@@ -1,21 +1,493 @@
-<script>
+<script lang="ts">
+	import { goto } from '$app/navigation';
+	import {
+		ArrowLeft,
+		ShoppingBag,
+		CreditCard,
+		Phone,
+		Mail,
+		MessageSquare,
+		Check,
+		Lock,
+		Chrome
+	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
-	import Checkout from '$lib/components/Checkout.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import { cart, cartState } from '$lib/stores/cart.svelte';
+	import { auth } from '$lib/stores/auth';
+
+	// Reactive state
+	let authState = $state($auth);
+	let loading = $state(false);
+
+	// Form state
+	let guestEmail = $state('');
+	let guestName = $state('');
+	let guestPhone = $state('');
+	let deliveryMethod = $state('email');
+	let whatsappNumber = $state('');
+	let telegramUsername = $state('');
+
+	// Validation
+	let errors = $state({
+		email: '',
+		name: '',
+		phone: '',
+		whatsapp: '',
+		telegram: ''
+	});
+
+	// Auto-initialize auth and redirect if cart is empty
+	$effect(() => {
+		if (!authState.initialized) {
+			auth.initialize();
+		}
+
+		authState = $auth;
+
+		if (authState.initialized && cartState.items.length === 0) {
+			goto('/products');
+		}
+	});
+
+	async function signInWithGoogle() {
+		try {
+			await auth.signInWithGoogle('/checkout');
+		} catch (error) {
+			console.error('Google sign in error:', error);
+		}
+	}
+
+	function formatPrice(price: number): string {
+		return new Intl.NumberFormat('en-NG', {
+			style: 'currency',
+			currency: 'NGN'
+		}).format(price);
+	}
+
+	function validateForm(): boolean {
+		errors = { email: '', name: '', phone: '', whatsapp: '', telegram: '' };
+		let isValid = true;
+
+		if (!authState.user) {
+			if (!guestEmail.trim()) {
+				errors.email = 'Email is required';
+				isValid = false;
+			} else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+				errors.email = 'Please enter a valid email';
+				isValid = false;
+			}
+
+			if (!guestName.trim()) {
+				errors.name = 'Full name is required';
+				isValid = false;
+			}
+
+			if (!guestPhone.trim()) {
+				errors.phone = 'Phone number is required';
+				isValid = false;
+			}
+		}
+
+		// Validate delivery method specific fields
+		if (deliveryMethod === 'whatsapp' && !whatsappNumber.trim()) {
+			errors.whatsapp = 'WhatsApp number is required';
+			isValid = false;
+		}
+
+		if (deliveryMethod === 'telegram' && !telegramUsername.trim()) {
+			errors.telegram = 'Telegram username is required';
+			isValid = false;
+		}
+
+		return isValid;
+	}
+
+	async function processCheckout() {
+		if (!validateForm()) return;
+
+		loading = true;
+		try {
+			// Create order logic here
+			console.log('Processing checkout...', {
+				user: authState.user,
+				profile: authState.profile,
+				guestEmail,
+				guestName,
+				deliveryMethod,
+				items: cartState.items,
+				total: cartState.total
+			});
+
+			// For now, show success message
+			alert('Order submitted successfully! You will receive your accounts shortly.');
+			cart.clear();
+			goto('/dashboard');
+		} catch (error) {
+			console.error('Checkout error:', error);
+			alert('Failed to process order. Please try again.');
+		} finally {
+			loading = false;
+		}
+	}
+
+	function goBack() {
+		history.back();
+	}
 </script>
 
 <svelte:head>
-	<title>Checkout | FastAccs</title>
-	<meta
-		name="description"
-		content="Complete your purchase securely. Choose delivery method and payment options for your social media accounts and services."
-	/>
+	<title>Checkout - FastAccs</title>
+	<meta name="description" content="Complete your purchase securely on FastAccs" />
 </svelte:head>
 
 <Navigation />
 
-<main class="min-h-screen bg-gray-50">
-	<Checkout />
+<main class="min-h-screen bg-gray-50 py-8">
+	<div class="mx-auto max-w-4xl px-4">
+		<!-- Header -->
+		<div class="mb-8 flex items-center gap-4">
+			<button
+				onclick={goBack}
+				class="flex items-center gap-2 text-purple-600 hover:text-purple-700"
+			>
+				<ArrowLeft size={20} />
+				Back
+			</button>
+			<h1 class="text-3xl font-bold text-gray-900">Checkout</h1>
+		</div>
+
+		{#if cartState.items.length === 0}
+			<div class="rounded-lg bg-white p-12 text-center shadow-sm">
+				<ShoppingBag size={64} class="mx-auto mb-4 text-gray-300" />
+				<h2 class="mb-2 text-xl font-semibold text-gray-900">Your cart is empty</h2>
+				<p class="mb-6 text-gray-600">Add some products to continue with checkout</p>
+				<button
+					onclick={() => goto('/products')}
+					class="rounded-lg bg-purple-600 px-6 py-3 font-semibold text-white hover:bg-purple-700"
+				>
+					Browse Products
+				</button>
+			</div>
+		{:else}
+			<div class="grid grid-cols-1 gap-8 lg:grid-cols-3">
+				<!-- Order Summary -->
+				<div class="lg:col-span-2">
+					<!-- Customer Information -->
+					<div class="mb-8 rounded-lg bg-white p-6 shadow-sm">
+						<h2 class="mb-6 text-xl font-semibold">Customer Information</h2>
+
+						{#if authState.user}
+							<div class="rounded-lg bg-green-50 p-4">
+								<div class="flex items-center gap-3">
+									<Check size={20} class="text-green-600" />
+									<div class="flex-1">
+										<p class="font-medium text-green-800">
+											Logged in as {authState.profile?.full_name || authState.user.email}
+										</p>
+										<p class="text-sm text-green-600">Your order will be saved to your account</p>
+									</div>
+									{#if authState.profile?.avatar_url}
+										<img
+											src={authState.profile.avatar_url}
+											alt="Profile"
+											class="h-10 w-10 rounded-full"
+										/>
+									{/if}
+								</div>
+							</div>
+						{:else}
+							<!-- Login Option Banner -->
+							<div class="mb-6 rounded-lg border border-purple-200 bg-purple-50 p-4">
+								<div class="flex items-center justify-between">
+									<div class="flex items-center gap-3">
+										<Chrome size={20} class="text-purple-600" />
+										<div>
+											<p class="font-medium text-purple-800">Save time with Google Sign In</p>
+											<p class="text-sm text-purple-600">Faster checkout and order history</p>
+										</div>
+									</div>
+									<button
+										onclick={signInWithGoogle}
+										class="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
+									>
+										Sign In
+									</button>
+								</div>
+							</div>
+
+							<!-- Guest Form -->
+							<div class="space-y-4">
+								<div>
+									<label for="guest-email" class="mb-2 block text-sm font-medium text-gray-700">
+										Email Address *
+									</label>
+									<input
+										id="guest-email"
+										type="email"
+										bind:value={guestEmail}
+										class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+										placeholder="Enter your email"
+									/>
+									{#if errors.email}
+										<p class="mt-1 text-sm text-red-600">{errors.email}</p>
+									{/if}
+								</div>
+
+								<div>
+									<label for="guest-name" class="mb-2 block text-sm font-medium text-gray-700">
+										Full Name *
+									</label>
+									<input
+										id="guest-name"
+										type="text"
+										bind:value={guestName}
+										class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+										placeholder="Enter your full name"
+									/>
+									{#if errors.name}
+										<p class="mt-1 text-sm text-red-600">{errors.name}</p>
+									{/if}
+								</div>
+
+								<div>
+									<label for="guest-phone" class="mb-2 block text-sm font-medium text-gray-700">
+										Phone Number *
+									</label>
+									<input
+										id="guest-phone"
+										type="tel"
+										bind:value={guestPhone}
+										class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+										placeholder="+234 xxx xxx xxxx"
+									/>
+									{#if errors.phone}
+										<p class="mt-1 text-sm text-red-600">{errors.phone}</p>
+									{/if}
+								</div>
+							</div>
+						{/if}
+					</div>
+
+					<!-- Delivery Method -->
+					<div class="mb-8 rounded-lg bg-white p-6 shadow-sm">
+						<h2 class="mb-6 text-xl font-semibold">Delivery Method</h2>
+
+						<div class="space-y-3">
+							<label
+								class="flex cursor-pointer items-center gap-3 rounded-lg border p-4 hover:bg-gray-50 {deliveryMethod ===
+								'email'
+									? 'border-purple-500 bg-purple-50'
+									: ''}"
+							>
+								<input
+									type="radio"
+									bind:group={deliveryMethod}
+									value="email"
+									class="text-purple-600"
+								/>
+								<Mail size={20} class="text-purple-600" />
+								<div>
+									<div class="font-medium">Email</div>
+									<div class="text-sm text-gray-600">Receive account details via email</div>
+								</div>
+							</label>
+
+							<label
+								class="flex cursor-pointer items-center gap-3 rounded-lg border p-4 hover:bg-gray-50 {deliveryMethod ===
+								'whatsapp'
+									? 'border-purple-500 bg-purple-50'
+									: ''}"
+							>
+								<input
+									type="radio"
+									bind:group={deliveryMethod}
+									value="whatsapp"
+									class="text-purple-600"
+								/>
+								<Phone size={20} class="text-green-600" />
+								<div>
+									<div class="font-medium">WhatsApp</div>
+									<div class="text-sm text-gray-600">Get instant delivery via WhatsApp</div>
+								</div>
+							</label>
+
+							<label
+								class="flex cursor-pointer items-center gap-3 rounded-lg border p-4 hover:bg-gray-50 {deliveryMethod ===
+								'telegram'
+									? 'border-purple-500 bg-purple-50'
+									: ''}"
+							>
+								<input
+									type="radio"
+									bind:group={deliveryMethod}
+									value="telegram"
+									class="text-purple-600"
+								/>
+								<MessageSquare size={20} class="text-blue-600" />
+								<div>
+									<div class="font-medium">Telegram</div>
+									<div class="text-sm text-gray-600">Secure delivery via Telegram</div>
+								</div>
+							</label>
+
+							<label
+								class="flex cursor-pointer items-center gap-3 rounded-lg border p-4 hover:bg-gray-50 {deliveryMethod ===
+								'dashboard'
+									? 'border-purple-500 bg-purple-50'
+									: ''}"
+							>
+								<input
+									type="radio"
+									bind:group={deliveryMethod}
+									value="dashboard"
+									class="text-purple-600"
+								/>
+								<CreditCard size={20} class="text-purple-600" />
+								<div>
+									<div class="font-medium">Dashboard</div>
+									<div class="text-sm text-gray-600">Access from your account dashboard</div>
+								</div>
+							</label>
+						</div>
+
+						<!-- Additional fields based on delivery method -->
+						{#if deliveryMethod === 'whatsapp'}
+							<div class="mt-4">
+								<label for="whatsapp-number" class="mb-2 block text-sm font-medium text-gray-700">
+									WhatsApp Number *
+								</label>
+								<input
+									id="whatsapp-number"
+									type="tel"
+									bind:value={whatsappNumber}
+									class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+									placeholder="+234 xxx xxx xxxx"
+								/>
+								{#if errors.whatsapp}
+									<p class="mt-1 text-sm text-red-600">{errors.whatsapp}</p>
+								{/if}
+							</div>
+						{/if}
+
+						{#if deliveryMethod === 'telegram'}
+							<div class="mt-4">
+								<label for="telegram-username" class="mb-2 block text-sm font-medium text-gray-700">
+									Telegram Username *
+								</label>
+								<input
+									id="telegram-username"
+									type="text"
+									bind:value={telegramUsername}
+									class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+									placeholder="@username"
+								/>
+								{#if errors.telegram}
+									<p class="mt-1 text-sm text-red-600">{errors.telegram}</p>
+								{/if}
+							</div>
+						{/if}
+					</div>
+				</div>
+
+				<!-- Order Summary Sidebar -->
+				<div class="lg:col-span-1">
+					<div class="rounded-lg bg-white p-6 shadow-sm">
+						<h2 class="mb-6 text-xl font-semibold">Order Summary</h2>
+
+						<!-- Cart Items -->
+						<div class="space-y-4">
+							{#each cartState.items as item}
+								<div class="flex gap-3">
+									<div class="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
+										{#if item.product.thumbnail_url}
+											<img
+												src={item.product.thumbnail_url}
+												alt={item.product.title}
+												class="h-full w-full object-cover"
+											/>
+										{:else}
+											<div class="flex h-full w-full items-center justify-center">
+												<ShoppingBag size={20} class="text-gray-400" />
+											</div>
+										{/if}
+									</div>
+									<div class="flex-1">
+										<h3 class="line-clamp-2 font-medium text-gray-900">
+											{item.product.title}
+										</h3>
+										<p class="text-sm text-gray-600">
+											{item.product.platform} • Qty: {item.quantity}
+										</p>
+										<p class="font-semibold text-purple-600">
+											{formatPrice(item.product.price * item.quantity)}
+										</p>
+									</div>
+								</div>
+							{/each}
+						</div>
+
+						<hr class="my-6" />
+
+						<!-- Total -->
+						<div class="space-y-2">
+							<div class="flex justify-between text-sm">
+								<span class="text-gray-600">Subtotal</span>
+								<span class="font-medium">{formatPrice(cartState.total)}</span>
+							</div>
+							<div class="flex justify-between text-sm">
+								<span class="text-gray-600">Processing Fee</span>
+								<span class="font-medium">Free</span>
+							</div>
+							<hr />
+							<div class="flex justify-between text-lg font-bold">
+								<span>Total</span>
+								<span class="text-purple-600">{formatPrice(cartState.total)}</span>
+							</div>
+						</div>
+
+						<!-- Checkout Button -->
+						<button
+							onclick={processCheckout}
+							disabled={loading}
+							class="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 py-4 text-lg font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
+						>
+							{#if loading}
+								<div
+									class="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"
+								></div>
+								Processing...
+							{:else}
+								<Lock size={20} />
+								Complete Order
+							{/if}
+						</button>
+
+						<!-- Security Notice -->
+						<div class="mt-4 rounded-lg bg-green-50 p-3">
+							<div class="flex items-start gap-2">
+								<Lock size={16} class="mt-0.5 text-green-600" />
+								<div class="text-sm text-green-800">
+									<p class="font-medium">Secure Checkout</p>
+									<p>Your payment information is encrypted and secure</p>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		{/if}
+	</div>
 </main>
 
 <Footer />
+
+<style>
+	.line-clamp-2 {
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+</style>

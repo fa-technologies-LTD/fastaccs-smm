@@ -1,9 +1,36 @@
 <script>
-	import { Search, ShoppingCart, User, Menu, X } from '@lucide/svelte';
+	import { Search, User, Menu, X, ShoppingCart, LogOut, Settings } from '@lucide/svelte';
+	import { cart, cartState, itemCount } from '$lib/stores/cart.svelte';
+	import { auth } from '$lib/stores/auth';
+	import MiniCart from './MiniCart.svelte';
 
 	let mobileMenuOpen = $state(false);
-	let cartItemCount = $state(3);
-	let isLoggedIn = $state(false);
+	let userMenuOpen = $state(false);
+
+	// Create local derived values from the functions
+	const currentItemCount = $derived(itemCount());
+
+	// Initialize auth using $effect
+	$effect(() => {
+		// Initialize auth if not done yet
+		if (!$auth.initialized) {
+			auth.initialize();
+		}
+	});
+
+	async function handleSignOut() {
+		try {
+			await auth.signOut();
+			userMenuOpen = false;
+		} catch (error) {
+			console.error('Sign out error:', error);
+		}
+	}
+
+	function closeMenus() {
+		mobileMenuOpen = false;
+		userMenuOpen = false;
+	}
 </script>
 
 <nav class="sticky top-0 z-50 border-b border-gray-200 bg-white">
@@ -53,38 +80,67 @@
 				</div>
 
 				<!-- Cart -->
-				<a href="/cart" class="relative p-2 text-gray-600 transition-colors hover:text-gray-900">
-					<ShoppingCart class="h-6 w-6" />
-					{#if cartItemCount > 0}
-						<span
-							class="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-xs text-white"
-						>
-							{cartItemCount}
-						</span>
-					{/if}
-				</a>
+				<MiniCart />
 
 				<!-- User Menu -->
-				{#if isLoggedIn}
+				{#if $auth.user}
 					<div class="relative">
 						<button
-							class="flex items-center space-x-2 text-gray-600 transition-colors hover:text-gray-900"
+							onclick={() => (userMenuOpen = !userMenuOpen)}
+							class="flex items-center space-x-2 rounded-lg p-2 text-gray-600 transition-colors hover:text-gray-900 focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:outline-none"
 						>
-							<User class="h-6 w-6" />
-							<span>Account</span>
+							{#if $auth.profile?.avatar_url}
+								<img src={$auth.profile.avatar_url} alt="Profile" class="h-6 w-6 rounded-full" />
+							{:else}
+								<User class="h-6 w-6" />
+							{/if}
+							<span class="hidden sm:inline">{$auth.profile?.full_name || $auth.user.email}</span>
 						</button>
+
+						{#if userMenuOpen}
+							<!-- svelte-ignore a11y_click_events_have_key_events -->
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div
+								class="fixed inset-0 z-10"
+								onclick={closeMenus}
+								role="button"
+								tabindex="-1"
+							></div>
+							<div
+								class="absolute right-0 z-20 mt-2 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+							>
+								<a
+									href="/dashboard"
+									onclick={closeMenus}
+									class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+								>
+									<User class="mr-3 h-4 w-4" />
+									Dashboard
+								</a>
+								<a
+									href="/dashboard/settings"
+									onclick={closeMenus}
+									class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+								>
+									<Settings class="mr-3 h-4 w-4" />
+									Settings
+								</a>
+								<hr class="my-1" />
+								<button
+									onclick={handleSignOut}
+									class="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+								>
+									<LogOut class="mr-3 h-4 w-4" />
+									Sign Out
+								</button>
+							</div>
+						{/if}
 					</div>
 				{:else}
 					<div class="flex items-center space-x-2">
 						<a
-							href="/login"
-							class="font-medium text-gray-600 transition-colors hover:text-gray-900"
-						>
-							Sign In
-						</a>
-						<a
-							href="/register"
-							class="rounded-full bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-700"
+							href="/auth/login"
+							class="rounded-full bg-purple-600 px-4 py-2 font-medium text-white transition-colors hover:bg-purple-700"
 						>
 							Get Started
 						</a>
@@ -140,21 +196,28 @@
 				<div class="space-y-2 border-t border-gray-200 pt-4">
 					<a href="/cart" class="flex items-center py-2 text-gray-600 hover:text-gray-900">
 						<ShoppingCart class="mr-2 h-5 w-5" />
-						Cart ({cartItemCount})
+						Cart ({currentItemCount})
 					</a>
 
-					{#if isLoggedIn}
+					{#if $auth.user}
 						<a href="/dashboard" class="flex items-center py-2 text-gray-600 hover:text-gray-900">
 							<User class="mr-2 h-5 w-5" />
 							My Account
 						</a>
+						<button
+							onclick={handleSignOut}
+							class="flex w-full items-start py-2 text-gray-600 hover:text-gray-900"
+						>
+							<LogOut class="mr-2 h-5 w-5" />
+							Sign Out
+						</button>
 					{:else}
-						<a href="/login" class="block py-2 font-medium text-gray-600 hover:text-gray-900">
+						<a href="/auth/login" class="block py-2 font-medium text-gray-600 hover:text-gray-900">
 							Sign In
 						</a>
 						<a
-							href="/register"
-							class="block w-full rounded-lg bg-blue-600 px-4 py-2 text-center font-medium text-white transition-colors hover:bg-blue-700"
+							href="/auth/login"
+							class="block w-full rounded-lg bg-purple-600 px-4 py-2 text-center font-medium text-white transition-colors hover:bg-purple-700"
 						>
 							Get Started
 						</a>

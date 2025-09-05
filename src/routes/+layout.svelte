@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
+	import Cart from '$lib/components/Cart.svelte';
 
 	let { children } = $props();
 </script>
@@ -11,4 +12,5 @@
 
 <div class="min-h-screen bg-white">
 	{@render children?.()}
+	<Cart />
 </div>

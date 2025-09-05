@@ -20,7 +20,8 @@
 
 				<div class="p-6">
 					<div class="mb-6 grid grid-cols-2 gap-4">
-						<div
+						<a
+							href="/products?platform=instagram"
 							class="flex cursor-pointer items-center rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
 						>
 							<Instagram class="mr-3 h-8 w-8 text-pink-600" />
@@ -28,9 +29,10 @@
 								<div class="font-semibold text-gray-800">Instagram</div>
 								<div class="text-sm text-gray-600">1K - 500K followers</div>
 							</div>
-						</div>
+						</a>
 
-						<div
+						<a
+							href="/products?platform=tiktok"
 							class="flex cursor-pointer items-center rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
 						>
 							<Music class="mr-3 h-8 w-8 text-black" />
@@ -38,9 +40,10 @@
 								<div class="font-semibold text-gray-800">TikTok</div>
 								<div class="text-sm text-gray-600">5K - 1M followers</div>
 							</div>
-						</div>
+						</a>
 
-						<div
+						<a
+							href="/products?platform=facebook"
 							class="flex cursor-pointer items-center rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
 						>
 							<Facebook class="mr-3 h-8 w-8 text-blue-600" />
@@ -48,9 +51,10 @@
 								<div class="font-semibold text-gray-800">Facebook</div>
 								<div class="text-sm text-gray-600">2K - 100K likes</div>
 							</div>
-						</div>
+						</a>
 
-						<div
+						<a
+							href="/products?platform=twitter"
 							class="flex cursor-pointer items-center rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
 						>
 							<Twitter class="mr-3 h-8 w-8 text-blue-400" />
@@ -58,14 +62,15 @@
 								<div class="font-semibold text-gray-800">Twitter</div>
 								<div class="text-sm text-gray-600">1K - 50K followers</div>
 							</div>
-						</div>
+						</a>
 					</div>
 
-					<button
-						class="w-full rounded-lg bg-purple-600 py-3 font-semibold text-white transition-colors hover:bg-purple-700"
+					<a
+						href="/products"
+						class="block w-full rounded-lg bg-purple-600 py-3 text-center font-semibold text-white transition-colors hover:bg-purple-700"
 					>
 						Browse All Accounts
-					</button>
+					</a>
 				</div>
 			</div>
 
@@ -121,11 +126,12 @@
 						</div>
 					</div>
 
-					<button
-						class="w-full rounded-lg bg-blue-600 py-3 font-semibold text-white transition-colors hover:bg-blue-700"
+					<a
+						href="/services"
+						class="block w-full rounded-lg bg-blue-600 py-3 text-center font-semibold text-white transition-colors hover:bg-blue-700"
 					>
 						View All Services
-					</button>
+					</a>
 				</div>
 			</div>
 		</div>
