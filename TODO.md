@@ -8,7 +8,28 @@
 
 ## Pending Implementation 🔄
 
-### Item 4: Order Processing System
+### Item 4: Admin Inventory Management System
+
+**Status:** Needs Implementation (PRIORITY)
+**Description:** Admin dashboard to manage product inventory and availability
+**Requirements:**
+
+- Admin authentication and role-based access
+- Product inventory CRUD operations (Create, Read, Update, Delete)
+- Stock level management and tracking
+- Product status management (available/sold/reserved)
+- Bulk inventory operations
+- Inventory analytics and reporting
+
+**Files to Create/Update:**
+
+- Admin dashboard pages (`/admin/*`)
+- Inventory management components
+- Admin authentication middleware
+- Supabase RLS policies for admin access
+- Product management API endpoints
+
+### Item 5: Order Processing System
 
 **Status:** Needs Implementation
 **Description:** Currently checkout only console.logs order data
@@ -26,7 +47,7 @@
 - Update checkout processCheckout() function
 - Add order confirmation page
 
-### Item 5: Payment & Delivery Automation
+### Item 6: Payment & Delivery Automation
 
 **Status:** Needs Implementation
 **Description:** Full payment processing and automated delivery
@@ -48,7 +69,9 @@
 
 ## Notes
 
-- Both items 4 & 5 depend on completing Supabase environment setup
+- **Item 4 (Admin Inventory) is the foundation** - Must be completed first
+- Items 5 & 6 depend on completing Supabase environment setup
 - Schema is already prepared in supabase-schema.sql
 - Google OAuth is fully functional and ready
 - Authentication system is complete and integrated
+- Need to establish admin user roles and permissions

@@ -525,5 +525,5 @@ export class DatabaseService {
 	}
 }
 
-// Export a singleton instance
+// Export a singleton instance for backward compatibility
 export const db = new DatabaseService(supabase);

@@ -1,165 +1,159 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
-	import { supabase } from '$lib/supabase';
+	import { goto, invalidateAll } from '$app/navigation';
+	import { page } from '$app/state';
+	import { onMount } from 'svelte';
+	import { Chrome, Mail, Lock, ArrowLeft } from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import { Chrome, Mail, ArrowRight, Shield, Zap, Users } from '@lucide/svelte';
+	import type { PageData } from './$types';
+
+	interface Props {
+		data: PageData;
+	}
+
+	let { data }: Props = $props();
 
 	let loading = $state(false);
 	let error = $state('');
 
-	// Get redirect URL from query params (e.g., /auth/login?redirect=/checkout)
-	const redirectTo = $derived($page.url.searchParams.get('redirect') || '/dashboard');
+	// Get redirect URL from query params
+	const redirectTo = page.url.searchParams.get('redirectTo') || '/dashboard';
+	const errorParam = page.url.searchParams.get('error');
+
+	onMount(() => {
+		// Show error from URL params
+		if (errorParam) {
+			error = errorParam;
+		}
+
+		// Check if user is already logged in
+		if (data.user) {
+			goto(redirectTo);
+		}
+	});
 
 	async function signInWithGoogle() {
 		try {
 			loading = true;
 			error = '';
 
-			const { data, error: authError } = await supabase.auth.signInWithOAuth({
+			const { error: authError } = await data.supabase.auth.signInWithOAuth({
 				provider: 'google',
 				options: {
-					redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectTo)}`
+					redirectTo: `${page.url.origin}/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`
 				}
 			});
 
 			if (authError) {
+				console.error('OAuth initiation error:', authError);
 				throw authError;
 			}
-		} catch (err) {
-			error = (err as Error).message || 'Failed to sign in with Google';
+		} catch (err: any) {
 			console.error('Google sign in error:', err);
-		} finally {
+			error = err.message || 'Failed to start Google authentication';
 			loading = false;
 		}
 	}
 
-	async function continueAsGuest() {
-		// For guest checkout, redirect to intended page
-		goto(redirectTo);
+	function goBack() {
+		goto('/');
 	}
 </script>
 
 <svelte:head>
 	<title>Sign In - FastAccs</title>
-	<meta name="description" content="Sign in to your FastAccs account or continue as guest" />
+	<meta
+		name="description"
+		content="Sign in to your FastAccs account to access premium social media accounts"
+	/>
 </svelte:head>
 
 <Navigation />
 
-<main class="flex min-h-screen flex-col justify-center bg-gray-50 py-12 sm:px-6 lg:px-8">
-	<div class="sm:mx-auto sm:w-full sm:max-w-md">
-		<div class="text-center">
-			<div
-				class="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-r from-purple-600 to-blue-600 text-2xl font-bold text-white"
-			>
-				FA
+<main class="bg-gradient-primary flex min-h-screen items-center justify-center px-4 py-6 sm:py-12">
+	<div class="w-full max-w-md">
+		<!-- Back Button -->
+		<button
+			onclick={goBack}
+			class="hover:text-primary-accent active:text-primary-accent-bright mb-6 flex items-center gap-2 text-white transition-colors"
+		>
+			<ArrowLeft size={20} />
+			<span class="text-sm sm:text-base">Back to Home</span>
+		</button>
+
+		<!-- Login Card -->
+		<div class="overflow-hidden rounded-2xl bg-white shadow-xl">
+			<!-- Header -->
+			<div class="bg-neutral-dark px-6 py-6 text-center text-white sm:px-8 sm:py-8">
+				<h1 class="mb-2 text-2xl font-bold sm:text-3xl">Welcome Back</h1>
+				<p class="text-sm text-gray-300 sm:text-base">Sign in to access your FastAccs account</p>
 			</div>
-			<h2 class="text-3xl font-bold text-gray-900">Welcome to FastAccs</h2>
-			<p class="mt-2 text-gray-600">Sign in to your account or continue as guest</p>
-		</div>
-	</div>
 
-	<div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-		<div class="rounded-lg bg-white px-4 py-8 shadow-lg sm:px-10">
-			{#if error}
-				<div class="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
-					<p class="text-sm text-red-600">{error}</p>
-				</div>
-			{/if}
-
-			<!-- Google Sign In -->
-			<button
-				onclick={signInWithGoogle}
-				disabled={loading}
-				class="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-3 font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 focus:border-transparent focus:ring-2 focus:ring-purple-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-			>
-				{#if loading}
-					<div
-						class="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-purple-600"
-					></div>
-					<span>Signing in...</span>
-				{:else}
-					<Chrome size={20} />
-					<span>Continue with Google</span>
+			<!-- Content -->
+			<div class="px-6 py-6 sm:px-8 sm:py-8">
+				{#if error}
+					<div class="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
+						<div class="flex items-center gap-2 text-red-800">
+							<Lock size={16} />
+							<span class="text-sm font-medium">Sign In Error</span>
+						</div>
+						<p class="mt-1 text-sm text-red-700">{error}</p>
+					</div>
 				{/if}
-			</button>
 
-			<div class="mt-6">
-				<div class="relative">
-					<div class="absolute inset-0 flex items-center">
-						<div class="w-full border-t border-gray-300"></div>
+				<!-- Google Sign In -->
+				<button
+					onclick={signInWithGoogle}
+					disabled={loading}
+					class="hover:border-secondary flex w-full items-center justify-center gap-3 rounded-xl border-2 border-gray-200 bg-white px-4 py-4 text-base transition-all duration-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6"
+				>
+					{#if loading}
+						<div
+							class="border-secondary h-5 w-5 animate-spin rounded-full border-2 border-t-transparent"
+						></div>
+						<span class="font-semibold text-gray-700">Signing in...</span>
+					{:else}
+						<Chrome size={20} class="text-secondary" />
+						<span class="font-semibold text-gray-700">Continue with Google</span>
+					{/if}
+				</button>
+
+				<div class="mt-6 text-center sm:mt-8">
+					<p class="text-sm text-gray-600">
+						Don't have an account? Signing in with Google will create one automatically.
+					</p>
+				</div>
+
+				<!-- Features -->
+				<div class="mt-6 space-y-3 sm:mt-8">
+					<div class="flex items-center gap-3 text-sm text-gray-600">
+						<div class="bg-secondary h-2 w-2 rounded-full"></div>
+						<span>Access your order history and account details</span>
 					</div>
-					<div class="relative flex justify-center text-sm">
-						<span class="bg-white px-2 text-gray-500">Or</span>
+					<div class="flex items-center gap-3 text-sm text-gray-600">
+						<div class="bg-secondary h-2 w-2 rounded-full"></div>
+						<span>Faster checkout with saved information</span>
+					</div>
+					<div class="flex items-center gap-3 text-sm text-gray-600">
+						<div class="bg-secondary h-2 w-2 rounded-full"></div>
+						<span>Track your purchases and delivery status</span>
 					</div>
 				</div>
-			</div>
-
-			<!-- Continue as Guest -->
-			<button
-				onclick={continueAsGuest}
-				class="mt-6 flex w-full items-center justify-center gap-3 rounded-lg border-2 border-dashed border-gray-300 px-4 py-3 font-medium text-gray-600 transition-all hover:border-purple-400 hover:text-purple-600 focus:border-transparent focus:ring-2 focus:ring-purple-500 focus:outline-none"
-			>
-				<Mail size={20} />
-				<span>Continue as Guest</span>
-				<ArrowRight size={16} />
-			</button>
-
-			<div class="mt-8 text-center">
-				<p class="text-xs text-gray-500">
-					By continuing, you agree to our
-					<a href="/terms" class="text-purple-600 hover:text-purple-700">Terms of Service</a>
-					and
-					<a href="/privacy" class="text-purple-600 hover:text-purple-700">Privacy Policy</a>
-				</p>
 			</div>
 		</div>
 
-		<!-- Benefits Section -->
-		<div class="mt-8 rounded-lg bg-white p-6 shadow-sm">
-			<h3 class="mb-4 text-center text-lg font-semibold text-gray-900">Why create an account?</h3>
-			<div class="space-y-3">
-				<div class="flex items-center gap-3">
-					<div class="flex-shrink-0">
-						<Shield size={20} class="text-green-600" />
-					</div>
-					<div>
-						<p class="text-sm font-medium text-gray-900">Secure Order History</p>
-						<p class="text-xs text-gray-600">Access your purchases anytime</p>
-					</div>
-				</div>
-				<div class="flex items-center gap-3">
-					<div class="flex-shrink-0">
-						<Zap size={20} class="text-blue-600" />
-					</div>
-					<div>
-						<p class="text-sm font-medium text-gray-900">Faster Checkout</p>
-						<p class="text-xs text-gray-600">Skip forms on future orders</p>
-					</div>
-				</div>
-				<div class="flex items-center gap-3">
-					<div class="flex-shrink-0">
-						<Users size={20} class="text-purple-600" />
-					</div>
-					<div>
-						<p class="text-sm font-medium text-gray-900">Affiliate Program</p>
-						<p class="text-xs text-gray-600">Earn commissions on referrals</p>
-					</div>
-				</div>
+		<!-- Security Notice -->
+		<div class="mt-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+			<div class="mb-2 flex items-center gap-2 text-green-600">
+				<Lock size={16} />
+				<span class="text-sm font-medium">Secure Authentication</span>
 			</div>
+			<p class="text-xs text-gray-600">
+				Your data is protected with industry-standard encryption. We never store your password or
+				share your information.
+			</p>
 		</div>
 	</div>
 </main>
 
 <Footer />
-
-<style>
-	main {
-		background-image:
-			radial-gradient(circle at 25px 25px, rgba(147, 51, 234, 0.1) 2px, transparent 0),
-			radial-gradient(circle at 75px 75px, rgba(59, 130, 246, 0.1) 2px, transparent 0);
-		background-size: 100px 100px;
-	}
-</style>

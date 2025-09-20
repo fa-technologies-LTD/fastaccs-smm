@@ -3,39 +3,25 @@
 	import Footer from '$lib/components/Footer.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { auth } from '$lib/stores/auth';
+	import { supabase } from '$lib/supabase';
 	import { ShoppingCart, Package, User, LogOut, Eye, RefreshCw, Calendar } from '@lucide/svelte';
-	import type { Tables } from '$lib/supabase';
-
-	interface Order {
-		id: string;
-		status: string;
-		total_amount: number;
-		created_at: string;
-		delivery_method: string;
-		items: Array<{
-			id: string;
-			product_title: string;
-			platform: string;
-			price: number;
-			quantity: number;
-		}>;
-	}
 
 	// Svelte 5 reactive state
 	let currentUser = $state<any>(null);
-	let orders = $state<Order[]>([]);
+	let orders = $state<any[]>([]);
 	let loading = $state(true);
 	let activeTab = $state('orders');
 
 	onMount(async () => {
-		// Check if user is logged in
-		if (!$auth.user) {
-			goto('/auth/login');
+		const {
+			data: { user }
+		} = await supabase.auth.getUser();
+		if (!user) {
+			goto('/auth');
 			return;
 		}
 
-		currentUser = $auth.user;
+		currentUser = user;
 		await loadUserOrders();
 	});
 
@@ -44,42 +30,26 @@
 
 		loading = true;
 		try {
-			// For now, we'll use mock data since the orders table might not exist yet
-			// In a real app, this would fetch from Supabase
-			orders = [
-				{
-					id: '1',
-					status: 'completed',
-					total_amount: 22000,
-					created_at: new Date().toISOString(),
-					delivery_method: 'whatsapp',
-					items: [
-						{
-							id: '1',
-							product_title: 'Instagram Fashion Account',
-							platform: 'instagram',
-							price: 22000,
-							quantity: 1
-						}
-					]
-				},
-				{
-					id: '2',
-					status: 'processing',
-					total_amount: 15000,
-					created_at: new Date(Date.now() - 86400000).toISOString(), // Yesterday
-					delivery_method: 'telegram',
-					items: [
-						{
-							id: '2',
-							product_title: 'Tech Instagram Account',
-							platform: 'instagram',
-							price: 15000,
-							quantity: 1
-						}
-					]
-				}
-			];
+			const { data, error } = await supabase
+				.from('orders')
+				.select(
+					`
+					*,
+					order_items (
+						*,
+						products (
+							title,
+							platform,
+							thumbnail_url
+						)
+					)
+				`
+				)
+				.eq('user_id', currentUser.id)
+				.order('created_at', { ascending: false });
+
+			if (error) throw error;
+			orders = data || [];
 		} catch (error) {
 			console.error('Error loading orders:', error);
 		} finally {
@@ -88,12 +58,8 @@
 	}
 
 	async function handleLogout() {
-		try {
-			await auth.signOut();
-			goto('/');
-		} catch (error) {
-			console.error('Logout error:', error);
-		}
+		await supabase.auth.signOut();
+		goto('/');
 	}
 
 	function formatPrice(price: number): string {
@@ -208,10 +174,10 @@
 						<h3 class="mb-2 text-lg font-medium text-gray-900">No orders yet</h3>
 						<p class="mb-6 text-gray-600">Start shopping to see your orders here</p>
 						<button
-							onclick={() => goto('/accounts')}
+							onclick={() => goto('/products')}
 							class="rounded-lg bg-purple-600 px-6 py-3 font-semibold text-white hover:bg-purple-700"
 						>
-							Browse Accounts
+							Browse Products
 						</button>
 					</div>
 				{:else}
@@ -220,7 +186,7 @@
 							<div class="rounded-lg border p-6">
 								<div class="mb-4 flex items-center justify-between">
 									<div>
-										<h3 class="font-semibold text-gray-900">Order #{order.id}</h3>
+										<h3 class="font-semibold text-gray-900">Order #{order.order_number}</h3>
 										<div class="flex items-center gap-4 text-sm text-gray-600">
 											<span class="flex items-center gap-1">
 												<Calendar size={14} />
@@ -243,24 +209,32 @@
 									</div>
 								</div>
 
-								{#if order.items && order.items.length > 0}
+								{#if order.order_items && order.order_items.length > 0}
 									<div class="space-y-3">
-										{#each order.items as item}
+										{#each order.order_items as item}
 											<div class="flex items-center gap-4 rounded-lg bg-gray-50 p-3">
 												<div class="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
-													<div class="flex h-full w-full items-center justify-center">
-														<Package size={16} class="text-gray-400" />
-													</div>
+													{#if item.products?.thumbnail_url}
+														<img
+															src={item.products.thumbnail_url}
+															alt={item.products.title}
+															class="h-full w-full object-cover"
+														/>
+													{:else}
+														<div class="flex h-full w-full items-center justify-center">
+															<Package size={16} class="text-gray-400" />
+														</div>
+													{/if}
 												</div>
 												<div class="flex-1">
-													<h4 class="font-medium text-gray-900">{item.product_title}</h4>
+													<h4 class="font-medium text-gray-900">{item.products?.title}</h4>
 													<p class="text-sm text-gray-600">
-														{item.platform} • Qty: {item.quantity}
+														{item.products?.platform} • Qty: {item.quantity}
 													</p>
 												</div>
 												<div class="text-right">
 													<div class="font-semibold text-gray-900">
-														{formatPrice(item.price * item.quantity)}
+														{formatPrice(item.unit_price * item.quantity)}
 													</div>
 												</div>
 											</div>

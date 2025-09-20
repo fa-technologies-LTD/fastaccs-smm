@@ -1,49 +1,34 @@
 <script>
-	import { Search, ShoppingCart, Star } from '@lucide/svelte';
-
-	let searchQuery = $state('');
+	import { goto } from '$app/navigation';
 </script>
 
-<section class="bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-700 px-4 py-16 text-white">
+<section class="bg-gradient-primary px-4 py-12 text-white sm:py-16 lg:py-20">
 	<div class="mx-auto max-w-6xl text-center">
 		<!-- Main Hero Content -->
-		<div class="mb-8">
-			<h1 class="mb-4 text-4xl leading-tight font-bold md:text-6xl">
+		<div class="mb-6 sm:mb-8">
+			<h1 class="mb-4 text-2xl leading-tight font-bold sm:text-3xl md:text-4xl">
 				Get Premium Social Media Accounts
-				<span class="text-yellow-300">Instantly</span>
+				<span class="text-primary-accent-bright">Instantly</span>
 			</h1>
-			<p class="mx-auto mb-8 max-w-3xl text-xl text-blue-100 md:text-2xl">
+			<p
+				class="mx-auto mb-6 max-w-3xl text-base text-green-100 sm:mb-8 sm:text-lg md:text-xl lg:text-2xl"
+			>
 				Nigeria's most trusted marketplace for verified social media accounts and boosting services.
 				Fast, secure, and reliable delivery guaranteed.
 			</p>
 		</div>
 
-		<!-- Search Bar -->
-		<div class="mx-auto mb-8 max-w-2xl">
-			<div class="relative">
-				<input
-					type="text"
-					bind:value={searchQuery}
-					placeholder="Search for Instagram, TikTok, Facebook accounts..."
-					class="w-full rounded-full bg-white px-6 py-4 text-lg text-gray-900 shadow-lg transition-all focus:ring-4 focus:ring-yellow-300 focus:outline-none"
-				/>
-				<button
-					class="absolute top-2 right-2 rounded-full bg-yellow-400 p-2 text-gray-900 transition-colors hover:bg-yellow-500"
-				>
-					<Search size={24} />
-				</button>
-			</div>
-		</div>
-
 		<!-- CTA Buttons -->
-		<div class="mb-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
+		<div class="mb-8 flex flex-col items-center justify-center gap-3 sm:mb-12 sm:flex-row sm:gap-4">
 			<button
-				class="transform rounded-full bg-yellow-400 px-8 py-4 text-lg font-semibold text-gray-900 shadow-lg transition-all hover:scale-105 hover:bg-yellow-500"
+				class="cursor-pointer bg-primary-accent hover:bg-primary-accent-bright w-full transform rounded-full px-6 py-2 text-base font-semibold text-gray-900 shadow-lg transition-all hover:scale-105 active:scale-100 sm:w-auto sm:px-8 sm:py-4 sm:text-lg"
+				onclick={() => goto('/accounts')}
 			>
 				Browse Accounts
 			</button>
 			<button
-				class="rounded-full border-2 border-white px-8 py-4 text-lg font-semibold text-white transition-all hover:bg-white hover:text-purple-600"
+				class="cursor-pointer hover:text-neutral-dark w-full rounded-full border-2 border-white px-6 py-2 text-base font-semibold text-white transition-all hover:bg-white hover:text-black active:bg-white sm:w-auto sm:px-8 sm:py-4 sm:text-lg"
+				onclick={() => goto('/services')}
 			>
 				View Boosting Services
 			</button>
@@ -52,20 +37,16 @@
 		<!-- Trust Indicators -->
 		<div class="grid grid-cols-1 gap-6 text-center md:grid-cols-3">
 			<div class="rounded-lg bg-white/10 p-6 backdrop-blur-sm">
-				<div class="mb-2 text-3xl font-bold text-yellow-300">10,000+</div>
-				<div class="text-blue-100">Accounts Delivered</div>
+				<div class="mb-2 text-3xl font-bold text-yellow-300">Premium</div>
+				<div class="text-blue-100">Quality Accounts</div>
 			</div>
 			<div class="rounded-lg bg-white/10 p-6 backdrop-blur-sm">
 				<div class="mb-2 text-3xl font-bold text-yellow-300">24/7</div>
 				<div class="text-blue-100">Instant Delivery</div>
 			</div>
 			<div class="rounded-lg bg-white/10 p-6 backdrop-blur-sm">
-				<div class="mb-2 flex items-center justify-center">
-					{#each Array(5) as _}
-						<Star class="h-6 w-6 fill-yellow-300 text-yellow-300" />
-					{/each}
-				</div>
-				<div class="text-blue-100">5-Star Rated</div>
+				<div class="mb-2 text-3xl font-bold text-yellow-300">Secure</div>
+				<div class="text-blue-100">Safe Transactions</div>
 			</div>
 		</div>
 	</div>

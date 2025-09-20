@@ -13,12 +13,26 @@
 	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import { cart, cartState } from '$lib/stores/cart.svelte';
-	import { auth } from '$lib/stores/auth';
+	import { cart } from '$lib/stores/cart';
+	import { auth, setAuth } from '$lib/stores/auth';
+	import { supabase } from '$lib/supabase';
+	import { onMount } from 'svelte';
+	import type { PageData } from './$types';
+
+	let { data }: { data: PageData } = $props();
 
 	// Reactive state
+	let cartState = $state($cart);
 	let authState = $state($auth);
 	let loading = $state(false);
+
+	// Initialize auth state from layout data
+	onMount(() => {
+		if (data.user && data.session) {
+			setAuth(data.user, data.session);
+		}
+		authState = $auth;
+	});
 
 	// Form state
 	let guestEmail = $state('');
@@ -39,22 +53,30 @@
 
 	// Auto-initialize auth and redirect if cart is empty
 	$effect(() => {
-		if (!authState.initialized) {
-			auth.initialize();
-		}
-
+		// Keep local state in sync with stores
 		authState = $auth;
+		cartState = $cart;
 
-		if (authState.initialized && cartState.items.length === 0) {
+		// Redirect if cart is empty and not loading
+		if (!authState.loading && cartState.items.length === 0) {
 			goto('/products');
 		}
 	});
 
 	async function signInWithGoogle() {
 		try {
-			await auth.signInWithGoogle('/checkout');
+			loading = true;
+			const { data, error } = await supabase.auth.signInWithOAuth({
+				provider: 'google',
+				options: {
+					redirectTo: `${window.location.origin}/checkout`
+				}
+			});
+			if (error) throw error;
 		} catch (error) {
 			console.error('Google sign in error:', error);
+		} finally {
+			loading = false;
 		}
 	}
 
@@ -111,7 +133,6 @@
 			// Create order logic here
 			console.log('Processing checkout...', {
 				user: authState.user,
-				profile: authState.profile,
 				guestEmail,
 				guestName,
 				deliveryMethod,
@@ -143,39 +164,42 @@
 
 <Navigation />
 
-<main class="min-h-screen bg-gray-50 py-8">
-	<div class="mx-auto max-w-4xl px-4">
+<main class="min-h-screen bg-gray-50 py-4 sm:py-8">
+	<div class="mx-auto max-w-4xl px-4 sm:px-6">
 		<!-- Header -->
-		<div class="mb-8 flex items-center gap-4">
+		<div class="mb-6 flex items-center gap-3 sm:mb-8 sm:gap-4">
 			<button
 				onclick={goBack}
-				class="flex items-center gap-2 text-purple-600 hover:text-purple-700"
+				class="text-secondary hover:text-secondary-light active:text-secondary-light flex items-center gap-2"
 			>
-				<ArrowLeft size={20} />
-				Back
+				<ArrowLeft size={18} class="sm:hidden" />
+				<ArrowLeft size={20} class="hidden sm:block" />
+				<span class="text-sm sm:text-base">Back</span>
 			</button>
-			<h1 class="text-3xl font-bold text-gray-900">Checkout</h1>
+			<h1 class="text-2xl font-bold text-gray-900 sm:text-3xl">Checkout</h1>
 		</div>
 
 		{#if cartState.items.length === 0}
-			<div class="rounded-lg bg-white p-12 text-center shadow-sm">
-				<ShoppingBag size={64} class="mx-auto mb-4 text-gray-300" />
-				<h2 class="mb-2 text-xl font-semibold text-gray-900">Your cart is empty</h2>
-				<p class="mb-6 text-gray-600">Add some products to continue with checkout</p>
+			<div class="rounded-lg bg-white p-8 text-center shadow-sm sm:p-12">
+				<ShoppingBag size={48} class="mx-auto mb-4 text-gray-300 sm:h-16 sm:w-16" />
+				<h2 class="mb-2 text-lg font-semibold text-gray-900 sm:text-xl">Your cart is empty</h2>
+				<p class="mb-6 text-sm text-gray-600 sm:text-base">
+					Add some products to continue with checkout
+				</p>
 				<button
 					onclick={() => goto('/products')}
-					class="rounded-lg bg-purple-600 px-6 py-3 font-semibold text-white hover:bg-purple-700"
+					class="bg-primary hover:bg-primary-dark active:bg-primary-dark rounded-lg px-4 py-2.5 text-sm font-semibold text-white sm:px-6 sm:py-3 sm:text-base"
 				>
 					Browse Products
 				</button>
 			</div>
 		{:else}
-			<div class="grid grid-cols-1 gap-8 lg:grid-cols-3">
+			<div class="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
 				<!-- Order Summary -->
-				<div class="lg:col-span-2">
+				<div class="order-2 lg:order-1 lg:col-span-2">
 					<!-- Customer Information -->
-					<div class="mb-8 rounded-lg bg-white p-6 shadow-sm">
-						<h2 class="mb-6 text-xl font-semibold">Customer Information</h2>
+					<div class="mb-6 rounded-lg bg-white p-4 shadow-sm sm:mb-8 sm:p-6">
+						<h2 class="mb-4 text-lg font-semibold sm:mb-6 sm:text-xl">Customer Information</h2>
 
 						{#if authState.user}
 							<div class="rounded-lg bg-green-50 p-4">
@@ -183,13 +207,14 @@
 									<Check size={20} class="text-green-600" />
 									<div class="flex-1">
 										<p class="font-medium text-green-800">
-											Logged in as {authState.profile?.full_name || authState.user.email}
+											Logged in as {authState.user?.user_metadata?.full_name ||
+												authState.user?.email}
 										</p>
 										<p class="text-sm text-green-600">Your order will be saved to your account</p>
 									</div>
-									{#if authState.profile?.avatar_url}
+									{#if authState.user?.user_metadata?.avatar_url}
 										<img
-											src={authState.profile.avatar_url}
+											src={authState.user.user_metadata.avatar_url}
 											alt="Profile"
 											class="h-10 w-10 rounded-full"
 										/>
@@ -391,15 +416,17 @@
 				</div>
 
 				<!-- Order Summary Sidebar -->
-				<div class="lg:col-span-1">
-					<div class="rounded-lg bg-white p-6 shadow-sm">
-						<h2 class="mb-6 text-xl font-semibold">Order Summary</h2>
+				<div class="order-1 lg:order-2 lg:col-span-1">
+					<div class="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+						<h2 class="mb-4 text-lg font-semibold sm:mb-6 sm:text-xl">Order Summary</h2>
 
 						<!-- Cart Items -->
-						<div class="space-y-4">
+						<div class="space-y-3 sm:space-y-4">
 							{#each cartState.items as item}
 								<div class="flex gap-3">
-									<div class="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
+									<div
+										class="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100 sm:h-16 sm:w-16"
+									>
 										{#if item.product.thumbnail_url}
 											<img
 												src={item.product.thumbnail_url}
@@ -408,12 +435,12 @@
 											/>
 										{:else}
 											<div class="flex h-full w-full items-center justify-center">
-												<ShoppingBag size={20} class="text-gray-400" />
+												<ShoppingBag size={16} class="text-gray-400 sm:h-5 sm:w-5" />
 											</div>
 										{/if}
 									</div>
 									<div class="flex-1">
-										<h3 class="line-clamp-2 font-medium text-gray-900">
+										<h3 class="line-clamp-2 text-sm font-medium text-gray-900 sm:text-base">
 											{item.product.title}
 										</h3>
 										<p class="text-sm text-gray-600">
@@ -450,16 +477,16 @@
 						<button
 							onclick={processCheckout}
 							disabled={loading}
-							class="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 py-4 text-lg font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
+							class="bg-primary hover:bg-primary-dark active:bg-primary-dark mt-4 flex w-full items-center justify-center gap-2 rounded-lg py-3 text-base font-semibold text-white disabled:opacity-50 sm:mt-6 sm:py-4 sm:text-lg"
 						>
 							{#if loading}
 								<div
-									class="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"
+									class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent sm:h-5 sm:w-5"
 								></div>
-								Processing...
+								<span class="text-sm sm:text-base">Processing...</span>
 							{:else}
-								<Lock size={20} />
-								Complete Order
+								<Lock size={18} class="sm:h-5 sm:w-5" />
+								<span class="text-sm sm:text-base">Complete Order</span>
 							{/if}
 						</button>
 

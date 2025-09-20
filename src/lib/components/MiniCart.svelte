@@ -1,14 +1,12 @@
 <script lang="ts">
-	import { cart, cartState, itemCount } from '$lib/stores/cart.svelte';
+	import { cart } from '$lib/stores/cart';
 	import { ShoppingCart } from '@lucide/svelte';
 
-	// Create local derived values from the functions
-	const currentItemCount = $derived(itemCount());
+	$: cartState = $cart;
+	$: itemCount = cartState.items.reduce((total, item) => total + item.quantity, 0);
 
 	function toggleCart() {
-		console.log('MiniCart toggleCart clicked');
 		cart.toggle();
-		console.log('cart.toggle called');
 	}
 </script>
 
@@ -19,16 +17,16 @@
 >
 	<ShoppingCart size={20} />
 
-	{#if currentItemCount > 0}
+	{#if itemCount > 0}
 		<!-- Cart Badge -->
 		<span
 			class="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white"
 		>
-			{currentItemCount > 99 ? '99+' : currentItemCount}
+			{itemCount > 99 ? '99+' : itemCount}
 		</span>
 
 		<!-- Desktop text -->
-		<span class="hidden md:block">Cart ({currentItemCount})</span>
+		<span class="hidden md:block">Cart ({itemCount})</span>
 	{:else}
 		<span class="hidden md:block">Cart</span>
 	{/if}

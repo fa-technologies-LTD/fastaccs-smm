@@ -8,7 +8,7 @@
 	<title>Instagram Account - Fashion Niche | FastAccs</title>
 	<meta
 		name="description"
-		content="Premium Instagram account with 45K followers in fashion niche. High engagement rate, verified email access, and instant delivery."
+		content="Premium social media accounts with authentic engagement and verified access. Instant delivery and professional support included."
 	/>
 </svelte:head>
 

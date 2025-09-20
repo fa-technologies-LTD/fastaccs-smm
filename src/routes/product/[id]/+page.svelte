@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { onMount } from 'svelte';
 	import {
 		Instagram,
 		Music,
@@ -22,15 +20,21 @@
 	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import { supabase } from '$lib/supabase';
-	import { cart } from '$lib/stores/cart.svelte';
+	import ImagePreviewModal from '$lib/components/ImagePreviewModal.svelte';
+
+	import { cart } from '$lib/stores/cart';
 	import type { PageData } from './$types';
 
-	export let data: PageData;
+	interface Props {
+		data: PageData;
+	}
 
-	let selectedImage = 0;
-	let addingToCart = false;
-	let showFullDescription = false;
+	let { data }: Props = $props();
+
+	let selectedImage = $state(0);
+	let addingToCart = $state(false);
+	let showFullDescription = $state(false);
+	let showImagePreview = $state(false);
 
 	// Platform icons mapping
 	const platformIcons: Record<string, any> = {
@@ -59,7 +63,10 @@
 		return count.toString();
 	}
 
-	// Get platform color
+	// Get platform icon component
+	function getPlatformIcon(platform: string) {
+		return platformIcons[platform] || Instagram;
+	}
 	function getPlatformColor(platform: string): string {
 		const colors: Record<string, string> = {
 			instagram: 'from-pink-500 to-purple-600',
@@ -114,17 +121,6 @@
 			((data.product.original_price - data.product.price) / data.product.original_price) * 100
 		);
 	}
-
-	// Add to cart function
-	async function addToCart() {
-		addingToCart = true;
-		try {
-			cart.addItem(data.product);
-			// Optional: Show success message or navigate to cart
-		} finally {
-			addingToCart = false;
-		}
-	}
 </script>
 
 <svelte:head>
@@ -172,17 +168,17 @@
 						/>
 					{:else}
 						<div class="flex h-full items-center justify-center">
-							<svelte:component
-								this={platformIcons[data.product.platform] || Instagram}
-								class="h-20 w-20 text-gray-400"
-							/>
+							{#if getPlatformIcon(data.product.platform)}
+								{@const PlatformIcon = getPlatformIcon(data.product.platform)}
+								<PlatformIcon class="h-20 w-20 text-gray-400" />
+							{/if}
 						</div>
 					{/if}
 				</div>
 
 				<!-- Thumbnail Gallery -->
 				{#if data.product.screenshot_urls && data.product.screenshot_urls.length > 1}
-					<div class="grid grid-cols-4 gap-2">
+					<div class="mb-4 grid grid-cols-4 gap-2">
 						{#each data.product.screenshot_urls as image, index}
 							<button
 								onclick={() => (selectedImage = index)}
@@ -194,6 +190,15 @@
 							</button>
 						{/each}
 					</div>
+
+					<!-- Preview All Images Button -->
+					<button
+						onclick={() => (showImagePreview = true)}
+						class="w-full rounded-lg border-2 border-purple-300 bg-purple-50 px-4 py-3 font-medium text-purple-700 transition-colors hover:bg-purple-100"
+					>
+						<Eye class="mr-2 inline h-4 w-4" />
+						Preview All Images ({data.product.screenshot_urls.length})
+					</button>
 				{/if}
 			</div>
 
@@ -204,10 +209,10 @@
 					<span
 						class={`inline-flex items-center gap-2 rounded-full bg-gradient-to-r ${getPlatformColor(data.product.platform)} px-4 py-2 text-sm font-medium text-white`}
 					>
-						<svelte:component
-							this={platformIcons[data.product.platform] || Instagram}
-							class="h-4 w-4"
-						/>
+						{#if getPlatformIcon(data.product.platform)}
+							{@const PlatformIcon = getPlatformIcon(data.product.platform)}
+							<PlatformIcon class="h-4 w-4" />
+						{/if}
 						{data.product.platform.charAt(0).toUpperCase() + data.product.platform.slice(1)} Account
 					</span>
 
@@ -228,9 +233,9 @@
 				<!-- Price -->
 				<div class="mb-6">
 					<div class="flex items-baseline gap-3">
-						<span class="text-4xl font-bold text-gray-900">{formatPrice(data.product.price)}</span>
+						<span class="text-3xl font-bold text-gray-900">{formatPrice(data.product.price)}</span>
 						{#if data.product.original_price && data.product.original_price > data.product.price}
-							<span class="text-xl text-gray-500 line-through"
+							<span class="text-base text-gray-500 line-through"
 								>{formatPrice(data.product.original_price)}</span
 							>
 							<span class="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
@@ -247,7 +252,7 @@
 							<Heart class="h-4 w-4" />
 							<span class="text-sm">Followers</span>
 						</div>
-						<div class="text-2xl font-bold text-gray-900">
+						<div class="text-xl font-bold text-gray-900">
 							{formatFollowers(data.product.follower_count || 0)}
 						</div>
 					</div>
@@ -257,7 +262,7 @@
 							<Eye class="h-4 w-4" />
 							<span class="text-sm">Following</span>
 						</div>
-						<div class="text-2xl font-bold text-gray-900">
+						<div class="text-xl font-bold text-gray-900">
 							{formatFollowers(data.product.following_count || 0)}
 						</div>
 					</div>
@@ -268,7 +273,7 @@
 								<MessageCircle class="h-4 w-4" />
 								<span class="text-sm">Posts</span>
 							</div>
-							<div class="text-2xl font-bold text-gray-900">
+							<div class="text-xl font-bold text-gray-900">
 								{formatFollowers(data.product.posts_count)}
 							</div>
 						</div>
@@ -280,7 +285,7 @@
 								<TrendingUp class="h-4 w-4" />
 								<span class="text-sm">Engagement</span>
 							</div>
-							<div class="text-2xl font-bold text-gray-900">
+							<div class="text-xl font-bold text-gray-900">
 								{data.product.engagement_rate.toFixed(1)}%
 							</div>
 						</div>
@@ -328,12 +333,40 @@
 					</div>
 				{/if}
 
+				<!-- Purchase Disclaimer -->
+				<div class="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+					<div class="mb-2 flex items-center gap-3">
+						<AlertCircle class="h-5 w-5 text-amber-600" />
+						<span class="font-semibold text-amber-800">Important Notice</span>
+					</div>
+					<div class="space-y-2 text-sm text-amber-700">
+						<p>
+							• By purchasing this account, you acknowledge that social media platforms may have
+							policies regarding account transfers.
+						</p>
+						<p>
+							• We recommend changing the password and security settings immediately upon receipt.
+						</p>
+						<p>
+							• Account performance (followers, engagement) may vary after transfer due to platform
+							algorithms.
+						</p>
+						<p>
+							• FastAccs provides the account "as-is" and cannot guarantee future performance
+							metrics.
+						</p>
+						<p class="font-medium">
+							• All sales are final. Please review account details carefully before purchase.
+						</p>
+					</div>
+				</div>
+
 				<!-- Action Buttons -->
 				<div class="mb-8 space-y-3">
 					<button
 						onclick={handleAddToCart}
 						disabled={addingToCart || data.product.is_sold || data.product.stock_quantity <= 0}
-						class="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 py-4 text-lg font-semibold text-white transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+						class="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-600 py-2 text-base font-semibold text-white transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						{#if addingToCart}
 							<div
@@ -349,7 +382,7 @@
 					</button>
 
 					<button
-						class="w-full rounded-xl border-2 border-purple-600 py-4 text-lg font-semibold text-purple-600 transition-colors hover:bg-purple-50"
+						class="w-full rounded-xl border-2 border-purple-600 py-2 text-base font-semibold text-purple-600 transition-colors hover:bg-purple-50"
 					>
 						Buy Now
 					</button>
@@ -451,7 +484,29 @@
 
 				<!-- Security -->
 				<div class="rounded-xl bg-white p-6 shadow-sm">
-					<h3 class="mb-4 text-lg font-bold">Security & Delivery</h3>
+					<h3 class="mb-4 text-lg font-bold">Security Features</h3>
+					<div class="space-y-3">
+						<div class="flex items-center justify-between">
+							<span class="text-gray-600">2FA Enabled</span>
+							<span
+								class={`font-medium ${data.product.two_factor_enabled ? 'text-green-600' : 'text-red-500'}`}
+							>
+								{data.product.two_factor_enabled ? 'Yes' : 'No'}
+							</span>
+						</div>
+						<div class="flex items-center justify-between">
+							<span class="text-gray-600">Easy Login</span>
+							<span
+								class={`font-medium ${data.product.easy_login_enabled ? 'text-green-600' : 'text-red-500'}`}
+							>
+								{data.product.easy_login_enabled ? 'Yes' : 'No'}
+							</span>
+						</div>
+					</div>
+
+					<hr class="my-4" />
+
+					<h4 class="mb-3 font-medium">Delivery Includes</h4>
 					<ul class="space-y-2 text-sm text-gray-700">
 						<li class="flex items-center gap-2">
 							<CheckCircle class="h-4 w-4 text-green-600" />
@@ -495,10 +550,10 @@
 									/>
 								{:else}
 									<div class="flex h-full items-center justify-center">
-										<svelte:component
-											this={platformIcons[product.platform] || Instagram}
-											class="h-8 w-8 text-gray-400"
-										/>
+										{#if getPlatformIcon(product.platform)}
+											{@const PlatformIcon = getPlatformIcon(product.platform)}
+											<PlatformIcon class="h-8 w-8 text-gray-400" />
+										{/if}
 									</div>
 								{/if}
 							</div>
@@ -523,6 +578,16 @@
 		{/if}
 	</div>
 </main>
+
+<!-- Image Preview Modal -->
+{#if data.product.screenshot_urls && data.product.screenshot_urls.length > 0}
+	<ImagePreviewModal
+		images={data.product.screenshot_urls}
+		isOpen={showImagePreview}
+		onClose={() => (showImagePreview = false)}
+		initialIndex={selectedImage}
+	/>
+{/if}
 
 <Footer />
 

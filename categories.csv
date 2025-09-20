@@ -1,0 +1,6 @@
+name,slug,description,icon,sort_order
+"Social Media Accounts","accounts","Premium verified social media accounts","user-circle",1
+"Instagram Services","instagram-services","Instagram followers, likes, and engagement","instagram",2
+"TikTok Services","tiktok-services","TikTok views, followers, and likes","music",3
+"Facebook Services","facebook-services","Facebook page likes and engagement","facebook",4
+"Twitter Services","twitter-services","Twitter followers, retweets, and engagement","twitter",5

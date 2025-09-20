@@ -1,10 +1,11 @@
 <script lang="ts">
-	import { cart, cartState, isEmpty, itemCount } from '$lib/stores/cart.svelte';
+	import { cart } from '$lib/stores/cart';
 	import { X, Plus, Minus, ShoppingBag, Trash2 } from '@lucide/svelte';
 	import { goto } from '$app/navigation';
 
-	// Create local derived values from the functions
-	const currentItemCount = $derived(itemCount());
+	$: cartState = $cart;
+	$: itemCount = cartState.items.length;
+	$: total = cartState.total;
 
 	function closeCart() {
 		cart.close();
@@ -36,7 +37,7 @@
 	<div class="fixed inset-0 z-50 overflow-hidden">
 		<!-- Background overlay -->
 		<div
-			class="bg-opacity-50 absolute inset-0 bg-black"
+			class="bg-opacity-25 absolute inset-0 bg-black"
 			onclick={closeCart}
 			role="button"
 			tabindex="0"
@@ -44,11 +45,11 @@
 		></div>
 
 		<!-- Cart Panel -->
-		<div class="absolute top-0 right-0 z-10 h-full w-full max-w-md bg-white shadow-xl">
+		<div class="absolute top-0 right-0 h-full w-full max-w-md bg-white shadow-xl">
 			<div class="flex h-full flex-col">
 				<!-- Cart Header -->
 				<div class="flex items-center justify-between border-b p-4">
-					<h2 class="text-lg font-semibold">Shopping Cart ({currentItemCount})</h2>
+					<h2 class="text-lg font-semibold">Shopping Cart ({itemCount})</h2>
 					<button
 						onclick={closeCart}
 						class="text-gray-400 hover:text-gray-600"
@@ -138,7 +139,7 @@
 						<!-- Total -->
 						<div class="mb-4 flex items-center justify-between">
 							<span class="text-lg font-medium">Total:</span>
-							<span class="text-xl font-bold text-blue-600">{formatPrice(cartState.total)}</span>
+							<span class="text-xl font-bold text-blue-600">{formatPrice(total)}</span>
 						</div>
 
 						<!-- Checkout Button -->

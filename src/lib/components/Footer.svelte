@@ -1,19 +1,15 @@
 <script>
 	import { Mail, Phone, MessageCircle, Send, Facebook, Twitter, Instagram } from '@lucide/svelte';
+	import footerLogo from '$lib/assets/footer-logo.png';
 </script>
 
-<footer class="bg-gray-900 text-white">
+<footer class="bg-neutral-dark text-white">
 	<div class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
 		<div class="grid grid-cols-1 gap-8 md:grid-cols-4">
 			<!-- Company Info -->
 			<div>
-				<div class="mb-4 flex items-center">
-					<div
-						class="mr-2 flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 text-sm font-bold text-white"
-					>
-						FA
-					</div>
-					<span class="text-xl font-bold">FastAccs</span>
+				<div class="mb-4">
+					<img src={footerLogo} alt="FastAccs Logo" class="h-8 w-auto" />
 				</div>
 				<p class="mb-4 text-gray-400">
 					Nigeria's most trusted marketplace for premium social media accounts and boosting
@@ -134,8 +130,16 @@
 				<div class="mt-6">
 					<div class="mb-2 text-sm text-gray-400">Trusted & Secure</div>
 					<div class="flex space-x-2">
-						<div class="rounded bg-gray-800 px-2 py-1 text-xs">SSL Secured</div>
-						<div class="rounded bg-gray-800 px-2 py-1 text-xs">24/7 Support</div>
+						<div
+							class="bg-primary/10 border-primary/20 text-primary rounded border px-2 py-1 text-xs"
+						>
+							SSL Secured
+						</div>
+						<div
+							class="bg-primary/10 border-primary/20 text-primary rounded border px-2 py-1 text-xs"
+						>
+							24/7 Support
+						</div>
 					</div>
 				</div>
 			</div>

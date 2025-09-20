@@ -1,58 +1,28 @@
 <script>
-	import { ShoppingCart, Eye, Calendar, Users, TrendingUp, Star } from '@lucide/svelte';
+	import { ShoppingCart } from '@lucide/svelte';
 
-	let product = {
-		id: 1,
-		title: 'Premium Instagram Account - Fashion Niche',
-		platform: 'Instagram',
-		followers: '45,000',
-		engagement: '4.2%',
-		created: 'Jan 2022',
-		posts: 342,
-		price: '₦22,000',
-		originalPrice: '₦28,000',
-		images: ['/api/placeholder/400/600', '/api/placeholder/400/600', '/api/placeholder/400/600'],
-		description:
-			'High-quality Instagram account in the fashion niche with authentic followers from Nigeria and worldwide. Perfect for fashion brands, influencers, or dropshipping businesses.',
-		features: [
-			'Verified email access included',
-			'Original phone number',
-			'No previous violations',
-			'High engagement rate',
-			'Niche-specific followers',
-			'Regular posting history'
-		],
-		stats: {
-			avgLikes: '1,890',
-			avgComments: '234',
-			stories: 'Daily',
-			location: 'Nigeria'
+	// This component will receive real product data as props
+	let {
+		product = {
+			id: 1,
+			title: 'Premium Social Media Account',
+			platform: 'Instagram',
+			images: ['/api/placeholder/400/600', '/api/placeholder/400/600', '/api/placeholder/400/600'],
+			description:
+				'High-quality social media account with authentic followers and engagement. Perfect for businesses, influencers, or content creators.',
+			features: [
+				'Verified email access included',
+				'Original phone number',
+				'No previous violations',
+				'High engagement rate',
+				'Quality followers',
+				'Regular posting history'
+			]
 		}
-	};
+	} = $props();
 
 	let currentImageIndex = $state(0);
 	let quantity = $state(1);
-
-	let testimonials = [
-		{
-			name: 'Ahmed M.',
-			rating: 5,
-			text: 'Exactly as described! Great account with real followers.',
-			date: '2 days ago'
-		},
-		{
-			name: 'Blessing O.',
-			rating: 5,
-			text: 'Fast delivery and excellent quality. Highly recommend!',
-			date: '1 week ago'
-		},
-		{
-			name: 'David K.',
-			rating: 5,
-			text: 'Perfect for my fashion business. Worth every naira!',
-			date: '2 weeks ago'
-		}
-	];
 </script>
 
 <div class="mx-auto max-w-7xl px-4 py-8">
@@ -94,52 +64,11 @@
 					{product.platform}
 				</span>
 				<h1 class="mb-2 text-3xl font-bold text-gray-900">{product.title}</h1>
-				<div class="flex items-center gap-4 text-gray-600">
-					<div class="flex items-center">
-						<Users class="mr-1 h-4 w-4" />
-						{product.followers} followers
-					</div>
-					<div class="flex items-center">
-						<TrendingUp class="mr-1 h-4 w-4" />
-						{product.engagement} engagement
-					</div>
-					<div class="flex items-center">
-						<Calendar class="mr-1 h-4 w-4" />
-						Created {product.created}
-					</div>
-				</div>
 			</div>
 
 			<!-- Price -->
 			<div class="mb-6">
-				<div class="mb-2 flex items-center gap-3">
-					<span class="text-3xl font-bold text-gray-900">{product.price}</span>
-					<span class="text-xl text-gray-500 line-through">{product.originalPrice}</span>
-					<span class="rounded bg-red-100 px-2 py-1 text-sm font-semibold text-red-800"
-						>22% OFF</span
-					>
-				</div>
-				<p class="font-semibold text-green-600">✓ Instant delivery after payment</p>
-			</div>
-
-			<!-- Stats Grid -->
-			<div class="mb-6 grid grid-cols-2 gap-4">
-				<div class="rounded-lg bg-gray-50 p-4">
-					<div class="text-sm text-gray-600">Avg. Likes</div>
-					<div class="text-xl font-semibold">{product.stats.avgLikes}</div>
-				</div>
-				<div class="rounded-lg bg-gray-50 p-4">
-					<div class="text-sm text-gray-600">Avg. Comments</div>
-					<div class="text-xl font-semibold">{product.stats.avgComments}</div>
-				</div>
-				<div class="rounded-lg bg-gray-50 p-4">
-					<div class="text-sm text-gray-600">Stories</div>
-					<div class="text-xl font-semibold">{product.stats.stories}</div>
-				</div>
-				<div class="rounded-lg bg-gray-50 p-4">
-					<div class="text-sm text-gray-600">Location</div>
-					<div class="text-xl font-semibold">{product.stats.location}</div>
-				</div>
+				<p class="font-semibold text-green-600">✓ Contact us for pricing and availability</p>
 			</div>
 
 			<!-- Add to Cart -->
@@ -165,13 +94,13 @@
 					class="mb-3 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-4 font-semibold text-white transition-colors hover:bg-blue-700"
 				>
 					<ShoppingCart class="h-5 w-5" />
-					Add to Cart - {quantity} × {product.price}
+					Add to Cart ({quantity})
 				</button>
 
 				<button
 					class="w-full rounded-lg border-2 border-blue-600 py-4 font-semibold text-blue-600 transition-colors hover:bg-blue-50"
 				>
-					Buy Now
+					Contact for Details
 				</button>
 			</div>
 
@@ -190,47 +119,19 @@
 		</div>
 	</div>
 
-	<!-- Description & Testimonials -->
-	<div class="mt-12 grid grid-cols-1 gap-8 lg:grid-cols-2">
-		<!-- Description -->
-		<div>
-			<h3 class="mb-4 text-2xl font-bold">Account Description</h3>
-			<p class="mb-6 leading-relaxed text-gray-700">{product.description}</p>
+	<!-- Description -->
+	<div class="mt-12">
+		<h3 class="mb-4 text-2xl font-bold">Account Description</h3>
+		<p class="mb-6 leading-relaxed text-gray-700">{product.description}</p>
 
-			<div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
-				<h4 class="mb-2 font-semibold text-blue-900">Delivery Information</h4>
-				<ul class="space-y-1 text-sm text-blue-800">
-					<li>• Account credentials delivered via WhatsApp, Telegram, or Email</li>
-					<li>• Full login access within 5 minutes of payment</li>
-					<li>• 24/7 support for any issues</li>
-					<li>• Money-back guarantee if not satisfied</li>
-				</ul>
-			</div>
-		</div>
-
-		<!-- Testimonials -->
-		<div>
-			<h3 class="mb-4 text-2xl font-bold">Customer Reviews</h3>
-			<div class="space-y-4">
-				{#each testimonials as testimonial}
-					<div class="rounded-lg bg-gray-50 p-4">
-						<div class="mb-2 flex items-center justify-between">
-							<span class="font-semibold text-gray-900">{testimonial.name}</span>
-							<div class="flex">
-								{#each Array(testimonial.rating) as _}
-									<Star class="h-4 w-4 fill-yellow-400 text-yellow-400" />
-								{/each}
-							</div>
-						</div>
-						<p class="mb-1 text-sm text-gray-700">"{testimonial.text}"</p>
-						<span class="text-xs text-gray-500">{testimonial.date}</span>
-					</div>
-				{/each}
-			</div>
-
-			<button class="mt-4 font-semibold text-blue-600 hover:text-blue-700">
-				View All Reviews →
-			</button>
+		<div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
+			<h4 class="mb-2 font-semibold text-blue-900">Delivery Information</h4>
+			<ul class="space-y-1 text-sm text-blue-800">
+				<li>• Account credentials delivered via secure channels</li>
+				<li>• Full verification and support included</li>
+				<li>• Professional customer support</li>
+				<li>• Quality guarantee on all accounts</li>
+			</ul>
 		</div>
 	</div>
 </div>

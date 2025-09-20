@@ -1,20 +1,22 @@
 import type { PageLoad } from './$types';
-import { db } from '$lib/supabase';
+import { getProducts } from '$lib/services/products';
+import { supabase } from '$lib/supabase';
 
 export const load: PageLoad = async ({ url, parent }) => {
 	await parent(); // Wait for layout auth
 
 	const category = url.searchParams.get('category');
 	const platform = url.searchParams.get('platform');
+	const search = url.searchParams.get('search');
 	const page = parseInt(url.searchParams.get('page') || '1');
 	const limit = 12;
 	const offset = (page - 1) * limit;
 
 	try {
-		// Get products
-		const { data: products, error: productsError } = await db.getProducts({
-			category: category || undefined,
+		// Get products with proper filters
+		const { data: products, error: productsError } = await getProducts({
 			platform: platform || undefined,
+			search: search || undefined,
 			limit,
 			offset
 		});
@@ -29,7 +31,11 @@ export const load: PageLoad = async ({ url, parent }) => {
 		}
 
 		// Get categories for filtering
-		const { data: categories, error: categoriesError } = await db.getCategories();
+		const { data: categories, error: categoriesError } = await supabase
+			.from('categories')
+			.select('*')
+			.eq('is_active', true)
+			.order('sort_order');
 
 		if (categoriesError) {
 			console.error('Error fetching categories:', categoriesError);
@@ -41,7 +47,8 @@ export const load: PageLoad = async ({ url, parent }) => {
 			currentPage: page,
 			filters: {
 				category,
-				platform
+				platform,
+				search
 			}
 		};
 	} catch (error) {
@@ -49,7 +56,8 @@ export const load: PageLoad = async ({ url, parent }) => {
 		return {
 			products: [],
 			categories: [],
-			error: 'An unexpected error occurred'
+			currentPage: page,
+			error: 'Failed to load data'
 		};
 	}
 };

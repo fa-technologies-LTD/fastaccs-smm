@@ -17,73 +17,16 @@
 		name: 'John Doe',
 		email: 'john.doe@example.com',
 		joinDate: 'March 2024',
-		totalOrders: 12,
-		totalSpent: 145000
+		totalOrders: 0,
+		totalSpent: 0
 	};
 
-	let orders = [
-		{
-			id: 'ORD-001',
-			date: '2025-01-15',
-			items: [
-				{ type: 'Instagram Account', details: '45K followers • Fashion niche', price: 22000 }
-			],
-			total: 22000,
-			status: 'delivered',
-			deliveryMethod: 'WhatsApp',
-			deliveredAt: '2025-01-15 14:30'
-		},
-		{
-			id: 'ORD-002',
-			date: '2025-01-12',
-			items: [
-				{ type: 'TikTok Views', details: '10K views', price: 250 },
-				{ type: 'Instagram Followers', details: '1K followers', price: 350 }
-			],
-			total: 600,
-			status: 'processing',
-			deliveryMethod: 'Telegram',
-			estimatedDelivery: '2025-01-16 16:00'
-		},
-		{
-			id: 'ORD-003',
-			date: '2025-01-08',
-			items: [{ type: 'YouTube Subscribers', details: '250 subscribers', price: 450 }],
-			total: 450,
-			status: 'completed',
-			deliveryMethod: 'Email',
-			deliveredAt: '2025-01-08 11:20'
-		}
+	let orders: any[] = [
+		// Orders will be loaded from actual data
 	];
 
-	let messages = [
-		{
-			id: 1,
-			subject: 'Order #ORD-001 Delivered',
-			content:
-				'Your Instagram account has been successfully delivered via WhatsApp. Login details: Username: @fashion_lifestyle_45k, Password: SecurePass123',
-			date: '2025-01-15 14:30',
-			read: true,
-			type: 'delivery'
-		},
-		{
-			id: 2,
-			subject: 'Order #ORD-002 Processing',
-			content:
-				'Your TikTok views order is currently being processed. Expected completion time: 2-4 hours.',
-			date: '2025-01-12 10:15',
-			read: false,
-			type: 'update'
-		},
-		{
-			id: 3,
-			subject: 'Welcome to FastAccs!',
-			content:
-				'Thank you for joining FastAccs! Your account has been created successfully. Start browsing our premium social media accounts and boosting services.',
-			date: '2025-01-08 09:00',
-			read: true,
-			type: 'welcome'
-		}
+	let messages: any[] = [
+		// Messages will be loaded from actual data
 	];
 
 	function getStatusIcon(status: any) {

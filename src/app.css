@@ -1,1 +1,115 @@
 @import 'tailwindcss';
+
+/* Fast Accounts Brand Colors */
+:root {
+	/* PRIMARY COLORS (from brand guidelines) */
+	--color-primary: #25b570; /* Primary Green */
+	--color-primary-bright: #05d471; /* Bright Green */
+	--color-primary-dark: #0d9152; /* Dark Green */
+	--color-primary-accent: #cadb2e; /* Primary Lime */
+	--color-primary-accent-bright: #eeff4e; /* Bright Lime */
+
+	/* SECONDARY COLORS (from brand guidelines) */
+	--color-secondary: #2e3192; /* Secondary Blue */
+	--color-secondary-light: #696dfa; /* Secondary Purple Light */
+	--color-secondary-soft: #aaadff; /* Secondary Purple Soft */
+
+	/* NEUTRAL COLORS */
+	--color-neutral-dark: #0f162f; /* Navy (neutral) */
+	--color-neutral: #313131; /* Gray */
+	--color-white: #ffffff;
+	--color-black: #000000;
+}
+
+/* Primary Color Utilities */
+.bg-primary {
+	background-color: var(--color-primary);
+}
+.bg-primary-bright {
+	background-color: var(--color-primary-bright);
+}
+.bg-primary-dark {
+	background-color: var(--color-primary-dark);
+}
+.bg-primary-accent {
+	background-color: var(--color-primary-accent);
+}
+.bg-primary-accent-bright {
+	background-color: var(--color-primary-accent-bright);
+}
+
+.text-primary {
+	color: var(--color-primary);
+}
+.text-primary-bright {
+	color: var(--color-primary-bright);
+}
+.text-primary-dark {
+	color: var(--color-primary-dark);
+}
+.text-primary-accent {
+	color: var(--color-primary-accent);
+}
+.text-primary-accent-bright {
+	color: var(--color-primary-accent-bright);
+}
+
+.border-primary {
+	border-color: var(--color-primary);
+}
+.border-primary-accent {
+	border-color: var(--color-primary-accent);
+}
+
+/* Secondary Color Utilities */
+.bg-secondary {
+	background-color: var(--color-secondary);
+}
+.bg-secondary-light {
+	background-color: var(--color-secondary-light);
+}
+.bg-secondary-soft {
+	background-color: var(--color-secondary-soft);
+}
+
+.text-secondary {
+	color: var(--color-secondary);
+}
+.text-secondary-light {
+	color: var(--color-secondary-light);
+}
+.text-secondary-soft {
+	color: var(--color-secondary-soft);
+}
+
+.border-secondary {
+	border-color: var(--color-secondary);
+}
+.border-secondary-light {
+	border-color: var(--color-secondary-light);
+}
+
+/* Neutral Color Utilities */
+.bg-neutral-dark {
+	background-color: var(--color-neutral-dark);
+}
+.bg-neutral {
+	background-color: var(--color-neutral);
+}
+.text-neutral-dark {
+	color: var(--color-neutral-dark);
+}
+.text-neutral {
+	color: var(--color-neutral);
+}
+.border-neutral-dark {
+	border-color: var(--color-neutral-dark);
+}
+
+/* Primary Brand Gradients */
+.bg-gradient-primary {
+	background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-bright) 100%);
+}
+.bg-gradient-secondary {
+	background: linear-gradient(135deg, var(--color-secondary) 0%, var(--color-secondary-light) 100%);
+}

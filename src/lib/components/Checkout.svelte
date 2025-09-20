@@ -10,27 +10,8 @@
 		User
 	} from '@lucide/svelte';
 
-	let cartItems = $state([
-		{
-			id: 1,
-			type: 'account',
-			title: 'Instagram Account - Fashion Niche',
-			platform: 'Instagram',
-			followers: '45,000',
-			price: 22000,
-			quantity: 1,
-			image: '/api/placeholder/80/80'
-		},
-		{
-			id: 2,
-			type: 'service',
-			title: 'TikTok Views',
-			platform: 'TikTok',
-			amount: '10,000 views',
-			price: 250,
-			quantity: 2,
-			targetUrl: 'https://tiktok.com/@username/video/123456789'
-		}
+	let cartItems = $state<any[]>([
+		// Cart will be populated from actual data
 	]);
 
 	let deliveryMethod = $state('whatsapp');
@@ -48,7 +29,9 @@
 		phone: ''
 	});
 
-	let subtotal = $derived(cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0));
+	let subtotal = $derived(
+		cartItems.reduce((sum, item) => sum + (item?.price || 0) * (item?.quantity || 1), 0)
+	);
 	let tax = $derived(Math.round(subtotal * 0.05)); // 5% tax
 	let total = $derived(subtotal + tax);
 

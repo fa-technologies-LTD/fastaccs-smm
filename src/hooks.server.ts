@@ -1,5 +1,5 @@
 import { createServerClient } from '@supabase/ssr';
-import { type Handle, redirect } from '@sveltejs/kit';
+import { type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
@@ -12,27 +12,15 @@ const supabase: Handle = async ({ event, resolve }) => {
 	 */
 	event.locals.supabase = createServerClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, {
 		cookies: {
-			get: (key) => event.cookies.get(key),
-			/**
-			 * SvelteKit's cookies.set defaults `sameSite` to `lax`.
-			 * Set it to `none` to support embedding your app in an iframe,
-			 * like in Supabase Auth with additional providers.
-			 * Also set `secure` to `true` if serving over HTTPS.
-			 */
-			set: (key, value, options) => {
-				event.cookies.set(key, value, {
-					...options,
-					path: options?.path || '/',
-					sameSite: 'lax',
-					secure: false
-				});
-			},
-			remove: (key, options) => {
-				event.cookies.delete(key, {
-					...options,
-					path: options?.path || '/',
-					sameSite: 'lax',
-					secure: false
+			getAll: () => event.cookies.getAll(),
+			setAll: (cookiesToSet) => {
+				cookiesToSet.forEach(({ name, value, options }) => {
+					event.cookies.set(name, value, {
+						...options,
+						path: options?.path || '/',
+						sameSite: 'lax',
+						secure: false
+					});
 				});
 			}
 		}
@@ -79,10 +67,13 @@ const authGuard: Handle = async ({ event, resolve }) => {
 	event.locals.session = session;
 	event.locals.user = user;
 
-	// Add guest user handling here
+	// Auth guard removed - unrestricted access to all routes
+	// Original guard logic commented out:
+	/*
 	if (!session && event.url.pathname.startsWith('/dashboard')) {
-		throw redirect(303, '/login');
+		throw redirect(303, '/auth/login');
 	}
+	*/
 
 	return resolve(event);
 };
