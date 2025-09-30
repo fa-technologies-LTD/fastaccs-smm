@@ -6,22 +6,8 @@ import { get } from 'svelte/store';
 export async function load({ url }) {
 	const authState: AuthState = get(auth);
 
-	// No authentication required - removed auth guards for unrestricted access
-	// Original auth guard logic is commented out below:
-	/*
-	// Check if user is authenticated
-	if (!authState.user) {
-		throw redirect(302, `/auth/login?redirectTo=${encodeURIComponent(url.pathname)}`);
-	}
-
-	// Check if user is admin using environment variable configuration
-	const adminEmails = ADMIN_EMAILS ? ADMIN_EMAILS.split(',').map((email) => email.trim()) : [];
-	const isAdmin = adminEmails.includes(authState.user.email || '');
-
-	if (!isAdmin) {
-		throw redirect(302, '/dashboard?error=access_denied');
-	}
-	*/
+	// Temporarily allow access without auth for testing
+	// TODO: Re-enable proper admin authentication once RLS policies are configured
 
 	return {
 		url: url.pathname,

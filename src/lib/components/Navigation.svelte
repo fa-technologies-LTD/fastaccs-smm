@@ -38,7 +38,10 @@
 
 			<!-- Desktop Navigation -->
 			<div class="hidden items-center space-x-8 md:flex">
-				<a href="/accounts" class="font-medium text-gray-600 transition-colors hover:text-gray-900">
+				<a
+					href="/platforms"
+					class="font-medium text-gray-600 transition-colors hover:text-gray-900"
+				>
 					Accounts
 				</a>
 				<a href="/services" class="font-medium text-gray-600 transition-colors hover:text-gray-900">
@@ -137,7 +140,7 @@
 				<!-- Mobile Navigation Links -->
 				<div class="space-y-1">
 					<a
-						href="/accounts"
+						href="/platforms"
 						class="block py-3 text-base font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
 					>
 						Accounts

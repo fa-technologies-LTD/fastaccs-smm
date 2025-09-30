@@ -1,9 +1,90 @@
 import { supabase } from '$lib/supabase';
-import type { Tables, TablesInsert, TablesUpdate } from '$lib/supabase';
 
-export type Product = Tables<'products'>;
-export type ProductInsert = TablesInsert<'products'>;
-export type ProductUpdate = TablesUpdate<'products'>;
+// Type for product metadata
+export interface ProductMetadata {
+	features?: string[];
+	requirements?: string[];
+	delivery_time?: string;
+	warranty_period?: string;
+	support_included?: boolean;
+	access_type?: 'shared' | 'exclusive' | 'temporary';
+	limitations?: string[];
+	[key: string]: unknown;
+}
+
+// New schema types based on our tier system
+export interface Category {
+	id: string;
+	parent_id: string | null;
+	name: string;
+	slug: string;
+	description: string | null;
+	category_type: 'platform' | 'tier' | 'service_group';
+	metadata: ProductMetadata;
+	sort_order: number;
+	is_active: boolean;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface Product {
+	id: string;
+	category_id: string;
+	name: string;
+	slug: string;
+	description: string | null;
+	price: number;
+	sku_type: 'tier' | 'unique';
+	screenshot_urls: string[] | null;
+	tags: string[] | null;
+	status: 'active' | 'inactive' | 'out_of_stock';
+	stock_quantity: number;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface ProductInsert {
+	category_id: string;
+	name: string;
+	slug: string;
+	description?: string | null;
+	price: number;
+	sku_type: 'tier' | 'unique';
+	screenshot_urls?: string[] | null;
+	tags?: string[] | null;
+	status?: 'active' | 'inactive' | 'out_of_stock';
+	stock_quantity?: number;
+}
+
+export interface ProductUpdate {
+	category_id?: string;
+	name?: string;
+	slug?: string;
+	description?: string | null;
+	price?: number;
+	sku_type?: 'tier' | 'unique';
+	screenshot_urls?: string[] | null;
+	tags?: string[] | null;
+	status?: 'active' | 'inactive' | 'out_of_stock';
+	stock_quantity?: number;
+}
+
+export interface TierInventory {
+	product_id: string;
+	tier_name: string;
+	tier_slug: string;
+	category_id: string;
+	category_name: string;
+	metadata: ProductMetadata;
+	accounts_available: number;
+	reservations_active: number;
+	visible_available: number;
+	price: number;
+	product_status: string;
+	tier_active: boolean;
+	platform_name: string;
+	platform_slug: string;
+}
 
 // Get all products with filtering and search
 export async function getProducts(filters?: {

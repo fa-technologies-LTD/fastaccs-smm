@@ -8,8 +8,7 @@
 		Mail,
 		MessageSquare,
 		Check,
-		Lock,
-		Chrome
+		Lock
 	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -18,6 +17,8 @@
 	import { supabase } from '$lib/supabase';
 	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
+	import { createTierOrder } from '$lib/services/orders';
+	import ReservationCountdown from '$lib/components/ReservationCountdown.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -38,7 +39,7 @@
 	let guestEmail = $state('');
 	let guestName = $state('');
 	let guestPhone = $state('');
-	let deliveryMethod = $state('email');
+	let deliveryMethod: 'email' | 'whatsapp' | 'telegram' = $state('email');
 	let whatsappNumber = $state('');
 	let telegramUsername = $state('');
 
@@ -59,26 +60,9 @@
 
 		// Redirect if cart is empty and not loading
 		if (!authState.loading && cartState.items.length === 0) {
-			goto('/products');
+			goto('/platforms');
 		}
 	});
-
-	async function signInWithGoogle() {
-		try {
-			loading = true;
-			const { data, error } = await supabase.auth.signInWithOAuth({
-				provider: 'google',
-				options: {
-					redirectTo: `${window.location.origin}/checkout`
-				}
-			});
-			if (error) throw error;
-		} catch (error) {
-			console.error('Google sign in error:', error);
-		} finally {
-			loading = false;
-		}
-	}
 
 	function formatPrice(price: number): string {
 		return new Intl.NumberFormat('en-NG', {
@@ -130,23 +114,38 @@
 
 		loading = true;
 		try {
-			// Create order logic here
-			console.log('Processing checkout...', {
-				user: authState.user,
-				guestEmail,
-				guestName,
+			// Create tier-based order with account allocation
+			const orderResult = await createTierOrder({
+				userId: authState.user?.id,
+				guestEmail: authState.user ? undefined : guestEmail,
+				guestName: authState.user ? undefined : guestName,
 				deliveryMethod,
+				whatsappNumber: deliveryMethod === 'whatsapp' ? whatsappNumber : undefined,
+				telegramUsername: deliveryMethod === 'telegram' ? telegramUsername : undefined,
 				items: cartState.items,
 				total: cartState.total
 			});
 
-			// For now, show success message
-			alert('Order submitted successfully! You will receive your accounts shortly.');
-			cart.clear();
-			goto('/dashboard');
+			if (orderResult.success) {
+				alert(
+					'Order submitted successfully! Accounts have been allocated and you will receive them shortly.'
+				);
+				await cart.clear();
+
+				// Redirect based on user status
+				if (authState.user) {
+					goto('/dashboard');
+				} else {
+					goto(`/order/${orderResult.orderId}`);
+				}
+			} else {
+				throw new Error(orderResult.error || 'Failed to process order');
+			}
 		} catch (error) {
 			console.error('Checkout error:', error);
-			alert('Failed to process order. Please try again.');
+			alert(
+				`Failed to process order: ${error instanceof Error ? error.message : 'Please try again.'}`
+			);
 		} finally {
 			loading = false;
 		}
@@ -184,13 +183,13 @@
 				<ShoppingBag size={48} class="mx-auto mb-4 text-gray-300 sm:h-16 sm:w-16" />
 				<h2 class="mb-2 text-lg font-semibold text-gray-900 sm:text-xl">Your cart is empty</h2>
 				<p class="mb-6 text-sm text-gray-600 sm:text-base">
-					Add some products to continue with checkout
+					Add some accounts to continue with checkout
 				</p>
 				<button
-					onclick={() => goto('/products')}
+					onclick={() => goto('/platforms')}
 					class="bg-primary hover:bg-primary-dark active:bg-primary-dark rounded-lg px-4 py-2.5 text-sm font-semibold text-white sm:px-6 sm:py-3 sm:text-base"
 				>
-					Browse Products
+					Browse Accounts
 				</button>
 			</div>
 		{:else}
@@ -222,25 +221,6 @@
 								</div>
 							</div>
 						{:else}
-							<!-- Login Option Banner -->
-							<div class="mb-6 rounded-lg border border-purple-200 bg-purple-50 p-4">
-								<div class="flex items-center justify-between">
-									<div class="flex items-center gap-3">
-										<Chrome size={20} class="text-purple-600" />
-										<div>
-											<p class="font-medium text-purple-800">Save time with Google Sign In</p>
-											<p class="text-sm text-purple-600">Faster checkout and order history</p>
-										</div>
-									</div>
-									<button
-										onclick={signInWithGoogle}
-										class="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
-									>
-										Sign In
-									</button>
-								</div>
-							</div>
-
 							<!-- Guest Form -->
 							<div class="space-y-4">
 								<div>
@@ -355,25 +335,6 @@
 									<div class="text-sm text-gray-600">Secure delivery via Telegram</div>
 								</div>
 							</label>
-
-							<label
-								class="flex cursor-pointer items-center gap-3 rounded-lg border p-4 hover:bg-gray-50 {deliveryMethod ===
-								'dashboard'
-									? 'border-purple-500 bg-purple-50'
-									: ''}"
-							>
-								<input
-									type="radio"
-									bind:group={deliveryMethod}
-									value="dashboard"
-									class="text-purple-600"
-								/>
-								<CreditCard size={20} class="text-purple-600" />
-								<div>
-									<div class="font-medium">Dashboard</div>
-									<div class="text-sm text-gray-600">Access from your account dashboard</div>
-								</div>
-							</label>
 						</div>
 
 						<!-- Additional fields based on delivery method -->
@@ -446,6 +407,17 @@
 										<p class="text-sm text-gray-600">
 											{item.product.platform} • Qty: {item.quantity}
 										</p>
+
+										<!-- Reservation Countdown -->
+										{#if item.reservationExpiry}
+											<div class="mt-1">
+												<ReservationCountdown
+													expiresAt={item.reservationExpiry}
+													onExpired={() => cart.cleanupExpired()}
+												/>
+											</div>
+										{/if}
+
 										<p class="font-semibold text-purple-600">
 											{formatPrice(item.product.price * item.quantity)}
 										</p>

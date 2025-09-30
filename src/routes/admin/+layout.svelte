@@ -2,13 +2,24 @@
 	import { page } from '$app/state';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import { Package, ShoppingCart, Users, BarChart3, Settings, Home, Plus } from '@lucide/svelte';
+	import {
+		Package,
+		ShoppingCart,
+		Users,
+		BarChart3,
+		Settings,
+		Home,
+		Plus,
+		Layers
+	} from '@lucide/svelte';
 
 	export let data;
 
 	const adminNavItems = [
 		{ href: '/admin', label: 'Dashboard', icon: Home },
-		{ href: '/admin/inventory', label: 'Inventory', icon: Package },
+		{ href: '/admin/platforms', label: 'Platforms', icon: Layers },
+		{ href: '/inventory', label: 'Inventory', icon: Package },
+		{ href: '/admin/batches', label: 'Batch Import', icon: Plus },
 		{ href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
 		{ href: '/admin/users', label: 'Users', icon: Users },
 		{ href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },

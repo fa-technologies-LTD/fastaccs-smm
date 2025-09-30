@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { supabase } from '$lib/supabase';
+	import { showError, showSuccess } from '$lib/stores/toasts';
 	import { Plus, Edit, Trash2, Save, X } from '@lucide/svelte';
 
 	interface Category {
@@ -90,7 +91,10 @@
 			onUpdate();
 		} catch (error) {
 			console.error('Error saving category:', error);
-			alert('Failed to save category');
+			showError(
+				'Failed to save category',
+				error instanceof Error ? error.message : 'An unexpected error occurred'
+			);
 		} finally {
 			loading = false;
 		}
@@ -108,7 +112,7 @@
 			onUpdate();
 		} catch (error) {
 			console.error('Error deleting category:', error);
-			alert('Failed to delete category. It may have associated products.');
+			showError('Failed to delete category', 'It may have associated products.');
 		}
 	}
 

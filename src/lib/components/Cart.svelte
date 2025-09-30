@@ -2,6 +2,7 @@
 	import { cart } from '$lib/stores/cart';
 	import { X, Plus, Minus, ShoppingBag, Trash2 } from '@lucide/svelte';
 	import { goto } from '$app/navigation';
+	import ReservationCountdown from './ReservationCountdown.svelte';
 
 	$: cartState = $cart;
 	$: itemCount = cartState.items.length;
@@ -11,12 +12,17 @@
 		cart.close();
 	}
 
-	function removeItem(productId: string) {
-		cart.removeItem(productId);
+	async function removeItem(productId: string) {
+		await cart.removeItem(productId);
 	}
 
-	function updateQuantity(productId: string, quantity: number) {
-		cart.updateQuantity(productId, quantity);
+	async function updateQuantity(productId: string, quantity: number) {
+		await cart.updateQuantity(productId, quantity);
+	}
+
+	function handleReservationExpired(productId: string) {
+		// Clean up expired items from cart
+		cart.cleanupExpired();
 	}
 
 	function proceedToCheckout() {
@@ -94,6 +100,17 @@
 										<p class="text-xs text-gray-500">
 											{item.product.platform} • {item.product.follower_count?.toLocaleString()} followers
 										</p>
+
+										<!-- Reservation Countdown -->
+										{#if item.reservationExpiry}
+											<div class="mt-1">
+												<ReservationCountdown
+													expiresAt={item.reservationExpiry}
+													onExpired={() => handleReservationExpired(item.id)}
+												/>
+											</div>
+										{/if}
+
 										<div class="mt-1 flex items-center justify-between">
 											<span class="text-sm font-semibold text-blue-600">
 												{formatPrice(item.product.price)}

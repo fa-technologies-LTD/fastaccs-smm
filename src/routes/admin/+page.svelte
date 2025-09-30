@@ -1,64 +1,151 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import {
 		Package,
 		ShoppingCart,
 		Users,
 		TrendingUp,
 		DollarSign,
-		AlertCircle
+		AlertCircle,
+		Clock,
+		CheckCircle,
+		Activity,
+		RefreshCw,
+		Calendar,
+		BarChart3,
+		Eye,
+		ArrowUpRight,
+		ArrowDownRight
 	} from '@lucide/svelte';
-	import { getProductStats } from '$lib/services/products';
+	import { getOrderStats } from '$lib/services/orders';
+	import { getInventoryStats } from '$lib/services/inventory';
 
-	// Reactive stats data
-	let stats = {
-		totalProducts: 0,
-		availableProducts: 0,
-		lowStockProducts: 0,
-		soldProducts: 0,
-		totalOrders: 0, // TODO: Add orders service
-		totalUsers: 0, // TODO: Add users service
-		revenue: 0 // TODO: Calculate from orders
-	};
+	// Props from load function
+	interface Props {
+		data: {
+			orderStats: {
+				total_orders: number;
+				pending_orders: number;
+				processing_orders: number;
+				completed_orders: number;
+				failed_orders: number;
+				todays_orders: number;
+				total_revenue: number;
+				todays_revenue: number;
+			};
+			inventoryStats: {
+				total_tiers: number;
+				total_available: number;
+				total_reserved: number;
+				out_of_stock: number;
+				low_stock: number;
+				platforms: number;
+			};
+			error: string | null;
+		};
+	}
 
-	let loading = true;
-	let error = '';
+	let { data }: Props = $props();
 
-	async function loadStats() {
+	let orderStats = $state(data.orderStats);
+	let inventoryStats = $state(data.inventoryStats);
+	let loading = $state(false);
+	let error = $state(data.error);
+	let autoRefresh = $state(false);
+	let refreshInterval: NodeJS.Timeout | null = null;
+	let lastUpdated = $state<Date>(new Date());
+
+	async function refreshData() {
+		loading = true;
 		try {
-			loading = true;
+			// Handle services individually to get partial data if one fails
+			const orderStatsPromise = getOrderStats().catch((err) => {
+				console.warn('Order stats refresh failed:', err);
+				return { data: null, error: err };
+			});
 
-			// Load product statistics
-			const productStatsResult = await getProductStats();
-			if (productStatsResult.error) {
-				throw new Error('Failed to load product statistics');
+			const inventoryStatsPromise = getInventoryStats().catch((err) => {
+				console.warn('Inventory stats refresh failed:', err);
+				return { data: null, error: err };
+			});
+
+			const [orderStatsResult, inventoryStatsResult] = await Promise.all([
+				orderStatsPromise,
+				inventoryStatsPromise
+			]);
+
+			// Update what we can
+			if (orderStatsResult.data) {
+				orderStats = orderStatsResult.data;
+			}
+			if (inventoryStatsResult.data) {
+				inventoryStats = inventoryStatsResult.data;
 			}
 
-			if (productStatsResult.data) {
-				stats.totalProducts = productStatsResult.data.totalProducts;
-				stats.availableProducts = productStatsResult.data.availableProducts;
-				stats.lowStockProducts = productStatsResult.data.lowStockProducts;
-				stats.soldProducts = productStatsResult.data.soldProducts;
+			// Collect any errors
+			const errors = [];
+			if (orderStatsResult.error) {
+				errors.push('Order stats unavailable');
+			}
+			if (inventoryStatsResult.error) {
+				errors.push('Inventory stats unavailable');
 			}
 
-			// TODO: Load other stats (orders, users, revenue) when those services are ready
+			lastUpdated = new Date();
+			error = errors.length > 0 ? errors.join(', ') : null;
 		} catch (err) {
-			console.error('Error loading dashboard stats:', err);
-			error = err instanceof Error ? err.message : 'Failed to load dashboard data';
+			console.error('Error refreshing dashboard:', err);
+			error = err instanceof Error ? err.message : 'Failed to refresh dashboard data';
 		} finally {
 			loading = false;
 		}
 	}
 
+	function startAutoRefresh() {
+		if (refreshInterval) {
+			clearInterval(refreshInterval);
+		}
+		refreshInterval = setInterval(refreshData, 30000); // Refresh every 30 seconds
+	}
+
+	function toggleAutoRefresh() {
+		autoRefresh = !autoRefresh;
+		if (autoRefresh) {
+			startAutoRefresh();
+		} else if (refreshInterval) {
+			clearInterval(refreshInterval);
+			refreshInterval = null;
+		}
+	}
+
 	function formatCurrency(amount: number) {
-		return new Intl.NumberFormat('en-NG', {
+		return new Intl.NumberFormat('en-US', {
 			style: 'currency',
-			currency: 'NGN'
+			currency: 'USD'
 		}).format(amount);
 	}
 
+	function formatRelativeTime(date: Date): string {
+		const now = new Date();
+		const diffMs = now.getTime() - date.getTime();
+		const diffMins = Math.floor(diffMs / 60000);
+
+		if (diffMins < 1) return 'Just now';
+		if (diffMins < 60) return `${diffMins}m ago`;
+		if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+		return `${Math.floor(diffMins / 1440)}d ago`;
+	}
+
 	onMount(() => {
-		loadStats();
+		if (autoRefresh) {
+			startAutoRefresh();
+		}
+	});
+
+	onDestroy(() => {
+		if (refreshInterval) {
+			clearInterval(refreshInterval);
+		}
 	});
 </script>
 
@@ -66,185 +153,378 @@
 	<title>Admin Dashboard - FastAccs</title>
 </svelte:head>
 
-<div class="space-y-4 sm:space-y-6">
-	<!-- Page Header -->
-	<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-		<div>
-			<h1 class="text-xl font-bold text-gray-900 sm:text-2xl">Admin Dashboard</h1>
-			<p class="text-sm text-gray-500 sm:text-base">Overview of your FastAccs business</p>
-		</div>
-		<div class="text-xs text-gray-500 sm:text-sm">
-			Last updated: {new Date().toLocaleDateString()}
-		</div>
-	</div>
-
-	<!-- Stats Cards -->
-	{#if loading}
-		<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-			{#each Array(6) as _}
-				<div class="animate-pulse rounded-lg bg-white p-6 shadow">
-					<div class="flex items-center">
-						<div class="h-12 w-12 rounded-full bg-gray-200 p-3"></div>
-						<div class="ml-4 flex-1">
-							<div class="mb-2 h-4 w-3/4 rounded bg-gray-200"></div>
-							<div class="h-6 w-1/2 rounded bg-gray-200"></div>
-						</div>
-					</div>
+<div class="min-h-screen bg-gray-50 p-6">
+	<div class="mx-auto max-w-7xl">
+		<!-- Enhanced Header -->
+		<div class="mb-8">
+			<div class="mb-6 flex items-center justify-between">
+				<div>
+					<h1 class="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+					<p class="mt-1 text-gray-600">
+						Complete overview of your FastAccs business performance
+						{#if !loading}
+							• Last updated: {formatRelativeTime(lastUpdated)}
+						{/if}
+					</p>
 				</div>
-			{/each}
+				<div class="flex items-center gap-3">
+					<!-- Auto-refresh toggle -->
+					<button
+						onclick={toggleAutoRefresh}
+						class="flex items-center gap-2 rounded-lg border px-4 py-2 transition-colors {autoRefresh
+							? 'border-green-200 bg-green-50 text-green-700'
+							: 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'}"
+					>
+						<Activity class="h-4 w-4" />
+						Auto-refresh {autoRefresh ? 'ON' : 'OFF'}
+					</button>
+
+					<!-- Manual refresh -->
+					<button
+						onclick={refreshData}
+						disabled={loading}
+						class="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+					>
+						<RefreshCw class="h-4 w-4 {loading ? 'animate-spin' : ''}" />
+						Refresh
+					</button>
+				</div>
+			</div>
 		</div>
-	{:else if error}
-		<div class="rounded-lg border border-red-200 bg-red-50 p-4">
-			<div class="flex">
-				<AlertCircle class="h-5 w-5 text-red-400" />
-				<div class="ml-3">
-					<h3 class="text-sm font-medium text-red-800">Error Loading Dashboard</h3>
-					<div class="mt-2 text-sm text-red-700">{error}</div>
-					<div class="mt-3">
+
+		<!-- Error Display -->
+		{#if error}
+			<div class="mb-8 rounded-lg border border-red-200 bg-red-50 p-4">
+				<div class="flex items-center">
+					<AlertCircle class="mr-2 h-5 w-5 text-red-600" />
+					<div>
+						<h3 class="text-sm font-medium text-red-800">Dashboard Loading Error</h3>
+						<p class="mt-1 text-sm text-red-700">{error}</p>
 						<button
-							onclick={loadStats}
-							class="rounded bg-red-100 px-2 py-1 text-sm text-red-800 hover:bg-red-200"
+							onclick={refreshData}
+							class="mt-2 text-sm text-red-800 underline hover:text-red-900"
 						>
-							Retry
+							Try Again
 						</button>
 					</div>
 				</div>
 			</div>
-		</div>
-	{:else}
-		<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-			<!-- Total Products -->
-			<div class="rounded-lg bg-white p-6 shadow">
-				<div class="flex items-center">
-					<div class="rounded-full bg-blue-100 p-3">
-						<Package class="h-6 w-6 text-blue-600" />
-					</div>
-					<div class="ml-4">
-						<p class="text-sm font-medium text-gray-500">Total Products</p>
-						<p class="text-2xl font-bold text-gray-900">{stats.totalProducts}</p>
-					</div>
-				</div>
-			</div>
+		{/if}
 
+		<!-- Main Statistics Grid -->
+		<div class="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
 			<!-- Total Orders -->
-			<div class="rounded-lg bg-white p-6 shadow">
+			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
 				<div class="flex items-center">
-					<div class="rounded-full bg-green-100 p-3">
-						<ShoppingCart class="h-6 w-6 text-green-600" />
+					<div class="rounded-lg bg-blue-50 p-3">
+						<ShoppingCart class="h-8 w-8 text-blue-600" />
 					</div>
 					<div class="ml-4">
 						<p class="text-sm font-medium text-gray-500">Total Orders</p>
-						<p class="text-2xl font-bold text-gray-900">{stats.totalOrders}</p>
+						<p class="text-3xl font-bold text-gray-900">{orderStats.total_orders}</p>
+						<div class="mt-1 flex items-center">
+							<span class="text-sm text-gray-600">Today: {orderStats.todays_orders}</span>
+						</div>
 					</div>
 				</div>
 			</div>
 
-			<!-- Total Users -->
-			<div class="rounded-lg bg-white p-6 shadow">
+			<!-- Total Revenue -->
+			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
 				<div class="flex items-center">
-					<div class="rounded-full bg-purple-100 p-3">
-						<Users class="h-6 w-6 text-purple-600" />
-					</div>
-					<div class="ml-4">
-						<p class="text-sm font-medium text-gray-500">Total Users</p>
-						<p class="text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
-					</div>
-				</div>
-			</div>
-
-			<!-- Revenue -->
-			<div class="rounded-lg bg-white p-6 shadow">
-				<div class="flex items-center">
-					<div class="rounded-full bg-yellow-100 p-3">
-						<DollarSign class="h-6 w-6 text-yellow-600" />
+					<div class="rounded-lg bg-green-50 p-3">
+						<DollarSign class="h-8 w-8 text-green-600" />
 					</div>
 					<div class="ml-4">
 						<p class="text-sm font-medium text-gray-500">Total Revenue</p>
-						<p class="text-2xl font-bold text-gray-900">{formatCurrency(stats.revenue)}</p>
+						<p class="text-3xl font-bold text-gray-900">
+							{formatCurrency(orderStats.total_revenue)}
+						</p>
+						<div class="mt-1 flex items-center">
+							<span class="text-sm text-gray-600"
+								>Today: {formatCurrency(orderStats.todays_revenue)}</span
+							>
+						</div>
 					</div>
 				</div>
 			</div>
 
-			<!-- Low Stock Alert -->
-			<div class="rounded-lg bg-white p-6 shadow">
+			<!-- Inventory Items -->
+			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
 				<div class="flex items-center">
-					<div class="rounded-full bg-orange-100 p-3">
-						<AlertCircle class="h-6 w-6 text-orange-600" />
+					<div class="rounded-lg bg-purple-50 p-3">
+						<Package class="h-8 w-8 text-purple-600" />
 					</div>
 					<div class="ml-4">
-						<p class="text-sm font-medium text-gray-500">Low Stock Items</p>
-						<p class="text-2xl font-bold text-gray-900">{stats.lowStockProducts}</p>
+						<p class="text-sm font-medium text-gray-500">Total Inventory</p>
+						<p class="text-3xl font-bold text-gray-900">{inventoryStats.total_available}</p>
+						<div class="mt-1 flex items-center">
+							<span class="text-sm text-gray-600">Reserved: {inventoryStats.total_reserved}</span>
+						</div>
 					</div>
 				</div>
 			</div>
 
-			<!-- Sold Products -->
-			<div class="rounded-lg bg-white p-6 shadow">
+			<!-- Low Stock Alerts -->
+			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
 				<div class="flex items-center">
-					<div class="rounded-full bg-red-100 p-3">
-						<TrendingUp class="h-6 w-6 text-red-600" />
+					<div class="rounded-lg bg-orange-50 p-3">
+						<AlertCircle class="h-8 w-8 text-orange-600" />
 					</div>
 					<div class="ml-4">
-						<p class="text-sm font-medium text-gray-500">Sold Products</p>
-						<p class="text-2xl font-bold text-gray-900">{stats.soldProducts}</p>
-					</div>
-				</div>
-			</div>
-		</div>
-	{/if}
-	<!-- Quick Actions -->
-	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-		<!-- Recent Activity -->
-		<div class="rounded-lg bg-white shadow">
-			<div class="border-b border-gray-200 p-6">
-				<h3 class="text-lg font-medium text-gray-900">Recent Activity</h3>
-			</div>
-			<div class="p-6">
-				<div class="space-y-4">
-					<div class="flex items-center">
-						<div class="mr-3 h-2 w-2 rounded-full bg-green-500"></div>
-						<span class="text-sm text-gray-600">New order #1234 received</span>
-						<span class="ml-auto text-xs text-gray-400">2 hours ago</span>
-					</div>
-					<div class="flex items-center">
-						<div class="mr-3 h-2 w-2 rounded-full bg-blue-500"></div>
-						<span class="text-sm text-gray-600">Instagram account "influencer123" added</span>
-						<span class="ml-auto text-xs text-gray-400">4 hours ago</span>
-					</div>
-					<div class="flex items-center">
-						<div class="mr-3 h-2 w-2 rounded-full bg-orange-500"></div>
-						<span class="text-sm text-gray-600">Low stock alert: TikTok Premium accounts</span>
-						<span class="ml-auto text-xs text-gray-400">1 day ago</span>
+						<p class="text-sm font-medium text-gray-500">Stock Issues</p>
+						<p class="text-3xl font-bold text-gray-900">
+							{inventoryStats.low_stock + inventoryStats.out_of_stock}
+						</p>
+						<div class="mt-1 flex items-center">
+							{#if inventoryStats.low_stock + inventoryStats.out_of_stock > 0}
+								<span class="text-sm text-orange-600">
+									{inventoryStats.out_of_stock} out, {inventoryStats.low_stock} low
+								</span>
+							{:else}
+								<span class="text-sm text-green-600">All good</span>
+							{/if}
+						</div>
 					</div>
 				</div>
 			</div>
 		</div>
 
-		<!-- Quick Actions Panel -->
-		<div class="rounded-lg bg-white shadow">
-			<div class="border-b border-gray-200 p-6">
-				<h3 class="text-lg font-medium text-gray-900">Quick Actions</h3>
+		<!-- Order Status Overview -->
+		<div class="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+			<!-- Pending Orders -->
+			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+				<div class="flex items-center">
+					<div class="rounded-lg bg-yellow-50 p-3">
+						<Clock class="h-6 w-6 text-yellow-600" />
+					</div>
+					<div class="ml-4">
+						<p class="text-sm font-medium text-gray-500">Pending Orders</p>
+						<p class="text-2xl font-bold text-gray-900">{orderStats.pending_orders}</p>
+					</div>
+				</div>
 			</div>
-			<div class="p-6">
-				<div class="space-y-3">
-					<a
-						href="/admin/inventory/new"
-						class="block w-full rounded-lg bg-blue-600 px-4 py-2 text-center text-white transition-colors hover:bg-blue-700"
-					>
-						Add New Product
-					</a>
-					<a
-						href="/admin/inventory"
-						class="block w-full rounded-lg border border-gray-300 px-4 py-2 text-center text-gray-700 transition-colors hover:bg-gray-50"
-					>
-						Manage Inventory
-					</a>
-					<a
-						href="/admin/orders"
-						class="block w-full rounded-lg border border-gray-300 px-4 py-2 text-center text-gray-700 transition-colors hover:bg-gray-50"
-					>
-						View All Orders
-					</a>
+
+			<!-- Processing Orders -->
+			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+				<div class="flex items-center">
+					<div class="rounded-lg bg-blue-50 p-3">
+						<Activity class="h-6 w-6 text-blue-600" />
+					</div>
+					<div class="ml-4">
+						<p class="text-sm font-medium text-gray-500">Processing</p>
+						<p class="text-2xl font-bold text-gray-900">{orderStats.processing_orders}</p>
+					</div>
+				</div>
+			</div>
+
+			<!-- Completed Orders -->
+			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+				<div class="flex items-center">
+					<div class="rounded-lg bg-green-50 p-3">
+						<CheckCircle class="h-6 w-6 text-green-600" />
+					</div>
+					<div class="ml-4">
+						<p class="text-sm font-medium text-gray-500">Completed</p>
+						<p class="text-2xl font-bold text-gray-900">{orderStats.completed_orders}</p>
+					</div>
+				</div>
+			</div>
+
+			<!-- Failed Orders -->
+			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+				<div class="flex items-center">
+					<div class="rounded-lg bg-red-50 p-3">
+						<AlertCircle class="h-6 w-6 text-red-600" />
+					</div>
+					<div class="ml-4">
+						<p class="text-sm font-medium text-gray-500">Failed</p>
+						<p class="text-2xl font-bold text-gray-900">{orderStats.failed_orders}</p>
+					</div>
+				</div>
+			</div>
+		</div>
+		<!-- System Overview -->
+		<div class="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
+			<!-- Platform Coverage -->
+			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+				<div class="flex items-center justify-between">
+					<div>
+						<p class="text-sm font-medium text-gray-500">Platforms</p>
+						<p class="text-2xl font-bold text-gray-900">{inventoryStats.platforms}</p>
+						<div class="mt-1 flex items-center">
+							<span class="text-sm text-gray-600">Active platforms</span>
+						</div>
+					</div>
+					<div class="rounded-lg bg-indigo-50 p-3">
+						<BarChart3 class="h-6 w-6 text-indigo-600" />
+					</div>
+				</div>
+			</div>
+
+			<!-- Total Tiers -->
+			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+				<div class="flex items-center justify-between">
+					<div>
+						<p class="text-sm font-medium text-gray-500">Product Tiers</p>
+						<p class="text-2xl font-bold text-gray-900">{inventoryStats.total_tiers}</p>
+						<div class="mt-1 flex items-center">
+							<span class="text-sm text-gray-600">Across all platforms</span>
+						</div>
+					</div>
+					<div class="rounded-lg bg-purple-50 p-3">
+						<Package class="h-6 w-6 text-purple-600" />
+					</div>
+				</div>
+			</div>
+
+			<!-- Success Rate -->
+			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+				<div class="flex items-center justify-between">
+					<div>
+						<p class="text-sm font-medium text-gray-500">Success Rate</p>
+						<p class="text-2xl font-bold text-gray-900">
+							{orderStats.total_orders > 0
+								? ((orderStats.completed_orders / orderStats.total_orders) * 100).toFixed(1)
+								: 0}%
+						</p>
+						<div class="mt-1 flex items-center">
+							<span class="text-sm text-gray-600">
+								{orderStats.completed_orders}/{orderStats.total_orders} completed
+							</span>
+						</div>
+					</div>
+					<div class="rounded-lg bg-green-50 p-3">
+						<TrendingUp class="h-6 w-6 text-green-600" />
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Quick Actions & Navigation -->
+		<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+			<!-- Management Actions -->
+			<div class="rounded-lg border border-gray-200 bg-white shadow-sm">
+				<div class="border-b border-gray-200 p-6">
+					<h3 class="text-lg font-semibold text-gray-900">Management Center</h3>
+					<p class="mt-1 text-sm text-gray-600">Access key administrative functions</p>
+				</div>
+				<div class="p-6">
+					<div class="grid grid-cols-1 gap-3">
+						<a
+							href="/admin/orders"
+							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300 hover:bg-blue-50"
+						>
+							<div class="flex items-center">
+								<ShoppingCart class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
+								<div>
+									<p class="font-medium text-gray-900">Order Management</p>
+									<p class="text-sm text-gray-500">Process and track orders</p>
+								</div>
+							</div>
+							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
+						</a>
+
+						<a
+							href="/admin/inventory"
+							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300 hover:bg-blue-50"
+						>
+							<div class="flex items-center">
+								<Package class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
+								<div>
+									<p class="font-medium text-gray-900">Inventory Dashboard</p>
+									<p class="text-sm text-gray-500">Monitor stock levels</p>
+								</div>
+							</div>
+							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
+						</a>
+
+						<a
+							href="/admin/platforms"
+							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300 hover:bg-blue-50"
+						>
+							<div class="flex items-center">
+								<Users class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
+								<div>
+									<p class="font-medium text-gray-900">Platform Management</p>
+									<p class="text-sm text-gray-500">Manage platforms & tiers</p>
+								</div>
+							</div>
+							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
+						</a>
+
+						<a
+							href="/admin/batches"
+							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300 hover:bg-blue-50"
+						>
+							<div class="flex items-center">
+								<Activity class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
+								<div>
+									<p class="font-medium text-gray-900">Batch Operations</p>
+									<p class="text-sm text-gray-500">Bulk import accounts</p>
+								</div>
+							</div>
+							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
+						</a>
+					</div>
+				</div>
+			</div>
+
+			<!-- System Status -->
+			<div class="rounded-lg border border-gray-200 bg-white shadow-sm">
+				<div class="border-b border-gray-200 p-6">
+					<h3 class="text-lg font-semibold text-gray-900">System Status</h3>
+					<p class="mt-1 text-sm text-gray-600">Current system health overview</p>
+				</div>
+				<div class="space-y-4 p-6">
+					<!-- Order Processing Status -->
+					<div class="flex items-center justify-between">
+						<div class="flex items-center">
+							<div class="mr-3 h-3 w-3 rounded-full bg-green-500"></div>
+							<span class="text-sm font-medium text-gray-900">Order Processing</span>
+						</div>
+						<span class="text-sm text-green-600">Operational</span>
+					</div>
+
+					<!-- Inventory System -->
+					<div class="flex items-center justify-between">
+						<div class="flex items-center">
+							<div
+								class="h-3 w-3 rounded-full {inventoryStats.low_stock +
+									inventoryStats.out_of_stock >
+								0
+									? 'bg-yellow-500'
+									: 'bg-green-500'} mr-3"
+							></div>
+							<span class="text-sm font-medium text-gray-900">Inventory System</span>
+						</div>
+						<span
+							class="text-sm {inventoryStats.low_stock + inventoryStats.out_of_stock > 0
+								? 'text-yellow-600'
+								: 'text-green-600'}"
+						>
+							{inventoryStats.low_stock + inventoryStats.out_of_stock > 0
+								? `${inventoryStats.low_stock + inventoryStats.out_of_stock} Issues`
+								: 'Healthy'}
+						</span>
+					</div>
+
+					<!-- Database Status -->
+					<div class="flex items-center justify-between">
+						<div class="flex items-center">
+							<div class="mr-3 h-3 w-3 rounded-full bg-green-500"></div>
+							<span class="text-sm font-medium text-gray-900">Database</span>
+						</div>
+						<span class="text-sm text-green-600">Connected</span>
+					</div>
+
+					<!-- Last Update -->
+					<div class="border-t border-gray-200 pt-4">
+						<div class="flex items-center justify-between text-sm">
+							<span class="text-gray-500">Last system update:</span>
+							<span class="text-gray-900">{formatRelativeTime(lastUpdated)}</span>
+						</div>
+					</div>
 				</div>
 			</div>
 		</div>

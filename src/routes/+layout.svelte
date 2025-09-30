@@ -4,6 +4,7 @@
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import Cart from '$lib/components/Cart.svelte';
+	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import type { LayoutData } from './$types';
 
 	interface Props {
@@ -33,4 +34,5 @@
 <div class="min-h-screen bg-white">
 	{@render children?.()}
 	<Cart />
+	<ToastContainer />
 </div>
