@@ -1,33 +1,171 @@
 <script lang="ts">
-	import { cart } from '$lib/stores/cart';
-	import { ShoppingCart } from '@lucide/svelte';
+	import { cart } from '$lib/stores/cart.svelte';
+	import { ShoppingCart, X, Trash2, ArrowRight, ShoppingBag } from '@lucide/svelte';
+	import { goto } from '$app/navigation';
 
-	$: cartState = $cart;
-	$: itemCount = cartState.items.reduce((total, item) => total + item.quantity, 0);
+	// Use the new runes-based cart store
+	const itemCount = $derived(cart.itemCount);
+	const cartItems = $derived(cart.items);
+	const isOpen = $derived(cart.isOpen);
+	const total = $derived(cart.total);
 
-	function toggleCart() {
-		cart.toggle();
+	// Debug logging
+	$effect(() => {
+		console.log('MiniCart - isOpen:', isOpen, 'itemCount:', itemCount);
+	});
+
+	function closeCart() {
+		cart.close();
+	}
+
+	function removeItem(productId: string) {
+		cart.removeItem(productId);
+	}
+
+	function goToCheckout() {
+		cart.close();
+		goto('/checkout');
+	}
+
+	function continueShopping() {
+		cart.close();
+		goto('/platforms');
+	}
+
+	// Format price
+	function formatPrice(price: number): string {
+		return new Intl.NumberFormat('en-NG', {
+			style: 'currency',
+			currency: 'NGN',
+			minimumFractionDigits: 0
+		}).format(price);
+	}
+
+	// Helper function to safely extract price from tier metadata
+	function getTierPrice(metadata: any): number {
+		if (typeof metadata === 'object' && metadata !== null && 'price' in metadata) {
+			const price = Number(metadata.price);
+			return isNaN(price) ? 0 : price;
+		}
+		return 0;
 	}
 </script>
 
-<button
-	onclick={toggleCart}
-	class="relative flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-white transition-colors hover:bg-blue-700"
-	aria-label="Open shopping cart"
->
-	<ShoppingCart size={20} />
+<!-- Professional MiniCart Dropdown -->
+{#if isOpen}
+	<!-- Backdrop -->
+	<button
+		class="fixed inset-0 z-40 bg-black/20 transition-opacity"
+		onclick={closeCart}
+		aria-label="Close cart"
+	></button>
 
-	{#if itemCount > 0}
-		<!-- Cart Badge -->
-		<span
-			class="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white"
-		>
-			{itemCount > 99 ? '99+' : itemCount}
-		</span>
+	<!-- Cart Dropdown -->
+	<div class="fixed top-1/2 left-1/2 z-50 w-80 -translate-x-1/2 -translate-y-1/2 transform sm:w-96">
+		<div class="overflow-hidden rounded-lg bg-white shadow-xl ring-1 ring-black/5">
+			<!-- Header -->
+			<div class="bg-gradient-primary flex items-center justify-between px-4 py-3 text-white">
+				<div class="flex items-center gap-2">
+					<ShoppingBag size={20} />
+					<h3 class="font-semibold">Shopping Cart</h3>
+					{#if itemCount > 0}
+						<span class="rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium">
+							{itemCount} item{itemCount > 1 ? 's' : ''}
+						</span>
+					{/if}
+				</div>
+				<button
+					onclick={closeCart}
+					class="rounded-full p-1 transition-colors hover:bg-white/20"
+					aria-label="Close cart"
+				>
+					<X size={18} />
+				</button>
+			</div>
 
-		<!-- Desktop text -->
-		<span class="hidden md:block">Cart ({itemCount})</span>
-	{:else}
-		<span class="hidden md:block">Cart</span>
-	{/if}
-</button>
+			<!-- Cart Content -->
+			<div class="max-h-96 overflow-y-auto">
+				{#if cartItems.length === 0}
+					<!-- Empty Cart -->
+					<div class="px-4 py-8 text-center">
+						<div
+							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100"
+						>
+							<ShoppingCart size={24} class="text-gray-400" />
+						</div>
+						<h4 class="mb-2 font-medium text-gray-900">Your cart is empty</h4>
+						<p class="mb-4 text-sm text-gray-600">Browse our accounts to get started!</p>
+						<button
+							onclick={continueShopping}
+							class="bg-primary hover:bg-primary-dark rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors"
+						>
+							Browse Accounts
+						</button>
+					</div>
+				{:else}
+					<!-- Cart Items -->
+					<div class="divide-y divide-gray-100">
+						{#each cartItems as item}
+							<div class="flex items-center gap-3 p-4">
+								<!-- Item Image/Icon Placeholder -->
+								<div class="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
+									<ShoppingBag size={20} class="text-gray-500" />
+								</div>
+
+								<!-- Item Details -->
+								<div class="min-w-0 flex-1">
+									<h4 class="truncate text-sm font-medium text-gray-900">
+										{item.product.name}
+									</h4>
+									<p class="text-sm text-gray-600">
+										Qty: {item.quantity} × {formatPrice(getTierPrice(item.product.metadata))}
+									</p>
+								</div>
+
+								<!-- Item Total & Remove -->
+								<div class="flex flex-col items-end gap-1">
+									<span class="text-sm font-semibold text-gray-900">
+										{formatPrice(getTierPrice(item.product.metadata) * item.quantity)}
+									</span>
+									<button
+										onclick={() => removeItem(item.id)}
+										class="rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+										aria-label="Remove item"
+									>
+										<Trash2 size={14} />
+									</button>
+								</div>
+							</div>
+						{/each}
+					</div>
+
+					<!-- Cart Footer -->
+					<div class="border-t border-gray-100 bg-gray-50 p-4">
+						<!-- Total -->
+						<div class="mb-4 flex items-center justify-between">
+							<span class="text-base font-medium text-gray-900">Total:</span>
+							<span class="text-primary text-lg font-bold">{formatPrice(total)}</span>
+						</div>
+
+						<!-- Action Buttons -->
+						<div class="space-y-2">
+							<button
+								onclick={goToCheckout}
+								class="bg-primary hover:bg-primary-dark active:bg-primary-dark flex w-full items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold text-white transition-colors"
+							>
+								<span>Checkout</span>
+								<ArrowRight size={16} />
+							</button>
+							<button
+								onclick={continueShopping}
+								class="flex w-full items-center justify-center rounded-lg border border-gray-300 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+							>
+								Continue Shopping
+							</button>
+						</div>
+					</div>
+				{/if}
+			</div>
+		</div>
+	</div>
+{/if}

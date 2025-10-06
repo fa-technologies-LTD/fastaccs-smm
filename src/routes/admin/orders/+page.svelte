@@ -226,7 +226,7 @@
 		try {
 			const result = await updateOrderStatus(orderId, newStatus);
 			if (result.error) {
-				showError('Failed to update order status', result.error.message);
+				showError('Failed to update order status', result.error);
 			} else {
 				// Update local state
 				orders = orders.map((order) =>
@@ -339,7 +339,7 @@
 		try {
 			const result = await processOrder(orderId);
 			if (result.error) {
-				showError('Failed to process order', result.error.message);
+				showError('Failed to process order', result.error);
 			} else {
 				// Update local state
 				orders = orders.map((order) =>

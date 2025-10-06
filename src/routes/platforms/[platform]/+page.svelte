@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
+
 	import {
 		Instagram,
 		Music,
@@ -14,7 +14,6 @@
 	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import { cart } from '$lib/stores/cart';
 	import type { PageData } from './$types';
 
 	interface Props {
@@ -59,9 +58,11 @@
 	// Format follower count
 	function formatFollowers(count: number): string {
 		if (count >= 1000000) {
-			return `${(count / 1000000).toFixed(1)}M`;
+			const millions = count / 1000000;
+			return millions % 1 === 0 ? `${millions}M` : `${millions.toFixed(1)}M`;
 		} else if (count >= 1000) {
-			return `${(count / 1000).toFixed(1)}K`;
+			const thousands = count / 1000;
+			return thousands % 1 === 0 ? `${thousands}K` : `${thousands.toFixed(1)}K`;
 		}
 		return count.toString();
 	}
@@ -217,7 +218,18 @@
 										<div>
 											<h3 class="text-xl font-bold text-gray-900">{tier.tier_name}</h3>
 											<p class="text-sm text-gray-600">
-												{formatFollowers((tier.metadata?.follower_count as number) || 0)} followers
+												{#if tier.metadata?.followers_range}
+													{@const range = (tier.metadata as any).followers_range}
+													{#if Array.isArray(range) && range.length >= 2}
+														{formatFollowers(range[0])} - {formatFollowers(range[1])} followers
+													{:else if typeof range === 'object' && range.min && range.max}
+														{formatFollowers(range.min)} - {formatFollowers(range.max)} followers
+													{:else}
+														{formatFollowers((tier.metadata?.follower_count as number) || 0)} followers
+													{/if}
+												{:else}
+													{formatFollowers((tier.metadata?.follower_count as number) || 0)} followers
+												{/if}
 											</p>
 										</div>
 										<div class="text-right">

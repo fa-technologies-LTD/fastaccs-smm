@@ -1,4 +1,4 @@
-import { supabase } from '$lib/supabase';
+// Removed Supabase dependency - using Prisma/API instead
 
 // Types for tier-based products
 export interface TierProduct {

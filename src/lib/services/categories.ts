@@ -1,5 +1,3 @@
-import { supabase } from '$lib/supabase';
-
 // Type for category metadata
 export interface CategoryMetadata {
 	icon?: string;
@@ -19,194 +17,170 @@ export interface CategoryMetadata {
 	[key: string]: unknown;
 }
 
-// Types based on new schema
+// Category type to match Prisma schema
 export interface Category {
 	id: string;
-	parent_id: string | null;
+	parentId: string | null;
 	name: string;
 	slug: string;
 	description: string | null;
-	category_type: 'platform' | 'tier' | 'service_group';
+	categoryType: 'platform' | 'tier' | 'service_group';
 	metadata: CategoryMetadata;
-	sort_order: number;
-	is_active: boolean;
-	created_at: string;
-	updated_at: string;
+	sortOrder: number;
+	isActive: boolean;
+	createdAt: Date;
+	updatedAt: Date;
+	parent?: Category | null; // Optional parent relation
 }
 
 export interface CategoryInsert {
-	parent_id?: string | null;
+	parentId?: string | null;
 	name: string;
 	slug: string;
 	description?: string | null;
-	category_type: 'platform' | 'tier' | 'service_group';
+	categoryType: 'platform' | 'tier' | 'service_group';
 	metadata?: CategoryMetadata;
-	sort_order?: number;
-	is_active?: boolean;
+	sortOrder?: number;
+	isActive?: boolean;
 }
 
 export interface CategoryUpdate {
-	parent_id?: string | null;
+	parentId?: string | null;
 	name?: string;
 	slug?: string;
 	description?: string | null;
-	category_type?: 'platform' | 'tier' | 'service_group';
+	categoryType?: 'platform' | 'tier' | 'service_group';
 	metadata?: CategoryMetadata;
-	sort_order?: number;
-	is_active?: boolean;
+	sortOrder?: number;
+	isActive?: boolean;
+}
+
+// Helper function to handle API responses
+async function handleApiCall(response: Response) {
+	if (!response.ok) {
+		return { data: null, error: `HTTP ${response.status}: ${response.statusText}` };
+	}
+	return await response.json();
 }
 
 // Get all platforms
 export async function getPlatforms() {
 	try {
-		const response = await fetch('/api/admin/categories?category_type=platform');
-		const result = await response.json();
-
-		if (!response.ok) {
-			return { data: null, error: { message: result.error } };
-		}
-
-		return { data: result.data, error: null };
-	} catch {
-		return { data: null, error: { message: 'Network error' } };
+		const response = await fetch('/api/categories');
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to fetch platforms:', error);
+		return { data: null, error: 'Failed to fetch platforms' };
 	}
 }
 
 // Get tiers for a platform
 export async function getTiersByPlatform(platformId: string) {
 	try {
-		const response = await fetch(
-			`/api/admin/categories?category_type=tier&parent_id=${platformId}`
-		);
-		const result = await response.json();
-
-		if (!response.ok) {
-			return { data: null, error: { message: result.error } };
-		}
-
-		return { data: result.data, error: null };
-	} catch {
-		return { data: null, error: { message: 'Network error' } };
+		const response = await fetch(`/api/categories/tiers/${platformId}`);
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to fetch tiers:', error);
+		return { data: null, error: 'Failed to fetch tiers' };
 	}
 }
 
 // Get all categories with hierarchy
 export async function getCategoriesWithHierarchy() {
-	const { data, error } = await supabase
-		.from('categories')
-		.select(
-			`
-      *,
-      children:categories!parent_id(*)
-    `
-		)
-		.eq('category_type', 'platform')
-		.eq('is_active', true)
-		.order('sort_order');
-
-	return { data, error };
+	try {
+		const response = await fetch('/api/categories/hierarchy');
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to fetch categories with hierarchy:', error);
+		return { data: null, error: 'Failed to fetch categories with hierarchy' };
+	}
 }
 
 // Create platform
-export async function createPlatform(platform: Omit<CategoryInsert, 'category_type'>) {
-	const { data, error } = await supabase
-		.from('categories')
-		.insert({
-			...platform,
-			category_type: 'platform'
-		})
-		.select()
-		.single();
-
-	return { data, error };
+export async function createPlatform(platform: Omit<CategoryInsert, 'categoryType'>) {
+	try {
+		const response = await fetch('/api/categories', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ ...platform, categoryType: 'platform' })
+		});
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to create platform:', error);
+		return { data: null, error: 'Failed to create platform' };
+	}
 }
 
 // Create tier under platform
-export async function createTier(tier: Omit<CategoryInsert, 'category_type'>) {
-	const { data, error } = await supabase
-		.from('categories')
-		.insert({
-			...tier,
-			category_type: 'tier'
-		})
-		.select()
-		.single();
-
-	return { data, error };
+export async function createTier(tier: Omit<CategoryInsert, 'categoryType'>) {
+	try {
+		const response = await fetch('/api/categories', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ ...tier, categoryType: 'tier' })
+		});
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to create tier:', error);
+		return { data: null, error: 'Failed to create tier' };
+	}
 }
 
 // Update category
 export async function updateCategory(id: string, updates: CategoryUpdate) {
-	const { data, error } = await supabase
-		.from('categories')
-		.update(updates)
-		.eq('id', id)
-		.select()
-		.single();
-
-	return { data, error };
-}
-
-// Delete category (soft delete)
-export async function deleteCategory(id: string) {
 	try {
-		const response = await fetch(`/api/admin/categories?id=${id}`, {
-			method: 'DELETE',
-			headers: {
-				'Content-Type': 'application/json'
-			}
+		const response = await fetch(`/api/categories/${id}`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(updates)
 		});
-
-		const result = await response.json();
-
-		if (!response.ok) {
-			return { data: null, error: { message: result.error } };
-		}
-
-		return { data: { success: true }, error: null };
-	} catch {
-		return { data: null, error: { message: 'Network error occurred' } };
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to update category:', error);
+		return { data: null, error: 'Failed to update category' };
 	}
 }
 
-// Hard delete category (if no dependencies)
-export async function hardDeleteCategory(id: string) {
-	const { data, error } = await supabase.from('categories').delete().eq('id', id).select().single();
+// Delete category
+export async function deleteCategory(id: string) {
+	try {
+		const response = await fetch(`/api/categories/${id}`, {
+			method: 'DELETE'
+		});
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to delete category:', error);
+		return { data: null, error: 'Failed to delete category' };
+	}
+}
 
-	return { data, error };
+// Hard delete category (same as deleteCategory now)
+export async function hardDeleteCategory(id: string) {
+	return deleteCategory(id);
 }
 
 // Get category by slug
 export async function getCategoryBySlug(slug: string) {
-	const { data, error } = await supabase
-		.from('categories')
-		.select('*')
-		.eq('slug', slug)
-		.eq('is_active', true)
-		.single();
-
-	return { data, error };
+	try {
+		const response = await fetch(`/api/categories/slug/${slug}`);
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to fetch category by slug:', error);
+		return { data: null, error: 'Failed to fetch category by slug' };
+	}
 }
 
 // Generic create category function
 export async function createCategory(category: CategoryInsert) {
 	try {
-		const response = await fetch('/api/admin/categories', {
+		const response = await fetch('/api/categories', {
 			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
+			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(category)
 		});
-
-		const result = await response.json();
-
-		if (!response.ok) {
-			return { data: null, error: { message: result.error } };
-		}
-
-		return { data: result.data, error: null };
-	} catch {
-		return { data: null, error: { message: 'Network error' } };
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to create category:', error);
+		return { data: null, error: 'Failed to create category' };
 	}
 }

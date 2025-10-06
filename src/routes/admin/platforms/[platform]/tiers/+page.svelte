@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import {
 		ArrowLeft,
@@ -9,7 +8,8 @@
 		Users,
 		DollarSign,
 		Package,
-		AlertCircle
+		AlertCircle,
+		Target
 	} from '@lucide/svelte';
 	import { createCategory, updateCategory, deleteCategory } from '$lib/services/categories';
 	import type { CategoryMetadata, CategoryInsert, CategoryUpdate } from '$lib/services/categories';
@@ -54,13 +54,12 @@
 		}
 	});
 
-	// Auto-generate slug from name
+	// Auto-generate slug from name (GLOBAL SLUG - no platform prefix)
 	const generateSlug = (name: string) => {
-		if (!platform) return '';
-		return `${platform.slug as string}-${name
+		return name
 			.toLowerCase()
 			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-|-$/g, '')}`;
+			.replace(/^-|-$/g, '');
 	};
 
 	// Watch name changes to auto-generate slug
@@ -119,17 +118,17 @@
 				name: tierForm.name,
 				slug: tierForm.slug,
 				description: tierForm.description || null,
-				category_type: 'tier',
-				parent_id: platform.id as string,
+				categoryType: 'tier',
+				parentId: null, // GLOBAL TIER - no parent platform
 				metadata: tierForm.metadata,
-				is_active: true,
-				sort_order: tiers.length + 1
+				isActive: true,
+				sortOrder: tiers.length + 1
 			};
 
 			const result = await createCategory(newTier);
 			if (result.error) {
 				console.error('Failed to create tier:', result.error);
-				alert('Failed to create tier: ' + result.error.message);
+				alert('Failed to create tier: ' + result.error);
 			} else {
 				// Add to local state instead of reloading
 				tiers = [...tiers, result.data!];
@@ -159,7 +158,7 @@
 			const result = await updateCategory(selectedTier.id as string, updates);
 			if (result.error) {
 				console.error('Failed to update tier:', result.error);
-				alert('Failed to update tier: ' + result.error.message);
+				alert('Failed to update tier: ' + result.error);
 			} else {
 				// Update local state instead of reloading
 				tiers = tiers.map((t) => (t.id === selectedTier!.id ? result.data! : t));
@@ -188,7 +187,7 @@
 			const result = await deleteCategory(tier.id as string);
 			if (result.error) {
 				console.error('Failed to delete tier:', result.error);
-				alert('Failed to delete tier: ' + result.error.message);
+				alert('Failed to delete tier: ' + result.error);
 			} else {
 				// Remove from local state instead of reloading
 				tiers = tiers.filter((t) => t.id !== tier.id);
@@ -268,8 +267,10 @@
 						</div>
 					{/if}
 					<div>
-						<h1 class="text-2xl font-bold text-gray-900">{platform.name}</h1>
-						<p class="text-gray-600">Manage follower tiers and pricing for {platform.name}</p>
+						<h1 class="text-2xl font-bold text-gray-900">{platform.name} - Global Tiers</h1>
+						<p class="text-gray-600">
+							Manage global tiers that work across all platforms (including {platform.name})
+						</p>
 					</div>
 				{/if}
 			</div>
@@ -280,6 +281,21 @@
 				<Plus size={18} />
 				Add Tier
 			</button>
+		</div>
+
+		<!-- Global Tiers Notice -->
+		<div class="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+			<div class="flex items-start gap-3">
+				<AlertCircle class="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+				<div class="text-sm">
+					<p class="mb-1 font-medium text-amber-900">Important: Global Tier System</p>
+					<p class="text-amber-700">
+						Tiers created here are <strong>global</strong> and work across ALL platforms. When you create
+						a "500 Followers" tier, it will contain accounts from Instagram, TikTok, and all other platforms.
+						Platform pages will automatically filter these global tiers to show only relevant accounts.
+					</p>
+				</div>
+			</div>
 		</div>
 	</div>
 
@@ -308,8 +324,11 @@
 					<!-- Tier Header -->
 					<div class="mb-4 flex items-start justify-between">
 						<div>
-							<h3 class="font-semibold text-gray-900">{tier.name}</h3>
-							<p class="text-sm text-gray-500">SKU: {generateAutoSKU(tier)}</p>
+							<h3 class="flex items-center gap-2 font-semibold text-gray-900">
+								<Target class="h-4 w-4 text-purple-600" />
+								{tier.name}
+							</h3>
+							<p class="text-sm text-gray-500">Global Tier • All Platforms</p>
 						</div>
 						<div class="flex items-center gap-1">
 							<button
@@ -386,10 +405,8 @@
 						<!-- Status -->
 						<div class="flex items-center justify-between">
 							<span class="text-sm text-gray-600">Status</span>
-							<span
-								class="text-sm font-medium {tier.is_active ? 'text-green-600' : 'text-red-600'}"
-							>
-								{tier.is_active ? 'Active' : 'Inactive'}
+							<span class="text-sm font-medium {tier.isActive ? 'text-green-600' : 'text-red-600'}">
+								{tier.isActive ? 'Active' : 'Inactive'}
 							</span>
 						</div>
 					</div>
@@ -421,7 +438,7 @@
 		<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
 			<!-- Background overlay -->
 			<div
-				class="bg-opacity-75 fixed inset-0 bg-gray-500 transition-opacity"
+				class="fixed inset-0 bg-black/20 transition-opacity"
 				onclick={() => (showCreateModal = false)}
 			></div>
 
@@ -454,7 +471,7 @@
 										tierForm.name = (e.target as HTMLInputElement).value;
 										generateSlug(tierForm.name);
 									}}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
 									placeholder="e.g., Micro Influencer"
 								/>
 							</div>
@@ -468,7 +485,7 @@
 									required
 									value={tierForm.slug}
 									oninput={(e) => (tierForm.slug = (e.target as HTMLInputElement).value)}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
 									placeholder="Auto-generated"
 								/>
 							</div>
@@ -483,7 +500,7 @@
 									rows="2"
 									value={tierForm.description}
 									oninput={(e) => (tierForm.description = (e.target as HTMLTextAreaElement).value)}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
 									placeholder="Tier description..."
 								></textarea>
 							</div>
@@ -500,7 +517,7 @@
 											parseInt((e.target as HTMLInputElement).value) || 0;
 										updateFollowerDisplay();
 									}}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
 								/>
 							</div>
 
@@ -515,7 +532,7 @@
 											parseInt((e.target as HTMLInputElement).value) || 0;
 										updateFollowerDisplay();
 									}}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
 								/>
 							</div>
 
@@ -526,7 +543,7 @@
 									type="text"
 									readonly
 									value={tierForm.metadata.follower_range.display}
-									class="mt-1 block w-full rounded-md border-gray-300 bg-gray-50 shadow-sm"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2"
 								/>
 							</div>
 
@@ -541,7 +558,7 @@
 									oninput={(e) =>
 										(tierForm.metadata.pricing.base_price =
 											parseFloat((e.target as HTMLInputElement).value) || 0)}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500"
 								/>
 							</div>
 
@@ -556,7 +573,7 @@
 									oninput={(e) =>
 										(tierForm.metadata.quality_score =
 											parseInt((e.target as HTMLInputElement).value) || 5)}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
 								/>
 							</div>
 
@@ -568,7 +585,7 @@
 									value={tierForm.metadata.delivery_time}
 									oninput={(e) =>
 										(tierForm.metadata.delivery_time = (e.target as HTMLInputElement).value)}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
 									placeholder="e.g., 24-48 hours"
 								/>
 							</div>

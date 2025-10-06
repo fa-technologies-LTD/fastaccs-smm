@@ -43,7 +43,7 @@
 			const term = searchTerm.toLowerCase();
 			filtered = filtered.filter(
 				(account) =>
-					account.username.toLowerCase().includes(term) ||
+					account.username?.toLowerCase().includes(term) ||
 					account.platform?.toLowerCase().includes(term)
 			);
 		}
@@ -126,7 +126,7 @@
 
 	const exportAccounts = () => {
 		// Create CSV content
-		const headers = ['Username', 'Platform', 'Followers', 'Engagement Rate', 'Status', 'Price'];
+		const headers = ['Username', 'Platform', 'Followers', 'Engagement Rate', 'Status', 'Quality'];
 		const csvContent = [
 			headers.join(','),
 			...filteredAccounts().map((account) =>
@@ -136,7 +136,7 @@
 					account.followers || 0,
 					account.engagement_rate || 0,
 					account.status,
-					account.price || 0
+					account.quality_score || 0
 				].join(',')
 			)
 		].join('\n');
@@ -251,9 +251,9 @@
 			<div class="flex items-center">
 				<CheckCircle class="h-8 w-8 text-green-600" />
 				<div class="ml-4">
-					<p class="text-sm font-medium text-gray-600">Sold</p>
+					<p class="text-sm font-medium text-gray-600">Delivered</p>
 					<p class="text-2xl font-bold text-gray-900">
-						{accounts.filter((a) => a.status === 'sold').length}
+						{accounts.filter((a) => a.status === 'delivered').length}
 					</p>
 				</div>
 			</div>
@@ -395,7 +395,7 @@
 							<th
 								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
 							>
-								Price
+								Quality
 							</th>
 						</tr>
 					</thead>
@@ -409,9 +409,11 @@
 											class="h-4 w-4 {getStatusColor(account.status).split(' ')[0]} mr-3"
 										/>
 										<div>
-											<div class="text-sm font-medium text-gray-900">@{account.username}</div>
-											{#if account.display_name}
-												<div class="text-sm text-gray-500">{account.display_name}</div>
+											<div class="text-sm font-medium text-gray-900">
+												@{account.username || 'N/A'}
+											</div>
+											{#if account.email}
+												<div class="text-sm text-gray-500">{account.email}</div>
 											{/if}
 										</div>
 									</div>
@@ -435,7 +437,7 @@
 									</span>
 								</td>
 								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-900">
-									${(account.price || 0).toFixed(2)}
+									{account.quality_score || 'N/A'}
 								</td>
 							</tr>
 						{/each}

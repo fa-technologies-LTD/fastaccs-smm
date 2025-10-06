@@ -4,8 +4,8 @@
 	import FeaturedCategories from '$lib/components/FeaturedCategories.svelte';
 	import SocialProof from '$lib/components/SocialProof.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import { Instagram, Music, Facebook, Twitter, Star, Eye, Youtube, Package } from '@lucide/svelte';
-	import { cart } from '$lib/stores/cart';
+	import { Instagram, Music, Facebook, Twitter, Star, Eye, Youtube } from '@lucide/svelte';
+	import { cart } from '$lib/stores/cart.svelte';
 	import type { PageData } from './$types';
 
 	export let data: PageData;

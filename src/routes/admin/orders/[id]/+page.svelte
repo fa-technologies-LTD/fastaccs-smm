@@ -21,13 +21,13 @@
 		EyeOff
 	} from '@lucide/svelte';
 	import { updateOrderStatus, processOrderDelivery, addOrderNote } from '$lib/services/orders';
-	import type { OrderMetadata, OrderItem } from '$lib/services/orders';
+	import type { OrderMetadata, OrderItemWithDetails } from '$lib/services/orders';
 
 	// Props from load function
 	interface Props {
 		data: {
 			order: OrderMetadata;
-			items: OrderItem[];
+			items: OrderItemWithDetails[];
 			error: string | null;
 		};
 	}
@@ -35,7 +35,7 @@
 	let { data }: Props = $props();
 
 	let order = $state(data.order);
-	let items = $state(data.items);
+	let items = $state<OrderItemWithDetails[]>(data.items);
 	let isProcessing = $state(false);
 	let showCredentials = $state(false);
 	let newNote = $state('');
@@ -95,7 +95,7 @@
 		try {
 			const result = await updateOrderStatus(order.id, newStatus);
 			if (result.error) {
-				alert('Failed to update order status: ' + result.error.message);
+				alert('Failed to update order status: ' + result.error);
 			} else {
 				order = { ...order, status: newStatus };
 			}
@@ -114,7 +114,7 @@
 		try {
 			const result = await processOrderDelivery(order.id, selectedDeliveryMethod);
 			if (result.error) {
-				alert('Failed to process delivery: ' + result.error.message);
+				alert('Failed to process delivery: ' + result.error);
 			} else {
 				alert('Delivery initiated successfully!');
 				order = { ...order, status: 'processing' };
@@ -134,7 +134,7 @@
 		try {
 			const result = await addOrderNote(order.id, newNote.trim());
 			if (result.error) {
-				alert('Failed to add note: ' + result.error.message);
+				alert('Failed to add note: ' + result.error);
 			} else {
 				// Update order metadata with new note
 				const currentNotes = order.metadata?.notes || [];
@@ -575,10 +575,16 @@
 						{#if order.metadata?.notes && order.metadata.notes.length > 0}
 							{#each order.metadata.notes as note}
 								<div class="rounded-lg bg-gray-50 p-3">
-									<p class="text-sm text-gray-900">{note.note}</p>
+									<p class="text-sm text-gray-900">
+										{typeof note === 'string' ? note : note.note}
+									</p>
 									<div class="mt-2 flex items-center justify-between text-xs text-gray-500">
-										<span>{note.author || 'Admin'}</span>
-										<span>{new Date(note.created_at).toLocaleDateString()}</span>
+										<span>{typeof note === 'string' ? 'Admin' : note.author || 'Admin'}</span>
+										<span>
+											{typeof note === 'string'
+												? 'No date'
+												: new Date(note.created_at).toLocaleDateString()}
+										</span>
 									</div>
 								</div>
 							{/each}

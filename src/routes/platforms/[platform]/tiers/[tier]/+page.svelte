@@ -17,7 +17,7 @@
 	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import { cart } from '$lib/stores/cart';
+	import { cart } from '$lib/stores/cart.svelte';
 	import type { PageData } from './$types';
 
 	interface Props {
@@ -100,7 +100,7 @@
 
 	// Add to cart functionality
 	async function addToCart() {
-		if (!data.product || !data.tier || addingToCart) return;
+		if (!data.tierCategory || !data.tier || addingToCart) return;
 
 		addingToCart = true;
 		try {
@@ -110,16 +110,15 @@
 				return;
 			}
 
-			// Use the existing cart system with the product data - now async with reservations
-			await cart.addItem(data.product, selectedQuantity);
+			// Use the existing cart system - no database reservations needed
+			cart.addItem(data.tierCategory, selectedQuantity);
 
-			// Success feedback
-			alert(
-				`Added ${selectedQuantity} ${data.tier.tier_name} account${selectedQuantity > 1 ? 's' : ''} to cart with 30-minute reservation!`
-			);
+			// Success - show proper notification
+			console.log('Added to cart:', selectedQuantity, 'x', data.tier.tier_name);
+			console.log('Cart items:', cart.items);
 
-			// Redirect to checkout
-			goto('/checkout');
+			// Reset quantity to 1 after adding
+			selectedQuantity = 1;
 		} catch (error) {
 			console.error('Error adding to cart:', error);
 			alert('Failed to add items to cart. Please try again.');
@@ -161,7 +160,10 @@
 	<title>{data.platform?.name} {data.tier?.tier_name} - FastAccs</title>
 	<meta
 		name="description"
-		content="Buy {data.platform?.name} accounts with {data.tier?.metadata?.follower_count ||
+		content="Buy {data.platform?.name} accounts with {data.tier?.metadata?.follower_range
+			?.display ||
+			`${formatFollowers(data.tier?.metadata?.follower_range?.min || 0)} - ${formatFollowers(data.tier?.metadata?.follower_range?.max || 0)}` ||
+			data.tier?.metadata?.follower_count ||
 			0} followers. Premium quality accounts with instant delivery and full access."
 	/>
 </svelte:head>
@@ -225,9 +227,14 @@
 								</span>
 							</div>
 							<p class="text-xl opacity-90">
-								{data.platform.name} accounts with {formatFollowers(
-									(data.tier.metadata?.follower_count as number) || 0
-								)} followers
+								{data.platform.name} accounts with
+								{#if data.tier.metadata?.follower_range}
+									{@const range = data.tier.metadata.follower_range}
+									{range.display ||
+										`${formatFollowers(range.min || 0)} - ${formatFollowers(range.max || 0)}`} followers
+								{:else}
+									{formatFollowers((data.tier.metadata?.follower_count as number) || 0)} followers
+								{/if}
 							</p>
 							<p class="mt-2 text-lg opacity-75">
 								{data.tier.visible_available} accounts available
@@ -256,8 +263,17 @@
 						<div class="mb-8 rounded-xl bg-white p-8 shadow-sm">
 							<h2 class="mb-4 text-2xl font-bold text-gray-900">Account Details</h2>
 							<p class="mb-6 text-lg text-gray-700">
-								{data.tier.category_name ||
-									`Premium ${data.platform.name} accounts with ${formatFollowers((data.tier.metadata?.follower_count as number) || 0)} followers.`}
+								{#if data.tier.metadata?.follower_range}
+									{@const range = data.tier.metadata.follower_range}
+									Premium {data.platform.name} accounts with {range.display ||
+										`${formatFollowers(range.min || 0)} - ${formatFollowers(range.max || 0)}`} followers.
+									{data.tier.category_name
+										? `${data.tier.category_name}`
+										: 'High-quality accounts ready for immediate use.'}
+								{:else}
+									{data.tier.category_name ||
+										`Premium ${data.platform.name} accounts with ${formatFollowers((data.tier.metadata?.follower_count as number) || 0)} followers.`}
+								{/if}
 							</p>
 
 							<!-- Features -->

@@ -1,233 +1,301 @@
-import { supabase } from '$lib/supabase';
+import type { Account, Category } from '@prisma/client';
 
-// Type for metadata fields
-export interface TierMetadata {
-	description?: string;
-	features?: string[];
-	requirements?: string[];
-	min_followers?: number;
-	max_followers?: number;
-	engagement_rate?: number;
-	verification_required?: boolean;
-	[key: string]: unknown;
+// Account with platform/tier category information
+export interface AccountInventory extends Account {
+	category: Category & {
+		parent?: Category;
+	};
 }
 
-export interface StockAlert {
-	tier_name: string;
-	platform_name: string;
-	available: number;
-	threshold: number;
-	severity: 'low' | 'critical' | 'out_of_stock';
+// Platform/tier inventory summary for admin dashboard
+export interface InventoryByPlatform {
+	platform: string;
+	tier: string;
+	categoryId: string;
+	total_accounts: number;
+	available_accounts: number;
+	assigned_accounts: number;
+	delivered_accounts: number;
+	price: number;
+	status: 'in_stock' | 'low_stock' | 'out_of_stock';
+	last_restocked?: Date;
 }
 
-export interface StockMovement {
-	id: string;
-	tier_name: string;
-	platform_name: string;
-	type: 'sale' | 'reservation' | 'import' | 'cancellation';
-	quantity: number;
-	created_at: string;
+// Overall inventory statistics
+export interface InventoryStats {
+	total_accounts: number;
+	available_accounts: number;
+	assigned_accounts: number;
+	delivered_accounts: number;
+	platforms: number;
+	// Additional properties for admin dashboard
+	total_tiers: number;
+	total_available: number;
+	total_reserved: number;
+	out_of_stock: number;
+	low_stock: number;
+}
+
+// Data for creating new accounts during import
+export interface CreateAccountData {
+	categoryId: string;
+	username: string;
+	email?: string;
+	password?: string;
+	followers: number;
+	engagement?: number;
+	verified: boolean;
+	price: number;
+	currency: string;
+	status: string;
 	metadata?: Record<string, unknown>;
 }
 
-// Get real-time tier inventory
-export async function getTierInventory() {
-	const { data, error } = await supabase
-		.from('mv_tier_inventory')
-		.select('*')
-		.order('platform_name, tier_name');
-
-	return { data, error };
-}
-
-// Get inventory by platform
-export async function getInventoryByPlatform(platformSlug: string) {
-	const { data, error } = await supabase
-		.from('mv_tier_inventory')
-		.select('*')
-		.eq('platform_slug', platformSlug)
-		.order('tier_name');
-
-	return { data, error };
-}
-
-// Get low stock alerts
-export async function getLowStockAlerts(threshold: number = 10) {
-	const { data, error } = await supabase
-		.from('mv_tier_inventory')
-		.select('*')
-		.lt('visible_available', threshold)
-		.order('visible_available');
-
-	if (error) return { data: null, error };
-
-	const alerts: StockAlert[] =
-		data?.map((item) => ({
-			tier_name: item.tier_name,
-			platform_name: item.platform_name,
-			available: item.visible_available,
-			threshold,
-			severity:
-				item.visible_available === 0
-					? 'out_of_stock'
-					: item.visible_available < 5
-						? 'critical'
-						: 'low'
-		})) || [];
-
-	return { data: alerts, error: null };
-}
-
-// Get inventory stats
-export async function getInventoryStats() {
-	const { data, error } = await supabase.from('mv_tier_inventory').select('*');
-
-	if (error) return { data: null, error };
-
-	const stats = {
-		total_tiers: data?.length || 0,
-		total_available: data?.reduce((sum, item) => sum + item.accounts_available, 0) || 0,
-		total_reserved: data?.reduce((sum, item) => sum + item.reservations_active, 0) || 0,
-		out_of_stock: data?.filter((item) => item.visible_available === 0).length || 0,
-		low_stock:
-			data?.filter((item) => item.visible_available > 0 && item.visible_available < 10).length || 0,
-		platforms: [...new Set(data?.map((item) => item.platform_name))].length
-	};
-
-	return { data: stats, error: null };
-}
-
-// Update stock quantity cache
-export async function updateStockCache(productId: string) {
-	// This would typically be called after batch imports or account status changes
-	const { data: inventory } = await supabase
-		.from('mv_tier_inventory')
-		.select('visible_available')
-		.eq('product_id', productId)
-		.single();
-
-	if (inventory) {
-		const { data, error } = await supabase
-			.from('products')
-			.update({ stock_quantity: inventory.visible_available })
-			.eq('id', productId)
-			.select()
-			.single();
-
-		return { data, error };
-	}
-
-	return { data: null, error: { message: 'Inventory not found' } };
-}
-
-// Get stock movements (real-time activity)
-export async function getStockMovements(limit: number = 20) {
+/**
+ * Get inventory organized by platform/tier for admin dashboard
+ */
+export async function getInventoryByPlatforms(): Promise<{
+	data: InventoryByPlatform[] | null;
+	error?: string;
+}> {
 	try {
-		// Get recent orders (sales)
-		const { data: orders } = await supabase
-			.from('orders')
-			.select(
-				`
-				id,
-				created_at,
-				total_amount,
-				status
-			`
-			)
-			.order('created_at', { ascending: false })
-			.limit(limit / 2);
-
-		// Get recent account status changes
-		const { data: accounts } = await supabase
-			.from('accounts')
-			.select(
-				`
-				id,
-				status,
-				created_at,
-				category:categories(
-					name,
-					parent:categories(name)
-				)
-			`
-			)
-			.in('status', ['sold', 'reserved', 'available'])
-			.order('created_at', { ascending: false })
-			.limit(limit / 2);
-
-		// Combine and format movements
-		const movements: StockMovement[] = [];
-
-		// Add order movements
-		orders?.forEach((order) => {
-			movements.push({
-				id: order.id,
-				tier_name: 'Mixed Tiers', // Would need order line items for specific tiers
-				platform_name: 'Multiple',
-				type: 'sale',
-				quantity: 1, // Default to 1, would need to count from order_items for actual quantity
-				created_at: order.created_at,
-				metadata: { total_amount: order.total_amount, status: order.status }
-			});
-		});
-
-		// Add account status movements
-		accounts?.forEach((account) => {
-			// Handle nested category structure from Supabase
-			let platformName = 'Unknown';
-			let tierName = 'Unknown';
-
-			if (account.category && Array.isArray(account.category) && account.category.length > 0) {
-				const cat = account.category[0] as { name: string; parent?: Array<{ name: string }> };
-				tierName = cat.name || 'Unknown';
-				if (cat.parent && Array.isArray(cat.parent) && cat.parent.length > 0) {
-					platformName = cat.parent[0].name || 'Unknown';
-				}
-			}
-
-			movements.push({
-				id: account.id,
-				tier_name: tierName,
-				platform_name: platformName,
-				type:
-					account.status === 'sold'
-						? 'sale'
-						: account.status === 'reserved'
-							? 'reservation'
-							: 'import',
-				quantity: 1,
-				created_at: account.created_at,
-				metadata: { account_status: account.status }
-			});
-		});
-
-		// Sort by date and limit
-		movements.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-		return { data: movements.slice(0, limit), error: null };
+		const response = await fetch('/api/inventory');
+		if (!response.ok) {
+			const errorText = await response.text();
+			return { data: null, error: `HTTP ${response.status}: ${errorText}` };
+		}
+		const data = await response.json();
+		return { data: data.data || data };
 	} catch (error) {
-		console.error('Error fetching stock movements:', error);
-		return { data: [], error };
+		console.error('Failed to fetch inventory:', error);
+		return { data: null, error: 'Failed to fetch inventory' };
 	}
 }
 
-// Get inventory movements (activity log) - Legacy function
-export async function getInventoryMovements(limit: number = 50) {
-	// This would typically query an audit/activity log table
-	// For now, we'll get recent account status changes as a proxy
-	const { data, error } = await supabase
-		.from('accounts')
-		.select(
-			`
-      id,
-      status,
-      created_at,
-      delivered_at,
-      category:categories(name, parent:categories(name))
-    `
-		)
-		.order('created_at', { ascending: false })
-		.limit(limit);
+/**
+ * Get overall inventory statistics
+ */
+export async function getInventoryStats(): Promise<{
+	data: InventoryStats | null;
+	error?: string;
+}> {
+	try {
+		const response = await fetch('/api/inventory/stats');
+		if (!response.ok) {
+			const errorText = await response.text();
+			return { data: null, error: `HTTP ${response.status}: ${errorText}` };
+		}
+		const data = await response.json();
+		return { data: data.data || data };
+	} catch (error) {
+		console.error('Failed to fetch inventory stats:', error);
+		return { data: null, error: 'Failed to fetch inventory stats' };
+	}
+}
 
-	return { data, error };
+/**
+ * Get accounts with filtering
+ */
+export async function getAccounts(
+	options: {
+		categoryId?: string;
+		status?: string;
+		platform?: string;
+		page?: number;
+		limit?: number;
+	} = {}
+): Promise<{ data: AccountInventory[] | null; error?: string }> {
+	try {
+		const searchParams = new URLSearchParams();
+		if (options.categoryId) searchParams.set('categoryId', options.categoryId);
+		if (options.status) searchParams.set('status', options.status);
+		if (options.platform) searchParams.set('platform', options.platform);
+		if (options.page) searchParams.set('page', options.page.toString());
+		if (options.limit) searchParams.set('limit', options.limit.toString());
+
+		const response = await fetch(`/api/inventory/accounts?${searchParams.toString()}`);
+		if (!response.ok) {
+			const errorText = await response.text();
+			return { data: null, error: `HTTP ${response.status}: ${errorText}` };
+		}
+		const data = await response.json();
+		return { data: data.data || data };
+	} catch (error) {
+		console.error('Failed to fetch accounts:', error);
+		return { data: null, error: 'Failed to fetch accounts' };
+	}
+}
+
+/**
+ * Get single account by ID
+ */
+export async function getAccountById(
+	accountId: string
+): Promise<{ data: AccountInventory | null; error?: string }> {
+	try {
+		const response = await fetch(`/api/inventory/accounts/${accountId}`);
+		if (!response.ok) {
+			const errorText = await response.text();
+			return { data: null, error: `HTTP ${response.status}: ${errorText}` };
+		}
+		const data = await response.json();
+		return { data: data.data || data };
+	} catch (error) {
+		console.error('Failed to fetch account:', error);
+		return { data: null, error: 'Failed to fetch account' };
+	}
+}
+
+/**
+ * Create new account (admin import)
+ */
+export async function createAccount(
+	accountData: CreateAccountData
+): Promise<{ data: Account | null; error?: string }> {
+	try {
+		const response = await fetch('/api/inventory/accounts', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(accountData)
+		});
+		if (!response.ok) {
+			const errorText = await response.text();
+			return { data: null, error: `HTTP ${response.status}: ${errorText}` };
+		}
+		const data = await response.json();
+		return { data: data.data || data };
+	} catch (error) {
+		console.error('Failed to create account:', error);
+		return { data: null, error: 'Failed to create account' };
+	}
+}
+
+/**
+ * Update account
+ */
+export async function updateAccount(
+	accountId: string,
+	updates: Partial<CreateAccountData>
+): Promise<{ data: Account | null; error?: string }> {
+	try {
+		const response = await fetch(`/api/inventory/accounts/${accountId}`, {
+			method: 'PUT',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(updates)
+		});
+		if (!response.ok) {
+			const errorText = await response.text();
+			return { data: null, error: `HTTP ${response.status}: ${errorText}` };
+		}
+		const data = await response.json();
+		return { data: data.data || data };
+	} catch (error) {
+		console.error('Failed to update account:', error);
+		return { data: null, error: 'Failed to update account' };
+	}
+}
+
+/**
+ * Update account status (available → assigned → delivered)
+ */
+export async function updateAccountStatus(
+	accountId: string,
+	status: string
+): Promise<{ data: Account | null; error?: string }> {
+	try {
+		const response = await fetch(`/api/inventory/accounts/${accountId}/status`, {
+			method: 'PATCH',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({ status })
+		});
+		if (!response.ok) {
+			const errorText = await response.text();
+			return { data: null, error: `HTTP ${response.status}: ${errorText}` };
+		}
+		const data = await response.json();
+		return { data: data.data || data };
+	} catch (error) {
+		console.error('Failed to update account status:', error);
+		return { data: null, error: 'Failed to update account status' };
+	}
+}
+
+/**
+ * Delete account
+ */
+export async function deleteAccount(
+	accountId: string
+): Promise<{ data: boolean | null; error?: string }> {
+	try {
+		const response = await fetch(`/api/inventory/accounts/${accountId}`, {
+			method: 'DELETE'
+		});
+		if (!response.ok) {
+			const errorText = await response.text();
+			return { data: null, error: `HTTP ${response.status}: ${errorText}` };
+		}
+		return { data: true };
+	} catch (error) {
+		console.error('Failed to delete account:', error);
+		return { data: null, error: 'Failed to delete account' };
+	}
+}
+
+/**
+ * Assign accounts to an order (available → assigned)
+ */
+export async function assignAccountsToOrder(
+	orderId: string,
+	categoryId: string,
+	quantity: number
+): Promise<{ data: Account[] | null; error?: string }> {
+	try {
+		const response = await fetch(`/api/orders/${orderId}/assign`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({ categoryId, quantity })
+		});
+		if (!response.ok) {
+			const errorText = await response.text();
+			return { data: null, error: `HTTP ${response.status}: ${errorText}` };
+		}
+		const data = await response.json();
+		return { data: data.data || data };
+	} catch (error) {
+		console.error('Failed to assign accounts to order:', error);
+		return { data: null, error: 'Failed to assign accounts to order' };
+	}
+}
+
+/**
+ * Mark accounts as delivered (assigned → delivered)
+ */
+export async function markAccountsDelivered(
+	accountIds: string[]
+): Promise<{ data: boolean | null; error?: string }> {
+	try {
+		const response = await fetch('/api/inventory/deliver', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({ accountIds })
+		});
+		if (!response.ok) {
+			const errorText = await response.text();
+			return { data: null, error: `HTTP ${response.status}: ${errorText}` };
+		}
+		return { data: true };
+	} catch (error) {
+		console.error('Failed to mark accounts as delivered:', error);
+		return { data: null, error: 'Failed to mark accounts as delivered' };
+	}
 }

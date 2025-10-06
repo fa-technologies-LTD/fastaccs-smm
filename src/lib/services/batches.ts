@@ -1,81 +1,80 @@
-import { supabase } from '$lib/supabase';
-
-// Types for batch management
+// Types for batch management (updated for Prisma)
 export interface AccountBatch {
 	id: string;
-	category_id: string;
+	categoryId: string;
 	supplier: string | null;
-	cost_per_unit: number | null;
+	costPerUnit: number | null;
 	descriptors: Record<string, unknown>;
-	links_raw: string | null;
-	logs_raw: string | null;
+	linksRaw: string | null;
+	logsRaw: string | null;
 	notes: string | null;
-	total_units: number;
-	remaining_units: number;
-	created_at: string;
+	totalUnits: number;
+	remainingUnits: number;
+	createdAt: string;
+	updatedAt: string;
 }
 
 export interface AccountBatchInsert {
-	category_id: string;
+	categoryId: string;
 	supplier?: string | null;
-	cost_per_unit?: number | null;
+	costPerUnit?: number | null;
 	descriptors?: Record<string, unknown>;
-	links_raw: string;
-	logs_raw: string;
+	linksRaw: string;
+	logsRaw: string;
 	notes?: string | null;
-	total_units: number;
+	totalUnits: number;
 }
 
 export interface Account {
 	id: string;
-	batch_id: string;
-	category_id: string;
+	batchId: string;
+	categoryId: string;
 	platform: string;
-	link_url: string | null;
+	linkUrl: string | null;
 	username: string | null;
 	password: string | null;
 	email: string | null;
-	email_password: string | null;
-	two_fa: string | null;
-	two_factor_enabled: boolean | null;
-	easy_login_enabled: boolean | null;
-	age_months: number | null;
+	emailPassword: string | null;
+	twoFa: string | null;
+	twoFactorEnabled: boolean | null;
+	easyLoginEnabled: boolean | null;
+	ageMonths: number | null;
 	niche: string | null;
-	quality_score: number | null;
+	qualityScore: number | null;
 	status: 'available' | 'reserved' | 'assigned' | 'delivered' | 'failed' | 'retired';
-	reserved_until: string | null;
-	order_item_id: string | null;
-	delivered_at: string | null;
-	delivery_notes: string | null;
-	created_at: string;
+	reservedUntil: string | null;
+	orderItemId: string | null;
+	deliveredAt: string | null;
+	deliveryNotes: string | null;
+	createdAt: string;
 }
 
 export interface AccountInsert {
-	batch_id: string;
-	category_id: string;
+	batchId: string;
+	categoryId: string;
 	platform: string;
-	link_url?: string | null;
+	linkUrl?: string | null;
 	username?: string | null;
 	password?: string | null;
 	email?: string | null;
-	email_password?: string | null;
-	two_fa?: string | null;
-	two_factor_enabled?: boolean | null;
-	easy_login_enabled?: boolean | null;
-	age_months?: number | null;
+	emailPassword?: string | null;
+	twoFa?: string | null;
+	twoFactorEnabled?: boolean | null;
+	easyLoginEnabled?: boolean | null;
+	ageMonths?: number | null;
 	niche?: string | null;
-	quality_score?: number | null;
+	qualityScore?: number | null;
 }
 
 export interface ParsedAccount {
-	link_url: string;
+	linkUrl: string;
 	username: string;
 	password: string;
 	email?: string;
-	email_password?: string;
-	two_fa?: string;
-	two_factor_enabled?: boolean;
-	easy_login_enabled?: boolean;
+	emailPassword?: string;
+	twoFa?: string;
+	twoFactorEnabled?: boolean;
+	easyLoginEnabled?: boolean;
 }
 
 export interface ImportResult {
@@ -104,7 +103,7 @@ export function parseCredentialBlocks(credentialsText: string): ParsedAccount[] 
 			.map((line) => line.trim())
 			.filter((line) => line);
 		const account: ParsedAccount = {
-			link_url: '',
+			linkUrl: '',
 			username: lines[0] || '',
 			password: lines[1] || ''
 		};
@@ -116,17 +115,17 @@ export function parseCredentialBlocks(credentialsText: string): ParsedAccount[] 
 			if (line.includes('@')) {
 				account.email = line;
 			} else if (line.includes('2FA') || line.includes('BACKUP')) {
-				account.two_fa = line;
-				account.two_factor_enabled = true;
+				account.twoFa = line;
+				account.twoFactorEnabled = true;
 			} else if (line.toLowerCase().includes('no_2fa')) {
-				account.two_factor_enabled = false;
+				account.twoFactorEnabled = false;
 			} else if (line.toLowerCase().includes('easy_login=yes')) {
-				account.easy_login_enabled = true;
+				account.easyLoginEnabled = true;
 			} else if (line.toLowerCase().includes('easy_login=no')) {
-				account.easy_login_enabled = false;
-			} else if (!account.email_password && line.length > 5) {
+				account.easyLoginEnabled = false;
+			} else if (!account.emailPassword && line.length > 5) {
 				// Assume it's email password if we already have email
-				account.email_password = line;
+				account.emailPassword = line;
 			}
 		}
 
@@ -171,7 +170,8 @@ export async function importBatch(
 	platform: string,
 	linksText: string,
 	credentialsText: string,
-	batchData: Partial<AccountBatchInsert> = {}
+	batchData: Partial<AccountBatchInsert> = {},
+	fetchFn = fetch
 ): Promise<ImportResult> {
 	try {
 		// Parse input data
@@ -190,65 +190,90 @@ export async function importBatch(
 		}
 
 		// Create batch record
-		const { data: batch, error: batchError } = await supabase
-			.from('account_batches')
-			.insert({
-				category_id: categoryId,
-				links_raw: linksText,
-				logs_raw: credentialsText,
-				total_units: accounts.length,
-				remaining_units: accounts.length,
+		const batchResponse = await fetchFn('/api/batches', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				categoryId: categoryId,
+				linksRaw: linksText,
+				logsRaw: credentialsText,
+				totalUnits: accounts.length,
+				remainingUnits: accounts.length,
 				...batchData
 			})
-			.select()
-			.single();
+		});
 
-		if (batchError || !batch) {
+		const batchResult = await batchResponse.json();
+		if (!batchResponse.ok || batchResult.error) {
 			return {
 				success: false,
 				imported_count: 0,
 				failed_count: accounts.length,
-				errors: [`Failed to create batch: ${batchError?.message}`]
+				errors: [`Failed to create batch: ${batchResult.error}`]
 			};
 		}
 
+		const batch = batchResult.data;
+
 		// Create account records
 		const accountInserts: AccountInsert[] = accounts.map((account, index) => ({
-			batch_id: batch.id,
-			category_id: categoryId,
+			batchId: batch.id,
+			categoryId: categoryId,
 			platform,
-			link_url: links[index],
+			linkUrl: links[index],
 			username: account.username,
 			password: account.password,
 			email: account.email || null,
-			email_password: account.email_password || null,
-			two_fa: account.two_fa || null,
-			two_factor_enabled: account.two_factor_enabled || null,
-			easy_login_enabled: account.easy_login_enabled || null
+			emailPassword: account.emailPassword || null,
+			twoFa: account.twoFa || null,
+			twoFactorEnabled: account.twoFactorEnabled || null,
+			easyLoginEnabled: account.easyLoginEnabled || null
 		}));
 
-		const { data: insertedAccounts, error: accountsError } = await supabase
-			.from('accounts')
-			.insert(accountInserts)
-			.select();
+		// Create accounts in batch
+		let insertedCount = 0;
+		const accountErrors: string[] = [];
 
-		if (accountsError) {
-			// Clean up batch if account insertion fails
-			await supabase.from('account_batches').delete().eq('id', batch.id);
+		for (let i = 0; i < accountInserts.length; i++) {
+			try {
+				const accountResponse = await fetchFn('/api/accounts', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(accountInserts[i])
+				});
+
+				const accountResult = await accountResponse.json();
+				if (accountResponse.ok && !accountResult.error) {
+					insertedCount++;
+				} else {
+					accountErrors.push(`Account ${i + 1}: ${accountResult.error}`);
+				}
+			} catch (error) {
+				accountErrors.push(
+					`Account ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`
+				);
+			}
+		}
+
+		if (accountErrors.length > 0 && insertedCount === 0) {
+			// Clean up batch if no accounts were inserted
+			await fetchFn(`/api/batches/${batch.id}`, {
+				method: 'DELETE'
+			});
 
 			return {
 				success: false,
 				imported_count: 0,
 				failed_count: accounts.length,
-				errors: [`Failed to create accounts: ${accountsError.message}`]
+				errors: [`Failed to create accounts:`, ...accountErrors]
 			};
 		}
 
 		return {
 			success: true,
 			batch_id: batch.id,
-			imported_count: insertedAccounts?.length || 0,
-			failed_count: 0,
+			imported_count: insertedCount,
+			failed_count: accountErrors.length,
 			errors: []
 		};
 	} catch (error) {
@@ -262,35 +287,29 @@ export async function importBatch(
 }
 
 // Get all batches in BatchMetadata format
-export async function getBatches() {
+export async function getBatches(fetchFn: typeof fetch = fetch) {
 	try {
-		const { data, error } = await supabase
-			.from('account_batches')
-			.select(
-				`
-        *,
-        tier:categories!inner(
-          name,
-          parent:categories(name)
-        )
-      `
-			)
-			.order('created_at', { ascending: false });
+		const response = await fetchFn('/api/batches');
+		const result = await response.json();
 
-		if (error) return { data: null, error };
+		if (result.error) {
+			return { data: null, error: result.error };
+		}
 
 		// Convert to BatchMetadata format
-		const batches: BatchMetadata[] = (data || []).map((batch) => {
+		const batches: BatchMetadata[] = (result.data || []).map((batch: Record<string, unknown>) => {
 			const descriptors = batch.descriptors as Record<string, unknown> | null;
 			const status = descriptors?.status as string;
+			const totalUnits = (batch.totalUnits as number) || 0;
+			const remainingUnits = (batch.remainingUnits as number) || 0;
 
 			return {
-				id: batch.id,
-				name: batch.supplier || 'Unnamed Batch',
-				description: batch.notes,
-				tier_id: batch.category_id,
-				total_accounts: batch.total_units,
-				processed_accounts: batch.total_units - batch.remaining_units,
+				id: batch.id as string,
+				name: (batch.supplier as string) || 'Unnamed Batch',
+				description: batch.notes as string,
+				tier_id: batch.categoryId as string,
+				total_accounts: totalUnits,
+				processed_accounts: totalUnits - remainingUnits,
 				status:
 					status === 'failed' ||
 					status === 'pending' ||
@@ -298,8 +317,8 @@ export async function getBatches() {
 					status === 'completed'
 						? status
 						: 'pending',
-				created_at: batch.created_at,
-				updated_at: batch.created_at,
+				created_at: batch.createdAt as string,
+				updated_at: batch.updatedAt as string,
 				metadata: descriptors || {}
 			};
 		});
@@ -307,49 +326,52 @@ export async function getBatches() {
 		return { data: batches, error: null };
 	} catch (error) {
 		console.error('Error fetching batches:', error);
-		return { data: null, error: { message: 'Failed to fetch batches' } };
+		return { data: null, error: 'Failed to fetch batches' };
 	}
 }
 
 // Get batches by tier
-export async function getBatchesByTier(categoryId: string) {
-	const { data, error } = await supabase
-		.from('account_batches')
-		.select('*')
-		.eq('category_id', categoryId)
-		.order('created_at', { ascending: false });
+export async function getBatchesByTier(categoryId: string, fetchFn = fetch) {
+	try {
+		const response = await fetchFn(`/api/batches?categoryId=${encodeURIComponent(categoryId)}`);
+		const result = await response.json();
 
-	return { data, error };
+		if (result.error) {
+			return { data: null, error: result.error };
+		}
+
+		return { data: result.data, error: null };
+	} catch (error) {
+		console.error('Error fetching batches by tier:', error);
+		return { data: null, error: 'Failed to fetch batches' };
+	}
 }
 
 // Get batch details with accounts
-export async function getBatchDetails(batchId: string) {
-	const { data: batch, error: batchError } = await supabase
-		.from('account_batches')
-		.select(
-			`
-      *,
-      tier:categories!inner(
-        name,
-        parent:categories(name)
-      )
-    `
-		)
-		.eq('id', batchId)
-		.single();
+export async function getBatchDetails(batchId: string, fetchFn: typeof fetch = fetch) {
+	try {
+		const response = await fetchFn(`/api/batches/${batchId}`);
+		const result = await response.json();
 
-	if (batchError) return { data: null, error: batchError };
+		if (result.error) {
+			return { data: null, error: result.error };
+		}
 
-	const { data: accounts, error: accountsError } = await supabase
-		.from('accounts')
-		.select('*')
-		.eq('batch_id', batchId)
-		.order('created_at');
+		// Get accounts for this batch
+		const accountsResponse = await fetchFn(`/api/accounts?batchId=${batchId}`);
+		const accountsResult = await accountsResponse.json();
 
-	return {
-		data: { batch, accounts },
-		error: accountsError
-	};
+		return {
+			data: {
+				batch: result.data,
+				accounts: accountsResult.data || []
+			},
+			error: accountsResult.error
+		};
+	} catch (error) {
+		console.error('Error fetching batch details:', error);
+		return { data: null, error: 'Failed to fetch batch details' };
+	}
 }
 
 // Additional types and functions for the new batch import system
@@ -382,67 +404,81 @@ export interface BatchInsert {
 }
 
 // Create new batch for import system
-export async function createBatch(batchData: BatchInsert) {
+export async function createBatch(batchData: BatchInsert, fetchFn: typeof fetch = fetch) {
 	try {
-		// Insert into account_batches table with compatible structure
-		const { data, error } = await supabase
-			.from('account_batches')
-			.insert([
-				{
-					category_id: batchData.tier_id,
-					supplier: batchData.name,
-					total_units: batchData.total_accounts,
-					remaining_units: batchData.total_accounts - (batchData.processed_accounts || 0),
-					descriptors: {
-						...(batchData.metadata || {}),
-						status: batchData.status || 'pending'
-					},
-					notes: batchData.description
-				}
-			])
-			.select()
-			.single();
+		const response = await fetchFn('/api/batches', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({
+				categoryId: batchData.tier_id,
+				supplier: batchData.name,
+				totalUnits: batchData.total_accounts,
+				remainingUnits: batchData.total_accounts - (batchData.processed_accounts || 0),
+				descriptors: {
+					...(batchData.metadata || {}),
+					status: batchData.status || 'pending'
+				},
+				notes: batchData.description
+			})
+		});
 
-		if (error) return { data: null, error };
+		const result = await response.json();
+
+		if (result.error) return { data: null, error: result.error };
 
 		// Return in BatchMetadata format
+		const data = result.data;
 		const batchMetadata: BatchMetadata = {
 			id: data.id,
 			name: data.supplier || 'Unnamed Batch',
 			description: data.notes,
-			tier_id: data.category_id,
-			total_accounts: data.total_units,
-			processed_accounts: data.total_units - data.remaining_units,
+			tier_id: data.categoryId,
+			total_accounts: data.totalUnits,
+			processed_accounts: data.totalUnits - data.remainingUnits,
 			status: (['pending', 'processing', 'completed', 'failed'].includes(
 				(data.descriptors as Record<string, unknown>)?.status as string
 			)
 				? (data.descriptors as Record<string, unknown>)?.status
 				: 'pending') as 'pending' | 'processing' | 'completed' | 'failed',
-			created_at: data.created_at,
-			updated_at: data.created_at,
+			created_at: data.createdAt,
+			updated_at: data.updatedAt,
 			metadata: (data.descriptors as Record<string, unknown>) || {}
 		};
 
 		return { data: batchMetadata, error: null };
 	} catch (error) {
 		console.error('Error creating batch:', error);
-		return { data: null, error: { message: 'Failed to create batch' } };
+		return { data: null, error: 'Failed to create batch' };
 	}
 }
 
 // Update batch status
-export async function updateBatchStatus(id: string, status: string) {
+export async function updateBatchStatus(id: string, status: string, fetchFn = fetch) {
 	try {
-		const { data, error } = await supabase
-			.from('account_batches')
-			.update({
-				descriptors: { status }
-			})
-			.eq('id', id)
-			.select()
-			.single();
+		// If status is completed, also update remainingUnits to 0
+		const updateData: { descriptors: { status: string }; remainingUnits?: number } = {
+			descriptors: { status }
+		};
 
-		return { data, error };
+		if (status === 'completed') {
+			updateData.remainingUnits = 0;
+		}
+
+		const response = await fetchFn(`/api/batches/${id}`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(updateData)
+		});
+
+		const result = await response.json();
+
+		if (result.error) {
+			return { data: null, error: result.error };
+		}
+
+		return { data: result.data, error: null };
 	} catch (error) {
 		console.error('Error updating batch status:', error);
 		return { data: null, error: { message: 'Failed to update batch status' } };
@@ -450,15 +486,14 @@ export async function updateBatchStatus(id: string, status: string) {
 }
 
 // Get batch by ID in BatchMetadata format
-export async function getBatchById(id: string) {
+export async function getBatchById(id: string, fetchFn: typeof fetch = fetch) {
 	try {
-		const { data, error } = await supabase
-			.from('account_batches')
-			.select('*')
-			.eq('id', id)
-			.single();
+		const response = await fetchFn(`/api/batches/${id}`);
+		const result = await response.json();
 
-		if (error) return { data: null, error };
+		if (result.error) return { data: null, error: result.error };
+
+		const data = result.data;
 
 		// Convert to BatchMetadata format
 		const descriptors = data.descriptors as Record<string, unknown> | null;

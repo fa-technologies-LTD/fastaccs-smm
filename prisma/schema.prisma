@@ -1,0 +1,265 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                    String?   @unique
+  googleId                 String?   @unique @map("google_id")
+  fullName                 String?   @map("full_name")
+  avatarUrl                String?   @map("avatar_url")
+  phone                    String?
+  whatsappNumber           String?   @map("whatsapp_number")
+  telegramUsername         String?   @map("telegram_username")
+  userType                 String    @default("registered") @map("user_type")
+  guestSessionId           String?   @unique @map("guest_session_id")
+  preferredDeliveryMethod  String    @default("whatsapp") @map("preferred_delivery_method")
+  dailyPurchaseLimit       Int       @default(100) @map("daily_purchase_limit")
+  totalPurchaseLimit       Int       @default(1000) @map("total_purchase_limit")
+  restrictedCategories     String[]  @map("restricted_categories")
+  isActive                 Boolean   @default(true) @map("is_active")
+  emailVerified            Boolean   @default(false) @map("email_verified")
+  registeredAt             DateTime  @default(now()) @map("registered_at")
+  lastLogin                DateTime? @map("last_login")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @default(now()) @map("updated_at")
+
+  // Relations
+  orders              Order[]
+  affiliateOrders     Order[]            @relation("AffiliateOrders")
+  cartItems           CartItem[]
+  notifications       Notification[]
+  reviews             Review[]
+  affiliatePrograms   AffiliateProgram[]
+
+  @@map("users")
+}
+
+model Category {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parentId     String?   @map("parent_id") @db.Uuid
+  name         String
+  slug         String
+  description  String?
+  categoryType String    @map("category_type")
+  metadata     Json      @default("{}")
+  sortOrder    Int       @default(0) @map("sort_order")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @map("updated_at")
+
+  // Relations
+  parent         Category?      @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children       Category[]     @relation("CategoryHierarchy")
+  accountBatches AccountBatch[]
+  accounts       Account[]
+  orderItems     OrderItem[]
+  cartItems      CartItem[]
+  reviews        Review[]
+
+  @@map("categories")
+}
+
+model AccountBatch {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId     String    @map("category_id") @db.Uuid
+  supplier       String?
+  costPerUnit    Decimal?  @map("cost_per_unit")
+  descriptors    Json      @default("{}")
+  linksRaw       String?   @map("links_raw")
+  logsRaw        String?   @map("logs_raw")
+  notes          String?
+  totalUnits     Int       @map("total_units")
+  remainingUnits Int       @default(0) @map("remaining_units")
+  importStatus   String    @default("pending") @map("import_status")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @default(now()) @map("updated_at")
+
+  // Relations
+  category Category  @relation(fields: [categoryId], references: [id])
+  accounts Account[]
+
+  @@map("account_batches")
+}
+
+model Account {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batchId           String    @map("batch_id") @db.Uuid
+  categoryId        String    @map("category_id") @db.Uuid
+  platform          String
+  linkUrl           String?   @map("link_url")
+  username          String?
+  password          String?
+  email             String?
+  emailPassword     String?   @map("email_password")
+  twoFa             String?   @map("two_fa")
+  twoFactorEnabled  Boolean?  @map("two_factor_enabled")
+  easyLoginEnabled  Boolean?  @map("easy_login_enabled")
+  followers         Int?
+  following         Int?
+  postsCount        Int?      @map("posts_count")
+  engagementRate    Decimal?  @map("engagement_rate")
+  ageMonths         Int?      @map("age_months")
+  niche             String?
+  qualityScore      Int?      @map("quality_score")
+  status            String    @default("available")
+  reservedUntil     DateTime? @map("reserved_until")
+  orderItemId       String?   @map("order_item_id") @db.Uuid
+  deliveredAt       DateTime? @map("delivered_at")
+  deliveryNotes     String?   @map("delivery_notes")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @default(now()) @map("updated_at")
+
+  // Relations
+  batch     AccountBatch @relation(fields: [batchId], references: [id])
+  category  Category     @relation(fields: [categoryId], references: [id])
+  orderItem OrderItem?   @relation(fields: [orderItemId], references: [id])
+
+  @@map("accounts")
+}
+
+model Order {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderNumber          String    @unique @map("order_number")
+  userId               String?   @map("user_id") @db.Uuid
+  guestEmail           String?   @map("guest_email")
+  guestPhone           String?   @map("guest_phone")
+  guestWhatsapp        String?   @map("guest_whatsapp")
+  guestTelegram        String?   @map("guest_telegram")
+  emailVerified        Boolean   @default(false) @map("email_verified")
+  verificationToken    String?   @map("verification_token")
+  verificationSentAt   DateTime? @map("verification_sent_at")
+  subtotal             Decimal
+  taxAmount            Decimal   @default(0) @map("tax_amount")
+  discountAmount       Decimal   @default(0) @map("discount_amount")
+  totalAmount          Decimal   @map("total_amount")
+  currency             String    @default("NGN")
+  paymentMethod        String?   @map("payment_method")
+  paymentReference     String?   @map("payment_reference")
+  paymentStatus        String    @default("pending") @map("payment_status")
+  paidAt               DateTime? @map("paid_at")
+  deliveryMethod       String    @map("delivery_method")
+  deliveryContact      String    @map("delivery_contact")
+  deliveryStatus       String    @default("pending") @map("delivery_status")
+  deliveredAt          DateTime? @map("delivered_at")
+  status               String    @default("pending")
+  affiliateCode        String?   @map("affiliate_code")
+  affiliateUserId      String?   @map("affiliate_user_id") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @default(now()) @map("updated_at")
+
+  // Relations
+  user            User?          @relation(fields: [userId], references: [id])
+  affiliateUser   User?          @relation("AffiliateOrders", fields: [affiliateUserId], references: [id])
+  orderItems      OrderItem[]
+  notifications   Notification[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId          String    @map("order_id") @db.Uuid
+  categoryId       String    @map("category_id") @db.Uuid  // Changed from productId to categoryId
+  quantity         Int
+  unitPrice        Decimal   @map("unit_price")
+  totalPrice       Decimal   @map("total_price")
+  productName      String    @map("product_name")
+  productCategory  String    @map("product_category")
+  allocationStatus String    @default("pending") @map("allocation_status")
+  allocatedCount   Int       @default(0) @map("allocated_count")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @default(now()) @map("updated_at")
+
+  // Relations
+  order    Order    @relation(fields: [orderId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])  // Changed from product to category
+  accounts Account[]
+  reviews  Review[]
+
+  @@map("order_items")
+}
+
+model CartItem {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  categoryId String   @map("category_id") @db.Uuid  // Changed from productId to categoryId
+  quantity   Int
+  addedAt    DateTime @default(now()) @map("added_at")
+
+  // Relations
+  user     User     @relation(fields: [userId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])  // Changed from product to category
+
+  @@map("cart_items")
+}
+
+
+model Notification {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  type      String
+  title     String
+  message   String
+  orderId   String?   @map("order_id") @db.Uuid
+  read      Boolean   @default(false)
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  expiresAt DateTime? @map("expires_at")
+
+  // Relations
+  user  User   @relation(fields: [userId], references: [id])
+  order Order? @relation(fields: [orderId], references: [id])
+
+  @@map("notifications")
+}
+
+model Review {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId  String    @map("category_id") @db.Uuid  // Changed from productId to categoryId
+  userId      String    @map("user_id") @db.Uuid
+  orderItemId String?   @map("order_item_id") @db.Uuid
+  rating      Int
+  title       String?
+  content     String?
+  imageUrls   String[]  @map("image_urls")
+  status      String    @default("published")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @map("updated_at")
+
+  // Relations
+  category  Category   @relation(fields: [categoryId], references: [id])  // Changed from product to category
+  user      User       @relation(fields: [userId], references: [id])
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id])
+
+  @@map("reviews")
+}
+
+model AffiliateProgram {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  affiliateCode   String   @unique @map("affiliate_code")
+  commissionRate  Decimal  @default(10.00) @map("commission_rate")
+  totalReferrals  Int      @default(0) @map("total_referrals")
+  totalSales      Decimal  @default(0) @map("total_sales")
+  totalCommission Decimal  @default(0) @map("total_commission")
+  status          String   @default("active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("affiliate_programs")
+}

@@ -52,24 +52,25 @@
 
 	function openEditModal(platform: Category) {
 		selectedPlatform = platform;
+		const metadata = platform.metadata as any;
 		platformForm = {
 			name: platform.name,
 			slug: platform.slug,
 			description: platform.description || '',
 			metadata: {
-				icon: platform.metadata?.icon || '',
-				color: platform.metadata?.color || '#3B82F6',
-				logo_url: platform.metadata?.logo_url || '',
-				website_url: platform.metadata?.website_url || '',
+				icon: metadata?.icon || '',
+				color: metadata?.color || '#3B82F6',
+				logo_url: metadata?.logo_url || '',
+				website_url: metadata?.website_url || '',
 				api_info: {
-					base_url: platform.metadata?.api_info?.base_url || '',
-					rate_limits: platform.metadata?.api_info?.rate_limits || {},
-					auth_methods: platform.metadata?.api_info?.auth_methods || []
+					base_url: metadata?.api_info?.base_url || '',
+					rate_limits: metadata?.api_info?.rate_limits || {},
+					auth_methods: metadata?.api_info?.auth_methods || []
 				},
 				platform_info: {
-					followers_range: platform.metadata?.platform_info?.followers_range || [0, 0],
-					content_types: platform.metadata?.platform_info?.content_types || [],
-					demographics: platform.metadata?.platform_info?.demographics || []
+					followers_range: metadata?.platform_info?.followers_range || [0, 0],
+					content_types: metadata?.platform_info?.content_types || [],
+					demographics: metadata?.platform_info?.demographics || []
 				}
 			}
 		};
@@ -107,16 +108,16 @@
 				name: platformForm.name,
 				slug: platformForm.slug,
 				description: platformForm.description || null,
-				category_type: 'platform' as const,
+				categoryType: 'platform' as const,
 				metadata: platformForm.metadata,
-				is_active: true,
-				sort_order: platforms.length + 1
+				isActive: true,
+				sortOrder: platforms.length + 1
 			};
 
 			const result = await createCategory(newPlatform);
 			if (result.error) {
 				console.error('Failed to create platform:', result.error);
-				showError('Failed to create platform', result.error.message);
+				showError('Failed to create platform', result.error);
 			} else {
 				// Add the new platform to the existing array
 				if (result.data) {
@@ -149,7 +150,7 @@
 			const result = await updateCategory(selectedPlatform!.id, updates);
 			if (result.error) {
 				console.error('Failed to update platform:', result.error);
-				showError('Failed to update platform', result.error.message);
+				showError('Failed to update platform', result.error);
 			} else {
 				// Update the platform in the existing array instead of reloading
 				if (result.data) {
@@ -170,19 +171,13 @@
 			loading = false;
 		}
 	}
-
 	async function handleDelete(platform: Category) {
-		// For now, just proceed with deletion. You can add a proper confirmation modal later
-		// if (!confirm(`Are you sure you want to delete ${platform.name}? This will also delete all associated tiers.`)) {
-		//     return;
-		// }
-
 		loading = true;
 		try {
 			const result = await deleteCategory(platform.id);
 			if (result.error) {
 				console.error('Failed to delete platform:', result.error);
-				showError('Failed to delete platform', result.error.message);
+				showError('Failed to delete platform', result.error);
 			} else {
 				// Remove the platform from the existing array instead of reloading
 				platforms = platforms.filter((p) => p.id !== platform.id);
@@ -204,7 +199,9 @@
 	}
 
 	function viewTiers(platform: Category) {
-		goto(`/admin/platforms/${platform.slug}/tiers`);
+		// Redirect to global tiers page since tiers are no longer platform-specific
+		// You can filter by platform if needed in the UI
+		goto('/admin/tiers');
 	}
 </script>
 
@@ -255,12 +252,16 @@
 					<!-- Platform Header -->
 					<div class="mb-4 flex items-start justify-between">
 						<div class="flex items-center gap-3">
-							{#if platform.metadata.icon && (platform.metadata.icon.startsWith('http') || platform.metadata.icon.startsWith('/static') || platform.metadata.icon.startsWith('data:'))}
-								<img src={platform.metadata.icon} alt={platform.name} class="h-8 w-8 rounded" />
+							{#if (platform.metadata as any)?.icon && ((platform.metadata as any).icon.startsWith('http') || (platform.metadata as any).icon.startsWith('/static') || (platform.metadata as any).icon.startsWith('data:'))}
+								<img
+									src={(platform.metadata as any).icon}
+									alt={platform.name}
+									class="h-8 w-8 rounded"
+								/>
 							{:else}
 								<div
 									class="flex h-8 w-8 items-center justify-center rounded font-semibold text-white"
-									style="background-color: {platform.metadata.color || '#3B82F6'}"
+									style="background-color: {(platform.metadata as any)?.color || '#3B82F6'}"
 								>
 									{platform.name.charAt(0)}
 								</div>
@@ -304,15 +305,15 @@
 					<div class="space-y-2 text-sm">
 						<div class="flex justify-between">
 							<span class="text-gray-500">Status:</span>
-							<span class="font-medium {platform.is_active ? 'text-green-600' : 'text-red-600'}">
-								{platform.is_active ? 'Active' : 'Inactive'}
+							<span class="font-medium {platform.isActive ? 'text-green-600' : 'text-red-600'}">
+								{platform.isActive ? 'Active' : 'Inactive'}
 							</span>
 						</div>
-						{#if platform.metadata.website_url}
+						{#if (platform.metadata as any)?.website_url}
 							<div class="flex justify-between">
 								<span class="text-gray-500">Website:</span>
 								<a
-									href={platform.metadata.website_url}
+									href={(platform.metadata as any).website_url}
 									target="_blank"
 									class="text-blue-600 hover:underline"
 								>
@@ -322,15 +323,14 @@
 						{/if}
 					</div>
 
-					<!-- Actions -->
+					<!-- Platform Info Note -->
 					<div class="mt-4 border-t border-gray-200 pt-4">
-						<button
-							onclick={() => viewTiers(platform)}
-							class="flex w-full items-center justify-center gap-2 rounded-md bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
-						>
-							<Settings size={16} />
-							Manage Tiers
-						</button>
+						<p class="text-center text-xs text-gray-500">
+							Tiers are managed globally in the <a
+								href="/admin/tiers"
+								class="text-blue-600 hover:underline">Global Tiers</a
+							> section
+						</p>
 					</div>
 				</div>
 			{/each}
@@ -344,7 +344,7 @@
 		<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
 			<!-- Background overlay -->
 			<div
-				class="bg-opacity-75 fixed inset-0 bg-gray-500 transition-opacity"
+				class="fixed inset-0 bg-black/20 transition-opacity"
 				onclick={() => (showCreateModal = false)}
 			></div>
 
@@ -373,7 +373,7 @@
 										platformForm.name = (e.target as HTMLInputElement).value;
 										generateSlug(platformForm.name);
 									}}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
 									placeholder="e.g., Instagram"
 								/>
 							</div>
@@ -387,7 +387,7 @@
 									required
 									value={platformForm.slug}
 									oninput={(e) => (platformForm.slug = (e.target as HTMLInputElement).value)}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
 									placeholder="e.g., instagram"
 								/>
 							</div>
@@ -403,7 +403,7 @@
 									value={platformForm.description}
 									oninput={(e) =>
 										(platformForm.description = (e.target as HTMLTextAreaElement).value)}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
 									placeholder="Platform description..."
 								></textarea>
 							</div>
@@ -419,7 +419,7 @@
 									value={platformForm.metadata.color}
 									oninput={(e) =>
 										(platformForm.metadata.color = (e.target as HTMLInputElement).value)}
-									class="mt-1 block h-10 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block h-10 w-full rounded-md border border-gray-300 py-2 focus:border-blue-500 focus:ring-blue-500"
 								/>
 							</div>
 
@@ -434,7 +434,7 @@
 									value={platformForm.metadata.website_url}
 									oninput={(e) =>
 										(platformForm.metadata.website_url = (e.target as HTMLInputElement).value)}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
 									placeholder="https://example.com"
 								/>
 							</div>
@@ -495,7 +495,7 @@
 									required
 									value={platformForm.name}
 									oninput={(e) => (platformForm.name = (e.target as HTMLInputElement).value)}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
 								/>
 							</div>
 
@@ -509,7 +509,7 @@
 									required
 									value={platformForm.slug}
 									oninput={(e) => (platformForm.slug = (e.target as HTMLInputElement).value)}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
 								/>
 							</div>
 
@@ -520,11 +520,12 @@
 								>
 								<textarea
 									id="edit-description"
+									name="description"
 									rows="3"
 									value={platformForm.description}
 									oninput={(e) =>
 										(platformForm.description = (e.target as HTMLTextAreaElement).value)}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500"
 								></textarea>
 							</div>
 

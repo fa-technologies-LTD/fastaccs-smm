@@ -1,30 +1,27 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import {
-		ArrowLeft,
-		ShoppingBag,
-		CreditCard,
-		Phone,
-		Mail,
-		MessageSquare,
-		Check,
-		Lock
-	} from '@lucide/svelte';
+	import { ArrowLeft, ShoppingBag, CreditCard, Mail, Check, Lock } from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import { cart } from '$lib/stores/cart';
+	import { cart } from '$lib/stores/cart.svelte';
 	import { auth, setAuth } from '$lib/stores/auth';
-	import { supabase } from '$lib/supabase';
 	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
-	import { createTierOrder } from '$lib/services/orders';
+	import { createOrder } from '$lib/services/orders';
 	import ReservationCountdown from '$lib/components/ReservationCountdown.svelte';
 
 	let { data }: { data: PageData } = $props();
 
+	// Helper function to safely extract price from tier metadata
+	function getTierPrice(metadata: any): number {
+		if (typeof metadata === 'object' && metadata !== null && 'price' in metadata) {
+			const price = Number(metadata.price);
+			return isNaN(price) ? 0 : price;
+		}
+		return 0;
+	}
+
 	// Reactive state
-	let cartState = $state($cart);
-	let authState = $state($auth);
 	let loading = $state(false);
 
 	// Initialize auth state from layout data
@@ -32,34 +29,25 @@
 		if (data.user && data.session) {
 			setAuth(data.user, data.session);
 		}
-		authState = $auth;
 	});
 
 	// Form state
 	let guestEmail = $state('');
 	let guestName = $state('');
 	let guestPhone = $state('');
-	let deliveryMethod: 'email' | 'whatsapp' | 'telegram' = $state('email');
-	let whatsappNumber = $state('');
-	let telegramUsername = $state('');
+	let deliveryMethod: 'email' = $state('email');
 
 	// Validation
 	let errors = $state({
 		email: '',
 		name: '',
-		phone: '',
-		whatsapp: '',
-		telegram: ''
+		phone: ''
 	});
 
 	// Auto-initialize auth and redirect if cart is empty
 	$effect(() => {
-		// Keep local state in sync with stores
-		authState = $auth;
-		cartState = $cart;
-
 		// Redirect if cart is empty and not loading
-		if (!authState.loading && cartState.items.length === 0) {
+		if (!$auth.loading && cart.items.length === 0) {
 			goto('/platforms');
 		}
 	});
@@ -72,10 +60,10 @@
 	}
 
 	function validateForm(): boolean {
-		errors = { email: '', name: '', phone: '', whatsapp: '', telegram: '' };
+		errors = { email: '', name: '', phone: '' };
 		let isValid = true;
 
-		if (!authState.user) {
+		if (!$auth.user) {
 			if (!guestEmail.trim()) {
 				errors.email = 'Email is required';
 				isValid = false;
@@ -96,14 +84,14 @@
 		}
 
 		// Validate delivery method specific fields
-		if (deliveryMethod === 'whatsapp' && !whatsappNumber.trim()) {
-			errors.whatsapp = 'WhatsApp number is required';
-			isValid = false;
-		}
-
-		if (deliveryMethod === 'telegram' && !telegramUsername.trim()) {
-			errors.telegram = 'Telegram username is required';
-			isValid = false;
+		// ✅ FIXED: Added phone number format validation for reliable delivery
+		if (!$auth.user && guestPhone.trim()) {
+			// Basic international phone format validation
+			const phoneRegex = /^\+?[\d\s\-\(\)]{10,}$/;
+			if (!phoneRegex.test(guestPhone.trim())) {
+				errors.phone = 'Please enter a valid phone number (e.g., +234XXXXXXXXXX)';
+				isValid = false;
+			}
 		}
 
 		return isValid;
@@ -114,18 +102,35 @@
 
 		loading = true;
 		try {
-			// Create tier-based order with account allocation
-			const orderResult = await createTierOrder({
-				userId: authState.user?.id,
-				guestEmail: authState.user ? undefined : guestEmail,
-				guestName: authState.user ? undefined : guestName,
-				deliveryMethod,
-				whatsappNumber: deliveryMethod === 'whatsapp' ? whatsappNumber : undefined,
-				telegramUsername: deliveryMethod === 'telegram' ? telegramUsername : undefined,
-				items: cartState.items,
-				total: cartState.total
-			});
+			// ✅ FIXED: Added stock validation to prevent overselling race conditions
+			for (const item of cart.items) {
+				const stockResponse = await fetch(`/api/categories/${item.product.id}/stock`);
+				if (stockResponse.ok) {
+					const stockData = await stockResponse.json();
+					if (stockData.available < item.quantity) {
+						alert(
+							`Sorry, only ${stockData.available} ${item.product.name} accounts are currently available. Please reduce your quantity.`
+						);
+						loading = false;
+						return;
+					}
+				}
+			}
 
+			// Create tier-based order with account allocation
+			const orderResult = await createOrder({
+				userId: $auth.user?.id,
+				email: $auth.user?.email || guestEmail,
+				phone: guestPhone,
+				items: cart.items.map((item) => ({
+					categoryId: item.product.id, // This is the tier ID - correct for schema
+					quantity: item.quantity,
+					price: getTierPrice(item.product.metadata)
+				})),
+				totalAmount: cart.total,
+				currency: 'NGN', // ✅ FIXED: Changed from USD to NGN to match tier pricing and display formatting
+				paymentMethod: 'manual'
+			});
 			if (orderResult.success) {
 				alert(
 					'Order submitted successfully! Accounts have been allocated and you will receive them shortly.'
@@ -133,7 +138,7 @@
 				await cart.clear();
 
 				// Redirect based on user status
-				if (authState.user) {
+				if ($auth.user) {
 					goto('/dashboard');
 				} else {
 					goto(`/order/${orderResult.orderId}`);
@@ -178,7 +183,7 @@
 			<h1 class="text-2xl font-bold text-gray-900 sm:text-3xl">Checkout</h1>
 		</div>
 
-		{#if cartState.items.length === 0}
+		{#if cart.items.length === 0}
 			<div class="rounded-lg bg-white p-8 text-center shadow-sm sm:p-12">
 				<ShoppingBag size={48} class="mx-auto mb-4 text-gray-300 sm:h-16 sm:w-16" />
 				<h2 class="mb-2 text-lg font-semibold text-gray-900 sm:text-xl">Your cart is empty</h2>
@@ -200,20 +205,19 @@
 					<div class="mb-6 rounded-lg bg-white p-4 shadow-sm sm:mb-8 sm:p-6">
 						<h2 class="mb-4 text-lg font-semibold sm:mb-6 sm:text-xl">Customer Information</h2>
 
-						{#if authState.user}
+						{#if $auth.user}
 							<div class="rounded-lg bg-green-50 p-4">
 								<div class="flex items-center gap-3">
 									<Check size={20} class="text-green-600" />
 									<div class="flex-1">
 										<p class="font-medium text-green-800">
-											Logged in as {authState.user?.user_metadata?.full_name ||
-												authState.user?.email}
+											Logged in as {$auth.user?.user_metadata?.full_name || $auth.user?.email}
 										</p>
 										<p class="text-sm text-green-600">Your order will be saved to your account</p>
 									</div>
-									{#if authState.user?.user_metadata?.avatar_url}
+									{#if $auth.user?.user_metadata?.avatar_url}
 										<img
-											src={authState.user.user_metadata.avatar_url}
+											src={$auth.user.user_metadata.avatar_url}
 											alt="Profile"
 											class="h-10 w-10 rounded-full"
 										/>
@@ -280,16 +284,14 @@
 
 						<div class="space-y-3">
 							<label
-								class="flex cursor-pointer items-center gap-3 rounded-lg border p-4 hover:bg-gray-50 {deliveryMethod ===
-								'email'
-									? 'border-purple-500 bg-purple-50'
-									: ''}"
+								class="flex cursor-pointer items-center gap-3 rounded-lg border border-purple-500 bg-purple-50 p-4"
 							>
 								<input
 									type="radio"
 									bind:group={deliveryMethod}
 									value="email"
 									class="text-purple-600"
+									checked
 								/>
 								<Mail size={20} class="text-purple-600" />
 								<div>
@@ -297,82 +299,7 @@
 									<div class="text-sm text-gray-600">Receive account details via email</div>
 								</div>
 							</label>
-
-							<label
-								class="flex cursor-pointer items-center gap-3 rounded-lg border p-4 hover:bg-gray-50 {deliveryMethod ===
-								'whatsapp'
-									? 'border-purple-500 bg-purple-50'
-									: ''}"
-							>
-								<input
-									type="radio"
-									bind:group={deliveryMethod}
-									value="whatsapp"
-									class="text-purple-600"
-								/>
-								<Phone size={20} class="text-green-600" />
-								<div>
-									<div class="font-medium">WhatsApp</div>
-									<div class="text-sm text-gray-600">Get instant delivery via WhatsApp</div>
-								</div>
-							</label>
-
-							<label
-								class="flex cursor-pointer items-center gap-3 rounded-lg border p-4 hover:bg-gray-50 {deliveryMethod ===
-								'telegram'
-									? 'border-purple-500 bg-purple-50'
-									: ''}"
-							>
-								<input
-									type="radio"
-									bind:group={deliveryMethod}
-									value="telegram"
-									class="text-purple-600"
-								/>
-								<MessageSquare size={20} class="text-blue-600" />
-								<div>
-									<div class="font-medium">Telegram</div>
-									<div class="text-sm text-gray-600">Secure delivery via Telegram</div>
-								</div>
-							</label>
 						</div>
-
-						<!-- Additional fields based on delivery method -->
-						{#if deliveryMethod === 'whatsapp'}
-							<div class="mt-4">
-								<label for="whatsapp-number" class="mb-2 block text-sm font-medium text-gray-700">
-									WhatsApp Number *
-								</label>
-								<input
-									id="whatsapp-number"
-									type="tel"
-									bind:value={whatsappNumber}
-									class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
-									placeholder="+234 xxx xxx xxxx"
-								/>
-								{#if errors.whatsapp}
-									<p class="mt-1 text-sm text-red-600">{errors.whatsapp}</p>
-								{/if}
-							</div>
-						{/if}
-
-						{#if deliveryMethod === 'telegram'}
-							<div class="mt-4">
-								<label for="telegram-username" class="mb-2 block text-sm font-medium text-gray-700">
-									Telegram Username *
-								</label>
-								<input
-									id="telegram-username"
-									type="text"
-									bind:value={telegramUsername}
-									class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
-									placeholder="@username"
-								/>
-								{#if errors.telegram}
-									<p class="mt-1 text-sm text-red-600">{errors.telegram}</p>
-								{/if}
-							</div>
-						{/if}
 					</div>
 				</div>
 
@@ -383,43 +310,26 @@
 
 						<!-- Cart Items -->
 						<div class="space-y-3 sm:space-y-4">
-							{#each cartState.items as item}
+							{#each cart.items as item}
 								<div class="flex gap-3">
 									<div
-										class="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100 sm:h-16 sm:w-16"
+										class="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 sm:h-16 sm:w-16"
 									>
-										{#if item.product.thumbnail_url}
-											<img
-												src={item.product.thumbnail_url}
-												alt={item.product.title}
-												class="h-full w-full object-cover"
-											/>
-										{:else}
-											<div class="flex h-full w-full items-center justify-center">
-												<ShoppingBag size={16} class="text-gray-400 sm:h-5 sm:w-5" />
-											</div>
-										{/if}
+										<!-- Show tier icon since we're selling tiers (categories) not products with screenshots -->
+										<div class="flex h-full w-full items-center justify-center">
+											<ShoppingBag size={16} class="text-gray-400 sm:h-5 sm:w-5" />
+										</div>
 									</div>
 									<div class="flex-1">
 										<h3 class="line-clamp-2 text-sm font-medium text-gray-900 sm:text-base">
-											{item.product.title}
+											{item.product.name}
 										</h3>
 										<p class="text-sm text-gray-600">
-											{item.product.platform} • Qty: {item.quantity}
+											Product • Qty: {item.quantity}
 										</p>
 
-										<!-- Reservation Countdown -->
-										{#if item.reservationExpiry}
-											<div class="mt-1">
-												<ReservationCountdown
-													expiresAt={item.reservationExpiry}
-													onExpired={() => cart.cleanupExpired()}
-												/>
-											</div>
-										{/if}
-
 										<p class="font-semibold text-purple-600">
-											{formatPrice(item.product.price * item.quantity)}
+											{formatPrice(getTierPrice(item.product.metadata) * item.quantity)}
 										</p>
 									</div>
 								</div>
@@ -432,7 +342,7 @@
 						<div class="space-y-2">
 							<div class="flex justify-between text-sm">
 								<span class="text-gray-600">Subtotal</span>
-								<span class="font-medium">{formatPrice(cartState.total)}</span>
+								<span class="font-medium">{formatPrice(cart.total)}</span>
 							</div>
 							<div class="flex justify-between text-sm">
 								<span class="text-gray-600">Processing Fee</span>
@@ -441,7 +351,7 @@
 							<hr />
 							<div class="flex justify-between text-lg font-bold">
 								<span>Total</span>
-								<span class="text-purple-600">{formatPrice(cartState.total)}</span>
+								<span class="text-purple-600">{formatPrice(cart.total)}</span>
 							</div>
 						</div>
 

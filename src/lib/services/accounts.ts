@@ -1,6 +1,12 @@
-import { supabase } from '$lib/supabase';
+// Helper function to handle API responses
+async function handleApiCall(response: Response) {
+	if (!response.ok) {
+		return { data: null, error: `HTTP ${response.status}: ${response.statusText}` };
+	}
+	return await response.json();
+}
 
-// Types for account management
+// Types for account management - keep the original types
 export interface Account {
 	id: string;
 	batch_id: string;
@@ -14,6 +20,10 @@ export interface Account {
 	two_fa: string | null;
 	two_factor_enabled: boolean | null;
 	easy_login_enabled: boolean | null;
+	followers: number | null;
+	following: number | null;
+	posts_count: number | null;
+	engagement_rate: number | null;
 	age_months: number | null;
 	niche: string | null;
 	quality_score: number | null;
@@ -24,6 +34,9 @@ export interface Account {
 	delivery_notes: string | null;
 	created_at: string;
 }
+
+// Alias for compatibility with existing code
+export type AccountMetadata = Account;
 
 export interface AccountInsert {
 	id?: string;
@@ -49,258 +62,176 @@ export interface AccountInsert {
 }
 
 export interface AccountUpdate {
+	batch_id?: string;
+	category_id?: string;
+	platform?: string;
+	link_url?: string | null;
+	username?: string;
+	password?: string | null;
+	email?: string | null;
+	email_password?: string | null;
+	two_fa?: string | null;
+	two_factor_enabled?: boolean | null;
+	easy_login_enabled?: boolean | null;
+	age_months?: number | null;
+	niche?: string | null;
+	quality_score?: number | null;
 	status?: 'available' | 'reserved' | 'assigned' | 'delivered' | 'failed' | 'retired';
 	reserved_until?: string | null;
 	order_item_id?: string | null;
 	delivered_at?: string | null;
 	delivery_notes?: string | null;
-	quality_score?: number | null;
 }
 
 // Get accounts by tier
 export async function getAccountsByTier(categoryId: string) {
-	const { data, error } = await supabase
-		.from('accounts')
-		.select(
-			`
-      *,
-      batch:account_batches(id, supplier, created_at)
-    `
-		)
-		.eq('category_id', categoryId)
-		.order('created_at');
-
-	return { data, error };
-}
-
-// Get accounts by status
-export async function getAccountsByStatus(status: Account['status']) {
-	const { data, error } = await supabase
-		.from('accounts')
-		.select(
-			`
-      *,
-      category:categories!category_id(
-        name,
-        parent:categories(name)
-      )
-    `
-		)
-		.eq('status', status)
-		.order('created_at');
-
-	return { data, error };
-}
-
-// Get available accounts for allocation (FIFO)
-export async function getAvailableAccounts(categoryId: string, limit: number) {
-	const { data, error } = await supabase
-		.from('accounts')
-		.select('*')
-		.eq('category_id', categoryId)
-		.eq('status', 'available')
-		.is('reserved_until', null)
-		.order('created_at') // FIFO - oldest first
-		.limit(limit);
-
-	return { data, error };
-}
-
-// Update account status
-export async function updateAccount(id: string, updates: AccountUpdate) {
-	const { data, error } = await supabase
-		.from('accounts')
-		.update(updates)
-		.eq('id', id)
-		.select()
-		.single();
-
-	return { data, error };
-}
-
-// Reserve accounts for cart (soft hold)
-export async function reserveAccounts(categoryId: string, quantity: number) {
-	const expiresAt = new Date();
-	expiresAt.setMinutes(expiresAt.getMinutes() + 30); // 30-minute hold
-
-	// Get available accounts
-	const { data: accounts, error: fetchError } = await getAvailableAccounts(categoryId, quantity);
-
-	if (fetchError || !accounts || accounts.length < quantity) {
-		return {
-			data: null,
-			error: { message: `Only ${accounts?.length || 0} accounts available, need ${quantity}` }
-		};
+	try {
+		const response = await fetch(`/api/accounts?categoryId=${categoryId}`);
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to fetch accounts by tier:', error);
+		return { data: null, error: 'Failed to fetch accounts by tier' };
 	}
-
-	// Update accounts to reserved status
-	const accountIds = accounts.map((a) => a.id);
-	const { data, error } = await supabase
-		.from('accounts')
-		.update({
-			status: 'reserved',
-			reserved_until: expiresAt.toISOString()
-		})
-		.in('id', accountIds)
-		.select();
-
-	return { data, error };
 }
 
-// Release reserved accounts (expired or cancelled)
-export async function releaseReservedAccounts(accountIds: string[]) {
-	const { data, error } = await supabase
-		.from('accounts')
-		.update({
-			status: 'available',
-			reserved_until: null
-		})
-		.in('id', accountIds)
-		.eq('status', 'reserved')
-		.select();
-
-	return { data, error };
-}
-
-// Assign accounts to order (atomic allocation)
-export async function assignAccountsToOrder(
-	categoryId: string,
-	quantity: number,
-	orderItemId: string
+// Get all accounts with optional filters
+export async function getAccounts(
+	filters: {
+		status?: string;
+		platform?: string;
+		batchId?: string;
+		categoryId?: string;
+	} = {}
 ) {
-	// This uses the database function for atomic allocation
-	const { error } = await supabase.rpc('allocate_accounts_for_order_item', {
-		p_order_item_id: orderItemId
-	});
+	try {
+		const params = new URLSearchParams();
+		if (filters.status) params.append('status', filters.status);
+		if (filters.platform) params.append('platform', filters.platform);
+		if (filters.batchId) params.append('batchId', filters.batchId);
+		if (filters.categoryId) params.append('categoryId', filters.categoryId);
 
-	if (error) {
-		return { data: null, error };
+		const response = await fetch(`/api/accounts?${params.toString()}`);
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to fetch accounts:', error);
+		return { data: null, error: 'Failed to fetch accounts' };
 	}
-
-	// Get the assigned accounts
-	const { data, error: fetchError } = await supabase
-		.from('accounts')
-		.select('*')
-		.eq('order_item_id', orderItemId)
-		.eq('status', 'assigned');
-
-	return { data, error: fetchError };
 }
 
-// Mark accounts as delivered
-export async function markAccountsDelivered(accountIds: string[], deliveryNotes?: string) {
-	const { data, error } = await supabase
-		.from('accounts')
-		.update({
-			status: 'delivered',
-			delivered_at: new Date().toISOString(),
-			delivery_notes: deliveryNotes || null
-		})
-		.in('id', accountIds)
-		.select();
-
-	return { data, error };
+// Create account
+export async function createAccount(account: AccountInsert) {
+	try {
+		const response = await fetch('/api/accounts', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(account)
+		});
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to create account:', error);
+		return { data: null, error: 'Failed to create account' };
+	}
 }
 
-// Mark accounts as failed
-export async function markAccountsFailed(accountIds: string[], reason?: string) {
-	const { data, error } = await supabase
-		.from('accounts')
-		.update({
-			status: 'failed',
-			delivery_notes: reason || null
-		})
-		.in('id', accountIds)
-		.select();
-
-	return { data, error };
+// Update account
+export async function updateAccount(id: string, updates: AccountUpdate) {
+	try {
+		const response = await fetch(`/api/accounts/${id}`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(updates)
+		});
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to update account:', error);
+		return { data: null, error: 'Failed to update account' };
+	}
 }
 
-// Retire accounts (remove from circulation)
-export async function retireAccounts(accountIds: string[], reason?: string) {
-	const { data, error } = await supabase
-		.from('accounts')
-		.update({
-			status: 'retired',
-			delivery_notes: reason || null
-		})
-		.in('id', accountIds)
-		.select();
-
-	return { data, error };
+// Delete account
+export async function deleteAccount(id: string) {
+	try {
+		const response = await fetch(`/api/accounts/${id}`, {
+			method: 'DELETE'
+		});
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to delete account:', error);
+		return { data: null, error: 'Failed to delete account' };
+	}
 }
 
-// Get account statistics
-export async function getAccountStats() {
-	const { data, error } = await supabase.from('accounts').select('status, category_id');
-
-	if (error) return { data: null, error };
-
-	const stats = {
-		total: data.length,
-		available: data.filter((a) => a.status === 'available').length,
-		reserved: data.filter((a) => a.status === 'reserved').length,
-		assigned: data.filter((a) => a.status === 'assigned').length,
-		delivered: data.filter((a) => a.status === 'delivered').length,
-		failed: data.filter((a) => a.status === 'failed').length,
-		retired: data.filter((a) => a.status === 'retired').length
-	};
-
-	return { data: stats, error: null };
+// Get available accounts by tier
+export async function getAvailableAccountsByTier(categoryId: string) {
+	try {
+		const response = await fetch(`/api/accounts?categoryId=${categoryId}&status=available`);
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to fetch available accounts:', error);
+		return { data: null, error: 'Failed to fetch available accounts' };
+	}
 }
 
-// Clean up expired reservations
-export async function cleanupExpiredReservations() {
-	const { data, error } = await supabase.rpc('cleanup_expired_reservations');
-	return { data, error };
-}
-
-// Upload accounts in batch
+// Upload accounts batch
 export async function uploadAccountsBatch(batchId: string, accounts: Partial<AccountInsert>[]) {
 	try {
-		// Add batch_id to each account (let database generate UUIDs)
+		// First, get the batch to ensure we have correct categoryId
+		const batchResponse = await fetch(`/api/batches?id=${batchId}`);
+		const batchResult = await batchResponse.json();
+
+		if (batchResult.error || !batchResult.data || batchResult.data.length === 0) {
+			throw new Error('Could not find batch with ID: ' + batchId);
+		}
+
+		const batch = batchResult.data[0];
+		const correctCategoryId = batch.categoryId;
+
+		// Add batchId and ensure correct categoryId for each account
 		const accountsWithBatchId = accounts.map((account) => ({
 			...account,
-			batch_id: batchId
+			batchId: batchId,
+			categoryId: correctCategoryId // Ensure categoryId matches the batch's categoryId
 		}));
 
-		const { data, error } = await supabase.from('accounts').insert(accountsWithBatchId).select();
+		// Create multiple accounts via API
+		const promises = accountsWithBatchId.map((account) =>
+			fetch('/api/accounts', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(account)
+			})
+		);
 
-		return { data, error };
+		const responses = await Promise.all(promises);
+		const results = await Promise.all(responses.map((r) => r.json()));
+
+		const successful = results.filter((r) => r.data && !r.error);
+		const failed = results.filter((r) => r.error);
+
+		if (failed.length > 0) {
+			console.error('Some accounts failed to upload:', failed);
+		}
+
+		return {
+			data: successful.map((r) => r.data),
+			error: failed.length > 0 ? `${failed.length} accounts failed to upload` : null
+		};
 	} catch (error) {
 		console.error('Error uploading accounts batch:', error);
-		return { data: null, error: { message: 'Failed to upload accounts batch' } };
+		return { data: null, error: 'Failed to upload accounts batch' };
 	}
 }
 
 // Get accounts by batch ID
-export async function getAccountsByBatch(batchId: string) {
+export async function getAccountsByBatch(batchId: string, fetchFn: typeof fetch = fetch) {
 	try {
-		const { data, error } = await supabase
-			.from('accounts')
-			.select('*')
-			.eq('batch_id', batchId)
-			.order('created_at', { ascending: false });
-
-		return { data, error };
+		const response = await fetchFn(`/api/accounts?batchId=${batchId}`);
+		return await handleApiCall(response);
 	} catch (error) {
-		console.error('Error fetching accounts by batch:', error);
-		return { data: null, error: { message: 'Failed to fetch accounts' } };
+		console.error('Failed to fetch accounts by batch:', error);
+		return { data: null, error: 'Failed to fetch accounts by batch' };
 	}
 }
 
-// Add AccountMetadata type export
-export interface AccountMetadata {
-	id: string;
-	batch_id: string;
-	tier_id: string;
-	username: string;
-	display_name?: string;
-	platform?: string;
-	followers?: number;
-	engagement_rate?: number;
-	status: string;
-	price?: number;
-	created_at: string;
-	updated_at: string;
-}
+// Note: Complex functions like allocateAccountsForOrderItem and RPC calls
+// will need specific API endpoints created for them.

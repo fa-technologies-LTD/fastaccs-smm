@@ -1,49 +1,54 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import {
-		Upload,
-		FileText,
-		AlertCircle,
-		CheckCircle,
-		Clock,
-		X,
-		Download,
-		Eye
-	} from '@lucide/svelte';
+
+	import { Upload, FileText, AlertCircle, CheckCircle, Clock, X, Eye } from '@lucide/svelte';
 	import { createBatch, updateBatchStatus } from '$lib/services/batches';
 	import { uploadAccountsBatch } from '$lib/services/accounts';
 	import type { BatchMetadata } from '$lib/services/batches';
+	import { addToast } from '$lib/stores/toasts';
 
 	// Props from load function
 	interface Props {
 		data: {
 			batches: BatchMetadata[];
+			platforms: any[];
+			tiers: any[];
 			error: string | null;
-			tiers: {
-				id: string;
-				name: string;
-				slug: string;
-				metadata: Record<string, any>;
-			}[];
 		};
 	}
 
 	let { data }: Props = $props();
 
 	let batches = $state(data.batches);
+	let platforms = $state(data.platforms);
+	let allTiers = $state(data.tiers);
 	let showUploadModal = $state(false);
 	let isUploading = $state(false);
 	let uploadError = $state('');
 	let selectedFile: File | null = $state(null);
-	let selectedTier = $state('');
+	let selectedPlatform = $state('');
 	let dragActive = $state(false);
 
 	// Upload form data
 	let uploadForm = $state({
 		name: '',
 		description: '',
+		platform_id: '',
 		tier_id: '',
 		expected_count: 0
+	});
+
+	// Get tiers for selected platform
+	const availableTiers = $derived(() => {
+		if (!uploadForm.platform_id) return [];
+		return allTiers.filter((tier) => tier.parentId === uploadForm.platform_id);
+	});
+
+	// Reset tier when platform changes
+	$effect(() => {
+		if (uploadForm.platform_id) {
+			uploadForm.tier_id = ''; // Reset tier when platform changes
+		}
 	});
 
 	// File drop handlers
@@ -94,6 +99,11 @@
 			return;
 		}
 
+		if (!uploadForm.platform_id) {
+			uploadError = 'Please select a platform';
+			return;
+		}
+
 		if (!uploadForm.tier_id) {
 			uploadError = 'Please select a tier';
 			return;
@@ -112,9 +122,9 @@
 				return;
 			}
 
-			// Validate CSV format (should have headers: username, followers, engagement_rate, etc.)
+			// Validate CSV format (should have headers: username at minimum)
 			const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
-			const requiredHeaders = ['username', 'followers'];
+			const requiredHeaders = ['username'];
 			const missingHeaders = requiredHeaders.filter((h) => !headers.includes(h));
 
 			if (missingHeaders.length > 0) {
@@ -124,50 +134,61 @@
 
 			// Parse accounts data
 			const accounts = [];
-			// Valid columns for accounts table
-			const validColumns = [
-				'username',
-				'password',
-				'email',
-				'email_password',
-				'two_fa',
-				'two_factor_enabled',
-				'easy_login_enabled',
-				'age_months',
-				'niche',
-				'quality_score',
-				'link_url'
-			];
+
+			// Column mapping - maps CSV headers to our Prisma field names
+			const columnMap: Record<string, string> = {
+				profile_link: 'linkUrl',
+				username: 'username',
+				password: 'password',
+				email: 'email',
+				email_password: 'emailPassword',
+				'2fa_link': 'twoFa',
+				followers: 'followers',
+				engagement_rate: 'engagementRate',
+				niche: 'niche',
+				quality_score: 'qualityScore',
+				two_factor_enabled: 'twoFactorEnabled',
+				easy_login_enabled: 'easyLoginEnabled',
+				age_months: 'ageMonths'
+			};
 
 			for (let i = 1; i < lines.length; i++) {
 				const values = lines[i].split(',').map((v) => v.trim());
 				if (values.length >= headers.length) {
 					const account: any = {};
-					headers.forEach((header, index) => {
-						// Only process valid columns
-						if (validColumns.includes(header)) {
-							if (header === 'age_months') {
-								account[header] = parseInt(values[index]) || null;
-							} else if (header === 'quality_score') {
-								const score = parseInt(values[index]);
-								account[header] = score >= 1 && score <= 10 ? score : null;
-							} else if (header === 'two_factor_enabled' || header === 'easy_login_enabled') {
-								const val = values[index].toLowerCase();
-								account[header] =
+					headers.forEach((csvHeader, index) => {
+						// Map CSV header to database field name
+						const dbField = columnMap[csvHeader] || csvHeader;
+						const value = values[index];
+
+						if (value) {
+							if (dbField === 'followers' || dbField === 'ageMonths') {
+								account[dbField] = parseInt(value) || null;
+							} else if (dbField === 'engagementRate') {
+								account[dbField] = parseFloat(value) || null;
+							} else if (dbField === 'qualityScore') {
+								const score = parseInt(value);
+								account[dbField] = score >= 1 && score <= 10 ? score : null;
+							} else if (dbField === 'twoFactorEnabled' || dbField === 'easyLoginEnabled') {
+								const val = value.toLowerCase();
+								account[dbField] =
 									val === 'true' || val === '1' || val === 'yes'
 										? true
 										: val === 'false' || val === '0' || val === 'no'
 											? false
 											: null;
 							} else {
-								account[header] = values[index] || null;
+								account[dbField] = value;
 							}
+						} else {
+							account[dbField] = null;
 						}
 					});
 
 					// Add required fields
-					account.category_id = uploadForm.tier_id;
-					account.platform = 'instagram'; // Default platform, could be derived from CSV or dropdown
+					const selectedPlatform = platforms.find((p) => p.id === uploadForm.platform_id);
+					account.categoryId = uploadForm.tier_id;
+					account.platform = selectedPlatform?.name || 'Unknown';
 					account.status = 'available';
 
 					accounts.push(account);
@@ -180,27 +201,35 @@
 			}
 
 			// Create batch record
-			const batchResult = await createBatch({
-				name: uploadForm.name,
-				description: uploadForm.description || null,
-				tier_id: uploadForm.tier_id,
-				total_accounts: accounts.length,
-				processed_accounts: 0,
-				status: 'processing',
-				metadata: {
-					filename: selectedFile.name,
-					upload_date: new Date().toISOString(),
-					file_size: selectedFile.size,
-					headers: headers
-				}
-			});
+			const batchResult = await createBatch(
+				{
+					name: uploadForm.name,
+					description: uploadForm.description || null,
+					tier_id: uploadForm.tier_id,
+					total_accounts: accounts.length,
+					processed_accounts: 0,
+					status: 'processing',
+					metadata: {
+						filename: selectedFile.name,
+						upload_date: new Date().toISOString(),
+						file_size: selectedFile.size,
+						headers: headers
+					}
+				},
+				fetch
+			);
 
 			if (batchResult.error) {
-				uploadError = batchResult.error.message;
+				const error = batchResult.error;
+				uploadError =
+					typeof error === 'string' ? error : (error as any)?.message || 'Failed to create batch';
 				return;
 			}
 
 			const batch = batchResult.data!;
+
+			// Add the new batch to the list immediately (with processing status)
+			batches = [batch, ...batches];
 
 			// Upload accounts in batch
 			console.log('Uploading accounts:', accounts.length, 'accounts to batch:', batch.id);
@@ -209,22 +238,43 @@
 			if (uploadResult.error) {
 				console.error('Account upload failed:', uploadResult.error);
 				// Update batch status to failed
-				await updateBatchStatus(batch.id, 'failed');
-				uploadError = uploadResult.error.message;
+				await updateBatchStatus(batch.id, 'failed', fetch);
+
+				// Update the batch in the local array
+				const batchIndex = batches.findIndex((b) => b.id === batch.id);
+				if (batchIndex !== -1) {
+					batches[batchIndex] = {
+						...batches[batchIndex],
+						status: 'failed'
+					};
+				}
+
+				uploadError = uploadResult.error;
 				return;
 			}
 
 			console.log('Accounts uploaded successfully');
 
 			// Update batch as completed
-			await updateBatchStatus(batch.id, 'completed');
+			await updateBatchStatus(batch.id, 'completed', fetch);
 
-			// Refresh batches list
-			const updatedBatchesResult = await batches;
-			if (!updatedBatchesResult) {
-				// Reload the page to get fresh data
-				window.location.reload();
+			// Update the batch status in the local array
+			const batchIndex = batches.findIndex((b) => b.id === batch.id);
+			if (batchIndex !== -1) {
+				batches[batchIndex] = {
+					...batches[batchIndex],
+					status: 'completed',
+					processed_accounts: accounts.length // Use the actual number of accounts processed
+				};
 			}
+
+			// Show success notification
+			addToast({
+				type: 'success',
+				title: 'Batch Upload Successful',
+				message: `Successfully uploaded ${accounts.length} accounts to ${batch.name}`,
+				duration: 5000
+			});
 
 			// Close modal and reset form
 			showUploadModal = false;
@@ -232,6 +282,14 @@
 		} catch (error) {
 			console.error('Upload failed:', error);
 			uploadError = 'Upload failed. Please try again.';
+
+			// Show error notification
+			addToast({
+				type: 'error',
+				title: 'Upload Failed',
+				message: error instanceof Error ? error.message : 'Upload failed. Please try again.',
+				duration: 7000
+			});
 		} finally {
 			isUploading = false;
 		}
@@ -242,6 +300,7 @@
 		uploadForm = {
 			name: '',
 			description: '',
+			platform_id: '',
 			tier_id: '',
 			expected_count: 0
 		};
@@ -396,21 +455,30 @@
 						{/if}
 					</div>
 
-					<!-- Progress Bar -->
-					{#if batch.total_accounts > 0}
-						<div class="mb-4">
-							<div class="mb-1 flex justify-between text-sm text-gray-600">
-								<span>Progress</span>
-								<span>{Math.round((batch.processed_accounts / batch.total_accounts) * 100)}%</span>
-							</div>
-							<div class="h-2 w-full rounded-full bg-gray-200">
-								<div
-									class="h-2 rounded-full bg-blue-600 transition-all duration-300"
-									style="width: {(batch.processed_accounts / batch.total_accounts) * 100}%"
-								></div>
+					<!-- Status Display -->
+					<div class="mb-4">
+						<div class="flex items-center justify-between text-sm">
+							<span class="text-gray-600">Status:</span>
+							<div class="flex items-center gap-2">
+								<svelte:component
+									this={getStatusIcon(batch.status)}
+									class="h-4 w-4 {getStatusColor(batch.status)}"
+								/>
+								<span class="font-medium {getStatusColor(batch.status)} capitalize">
+									{batch.status === 'completed'
+										? 'Successful'
+										: batch.status === 'failed'
+											? 'Failed'
+											: batch.status}
+								</span>
 							</div>
 						</div>
-					{/if}
+						{#if batch.total_accounts > 0}
+							<div class="mt-2 text-sm text-gray-600">
+								{batch.processed_accounts} / {batch.total_accounts} accounts processed
+							</div>
+						{/if}
+					</div>
 
 					<!-- Actions -->
 					<div class="border-t border-gray-200 pt-4">
@@ -434,7 +502,7 @@
 		<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
 			<!-- Background overlay -->
 			<div
-				class="bg-opacity-75 fixed inset-0 bg-gray-500 transition-opacity"
+				class="fixed inset-0 bg-black/20 transition-opacity"
 				onclick={() => !isUploading && (showUploadModal = false)}
 			></div>
 
@@ -452,7 +520,16 @@
 						<div class="mb-4">
 							<h3 class="text-lg font-semibold text-gray-900">Import Account Batch</h3>
 							<p class="mt-1 text-sm text-gray-600">
-								Upload a CSV file with account data. Required columns: username, followers
+								Upload a CSV file with account data. Required column: <strong>username</strong>.
+							</p>
+							<p class="mt-1 text-xs text-gray-500">
+								Supported columns: profile_link, username, password, email, email_password,
+								2fa_link, followers, engagement_rate, niche, quality_score
+							</p>
+							<p class="mt-1 text-xs text-gray-500">
+								Example: <code class="rounded bg-gray-100 px-1"
+									>profile_link,username,password,email,email_password,2fa_link</code
+								>
 							</p>
 						</div>
 
@@ -515,27 +592,46 @@
 									type="text"
 									required
 									bind:value={uploadForm.name}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 px-2 py-2 focus:border-blue-500 focus:ring-blue-500"
 									placeholder="e.g., Instagram Influencers Q4 2024"
 								/>
+							</div>
+
+							<!-- Platform Selection -->
+							<div>
+								<label for="platform-select" class="block text-sm font-medium text-gray-700">
+									Platform *
+								</label>
+								<select
+									id="platform-select"
+									required
+									bind:value={uploadForm.platform_id}
+									class="mt-1 block w-full rounded-md border border-gray-300 py-2 focus:border-blue-500 focus:ring-blue-500"
+								>
+									<option value="">Select a platform...</option>
+									{#each platforms as platform}
+										<option value={platform.id}>{platform.name}</option>
+									{/each}
+								</select>
 							</div>
 
 							<!-- Tier Selection -->
 							<div>
 								<label for="tier-select" class="block text-sm font-medium text-gray-700">
-									Target Tier *
+									Tier *
 								</label>
 								<select
 									id="tier-select"
 									required
 									bind:value={uploadForm.tier_id}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									disabled={!uploadForm.platform_id}
+									class="mt-1 block w-full rounded-md border border-gray-300 py-2 focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100"
 								>
-									<option value="">Select a tier...</option>
-									{#each data.tiers || [] as tier}
-										<option value={tier.id}>
-											{tier.name}
-										</option>
+									<option value="">
+										{uploadForm.platform_id ? 'Select a tier...' : 'Select platform first'}
+									</option>
+									{#each availableTiers() as tier}
+										<option value={tier.id}>{tier.name}</option>
 									{/each}
 								</select>
 							</div>
@@ -549,7 +645,7 @@
 									id="batch-description"
 									rows="3"
 									bind:value={uploadForm.description}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
 									placeholder="Optional description for this batch..."
 								></textarea>
 							</div>

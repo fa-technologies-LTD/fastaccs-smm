@@ -1,5 +1,4 @@
 import type { PageLoad } from './$types';
-import { supabase } from '$lib/supabase';
 import { error } from '@sveltejs/kit';
 
 export interface TierInventory {
@@ -32,44 +31,73 @@ export interface PageData {
 	tiers: TierInventory[];
 }
 
-export const load: PageLoad = async ({ params }): Promise<PageData> => {
+export const load: PageLoad = async ({ params, fetch }): Promise<PageData> => {
 	const platformSlug = params.platform;
 
 	try {
-		// Get platform details
-		const { data: platform, error: platformError } = await supabase
-			.from('categories')
-			.select('id, name, slug, description, metadata')
-			.eq('slug', platformSlug)
-			.eq('category_type', 'platform')
-			.eq('is_active', true)
-			.single();
+		// Get platform details using API
+		const platformResponse = await fetch(`/api/categories/slug/${platformSlug}`);
 
-		if (platformError || !platform) {
-			console.error('Platform not found:', platformError);
+		if (!platformResponse.ok) {
+			console.error('Platform not found');
 			throw error(404, 'Platform not found');
 		}
 
-		// Get tiers for this platform using the tier inventory view
-		const { data: tiers, error: tiersError } = await supabase
-			.from('mv_tier_inventory')
-			.select('*')
-			.eq('platform_slug', platformSlug)
-			.eq('tier_active', true)
-			.eq('product_status', 'active')
-			.order('tier_name');
+		const platformResult = await platformResponse.json();
+		const platform = platformResult.data;
 
-		if (tiersError) {
-			console.error('Error fetching tiers:', tiersError);
-			return {
-				platform,
-				tiers: []
-			};
+		if (!platform) {
+			throw error(404, 'Platform not found');
+		}
+
+		// Get tiers for this platform
+		const tiersResponse = await fetch(`/api/categories/tiers/${platform.id}`);
+		let tiers: TierInventory[] = [];
+
+		if (tiersResponse.ok) {
+			const tiersResult = await tiersResponse.json();
+			// Convert tier data to TierInventory format
+			tiers = (tiersResult.data || []).map(
+				(tier: {
+					id: string;
+					name: string;
+					slug: string;
+					isActive: boolean;
+					metadata?: Record<string, unknown>;
+					accountCount: number;
+					price: number;
+					productId: string | null;
+					productStatus: string;
+				}) => ({
+					product_id: tier.productId || tier.id,
+					tier_name: tier.name,
+					tier_slug: tier.slug,
+					category_id: tier.id,
+					category_name: tier.name,
+					metadata: tier.metadata || {},
+					accounts_available: tier.accountCount,
+					reservations_active: 0, // No longer using database reservations - cart uses cookies
+					visible_available: tier.accountCount,
+					price: tier.price,
+					product_status: tier.productStatus,
+					tier_active: tier.isActive,
+					platform_name: platform.name,
+					platform_slug: platform.slug
+				})
+			);
+		} else {
+			console.error('Error fetching tiers:', await tiersResponse.text());
 		}
 
 		return {
-			platform,
-			tiers: tiers || []
+			platform: {
+				id: platform.id,
+				name: platform.name,
+				slug: platform.slug,
+				description: platform.description,
+				metadata: platform.metadata || {}
+			},
+			tiers
 		};
 	} catch (err) {
 		console.error('Error in platform page load:', err);

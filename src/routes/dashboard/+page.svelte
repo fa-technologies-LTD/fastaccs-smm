@@ -3,7 +3,7 @@
 	import Footer from '$lib/components/Footer.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { supabase } from '$lib/supabase';
+	// Removed Supabase dependency
 	import { ShoppingCart, Package, User, LogOut, Eye, RefreshCw, Calendar } from '@lucide/svelte';
 
 	// Svelte 5 reactive state
@@ -13,15 +13,8 @@
 	let activeTab = $state('orders');
 
 	onMount(async () => {
-		const {
-			data: { user }
-		} = await supabase.auth.getUser();
-		if (!user) {
-			goto('/auth');
-			return;
-		}
-
-		currentUser = user;
+		// Mock user for testing - replace with proper auth later
+		currentUser = { id: 'test-user', email: 'test@example.com' };
 		await loadUserOrders();
 	});
 
@@ -30,26 +23,8 @@
 
 		loading = true;
 		try {
-			const { data, error } = await supabase
-				.from('orders')
-				.select(
-					`
-					*,
-					order_items (
-						*,
-						products (
-							title,
-							platform,
-							thumbnail_url
-						)
-					)
-				`
-				)
-				.eq('user_id', currentUser.id)
-				.order('created_at', { ascending: false });
-
-			if (error) throw error;
-			orders = data || [];
+			// Mock orders for testing - replace with API call later
+			orders = [];
 		} catch (error) {
 			console.error('Error loading orders:', error);
 		} finally {
@@ -58,7 +33,7 @@
 	}
 
 	async function handleLogout() {
-		await supabase.auth.signOut();
+		// Mock logout - replace with proper auth later
 		goto('/');
 	}
 

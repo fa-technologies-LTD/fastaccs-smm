@@ -1,26 +1,21 @@
 <script>
 	import { User, Menu, X, ShoppingCart } from '@lucide/svelte';
-	import { cart } from '$lib/stores/cart';
+	import { cart } from '$lib/stores/cart.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import logo from '$lib/assets/logo.png';
+	import MiniCart from '$lib/components/MiniCart.svelte';
 
 	let mobileMenuOpen = $state(false);
 
-	let cartState = $state($cart);
-	const cartItemCount = $derived(cartState.items.reduce((total, item) => total + item.quantity, 0));
-
 	// Get auth data from page data
 	const user = $derived(page.data.user);
-	const supabase = $derived(page.data.supabase);
 
-	// Keep cart state in sync
-	$effect(() => {
-		cartState = $cart;
-	});
+	// Cart item count using the new cart structure
+	const cartItemCount = $derived(cart.itemCount);
 
 	async function signOut() {
-		await supabase.auth.signOut();
+		// TODO: Implement proper sign out when auth system is added
 		await invalidateAll();
 		goto('/');
 	}
@@ -59,7 +54,11 @@
 			<div class="hidden items-center space-x-4 md:flex">
 				<!-- Cart -->
 				<button
-					onclick={() => cart.toggle()}
+					onclick={() => {
+						console.log('Cart button clicked, isOpen:', cart.isOpen);
+						cart.toggle();
+						console.log('After toggle, isOpen:', cart.isOpen);
+					}}
 					class="relative p-2 text-gray-600 transition-colors hover:text-gray-900"
 					aria-label="Open shopping cart"
 				>
@@ -210,3 +209,6 @@
 		</div>
 	{/if}
 </nav>
+
+<!-- Mini Cart Component -->
+<MiniCart />

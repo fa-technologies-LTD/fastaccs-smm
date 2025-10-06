@@ -10,7 +10,8 @@
 		Settings,
 		Home,
 		Plus,
-		Layers
+		Layers,
+		Target
 	} from '@lucide/svelte';
 
 	export let data;
@@ -18,7 +19,8 @@
 	const adminNavItems = [
 		{ href: '/admin', label: 'Dashboard', icon: Home },
 		{ href: '/admin/platforms', label: 'Platforms', icon: Layers },
-		{ href: '/inventory', label: 'Inventory', icon: Package },
+		{ href: '/admin/tiers', label: 'Tiers', icon: Target },
+		{ href: '/admin/inventory', label: 'Inventory', icon: Package },
 		{ href: '/admin/batches', label: 'Batch Import', icon: Plus },
 		{ href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
 		{ href: '/admin/users', label: 'Users', icon: Users },
@@ -65,11 +67,11 @@
 					Quick Actions
 				</h3>
 				<a
-					href="/admin/inventory/new"
+					href="/admin/tiers"
 					class="bg-primary hover:bg-primary-dark active:bg-primary-dark flex w-full items-center rounded-lg px-3 py-2 text-sm text-white transition-colors"
 				>
 					<Plus class="mr-2 h-4 w-4" />
-					Add Product
+					Manage Tiers
 				</a>
 			</div>
 		</div>
