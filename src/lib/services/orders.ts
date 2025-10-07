@@ -80,6 +80,23 @@ export async function getOrderById(orderId: string) {
 	}
 }
 
+// Get tier order details (comprehensive order information for customer view)
+export async function getTierOrderDetails(orderId: string) {
+	try {
+		const response = await fetch(`/api/orders/${orderId}`);
+		const result = await handleApiCall(response);
+
+		if (result.error) {
+			return null;
+		}
+
+		return result.data;
+	} catch (error) {
+		console.error('Failed to fetch tier order details:', error);
+		return null;
+	}
+}
+
 // Create new order
 export async function createOrder(orderData: CreateOrderData) {
 	try {

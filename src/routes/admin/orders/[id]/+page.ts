@@ -1,4 +1,4 @@
-import { getOrderById, getOrderItems } from '$lib/services/orders';
+import { getOrderById, getOrder } from '$lib/services/orders';
 import { error } from '@sveltejs/kit';
 
 export const load = async ({ params }: { params: { id: string } }) => {
