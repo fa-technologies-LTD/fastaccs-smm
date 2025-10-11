@@ -167,6 +167,11 @@ Thank you for your order with FastAccs! Your accounts are ready.
 - Keep your account details secure and private  
 - Contact support if you face any issues
 
+**Quick Links:**
+- View Order Details: https://fastaccs.com/dashboard
+- Browse More Accounts: https://fastaccs.com/platforms
+- Contact Support: https://fastaccs.com/support
+
 **Support:**
 For any questions or issues, please contact our support team.
 

@@ -37,7 +37,13 @@ export const load: PageLoad = async ({ fetch }): Promise<PageData> => {
 					try {
 						// Get tiers for this platform
 						const tiersResponse = await fetch(`/api/categories/tiers/${platform.id}`);
-						let tiers: { id: string; name: string; slug: string }[] = [];
+						let tiers: Array<{
+							id: string;
+							name: string;
+							slug: string;
+							accountCount: number;
+							price: number;
+						}> = [];
 
 						if (tiersResponse.ok) {
 							const tiersResult = await tiersResponse.json();
@@ -49,19 +55,20 @@ export const load: PageLoad = async ({ fetch }): Promise<PageData> => {
 							);
 						}
 
-						// For now, we'll just return basic platform info without account counts
-						// since that requires complex inventory calculations
+						// Calculate total accounts across all tiers for this platform
+						const totalAccounts = tiers.reduce((sum, tier) => sum + (tier.accountCount || 0), 0);
+
 						return {
 							id: platform.id,
 							name: platform.name,
 							slug: platform.slug,
 							description: platform.description,
 							tier_count: tiers.length,
-							total_accounts: 0, // We can add this later via a dedicated inventory API if needed
+							total_accounts: totalAccounts,
 							sample_tiers: tiers.slice(0, 6).map((tier) => ({
 								name: tier.name,
 								slug: tier.slug,
-								price: 0 // Price info would come from products, but we'll keep it simple for now
+								price: tier.price || 0
 							}))
 						};
 					} catch (error) {

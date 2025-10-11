@@ -219,7 +219,7 @@
 			</div>
 			<button
 				onclick={openCreateModal}
-				class="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"
+				class="cursor-pointer hover:scale-[.95] transition-all flex text-sm items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
 			>
 				<Plus size={18} />
 				Add Platform
@@ -326,9 +326,9 @@
 					<!-- Platform Info Note -->
 					<div class="mt-4 border-t border-gray-200 pt-4">
 						<p class="text-center text-xs text-gray-500">
-							Tiers are managed globally in the <a
+							Tiers are managed in the <a
 								href="/admin/tiers"
-								class="text-blue-600 hover:underline">Global Tiers</a
+								class="text-blue-600 hover:underline">Tiers</a
 							> section
 						</p>
 					</div>

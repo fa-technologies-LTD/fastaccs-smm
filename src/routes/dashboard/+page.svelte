@@ -3,7 +3,6 @@
 	import Footer from '$lib/components/Footer.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	// Removed Supabase dependency
 	import { ShoppingCart, Package, User, LogOut, Eye, RefreshCw, Calendar } from '@lucide/svelte';
 
 	// Svelte 5 reactive state

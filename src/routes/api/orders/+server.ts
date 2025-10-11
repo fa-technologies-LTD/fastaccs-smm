@@ -41,6 +41,26 @@ export async function POST({ request }) {
 	try {
 		const orderData = await request.json();
 
+		// Get category information to get proper tier names
+		const categoryPromises = orderData.items.map(
+			async (item: { categoryId: string; quantity: number; price: number }) => {
+				const category = await prisma.category.findUnique({
+					where: { id: item.categoryId },
+					include: {
+						parent: true // Include parent category (which should be the platform)
+					}
+				});
+				return {
+					...item,
+					categoryName: category
+						? `${category.parent?.name || 'Unknown Platform'} ${category.name}`
+						: `Tier-${item.categoryId}`
+				};
+			}
+		);
+
+		const itemsWithNames = await Promise.all(categoryPromises);
+
 		// ✅ FIXED: Create order with proper structure for account allocation
 		const data = await prisma.order.create({
 			data: {
@@ -56,16 +76,14 @@ export async function POST({ request }) {
 				deliveryContact: orderData.email,
 				status: 'pending',
 				orderItems: {
-					create: orderData.items.map(
-						(item: { categoryId: string; quantity: number; price: number }) => ({
-							categoryId: item.categoryId, // ✅ FIXED: Use categoryId field that matches the schema
-							quantity: item.quantity,
-							unitPrice: item.price,
-							totalPrice: item.price * item.quantity,
-							productName: `Tier-${item.categoryId}`, // Will be updated with actual name
-							productCategory: 'tier'
-						})
-					)
+					create: itemsWithNames.map((item) => ({
+						categoryId: item.categoryId, // ✅ FIXED: Use categoryId field that matches the schema
+						quantity: item.quantity,
+						unitPrice: item.price,
+						totalPrice: item.price * item.quantity,
+						productName: item.categoryName, // ✅ FIXED: Use actual tier name
+						productCategory: 'tier'
+					}))
 				}
 			},
 			include: {
@@ -75,9 +93,7 @@ export async function POST({ request }) {
 					}
 				}
 			}
-		});
-
-		// ✅ FIXED: Automatically fulfill order (allocate + deliver accounts)
+		}); // ✅ FIXED: Automatically fulfill order (allocate + deliver accounts)
 		try {
 			const { fulfillOrder } = await import('$lib/services/fulfillment');
 			const fulfillmentResult = await fulfillOrder(data.id);

@@ -18,6 +18,7 @@
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { cart } from '$lib/stores/cart.svelte';
+	import { showError, showWarning, showSuccess } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 
 	interface Props {
@@ -90,7 +91,14 @@
 	}
 
 	function increaseQuantity() {
-		if (selectedQuantity < (data.tier?.visible_available || 0)) {
+		if (!data.tierCategory || !data.tier) return;
+
+		// Check existing quantity in cart for this tier
+		const existingCartItem = cart.items.find((item) => item.tierId === data.tierCategory.id);
+		const currentCartQuantity = existingCartItem ? existingCartItem.quantity : 0;
+		const maxAllowedSelection = data.tier.visible_available - currentCartQuantity;
+
+		if (selectedQuantity < maxAllowedSelection) {
 			selectedQuantity++;
 		}
 	}
@@ -98,48 +106,85 @@
 	// Calculate total price
 	const totalPrice = $derived((data.tier?.price || 0) * selectedQuantity);
 
+	// Format feature names from snake_case to Title Case
+	function formatFeatureName(feature: string): string {
+		return feature
+			.split('_')
+			.map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+			.join(' ');
+	}
+
+	// Get tier features based on metadata
+	function getTierFeatures(metadata: any): string[] {
+		// First check for admin-defined features
+		if (metadata?.features && Array.isArray(metadata.features)) {
+			return metadata.features
+				.filter((feature: string) => feature && feature.trim() !== '')
+				.map(formatFeatureName);
+		}
+
+		// Fallback to legacy features
+		const features: string[] = [];
+		if (metadata?.typical_features) {
+			features.push(...metadata.typical_features.map(formatFeatureName));
+		}
+		return features;
+	}
+
 	// Add to cart functionality
 	async function addToCart() {
 		if (!data.tierCategory || !data.tier || addingToCart) return;
 
 		addingToCart = true;
 		try {
-			// Validate quantity doesn't exceed available
-			if (selectedQuantity > data.tier.visible_available) {
-				alert(`Only ${data.tier.visible_available} accounts available for this tier`);
+			// Check existing quantity in cart for this tier
+			const existingCartItem = cart.items.find((item) => item.tierId === data.tierCategory.id);
+			const currentCartQuantity = existingCartItem ? existingCartItem.quantity : 0;
+			const totalQuantityAfterAdd = currentCartQuantity + selectedQuantity;
+
+			// Validate total quantity doesn't exceed available stock
+			if (totalQuantityAfterAdd > data.tier.visible_available) {
+				const remainingStock = data.tier.visible_available - currentCartQuantity;
+				if (remainingStock <= 0) {
+					showWarning(
+						'Maximum quantity reached',
+						`You already have the maximum available quantity (${data.tier.visible_available}) for this tier in your cart.`
+					);
+				} else {
+					showWarning(
+						'Quantity limit exceeded',
+						`Only ${remainingStock} more accounts can be added to your cart for this tier. You already have ${currentCartQuantity} in your cart.`
+					);
+				}
 				return;
 			}
 
-			// Use the existing cart system - no database reservations needed
-			cart.addItem(data.tierCategory, selectedQuantity);
+			// Add to cart using new system
+			cart.addTier(data.tierCategory.id, selectedQuantity);
 
 			// Success - show proper notification
-			console.log('Added to cart:', selectedQuantity, 'x', data.tier.tier_name);
-			console.log('Cart items:', cart.items);
+			showSuccess(
+				'Added to cart!',
+				`${selectedQuantity} ${data.tier.tier_name} ${selectedQuantity === 1 ? 'account' : 'accounts'} added successfully.`
+			);
 
 			// Reset quantity to 1 after adding
 			selectedQuantity = 1;
 		} catch (error) {
 			console.error('Error adding to cart:', error);
-			alert('Failed to add items to cart. Please try again.');
+			showError(
+				'Failed to add to cart',
+				'Please try again or contact support if the problem persists.'
+			);
 		} finally {
 			addingToCart = false;
 		}
 	}
 
-	// Get tier features from metadata
-	function getTierFeatures(metadata: Record<string, unknown>): string[] {
-		const features = [];
-		if (metadata?.typical_features && Array.isArray(metadata.typical_features)) {
-			features.push(...metadata.typical_features);
-		}
-		return features;
-	}
-
 	// Get tier status
 	function getTierStatus(available: number): { status: string; color: string; bgColor: string } {
 		if (available === 0) {
-			return { status: 'Out of Stock', color: 'text-red-600', bgColor: 'bg-red-50 border-red-200' };
+			return { status: 'Sold Out', color: 'text-red-600', bgColor: 'bg-red-50 border-red-200' };
 		} else if (available <= 10) {
 			return {
 				status: 'Low Stock',
@@ -210,7 +255,18 @@
 		</section>
 
 		<!-- Tier Header -->
-		<section class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} py-16 text-white`}>
+		<section
+			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} relative py-16 text-white`}
+		>
+			<!-- Stock Status Badge - Small Corner Position -->
+			<div class="absolute top-4 right-4">
+				<span
+					class={`rounded-full px-2 py-1 text-xs font-medium ${tierStatus.status === 'In Stock' ? 'border border-green-300/30 bg-green-500/20 text-green-100' : tierStatus.status === 'Low Stock' ? 'border border-yellow-300/30 bg-yellow-500/20 text-yellow-100' : 'border border-red-300/30 bg-red-500/20 text-red-100'}`}
+				>
+					{tierStatus.status}
+				</span>
+			</div>
+
 			<div class="mx-auto max-w-6xl px-4">
 				<div class="flex items-center justify-between">
 					<div class="flex items-center gap-6">
@@ -218,13 +274,8 @@
 							<PlatformIcon class="h-12 w-12" />
 						</div>
 						<div>
-							<div class="mb-2 flex items-center gap-4">
+							<div class="mb-2">
 								<h1 class="text-4xl font-bold">{data.tier.tier_name}</h1>
-								<span
-									class={`rounded-full border border-white/30 bg-white/20 px-3 py-1 text-sm font-medium`}
-								>
-									{tierStatus.status}
-								</span>
 							</div>
 							<p class="text-xl opacity-90">
 								{data.platform.name} accounts with
@@ -262,17 +313,23 @@
 						<!-- Tier Description -->
 						<div class="mb-8 rounded-xl bg-white p-8 shadow-sm">
 							<h2 class="mb-4 text-2xl font-bold text-gray-900">Account Details</h2>
+
+							<!-- Tier-specific description -->
+							{#if data.tier.description}
+								<p class="mb-4 text-lg leading-relaxed text-gray-700">{data.tier.description}</p>
+							{/if}
+
+							<!-- Default description -->
 							<p class="mb-6 text-lg text-gray-700">
 								{#if data.tier.metadata?.follower_range}
 									{@const range = data.tier.metadata.follower_range}
 									Premium {data.platform.name} accounts with {range.display ||
 										`${formatFollowers(range.min || 0)} - ${formatFollowers(range.max || 0)}`} followers.
-									{data.tier.category_name
-										? `${data.tier.category_name}`
-										: 'High-quality accounts ready for immediate use.'}
+									{!data.tier.description ? 'High-quality accounts ready for immediate use.' : ''}
 								{:else}
-									{data.tier.category_name ||
-										`Premium ${data.platform.name} accounts with ${formatFollowers((data.tier.metadata?.follower_count as number) || 0)} followers.`}
+									{!data.tier.description
+										? `Premium ${data.platform.name} accounts with ${formatFollowers((data.tier.metadata?.follower_count as number) || 0)} followers.`
+										: ''}
 								{/if}
 							</p>
 
@@ -428,8 +485,6 @@
 										></div>
 										Adding to Cart...
 									</div>
-								{:else if data.tier.visible_available === 0}
-									Out of Stock
 								{:else}
 									<div class="flex items-center justify-center gap-2">
 										<ShoppingCart class="h-5 w-5" />

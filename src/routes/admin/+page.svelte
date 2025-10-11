@@ -158,20 +158,18 @@
 		<!-- Enhanced Header -->
 		<div class="mb-8">
 			<div class="mb-6 flex items-center justify-between">
-				<div>
-					<h1 class="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-					<p class="mt-1 text-gray-600">
-						Complete overview of your FastAccs business performance
+				<h1 class="text-2xl font-bold text-gray-600">
+						Overview of your FastAccs
 						{#if !loading}
-							• Last updated: {formatRelativeTime(lastUpdated)}
+							• <span class='text-sm'>Last updated: {formatRelativeTime(lastUpdated)}</span>
 						{/if}
-					</p>
-				</div>
+				</h1>
+
 				<div class="flex items-center gap-3">
 					<!-- Auto-refresh toggle -->
 					<button
 						onclick={toggleAutoRefresh}
-						class="flex items-center gap-2 rounded-lg border px-4 py-2 transition-colors {autoRefresh
+						class="cursor-pointer hover:scale-[.95] flex items-center gap-2 rounded-lg border px-4 py-2 transition-colors {autoRefresh
 							? 'border-green-200 bg-green-50 text-green-700'
 							: 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'}"
 					>
@@ -183,7 +181,7 @@
 					<button
 						onclick={refreshData}
 						disabled={loading}
-						class="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+						class="cursor-pointer hover:scale-[.95] flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
 					>
 						<RefreshCw class="h-4 w-4 {loading ? 'animate-spin' : ''}" />
 						Refresh
@@ -212,16 +210,16 @@
 		{/if}
 
 		<!-- Main Statistics Grid -->
-		<div class="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+		<div class="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
 			<!-- Total Orders -->
 			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
 				<div class="flex items-center">
 					<div class="rounded-lg bg-blue-50 p-3">
-						<ShoppingCart class="h-8 w-8 text-blue-600" />
+						<ShoppingCart class="size-6 text-blue-600" />
 					</div>
 					<div class="ml-4">
 						<p class="text-sm font-medium text-gray-500">Total Orders</p>
-						<p class="text-3xl font-bold text-gray-900">{orderStats.total_orders}</p>
+						<p class="text-2xl font-bold text-gray-900">{orderStats.total_orders}</p>
 						<div class="mt-1 flex items-center">
 							<span class="text-sm text-gray-600">Today: {orderStats.todays_orders}</span>
 						</div>
@@ -233,11 +231,11 @@
 			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
 				<div class="flex items-center">
 					<div class="rounded-lg bg-green-50 p-3">
-						<DollarSign class="h-8 w-8 text-green-600" />
+						<DollarSign class="size-6 text-green-600" />
 					</div>
 					<div class="ml-4">
 						<p class="text-sm font-medium text-gray-500">Total Revenue</p>
-						<p class="text-3xl font-bold text-gray-900">
+						<p class="text-2xl font-bold text-gray-900">
 							{formatCurrency(orderStats.total_revenue)}
 						</p>
 						<div class="mt-1 flex items-center">
@@ -253,11 +251,11 @@
 			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
 				<div class="flex items-center">
 					<div class="rounded-lg bg-purple-50 p-3">
-						<Package class="h-8 w-8 text-purple-600" />
+						<Package class="size-6 text-purple-600" />
 					</div>
 					<div class="ml-4">
 						<p class="text-sm font-medium text-gray-500">Total Inventory</p>
-						<p class="text-3xl font-bold text-gray-900">{inventoryStats.total_available}</p>
+						<p class="text-2xl font-bold text-gray-900">{inventoryStats.total_available}</p>
 						<div class="mt-1 flex items-center">
 							<span class="text-sm text-gray-600">Reserved: {inventoryStats.total_reserved}</span>
 						</div>
@@ -269,11 +267,11 @@
 			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
 				<div class="flex items-center">
 					<div class="rounded-lg bg-orange-50 p-3">
-						<AlertCircle class="h-8 w-8 text-orange-600" />
+						<AlertCircle class="size-6 text-orange-600" />
 					</div>
 					<div class="ml-4">
 						<p class="text-sm font-medium text-gray-500">Stock Issues</p>
-						<p class="text-3xl font-bold text-gray-900">
+						<p class="text-2xl font-bold text-gray-900">
 							{inventoryStats.low_stock + inventoryStats.out_of_stock}
 						</p>
 						<div class="mt-1 flex items-center">
@@ -290,60 +288,7 @@
 			</div>
 		</div>
 
-		<!-- Order Status Overview -->
-		<div class="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-			<!-- Pending Orders -->
-			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-				<div class="flex items-center">
-					<div class="rounded-lg bg-yellow-50 p-3">
-						<Clock class="h-6 w-6 text-yellow-600" />
-					</div>
-					<div class="ml-4">
-						<p class="text-sm font-medium text-gray-500">Pending Orders</p>
-						<p class="text-2xl font-bold text-gray-900">{orderStats.pending_orders}</p>
-					</div>
-				</div>
-			</div>
-
-			<!-- Processing Orders -->
-			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-				<div class="flex items-center">
-					<div class="rounded-lg bg-blue-50 p-3">
-						<Activity class="h-6 w-6 text-blue-600" />
-					</div>
-					<div class="ml-4">
-						<p class="text-sm font-medium text-gray-500">Processing</p>
-						<p class="text-2xl font-bold text-gray-900">{orderStats.processing_orders}</p>
-					</div>
-				</div>
-			</div>
-
-			<!-- Completed Orders -->
-			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-				<div class="flex items-center">
-					<div class="rounded-lg bg-green-50 p-3">
-						<CheckCircle class="h-6 w-6 text-green-600" />
-					</div>
-					<div class="ml-4">
-						<p class="text-sm font-medium text-gray-500">Completed</p>
-						<p class="text-2xl font-bold text-gray-900">{orderStats.completed_orders}</p>
-					</div>
-				</div>
-			</div>
-
-			<!-- Failed Orders -->
-			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-				<div class="flex items-center">
-					<div class="rounded-lg bg-red-50 p-3">
-						<AlertCircle class="h-6 w-6 text-red-600" />
-					</div>
-					<div class="ml-4">
-						<p class="text-sm font-medium text-gray-500">Failed</p>
-						<p class="text-2xl font-bold text-gray-900">{orderStats.failed_orders}</p>
-					</div>
-				</div>
-			</div>
-		</div>
+	
 		<!-- System Overview -->
 		<div class="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
 			<!-- Platform Coverage -->
@@ -357,7 +302,7 @@
 						</div>
 					</div>
 					<div class="rounded-lg bg-indigo-50 p-3">
-						<BarChart3 class="h-6 w-6 text-indigo-600" />
+						<BarChart3 class="size-6 text-indigo-600" />
 					</div>
 				</div>
 			</div>
@@ -373,7 +318,7 @@
 						</div>
 					</div>
 					<div class="rounded-lg bg-purple-50 p-3">
-						<Package class="h-6 w-6 text-purple-600" />
+						<Package class="size-6 text-purple-600" />
 					</div>
 				</div>
 			</div>
@@ -395,7 +340,7 @@
 						</div>
 					</div>
 					<div class="rounded-lg bg-green-50 p-3">
-						<TrendingUp class="h-6 w-6 text-green-600" />
+						<TrendingUp class="size-6 text-green-600" />
 					</div>
 				</div>
 			</div>

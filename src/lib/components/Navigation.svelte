@@ -5,19 +5,36 @@
 	import { page } from '$app/state';
 	import logo from '$lib/assets/logo.png';
 	import MiniCart from '$lib/components/MiniCart.svelte';
+	import { addToast } from '$lib/stores/toasts';
 
 	let mobileMenuOpen = $state(false);
 
-	// Get auth data from page data
+	// Get auth data from page data (comes from hooks.server.ts)
 	const user = $derived(page.data.user);
 
 	// Cart item count using the new cart structure
 	const cartItemCount = $derived(cart.itemCount);
 
 	async function signOut() {
-		// TODO: Implement proper sign out when auth system is added
-		await invalidateAll();
-		goto('/');
+		try {
+			// Call logout API endpoint
+			const response = await fetch('/auth/logout', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				}
+			});
+
+			if (response.ok) {
+				// Invalidate all data and redirect
+				await invalidateAll();
+				goto('/');
+			}
+		} catch (error) {
+			console.error('Logout error:', error);
+			// Fallback: just navigate to home
+			goto('/');
+		}
 	}
 </script>
 
@@ -39,9 +56,12 @@
 				>
 					Accounts
 				</a>
-				<a href="/services" class="font-medium text-gray-600 transition-colors hover:text-gray-900">
+				<button
+					onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
+					class="cursor-pointer border-none bg-transparent font-medium text-gray-600 transition-colors hover:text-gray-900"
+				>
 					Boosting Services
-				</a>
+				</button>
 				<a
 					href="/how-it-works"
 					class="font-medium text-gray-600 transition-colors hover:text-gray-900"
@@ -52,48 +72,54 @@
 
 			<!-- Desktop Actions -->
 			<div class="hidden items-center space-x-4 md:flex">
-				<!-- Cart -->
-				<button
-					onclick={() => {
-						console.log('Cart button clicked, isOpen:', cart.isOpen);
-						cart.toggle();
-						console.log('After toggle, isOpen:', cart.isOpen);
-					}}
-					class="relative p-2 text-gray-600 transition-colors hover:text-gray-900"
-					aria-label="Open shopping cart"
-				>
-					<ShoppingCart size={24} />
-					{#if cartItemCount > 0}
-						<span
-							class="bg-primary absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-white"
-						>
-							{cartItemCount > 99 ? '99+' : cartItemCount}
-						</span>
-					{/if}
-				</button>
+				<!-- Cart (hidden for admin users) -->
+				{#if !user || user.userType !== 'ADMIN'}
+					<button
+						onclick={() => {
+							console.log('Cart button clicked, isOpen:', cart.isOpen);
+							cart.toggle();
+							console.log('After toggle, isOpen:', cart.isOpen);
+						}}
+						class="relative p-2 text-gray-600 transition-colors hover:text-gray-900"
+						aria-label="Open shopping cart"
+					>
+						<ShoppingCart size={24} />
+						{#if cartItemCount > 0}
+							<span
+								class="bg-primary absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-white"
+							>
+								{cartItemCount > 99 ? '99+' : cartItemCount}
+							</span>
+						{/if}
+					</button>
+				{/if}
 
 				<!-- User Menu -->
 				{#if user}
 					<div class="relative">
-						<div class="flex items-center space-x-2">
+						<div class="flex items-center space-x-4">
 							<a
 								href="/dashboard"
 								class="flex items-center space-x-2 text-gray-600 transition-colors hover:text-gray-900"
 							>
-								{#if user.user_metadata?.avatar_url}
-									<img
-										src={user.user_metadata.avatar_url}
-										alt="Profile"
-										class="h-6 w-6 rounded-full"
-									/>
+								{#if user.avatarUrl}
+									<img src={user.avatarUrl} alt="Profile" class="h-6 w-6 rounded-full" />
 								{:else}
 									<User class="h-6 w-6" />
 								{/if}
-								<span class="hidden sm:inline">{user.user_metadata?.full_name || 'Account'}</span>
+								<span class="hidden sm:inline">{user.fullName || 'Account'}</span>
 							</a>
+							{#if user.userType === 'ADMIN'}
+								<a
+									href="/admin"
+									class="rounded-md bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 hover:text-blue-800"
+								>
+									Admin
+								</a>
+							{/if}
 							<button
 								onclick={signOut}
-								class="text-sm text-gray-500 transition-colors hover:text-gray-700"
+								class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:scale-[.93] hover:bg-gray-50 hover:text-gray-900 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
 							>
 								Sign Out
 							</button>
@@ -140,19 +166,19 @@
 				<div class="space-y-1">
 					<a
 						href="/platforms"
-						class="block py-3 text-base font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
+						class="block py-3 text-sm font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
 					>
 						Accounts
 					</a>
-					<a
-						href="/services"
-						class="block py-3 text-base font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
+					<button
+						onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
+						class="block w-full cursor-pointer border-none bg-transparent py-3 text-left text-sm font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
 					>
 						Boosting Services
-					</a>
+					</button>
 					<a
 						href="/how-it-works"
-						class="block py-3 text-base font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
+						class="block py-3 text-sm font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
 					>
 						How It Works
 					</a>
@@ -160,33 +186,40 @@
 
 				<!-- Mobile Cart & User -->
 				<div class="space-y-2 border-t border-gray-200 pt-4">
-					<a
-						href="/cart"
-						class="flex items-center py-3 text-base text-gray-600 hover:text-gray-900 active:bg-gray-50"
-					>
-						<ShoppingCart class="mr-3 h-5 w-5" />
-						Cart ({cartItemCount})
-					</a>
+					<!-- Cart (hidden for admin users) -->
+					{#if !user || user.userType !== 'ADMIN'}
+						<a
+							href="/cart"
+							class="flex items-center py-3 text-base text-gray-600 hover:text-gray-900 active:bg-gray-50"
+						>
+							<ShoppingCart class="mr-3 h-5 w-5" />
+							Cart ({cartItemCount})
+						</a>
+					{/if}
 
 					{#if user}
 						<a
 							href="/dashboard"
 							class="flex items-center py-3 text-base text-gray-600 hover:text-gray-900 active:bg-gray-50"
 						>
-							{#if user.user_metadata?.avatar_url}
-								<img
-									src={user.user_metadata.avatar_url}
-									alt="Profile"
-									class="mr-3 h-5 w-5 rounded-full"
-								/>
+							{#if user.avatarUrl}
+								<img src={user.avatarUrl} alt="Profile" class="mr-3 h-5 w-5 rounded-full" />
 							{:else}
 								<User class="mr-3 h-5 w-5" />
 							{/if}
 							My Account
 						</a>
+						{#if user.userType === 'ADMIN'}
+							<a
+								href="/admin"
+								class="mb-2 block rounded-md bg-blue-50 px-3 py-2 text-base font-medium text-blue-700 transition-colors hover:bg-blue-100 hover:text-blue-800"
+							>
+								Admin Dashboard
+							</a>
+						{/if}
 						<button
 							onclick={signOut}
-							class="block w-full py-3 text-left text-base font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
+							class="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-base font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-900 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
 						>
 							Sign Out
 						</button>
@@ -210,5 +243,7 @@
 	{/if}
 </nav>
 
-<!-- Mini Cart Component -->
-<MiniCart />
+<!-- Mini Cart Component (hidden for admin users) -->
+{#if !user || user.userType !== 'ADMIN'}
+	<MiniCart />
+{/if}

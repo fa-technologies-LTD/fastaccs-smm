@@ -182,7 +182,7 @@
 	<!-- Features Section -->
 	<section class="bg-white py-16">
 		<div class="mx-auto max-w-4xl px-4 text-center">
-			<h2 class="mb-8 text-3xl font-bold text-gray-900">Why Choose FastAccs?</h2>
+			<h2 class="mb-8 text-xl font-bold text-gray-900">Why Choose FastAccs?</h2>
 			<div class="grid grid-cols-1 gap-8 md:grid-cols-3">
 				<div class="text-center">
 					<div

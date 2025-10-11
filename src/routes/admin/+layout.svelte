@@ -39,16 +39,11 @@
 	<div class="flex flex-col lg:flex-row">
 		<!-- Admin Sidebar -->
 		<div class="bg-white shadow-lg lg:w-64">
-			<div class="border-b border-gray-200 p-4 lg:p-6">
-				<h2 class="text-lg font-semibold text-gray-900 lg:text-xl">Admin Panel</h2>
-				<p class="text-sm text-gray-500">Welcome, {data.user?.email}</p>
-			</div>
-
 			<nav class="mt-4 lg:mt-6">
 				{#each adminNavItems as item}
 					<a
 						href={item.href}
-						class="flex items-center px-4 py-2.5 text-sm text-gray-700 transition-colors hover:bg-blue-50 hover:text-blue-700 lg:px-6 lg:py-3 lg:text-base {page
+						class="flex items-center px-4 py-2.5 text-sm text-gray-700 transition-colors hover:bg-blue-50 hover:text-blue-700 lg:px-6 lg:py-3 {page
 							.url.pathname === item.href
 							? 'border-primary-dark text-primary-dark border-r-2 bg-blue-50 lg:border-blue-700 lg:bg-blue-100 lg:text-blue-700'
 							: ''}"

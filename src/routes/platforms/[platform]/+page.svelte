@@ -78,10 +78,10 @@
 	// Get tier status based on availability
 	function getTierStatus(available: number): { status: string; color: string; bgColor: string } {
 		if (available === 0) {
-			return { status: 'Out of Stock', color: 'text-red-600', bgColor: 'bg-red-50 border-red-200' };
+			return { status: 'Sold Out', color: 'text-red-600', bgColor: 'bg-red-50 border-red-200' };
 		} else if (available <= 10) {
 			return {
-				status: 'Low Stock',
+				status: 'Few Left',
 				color: 'text-yellow-600',
 				bgColor: 'bg-yellow-50 border-yellow-200'
 			};
@@ -94,14 +94,30 @@
 		}
 	}
 
+	// Format feature names (e.g., "viral_ready" -> "Viral Ready")
+	function formatFeatureName(feature: string): string {
+		return feature
+			.split('_')
+			.map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+			.join(' ');
+	}
+
 	// Get tier features based on metadata
 	function getTierFeatures(metadata: any): string[] {
-		const features = [];
+		// First check for admin-defined features
+		if (metadata?.features && Array.isArray(metadata.features)) {
+			return metadata.features
+				.filter((feature: string) => feature && feature.trim() !== '')
+				.map(formatFeatureName);
+		}
+
+		// Fallback to legacy features
+		const features: string[] = [];
 		if (metadata?.typical_features) {
-			features.push(...metadata.typical_features);
+			features.push(...metadata.typical_features.map(formatFeatureName));
 		}
 		if (metadata?.age_hint) {
-			features.push(metadata.age_hint);
+			features.push(formatFeatureName(metadata.age_hint));
 		}
 		return features;
 	}
@@ -204,9 +220,9 @@
 								class="group relative overflow-hidden rounded-xl bg-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
 							>
 								<!-- Stock Status Badge -->
-								<div class="absolute top-4 right-4 z-10">
+								<div class="absolute top-32 right-3 z-10">
 									<span
-										class={`rounded-full border px-3 py-1 text-xs font-medium ${tierStatus.bgColor} ${tierStatus.color}`}
+										class={`rounded-full px-2 py-1 text-xs font-medium ${tierStatus.status === 'In Stock' ? 'border border-green-200 bg-green-100 text-green-700' : tierStatus.status === 'Few Left' ? 'border border-yellow-200 bg-yellow-100 text-yellow-700' : 'border border-red-200 bg-red-100 text-red-700'}`}
 									>
 										{tierStatus.status}
 									</span>
@@ -240,6 +256,13 @@
 										</div>
 									</div>
 
+									<!-- Tier Description -->
+									{#if tier.description}
+										<div class="mb-4">
+											<p class="text-sm leading-relaxed text-gray-700">{tier.description}</p>
+										</div>
+									{/if}
+
 									<!-- Availability -->
 									<div class="mb-4 text-sm text-gray-600">
 										<span class="font-medium">{tier.visible_available}</span> accounts available
@@ -250,15 +273,15 @@
 										{/if}
 									</div>
 
-									<!-- Features -->
+									<!-- Tier Features -->
 									{#if tierFeatures.length > 0}
 										<div class="mb-6">
-											<h4 class="mb-2 text-sm font-semibold text-gray-700">Features:</h4>
-											<div class="space-y-1">
-												{#each tierFeatures.slice(0, 3) as feature}
-													<div class="flex items-center gap-2 text-sm text-gray-600">
-														<Star class="h-3 w-3 text-green-500" />
-														<span>{feature}</span>
+											<h4 class="mb-3 text-sm font-semibold text-gray-700">Tier Features:</h4>
+											<div class="space-y-2">
+												{#each tierFeatures as feature}
+													<div class="flex items-start gap-2 text-sm text-gray-600">
+														<Star class="mt-0.5 h-3 w-3 flex-shrink-0 text-green-500" />
+														<span>{formatFeatureName(feature)}</span>
 													</div>
 												{/each}
 											</div>
@@ -283,7 +306,7 @@
 										class="w-full rounded-lg bg-gray-900 py-3 font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
 									>
 										{#if tier.visible_available === 0}
-											Out of Stock
+											Sold Out
 										{:else}
 											Select This Tier
 										{/if}

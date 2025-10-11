@@ -131,13 +131,19 @@
 	async function handleCreate() {
 		loading = true;
 		try {
+			// Clean up empty features
+			const cleanedMetadata = {
+				...tierForm.metadata,
+				features: tierForm.metadata.features.filter((feature) => feature.trim() !== '')
+			};
+
 			const newTier: CategoryInsert = {
 				name: tierForm.name,
 				slug: tierForm.slug,
 				description: tierForm.description || null,
 				categoryType: 'tier',
 				parentId: tierForm.parentId, // Tier belongs to a platform
-				metadata: tierForm.metadata,
+				metadata: cleanedMetadata,
 				isActive: true,
 				sortOrder: tiers.length + 1
 			};
@@ -168,11 +174,17 @@
 
 		loading = true;
 		try {
+			// Clean up empty features
+			const cleanedMetadata = {
+				...tierForm.metadata,
+				features: tierForm.metadata.features.filter((feature) => feature.trim() !== '')
+			};
+
 			const updates: CategoryUpdate = {
 				name: tierForm.name,
 				slug: tierForm.slug,
 				description: tierForm.description || null,
-				metadata: tierForm.metadata
+				metadata: cleanedMetadata
 			};
 
 			const result = await updateCategory(selectedTier.id as string, updates);
@@ -499,6 +511,44 @@
 								></textarea>
 							</div>
 
+							<!-- Features -->
+							<div class="md:col-span-2">
+								<label class="mb-2 block text-sm font-medium text-gray-700">Features</label>
+								<div class="space-y-2">
+									{#each tierForm.metadata.features as feature, index}
+										<div class="flex gap-2">
+											<input
+												type="text"
+												bind:value={tierForm.metadata.features[index]}
+												class="flex-1 rounded-md border border-gray-300 px-3 py-2 focus:border-purple-500 focus:ring-purple-500"
+												placeholder="Enter a feature"
+											/>
+											<button
+												type="button"
+												onclick={() => {
+													tierForm.metadata.features = tierForm.metadata.features.filter(
+														(_, i) => i !== index
+													);
+												}}
+												class="rounded-md bg-red-50 px-3 py-2 text-red-600 hover:bg-red-100 focus:ring-2 focus:ring-red-500 focus:outline-none"
+											>
+												<Trash2 size={16} />
+											</button>
+										</div>
+									{/each}
+									<button
+										type="button"
+										onclick={() => {
+											tierForm.metadata.features = [...tierForm.metadata.features, ''];
+										}}
+										class="flex items-center gap-2 rounded-md bg-gray-50 px-3 py-2 text-gray-600 hover:bg-gray-100 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+									>
+										<Plus size={16} />
+										Add Feature
+									</button>
+								</div>
+							</div>
+
 							<!-- Follower Range -->
 							<div>
 								<label class="block text-sm font-medium text-gray-700">Min Followers</label>
@@ -659,6 +709,44 @@
 									rows="2"
 									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-purple-500 focus:ring-purple-500"
 								></textarea>
+							</div>
+
+							<!-- Features -->
+							<div class="md:col-span-2">
+								<label class="mb-2 block text-sm font-medium text-gray-700">Features</label>
+								<div class="space-y-2">
+									{#each tierForm.metadata.features as feature, index}
+										<div class="flex gap-2">
+											<input
+												type="text"
+												bind:value={tierForm.metadata.features[index]}
+												class="flex-1 rounded-md border border-gray-300 px-3 py-2 focus:border-purple-500 focus:ring-purple-500"
+												placeholder="Enter a feature"
+											/>
+											<button
+												type="button"
+												onclick={() => {
+													tierForm.metadata.features = tierForm.metadata.features.filter(
+														(_, i) => i !== index
+													);
+												}}
+												class="rounded-md bg-red-50 px-3 py-2 text-red-600 hover:bg-red-100 focus:ring-2 focus:ring-red-500 focus:outline-none"
+											>
+												<Trash2 size={16} />
+											</button>
+										</div>
+									{/each}
+									<button
+										type="button"
+										onclick={() => {
+											tierForm.metadata.features = [...tierForm.metadata.features, ''];
+										}}
+										class="flex items-center gap-2 rounded-md bg-gray-50 px-3 py-2 text-gray-600 hover:bg-gray-100 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+									>
+										<Plus size={16} />
+										Add Feature
+									</button>
+								</div>
 							</div>
 
 							<!-- Follower Range -->

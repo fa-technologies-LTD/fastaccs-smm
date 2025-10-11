@@ -35,7 +35,7 @@
 
 	// Add to cart
 	function addToCart(product: any) {
-		cart.addItem(product, 1);
+		cart.addTier(product.id, 1);
 	}
 </script>
 

@@ -40,6 +40,7 @@ export const load: PageLoad = async ({ params, fetch }) => {
 			tier_slug: tierData.slug,
 			category_id: tierData.id,
 			category_name: tierData.name,
+			description: tierData.description, // Add description field
 			metadata: tierData.metadata || {},
 			accounts_available: tierData.accountCount || 0, // Use actual account count
 			reservations_active: 0, // No longer using database reservations

@@ -13,10 +13,10 @@
 
 <section class="bg-white px-4 py-16">
 	<div class="mx-auto max-w-6xl">
-		<h2 class="mb-4 text-center text-3xl font-bold text-gray-800 md:text-4xl">
+		<h2 class="mb-4 text-center text-xl font-bold text-gray-800 md:text-4xl">
 			Why Choose FastAccs?
 		</h2>
-		<p class="mb-12 text-center text-xl text-gray-600">
+		<p class="mb-12 text-center text-base text-gray-600">
 			Your trusted partner for premium social media accounts and growth services
 		</p>
 

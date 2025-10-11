@@ -1,5 +1,6 @@
 <script>
 	import { Instagram, Music, Facebook, Twitter } from '@lucide/svelte';
+	import { addToast } from '$lib/stores/toasts';
 </script>
 
 <section class="bg-gray-50 px-4 py-12 sm:py-16">
@@ -23,7 +24,7 @@
 				<div class="flex flex-1 flex-col p-4 sm:p-6">
 					<div class="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 sm:gap-4">
 						<a
-							href="/products?platform=instagram"
+							href="/platforms/instagram"
 							class="flex cursor-pointer items-center rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100 active:bg-gray-100 sm:p-4"
 						>
 							<Instagram class="mr-3 h-6 w-6 text-pink-600 sm:h-8 sm:w-8" />
@@ -34,7 +35,7 @@
 						</a>
 
 						<a
-							href="/products?platform=tiktok"
+							href="/platforms/tiktok"
 							class="flex cursor-pointer items-center rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100 active:bg-gray-100 sm:p-4"
 						>
 							<Music class="mr-3 h-6 w-6 text-black sm:h-8 sm:w-8" />
@@ -45,7 +46,7 @@
 						</a>
 
 						<a
-							href="/products?platform=facebook"
+							href="/platforms/facebook"
 							class="flex cursor-pointer items-center rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100 active:bg-gray-100 sm:p-4"
 						>
 							<Facebook class="mr-3 h-6 w-6 text-blue-600 sm:h-8 sm:w-8" />
@@ -56,7 +57,7 @@
 						</a>
 
 						<a
-							href="/products?platform=twitter"
+							href="/platforms/twitter"
 							class="flex cursor-pointer items-center rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
 						>
 							<Twitter class="mr-3 h-8 w-8 text-blue-400" />
@@ -69,7 +70,7 @@
 
 					<div class="mt-auto">
 						<a
-							href="/products"
+							href="/platforms"
 							class="block w-full cursor-pointer rounded-lg bg-purple-600 py-3 text-center font-semibold text-white transition-colors hover:bg-purple-700"
 						>
 							Browse All Accounts
@@ -91,6 +92,11 @@
 					<div class="mb-6 space-y-4">
 						<div
 							class="flex cursor-pointer items-center justify-between rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
+							role="button"
+							tabindex="0"
+							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
+							onkeydown={(e) =>
+								e.key === 'Enter' && addToast({ title: 'Coming soon', type: 'info' })}
 						>
 							<div>
 								<div class="font-semibold text-gray-800">Instagram Followers</div>
@@ -100,6 +106,11 @@
 
 						<div
 							class="flex cursor-pointer items-center justify-between rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
+							role="button"
+							tabindex="0"
+							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
+							onkeydown={(e) =>
+								e.key === 'Enter' && addToast({ title: 'Coming soon', type: 'info' })}
 						>
 							<div>
 								<div class="font-semibold text-gray-800">TikTok Views</div>
@@ -109,6 +120,11 @@
 
 						<div
 							class="flex cursor-pointer items-center justify-between rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
+							role="button"
+							tabindex="0"
+							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
+							onkeydown={(e) =>
+								e.key === 'Enter' && addToast({ title: 'Coming soon', type: 'info' })}
 						>
 							<div>
 								<div class="font-semibold text-gray-800">YouTube Subscribers</div>
@@ -118,6 +134,11 @@
 
 						<div
 							class="flex cursor-pointer items-center justify-between rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
+							role="button"
+							tabindex="0"
+							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
+							onkeydown={(e) =>
+								e.key === 'Enter' && addToast({ title: 'Coming soon', type: 'info' })}
 						>
 							<div>
 								<div class="font-semibold text-gray-800">Facebook Likes</div>
@@ -127,12 +148,12 @@
 					</div>
 
 					<div class="mt-auto">
-						<a
-							href="/services"
+						<button
+							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
 							class="block w-full cursor-pointer rounded-lg bg-blue-600 py-3 text-center font-semibold text-white transition-colors hover:bg-blue-700"
 						>
 							View All Services
-						</a>
+						</button>
 					</div>
 				</div>
 			</div>

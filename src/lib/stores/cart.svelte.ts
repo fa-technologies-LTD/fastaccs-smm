@@ -1,300 +1,246 @@
-import type { Category } from '@prisma/client';
 import { browser } from '$app/environment';
+import type { CartItem, CartItemWithTier, CartStorage, CartState } from '$lib/types/cart';
 
-export interface CartItem {
+interface TierData {
 	id: string;
-	product: Category; // This is actually a tier/category, but keeping 'product' name for compatibility
-	quantity: number;
-	addedAt: Date;
+	name: string;
+	slug: string;
+	metadata: { price?: number } | null;
+	isActive: boolean;
+	parent?: {
+		name: string;
+		slug: string;
+	} | null;
 }
 
-// Cookie cart item formats
-interface CookieCartItemNew {
-	id: string;
-	productId: string;
-	productName: string;
-	quantity: number;
-	addedAt: string;
-}
-
-interface CookieCartItemOld {
-	id: string;
-	product: Category;
-	quantity: number;
-	addedAt: string;
-}
-
-interface CartState {
-	items: CartItem[];
-	isOpen: boolean;
-	loading: boolean;
-}
+const STORAGE_KEY = 'fastaccs_cart';
+const STORAGE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 
 class CartStore {
 	private state = $state<CartState>({
 		items: [],
 		isOpen: false,
-		loading: false
+		loading: false,
+		error: null
 	});
 
 	constructor() {
-		// Load cart from cookies on initialization
 		if (browser) {
-			this.loadFromCookies().catch((error) => {
-				console.error('Failed to load cart from cookies:', error);
-			});
+			this.loadFromStorage();
+			this.setupStorageListener();
 		}
 	}
 
 	// Getters
-	get items() {
+	get items(): CartItem[] {
 		return this.state.items;
 	}
 
-	get isOpen() {
+	get isOpen(): boolean {
 		return this.state.isOpen;
 	}
 
-	get loading() {
+	get loading(): boolean {
 		return this.state.loading;
 	}
 
-	get total() {
-		return this.state.items.reduce((sum, item) => {
-			// Get price from tier metadata or default to 0
-			const price =
-				typeof item.product.metadata === 'object' &&
-				item.product.metadata !== null &&
-				'price' in item.product.metadata
-					? Number(item.product.metadata.price)
-					: 0;
-			return sum + price * item.quantity;
-		}, 0);
+	get error(): string | null {
+		return this.state.error;
 	}
 
-	get itemCount() {
+	get itemCount(): number {
 		return this.state.items.reduce((sum, item) => sum + item.quantity, 0);
 	}
 
-	// Cookie management
-	private saveToCookies() {
+	// Storage management
+	private saveToStorage(): void {
 		if (!browser) return;
 
-		// ✅ FIXED: Store only essential data to avoid 4KB cookie limit
-		const cartData = {
-			items: this.state.items.map((item) => ({
-				id: item.id,
-				productId: item.product.id, // Only store ID, not full Category object
-				productName: item.product.name, // Store name for display
-				quantity: item.quantity,
-				addedAt: item.addedAt.toISOString()
-			}))
-		};
-
-		// Set cookie to expire in 24 hours
-		const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-		document.cookie = `fastaccs_cart=${encodeURIComponent(JSON.stringify(cartData))}; expires=${expires.toUTCString()}; path=/; SameSite=Lax`;
-	}
-
-	private async loadFromCookies() {
-		if (!browser) return;
-
-		const cookies = document.cookie.split(';');
-		const cartCookie = cookies.find((cookie) => cookie.trim().startsWith('fastaccs_cart='));
-
-		if (cartCookie) {
-			try {
-				const cartData = JSON.parse(decodeURIComponent(cartCookie.split('=')[1]));
-
-				// ✅ FIXED: Added validation to prevent corruption issues
-				if (!cartData || !Array.isArray(cartData.items)) {
-					console.warn('Invalid cart data format in cookie');
-					this.clearCookies();
-					return;
-				}
-
-				// ✅ FIXED: Handle both old format (full product) and new format (productId only)
-				const validItems = cartData.items.filter((item: unknown) => {
-					if (!item || typeof item !== 'object') return false;
-
-					// New format with productId
-					if ('productId' in item && 'productName' in item) {
-						return (
-							'id' in item &&
-							typeof item.id === 'string' &&
-							typeof item.productId === 'string' &&
-							typeof item.productName === 'string' &&
-							'quantity' in item &&
-							typeof item.quantity === 'number' &&
-							item.quantity > 0 &&
-							'addedAt' in item &&
-							typeof item.addedAt === 'string'
-						);
-					}
-
-					// Old format with full product object (backward compatibility)
-					return (
-						'id' in item &&
-						typeof item.id === 'string' &&
-						'product' in item &&
-						item.product &&
-						typeof item.product === 'object' &&
-						'id' in item.product &&
-						typeof item.product.id === 'string' &&
-						'name' in item.product &&
-						typeof item.product.name === 'string' &&
-						'quantity' in item &&
-						typeof item.quantity === 'number' &&
-						item.quantity > 0 &&
-						'addedAt' in item &&
-						typeof item.addedAt === 'string'
-					);
-				});
-
-				// ✅ FIXED: Load cart items and fetch full category data for new format
-				this.state.items = await Promise.all(
-					validItems.map(async (item: unknown) => {
-						let product;
-
-						// Type assertion for validated items
-						const typedItem = item as CookieCartItemNew | CookieCartItemOld;
-
-						// New format - need to fetch category data
-						if ('productId' in typedItem && 'productName' in typedItem) {
-							try {
-								const response = await fetch(`/api/categories/${typedItem.productId}`);
-								if (response.ok) {
-									const categoryData = await response.json();
-									product = categoryData.data;
-								} else {
-									// Fallback if API fails - create minimal product object
-									product = {
-										id: typedItem.productId,
-										name: typedItem.productName,
-										metadata: {},
-										slug: '',
-										description: null,
-										categoryType: 'tier',
-										parentId: null,
-										sortOrder: 0,
-										isActive: true,
-										createdAt: new Date(),
-										updatedAt: new Date()
-									};
-								}
-							} catch (error) {
-								console.warn('Failed to fetch category data:', error);
-								// Create minimal product object as fallback
-								product = {
-									id: typedItem.productId,
-									name: typedItem.productName,
-									metadata: {},
-									slug: '',
-									description: null,
-									categoryType: 'tier',
-									parentId: null,
-									sortOrder: 0,
-									isActive: true,
-									createdAt: new Date(),
-									updatedAt: new Date()
-								};
-							}
-						} else {
-							// Old format - use existing product data
-							product = typedItem.product;
-						}
-
-						return {
-							id: typedItem.id,
-							product,
-							quantity: typedItem.quantity,
-							addedAt: new Date(typedItem.addedAt)
-						};
-					})
-				);
-
-				// ✅ FIXED: Save cleaned data back to cookie if items were filtered
-				if (validItems.length !== cartData.items.length) {
-					this.saveToCookies();
-				}
-			} catch (error) {
-				console.error('Failed to load cart from cookies:', error);
-				this.clearCookies(); // Clear corrupted cookie
-			}
+		try {
+			const data: CartStorage = {
+				items: this.state.items,
+				lastUpdated: Date.now()
+			};
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+		} catch (error) {
+			console.error('Failed to save cart to storage:', error);
+			this.state.error = 'Failed to save cart';
 		}
 	}
 
-	private clearCookies() {
+	private loadFromStorage(): void {
 		if (!browser) return;
-		document.cookie = 'fastaccs_cart=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+
+		try {
+			const stored = localStorage.getItem(STORAGE_KEY);
+			if (!stored) return;
+
+			const data: CartStorage = JSON.parse(stored);
+
+			// Check if data is expired
+			if (Date.now() - data.lastUpdated > STORAGE_EXPIRY) {
+				this.clearStorage();
+				return;
+			}
+
+			// Validate and filter items
+			const validItems = data.items.filter(
+				(item) =>
+					item.tierId &&
+					typeof item.quantity === 'number' &&
+					item.quantity > 0 &&
+					typeof item.addedAt === 'number'
+			);
+
+			this.state.items = validItems;
+		} catch (error) {
+			console.error('Failed to load cart from storage:', error);
+			this.clearStorage();
+		}
 	}
 
-	// Actions
-	addItem(product: Category, quantity: number = 1) {
-		const existingIndex = this.state.items.findIndex((item) => item.id === product.id);
+	private clearStorage(): void {
+		if (!browser) return;
+		localStorage.removeItem(STORAGE_KEY);
+	}
+
+	private setupStorageListener(): void {
+		if (!browser) return;
+
+		window.addEventListener('storage', (event) => {
+			if (event.key === STORAGE_KEY) {
+				this.loadFromStorage();
+			}
+		});
+	}
+
+	// Cart actions
+	addTier(tierId: string, quantity: number = 1): void {
+		if (!tierId || quantity <= 0) return;
+
+		const existingIndex = this.state.items.findIndex((item) => item.tierId === tierId);
 
 		if (existingIndex >= 0) {
-			// Update existing item
 			this.state.items[existingIndex].quantity += quantity;
 		} else {
-			// Add new item
 			this.state.items.push({
-				id: product.id,
-				product,
+				tierId,
 				quantity,
-				addedAt: new Date()
+				addedAt: Date.now()
 			});
 		}
 
-		this.saveToCookies();
+		this.state.error = null;
+		this.saveToStorage();
 	}
 
-	removeItem(productId: string) {
-		this.state.items = this.state.items.filter((item) => item.id !== productId);
-		this.saveToCookies();
+	removeTier(tierId: string): void {
+		this.state.items = this.state.items.filter((item) => item.tierId !== tierId);
+		this.saveToStorage();
 	}
 
-	updateQuantity(productId: string, quantity: number) {
+	updateQuantity(tierId: string, quantity: number): void {
 		if (quantity <= 0) {
-			this.removeItem(productId);
+			this.removeTier(tierId);
 			return;
 		}
 
-		const item = this.state.items.find((item) => item.id === productId);
+		const item = this.state.items.find((item) => item.tierId === tierId);
 		if (item) {
 			item.quantity = quantity;
-			this.saveToCookies();
+			this.saveToStorage();
 		}
 	}
 
-	clear() {
+	clear(): void {
 		this.state.items = [];
-		this.clearCookies();
+		this.state.error = null;
+		this.clearStorage();
 	}
 
-	toggle() {
-		this.state.isOpen = !this.state.isOpen;
-	}
-
-	open() {
+	// UI state management
+	open(): void {
 		this.state.isOpen = true;
 	}
 
-	close() {
+	close(): void {
 		this.state.isOpen = false;
 	}
 
-	// Utility methods
-	cleanupExpired() {
-		// For now, just a placeholder
-		// TODO: Implement reservation expiry logic if needed
+	toggle(): void {
+		this.state.isOpen = !this.state.isOpen;
 	}
 
-	setLoading(loading: boolean) {
-		this.state.loading = loading;
+	// Get items with tier data
+	async getItemsWithTiers(): Promise<CartItemWithTier[]> {
+		if (this.state.items.length === 0) return [];
+
+		this.state.loading = true;
+		this.state.error = null;
+
+		try {
+			const tierIds = this.state.items.map((item) => item.tierId);
+			const response = await fetch('/api/categories/tiers/batch', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ ids: tierIds })
+			});
+
+			if (!response.ok) {
+				throw new Error('Failed to fetch tier data');
+			}
+
+			const { data: tiers }: { data: TierData[] } = await response.json();
+
+			// Match items with tier data
+			const itemsWithTiers: CartItemWithTier[] = [];
+
+			for (const item of this.state.items) {
+				const tier = tiers.find((t: TierData) => t.id === item.tierId);
+				if (tier) {
+					itemsWithTiers.push({
+						...item,
+						tier: {
+							id: tier.id,
+							name: tier.name,
+							price:
+								typeof tier.metadata === 'object' && tier.metadata?.price
+									? Number(tier.metadata.price)
+									: 0,
+							slug: tier.slug,
+							platformName: tier.parent?.name || 'Unknown',
+							platformSlug: tier.parent?.slug || '',
+							isActive: tier.isActive
+						}
+					});
+				}
+			}
+
+			// Remove items for deleted/inactive tiers
+			if (itemsWithTiers.length !== this.state.items.length) {
+				this.state.items = itemsWithTiers.map((item) => ({
+					tierId: item.tierId,
+					quantity: item.quantity,
+					addedAt: item.addedAt
+				}));
+				this.saveToStorage();
+			}
+
+			return itemsWithTiers;
+		} catch (error) {
+			console.error('Failed to fetch tier data:', error);
+			this.state.error = 'Failed to load cart items';
+			return [];
+		} finally {
+			this.state.loading = false;
+		}
+	}
+
+	// Calculate total
+	async getTotal(): Promise<number> {
+		const items = await this.getItemsWithTiers();
+		return items.reduce((sum, item) => sum + item.tier.price * item.quantity, 0);
 	}
 }
 
-// Export singleton instance
 export const cart = new CartStore();

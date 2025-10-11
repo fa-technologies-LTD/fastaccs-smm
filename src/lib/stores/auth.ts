@@ -1,5 +1,23 @@
 import { writable } from 'svelte/store';
-import type { User, Session } from '@supabase/supabase-js';
+
+import type { UserType } from '@prisma/client';
+
+export interface User {
+	id: string;
+	email: string | null;
+	fullName: string | null;
+	avatarUrl: string | null;
+	userType: UserType;
+	isActive: boolean;
+	emailVerified: boolean;
+}
+
+export interface Session {
+	accessToken: string;
+	refreshToken: string;
+	expiresAt: number;
+	user: User;
+}
 
 export interface AuthState {
 	user: User | null;

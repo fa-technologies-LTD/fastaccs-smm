@@ -7,6 +7,7 @@ export interface TierInventory {
 	tier_slug: string;
 	category_id: string;
 	category_name: string;
+	description: string | null;
 	metadata: Record<string, unknown>;
 	accounts_available: number;
 	reservations_active: number;
@@ -62,6 +63,7 @@ export const load: PageLoad = async ({ params, fetch }): Promise<PageData> => {
 					id: string;
 					name: string;
 					slug: string;
+					description: string | null;
 					isActive: boolean;
 					metadata?: Record<string, unknown>;
 					accountCount: number;
@@ -74,6 +76,7 @@ export const load: PageLoad = async ({ params, fetch }): Promise<PageData> => {
 					tier_slug: tier.slug,
 					category_id: tier.id,
 					category_name: tier.name,
+					description: tier.description,
 					metadata: tier.metadata || {},
 					accounts_available: tier.accountCount,
 					reservations_active: 0, // No longer using database reservations - cart uses cookies
