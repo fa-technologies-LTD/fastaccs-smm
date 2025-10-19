@@ -149,26 +149,26 @@ Thank you for your order with FastAccs! Your accounts are ready.
 			item.accounts.forEach((account: AccountForEmail, accIndex: number) => {
 				content += `\nAccount ${accIndex + 1}:\n`;
 				if (account.username) content += `- Username: ${account.username}\n`;
-				if (account.password) content += `- Password: ${account.password}\n`;
 				if (account.email) content += `- Email: ${account.email}\n`;
-				if (account.emailPassword) content += `- Email Password: ${account.emailPassword}\n`;
-				if (account.twoFa) content += `- 2FA Code: ${account.twoFa}\n`;
 				if (account.linkUrl) content += `- Login Link: ${account.linkUrl}\n`;
 				if (account.followers !== null) content += `- Followers: ${account.followers}\n`;
 				if (account.ageMonths) content += `- Account Age: ${account.ageMonths} months\n`;
+				content += `- Password: Available in your dashboard\n`;
 			});
 
 			content += `\n`;
 		}
 	});
 
-	content += `**Important Notes:**
-- Please change passwords immediately after receiving accounts
+	content += `**Important Security Information:**
+- **Account passwords are available in your dashboard for security reasons**
+- Please log into your dashboard to access full account credentials
+- Change passwords immediately after accessing your accounts
 - Keep your account details secure and private  
 - Contact support if you face any issues
 
 **Quick Links:**
-- View Order Details: https://fastaccs.com/dashboard
+- Access Passwords & Full Details: https://fastaccs.com/dashboard
 - Browse More Accounts: https://fastaccs.com/platforms
 - Contact Support: https://fastaccs.com/support
 

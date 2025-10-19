@@ -81,6 +81,47 @@
 		}
 	}
 
+	// Cleanup orphaned allocated accounts
+	let cleanupLoading = $state(false);
+	let cleanupMessage = $state<string | null>(null);
+
+	async function cleanupOrphanedAccounts() {
+		if (!confirm('This will reset orphaned allocated accounts back to available. Are you sure?')) {
+			return;
+		}
+
+		cleanupLoading = true;
+		cleanupMessage = null;
+
+		try {
+			const response = await fetch('/api/admin/cleanup/allocated-accounts', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				}
+			});
+
+			const result = await response.json();
+
+			if (response.ok) {
+				cleanupMessage = `✅ ${result.message}`;
+				// Reload inventory to see updated counts
+				await loadInventory();
+			} else {
+				cleanupMessage = `❌ Error: ${result.error}`;
+			}
+		} catch (error) {
+			console.error('Cleanup failed:', error);
+			cleanupMessage = '❌ Failed to cleanup accounts';
+		} finally {
+			cleanupLoading = false;
+			// Clear message after 5 seconds
+			setTimeout(() => {
+				cleanupMessage = null;
+			}, 5000);
+		}
+	}
+
 	// Initialize with page data or load fresh data
 	onMount(() => {
 		if (data.inventory && data.stats) {
@@ -123,36 +164,60 @@
 	}
 </script>
 
-<div class="min-h-screen bg-gray-50 p-6">
-	<div class="mb-6 flex items-center justify-between">
-		<div>
-			<h1 class="text-2xl font-bold text-gray-900">Account Inventory</h1>
-			<p class="text-gray-500">Manage your social media account inventory by Platform & Tier</p>
+<div class="min-h-screen bg-gray-50 p-4 sm:p-6">
+	<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+		<div class="min-w-0 flex-1">
+			<h1 class="text-xl font-bold text-gray-900 sm:text-2xl">Account Inventory</h1>
+			<p class="mt-1 text-sm text-gray-500 sm:text-base">
+				Manage your social media account inventory by Platform & Tier
+			</p>
 		</div>
-		<button
-			onclick={loadInventory}
-			disabled={loading}
-			class="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-		>
-			{loading ? 'Refreshing...' : 'Refresh'}
-		</button>
+		<div class="flex flex-col gap-2 sm:flex-row sm:space-x-3">
+			<button
+				onclick={cleanupOrphanedAccounts}
+				disabled={cleanupLoading}
+				class="w-full rounded-lg bg-orange-600 px-4 py-3 text-white transition-colors hover:bg-orange-700 disabled:opacity-50 sm:w-auto sm:py-2"
+			>
+				{cleanupLoading ? 'Cleaning...' : 'Fix Stuck Accounts'}
+			</button>
+			<button
+				onclick={loadInventory}
+				disabled={loading}
+				class="w-full rounded-lg bg-blue-600 px-4 py-3 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 sm:w-auto sm:py-2"
+			>
+				{loading ? 'Refreshing...' : 'Refresh'}
+			</button>
+		</div>
 	</div>
 
-	<!-- Stats Cards -->
-	<div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
-		<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-			<h3 class="text-sm font-medium text-gray-500">Total Accounts</h3>
-			<p class="text-2xl font-bold text-gray-900">{summaryStats.total_accounts.toLocaleString()}</p>
+	<!-- Cleanup Message -->
+	{#if cleanupMessage}
+		<div
+			class="mb-6 rounded-lg border {cleanupMessage.startsWith('✅')
+				? 'border-green-200 bg-green-50 text-green-800'
+				: 'border-red-200 bg-red-50 text-red-800'} p-4"
+		>
+			<p class="font-medium">{cleanupMessage}</p>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-			<h3 class="text-sm font-medium text-gray-500">Available</h3>
-			<p class="text-2xl font-bold text-green-600">
+	{/if}
+
+	<!-- Stats Cards -->
+	<div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
+		<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+			<h3 class="text-xs font-medium text-gray-500 sm:text-sm">Total Accounts</h3>
+			<p class="text-lg font-bold text-gray-900 sm:text-2xl">
+				{summaryStats.total_accounts.toLocaleString()}
+			</p>
+		</div>
+		<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+			<h3 class="text-xs font-medium text-gray-500 sm:text-sm">Available</h3>
+			<p class="text-lg font-bold text-green-600 sm:text-2xl">
 				{summaryStats.available_accounts.toLocaleString()}
 			</p>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-			<h3 class="text-sm font-medium text-gray-500">Assigned</h3>
-			<p class="text-2xl font-bold text-yellow-600">
+		<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+			<h3 class="text-xs font-medium text-gray-500 sm:text-sm">Assigned</h3>
+			<p class="text-lg font-bold text-yellow-600 sm:text-2xl">
 				{summaryStats.assigned_accounts.toLocaleString()}
 			</p>
 		</div>

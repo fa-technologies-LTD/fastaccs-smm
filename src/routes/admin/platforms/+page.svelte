@@ -209,17 +209,19 @@
 	<title>Platform Management - Admin Panel</title>
 </svelte:head>
 
-<div class="p-6">
+<div class="p-4 sm:p-6">
 	<!-- Header -->
 	<div class="mb-6">
-		<div class="mb-4 flex items-center justify-between">
-			<div>
-				<h1 class="text-2xl font-bold text-gray-900">Platform Management</h1>
-				<p class="text-gray-600">Manage social media platforms and their configurations</p>
+		<div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+			<div class="min-w-0 flex-1">
+				<h1 class="text-xl font-bold text-gray-900 sm:text-2xl">Platform Management</h1>
+				<p class="mt-1 text-sm text-gray-600 sm:text-base">
+					Manage social media platforms and their configurations
+				</p>
 			</div>
 			<button
 				onclick={openCreateModal}
-				class="cursor-pointer hover:scale-[.95] transition-all flex text-sm items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm text-white transition-all hover:scale-[.95] hover:bg-blue-700 sm:w-auto sm:py-2"
 			>
 				<Plus size={18} />
 				Add Platform
@@ -233,63 +235,68 @@
 			<div class="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
 		</div>
 	{:else if platforms.length === 0}
-		<div class="py-12 text-center">
+		<div class="px-4 py-12 text-center">
 			<AlertCircle class="mx-auto mb-4 h-12 w-12 text-gray-400" />
 			<h3 class="mb-2 text-lg font-medium text-gray-900">No platforms found</h3>
-			<p class="mb-4 text-gray-500">Get started by adding your first social media platform.</p>
+			<p class="mx-auto mb-6 max-w-md text-gray-500">
+				Get started by adding your first social media platform.
+			</p>
 			<button
 				onclick={openCreateModal}
-				class="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700"
+				class="inline-flex items-center justify-center rounded-md bg-blue-600 px-6 py-3 font-medium text-white transition-colors hover:bg-blue-700"
 			>
 				<Plus class="mr-2 h-4 w-4" />
 				Add Platform
 			</button>
 		</div>
 	{:else}
-		<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
 			{#each platforms as platform}
-				<div class="rounded-lg border border-gray-200 bg-white p-6 shadow">
+				<div class="rounded-lg border border-gray-200 bg-white p-4 shadow sm:p-6">
 					<!-- Platform Header -->
-					<div class="mb-4 flex items-start justify-between">
-						<div class="flex items-center gap-3">
+					<div class="mb-4 flex items-start justify-between gap-3">
+						<div class="flex min-w-0 flex-1 items-center gap-3">
 							{#if (platform.metadata as any)?.icon && ((platform.metadata as any).icon.startsWith('http') || (platform.metadata as any).icon.startsWith('/static') || (platform.metadata as any).icon.startsWith('data:'))}
 								<img
 									src={(platform.metadata as any).icon}
 									alt={platform.name}
-									class="h-8 w-8 rounded"
+									class="h-8 w-8 flex-shrink-0 rounded"
 								/>
 							{:else}
 								<div
-									class="flex h-8 w-8 items-center justify-center rounded font-semibold text-white"
+									class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded font-semibold text-white"
 									style="background-color: {(platform.metadata as any)?.color || '#3B82F6'}"
 								>
 									{platform.name.charAt(0)}
 								</div>
 							{/if}
-							<div>
-								<h3 class="font-semibold text-gray-900">{platform.name}</h3>
-								<p class="text-sm text-gray-500">{platform.slug}</p>
+							<div class="min-w-0 flex-1">
+								<h3 class="truncate font-semibold text-gray-900">{platform.name}</h3>
+								<p class="truncate text-sm text-gray-500">{platform.slug}</p>
 							</div>
 						</div>
-						<div class="flex items-center gap-1">
+						<div class="flex flex-shrink-0 items-center gap-1">
 							<button
 								onclick={() => viewTiers(platform)}
-								class="rounded p-1 text-gray-400 hover:text-blue-600"
+								class="rounded p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
 								title="View Tiers"
+								aria-label="View Tiers"
 							>
 								<Eye size={16} />
 							</button>
 							<button
 								onclick={() => openEditModal(platform)}
-								class="rounded p-1 text-gray-400 hover:text-blue-600"
+								class="rounded p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
 								title="Edit Platform"
+								aria-label="Edit Platform"
 							>
 								<Edit size={16} />
 							</button>
 							<button
 								onclick={() => handleDelete(platform)}
-								class="rounded p-1 text-gray-400 hover:text-red-600"
+								class="rounded p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
 								title="Delete Platform"
+								aria-label="Delete Platform"
 							>
 								<Trash2 size={16} />
 							</button>
@@ -303,19 +310,23 @@
 
 					<!-- Platform Stats -->
 					<div class="space-y-2 text-sm">
-						<div class="flex justify-between">
-							<span class="text-gray-500">Status:</span>
-							<span class="font-medium {platform.isActive ? 'text-green-600' : 'text-red-600'}">
+						<div class="flex items-center justify-between gap-2">
+							<span class="flex-shrink-0 text-gray-500">Status:</span>
+							<span
+								class="font-medium {platform.isActive
+									? 'text-green-600'
+									: 'text-red-600'} text-right"
+							>
 								{platform.isActive ? 'Active' : 'Inactive'}
 							</span>
 						</div>
 						{#if (platform.metadata as any)?.website_url}
-							<div class="flex justify-between">
-								<span class="text-gray-500">Website:</span>
+							<div class="flex items-center justify-between gap-2">
+								<span class="flex-shrink-0 text-gray-500">Website:</span>
 								<a
 									href={(platform.metadata as any).website_url}
 									target="_blank"
-									class="text-blue-600 hover:underline"
+									class="truncate text-right text-blue-600 hover:underline"
 								>
 									Visit
 								</a>
@@ -326,9 +337,8 @@
 					<!-- Platform Info Note -->
 					<div class="mt-4 border-t border-gray-200 pt-4">
 						<p class="text-center text-xs text-gray-500">
-							Tiers are managed in the <a
-								href="/admin/tiers"
-								class="text-blue-600 hover:underline">Tiers</a
+							Tiers are managed in the <a href="/admin/tiers" class="text-blue-600 hover:underline"
+								>Tiers</a
 							> section
 						</p>
 					</div>

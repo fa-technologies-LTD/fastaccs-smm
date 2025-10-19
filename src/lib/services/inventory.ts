@@ -28,12 +28,15 @@ export interface InventoryStats {
 	assigned_accounts: number;
 	delivered_accounts: number;
 	platforms: number;
-	// Additional properties for admin dashboard
+
 	total_tiers: number;
 	total_available: number;
 	total_reserved: number;
 	out_of_stock: number;
 	low_stock: number;
+
+	accountsInOutOfStockTiers: number;
+	outOfStockTiersCount: number;
 }
 
 // Data for creating new accounts during import

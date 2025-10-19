@@ -24,44 +24,59 @@ export async function GET({ url }) {
 			});
 
 			// Get inventory data from accounts (which are the actual inventory items)
-			const [totalAvailable, totalReserved, tiersWithoutStock, tiersWithLowStock] =
-				await Promise.all([
-					// Count all available accounts
-					prisma.account.count({
-						where: { status: 'available' }
-					}),
+			const [totalAvailable, totalReserved, tiersWithoutStockData] = await Promise.all([
+				// Count all available accounts
+				prisma.account.count({
+					where: { status: 'available' }
+				}),
 
-					// Count all reserved accounts
-					prisma.account.count({
-						where: { status: 'reserved' }
-					}),
+				// Count all reserved accounts
+				prisma.account.count({
+					where: { status: 'reserved' }
+				}),
 
-					// Count tiers with no available accounts
-					prisma.category.count({
-						where: {
-							categoryType: 'tier',
-							isActive: true,
-							parentId: { not: null }, // Platform-specific tiers only
-							accounts: {
-								none: {
-									status: 'available'
+				// Get tiers with no available accounts and count non-delivered accounts in those tiers
+				prisma.category.findMany({
+					where: {
+						categoryType: 'tier',
+						isActive: true,
+						parentId: { not: null }, // Platform-specific tiers only
+						accounts: {
+							none: {
+								status: 'available'
+							}
+						}
+					},
+					include: {
+						_count: {
+							select: {
+								accounts: {
+									where: {
+										status: { not: 'delivered' } // Only count non-delivered accounts
+									}
 								}
 							}
 						}
-					}),
+					}
+				})
+			]);
 
-					// For low stock, we need a more complex query - let's use 0 for now
-					// TODO: Implement proper low stock detection with account counting
-					0
-				]);
+			// Calculate non-delivered accounts in out-of-stock tiers (reserved accounts that can't be fulfilled)
+			const accountsInOutOfStockTiers = tiersWithoutStockData.reduce(
+				(sum, tier) => sum + tier._count.accounts,
+				0
+			);
+			const outOfStockTiersCount = tiersWithoutStockData.length;
 
 			const stats = {
 				total_tiers: totalTiers,
 				total_available: totalAvailable,
 				total_reserved: totalReserved,
-				out_of_stock: tiersWithoutStock,
-				low_stock: tiersWithLowStock,
-				platforms: totalPlatforms
+				out_of_stock: outOfStockTiersCount, // Keep original field for compatibility
+				low_stock: 0, // TODO: Implement low stock detection
+				platforms: totalPlatforms,
+				accountsInOutOfStockTiers: accountsInOutOfStockTiers,
+				outOfStockTiersCount: outOfStockTiersCount
 			};
 
 			return json({ data: stats, error: null });

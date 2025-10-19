@@ -355,17 +355,19 @@
 	<title>Batch Import - Admin Panel</title>
 </svelte:head>
 
-<div class="p-6">
+<div class="p-4 sm:p-6">
 	<!-- Header -->
 	<div class="mb-6">
-		<div class="mb-4 flex items-center justify-between">
-			<div>
-				<h1 class="text-2xl font-bold text-gray-900">Batch Import</h1>
-				<p class="text-gray-600">Import and manage account batches from CSV files</p>
+		<div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+			<div class="min-w-0 flex-1">
+				<h1 class="text-xl font-bold text-gray-900 sm:text-2xl">Batch Import</h1>
+				<p class="mt-1 text-sm text-gray-600 sm:text-base">
+					Import and manage account batches from CSV files
+				</p>
 			</div>
 			<button
 				onclick={openUploadModal}
-				class="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"
+				class="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-white transition-colors hover:bg-blue-700 sm:w-auto sm:py-2"
 			>
 				<Upload size={18} />
 				Import Batch
@@ -385,13 +387,15 @@
 
 	<!-- Batches List -->
 	{#if batches.length === 0}
-		<div class="py-12 text-center">
+		<div class="px-4 py-12 text-center">
 			<FileText class="mx-auto mb-4 h-12 w-12 text-gray-400" />
 			<h3 class="mb-2 text-lg font-medium text-gray-900">No batches found</h3>
-			<p class="mb-4 text-gray-500">Get started by importing your first batch of accounts.</p>
+			<p class="mx-auto mb-6 max-w-md text-gray-500">
+				Get started by importing your first batch of accounts.
+			</p>
 			<button
 				onclick={openUploadModal}
-				class="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700"
+				class="inline-flex items-center justify-center rounded-md bg-blue-600 px-6 py-3 font-medium text-white transition-colors hover:bg-blue-700"
 			>
 				<Upload class="mr-2 h-4 w-4" />
 				Import Batch

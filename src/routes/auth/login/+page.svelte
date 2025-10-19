@@ -15,8 +15,8 @@
 
 	let error = $state('');
 
-	// Get redirect URL from query params
-	const redirectTo = page.url.searchParams.get('redirectTo') || '/';
+	// Get redirect URL from server data or query params
+	const redirectTo = data.returnUrl || page.url.searchParams.get('returnUrl') || '/dashboard';
 	const errorParam = page.url.searchParams.get('error');
 
 	onMount(() => {
@@ -62,7 +62,6 @@
 			<!-- Header -->
 			<div class="bg-neutral-dark px-6 py-6 text-center text-white sm:px-8 sm:py-8">
 				<h1 class="mb-2 text-2xl font-bold sm:text-3xl">Account Required</h1>
-		
 			</div>
 
 			<!-- Content -->

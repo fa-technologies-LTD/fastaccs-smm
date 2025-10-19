@@ -245,23 +245,23 @@
 	<title>Tier Management - Admin Panel</title>
 </svelte:head>
 
-<div class="p-6">
+<div class="p-4 sm:p-6">
 	<!-- Header -->
 	<div class="mb-6">
-		<div class="mb-4 flex items-center justify-between">
-			<div>
+		<div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+			<div class="min-w-0 flex-1">
 				<div class="mb-2 flex items-center gap-3">
-					<Target class="h-6 w-6 text-purple-600" />
-					<h1 class="text-2xl font-bold text-gray-900">Tier Management</h1>
+					<Target class="h-5 w-5 text-purple-600 sm:h-6 sm:w-6" />
+					<h1 class="text-xl font-bold text-gray-900 sm:text-2xl">Tier Management</h1>
 				</div>
-				<p class="text-gray-600">
+				<p class="text-sm text-gray-600 sm:text-base">
 					Manage follower tiers that work across all platforms. Accounts from any platform can be
 					assigned to these tiers.
 				</p>
 			</div>
 			<button
 				onclick={openCreateModal}
-				class="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-white transition-colors hover:bg-purple-700"
+				class="flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-3 text-white transition-colors hover:bg-purple-700 sm:w-auto sm:py-2"
 			>
 				<Plus size={18} />
 				Add Tier

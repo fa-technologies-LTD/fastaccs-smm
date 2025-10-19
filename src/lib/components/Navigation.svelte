@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	import { User, Menu, X, ShoppingCart } from '@lucide/svelte';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
@@ -14,6 +14,55 @@
 
 	// Cart item count using the new cart structure
 	const cartItemCount = $derived(cart.itemCount);
+
+	// Generate initials from user's name
+	function getInitials(fullName: string | null | undefined): string {
+		if (!fullName) return 'U';
+
+		const names = fullName.trim().split(' ');
+		if (names.length >= 2) {
+			return (names[0][0] + names[names.length - 1][0]).toUpperCase();
+		}
+		return names[0][0].toUpperCase();
+	}
+
+	// Generate a consistent color based on user's name
+	function getAvatarColor(fullName: string | null | undefined): string {
+		const colors = [
+			'bg-red-500',
+			'bg-blue-500',
+			'bg-green-500',
+			'bg-yellow-500',
+			'bg-purple-500',
+			'bg-pink-500',
+			'bg-indigo-500',
+			'bg-teal-500',
+			'bg-orange-500',
+			'bg-emerald-500',
+			'bg-cyan-500',
+			'bg-violet-500'
+		];
+
+		if (!fullName) return colors[0];
+
+		// Use the name to generate a consistent color index
+		let hash = 0;
+		for (let i = 0; i < fullName.length; i++) {
+			hash = fullName.charCodeAt(i) + ((hash << 5) - hash);
+		}
+		const index = Math.abs(hash) % colors.length;
+		return colors[index];
+	}
+
+	// Capitalize the display name
+	const displayName = $derived(
+		user?.fullName
+			? user.fullName
+					.split(' ')
+					.map((name: string) => name.charAt(0).toUpperCase() + name.slice(1).toLowerCase())
+					.join(' ')
+			: 'Account'
+	);
 
 	async function signOut() {
 		try {
@@ -105,9 +154,15 @@
 								{#if user.avatarUrl}
 									<img src={user.avatarUrl} alt="Profile" class="h-6 w-6 rounded-full" />
 								{:else}
-									<User class="h-6 w-6" />
+									<div
+										class="flex h-6 w-6 items-center justify-center rounded-full {getAvatarColor(
+											user.fullName
+										)} text-xs font-medium text-white"
+									>
+										{getInitials(user.fullName)}
+									</div>
 								{/if}
-								<span class="hidden sm:inline">{user.fullName || 'Account'}</span>
+								<span class="hidden sm:inline">{displayName}</span>
 							</a>
 							{#if user.userType === 'ADMIN'}
 								<a
@@ -205,7 +260,13 @@
 							{#if user.avatarUrl}
 								<img src={user.avatarUrl} alt="Profile" class="mr-3 h-5 w-5 rounded-full" />
 							{:else}
-								<User class="mr-3 h-5 w-5" />
+								<div
+									class="mr-3 flex h-5 w-5 items-center justify-center rounded-full {getAvatarColor(
+										user.fullName
+									)} text-xs font-medium text-white"
+								>
+									{getInitials(user.fullName)}
+								</div>
 							{/if}
 							My Account
 						</a>

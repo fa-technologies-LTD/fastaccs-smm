@@ -101,7 +101,26 @@ export async function POST({ params }) {
 			error: null
 		});
 	} catch (error) {
-		console.error('Database error:', error);
+		console.error('Database error during order processing:', error);
+
+		// Rollback any allocated accounts for this order on error
+		try {
+			const orderId = params.id;
+			await prisma.account.updateMany({
+				where: {
+					orderItem: { orderId: orderId },
+					status: 'allocated'
+				},
+				data: {
+					status: 'available',
+					orderItemId: null
+				}
+			});
+			console.log('Rolled back allocated accounts due to processing error');
+		} catch (rollbackError) {
+			console.error('Failed to rollback allocated accounts:', rollbackError);
+		}
+
 		return json(
 			{ data: null, error: error instanceof Error ? error.message : 'Unknown error' },
 			{ status: 500 }

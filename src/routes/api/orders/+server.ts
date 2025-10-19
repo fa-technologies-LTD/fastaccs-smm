@@ -6,11 +6,13 @@ export async function GET({ url }) {
 	try {
 		const status = url.searchParams.get('status');
 		const customerEmail = url.searchParams.get('customerEmail');
+		const userId = url.searchParams.get('userId');
 		const limit = url.searchParams.get('limit');
 
-		const where: Record<string, string> = {};
+		const where: { status?: string; guestEmail?: string; userId?: string } = {};
 		if (status) where.status = status;
-		if (customerEmail) where.customerEmail = customerEmail;
+		if (customerEmail) where.guestEmail = customerEmail;
+		if (userId) where.userId = userId;
 
 		const data = await prisma.order.findMany({
 			where,

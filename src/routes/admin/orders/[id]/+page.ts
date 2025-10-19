@@ -1,4 +1,4 @@
-import { getOrderById, getOrder } from '$lib/services/orders';
+import { getOrderById } from '$lib/services/orders';
 import { error } from '@sveltejs/kit';
 
 export const load = async ({ params }: { params: { id: string } }) => {
@@ -10,12 +10,9 @@ export const load = async ({ params }: { params: { id: string } }) => {
 		throw error(404, 'Order not found');
 	}
 
-	// Load order items (allocated accounts)
-	const itemsResult = await getOrderItems(orderId);
-
 	return {
 		order: orderResult.data,
-		items: itemsResult.data || [],
-		error: itemsResult.error?.message || null
+		items: orderResult.data.orderItems || [],
+		error: null
 	};
 };

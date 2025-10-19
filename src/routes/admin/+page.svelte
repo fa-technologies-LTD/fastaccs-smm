@@ -40,6 +40,8 @@
 				out_of_stock: number;
 				low_stock: number;
 				platforms: number;
+				accountsInOutOfStockTiers: number;
+				outOfStockTiersCount: number;
 			};
 			error: string | null;
 		};
@@ -156,32 +158,36 @@
 <div class="min-h-screen bg-gray-50 p-6">
 	<div class="mx-auto max-w-7xl">
 		<!-- Enhanced Header -->
-		<div class="mb-8">
-			<div class="mb-6 flex items-center justify-between">
-				<h1 class="text-2xl font-bold text-gray-600">
-						Overview of your FastAccs
-						{#if !loading}
-							• <span class='text-sm'>Last updated: {formatRelativeTime(lastUpdated)}</span>
-						{/if}
-				</h1>
+		<div class="mb-6 sm:mb-8">
+			<div class="mb-4 flex flex-col gap-4 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+				<div>
+					<h1 class="text-xl font-bold text-gray-600 sm:text-2xl">Overview of your FastAccs</h1>
+					{#if !loading}
+						<span class="mt-1 block text-xs text-gray-500 sm:text-sm">
+							Last updated: {formatRelativeTime(lastUpdated)}
+						</span>
+					{/if}
+				</div>
 
-				<div class="flex items-center gap-3">
+				<div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
 					<!-- Auto-refresh toggle -->
 					<button
 						onclick={toggleAutoRefresh}
-						class="cursor-pointer hover:scale-[.95] flex items-center gap-2 rounded-lg border px-4 py-2 transition-colors {autoRefresh
+						class="flex cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:scale-[.95] sm:px-4 {autoRefresh
 							? 'border-green-200 bg-green-50 text-green-700'
 							: 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'}"
 					>
 						<Activity class="h-4 w-4" />
-						Auto-refresh {autoRefresh ? 'ON' : 'OFF'}
+						<span class="hidden sm:inline">Auto-refresh</span>
+						<span class="sm:hidden">Auto</span>
+						{autoRefresh ? 'ON' : 'OFF'}
 					</button>
 
 					<!-- Manual refresh -->
 					<button
 						onclick={refreshData}
 						disabled={loading}
-						class="cursor-pointer hover:scale-[.95] flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+						class="flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:scale-[.95] hover:bg-blue-700 disabled:opacity-50 sm:px-4"
 					>
 						<RefreshCw class="h-4 w-4 {loading ? 'animate-spin' : ''}" />
 						Refresh
@@ -210,36 +216,37 @@
 		{/if}
 
 		<!-- Main Statistics Grid -->
-		<div class="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+		<div class="mb-6 grid grid-cols-1 gap-4 sm:mb-8 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
 			<!-- Total Orders -->
-			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+			<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
 				<div class="flex items-center">
-					<div class="rounded-lg bg-blue-50 p-3">
-						<ShoppingCart class="size-6 text-blue-600" />
+					<div class="rounded-lg bg-blue-50 p-2 sm:p-3">
+						<ShoppingCart class="size-5 text-blue-600 sm:size-6" />
 					</div>
-					<div class="ml-4">
-						<p class="text-sm font-medium text-gray-500">Total Orders</p>
-						<p class="text-2xl font-bold text-gray-900">{orderStats.total_orders}</p>
+					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
+						<p class="text-xs font-medium text-gray-500 sm:text-sm">Total Orders</p>
+						<p class="text-xl font-bold text-gray-900 sm:text-2xl">{orderStats.total_orders}</p>
 						<div class="mt-1 flex items-center">
-							<span class="text-sm text-gray-600">Today: {orderStats.todays_orders}</span>
+							<span class="text-xs text-gray-600 sm:text-sm">Today: {orderStats.todays_orders}</span
+							>
 						</div>
 					</div>
 				</div>
 			</div>
 
 			<!-- Total Revenue -->
-			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+			<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
 				<div class="flex items-center">
-					<div class="rounded-lg bg-green-50 p-3">
-						<DollarSign class="size-6 text-green-600" />
+					<div class="rounded-lg bg-green-50 p-2 sm:p-3">
+						<DollarSign class="size-5 text-green-600 sm:size-6" />
 					</div>
-					<div class="ml-4">
-						<p class="text-sm font-medium text-gray-500">Total Revenue</p>
-						<p class="text-2xl font-bold text-gray-900">
+					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
+						<p class="text-xs font-medium text-gray-500 sm:text-sm">Total Revenue</p>
+						<p class="text-xl font-bold text-gray-900 sm:text-2xl">
 							{formatCurrency(orderStats.total_revenue)}
 						</p>
 						<div class="mt-1 flex items-center">
-							<span class="text-sm text-gray-600"
+							<span class="text-xs text-gray-600 sm:text-sm"
 								>Today: {formatCurrency(orderStats.todays_revenue)}</span
 							>
 						</div>
@@ -248,39 +255,44 @@
 			</div>
 
 			<!-- Inventory Items -->
-			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+			<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
 				<div class="flex items-center">
-					<div class="rounded-lg bg-purple-50 p-3">
-						<Package class="size-6 text-purple-600" />
+					<div class="rounded-lg bg-purple-50 p-2 sm:p-3">
+						<Package class="size-5 text-purple-600 sm:size-6" />
 					</div>
-					<div class="ml-4">
-						<p class="text-sm font-medium text-gray-500">Total Inventory</p>
-						<p class="text-2xl font-bold text-gray-900">{inventoryStats.total_available}</p>
+					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
+						<p class="text-xs font-medium text-gray-500 sm:text-sm">Total Inventory</p>
+						<p class="text-xl font-bold text-gray-900 sm:text-2xl">
+							{inventoryStats.total_available}
+						</p>
 						<div class="mt-1 flex items-center">
-							<span class="text-sm text-gray-600">Reserved: {inventoryStats.total_reserved}</span>
+							<span class="text-xs text-gray-600 sm:text-sm"
+								>Reserved: {inventoryStats.total_reserved}</span
+							>
 						</div>
 					</div>
 				</div>
 			</div>
 
-			<!-- Low Stock Alerts -->
-			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+			<!-- Stock Issues -->
+			<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
 				<div class="flex items-center">
-					<div class="rounded-lg bg-orange-50 p-3">
-						<AlertCircle class="size-6 text-orange-600" />
+					<div class="rounded-lg bg-orange-50 p-2 sm:p-3">
+						<AlertCircle class="size-5 text-orange-600 sm:size-6" />
 					</div>
-					<div class="ml-4">
-						<p class="text-sm font-medium text-gray-500">Stock Issues</p>
-						<p class="text-2xl font-bold text-gray-900">
-							{inventoryStats.low_stock + inventoryStats.out_of_stock}
+					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
+						<p class="text-xs font-medium text-gray-500 sm:text-sm">Stock Issues</p>
+						<p class="text-xl font-bold text-gray-900 sm:text-2xl">
+							{inventoryStats.accountsInOutOfStockTiers || 0}
 						</p>
 						<div class="mt-1 flex items-center">
-							{#if inventoryStats.low_stock + inventoryStats.out_of_stock > 0}
-								<span class="text-sm text-orange-600">
-									{inventoryStats.out_of_stock} out, {inventoryStats.low_stock} low
+							{#if (inventoryStats.outOfStockTiersCount || 0) > 0}
+								<span class="text-xs text-orange-600 sm:text-sm">
+									{inventoryStats.accountsInOutOfStockTiers || 0} accounts in {inventoryStats.outOfStockTiersCount}
+									tiers
 								</span>
 							{:else}
-								<span class="text-sm text-green-600">All good</span>
+								<span class="text-xs text-green-600 sm:text-sm">All tiers have stock</span>
 							{/if}
 						</div>
 					</div>
@@ -288,9 +300,8 @@
 			</div>
 		</div>
 
-	
 		<!-- System Overview -->
-		<div class="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
+		<div class="mb-6 grid grid-cols-1 gap-4 sm:mb-8 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
 			<!-- Platform Coverage -->
 			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
 				<div class="flex items-center justify-between">

@@ -60,12 +60,24 @@ export async function PATCH({ params, request }) {
 // DELETE /api/orders/[id] - Delete order
 export async function DELETE({ params }) {
 	try {
-		// First delete related order items
+		// First, release any allocated accounts back to available
+		await prisma.account.updateMany({
+			where: {
+				orderItem: { orderId: params.id },
+				status: { in: ['allocated'] } // Only reset allocated accounts, not delivered ones
+			},
+			data: {
+				status: 'available',
+				orderItemId: null
+			}
+		});
+
+		// Then delete related order items
 		await prisma.orderItem.deleteMany({
 			where: { orderId: params.id }
 		});
 
-		// Then delete the order
+		// Finally delete the order
 		const data = await prisma.order.delete({
 			where: { id: params.id }
 		});
