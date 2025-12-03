@@ -1,6 +1,16 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { ArrowLeft, ShoppingBag, CreditCard, Mail, Check, Lock } from '@lucide/svelte';
+	import { page } from '$app/stores';
+	import {
+		ArrowLeft,
+		ShoppingBag,
+		CreditCard,
+		Mail,
+		Check,
+		Lock,
+		Tag,
+		Wallet
+	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { cart } from '$lib/stores/cart.svelte';
@@ -13,11 +23,16 @@
 
 	// Reactive state
 	let loading = $state(false);
+	let processingPayment = $state(false);
+	let currentOrderId = $state<string | null>(null);
+	let affiliateCode = $state<string | null>(null);
+	let affiliateDiscount = $state<number>(0);
+	let validatingAffiliate = $state(false);
+	let walletBalance = $state<number>(0);
+	let loadingBalance = $state(true);
 
 	// Use user data directly from page data
 	const user = $derived(data.user);
-
-	// No form state needed since authentication is required
 
 	// Cart items and total
 	let cartItems = $state<CartItemWithTier[]>([]);
@@ -26,6 +41,12 @@
 	// Load cart data and redirect if empty
 	$effect(() => {
 		loadCartData();
+		loadWalletBalance();
+		// Extract affiliate code from URL
+		const refCode = $page.url.searchParams.get('ref');
+		if (refCode && !affiliateCode) {
+			validateAffiliateCode(refCode);
+		}
 	});
 
 	async function loadCartData() {
@@ -39,6 +60,42 @@
 			cartTotal = await cart.getTotal();
 		} catch (error) {
 			console.error('Failed to load cart data:', error);
+		}
+	}
+
+	async function loadWalletBalance() {
+		if (!user) return;
+
+		try {
+			const response = await fetch('/api/wallet/balance');
+			const data = await response.json();
+			if (data.success) {
+				walletBalance = data.balance || 0;
+			}
+		} catch (error) {
+			console.error('Failed to load wallet balance:', error);
+		} finally {
+			loadingBalance = false;
+		}
+	}
+
+	async function validateAffiliateCode(code: string) {
+		validatingAffiliate = true;
+		try {
+			const response = await fetch(`/api/affiliate/validate?code=${encodeURIComponent(code)}`);
+			const result = await response.json();
+
+			if (result.valid) {
+				affiliateCode = code.toUpperCase();
+				affiliateDiscount = result.commissionRate || 10;
+				showSuccess('Affiliate code applied!', `You'll receive ${affiliateDiscount}% discount`);
+			} else {
+				showWarning('Invalid affiliate code', 'The code you entered is not valid');
+			}
+		} catch (error) {
+			console.error('Error validating affiliate code:', error);
+		} finally {
+			validatingAffiliate = false;
 		}
 	}
 
@@ -68,6 +125,20 @@
 
 		loading = true;
 		try {
+			// Calculate final total with affiliate discount
+			const discountAmount = affiliateCode ? (cartTotal * affiliateDiscount) / 100 : 0;
+			const finalTotal = cartTotal - discountAmount;
+
+			// Check wallet balance
+			if (walletBalance < finalTotal) {
+				showError(
+					'Insufficient balance',
+					`Your wallet balance (₦${walletBalance.toLocaleString()}) is insufficient. Please fund your wallet first.`
+				);
+				loading = false;
+				return;
+			}
+
 			// Stock validation to prevent overselling
 			for (const item of cartItems) {
 				const stockResponse = await fetch(`/api/categories/${item.tierId}/stock`);
@@ -84,7 +155,7 @@
 				}
 			}
 
-			// Create tier-based order with account allocation
+			// Create order with wallet payment
 			const orderResult = await createOrder({
 				userId: user.id,
 				email: user.email || '',
@@ -94,22 +165,36 @@
 					quantity: item.quantity,
 					price: item.tier.price
 				})),
-				totalAmount: cartTotal,
+				totalAmount: finalTotal,
 				currency: 'NGN',
-				paymentMethod: 'manual'
+				paymentMethod: 'wallet',
+				affiliateCode: affiliateCode || undefined
 			});
-			if (orderResult.success) {
-				showSuccess(
-					'Order submitted successfully!',
-					'Accounts have been allocated and you will receive them shortly.'
-				);
-				cart.clear();
 
-				// Redirect to dashboard since user is authenticated
-				goto('/dashboard');
-			} else {
-				throw new Error(orderResult.error || 'Failed to process order');
+			if (!orderResult.success) {
+				throw new Error(orderResult.error || 'Failed to create order');
 			}
+
+			// Debit wallet
+			const debitResponse = await fetch('/api/wallet/debit', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					amount: finalTotal,
+					orderId: orderResult.orderId
+				})
+			});
+
+			const debitResult = await debitResponse.json();
+
+			if (!debitResult.success) {
+				throw new Error(debitResult.error || 'Failed to debit wallet');
+			}
+
+			// Clear cart and redirect to success
+			cart.clear();
+			showSuccess('Order successful!', 'Your accounts have been delivered to your dashboard');
+			goto('/dashboard');
 		} catch (error) {
 			console.error('Checkout error:', error);
 			showError(
@@ -252,6 +337,18 @@
 								<span class="text-gray-600">Subtotal</span>
 								<span class="font-medium">{formatPrice(cartTotal)}</span>
 							</div>
+							{#if affiliateCode}
+								<div class="flex justify-between text-sm font-semibold text-green-600">
+									<span class="flex items-center gap-1">
+										<Tag size={14} />
+										Affiliate Discount ({affiliateDiscount}%)
+									</span>
+									<span>-{formatPrice((cartTotal * affiliateDiscount) / 100)}</span>
+								</div>
+								<div class="rounded-lg bg-green-50 p-2 text-xs text-green-700">
+									Referred by: <strong>{affiliateCode}</strong>
+								</div>
+							{/if}
 							<div class="flex justify-between text-sm">
 								<span class="text-gray-600">Processing Fee</span>
 								<span class="font-medium">Free</span>
@@ -259,14 +356,42 @@
 							<hr />
 							<div class="flex justify-between text-lg font-bold">
 								<span>Total</span>
-								<span class="text-purple-600">{formatPrice(cartTotal)}</span>
+								<span class="text-purple-600">
+									{formatPrice(
+										affiliateCode ? cartTotal - (cartTotal * affiliateDiscount) / 100 : cartTotal
+									)}
+								</span>
 							</div>
+						</div>
+
+						<!-- Wallet Balance -->
+						<div class="my-4 rounded-lg bg-blue-50 p-4">
+							<div class="flex items-center justify-between">
+								<div class="flex items-center gap-2">
+									<Wallet size={20} class="text-blue-600" />
+									<span class="font-medium text-blue-900">Wallet Balance</span>
+								</div>
+								<span class="text-lg font-bold text-blue-600">
+									{loadingBalance ? '...' : formatPrice(walletBalance)}
+								</span>
+							</div>
+							{#if !loadingBalance && walletBalance < (affiliateCode ? cartTotal - (cartTotal * affiliateDiscount) / 100 : cartTotal)}
+								<div class="mt-2 text-sm text-red-600">
+									Insufficient balance. Please <a href="/dashboard?tab=wallet" class="underline"
+										>fund your wallet</a
+									>.
+								</div>
+							{/if}
 						</div>
 
 						<!-- Checkout Button -->
 						<button
 							onclick={processCheckout}
-							disabled={loading || !user}
+							disabled={loading ||
+								!user ||
+								loadingBalance ||
+								walletBalance <
+									(affiliateCode ? cartTotal - (cartTotal * affiliateDiscount) / 100 : cartTotal)}
 							class="bg-primary hover:bg-primary-dark active:bg-primary-dark mt-4 flex w-full items-center justify-center gap-2 rounded-lg py-3 text-base font-semibold text-white disabled:opacity-50 sm:mt-6 sm:py-4 sm:text-lg"
 						>
 							{#if loading}
@@ -278,8 +403,8 @@
 								<Lock size={18} class="sm:h-5 sm:w-5" />
 								<span class="text-sm sm:text-base">Login Required</span>
 							{:else}
-								<Lock size={18} class="sm:h-5 sm:w-5" />
-								<span class="text-sm sm:text-base">Complete Order</span>
+								<Wallet size={18} class="sm:h-5 sm:w-5" />
+								<span class="text-sm sm:text-base">Pay with Wallet</span>
 							{/if}
 						</button>
 
@@ -288,8 +413,8 @@
 							<div class="flex items-start gap-2">
 								<Lock size={16} class="mt-0.5 text-green-600" />
 								<div class="text-sm text-green-800">
-									<p class="font-medium">Secure Checkout</p>
-									<p>Your payment information is encrypted and secure</p>
+									<p class="font-medium">Secure Wallet Payment</p>
+									<p>Instant delivery after payment confirmation</p>
 								</div>
 							</div>
 						</div>

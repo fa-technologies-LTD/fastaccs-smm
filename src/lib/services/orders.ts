@@ -24,6 +24,7 @@ export interface CreateOrderData {
 	totalAmount: number;
 	currency: string;
 	paymentMethod: string;
+	affiliateCode?: string;
 }
 
 export interface OrderSummary {

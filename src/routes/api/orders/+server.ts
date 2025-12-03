@@ -63,6 +63,21 @@ export async function POST({ request }) {
 
 		const itemsWithNames = await Promise.all(categoryPromises);
 
+		// Validate affiliate code if provided
+		let affiliateUserId: string | undefined;
+		if (orderData.affiliateCode) {
+			const affiliateProgram = await prisma.affiliateProgram.findUnique({
+				where: {
+					affiliateCode: orderData.affiliateCode.toUpperCase(),
+					status: 'active'
+				},
+				select: { userId: true }
+			});
+			if (affiliateProgram) {
+				affiliateUserId = affiliateProgram.userId;
+			}
+		}
+
 		// ✅ FIXED: Create order with proper structure for account allocation
 		const data = await prisma.order.create({
 			data: {
@@ -77,6 +92,8 @@ export async function POST({ request }) {
 				deliveryMethod: 'email', // Default delivery method
 				deliveryContact: orderData.email,
 				status: 'pending',
+				affiliateCode: orderData.affiliateCode?.toUpperCase(),
+				affiliateUserId,
 				orderItems: {
 					create: itemsWithNames.map((item) => ({
 						categoryId: item.categoryId, // ✅ FIXED: Use categoryId field that matches the schema

@@ -199,17 +199,39 @@
 			</div>
 
 			<!-- Mobile menu button -->
-			<button
-				onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
-				class="flex items-center justify-center p-2 text-gray-600 transition-colors hover:text-gray-900 md:hidden"
-				aria-label="Toggle mobile menu"
-			>
-				{#if mobileMenuOpen}
-					<X class="h-6 w-6" />
-				{:else}
-					<Menu class="h-6 w-6" />
+			<div class="flex items-center gap-2 md:hidden">
+				<!-- Mobile Cart (hidden for admin users) -->
+				{#if !user || user.userType !== 'ADMIN'}
+					<button
+						onclick={() => {
+							cart.toggle();
+						}}
+						class="relative p-2 text-gray-600 transition-colors hover:text-gray-900"
+						aria-label="Open shopping cart"
+					>
+						<ShoppingCart size={24} />
+						{#if cartItemCount > 0}
+							<span
+								class="bg-primary absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-white"
+							>
+								{cartItemCount > 99 ? '99+' : cartItemCount}
+							</span>
+						{/if}
+					</button>
 				{/if}
-			</button>
+
+				<button
+					onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
+					class="flex items-center justify-center p-2 text-gray-600 transition-colors hover:text-gray-900"
+					aria-label="Toggle mobile menu"
+				>
+					{#if mobileMenuOpen}
+						<X class="h-6 w-6" />
+					{:else}
+						<Menu class="h-6 w-6" />
+					{/if}
+				</button>
+			</div>
 		</div>
 	</div>
 
@@ -241,17 +263,6 @@
 
 				<!-- Mobile Cart & User -->
 				<div class="space-y-2 border-t border-gray-200 pt-4">
-					<!-- Cart (hidden for admin users) -->
-					{#if !user || user.userType !== 'ADMIN'}
-						<a
-							href="/cart"
-							class="flex items-center py-3 text-base text-gray-600 hover:text-gray-900 active:bg-gray-50"
-						>
-							<ShoppingCart class="mr-3 h-5 w-5" />
-							Cart ({cartItemCount})
-						</a>
-					{/if}
-
 					{#if user}
 						<a
 							href="/dashboard"

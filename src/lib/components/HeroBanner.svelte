@@ -21,13 +21,13 @@
 		<!-- CTA Buttons -->
 		<div class="mb-8 flex flex-col items-center justify-center gap-3 sm:mb-12 sm:flex-row sm:gap-4">
 			<button
-				class="bg-primary-accent hover:bg-primary-accent-bright w-full transform cursor-pointer rounded-full px-6 py-2 text-base font-semibold text-gray-900 shadow-lg transition-all hover:scale-105 active:scale-100 sm:w-auto sm:px-8 sm:py-4 sm:text-lg"
+				class="bg-primary-accent hover:bg-primary-accent-bright w-full transform cursor-pointer rounded-full px-6 py-3 text-base font-semibold text-gray-900 shadow-lg transition-all hover:scale-105 active:scale-100 sm:w-auto sm:px-8"
 				onclick={() => goto('/platforms')}
 			>
 				Browse Accounts
 			</button>
 			<button
-				class="hover:text-neutral-dark w-full cursor-pointer rounded-full border-2 border-white px-6 py-2 text-base font-semibold text-white transition-all hover:bg-white hover:text-black active:bg-white sm:w-auto sm:px-8 sm:py-4 sm:text-lg"
+				class="hover:text-neutral-dark w-full cursor-pointer rounded-full border-2 border-white px-6 py-3 text-base font-semibold text-white transition-all hover:bg-white hover:text-black active:bg-white sm:w-auto sm:px-8"
 				onclick={() => goto('/services')}
 			>
 				View Boosting Services

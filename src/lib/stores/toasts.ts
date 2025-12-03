@@ -16,7 +16,7 @@ export function addToast(toast: Omit<Toast, 'id'>) {
 	const id = (++toastId).toString();
 	const newToast: Toast = {
 		id,
-		duration: 5000,
+		duration: 1000,
 		...toast
 	};
 

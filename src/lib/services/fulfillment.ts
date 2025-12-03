@@ -1,5 +1,9 @@
 import { prisma } from '$lib/prisma';
 import type { Decimal } from '@prisma/client/runtime/library';
+import nodemailer from 'nodemailer';
+import { env } from '$env/dynamic/private';
+import { PUBLIC_BASE_URL } from '$env/static/public';
+import { recordCommission } from './affiliate';
 
 // Type definitions
 interface AllocationResult {
@@ -81,6 +85,14 @@ export async function fulfillOrder(orderId: string): Promise<{
 
 /**
  * Allocate accounts to order items
+ * Exported for use in payment verification flow
+ */
+export async function allocateAccountsForOrder(orderId: string) {
+	return allocateAccounts(orderId);
+}
+
+/**
+ * Internal allocation function
  */
 async function allocateAccounts(orderId: string) {
 	try {
@@ -161,6 +173,19 @@ async function allocateAccounts(orderId: string) {
 			}
 		});
 
+		// Record affiliate commission if order has affiliate code
+		if (order.affiliateCode) {
+			const orderTotal = Number(order.totalAmount);
+			const commissionResult = await recordCommission(orderId, order.affiliateCode, orderTotal);
+			if (commissionResult.success) {
+				console.log(
+					`Recorded affiliate commission: ₦${commissionResult.commission} for code ${order.affiliateCode}`
+				);
+			} else {
+				console.error('Failed to record commission:', commissionResult.error);
+			}
+		}
+
 		return {
 			success: true,
 			data: allocationResults
@@ -220,7 +245,7 @@ async function deliverAccounts(orderId: string) {
 		// Send email via our email service
 		const emailResult = await sendEmail({
 			to: customerEmail,
-			subject: `Your FastAccs Order ${order.orderNumber} - Account Details`,
+			subject: `Order ${order.orderNumber} Delivered - View Your Accounts`,
 			content: emailContent
 		});
 
@@ -278,8 +303,6 @@ async function sendEmail({
 }) {
 	try {
 		// Import nodemailer and env here to avoid issues
-		const nodemailer = await import('nodemailer');
-		const { env } = await import('$env/dynamic/private');
 
 		const gmailUser = env.GMAIL_USER;
 		const gmailPassword = env.GMAIL_APP_PASSWORD;
@@ -289,7 +312,7 @@ async function sendEmail({
 		}
 
 		// Create transporter
-		const transporter = nodemailer.default.createTransport({
+		const transporter = nodemailer.createTransport({
 			service: 'gmail',
 			auth: {
 				user: gmailUser,
@@ -306,12 +329,12 @@ async function sendEmail({
 			html: formatEmailContent(content)
 		};
 
-		console.log('📧 Sending email via Gmail:', { to, subject });
+		console.log('Sending email via Gmail:', { to, subject });
 
 		// Send email
 		const result = await transporter.sendMail(mailOptions);
 
-		console.log('✅ Email sent successfully:', result.messageId);
+		console.log('Email sent successfully:', result.messageId);
 
 		return {
 			success: true,
@@ -324,50 +347,50 @@ async function sendEmail({
 }
 
 /**
- * Generate formatted email content with account details
+ * Generate notification email content (without credentials - dashboard only)
  */
 function generateAccountDeliveryEmail(order: OrderWithItems): string {
 	const orderItems = order.orderItems;
+	const totalAccounts = orderItems.reduce((sum, item) => sum + item.accounts.length, 0);
+
 	let content = `**Dear Customer,**
 
-Thank you for your order with FastAccs! Your accounts are ready.
+Great news! Your order is ready and has been delivered to your dashboard.
 
 **Order Details:**
 - Order Number: ${order.orderNumber}
 - Order Date: ${new Date(order.createdAt).toLocaleDateString()}
 - Total Amount: ₦${order.totalAmount}
+- Accounts Delivered: ${totalAccounts}
 
-**Your Account Details:**
+**Purchased Items:**
 
 `;
 
 	orderItems.forEach((item: OrderItemWithAccounts) => {
 		if (item.accounts.length > 0) {
-			content += `**${item.productName}** (${item.accounts.length} account${item.accounts.length > 1 ? 's' : ''})\n`;
-
-			item.accounts.forEach((account: AccountData, accIndex: number) => {
-				content += `\nAccount ${accIndex + 1}:\n`;
-				if (account.username) content += `- Username: ${account.username}\n`;
-				if (account.password) content += `- Password: ${account.password}\n`;
-				if (account.email) content += `- Email: ${account.email}\n`;
-				if (account.emailPassword) content += `- Email Password: ${account.emailPassword}\n`;
-				if (account.twoFa) content += `- 2FA Code: ${account.twoFa}\n`;
-				if (account.linkUrl) content += `- Login Link: ${account.linkUrl}\n`;
-				if (account.followers !== null) content += `- Followers: ${account.followers}\n`;
-				if (account.ageMonths) content += `- Account Age: ${account.ageMonths} months\n`;
-			});
-
-			content += `\n`;
+			content += `- ${item.productName}: ${item.accounts.length} account${item.accounts.length > 1 ? 's' : ''}\n`;
 		}
 	});
 
-	content += `**Important Notes:**
-- Please change passwords immediately after receiving accounts
-- Keep your account details secure and private  
-- Contact support if you face any issues
+	content += `
 
-**Support:**
-For any questions or issues, please contact our support team.
+**Access Your Accounts:**
+
+To view your account credentials and details, please visit your dashboard:
+
+👉 **View Purchases:** ${PUBLIC_BASE_URL || 'http://localhost:5173'}/dashboard
+
+Go to the "Purchases" tab to see all your account details including usernames, passwords, and login links.
+
+**Important Security Notes:**
+- Your credentials are securely stored and only visible in your dashboard
+- Please change passwords immediately after accessing accounts
+- Never share your account credentials with anyone
+- Contact support immediately if you notice any issues
+
+**Need Help?**
+If you have any questions or need assistance accessing your accounts, our support team is here to help.
 
 Thank you for choosing FastAccs!
 
