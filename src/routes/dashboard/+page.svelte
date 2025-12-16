@@ -9,6 +9,8 @@
 	}
 
 	let { data }: Props = $props();
+
+	// console.log('Dashboard data:', data);
 </script>
 
 <svelte:head>
@@ -21,6 +23,6 @@
 
 <Navigation />
 
-<UserDashboard />
+<UserDashboard name={data.user.fullName} orders={data.orders} joinDate={data.user.createdAt} />
 
 <Footer />

@@ -268,14 +268,34 @@ model AffiliateProgram {
   totalReferrals  Int      @default(0) @map("total_referrals")
   totalSales      Decimal  @default(0) @map("total_sales")
   totalCommission Decimal  @default(0) @map("total_commission")
+  totalPaid       Decimal  @default(0) @map("total_paid")
   status          String   @default("active")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @default(now()) @map("updated_at")
 
   // Relations
-  user User @relation(fields: [userId], references: [id])
+  user              User                 @relation(fields: [userId], references: [id])
+  commissionPayouts CommissionPayout[]
 
   @@map("affiliate_programs")
+}
+
+model CommissionPayout {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  affiliateProgramId String   @map("affiliate_program_id") @db.Uuid
+  amount             Decimal
+  payoutMethod       String   @map("payout_method") // bank_transfer, paypal, payoneer, etc.
+  payoutReference    String?  @map("payout_reference")
+  payoutDate         DateTime @map("payout_date")
+  notes              String?
+  processedBy        String?  @map("processed_by") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @default(now()) @map("updated_at")
+
+  // Relations
+  affiliateProgram AffiliateProgram @relation(fields: [affiliateProgramId], references: [id])
+
+  @@map("commission_payouts")
 }
 
 model Session {
@@ -327,4 +347,17 @@ model WalletTransaction {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("wallet_transactions")
+}
+
+model Microcopy {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key         String   @unique // e.g., "hero.title", "checkout.button"
+  value       String   @db.Text
+  description String?  @db.Text
+  category    String   @default("general") // 'general', 'hero', 'checkout', 'dashboard', etc.
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  @@map("microcopy")
 }

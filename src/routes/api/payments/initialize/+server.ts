@@ -46,16 +46,23 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		// Calculate total amount in kobo
 		const totalInKobo = nairaToKobo(Number(order.totalAmount));
 
-		// Initialize payment with Paystack
+		// Generate reference for this payment
+		// Korapay has 50 char limit: ORD_XXXXXXXX_TIMESTAMP (max 28 chars)
+		const shortOrderId = order.id.substring(0, 8);
+		const reference = `ORD_${shortOrderId}_${Date.now()}`;
+
+		// Initialize payment with Korapay
 		const paymentResult = await initializePayment({
 			email: order.user?.email || order.guestEmail || '',
 			amount: totalInKobo,
-			orderId: order.id,
+			reference,
 			metadata: {
+				orderId: order.id,
 				userId: order.userId,
 				orderItems: order.orderItems.length,
 				customerName: order.user?.fullName || 'Guest'
-			}
+			},
+			narration: `Payment for Order ${order.id}`
 		});
 
 		if (!paymentResult.success) {

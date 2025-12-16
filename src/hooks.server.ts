@@ -3,6 +3,13 @@ import { validateSessionToken } from '$lib/auth/session';
 import type { Handle } from '@sveltejs/kit';
 
 export const handle: Handle = async ({ event, resolve }) => {
+	// Skip CSRF check for webhook endpoints
+	// if (event.url.pathname.startsWith('/api/webhooks/')) {
+	// 	return resolve(event, {
+	// 		filterSerializedResponseHeaders: (name) => name === 'content-type'
+	// 	});
+	// }
+
 	// Get session token from cookies
 	const sessionToken = event.cookies.get('session');
 

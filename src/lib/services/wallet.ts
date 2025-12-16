@@ -1,5 +1,5 @@
-import prisma from '$lib/prisma';
-import type { Wallet, WalletTransaction } from '@prisma/client';
+import { prisma } from '$lib/prisma';
+import type { Wallet, WalletTransaction, Prisma } from '@prisma/client';
 
 /**
  * Get or create user's wallet
@@ -51,7 +51,7 @@ export async function fundWallet(
 	userId: string,
 	amount: number,
 	reference: string,
-	paymentMethod: string = 'paystack'
+	paymentMethod: string = 'korapay'
 ): Promise<{ success: boolean; transaction?: WalletTransaction; error?: string }> {
 	try {
 		const wallet = await getOrCreateWallet(userId);
@@ -214,7 +214,7 @@ export async function getWalletTransactions(
 	try {
 		const { limit = 50, offset = 0, type } = options;
 
-		const where: any = { userId };
+		const where: Prisma.WalletTransactionWhereInput = { userId };
 		if (type) where.type = type;
 
 		const [transactions, total] = await Promise.all([

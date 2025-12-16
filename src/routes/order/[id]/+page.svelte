@@ -12,6 +12,7 @@
 	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -98,7 +99,11 @@
 
 	function copyToClipboard(text: string) {
 		navigator.clipboard.writeText(text);
-		alert('Copied to clipboard!');
+		addToast({
+			type: 'success',
+			title: 'Copied to clipboard!',
+			duration: 2000
+		});
 	}
 </script>
 

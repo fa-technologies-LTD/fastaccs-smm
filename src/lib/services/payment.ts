@@ -1,16 +1,18 @@
-import Paystack from 'paystack-node';
-import { PAYSTACK_SECRET_KEY } from '$env/static/private';
-import { PUBLIC_BASE_URL } from '$env/static/public';
-import { createHmac } from 'crypto';
-
-// Initialize Paystack with secret key
-const paystack = new Paystack(PAYSTACK_SECRET_KEY);
+import {
+	initializeCharge,
+	verifyCharge,
+	verifyWebhookSignature as verifyKorapayWebhookSignature,
+	nairaToKobo as convertNairaToKobo,
+	koboToNaira as convertKoboToNaira
+} from './korapay';
 
 export interface InitializePaymentParams {
 	email: string;
 	amount: number; // in kobo (smallest currency unit)
-	orderId: string;
+	reference?: string;
 	metadata?: Record<string, unknown>;
+	narration?: string;
+	redirectUrl?: string;
 }
 
 export interface PaymentVerificationResult {
@@ -25,44 +27,35 @@ export interface PaymentVerificationResult {
 }
 
 /**
- * Initialize a payment transaction with Paystack
+ * Initialize a payment transaction with Korapay
  * @param params Payment initialization parameters
  * @returns Authorization URL and reference
  */
 export async function initializePayment(params: InitializePaymentParams) {
-	try {
-		const response = await paystack.transaction.initialize({
-			email: params.email,
-			amount: params.amount, // Amount in kobo (e.g., 10000 = ₦100)
-			reference: `ORDER-${params.orderId}-${Date.now()}`,
-			callback_url: `${PUBLIC_BASE_URL || 'http://localhost:5173'}/checkout/verify`,
-			metadata: {
-				orderId: params.orderId,
-				...params.metadata
-			},
-			channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer']
-		});
+	const reference =
+		params.reference || `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-		if (response.status && response.data) {
-			return {
-				success: true,
-				authorizationUrl: response.data.authorization_url,
-				accessCode: response.data.access_code,
-				reference: response.data.reference
-			};
-		}
+	const result = await initializeCharge({
+		email: params.email,
+		amount: params.amount,
+		reference,
+		metadata: params.metadata,
+		narration: params.narration,
+		redirectUrl: params.redirectUrl
+	});
 
+	if (result.success) {
 		return {
-			success: false,
-			error: 'Failed to initialize payment'
-		};
-	} catch (error) {
-		console.error('Paystack initialization error:', error);
-		return {
-			success: false,
-			error: error instanceof Error ? error.message : 'Unknown error occurred'
+			success: true,
+			authorizationUrl: result.checkoutUrl,
+			reference: result.reference
 		};
 	}
+
+	return {
+		success: false,
+		error: result.error || 'Failed to initialize payment'
+	};
 }
 
 /**
@@ -71,62 +64,26 @@ export async function initializePayment(params: InitializePaymentParams) {
  * @returns Payment verification result
  */
 export async function verifyPayment(reference: string): Promise<PaymentVerificationResult> {
-	try {
-		const response = await paystack.transaction.verify(reference);
-
-		if (response.status && response.data) {
-			const data = response.data;
-
-			return {
-				success: data.status === 'success',
-				reference: data.reference,
-				amount: data.amount / 100, // Convert from kobo to naira
-				currency: data.currency,
-				status: data.status,
-				paidAt: data.paid_at ? new Date(data.paid_at) : undefined,
-				channel: data.channel,
-				metadata: data.metadata
-			};
-		}
-
-		return {
-			success: false,
-			reference,
-			amount: 0,
-			currency: 'NGN',
-			status: 'failed'
-		};
-	} catch (error) {
-		console.error('Paystack verification error:', error);
-		return {
-			success: false,
-			reference,
-			amount: 0,
-			currency: 'NGN',
-			status: 'error'
-		};
-	}
+	return await verifyCharge(reference);
 }
 
 /**
- * Verify webhook signature from Paystack
+ * Verify webhook signature from Korapay
  * @param signature Signature from request header
- * @param body Request body
+ * @param dataObject The 'data' object from webhook payload
  * @returns Whether signature is valid
  */
-export function verifyWebhookSignature(signature: string, body: string): boolean {
-	const hash = createHmac('sha512', PAYSTACK_SECRET_KEY).update(body).digest('hex');
-
-	return hash === signature;
+export function verifyWebhookSignature(signature: string, dataObject: unknown): boolean {
+	return verifyKorapayWebhookSignature(signature, dataObject);
 }
 
 /**
- * Convert amount from Naira to Kobo (Paystack expects amounts in kobo)
+ * Convert amount from Naira to Kobo
  * @param naira Amount in Naira
  * @returns Amount in Kobo
  */
 export function nairaToKobo(naira: number): number {
-	return Math.round(naira * 100);
+	return convertNairaToKobo(naira);
 }
 
 /**
@@ -135,5 +92,5 @@ export function nairaToKobo(naira: number): number {
  * @returns Amount in Naira
  */
 export function koboToNaira(kobo: number): number {
-	return kobo / 100;
+	return convertKoboToNaira(kobo);
 }

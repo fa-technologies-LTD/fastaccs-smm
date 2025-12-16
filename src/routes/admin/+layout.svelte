@@ -11,7 +11,10 @@
 		Layers,
 		Target,
 		Menu,
-		X
+		X,
+		Wallet,
+		UserCheck,
+		Type
 	} from '@lucide/svelte';
 
 	let { data, children } = $props();
@@ -23,8 +26,11 @@
 		{ href: '/admin/inventory', label: 'Inventory', icon: Package },
 		{ href: '/admin/batches', label: 'Batch Import', icon: Plus },
 		{ href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
+		{ href: '/admin/wallets', label: 'Wallets', icon: Wallet },
+		{ href: '/admin/affiliates', label: 'Affiliates', icon: UserCheck },
 		{ href: '/admin/users', label: 'Users', icon: Users },
 		{ href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
+		{ href: '/admin/microcopy', label: 'Microcopy', icon: Type },
 		{ href: '/admin/settings', label: 'Settings', icon: Settings }
 	];
 

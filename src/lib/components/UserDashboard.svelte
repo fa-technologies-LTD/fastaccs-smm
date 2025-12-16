@@ -1,10 +1,6 @@
 <script lang="ts">
 	import {
-		ShoppingCart,
 		Package,
-		User,
-		Settings,
-		LogOut,
 		Clock,
 		CheckCircle,
 		RefreshCw,
@@ -19,6 +15,9 @@
 		ArrowDownLeft
 	} from '@lucide/svelte';
 	import { showSuccess, showError } from '$lib/stores/toasts';
+	import { goto } from '$app/navigation';
+
+	let { name, orders, joinDate } = $props();
 
 	let activeTab = $state('orders');
 	let isLoadingAffiliate = $state(false);
@@ -30,6 +29,7 @@
 	let purchases = $state<any[]>([]);
 	let loadingPurchases = $state(false);
 	let maskedFields = $state<Record<string, boolean>>({});
+	let loading = $state(false);
 
 	let user = {
 		name: 'John Doe',
@@ -38,10 +38,6 @@
 		totalOrders: 0,
 		totalSpent: 0
 	};
-
-	let orders: any[] = [
-		// Orders will be loaded from actual data
-	];
 
 	let messages: any[] = [
 		// Messages will be loaded from actual data
@@ -152,15 +148,19 @@
 			});
 
 			const data = await response.json();
-
+			loading = true
 			if (data.success) {
-				// Redirect to Paystack payment
+				// Redirect to Korapay payment (external URL)
 				window.location.href = data.authorizationUrl;
 			} else {
+
 				showError(data.error || 'Failed to initialize payment');
+				loading = false
 			}
 		} catch (error) {
 			showError('Failed to fund wallet');
+		} finally {
+			loading = false;
 		}
 	}
 
@@ -220,14 +220,14 @@
 				<div
 					class="mr-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-xl font-bold text-white"
 				>
-					{user.name
+					{name
 						.split(' ')
-						.map((n) => n[0])
+						.map((n: string) => n[0])
 						.join('')}
 				</div>
 				<div>
-					<h1 class="text-2xl font-bold text-gray-900">Welcome back, {user.name}!</h1>
-					<p class="text-gray-600">Member since {user.joinDate}</p>
+					<h1 class="text-2xl text-gray-900">Welcome back, {name}!</h1>
+					<p class="text-gray-600">Member since {new Date(joinDate).toDateString()}</p>
 				</div>
 			</div>
 			<div class="text-right">
@@ -253,7 +253,7 @@
 				<CheckCircle class="mr-3 h-8 w-8 text-green-600" />
 				<div>
 					<div class="text-2xl font-bold text-gray-900">
-						{orders.filter((o) => o.status === 'delivered' || o.status === 'completed').length}
+						{orders.filter((o: any) => o.status === 'delivered' || o.status === 'completed').length}
 					</div>
 					<div class="text-gray-600">Completed Orders</div>
 				</div>
@@ -264,7 +264,7 @@
 				<RefreshCw class="mr-3 h-8 w-8 text-blue-600" />
 				<div>
 					<div class="text-2xl font-bold text-gray-900">
-						{orders.filter((o) => o.status === 'processing').length}
+						{orders.filter((o: any) => o.status === 'processing').length}
 					</div>
 					<div class="text-gray-600">In Progress</div>
 				</div>
@@ -300,7 +300,7 @@
 					? 'border-blue-500 text-blue-600'
 					: 'border-transparent text-gray-500 hover:text-gray-700'}"
 			>
-				Messages ({messages.filter((m) => !m.read).length})
+				Messages ({messages.filter((m: any) => !m.read).length})
 			</button>
 			<button
 				onclick={() => (activeTab = 'affiliate')}
@@ -817,7 +817,7 @@
 						<button
 							onclick={enableAffiliate}
 							disabled={isLoadingAffiliate}
-							class="rounded-lg bg-blue-600 px-8 py-3 text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+							class="cursor-pointer rounded-lg bg-blue-600 px-8 py-3 text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
 						>
 							{isLoadingAffiliate ? 'Enabling...' : 'Become an Affiliate'}
 						</button>
@@ -862,12 +862,16 @@
 							onclick={fundWallet}
 							class="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-blue-700"
 						>
+							{#if loading}
+								<RefreshCw class="h-5 w-5 animate-spin" />
+							{:else}
 							<Plus class="h-5 w-5" />
+							{/if}
 							Fund Wallet
 						</button>
 					</div>
 					<p class="mt-2 text-sm text-gray-600">
-						Pay with Paystack (cards, bank transfer, USSD, mobile money)
+						Pay with Korapay (cards, bank transfer, mobile money)
 					</p>
 				</div>
 

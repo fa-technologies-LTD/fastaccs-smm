@@ -213,7 +213,7 @@
 					</div>
 				{:else}
 					<div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-						{#each data.tiers as tier}
+						{#each data.tiers.filter((t) => t.visible_available > 0) as tier}
 							{@const tierStatus = getTierStatus(tier.visible_available)}
 							{@const tierFeatures = getTierFeatures(tier.metadata)}
 							<div

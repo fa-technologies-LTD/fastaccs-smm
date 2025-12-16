@@ -15,9 +15,9 @@ let toastId = 0;
 export function addToast(toast: Omit<Toast, 'id'>) {
 	const id = (++toastId).toString();
 	const newToast: Toast = {
+		...toast,
 		id,
-		duration: 1000,
-		...toast
+		duration: toast.duration ?? 3000 
 	};
 
 	toasts.update((all) => [...all, newToast]);

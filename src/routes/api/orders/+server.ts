@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
+import {fulfillOrder}  from '$lib/services/fulfillment';
 
 // GET /api/orders - Get all orders with optional filters
 export async function GET({ url }) {
@@ -78,7 +79,7 @@ export async function POST({ request }) {
 			}
 		}
 
-		// ✅ FIXED: Create order with proper structure for account allocation
+		// Create order with proper structure for account allocation
 		const data = await prisma.order.create({
 			data: {
 				userId: orderData.userId,
@@ -96,11 +97,11 @@ export async function POST({ request }) {
 				affiliateUserId,
 				orderItems: {
 					create: itemsWithNames.map((item) => ({
-						categoryId: item.categoryId, // ✅ FIXED: Use categoryId field that matches the schema
+						categoryId: item.categoryId,
 						quantity: item.quantity,
 						unitPrice: item.price,
 						totalPrice: item.price * item.quantity,
-						productName: item.categoryName, // ✅ FIXED: Use actual tier name
+						productName: item.categoryName,
 						productCategory: 'tier'
 					}))
 				}
@@ -112,9 +113,9 @@ export async function POST({ request }) {
 					}
 				}
 			}
-		}); // ✅ FIXED: Automatically fulfill order (allocate + deliver accounts)
+		}); // Automatically fulfill order (allocate + deliver accounts)
 		try {
-			const { fulfillOrder } = await import('$lib/services/fulfillment');
+			
 			const fulfillmentResult = await fulfillOrder(data.id);
 
 			if (fulfillmentResult.success) {

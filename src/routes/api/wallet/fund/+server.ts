@@ -16,13 +16,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ success: false, error: 'Invalid amount' }, { status: 400 });
 		}
 
-		// Initialize Paystack payment for wallet funding
-		const reference = `wallet_${user.id}_${Date.now()}`;
+		// Initialize Korapay payment for wallet funding
+		// Korapay has 50 char limit: wallet_XXXXXXXX_TIMESTAMP (max 30 chars)
+		const shortUserId = user.id.substring(0, 8);
+		const reference = `WLT_${shortUserId}_${Date.now()}`;
 
 		const paymentResult = await initializePayment({
 			email: user.email || '',
-			amount: amount,
+			amount: amount , // Convert naira to kobo
 			reference,
+			narration: 'Wallet Funding',
+			redirectUrl: 'http://localhost:5173/dashboard',
 			metadata: {
 				type: 'wallet_funding',
 				userId: user.id,

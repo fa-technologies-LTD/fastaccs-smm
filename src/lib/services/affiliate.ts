@@ -1,5 +1,5 @@
-import prisma from '$lib/prisma';
-import type { User, AffiliateProgram } from '@prisma/client';
+import {prisma }from '$lib/prisma';
+// import type { User, AffiliateProgram } from '@prisma/client';
 
 /**
  * Extract initials from a full name

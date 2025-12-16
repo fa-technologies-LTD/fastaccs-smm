@@ -12,6 +12,7 @@
 		Target
 	} from '@lucide/svelte';
 	import { createCategory, updateCategory, deleteCategory } from '$lib/services/categories';
+	import { addToast } from '$lib/stores/toasts';
 	import type { CategoryMetadata, CategoryInsert, CategoryUpdate } from '$lib/services/categories';
 
 	// Props from load function
@@ -128,16 +129,30 @@
 			const result = await createCategory(newTier);
 			if (result.error) {
 				console.error('Failed to create tier:', result.error);
-				alert('Failed to create tier: ' + result.error);
+				addToast({
+					type: 'error',
+					title: 'Failed to create tier',
+					message: result.error,
+					duration: 4000
+				});
 			} else {
 				// Add to local state instead of reloading
 				tiers = [...tiers, result.data!];
 				showCreateModal = false;
 				resetForm();
+				addToast({
+					type: 'success',
+					title: 'Tier created successfully',
+					duration: 3000
+				});
 			}
 		} catch (error) {
 			console.error('Failed to create tier:', error);
-			alert('Failed to create tier');
+			addToast({
+				type: 'error',
+				title: 'Failed to create tier',
+				duration: 3000
+			});
 		} finally {
 			loading = false;
 		}
@@ -158,16 +173,30 @@
 			const result = await updateCategory(selectedTier.id as string, updates);
 			if (result.error) {
 				console.error('Failed to update tier:', result.error);
-				alert('Failed to update tier: ' + result.error);
+				addToast({
+					type: 'error',
+					title: 'Failed to update tier',
+					message: result.error,
+					duration: 4000
+				});
 			} else {
 				// Update local state instead of reloading
 				tiers = tiers.map((t) => (t.id === selectedTier!.id ? result.data! : t));
 				showEditModal = false;
 				selectedTier = null;
+				addToast({
+					type: 'success',
+					title: 'Tier updated successfully',
+					duration: 3000
+				});
 			}
 		} catch (error) {
 			console.error('Failed to update tier:', error);
-			alert('Failed to update tier');
+			addToast({
+				type: 'error',
+				title: 'Failed to update tier',
+				duration: 3000
+			});
 		} finally {
 			loading = false;
 		}
@@ -187,14 +216,28 @@
 			const result = await deleteCategory(tier.id as string);
 			if (result.error) {
 				console.error('Failed to delete tier:', result.error);
-				alert('Failed to delete tier: ' + result.error);
+				addToast({
+					type: 'error',
+					title: 'Failed to delete tier',
+					message: result.error,
+					duration: 4000
+				});
 			} else {
 				// Remove from local state instead of reloading
 				tiers = tiers.filter((t) => t.id !== tier.id);
+				addToast({
+					type: 'success',
+					title: 'Tier deleted successfully',
+					duration: 3000
+				});
 			}
 		} catch (error) {
 			console.error('Failed to delete tier:', error);
-			alert('Failed to delete tier');
+			addToast({
+				type: 'error',
+				title: 'Failed to delete tier',
+				duration: 3000
+			});
 		} finally {
 			loading = false;
 		}

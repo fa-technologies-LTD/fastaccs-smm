@@ -7,30 +7,33 @@ import { fundWallet, getTransactionByReference } from '$lib/services/wallet';
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
-		// Get webhook signature from headers
-		const signature = request.headers.get('x-paystack-signature');
+		// Parse the body first
+		const body = await request.json();
+
+		console.log('Webhook received:', body);
+
+		// Get webhook signature from headers (Korapay uses x-korapay-signature)
+		const signature = request.headers.get('x-korapay-signature');
 
 		if (!signature) {
+			console.error('No signature in webhook');
 			return json({ success: false, error: 'No signature provided' }, { status: 400 });
 		}
 
-		// Get raw body as text for signature verification
-		const body = await request.text();
+		const event = body.event;
+		const data = body.data;
 
-		// Verify webhook signature
-		if (!verifyWebhookSignature(signature, body)) {
+		// Verify webhook signature (Korapay signs only the 'data' object)
+		if (!verifyWebhookSignature(signature, data)) {
+			console.error('Invalid webhook signature');
 			return json({ success: false, error: 'Invalid signature' }, { status: 401 });
 		}
 
-		// Parse the body
-		const event = JSON.parse(body);
-
 		// Handle different webhook events
-		switch (event.event) {
+		switch (event) {
 			case 'charge.success': {
 				// Payment successful
-				const paymentData = event.data;
-				const reference = paymentData.reference;
+				const reference = data.reference;
 
 				// Verify the payment
 				const verificationResult = await verifyPayment(reference);
@@ -40,9 +43,9 @@ export const POST: RequestHandler = async ({ request }) => {
 					return json({ success: false });
 				}
 
-				// Check if this is a wallet funding transaction
-				if (reference.startsWith('wallet_')) {
-					// Extract userId from reference
+				// Check if this is a wallet funding transaction (starts with WLT_)
+				if (reference.startsWith('WLT_')) {
+					// Extract userId from reference or metadata
 					const metadata = verificationResult.metadata || {};
 					const userId = metadata.userId as string;
 					const amount = verificationResult.amount;
@@ -59,7 +62,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					}
 
 					// Fund the wallet
-					const fundResult = await fundWallet(userId, amount, reference, 'paystack');
+					const fundResult = await fundWallet(userId, amount, reference, 'korapay');
 
 					if (fundResult.success) {
 						console.log('Wallet funded successfully:', userId, amount);
@@ -70,7 +73,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					return json({ success: true });
 				}
 
-				// Handle order payment (existing logic)
+				// Handle order payment
 				const orderId = verificationResult.metadata?.orderId as string;
 
 				if (!orderId) {
@@ -126,8 +129,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 			case 'charge.failed': {
 				// Payment failed
-				const paymentData = event.data;
-				const reference = paymentData.reference;
+				const reference = data.reference;
 
 				// Find order by reference
 				const order = await prisma.order.findFirst({
@@ -151,7 +153,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 			default:
 				// Log unhandled events
-				console.log('Unhandled webhook event:', event.event);
+				console.log('Unhandled webhook event:', event);
 		}
 
 		return json({ success: true });

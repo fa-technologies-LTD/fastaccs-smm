@@ -21,6 +21,7 @@
 		EyeOff
 	} from '@lucide/svelte';
 	import { updateOrderStatus, processOrderDelivery, addOrderNote } from '$lib/services/orders';
+	import { addToast } from '$lib/stores/toasts';
 	import type { OrderMetadata, OrderItemWithDetails } from '$lib/services/orders';
 
 	// Props from load function
@@ -95,13 +96,27 @@
 		try {
 			const result = await updateOrderStatus(order.id, newStatus);
 			if (result.error) {
-				alert('Failed to update order status: ' + result.error);
+				addToast({
+					type: 'error',
+					title: 'Failed to update order status',
+					message: result.error,
+					duration: 4000
+				});
 			} else {
 				order = { ...order, status: newStatus };
+				addToast({
+					type: 'success',
+					title: 'Order status updated',
+					duration: 3000
+				});
 			}
 		} catch (error) {
 			console.error('Failed to update order status:', error);
-			alert('Failed to update order status');
+			addToast({
+				type: 'error',
+				title: 'Failed to update order status',
+				duration: 3000
+			});
 		} finally {
 			isProcessing = false;
 		}
@@ -114,14 +129,27 @@
 		try {
 			const result = await processOrderDelivery(order.id, selectedDeliveryMethod);
 			if (result.error) {
-				alert('Failed to process delivery: ' + result.error);
+				addToast({
+					type: 'error',
+					title: 'Failed to process delivery',
+					message: result.error,
+					duration: 4000
+				});
 			} else {
-				alert('Delivery initiated successfully!');
+				addToast({
+					type: 'success',
+					title: 'Delivery initiated successfully!',
+					duration: 3000
+				});
 				order = { ...order, status: 'processing' };
 			}
 		} catch (error) {
 			console.error('Failed to process delivery:', error);
-			alert('Failed to process delivery');
+			addToast({
+				type: 'error',
+				title: 'Failed to process delivery',
+				duration: 3000
+			});
 		} finally {
 			isProcessing = false;
 		}
@@ -134,7 +162,12 @@
 		try {
 			const result = await addOrderNote(order.id, newNote.trim());
 			if (result.error) {
-				alert('Failed to add note: ' + result.error);
+				addToast({
+					type: 'error',
+					title: 'Failed to add note',
+					message: result.error,
+					duration: 4000
+				});
 			} else {
 				// Update order metadata with new note
 				const currentNotes = order.metadata?.notes || [];
@@ -150,10 +183,19 @@
 					]
 				};
 				newNote = '';
+				addToast({
+					type: 'success',
+					title: 'Note added successfully',
+					duration: 3000
+				});
 			}
 		} catch (error) {
 			console.error('Failed to add note:', error);
-			alert('Failed to add note');
+			addToast({
+				type: 'error',
+				title: 'Failed to add note',
+				duration: 3000
+			});
 		} finally {
 			isProcessing = false;
 		}
@@ -163,10 +205,18 @@
 		navigator.clipboard
 			.writeText(text)
 			.then(() => {
-				alert('Copied to clipboard!');
+				addToast({
+					type: 'success',
+					title: 'Copied to clipboard!',
+					duration: 2000
+				});
 			})
 			.catch(() => {
-				alert('Failed to copy to clipboard');
+				addToast({
+					type: 'error',
+					title: 'Failed to copy to clipboard',
+					duration: 3000
+				});
 			});
 	}
 
@@ -472,6 +522,45 @@
 						{/if}
 					</div>
 				</div>
+
+				<!-- Affiliate Information -->
+				{#if order.affiliateCode}
+					<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+						<h3 class="mb-4 text-lg font-semibold text-gray-900">Affiliate Information</h3>
+						<div class="space-y-4">
+							<div class="flex items-center justify-between rounded-lg bg-blue-50 p-3">
+								<span class="text-sm font-medium text-gray-700">Affiliate Code</span>
+								<a
+									href="/admin/affiliates?code={order.affiliateCode}"
+									class="font-mono text-sm font-semibold text-blue-600 transition-colors hover:text-blue-900"
+								>
+									{order.affiliateCode}
+								</a>
+							</div>
+							{#if order.affiliateUserId}
+								<div class="flex items-center justify-between rounded-lg bg-gray-50 p-3">
+									<span class="text-sm font-medium text-gray-700">Referred By</span>
+									<a
+										href="/admin/affiliates/{order.affiliateUserId}"
+										class="text-sm font-medium text-blue-600 transition-colors hover:text-blue-900"
+									>
+										View Affiliate
+									</a>
+								</div>
+							{/if}
+							<div class="flex items-center justify-between rounded-lg bg-green-50 p-3">
+								<span class="text-sm font-medium text-gray-700">Commission Earned</span>
+								<span class="text-sm font-bold text-green-600">
+									{#if order.total_amount && order.metadata?.commissionRate}
+										${((Number(order.total_amount) * Number(order.metadata.commissionRate)) / 100).toFixed(2)}
+									{:else}
+										Pending calculation
+									{/if}
+								</span>
+							</div>
+						</div>
+					</div>
+				{/if}
 
 				<!-- Delivery Management -->
 				<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">

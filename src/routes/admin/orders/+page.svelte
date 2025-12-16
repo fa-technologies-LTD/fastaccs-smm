@@ -32,7 +32,8 @@
 			(order: any) =>
 				order.id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
 				order.guestEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				order.orderNumber?.toLowerCase().includes(searchTerm.toLowerCase())
+				order.orderNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+				order.affiliateCode?.toLowerCase().includes(searchTerm.toLowerCase())
 		);
 	});
 
@@ -206,6 +207,11 @@
 						<th
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
 						>
+							Affiliate
+						</th>
+						<th
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+						>
 							Status
 						</th>
 						<th
@@ -238,6 +244,18 @@
 								<div class="text-sm text-gray-900">{order.guestEmail || 'N/A'}</div>
 								{#if order.guestPhone}
 									<div class="text-sm text-gray-500">{order.guestPhone}</div>
+								{/if}
+							</td>
+							<td class="px-6 py-4 whitespace-nowrap">
+								{#if order.affiliateCode}
+									<a
+										href="/admin/affiliates?code={order.affiliateCode}"
+										class="font-mono text-sm font-medium text-blue-600 transition-colors hover:text-blue-900"
+									>
+										{order.affiliateCode}
+									</a>
+								{:else}
+									<span class="text-sm text-gray-400">—</span>
 								{/if}
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">

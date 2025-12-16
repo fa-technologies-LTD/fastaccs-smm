@@ -17,7 +17,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ success: false, error: 'Payment reference is required' }, { status: 400 });
 		}
 
-		// Verify payment with Paystack
+		// Verify payment with Korapay
 		const verificationResult = await verifyPayment(reference);
 
 		if (!verificationResult.success) {

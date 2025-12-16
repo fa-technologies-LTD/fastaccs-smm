@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import {
 		ArrowLeft,
 		ShoppingBag,
@@ -43,7 +43,7 @@
 		loadCartData();
 		loadWalletBalance();
 		// Extract affiliate code from URL
-		const refCode = $page.url.searchParams.get('ref');
+		const refCode = page.url.searchParams.get('ref');
 		if (refCode && !affiliateCode) {
 			validateAffiliateCode(refCode);
 		}
@@ -208,6 +208,82 @@
 
 	function goBack() {
 		history.back();
+	}
+
+	async function payWithKorapay() {
+		if (!user) {
+			const currentUrl = new URL(window.location.href);
+			const returnUrl = encodeURIComponent(currentUrl.pathname + currentUrl.search);
+			goto(`/auth/login?returnUrl=${returnUrl}`);
+			return;
+		}
+
+		loading = true;
+		try {
+			// Calculate final total with affiliate discount
+			const discountAmount = affiliateCode ? (cartTotal * affiliateDiscount) / 100 : 0;
+			const finalTotal = cartTotal - discountAmount;
+
+			// Verify stock availability for all items
+			for (const item of cartItems) {
+				const stockResponse = await fetch(`/api/categories/${item.tierId}/stock`);
+				const stockData = await stockResponse.json();
+
+				if (stockData.available < item.quantity) {
+					showError(
+						'Insufficient stock',
+						`Sorry, only ${stockData.available} ${item.tier.name} accounts are currently available. Please reduce your quantity.`
+					);
+					loading = false;
+					return;
+				}
+			}
+
+			// Create order with korapay payment method
+			const orderResult = await createOrder({
+				userId: user.id,
+				email: user.email || '',
+				phone: user.phone || '',
+				items: cartItems.map((item) => ({
+					categoryId: item.tierId,
+					quantity: item.quantity,
+					price: item.tier.price
+				})),
+				totalAmount: finalTotal,
+				currency: 'NGN',
+				paymentMethod: 'korapay',
+				affiliateCode: affiliateCode || undefined
+			});
+
+			if (!orderResult.success) {
+				throw new Error(orderResult.error || 'Failed to create order');
+			}
+
+			// Initialize Korapay payment
+			const paymentResponse = await fetch('/api/payments/initialize', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					orderId: orderResult.orderId
+				})
+			});
+
+			const paymentResult = await paymentResponse.json();
+
+			if (!paymentResult.success) {
+				throw new Error(paymentResult.error || 'Failed to initialize payment');
+			}
+
+			// Redirect to Korapay checkout
+			goto(paymentResult.authorizationUrl);
+		} catch (error) {
+			console.error('Payment initialization error:', error);
+			showError(
+				'Payment failed',
+				`Failed to initialize payment: ${error instanceof Error ? error.message : 'Please try again.'}`
+			);
+			loading = false;
+		}
 	}
 </script>
 
@@ -375,45 +451,66 @@
 									{loadingBalance ? '...' : formatPrice(walletBalance)}
 								</span>
 							</div>
-							{#if !loadingBalance && walletBalance < (affiliateCode ? cartTotal - (cartTotal * affiliateDiscount) / 100 : cartTotal)}
-								<div class="mt-2 text-sm text-red-600">
-									Insufficient balance. Please <a href="/dashboard?tab=wallet" class="underline"
-										>fund your wallet</a
-									>.
-								</div>
-							{/if}
 						</div>
 
-						<!-- Checkout Button -->
-						<button
-							onclick={processCheckout}
-							disabled={loading ||
-								!user ||
-								loadingBalance ||
-								walletBalance <
-									(affiliateCode ? cartTotal - (cartTotal * affiliateDiscount) / 100 : cartTotal)}
-							class="bg-primary hover:bg-primary-dark active:bg-primary-dark mt-4 flex w-full items-center justify-center gap-2 rounded-lg py-3 text-base font-semibold text-white disabled:opacity-50 sm:mt-6 sm:py-4 sm:text-lg"
-						>
-							{#if loading}
-								<div
-									class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent sm:h-5 sm:w-5"
-								></div>
-								<span class="text-sm sm:text-base">Processing...</span>
-							{:else if !user}
-								<Lock size={18} class="sm:h-5 sm:w-5" />
-								<span class="text-sm sm:text-base">Login Required</span>
-							{:else}
-								<Wallet size={18} class="sm:h-5 sm:w-5" />
-								<span class="text-sm sm:text-base">Pay with Wallet</span>
-							{/if}
-						</button>
+						<!-- Payment Options -->
+						<div class="space-y-3">
+							<!-- Pay with Wallet -->
+							<button
+								onclick={processCheckout}
+								disabled={loading ||
+									!user ||
+									loadingBalance ||
+									walletBalance <
+										(affiliateCode ? cartTotal - (cartTotal * affiliateDiscount) / 100 : cartTotal)}
+								class="bg-primary hover:bg-primary-dark active:bg-primary-dark flex w-full items-center justify-center gap-2 rounded-lg py-3 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-lg"
+							>
+								{#if loading}
+									<div
+										class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent sm:h-5 sm:w-5"
+									></div>
+									<span class="text-sm sm:text-base">Processing...</span>
+								{:else if !user}
+									<Lock size={18} class="sm:h-5 sm:w-5" />
+									<span class="text-sm sm:text-base">Login Required</span>
+								{:else}
+									<Wallet size={18} class="sm:h-5 sm:w-5" />
+									<span class="text-sm sm:text-base">Pay with Wallet</span>
+								{/if}
+							</button>
+
+							<!-- Divider -->
+							<div class="relative">
+								<div class="absolute inset-0 flex items-center">
+									<div class="w-full border-t border-gray-300"></div>
+								</div>
+								<div class="relative flex justify-center text-sm">
+									<span class="bg-white px-2 text-gray-500">or</span>
+								</div>
+							</div>
+
+							<!-- Pay with Card/Bank -->
+							<button
+								onclick={payWithKorapay}
+								disabled={loading || !user}
+								class="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-purple-600 bg-white py-3 text-base font-semibold text-purple-600 hover:bg-purple-50 active:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-lg"
+							>
+								{#if !user}
+									<Lock size={18} class="sm:h-5 sm:w-5" />
+									<span class="text-sm sm:text-base">Login Required</span>
+								{:else}
+									<CreditCard size={18} class="sm:h-5 sm:w-5" />
+									<span class="text-sm sm:text-base">Pay with Card/Bank</span>
+								{/if}
+							</button>
+						</div>
 
 						<!-- Security Notice -->
 						<div class="mt-4 rounded-lg bg-green-50 p-3">
 							<div class="flex items-start gap-2">
 								<Lock size={16} class="mt-0.5 text-green-600" />
 								<div class="text-sm text-green-800">
-									<p class="font-medium">Secure Wallet Payment</p>
+									<p class="font-medium">Secure Payment</p>
 									<p>Instant delivery after payment confirmation</p>
 								</div>
 							</div>
