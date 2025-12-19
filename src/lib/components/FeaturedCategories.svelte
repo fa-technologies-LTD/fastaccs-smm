@@ -25,7 +25,7 @@
 					<div class="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 sm:gap-4">
 						<a
 							href="/platforms/instagram"
-							class="flex cursor-pointer items-center rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100 active:bg-gray-100 sm:p-4"
+							class="active:scale-[.95] flex cursor-pointer items-center rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100 active:bg-gray-100 sm:p-4"
 						>
 							<Instagram class="mr-3 h-6 w-6 text-pink-600 sm:h-8 sm:w-8" />
 							<div>
@@ -36,7 +36,7 @@
 
 						<a
 							href="/platforms/tiktok"
-							class="flex cursor-pointer items-center rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100 active:bg-gray-100 sm:p-4"
+							class="active:scale-[.95] flex cursor-pointer items-center rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100 active:bg-gray-100 sm:p-4"
 						>
 							<Music class="mr-3 h-6 w-6 text-black sm:h-8 sm:w-8" />
 							<div>
@@ -47,7 +47,7 @@
 
 						<a
 							href="/platforms/facebook"
-							class="flex cursor-pointer items-center rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100 active:bg-gray-100 sm:p-4"
+							class="active:scale-[.95] flex cursor-pointer items-center rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100 active:bg-gray-100 sm:p-4"
 						>
 							<Facebook class="mr-3 h-6 w-6 text-blue-600 sm:h-8 sm:w-8" />
 							<div>
@@ -58,7 +58,7 @@
 
 						<a
 							href="/platforms/twitter"
-							class="flex cursor-pointer items-center rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
+							class="active:scale-[.95] flex cursor-pointer items-center rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
 						>
 							<Twitter class="mr-3 h-8 w-8 text-blue-400" />
 							<div>
@@ -71,7 +71,7 @@
 					<div class="mt-auto">
 						<a
 							href="/platforms"
-							class="block w-full cursor-pointer rounded-lg bg-purple-600 py-3 text-center font-semibold text-white transition-colors hover:bg-purple-700"
+							class="active:scale-[.95] block w-full cursor-pointer rounded-lg bg-purple-600 py-3 text-center font-semibold text-white transition-colors hover:bg-purple-700"
 						>
 							Browse All Accounts
 						</a>

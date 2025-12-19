@@ -1,24 +1,10 @@
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async () => {
 	try {
-		// Verify admin access
-		if (!locals.user || locals.user.userType !== 'ADMIN') {
-			return {
-				wallets: [],
-				transactions: [],
-				stats: {
-					totalWallets: 0,
-					totalBalance: 0,
-					totalDeposits: 0,
-					totalWithdrawals: 0
-				}
-			};
-		}
-
 		// Get all wallets with user info
-		const wallets = await prisma.wallet.findMany({
+		const walletsRaw = await prisma.wallet.findMany({
 			include: {
 				user: {
 					select: {
@@ -34,7 +20,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		});
 
 		// Get recent transactions (last 100)
-		const transactions = await prisma.walletTransaction.findMany({
+		const transactionsRaw = await prisma.walletTransaction.findMany({
 			take: 100,
 			include: {
 				user: {
@@ -50,8 +36,21 @@ export const load: PageServerLoad = async ({ locals }) => {
 			}
 		});
 
-		// Calculate stats
-		const totalBalance = wallets.reduce((sum, wallet) => sum + Number(wallet.balance), 0);
+		// Convert Decimal types to numbers for serialization
+		const wallets = walletsRaw.map((wallet) => ({
+			...wallet,
+			balance: Number(wallet.balance)
+		}));
+
+		const transactions = transactionsRaw.map((txn) => ({
+			...txn,
+			amount: Number(txn.amount),
+			balanceBefore: txn.balanceBefore ? Number(txn.balanceBefore) : null,
+			balanceAfter: txn.balanceAfter ? Number(txn.balanceAfter) : null
+		}));
+
+		// Calculate total balance
+		const totalBalance = wallets.reduce((sum, wallet) => sum + wallet.balance, 0);
 
 		const deposits = await prisma.walletTransaction.aggregate({
 			where: { type: 'deposit', status: 'completed' },

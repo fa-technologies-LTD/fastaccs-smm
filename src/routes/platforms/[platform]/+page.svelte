@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-
 	import {
 		Instagram,
 		Music,
@@ -15,6 +14,9 @@
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
+	import { getPlatformColor, getPlatformIcon } from '$lib/helpers/platformColors';
+	import { formatPrice } from '$lib/helpers/utils';
+
 
 	interface Props {
 		data: PageData;
@@ -22,38 +24,6 @@
 
 	let { data }: Props = $props();
 
-	// Platform icons mapping
-	const platformIcons: Record<string, any> = {
-		instagram: Instagram,
-		tiktok: Music,
-		facebook: Facebook,
-		twitter: Twitter
-	};
-
-	// Platform colors
-	const platformColors: Record<string, string> = {
-		instagram: 'from-pink-500 to-purple-600',
-		tiktok: 'from-black to-gray-800',
-		facebook: 'from-blue-600 to-blue-700',
-		twitter: 'from-blue-400 to-blue-500'
-	};
-
-	function getPlatformIcon(platform: string) {
-		return platformIcons[platform.toLowerCase()] || Package;
-	}
-
-	function getPlatformColor(platform: string): string {
-		return platformColors[platform.toLowerCase()] || 'from-gray-500 to-gray-600';
-	}
-
-	// Format price to Nigerian Naira
-	function formatPrice(price: number): string {
-		return new Intl.NumberFormat('en-NG', {
-			style: 'currency',
-			currency: 'NGN',
-			minimumFractionDigits: 0
-		}).format(price);
-	}
 
 	// Format follower count
 	function formatFollowers(count: number): string {
@@ -217,7 +187,7 @@
 							{@const tierStatus = getTierStatus(tier.visible_available)}
 							{@const tierFeatures = getTierFeatures(tier.metadata)}
 							<div
-								class="group relative overflow-hidden rounded-xl bg-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
+								class="active:scale-[.98] group relative overflow-hidden rounded-xl bg-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
 							>
 								<!-- Stock Status Badge -->
 								<div class="absolute top-32 right-3 z-10">
@@ -302,6 +272,7 @@
 									<!-- Action Button -->
 									<button
 										onclick={() => navigateToTier(tier.tier_slug)}
+										data-sveltekit-preload-data="hover"
 										disabled={tier.visible_available === 0}
 										class="w-full rounded-lg bg-gray-900 py-3 font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
 									>

@@ -23,7 +23,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		const paymentResult = await initializePayment({
 			email: user.email || '',
-			amount: amount , // Convert naira to kobo
+			amount: amount,
 			reference,
 			narration: 'Wallet Funding',
 			redirectUrl: 'http://localhost:5173/dashboard',

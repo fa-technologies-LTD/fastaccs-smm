@@ -17,6 +17,7 @@
 	} from '@lucide/svelte';
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
+	import { formatPrice, formatDate } from '$lib/helpers/utils';
 
 	let { data }: { data: PageData } = $props();
 
@@ -80,7 +81,7 @@
 		}
 
 		if (payoutAmount > unpaidCommission) {
-			payoutError = `Payout amount cannot exceed unpaid commission (${formatCurrency(unpaidCommission)})`;
+			payoutError = `Payout amount cannot exceed unpaid commission (${formatPrice(unpaidCommission)})`;
 			return;
 		}
 
@@ -135,7 +136,7 @@
 				addToast({
 					type: 'success',
 					title: 'Payout recorded successfully!',
-					message: `Paid ${formatCurrency(result.payout.amount)} via ${result.payout.payoutMethod}`,
+					message: `Paid ${formatPrice(result.payout.amount)} via ${result.payout.payoutMethod}`,
 					duration: 3000
 				});
 			} else {
@@ -148,32 +149,6 @@
 		}
 	}
 
-	function formatCurrency(amount: number): string {
-		return new Intl.NumberFormat('en-NG', {
-			style: 'currency',
-			currency: 'NGN'
-		}).format(amount);
-	}
-
-	function formatDate(date: string | Date): string {
-		const dateObj = typeof date === 'string' ? new Date(date) : date;
-		return dateObj.toLocaleDateString('en-NG', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric'
-		});
-	}
-
-	function formatDateTime(date: string | Date): string {
-		const dateObj = typeof date === 'string' ? new Date(date) : date;
-		return dateObj.toLocaleString('en-NG', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
 
 	function copyToClipboard(text: string, label: string) {
 		navigator.clipboard.writeText(text);
@@ -250,7 +225,7 @@
 				<div>
 					<p class="text-sm font-medium text-gray-600">Total Sales</p>
 					<p class="mt-2 text-3xl font-bold text-green-600">
-						{formatCurrency(data.program.totalSales)}
+						{formatPrice(data.program.totalSales)}
 					</p>
 				</div>
 				<div class="rounded-full bg-green-100 p-3">
@@ -264,7 +239,7 @@
 				<div>
 					<p class="text-sm font-medium text-gray-600">Total Commission</p>
 					<p class="mt-2 text-3xl font-bold text-purple-600">
-						{formatCurrency(data.program.totalCommission)}
+						{formatPrice(data.program.totalCommission)}
 					</p>
 				</div>
 				<div class="rounded-full bg-purple-100 p-3">
@@ -375,7 +350,7 @@
 						<span class="text-sm font-medium text-gray-700">Sales</span>
 					</div>
 					<span class="text-xl font-bold text-green-600">
-						{formatCurrency(data.recentStats.sales)}
+						{formatPrice(data.recentStats.sales)}
 					</span>
 				</div>
 
@@ -385,7 +360,7 @@
 						<span class="text-sm font-medium text-gray-700">Commission</span>
 					</div>
 					<span class="text-xl font-bold text-purple-600">
-						{formatCurrency(data.recentStats.commission)}
+						{formatPrice(data.recentStats.commission)}
 					</span>
 				</div>
 			</div>
@@ -432,10 +407,10 @@
 									{month.orders}
 								</td>
 								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-900">
-									{formatCurrency(month.sales)}
+									{formatPrice(month.sales)}
 								</td>
 								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap text-green-600">
-									{formatCurrency(month.commission)}
+									{formatPrice(month.commission)}
 								</td>
 							</tr>
 						{/each}
@@ -467,7 +442,7 @@
 					Total Earned
 				</div>
 				<div class="mt-2 text-2xl font-bold text-gray-900">
-					{formatCurrency(data.program.totalCommission)}
+					{formatPrice(data.program.totalCommission)}
 				</div>
 			</div>
 
@@ -477,7 +452,7 @@
 					Total Paid
 				</div>
 				<div class="mt-2 text-2xl font-bold text-green-600">
-					{formatCurrency(data.program.totalPaid)}
+					{formatPrice(data.program.totalPaid)}
 				</div>
 			</div>
 
@@ -487,7 +462,7 @@
 					Unpaid Balance
 				</div>
 				<div class="mt-2 text-2xl font-bold text-blue-600">
-					{formatCurrency(unpaidCommission)}
+					{formatPrice(unpaidCommission)}
 				</div>
 			</div>
 		</div>
@@ -533,7 +508,7 @@
 									{formatDate(payout.payoutDate)}
 								</td>
 								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap text-green-600">
-									{formatCurrency(payout.amount)}
+									{formatPrice(payout.amount)}
 								</td>
 								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-900">
 									{payout.payoutMethod}
@@ -633,10 +608,10 @@
 									{order.itemCount}
 								</td>
 								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap text-gray-900">
-									{formatCurrency(order.totalAmount)}
+									{formatPrice(order.totalAmount)}
 								</td>
 								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap text-green-600">
-									{formatCurrency(order.commission)}
+									{formatPrice(order.commission)}
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<span
@@ -748,7 +723,7 @@
 			<div class="mb-4 rounded-lg bg-blue-50 p-4">
 				<div class="flex items-center justify-between">
 					<span class="text-sm font-medium text-gray-700">Unpaid Balance:</span>
-					<span class="text-lg font-bold text-blue-600">{formatCurrency(unpaidCommission)}</span>
+					<span class="text-lg font-bold text-blue-600">{formatPrice(unpaidCommission)}</span>
 				</div>
 			</div>
 
@@ -763,7 +738,7 @@
 					class="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-green-500 focus:ring-2 focus:ring-green-500"
 					placeholder="Enter payout amount"
 				/>
-				<p class="mt-1 text-xs text-gray-500">Maximum: {formatCurrency(unpaidCommission)}</p>
+				<p class="mt-1 text-xs text-gray-500">Maximum: {formatPrice(unpaidCommission)}</p>
 			</div>
 
 			<div class="mb-4">

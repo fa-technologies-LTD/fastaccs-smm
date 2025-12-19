@@ -103,7 +103,7 @@ export async function verifyCharge(reference: string): Promise<ChargeVerificatio
 			return {
 				success: data.status === 'success',
 				reference: data.reference,
-				amount: data.amount / 100, // Convert from kobo to naira
+				amount: parseFloat(data.amount), // Korapay returns amount as string
 				currency: data.currency,
 				status: data.status,
 				paidAt: data.paid_at ? new Date(data.paid_at) : undefined,

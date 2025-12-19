@@ -12,6 +12,7 @@
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import { goto } from '$app/navigation';
+	import { formatPrice, formatDate } from '$lib/helpers/utils';
 
 	let { data }: { data: PageData } = $props();
 
@@ -27,22 +28,6 @@
 	});
 
 	let affiliates = $derived(data.affiliates || []);
-
-	function formatCurrency(amount: number): string {
-		return new Intl.NumberFormat('en-NG', {
-			style: 'currency',
-			currency: 'NGN'
-		}).format(amount);
-	}
-
-	function formatDate(date: string | Date): string {
-		const dateObj = typeof date === 'string' ? new Date(date) : date;
-		return dateObj.toLocaleDateString('en-NG', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric'
-		});
-	}
 
 	function exportData() {
 		// Generate CSV data
@@ -179,7 +164,7 @@
 				<div>
 					<p class="text-sm font-medium text-gray-600">Total Commissions</p>
 					<p class="mt-2 text-3xl font-bold text-purple-600">
-						{formatCurrency(stats.totalCommissions)}
+						{formatPrice(stats.totalCommissions)}
 					</p>
 				</div>
 				<div class="rounded-full bg-purple-100 p-3">
@@ -292,10 +277,10 @@
 									{affiliate.affiliatePrograms[0]?.totalReferrals || 0}
 								</td>
 								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-900">
-									{formatCurrency(Number(affiliate.affiliatePrograms[0]?.totalSales || 0))}
+									{formatPrice(Number(affiliate.affiliatePrograms[0]?.totalSales || 0))}
 								</td>
 								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap text-green-600">
-									{formatCurrency(Number(affiliate.affiliatePrograms[0]?.totalCommission || 0))}
+									{formatPrice(Number(affiliate.affiliatePrograms[0]?.totalCommission || 0))}
 								</td>
 								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-500">
 									{formatDate(affiliate.affiliatePrograms[0]?.createdAt || affiliate.createdAt)}

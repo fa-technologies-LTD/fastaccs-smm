@@ -6,6 +6,7 @@
 		type InventoryStats
 	} from '$lib/services/inventory';
 	import { onMount } from 'svelte';
+	import { formatDate, formatPrice } from '$lib/helpers/utils';
 
 	// Props from page data
 	let { data } = $props<{ data: { inventory?: InventoryByPlatform[]; stats?: InventoryStats } }>();
@@ -144,23 +145,6 @@
 			default:
 				return 'text-gray-600 bg-gray-100';
 		}
-	}
-
-	// Format currency
-	function formatPrice(price: number): string {
-		return new Intl.NumberFormat('en-US', {
-			style: 'currency',
-			currency: 'USD'
-		}).format(price);
-	}
-
-	// Format date
-	function formatDate(date?: Date): string {
-		if (!date) return 'N/A';
-		return new Intl.RelativeTimeFormat('en-US').format(
-			Math.floor((new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
-			'day'
-		);
 	}
 </script>
 

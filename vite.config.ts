@@ -4,6 +4,9 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
+	server: {
+		allowedHosts: ['matha-excursionary-veraciously.ngrok-free.dev']
+	},
 	test: {
 		expect: { requireAssertions: true },
 		projects: [

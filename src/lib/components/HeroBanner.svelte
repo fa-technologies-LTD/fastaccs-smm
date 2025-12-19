@@ -23,6 +23,7 @@
 			<button
 				class="bg-primary-accent hover:bg-primary-accent-bright w-full transform cursor-pointer rounded-full px-6 py-3 text-base font-semibold text-gray-900 shadow-lg transition-all hover:scale-105 active:scale-100 sm:w-auto sm:px-8"
 				onclick={() => goto('/platforms')}
+				data-sveltekit-preload-data="hover"
 			>
 				Browse Accounts
 			</button>

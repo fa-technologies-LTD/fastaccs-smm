@@ -8,12 +8,14 @@
 		Download,
 		Mail,
 		MessageSquare,
-		Phone
+		Phone,
+		Copy
 	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
+	import { formatDate, formatPrice, copyToClipboard, copyAllAccounts } from '$lib/helpers/utils';
 
 	let { data }: { data: PageData } = $props();
 
@@ -66,45 +68,6 @@
 				return status;
 		}
 	}
-
-	function formatPrice(price: number): string {
-		return new Intl.NumberFormat('en-NG', {
-			style: 'currency',
-			currency: 'NGN'
-		}).format(price);
-	}
-
-	function formatDate(dateString: string): string {
-		return new Date(dateString).toLocaleDateString('en-US', {
-			year: 'numeric',
-			month: 'long',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
-
-	function getDeliveryIcon(method: string) {
-		switch (method) {
-			case 'email':
-				return Mail;
-			case 'whatsapp':
-				return MessageSquare;
-			case 'telegram':
-				return MessageSquare;
-			default:
-				return Mail;
-		}
-	}
-
-	function copyToClipboard(text: string) {
-		navigator.clipboard.writeText(text);
-		addToast({
-			type: 'success',
-			title: 'Copied to clipboard!',
-			duration: 2000
-		});
-	}
 </script>
 
 <svelte:head>
@@ -120,16 +83,16 @@
 		<div class="mb-8">
 			<div class="flex items-center gap-4">
 				<button
-					onclick={() => goto('/')}
-					class="rounded-lg bg-white px-4 py-2 text-purple-600 shadow-sm hover:bg-gray-50"
+					onclick={() => goto('/dashboard')}
+					class="cursor-pointer rounded-lg border bg-white px-4 py-2 text-blue-600 transition-transform hover:scale-101 active:scale-95"
 				>
-					← Back to Home
+					← Back to Dashboard
 				</button>
 			</div>
 			<h1 class="mt-4 text-3xl font-bold text-gray-900">
 				Order #{data.order.id.slice(-8)}
 			</h1>
-			<p class="text-gray-600">Placed on {formatDate(data.order.created_at)}</p>
+			<p class="text-gray-600">Placed on {formatDate(data.order.createdAt)}</p>
 		</div>
 
 		<div class="grid gap-8 lg:grid-cols-3">
@@ -175,84 +138,118 @@
 				<div class="rounded-lg bg-white p-6 shadow-sm">
 					<h3 class="mb-4 text-lg font-semibold">Order Items</h3>
 					<div class="space-y-6">
-						{#each data.order.order_items as item}
+						{#each data.order.orderItems as item}
 							<div class="border-b border-gray-200 pb-6 last:border-b-0 last:pb-0">
 								<div class="flex items-start justify-between">
 									<div class="flex-1">
-										<h4 class="font-medium text-gray-900">{item.products.title}</h4>
+										<h4 class="font-medium text-gray-900">{item.category.title}</h4>
 										<p class="text-sm text-gray-600">
-											{item.products.platform} • {item.products.tier_name}
+											{item.category.platform} • {item.category.tierName}
 										</p>
 										<p class="text-sm text-gray-600">
-											Quantity: {item.quantity} • {formatPrice(item.price)} each
+											Quantity: {item.quantity} • {formatPrice(item.unitPrice)} each
 										</p>
 										<div class="mt-2">
 											<span
 												class={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-													item.allocation_status === 'allocated'
+													item.allocationStatus === 'allocated'
 														? 'bg-green-100 text-green-800'
-														: item.allocation_status === 'partial'
+														: item.allocationStatus === 'partial'
 															? 'bg-yellow-100 text-yellow-800'
-															: item.allocation_status === 'failed'
+															: item.allocationStatus === 'failed'
 																? 'bg-red-100 text-red-800'
 																: 'bg-gray-100 text-gray-800'
 												}`}
 											>
-												{item.allocated_count} of {item.quantity} allocated
+												{item.allocatedCount} of {item.quantity} allocated
 											</span>
 										</div>
 									</div>
 									<div class="text-right">
-										<p class="font-semibold">{formatPrice(item.price * item.quantity)}</p>
+										<p class="font-semibold">{formatPrice(item.totalPrice)}</p>
 									</div>
 								</div>
 
 								<!-- Account Details -->
 								{#if item.accounts && item.accounts.length > 0}
 									<div class="mt-4">
-										<h5 class="mb-2 text-sm font-medium text-gray-900">Your Accounts:</h5>
+										<div class="mb-2 flex items-center justify-between">
+											<h5 class="text-sm font-medium text-gray-900">Your Accounts:</h5>
+											<button
+												onclick={() => copyAllAccounts(item.accounts, { showToast: addToast })}
+												class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200"
+												title="Copy all accounts"
+											>
+												<Copy class="mr-1 inline h-3 w-3" />
+												Copy All
+											</button>
+										</div>
 										<div class="space-y-2">
 											{#each item.accounts as account}
 												<div class="rounded-lg bg-gray-50 p-3">
-													<div class="grid gap-2 text-sm">
-														<div class="flex justify-between">
-															<span class="font-medium">Username:</span>
-															<span class="font-mono">{account.username}</span>
+													<div class="space-y-3">
+														<div class="flex items-center justify-between">
+															<div class="flex-1">
+																<span class="text-xs font-medium text-gray-500 uppercase"
+																	>Username</span
+																>
+																<div class="font-mono text-sm">{account.username}</div>
+															</div>
 															<button
-																onclick={() => copyToClipboard(account.username)}
-																class="text-purple-600 hover:text-purple-700"
+																onclick={() =>
+																	copyToClipboard(account.username, {
+																		label: 'Username',
+																		showToast: addToast
+																	})}
+																class="ml-2 rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
 															>
-																Copy
+																<Copy class="h-4 w-4" />
 															</button>
 														</div>
-														<div class="flex justify-between">
-															<span class="font-medium">Password:</span>
-															<span class="font-mono">{account.password}</span>
+														<div class="flex items-center justify-between">
+															<div class="flex-1">
+																<span class="text-xs font-medium text-gray-500 uppercase"
+																	>Password</span
+																>
+																<div class="font-mono text-sm">{account.password}</div>
+															</div>
 															<button
-																onclick={() => copyToClipboard(account.password)}
-																class="text-purple-600 hover:text-purple-700"
+																onclick={() =>
+																	copyToClipboard(account.password, {
+																		label: 'Password',
+																		showToast: addToast
+																	})}
+																class="ml-2 rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
 															>
-																Copy
+																<Copy class="h-4 w-4" />
 															</button>
 														</div>
 														{#if account.email}
-															<div class="flex justify-between">
-																<span class="font-medium">Email:</span>
-																<span class="font-mono">{account.email}</span>
+															<div class="flex items-center justify-between">
+																<div class="flex-1">
+																	<span class="text-xs font-medium text-gray-500 uppercase"
+																		>Email</span
+																	>
+																	<div class="font-mono text-sm">{account.email}</div>
+																</div>
 																<button
-																	onclick={() => copyToClipboard(account.email)}
-																	class="text-purple-600 hover:text-purple-700"
+																	onclick={() =>
+																		copyToClipboard(account.email, {
+																			label: 'Email',
+																			showToast: addToast
+																		})}
+																	class="ml-2 rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
 																>
-																	Copy
+																	<Copy class="h-4 w-4" />
 																</button>
 															</div>
 														{/if}
-														{#if account.additional_info}
+														{#if account.additionalInfo}
 															<div class="mt-2">
 																<span class="font-medium">Additional Info:</span>
 																<pre
 																	class="mt-1 text-xs whitespace-pre-wrap text-gray-600">{JSON.stringify(
-																		account.additional_info,
+																		account.additionalInfo,
 																		null,
 																		2
 																	)}</pre>
@@ -275,18 +272,18 @@
 				<!-- Order Summary -->
 				<div class="rounded-lg bg-white p-6 shadow-sm">
 					<h3 class="mb-4 text-lg font-semibold">Order Summary</h3>
-					<div class="space-y-2 text-sm">
+					<div class="space-y-3 text-sm">
 						<div class="flex justify-between">
-							<span>Total Amount:</span>
-							<span class="font-semibold">{formatPrice(data.order.total)}</span>
+							<span class="text-gray-600">Total Amount:</span>
+							<span class="font-semibold">{formatPrice(data.order.totalAmount)}</span>
+						</div>
+						<div>
+							<div class="mb-1 text-gray-600">Order ID:</div>
+							<div class="font-mono text-xs break-all">{data.order.id}</div>
 						</div>
 						<div class="flex justify-between">
-							<span>Order ID:</span>
-							<span class="font-mono text-xs">{data.order.id}</span>
-						</div>
-						<div class="flex justify-between">
-							<span>Order Date:</span>
-							<span>{formatDate(data.order.created_at)}</span>
+							<span class="text-gray-600">Order Date:</span>
+							<span>{formatDate(data.order.createdAt)}</span>
 						</div>
 					</div>
 				</div>
@@ -295,24 +292,24 @@
 				<div class="rounded-lg bg-white p-6 shadow-sm">
 					<h3 class="mb-4 text-lg font-semibold">Delivery Information</h3>
 					<div class="flex items-center gap-3">
-						{#if data.order.delivery_method === 'email'}
+						{#if data.order.deliveryMethod === 'email'}
 							<Mail class="h-5 w-5 text-purple-600" />
-						{:else if data.order.delivery_method === 'whatsapp'}
+						{:else if data.order.deliveryMethod === 'whatsapp'}
 							<MessageSquare class="h-5 w-5 text-purple-600" />
-						{:else if data.order.delivery_method === 'telegram'}
+						{:else if data.order.deliveryMethod === 'telegram'}
 							<MessageSquare class="h-5 w-5 text-purple-600" />
 						{:else}
 							<Mail class="h-5 w-5 text-purple-600" />
 						{/if}
 						<div>
-							<p class="font-medium capitalize">{data.order.delivery_method}</p>
+							<p class="font-medium capitalize">{data.order.deliveryMethod}</p>
 							<p class="text-sm text-gray-600">
-								{#if data.order.delivery_method === 'email'}
-									{data.order.guest_email || 'Account email'}
-								{:else if data.order.delivery_method === 'whatsapp'}
-									{data.order.whatsapp_number || 'WhatsApp number'}
-								{:else if data.order.delivery_method === 'telegram'}
-									{data.order.telegram_username || 'Telegram username'}
+								{#if data.order.deliveryMethod === 'email'}
+									{data.order.guestEmail || data.order.deliveryContact}
+								{:else if data.order.deliveryMethod === 'whatsapp'}
+									{data.order.deliveryContact}
+								{:else if data.order.deliveryMethod === 'telegram'}
+									{data.order.deliveryContact}
 								{:else}
 									<!-- fallback info -->
 								{/if}

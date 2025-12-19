@@ -101,6 +101,7 @@
 			<div class="hidden items-center space-x-8 md:flex">
 				<a
 					href="/platforms"
+					data-sveltekit-preload-data="hover"
 					class="font-medium text-gray-600 transition-colors hover:text-gray-900"
 				>
 					Accounts
@@ -113,6 +114,7 @@
 				</button>
 				<a
 					href="/how-it-works"
+					data-sveltekit-preload-data="hover"
 					class="font-medium text-gray-600 transition-colors hover:text-gray-900"
 				>
 					How It Works

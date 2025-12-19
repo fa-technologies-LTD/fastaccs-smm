@@ -35,15 +35,12 @@
 				success = true;
 				orderId = result.orderId;
 
-				// Clear cart on successful payment
-				cart.clear();
-
 				showSuccess('Payment successful!', 'Your order has been completed.');
 
-				// Redirect to dashboard after 3 seconds
-				setTimeout(() => {
-					goto('/dashboard');
-				}, 3000);
+				// Redirect to dashboard immediately (clear cart after navigation)
+				goto('/dashboard').then(() => {
+					cart.clear();
+				});
 			} else {
 				errorMessage = result.error || 'Payment verification failed';
 				showError('Payment failed', errorMessage);

@@ -9,7 +9,8 @@ export async function GET({ params }) {
 			include: {
 				orderItems: {
 					include: {
-						accounts: true
+						accounts: true,
+						category: true
 					}
 				},
 				user: true

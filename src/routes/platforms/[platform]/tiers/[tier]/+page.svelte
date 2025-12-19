@@ -20,6 +20,8 @@
 	import { cart } from '$lib/stores/cart.svelte';
 	import { showError, showWarning, showSuccess } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
+	import { getPlatformColor, getPlatformIcon } from '$lib/helpers/platformColors';
+	import { formatPrice } from '$lib/helpers/utils';
 
 	interface Props {
 		data: PageData;
@@ -31,38 +33,7 @@
 	let selectedQuantity = $state(1);
 	let addingToCart = $state(false);
 
-	// Platform icons mapping
-	const platformIcons: Record<string, any> = {
-		instagram: Instagram,
-		tiktok: Music,
-		facebook: Facebook,
-		twitter: Twitter
-	};
-
-	// Platform colors
-	const platformColors: Record<string, string> = {
-		instagram: 'from-pink-500 to-purple-600',
-		tiktok: 'from-black to-gray-800',
-		facebook: 'from-blue-600 to-blue-700',
-		twitter: 'from-blue-400 to-blue-500'
-	};
-
-	function getPlatformIcon(platform: string) {
-		return platformIcons[platform.toLowerCase()] || Package;
-	}
-
-	function getPlatformColor(platform: string): string {
-		return platformColors[platform.toLowerCase()] || 'from-gray-500 to-gray-600';
-	}
-
-	// Format price to Nigerian Naira
-	function formatPrice(price: number): string {
-		return new Intl.NumberFormat('en-NG', {
-			style: 'currency',
-			currency: 'NGN',
-			minimumFractionDigits: 0
-		}).format(price);
-	}
+	
 
 	// Format follower count
 	function formatFollowers(count: number): string {

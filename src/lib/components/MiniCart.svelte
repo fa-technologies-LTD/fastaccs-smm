@@ -3,6 +3,7 @@
 	import { ShoppingCart, X, Trash2, ArrowRight, ShoppingBag, Loader } from '@lucide/svelte';
 	import { goto } from '$app/navigation';
 	import type { CartItemWithTier } from '$lib/types/cart';
+	import { formatPrice } from '$lib/helpers/utils';
 
 	// Reactive state
 	const isOpen = $derived(cart.isOpen);
@@ -51,13 +52,7 @@
 		goto('/platforms');
 	}
 
-	function formatPrice(price: number): string {
-		return new Intl.NumberFormat('en-NG', {
-			style: 'currency',
-			currency: 'NGN',
-			minimumFractionDigits: 0
-		}).format(price);
-	}
+
 </script>
 
 <!-- Professional MiniCart Dropdown -->

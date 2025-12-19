@@ -4,6 +4,8 @@
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
+	import { getPlatformColor, getPlatformIcon } from '$lib/helpers/platformColors';
+	import { formatPrice } from '$lib/helpers/utils';
 
 	interface Props {
 		data: PageData;
@@ -11,30 +13,7 @@
 
 	let { data }: Props = $props();
 
-	// Platform icons mapping
-	const platformIcons: Record<string, any> = {
-		instagram: Instagram,
-		tiktok: Music,
-		facebook: Facebook,
-		twitter: Twitter
-	};
-
-	// Platform colors for gradients
-	const platformColors: Record<string, string> = {
-		instagram: 'from-pink-500 to-purple-600',
-		tiktok: 'from-black to-gray-800',
-		facebook: 'from-blue-600 to-blue-700',
-		twitter: 'from-blue-400 to-blue-500'
-	};
-
-	function getPlatformIcon(platform: string) {
-		return platformIcons[platform.toLowerCase()] || Package;
-	}
-
-	function getPlatformColor(platform: string): string {
-		return platformColors[platform.toLowerCase()] || 'from-gray-500 to-gray-600';
-	}
-
+	
 	function navigateToPlatform(platformSlug: string) {
 		goto(`/platforms/${platformSlug}`);
 	}
@@ -54,7 +33,6 @@
 </svelte:head>
 
 <Navigation />
-
 <main class="min-h-screen bg-gray-50">
 	<!-- Hero Section -->
 	<section class="bg-gradient-to-r from-purple-600 to-blue-600 py-16 text-white">
@@ -82,6 +60,7 @@
 	</section>
 
 	<!-- Platform Selection -->
+
 	<section class="py-16">
 		<div class="mx-auto max-w-6xl px-4">
 			<div class="mb-12 text-center">
@@ -104,7 +83,7 @@
 					{#each data.platforms as platform}
 						{@const PlatformIcon = getPlatformIcon(platform.slug)}
 						<div
-							class="group relative overflow-hidden rounded-2xl bg-white shadow-lg transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl"
+							class="active:scale-[0.98] cursor-pointer group relative overflow-hidden rounded-2xl bg-white shadow-lg transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl"
 						>
 							<!-- Platform Gradient Header -->
 							<div class={`bg-gradient-to-r ${getPlatformColor(platform.slug)} p-8 text-white`}>
@@ -167,7 +146,8 @@
 								<!-- Browse Button -->
 								<button
 									onclick={() => navigateToPlatform(platform.slug)}
-									class="w-full rounded-lg bg-gray-900 py-3 font-semibold text-white transition-colors hover:bg-gray-800"
+									data-sveltekit-preload-data="hover"
+									class="cursor-pointer w-full rounded-lg bg-gray-900 py-3 font-semibold text-white transition-colors hover:bg-gray-800 "
 								>
 									Browse {platform.name} Accounts
 								</button>
@@ -221,5 +201,4 @@
 		</div>
 	</section>
 </main>
-
 <Footer />

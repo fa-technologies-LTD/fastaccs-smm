@@ -79,7 +79,6 @@ export const load: PageLoad = async ({ params, fetch }): Promise<PageData> => {
 					description: tier.description,
 					metadata: tier.metadata || {},
 					accounts_available: tier.accountCount,
-					reservations_active: 0, // No longer using database reservations - cart uses cookies
 					visible_available: tier.accountCount,
 					price: tier.price,
 					product_status: tier.productStatus,

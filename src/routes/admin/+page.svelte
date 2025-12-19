@@ -19,6 +19,7 @@
 	} from '@lucide/svelte';
 	import { getOrderStats } from '$lib/services/orders';
 	import { getInventoryStats } from '$lib/services/inventory';
+	import { formatPrice } from '$lib/helpers/utils';
 
 	// Props from load function
 	interface Props {
@@ -120,12 +121,7 @@
 		}
 	}
 
-	function formatCurrency(amount: number) {
-		return new Intl.NumberFormat('en-US', {
-			style: 'currency',
-			currency: 'USD'
-		}).format(amount);
-	}
+
 
 	function formatRelativeTime(date: Date): string {
 		const now = new Date();
@@ -243,11 +239,11 @@
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 						<p class="text-xs font-medium text-gray-500 sm:text-sm">Total Revenue</p>
 						<p class="text-xl font-bold text-gray-900 sm:text-2xl">
-							{formatCurrency(orderStats.total_revenue)}
+							{formatPrice(orderStats.total_revenue)}
 						</p>
 						<div class="mt-1 flex items-center">
 							<span class="text-xs text-gray-600 sm:text-sm"
-								>Today: {formatCurrency(orderStats.todays_revenue)}</span
+								>Today: {formatPrice(orderStats.todays_revenue)}</span
 							>
 						</div>
 					</div>

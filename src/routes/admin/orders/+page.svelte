@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getOrders, getOrderStats } from '$lib/services/orders';
+	import { formatDate, formatPrice } from '$lib/helpers/utils';
 
 	// Props from page data
 	let { data } = $props<{
@@ -100,24 +101,6 @@
 		}
 	}
 
-	// Format currency
-	function formatPrice(price: number): string {
-		return new Intl.NumberFormat('en-US', {
-			style: 'currency',
-			currency: 'USD'
-		}).format(price);
-	}
-
-	// Format date
-	function formatDate(date: string | Date): string {
-		if (!date) return 'N/A';
-		const dateObj = typeof date === 'string' ? new Date(date) : date;
-		return dateObj.toLocaleDateString('en-US', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric'
-		});
-	}
 </script>
 
 <div class="min-h-screen bg-gray-50 p-4 sm:p-6">

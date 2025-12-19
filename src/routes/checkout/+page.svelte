@@ -18,6 +18,8 @@
 	import type { PageData } from './$types';
 	import { createOrder } from '$lib/services/orders';
 	import type { CartItemWithTier } from '$lib/types/cart';
+	import { formatPrice } from '$lib/helpers/utils';
+
 
 	let { data }: { data: PageData } = $props();
 
@@ -99,12 +101,6 @@
 		}
 	}
 
-	function formatPrice(price: number): string {
-		return new Intl.NumberFormat('en-NG', {
-			style: 'currency',
-			currency: 'NGN'
-		}).format(price);
-	}
 
 	function validateForm(): boolean {
 		// Since authentication is required, just check if user exists
@@ -297,16 +293,8 @@
 <main class="min-h-screen bg-gray-50 py-4 sm:py-8">
 	<div class="mx-auto max-w-4xl px-4 sm:px-6">
 		<!-- Header -->
-		<div class="mb-6 flex items-center gap-3 sm:mb-8 sm:gap-4">
-			<button
-				onclick={goBack}
-				class="text-secondary hover:text-secondary-light active:text-secondary-light flex items-center gap-2"
-			>
-				<ArrowLeft size={18} class="sm:hidden" />
-				<ArrowLeft size={20} class="hidden sm:block" />
-				<span class="text-sm sm:text-base">Back</span>
-			</button>
-			<h1 class="text-2xl font-bold text-gray-900 sm:text-3xl">Checkout</h1>
+		<div class="mb-6 sm:mb-8">
+			<h1 class="text-xl font-bold text-gray-900 sm:text-2xl">Checkout</h1>
 		</div>
 
 		{#if cartItems.length === 0}
@@ -329,9 +317,7 @@
 				<div class="order-2 lg:order-1 lg:col-span-2">
 					<!-- Customer Information -->
 					<div class="mb-6 rounded-lg bg-white p-4 shadow-sm sm:mb-8 sm:p-6">
-						<h2 class="mb-4 text-lg font-semibold sm:mb-6 sm:text-xl">Customer Information</h2>
-
-						{#if user}
+					<h2 class="mb-4 text-base font-semibold sm:mb-6 sm:text-lg">Customer Information</h2>
 							<div class="rounded-lg bg-green-50 p-4">
 								<div class="flex items-center gap-3">
 									<Check size={20} class="text-green-600" />
@@ -375,11 +361,11 @@
 
 				<!-- Order Summary Sidebar -->
 				<div class="order-1 lg:order-2 lg:col-span-1">
-					<div class="rounded-lg bg-white p-4 shadow-sm sm:p-6">
-						<h2 class="mb-4 text-lg font-semibold sm:mb-6 sm:text-xl">Order Summary</h2>
+					<div class="rounded-lg bg-white p-6 shadow-sm sm:p-8">
+						<h2 class="mb-6 text-base font-semibold sm:text-lg">Order Summary</h2>
 
 						<!-- Cart Items -->
-						<div class="space-y-3 sm:space-y-4">
+						<div class="space-y-4 sm:space-y-5">
 							{#each cartItems as item}
 								<div class="flex gap-3">
 									<div
@@ -390,14 +376,14 @@
 										</div>
 									</div>
 									<div class="flex-1">
-										<h3 class="line-clamp-2 text-sm font-medium text-gray-900 sm:text-base">
+										<h3 class="line-clamp-2 text-xs font-medium text-gray-900 sm:text-sm">
 											{item.tier.name}
 										</h3>
-										<p class="text-sm text-gray-600">
+										<p class="text-xs text-gray-600">
 											{item.tier.platformName} • Qty: {item.quantity}
 										</p>
 
-										<p class="font-semibold text-purple-600">
+										<p class="text-sm font-semibold text-purple-600">
 											{formatPrice(item.tier.price * item.quantity)}
 										</p>
 									</div>
@@ -405,16 +391,16 @@
 							{/each}
 						</div>
 
-						<hr class="my-6" />
+					<hr class="my-8" />
 
-						<!-- Total -->
-						<div class="space-y-2">
-							<div class="flex justify-between text-sm">
+					<!-- Total -->
+					<div class="space-y-3">
+							<div class="flex justify-between text-xs sm:text-sm">
 								<span class="text-gray-600">Subtotal</span>
 								<span class="font-medium">{formatPrice(cartTotal)}</span>
 							</div>
 							{#if affiliateCode}
-								<div class="flex justify-between text-sm font-semibold text-green-600">
+								<div class="flex justify-between text-xs font-semibold text-green-600 sm:text-sm">
 									<span class="flex items-center gap-1">
 										<Tag size={14} />
 										Affiliate Discount ({affiliateDiscount}%)
@@ -425,12 +411,12 @@
 									Referred by: <strong>{affiliateCode}</strong>
 								</div>
 							{/if}
-							<div class="flex justify-between text-sm">
-								<span class="text-gray-600">Processing Fee</span>
-								<span class="font-medium">Free</span>
-							</div>
-							<hr />
-							<div class="flex justify-between text-lg font-bold">
+								<div class="flex justify-between text-xs sm:text-sm">
+									<span class="text-gray-600">Processing Fee</span>
+									<span class="font-medium">Free</span>
+								</div>
+								<hr />
+								<div class="flex justify-between text-base font-bold sm:text-lg">
 								<span>Total</span>
 								<span class="text-purple-600">
 									{formatPrice(
@@ -441,13 +427,13 @@
 						</div>
 
 						<!-- Wallet Balance -->
-						<div class="my-4 rounded-lg bg-blue-50 p-4">
+						<div class="my-6 rounded-lg bg-blue-50 p-4">
 							<div class="flex items-center justify-between">
 								<div class="flex items-center gap-2">
-									<Wallet size={20} class="text-blue-600" />
-									<span class="font-medium text-blue-900">Wallet Balance</span>
+									<Wallet size={18} class="text-blue-600" />
+									<span class="text-sm font-medium text-blue-900">Wallet Balance</span>
 								</div>
-								<span class="text-lg font-bold text-blue-600">
+								<span class="text-base font-bold text-blue-600 sm:text-lg">
 									{loadingBalance ? '...' : formatPrice(walletBalance)}
 								</span>
 							</div>
@@ -463,7 +449,7 @@
 									loadingBalance ||
 									walletBalance <
 										(affiliateCode ? cartTotal - (cartTotal * affiliateDiscount) / 100 : cartTotal)}
-								class="bg-primary hover:bg-primary-dark active:bg-primary-dark flex w-full items-center justify-center gap-2 rounded-lg py-3 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-lg"
+								class="cursor-pointer active:scale-95 bg-primary hover:bg-primary-dark active:bg-primary-dark flex w-full items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-base"
 							>
 								{#if loading}
 									<div
@@ -478,38 +464,13 @@
 									<span class="text-sm sm:text-base">Pay with Wallet</span>
 								{/if}
 							</button>
-
-							<!-- Divider -->
-							<div class="relative">
-								<div class="absolute inset-0 flex items-center">
-									<div class="w-full border-t border-gray-300"></div>
-								</div>
-								<div class="relative flex justify-center text-sm">
-									<span class="bg-white px-2 text-gray-500">or</span>
-								</div>
-							</div>
-
-							<!-- Pay with Card/Bank -->
-							<button
-								onclick={payWithKorapay}
-								disabled={loading || !user}
-								class="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-purple-600 bg-white py-3 text-base font-semibold text-purple-600 hover:bg-purple-50 active:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-lg"
-							>
-								{#if !user}
-									<Lock size={18} class="sm:h-5 sm:w-5" />
-									<span class="text-sm sm:text-base">Login Required</span>
-								{:else}
-									<CreditCard size={18} class="sm:h-5 sm:w-5" />
-									<span class="text-sm sm:text-base">Pay with Card/Bank</span>
-								{/if}
-							</button>
 						</div>
 
 						<!-- Security Notice -->
-						<div class="mt-4 rounded-lg bg-green-50 p-3">
+						<div class="mt-6 rounded-lg bg-green-50 p-3">
 							<div class="flex items-start gap-2">
-								<Lock size={16} class="mt-0.5 text-green-600" />
-								<div class="text-sm text-green-800">
+								<Lock size={14} class="mt-0.5 text-green-600" />
+								<div class="text-xs text-green-800">
 									<p class="font-medium">Secure Payment</p>
 									<p>Instant delivery after payment confirmation</p>
 								</div>

@@ -9,18 +9,14 @@
 		ArrowUp,
 		ArrowDown
 	} from '@lucide/svelte';
+	import { formatPrice } from '$lib/helpers/utils';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
 	let stats = $derived(data.stats || {});
 
-	function formatCurrency(amount: number): string {
-		return new Intl.NumberFormat('en-NG', {
-			style: 'currency',
-			currency: 'NGN'
-		}).format(amount);
-	}
+	
 
 	function calculatePercentageChange(current: number, previous: number): number {
 		if (previous === 0) return 0;
@@ -43,7 +39,7 @@
 				<div class="flex-1">
 					<p class="text-sm font-medium text-gray-600">Total Revenue</p>
 					<p class="mt-2 text-3xl font-bold text-gray-900">
-						{formatCurrency(stats.totalRevenue || 0)}
+						{formatPrice(stats.totalRevenue || 0)}
 					</p>
 					{#if stats.revenueChange !== undefined}
 						<div class="mt-2 flex items-center gap-1 text-sm">
@@ -149,19 +145,19 @@
 				<div class="flex items-center justify-between">
 					<span class="text-gray-600">Total Wallet Balance</span>
 					<span class="font-semibold text-gray-900">
-						{formatCurrency(stats.totalWalletBalance || 0)}
+						{formatPrice(stats.totalWalletBalance || 0)}
 					</span>
 				</div>
 				<div class="flex items-center justify-between">
 					<span class="text-gray-600">Total Deposits</span>
 					<span class="font-semibold text-green-600">
-						{formatCurrency(stats.totalDeposits || 0)}
+						{formatPrice(stats.totalDeposits || 0)}
 					</span>
 				</div>
 				<div class="flex items-center justify-between">
 					<span class="text-gray-600">Total Debits</span>
 					<span class="font-semibold text-red-600">
-						{formatCurrency(stats.totalDebits || 0)}
+						{formatPrice(stats.totalDebits || 0)}
 					</span>
 				</div>
 				<div class="flex items-center justify-between">
@@ -186,13 +182,13 @@
 				<div class="flex items-center justify-between">
 					<span class="text-gray-600">Affiliate Sales</span>
 					<span class="font-semibold text-gray-900">
-						{formatCurrency(stats.affiliateSales || 0)}
+						{formatPrice(stats.affiliateSales || 0)}
 					</span>
 				</div>
 				<div class="flex items-center justify-between">
 					<span class="text-gray-600">Total Commissions</span>
 					<span class="font-semibold text-purple-600">
-						{formatCurrency(stats.totalCommissions || 0)}
+						{formatPrice(stats.totalCommissions || 0)}
 					</span>
 				</div>
 			</div>
@@ -234,7 +230,7 @@
 							<p class="text-sm text-gray-600">{category.orderCount} orders</p>
 						</div>
 						<div class="text-right">
-							<p class="font-semibold text-gray-900">{formatCurrency(category.revenue)}</p>
+							<p class="font-semibold text-gray-900">{formatPrice(category.revenue)}</p>
 							<p class="text-sm text-gray-600">{category.unitsSold} accounts sold</p>
 						</div>
 					</div>

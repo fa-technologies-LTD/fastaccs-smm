@@ -13,6 +13,7 @@
 	} from '@lucide/svelte';
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
+	import { formatPrice, formatDate } from '$lib/helpers/utils';
 
 	let { data }: { data: PageData } = $props();
 
@@ -31,24 +32,6 @@
 
 	let wallets = $derived(data.wallets || []);
 	let transactions = $derived(data.transactions || []);
-
-	function formatCurrency(amount: number): string {
-		return new Intl.NumberFormat('en-NG', {
-			style: 'currency',
-			currency: 'NGN'
-		}).format(amount);
-	}
-
-	function formatDate(date: string | Date): string {
-		const dateObj = typeof date === 'string' ? new Date(date) : date;
-		return dateObj.toLocaleDateString('en-NG', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
 
 	function getTypeIcon(type: string) {
 		switch (type) {
@@ -103,57 +86,57 @@
 	</div>
 
 	<!-- Stats Cards -->
-	<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+		<div class="rounded-lg border border-gray-200 bg-white p-4">
 			<div class="flex items-center justify-between">
-				<div>
-					<p class="text-sm font-medium text-gray-600">Total Wallets</p>
-					<p class="mt-2 text-3xl font-bold text-gray-900">{stats.totalWallets}</p>
+				<div class="flex-1">
+					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Total Wallets</p>
+					<p class="mt-1 text-xl font-bold text-gray-900">{stats.totalWallets}</p>
 				</div>
-				<div class="rounded-full bg-blue-100 p-3">
-					<Users class="h-6 w-6 text-blue-600" />
+				<div class="rounded-full bg-blue-100 p-2">
+					<Users class="h-5 w-5 text-blue-600" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4">
 			<div class="flex items-center justify-between">
-				<div>
-					<p class="text-sm font-medium text-gray-600">Total Balance</p>
-					<p class="mt-2 text-3xl font-bold text-gray-900">
-						{formatCurrency(stats.totalBalance)}
+				<div class="flex-1">
+					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Total Balance</p>
+					<p class="mt-1 text-xl font-bold text-gray-900">
+						{formatPrice(stats.totalBalance)}
 					</p>
 				</div>
-				<div class="rounded-full bg-green-100 p-3">
-					<Wallet class="h-6 w-6 text-green-600" />
+				<div class="rounded-full bg-green-100 p-2">
+					<Wallet class="h-5 w-5 text-green-600" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4">
 			<div class="flex items-center justify-between">
-				<div>
-					<p class="text-sm font-medium text-gray-600">Total Deposits</p>
-					<p class="mt-2 text-3xl font-bold text-green-600">
-						{formatCurrency(stats.totalDeposits)}
+				<div class="flex-1">
+					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Total Deposits</p>
+					<p class="mt-1 text-xl font-bold text-green-600">
+						{formatPrice(stats.totalDeposits)}
 					</p>
 				</div>
-				<div class="rounded-full bg-green-100 p-3">
-					<ArrowDownLeft class="h-6 w-6 text-green-600" />
+				<div class="rounded-full bg-green-100 p-2">
+					<ArrowDownLeft class="h-5 w-5 text-green-600" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4">
 			<div class="flex items-center justify-between">
-				<div>
-					<p class="text-sm font-medium text-gray-600">Total Withdrawals</p>
-					<p class="mt-2 text-3xl font-bold text-red-600">
-						{formatCurrency(stats.totalWithdrawals)}
+				<div class="flex-1">
+					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Total Withdrawals</p>
+					<p class="mt-1 text-xl font-bold text-red-600">
+						{formatPrice(stats.totalWithdrawals)}
 					</p>
 				</div>
-				<div class="rounded-full bg-red-100 p-3">
-					<ArrowUpRight class="h-6 w-6 text-red-600" />
+				<div class="rounded-full bg-red-100 p-2">
+					<ArrowUpRight class="h-5 w-5 text-red-600" />
 				</div>
 			</div>
 		</div>
@@ -189,8 +172,8 @@
 
 	<!-- Recent Transactions -->
 	<div class="rounded-lg border border-gray-200 bg-white">
-		<div class="border-b border-gray-200 p-6">
-			<h2 class="text-lg font-semibold text-gray-900">Recent Transactions</h2>
+		<div class="border-b border-gray-200 p-4">
+			<h2 class="text-base font-semibold text-gray-900">Recent Transactions</h2>
 		</div>
 		<div class="overflow-x-auto">
 			<table class="w-full">
@@ -265,12 +248,12 @@
 								<td class="px-6 py-4 whitespace-nowrap">
 									<div class="text-sm font-medium {getTypeColor(transaction.type)}">
 										{transaction.type === 'debit' ? '-' : '+'}
-										{formatCurrency(Number(transaction.amount))}
+										{formatPrice(Number(transaction.amount))}
 									</div>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<div class="text-sm text-gray-900">
-										{formatCurrency(Number(transaction.balanceAfter))}
+										{formatPrice(Number(transaction.balanceAfter))}
 									</div>
 								</td>
 								<td class="max-w-xs truncate px-6 py-4">
