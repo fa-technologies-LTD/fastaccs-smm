@@ -6,6 +6,7 @@
 	import { uploadAccountsBatch } from '$lib/services/accounts';
 	import type { BatchMetadata } from '$lib/services/batches';
 	import { addToast } from '$lib/stores/toasts';
+	import { fade, fly } from 'svelte/transition';
 
 	// Props from load function
 	interface Props {
@@ -367,7 +368,7 @@
 			</div>
 			<button
 				onclick={openUploadModal}
-				class="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-white transition-colors hover:bg-blue-700 sm:w-auto sm:py-2"
+				class="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-white cursor-pointer transition-all hover:scale-95 hover:bg-blue-700 sm:w-auto sm:py-2"
 			>
 				<Upload size={18} />
 				Import Batch
@@ -420,10 +421,10 @@
 						<div class="flex items-center gap-1">
 							<button
 								onclick={() => viewBatchDetails(batch)}
-								class="rounded p-1 text-gray-400 hover:text-blue-600"
+								class="group rounded p-1 text-gray-400 hover:text-blue-600"
 								title="View Details"
 							>
-								<Eye size={16} />
+								<Eye size={16} class='group-hover:scale-90 transition-transform' />
 							</button>
 						</div>
 					</div>
@@ -488,9 +489,9 @@
 					<div class="border-t border-gray-200 pt-4">
 						<button
 							onclick={() => viewBatchDetails(batch)}
-							class="flex w-full items-center justify-center gap-2 rounded-md bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+							class="group flex w-full items-center justify-center gap-2 rounded-md bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition-all hover:scale-95 cursor-pointer hover:bg-gray-100"
 						>
-							<Eye size={16} />
+							<Eye size={16} class='group-hover:scale-90 transition-transform' />
 							View Details
 						</button>
 					</div>
@@ -513,6 +514,8 @@
 			<!-- Modal content -->
 			<div
 				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg"
+				in:fly={{ y: 200, duration: 500 }}
+				out:fade={{ duration: 500}}
 			>
 				<form
 					onsubmit={(e) => {

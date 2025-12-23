@@ -18,6 +18,7 @@
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import { formatPrice, formatDate } from '$lib/helpers/utils';
+	import { fade, fly } from 'svelte/transition';
 
 	let { data }: { data: PageData } = $props();
 
@@ -645,8 +646,9 @@
 
 <!-- Commission Rate Adjustment Modal -->
 {#if showCommissionModal}
-	<div class="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black p-4">
-		<div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+		<div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl" in:fly={{ y: 200, duration: 500 }}
+				out:fade={{ duration: 500}}>
 			<h2 class="mb-4 text-xl font-bold text-gray-900">Adjust Commission Rate</h2>
 
 			<div class="mb-4">
@@ -679,14 +681,14 @@
 						commissionError = '';
 					}}
 					disabled={isUpdatingRate}
-					class="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+					class="cursor-pointer flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 transition-all hover:scale-95 hover:bg-gray-50 disabled:opacity-50"
 				>
 					Cancel
 				</button>
 				<button
 					onclick={updateCommissionRate}
 					disabled={isUpdatingRate}
-					class="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+					class="cursor-pointer flex-1 rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:scale-95 hover:bg-blue-700 disabled:opacity-50"
 				>
 					{isUpdatingRate ? 'Updating...' : 'Update Rate'}
 				</button>

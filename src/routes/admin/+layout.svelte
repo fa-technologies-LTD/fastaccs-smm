@@ -52,12 +52,13 @@
 						{@const IconComponent = item.icon}
 						<a
 							href={item.href}
+							data-sveltekit-preload-data='hover'
 							class="group flex items-center rounded-md px-2 py-2 text-sm font-medium {page.url
 								.pathname === item.href
 								? 'bg-gray-100 text-gray-900'
 								: 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}"
 						>
-							<IconComponent class="mr-3 h-5 w-5 flex-shrink-0" />
+							<IconComponent class="mr-3 h-5 w-5 flex-shrink-0 group-hover:scale-95 group-hover:rotate-12" />
 							{item.label}
 						</a>
 					{/each}

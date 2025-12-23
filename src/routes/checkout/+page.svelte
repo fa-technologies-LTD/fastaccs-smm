@@ -20,7 +20,6 @@
 	import type { CartItemWithTier } from '$lib/types/cart';
 	import { formatPrice } from '$lib/helpers/utils';
 
-
 	let { data }: { data: PageData } = $props();
 
 	// Reactive state
@@ -100,7 +99,6 @@
 			validatingAffiliate = false;
 		}
 	}
-
 
 	function validateForm(): boolean {
 		// Since authentication is required, just check if user exists
@@ -317,7 +315,8 @@
 				<div class="order-2 lg:order-1 lg:col-span-2">
 					<!-- Customer Information -->
 					<div class="mb-6 rounded-lg bg-white p-4 shadow-sm sm:mb-8 sm:p-6">
-					<h2 class="mb-4 text-base font-semibold sm:mb-6 sm:text-lg">Customer Information</h2>
+						<h2 class="mb-4 text-base font-semibold sm:mb-6 sm:text-lg">Customer Information</h2>
+						{#if user}
 							<div class="rounded-lg bg-green-50 p-4">
 								<div class="flex items-center gap-3">
 									<Check size={20} class="text-green-600" />
@@ -391,10 +390,10 @@
 							{/each}
 						</div>
 
-					<hr class="my-8" />
+						<hr class="my-8" />
 
-					<!-- Total -->
-					<div class="space-y-3">
+						<!-- Total -->
+						<div class="space-y-3">
 							<div class="flex justify-between text-xs sm:text-sm">
 								<span class="text-gray-600">Subtotal</span>
 								<span class="font-medium">{formatPrice(cartTotal)}</span>
@@ -411,12 +410,12 @@
 									Referred by: <strong>{affiliateCode}</strong>
 								</div>
 							{/if}
-								<div class="flex justify-between text-xs sm:text-sm">
-									<span class="text-gray-600">Processing Fee</span>
-									<span class="font-medium">Free</span>
-								</div>
-								<hr />
-								<div class="flex justify-between text-base font-bold sm:text-lg">
+							<div class="flex justify-between text-xs sm:text-sm">
+								<span class="text-gray-600">Processing Fee</span>
+								<span class="font-medium">Free</span>
+							</div>
+							<hr />
+							<div class="flex justify-between text-base font-bold sm:text-lg">
 								<span>Total</span>
 								<span class="text-purple-600">
 									{formatPrice(
@@ -449,7 +448,7 @@
 									loadingBalance ||
 									walletBalance <
 										(affiliateCode ? cartTotal - (cartTotal * affiliateDiscount) / 100 : cartTotal)}
-								class="cursor-pointer active:scale-95 bg-primary hover:bg-primary-dark active:bg-primary-dark flex w-full items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-base"
+								class="bg-primary hover:bg-primary-dark active:bg-primary-dark flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-base"
 							>
 								{#if loading}
 									<div

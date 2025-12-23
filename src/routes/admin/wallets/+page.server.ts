@@ -70,7 +70,8 @@ export const load: PageServerLoad = async () => {
 				totalBalance,
 				totalDeposits: Number(deposits._sum.amount || 0),
 				totalWithdrawals: Number(debits._sum.amount || 0)
-			}
+			},
+			error: null
 		};
 	} catch (error) {
 		console.error('Error loading wallet data:', error);
@@ -82,7 +83,8 @@ export const load: PageServerLoad = async () => {
 				totalBalance: 0,
 				totalDeposits: 0,
 				totalWithdrawals: 0
-			}
+			},
+			error: 'Database connection failed. Please check your connection and try again.'
 		};
 	}
 };

@@ -108,3 +108,41 @@ export function copyAllAccounts(
 		showToast: options?.showToast
 	});
 }
+
+// CSV Export utility
+export function exportToCSV(data: Record<string, unknown>[], filename: string, headers?: string[]): void {
+	if (!data || data.length === 0) return;
+
+	// Auto-generate headers from first object keys if not provided
+	const csvHeaders = headers || Object.keys(data[0]);
+
+	// Convert data to CSV rows
+	const rows = data.map((item) =>
+		csvHeaders.map((header) => {
+			const value = item[header];
+			const cellStr = String(value ?? '');
+			// Escape quotes and wrap in quotes if contains comma, quote, or newline
+			if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+				return `"${cellStr.replace(/"/g, '""')}"`;
+			}
+			return cellStr;
+		})
+	);
+
+	// Combine headers and rows
+	const csvContent = [csvHeaders.join(','), ...rows.map((row) => row.join(','))].join('\n');
+
+	// Create and trigger download
+	const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement('a');
+
+	link.setAttribute('href', url);
+	link.setAttribute('download', filename);
+	link.style.visibility = 'hidden';
+
+	document.body.appendChild(link);
+	link.click();
+	document.body.removeChild(link);
+	URL.revokeObjectURL(url);
+}

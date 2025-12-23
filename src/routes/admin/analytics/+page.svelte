@@ -16,8 +16,6 @@
 
 	let stats = $derived(data.stats || {});
 
-	
-
 	function calculatePercentageChange(current: number, previous: number): number {
 		if (previous === 0) return 0;
 		return ((current - previous) / previous) * 100;
@@ -34,7 +32,7 @@
 	<!-- Key Metrics -->
 	<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
 		<!-- Total Revenue -->
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+		<div class="group rounded-lg border border-gray-200 bg-white p-6">
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-sm font-medium text-gray-600">Total Revenue</p>
@@ -42,95 +40,111 @@
 						{formatPrice(stats.totalRevenue || 0)}
 					</p>
 					{#if stats.revenueChange !== undefined}
-						<div class="mt-2 flex items-center gap-1 text-sm">
+						<div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
 							{#if stats.revenueChange >= 0}
-								<ArrowUp class="h-4 w-4 text-green-600" />
-								<span class="text-green-600">+{stats.revenueChange.toFixed(1)}%</span>
+								<div class="flex items-center gap-1">
+									<ArrowUp class="h-4 w-4 text-green-600" />
+									<span class="text-green-600">+{stats.revenueChange.toFixed(1)}%</span>
+								</div>
 							{:else}
-								<ArrowDown class="h-4 w-4 text-red-600" />
-								<span class="text-red-600">{stats.revenueChange.toFixed(1)}%</span>
+								<div class="flex items-center gap-1">
+									<ArrowDown class="h-4 w-4 text-red-600" />
+									<span class="text-red-600">{stats.revenueChange.toFixed(1)}%</span>
+								</div>
 							{/if}
 							<span class="text-gray-500">vs last month</span>
 						</div>
 					{/if}
 				</div>
 				<div class="rounded-full bg-green-100 p-3">
-					<DollarSign class="h-6 w-6 text-green-600" />
+					<DollarSign class="h-6 w-6 text-green-600 group-hover:scale-80 group-hover:rotate-20" />
 				</div>
 			</div>
 		</div>
 
 		<!-- Total Orders -->
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+		<div class="group rounded-lg border border-gray-200 bg-white p-6">
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-sm font-medium text-gray-600">Total Orders</p>
 					<p class="mt-2 text-3xl font-bold text-gray-900">{stats.totalOrders || 0}</p>
 					{#if stats.ordersChange !== undefined}
-						<div class="mt-2 flex items-center gap-1 text-sm">
+						<div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
 							{#if stats.ordersChange >= 0}
-								<ArrowUp class="h-4 w-4 text-green-600" />
-								<span class="text-green-600">+{stats.ordersChange.toFixed(1)}%</span>
+								<div class="flex items-center gap-1">
+									<ArrowUp class="h-4 w-4 text-green-600" />
+									<span class="text-green-600">+{stats.ordersChange.toFixed(1)}%</span>
+								</div>
 							{:else}
-								<ArrowDown class="h-4 w-4 text-red-600" />
-								<span class="text-red-600">{stats.ordersChange.toFixed(1)}%</span>
+								<div class="flex items-center gap-1">
+									<ArrowDown class="h-4 w-4 text-red-600" />
+									<span class="text-red-600">{stats.ordersChange.toFixed(1)}%</span>
+								</div>
 							{/if}
 							<span class="text-gray-500">vs last month</span>
 						</div>
 					{/if}
 				</div>
 				<div class="rounded-full bg-blue-100 p-3">
-					<ShoppingCart class="h-6 w-6 text-blue-600" />
+					<ShoppingCart class="h-6 w-6 text-blue-600 group-hover:scale-80 group-hover:rotate-20" />
 				</div>
 			</div>
 		</div>
 
 		<!-- Total Customers -->
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+		<div class="group rounded-lg border border-gray-200 bg-white p-6">
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-sm font-medium text-gray-600">Total Customers</p>
 					<p class="mt-2 text-3xl font-bold text-gray-900">{stats.totalCustomers || 0}</p>
 					{#if stats.customersChange !== undefined}
-						<div class="mt-2 flex items-center gap-1 text-sm">
+						<div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
 							{#if stats.customersChange >= 0}
-								<ArrowUp class="h-4 w-4 text-green-600" />
-								<span class="text-green-600">+{stats.customersChange.toFixed(1)}%</span>
+								<div class="flex items-center gap-1">
+									<ArrowUp class="h-4 w-4 text-green-600" />
+									<span class="text-green-600">+{stats.customersChange.toFixed(1)}%</span>
+								</div>
 							{:else}
-								<ArrowDown class="h-4 w-4 text-red-600" />
-								<span class="text-red-600">{stats.customersChange.toFixed(1)}%</span>
+								<div class="flex items-center gap-1">
+									<ArrowDown class="h-4 w-4 text-red-600" />
+									<span class="text-red-600">{stats.customersChange.toFixed(1)}%</span>
+								</div>
 							{/if}
 							<span class="text-gray-500">vs last month</span>
 						</div>
 					{/if}
 				</div>
 				<div class="rounded-full bg-purple-100 p-3">
-					<Users class="h-6 w-6 text-purple-600" />
+					<Users class="h-6 w-6 text-purple-600 group-hover:scale-80 group-hover:rotate-20" />
 				</div>
 			</div>
 		</div>
 
 		<!-- Accounts Sold -->
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+		<div class="group rounded-lg border border-gray-200 bg-white p-6">
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-sm font-medium text-gray-600">Accounts Sold</p>
 					<p class="mt-2 text-3xl font-bold text-gray-900">{stats.accountsSold || 0}</p>
 					{#if stats.accountsChange !== undefined}
-						<div class="mt-2 flex items-center gap-1 text-sm">
+						<div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
 							{#if stats.accountsChange >= 0}
-								<ArrowUp class="h-4 w-4 text-green-600" />
-								<span class="text-green-600">+{stats.accountsChange.toFixed(1)}%</span>
+								<div class="flex items-center gap-1">
+									<ArrowUp class="h-4 w-4 text-green-600" />
+									<span class="text-green-600">+{stats.accountsChange.toFixed(1)}%</span>
+								</div>
 							{:else}
-								<ArrowDown class="h-4 w-4 text-red-600" />
-								<span class="text-red-600">{stats.accountsChange.toFixed(1)}%</span>
+								<div class="flex items-center gap-1">
+									<ArrowDown class="h-4 w-4 text-red-600" />
+									<span class="text-red-600">{stats.accountsChange.toFixed(1)}%</span>
+								</div>
 							{/if}
 							<span class="text-gray-500">vs last month</span>
 						</div>
 					{/if}
 				</div>
 				<div class="rounded-full bg-orange-100 p-3">
-					<Package class="h-6 w-6 text-orange-600" />
+					<Package class="h-6 w-6 text-orange-600 group-hover:scale-80 group-hover:rotate-20" />
 				</div>
 			</div>
 		</div>

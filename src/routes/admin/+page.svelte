@@ -20,6 +20,7 @@
 	import { getOrderStats } from '$lib/services/orders';
 	import { getInventoryStats } from '$lib/services/inventory';
 	import { formatPrice } from '$lib/helpers/utils';
+	import AdminDashStatsCard from '$lib/components/AdminDashStatsCard.svelte';
 
 	// Props from load function
 	interface Props {
@@ -121,8 +122,6 @@
 		}
 	}
 
-
-
 	function formatRelativeTime(date: Date): string {
 		const now = new Date();
 		const diffMs = now.getTime() - date.getTime();
@@ -212,12 +211,14 @@
 		{/if}
 
 		<!-- Main Statistics Grid -->
-		<div class="mb-6 grid grid-cols-1 gap-4 sm:mb-8 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+		<div class=" mb-6 grid grid-cols-1 gap-4 sm:mb-8 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
 			<!-- Total Orders -->
-			<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+			<div class="group rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
 				<div class="flex items-center">
 					<div class="rounded-lg bg-blue-50 p-2 sm:p-3">
-						<ShoppingCart class="size-5 text-blue-600 sm:size-6" />
+						<ShoppingCart
+							class="size-5 text-blue-600 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+						/>
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 						<p class="text-xs font-medium text-gray-500 sm:text-sm">Total Orders</p>
@@ -229,12 +230,17 @@
 					</div>
 				</div>
 			</div>
+			<!-- <AdminDashStatsCard title="Total Orders" status={orderStats.total_orders} subtitle={`Today: ${orderStats.todays_orders}`}>
+				<ShoppingCart
+							class="size-5 text-blue-600 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+						/>
+			</AdminDashStatsCard> -->
 
 			<!-- Total Revenue -->
-			<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+			<div class="group rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
 				<div class="flex items-center">
 					<div class="rounded-lg bg-green-50 p-2 sm:p-3">
-						<DollarSign class="size-5 text-green-600 sm:size-6" />
+						<DollarSign class="size-5 text-green-600 sm:size-6 transition-all group-hover:scale-80 group-hover:-rotate-20 " />
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 						<p class="text-xs font-medium text-gray-500 sm:text-sm">Total Revenue</p>
@@ -251,10 +257,10 @@
 			</div>
 
 			<!-- Inventory Items -->
-			<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+			<div class="group rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
 				<div class="flex items-center">
 					<div class="rounded-lg bg-purple-50 p-2 sm:p-3">
-						<Package class="size-5 text-purple-600 sm:size-6" />
+						<Package class="size-5 text-purple-600 sm:size-6 transition-all group-hover:scale-80 group-hover:-rotate-20 " />
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 						<p class="text-xs font-medium text-gray-500 sm:text-sm">Total Inventory</p>
@@ -271,10 +277,10 @@
 			</div>
 
 			<!-- Stock Issues -->
-			<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+			<div class="group rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
 				<div class="flex items-center">
 					<div class="rounded-lg bg-orange-50 p-2 sm:p-3">
-						<AlertCircle class="size-5 text-orange-600 sm:size-6" />
+						<AlertCircle class="size-5 text-orange-600 sm:size-6 transition-all group-hover:scale-80 group-hover:-rotate-20" />
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 						<p class="text-xs font-medium text-gray-500 sm:text-sm">Stock Issues</p>
@@ -299,7 +305,7 @@
 		<!-- System Overview -->
 		<div class="mb-6 grid grid-cols-1 gap-4 sm:mb-8 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
 			<!-- Platform Coverage -->
-			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+			<div class="group rounded-lg border border-gray-200 bg-white p-6">
 				<div class="flex items-center justify-between">
 					<div>
 						<p class="text-sm font-medium text-gray-500">Platforms</p>
@@ -309,13 +315,13 @@
 						</div>
 					</div>
 					<div class="rounded-lg bg-indigo-50 p-3">
-						<BarChart3 class="size-6 text-indigo-600" />
+						<BarChart3 class="size-6 text-indigo-600 transition-all group-hover:scale-80 group-hover:-rotate-20" />
 					</div>
 				</div>
 			</div>
 
 			<!-- Total Tiers -->
-			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+			<div class="group rounded-lg border border-gray-200 bg-white p-6">
 				<div class="flex items-center justify-between">
 					<div>
 						<p class="text-sm font-medium text-gray-500">Product Tiers</p>
@@ -325,13 +331,13 @@
 						</div>
 					</div>
 					<div class="rounded-lg bg-purple-50 p-3">
-						<Package class="size-6 text-purple-600" />
+						<Package class="size-6 text-purple-600 transition-all group-hover:scale-80 group-hover:-rotate-20" />
 					</div>
 				</div>
 			</div>
 
 			<!-- Success Rate -->
-			<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+			<div class="group rounded-lg border border-gray-200 bg-white p-6">
 				<div class="flex items-center justify-between">
 					<div>
 						<p class="text-sm font-medium text-gray-500">Success Rate</p>
@@ -347,7 +353,7 @@
 						</div>
 					</div>
 					<div class="rounded-lg bg-green-50 p-3">
-						<TrendingUp class="size-6 text-green-600" />
+						<TrendingUp class="size-6 text-green-600 transition-all group-hover:scale-80 group-hover:-rotate-20" />
 					</div>
 				</div>
 			</div>
@@ -356,7 +362,7 @@
 		<!-- Quick Actions & Navigation -->
 		<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 			<!-- Management Actions -->
-			<div class="rounded-lg border border-gray-200 bg-white shadow-sm">
+			<div class="rounded-lg border border-gray-200 bg-white">
 				<div class="border-b border-gray-200 p-6">
 					<h3 class="text-lg font-semibold text-gray-900">Management Center</h3>
 					<p class="mt-1 text-sm text-gray-600">Access key administrative functions</p>
@@ -365,7 +371,8 @@
 					<div class="grid grid-cols-1 gap-3">
 						<a
 							href="/admin/orders"
-							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300 hover:bg-blue-50"
+							data-sveltekit-preload-data='hover'
+							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-all hover:scale-95 hover:border-blue-300 hover:bg-blue-50"
 						>
 							<div class="flex items-center">
 								<ShoppingCart class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
@@ -374,12 +381,13 @@
 									<p class="text-sm text-gray-500">Process and track orders</p>
 								</div>
 							</div>
-							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
+							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600 group-hover:rotate-45" />
 						</a>
 
 						<a
 							href="/admin/inventory"
-							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300 hover:bg-blue-50"
+							data-sveltekit-preload-data='hover'
+							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-all hover:scale-95 hover:border-blue-300 hover:bg-blue-50"
 						>
 							<div class="flex items-center">
 								<Package class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
@@ -388,12 +396,13 @@
 									<p class="text-sm text-gray-500">Monitor stock levels</p>
 								</div>
 							</div>
-							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
+							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600 group-hover:rotate-45" />
 						</a>
 
 						<a
 							href="/admin/platforms"
-							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300 hover:bg-blue-50"
+							data-sveltekit-preload-data='hover'
+							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-all hover:scale-95 hover:border-blue-300 hover:bg-blue-50"
 						>
 							<div class="flex items-center">
 								<Users class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
@@ -402,12 +411,13 @@
 									<p class="text-sm text-gray-500">Manage platforms & tiers</p>
 								</div>
 							</div>
-							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
+							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600 group-hover:rotate-45" />
 						</a>
 
 						<a
 							href="/admin/batches"
-							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300 hover:bg-blue-50"
+							data-sveltekit-preload-data='hover'
+							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-all hover:scale-95 hover:border-blue-300 hover:bg-blue-50"
 						>
 							<div class="flex items-center">
 								<Activity class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
@@ -416,14 +426,14 @@
 									<p class="text-sm text-gray-500">Bulk import accounts</p>
 								</div>
 							</div>
-							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600" />
+							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600 group-hover:rotate-45" />
 						</a>
 					</div>
 				</div>
 			</div>
 
 			<!-- System Status -->
-			<div class="rounded-lg border border-gray-200 bg-white shadow-sm">
+			<div class="rounded-lg border border-gray-200 bg-white">
 				<div class="border-b border-gray-200 p-6">
 					<h3 class="text-lg font-semibold text-gray-900">System Status</h3>
 					<p class="mt-1 text-sm text-gray-600">Current system health overview</p>

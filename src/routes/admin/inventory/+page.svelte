@@ -1,154 +1,93 @@
 <script lang="ts">
-	import {
-		getInventoryByPlatforms,
-		getInventoryStats,
-		type InventoryByPlatform,
-		type InventoryStats
-	} from '$lib/services/inventory';
-	import { onMount } from 'svelte';
-	import { formatDate, formatPrice } from '$lib/helpers/utils';
+	import { formatDate } from '$lib/helpers/utils';
+	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
 
-	// Props from page data
-	let { data } = $props<{ data: { inventory?: InventoryByPlatform[]; stats?: InventoryStats } }>();
+	let { data } = $props();
 
-	// State
 	let searchTerm = $state('');
-	let loading = $state(false);
-	let inventory = $state<InventoryByPlatform[]>([]);
-	let stats = $state<InventoryStats | null>(null);
-
-	// Filter inventory based on search
-	const filteredInventory = $derived.by(() => {
-		if (!inventory || !Array.isArray(inventory)) return [];
-
-		if (!searchTerm) return inventory;
-
-		return inventory.filter(
-			(item: InventoryByPlatform) =>
-				item.platform.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				item.tier.toLowerCase().includes(searchTerm.toLowerCase())
-		);
-	});
-
-	// Calculate summary stats from filtered inventory
-	const summaryStats = $derived.by(() => {
-		const totalAccounts = filteredInventory.reduce(
-			(sum: number, item: InventoryByPlatform) => sum + (item.total_accounts || 0),
-			0
-		);
-		const availableAccounts = filteredInventory.reduce(
-			(sum: number, item: InventoryByPlatform) => sum + (item.available_accounts || 0),
-			0
-		);
-		const assignedAccounts = filteredInventory.reduce(
-			(sum: number, item: InventoryByPlatform) => sum + (item.assigned_accounts || 0),
-			0
-		);
-		const deliveredAccounts = filteredInventory.reduce(
-			(sum: number, item: InventoryByPlatform) => sum + (item.delivered_accounts || 0),
-			0
-		);
-		const platforms = new Set(filteredInventory.map((item: InventoryByPlatform) => item.platform))
-			.size;
-
-		return {
-			total_accounts: totalAccounts,
-			available_accounts: availableAccounts,
-			assigned_accounts: assignedAccounts,
-			delivered_accounts: deliveredAccounts,
-			platforms
-		};
-	});
-
-	// Load inventory data
-	async function loadInventory() {
-		loading = true;
-		try {
-			const [inventoryResult, statsResult] = await Promise.all([
-				getInventoryByPlatforms(),
-				getInventoryStats()
-			]);
-
-			if (inventoryResult.data) {
-				inventory = inventoryResult.data;
-			}
-			if (statsResult.data) {
-				stats = statsResult.data;
-			}
-		} catch (error) {
-			console.error('Failed to load inventory:', error);
-		} finally {
-			loading = false;
-		}
-	}
-
-	// Cleanup orphaned allocated accounts
+	let showConfirmModal = $state(false);
 	let cleanupLoading = $state(false);
 	let cleanupMessage = $state<string | null>(null);
 
-	async function cleanupOrphanedAccounts() {
-		if (!confirm('This will reset orphaned allocated accounts back to available. Are you sure?')) {
-			return;
-		}
+	const filteredInventory = $derived.by(() => {
+		if (!searchTerm) return data.inventory || [];
+		return (data.inventory || []).filter(
+			(item: any) =>
+				item.platform_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+				item.tier_name?.toLowerCase().includes(searchTerm.toLowerCase())
+		);
+	});
 
+	const summaryStats = $derived.by(() => {
+		return {
+			total_accounts: filteredInventory.reduce(
+				(sum: number, item: any) => sum + (item.total_accounts || 0),
+				0
+			),
+			available_accounts: filteredInventory.reduce(
+				(sum: number, item: any) => sum + (item.available_accounts || 0),
+				0
+			),
+			assigned_accounts: filteredInventory.reduce(
+				(sum: number, item: any) => sum + (item.assigned_accounts || 0),
+				0
+			),
+			delivered_accounts: filteredInventory.reduce(
+				(sum: number, item: any) => sum + (item.delivered_accounts || 0),
+				0
+			),
+			platforms: new Set(filteredInventory.map((item: any) => item.platform_name)).size
+		};
+	});
+
+	async function cleanupOrphanedAccounts() {
 		cleanupLoading = true;
 		cleanupMessage = null;
-
+		showConfirmModal = false;
 		try {
-			const response = await fetch('/api/admin/cleanup/allocated-accounts', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				}
-			});
-
+			const response = await fetch('/api/admin/cleanup/allocated-accounts', { method: 'POST' });
 			const result = await response.json();
-
 			if (response.ok) {
-				cleanupMessage = `✅ ${result.message}`;
-				// Reload inventory to see updated counts
-				await loadInventory();
+				cleanupMessage = result.message;
+				location.reload();
 			} else {
-				cleanupMessage = `❌ Error: ${result.error}`;
+				cleanupMessage = `Error: ${result.error}`;
 			}
 		} catch (error) {
-			console.error('Cleanup failed:', error);
-			cleanupMessage = '❌ Failed to cleanup accounts';
+			cleanupMessage = 'Failed to cleanup accounts';
 		} finally {
 			cleanupLoading = false;
-			// Clear message after 5 seconds
-			setTimeout(() => {
-				cleanupMessage = null;
-			}, 5000);
+			setTimeout(() => (cleanupMessage = null), 5000);
 		}
 	}
 
-	// Initialize with page data or load fresh data
-	onMount(() => {
-		if (data.inventory && data.stats) {
-			inventory = data.inventory;
-			stats = data.stats;
-		} else {
-			loadInventory();
-		}
-	});
+	function getStatusColor(available: number): string {
+		if (available === 0) return 'text-red-600 bg-red-100';
+		if (available < 10) return 'text-yellow-600 bg-yellow-100';
+		return 'text-green-600 bg-green-100';
+	}
 
-	// Get status color
-	function getStatusColor(status: string): string {
-		switch (status) {
-			case 'in_stock':
-				return 'text-green-600 bg-green-100';
-			case 'low_stock':
-				return 'text-yellow-600 bg-yellow-100';
-			case 'out_of_stock':
-				return 'text-red-600 bg-red-100';
-			default:
-				return 'text-gray-600 bg-gray-100';
-		}
+	function getStatusText(available: number): string {
+		if (available === 0) return 'out of stock';
+		if (available < 10) return 'low stock';
+		return 'in stock';
 	}
 </script>
 
 <div class="min-h-screen bg-gray-50 p-4 sm:p-6">
+	<!-- Confirm Modal -->
+	<ConfirmModal
+		isOpen={showConfirmModal}
+		onClose={() => (showConfirmModal = false)}
+		onConfirm={cleanupOrphanedAccounts}
+		title="Fix Stuck Accounts"
+		message="This will reset orphaned allocated accounts back to available status. This action cannot be undone. Are you sure you want to continue?"
+		confirmText="Yes, Fix Accounts"
+		cancelText="Cancel"
+		isDestructive={true}
+		isLoading={cleanupLoading}
+	/>
+
 	<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<div class="min-w-0 flex-1">
 			<h1 class="text-xl font-bold text-gray-900 sm:text-2xl">Account Inventory</h1>
@@ -158,26 +97,28 @@
 		</div>
 		<div class="flex flex-col gap-2 sm:flex-row sm:space-x-3">
 			<button
-				onclick={cleanupOrphanedAccounts}
+				onclick={() => (showConfirmModal = true)}
 				disabled={cleanupLoading}
-				class="w-full rounded-lg bg-orange-600 px-4 py-3 text-white transition-colors hover:bg-orange-700 disabled:opacity-50 sm:w-auto sm:py-2"
+				class="w-full rounded-lg bg-orange-600 px-4 py-3 text-white transition-colors hover:scale-95 hover:bg-orange-700 disabled:opacity-50 sm:w-auto sm:py-2"
 			>
 				{cleanupLoading ? 'Cleaning...' : 'Fix Stuck Accounts'}
 			</button>
-			<button
-				onclick={loadInventory}
-				disabled={loading}
-				class="w-full rounded-lg bg-blue-600 px-4 py-3 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 sm:w-auto sm:py-2"
-			>
-				{loading ? 'Refreshing...' : 'Refresh'}
-			</button>
+			
 		</div>
 	</div>
+
+	<!-- Error Message -->
+	{#if data.error}
+		<div class="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
+			<p class="font-medium">Error loading inventory</p>
+			<p class="mt-1 text-sm">{data.error}</p>
+		</div>
+	{/if}
 
 	<!-- Cleanup Message -->
 	{#if cleanupMessage}
 		<div
-			class="mb-6 rounded-lg border {cleanupMessage.startsWith('✅')
+			class="mb-6 rounded-lg border {cleanupMessage.startsWith('')
 				? 'border-green-200 bg-green-50 text-green-800'
 				: 'border-red-200 bg-red-50 text-red-800'} p-4"
 		>
@@ -187,31 +128,31 @@
 
 	<!-- Stats Cards -->
 	<div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
-		<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4  sm:p-6">
 			<h3 class="text-xs font-medium text-gray-500 sm:text-sm">Total Accounts</h3>
 			<p class="text-lg font-bold text-gray-900 sm:text-2xl">
 				{summaryStats.total_accounts.toLocaleString()}
 			</p>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4  sm:p-6">
 			<h3 class="text-xs font-medium text-gray-500 sm:text-sm">Available</h3>
 			<p class="text-lg font-bold text-green-600 sm:text-2xl">
 				{summaryStats.available_accounts.toLocaleString()}
 			</p>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4  sm:p-6">
 			<h3 class="text-xs font-medium text-gray-500 sm:text-sm">Assigned</h3>
 			<p class="text-lg font-bold text-yellow-600 sm:text-2xl">
 				{summaryStats.assigned_accounts.toLocaleString()}
 			</p>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+		<div class="rounded-lg border border-gray-200 bg-white p-6 ">
 			<h3 class="text-sm font-medium text-gray-500">Delivered</h3>
 			<p class="text-2xl font-bold text-blue-600">
 				{summaryStats.delivered_accounts.toLocaleString()}
 			</p>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+		<div class="rounded-lg border border-gray-200 bg-white p-6 ">
 			<h3 class="text-sm font-medium text-gray-500">Platforms</h3>
 			<p class="text-2xl font-bold text-purple-600">{summaryStats.platforms}</p>
 		</div>
@@ -228,7 +169,7 @@
 	</div>
 
 	<!-- Inventory Table -->
-	<div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+	<div class="overflow-hidden rounded-lg border border-gray-200 bg-white">
 		<div class="overflow-x-auto">
 			<table class="w-full">
 				<thead class="bg-gray-50">
@@ -276,49 +217,55 @@
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-gray-200 bg-white">
-					{#each filteredInventory as item (item.categoryId || `${item.platform}-${item.tier}`)}
+					{#each filteredInventory as item}
 						<tr class="hover:bg-gray-50">
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="flex items-center">
-									<div>
-										<div class="text-sm font-medium text-gray-900">{item.platform}</div>
-										<div class="text-sm text-gray-500">{item.tier}</div>
-									</div>
+								<div class="text-sm font-medium text-gray-900">
+									{item.platform_name || 'Unknown'}
+								</div>
+								<div class="text-sm text-gray-500">{item.tier_name || 'Unknown'}</div>
+							</td>
+							<td class="px-6 py-4 whitespace-nowrap">
+								<div class="text-sm text-gray-900">
+									{item.total_accounts?.toLocaleString() || 0}
 								</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm text-gray-900">{item.total_accounts.toLocaleString()}</div>
+								<div class="text-sm text-green-600">
+									{item.available_accounts?.toLocaleString() || 0}
+								</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm text-green-600">{item.available_accounts.toLocaleString()}</div>
+								<div class="text-sm text-yellow-600">
+									{item.assigned_accounts?.toLocaleString() || 0}
+								</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm text-yellow-600">{item.assigned_accounts.toLocaleString()}</div>
+								<div class="text-sm text-blue-600">
+									{item.delivered_accounts?.toLocaleString() || 0}
+								</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm text-blue-600">{item.delivered_accounts.toLocaleString()}</div>
-							</td>
-							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm text-gray-900">{formatPrice(item.price)}</div>
+								<div class="text-sm text-gray-900">-</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
 								<span
 									class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {getStatusColor(
-										item.status
+										item.available_accounts || 0
 									)}"
 								>
-									{item.status.replace('_', ' ')}
+									{getStatusText(item.available_accounts || 0)}
 								</span>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm text-gray-500">{formatDate(item.last_restocked)}</div>
+								<div class="text-sm text-gray-500">
+									{item.created_at ? formatDate(new Date(item.created_at)) : 'N/A'}
+								</div>
 							</td>
 						</tr>
 					{:else}
 						<tr>
-							<td colspan="8" class="px-6 py-8 text-center text-gray-500">
-								{loading ? 'Loading inventory...' : 'No inventory items found'}
-							</td>
+							<td colspan="8" class="px-6 py-8 text-center text-gray-500"> No inventory found </td>
 						</tr>
 					{/each}
 				</tbody>
@@ -328,7 +275,7 @@
 
 	{#if filteredInventory.length > 0}
 		<div class="mt-4 text-sm text-gray-500">
-			Showing {filteredInventory.length} of {inventory.length} inventory items
+			Showing {filteredInventory.length} of {data.inventory?.length || 0} inventory items
 		</div>
 	{/if}
 </div>

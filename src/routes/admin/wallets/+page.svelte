@@ -13,7 +13,7 @@
 	} from '@lucide/svelte';
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
-	import { formatPrice, formatDate } from '$lib/helpers/utils';
+	import { formatPrice, formatDate, exportToCSV } from '$lib/helpers/utils';
 
 	let { data }: { data: PageData } = $props();
 
@@ -60,10 +60,25 @@
 	}
 
 	function exportData() {
-		// TODO: Implement CSV export
+		const today = new Date().toISOString().split('T')[0];
+		const exportData = transactions.map((txn) => ({
+			User: txn.user?.fullName || txn.user?.email || 'N/A',
+			Email: txn.user?.email || 'N/A',
+			Type: txn.type,
+			Amount: Number(txn.amount),
+			'Balance Before': Number(txn.balanceBefore),
+			'Balance After': Number(txn.balanceAfter),
+			Description: txn.description,
+			Reference: txn.reference || 'N/A',
+			Status: txn.status,
+			Date: formatDate(txn.createdAt)
+		}));
+
+		exportToCSV(exportData, `wallet-transactions-${today}.csv`);
+
 		addToast({
-			type: 'info',
-			title: 'Export functionality coming soon',
+			type: 'success',
+			title: 'Export completed successfully',
 			duration: 3000
 		});
 	}
@@ -78,12 +93,30 @@
 		</div>
 		<button
 			onclick={exportData}
-			class="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+			class="flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:scale-95 hover:bg-blue-700"
 		>
 			<Download class="h-4 w-4" />
 			Export Data
 		</button>
 	</div>
+
+	{#if data.error}
+		<div class="rounded-lg border border-red-200 bg-red-50 p-4">
+			<div class="flex items-center gap-2">
+				<svg class="h-5 w-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+					<path
+						fill-rule="evenodd"
+						d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+						clip-rule="evenodd"
+					/>
+				</svg>
+				<div>
+					<p class="font-semibold text-red-800">Connection Error</p>
+					<p class="text-sm text-red-700">{data.error}</p>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Stats Cards -->
 	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

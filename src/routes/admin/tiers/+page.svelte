@@ -13,6 +13,7 @@
 	import { showSuccess, showError } from '$lib/stores/toasts';
 	import type { CategoryMetadata, CategoryInsert, CategoryUpdate } from '$lib/services/categories';
 	import type { PageData } from './$types';
+	import { fade, fly } from 'svelte/transition';
 
 	interface Props {
 		data: PageData;
@@ -261,7 +262,7 @@
 			</div>
 			<button
 				onclick={openCreateModal}
-				class="flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-3 text-white transition-colors hover:bg-purple-700 sm:w-auto sm:py-2"
+				class="cursor-pointer flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-3 text-white transition-all hover:bg-purple-700 sm:w-auto sm:py-2 hover:scale-95"
 			>
 				<Plus size={18} />
 				Add Tier
@@ -309,7 +310,7 @@
 			{#each tiers as tier}
 				{@const metadata = tier.metadata as any}
 				<div
-					class="rounded-lg border border-gray-200 bg-white p-6 shadow transition-shadow hover:shadow-lg"
+					class="rounded-lg border border-gray-200 bg-white p-6"
 				>
 					<!-- Tier Header -->
 					<div class="mb-4 flex items-start justify-between">
@@ -323,17 +324,17 @@
 						<div class="flex items-center gap-1">
 							<button
 								onclick={() => openEditModal(tier)}
-								class="rounded p-1 text-gray-400 transition-colors hover:text-purple-600"
+								class="group rounded p-1 text-gray-400 transition-colors hover:text-purple-600"
 								title="Edit Tier"
 							>
-								<Edit size={16} />
+								<Edit size={16} class='group-hover:scale-90 transition-transform' />
 							</button>
 							<button
 								onclick={() => handleDelete(tier)}
-								class="rounded p-1 text-gray-400 transition-colors hover:text-red-600"
+								class="group rounded p-1 text-gray-400 transition-colors hover:text-red-600"
 								title="Delete Tier"
 							>
-								<Trash2 size={16} />
+								<Trash2 size={16} class='group-hover:scale-90 transition-transform' />
 							</button>
 						</div>
 					</div>
@@ -433,6 +434,8 @@
 			<!-- Modal content -->
 			<div
 				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl"
+				in:fly={{ y: 200, duration: 500 }}
+				out:fade={{ duration: 500}}
 			>
 				<form
 					onsubmit={(e) => {
@@ -551,7 +554,7 @@
 
 							<!-- Follower Range -->
 							<div>
-								<label class="block text-sm font-medium text-gray-700">Min Followers</label>
+								<label class="block text-sm font-medium text-gray-700" >Min Followers</label>
 								<input
 									type="number"
 									min="0"
@@ -643,6 +646,7 @@
 		<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
 			<!-- Background overlay -->
 			<div
+				
 				class="fixed inset-0 bg-black/20 transition-opacity"
 				onclick={() => (showEditModal = false)}
 			></div>
@@ -650,6 +654,8 @@
 			<!-- Modal content -->
 			<div
 				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl"
+				in:fly={{ y: 200, duration: 500 }}
+				out:fade={{ duration: 500}}
 			>
 				<form
 					onsubmit={(e) => {

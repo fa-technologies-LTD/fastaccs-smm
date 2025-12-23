@@ -29,6 +29,14 @@
 	let filterStatus = $state('all');
 	let searchTerm = $state('');
 
+	// Calculate processed accounts (total accounts that exist)
+	const processedCount = $derived(accounts.length);
+	const availableCount = $derived(accounts.filter((a) => a.status === 'available').length);
+	const deliveredCount = $derived(accounts.filter((a) => a.status === 'delivered').length);
+	const totalUnits = $derived(
+		batch.total_accounts || (batch as any).totalUnits || accounts.length || 0
+	);
+
 	// Filter accounts based on status and search
 	const filteredAccounts = $derived(() => {
 		let filtered = accounts;
@@ -168,7 +176,7 @@
 		<div class="mb-4 flex items-center gap-4">
 			<button
 				onclick={goBack}
-				class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 transition-colors hover:bg-gray-50"
+				class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg border border-gray-300 transition-all hover:scale-95 hover:bg-gray-50"
 			>
 				<ArrowLeft size={20} />
 			</button>
@@ -191,7 +199,7 @@
 			</div>
 			<button
 				onclick={exportAccounts}
-				class="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white transition-colors hover:bg-green-700"
+				class="flex cursor-pointer items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white transition-all hover:scale-95 hover:bg-green-700"
 			>
 				<Download size={18} />
 				Export CSV
@@ -217,7 +225,7 @@
 				<FileText class="h-8 w-8 text-blue-600" />
 				<div class="ml-4">
 					<p class="text-sm font-medium text-gray-600">Total Accounts</p>
-					<p class="text-2xl font-bold text-gray-900">{batch.total_accounts}</p>
+					<p class="text-2xl font-bold text-gray-900">{totalUnits}</p>
 				</div>
 			</div>
 		</div>
@@ -228,7 +236,7 @@
 				<CheckCircle class="h-8 w-8 text-green-600" />
 				<div class="ml-4">
 					<p class="text-sm font-medium text-gray-600">Processed</p>
-					<p class="text-2xl font-bold text-gray-900">{batch.processed_accounts}</p>
+					<p class="text-2xl font-bold text-gray-900">{processedCount}</p>
 				</div>
 			</div>
 		</div>
@@ -239,9 +247,7 @@
 				<Users class="h-8 w-8 text-blue-600" />
 				<div class="ml-4">
 					<p class="text-sm font-medium text-gray-600">Available</p>
-					<p class="text-2xl font-bold text-gray-900">
-						{accounts.filter((a) => a.status === 'available').length}
-					</p>
+					<p class="text-2xl font-bold text-gray-900">{availableCount}</p>
 				</div>
 			</div>
 		</div>
@@ -252,9 +258,7 @@
 				<CheckCircle class="h-8 w-8 text-green-600" />
 				<div class="ml-4">
 					<p class="text-sm font-medium text-gray-600">Delivered</p>
-					<p class="text-2xl font-bold text-gray-900">
-						{accounts.filter((a) => a.status === 'delivered').length}
-					</p>
+					<p class="text-2xl font-bold text-gray-900">{deliveredCount}</p>
 				</div>
 			</div>
 		</div>
@@ -289,7 +293,7 @@
 					<div>
 						<dt class="text-sm font-medium text-gray-500">Upload Date</dt>
 						<dd class="text-sm text-gray-900">
-							{new Date(batch.created_at).toLocaleString()}
+							{batch.created_at ? new Date(batch.created_at).toLocaleString() : 'N/A'}
 						</dd>
 					</div>
 					{#if batch.metadata?.file_size}
@@ -301,7 +305,7 @@
 					<div>
 						<dt class="text-sm font-medium text-gray-500">Progress</dt>
 						<dd class="text-sm text-gray-900">
-							{Math.round((batch.processed_accounts / batch.total_accounts) * 100)}%
+							{totalUnits > 0 ? Math.round((processedCount / totalUnits) * 100) : 0}%
 						</dd>
 					</div>
 				</dl>
@@ -309,16 +313,16 @@
 		</div>
 
 		<!-- Progress Bar -->
-		{#if batch.total_accounts > 0}
+		{#if totalUnits > 0}
 			<div class="mt-6">
 				<div class="mb-2 flex justify-between text-sm text-gray-600">
 					<span>Processing Progress</span>
-					<span>{batch.processed_accounts} / {batch.total_accounts}</span>
+					<span>{processedCount} / {totalUnits}</span>
 				</div>
 				<div class="h-3 w-full rounded-full bg-gray-200">
 					<div
 						class="h-3 rounded-full bg-blue-600 transition-all duration-300"
-						style="width: {(batch.processed_accounts / batch.total_accounts) * 100}%"
+						style="width: {(processedCount / totalUnits) * 100}%"
 					></div>
 				</div>
 			</div>

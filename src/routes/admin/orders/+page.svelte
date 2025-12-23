@@ -115,7 +115,7 @@
 			<button
 				onclick={loadOrders}
 				disabled={loading}
-				class="w-full rounded-lg bg-blue-600 px-4 py-3 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 sm:w-auto sm:py-2"
+				class="cursor-pointer w-full rounded-lg bg-blue-600 px-4 py-3 text-white transition-all hover:scale-95 hover:bg-blue-700 disabled:opacity-50 sm:w-auto sm:py-2"
 			>
 				{loading ? 'Refreshing...' : 'Refresh'}
 			</button>
@@ -131,28 +131,28 @@
 
 	<!-- Stats Cards -->
 	<div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
-		<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4  sm:p-6">
 			<div class="text-xs font-medium text-gray-600 sm:text-sm">Total Orders</div>
 			<div class="text-lg font-bold text-gray-900 sm:text-2xl">{summaryStats.total_orders}</div>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4  sm:p-6">
 			<div class="text-xs font-medium text-gray-600 sm:text-sm">Pending</div>
 			<div class="text-lg font-bold text-yellow-600 sm:text-2xl">{summaryStats.pending_orders}</div>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4  sm:p-6">
 			<div class="text-xs font-medium text-gray-600 sm:text-sm">Processing</div>
 			<div class="text-lg font-bold text-blue-600 sm:text-2xl">
 				{summaryStats.processing_orders}
 			</div>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4  sm:p-6">
 			<div class="text-xs font-medium text-gray-600 sm:text-sm">Completed</div>
 			<div class="text-lg font-bold text-green-600 sm:text-2xl">
 				{summaryStats.completed_orders}
 			</div>
 		</div>
 		<div
-			class="col-span-2 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:col-span-1 sm:p-6"
+			class="col-span-2 rounded-lg border border-gray-200 bg-white p-4  sm:col-span-1 sm:p-6"
 		>
 			<div class="text-xs font-medium text-gray-600 sm:text-sm">Revenue</div>
 			<div class="text-lg font-bold text-gray-900 sm:text-2xl">
@@ -172,7 +172,7 @@
 	</div>
 
 	<!-- Orders Table -->
-	<div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+	<div class="overflow-hidden rounded-lg border border-gray-200 bg-white ">
 		<div class="overflow-x-auto">
 			<table class="min-w-full divide-y divide-gray-200">
 				<thead class="bg-gray-50">

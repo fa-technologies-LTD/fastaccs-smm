@@ -5,6 +5,7 @@
 	import { showSuccess, showError } from '$lib/stores/toasts';
 	import type { Category, CategoryInsert, CategoryUpdate } from '$lib/services/categories';
 	import type { PageData } from './$types';
+	import { fade, fly } from 'svelte/transition';
 
 	interface Props {
 		data: PageData;
@@ -221,7 +222,7 @@
 			</div>
 			<button
 				onclick={openCreateModal}
-				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm text-white transition-all hover:scale-[.95] hover:bg-blue-700 sm:w-auto sm:py-2"
+				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm text-white transition-all hover:scale-95 hover:bg-blue-700 sm:w-auto sm:py-2"
 			>
 				<Plus size={18} />
 				Add Platform
@@ -252,7 +253,7 @@
 	{:else}
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
 			{#each platforms as platform}
-				<div class="rounded-lg border border-gray-200 bg-white p-4 shadow sm:p-6">
+				<div class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
 					<!-- Platform Header -->
 					<div class="mb-4 flex items-start justify-between gap-3">
 						<div class="flex min-w-0 flex-1 items-center gap-3">
@@ -278,27 +279,27 @@
 						<div class="flex flex-shrink-0 items-center gap-1">
 							<button
 								onclick={() => viewTiers(platform)}
-								class="rounded p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
+								class="group rounded p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
 								title="View Tiers"
 								aria-label="View Tiers"
 							>
-								<Eye size={16} />
+								<Eye size={16} class='group-hover:scale-90 transition-transform'/>
 							</button>
 							<button
 								onclick={() => openEditModal(platform)}
-								class="rounded p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
+								class="group rounded p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
 								title="Edit Platform"
 								aria-label="Edit Platform"
 							>
-								<Edit size={16} />
+								<Edit size={16} class='group-hover:scale-90 transition-transform' />
 							</button>
 							<button
 								onclick={() => handleDelete(platform)}
-								class="rounded p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+								class="group rounded p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
 								title="Delete Platform"
 								aria-label="Delete Platform"
 							>
-								<Trash2 size={16} />
+								<Trash2 size={16} class='group-hover:scale-90 transition-transform' />
 							</button>
 						</div>
 					</div>
@@ -353,14 +354,17 @@
 	<div class="fixed inset-0 z-50 overflow-y-auto">
 		<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
 			<!-- Background overlay -->
-			<div
+			<button
 				class="fixed inset-0 bg-black/20 transition-opacity"
 				onclick={() => (showCreateModal = false)}
-			></div>
+				aria-label='create modal'
+			></button>
 
 			<!-- Modal content -->
 			<div
 				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg"
+				in:fly={{ y: 200, duration: 500 }}
+				out:fade={{ duration: 500}}
 			>
 				<form onsubmit={handleCreate}>
 					<div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
@@ -486,6 +490,8 @@
 			<!-- Modal content -->
 			<div
 				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg"
+				in:fly={{ y: 200, duration: 500 }}
+				out:fade={{ duration: 500}}
 			>
 				<form onsubmit={handleUpdate}>
 					<div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
