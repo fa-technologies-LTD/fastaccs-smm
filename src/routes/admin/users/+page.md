@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Manage all registered users, view user details, edit profiles, manage roles, view user activity, handle suspensions, and track user orders and purchases.
+Manage all users, view user details, track orders and purchases, monitor wallet balances, and export user data for analysis.
 
 ## Route
 
@@ -10,564 +10,291 @@ Manage all registered users, view user details, edit profiles, manage roles, vie
 
 ## File Structure
 
-- `+page.svelte` - Users list UI
-- `+page.ts` - Client-side data loading
+- `+page.server.ts` - Server-side data loading using Prisma
+- `+page.svelte` - Users list UI with search, filtering, and pagination
 
-## Components Imported
+## Data Loading
 
-- **Navigation** - Admin navigation
-- **Footer** - Site footer
+### Server-Side Loading (`+page.server.ts`)
+
+Data is loaded server-side using Prisma ORM with the `PageServerLoad` function.
+
+**Prisma Query:**
+
+```typescript
+const usersRaw = await prisma.user.findMany({
+  include: {
+    orders: true,
+    wallet: true
+  },
+  orderBy: {
+    createdAt: 'desc'
+  }
+});
+```
+
+**Data Transformation:**
+
+Each user is mapped to a `UserData` object with aggregated information:
+
+```typescript
+interface UserData {
+  id: string;
+  email: string | null;
+  fullName: string | null;
+  phone: string | null;
+  userType: 'REGISTERED' | 'GUEST' | 'CONVERTED' | 'AFFILIATE' | 'ADMIN';
+  isActive: boolean;
+  isAffiliateEnabled: boolean;
+  emailVerified: boolean;
+  registeredAt: Date | null;
+  lastLogin: Date | null;
+  createdAt: Date;
+  orderCount: number; // Calculated from orders.length
+  totalSpent: number; // Sum of all order.totalAmount values
+  walletBalance: number; // From wallet.balance, or 0 if no wallet
+}
+```
+
+**Stats Calculation:**
+
+The server calculates aggregate statistics from the user data:
+
+```typescript
+interface UserStats {
+  totalUsers: number; // Total count of all users
+  registeredUsers: number; // Users with userType === 'REGISTERED'
+  guestUsers: number; // Users with userType === 'GUEST'
+  affiliates: number; // Users with isAffiliateEnabled === true
+  activeUsers: number; // Users with isActive === true
+  totalRevenue: number; // Sum of all users' totalSpent
+}
+```
+
+**Return Value:**
+
+```typescript
+{
+  users: UserData[];
+  stats: UserStats;
+}
+```
 
 ## Icons Used
 
-- `Users`, `Search`, `Filter`, `Eye`, `Edit`, `Ban`, `CheckCircle`, `Mail`, `Calendar`, `ShoppingBag`, `Wallet`, `TrendingUp` from `@lucide/svelte`
-
-## Data Sources
-
-### API Endpoints
-
-**1. GET** `/api/admin/users?page=1&limit=50&role=&status=&search=`
-**Returns:**
-
-```typescript
-{
-  success: boolean;
-  data: {
-    users: User[];
-    totalCount: number;
-    currentPage: number;
-    totalPages: number;
-    stats: {
-      totalUsers: number;
-      activeUsers: number;
-      suspendedUsers: number;
-      adminUsers: number;
-    };
-  };
-}
-```
-
-**User Interface:**
-
-```typescript
-interface User {
-	id: string;
-	name: string;
-	email: string;
-	role: 'user' | 'admin';
-	status: 'active' | 'suspended' | 'banned';
-	emailVerified: boolean;
-	whatsapp?: string;
-	telegram?: string;
-	createdAt: DateTime;
-	updatedAt: DateTime;
-	lastLogin?: DateTime;
-	_count: {
-		orders: number;
-		sessions: number;
-	};
-	orders?: Order[];
-	walletBalance?: number;
-	affiliateData?: AffiliateProgram;
-}
-```
-
-**2. GET** `/api/admin/users/${userId}` - Get single user details
-
-**3. PUT** `/api/admin/users/${userId}` - Update user info
-
-**4. PUT** `/api/admin/users/${userId}/role` - Change user role
-
-**5. PUT** `/api/admin/users/${userId}/status` - Update status (suspend/activate)
-
-**6. DELETE** `/api/admin/users/${userId}` - Delete user account
-
-**7. GET** `/api/admin/users/${userId}/activity` - User activity log
+- `Users`, `UserCheck`, `Mail`, `Phone`, `Wallet`, `ShoppingBag`, `Calendar`, `Search`, `Download` from `lucide-svelte`
 
 ## Page State
 
+### Props
+
 ```typescript
-let users = $state<User[]>([]);
-let loading = $state(true);
-let totalCount = $state(0);
-let currentPage = $state(1);
-let pageSize = $state(50);
-let searchQuery = $state('');
-let roleFilter = $state<string>('');
-let statusFilter = $state<string>('');
-let stats = $state<any>(null);
-let selectedUser = $state<User | null>(null);
-let showDetailsModal = $state(false);
-let showEditModal = $state(false);
+let { data }: { data: PageData } = $props();
 ```
+
+### Reactive State ($state)
+
+```typescript
+let searchQuery = $state(''); // Search input value
+let filterType = $state('all'); // Filter selection
+let currentPage = $state(1); // Current pagination page
+let itemsPerPage = 20; // Items per page (constant)
+```
+
+### Derived State ($derived, $derived.by)
+
+```typescript
+let stats = $derived({
+  totalUsers: data.stats?.totalUsers || 0,
+  registeredUsers: data.stats?.registeredUsers || 0,
+  guestUsers: data.stats?.guestUsers || 0,
+  affiliates: data.stats?.affiliates || 0,
+  activeUsers: data.stats?.activeUsers || 0,
+  totalRevenue: data.stats?.totalRevenue || 0
+});
+
+let allUsers = $derived(data.users || []);
+
+let filteredUsers = $derived.by(() => {
+  // Applies filterType and searchQuery to allUsers
+});
+
+let paginatedUsers = $derived.by(() => {
+  // Returns the current page slice of filteredUsers
+});
+
+let totalPages = $derived(Math.ceil(filteredUsers.length / itemsPerPage));
+```
+
+## Helper Functions
+
+- `formatPrice()` - Formats numbers as currency
+- `formatDate()` - Formats dates
+- `exportToCSV()` - Exports data to CSV file
 
 ## Key Features
 
-### 1. User Statistics Cards
+### 1. Statistics Cards
+
+Six stat cards displayed at the top of the page:
 
 #### Total Users
-
-- Count of all registered users
+- Shows total count of all users
 - Icon: Users (blue)
 
-#### Active Users
+#### Registered
+- Shows count of registered users (userType === 'REGISTERED')
+- Icon: UserCheck (green)
 
-- Users with active status
-- Icon: CheckCircle (green)
-- Percentage of total
+#### Active
+- Shows count of active users (isActive === true)
+- Icon: UserCheck (green)
 
-#### Suspended Users
+#### Guests
+- Shows count of guest users (userType === 'GUEST')
+- Icon: Users (gray)
 
-- Suspended/banned accounts
-- Icon: Ban (red)
-- Click to filter
+#### Affiliates
+- Shows count of affiliate-enabled users (isAffiliateEnabled === true)
+- Icon: Users (purple)
 
-#### Admin Users
+#### Total Revenue
+- Shows sum of all user spending
+- Icon: Wallet (green)
+- Formatted as currency
 
-- Users with admin role
-- Icon: Shield (purple)
+### 2. Search Functionality
 
-### 2. Filters & Search
+**Input:** Text input with search icon  
+**Searches:** email, fullName, phone, id  
+**Method:** Case-insensitive substring match using `.toLowerCase().includes(query)`
 
-#### Role Filter
+### 3. Filter Functionality
 
-- All Roles
-- User
-- Admin
-- Affiliate (if has affiliate account)
+**Filter Types:**
+- `all` - Shows all users (no filter)
+- `registered` - userType === 'REGISTERED'
+- `guest` - userType === 'GUEST'
+- `affiliate` - isAffiliateEnabled === true
+- `active` - isActive === true
+- `inactive` - isActive === false
 
-#### Status Filter
+**Implementation:** Dropdown select with options, filters applied in `filteredUsers` derived state using `$derived.by()`
 
-- All Statuses
-- Active
-- Suspended
-- Banned
-
-#### Search
-
-- Search by:
-  - Name
-  - Email
-  - User ID
-  - WhatsApp
-  - Telegram
-- Real-time search (debounced)
-
-### 3. Users Table
+### 4. Users Table
 
 **Columns:**
+1. **User** - Full name + truncated ID
+2. **Contact** - Email and phone with icons
+3. **Type** - User type badge (REGISTERED/GUEST) + affiliate badge if applicable
+4. **Status** - Active/Inactive badge
+5. **Orders** - Order count with shopping bag icon
+6. **Total Spent** - Formatted currency
+7. **Wallet** - Wallet balance with wallet icon
+8. **Registered** - Registration date with calendar icon
 
-- Avatar/Initials
+**Empty State:** "No users found" message when filteredUsers is empty
+
+### 5. Pagination
+
+**Configuration:**
+- Items per page: 20
+- Shows page numbers (up to 5 visible)
+- Previous/Next buttons
+- Disabled state on first/last page
+- Shows current range (e.g., "Showing 1 to 20 of 156 users")
+
+**Implementation:** Uses `$derived.by()` to slice filteredUsers based on currentPage and itemsPerPage
+
+### 6. CSV Export
+
+**Button:** "Export Data" button in header with download icon
+
+**Export Data:**
+
+Exports all filtered users (not just current page) with the following columns:
+- ID
 - Name
 - Email
-- Role badge
-- Status badge
-- Orders count
-- Total spent
-- Member since
-- Last login
-- Actions
-
-**Role Badges:**
-
-- User: Gray badge
-- Admin: Purple badge with shield icon
-
-**Status Badges:**
-
-- Active: Green badge
-- Suspended: Orange badge
-- Banned: Red badge
-
-### 4. User Details Modal
-
-**Tabs:**
-
-#### Profile Tab
-
-- Full name
-- Email (with verified badge)
-- Role
-- Status
-- Member since
-- Last login
-- WhatsApp
-- Telegram
-- Edit button
-
-#### Orders Tab
-
-- List of all user orders
-- Order number
-- Date
-- Amount
-- Status
-- Link to order details page
-
-#### Purchases Tab
-
-- All purchased accounts
-- Platform
-- Tier
-- Quantity
-- Purchase date
-- Link to view accounts
-
-#### Wallet Tab
-
-- Current balance
-- Transaction history
-- Recent deposits
-- Recent debits
-- Adjust balance button (admin)
-
-#### Affiliate Tab (if enrolled)
-
-- Affiliate code
-- Referral link
-- Total referrals
-- Total sales
-- Total commission
-- Commission rate
-- Enable/disable affiliate
-
-#### Activity Tab
-
-- Login history
-- IP addresses
-- Device info
-- Order history
-- Account access logs
-- Admin actions taken
-
-### 5. Quick Actions per User
-
-**Action Buttons:**
-
-- **View Details** - Open details modal
-- **Edit Profile** - Edit user info
-- **Suspend/Activate** - Toggle user status
-- **Change Role** - Promote to admin or demote
-- **View Orders** - Filter orders by user
-- **Adjust Wallet** - Add/remove wallet funds
-- **Delete User** - Permanently delete (with confirmation)
-
-### 6. Edit User Modal
-
-**Fields:**
-
-- Name
-- Email
-- Role (dropdown)
-- Status (dropdown)
-- WhatsApp
-- Telegram
-- Email verified checkbox
-
-**Actions:**
-
-- Save Changes
-- Cancel
-- Delete User
-
-### 7. Bulk Operations
-
-- Select multiple users
-- Bulk status update
-- Bulk role assignment
-- Bulk export
-- Send bulk email
-
-## User Actions
-
-### Viewing
-
-- Filter by role
-- Filter by status
-- Search users
-- Sort columns
-- View user details
-- Paginate results
-
-### Management
-
-- Edit user profile
-- Change user role
-- Suspend/activate users
-- Delete users
-- Adjust wallet balance
-- View user activity
-- Manage affiliate status
-
-## API Request Examples
-
-### Get Users
-
-```typescript
-GET /api/admin/users?page=1&limit=50&role=user&status=active&search=john
-```
-
-### Get User Details
-
-```typescript
-GET /api/admin/users/${userId}
-```
-
-### Update User
-
-```typescript
-PUT /api/admin/users/${userId}
-{
-  name: "John Doe",
-  email: "john@example.com",
-  whatsapp: "+2348012345678",
-  telegram: "@johndoe"
-}
-```
-
-### Change Role
-
-```typescript
-PUT /api/admin/users/${userId}/role
-{
-  role: "admin"
-}
-```
-
-### Update Status
-
-```typescript
-PUT /api/admin/users/${userId}/status
-{
-  status: "suspended",
-  reason: "Violation of terms"
-}
-```
-
-### Adjust Wallet
-
-```typescript
-POST /api/admin/users/${userId}/wallet/adjust
-{
-  amount: 5000, // Positive to add, negative to deduct
-  description: "Admin adjustment - bonus",
-  type: "credit" | "debit"
-}
-```
-
-### Delete User
-
-```typescript
-DELETE /api/admin/users/${userId}
-```
-
-## SEO Metadata
-
-- **Title**: "User Management - Admin - FastAccs"
-- **Robots**: "noindex, nofollow"
-
-## Security
-
-- Admin role required
-- User passwords never shown (hashed)
-- Sensitive actions require confirmation
-- All admin actions logged
-- Cannot delete own admin account
-- Cannot demote last admin
-
-## Related Pages
-
-- `/admin` - Dashboard
-- `/admin/orders` - View user's orders
-- `/admin/wallet-transactions` - View user's wallet activity
-
-## Component Dependencies
-
-```
-+page.svelte
-├── Navigation
-├── Footer
-├── Modal components
-└── Users API
-```
-
-## Backend Services Used
-
-- `src/lib/auth/user.ts` - User queries and updates
-- `src/lib/services/wallet.ts` - Wallet adjustments
-- `src/lib/services/affiliate.ts` - Affiliate management
-- `src/routes/api/admin/users/+server.ts` - Main endpoint
-
-## Database Operations
-
-### Get Users (with filters)
-
-```typescript
-const users = await prisma.user.findMany({
-	where: {
-		AND: [
-			role ? { role } : {},
-			status ? { status } : {},
-			search
-				? {
-						OR: [
-							{ name: { contains: search, mode: 'insensitive' } },
-							{ email: { contains: search, mode: 'insensitive' } },
-							{ whatsapp: { contains: search } },
-							{ telegram: { contains: search } }
-						]
-					}
-				: {}
-		]
-	},
-	include: {
-		_count: {
-			select: {
-				orders: true,
-				sessions: true
-			}
-		}
-	},
-	skip: (page - 1) * limit,
-	take: limit,
-	orderBy: { createdAt: 'desc' }
-});
-```
-
-### Update User
-
-```typescript
-await prisma.user.update({
-	where: { id: userId },
-	data: {
-		name,
-		email,
-		whatsapp,
-		telegram,
-		role,
-		status
-	}
-});
-```
-
-### Get User Activity
-
-```typescript
-// Login history
-const sessions = await prisma.session.findMany({
-	where: { userId },
-	orderBy: { createdAt: 'desc' },
-	take: 50
-});
-
-// Order history
-const orders = await prisma.order.findMany({
-	where: { userId },
-	include: { items: true },
-	orderBy: { createdAt: 'desc' }
-});
-
-// Wallet transactions
-const transactions = await prisma.walletTransaction.findMany({
-	where: { userId },
-	orderBy: { createdAt: 'desc' },
-	take: 50
-});
-```
-
-### Adjust Wallet Balance
-
-```typescript
-const currentBalance = await getWalletBalance(userId);
-const newBalance = currentBalance + amount; // amount can be negative
-
-await prisma.walletTransaction.create({
-	data: {
-		userId,
-		type: amount > 0 ? 'credit' : 'debit',
-		amount: Math.abs(amount),
-		description,
-		balanceAfter: newBalance
-	}
-});
-```
-
-## Performance Considerations
-
-- Paginate users (50 per page)
-- Index on email, role, status
-- Debounce search (300ms)
-- Cache stats for 5 minutes
-- Lazy load user details
-
-## User Roles
-
-### User (default)
-
-- Can place orders
-- Access dashboard
-- Manage profile
-- Use wallet
-- Become affiliate
-
-### Admin
-
-- All user permissions
-- Access admin panel
-- Manage inventory
-- Manage orders
-- Manage users
-- View analytics
-- Adjust wallets
-- Process refunds
-
-## User Status
-
-### Active
-
-- Normal account status
-- Full platform access
-- Can place orders
-
-### Suspended
-
-- Temporary restriction
-- Cannot place orders
-- Can view existing purchases
-- Can be reactivated
-
-### Banned
-
-- Permanent restriction
-- No platform access
-- Cannot login
-- Requires admin to unban
-
-## Admin Actions Log
-
-Track all admin actions on users:
-
-- User created/updated
-- Role changed
-- Status changed
-- Wallet adjusted
-- User deleted
-- Logged by admin ID and timestamp
+- Phone
+- Type
+- Is Active
+- Is Affiliate
+- Email Verified
+- Total Orders
+- Total Spent
+- Wallet Balance
+- Registered At
+- Last Login
+
+**Filename:** `users-{YYYY-MM-DD}.csv`
+
+**Feedback:** Shows success toast notification after export
+
+## Badge Styling
+
+### User Type Badges
+- `REGISTERED`: Green background (`bg-green-100 text-green-800`)
+- `GUEST`: Gray background (`bg-gray-100 text-gray-800`)
+- `AFFILIATE`: Purple badge shown separately if `isAffiliateEnabled === true` (`bg-purple-100 text-purple-800`)
+
+### Status Badges
+- `Active` (isActive === true): Green (`bg-green-100 text-green-800`)
+- `Inactive` (isActive === false): Red (`bg-red-100 text-red-800`)
+
+## Schema Fields Used
+
+From Prisma `User` model:
+- `id` - Unique identifier
+- `email` - User email (nullable)
+- `fullName` - User full name (nullable)
+- `phone` - Phone number (nullable)
+- `userType` - Enum: REGISTERED, GUEST, CONVERTED, AFFILIATE, ADMIN
+- `isActive` - Boolean for account status
+- `isAffiliateEnabled` - Boolean for affiliate program participation
+- `emailVerified` - Boolean for email verification status
+- `registeredAt` - Timestamp of registration (nullable)
+- `lastLogin` - Timestamp of last login (nullable)
+- `createdAt` - Timestamp of account creation
+
+From Prisma `Order` model (via relation):
+- `totalAmount` - Decimal field (converted to Number for calculation)
+
+From Prisma `Wallet` model (via relation):
+- `balance` - Decimal field (converted to Number, nullable relation)
+
+## Technical Notes
+
+### Svelte 5 Runes
+- **$state** - Used for reactive UI state (search, filter, page)
+- **$derived** - Used for simple computed values (stats, allUsers, totalPages)
+- **$derived.by()** - Used for complex computed values with filtering/transformation logic (filteredUsers, paginatedUsers)
+
+### Type Conversions
+- Prisma `Decimal` types are converted to `Number` for calculations and display
+- Nullable fields are handled with optional chaining and default values
+
+### Performance Considerations
+- All users loaded once server-side
+- Filtering and pagination happen client-side for instant responsiveness
+- CSV export includes all filtered results (not limited by pagination)
 
 ## Error Handling
 
-- Invalid user ID
-- Cannot change own role/status
-- Cannot delete last admin
-- Email already exists
-- Invalid role/status value
+If the Prisma query fails, the server returns empty defaults:
 
-## Notes
+```typescript
+{
+  users: [],
+  stats: {
+    totalUsers: 0,
+    registeredUsers: 0,
+    guestUsers: 0,
+    affiliates: 0,
+    activeUsers: 0,
+    totalRevenue: 0
+  }
+}
+```
 
-- User deletion should be soft delete (set deletedAt)
-- Cannot delete users with pending orders
-- Wallet adjustments require reason/description
-- Email verification status shown
-- Last login time helps identify inactive accounts
-- Consider adding bulk import feature
-- Consider password reset functionality for users
+Error is logged to console: `console.error('Error loading users:', error)`

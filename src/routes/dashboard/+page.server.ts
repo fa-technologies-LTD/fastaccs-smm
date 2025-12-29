@@ -8,58 +8,26 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 	}
 
 	try {
-		// Fetch all dashboard data in parallel
-		const [ordersRes, affiliateRes, walletBalanceRes, walletTransactionsRes, purchasesRes] =
-			await Promise.all([
-				fetch(`/api/orders?userId=${locals.user.id}&limit=50`),
-				fetch('/api/affiliate/stats'),
-				fetch('/api/wallet/balance'),
-				fetch('/api/wallet/transactions?limit=20'),
-				fetch('/api/purchases')
-			]);
+		// Fetch all dashboard data from single consolidated endpoint
+		const response = await fetch('/api/dashboard');
 
-		// Parse orders
-		let orders = [];
-		if (ordersRes.ok) {
-			const result = await ordersRes.json();
-			orders = result.data || [];
+		if (!response.ok) {
+			throw new Error('Failed to fetch dashboard data');
 		}
 
-		// Parse affiliate data
-		let affiliateData = null;
-		if (affiliateRes.ok) {
-			const result = await affiliateRes.json();
-			affiliateData = result.success ? result.data : null;
-		}
+		const result = await response.json();
 
-		// Parse wallet balance
-		let walletBalance = 0;
-		if (walletBalanceRes.ok) {
-			const result = await walletBalanceRes.json();
-			walletBalance = result.success ? result.balance || 0 : 0;
-		}
-
-		// Parse wallet transactions
-		let walletTransactions = [];
-		if (walletTransactionsRes.ok) {
-			const result = await walletTransactionsRes.json();
-			walletTransactions = result.success ? result.transactions || [] : [];
-		}
-
-		// Parse purchases
-		let purchases = [];
-		if (purchasesRes.ok) {
-			const result = await purchasesRes.json();
-			purchases = result.purchases || [];
+		if (!result.success) {
+			throw new Error(result.error || 'Failed to load dashboard data');
 		}
 
 		return {
 			user: locals.user,
-			orders,
-			affiliateData,
-			walletBalance,
-			walletTransactions,
-			purchases,
+			orders: result.data.orders || [],
+			affiliateData: result.data.affiliateData || null,
+			walletBalance: result.data.walletBalance || 0,
+			walletTransactions: result.data.walletTransactions || [],
+			purchases: result.data.purchases || [],
 			messages: [], // TODO: Implement messages/notifications system
 			error: null
 		};
@@ -73,7 +41,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 			walletTransactions: [],
 			purchases: [],
 			messages: [],
-			error: 'Failed to load dashboard data'
+			error: error instanceof Error ? error.message : 'Failed to load dashboard data'
 		};
 	}
 };

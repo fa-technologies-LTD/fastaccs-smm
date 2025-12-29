@@ -83,6 +83,11 @@ model Category {
   cartItems      CartItem[]
   reviews        Review[]
 
+  @@index([parentId])
+  @@index([slug, isActive])
+  @@index([categoryType, isActive])
+  @@index([categoryType, parentId, isActive])
+  @@index([isActive, sortOrder])
   @@map("categories")
 }
 
@@ -105,6 +110,9 @@ model AccountBatch {
   category Category  @relation(fields: [categoryId], references: [id])
   accounts Account[]
 
+  @@index([categoryId])
+  @@index([importStatus])
+  @@index([categoryId, importStatus])
   @@map("account_batches")
 }
 
@@ -141,6 +149,12 @@ model Account {
   category  Category     @relation(fields: [categoryId], references: [id])
   orderItem OrderItem?   @relation(fields: [orderItemId], references: [id])
 
+  @@index([batchId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([categoryId, status])
+  @@index([status, reservedUntil])
+  @@index([orderItemId])
   @@map("accounts")
 }
 
@@ -179,6 +193,12 @@ model Order {
   orderItems      OrderItem[]
   notifications   Notification[]
 
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([paymentStatus])
+  @@index([affiliateUserId])
+  @@index([affiliateCode])
+  @@index([createdAt])
   @@map("orders")
 }
 
@@ -202,6 +222,9 @@ model OrderItem {
   accounts Account[]
   reviews  Review[]
 
+  @@index([orderId])
+  @@index([categoryId])
+  @@index([allocationStatus])
   @@map("order_items")
 }
 
@@ -216,6 +239,8 @@ model CartItem {
   user     User     @relation(fields: [userId], references: [id])
   category Category @relation(fields: [categoryId], references: [id])  // Changed from product to category
 
+  @@index([userId])
+  @@index([categoryId])
   @@map("cart_items")
 }
 
@@ -236,6 +261,9 @@ model Notification {
   user  User   @relation(fields: [userId], references: [id])
   order Order? @relation(fields: [orderId], references: [id])
 
+  @@index([userId, read, createdAt])
+  @@index([orderId])
+  @@index([expiresAt])
   @@map("notifications")
 }
 
@@ -257,6 +285,10 @@ model Review {
   user      User       @relation(fields: [userId], references: [id])
   orderItem OrderItem? @relation(fields: [orderItemId], references: [id])
 
+  @@index([categoryId])
+  @@index([userId])
+  @@index([orderItemId])
+  @@index([status, createdAt])
   @@map("reviews")
 }
 
@@ -277,6 +309,8 @@ model AffiliateProgram {
   user              User                 @relation(fields: [userId], references: [id])
   commissionPayouts CommissionPayout[]
 
+  @@index([userId])
+  @@index([status])
   @@map("affiliate_programs")
 }
 
@@ -295,18 +329,23 @@ model CommissionPayout {
   // Relations
   affiliateProgram AffiliateProgram @relation(fields: [affiliateProgramId], references: [id])
 
+  @@index([affiliateProgramId])
+  @@index([payoutDate])
   @@map("commission_payouts")
 }
 
 model Session {
-  id        String   @id
-  userId    String   @map("user_id") @db.Uuid
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  id              String   @id
+  userId          String   @map("user_id") @db.Uuid
+  expiresAt       DateTime @map("expires_at")
+  lastRefreshedAt DateTime @default(now()) @map("last_refreshed_at")
+  createdAt       DateTime @default(now()) @map("created_at")
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([expiresAt])
   @@map("sessions")
 }
 
@@ -346,6 +385,10 @@ model WalletTransaction {
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, createdAt])
+  @@index([walletId, createdAt])
+  @@index([type])
+  @@index([status])
   @@map("wallet_transactions")
 }
 
@@ -359,5 +402,6 @@ model Microcopy {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @map("updated_at")
 
+  @@index([category, isActive])
   @@map("microcopy")
 }

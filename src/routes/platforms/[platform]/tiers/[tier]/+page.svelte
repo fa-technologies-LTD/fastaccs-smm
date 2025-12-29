@@ -33,8 +33,6 @@
 	let selectedQuantity = $state(1);
 	let addingToCart = $state(false);
 
-	
-
 	// Format follower count
 	function formatFollowers(count: number): string {
 		if (count >= 1000000) {
@@ -136,7 +134,9 @@
 			// Success - show proper notification
 			showSuccess(
 				'Added to cart!',
-				`${selectedQuantity} ${data.tier.tier_name} ${selectedQuantity === 1 ? 'account' : 'accounts'} added successfully.`
+				`${selectedQuantity} ${data.tier.tier_name} ${selectedQuantity === 1 ? 'account' : 'accounts'} added successfully. Click to view cart.`,
+				6000,
+				'/checkout'
 			);
 
 			// Reset quantity to 1 after adding

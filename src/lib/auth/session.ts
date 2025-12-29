@@ -8,6 +8,28 @@ export interface SessionValidationResult {
 	user: User | null;
 }
 
+// In-memory session cache
+interface CachedSession {
+	session: Session;
+	user: User;
+	cachedAt: number;
+}
+
+const sessionCache = new Map<string, CachedSession>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Clean up expired cache entries periodically
+if (typeof setInterval !== 'undefined') {
+	setInterval(() => {
+		const now = Date.now();
+		for (const [key, value] of sessionCache.entries()) {
+			if (now - value.cachedAt > CACHE_TTL) {
+				sessionCache.delete(key);
+			}
+		}
+	}, 60 * 1000); // Clean up every minute
+}
+
 // Generate a secure session token
 export function generateSessionToken(): string {
 	const bytes = new Uint8Array(32);
@@ -24,6 +46,7 @@ export async function createSession(token: string, userId: string): Promise<Sess
 		id: sessionId,
 		userId,
 		expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30), // 30 days
+		lastRefreshedAt: new Date(),
 		createdAt: new Date()
 	};
 
@@ -38,12 +61,26 @@ export async function createSession(token: string, userId: string): Promise<Sess
 export async function validateSessionToken(token: string): Promise<SessionValidationResult> {
 	const sessionId = token;
 
+	// Check cache first
+	const cached = sessionCache.get(sessionId);
+	if (cached && Date.now() - cached.cachedAt < CACHE_TTL) {
+		// Check if cached session is still valid
+		if (Date.now() < cached.session.expiresAt.getTime()) {
+			return { session: cached.session, user: cached.user };
+		} else {
+			// Cached session expired, remove from cache
+			sessionCache.delete(sessionId);
+		}
+	}
+
+	// Cache miss or expired - query database
 	const result = await prisma.session.findUnique({
 		where: { id: sessionId },
 		include: { user: true }
 	});
 
 	if (!result) {
+		sessionCache.delete(sessionId); // Ensure removed from cache
 		return { session: null, user: null };
 	}
 
@@ -51,17 +88,37 @@ export async function validateSessionToken(token: string): Promise<SessionValida
 
 	if (Date.now() >= session.expiresAt.getTime()) {
 		await prisma.session.delete({ where: { id: sessionId } });
+		sessionCache.delete(sessionId); // Remove from cache
 		return { session: null, user: null };
 	}
 
-	if (Date.now() >= session.expiresAt.getTime() - 1000 * 60 * 60 * 24 * 15) {
-		// Refresh session if it expires in 15 days
+	// Only refresh if session expires in 15 days AND hasn't been refreshed in the last hour
+	const REFRESH_INTERVAL = 60 * 60 * 1000; // 1 hour
+	const shouldRefresh = 
+		Date.now() >= session.expiresAt.getTime() - 1000 * 60 * 60 * 24 * 15 &&
+		Date.now() - session.lastRefreshedAt.getTime() > REFRESH_INTERVAL;
+
+	if (shouldRefresh) {
+		// Refresh session expiry
 		session.expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
+		session.lastRefreshedAt = new Date();
 		await prisma.session.update({
 			where: { id: session.id },
-			data: { expiresAt: session.expiresAt }
+			data: { 
+				expiresAt: session.expiresAt,
+				lastRefreshedAt: session.lastRefreshedAt
+			}
 		});
+		// Invalidate cache so next request gets fresh data
+		sessionCache.delete(sessionId);
 	}
+
+	// Store in cache
+	sessionCache.set(sessionId, {
+		session,
+		user,
+		cachedAt: Date.now()
+	});
 
 	return { session, user };
 }

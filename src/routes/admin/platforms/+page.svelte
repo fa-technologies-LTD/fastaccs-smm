@@ -34,7 +34,6 @@
 				auth_methods: [] as string[]
 			},
 			platform_info: {
-				followers_range: [0, 0] as [number, number],
 				content_types: [] as string[],
 				demographics: [] as string[]
 			}
@@ -69,7 +68,6 @@
 					auth_methods: metadata?.api_info?.auth_methods || []
 				},
 				platform_info: {
-					followers_range: metadata?.platform_info?.followers_range || [0, 0],
 					content_types: metadata?.platform_info?.content_types || [],
 					demographics: metadata?.platform_info?.demographics || []
 				}
@@ -94,7 +92,6 @@
 					auth_methods: [] as string[]
 				},
 				platform_info: {
-					followers_range: [0, 0] as [number, number],
 					content_types: [] as string[],
 					demographics: [] as string[]
 				}
@@ -283,7 +280,7 @@
 								title="View Tiers"
 								aria-label="View Tiers"
 							>
-								<Eye size={16} class='group-hover:scale-90 transition-transform'/>
+								<Eye size={16} class="transition-transform group-hover:scale-90" />
 							</button>
 							<button
 								onclick={() => openEditModal(platform)}
@@ -291,7 +288,7 @@
 								title="Edit Platform"
 								aria-label="Edit Platform"
 							>
-								<Edit size={16} class='group-hover:scale-90 transition-transform' />
+								<Edit size={16} class="transition-transform group-hover:scale-90" />
 							</button>
 							<button
 								onclick={() => handleDelete(platform)}
@@ -299,7 +296,7 @@
 								title="Delete Platform"
 								aria-label="Delete Platform"
 							>
-								<Trash2 size={16} class='group-hover:scale-90 transition-transform' />
+								<Trash2 size={16} class="transition-transform group-hover:scale-90" />
 							</button>
 						</div>
 					</div>
@@ -357,14 +354,14 @@
 			<button
 				class="fixed inset-0 bg-black/20 transition-opacity"
 				onclick={() => (showCreateModal = false)}
-				aria-label='create modal'
+				aria-label="create modal"
 			></button>
 
 			<!-- Modal content -->
 			<div
 				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg"
 				in:fly={{ y: 200, duration: 500 }}
-				out:fade={{ duration: 500}}
+				out:fade={{ duration: 500 }}
 			>
 				<form onsubmit={handleCreate}>
 					<div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
@@ -491,7 +488,7 @@
 			<div
 				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg"
 				in:fly={{ y: 200, duration: 500 }}
-				out:fade={{ duration: 500}}
+				out:fade={{ duration: 500 }}
 			>
 				<form onsubmit={handleUpdate}>
 					<div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">

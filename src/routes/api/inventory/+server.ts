@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
+import { serverCache, getCacheHeaders, CACHE_TTL } from '$lib/helpers/cache';
 
 // GET /api/inventory - Get inventory stats and data
 export async function GET({ url }) {
@@ -7,6 +8,21 @@ export async function GET({ url }) {
 		const type = url.searchParams.get('type') || 'all';
 
 		if (type === 'stats') {
+			const cacheKey = 'admin:inventory-stats';
+
+			// Try cache first
+			const cached = serverCache.get(cacheKey, CACHE_TTL.ADMIN_STATS);
+			if (cached) {
+				return json(
+					{ data: cached, error: null },
+					{
+						headers: Object.fromEntries(
+							Object.entries(getCacheHeaders('dynamic')).filter(([, v]) => v !== undefined)
+						)
+					}
+				);
+			}
+
 			// Get total tiers (child categories)
 			const totalTiers = await prisma.category.count({
 				where: {
@@ -79,7 +95,17 @@ export async function GET({ url }) {
 				outOfStockTiersCount: outOfStockTiersCount
 			};
 
-			return json({ data: stats, error: null });
+			// Cache the result
+			serverCache.set(cacheKey, stats);
+
+			return json(
+				{ data: stats, error: null },
+				{
+					headers: Object.fromEntries(
+						Object.entries(getCacheHeaders('dynamic')).filter(([, v]) => v !== undefined)
+					)
+				}
+			);
 		}
 
 		if (type === 'batches') {

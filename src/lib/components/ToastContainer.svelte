@@ -47,25 +47,55 @@
 <div class="fixed top-4 right-4 z-50 w-full max-w-sm space-y-2">
 	{#each $toasts as toast (toast.id)}
 		{@const Icon = getToastIcon(toast.type)}
-		<div
-			transition:fly={{ x: 400, duration: 300 }}
-			class="flex items-start gap-3 rounded-lg border p-4 shadow-lg {getToastColors(toast.type)}"
-		>
-			<Icon class="mt-0.5 h-5 w-5 flex-shrink-0 {getIconColors(toast.type)}" />
-
-			<div class="min-w-0 flex-1">
-				<p class="text-sm font-medium">{toast.title}</p>
-				{#if toast.message}
-					<p class="mt-1 text-sm opacity-90">{toast.message}</p>
-				{/if}
-			</div>
-
-			<button
-				onclick={() => removeToast(toast.id)}
-				class="ml-2 flex-shrink-0 rounded p-0.5 transition-colors hover:bg-black/5"
+		{#if toast.link}
+			<a
+				href={toast.link}
+				transition:fly={{ x: 400, duration: 300 }}
+				class="flex items-start gap-3 rounded-lg border p-4 shadow-lg {getToastColors(
+					toast.type
+				)} cursor-pointer transition-shadow hover:shadow-xl"
 			>
-				<X class="h-4 w-4" />
-			</button>
-		</div>
+				<Icon class="mt-0.5 h-5 w-5 flex-shrink-0 {getIconColors(toast.type)}" />
+
+				<div class="min-w-0 flex-1">
+					<p class="text-sm font-medium">{toast.title}</p>
+					{#if toast.message}
+						<p class="mt-1 text-sm opacity-90">{toast.message}</p>
+					{/if}
+				</div>
+
+				<button
+					onclick={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						removeToast(toast.id);
+					}}
+					class="ml-2 flex-shrink-0 rounded p-0.5 transition-colors hover:bg-black/5"
+				>
+					<X class="h-4 w-4" />
+				</button>
+			</a>
+		{:else}
+			<div
+				transition:fly={{ x: 400, duration: 300 }}
+				class="flex items-start gap-3 rounded-lg border p-4 shadow-lg {getToastColors(toast.type)}"
+			>
+				<Icon class="mt-0.5 h-5 w-5 flex-shrink-0 {getIconColors(toast.type)}" />
+
+				<div class="min-w-0 flex-1">
+					<p class="text-sm font-medium">{toast.title}</p>
+					{#if toast.message}
+						<p class="mt-1 text-sm opacity-90">{toast.message}</p>
+					{/if}
+				</div>
+
+				<button
+					onclick={() => removeToast(toast.id)}
+					class="ml-2 flex-shrink-0 rounded p-0.5 transition-colors hover:bg-black/5"
+				>
+					<X class="h-4 w-4" />
+				</button>
+			</div>
+		{/if}
 	{/each}
 </div>

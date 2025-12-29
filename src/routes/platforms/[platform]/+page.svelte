@@ -17,13 +17,11 @@
 	import { getPlatformColor, getPlatformIcon } from '$lib/helpers/platformColors';
 	import { formatPrice } from '$lib/helpers/utils';
 
-
 	interface Props {
 		data: PageData;
 	}
 
 	let { data }: Props = $props();
-
 
 	// Format follower count
 	function formatFollowers(count: number): string {
@@ -126,10 +124,10 @@
 		{@const PlatformIcon = getPlatformIcon(data.platform.slug)}
 
 		<!-- Platform Header -->
-		<section class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} py-16 text-white`}>
+		<section class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} py-12 text-white`}>
 			<div class="mx-auto max-w-6xl px-4">
 				<!-- Breadcrumb -->
-				<div class="mb-8 flex items-center gap-2 text-sm">
+				<div class="mb-6 flex items-center gap-2 text-xs sm:text-sm">
 					<button onclick={goBack} class="flex items-center gap-2 hover:underline">
 						<ArrowLeft class="h-4 w-4" />
 						All Platforms
@@ -138,20 +136,21 @@
 					<span class="font-medium">{data.platform.name}</span>
 				</div>
 
-				<div class="flex items-center justify-between">
-					<div class="flex items-center gap-6">
-						<div class="rounded-full bg-white/20 p-4">
-							<PlatformIcon class="h-12 w-12" />
+				<div class="flex items-start gap-4 sm:gap-6">
+					<div class="flex flex-col items-center gap-3">
+						<div class="rounded-full bg-white/20 p-3 sm:p-4">
+							<PlatformIcon class="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12" />
 						</div>
-						<div>
-							<h1 class="mb-2 text-4xl font-bold">{data.platform.name} Accounts</h1>
-							<p class="text-xl opacity-90">{data.platform.description}</p>
+						<div class="text-center">
+							<div class="text-2xl font-bold sm:text-3xl">{data.tiers.length}</div>
+							<div class="text-xs opacity-75 sm:text-sm">Available Tiers</div>
 						</div>
 					</div>
-
-					<div class="text-right">
-						<div class="text-3xl font-bold">{data.tiers.length}</div>
-						<div class="text-sm opacity-75">Available Tiers</div>
+					<div class="flex-1">
+						<h1 class="mb-1 text-2xl font-bold sm:text-3xl md:text-4xl">
+							{data.platform.name} Accounts
+						</h1>
+						<p class="text-sm opacity-90 sm:text-base md:text-lg">{data.platform.description}</p>
 					</div>
 				</div>
 			</div>
@@ -183,11 +182,11 @@
 					</div>
 				{:else}
 					<div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-						{#each data.tiers.filter((t) => t.visible_available > 0) as tier}
+						{#each data.tiers as tier}
 							{@const tierStatus = getTierStatus(tier.visible_available)}
 							{@const tierFeatures = getTierFeatures(tier.metadata)}
 							<div
-								class="active:scale-[.98] group relative overflow-hidden rounded-xl bg-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
+								class="group relative overflow-hidden rounded-xl bg-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl active:scale-[.98]"
 							>
 								<!-- Stock Status Badge -->
 								<div class="absolute top-32 right-3 z-10">
@@ -204,12 +203,11 @@
 										<div>
 											<h3 class="text-xl font-bold text-gray-900">{tier.tier_name}</h3>
 											<p class="text-sm text-gray-600">
-												{#if tier.metadata?.followers_range}
-													{@const range = (tier.metadata as any).followers_range}
-													{#if Array.isArray(range) && range.length >= 2}
-														{formatFollowers(range[0])} - {formatFollowers(range[1])} followers
-													{:else if typeof range === 'object' && range.min && range.max}
-														{formatFollowers(range.min)} - {formatFollowers(range.max)} followers
+												{#if tier.metadata?.follower_range}
+													{@const range = (tier.metadata as any).follower_range}
+													{#if typeof range === 'object' && range.min !== undefined && range.max !== undefined}
+														{range.display ||
+															`${formatFollowers(range.min)} - ${formatFollowers(range.max)}`} followers
 													{:else}
 														{formatFollowers((tier.metadata?.follower_count as number) || 0)} followers
 													{/if}

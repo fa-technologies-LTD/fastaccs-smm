@@ -6,6 +6,7 @@ export interface Toast {
 	title: string;
 	message?: string;
 	duration?: number;
+	link?: string;
 }
 
 export const toasts = writable<Toast[]>([]);
@@ -17,7 +18,7 @@ export function addToast(toast: Omit<Toast, 'id'>) {
 	const newToast: Toast = {
 		...toast,
 		id,
-		duration: toast.duration ?? 3000 
+		duration: toast.duration ?? 3000
 	};
 
 	toasts.update((all) => [...all, newToast]);
@@ -40,8 +41,8 @@ export function clearToasts() {
 }
 
 // Convenience functions
-export function showSuccess(title: string, message?: string, duration?: number) {
-	return addToast({ type: 'success', title, message, duration });
+export function showSuccess(title: string, message?: string, duration?: number, link?: string) {
+	return addToast({ type: 'success', title, message, duration, link });
 }
 
 export function showError(title: string, message?: string, duration?: number) {

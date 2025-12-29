@@ -62,19 +62,19 @@ export const load: PageServerLoad = async ({ locals }) => {
 			}
 		});
 
-		// Accounts Sold
+		// Accounts Sold (delivered status)
 		const accountsSold = await prisma.account.count({
-			where: { status: 'sold' }
+			where: { status: 'delivered' }
 		});
 		const lastMonthAccounts = await prisma.account.count({
 			where: {
-				status: 'sold',
+				status: 'delivered',
 				deliveredAt: { gte: startOfLastMonth, lte: endOfLastMonth }
 			}
 		});
 		const thisMonthAccounts = await prisma.account.count({
 			where: {
-				status: 'sold',
+				status: 'delivered',
 				deliveredAt: { gte: startOfMonth }
 			}
 		});
@@ -107,10 +107,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 			where: { status: 'available' }
 		});
 		const soldAccounts = await prisma.account.count({
-			where: { status: 'sold' }
+			where: { status: 'delivered' }
 		});
 		const pendingAccounts = await prisma.account.count({
-			where: { status: 'reserved' }
+			where: { status: { in: ['allocated', 'assigned'] } }
 		});
 
 		// Top Categories

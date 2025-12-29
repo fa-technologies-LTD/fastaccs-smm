@@ -142,10 +142,7 @@
 							<div class="border-b border-gray-200 pb-6 last:border-b-0 last:pb-0">
 								<div class="flex items-start justify-between">
 									<div class="flex-1">
-										<h4 class="font-medium text-gray-900">{item.category.title}</h4>
-										<p class="text-sm text-gray-600">
-											{item.category.platform} • {item.category.tierName}
-										</p>
+										<h4 class="font-medium text-gray-900">{item.category.name}</h4>
 										<p class="text-sm text-gray-600">
 											Quantity: {item.quantity} • {formatPrice(item.unitPrice)} each
 										</p>
@@ -176,7 +173,11 @@
 										<div class="mb-2 flex items-center justify-between">
 											<h5 class="text-sm font-medium text-gray-900">Your Accounts:</h5>
 											<button
-												onclick={() => copyAllAccounts(item.accounts, { showToast: addToast })}
+												onclick={() => {
+													copyAllAccounts(item.accounts, {
+														showToast: (toast: any) => addToast(toast as any)
+													});
+												}}
 												class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200"
 												title="Copy all accounts"
 											>
@@ -197,9 +198,9 @@
 															</div>
 															<button
 																onclick={() =>
-																	copyToClipboard(account.username, {
+																	copyToClipboard(account.username || '', {
 																		label: 'Username',
-																		showToast: addToast
+																		showToast: (toast: any) => addToast(toast as any)
 																	})}
 																class="ml-2 rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
 															>
@@ -215,9 +216,9 @@
 															</div>
 															<button
 																onclick={() =>
-																	copyToClipboard(account.password, {
+																	copyToClipboard(account.password || '', {
 																		label: 'Password',
-																		showToast: addToast
+																		showToast: (toast: any) => addToast(toast as any)
 																	})}
 																class="ml-2 rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
 															>
@@ -234,9 +235,9 @@
 																</div>
 																<button
 																	onclick={() =>
-																		copyToClipboard(account.email, {
+																		copyToClipboard(account.email || '', {
 																			label: 'Email',
-																			showToast: addToast
+																			showToast: (toast: any) => addToast(toast as any)
 																		})}
 																	class="ml-2 rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
 																>
@@ -244,15 +245,12 @@
 																</button>
 															</div>
 														{/if}
-														{#if account.additionalInfo}
+														{#if account.deliveryNotes}
 															<div class="mt-2">
-																<span class="font-medium">Additional Info:</span>
-																<pre
-																	class="mt-1 text-xs whitespace-pre-wrap text-gray-600">{JSON.stringify(
-																		account.additionalInfo,
-																		null,
-																		2
-																	)}</pre>
+																<span class="text-xs font-medium text-gray-500 uppercase"
+																	>Notes:</span
+																>
+																<p class="mt-1 text-sm text-gray-600">{account.deliveryNotes}</p>
 															</div>
 														{/if}
 													</div>

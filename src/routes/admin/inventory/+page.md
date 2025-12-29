@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Manage account inventory across all platforms and tiers. View stock levels, add/edit/delete accounts, bulk operations, filter and search inventory, handle account status changes.
+View and monitor account inventory across all platforms and tiers. Track stock levels, manage account status distribution (available/assigned/delivered), and fix orphaned allocated accounts.
 
 ## Route
 
@@ -10,405 +10,295 @@ Manage account inventory across all platforms and tiers. View stock levels, add/
 
 ## File Structure
 
-- `+page.svelte` - Inventory UI with filters and table
-- `+page.ts` - Client-side data loading
+- `+page.svelte` - Inventory UI with search and stats
+- `+page.ts` - Client-side data loading from `/api/inventory`
 
-## Components Imported
+## Data Loading
 
-- **Navigation** - Admin navigation
-- **Footer** - Site footer
+### Client-Side Loading (`+page.ts`)
+
+Data is fetched from the `/api/inventory` endpoint:
+
+```typescript
+const response = await fetch('/api/inventory');
+const result = await response.json();
+
+return {
+  stats: result.data.stats,
+  inventory: result.data.batches // Platform/tier account data
+};
+```
+
+### Data Structure
+
+**Stats Interface:**
+
+```typescript
+interface InventoryStats {
+  total_accounts: number;
+  available_accounts: number;
+  reserved_accounts: number;
+  platforms: number;
+}
+```
+
+**Batch/Tier Inventory Interface:**
+
+```typescript
+interface InventoryBatch {
+  platform_name: string;
+  tier_name: string;
+  total_accounts: number;
+  available_accounts: number;
+  assigned_accounts: number;
+  delivered_accounts: number;
+  created_at: string | Date;
+}
+```
 
 ## Icons Used
 
-- `Package`, `Plus`, `Edit`, `Trash2`, `Search`, `Filter`, `Upload`, `Download`, `Eye`, `EyeOff`, `AlertCircle`, `CheckCircle` from `@lucide/svelte`
-
-## Data Sources
-
-### API Endpoints
-
-**1. GET** `/api/admin/inventory?page=1&limit=50&platform=&status=&search=`
-**Returns:**
-
-```typescript
-{
-  success: boolean;
-  data: {
-    accounts: Account[];
-    totalCount: number;
-    currentPage: number;
-    totalPages: number;
-    filters: {
-      platforms: Platform[];
-      tiers: Tier[];
-      statuses: string[];
-    };
-  };
-}
-```
-
-**Account Interface:**
-
-```typescript
-interface Account {
-	id: string;
-	productId: string;
-	username: string;
-	email: string;
-	emailPassword?: string;
-	password: string;
-	twoFactorCode?: string;
-	accountLink?: string;
-	stats?: {
-		followers?: number;
-		following?: number;
-		posts?: number;
-	};
-	status: 'available' | 'reserved' | 'sold';
-	userId?: string;
-	createdAt: DateTime;
-	updatedAt: DateTime;
-	product: {
-		category: {
-			name: string; // Tier name
-			parent: {
-				name: string; // Platform name
-			};
-		};
-	};
-}
-```
-
-**2. POST** `/api/admin/inventory` - Add single account
-
-**3. PUT** `/api/admin/inventory/${id}` - Update account
-
-**4. DELETE** `/api/admin/inventory/${id}` - Delete account
-
-**5. POST** `/api/admin/inventory/bulk` - Bulk operations
+None explicitly imported (minimal UI)
 
 ## Page State
 
+### Props
+
 ```typescript
-let accounts = $state<Account[]>([]);
-let loading = $state(true);
-let totalCount = $state(0);
-let currentPage = $state(1);
-let pageSize = $state(50);
-let searchQuery = $state('');
-let platformFilter = $state<string>('');
-let statusFilter = $state<string>('');
-let selectedAccounts = $state<Set<string>>(new Set());
-let showAddModal = $state(false);
-let editingAccount = $state<Account | null>(null);
+let { data } = $props();
+```
+
+### Reactive State ($state)
+
+```typescript
+let searchTerm = $state('');
+let showConfirmModal = $state(false);
+let cleanupLoading = $state(false);
+let cleanupMessage = $state<string | null>(null);
+```
+
+### Derived State ($derived.by)
+
+```typescript
+const filteredInventory = $derived.by(() => {
+  if (!searchTerm) return data.inventory || [];
+  return (data.inventory || []).filter(
+    (item: any) =>
+      item.platform_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.tier_name?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+});
+
+const summaryStats = $derived.by(() => {
+  return {
+    total_accounts: /* sum of all total_accounts */,
+    available_accounts: /* sum of all available_accounts */,
+    assigned_accounts: /* sum of all assigned_accounts */,
+    delivered_accounts: /* sum of all delivered_accounts */,
+    platforms: /* unique count of platform names */
+  };
+});
+```
+
+## Helper Functions
+
+- `formatDate()` - Formats dates for display
+- `getStatusColor()` - Returns Tailwind classes for stock level badge
+- `getStatusText()` - Returns human-readable status text
+
+### Status Logic
+
+```typescript
+function getStatusColor(available: number): string {
+  if (available === 0) return 'text-red-600 bg-red-100'; // Out of stock
+  if (available < 10) return 'text-yellow-600 bg-yellow-100'; // Low stock
+  return 'text-green-600 bg-green-100'; // In stock
+}
+
+function getStatusText(available: number): string {
+  if (available === 0) return 'out of stock';
+  if (available < 10) return 'low stock';
+  return 'in stock';
+}
 ```
 
 ## Key Features
 
-### 1. Filters & Search
+### 1. Statistics Cards
 
-#### Platform Filter
+Five stat cards displayed at the top:
 
-- Dropdown of all platforms
-- "All Platforms" option
-- Updates results instantly
+#### Total Accounts
+- Sum of all accounts across all batches
+- Color: Gray
 
-#### Status Filter
+#### Available
+- Accounts ready for assignment
+- Color: Green
 
-- Options:
-  - All Statuses
-  - Available (ready to sell)
-  - Reserved (in cart/checkout)
-  - Sold (delivered to customer)
-- Color-coded badges
+#### Assigned
+- Accounts allocated to orders (in progress)
+- Color: Yellow
 
-#### Search
+#### Delivered
+- Accounts successfully delivered to customers
+- Color: Blue
 
-- Search by:
-  - Username
-  - Email
-  - Account link
-- Real-time search (debounced)
+#### Platforms
+- Unique count of platforms with inventory
+- Color: Purple
 
-### 2. Inventory Table
+### 2. Search Functionality
+
+**Input:** Text input for filtering  
+**Searches:** platform_name, tier_name  
+**Method:** Case-insensitive substring match
+
+### 3. Inventory Table
+
+**View:** Platform/tier-level aggregation (not individual accounts)
 
 **Columns:**
+1. **Platform & Tier** - Platform name + tier name
+2. **Total Stock** - Total accounts in this batch
+3. **Available** - Ready for assignment (green)
+4. **Assigned** - Allocated to orders (yellow)
+5. **Delivered** - Delivered to customers (blue)
+6. **Price** - Currently displays "-" (not implemented)
+7. **Status** - Badge showing stock level (out of stock / low stock / in stock)
+8. **Last Restocked** - Created date of batch
 
-- Checkbox (bulk select)
-- Platform icon
-- Tier name
-- Username
-- Email
-- Status badge
-- Stock count (for that tier)
-- Created date
-- Actions (Edit, Delete, View)
+**Empty State:** "No inventory found" when no results
 
-**Actions per Row:**
+### 4. Fix Stuck Accounts
 
-- **View** - Show full account details in modal
-- **Edit** - Open edit form
-- **Delete** - Confirm and delete
+**Feature:** Cleanup orphaned allocated accounts
 
-### 3. Bulk Operations
+**Trigger:** "Fix Stuck Accounts" button in header
 
-**Toolbar appears when items selected:**
+**Confirmation:** ConfirmModal with warning message:
+- Title: "Fix Stuck Accounts"
+- Message: "This will reset orphaned allocated accounts back to available status. This action cannot be undone."
+- Destructive action (orange button)
 
-- Selected count display
-- Bulk actions dropdown:
-  - Mark as Available
-  - Mark as Reserved
-  - Delete Selected
-  - Export Selected
-  - Assign to Tier
-- "Select All" checkbox
-- "Clear Selection" button
-
-### 4. Add Account Modal
-
-**Fields:**
-
-- Platform (dropdown)
-- Tier (dropdown, filtered by platform)
-- Username (required)
-- Email (required)
-- Email Password
-- Account Password (required)
-- 2FA Code
-- Account Link
-- Followers count
-- Following count
-- Posts count
-- Status (default: available)
-
-**Actions:**
-
-- Save & Add Another
-- Save & Close
-- Cancel
-
-### 5. Edit Account Modal
-
-Same fields as Add, pre-populated with account data.
-
-### 6. Stock Indicators
-
-**Status Badges:**
-
-- **Available**: Green badge, ready to sell
-- **Reserved**: Yellow badge, temporarily held
-- **Sold**: Gray badge, delivered to customer
-
-**Low Stock Warning:**
-
-- Orange alert icon if tier has < 10 available
-- Shows in table row
-
-### 7. Pagination
-
-- Previous/Next buttons
-- Page number input
-- Page size selector (25, 50, 100, 200)
-- Total count display
-
-## User Actions
-
-### View Operations
-
-- Filter by platform
-- Filter by status
-- Search accounts
-- Sort columns
-- Change page size
-- Navigate pages
-
-### CRUD Operations
-
-- Add new account
-- Edit existing account
-- Delete account (with confirmation)
-- View account details
-
-### Bulk Operations
-
-- Select multiple accounts
-- Change status in bulk
-- Delete multiple accounts
-- Export to CSV
-
-## API Request Examples
-
-### Get Inventory
-
+**API Call:**
 ```typescript
-GET /api/admin/inventory?page=1&limit=50&platform=instagram&status=available&search=john
+POST /api/admin/cleanup/allocated-accounts
 ```
 
-### Add Account
+**Behavior:**
+- Shows loading state during cleanup
+- Displays success/error message
+- Reloads page on success
+- Message auto-dismisses after 5 seconds
 
+### 5. Error Handling
+
+Displays error banner if inventory loading fails:
+- Red background
+- Shows error message from API
+
+## Components Used
+
+- `ConfirmModal` - For confirming destructive actions
+
+## API Endpoints
+
+### GET `/api/inventory`
+
+Returns inventory stats and batch/tier-level data.
+
+**Response:**
 ```typescript
-POST /api/admin/inventory
 {
-  productId: "uuid",
-  username: "example_user",
-  email: "user@example.com",
-  emailPassword: "emailpass123",
-  password: "accountpass123",
-  twoFactorCode: "ABC123",
-  accountLink: "https://instagram.com/example_user",
-  stats: {
-    followers: 10500,
-    following: 850,
-    posts: 42
-  },
-  status: "available"
+  data: {
+    stats: {
+      total_accounts: number;
+      available_accounts: number;
+      reserved_accounts: number;
+      platforms: number;
+    },
+    batches: InventoryBatch[]
+  }
 }
 ```
 
-### Update Account
+### POST `/api/admin/cleanup/allocated-accounts`
 
+Fixes orphaned allocated accounts (resets to available).
+
+**Response:**
 ```typescript
-PUT /api/admin/inventory/${accountId}
 {
-  password: "newpassword123",
-  status: "available"
+  message: string; // Success message
 }
 ```
 
-### Delete Account
+## Account Status Flow
 
-```typescript
-DELETE /api/admin/inventory/${accountId}
-```
+Accounts progress through these states:
 
-### Bulk Update
+1. **Available** - Ready to be assigned to orders
+2. **Assigned** - Allocated to an order (reserved)
+3. **Delivered** - Successfully delivered to customer
 
-```typescript
-POST /api/admin/inventory/bulk
-{
-  operation: "updateStatus",
-  accountIds: ["id1", "id2", "id3"],
-  status: "available"
-}
-```
+**Orphaned Accounts:** Accounts stuck in "assigned" state without valid orders can be fixed with the cleanup tool.
 
-## SEO Metadata
+## Performance Considerations
 
-- **Title**: "Inventory Management - Admin - FastAccs"
-- **Robots**: "noindex, nofollow"
+- All inventory loaded at once (no pagination)
+- Client-side filtering for instant search
+- Stats calculated from filtered data in real-time
+
+## Stock Level Thresholds
+
+- **In Stock:** Available count >= 10
+- **Low Stock:** Available count 1-9 (yellow warning)
+- **Out of Stock:** Available count = 0 (red alert)
+
+## Technical Notes
+
+### Svelte 5 Runes
+
+- **$state** - Used for search input and modal state
+- **$derived.by()** - Used for filtered inventory and aggregated stats
+
+### Data Aggregation
+
+Stats are calculated client-side by reducing over the filtered inventory array to sum counts and extract unique platforms.
+
+## Error Handling
+
+- Displays error banner if inventory fails to load
+- Shows error message from API response
+- Cleanup errors shown in temporary message banner
 
 ## Security
 
 - Admin role required
-- All API endpoints check admin auth
-- Soft delete vs hard delete consideration
-- Activity logging recommended
+- Cleanup action requires confirmation
+- Destructive operations clearly marked
 
 ## Related Pages
 
-- `/admin/inventory/add` - Dedicated add page (if exists)
-- `/admin/batches` - Bulk CSV upload
-- `/admin/categories` - Manage platforms/tiers
-- `/admin` - Back to dashboard
+- `/admin/batches` - Add/manage account batches
+- `/admin/categories` - Manage platforms and tiers
+- `/admin` - Dashboard with inventory overview
 
-## Component Dependencies
+## Future Enhancements (Not Implemented)
 
-```
-+page.svelte
-├── Navigation
-├── Footer
-├── Modal components (inline)
-└── Inventory API
-```
-
-## Backend Services Used
-
-- `src/lib/services/inventory.ts` - CRUD operations
-- `src/routes/api/admin/inventory/+server.ts` - Main endpoint
-
-## Database Operations
-
-### Get Inventory (with filters)
-
-```typescript
-const accounts = await prisma.account.findMany({
-	where: {
-		AND: [
-			platform ? { product: { category: { parent: { slug: platform } } } } : {},
-			status ? { status } : {},
-			search
-				? {
-						OR: [
-							{ username: { contains: search, mode: 'insensitive' } },
-							{ email: { contains: search, mode: 'insensitive' } }
-						]
-					}
-				: {}
-		]
-	},
-	include: {
-		product: {
-			include: {
-				category: {
-					include: {
-						parent: true
-					}
-				}
-			}
-		}
-	},
-	skip: (page - 1) * limit,
-	take: limit,
-	orderBy: { createdAt: 'desc' }
-});
-```
-
-### Add Account
-
-```typescript
-await prisma.account.create({
-	data: {
-		productId,
-		username,
-		email,
-		emailPassword,
-		password,
-		twoFactorCode,
-		accountLink,
-		stats,
-		status
-	}
-});
-```
-
-## Performance Considerations
-
-- Paginate results (50 per page default)
-- Index on status, productId
-- Debounce search input (300ms)
-- Consider virtual scrolling for large datasets
-- Cache platform/tier lists
-
-## Validation Rules
-
-- Username: Required, min 3 chars
-- Email: Required, email format
-- Password: Required, min 6 chars
-- Platform/Tier: Must exist in database
-- Status: Must be valid enum value
-
-## Error Handling
-
-- Duplicate username/email check
-- Invalid productId
-- Database errors
-- Network errors
-- Insufficient permissions
+- Individual account view/edit
+- Bulk account import
+- Price management per tier
+- Detailed restock history
+- Account deletion/archival
+- Status filtering (available/assigned/delivered)
+- Pagination for large inventories
 
 ## Notes
 
-- Reserved status clears after 15 minutes if checkout abandoned
-- Sold accounts cannot be edited (read-only)
-- Delete requires confirmation modal
-- Bulk operations show progress indicator
-- Export generates CSV file
-- Consider adding import from CSV feature
+- This is a read-only view of inventory at batch/tier level
+- Individual account management done elsewhere
+- No add/edit/delete individual account functionality on this page
+- Price column exists but shows "-" (not implemented)
+- Search is instant with no debouncing

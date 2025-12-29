@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { Instagram, Music, Facebook, Twitter, ArrowRight, Users, Package } from '@lucide/svelte';
+	import {ArrowRight, Users, Package } from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
 	import { getPlatformColor, getPlatformIcon } from '$lib/helpers/platformColors';
-	import { formatPrice } from '$lib/helpers/utils';
+
 
 	interface Props {
 		data: PageData;

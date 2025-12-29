@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import { onNavigate } from '$app/navigation';
+	import { page } from '$app/stores';
 	import favicon from '$lib/assets/favicon.png';
 	import Cart from '$lib/components/Cart.svelte';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
@@ -13,18 +14,31 @@
 
 	let { children, data }: Props = $props();
 
-
 	onNavigate((navigation) => {
+		// Skip if view transitions not supported
 		if (!document.startViewTransition) return;
 
-		return new Promise((resolve) => {
-			document.startViewTransition(async() => {{
-				resolve()
-				await navigation.complete
-			}})
-		})
-	})
+		const from = navigation.from?.route.id;
+		const to = navigation.to?.route.id;
 
+		// Skip transitions for admin panel (prioritize speed)
+		if (from?.startsWith('/admin') || to?.startsWith('/admin')) {
+			return;
+		}
+
+		// Skip transitions for API routes and auth pages
+		if (to?.startsWith('/api') || to?.startsWith('/auth')) {
+			return;
+		}
+
+		// Only apply smooth transitions for main navigation
+		return new Promise((resolve) => {
+			document.startViewTransition(async () => {
+				resolve();
+				await navigation.complete;
+			});
+		});
+	});
 </script>
 
 <svelte:head>

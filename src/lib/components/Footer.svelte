@@ -42,26 +42,38 @@
 				<h3 class="mb-4 text-lg font-semibold">Quick Links</h3>
 				<ul class="space-y-2">
 					<li>
-						<a href="/accounts" class="text-gray-400 transition-colors hover:text-white"
-							>Browse Accounts</a
+						<a
+							href="/accounts"
+							data-sveltekit-preload-data="hover"
+							class="text-gray-400 transition-colors hover:text-white">Browse Accounts</a
 						>
 					</li>
 					<li>
-						<a href="/services" class="text-gray-400 transition-colors hover:text-white"
-							>Boosting Services</a
+						<a
+							href="/services"
+							data-sveltekit-preload-data="hover"
+							class="text-gray-400 transition-colors hover:text-white">Boosting Services</a
 						>
 					</li>
 					<li>
-						<a href="/how-it-works" class="text-gray-400 transition-colors hover:text-white"
-							>How It Works</a
+						<a
+							href="/how-it-works"
+							data-sveltekit-preload-data="hover"
+							class="text-gray-400 transition-colors hover:text-white">How It Works</a
 						>
 					</li>
 					<li>
-						<a href="/pricing" class="text-gray-400 transition-colors hover:text-white">Pricing</a>
+						<a
+							href="/pricing"
+							data-sveltekit-preload-data="hover"
+							class="text-gray-400 transition-colors hover:text-white">Pricing</a
+						>
 					</li>
 					<li>
-						<a href="/affiliate" class="text-gray-400 transition-colors hover:text-white"
-							>Affiliate Program</a
+						<a
+							href="/affiliate"
+							data-sveltekit-preload-data="hover"
+							class="text-gray-400 transition-colors hover:text-white">Affiliate Program</a
 						>
 					</li>
 				</ul>
@@ -72,22 +84,38 @@
 				<h3 class="mb-4 text-lg font-semibold">Support</h3>
 				<ul class="space-y-2">
 					<li>
-						<a href="/help" class="text-gray-400 transition-colors hover:text-white">Help Center</a>
-					</li>
-					<li>
-						<a href="/contact" class="text-gray-400 transition-colors hover:text-white"
-							>Contact Us</a
-						>
-					</li>
-					<li><a href="/faq" class="text-gray-400 transition-colors hover:text-white">FAQ</a></li>
-					<li>
-						<a href="/terms" class="text-gray-400 transition-colors hover:text-white"
-							>Terms of Service</a
+						<a
+							href="/help"
+							data-sveltekit-preload-data="hover"
+							class="text-gray-400 transition-colors hover:text-white">Help Center</a
 						>
 					</li>
 					<li>
-						<a href="/privacy" class="text-gray-400 transition-colors hover:text-white"
-							>Privacy Policy</a
+						<a
+							href="/contact"
+							data-sveltekit-preload-data="hover"
+							class="text-gray-400 transition-colors hover:text-white">Contact Us</a
+						>
+					</li>
+					<li>
+						<a
+							href="/faq"
+							data-sveltekit-preload-data="hover"
+							class="text-gray-400 transition-colors hover:text-white">FAQ</a
+						>
+					</li>
+					<li>
+						<a
+							href="/terms"
+							data-sveltekit-preload-data="hover"
+							class="text-gray-400 transition-colors hover:text-white">Terms of Service</a
+						>
+					</li>
+					<li>
+						<a
+							href="/privacy"
+							data-sveltekit-preload-data="hover"
+							class="text-gray-400 transition-colors hover:text-white">Privacy Policy</a
 						>
 					</li>
 				</ul>

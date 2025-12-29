@@ -1,9 +1,27 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
+import { serverCache, getCacheHeaders, CACHE_TTL } from '$lib/helpers/cache';
 
 // GET /api/orders/stats - Get order statistics for admin dashboard
 export async function GET() {
 	try {
+		const cacheKey = 'admin:order-stats';
+
+		// Try cache first
+		const cached = serverCache.get(cacheKey, CACHE_TTL.ADMIN_STATS);
+		if (cached) {
+			const headers = getCacheHeaders('dynamic');
+			const cleanHeaders = Object.fromEntries(
+				Object.entries(headers).filter(([, v]) => v !== undefined)
+			);
+			return json(
+				{ data: cached, error: null },
+				{
+					headers: cleanHeaders
+				}
+			);
+		}
+
 		// Get order counts by status
 		const [totalOrders, pendingOrders, processingOrders, completedOrders, failedOrders] =
 			await Promise.all([
@@ -59,7 +77,20 @@ export async function GET() {
 			todays_revenue: Number(todaysRevenueData._sum.totalAmount || 0)
 		};
 
-		return json({ data: stats, error: null });
+		// Cache the result
+		serverCache.set(cacheKey, stats);
+
+		const headers = getCacheHeaders('dynamic');
+		const cleanHeaders = Object.fromEntries(
+			Object.entries(headers).filter(([, v]) => v !== undefined)
+		);
+
+		return json(
+			{ data: stats, error: null },
+			{
+				headers: cleanHeaders
+			}
+		);
 	} catch (error) {
 		console.error('Failed to get order statistics:', error);
 		return json({ data: null, error: 'Failed to get order statistics' }, { status: 500 });

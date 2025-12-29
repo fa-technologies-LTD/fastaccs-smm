@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
-import {fulfillOrder}  from '$lib/services/fulfillment';
+import { fulfillOrder } from '$lib/services/fulfillment';
+import { serverCache } from '$lib/helpers/cache';
 
 // GET /api/orders - Get all orders with optional filters
 export async function GET({ url }) {
@@ -114,8 +115,12 @@ export async function POST({ request }) {
 				}
 			}
 		}); // Automatically fulfill order (allocate + deliver accounts)
+
+		// Invalidate admin stats cache after order creation
+		serverCache.invalidate('admin:order-stats');
+		serverCache.invalidate('admin:inventory-stats');
+
 		try {
-			
 			const fulfillmentResult = await fulfillOrder(data.id);
 
 			if (fulfillmentResult.success) {

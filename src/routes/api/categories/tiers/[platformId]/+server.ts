@@ -1,6 +1,13 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 
+interface TierMetadata {
+	pricing?: {
+		base_price?: number | string;
+	};
+	price?: number | string;
+}
+
 // GET /api/categories/tiers/[platformId] - Get tiers for a specific platform
 export async function GET({ params }) {
 	try {
@@ -35,24 +42,31 @@ export async function GET({ params }) {
 		});
 
 		// Transform to include account counts and pricing from tier metadata
-		const tiersWithCounts = tiers.map((tier) => ({
-			id: tier.id,
-			name: tier.name,
-			slug: tier.slug,
-			description: tier.description,
-			isActive: tier.isActive,
-			metadata: tier.metadata,
-			sortOrder: tier.sortOrder,
-			accountCount: tier.accounts.length,
-			// Since we removed Products table, get pricing from tier metadata
-			price:
-				typeof tier.metadata === 'object' && tier.metadata !== null && 'price' in tier.metadata
-					? Number(tier.metadata.price) || 0
-					: 0,
-			// For compatibility with existing frontend, use tier ID as productId
-			productId: tier.id,
-			productStatus: tier.isActive ? 'active' : 'inactive'
-		}));
+		const tiersWithCounts = tiers.map((tier) => {
+			const metadata = tier.metadata as TierMetadata;
+
+			// Extract price from new or old metadata format
+			let price = 0;
+			if (metadata?.pricing?.base_price) {
+				price = Number(metadata.pricing.base_price);
+			} else if (metadata?.price) {
+				price = Number(metadata.price);
+			}
+
+			return {
+				id: tier.id,
+				name: tier.name,
+				slug: tier.slug,
+				description: tier.description,
+				isActive: tier.isActive,
+				metadata: tier.metadata,
+				sortOrder: tier.sortOrder,
+				accountCount: tier.accounts.length,
+				price,
+				productId: tier.id,
+				productStatus: tier.isActive ? 'active' : 'inactive'
+			};
+		});
 
 		return json({ data: tiersWithCounts, error: null });
 	} catch (error) {

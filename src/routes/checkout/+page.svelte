@@ -289,7 +289,7 @@
 <Navigation />
 
 <main class="min-h-screen bg-gray-50 py-4 sm:py-8">
-	<div class="mx-auto max-w-4xl px-4 sm:px-6">
+	<div class="mx-auto max-w-6xl px-4 sm:px-6">
 		<!-- Header -->
 		<div class="mb-6 sm:mb-8">
 			<h1 class="text-xl font-bold text-gray-900 sm:text-2xl">Checkout</h1>

@@ -245,6 +245,7 @@
 				<div class="space-y-1">
 					<a
 						href="/platforms"
+						data-sveltekit-preload-data="hover"
 						class="block py-3 text-sm font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
 					>
 						Accounts
@@ -257,6 +258,7 @@
 					</button>
 					<a
 						href="/how-it-works"
+						data-sveltekit-preload-data="hover"
 						class="block py-3 text-sm font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
 					>
 						How It Works
@@ -268,6 +270,7 @@
 					{#if user}
 						<a
 							href="/dashboard"
+							data-sveltekit-preload-data="hover"
 							class="flex items-center py-3 text-base text-gray-600 hover:text-gray-900 active:bg-gray-50"
 						>
 							{#if user.avatarUrl}
@@ -286,6 +289,7 @@
 						{#if user.userType === 'ADMIN'}
 							<a
 								href="/admin"
+								data-sveltekit-preload-data="hover"
 								class="mb-2 block rounded-md bg-blue-50 px-3 py-2 text-base font-medium text-blue-700 transition-colors hover:bg-blue-100 hover:text-blue-800"
 							>
 								Admin Dashboard
@@ -300,12 +304,14 @@
 					{:else}
 						<a
 							href="/auth/login"
+							data-sveltekit-preload-data="hover"
 							class="block py-3 text-base font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
 						>
 							Sign In
 						</a>
 						<a
 							href="/auth/login"
+							data-sveltekit-preload-data="hover"
 							class="bg-primary hover:bg-primary-dark active:bg-primary-dark block w-full rounded-lg px-4 py-3 text-center text-base font-medium text-white transition-colors"
 						>
 							Get Started
