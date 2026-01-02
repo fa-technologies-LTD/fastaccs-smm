@@ -1,18 +1,16 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import {
-		Instagram,
-		Music,
-		Facebook,
-		Twitter,
 		ShoppingCart,
 		Star,
 		Users,
 		Package,
-		ArrowLeft
+		ArrowRight,
+		ChevronRight
 	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	import type { PageData } from './$types';
 	import { getPlatformColor, getPlatformIcon } from '$lib/helpers/platformColors';
 	import { formatPrice } from '$lib/helpers/utils';
@@ -114,7 +112,7 @@
 				</p>
 				<button
 					onclick={goBack}
-					class="rounded-lg bg-purple-600 px-6 py-3 font-semibold text-white hover:bg-purple-700"
+					class="rounded-lg bg-purple-600 px-6 py-3 font-semibold text-white transition-all hover:bg-purple-700 active:scale-95"
 				>
 					Back to Platforms
 				</button>
@@ -122,28 +120,53 @@
 		</section>
 	{:else}
 		{@const PlatformIcon = getPlatformIcon(data.platform.slug)}
+		{@const platformMeta = data.platform.metadata as any}
 
 		<!-- Platform Header -->
-		<section class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} py-12 text-white`}>
+		<section
+			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} py-8 text-white sm:py-12`}
+		>
 			<div class="mx-auto max-w-6xl px-4">
-				<!-- Breadcrumb -->
-				<div class="mb-6 flex items-center gap-2 text-xs sm:text-sm">
-					<button onclick={goBack} class="flex items-center gap-2 hover:underline">
-						<ArrowLeft class="h-4 w-4" />
-						All Platforms
-					</button>
-					<span>/</span>
-					<span class="font-medium">{data.platform.name}</span>
+				<!-- Enhanced Breadcrumb Navigation -->
+				<Breadcrumb
+					items={[
+						{ label: 'Platforms', href: '/platforms' },
+						{ label: data.platform.name, active: true }
+					]}
+				/>
+
+				<!-- Step Indicator -->
+				<div class="mb-6 flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 backdrop-blur-sm">
+					<div class="flex items-center gap-2">
+						<div
+							class="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-bold text-blue-600"
+						>
+							2
+						</div>
+						<span class="text-sm font-medium">Choose Category</span>
+					</div>
+					<ChevronRight class="h-4 w-4 opacity-50" />
+					<span class="text-sm opacity-75">Select Quantity</span>
+					<ChevronRight class="h-4 w-4 opacity-50" />
+					<span class="text-sm opacity-75">Checkout</span>
 				</div>
 
 				<div class="flex items-start gap-4 sm:gap-6">
 					<div class="flex flex-col items-center gap-3">
 						<div class="rounded-full bg-white/20 p-3 sm:p-4">
-							<PlatformIcon class="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12" />
+							{#if platformMeta?.icon}
+								<img
+									src={platformMeta.icon}
+									alt={data.platform.name}
+									class="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12"
+								/>
+							{:else}
+								<PlatformIcon class="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12" />
+							{/if}
 						</div>
 						<div class="text-center">
 							<div class="text-2xl font-bold sm:text-3xl">{data.tiers.length}</div>
-							<div class="text-xs opacity-75 sm:text-sm">Available Tiers</div>
+							<div class="text-xs opacity-75 sm:text-sm">Available Categories</div>
 						</div>
 					</div>
 					<div class="flex-1">
@@ -157,11 +180,23 @@
 		</section>
 
 		<!-- Tier Selection -->
-		<section class="py-16">
+		<section class="py-8 sm:py-16">
 			<div class="mx-auto max-w-6xl px-4">
-				<div class="mb-12 text-center">
-					<h2 class="mb-4 text-3xl font-bold text-gray-900">Choose Your Tier</h2>
-					<p class="text-lg text-gray-600">
+				<!-- Instructional Banner -->
+				<div class="mb-8 rounded-xl border border-blue-100 bg-blue-50 p-4 sm:p-6">
+					<h2 class="mb-2 flex items-center gap-2 text-lg font-semibold text-blue-900">
+						<Package class="h-5 w-5" />
+						Choose Your Account Category
+					</h2>
+					<p class="text-sm text-blue-700 sm:text-base">
+						Select a follower tier below to see full details and purchase. Each category contains
+						verified accounts with the follower count shown. Click any card to continue.
+					</p>
+				</div>
+
+				<div class="mb-8 text-center">
+					<h2 class="mb-4 text-2xl font-bold text-gray-900 sm:text-3xl">Available Categories</h2>
+					<p class="text-base text-gray-600 sm:text-lg">
 						Select the follower count that matches your needs. All accounts come with full access.
 					</p>
 				</div>
@@ -175,7 +210,7 @@
 						</p>
 						<button
 							onclick={goBack}
-							class="mt-4 rounded-lg bg-yellow-600 px-6 py-2 text-white hover:bg-yellow-700"
+							class="mt-4 rounded-lg bg-yellow-600 px-6 py-2 text-white transition-all hover:bg-yellow-700 active:scale-95"
 						>
 							Browse Other Platforms
 						</button>
@@ -186,7 +221,15 @@
 							{@const tierStatus = getTierStatus(tier.visible_available)}
 							{@const tierFeatures = getTierFeatures(tier.metadata)}
 							<div
-								class="group relative overflow-hidden rounded-xl bg-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl active:scale-[.98]"
+								onclick={() => tier.visible_available > 0 && navigateToTier(tier.tier_slug)}
+								onkeydown={(e) =>
+									e.key === 'Enter' && tier.visible_available > 0 && navigateToTier(tier.tier_slug)}
+								role="button"
+								tabindex={tier.visible_available > 0 ? 0 : -1}
+								class="group relative overflow-hidden rounded-xl bg-white shadow transition-all duration-300 {tier.visible_available >
+								0
+									? 'cursor-pointer hover:-translate-y-1 hover:shadow-md active:scale-[.98]'
+									: 'cursor-not-allowed opacity-75'}"
 							>
 								<!-- Stock Status Badge -->
 								<div class="absolute top-32 right-3 z-10">
@@ -267,19 +310,20 @@
 										</div>
 									{/if}
 
-									<!-- Action Button -->
-									<button
-										onclick={() => navigateToTier(tier.tier_slug)}
-										data-sveltekit-preload-data="hover"
-										disabled={tier.visible_available === 0}
-										class="w-full rounded-lg bg-gray-900 py-3 font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+									<!-- Action Label -->
+									<div
+										class="mt-4 flex items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-colors {tier.visible_available ===
+										0
+											? 'bg-gray-100 text-gray-500'
+											: 'bg-gray-900 text-white group-hover:bg-gray-800'}"
 									>
 										{#if tier.visible_available === 0}
 											Sold Out
 										{:else}
-											Select This Tier
+											<span>Select This Tier</span>
+											<ArrowRight class="h-4 w-4" />
 										{/if}
-									</button>
+									</div>
 								</div>
 							</div>
 						{/each}

@@ -99,11 +99,10 @@
 			<button
 				onclick={() => (showConfirmModal = true)}
 				disabled={cleanupLoading}
-				class="w-full rounded-lg bg-orange-600 px-4 py-3 text-white transition-colors hover:scale-95 hover:bg-orange-700 disabled:opacity-50 sm:w-auto sm:py-2"
+				class="w-full rounded-lg bg-orange-600 px-4 py-3 text-white transition-all hover:scale-95 hover:bg-orange-700 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:w-auto sm:py-2"
 			>
 				{cleanupLoading ? 'Cleaning...' : 'Fix Stuck Accounts'}
 			</button>
-			
 		</div>
 	</div>
 
@@ -128,31 +127,31 @@
 
 	<!-- Stats Cards -->
 	<div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
-		<div class="rounded-lg border border-gray-200 bg-white p-4  sm:p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
 			<h3 class="text-xs font-medium text-gray-500 sm:text-sm">Total Accounts</h3>
 			<p class="text-lg font-bold text-gray-900 sm:text-2xl">
 				{summaryStats.total_accounts.toLocaleString()}
 			</p>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-4  sm:p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
 			<h3 class="text-xs font-medium text-gray-500 sm:text-sm">Available</h3>
 			<p class="text-lg font-bold text-green-600 sm:text-2xl">
 				{summaryStats.available_accounts.toLocaleString()}
 			</p>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-4  sm:p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
 			<h3 class="text-xs font-medium text-gray-500 sm:text-sm">Assigned</h3>
 			<p class="text-lg font-bold text-yellow-600 sm:text-2xl">
 				{summaryStats.assigned_accounts.toLocaleString()}
 			</p>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-6 ">
+		<div class="rounded-lg border border-gray-200 bg-white p-6">
 			<h3 class="text-sm font-medium text-gray-500">Delivered</h3>
 			<p class="text-2xl font-bold text-blue-600">
 				{summaryStats.delivered_accounts.toLocaleString()}
 			</p>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-6 ">
+		<div class="rounded-lg border border-gray-200 bg-white p-6">
 			<h3 class="text-sm font-medium text-gray-500">Platforms</h3>
 			<p class="text-2xl font-bold text-purple-600">{summaryStats.platforms}</p>
 		</div>

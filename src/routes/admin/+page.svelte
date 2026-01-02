@@ -168,7 +168,7 @@
 					<!-- Auto-refresh toggle -->
 					<button
 						onclick={toggleAutoRefresh}
-						class="flex cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:scale-[.95] sm:px-4 {autoRefresh
+						class="flex cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all hover:scale-[.95] active:scale-90 sm:px-4 {autoRefresh
 							? 'border-green-200 bg-green-50 text-green-700'
 							: 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'}"
 					>
@@ -182,7 +182,7 @@
 					<button
 						onclick={refreshData}
 						disabled={loading}
-						class="flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:scale-[.95] hover:bg-blue-700 disabled:opacity-50 sm:px-4"
+						class="flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white transition-all hover:scale-[.95] hover:bg-blue-700 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:px-4"
 					>
 						<RefreshCw class="h-4 w-4 {loading ? 'animate-spin' : ''}" />
 						Refresh
@@ -240,7 +240,9 @@
 			<div class="group rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
 				<div class="flex items-center">
 					<div class="rounded-lg bg-green-50 p-2 sm:p-3">
-						<DollarSign class="size-5 text-green-600 sm:size-6 transition-all group-hover:scale-80 group-hover:-rotate-20 " />
+						<DollarSign
+							class="size-5 text-green-600 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6 "
+						/>
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 						<p class="text-xs font-medium text-gray-500 sm:text-sm">Total Revenue</p>
@@ -260,7 +262,9 @@
 			<div class="group rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
 				<div class="flex items-center">
 					<div class="rounded-lg bg-purple-50 p-2 sm:p-3">
-						<Package class="size-5 text-purple-600 sm:size-6 transition-all group-hover:scale-80 group-hover:-rotate-20 " />
+						<Package
+							class="size-5 text-purple-600 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6 "
+						/>
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 						<p class="text-xs font-medium text-gray-500 sm:text-sm">Total Inventory</p>
@@ -280,7 +284,9 @@
 			<div class="group rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
 				<div class="flex items-center">
 					<div class="rounded-lg bg-orange-50 p-2 sm:p-3">
-						<AlertCircle class="size-5 text-orange-600 sm:size-6 transition-all group-hover:scale-80 group-hover:-rotate-20" />
+						<AlertCircle
+							class="size-5 text-orange-600 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+						/>
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 						<p class="text-xs font-medium text-gray-500 sm:text-sm">Stock Issues</p>
@@ -315,7 +321,9 @@
 						</div>
 					</div>
 					<div class="rounded-lg bg-indigo-50 p-3">
-						<BarChart3 class="size-6 text-indigo-600 transition-all group-hover:scale-80 group-hover:-rotate-20" />
+						<BarChart3
+							class="size-6 text-indigo-600 transition-all group-hover:scale-80 group-hover:-rotate-20"
+						/>
 					</div>
 				</div>
 			</div>
@@ -331,7 +339,9 @@
 						</div>
 					</div>
 					<div class="rounded-lg bg-purple-50 p-3">
-						<Package class="size-6 text-purple-600 transition-all group-hover:scale-80 group-hover:-rotate-20" />
+						<Package
+							class="size-6 text-purple-600 transition-all group-hover:scale-80 group-hover:-rotate-20"
+						/>
 					</div>
 				</div>
 			</div>
@@ -353,7 +363,9 @@
 						</div>
 					</div>
 					<div class="rounded-lg bg-green-50 p-3">
-						<TrendingUp class="size-6 text-green-600 transition-all group-hover:scale-80 group-hover:-rotate-20" />
+						<TrendingUp
+							class="size-6 text-green-600 transition-all group-hover:scale-80 group-hover:-rotate-20"
+						/>
 					</div>
 				</div>
 			</div>
@@ -371,7 +383,7 @@
 					<div class="grid grid-cols-1 gap-3">
 						<a
 							href="/admin/orders"
-							data-sveltekit-preload-data='hover'
+							data-sveltekit-preload-data="hover"
 							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-all hover:scale-95 hover:border-blue-300 hover:bg-blue-50"
 						>
 							<div class="flex items-center">
@@ -381,12 +393,14 @@
 									<p class="text-sm text-gray-500">Process and track orders</p>
 								</div>
 							</div>
-							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600 group-hover:rotate-45" />
+							<ArrowUpRight
+								class="h-4 w-4 text-gray-400 group-hover:rotate-45 group-hover:text-blue-600"
+							/>
 						</a>
 
 						<a
 							href="/admin/inventory"
-							data-sveltekit-preload-data='hover'
+							data-sveltekit-preload-data="hover"
 							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-all hover:scale-95 hover:border-blue-300 hover:bg-blue-50"
 						>
 							<div class="flex items-center">
@@ -396,12 +410,14 @@
 									<p class="text-sm text-gray-500">Monitor stock levels</p>
 								</div>
 							</div>
-							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600 group-hover:rotate-45" />
+							<ArrowUpRight
+								class="h-4 w-4 text-gray-400 group-hover:rotate-45 group-hover:text-blue-600"
+							/>
 						</a>
 
 						<a
 							href="/admin/platforms"
-							data-sveltekit-preload-data='hover'
+							data-sveltekit-preload-data="hover"
 							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-all hover:scale-95 hover:border-blue-300 hover:bg-blue-50"
 						>
 							<div class="flex items-center">
@@ -411,12 +427,14 @@
 									<p class="text-sm text-gray-500">Manage platforms & tiers</p>
 								</div>
 							</div>
-							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600 group-hover:rotate-45" />
+							<ArrowUpRight
+								class="h-4 w-4 text-gray-400 group-hover:rotate-45 group-hover:text-blue-600"
+							/>
 						</a>
 
 						<a
 							href="/admin/batches"
-							data-sveltekit-preload-data='hover'
+							data-sveltekit-preload-data="hover"
 							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-all hover:scale-95 hover:border-blue-300 hover:bg-blue-50"
 						>
 							<div class="flex items-center">
@@ -426,7 +444,9 @@
 									<p class="text-sm text-gray-500">Bulk import accounts</p>
 								</div>
 							</div>
-							<ArrowUpRight class="h-4 w-4 text-gray-400 group-hover:text-blue-600 group-hover:rotate-45" />
+							<ArrowUpRight
+								class="h-4 w-4 text-gray-400 group-hover:rotate-45 group-hover:text-blue-600"
+							/>
 						</a>
 					</div>
 				</div>

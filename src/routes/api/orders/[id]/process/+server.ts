@@ -116,7 +116,7 @@ export async function POST({ params }) {
 					orderItemId: null
 				}
 			});
-			console.log('Rolled back allocated accounts due to processing error');
+			
 		} catch (rollbackError) {
 			console.error('Failed to rollback allocated accounts:', rollbackError);
 		}

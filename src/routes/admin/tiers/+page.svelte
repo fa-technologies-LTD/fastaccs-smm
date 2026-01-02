@@ -14,6 +14,7 @@
 	import type { CategoryMetadata, CategoryInsert, CategoryUpdate } from '$lib/services/categories';
 	import type { PageData } from './$types';
 	import { fade, fly } from 'svelte/transition';
+	import { flip } from 'svelte/animate';
 
 	interface Props {
 		data: PageData;
@@ -25,7 +26,9 @@
 	let loading = $state(false);
 	let showCreateModal = $state(false);
 	let showEditModal = $state(false);
+	let showDeleteModal = $state(false);
 	let selectedTier = $state<CategoryMetadata | null>(null);
+	let tierToDelete = $state<CategoryMetadata | null>(null);
 
 	// Form state for creating/editing tiers
 	let tierForm = $state({
@@ -42,7 +45,7 @@
 			pricing: {
 				base_price: 0.0,
 				bulk_discount: 0,
-				currency: 'USD'
+				currency: 'NGN'
 			},
 			features: [] as string[],
 			quality_score: 5,
@@ -93,7 +96,7 @@
 				pricing: metadata?.pricing || {
 					base_price: 0.0,
 					bulk_discount: 0,
-					currency: 'USD'
+					currency: 'NGN'
 				},
 				features: metadata?.features || [],
 				quality_score: metadata?.quality_score || 5,
@@ -119,7 +122,7 @@
 				pricing: {
 					base_price: 0.0,
 					bulk_discount: 0,
-					currency: 'USD'
+					currency: 'NGN'
 				},
 				features: [],
 				quality_score: 5,
@@ -130,7 +133,6 @@
 	}
 
 	async function handleCreate() {
-		loading = true;
 		try {
 			// Clean up empty features
 			const cleanedMetadata = {
@@ -165,8 +167,6 @@
 		} catch (error) {
 			console.error('Failed to create tier:', error);
 			showError('Failed to create tier', 'An unexpected error occurred');
-		} finally {
-			loading = false;
 		}
 	}
 
@@ -205,40 +205,32 @@
 		}
 	}
 
-	async function handleDelete(tier: CategoryMetadata) {
-		if (
-			!confirm(
-				`Are you sure you want to delete "${tier.name}"? This will affect all platforms and associated accounts.`
-			)
-		) {
-			return;
-		}
+	function openDeleteModal(tier: CategoryMetadata) {
+		tierToDelete = tier;
+		showDeleteModal = true;
+	}
 
-		loading = true;
+	function closeDeleteModal() {
+		showDeleteModal = false;
+		tierToDelete = null;
+	}
+
+	async function confirmDelete() {
+		if (!tierToDelete) return;
+
 		try {
-			const result = await deleteCategory(tier.id as string);
+			const result = await deleteCategory(tierToDelete.id as string);
 			if (result.error) {
 				showError('Failed to delete tier', result.error);
 			} else {
-				tiers = tiers.filter((t) => t.id !== tier.id);
-				showSuccess(' tier deleted', `${tier.name} has been removed from all platforms`);
+				tiers = tiers.filter((t) => t.id !== tierToDelete!.id);
+				showSuccess('Tier deleted', `${tierToDelete.name} has been removed from all platforms`);
+				closeDeleteModal();
 			}
 		} catch (error) {
 			console.error('Failed to delete tier:', error);
 			showError('Failed to delete tier', 'An unexpected error occurred');
-		} finally {
-			loading = false;
 		}
-	}
-
-	// Helper function to format follower count
-	function formatFollowers(count: number): string {
-		if (count >= 1000000) {
-			return `${(count / 1000000).toFixed(1)}M`;
-		} else if (count >= 1000) {
-			return `${(count / 1000).toFixed(0)}K`;
-		}
-		return count.toString();
 	}
 </script>
 
@@ -262,7 +254,7 @@
 			</div>
 			<button
 				onclick={openCreateModal}
-				class="cursor-pointer flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-3 text-white transition-all hover:bg-purple-700 sm:w-auto sm:py-2 hover:scale-95"
+				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-3 text-white transition-all hover:scale-95 hover:bg-purple-700 active:scale-90 sm:w-auto sm:py-2"
 			>
 				<Plus size={18} />
 				Add Tier
@@ -299,7 +291,7 @@
 			</p>
 			<button
 				onclick={openCreateModal}
-				class="inline-flex items-center rounded-md bg-purple-600 px-4 py-2 font-medium text-white hover:bg-purple-700"
+				class="inline-flex items-center rounded-md bg-purple-600 px-4 py-2 font-medium text-white transition-all hover:bg-purple-700 active:scale-95"
 			>
 				<Plus class="mr-2 h-4 w-4" />
 				Add Tier
@@ -307,9 +299,10 @@
 		</div>
 	{:else}
 		<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-			{#each tiers as tier}
+			{#each tiers as tier (tier.id)}
 				{@const metadata = tier.metadata as any}
 				<div
+					animate:flip={{ duration: 500 }}
 					class="rounded-lg border border-gray-200 bg-white p-6"
 				>
 					<!-- Tier Header -->
@@ -327,14 +320,14 @@
 								class="group rounded p-1 text-gray-400 transition-colors hover:text-purple-600"
 								title="Edit Tier"
 							>
-								<Edit size={16} class='group-hover:scale-90 transition-transform' />
+								<Edit size={16} class="transition-transform group-hover:scale-90" />
 							</button>
 							<button
-								onclick={() => handleDelete(tier)}
+								onclick={() => openDeleteModal(tier)}
 								class="group rounded p-1 text-gray-400 transition-colors hover:text-red-600"
 								title="Delete Tier"
 							>
-								<Trash2 size={16} class='group-hover:scale-90 transition-transform' />
+								<Trash2 size={16} class="transition-transform group-hover:scale-90" />
 							</button>
 						</div>
 					</div>
@@ -364,7 +357,7 @@
 								<span class="text-sm text-gray-600">Base Price</span>
 							</div>
 							<span class="text-sm font-medium text-gray-900">
-								${metadata?.pricing?.base_price || 0}
+								₦{metadata?.pricing?.base_price || 0}
 							</span>
 						</div>
 
@@ -434,8 +427,8 @@
 			<!-- Modal content -->
 			<div
 				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl"
-				in:fly={{ y: 200, duration: 500 }}
-				out:fade={{ duration: 500}}
+				in:fly={{ y: 200, duration: 300 }}
+				out:fade={{ duration: 300 }}
 			>
 				<form
 					onsubmit={(e) => {
@@ -554,7 +547,7 @@
 
 							<!-- Follower Range -->
 							<div>
-								<label class="block text-sm font-medium text-gray-700" >Min Followers</label>
+								<label class="block text-sm font-medium text-gray-700">Min Followers</label>
 								<input
 									type="number"
 									min="0"
@@ -585,7 +578,7 @@
 
 							<!-- Pricing -->
 							<div>
-								<label class="block text-sm font-medium text-gray-700">Base Price ($)</label>
+								<label class="block text-sm font-medium text-gray-700">Base Price (₦)</label>
 								<input
 									type="number"
 									step="0.01"
@@ -646,7 +639,6 @@
 		<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
 			<!-- Background overlay -->
 			<div
-				
 				class="fixed inset-0 bg-black/20 transition-opacity"
 				onclick={() => (showEditModal = false)}
 			></div>
@@ -654,8 +646,8 @@
 			<!-- Modal content -->
 			<div
 				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl"
-				in:fly={{ y: 200, duration: 500 }}
-				out:fade={{ duration: 500}}
+				in:fly={{ y: 200, duration: 300 }}
+				out:fade={{ duration: 300 }}
 			>
 				<form
 					onsubmit={(e) => {
@@ -787,7 +779,7 @@
 
 							<!-- Pricing -->
 							<div>
-								<label class="block text-sm font-medium text-gray-700">Base Price ($)</label>
+								<label class="block text-sm font-medium text-gray-700">Base Price (₦)</label>
 								<input
 									type="number"
 									step="0.01"
@@ -836,6 +828,70 @@
 						</button>
 					</div>
 				</form>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Delete Confirmation Modal -->
+{#if showDeleteModal}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4"
+		onclick={closeDeleteModal}
+		onkeydown={(e) => e.key === 'Escape' && closeDeleteModal()}
+		role="button"
+		tabindex="-1"
+		aria-label="Close modal"
+		transition:fade={{ duration: 300 }}
+	>
+		<div
+			class="relative w-full max-w-md transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-modal="true"
+			tabindex="-1"
+			in:fly={{ y: 200, duration: 300 }}
+			out:fade={{ duration: 300 }}
+		>
+			<div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+				<div class="sm:flex sm:items-start">
+					<div
+						class="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10"
+					>
+						<AlertCircle class="h-6 w-6 text-red-600" />
+					</div>
+					<div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+						<h3 class="text-lg leading-6 font-semibold text-gray-900">Delete Tier</h3>
+						<div class="mt-2">
+							<p class="text-sm text-gray-500">
+								Are you sure you want to delete <strong>{tierToDelete?.name}</strong>? This action
+								cannot be undone.
+							</p>
+							<p class="mt-2 text-sm text-red-600">
+								<strong>Warning:</strong> This will affect all platforms and associated accounts.
+							</p>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+				<button
+					type="button"
+					onclick={confirmDelete}
+					disabled={loading}
+					class="inline-flex w-full cursor-pointer justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white transition-all hover:scale-95 hover:bg-red-500 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:ml-3 sm:w-auto"
+				>
+					{loading ? 'Deleting...' : 'Delete Tier'}
+				</button>
+				<button
+					type="button"
+					onclick={closeDeleteModal}
+					disabled={loading}
+					class="mt-3 inline-flex w-full cursor-pointer justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 ring-1 ring-gray-300 transition-all ring-inset hover:scale-95 hover:bg-gray-50 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:mt-0 sm:w-auto"
+				>
+					Cancel
+				</button>
 			</div>
 		</div>
 	</div>

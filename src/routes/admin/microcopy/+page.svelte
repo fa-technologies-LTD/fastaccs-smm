@@ -194,7 +194,7 @@
 		</div>
 		<button
 			onclick={openCreateModal}
-			class="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+			class="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:bg-blue-700 active:scale-95"
 		>
 			<Plus class="h-4 w-4" />
 			Add Microcopy
@@ -442,7 +442,7 @@
 					<button
 						onclick={createMicrocopy}
 						disabled={!newItem.key || !newItem.value}
-						class="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+						class="rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50 disabled:active:scale-100"
 					>
 						Create
 					</button>

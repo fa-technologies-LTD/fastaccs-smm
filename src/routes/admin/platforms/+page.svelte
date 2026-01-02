@@ -6,6 +6,7 @@
 	import type { Category, CategoryInsert, CategoryUpdate } from '$lib/services/categories';
 	import type { PageData } from './$types';
 	import { fade, fly } from 'svelte/transition';
+	import { flip } from 'svelte/animate';
 
 	interface Props {
 		data: PageData;
@@ -16,7 +17,9 @@
 	let loading = $state(false);
 	let showCreateModal = $state(false);
 	let showEditModal = $state(false);
+	let showDeleteModal = $state(false);
 	let selectedPlatform = $state<Category | null>(null);
+	let platformToDelete = $state<Category | null>(null);
 
 	// Form state for creating/editing platforms
 	let platformForm = $state({
@@ -169,17 +172,31 @@
 			loading = false;
 		}
 	}
-	async function handleDelete(platform: Category) {
+
+	function openDeleteModal(platform: Category) {
+		platformToDelete = platform;
+		showDeleteModal = true;
+	}
+
+	function closeDeleteModal() {
+		showDeleteModal = false;
+		platformToDelete = null;
+	}
+
+	async function confirmDelete() {
+		if (!platformToDelete) return;
+
 		loading = true;
 		try {
-			const result = await deleteCategory(platform.id);
+			const result = await deleteCategory(platformToDelete.id);
 			if (result.error) {
 				console.error('Failed to delete platform:', result.error);
-				showError('Failed to delete platform', result.error);
+				showError('Cannot delete platform', result.error);
 			} else {
-				// Remove the platform from the existing array instead of reloading
-				platforms = platforms.filter((p) => p.id !== platform.id);
-				showSuccess('Platform deleted successfully', `${platform.name} has been deleted.`);
+				// Remove the platform from the existing array
+				platforms = platforms.filter((p) => p.id !== platformToDelete!.id);
+				showSuccess('Platform deleted successfully', `${platformToDelete.name} has been deleted.`);
+				closeDeleteModal();
 			}
 		} catch (error) {
 			console.error('Failed to delete platform:', error);
@@ -219,7 +236,7 @@
 			</div>
 			<button
 				onclick={openCreateModal}
-				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm text-white transition-all hover:scale-95 hover:bg-blue-700 sm:w-auto sm:py-2"
+				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm text-white transition-all hover:scale-95 hover:bg-blue-700 active:scale-90 sm:w-auto sm:py-2"
 			>
 				<Plus size={18} />
 				Add Platform
@@ -241,7 +258,7 @@
 			</p>
 			<button
 				onclick={openCreateModal}
-				class="inline-flex items-center justify-center rounded-md bg-blue-600 px-6 py-3 font-medium text-white transition-colors hover:bg-blue-700"
+				class="inline-flex items-center justify-center rounded-md bg-blue-600 px-6 py-3 font-medium text-white transition-all hover:bg-blue-700 active:scale-95"
 			>
 				<Plus class="mr-2 h-4 w-4" />
 				Add Platform
@@ -249,8 +266,11 @@
 		</div>
 	{:else}
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
-			{#each platforms as platform}
-				<div class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
+			{#each platforms as platform (platform.id)}
+				<div
+					animate:flip={{ duration: 300 }}
+					class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6"
+				>
 					<!-- Platform Header -->
 					<div class="mb-4 flex items-start justify-between gap-3">
 						<div class="flex min-w-0 flex-1 items-center gap-3">
@@ -284,6 +304,7 @@
 							</button>
 							<button
 								onclick={() => openEditModal(platform)}
+								type="button"
 								class="group rounded p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
 								title="Edit Platform"
 								aria-label="Edit Platform"
@@ -291,7 +312,8 @@
 								<Edit size={16} class="transition-transform group-hover:scale-90" />
 							</button>
 							<button
-								onclick={() => handleDelete(platform)}
+								onclick={() => openDeleteModal(platform)}
+								type="button"
 								class="group rounded p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
 								title="Delete Platform"
 								aria-label="Delete Platform"
@@ -360,8 +382,8 @@
 			<!-- Modal content -->
 			<div
 				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg"
-				in:fly={{ y: 200, duration: 500 }}
-				out:fade={{ duration: 500 }}
+				in:fly={{ y: 200, duration: 300 }}
+				out:fade={{ duration: 300 }}
 			>
 				<form onsubmit={handleCreate}>
 					<div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
@@ -417,6 +439,42 @@
 									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
 									placeholder="Platform description..."
 								></textarea>
+							</div>
+
+							<!-- Icon URL -->
+							<div>
+								<label for="icon" class="block text-sm font-medium text-gray-700">
+									Platform Icon URL
+									<span class="text-xs font-normal text-gray-500">(Optional)</span>
+								</label>
+								<input
+									id="icon"
+									type="url"
+									value={platformForm.metadata.icon}
+									oninput={(e) =>
+										(platformForm.metadata.icon = (e.target as HTMLInputElement).value)}
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
+									placeholder="https://example.com/icon.png or /static/icons/platform.svg"
+								/>
+								<p class="mt-1 text-xs text-gray-500">
+									💡 <strong>Leave blank</strong> for auto icons (Instagram, TikTok, Facebook,
+									Twitter).<br />
+									<strong>For new platforms:</strong> Provide an icon URL or upload to
+									<code class="rounded bg-gray-100 px-1">/static/icons/</code>
+								</p>
+								{#if platformForm.metadata.icon}
+									<div class="mt-2 flex items-center gap-2">
+										<span class="text-xs text-gray-600">Preview:</span>
+										<img
+											src={platformForm.metadata.icon}
+											alt="Icon preview"
+											class="h-8 w-8 rounded border border-gray-200"
+											onerror={(e) => {
+												(e.target as HTMLImageElement).style.display = 'none';
+											}}
+										/>
+									</div>
+								{/if}
 							</div>
 
 							<!-- Color -->
@@ -482,13 +540,17 @@
 			<div
 				class="bg-opacity-75 fixed inset-0 bg-gray-500 transition-opacity"
 				onclick={() => (showEditModal = false)}
+				onkeydown={(e) => e.key === 'Escape' && (showEditModal = false)}
+				role="button"
+				tabindex="-1"
+				aria-label="Close modal"
 			></div>
 
 			<!-- Modal content -->
 			<div
 				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg"
-				in:fly={{ y: 200, duration: 500 }}
-				out:fade={{ duration: 500 }}
+				in:fly={{ y: 200, duration: 300 }}
+				out:fade={{ duration: 300 }}
 			>
 				<form onsubmit={handleUpdate}>
 					<div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
@@ -591,6 +653,71 @@
 						</button>
 					</div>
 				</form>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Delete Confirmation Modal -->
+{#if showDeleteModal}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4"
+		onclick={closeDeleteModal}
+		onkeydown={(e) => e.key === 'Escape' && closeDeleteModal()}
+		role="button"
+		tabindex="-1"
+		aria-label="Close modal"
+		transition:fade={{ duration: 300 }}
+	>
+		<div
+			class="relative w-full max-w-md transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-modal="true"
+			tabindex="0"
+			in:fly={{ y: 200, duration: 300 }}
+			out:fade={{ duration: 300 }}
+		>
+			<div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+				<div class="sm:flex sm:items-start">
+					<div
+						class="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10"
+					>
+						<AlertCircle class="h-6 w-6 text-red-600" />
+					</div>
+					<div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+						<h3 class="text-lg leading-6 font-semibold text-gray-900">Delete Platform</h3>
+						<div class="mt-2">
+							<p class="text-sm text-gray-500">
+								Are you sure you want to delete <strong>{platformToDelete?.name}</strong>? This
+								action cannot be undone.
+							</p>
+							<p class="mt-2 text-sm text-red-600">
+								<strong>Warning:</strong> If this platform has any tiers, services, accounts, or orders
+								associated with it, the deletion will be prevented.
+							</p>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+				<button
+					type="button"
+					onclick={confirmDelete}
+					disabled={loading}
+					class="inline-flex w-full cursor-pointer justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white transition-all hover:scale-95 hover:bg-red-500 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:ml-3 sm:w-auto"
+				>
+					{loading ? 'Deleting...' : 'Delete Platform'}
+				</button>
+				<button
+					type="button"
+					onclick={closeDeleteModal}
+					disabled={loading}
+					class="mt-3 inline-flex w-full cursor-pointer justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 ring-1 ring-gray-300 transition-all ring-inset hover:scale-95 hover:bg-gray-50 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:mt-0 sm:w-auto"
+				>
+					Cancel
+				</button>
 			</div>
 		</div>
 	</div>

@@ -9,7 +9,8 @@
 		Check,
 		Lock,
 		Tag,
-		Wallet
+		Wallet,
+		Shield
 	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -424,7 +425,21 @@
 								</span>
 							</div>
 						</div>
-
+						<!-- Security Banner -->
+						<div
+							class="mb-4 flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 p-3"
+						>
+							<div class="flex items-center gap-2">
+								<Shield size={20} class="text-blue-600" />
+								<span class="text-sm font-medium text-blue-900">Payments secured by Korapay</span>
+							</div>
+							<a
+								href="/support"
+								class="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
+							>
+								Payment FAQ
+							</a>
+						</div>
 						<!-- Wallet Balance -->
 						<div class="my-6 rounded-lg bg-blue-50 p-4">
 							<div class="flex items-center justify-between">
@@ -466,13 +481,21 @@
 						</div>
 
 						<!-- Security Notice -->
-						<div class="mt-6 rounded-lg bg-green-50 p-3">
-							<div class="flex items-start gap-2">
-								<Lock size={14} class="mt-0.5 text-green-600" />
-								<div class="text-xs text-green-800">
-									<p class="font-medium">Secure Payment</p>
-									<p>Instant delivery after payment confirmation</p>
+						<div class="mt-6 space-y-2">
+							<div class="rounded-lg bg-green-50 p-3">
+								<div class="flex items-start gap-2">
+									<Shield size={14} class="mt-0.5 text-green-600" />
+									<div class="text-xs text-green-800">
+										<p class="font-medium">Secure Payment & Instant Delivery</p>
+										<p>
+											Your purchase is protected. Accounts delivered within 2 hours or full refund.
+										</p>
+									</div>
 								</div>
+							</div>
+							<div class="flex items-center justify-center gap-2 text-xs text-gray-500">
+								<Lock size={12} />
+								<span>256-bit SSL encryption</span>
 							</div>
 						</div>
 					</div>

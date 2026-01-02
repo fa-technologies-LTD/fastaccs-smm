@@ -233,7 +233,7 @@
 			batches = [batch, ...batches];
 
 			// Upload accounts in batch
-			console.log('Uploading accounts:', accounts.length, 'accounts to batch:', batch.id);
+
 			const uploadResult = await uploadAccountsBatch(batch.id, accounts);
 
 			if (uploadResult.error) {
@@ -253,9 +253,6 @@
 				uploadError = uploadResult.error;
 				return;
 			}
-
-			console.log('Accounts uploaded successfully');
-
 			// Update batch as completed
 			await updateBatchStatus(batch.id, 'completed', fetch);
 
@@ -368,7 +365,7 @@
 			</div>
 			<button
 				onclick={openUploadModal}
-				class="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-white cursor-pointer transition-all hover:scale-95 hover:bg-blue-700 sm:w-auto sm:py-2"
+				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-white transition-all hover:scale-95 hover:bg-blue-700 active:scale-90 sm:w-auto sm:py-2"
 			>
 				<Upload size={18} />
 				Import Batch
@@ -396,7 +393,7 @@
 			</p>
 			<button
 				onclick={openUploadModal}
-				class="inline-flex items-center justify-center rounded-md bg-blue-600 px-6 py-3 font-medium text-white transition-colors hover:bg-blue-700"
+				class="inline-flex items-center justify-center rounded-md bg-blue-600 px-6 py-3 font-medium text-white transition-all hover:bg-blue-700 active:scale-95"
 			>
 				<Upload class="mr-2 h-4 w-4" />
 				Import Batch
@@ -424,7 +421,7 @@
 								class="group rounded p-1 text-gray-400 hover:text-blue-600"
 								title="View Details"
 							>
-								<Eye size={16} class='group-hover:scale-90 transition-transform' />
+								<Eye size={16} class="transition-transform group-hover:scale-90" />
 							</button>
 						</div>
 					</div>
@@ -489,9 +486,9 @@
 					<div class="border-t border-gray-200 pt-4">
 						<button
 							onclick={() => viewBatchDetails(batch)}
-							class="group flex w-full items-center justify-center gap-2 rounded-md bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition-all hover:scale-95 cursor-pointer hover:bg-gray-100"
+							class="group flex w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition-all hover:scale-95 hover:bg-gray-100"
 						>
-							<Eye size={16} class='group-hover:scale-90 transition-transform' />
+							<Eye size={16} class="transition-transform group-hover:scale-90" />
 							View Details
 						</button>
 					</div>
@@ -515,7 +512,7 @@
 			<div
 				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg"
 				in:fly={{ y: 200, duration: 500 }}
-				out:fade={{ duration: 500}}
+				out:fade={{ duration: 500 }}
 			>
 				<form
 					onsubmit={(e) => {
@@ -663,7 +660,7 @@
 						<button
 							type="submit"
 							disabled={isUploading || !selectedFile}
-							class="inline-flex w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 sm:ml-3 sm:w-auto"
+							class="inline-flex w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 sm:ml-3 sm:w-auto"
 						>
 							{#if isUploading}
 								<div class="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>

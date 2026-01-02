@@ -74,15 +74,15 @@
 					<div class="flex gap-2">
 						<button
 							onclick={() => reorderItems(order)}
-              data-sveltekit-preload-data="hover"
-							class="cursor-pointer active:scale-95 hover:scale-101 rounded-lg border border-blue-600 px-4 py-2 text-blue-600 transition-colors hover:bg-blue-50"
+							data-sveltekit-preload-data="hover"
+							class="cursor-pointer rounded-lg border border-blue-600 px-4 py-2 text-blue-600 transition-all hover:scale-101 hover:bg-blue-50 active:scale-95"
 						>
 							Order Again
 						</button>
 						<button
 							onclick={() => viewOrderDetails(order.id)}
-              data-sveltekit-preload-data="hover"
-							class="cursor-pointer active:scale-95 hover:scale-101 rounded-lg border border-gray-300 px-4 py-2 text-gray-600 transition-colors hover:bg-gray-50"
+							data-sveltekit-preload-data="hover"
+							class="cursor-pointer rounded-lg border border-gray-300 px-4 py-2 text-gray-600 transition-colors hover:scale-101 hover:bg-gray-50 active:scale-95"
 						>
 							View Details
 						</button>

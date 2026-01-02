@@ -34,7 +34,12 @@ export async function copyToClipboard(
 	options?: {
 		successMessage?: string;
 		label?: string;
-		showToast?: (message: { type: string; title: string; duration: number }) => void;
+		showToast?: (toast: {
+			type: 'success' | 'error' | 'warning' | 'info';
+			title: string;
+			message?: string;
+			duration?: number;
+		}) => void;
 	}
 ): Promise<boolean> {
 	try {
@@ -65,7 +70,12 @@ export async function copyToClipboard(
 export function copyAccountDetails(
 	account: Account,
 	options?: {
-		showToast?: (message: { type: string; title: string; duration: number }) => void;
+		showToast?: (toast: {
+			type: 'success' | 'error' | 'warning' | 'info';
+			title: string;
+			message?: string;
+			duration?: number;
+		}) => void;
 	}
 ): void {
 	let details = `Username: ${account.username}\nPassword: ${account.password}`;
@@ -86,7 +96,12 @@ export function copyAccountDetails(
 export function copyAllAccounts(
 	accounts: Account[],
 	options?: {
-		showToast?: (message: { type: string; title: string; duration: number }) => void;
+		showToast?: (toast: {
+			type: 'success' | 'error' | 'warning' | 'info';
+			title: string;
+			message?: string;
+			duration?: number;
+		}) => void;
 	}
 ): void {
 	const allDetails = accounts
@@ -110,7 +125,11 @@ export function copyAllAccounts(
 }
 
 // CSV Export utility
-export function exportToCSV(data: Record<string, unknown>[], filename: string, headers?: string[]): void {
+export function exportToCSV(
+	data: Record<string, unknown>[],
+	filename: string,
+	headers?: string[]
+): void {
 	if (!data || data.length === 0) return;
 
 	// Auto-generate headers from first object keys if not provided

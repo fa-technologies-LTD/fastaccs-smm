@@ -126,7 +126,7 @@
 		</div>
 		<button
 			onclick={exportData}
-			class="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white cursor-pointer transition-all hover:scale-95 hover:bg-blue-700"
+			class="flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:scale-95 hover:bg-blue-700 active:scale-90"
 		>
 			<Download class="h-4 w-4" />
 			Export Data
@@ -306,21 +306,23 @@
 									<div class="flex gap-2">
 										<button
 											onclick={() => goto(`/admin/affiliates/${affiliate.id}`)}
-											class="cursor-pointer group text-blue-600 hover:text-blue-900"
+											class="group cursor-pointer text-blue-600 hover:text-blue-900"
 											title="View Details"
 										>
-											<Eye class="h-5 w-5 group-hover:scale-90 transition-all" />
+											<Eye class="h-5 w-5 transition-all group-hover:scale-90" />
 										</button>
 										<button
 											onclick={() =>
 												toggleAffiliateStatus(affiliate.id, affiliate.isAffiliateEnabled)}
-											class="cursor-pointer group text-gray-600 hover:text-gray-900"
+											class="group cursor-pointer text-gray-600 hover:text-gray-900"
 											title={affiliate.isAffiliateEnabled ? 'Disable' : 'Enable'}
 										>
 											{#if affiliate.isAffiliateEnabled}
-												<XCircle class="h-5 w-5 text-red-600 group-hover:scale-90 transition-all" />
+												<XCircle class="h-5 w-5 text-red-600 transition-all group-hover:scale-90" />
 											{:else}
-												<CheckCircle class="h-5 w-5 text-green-600 group-hover:scale-90 transition-all" />
+												<CheckCircle
+													class="h-5 w-5 text-green-600 transition-all group-hover:scale-90"
+												/>
 											{/if}
 										</button>
 									</div>

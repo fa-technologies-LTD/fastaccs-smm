@@ -10,8 +10,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		// Parse the body first
 		const body = await request.json();
 
-		console.log('Webhook received:', body);
-
 		// Get webhook signature from headers (Korapay uses x-korapay-signature)
 		const signature = request.headers.get('x-korapay-signature');
 
@@ -118,7 +116,6 @@ export const POST: RequestHandler = async ({ request }) => {
 						data: { status: 'completed' }
 					});
 
-					console.log('Order completed via webhook:', orderId);
 				} catch (error) {
 					console.error('Account allocation failed in webhook:', error);
 					// Keep status as 'paid' for manual processing
@@ -144,8 +141,6 @@ export const POST: RequestHandler = async ({ request }) => {
 							status: 'cancelled'
 						}
 					});
-
-					console.log('Order cancelled due to failed payment:', order.id);
 				}
 
 				break;

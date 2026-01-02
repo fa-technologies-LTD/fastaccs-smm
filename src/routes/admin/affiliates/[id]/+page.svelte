@@ -3,7 +3,6 @@
 	import {
 		ArrowLeft,
 		User,
-		Mail,
 		Copy,
 		CheckCircle,
 		TrendingUp,
@@ -149,7 +148,6 @@
 			isProcessingPayout = false;
 		}
 	}
-
 
 	function copyToClipboard(text: string, label: string) {
 		navigator.clipboard.writeText(text);
@@ -647,8 +645,11 @@
 <!-- Commission Rate Adjustment Modal -->
 {#if showCommissionModal}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-		<div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl" in:fly={{ y: 200, duration: 500 }}
-				out:fade={{ duration: 500}}>
+		<div
+			class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+			in:fly={{ y: 200, duration: 500 }}
+			out:fade={{ duration: 500 }}
+		>
 			<h2 class="mb-4 text-xl font-bold text-gray-900">Adjust Commission Rate</h2>
 
 			<div class="mb-4">
@@ -681,14 +682,14 @@
 						commissionError = '';
 					}}
 					disabled={isUpdatingRate}
-					class="cursor-pointer flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 transition-all hover:scale-95 hover:bg-gray-50 disabled:opacity-50"
+					class="flex-1 cursor-pointer rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 transition-all hover:scale-95 hover:bg-gray-50 disabled:opacity-50"
 				>
 					Cancel
 				</button>
 				<button
 					onclick={updateCommissionRate}
 					disabled={isUpdatingRate}
-					class="cursor-pointer flex-1 rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:scale-95 hover:bg-blue-700 disabled:opacity-50"
+					class="flex-1 cursor-pointer rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:scale-95 hover:bg-blue-700 disabled:opacity-50"
 				>
 					{isUpdatingRate ? 'Updating...' : 'Update Rate'}
 				</button>
@@ -809,7 +810,7 @@
 				<button
 					onclick={recordPayout}
 					disabled={isProcessingPayout}
-					class="flex-1 rounded-lg bg-green-600 px-4 py-2 text-white transition-colors hover:bg-green-700 disabled:opacity-50"
+					class="flex-1 rounded-lg bg-green-600 px-4 py-2 text-white transition-all hover:bg-green-700 active:scale-95 disabled:opacity-50 disabled:active:scale-100"
 				>
 					{isProcessingPayout ? 'Recording...' : 'Record Payout'}
 				</button>

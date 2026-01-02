@@ -100,7 +100,6 @@
 				return 'bg-gray-100 text-gray-800';
 		}
 	}
-
 </script>
 
 <div class="min-h-screen bg-gray-50 p-4 sm:p-6">
@@ -115,7 +114,7 @@
 			<button
 				onclick={loadOrders}
 				disabled={loading}
-				class="cursor-pointer w-full rounded-lg bg-blue-600 px-4 py-3 text-white transition-all hover:scale-95 hover:bg-blue-700 disabled:opacity-50 sm:w-auto sm:py-2"
+				class="w-full cursor-pointer rounded-lg bg-blue-600 px-4 py-3 text-white transition-all hover:scale-95 hover:bg-blue-700 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:w-auto sm:py-2"
 			>
 				{loading ? 'Refreshing...' : 'Refresh'}
 			</button>
@@ -131,29 +130,27 @@
 
 	<!-- Stats Cards -->
 	<div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
-		<div class="rounded-lg border border-gray-200 bg-white p-4  sm:p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
 			<div class="text-xs font-medium text-gray-600 sm:text-sm">Total Orders</div>
 			<div class="text-lg font-bold text-gray-900 sm:text-2xl">{summaryStats.total_orders}</div>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-4  sm:p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
 			<div class="text-xs font-medium text-gray-600 sm:text-sm">Pending</div>
 			<div class="text-lg font-bold text-yellow-600 sm:text-2xl">{summaryStats.pending_orders}</div>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-4  sm:p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
 			<div class="text-xs font-medium text-gray-600 sm:text-sm">Processing</div>
 			<div class="text-lg font-bold text-blue-600 sm:text-2xl">
 				{summaryStats.processing_orders}
 			</div>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-4  sm:p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
 			<div class="text-xs font-medium text-gray-600 sm:text-sm">Completed</div>
 			<div class="text-lg font-bold text-green-600 sm:text-2xl">
 				{summaryStats.completed_orders}
 			</div>
 		</div>
-		<div
-			class="col-span-2 rounded-lg border border-gray-200 bg-white p-4  sm:col-span-1 sm:p-6"
-		>
+		<div class="col-span-2 rounded-lg border border-gray-200 bg-white p-4 sm:col-span-1 sm:p-6">
 			<div class="text-xs font-medium text-gray-600 sm:text-sm">Revenue</div>
 			<div class="text-lg font-bold text-gray-900 sm:text-2xl">
 				{formatPrice(summaryStats.total_revenue)}
@@ -172,7 +169,7 @@
 	</div>
 
 	<!-- Orders Table -->
-	<div class="overflow-hidden rounded-lg border border-gray-200 bg-white ">
+	<div class="overflow-hidden rounded-lg border border-gray-200 bg-white">
 		<div class="overflow-x-auto">
 			<table class="min-w-full divide-y divide-gray-200">
 				<thead class="bg-gray-50">

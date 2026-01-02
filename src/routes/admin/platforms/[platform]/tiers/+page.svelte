@@ -46,7 +46,7 @@
 			pricing: {
 				base_price: 0.0,
 				bulk_discount: 0,
-				currency: 'USD'
+				currency: 'NGN'
 			},
 			features: [],
 			quality_score: 5,
@@ -319,7 +319,7 @@
 			</div>
 			<button
 				onclick={openCreateModal}
-				class="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"
+				class="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:bg-blue-700 active:scale-95"
 			>
 				<Plus size={18} />
 				Add Tier
@@ -354,7 +354,7 @@
 			<p class="mb-4 text-gray-500">Create your first follower tier to get started.</p>
 			<button
 				onclick={openCreateModal}
-				class="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700"
+				class="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-all hover:bg-blue-700 active:scale-95"
 			>
 				<Plus class="mr-2 h-4 w-4" />
 				Add Tier
@@ -416,7 +416,7 @@
 								<span class="text-sm text-gray-600">Base Price</span>
 							</div>
 							<span class="text-sm font-medium text-gray-900">
-								${((tier.metadata as any)?.pricing?.base_price || 0).toFixed(2)}
+								₦{((tier.metadata as any)?.pricing?.base_price || 0).toFixed(2)}
 							</span>
 						</div>
 
@@ -592,7 +592,7 @@
 
 							<!-- Base Price -->
 							<div>
-								<label class="block text-sm font-medium text-gray-700">Base Price ($)</label>
+								<label class="block text-sm font-medium text-gray-700">Base Price (₦)</label>
 								<input
 									type="number"
 									step="0.01"
@@ -765,7 +765,7 @@
 							</div>
 
 							<div>
-								<label class="block text-sm font-medium text-gray-700">Base Price ($)</label>
+								<label class="block text-sm font-medium text-gray-700">Base Price (₦)</label>
 								<input
 									type="number"
 									step="0.01"

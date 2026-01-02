@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Plus, Minus, TrendingUp, Users, Clock } from '@lucide/svelte';
+	import { Plus, Minus, TrendingUp, Clock } from '@lucide/svelte';
 
 	let services = [
 		{
@@ -254,7 +254,7 @@
 
 					<button
 						disabled={!userLink}
-						class="w-full rounded-lg bg-blue-600 py-4 font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+						class="w-full rounded-lg bg-blue-600 py-4 font-semibold text-white transition-all hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:active:scale-100"
 					>
 						{userLink
 							? `Order Now - ₦${totalPrice.toLocaleString()}`

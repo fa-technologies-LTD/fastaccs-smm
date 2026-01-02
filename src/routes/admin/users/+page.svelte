@@ -120,7 +120,7 @@
 		</div>
 		<button
 			onclick={exportData}
-			class="flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:scale-95 hover:bg-blue-700"
+			class="flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:scale-95 hover:bg-blue-700 active:scale-90"
 		>
 			<Download class="h-4 w-4" />
 			Export Data

@@ -47,11 +47,13 @@
 	</div>
 
 	<div class="mt-6 flex gap-4">
-		<button class="rounded-lg bg-blue-600 px-6 py-2 text-white transition-colors hover:bg-blue-700 active:scale-[.98]">
+		<button
+			class="rounded-lg bg-blue-600 px-6 py-2 text-white transition-all hover:bg-blue-700 active:scale-[.98]"
+		>
 			Save Changes
 		</button>
 		<button
-			class="rounded-lg border border-gray-300 px-6 py-2 text-gray-700 transition-colors hover:bg-gray-50 active:scale-[.98]"
+			class="rounded-lg border border-gray-300 px-6 py-2 text-gray-700 transition-all hover:bg-gray-50 active:scale-[.98]"
 		>
 			Cancel
 		</button>

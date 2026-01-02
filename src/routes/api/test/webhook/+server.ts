@@ -7,10 +7,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		const signature = request.headers.get('x-korapay-signature');
 		const body = await request.json();
 
-		console.log('Test webhook received');
-		console.log('Signature:', signature);
-		console.log('Body:', JSON.stringify(body, null, 2));
-
 		if (!signature) {
 			return json({
 				success: true,

@@ -1,5 +1,5 @@
 <script>
-	import { Mail, Phone, MessageCircle, Send, Facebook, Twitter, Instagram } from '@lucide/svelte';
+	import { Mail, MessageCircle, Send, Facebook, Twitter, Instagram } from '@lucide/svelte';
 	import footerLogo from '$lib/assets/footer-logo.png';
 </script>
 

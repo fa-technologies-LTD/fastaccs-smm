@@ -5,6 +5,7 @@ export interface Platform {
 	name: string;
 	slug: string;
 	description: string;
+	metadata?: Record<string, any>;
 	tier_count?: number;
 	total_accounts?: number;
 	sample_tiers?: Array<{

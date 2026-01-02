@@ -143,9 +143,6 @@ export function verifyWebhookSignature(signature: string, dataObject: unknown): 
 		const hash = createHmac('sha256', KORAPAY_SECRET_KEY)
 			.update(JSON.stringify(dataObject))
 			.digest('hex');
-
-		console.log('Computed hash:', hash);
-
 		return hash === signature;
 	} catch (error) {
 		console.error('Webhook signature verification error:', error);

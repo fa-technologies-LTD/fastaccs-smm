@@ -63,6 +63,40 @@ export async function PUT({ params, request }) {
 export async function DELETE({ params }) {
 	try {
 		const id = params.id;
+
+		// Check if category has children (tiers, services, etc.)
+		const childrenCount = await prisma.category.count({
+			where: { parentId: id }
+		});
+
+		if (childrenCount > 0) {
+			return json(
+				{
+					data: null,
+					error: `Cannot delete this category. It has ${childrenCount} child ${childrenCount === 1 ? 'item' : 'items'} (tiers/services). Please delete or reassign them first.`
+				},
+				{ status: 400 }
+			);
+		}
+
+		// Check if category has any related records (accounts, orders, etc.)
+		const [accountsCount, orderItemsCount, accountBatchesCount] = await Promise.all([
+			prisma.account.count({ where: { categoryId: id } }),
+			prisma.orderItem.count({ where: { categoryId: id } }),
+			prisma.accountBatch.count({ where: { categoryId: id } })
+		]);
+
+		const totalRelated = accountsCount + orderItemsCount + accountBatchesCount;
+		if (totalRelated > 0) {
+			return json(
+				{
+					data: null,
+					error: `Cannot delete this category. It has ${accountsCount} accounts, ${orderItemsCount} orders, and ${accountBatchesCount} batches associated with it.`
+				},
+				{ status: 400 }
+			);
+		}
+
 		const data = await prisma.category.delete({
 			where: { id }
 		});

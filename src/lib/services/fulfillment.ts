@@ -329,12 +329,8 @@ async function sendEmail({
 			html: formatEmailContent(content)
 		};
 
-		console.log('Sending email via Gmail:', { to, subject });
-
 		// Send email
 		const result = await transporter.sendMail(mailOptions);
-
-		console.log('Email sent successfully:', result.messageId);
 
 		return {
 			success: true,

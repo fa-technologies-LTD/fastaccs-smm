@@ -1,11 +1,10 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import {ArrowRight, Users, Package } from '@lucide/svelte';
+	import { ArrowRight, Users, Package } from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
 	import { getPlatformColor, getPlatformIcon } from '$lib/helpers/platformColors';
-
 
 	interface Props {
 		data: PageData;
@@ -13,7 +12,6 @@
 
 	let { data }: Props = $props();
 
-	
 	function navigateToPlatform(platformSlug: string) {
 		goto(`/platforms/${platformSlug}`);
 	}
@@ -42,7 +40,7 @@
 				Premium social media accounts with real followers, authentic engagement, and instant
 				delivery
 			</p>
-			<div class="flex items-center justify-center gap-8 text-sm">
+			<div class="flex items-center justify-center gap-4 md:gap-8 text-xs md:text-sm">
 				<div class="flex items-center gap-2">
 					<Users class="h-5 w-5" />
 					<span>Real Followers</span>
@@ -82,15 +80,24 @@
 				<div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-2">
 					{#each data.platforms as platform}
 						{@const PlatformIcon = getPlatformIcon(platform.slug)}
+						{@const platformMeta = platform.metadata as any}
 						<div
-							class="active:scale-[0.98] cursor-pointer group relative overflow-hidden rounded-2xl bg-white shadow-lg transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl"
+							onclick={() => navigateToPlatform(platform.slug)}
+							onkeydown={(e) => e.key === 'Enter' && navigateToPlatform(platform.slug)}
+							role="button"
+							tabindex="0"
+							class="group relative cursor-pointer overflow-hidden rounded-2xl bg-white shadow transition-all duration-300 hover:-translate-y-2 hover:shadow-md active:scale-[0.98]"
 						>
 							<!-- Platform Gradient Header -->
 							<div class={`bg-gradient-to-r ${getPlatformColor(platform.slug)} p-8 text-white`}>
 								<div class="flex items-center justify-between">
 									<div class="flex items-center gap-4">
 										<div class="rounded-full bg-white/20 p-3">
-											<PlatformIcon class="h-8 w-8" />
+											{#if platformMeta?.icon}
+												<img src={platformMeta.icon} alt={platform.name} class="h-8 w-8" />
+											{:else}
+												<PlatformIcon class="h-8 w-8" />
+											{/if}
 										</div>
 										<div>
 											<h3 class="text-2xl font-bold">{platform.name}</h3>
@@ -143,14 +150,13 @@
 									</div>
 								{/if}
 
-								<!-- Browse Button -->
-								<button
-									onclick={() => navigateToPlatform(platform.slug)}
-									data-sveltekit-preload-data="hover"
-									class="cursor-pointer w-full rounded-lg bg-gray-900 py-3 font-semibold text-white transition-colors hover:bg-gray-800 "
+								<!-- Browse Action Label -->
+								<div
+									class="flex items-center justify-center gap-2 text-sm font-medium text-gray-600 transition-colors group-hover:text-gray-900"
 								>
-									Browse {platform.name} Accounts
-								</button>
+									<span>Browse {platform.name} Accounts</span>
+									<ArrowRight class="h-4 w-4" />
+								</div>
 							</div>
 						</div>
 					{/each}

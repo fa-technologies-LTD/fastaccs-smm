@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { User, Menu, X, ShoppingCart } from '@lucide/svelte';
+	import { Menu, X, ShoppingCart } from '@lucide/svelte';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
@@ -99,26 +99,45 @@
 
 			<!-- Desktop Navigation -->
 			<div class="hidden items-center space-x-8 md:flex">
-				<a
-					href="/platforms"
-					data-sveltekit-preload-data="hover"
-					class="font-medium text-gray-600 transition-colors hover:text-gray-900"
-				>
-					Accounts
-				</a>
-				<button
-					onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
-					class="cursor-pointer border-none bg-transparent font-medium text-gray-600 transition-colors hover:text-gray-900"
-				>
-					Boosting Services
-				</button>
-				<a
-					href="/how-it-works"
-					data-sveltekit-preload-data="hover"
-					class="font-medium text-gray-600 transition-colors hover:text-gray-900"
-				>
-					How It Works
-				</a>
+				{#if user}
+					<!-- Authenticated User Navigation -->
+					<a
+						href="/dashboard"
+						data-sveltekit-preload-data="hover"
+						class="font-medium text-gray-900 transition-colors hover:text-blue-600"
+					>
+						Dashboard
+					</a>
+					<a
+						href="/platforms"
+						data-sveltekit-preload-data="hover"
+						class="font-medium text-gray-900 transition-colors hover:text-blue-600"
+					>
+						Browse Accounts
+					</a>
+				{:else}
+					<!-- Guest Navigation -->
+					<a
+						href="/platforms"
+						data-sveltekit-preload-data="hover"
+						class="font-medium text-gray-600 transition-colors hover:text-gray-900"
+					>
+						Accounts
+					</a>
+					<button
+						onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
+						class="cursor-pointer border-none bg-transparent font-medium text-gray-600 transition-colors hover:text-gray-900"
+					>
+						Boosting Services
+					</button>
+					<a
+						href="/how-it-works"
+						data-sveltekit-preload-data="hover"
+						class="font-medium text-gray-600 transition-colors hover:text-gray-900"
+					>
+						How It Works
+					</a>
+				{/if}
 			</div>
 
 			<!-- Desktop Actions -->
@@ -127,9 +146,7 @@
 				{#if !user || user.userType !== 'ADMIN'}
 					<button
 						onclick={() => {
-							console.log('Cart button clicked, isOpen:', cart.isOpen);
 							cart.toggle();
-							console.log('After toggle, isOpen:', cart.isOpen);
 						}}
 						class="relative p-2 text-gray-600 transition-colors hover:text-gray-900"
 						aria-label="Open shopping cart"
@@ -169,14 +186,14 @@
 							{#if user.userType === 'ADMIN'}
 								<a
 									href="/admin"
-									class="rounded-md bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 hover:text-blue-800"
+									class="rounded-md bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 transition-all hover:bg-blue-100 hover:text-blue-800 active:scale-95"
 								>
 									Admin
 								</a>
 							{/if}
 							<button
 								onclick={signOut}
-								class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:scale-[.93] hover:bg-gray-50 hover:text-gray-900 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+								class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-all hover:scale-[.93] hover:bg-gray-50 hover:text-gray-900 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none active:scale-90"
 							>
 								Sign Out
 							</button>
@@ -243,26 +260,45 @@
 			<div class="space-y-4 px-4 py-6">
 				<!-- Mobile Navigation Links -->
 				<div class="space-y-1">
-					<a
-						href="/platforms"
-						data-sveltekit-preload-data="hover"
-						class="block py-3 text-sm font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
-					>
-						Accounts
-					</a>
-					<button
-						onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
-						class="block w-full cursor-pointer border-none bg-transparent py-3 text-left text-sm font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
-					>
-						Boosting Services
-					</button>
-					<a
-						href="/how-it-works"
-						data-sveltekit-preload-data="hover"
-						class="block py-3 text-sm font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
-					>
-						How It Works
-					</a>
+					{#if user}
+						<!-- Authenticated User Mobile Navigation -->
+						<a
+							href="/dashboard"
+							data-sveltekit-preload-data="hover"
+							class="block py-3 text-sm font-semibold text-gray-900 hover:text-blue-600 active:bg-gray-50"
+						>
+							Dashboard
+						</a>
+						<a
+							href="/platforms"
+							data-sveltekit-preload-data="hover"
+							class="block py-3 text-sm font-medium text-gray-900 hover:text-blue-600 active:bg-gray-50"
+						>
+							Browse Accounts
+						</a>
+					{:else}
+						<!-- Guest Mobile Navigation -->
+						<a
+							href="/platforms"
+							data-sveltekit-preload-data="hover"
+							class="block py-3 text-sm font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
+						>
+							Accounts
+						</a>
+						<button
+							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
+							class="block w-full cursor-pointer border-none bg-transparent py-3 text-left text-sm font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
+						>
+							Boosting Services
+						</button>
+						<a
+							href="/how-it-works"
+							data-sveltekit-preload-data="hover"
+							class="block py-3 text-sm font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
+						>
+							How It Works
+						</a>
+					{/if}
 				</div>
 
 				<!-- Mobile Cart & User -->
@@ -290,14 +326,14 @@
 							<a
 								href="/admin"
 								data-sveltekit-preload-data="hover"
-								class="mb-2 block rounded-md bg-blue-50 px-3 py-2 text-base font-medium text-blue-700 transition-colors hover:bg-blue-100 hover:text-blue-800"
+								class="mb-2 block rounded-md bg-blue-50 px-3 py-2 text-base font-medium text-blue-700 transition-all hover:bg-blue-100 hover:text-blue-800 active:scale-[.98]"
 							>
 								Admin Dashboard
 							</a>
 						{/if}
 						<button
 							onclick={signOut}
-							class="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-base font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-900 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+							class="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-base font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:text-gray-900 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none active:scale-[.98]"
 						>
 							Sign Out
 						</button>

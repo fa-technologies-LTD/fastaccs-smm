@@ -25,7 +25,7 @@
 			const headers: Record<string, string> = {
 				'Content-Type': 'application/json'
 			};
-			
+
 			if (!skipSignature && signature) {
 				headers['x-korapay-signature'] = signature;
 			}
@@ -52,7 +52,7 @@
 			const headers: Record<string, string> = {
 				'Content-Type': 'application/json'
 			};
-			
+
 			if (!skipSignature && signature) {
 				headers['x-korapay-signature'] = signature;
 			}
@@ -72,11 +72,11 @@
 	}
 </script>
 
-<div class="min-h-screen bg-gray-50 py-8 px-4">
-	<div class="max-w-4xl mx-auto">
-		<h1 class="text-3xl font-bold mb-8">Webhook Signature Tester</h1>
+<div class="min-h-screen bg-gray-50 px-4 py-8">
+	<div class="mx-auto max-w-4xl">
+		<h1 class="mb-8 text-3xl font-bold">Webhook Signature Tester</h1>
 
-		<div class="bg-white rounded-lg shadow p-6 mb-6">
+		<div class="mb-6 rounded-lg bg-white p-6 shadow">
 			<div class="mb-4">
 				<label class="flex items-center gap-2">
 					<input type="checkbox" bind:checked={skipSignature} />
@@ -86,22 +86,24 @@
 
 			{#if !skipSignature}
 				<div class="mb-4">
-					<label class="block text-sm font-medium mb-2">Webhook Signature (x-korapay-signature)</label>
+					<label class="mb-2 block text-sm font-medium"
+						>Webhook Signature (x-korapay-signature)</label
+					>
 					<input
 						type="text"
 						bind:value={signature}
 						placeholder="Enter signature from Korapay webhook"
-						class="w-full px-4 py-2 border rounded-lg"
+						class="w-full rounded-lg border px-4 py-2"
 					/>
 				</div>
 			{/if}
 
 			<div class="mb-4">
-				<label class="block text-sm font-medium mb-2">Webhook Payload</label>
+				<label class="mb-2 block text-sm font-medium">Webhook Payload</label>
 				<textarea
 					bind:value={webhookData}
 					rows="15"
-					class="w-full px-4 py-2 border rounded-lg font-mono text-sm"
+					class="w-full rounded-lg border px-4 py-2 font-mono text-sm"
 				></textarea>
 			</div>
 
@@ -109,15 +111,15 @@
 				<button
 					onclick={testWebhook}
 					disabled={loading}
-					class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-300"
+					class="rounded-lg bg-blue-600 px-6 py-2 text-white transition-all hover:bg-blue-700 active:scale-95 disabled:bg-gray-300 disabled:active:scale-100"
 				>
 					{loading ? 'Testing...' : 'Test Endpoint'}
 				</button>
-				
+
 				<button
 					onclick={testActualWebhook}
 					disabled={loading}
-					class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-300"
+					class="rounded-lg bg-green-600 px-6 py-2 text-white transition-all hover:bg-green-700 active:scale-95 disabled:bg-gray-300 disabled:active:scale-100"
 				>
 					{loading ? 'Testing...' : 'Test Real Webhook'}
 				</button>
@@ -125,8 +127,8 @@
 		</div>
 
 		{#if result}
-			<div class="bg-white rounded-lg shadow p-6">
-				<h2 class="text-xl font-bold mb-4">Result</h2>
+			<div class="rounded-lg bg-white p-6 shadow">
+				<h2 class="mb-4 text-xl font-bold">Result</h2>
 				<div class="space-y-2">
 					<div>
 						<span class="font-medium">Signature Valid:</span>
@@ -134,16 +136,16 @@
 							{result.signatureValid ? '✓ Valid' : '✗ Invalid'}
 						</span>
 					</div>
-					<div class="bg-gray-50 p-4 rounded overflow-auto">
+					<div class="overflow-auto rounded bg-gray-50 p-4">
 						<pre class="text-xs">{JSON.stringify(result, null, 2)}</pre>
 					</div>
 				</div>
 			</div>
 		{/if}
 
-		<div class="mt-8 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-			<h3 class="font-bold mb-2">How to use:</h3>
-			<ol class="list-decimal list-inside space-y-1 text-sm">
+		<div class="mt-8 rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+			<h3 class="mb-2 font-bold">How to use:</h3>
+			<ol class="list-inside list-decimal space-y-1 text-sm">
 				<li>Go to your Korapay dashboard transaction</li>
 				<li>Find the webhook attempt in the Webhook/Metadata section</li>
 				<li>Copy the signature from the request headers</li>

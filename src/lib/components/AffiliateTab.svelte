@@ -106,7 +106,7 @@
 									label: 'Affiliate code',
 									showToast: addToast
 								})}
-							class="rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700 hover:scale-105 active:scale-95"
+							class="rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:scale-105 hover:bg-blue-700 active:scale-95"
 						>
 							<Copy class="h-5 w-5" />
 						</button>
@@ -128,7 +128,7 @@
 									label: 'Referral link',
 									showToast: addToast
 								})}
-							class="rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700 hover:scale-105 active:scale-95"
+							class="rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:scale-105 hover:bg-blue-700 active:scale-95"
 						>
 							<Copy class="h-5 w-5" />
 						</button>
@@ -155,7 +155,7 @@
 				<button
 					onclick={enableAffiliate}
 					disabled={isLoadingAffiliate}
-					class="cursor-pointer rounded-lg bg-blue-600 px-8 py-3 text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+					class="cursor-pointer rounded-lg bg-blue-600 px-8 py-3 text-white transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50 disabled:active:scale-100"
 				>
 					{isLoadingAffiliate ? 'Enabling...' : 'Become an Affiliate'}
 				</button>

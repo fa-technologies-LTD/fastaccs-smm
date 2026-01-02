@@ -1,22 +1,18 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import {
-		Instagram,
-		Music,
-		Facebook,
-		Twitter,
 		ShoppingCart,
-		Star,
 		Users,
 		Package,
-		ArrowLeft,
 		Plus,
 		Minus,
 		Shield,
-		CheckCircle
+		CheckCircle,
+		ChevronRight
 	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { showError, showWarning, showSuccess } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
@@ -199,7 +195,7 @@
 				<div class="flex justify-center gap-4">
 					<button
 						onclick={goBackToPlatforms}
-						class="rounded-lg bg-gray-600 px-6 py-3 font-semibold text-white hover:bg-gray-700"
+						class="rounded-lg bg-gray-600 px-6 py-3 font-semibold text-white transition-all hover:bg-gray-700 active:scale-95"
 					>
 						All Platforms
 					</button>
@@ -210,17 +206,47 @@
 		{@const PlatformIcon = getPlatformIcon(data.platform.slug)}
 		{@const tierStatus = getTierStatus(data.tier.visible_available)}
 
-		<!-- Breadcrumb -->
-		<section class="bg-white py-6">
+		<!-- Enhanced Breadcrumb & Progress -->
+		<section class="bg-white py-4 shadow sm:py-6">
 			<div class="mx-auto max-w-6xl px-4">
-				<div class="flex items-center gap-2 text-sm text-gray-600">
-					<button onclick={goBackToPlatforms} class="hover:text-purple-600"> All Platforms </button>
-					<span>/</span>
-					<button onclick={goBackToPlatform} class="hover:text-purple-600">
-						{data.platform.name}
-					</button>
-					<span>/</span>
-					<span class="font-medium text-gray-900">{data.tier.tier_name}</span>
+				<Breadcrumb
+					items={[
+						{ label: 'Platforms', href: '/platforms' },
+						{ label: data.platform.name, href: `/platforms/${data.platform.slug}` },
+						{ label: data.tier.tier_name, active: true }
+					]}
+				/>
+
+				<!-- Step Indicator -->
+				<div class="mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 sm:px-4">
+					<div class="flex items-center gap-2 opacity-50">
+						<div
+							class="flex h-6 w-6 items-center justify-center rounded-full bg-green-500 text-xs font-bold text-white"
+						>
+							✓
+						</div>
+						<span class="text-xs sm:text-sm">Platform</span>
+					</div>
+					<ChevronRight class="h-4 w-4 text-gray-400" />
+					<div class="flex items-center gap-2 opacity-50">
+						<div
+							class="flex h-6 w-6 items-center justify-center rounded-full bg-green-500 text-xs font-bold text-white"
+						>
+							✓
+						</div>
+						<span class="text-xs sm:text-sm">Category</span>
+					</div>
+					<ChevronRight class="h-4 w-4 text-gray-400" />
+					<div class="flex items-center gap-2">
+						<div
+							class="flex h-6 w-6 items-center justify-center rounded-full bg-purple-600 text-xs font-bold text-white"
+						>
+							3
+						</div>
+						<span class="text-xs font-medium text-gray-900 sm:text-sm">Select Quantity</span>
+					</div>
+					<ChevronRight class="h-4 w-4 text-gray-400" />
+					<span class="text-xs text-gray-500 sm:text-sm">Checkout</span>
 				</div>
 			</div>
 		</section>
@@ -276,22 +302,36 @@
 		</section>
 
 		<!-- Main Content -->
-		<section class="py-16">
+		<section class="py-8 sm:py-16">
 			<div class="mx-auto max-w-6xl px-4">
-				<div class="grid grid-cols-1 gap-12 lg:grid-cols-3">
+				<!-- Instructional Banner -->
+				<div class="mb-8 rounded-xl border border-purple-100 bg-purple-50 p-4 sm:p-6">
+					<h2 class="mb-2 flex items-center gap-2 text-lg font-semibold text-purple-900">
+						<ShoppingCart class="h-5 w-5" />
+						Single Product Selection
+					</h2>
+					<p class="text-sm text-purple-700 sm:text-base">
+						This is a single SKU (Stock Keeping Unit). Choose your desired quantity below and add to
+						cart. Each purchase draws from our verified account inventory.
+					</p>
+				</div>
+
+				<div class="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:gap-12">
 					<!-- Left Column - Details -->
 					<div class="lg:col-span-2">
 						<!-- Tier Description -->
-						<div class="mb-8 rounded-xl bg-white p-8 shadow-sm">
-							<h2 class="mb-4 text-2xl font-bold text-gray-900">Account Details</h2>
+						<div class="mb-8 rounded-xl bg-white p-6 shadow sm:p-8">
+							<h2 class="mb-4 text-xl font-bold text-gray-900 sm:text-2xl">Account Details</h2>
 
 							<!-- Tier-specific description -->
 							{#if data.tier.description}
-								<p class="mb-4 text-lg leading-relaxed text-gray-700">{data.tier.description}</p>
+								<p class="mb-4 text-base leading-relaxed text-gray-700 sm:text-lg">
+									{data.tier.description}
+								</p>
 							{/if}
 
 							<!-- Default description -->
-							<p class="mb-6 text-lg text-gray-700">
+							<p class="mb-6 text-base text-gray-700 sm:text-lg">
 								{#if data.tier.metadata?.follower_range}
 									{@const range = data.tier.metadata.follower_range}
 									Premium {data.platform.name} accounts with {range.display ||
@@ -364,7 +404,7 @@
 						</div>
 
 						<!-- Security Features -->
-						<div class="rounded-xl bg-white p-8 shadow-sm">
+						<div class="rounded-xl bg-white p-8 shadow">
 							<h2 class="mb-6 text-2xl font-bold text-gray-900">Security & Safety</h2>
 							<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 								<div class="flex items-center gap-3 rounded-lg bg-green-50 p-4">
@@ -387,7 +427,7 @@
 
 					<!-- Right Column - Purchase -->
 					<div class="lg:col-span-1">
-						<div class="sticky top-6 rounded-xl bg-white p-8 shadow-lg">
+						<div class="sticky top-6 rounded-xl bg-white p-8 shadow">
 							<h3 class="mb-6 text-xl font-bold text-gray-900">Select Quantity</h3>
 
 							<!-- Quantity Selector -->
@@ -447,7 +487,7 @@
 							<button
 								onclick={addToCart}
 								disabled={data.tier.visible_available === 0 || addingToCart}
-								class="w-full rounded-lg bg-purple-600 py-4 font-semibold text-white transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+								class="w-full rounded-lg bg-purple-600 py-4 font-semibold text-white transition-all hover:bg-purple-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:active:scale-100"
 							>
 								{#if addingToCart}
 									<div class="flex items-center justify-center gap-2">

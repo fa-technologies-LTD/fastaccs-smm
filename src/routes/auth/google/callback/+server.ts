@@ -27,12 +27,9 @@ export const GET: RequestHandler = async (event) => {
 	}
 
 	try {
-		console.log('🔄 Step 1: Exchanging authorization code for tokens...');
 		// Exchange authorization code for tokens
 		const tokens: OAuth2Tokens = await google.validateAuthorizationCode(code, codeVerifier);
-		console.log('✅ Step 1: Successfully got tokens');
-
-		console.log('🔄 Step 2: Decoding ID token...');
+	
 		// Decode the ID token to get user info
 		const claims = decodeIdToken(tokens.idToken()) as {
 			sub: string;
@@ -44,8 +41,7 @@ export const GET: RequestHandler = async (event) => {
 		const email = claims.email;
 		const name = claims.name;
 		const picture = claims.picture;
-		console.log('✅ Step 2: Successfully decoded token for user:', email);
-
+	
 		if (!googleUserId || !email || !name) {
 			throw error(400, 'Incomplete user data from Google');
 		}
@@ -91,7 +87,6 @@ export const GET: RequestHandler = async (event) => {
 			finalRedirectTo = '/admin';
 		}
 
-		console.log('✅ Authentication successful, redirecting to:', finalRedirectTo);
 		// Redirect to intended destination
 		throw redirect(302, finalRedirectTo);
 	} catch (e) {

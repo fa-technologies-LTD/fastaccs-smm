@@ -96,7 +96,7 @@
 				<div class="space-y-3">
 					<button
 						onclick={() => goto('/checkout')}
-						class="w-full rounded-lg bg-purple-600 px-6 py-3 font-semibold text-white hover:bg-purple-700"
+						class="w-full rounded-lg bg-purple-600 px-6 py-3 font-semibold text-white transition-all hover:bg-purple-700 active:scale-95"
 					>
 						Try Again
 					</button>

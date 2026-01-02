@@ -9,8 +9,6 @@
 	}
 
 	let { data }: Props = $props();
-
-	// console.log('Dashboard data:', data);
 </script>
 
 <svelte:head>
@@ -23,15 +21,15 @@
 
 <Navigation />
 
-<UserDashboard 
-	name={data.user.fullName} 
-	orders={data.orders} 
+<UserDashboard
+	user={data.user}
+	name={data.user.fullName}
+	orders={data.orders}
 	joinDate={data.user.createdAt}
 	affiliateData={data.affiliateData}
 	walletBalance={data.walletBalance}
 	walletTransactions={data.walletTransactions}
 	purchases={data.purchases}
-	messages={data.messages}
 />
 
 <Footer />

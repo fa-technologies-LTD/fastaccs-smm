@@ -324,7 +324,7 @@
 					</p>
 					<a
 						href="/support"
-						class="inline-flex items-center rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
+						class="inline-flex items-center rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-purple-700 active:scale-95"
 					>
 						Contact Support
 					</a>

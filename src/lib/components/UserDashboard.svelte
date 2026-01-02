@@ -2,7 +2,6 @@
 	import { Package, CheckCircle, RefreshCw } from '@lucide/svelte';
 	import OrderTab from './OrderTab.svelte';
 	import PurchaseTab from './PurchaseTab.svelte';
-	import MessageTab from './MessageTab.svelte';
 	import AffiliateTab from './AffiliateTab.svelte';
 	import WalletTab from './WalletTab.svelte';
 	import ProfileTab from './ProfileTab.svelte';
@@ -15,12 +14,10 @@
 		walletBalance: initialWalletBalance = 0,
 		walletTransactions: initialWalletTransactions = [],
 		purchases: initialPurchases = [],
-		messages: initialMessages = [],
 		user
 	} = $props();
 
 	let activeTab = $state('orders');
-	let messages = $state<any[]>(initialMessages);
 
 	// Calculate stats from orders
 	let totalOrders = $derived(orders.length);
@@ -111,15 +108,6 @@
 				Purchases
 			</button>
 			<button
-				onclick={() => (activeTab = 'messages')}
-				class="border-b-2 px-1 py-2 text-sm font-medium transition-colors
-					{activeTab === 'messages'
-					? 'border-blue-500 text-blue-600'
-					: 'border-transparent text-gray-500 hover:text-gray-700'}"
-			>
-				Messages ({messages.filter((m: any) => !m.read).length})
-			</button>
-			<button
 				onclick={() => (activeTab = 'affiliate')}
 				class="border-b-2 px-1 py-2 text-sm font-medium transition-colors
 					{activeTab === 'affiliate'
@@ -152,8 +140,6 @@
 	<!-- Tab Content -->
 	{#if activeTab === 'orders'}
 		<OrderTab initialOrders={orders} />
-	{:else if activeTab === 'messages'}
-		<MessageTab initialMessages={messages} />
 	{:else if activeTab === 'purchases'}
 		<PurchaseTab {initialPurchases} />
 	{:else if activeTab === 'affiliate'}

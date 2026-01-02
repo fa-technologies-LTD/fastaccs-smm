@@ -33,13 +33,8 @@ export async function POST({ request }) {
 			html: formatEmailContent(content)
 		};
 
-		console.log('📧 Sending email via Gmail:', { to, subject });
-
 		// Send email
 		const result = await transporter.sendMail(mailOptions);
-
-		console.log('✅ Email sent successfully:', result.messageId);
-
 		return json({
 			success: true,
 			messageId: result.messageId

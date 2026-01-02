@@ -1,10 +1,10 @@
 <script lang="ts">
 	import '../app.css';
 	import { onNavigate } from '$app/navigation';
-	import { page } from '$app/stores';
+
 	import favicon from '$lib/assets/favicon.png';
-	import Cart from '$lib/components/Cart.svelte';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
+	import PageLoadingBar from '$lib/components/PageLoadingBar.svelte';
 	import type { LayoutData } from './$types';
 
 	interface Props {
@@ -44,6 +44,8 @@
 <svelte:head>
 	<link rel="icon" href={favicon} />
 </svelte:head>
+
+<PageLoadingBar />
 
 <div class="min-h-screen bg-white">
 	{@render children?.()}

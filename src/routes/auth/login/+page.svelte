@@ -104,7 +104,10 @@
 					</a>
 
 					<div class="text-center">
-						<button onclick={goBack} class="text-sm text-gray-500 hover:text-gray-700">
+						<button
+							onclick={goBack}
+							class="text-sm text-gray-500 transition-colors hover:text-gray-700 active:scale-95"
+						>
 							← Back to browsing
 						</button>
 					</div>
