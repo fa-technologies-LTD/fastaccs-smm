@@ -49,6 +49,6 @@
 
 <div class="min-h-screen bg-white">
 	{@render children?.()}
-	<Cart />
+
 	<ToastContainer />
 </div>
