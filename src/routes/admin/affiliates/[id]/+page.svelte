@@ -281,7 +281,7 @@
 						/>
 						<button
 							onclick={() => copyToClipboard(data.program.affiliateCode, 'Code')}
-							class="rounded-lg bg-blue-600 px-3 py-2 text-white transition-colors hover:bg-blue-700"
+							class="rounded-lg cursor-copy active:scale-90 bg-blue-600 px-3 py-2 text-white transition-colors hover:bg-blue-700"
 						>
 							<Copy class="h-4 w-4" />
 						</button>
@@ -305,7 +305,7 @@
 						<button
 							onclick={() =>
 								copyToClipboard(`${page.url.origin}/?ref=${data.program.affiliateCode}`, 'Link')}
-							class="rounded-lg bg-blue-600 px-3 py-2 text-white transition-colors hover:bg-blue-700"
+							class="rounded-lg cursor-copy active:scale-90 bg-blue-600 px-3 py-2 text-white transition-colors hover:bg-blue-700"
 						>
 							<Copy class="h-4 w-4" />
 						</button>

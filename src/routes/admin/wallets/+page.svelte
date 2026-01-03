@@ -19,10 +19,10 @@
 
 	let searchQuery = $state('');
 	let filterType = $state('all'); // all, deposit, debit, refund
-	let currentPage = $state(1);
-	let itemsPerPage = 10;
+	// let currentPage = $state(1);
+	// let itemsPerPage = 10;
 
-	// Mock data - will be replaced with actual data from server
+	
 	let stats = $derived({
 		totalWallets: data.stats?.totalWallets || 0,
 		totalBalance: data.stats?.totalBalance || 0,
@@ -103,7 +103,7 @@
 	{#if data.error}
 		<div class="rounded-lg border border-red-200 bg-red-50 p-4">
 			<div class="flex items-center gap-2">
-				<svg class="h-5 w-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+				<svg class="size-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
 					<path
 						fill-rule="evenodd"
 						d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
@@ -120,19 +120,19 @@
 
 	<!-- Stats Cards -->
 	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-		<div class="rounded-lg border border-gray-200 bg-white p-4">
+		<div class="group rounded-lg border border-gray-200 bg-white p-4">
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Total Wallets</p>
 					<p class="mt-1 text-xl font-bold text-gray-900">{stats.totalWallets}</p>
 				</div>
 				<div class="rounded-full bg-blue-100 p-2">
-					<Users class="h-5 w-5 text-blue-600" />
+					<Users class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-blue-600" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-4">
+		<div class="group rounded-lg border border-gray-200 bg-white p-4">
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Total Balance</p>
@@ -141,12 +141,12 @@
 					</p>
 				</div>
 				<div class="rounded-full bg-green-100 p-2">
-					<Wallet class="h-5 w-5 text-green-600" />
+					<Wallet class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-green-600" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-4">
+		<div class="group rounded-lg border border-gray-200 bg-white p-4">
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Total Deposits</p>
@@ -155,12 +155,12 @@
 					</p>
 				</div>
 				<div class="rounded-full bg-green-100 p-2">
-					<ArrowDownLeft class="h-5 w-5 text-green-600" />
+					<ArrowDownLeft class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-green-600" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-4">
+		<div class="group rounded-lg border border-gray-200 bg-white p-4">
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Total Withdrawals</p>
@@ -169,7 +169,7 @@
 					</p>
 				</div>
 				<div class="rounded-full bg-red-100 p-2">
-					<ArrowUpRight class="h-5 w-5 text-red-600" />
+					<ArrowUpRight class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-red-600" />
 				</div>
 			</div>
 		</div>
