@@ -4,7 +4,7 @@
 	import PurchaseTab from './PurchaseTab.svelte';
 	import AffiliateTab from './AffiliateTab.svelte';
 	import WalletTab from './WalletTab.svelte';
-	import ProfileTab from './ProfileTab.svelte';
+	// import ProfileTab from './ProfileTab.svelte';
 
 	let {
 		name,
@@ -14,7 +14,7 @@
 		walletBalance: initialWalletBalance = 0,
 		walletTransactions: initialWalletTransactions = [],
 		purchases: initialPurchases = [],
-		user
+		// user
 	} = $props();
 
 	let activeTab = $state('orders');
@@ -125,6 +125,7 @@
 			>
 				Wallet
 			</button>
+			<!-- Profile Settings tab commented out
 			<button
 				onclick={() => (activeTab = 'profile')}
 				class="border-b-2 px-1 py-2 text-sm font-medium transition-colors
@@ -134,6 +135,7 @@
 			>
 				Profile Settings
 			</button>
+			-->
 		</nav>
 	</div>
 
@@ -146,7 +148,9 @@
 		<AffiliateTab {initialAffiliateData} />
 	{:else if activeTab === 'wallet'}
 		<WalletTab {initialWalletBalance} {initialWalletTransactions} />
+		<!-- Profile Settings tab commented out
 	{:else if activeTab === 'profile'}
 		<ProfileTab {user} />
+	-->
 	{/if}
 </div>

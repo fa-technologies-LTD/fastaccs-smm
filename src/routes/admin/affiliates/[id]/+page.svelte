@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import {
 		ArrowLeft,
 		User,
@@ -11,13 +12,13 @@
 		BarChart3,
 		Settings,
 		ExternalLink,
-		Wallet,
-		X
+		Wallet
 	} from '@lucide/svelte';
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import { formatPrice, formatDate } from '$lib/helpers/utils';
-	import { fade, fly } from 'svelte/transition';
+	import CommissionModal from '$lib/components/modals/CommissionModal.svelte';
+	import PayoutModal from '$lib/components/modals/PayoutModal.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -34,6 +35,8 @@
 	let payoutNotes = $state('');
 	let isProcessingPayout = $state(false);
 	let payoutError = $state('');
+
+
 
 	// Calculate unpaid commission
 	const unpaidCommission = $derived(data.program.totalCommission - (data.program.totalPaid || 0));
@@ -55,7 +58,6 @@
 			});
 
 			const result = await response.json();
-
 			if (result.success) {
 				data.program.commissionRate = newCommissionRate;
 				showCommissionModal = false;
@@ -193,7 +195,7 @@
 			<div class="flex gap-2">
 				<button
 					onclick={() => {
-						newCommissionRate = data.program.commissionRate;
+						
 						showCommissionModal = true;
 					}}
 					class="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 transition-colors hover:bg-gray-50"
@@ -207,19 +209,19 @@
 
 	<!-- Stats Overview -->
 	<div class="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-6 group">
 			<div class="flex items-center justify-between">
 				<div>
 					<p class="text-sm font-medium text-gray-600">Total Referrals</p>
 					<p class="mt-2 text-3xl font-bold text-gray-900">{data.program.totalReferrals}</p>
 				</div>
 				<div class="rounded-full bg-blue-100 p-3">
-					<User class="h-6 w-6 text-blue-600" />
+					<User class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-blue-600" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-6 group">
 			<div class="flex items-center justify-between">
 				<div>
 					<p class="text-sm font-medium text-gray-600">Total Sales</p>
@@ -228,12 +230,12 @@
 					</p>
 				</div>
 				<div class="rounded-full bg-green-100 p-3">
-					<TrendingUp class="h-6 w-6 text-green-600" />
+					<TrendingUp class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-green-600" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-6 group">
 			<div class="flex items-center justify-between">
 				<div>
 					<p class="text-sm font-medium text-gray-600">Total Commission</p>
@@ -242,19 +244,19 @@
 					</p>
 				</div>
 				<div class="rounded-full bg-purple-100 p-3">
-					<DollarSign class="h-6 w-6 text-purple-600" />
+					<DollarSign class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-purple-600" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+		<div class="rounded-lg border border-gray-200 bg-white p-6 group">
 			<div class="flex items-center justify-between">
 				<div>
 					<p class="text-sm font-medium text-gray-600">Commission Rate</p>
 					<p class="mt-2 text-3xl font-bold text-orange-600">{data.program.commissionRate}%</p>
 				</div>
 				<div class="rounded-full bg-orange-100 p-3">
-					<BarChart3 class="h-6 w-6 text-orange-600" />
+					<BarChart3 class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-orange-600" />
 				</div>
 			</div>
 		</div>
@@ -267,7 +269,9 @@
 			<h2 class="mb-4 text-lg font-semibold text-gray-900">Affiliate Information</h2>
 			<div class="space-y-4">
 				<div>
-					<label class="mb-1 block text-sm font-medium text-gray-700">Affiliate Code</label>
+					<label for="affiliate code" class="mb-1 block text-sm font-medium text-gray-700"
+						>Affiliate Code</label
+					>
 					<div class="flex gap-2">
 						<input
 							type="text"
@@ -288,20 +292,19 @@
 				</div>
 
 				<div>
-					<label class="mb-1 block text-sm font-medium text-gray-700">Referral Link</label>
+					<label for="referral link" class="mb-1 block text-sm font-medium text-gray-700"
+						>Referral Link</label
+					>
 					<div class="flex gap-2">
 						<input
 							type="text"
-							value={`${window.location.origin}/?ref=${data.program.affiliateCode}`}
+							value={`${page.url.origin}/?ref=${data.program.affiliateCode}`}
 							readonly
 							class="flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
 						/>
 						<button
 							onclick={() =>
-								copyToClipboard(
-									`${window.location.origin}/?ref=${data.program.affiliateCode}`,
-									'Link'
-								)}
+								copyToClipboard(`${page.url.origin}/?ref=${data.program.affiliateCode}`, 'Link')}
 							class="rounded-lg bg-blue-600 px-3 py-2 text-white transition-colors hover:bg-blue-700"
 						>
 							<Copy class="h-4 w-4" />
@@ -644,177 +647,33 @@
 
 <!-- Commission Rate Adjustment Modal -->
 {#if showCommissionModal}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-		<div
-			class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
-			in:fly={{ y: 200, duration: 500 }}
-			out:fade={{ duration: 500 }}
-		>
-			<h2 class="mb-4 text-xl font-bold text-gray-900">Adjust Commission Rate</h2>
-
-			<div class="mb-4">
-				<label for="commission-rate" class="mb-2 block text-sm font-medium text-gray-700">
-					Commission Rate (%)
-				</label>
-				<input
-					id="commission-rate"
-					type="number"
-					min="0"
-					max="100"
-					step="0.1"
-					bind:value={newCommissionRate}
-					class="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-					placeholder="Enter commission rate"
-				/>
-				<p class="mt-1 text-xs text-gray-500">Must be between 0 and 100</p>
-			</div>
-
-			{#if commissionError}
-				<div class="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">
-					{commissionError}
-				</div>
-			{/if}
-
-			<div class="flex gap-3">
-				<button
-					onclick={() => {
-						showCommissionModal = false;
-						commissionError = '';
-					}}
-					disabled={isUpdatingRate}
-					class="flex-1 cursor-pointer rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 transition-all hover:scale-95 hover:bg-gray-50 disabled:opacity-50"
-				>
-					Cancel
-				</button>
-				<button
-					onclick={updateCommissionRate}
-					disabled={isUpdatingRate}
-					class="flex-1 cursor-pointer rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:scale-95 hover:bg-blue-700 disabled:opacity-50"
-				>
-					{isUpdatingRate ? 'Updating...' : 'Update Rate'}
-				</button>
-			</div>
-		</div>
-	</div>
+	<CommissionModal
+		bind:newCommissionRate={newCommissionRate}
+		{commissionError}
+		{updateCommissionRate}
+		{isUpdatingRate}
+		onclick={() => {
+			showCommissionModal = false;
+			commissionError = '';
+		}}
+	/>
 {/if}
 
 <!-- Record Payout Modal -->
 {#if showPayoutModal}
-	<div
-		class="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black p-4"
-		onclick={(e) => {
-			if (e.target === e.currentTarget) {
-				showPayoutModal = false;
-				payoutError = '';
-			}
+	<PayoutModal
+		{isProcessingPayout}
+		{recordPayout}
+		{payoutError}
+		bind:payoutAmount={payoutAmount}
+		bind:payoutMethod={payoutMethod}
+		bind:payoutReference={payoutReference}
+		bind:payoutDate={payoutDate}
+		bind:payoutNotes={payoutNotes}
+		{unpaidCommission}
+		onclick={() => {
+			showPayoutModal = false;
+			payoutError = '';
 		}}
-	>
-		<div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-			<div class="mb-4 flex items-center justify-between">
-				<h3 class="text-lg font-semibold text-gray-900">Record Commission Payout</h3>
-				<button
-					onclick={() => {
-						showPayoutModal = false;
-						payoutError = '';
-					}}
-					class="text-gray-400 hover:text-gray-600"
-				>
-					<X class="h-5 w-5" />
-				</button>
-			</div>
-
-			<div class="mb-4 rounded-lg bg-blue-50 p-4">
-				<div class="flex items-center justify-between">
-					<span class="text-sm font-medium text-gray-700">Unpaid Balance:</span>
-					<span class="text-lg font-bold text-blue-600">{formatPrice(unpaidCommission)}</span>
-				</div>
-			</div>
-
-			<div class="mb-4">
-				<label class="mb-2 block text-sm font-medium text-gray-700">Amount</label>
-				<input
-					type="number"
-					step="0.01"
-					min="0.01"
-					max={unpaidCommission}
-					bind:value={payoutAmount}
-					class="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-green-500 focus:ring-2 focus:ring-green-500"
-					placeholder="Enter payout amount"
-				/>
-				<p class="mt-1 text-xs text-gray-500">Maximum: {formatPrice(unpaidCommission)}</p>
-			</div>
-
-			<div class="mb-4">
-				<label class="mb-2 block text-sm font-medium text-gray-700">Payment Method</label>
-				<select
-					bind:value={payoutMethod}
-					class="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-green-500 focus:ring-2 focus:ring-green-500"
-				>
-					<option value="Bank Transfer">Bank Transfer</option>
-					<option value="PayPal">PayPal</option>
-					<option value="Payoneer">Payoneer</option>
-					<option value="Crypto">Crypto</option>
-					<option value="Check">Check</option>
-					<option value="Other">Other</option>
-				</select>
-			</div>
-
-			<div class="mb-4">
-				<label class="mb-2 block text-sm font-medium text-gray-700">
-					Payment Reference (Optional)
-				</label>
-				<input
-					type="text"
-					bind:value={payoutReference}
-					class="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-green-500 focus:ring-2 focus:ring-green-500"
-					placeholder="Transaction ID, check number, etc."
-				/>
-			</div>
-
-			<div class="mb-4">
-				<label class="mb-2 block text-sm font-medium text-gray-700">Payment Date</label>
-				<input
-					type="date"
-					bind:value={payoutDate}
-					class="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-green-500 focus:ring-2 focus:ring-green-500"
-				/>
-			</div>
-
-			<div class="mb-4">
-				<label class="mb-2 block text-sm font-medium text-gray-700">Notes (Optional)</label>
-				<textarea
-					bind:value={payoutNotes}
-					rows="3"
-					class="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-green-500 focus:ring-2 focus:ring-green-500"
-					placeholder="Additional notes about this payout..."
-				></textarea>
-			</div>
-
-			{#if payoutError}
-				<div class="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">
-					{payoutError}
-				</div>
-			{/if}
-
-			<div class="flex gap-3">
-				<button
-					onclick={() => {
-						showPayoutModal = false;
-						payoutError = '';
-					}}
-					disabled={isProcessingPayout}
-					class="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-				>
-					Cancel
-				</button>
-				<button
-					onclick={recordPayout}
-					disabled={isProcessingPayout}
-					class="flex-1 rounded-lg bg-green-600 px-4 py-2 text-white transition-all hover:bg-green-700 active:scale-95 disabled:opacity-50 disabled:active:scale-100"
-				>
-					{isProcessingPayout ? 'Recording...' : 'Record Payout'}
-				</button>
-			</div>
-		</div>
-	</div>
+	/>
 {/if}
