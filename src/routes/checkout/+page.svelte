@@ -10,7 +10,10 @@
 		Lock,
 		Tag,
 		Wallet,
-		Shield
+		Shield,
+		X,
+		Minus,
+		Plus
 	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -376,16 +379,59 @@
 										</div>
 									</div>
 									<div class="flex-1">
-										<h3 class="line-clamp-2 text-xs font-medium text-gray-900 sm:text-sm">
-											{item.tier.name}
-										</h3>
-										<p class="text-xs text-gray-600">
-											{item.tier.platformName} • Qty: {item.quantity}
-										</p>
+										<div class="flex items-start justify-between">
+											<div class="flex-1">
+												<h3 class="line-clamp-2 text-xs font-medium text-gray-900 sm:text-sm">
+													{item.tier.name}
+												</h3>
+												<p class="text-xs text-gray-600">
+													{item.tier.platformName}
+												</p>
+											</div>
+											<button
+												onclick={async () => {
+													cart.removeTier(item.tier.id);
+													await loadCartData();
+												}}
+												class="text-gray-400 hover:text-red-600"
+												title="Remove item"
+											>
+												<X size={16} />
+											</button>
+										</div>
 
-										<p class="text-sm font-semibold text-purple-600">
-											{formatPrice(item.tier.price * item.quantity)}
-										</p>
+										<!-- Quantity Controls -->
+										<div class="mt-2 flex items-center gap-2">
+											<div class="flex items-center gap-1 rounded-md border border-gray-300">
+												<button
+													onclick={async () => {
+														if (item.quantity > 1) {
+															cart.updateQuantity(item.tier.id, item.quantity - 1);
+															await loadCartData();
+														}
+													}}
+													disabled={item.quantity <= 1}
+													class="px-2 py-1 text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+												>
+													<Minus size={14} />
+												</button>
+												<span class="min-w-[2rem] text-center text-sm font-medium">
+													{item.quantity}
+												</span>
+												<button
+													onclick={async () => {
+														cart.updateQuantity(item.tier.id, item.quantity + 1);
+														await loadCartData();
+													}}
+													class="px-2 py-1 text-gray-600 hover:bg-gray-100"
+												>
+													<Plus size={14} />
+												</button>
+											</div>
+											<p class="text-sm font-semibold text-purple-600">
+												{formatPrice(item.tier.price * item.quantity)}
+											</p>
+										</div>
 									</div>
 								</div>
 							{/each}

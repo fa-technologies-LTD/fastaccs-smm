@@ -6,7 +6,6 @@ type Account = {
 	emailPassword?: string | null;
 	twoFa?: string | null;
 	linkUrl?: string | null;
-	additionalInfo?: unknown;
 };
 
 // Format price to Nigerian Naira
@@ -83,9 +82,6 @@ export function copyAccountDetails(
 	if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
 	if (account.twoFa) details += `\n2FA: ${account.twoFa}`;
 	if (account.linkUrl) details += `\nLink: ${account.linkUrl}`;
-	if (account.additionalInfo) {
-		details += `\nAdditional Info: ${JSON.stringify(account.additionalInfo, null, 2)}`;
-	}
 
 	copyToClipboard(details, {
 		successMessage: 'Account details copied to clipboard!',
@@ -111,9 +107,6 @@ export function copyAllAccounts(
 			if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
 			if (account.twoFa) details += `\n2FA: ${account.twoFa}`;
 			if (account.linkUrl) details += `\nLink: ${account.linkUrl}`;
-			if (account.additionalInfo) {
-				details += `\nAdditional Info: ${JSON.stringify(account.additionalInfo, null, 2)}`;
-			}
 			return details;
 		})
 		.join('\n\n');

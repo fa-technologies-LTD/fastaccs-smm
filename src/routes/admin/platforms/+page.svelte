@@ -7,6 +7,9 @@
 	import type { PageData } from './$types';
 	import { fade, fly } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
+	import PlatformCreateModal from '$lib/components/modals/PlatformCreateModal.svelte';
+	import PlatformEditModal from '$lib/components/modals/PlatformEditModal.svelte';
+	import PlatformDeleteModal from '$lib/components/modals/PlatformDeleteModal.svelte';
 
 	interface Props {
 		data: PageData;
@@ -370,355 +373,47 @@
 
 <!-- Create Platform Modal -->
 {#if showCreateModal}
-	<div class="fixed inset-0 z-50 overflow-y-auto">
-		<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-			<!-- Background overlay -->
-			<button
-				class="fixed inset-0 bg-black/20 transition-opacity"
-				onclick={() => (showCreateModal = false)}
-				aria-label="create modal"
-			></button>
-
-			<!-- Modal content -->
-			<div
-				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg"
-				in:fly={{ y: 200, duration: 300 }}
-				out:fade={{ duration: 300 }}
-			>
-				<form onsubmit={handleCreate}>
-					<div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-						<div class="mb-4">
-							<h3 class="text-lg font-semibold text-gray-900">Add New Platform</h3>
-						</div>
-
-						<div class="space-y-4">
-							<!-- Name -->
-							<div>
-								<label for="name" class="block text-sm font-medium text-gray-700"
-									>Platform Name *</label
-								>
-								<input
-									id="name"
-									type="text"
-									required
-									value={platformForm.name}
-									oninput={(e) => {
-										platformForm.name = (e.target as HTMLInputElement).value;
-										generateSlug(platformForm.name);
-									}}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
-									placeholder="e.g., Instagram"
-								/>
-							</div>
-
-							<!-- Slug -->
-							<div>
-								<label for="slug" class="block text-sm font-medium text-gray-700">Slug *</label>
-								<input
-									id="slug"
-									type="text"
-									required
-									value={platformForm.slug}
-									oninput={(e) => (platformForm.slug = (e.target as HTMLInputElement).value)}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
-									placeholder="e.g., instagram"
-								/>
-							</div>
-
-							<!-- Description -->
-							<div>
-								<label for="description" class="block text-sm font-medium text-gray-700"
-									>Description</label
-								>
-								<textarea
-									id="description"
-									rows="3"
-									value={platformForm.description}
-									oninput={(e) =>
-										(platformForm.description = (e.target as HTMLTextAreaElement).value)}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
-									placeholder="Platform description..."
-								></textarea>
-							</div>
-
-							<!-- Icon URL -->
-							<div>
-								<label for="icon" class="block text-sm font-medium text-gray-700">
-									Platform Icon URL
-									<span class="text-xs font-normal text-gray-500">(Optional)</span>
-								</label>
-								<input
-									id="icon"
-									type="url"
-									value={platformForm.metadata.icon}
-									oninput={(e) =>
-										(platformForm.metadata.icon = (e.target as HTMLInputElement).value)}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
-									placeholder="https://example.com/icon.png or /static/icons/platform.svg"
-								/>
-								<p class="mt-1 text-xs text-gray-500">
-									💡 <strong>Leave blank</strong> for auto icons (Instagram, TikTok, Facebook,
-									Twitter).<br />
-									<strong>For new platforms:</strong> Provide an icon URL or upload to
-									<code class="rounded bg-gray-100 px-1">/static/icons/</code>
-								</p>
-								{#if platformForm.metadata.icon}
-									<div class="mt-2 flex items-center gap-2">
-										<span class="text-xs text-gray-600">Preview:</span>
-										<img
-											src={platformForm.metadata.icon}
-											alt="Icon preview"
-											class="h-8 w-8 rounded border border-gray-200"
-											onerror={(e) => {
-												(e.target as HTMLImageElement).style.display = 'none';
-											}}
-										/>
-									</div>
-								{/if}
-							</div>
-
-							<!-- Color -->
-							<div>
-								<label for="color" class="block text-sm font-medium text-gray-700"
-									>Brand Color</label
-								>
-								<input
-									id="color"
-									type="color"
-									value={platformForm.metadata.color}
-									oninput={(e) =>
-										(platformForm.metadata.color = (e.target as HTMLInputElement).value)}
-									class="mt-1 block h-10 w-full rounded-md border border-gray-300 py-2 focus:border-blue-500 focus:ring-blue-500"
-								/>
-							</div>
-
-							<!-- Website URL -->
-							<div>
-								<label for="website" class="block text-sm font-medium text-gray-700"
-									>Website URL</label
-								>
-								<input
-									id="website"
-									type="url"
-									value={platformForm.metadata.website_url}
-									oninput={(e) =>
-										(platformForm.metadata.website_url = (e.target as HTMLInputElement).value)}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
-									placeholder="https://example.com"
-								/>
-							</div>
-						</div>
-					</div>
-
-					<div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
-						<button
-							type="submit"
-							disabled={loading}
-							class="inline-flex w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 disabled:opacity-50 sm:ml-3 sm:w-auto"
-						>
-							{loading ? 'Creating...' : 'Create Platform'}
-						</button>
-						<button
-							type="button"
-							onclick={() => (showCreateModal = false)}
-							class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-gray-300 ring-inset hover:bg-gray-50 sm:mt-0 sm:w-auto"
-						>
-							Cancel
-						</button>
-					</div>
-				</form>
-			</div>
-		</div>
-	</div>
+	<PlatformCreateModal
+		open={showCreateModal}
+		{platformForm}
+		{loading}
+		onClose={() => (showCreateModal = false)}
+		onCreate={handleCreate}
+		onNameInput={(value) => {
+			platformForm.name = value;
+			generateSlug(value);
+		}}
+		onSlugInput={(value) => (platformForm.slug = value)}
+		onDescriptionInput={(value) => (platformForm.description = value)}
+		onIconInput={(value) => (platformForm.metadata.icon = value)}
+		onColorInput={(value) => (platformForm.metadata.color = value)}
+		onWebsiteInput={(value) => (platformForm.metadata.website_url = value)}
+	/>
 {/if}
 
 <!-- Edit Platform Modal -->
 {#if showEditModal && selectedPlatform}
-	<div class="fixed inset-0 z-50 overflow-y-auto">
-		<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-			<!-- Background overlay -->
-			<div
-				class="bg-opacity-75 fixed inset-0 bg-gray-500 transition-opacity"
-				onclick={() => (showEditModal = false)}
-				onkeydown={(e) => e.key === 'Escape' && (showEditModal = false)}
-				role="button"
-				tabindex="-1"
-				aria-label="Close modal"
-			></div>
-
-			<!-- Modal content -->
-			<div
-				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg"
-				in:fly={{ y: 200, duration: 300 }}
-				out:fade={{ duration: 300 }}
-			>
-				<form onsubmit={handleUpdate}>
-					<div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-						<div class="mb-4">
-							<h3 class="text-lg font-semibold text-gray-900">Edit Platform</h3>
-						</div>
-
-						<div class="space-y-4">
-							<!-- Name -->
-							<div>
-								<label for="edit-name" class="block text-sm font-medium text-gray-700"
-									>Platform Name *</label
-								>
-								<input
-									id="edit-name"
-									type="text"
-									required
-									value={platformForm.name}
-									oninput={(e) => (platformForm.name = (e.target as HTMLInputElement).value)}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
-								/>
-							</div>
-
-							<!-- Slug -->
-							<div>
-								<label for="edit-slug" class="block text-sm font-medium text-gray-700">Slug *</label
-								>
-								<input
-									id="edit-slug"
-									type="text"
-									required
-									value={platformForm.slug}
-									oninput={(e) => (platformForm.slug = (e.target as HTMLInputElement).value)}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
-								/>
-							</div>
-
-							<!-- Description -->
-							<div>
-								<label for="edit-description" class="block text-sm font-medium text-gray-700"
-									>Description</label
-								>
-								<textarea
-									id="edit-description"
-									name="description"
-									rows="3"
-									value={platformForm.description}
-									oninput={(e) =>
-										(platformForm.description = (e.target as HTMLTextAreaElement).value)}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-								></textarea>
-							</div>
-
-							<!-- Color -->
-							<div>
-								<label for="edit-color" class="block text-sm font-medium text-gray-700"
-									>Brand Color</label
-								>
-								<input
-									id="edit-color"
-									type="color"
-									value={platformForm.metadata.color}
-									oninput={(e) =>
-										(platformForm.metadata.color = (e.target as HTMLInputElement).value)}
-									class="mt-1 block h-10 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-								/>
-							</div>
-
-							<!-- Website URL -->
-							<div>
-								<label for="edit-website" class="block text-sm font-medium text-gray-700"
-									>Website URL</label
-								>
-								<input
-									id="edit-website"
-									type="url"
-									value={platformForm.metadata.website_url}
-									oninput={(e) =>
-										(platformForm.metadata.website_url = (e.target as HTMLInputElement).value)}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-								/>
-							</div>
-						</div>
-					</div>
-
-					<div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
-						<button
-							type="submit"
-							disabled={loading}
-							class="inline-flex w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 disabled:opacity-50 sm:ml-3 sm:w-auto"
-						>
-							{loading ? 'Updating...' : 'Update Platform'}
-						</button>
-						<button
-							type="button"
-							onclick={() => (showEditModal = false)}
-							class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-gray-300 ring-inset hover:bg-gray-50 sm:mt-0 sm:w-auto"
-						>
-							Cancel
-						</button>
-					</div>
-				</form>
-			</div>
-		</div>
-	</div>
+	<PlatformEditModal
+		open={showEditModal}
+		{platformForm}
+		{loading}
+		onClose={() => (showEditModal = false)}
+		onUpdate={handleUpdate}
+		onNameInput={(value) => (platformForm.name = value)}
+		onSlugInput={(value) => (platformForm.slug = value)}
+		onDescriptionInput={(value) => (platformForm.description = value)}
+		onColorInput={(value) => (platformForm.metadata.color = value)}
+		onWebsiteInput={(value) => (platformForm.metadata.website_url = value)}
+	/>
 {/if}
 
 <!-- Delete Confirmation Modal -->
 {#if showDeleteModal}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4"
-		onclick={closeDeleteModal}
-		onkeydown={(e) => e.key === 'Escape' && closeDeleteModal()}
-		role="button"
-		tabindex="-1"
-		aria-label="Close modal"
-		transition:fade={{ duration: 300 }}
-	>
-		<div
-			class="relative w-full max-w-md transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all"
-			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.stopPropagation()}
-			role="dialog"
-			aria-modal="true"
-			tabindex="0"
-			in:fly={{ y: 200, duration: 300 }}
-			out:fade={{ duration: 300 }}
-		>
-			<div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-				<div class="sm:flex sm:items-start">
-					<div
-						class="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10"
-					>
-						<AlertCircle class="h-6 w-6 text-red-600" />
-					</div>
-					<div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-						<h3 class="text-lg leading-6 font-semibold text-gray-900">Delete Platform</h3>
-						<div class="mt-2">
-							<p class="text-sm text-gray-500">
-								Are you sure you want to delete <strong>{platformToDelete?.name}</strong>? This
-								action cannot be undone.
-							</p>
-							<p class="mt-2 text-sm text-red-600">
-								<strong>Warning:</strong> If this platform has any tiers, services, accounts, or orders
-								associated with it, the deletion will be prevented.
-							</p>
-						</div>
-					</div>
-				</div>
-			</div>
-			<div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
-				<button
-					type="button"
-					onclick={confirmDelete}
-					disabled={loading}
-					class="inline-flex w-full cursor-pointer justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white transition-all hover:scale-95 hover:bg-red-500 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:ml-3 sm:w-auto"
-				>
-					{loading ? 'Deleting...' : 'Delete Platform'}
-				</button>
-				<button
-					type="button"
-					onclick={closeDeleteModal}
-					disabled={loading}
-					class="mt-3 inline-flex w-full cursor-pointer justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 ring-1 ring-gray-300 transition-all ring-inset hover:scale-95 hover:bg-gray-50 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:mt-0 sm:w-auto"
-				>
-					Cancel
-				</button>
-			</div>
-		</div>
-	</div>
+	<PlatformDeleteModal
+		open={showDeleteModal}
+		platform={platformToDelete}
+		{loading}
+		onClose={closeDeleteModal}
+		onConfirm={confirmDelete}
+	/>
 {/if}

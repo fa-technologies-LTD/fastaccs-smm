@@ -245,6 +245,66 @@
 																</button>
 															</div>
 														{/if}
+														{#if account.emailPassword}
+															<div class="flex items-center justify-between">
+																<div class="flex-1">
+																	<span class="text-xs font-medium text-gray-500 uppercase"
+																		>Email Password</span
+																	>
+																	<div class="font-mono text-sm">{account.emailPassword}</div>
+																</div>
+																<button
+																	onclick={() =>
+																		copyToClipboard(account.emailPassword || '', {
+																			label: 'Email Password',
+																			showToast: (toast: any) => addToast(toast as any)
+																		})}
+																	class="ml-2 rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+																>
+																	<Copy class="h-4 w-4" />
+																</button>
+															</div>
+														{/if}
+														{#if account.twoFa}
+															<div class="flex items-center justify-between">
+																<div class="flex-1">
+																	<span class="text-xs font-medium text-gray-500 uppercase"
+																		>2FA</span
+																	>
+																	<div class="font-mono text-sm">{account.twoFa}</div>
+																</div>
+																<button
+																	onclick={() =>
+																		copyToClipboard(account.twoFa || '', {
+																			label: '2FA',
+																			showToast: (toast: any) => addToast(toast as any)
+																		})}
+																	class="ml-2 rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+																>
+																	<Copy class="h-4 w-4" />
+																</button>
+															</div>
+														{/if}
+														{#if account.linkUrl}
+															<div class="flex items-center justify-between">
+																<div class="flex-1">
+																	<span class="text-xs font-medium text-gray-500 uppercase"
+																		>Link</span
+																	>
+																	<div class="font-mono text-sm break-all">{account.linkUrl}</div>
+																</div>
+																<button
+																	onclick={() =>
+																		copyToClipboard(account.linkUrl || '', {
+																			label: 'Link',
+																			showToast: (toast: any) => addToast(toast as any)
+																		})}
+																	class="ml-2 rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+																>
+																	<Copy class="h-4 w-4" />
+																</button>
+															</div>
+														{/if}
 														{#if account.deliveryNotes}
 															<div class="mt-2">
 																<span class="text-xs font-medium text-gray-500 uppercase"
