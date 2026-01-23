@@ -87,7 +87,10 @@
 	}
 </script>
 
-<nav class="sticky top-0 z-50 border-b border-gray-200 bg-white">
+<nav
+	class="sticky top-0 z-50 backdrop-blur-md"
+	style="border-bottom: 1px solid var(--border); background: rgba(7, 9, 12, 0.85);"
+>
 	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 		<div class="flex h-16 items-center justify-between">
 			<!-- Logo -->
@@ -104,38 +107,38 @@
 					<a
 						href="/dashboard"
 						data-sveltekit-preload-data="hover"
-						class="font-medium text-gray-900 transition-colors hover:text-blue-600"
+						class="nav-link-active font-medium"
 					>
 						Dashboard
 					</a>
 					<a
 						href="/platforms"
 						data-sveltekit-preload-data="hover"
-						class="font-medium text-gray-900 transition-colors hover:text-blue-600"
+						class="nav-link-active font-medium"
 					>
 						Browse Accounts
 					</a>
 				{:else}
 					<!-- Guest Navigation -->
-					<a
-						href="/platforms"
-						data-sveltekit-preload-data="hover"
-						class="font-medium text-gray-600 transition-colors hover:text-gray-900"
-					>
+					<a href="/platforms" data-sveltekit-preload-data="hover" class="nav-link font-medium">
 						Accounts
 					</a>
 					<button
 						onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
-						class="cursor-pointer border-none bg-transparent font-medium text-gray-600 transition-colors hover:text-gray-900"
+						class="nav-link cursor-pointer border-none bg-transparent font-medium"
 					>
-						Boosting Services
+						Services
 					</button>
-					<a
-						href="/how-it-works"
-						data-sveltekit-preload-data="hover"
-						class="font-medium text-gray-600 transition-colors hover:text-gray-900"
-					>
+					<a href="/how-it-works" data-sveltekit-preload-data="hover" class="nav-link font-medium">
 						How It Works
+					</a>
+					<a
+						href="https://wa.link/fast_accounts"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="nav-link font-medium"
+					>
+						Support
 					</a>
 				{/if}
 			</div>
@@ -148,13 +151,14 @@
 						onclick={() => {
 							cart.toggle();
 						}}
-						class="relative p-2 text-gray-600 transition-colors hover:text-gray-900"
+						class="cart-btn relative p-2"
 						aria-label="Open shopping cart"
 					>
 						<ShoppingCart size={24} />
 						{#if cartItemCount > 0}
 							<span
-								class="bg-primary absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-white"
+								class="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold"
+								style="background: var(--primary); color: #04140C; font-family: var(--font-body);"
 							>
 								{cartItemCount > 99 ? '99+' : cartItemCount}
 							</span>
@@ -166,10 +170,7 @@
 				{#if user}
 					<div class="relative">
 						<div class="flex items-center space-x-4">
-							<a
-								href="/dashboard"
-								class="flex items-center space-x-2 text-gray-600 transition-colors hover:text-gray-900"
-							>
+							<a href="/dashboard" class="nav-link flex items-center space-x-2">
 								{#if user.avatarUrl}
 									<img src={user.avatarUrl} alt="Profile" class="h-6 w-6 rounded-full" />
 								{:else}
@@ -186,14 +187,14 @@
 							{#if user.userType === 'ADMIN'}
 								<a
 									href="/admin"
-									class="rounded-md bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 transition-all hover:bg-blue-100 hover:text-blue-800 active:scale-95"
+									class="btn-secondary rounded-md px-3 py-1.5 text-sm font-medium active:scale-95"
 								>
 									Admin
 								</a>
 							{/if}
 							<button
 								onclick={signOut}
-								class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-all hover:scale-[.93] hover:bg-gray-50 hover:text-gray-900 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none active:scale-90"
+								class="btn-ghost px-3 py-1.5 text-sm font-medium hover:scale-[.93] focus:ring-2 focus:ring-offset-2 focus:outline-none active:scale-90"
 							>
 								Sign Out
 							</button>
@@ -201,16 +202,8 @@
 					</div>
 				{:else}
 					<div class="flex items-center space-x-2">
-						<a
-							href="/auth/login"
-							class="font-medium text-gray-600 transition-colors hover:text-gray-900"
-						>
-							Sign In
-						</a>
-						<a
-							href="/auth/login"
-							class="bg-primary hover:bg-primary-dark rounded-full px-4 py-2 font-medium text-white transition-colors"
-						>
+						<a href="/auth/login" class="nav-link font-medium"> Sign In </a>
+						<a href="/auth/login" class="btn-primary rounded-full px-4 py-2 font-medium">
 							Get Started
 						</a>
 					</div>
@@ -225,13 +218,14 @@
 						onclick={() => {
 							cart.toggle();
 						}}
-						class="relative p-2 text-gray-600 transition-colors hover:text-gray-900"
+						class="cart-btn relative p-2"
 						aria-label="Open shopping cart"
 					>
 						<ShoppingCart size={24} />
 						{#if cartItemCount > 0}
 							<span
-								class="bg-primary absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-white"
+								class="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold"
+								style="background: var(--primary); color: #04140C; font-family: var(--font-body);"
 							>
 								{cartItemCount > 99 ? '99+' : cartItemCount}
 							</span>
@@ -241,7 +235,7 @@
 
 				<button
 					onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
-					class="flex items-center justify-center p-2 text-gray-600 transition-colors hover:text-gray-900"
+					class="cart-btn flex items-center justify-center p-2"
 					aria-label="Toggle mobile menu"
 				>
 					{#if mobileMenuOpen}
@@ -256,7 +250,10 @@
 
 	<!-- Mobile menu -->
 	{#if mobileMenuOpen}
-		<div class="border-t border-gray-200 bg-white md:hidden">
+		<div
+			class="md:hidden"
+			style="border-top: 1px solid var(--border); background: var(--bg-elev-1);"
+		>
 			<div class="space-y-4 px-4 py-6">
 				<!-- Mobile Navigation Links -->
 				<div class="space-y-1">
@@ -265,14 +262,14 @@
 						<a
 							href="/dashboard"
 							data-sveltekit-preload-data="hover"
-							class="block py-3 text-sm font-semibold text-gray-900 hover:text-blue-600 active:bg-gray-50"
+							class="nav-link-active block py-3 text-sm font-semibold"
 						>
 							Dashboard
 						</a>
 						<a
 							href="/platforms"
 							data-sveltekit-preload-data="hover"
-							class="block py-3 text-sm font-medium text-gray-900 hover:text-blue-600 active:bg-gray-50"
+							class="nav-link-active block py-3 text-sm font-medium"
 						>
 							Browse Accounts
 						</a>
@@ -281,33 +278,41 @@
 						<a
 							href="/platforms"
 							data-sveltekit-preload-data="hover"
-							class="block py-3 text-sm font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
+							class="nav-link block py-3 text-sm font-medium"
 						>
 							Accounts
 						</a>
 						<button
 							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
-							class="block w-full cursor-pointer border-none bg-transparent py-3 text-left text-sm font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
+							class="nav-link block w-full cursor-pointer border-none bg-transparent py-3 text-left text-sm font-medium"
 						>
-							Boosting Services
+							Services
 						</button>
 						<a
 							href="/how-it-works"
 							data-sveltekit-preload-data="hover"
-							class="block py-3 text-sm font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
+							class="nav-link block py-3 text-sm font-medium"
 						>
 							How It Works
+						</a>
+						<a
+							href="https://wa.link/fast_accounts"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="nav-link block py-3 text-sm font-medium"
+						>
+							Support
 						</a>
 					{/if}
 				</div>
 
 				<!-- Mobile Cart & User -->
-				<div class="space-y-2 border-t border-gray-200 pt-4">
+				<div class="space-y-2 pt-4" style="border-top: 1px solid var(--border);">
 					{#if user}
 						<a
 							href="/dashboard"
 							data-sveltekit-preload-data="hover"
-							class="flex items-center py-3 text-base text-gray-600 hover:text-gray-900 active:bg-gray-50"
+							class="nav-link flex items-center py-3 text-base"
 						>
 							{#if user.avatarUrl}
 								<img src={user.avatarUrl} alt="Profile" class="mr-3 h-5 w-5 rounded-full" />
@@ -326,14 +331,14 @@
 							<a
 								href="/admin"
 								data-sveltekit-preload-data="hover"
-								class="mb-2 block rounded-md bg-blue-50 px-3 py-2 text-base font-medium text-blue-700 transition-all hover:bg-blue-100 hover:text-blue-800 active:scale-[.98]"
+								class="btn-secondary mb-2 block rounded-md px-3 py-2 text-base font-medium active:scale-[.98]"
 							>
 								Admin Dashboard
 							</a>
 						{/if}
 						<button
 							onclick={signOut}
-							class="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-base font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 hover:text-gray-900 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none active:scale-[.98]"
+							class="btn-ghost block w-full rounded-md px-3 py-2 text-left text-base font-medium shadow-sm focus:ring-2 focus:ring-offset-2 focus:outline-none active:scale-[.98]"
 						>
 							Sign Out
 						</button>
@@ -341,14 +346,14 @@
 						<a
 							href="/auth/login"
 							data-sveltekit-preload-data="hover"
-							class="block py-3 text-base font-medium text-gray-600 hover:text-gray-900 active:bg-gray-50"
+							class="nav-link block py-3 text-base font-medium"
 						>
 							Sign In
 						</a>
 						<a
 							href="/auth/login"
 							data-sveltekit-preload-data="hover"
-							class="bg-primary hover:bg-primary-dark active:bg-primary-dark block w-full rounded-lg px-4 py-3 text-center text-base font-medium text-white transition-colors"
+							class="btn-primary block w-full rounded-lg px-4 py-3 text-center text-base font-medium"
 						>
 							Get Started
 						</a>
@@ -363,3 +368,65 @@
 {#if !user || user.userType !== 'ADMIN'}
 	<MiniCart />
 {/if}
+
+<style>
+	.nav-link {
+		color: var(--text-muted);
+		font-family: var(--font-body);
+		transition: color 180ms ease;
+	}
+	.nav-link:hover {
+		color: var(--text);
+	}
+	.nav-link-active {
+		color: var(--text);
+		font-family: var(--font-body);
+		transition: color 180ms ease;
+	}
+	.nav-link-active:hover {
+		color: var(--link);
+	}
+	.cart-btn {
+		color: var(--text-muted);
+		transition: color 180ms ease;
+	}
+	.cart-btn:hover {
+		color: var(--text);
+	}
+	.btn-primary {
+		background: var(--btn-primary-gradient);
+		border: 1px solid rgba(5, 212, 113, 0.4);
+		box-shadow: var(--glow-primary);
+		color: #04140c;
+		font-family: var(--font-body);
+		transition: all 180ms ease;
+	}
+	.btn-primary:hover {
+		background: var(--btn-primary-gradient-hover);
+		transform: scale(1.05);
+	}
+	.btn-primary:active {
+		transform: scale(1);
+	}
+	.btn-secondary {
+		background: var(--btn-secondary-gradient);
+		border: 1px solid var(--border-2);
+		color: var(--text);
+		font-family: var(--font-body);
+		transition: all 180ms ease;
+	}
+	.btn-secondary:hover {
+		background: var(--btn-secondary-gradient-hover);
+	}
+	.btn-ghost {
+		border: 1px solid var(--border);
+		background: rgba(255, 255, 255, 0.04);
+		color: var(--text);
+		font-family: var(--font-body);
+		border-radius: var(--r-xs);
+		transition: all 180ms ease;
+	}
+	.btn-ghost:hover {
+		background: rgba(255, 255, 255, 0.08);
+	}
+</style>

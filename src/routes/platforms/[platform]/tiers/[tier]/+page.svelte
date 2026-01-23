@@ -182,20 +182,20 @@
 
 <Navigation />
 
-<main class="min-h-screen bg-gray-50">
+<main class="min-h-screen bg-[var(--color-background)]">
 	{#if !data.platform || !data.tier}
 		<!-- Not found -->
 		<section class="py-16">
 			<div class="mx-auto max-w-4xl px-4 text-center">
-				<Package class="mx-auto mb-4 h-16 w-16 text-gray-400" />
-				<h1 class="mb-4 text-3xl font-bold text-gray-900">Tier Not Found</h1>
-				<p class="mb-8 text-lg text-gray-600">
+				<Package class="mx-auto mb-4 h-16 w-16 text-[var(--color-text-muted)]" />
+				<h1 class="mb-4 text-3xl font-bold text-[var(--color-text-primary)]">Tier Not Found</h1>
+				<p class="mb-8 text-lg text-[var(--color-text-secondary)]">
 					The tier you're looking for doesn't exist or isn't available right now.
 				</p>
 				<div class="flex justify-center gap-4">
 					<button
 						onclick={goBackToPlatforms}
-						class="rounded-lg bg-gray-600 px-6 py-3 font-semibold text-white transition-all hover:bg-gray-700 active:scale-95"
+						class="rounded-lg bg-[var(--color-surface)] px-6 py-3 font-semibold text-[var(--color-text-primary)] transition-all hover:bg-[var(--color-surface-hover)] active:scale-95"
 					>
 						All Platforms
 					</button>
@@ -207,7 +207,7 @@
 		{@const tierStatus = getTierStatus(data.tier.visible_available)}
 
 		<!-- Enhanced Breadcrumb & Progress -->
-		<section class="bg-white py-4 shadow sm:py-6">
+		<section class="bg-[var(--color-card)] py-4 shadow sm:py-6">
 			<div class="mx-auto max-w-6xl px-4">
 				<Breadcrumb
 					items={[
@@ -218,7 +218,9 @@
 				/>
 
 				<!-- Step Indicator -->
-				<div class="mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 sm:px-4">
+				<div
+					class="mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-[var(--color-surface)] px-3 py-2 sm:px-4"
+				>
 					<div class="flex items-center gap-2 opacity-50">
 						<div
 							class="flex h-6 w-6 items-center justify-center rounded-full bg-green-500 text-xs font-bold text-white"
@@ -227,7 +229,7 @@
 						</div>
 						<span class="text-xs sm:text-sm">Platform</span>
 					</div>
-					<ChevronRight class="h-4 w-4 text-gray-400" />
+					<ChevronRight class="h-4 w-4 text-[var(--color-text-muted)]" />
 					<div class="flex items-center gap-2 opacity-50">
 						<div
 							class="flex h-6 w-6 items-center justify-center rounded-full bg-green-500 text-xs font-bold text-white"
@@ -236,17 +238,19 @@
 						</div>
 						<span class="text-xs sm:text-sm">Category</span>
 					</div>
-					<ChevronRight class="h-4 w-4 text-gray-400" />
+					<ChevronRight class="h-4 w-4 text-[var(--color-text-muted)]" />
 					<div class="flex items-center gap-2">
 						<div
 							class="flex h-6 w-6 items-center justify-center rounded-full bg-purple-600 text-xs font-bold text-white"
 						>
 							3
 						</div>
-						<span class="text-xs font-medium text-gray-900 sm:text-sm">Select Quantity</span>
+						<span class="text-xs font-medium text-[var(--color-text-primary)] sm:text-sm"
+							>Select Quantity</span
+						>
 					</div>
-					<ChevronRight class="h-4 w-4 text-gray-400" />
-					<span class="text-xs text-gray-500 sm:text-sm">Checkout</span>
+					<ChevronRight class="h-4 w-4 text-[var(--color-text-muted)]" />
+					<span class="text-xs text-[var(--color-text-muted)] sm:text-sm">Checkout</span>
 				</div>
 			</div>
 		</section>
@@ -305,12 +309,14 @@
 		<section class="py-8 sm:py-16">
 			<div class="mx-auto max-w-6xl px-4">
 				<!-- Instructional Banner -->
-				<div class="mb-8 rounded-xl border border-purple-100 bg-purple-50 p-4 sm:p-6">
-					<h2 class="mb-2 flex items-center gap-2 text-lg font-semibold text-purple-900">
+				<div
+					class="mb-8 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-6"
+				>
+					<h2 class="mb-2 flex items-center gap-2 text-lg font-semibold text-[var(--color-accent)]">
 						<ShoppingCart class="h-5 w-5" />
 						Single Product Selection
 					</h2>
-					<p class="text-sm text-purple-700 sm:text-base">
+					<p class="text-sm text-[var(--color-text-secondary)] sm:text-base">
 						This is a single SKU (Stock Keeping Unit). Choose your desired quantity below and add to
 						cart. Each purchase draws from our verified account inventory.
 					</p>
@@ -320,18 +326,21 @@
 					<!-- Left Column - Details -->
 					<div class="lg:col-span-2">
 						<!-- Tier Description -->
-						<div class="mb-8 rounded-xl bg-white p-6 shadow sm:p-8">
-							<h2 class="mb-4 text-xl font-bold text-gray-900 sm:text-2xl">Account Details</h2>
-
+						<div class="mb-8 rounded-xl bg-[var(--color-card)] p-6 shadow sm:p-8">
+							<h2 class="mb-4 text-xl font-bold text-[var(--color-text-primary)] sm:text-2xl">
+								Account Details
+							</h2>
 							<!-- Tier-specific description -->
 							{#if data.tier.description}
-								<p class="mb-4 text-base leading-relaxed text-gray-700 sm:text-lg">
+								<p
+									class="mb-4 text-base leading-relaxed text-[var(--color-text-secondary)] sm:text-lg"
+								>
 									{data.tier.description}
 								</p>
 							{/if}
 
 							<!-- Default description -->
-							<p class="mb-6 text-base text-gray-700 sm:text-lg">
+							<p class="mb-6 text-base text-[var(--color-text-secondary)] sm:text-lg">
 								{#if data.tier.metadata?.follower_range}
 									{@const range = data.tier.metadata.follower_range}
 									Premium {data.platform.name} accounts with {range.display ||
@@ -348,12 +357,14 @@
 							{#if getTierFeatures(data.tier.metadata).length > 0}
 								{@const features = getTierFeatures(data.tier.metadata)}
 								<div class="mb-6">
-									<h3 class="mb-4 text-lg font-semibold text-gray-900">What's Included:</h3>
+									<h3 class="mb-4 text-lg font-semibold text-[var(--color-text-primary)]">
+										What's Included:
+									</h3>
 									<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
 										{#each features as feature}
 											<div class="flex items-center gap-3">
 												<CheckCircle class="h-5 w-5 text-green-500" />
-												<span class="text-gray-700">{feature}</span>
+												<span class="text-[var(--color-text-secondary)]">{feature}</span>
 											</div>
 										{/each}
 									</div>
@@ -362,63 +373,77 @@
 
 							<!-- Standard Features -->
 							<div class="mb-6">
-								<h3 class="mb-4 text-lg font-semibold text-gray-900">Standard Features:</h3>
+								<h3 class="mb-4 text-lg font-semibold text-[var(--color-text-primary)]">
+									Standard Features:
+								</h3>
 								<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
 									<div class="flex items-center gap-3">
 										<CheckCircle class="h-5 w-5 text-green-500" />
-										<span class="text-gray-700">Full account access</span>
+										<span class="text-[var(--color-text-secondary)]">Full account access</span>
 									</div>
 									<div class="flex items-center gap-3">
 										<CheckCircle class="h-5 w-5 text-green-500" />
-										<span class="text-gray-700">Original email included</span>
+										<span class="text-[var(--color-text-secondary)]">Original email included</span>
 									</div>
 									<div class="flex items-center gap-3">
 										<CheckCircle class="h-5 w-5 text-green-500" />
-										<span class="text-gray-700">Password changeable</span>
+										<span class="text-[var(--color-text-secondary)]">Password changeable</span>
 									</div>
 									<div class="flex items-center gap-3">
 										<CheckCircle class="h-5 w-5 text-green-500" />
-										<span class="text-gray-700">Instant delivery</span>
+										<span class="text-[var(--color-text-secondary)]">Instant delivery</span>
 									</div>
 									<div class="flex items-center gap-3">
 										<CheckCircle class="h-5 w-5 text-green-500" />
-										<span class="text-gray-700">24/7 support</span>
+										<span class="text-[var(--color-text-secondary)]">24/7 support</span>
 									</div>
 									<div class="flex items-center gap-3">
 										<CheckCircle class="h-5 w-5 text-green-500" />
-										<span class="text-gray-700">No violations history</span>
+										<span class="text-[var(--color-text-secondary)]">No violations history</span>
 									</div>
 								</div>
 							</div>
 
 							<!-- Account Age Info -->
 							{#if data.tier.metadata?.age_hint}
-								<div class="rounded-lg bg-blue-50 p-4">
+								<div class="rounded-lg bg-[var(--color-surface)] p-4">
 									<div class="flex items-center gap-3">
-										<Users class="h-5 w-5 text-blue-600" />
-										<span class="font-medium text-blue-900">Account Age:</span>
-										<span class="text-blue-700">{data.tier.metadata.age_hint}</span>
+										<Users class="h-5 w-5 text-[var(--color-accent)]" />
+										<span class="font-medium text-[var(--color-text-primary)]">Account Age:</span>
+										<span class="text-[var(--color-text-secondary)]"
+											>{data.tier.metadata.age_hint}</span
+										>
 									</div>
 								</div>
 							{/if}
 						</div>
 
 						<!-- Security Features -->
-						<div class="rounded-xl bg-white p-8 shadow">
-							<h2 class="mb-6 text-2xl font-bold text-gray-900">Security & Safety</h2>
+						<div class="rounded-xl bg-[var(--color-card)] p-8 shadow">
+							<h2 class="mb-6 text-2xl font-bold text-[var(--color-text-primary)]">
+								Security & Safety
+							</h2>
 							<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-								<div class="flex items-center gap-3 rounded-lg bg-green-50 p-4">
-									<Shield class="h-6 w-6 text-green-600" />
+								<div class="flex items-center gap-3 rounded-lg bg-[var(--color-surface)] p-4">
+									<Shield class="h-6 w-6 text-green-500" />
 									<div>
-										<div class="font-semibold text-green-900">Secure Transfer</div>
-										<div class="text-sm text-green-700">Safe account handover process</div>
+										<div class="font-semibold text-[var(--color-text-primary)]">
+											Secure Transfer
+										</div>
+										<div class="text-sm text-[var(--color-text-secondary)]">
+											Safe account handover process
+										</div>
 									</div>
 								</div>
-								<div class="flex items-center gap-3 rounded-lg bg-blue-50 p-4">
-									<CheckCircle class="h-6 w-6 text-blue-600" />
+								<div class="flex items-center gap-3 rounded-lg bg-[var(--color-surface)] p-4">
+									<CheckCircle class="h-6 w-6 text-[var(--color-accent)]" />
 									<div>
-										<div class="font-semibold text-blue-900">Quality Assured</div>
-										<div class="text-sm text-blue-700">All accounts verified before sale</div>
+										<div class="font-semibold text-[var(--color-text-primary)]">
+											Quality Assured
+										</div>
+										<div class="text-sm text-[var(--color-text-secondary)]">
+											All accounts verified before sale
+										</div>
 									</div>
 								</div>
 							</div>
@@ -427,12 +452,15 @@
 
 					<!-- Right Column - Purchase -->
 					<div class="lg:col-span-1">
-						<div class="sticky top-6 rounded-xl bg-white p-8 shadow">
-							<h3 class="mb-6 text-xl font-bold text-gray-900">Select Quantity</h3>
-
-							<!-- Quantity Selector -->
+						<div class="sticky top-6 rounded-xl bg-[var(--color-card)] p-8 shadow">
+							<h3 class="mb-6 text-xl font-bold text-[var(--color-text-primary)]">
+								Select Quantity
+							</h3>
 							<div class="mb-6">
-								<label class="mb-3 block text-sm font-medium text-gray-700" for="quantity-selector">
+								<label
+									class="mb-3 block text-sm font-medium text-[var(--color-text-secondary)]"
+									for="quantity-selector"
+								>
 									How many accounts do you need?
 								</label>
 								<div
@@ -443,43 +471,51 @@
 									<button
 										onclick={decreaseQuantity}
 										disabled={selectedQuantity <= 1}
-										class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+										class="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
 									>
 										<Minus class="h-4 w-4" />
 									</button>
 									<div class="flex-1 text-center">
-										<div class="text-2xl font-bold text-gray-900">{selectedQuantity}</div>
-										<div class="text-sm text-gray-500">
+										<div class="text-2xl font-bold text-[var(--color-text-primary)]">
+											{selectedQuantity}
+										</div>
+										<div class="text-sm text-[var(--color-text-muted)]">
 											{selectedQuantity === 1 ? 'account' : 'accounts'}
 										</div>
 									</div>
 									<button
 										onclick={increaseQuantity}
 										disabled={selectedQuantity >= data.tier.visible_available}
-										class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+										class="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
 									>
 										<Plus class="h-4 w-4" />
 									</button>
 								</div>
-								<div class="mt-2 text-center text-sm text-gray-500">
+								<div class="mt-2 text-center text-sm text-[var(--color-text-muted)]">
 									Maximum: {data.tier.visible_available} available
 								</div>
 							</div>
 
 							<!-- Price Summary -->
-							<div class="mb-6 rounded-lg bg-gray-50 p-4">
-								<div class="flex items-center justify-between text-sm text-gray-600">
+							<div class="mb-6 rounded-lg bg-[var(--color-surface)] p-4">
+								<div
+									class="flex items-center justify-between text-sm text-[var(--color-text-secondary)]"
+								>
 									<span>Price per account:</span>
 									<span>{formatPrice(data.tier.price)}</span>
 								</div>
-								<div class="flex items-center justify-between text-sm text-gray-600">
+								<div
+									class="flex items-center justify-between text-sm text-[var(--color-text-secondary)]"
+								>
 									<span>Quantity:</span>
 									<span>×{selectedQuantity}</span>
 								</div>
 								<hr class="my-3" />
-								<div class="flex items-center justify-between text-lg font-bold text-gray-900">
+								<div
+									class="flex items-center justify-between text-lg font-bold text-[var(--color-text-primary)]"
+								>
 									<span>Total:</span>
-									<span class="text-purple-600">{formatPrice(totalPrice)}</span>
+									<span class="text-[var(--color-accent)]">{formatPrice(totalPrice)}</span>
 								</div>
 							</div>
 
@@ -487,7 +523,8 @@
 							<button
 								onclick={addToCart}
 								disabled={data.tier.visible_available === 0 || addingToCart}
-								class="w-full rounded-lg bg-purple-600 py-4 font-semibold text-white transition-all hover:bg-purple-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:active:scale-100"
+								class="w-full rounded-lg py-4 font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
+								style="background: var(--btn-primary-gradient);"
 							>
 								{#if addingToCart}
 									<div class="flex items-center justify-center gap-2">
@@ -506,8 +543,10 @@
 
 							<!-- Stock Warning -->
 							{#if data.tier.visible_available <= 10 && data.tier.visible_available > 0}
-								<div class="mt-4 rounded-lg bg-yellow-50 p-3">
-									<div class="text-sm text-yellow-800">
+								<div
+									class="mt-4 rounded-lg border border-yellow-500/30 bg-[var(--color-surface)] p-3"
+								>
+									<div class="text-sm text-yellow-500">
 										⚠️ Only {data.tier.visible_available} accounts left in stock!
 									</div>
 								</div>

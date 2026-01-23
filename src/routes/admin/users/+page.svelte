@@ -115,12 +115,13 @@
 	<!-- Header -->
 	<div class="flex items-center justify-between">
 		<div>
-			<h1 class="text-2xl font-bold text-gray-900">User Management</h1>
-			<p class="mt-1 text-gray-600">Manage and monitor all user accounts</p>
+			<h1 class="text-2xl font-bold" style="color: var(--text)">User Management</h1>
+			<p class="mt-1" style="color: var(--text-muted)">Manage and monitor all user accounts</p>
 		</div>
 		<button
 			onclick={exportData}
-			class="flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:scale-95 hover:bg-blue-700 active:scale-90"
+			class="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-white transition-all hover:scale-95 active:scale-90"
+			style="background: var(--btn-primary-gradient)"
 		>
 			<Download class="h-4 w-4" />
 			Export Data
@@ -129,11 +130,16 @@
 
 	<!-- Stats Grid -->
 	<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-		<div class="rounded-lg border border-gray-200 bg-white p-4">
+		<div
+			class="rounded-lg p-4"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
-					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Total Users</p>
-					<p class="mt-1 text-xl font-bold text-gray-900">{stats.totalUsers}</p>
+					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted)">
+						Total Users
+					</p>
+					<p class="mt-1 text-xl font-bold" style="color: var(--text)">{stats.totalUsers}</p>
 				</div>
 				<div class="rounded-full bg-blue-100 p-2">
 					<Users class="h-5 w-5 text-blue-600" />
@@ -141,11 +147,16 @@
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-4">
+		<div
+			class="rounded-lg p-4"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
-					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Registered</p>
-					<p class="mt-1 text-xl font-bold text-gray-900">{stats.registeredUsers}</p>
+					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted)">
+						Registered
+					</p>
+					<p class="mt-1 text-xl font-bold" style="color: var(--text)">{stats.registeredUsers}</p>
 				</div>
 				<div class="rounded-full bg-green-100 p-2">
 					<UserCheck class="h-5 w-5 text-green-600" />
@@ -153,10 +164,15 @@
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-4">
+		<div
+			class="rounded-lg p-4"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
-					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Active</p>
+					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted)">
+						Active
+					</p>
 					<p class="mt-1 text-xl font-bold text-green-600">{stats.activeUsers}</p>
 				</div>
 				<div class="rounded-full bg-green-100 p-2">

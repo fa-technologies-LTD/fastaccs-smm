@@ -4,71 +4,109 @@
 	import { goto } from '$app/navigation';
 </script>
 
-<section class="bg-gray-50 px-4 py-12 sm:py-16">
+<section style="background: var(--bg); padding: var(--space-4xl) var(--space-md);">
 	<div class="mx-auto max-w-6xl">
-		<h2 class="mb-8 text-center text-2xl font-bold text-gray-800 sm:mb-12 md:text-3xl">
+		<h2
+			style="margin-bottom: var(--space-3xl); text-align: center; font-size: 2rem; font-weight: 700; color: var(--text); font-family: var(--font-head);"
+		>
 			Featured Categories
 		</h2>
 
 		<div class="grid grid-cols-1 gap-6 sm:gap-8 lg:grid-cols-2">
 			<!-- Social Media Accounts -->
-			<div
-				class="flex flex-col overflow-hidden rounded-2xl bg-white shadow transition-all duration-300 hover:shadow-md"
-			>
-				<div class="bg-gradient-secondary p-4 text-white sm:p-6">
-					<h3 class="mb-2 text-xl font-bold">Social Media Accounts</h3>
-					<p class="text-sm text-blue-100 sm:text-base">
+			<div class="category-card flex flex-col overflow-hidden">
+				<div
+					style="background: var(--btn-primary-gradient); padding: var(--space-lg); color: #04140C;"
+				>
+					<h3
+						style="margin-bottom: var(--space-xs); font-size: 1.25rem; font-weight: 700; font-family: var(--font-head);"
+					>
+						Social Media Accounts
+					</h3>
+					<p style="font-size: 0.9rem; opacity: 0.8; font-family: var(--font-body);">
 						Premium verified accounts with real followers
 					</p>
 				</div>
 
-				<div class="flex flex-1 flex-col p-4 sm:p-6">
+				<div class="flex flex-1 flex-col" style="padding: var(--space-lg);">
 					<div class="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 sm:gap-4">
 						<button
 							onclick={() => goto('/platforms/instagram')}
-							class="flex w-full cursor-pointer items-center rounded-lg bg-gray-50 p-3 transition-all hover:bg-gray-100 active:scale-[.95] active:bg-gray-100 disabled:cursor-wait disabled:opacity-75 disabled:active:scale-100 sm:p-4"
+							class="platform-btn flex w-full cursor-pointer items-center"
 						>
-							<Instagram class="mr-3 h-6 w-6 text-pink-600 sm:h-8 sm:w-8" />
+							<Instagram class="mr-3 h-6 w-6 sm:h-8 sm:w-8" style="color: #E4405F;" />
 
 							<div class="text-left">
-								<div class="text-sm font-semibold text-gray-800 sm:text-base">Instagram</div>
-								<div class="text-xs text-gray-600 sm:text-sm">Premium accounts</div>
+								<div
+									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
+								>
+									Instagram
+								</div>
+								<div
+									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
+								>
+									Premium accounts
+								</div>
 							</div>
 						</button>
 
 						<button
 							onclick={() => goto('/platforms/tiktok')}
-							class="flex w-full cursor-pointer items-center rounded-lg bg-gray-50 p-3 transition-all hover:bg-gray-100 active:scale-[.95] active:bg-gray-100 disabled:cursor-wait disabled:opacity-75 disabled:active:scale-100 sm:p-4"
+							class="platform-btn flex w-full cursor-pointer items-center"
 						>
-							<Music class="mr-3 h-6 w-6 text-black sm:h-8 sm:w-8" />
+							<Music class="mr-3 h-6 w-6 sm:h-8 sm:w-8" style="color: #FE2C55;" />
 
 							<div class="text-left">
-								<div class="text-sm font-semibold text-gray-800 sm:text-base">TikTok</div>
-								<div class="text-xs text-gray-600 sm:text-sm">Verified accounts</div>
+								<div
+									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
+								>
+									TikTok
+								</div>
+								<div
+									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
+								>
+									Verified accounts
+								</div>
 							</div>
 						</button>
 
 						<button
 							onclick={() => goto('/platforms/facebook')}
-							class="flex w-full cursor-pointer items-center rounded-lg bg-gray-50 p-3 transition-all hover:bg-gray-100 active:scale-[.95] active:bg-gray-100 disabled:cursor-wait disabled:opacity-75 disabled:active:scale-100 sm:p-4"
+							class="platform-btn flex w-full cursor-pointer items-center"
 						>
-							<Facebook class="mr-3 h-6 w-6 text-blue-600 sm:h-8 sm:w-8" />
+							<Facebook class="mr-3 h-6 w-6 sm:h-8 sm:w-8" style="color: #1877F2;" />
 
 							<div class="text-left">
-								<div class="font-semibold text-gray-800">Facebook</div>
-								<div class="text-sm text-gray-600">Active accounts</div>
+								<div
+									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
+								>
+									Facebook
+								</div>
+								<div
+									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
+								>
+									Active accounts
+								</div>
 							</div>
 						</button>
 
 						<button
 							onclick={() => goto('/platforms/twitter')}
-							class="flex w-full cursor-pointer items-center rounded-lg bg-gray-50 p-4 transition-all hover:bg-gray-100 active:scale-[.95] disabled:cursor-wait disabled:opacity-75 disabled:active:scale-100"
+							class="platform-btn flex w-full cursor-pointer items-center"
 						>
-							<Twitter class="mr-3 h-8 w-8 text-blue-400" />
+							<Twitter class="mr-3 h-6 w-6 sm:h-8 sm:w-8" style="color: #1DA1F2;" />
 
 							<div class="text-left">
-								<div class="font-semibold text-gray-800">Twitter</div>
-								<div class="text-sm text-gray-600">Quality profiles</div>
+								<div
+									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
+								>
+									Twitter
+								</div>
+								<div
+									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
+								>
+									Quality profiles
+								</div>
 							</div>
 						</button>
 					</div>
@@ -76,7 +114,7 @@
 					<div class="mt-auto">
 						<button
 							onclick={() => goto('/platforms')}
-							class="block w-full cursor-pointer rounded-lg bg-purple-600 py-3 text-center font-semibold text-white transition-all hover:bg-purple-700 active:scale-[.95] disabled:cursor-wait disabled:opacity-75 disabled:active:scale-100"
+							class="btn-primary-cta block w-full cursor-pointer text-center"
 						>
 							Browse All Accounts
 						</button>
@@ -85,18 +123,26 @@
 			</div>
 
 			<!-- Boosting Services -->
-			<div
-				class="flex flex-col overflow-hidden rounded-2xl bg-white shadow transition-all duration-300 hover:shadow-md"
-			>
-				<div class="bg-gradient-to-r from-blue-500 to-indigo-600 p-6 text-white">
-					<h3 class="mb-2 text-xl font-bold">Boosting Services</h3>
-					<p class="text-blue-100">Grow your existing accounts with real engagement</p>
+			<div class="category-card flex flex-col overflow-hidden">
+				<div
+					style="background: var(--btn-secondary-gradient); padding: var(--space-lg); color: var(--text);"
+				>
+					<h3
+						style="margin-bottom: var(--space-xs); font-size: 1.25rem; font-weight: 700; font-family: var(--font-head);"
+					>
+						Boosting Services
+					</h3>
+					<p style="font-size: 0.9rem; color: var(--text-muted); font-family: var(--font-body);">
+						Grow your existing accounts with real engagement
+					</p>
 				</div>
 
-				<div class="flex flex-1 flex-col p-6">
-					<div class="mb-6 space-y-4">
+				<div class="flex flex-1 flex-col" style="padding: var(--space-lg);">
+					<div
+						style="margin-bottom: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-md);"
+					>
 						<div
-							class="flex cursor-pointer items-center justify-between rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
+							class="platform-btn flex cursor-pointer items-center justify-between"
 							role="button"
 							tabindex="0"
 							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
@@ -104,13 +150,21 @@
 								e.key === 'Enter' && addToast({ title: 'Coming soon', type: 'info' })}
 						>
 							<div>
-								<div class="font-semibold text-gray-800">Instagram Followers</div>
-								<div class="text-sm text-gray-600">High-quality, real followers</div>
+								<div
+									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
+								>
+									Instagram Followers
+								</div>
+								<div
+									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
+								>
+									High-quality, real followers
+								</div>
 							</div>
 						</div>
 
 						<div
-							class="flex cursor-pointer items-center justify-between rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
+							class="platform-btn flex cursor-pointer items-center justify-between"
 							role="button"
 							tabindex="0"
 							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
@@ -118,13 +172,21 @@
 								e.key === 'Enter' && addToast({ title: 'Coming soon', type: 'info' })}
 						>
 							<div>
-								<div class="font-semibold text-gray-800">TikTok Views</div>
-								<div class="text-sm text-gray-600">Boost your video reach</div>
+								<div
+									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
+								>
+									TikTok Views
+								</div>
+								<div
+									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
+								>
+									Boost your video reach
+								</div>
 							</div>
 						</div>
 
 						<div
-							class="flex cursor-pointer items-center justify-between rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
+							class="platform-btn flex cursor-pointer items-center justify-between"
 							role="button"
 							tabindex="0"
 							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
@@ -132,13 +194,21 @@
 								e.key === 'Enter' && addToast({ title: 'Coming soon', type: 'info' })}
 						>
 							<div>
-								<div class="font-semibold text-gray-800">YouTube Subscribers</div>
-								<div class="text-sm text-gray-600">Grow your channel fast</div>
+								<div
+									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
+								>
+									YouTube Subscribers
+								</div>
+								<div
+									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
+								>
+									Grow your channel fast
+								</div>
 							</div>
 						</div>
 
 						<div
-							class="flex cursor-pointer items-center justify-between rounded-lg bg-gray-50 p-4 transition-colors hover:bg-gray-100"
+							class="platform-btn flex cursor-pointer items-center justify-between"
 							role="button"
 							tabindex="0"
 							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
@@ -146,8 +216,16 @@
 								e.key === 'Enter' && addToast({ title: 'Coming soon', type: 'info' })}
 						>
 							<div>
-								<div class="font-semibold text-gray-800">Facebook Likes</div>
-								<div class="text-sm text-gray-600">Increase post engagement</div>
+								<div
+									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
+								>
+									Facebook Likes
+								</div>
+								<div
+									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
+								>
+									Increase post engagement
+								</div>
 							</div>
 						</div>
 					</div>
@@ -155,7 +233,7 @@
 					<div class="mt-auto">
 						<button
 							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
-							class="block w-full cursor-pointer rounded-lg bg-blue-600 py-3 text-center font-semibold text-white transition-all hover:bg-blue-700 active:scale-95"
+							class="btn-secondary-cta block w-full cursor-pointer text-center"
 						>
 							View All Services
 						</button>
@@ -165,3 +243,78 @@
 		</div>
 	</div>
 </section>
+
+<style>
+	.category-card {
+		background: var(--bg-elev-1);
+		border: 1px solid var(--border);
+		border-radius: var(--r-md);
+		transition: all 0.3s ease;
+	}
+
+	.category-card:hover {
+		transform: translateY(-2px);
+		box-shadow: var(--shadow-1);
+		border-color: var(--primary);
+	}
+
+	.platform-btn {
+		background: var(--bg-elev-2);
+		border: 1px solid var(--border);
+		border-radius: var(--r-sm);
+		transition: all 0.2s ease;
+		padding: var(--space-md);
+	}
+
+	.platform-btn:hover {
+		background: var(--surface);
+		border-color: var(--primary);
+		transform: scale(1.02);
+	}
+
+	.platform-btn:active {
+		transform: scale(0.98);
+	}
+
+	.btn-primary-cta {
+		background: var(--btn-primary-gradient);
+		border: none;
+		border-radius: var(--r-sm);
+		padding: var(--space-md) var(--space-lg);
+		font-family: var(--font-body);
+		font-weight: 600;
+		color: #04140c;
+		transition: all 0.2s ease;
+	}
+
+	.btn-primary-cta:hover {
+		background: var(--btn-primary-gradient-hover);
+		box-shadow: var(--glow-primary);
+		transform: translateY(-1px);
+	}
+
+	.btn-primary-cta:active {
+		transform: scale(0.98);
+	}
+
+	.btn-secondary-cta {
+		background: transparent;
+		border: 2px solid var(--fa-blue-500);
+		border-radius: var(--r-sm);
+		padding: var(--space-md) var(--space-lg);
+		font-family: var(--font-body);
+		font-weight: 600;
+		color: var(--fa-blue-300);
+		transition: all 0.2s ease;
+	}
+
+	.btn-secondary-cta:hover {
+		background: var(--btn-secondary-gradient);
+		border-color: var(--fa-blue-300);
+		box-shadow: var(--shadow-1);
+	}
+
+	.btn-secondary-cta:active {
+		transform: scale(0.98);
+	}
+</style>

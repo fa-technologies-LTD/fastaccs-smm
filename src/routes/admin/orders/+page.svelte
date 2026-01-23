@@ -102,11 +102,11 @@
 	}
 </script>
 
-<div class="min-h-screen bg-gray-50 p-4 sm:p-6">
+<div class="min-h-screen p-4 sm:p-6">
 	<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<div class="min-w-0 flex-1">
-			<h1 class="text-xl font-bold text-gray-900 sm:text-2xl">Order Management</h1>
-			<p class="mt-1 text-sm text-gray-500 sm:text-base">
+			<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">Order Management</h1>
+			<p class="mt-1 text-sm sm:text-base" style="color: var(--text-muted)">
 				Manage customer orders and processing status
 			</p>
 		</div>
@@ -114,7 +114,8 @@
 			<button
 				onclick={loadOrders}
 				disabled={loading}
-				class="w-full cursor-pointer rounded-lg bg-blue-600 px-4 py-3 text-white transition-all hover:scale-95 hover:bg-blue-700 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:w-auto sm:py-2"
+				class="w-full cursor-pointer rounded-lg px-4 py-3 text-white transition-all hover:scale-95 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:w-auto sm:py-2"
+				style="background: var(--btn-primary-gradient)"
 			>
 				{loading ? 'Refreshing...' : 'Refresh'}
 			</button>
@@ -130,12 +131,22 @@
 
 	<!-- Stats Cards -->
 	<div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
-		<div class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
-			<div class="text-xs font-medium text-gray-600 sm:text-sm">Total Orders</div>
-			<div class="text-lg font-bold text-gray-900 sm:text-2xl">{summaryStats.total_orders}</div>
+		<div
+			class="rounded-lg p-4 sm:p-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
+			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+				Total Orders
+			</div>
+			<div class="text-lg font-bold sm:text-2xl" style="color: var(--text)">
+				{summaryStats.total_orders}
+			</div>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
-			<div class="text-xs font-medium text-gray-600 sm:text-sm">Pending</div>
+		<div
+			class="rounded-lg p-4 sm:p-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
+			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Pending</div>
 			<div class="text-lg font-bold text-yellow-600 sm:text-2xl">{summaryStats.pending_orders}</div>
 		</div>
 		<div class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
@@ -164,7 +175,8 @@
 			type="text"
 			placeholder="Search orders by ID, email, or order number..."
 			bind:value={searchTerm}
-			class="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+			class="w-full rounded-lg px-4 py-2 focus:ring-1 focus:outline-none"
+			style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text); placeholder-color: var(--text-muted)"
 		/>
 	</div>
 

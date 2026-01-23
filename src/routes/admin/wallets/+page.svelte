@@ -22,7 +22,6 @@
 	// let currentPage = $state(1);
 	// let itemsPerPage = 10;
 
-	
 	let stats = $derived({
 		totalWallets: data.stats?.totalWallets || 0,
 		totalBalance: data.stats?.totalBalance || 0,
@@ -88,12 +87,13 @@
 	<!-- Header -->
 	<div class="flex items-center justify-between">
 		<div>
-			<h1 class="text-2xl font-bold text-gray-900">Wallet Oversight</h1>
-			<p class="mt-1 text-gray-600">Monitor all user wallets and transactions</p>
+			<h1 class="text-2xl font-bold" style="color: var(--text)">Wallet Oversight</h1>
+			<p class="mt-1" style="color: var(--text-muted)">Monitor all user wallets and transactions</p>
 		</div>
 		<button
 			onclick={exportData}
-			class="flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:scale-95 hover:bg-blue-700 active:scale-90"
+			class="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-white transition-all hover:scale-95 active:scale-90"
+			style="background: var(--btn-primary-gradient)"
 		>
 			<Download class="h-4 w-4" />
 			Export Data
@@ -127,7 +127,7 @@
 					<p class="mt-1 text-xl font-bold text-gray-900">{stats.totalWallets}</p>
 				</div>
 				<div class="rounded-full bg-blue-100 p-2">
-					<Users class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-blue-600" />
+					<Users class="size-5 text-blue-600 group-hover:scale-80 group-hover:-rotate-20" />
 				</div>
 			</div>
 		</div>
@@ -141,7 +141,7 @@
 					</p>
 				</div>
 				<div class="rounded-full bg-green-100 p-2">
-					<Wallet class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-green-600" />
+					<Wallet class="size-5 text-green-600 group-hover:scale-80 group-hover:-rotate-20" />
 				</div>
 			</div>
 		</div>
@@ -155,7 +155,9 @@
 					</p>
 				</div>
 				<div class="rounded-full bg-green-100 p-2">
-					<ArrowDownLeft class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-green-600" />
+					<ArrowDownLeft
+						class="size-5 text-green-600 group-hover:scale-80 group-hover:-rotate-20"
+					/>
 				</div>
 			</div>
 		</div>
@@ -169,7 +171,7 @@
 					</p>
 				</div>
 				<div class="rounded-full bg-red-100 p-2">
-					<ArrowUpRight class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-red-600" />
+					<ArrowUpRight class="size-5 text-red-600 group-hover:scale-80 group-hover:-rotate-20" />
 				</div>
 			</div>
 		</div>

@@ -23,6 +23,7 @@
 	import { createOrder } from '$lib/services/orders';
 	import type { CartItemWithTier } from '$lib/types/cart';
 	import { formatPrice } from '$lib/helpers/utils';
+	import { getPlatformIcon } from '$lib/helpers/platformColors';
 
 	let { data }: { data: PageData } = $props();
 
@@ -35,6 +36,7 @@
 	let validatingAffiliate = $state(false);
 	let walletBalance = $state<number>(0);
 	let loadingBalance = $state(true);
+	let loadingCartData = $state(true);
 
 	// Use user data directly from page data
 	const user = $derived(data.user);
@@ -55,6 +57,7 @@
 	});
 
 	async function loadCartData() {
+		loadingCartData = true;
 		if (cart.itemCount === 0) {
 			goto('/platforms');
 			return;
@@ -65,6 +68,8 @@
 			cartTotal = await cart.getTotal();
 		} catch (error) {
 			console.error('Failed to load cart data:', error);
+		} finally {
+			loadingCartData = false;
 		}
 	}
 
@@ -292,18 +297,84 @@
 
 <Navigation />
 
-<main class="min-h-screen bg-gray-50 py-4 sm:py-8">
+<main class="min-h-screen py-4 sm:py-8" style="background: var(--bg);">
 	<div class="mx-auto max-w-6xl px-4 sm:px-6">
 		<!-- Header -->
 		<div class="mb-6 sm:mb-8">
-			<h1 class="text-xl font-bold text-gray-900 sm:text-2xl">Checkout</h1>
+			<h1
+				style="font-size: 1.25rem; font-weight: 700; color: var(--text); font-family: var(--font-head);"
+				class="sm:text-xl"
+			>
+				Checkout
+			</h1>
 		</div>
 
-		{#if cartItems.length === 0}
-			<div class="rounded-lg bg-white p-8 text-center shadow-sm sm:p-12">
-				<ShoppingBag size={48} class="mx-auto mb-4 text-gray-300 sm:h-16 sm:w-16" />
-				<h2 class="mb-2 text-lg font-semibold text-gray-900 sm:text-xl">Your cart is empty</h2>
-				<p class="mb-6 text-sm text-gray-600 sm:text-base">
+		{#if loadingCartData}
+			<!-- Loading Spinner -->
+			<div
+				class="rounded-lg p-12 text-center shadow-sm sm:p-16"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
+				<div class="mx-auto mb-6 flex items-center justify-center">
+					<svg
+						class="animate-spin"
+						width="48"
+						height="48"
+						viewBox="0 0 24 24"
+						fill="none"
+						xmlns="http://www.w3.org/2000/svg"
+					>
+						<circle
+							cx="12"
+							cy="12"
+							r="10"
+							stroke="currentColor"
+							stroke-width="3"
+							stroke-linecap="round"
+							style="opacity: 0.25; color: var(--primary);"
+						/>
+						<path
+							d="M12 2a10 10 0 0 1 10 10"
+							stroke="currentColor"
+							stroke-width="3"
+							stroke-linecap="round"
+							style="color: var(--primary);"
+						/>
+					</svg>
+				</div>
+				<h2
+					class="mb-2 text-lg font-semibold sm:text-xl"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
+					Loading your cart...
+				</h2>
+				<p
+					class="text-sm sm:text-base"
+					style="color: var(--text-muted); font-family: var(--font-body);"
+				>
+					Please wait while we prepare your checkout
+				</p>
+			</div>
+		{:else if cartItems.length === 0}
+			<div
+				class="rounded-lg p-8 text-center shadow-sm sm:p-12"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
+				<ShoppingBag
+					size={48}
+					class="mx-auto mb-4 sm:h-16 sm:w-16"
+					style="color: var(--text-dim);"
+				/>
+				<h2
+					class="mb-2 text-lg font-semibold sm:text-xl"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
+					Your cart is empty
+				</h2>
+				<p
+					class="mb-6 text-sm sm:text-base"
+					style="color: var(--text-muted); font-family: var(--font-body);"
+				>
 					Add some accounts to continue with checkout
 				</p>
 				<button
@@ -318,17 +389,36 @@
 				<!-- Order Summary -->
 				<div class="order-2 lg:order-1 lg:col-span-2">
 					<!-- Customer Information -->
-					<div class="mb-6 rounded-lg bg-white p-4 shadow-sm sm:mb-8 sm:p-6">
-						<h2 class="mb-4 text-base font-semibold sm:mb-6 sm:text-lg">Customer Information</h2>
+					<div
+						class="mb-6 rounded-lg p-4 shadow-sm sm:mb-8 sm:p-6"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+					>
+						<h3
+							class="mb-4 text-base font-semibold sm:mb-6 sm:text-lg"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							Customer Information
+						</h3>
 						{#if user}
-							<div class="rounded-lg bg-green-50 p-4">
+							<div
+								class="rounded-lg p-4"
+								style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.3);"
+							>
 								<div class="flex items-center gap-3">
-									<Check size={20} class="text-green-600" />
+									<Check size={20} style="color: var(--primary);" />
 									<div class="flex-1">
-										<p class="font-medium text-green-800">
+										<p
+											class="font-medium"
+											style="color: var(--text); font-family: var(--font-body);"
+										>
 											Logged in as {user?.fullName || user?.email}
 										</p>
-										<p class="text-sm text-green-600">Your order will be saved to your account</p>
+										<p
+											class="text-sm"
+											style="color: var(--text-muted); font-family: var(--font-body);"
+										>
+											Your order will be saved to your account
+										</p>
 									</div>
 									{#if user?.avatarUrl}
 										<img src={user.avatarUrl} alt="Profile" class="h-10 w-10 rounded-full" />
@@ -337,12 +427,23 @@
 							</div>
 						{:else}
 							<!-- Login Required -->
-							<div class="rounded-lg bg-yellow-50 p-4">
+							<div
+								class="rounded-lg p-4"
+								style="background: rgba(202,219,46,0.12); border: 1px solid rgba(202,219,46,0.3);"
+							>
 								<div class="flex items-center gap-3">
-									<Lock size={20} class="text-yellow-600" />
+									<Lock size={20} style="color: var(--fa-lime-700);" />
 									<div class="flex-1">
-										<p class="font-medium text-yellow-800">Login Required</p>
-										<p class="text-sm text-yellow-700">
+										<p
+											class="font-medium"
+											style="color: var(--text); font-family: var(--font-head);"
+										>
+											Login Required
+										</p>
+										<p
+											class="text-sm"
+											style="color: var(--text-muted); font-family: var(--font-body);"
+										>
 											Please log in to continue with your purchase
 										</p>
 									</div>
@@ -353,7 +454,8 @@
 										const returnUrl = encodeURIComponent(currentUrl.pathname + currentUrl.search);
 										goto(`/auth/login?returnUrl=${returnUrl}`);
 									}}
-									class="mt-3 rounded-lg bg-yellow-600 px-4 py-2 text-sm font-semibold text-white hover:bg-yellow-700"
+									style="background: var(--fa-lime-700); color: var(--bg); font-family: var(--font-head);"
+									class="mt-3 rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90"
 								>
 									Login to Continue
 								</button>
@@ -364,27 +466,51 @@
 
 				<!-- Order Summary Sidebar -->
 				<div class="order-1 lg:order-2 lg:col-span-1">
-					<div class="rounded-lg bg-white p-6 shadow-sm sm:p-8">
-						<h2 class="mb-6 text-base font-semibold sm:text-lg">Order Summary</h2>
+					<div
+						class="rounded-lg p-6 shadow-sm sm:p-8"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+					>
+						<h3
+							class="mb-6 text-base font-semibold sm:text-lg"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							Order Summary
+						</h3>
 
 						<!-- Cart Items -->
 						<div class="space-y-4 sm:space-y-5">
 							{#each cartItems as item}
+								{@const PlatformIcon = getPlatformIcon(item.tier.platformSlug)}
 								<div class="flex gap-3">
 									<div
-										class="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 sm:h-16 sm:w-16"
+										class="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br sm:h-16 sm:w-16 {item
+											.tier.platformSlug === 'instagram'
+											? 'from-pink-500 to-purple-600'
+											: item.tier.platformSlug === 'tiktok'
+												? 'from-black to-gray-800'
+												: item.tier.platformSlug === 'facebook'
+													? 'from-blue-600 to-blue-700'
+													: item.tier.platformSlug === 'twitter'
+														? 'from-blue-400 to-blue-500'
+														: 'from-gray-500 to-gray-600'}"
 									>
 										<div class="flex h-full w-full items-center justify-center">
-											<ShoppingBag size={16} class="text-gray-400 sm:h-5 sm:w-5" />
+											<PlatformIcon size={20} class="text-white sm:h-6 sm:w-6" />
 										</div>
 									</div>
 									<div class="flex-1">
 										<div class="flex items-start justify-between">
 											<div class="flex-1">
-												<h3 class="line-clamp-2 text-xs font-medium text-gray-900 sm:text-sm">
+												<h4
+													class="line-clamp-2 text-xs font-medium sm:text-sm"
+													style="color: var(--text); font-family: var(--font-head);"
+												>
 													{item.tier.name}
-												</h3>
-												<p class="text-xs text-gray-600">
+												</h4>
+												<p
+													class="text-xs"
+													style="color: var(--text-muted); font-family: var(--font-body);"
+												>
 													{item.tier.platformName}
 												</p>
 											</div>
@@ -393,7 +519,8 @@
 													cart.removeTier(item.tier.id);
 													await loadCartData();
 												}}
-												class="text-gray-400 hover:text-red-600"
+												style="color: var(--text-dim);"
+												class="hover:text-red-600"
 												title="Remove item"
 											>
 												<X size={16} />
@@ -402,7 +529,10 @@
 
 										<!-- Quantity Controls -->
 										<div class="mt-2 flex items-center gap-2">
-											<div class="flex items-center gap-1 rounded-md border border-gray-300">
+											<div
+												class="flex items-center gap-1 rounded-md"
+												style="border: 1px solid var(--border);"
+											>
 												<button
 													onclick={async () => {
 														if (item.quantity > 1) {
@@ -411,11 +541,15 @@
 														}
 													}}
 													disabled={item.quantity <= 1}
-													class="px-2 py-1 text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+													style="color: var(--text-muted); background: transparent;"
+													class="px-2 py-1 hover:bg-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-50"
 												>
 													<Minus size={14} />
 												</button>
-												<span class="min-w-[2rem] text-center text-sm font-medium">
+												<span
+													class="min-w-[2rem] text-center text-sm font-medium"
+													style="color: var(--text); font-family: var(--font-body);"
+												>
 													{item.quantity}
 												</span>
 												<button
@@ -423,12 +557,16 @@
 														cart.updateQuantity(item.tier.id, item.quantity + 1);
 														await loadCartData();
 													}}
-													class="px-2 py-1 text-gray-600 hover:bg-gray-100"
+													style="color: var(--text-muted); background: transparent;"
+													class="px-2 py-1 hover:bg-[var(--surface)]"
 												>
 													<Plus size={14} />
 												</button>
 											</div>
-											<p class="text-sm font-semibold text-purple-600">
+											<p
+												class="text-sm font-semibold"
+												style="color: var(--primary); font-family: var(--font-body);"
+											>
 												{formatPrice(item.tier.price * item.quantity)}
 											</p>
 										</div>
@@ -437,34 +575,48 @@
 							{/each}
 						</div>
 
-						<hr class="my-8" />
+						<hr class="my-8" style="border-color: var(--border);" />
 
 						<!-- Total -->
 						<div class="space-y-3">
 							<div class="flex justify-between text-xs sm:text-sm">
-								<span class="text-gray-600">Subtotal</span>
-								<span class="font-medium">{formatPrice(cartTotal)}</span>
+								<span style="color: var(--text-muted); font-family: var(--font-body);"
+									>Subtotal</span
+								>
+								<span class="font-medium" style="color: var(--text); font-family: var(--font-body);"
+									>{formatPrice(cartTotal)}</span
+								>
 							</div>
 							{#if affiliateCode}
-								<div class="flex justify-between text-xs font-semibold text-green-600 sm:text-sm">
+								<div
+									class="flex justify-between text-xs font-semibold sm:text-sm"
+									style="color: var(--primary); font-family: var(--font-body);"
+								>
 									<span class="flex items-center gap-1">
 										<Tag size={14} />
 										Affiliate Discount ({affiliateDiscount}%)
 									</span>
 									<span>-{formatPrice((cartTotal * affiliateDiscount) / 100)}</span>
 								</div>
-								<div class="rounded-lg bg-green-50 p-2 text-xs text-green-700">
+								<div
+									class="rounded-lg p-2 text-xs"
+									style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.3); color: var(--primary); font-family: var(--font-body);"
+								>
 									Referred by: <strong>{affiliateCode}</strong>
 								</div>
 							{/if}
 							<div class="flex justify-between text-xs sm:text-sm">
-								<span class="text-gray-600">Processing Fee</span>
-								<span class="font-medium">Free</span>
+								<span style="color: var(--text-muted); font-family: var(--font-body);"
+									>Processing Fee</span
+								>
+								<span class="font-medium" style="color: var(--text); font-family: var(--font-body);"
+									>Free</span
+								>
 							</div>
-							<hr />
+							<hr style="border-color: var(--border);" />
 							<div class="flex justify-between text-base font-bold sm:text-lg">
-								<span>Total</span>
-								<span class="text-purple-600">
+								<span style="color: var(--text); font-family: var(--font-head);">Total</span>
+								<span style="color: var(--primary); font-family: var(--font-head);">
 									{formatPrice(
 										affiliateCode ? cartTotal - (cartTotal * affiliateDiscount) / 100 : cartTotal
 									)}
@@ -473,11 +625,16 @@
 						</div>
 						<!-- Security Banner -->
 						<div
-							class="mb-4 flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 p-3"
+							class="mb-4 flex items-center justify-between rounded-lg p-3"
+							style="background: var(--bg-elev-2); border: 1px solid var(--border-2);"
 						>
 							<div class="flex items-center gap-2">
-								<Shield size={20} class="text-blue-600" />
-								<span class="text-sm font-medium text-blue-900">Payments secured by Korapay</span>
+								<Shield size={20} style="color: var(--fa-blue-300);" />
+								<span
+									class="text-sm font-medium"
+									style="color: var(--text); font-family: var(--font-body);"
+									>Payments secured by Korapay</span
+								>
 							</div>
 							<a
 								href="/support"
@@ -487,13 +644,22 @@
 							</a>
 						</div>
 						<!-- Wallet Balance -->
-						<div class="my-6 rounded-lg bg-blue-50 p-4">
+						<div
+							class="my-6 rounded-lg p-4"
+							style="background: var(--bg-elev-2); border: 1px solid var(--border-2);"
+						>
 							<div class="flex items-center justify-between">
 								<div class="flex items-center gap-2">
-									<Wallet size={18} class="text-blue-600" />
-									<span class="text-sm font-medium text-blue-900">Wallet Balance</span>
+									<Wallet size={18} style="color: var(--primary);" />
+									<span
+										class="text-sm font-medium"
+										style="color: var(--text); font-family: var(--font-body);">Wallet Balance</span
+									>
 								</div>
-								<span class="text-base font-bold text-blue-600 sm:text-lg">
+								<span
+									class="text-base font-bold sm:text-lg"
+									style="color: var(--primary); font-family: var(--font-head);"
+								>
 									{loadingBalance ? '...' : formatPrice(walletBalance)}
 								</span>
 							</div>
@@ -509,7 +675,8 @@
 									loadingBalance ||
 									walletBalance <
 										(affiliateCode ? cartTotal - (cartTotal * affiliateDiscount) / 100 : cartTotal)}
-								class="bg-primary hover:bg-primary-dark active:bg-primary-dark flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-base"
+								style="background: linear-gradient(180deg, rgba(5,212,113,0.95), rgba(13,145,82,0.95)); border: 1px solid rgba(5,212,113,0.40); color: #04140C; font-family: var(--font-head);"
+								class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-base"
 							>
 								{#if loading}
 									<div
@@ -528,10 +695,13 @@
 
 						<!-- Security Notice -->
 						<div class="mt-6 space-y-2">
-							<div class="rounded-lg bg-green-50 p-3">
+							<div
+								class="rounded-lg p-3"
+								style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.3);"
+							>
 								<div class="flex items-start gap-2">
-									<Shield size={14} class="mt-0.5 text-green-600" />
-									<div class="text-xs text-green-800">
+									<Shield size={14} class="mt-0.5" style="color: var(--primary);" />
+									<div class="text-xs" style="color: var(--text); font-family: var(--font-body);">
 										<p class="font-medium">Secure Payment & Instant Delivery</p>
 										<p>
 											Your purchase is protected. Accounts delivered within 2 hours or full refund.
@@ -539,7 +709,10 @@
 									</div>
 								</div>
 							</div>
-							<div class="flex items-center justify-center gap-2 text-xs text-gray-500">
+							<div
+								class="flex items-center justify-center gap-2 text-xs"
+								style="color: var(--text-dim); font-family: var(--font-body);"
+							>
 								<Lock size={12} />
 								<span>256-bit SSL encryption</span>
 							</div>

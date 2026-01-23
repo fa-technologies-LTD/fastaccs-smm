@@ -12,6 +12,9 @@
 
 	let { data }: Props = $props();
 
+	let searchQuery = $state('');
+	let filterQuery = $state('all');
+
 	function navigateToPlatform(platformSlug: string) {
 		goto(`/platforms/${platformSlug}`);
 	}
@@ -20,6 +23,33 @@
 	function formatNumber(num: number): string {
 		return new Intl.NumberFormat().format(num);
 	}
+
+	function handleSearch() {
+		// Search logic can be implemented here if needed
+		// For now, just reactive to searchQuery changes
+	}
+
+	// Filter platforms based on search and filter
+	let filteredPlatforms = $derived(() => {
+		let platforms = data.platforms || [];
+
+		// Apply search filter
+		if (searchQuery.trim()) {
+			platforms = platforms.filter(
+				(p) =>
+					p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+					p.description.toLowerCase().includes(searchQuery.toLowerCase())
+			);
+		}
+
+		// Apply category filter
+		if (filterQuery !== 'all') {
+			// You can implement specific filter logic here
+			// For now, just return all platforms
+		}
+
+		return platforms;
+	});
 </script>
 
 <svelte:head>
@@ -31,27 +61,190 @@
 </svelte:head>
 
 <Navigation />
-<main class="min-h-screen bg-gray-50">
+<main class="min-h-screen" style="background: var(--bg);">
 	<!-- Hero Section -->
-	<section class="bg-gradient-to-r from-purple-600 to-blue-600 py-16 text-white">
+	<section
+		class="relative overflow-hidden"
+		style="padding: var(--space-4xl) var(--space-md); background: var(--bg);"
+	>
 		<div class="mx-auto max-w-4xl px-4 text-center">
-			<h1 class="mb-4 text-4xl font-bold md:text-5xl">Choose Your Platform</h1>
-			<p class="mb-8 text-xl text-purple-100">
-				Premium social media accounts with real followers, authentic engagement, and instant
-				delivery
+			<!-- All Platforms Label -->
+			<div class="mb-6 flex items-center justify-center gap-2">
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					style="color: var(--text-muted);"
+				>
+					<polygon
+						points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+					></polygon>
+				</svg>
+				<span
+					style="color: var(--text-muted); font-family: var(--font-body); font-size: 0.875rem; font-weight: 500;"
+				>
+					All Platforms
+				</span>
+			</div>
+
+			<h1
+				class="mb-4"
+				style="font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; color: var(--text); font-family: var(--font-head); line-height: 1.2;"
+			>
+				Choose Your Platform
+			</h1>
+
+			<p
+				class="mx-auto mb-8 max-w-2xl"
+				style="font-size: 1rem; color: var(--text-muted); font-family: var(--font-body); line-height: 1.6;"
+			>
+				Browse our collection of verified accounts across all major social media platforms. Ready to
+				use, secure, and backed by our guarantee.
 			</p>
-			<div class="flex items-center justify-center gap-4 md:gap-8 text-xs md:text-sm">
-				<div class="flex items-center gap-2">
-					<Users class="h-5 w-5" />
-					<span>Real Followers</span>
+
+			<!-- Feature Badges -->
+			<div class="mb-8 flex flex-wrap items-center justify-center gap-3">
+				<div
+					class="flex items-center gap-2 rounded-full px-4 py-2"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
+					<svg
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						style="color: var(--primary);"
+					>
+						<polyline points="20 6 9 17 4 12"></polyline>
+					</svg>
+					<span
+						style="font-size: 0.875rem; color: var(--text); font-family: var(--font-body); font-weight: 500;"
+					>
+						Real Followers
+					</span>
 				</div>
-				<div class="flex items-center gap-2">
-					<Package class="h-5 w-5" />
-					<span>Instant Delivery</span>
+				<div
+					class="flex items-center gap-2 rounded-full px-4 py-2"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
+					<svg
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						style="color: #3B82F6;"
+					>
+						<circle cx="12" cy="12" r="10"></circle>
+						<polyline points="12 6 12 12 16 14"></polyline>
+					</svg>
+					<span
+						style="font-size: 0.875rem; color: var(--text); font-family: var(--font-body); font-weight: 500;"
+					>
+						Instant Delivery
+					</span>
 				</div>
-				<div class="flex items-center gap-2">
-					<ArrowRight class="h-5 w-5" />
-					<span>24/7 Support</span>
+				<div
+					class="flex items-center gap-2 rounded-full px-4 py-2"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
+					<span
+						style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #FCD34D;"
+					></span>
+					<span
+						style="font-size: 0.875rem; color: var(--text); font-family: var(--font-body); font-weight: 500;"
+					>
+						24/7 Support
+					</span>
+				</div>
+			</div>
+
+			<!-- Search and Filter Section -->
+			<div
+				class="mx-auto max-w-3xl rounded-2xl p-6"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
+				<!-- Search Input -->
+				<div class="mb-4">
+					<div
+						class="flex items-center gap-3 rounded-lg px-4 py-3"
+						style="background: var(--bg-elev-2); border: 1px solid var(--border);"
+					>
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							style="color: var(--text-muted);"
+						>
+							<circle cx="11" cy="11" r="8"></circle>
+							<path d="m21 21-4.35-4.35"></path>
+						</svg>
+						<input
+							type="text"
+							placeholder="Search platforms..."
+							bind:value={searchQuery}
+							oninput={handleSearch}
+							class="flex-1 bg-transparent outline-none"
+							style="color: var(--text); font-family: var(--font-body); font-size: 0.9375rem;"
+						/>
+					</div>
+				</div>
+
+				<!-- Filter Buttons -->
+				<div class="flex flex-wrap gap-2">
+					<button
+						onclick={() => (filterQuery = 'all')}
+						class="rounded-lg px-4 py-2 transition-all"
+						style={filterQuery === 'all'
+							? 'background: var(--primary); color: white; font-family: var(--font-body); font-size: 0.875rem; font-weight: 500;'
+							: 'background: var(--bg-elev-2); color: var(--text-muted); font-family: var(--font-body); font-size: 0.875rem; font-weight: 500; border: 1px solid var(--border);'}
+					>
+						All
+					</button>
+					<button
+						onclick={() => (filterQuery = 'popular')}
+						class="rounded-lg px-4 py-2 transition-all"
+						style={filterQuery === 'popular'
+							? 'background: var(--primary); color: white; font-family: var(--font-body); font-size: 0.875rem; font-weight: 500;'
+							: 'background: var(--bg-elev-2); color: var(--text-muted); font-family: var(--font-body); font-size: 0.875rem; font-weight: 500; border: 1px solid var(--border);'}
+					>
+						Most Popular
+					</button>
+					<button
+						onclick={() => (filterQuery = 'available')}
+						class="rounded-lg px-4 py-2 transition-all"
+						style={filterQuery === 'available'
+							? 'background: var(--primary); color: white; font-family: var(--font-body); font-size: 0.875rem; font-weight: 500;'
+							: 'background: var(--bg-elev-2); color: var(--text-muted); font-family: var(--font-body); font-size: 0.875rem; font-weight: 500; border: 1px solid var(--border);'}
+					>
+						Available Now
+					</button>
+					<button
+						onclick={() => (filterQuery = 'engagement')}
+						class="rounded-lg px-4 py-2 transition-all"
+						style={filterQuery === 'engagement'
+							? 'background: var(--primary); color: white; font-family: var(--font-body); font-size: 0.875rem; font-weight: 500;'
+							: 'background: var(--bg-elev-2); color: var(--text-muted); font-family: var(--font-body); font-size: 0.875rem; font-weight: 500; border: 1px solid var(--border);'}
+					>
+						High Engagement
+					</button>
 				</div>
 			</div>
 		</div>
@@ -62,23 +255,35 @@
 	<section class="py-16">
 		<div class="mx-auto max-w-6xl px-4">
 			<div class="mb-12 text-center">
-				<h2 class="mb-4 text-3xl font-bold text-gray-900">Available Platforms</h2>
-				<p class="text-lg text-gray-600">
+				<h2
+					style="margin-bottom: var(--space-md); font-size: 2rem; font-weight: 700; color: var(--text); font-family: var(--font-head);"
+				>
+					Available Platforms
+				</h2>
+				<p style="font-size: 1.125rem; color: var(--text-muted); font-family: var(--font-body);">
 					Choose from our collection of verified accounts with different follower tiers
 				</p>
 			</div>
 
-			{#if data.platforms.length === 0}
-				<div class="rounded-lg bg-yellow-50 p-8 text-center">
-					<Package class="mx-auto mb-4 h-12 w-12 text-yellow-600" />
-					<h3 class="mb-2 text-lg font-semibold text-yellow-800">No Platforms Available</h3>
-					<p class="text-yellow-700">
-						We're currently setting up our inventory. Please check back soon!
+			{#if filteredPlatforms().length === 0}
+				<div
+					style="border-radius: var(--r-md); background: var(--status-warning-bg); border: 1px solid var(--status-warning-border); padding: var(--space-2xl); text-align: center;"
+				>
+					<Package class="mx-auto mb-4 h-12 w-12" style="color: var(--status-warning);" />
+					<h3
+						style="margin-bottom: var(--space-xs); font-size: 1.125rem; font-weight: 600; color: var(--text); font-family: var(--font-head);"
+					>
+						No Platforms Found
+					</h3>
+					<p style="color: var(--text-muted); font-family: var(--font-body);">
+						{searchQuery
+							? 'Try adjusting your search query.'
+							: 'No platforms available at the moment.'}
 					</p>
 				</div>
 			{:else}
 				<div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-2">
-					{#each data.platforms as platform}
+					{#each filteredPlatforms() as platform}
 						{@const PlatformIcon = getPlatformIcon(platform.slug)}
 						{@const platformMeta = platform.metadata as any}
 						<div
@@ -86,7 +291,8 @@
 							onkeydown={(e) => e.key === 'Enter' && navigateToPlatform(platform.slug)}
 							role="button"
 							tabindex="0"
-							class="group relative cursor-pointer overflow-hidden rounded-2xl bg-white shadow transition-all duration-300 hover:-translate-y-2 hover:shadow-md active:scale-[0.98]"
+							class="group relative cursor-pointer overflow-hidden transition-all duration-300 hover:-translate-y-2 active:scale-[0.98]"
+							style="background: var(--bg-elev-1); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-1);"
 						>
 							<!-- Platform Gradient Header -->
 							<div class={`bg-gradient-to-r ${getPlatformColor(platform.slug)} p-8 text-white`}>
@@ -111,37 +317,53 @@
 							</div>
 
 							<!-- Platform Stats -->
-							<div class="p-8">
+							<div style="padding: var(--space-2xl);">
 								<div class="mb-6 grid grid-cols-2 gap-4">
 									<div class="text-center">
-										<div class="text-2xl font-bold text-gray-900">
+										<div
+											style="font-size: 1.5rem; font-weight: 700; color: var(--text); font-family: var(--font-body);"
+										>
 											{platform.tier_count || 0}
 										</div>
-										<div class="text-sm text-gray-600">Available Tiers</div>
+										<div
+											style="font-size: 0.875rem; color: var(--text-muted); font-family: var(--font-body);"
+										>
+											Available Tiers
+										</div>
 									</div>
 									<div class="text-center">
-										<div class="text-2xl font-bold text-gray-900">
+										<div
+											style="font-size: 1.5rem; font-weight: 700; color: var(--text); font-family: var(--font-body);"
+										>
 											{formatNumber(platform.total_accounts || 0)}
 										</div>
-										<div class="text-sm text-gray-600">Total Accounts</div>
+										<div
+											style="font-size: 0.875rem; color: var(--text-muted); font-family: var(--font-body);"
+										>
+											Total Accounts
+										</div>
 									</div>
 								</div>
 
 								<!-- Tier Preview -->
 								{#if platform.sample_tiers && platform.sample_tiers.length > 0}
 									<div class="mb-6">
-										<h4 class="mb-3 text-sm font-semibold text-gray-700">Available Tiers:</h4>
+										<h4
+											style="margin-bottom: var(--space-sm); font-size: 0.875rem; font-weight: 600; color: var(--text-muted); font-family: var(--font-head);"
+										>
+											Available Tiers:
+										</h4>
 										<div class="flex flex-wrap gap-2">
 											{#each platform.sample_tiers.slice(0, 4) as tier}
 												<span
-													class="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700"
+													style="border-radius: var(--r-xs); background: var(--bg-elev-2); border: 1px solid var(--border); padding: 4px 12px; font-size: 0.75rem; font-weight: 500; color: var(--text-muted); font-family: var(--font-body);"
 												>
 													{tier.name}
 												</span>
 											{/each}
 											{#if platform.sample_tiers.length > 4}
 												<span
-													class="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-500"
+													style="border-radius: var(--r-xs); background: var(--bg-elev-2); border: 1px solid var(--border); padding: 4px 12px; font-size: 0.75rem; font-weight: 500; color: var(--text-dim); font-family: var(--font-body);"
 												>
 													+{platform.sample_tiers.length - 4} more
 												</span>
@@ -149,10 +371,10 @@
 										</div>
 									</div>
 								{/if}
-
 								<!-- Browse Action Label -->
 								<div
-									class="flex items-center justify-center gap-2 text-sm font-medium text-gray-600 transition-colors group-hover:text-gray-900"
+									class="flex items-center justify-center gap-2 transition-colors"
+									style="font-size: 0.875rem; font-weight: 500; color: var(--text-muted); font-family: var(--font-body);"
 								>
 									<span>Browse {platform.name} Accounts</span>
 									<ArrowRight class="h-4 w-4" />
@@ -166,42 +388,63 @@
 	</section>
 
 	<!-- Features Section -->
-	<section class="bg-white py-16">
+	<section style="background: var(--bg-elev-1); padding: var(--space-4xl) var(--space-md);">
 		<div class="mx-auto max-w-4xl px-4 text-center">
-			<h2 class="mb-8 text-xl font-bold text-gray-900">Why Choose FastAccs?</h2>
+			<h2
+				style="margin-bottom: var(--space-2xl); font-size: 1.875rem; font-weight: 700; color: var(--text); font-family: var(--font-head);"
+			>
+				Why Choose FastAccs?
+			</h2>
 			<div class="grid grid-cols-1 gap-8 md:grid-cols-3">
 				<div class="text-center">
 					<div
-						class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100"
+						class="mx-auto mb-4 flex h-16 w-16 items-center justify-center"
+						style="border-radius: 50%; background: var(--bg-elev-2); border: 2px solid var(--border);"
 					>
-						<Users class="h-8 w-8 text-green-600" />
+						<Users class="h-8 w-8" style="color: var(--primary);" />
 					</div>
-					<h3 class="mb-2 text-lg font-semibold">Real Followers</h3>
-					<p class="text-gray-600">
+					<h3
+						style="margin-bottom: var(--space-xs); font-size: 1.125rem; font-weight: 600; color: var(--text); font-family: var(--font-head);"
+					>
+						Real Followers
+					</h3>
+					<p style="color: var(--text-muted); font-family: var(--font-body);">
 						All accounts come with genuine followers and authentic engagement rates
 					</p>
 				</div>
 
 				<div class="text-center">
 					<div
-						class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100"
+						class="mx-auto mb-4 flex h-16 w-16 items-center justify-center"
+						style="border-radius: 50%; background: var(--bg-elev-2); border: 2px solid var(--border);"
 					>
-						<Package class="h-8 w-8 text-blue-600" />
+						<Package class="h-8 w-8" style="color: var(--fa-lime-700);" />
 					</div>
-					<h3 class="mb-2 text-lg font-semibold">Instant Delivery</h3>
-					<p class="text-gray-600">
+					<h3
+						style="margin-bottom: var(--space-xs); font-size: 1.125rem; font-weight: 600; color: var(--text); font-family: var(--font-head);"
+					>
+						Instant Delivery
+					</h3>
+					<p style="color: var(--text-muted); font-family: var(--font-body);">
 						Receive your account credentials immediately after payment confirmation
 					</p>
 				</div>
 
 				<div class="text-center">
 					<div
-						class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-purple-100"
+						class="mx-auto mb-4 flex h-16 w-16 items-center justify-center"
+						style="border-radius: 50%; background: var(--bg-elev-2); border: 2px solid var(--border);"
 					>
-						<ArrowRight class="h-8 w-8 text-purple-600" />
+						<ArrowRight class="h-8 w-8" style="color: var(--fa-blue-500);" />
 					</div>
-					<h3 class="mb-2 text-lg font-semibold">24/7 Support</h3>
-					<p class="text-gray-600">Get help anytime with our dedicated customer support team</p>
+					<h3
+						style="margin-bottom: var(--space-xs); font-size: 1.125rem; font-weight: 600; color: var(--text); font-family: var(--font-head);"
+					>
+						24/7 Support
+					</h3>
+					<p style="color: var(--text-muted); font-family: var(--font-body);">
+						Get help anytime with our dedicated customer support team
+					</p>
 				</div>
 			</div>
 		</div>

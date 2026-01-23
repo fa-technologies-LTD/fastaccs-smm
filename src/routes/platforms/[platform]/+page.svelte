@@ -1,13 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import {
-		ShoppingCart,
-		Star,
-		Users,
-		Package,
-		ArrowRight,
-		ChevronRight
-	} from '@lucide/svelte';
+	import { ShoppingCart, Star, Users, Package, ArrowRight, ChevronRight } from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
@@ -100,19 +93,20 @@
 
 <Navigation />
 
-<main class="min-h-screen bg-gray-50">
+<main class="min-h-screen" style="background: var(--bg-elev-1);">
 	{#if !data.platform}
 		<!-- Platform not found -->
 		<section class="py-16">
 			<div class="mx-auto max-w-4xl px-4 text-center">
-				<Package class="mx-auto mb-4 h-16 w-16 text-gray-400" />
-				<h1 class="mb-4 text-3xl font-bold text-gray-900">Platform Not Found</h1>
-				<p class="mb-8 text-lg text-gray-600">
+				<Package class="mx-auto mb-4 h-16 w-16" style="color: var(--text-muted);" />
+				<h1 class="mb-4 text-3xl font-bold" style="color: var(--text);">Platform Not Found</h1>
+				<p class="mb-8 text-lg" style="color: var(--text-muted);">
 					The platform you're looking for doesn't exist or isn't available right now.
 				</p>
 				<button
 					onclick={goBack}
-					class="rounded-lg bg-purple-600 px-6 py-3 font-semibold text-white transition-all hover:bg-purple-700 active:scale-95"
+					class="rounded-lg px-6 py-3 font-semibold transition-all active:scale-95"
+					style="background: var(--btn-primary-gradient); color: white;"
 				>
 					Back to Platforms
 				</button>
@@ -183,34 +177,45 @@
 		<section class="py-8 sm:py-16">
 			<div class="mx-auto max-w-6xl px-4">
 				<!-- Instructional Banner -->
-				<div class="mb-8 rounded-xl border border-blue-100 bg-blue-50 p-4 sm:p-6">
-					<h2 class="mb-2 flex items-center gap-2 text-lg font-semibold text-blue-900">
+				<div
+					class="mb-8 rounded-xl p-4 sm:p-6"
+					style="background: var(--bg-elev-2); border: 1px solid var(--border);"
+				>
+					<h2
+						class="mb-2 flex items-center gap-2 text-lg font-semibold"
+						style="color: var(--text);"
+					>
 						<Package class="h-5 w-5" />
 						Choose Your Account Category
 					</h2>
-					<p class="text-sm text-blue-700 sm:text-base">
+					<p class="text-sm sm:text-base" style="color: var(--text-muted);">
 						Select a follower tier below to see full details and purchase. Each category contains
 						verified accounts with the follower count shown. Click any card to continue.
 					</p>
 				</div>
 
 				<div class="mb-8 text-center">
-					<h2 class="mb-4 text-2xl font-bold text-gray-900 sm:text-3xl">Available Categories</h2>
-					<p class="text-base text-gray-600 sm:text-lg">
+					<h2 class="mb-4 text-2xl font-bold sm:text-3xl" style="color: var(--text);">
+						Available Categories
+					</h2>
+					<p class="text-base sm:text-lg" style="color: var(--text-muted);">
 						Select the follower count that matches your needs. All accounts come with full access.
 					</p>
 				</div>
 
 				{#if data.tiers.length === 0}
-					<div class="rounded-lg bg-yellow-50 p-8 text-center">
-						<Package class="mx-auto mb-4 h-12 w-12 text-yellow-600" />
-						<h3 class="mb-2 text-lg font-semibold text-yellow-800">No Tiers Available</h3>
-						<p class="text-yellow-700">
+					<div class="rounded-lg p-8 text-center" style="background: var(--bg-elev-2);">
+						<Package class="mx-auto mb-4 h-12 w-12" style="color: var(--text-muted);" />
+						<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">
+							No Tiers Available
+						</h3>
+						<p style="color: var(--text-muted);">
 							We're currently restocking {data.platform.name} accounts. Please check back soon!
 						</p>
 						<button
 							onclick={goBack}
-							class="mt-4 rounded-lg bg-yellow-600 px-6 py-2 text-white transition-all hover:bg-yellow-700 active:scale-95"
+							class="mt-4 rounded-lg px-6 py-2 transition-all active:scale-95"
+							style="background: var(--btn-primary-gradient); color: white;"
 						>
 							Browse Other Platforms
 						</button>
@@ -226,15 +231,21 @@
 									e.key === 'Enter' && tier.visible_available > 0 && navigateToTier(tier.tier_slug)}
 								role="button"
 								tabindex={tier.visible_available > 0 ? 0 : -1}
-								class="group relative overflow-hidden rounded-xl bg-white shadow transition-all duration-300 {tier.visible_available >
+								class="group relative overflow-hidden rounded-xl shadow transition-all duration-300 {tier.visible_available >
 								0
 									? 'cursor-pointer hover:-translate-y-1 hover:shadow-md active:scale-[.98]'
 									: 'cursor-not-allowed opacity-75'}"
+								style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 							>
 								<!-- Stock Status Badge -->
 								<div class="absolute top-32 right-3 z-10">
 									<span
-										class={`rounded-full px-2 py-1 text-xs font-medium ${tierStatus.status === 'In Stock' ? 'border border-green-200 bg-green-100 text-green-700' : tierStatus.status === 'Few Left' ? 'border border-yellow-200 bg-yellow-100 text-yellow-700' : 'border border-red-200 bg-red-100 text-red-700'}`}
+										class="rounded-full px-2 py-1 text-xs font-medium"
+										style={tierStatus.status === 'In Stock'
+											? 'background: rgba(34, 197, 94, 0.2); color: rgb(34, 197, 94); border: 1px solid rgba(34, 197, 94, 0.3);'
+											: tierStatus.status === 'Few Left'
+												? 'background: rgba(234, 179, 8, 0.2); color: rgb(234, 179, 8); border: 1px solid rgba(234, 179, 8, 0.3);'
+												: 'background: rgba(239, 68, 68, 0.2); color: rgb(239, 68, 68); border: 1px solid rgba(239, 68, 68, 0.3);'}
 									>
 										{tierStatus.status}
 									</span>
@@ -244,8 +255,10 @@
 								<div class="p-6">
 									<div class="mb-4 flex items-center justify-between">
 										<div>
-											<h3 class="text-xl font-bold text-gray-900">{tier.tier_name}</h3>
-											<p class="text-sm text-gray-600">
+											<h3 class="text-xl font-bold" style="color: var(--text);">
+												{tier.tier_name}
+											</h3>
+											<p class="text-sm" style="color: var(--text-muted);">
 												{#if tier.metadata?.follower_range}
 													{@const range = (tier.metadata as any).follower_range}
 													{#if typeof range === 'object' && range.min !== undefined && range.max !== undefined}
@@ -260,22 +273,27 @@
 											</p>
 										</div>
 										<div class="text-right">
-											<div class="text-2xl font-bold text-purple-600">
+											<div
+												class="text-2xl font-bold"
+												style="background: var(--btn-primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"
+											>
 												{formatPrice(tier.price)}
 											</div>
-											<div class="text-sm text-gray-500">per account</div>
+											<div class="text-sm" style="color: var(--text-muted);">per account</div>
 										</div>
 									</div>
 
 									<!-- Tier Description -->
 									{#if tier.description}
 										<div class="mb-4">
-											<p class="text-sm leading-relaxed text-gray-700">{tier.description}</p>
+											<p class="text-sm leading-relaxed" style="color: var(--text-muted);">
+												{tier.description}
+											</p>
 										</div>
 									{/if}
 
 									<!-- Availability -->
-									<div class="mb-4 text-sm text-gray-600">
+									<div class="mb-4 text-sm" style="color: var(--text-muted);">
 										<span class="font-medium">{tier.visible_available}</span> accounts available
 										{#if tier.reservations_active > 0}
 											<span class="text-yellow-600">
@@ -287,10 +305,15 @@
 									<!-- Tier Features -->
 									{#if tierFeatures.length > 0}
 										<div class="mb-6">
-											<h4 class="mb-3 text-sm font-semibold text-gray-700">Tier Features:</h4>
+											<h4 class="mb-3 text-sm font-semibold" style="color: var(--text);">
+												Tier Features:
+											</h4>
 											<div class="space-y-2">
 												{#each tierFeatures as feature}
-													<div class="flex items-start gap-2 text-sm text-gray-600">
+													<div
+														class="flex items-start gap-2 text-sm"
+														style="color: var(--text-muted);"
+													>
 														<Star class="mt-0.5 h-3 w-3 flex-shrink-0 text-green-500" />
 														<span>{formatFeatureName(feature)}</span>
 													</div>
@@ -301,8 +324,14 @@
 
 									<!-- Age Hint -->
 									{#if tier.metadata?.age_hint}
-										<div class="mb-4 rounded-lg bg-blue-50 p-3">
-											<div class="flex items-center gap-2 text-sm text-blue-700">
+										<div
+											class="mb-4 rounded-lg p-3"
+											style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+										>
+											<div
+												class="flex items-center gap-2 text-sm"
+												style="color: var(--text-muted);"
+											>
 												<Users class="h-4 w-4" />
 												<span class="font-medium">Account Age:</span>
 												<span>{tier.metadata.age_hint}</span>
@@ -312,10 +341,10 @@
 
 									<!-- Action Label -->
 									<div
-										class="mt-4 flex items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-colors {tier.visible_available ===
-										0
-											? 'bg-gray-100 text-gray-500'
-											: 'bg-gray-900 text-white group-hover:bg-gray-800'}"
+										class="mt-4 flex items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-colors"
+										style={tier.visible_available === 0
+											? 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'
+											: 'background: var(--btn-primary-gradient); color: white;'}
 									>
 										{#if tier.visible_available === 0}
 											Sold Out
@@ -333,44 +362,51 @@
 		</section>
 
 		<!-- Platform Benefits -->
-		<section class="bg-white py-16">
+		<section class="py-16" style="background: var(--bg-elev-2);">
 			<div class="mx-auto max-w-4xl px-4 text-center">
-				<h2 class="mb-8 text-3xl font-bold text-gray-900">
+				<h2 class="mb-8 text-3xl font-bold" style="color: var(--text);">
 					Why Choose {data.platform.name} Accounts?
 				</h2>
 				<div class="grid grid-cols-1 gap-8 md:grid-cols-3">
 					<div class="text-center">
 						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100"
+							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
+							style="background: rgba(34, 197, 94, 0.2);"
 						>
-							<Users class="h-8 w-8 text-green-600" />
+							<Users class="h-8 w-8" style="color: rgb(34, 197, 94);" />
 						</div>
-						<h3 class="mb-2 text-lg font-semibold">Authentic Followers</h3>
-						<p class="text-gray-600">
+						<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">
+							Authentic Followers
+						</h3>
+						<p style="color: var(--text-muted);">
 							Real {data.platform.name} followers with genuine engagement and activity
 						</p>
 					</div>
 
 					<div class="text-center">
 						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-purple-100"
+							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
+							style="background: rgba(168, 85, 247, 0.2);"
 						>
-							<Package class="h-8 w-8 text-purple-600" />
+							<Package class="h-8 w-8" style="color: rgb(168, 85, 247);" />
 						</div>
-						<h3 class="mb-2 text-lg font-semibold">Full Account Access</h3>
-						<p class="text-gray-600">
+						<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">
+							Full Account Access
+						</h3>
+						<p style="color: var(--text-muted);">
 							Complete credentials including email access and password change ability
 						</p>
 					</div>
 
 					<div class="text-center">
 						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100"
+							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
+							style="background: rgba(59, 130, 246, 0.2);"
 						>
-							<ShoppingCart class="h-8 w-8 text-blue-600" />
+							<ShoppingCart class="h-8 w-8" style="color: rgb(59, 130, 246);" />
 						</div>
-						<h3 class="mb-2 text-lg font-semibold">Instant Delivery</h3>
-						<p class="text-gray-600">
+						<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">Instant Delivery</h3>
+						<p style="color: var(--text-muted);">
 							Receive your account details immediately after payment confirmation
 						</p>
 					</div>

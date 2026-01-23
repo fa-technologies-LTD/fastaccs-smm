@@ -38,17 +38,19 @@
 	function getStatusColor(status: string) {
 		switch (status) {
 			case 'completed':
-				return 'text-green-600 bg-green-100';
+				return 'status-success';
 			case 'pending':
-				return 'text-yellow-600 bg-yellow-100';
+				return 'status-pending';
 			case 'processing':
-				return 'text-blue-600 bg-blue-100';
+				return 'status-info';
 			case 'failed':
-				return 'text-red-600 bg-red-100';
+				return 'status-error';
 			case 'partial':
-				return 'text-orange-600 bg-orange-100';
+				return 'status-warning';
+			case 'cancelled':
+				return 'status-inactive';
 			default:
-				return 'text-gray-600 bg-gray-100';
+				return 'status-inactive';
 		}
 	}
 
@@ -77,31 +79,38 @@
 
 <Navigation />
 
-<main class="min-h-screen bg-gray-50 py-8">
+<main class="min-h-screen py-8" style="background: var(--bg);">
 	<div class="mx-auto max-w-4xl px-4">
 		<!-- Header -->
 		<div class="mb-8">
 			<div class="flex items-center gap-4">
 				<button
 					onclick={() => goto('/dashboard')}
-					class="cursor-pointer rounded-lg border bg-white px-4 py-2 text-blue-600 transition-transform hover:scale-101 active:scale-95"
+					style="background: var(--surface); border: 1px solid var(--border); color: var(--link);"
+					class="cursor-pointer rounded-lg px-4 py-2 transition-transform hover:scale-101 active:scale-95"
 				>
 					← Back to Dashboard
 				</button>
 			</div>
-			<h1 class="mt-4 text-3xl font-bold text-gray-900">
+			<h1
+				class="mt-4 text-3xl font-bold"
+				style="font-family: var(--font-head); color: var(--text);"
+			>
 				Order #{data.order.id.slice(-8)}
 			</h1>
-			<p class="text-gray-600">Placed on {formatDate(data.order.createdAt)}</p>
+			<p style="color: var(--text-muted);">Placed on {formatDate(data.order.createdAt)}</p>
 		</div>
 
 		<div class="grid gap-8 lg:grid-cols-3">
 			<!-- Order Details -->
 			<div class="lg:col-span-2">
 				<!-- Status Card -->
-				<div class="mb-6 rounded-lg bg-white p-6 shadow-sm">
+				<div
+					class="mb-6 rounded-lg p-6"
+					style="background: var(--surface); border: 1px solid var(--border);"
+				>
 					<div class="flex items-center gap-4">
-						<div class={`rounded-full p-2 ${getStatusColor(data.order.status)}`}>
+						<div class={`status-badge ${getStatusColor(data.order.status)}`}>
 							<!-- Use getStatusIcon inline instead of StatusIcon constant -->
 							{#if data.order.status === 'completed'}
 								<CheckCircle class="h-6 w-6" />
@@ -116,8 +125,10 @@
 							{/if}
 						</div>
 						<div>
-							<h2 class="text-xl font-semibold">{getStatusText(data.order.status)}</h2>
-							<p class="text-gray-600">
+							<h2 class="text-xl font-semibold" style="color: var(--text);">
+								{getStatusText(data.order.status)}
+							</h2>
+							<p style="color: var(--text-muted);">
 								{#if data.order.status === 'completed'}
 									Your accounts have been successfully allocated and delivered.
 								{:else if data.order.status === 'pending'}
@@ -135,27 +146,30 @@
 				</div>
 
 				<!-- Order Items -->
-				<div class="rounded-lg bg-white p-6 shadow-sm">
-					<h3 class="mb-4 text-lg font-semibold">Order Items</h3>
+				<div
+					class="rounded-lg p-6"
+					style="background: var(--surface); border: 1px solid var(--border);"
+				>
+					<h3 class="mb-4 text-lg font-semibold" style="color: var(--text);">Order Items</h3>
 					<div class="space-y-6">
 						{#each data.order.orderItems as item}
-							<div class="border-b border-gray-200 pb-6 last:border-b-0 last:pb-0">
+							<div class="pb-6 last:pb-0" style="border-bottom: 1px solid var(--border);">
 								<div class="flex items-start justify-between">
 									<div class="flex-1">
-										<h4 class="font-medium text-gray-900">{item.category.name}</h4>
-										<p class="text-sm text-gray-600">
+										<h4 class="font-medium" style="color: var(--text);">{item.category.name}</h4>
+										<p class="text-sm" style="color: var(--text-muted);">
 											Quantity: {item.quantity} • {formatPrice(item.unitPrice)} each
 										</p>
 										<div class="mt-2">
 											<span
-												class={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+												class={`status-badge ${
 													item.allocationStatus === 'allocated'
-														? 'bg-green-100 text-green-800'
+														? 'status-success'
 														: item.allocationStatus === 'partial'
-															? 'bg-yellow-100 text-yellow-800'
+															? 'status-warning'
 															: item.allocationStatus === 'failed'
-																? 'bg-red-100 text-red-800'
-																: 'bg-gray-100 text-gray-800'
+																? 'status-error'
+																: 'status-inactive'
 												}`}
 											>
 												{item.allocatedCount} of {item.quantity} allocated
@@ -171,14 +185,17 @@
 								{#if item.accounts && item.accounts.length > 0}
 									<div class="mt-4">
 										<div class="mb-2 flex items-center justify-between">
-											<h5 class="text-sm font-medium text-gray-900">Your Accounts:</h5>
+											<h5 class="text-sm font-medium" style="color: var(--text);">
+												Your Accounts:
+											</h5>
 											<button
 												onclick={() => {
 													copyAllAccounts(item.accounts, {
 														showToast: (toast: any) => addToast(toast as any)
 													});
 												}}
-												class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200"
+												style="background: var(--surface-2); color: var(--text);"
+												class="rounded-lg px-3 py-1.5 text-xs font-medium hover:brightness-110"
 												title="Copy all accounts"
 											>
 												<Copy class="mr-1 inline h-3 w-3" />
@@ -187,14 +204,20 @@
 										</div>
 										<div class="space-y-2">
 											{#each item.accounts as account}
-												<div class="rounded-lg bg-gray-50 p-3">
+												<div
+													class="rounded-lg p-3"
+													style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+												>
 													<div class="space-y-3">
 														<div class="flex items-center justify-between">
 															<div class="flex-1">
-																<span class="text-xs font-medium text-gray-500 uppercase"
-																	>Username</span
+																<span
+																	class="text-xs font-medium uppercase"
+																	style="color: var(--text-dim);">Username</span
 																>
-																<div class="font-mono text-sm">{account.username}</div>
+																<div class="font-mono text-sm" style="color: var(--text);">
+																	{account.username}
+																</div>
 															</div>
 															<button
 																onclick={() =>
@@ -239,7 +262,8 @@
 																			label: 'Email',
 																			showToast: (toast: any) => addToast(toast as any)
 																		})}
-																	class="ml-2 rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+																	style="color: var(--text-dim);"
+																	class="ml-2 rounded p-2 hover:brightness-125"
 																>
 																	<Copy class="h-4 w-4" />
 																</button>
@@ -248,18 +272,22 @@
 														{#if account.emailPassword}
 															<div class="flex items-center justify-between">
 																<div class="flex-1">
-																	<span class="text-xs font-medium text-gray-500 uppercase"
-																		>Email Password</span
+																	<span
+																		class="text-xs font-medium uppercase"
+																		style="color: var(--text-dim);">Password</span
 																	>
-																	<div class="font-mono text-sm">{account.emailPassword}</div>
+																	<div class="font-mono text-sm" style="color: var(--text);">
+																		{account.password}
+																	</div>
 																</div>
 																<button
 																	onclick={() =>
-																		copyToClipboard(account.emailPassword || '', {
-																			label: 'Email Password',
+																		copyToClipboard(account.password || '', {
+																			label: 'Password',
 																			showToast: (toast: any) => addToast(toast as any)
 																		})}
-																	class="ml-2 rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+																	style="color: var(--text-dim);"
+																	class="ml-2 rounded p-2 hover:brightness-125"
 																>
 																	<Copy class="h-4 w-4" />
 																</button>
@@ -268,10 +296,13 @@
 														{#if account.twoFa}
 															<div class="flex items-center justify-between">
 																<div class="flex-1">
-																	<span class="text-xs font-medium text-gray-500 uppercase"
-																		>2FA</span
+																	<span
+																		class="text-xs font-medium uppercase"
+																		style="color: var(--text-dim);">2FA</span
 																	>
-																	<div class="font-mono text-sm">{account.twoFa}</div>
+																	<div class="font-mono text-sm" style="color: var(--text);">
+																		{account.twoFa}
+																	</div>
 																</div>
 																<button
 																	onclick={() =>
@@ -279,7 +310,8 @@
 																			label: '2FA',
 																			showToast: (toast: any) => addToast(toast as any)
 																		})}
-																	class="ml-2 rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+																	style="color: var(--text-dim);"
+																	class="ml-2 rounded p-2 hover:brightness-125"
 																>
 																	<Copy class="h-4 w-4" />
 																</button>
@@ -288,10 +320,16 @@
 														{#if account.linkUrl}
 															<div class="flex items-center justify-between">
 																<div class="flex-1">
-																	<span class="text-xs font-medium text-gray-500 uppercase"
-																		>Link</span
+																	<span
+																		class="text-xs font-medium uppercase"
+																		style="color: var(--text-dim);">Link</span
 																	>
-																	<div class="font-mono text-sm break-all">{account.linkUrl}</div>
+																	<div
+																		class="font-mono text-sm break-all"
+																		style="color: var(--text);"
+																	>
+																		{account.linkUrl}
+																	</div>
 																</div>
 																<button
 																	onclick={() =>
@@ -299,7 +337,8 @@
 																			label: 'Link',
 																			showToast: (toast: any) => addToast(toast as any)
 																		})}
-																	class="ml-2 rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+																	style="color: var(--text-dim);"
+																	class="ml-2 rounded p-2 hover:brightness-125"
 																>
 																	<Copy class="h-4 w-4" />
 																</button>
@@ -307,10 +346,13 @@
 														{/if}
 														{#if account.deliveryNotes}
 															<div class="mt-2">
-																<span class="text-xs font-medium text-gray-500 uppercase"
-																	>Notes:</span
+																<span
+																	class="text-xs font-medium uppercase"
+																	style="color: var(--text-dim);">Notes:</span
 																>
-																<p class="mt-1 text-sm text-gray-600">{account.deliveryNotes}</p>
+																<p class="mt-1 text-sm" style="color: var(--text-muted);">
+																	{account.deliveryNotes}
+																</p>
 															</div>
 														{/if}
 													</div>
@@ -328,40 +370,54 @@
 			<!-- Sidebar -->
 			<div class="space-y-6">
 				<!-- Order Summary -->
-				<div class="rounded-lg bg-white p-6 shadow-sm">
-					<h3 class="mb-4 text-lg font-semibold">Order Summary</h3>
+				<div
+					class="rounded-lg p-6"
+					style="background: var(--surface); border: 1px solid var(--border);"
+				>
+					<h3 class="mb-4 text-lg font-semibold" style="color: var(--text);">Order Summary</h3>
 					<div class="space-y-3 text-sm">
 						<div class="flex justify-between">
-							<span class="text-gray-600">Total Amount:</span>
-							<span class="font-semibold">{formatPrice(data.order.totalAmount)}</span>
+							<span style="color: var(--text-muted);">Total Amount:</span>
+							<span class="font-semibold" style="color: var(--text);"
+								>{formatPrice(data.order.totalAmount)}</span
+							>
 						</div>
 						<div>
-							<div class="mb-1 text-gray-600">Order ID:</div>
-							<div class="font-mono text-xs break-all">{data.order.id}</div>
+							<div class="mb-1" style="color: var(--text-muted);">Order ID:</div>
+							<div class="font-mono text-xs break-all" style="color: var(--text);">
+								{data.order.id}
+							</div>
 						</div>
 						<div class="flex justify-between">
-							<span class="text-gray-600">Order Date:</span>
-							<span>{formatDate(data.order.createdAt)}</span>
+							<span style="color: var(--text-muted);">Order Date:</span>
+							<span style="color: var(--text);">{formatDate(data.order.createdAt)}</span>
 						</div>
 					</div>
 				</div>
 
 				<!-- Delivery Info -->
-				<div class="rounded-lg bg-white p-6 shadow-sm">
-					<h3 class="mb-4 text-lg font-semibold">Delivery Information</h3>
+				<div
+					class="rounded-lg p-6"
+					style="background: var(--surface); border: 1px solid var(--border);"
+				>
+					<h3 class="mb-4 text-lg font-semibold" style="color: var(--text);">
+						Delivery Information
+					</h3>
 					<div class="flex items-center gap-3">
 						{#if data.order.deliveryMethod === 'email'}
-							<Mail class="h-5 w-5 text-purple-600" />
+							<Mail class="h-5 w-5" style="color: var(--fa-blue-300);" />
 						{:else if data.order.deliveryMethod === 'whatsapp'}
-							<MessageSquare class="h-5 w-5 text-purple-600" />
+							<MessageSquare class="h-5 w-5" style="color: var(--fa-blue-300);" />
 						{:else if data.order.deliveryMethod === 'telegram'}
-							<MessageSquare class="h-5 w-5 text-purple-600" />
+							<MessageSquare class="h-5 w-5" style="color: var(--fa-blue-300);" />
 						{:else}
-							<Mail class="h-5 w-5 text-purple-600" />
+							<Mail class="h-5 w-5" style="color: var(--fa-blue-300);" />
 						{/if}
 						<div>
-							<p class="font-medium capitalize">{data.order.deliveryMethod}</p>
-							<p class="text-sm text-gray-600">
+							<p class="font-medium capitalize" style="color: var(--text);">
+								{data.order.deliveryMethod}
+							</p>
+							<p class="text-sm" style="color: var(--text-muted);">
 								{#if data.order.deliveryMethod === 'email'}
 									{data.order.guestEmail || data.order.deliveryContact}
 								{:else if data.order.deliveryMethod === 'whatsapp'}
@@ -377,14 +433,18 @@
 				</div>
 
 				<!-- Support -->
-				<div class="rounded-lg bg-purple-50 p-6">
-					<h3 class="mb-2 text-lg font-semibold text-purple-900">Need Help?</h3>
-					<p class="mb-4 text-sm text-purple-700">
+				<div
+					class="rounded-lg p-6"
+					style="background: linear-gradient(180deg, rgba(170,173,255,0.08), rgba(105,109,250,0.06)); border: 1px solid rgba(170,173,255,0.20);"
+				>
+					<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">Need Help?</h3>
+					<p class="mb-4 text-sm" style="color: var(--text-muted);">
 						If you have any questions about your order, please contact our support team.
 					</p>
 					<a
 						href="/support"
-						class="inline-flex items-center rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-purple-700 active:scale-95"
+						style="background: linear-gradient(180deg, rgba(105,109,250,0.95), rgba(46,49,146,0.95)); border: 1px solid rgba(170,173,255,0.30); color: var(--text);"
+						class="inline-flex items-center rounded-lg px-4 py-2 text-sm font-medium transition-all hover:brightness-110 active:scale-95"
 					>
 						Contact Support
 					</a>
@@ -395,3 +455,61 @@
 </main>
 
 <Footer />
+
+<style>
+	:root {
+		--status-success: #05d471;
+		--status-error: #ff5050;
+		--status-warning: #cadb2e;
+		--status-info: #aaadff;
+		--status-pending: #ffb800;
+		--status-inactive: rgba(255, 255, 255, 0.35);
+	}
+
+	.status-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 8px 16px;
+		border-radius: 999px;
+		font-size: 13px;
+		font-weight: 600;
+		border: 1px solid;
+	}
+
+	.status-success {
+		background: rgba(5, 212, 113, 0.12);
+		border-color: rgba(5, 212, 113, 0.3);
+		color: var(--status-success);
+	}
+
+	.status-error {
+		background: rgba(255, 80, 80, 0.12);
+		border-color: rgba(255, 80, 80, 0.3);
+		color: var(--status-error);
+	}
+
+	.status-warning {
+		background: rgba(202, 219, 46, 0.12);
+		border-color: rgba(202, 219, 46, 0.3);
+		color: var(--status-warning);
+	}
+
+	.status-info {
+		background: rgba(170, 173, 255, 0.12);
+		border-color: rgba(170, 173, 255, 0.25);
+		color: var(--status-info);
+	}
+
+	.status-pending {
+		background: rgba(255, 184, 0, 0.12);
+		border-color: rgba(255, 184, 0, 0.3);
+		color: var(--status-pending);
+	}
+
+	.status-inactive {
+		background: rgba(255, 255, 255, 0.04);
+		border-color: rgba(255, 255, 255, 0.1);
+		color: var(--status-inactive);
+	}
+</style>

@@ -45,9 +45,9 @@
 
 <Navigation />
 
-<main class="min-h-screen bg-gray-50">
+<main class="min-h-screen" style="background: var(--bg);">
 	<!-- Hero Section -->
-	<section class="bg-gradient-primary px-4 py-16 text-white">
+	<section class="px-4 py-16 text-white" style="background: var(--btn-primary-gradient);">
 		<div class="mx-auto max-w-6xl text-center">
 			<h1 class="mb-4 text-4xl font-bold md:text-5xl">How FastAccs Works</h1>
 			<p class="mx-auto max-w-2xl text-lg text-green-100 md:text-xl">
@@ -58,25 +58,32 @@
 	</section>
 
 	<!-- Tab Navigation -->
-	<section class="sticky top-0 z-10 border-b border-gray-200 bg-white shadow-sm">
+	<section
+		class="sticky top-0 z-10 shadow-sm"
+		style="background: var(--bg-elev-1); border-bottom: 1px solid var(--border);"
+	>
 		<div class="mx-auto max-w-6xl px-4">
 			<div class="flex justify-center space-x-8">
 				<button
 					onclick={() => (selectedTab = 'buyer')}
-					class="border-b-2 px-4 py-4 text-sm font-semibold transition-colors md:text-base
-						{selectedTab === 'buyer'
-						? 'border-blue-600 text-blue-600'
-						: 'border-transparent text-gray-600 hover:text-gray-900'}"
+					class="px-4 py-4 text-sm font-semibold transition-colors md:text-base"
+					style="border-bottom: 2px solid {selectedTab === 'buyer'
+						? 'var(--brand-blue)'
+						: 'transparent'}; color: {selectedTab === 'buyer'
+						? 'var(--brand-blue)'
+						: 'var(--text-muted)'}; font-family: var(--font-head);"
 				>
 					<ShoppingBag class="mr-2 inline h-5 w-5" />
 					Buying Accounts
 				</button>
 				<button
 					onclick={() => (selectedTab = 'affiliate')}
-					class="border-b-2 px-4 py-4 text-sm font-semibold transition-colors md:text-base
-						{selectedTab === 'affiliate'
-						? 'border-blue-600 text-blue-600'
-						: 'border-transparent text-gray-600 hover:text-gray-900'}"
+					class="px-4 py-4 text-sm font-semibold transition-colors md:text-base"
+					style="border-bottom: 2px solid {selectedTab === 'affiliate'
+						? 'var(--brand-blue)'
+						: 'transparent'}; color: {selectedTab === 'affiliate'
+						? 'var(--brand-blue)'
+						: 'var(--text-muted)'}; font-family: var(--font-head);"
 				>
 					<Share2 class="mr-2 inline h-5 w-5" />
 					Affiliate Program
@@ -89,7 +96,10 @@
 		<!-- Buyer Flow Section -->
 		<section class="px-4 py-16">
 			<div class="mx-auto max-w-6xl">
-				<h2 class="mb-12 text-center text-3xl font-bold text-gray-900">
+				<h2
+					class="mb-12 text-center text-3xl font-bold"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
 					4 Simple Steps to Get Your Account
 				</h2>
 
@@ -98,8 +108,8 @@
 					<!-- Step 1: Sign Up -->
 					<div
 						class="flex flex-col items-center gap-8 md:flex-row {animatedSteps.includes(1)
-							? 'opacity-100 translate-y-0'
-							: 'opacity-0 translate-y-4'} transition-all duration-500"
+							? 'translate-y-0 opacity-100'
+							: 'translate-y-4 opacity-0'} transition-all duration-500"
 					>
 						<div class="flex-shrink-0">
 							<div
@@ -116,42 +126,67 @@
 									>Quick & Easy</span
 								>
 							</div>
-							<h3 class="mb-3 text-2xl font-bold text-gray-900">Create Your Account</h3>
-							<p class="mb-4 text-gray-600">
-								Sign up with your email or use Google OAuth for instant access. No lengthy forms, just
-								the essentials to get you started.
+							<h3
+								class="mb-3 text-2xl font-bold"
+								style="color: var(--text); font-family: var(--font-head);"
+							>
+								Create Your Account
+							</h3>
+							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
+								Sign up with your email or use Google OAuth for instant access. No lengthy forms,
+								just the essentials to get you started.
 							</p>
 							<ul class="space-y-2">
-								<li class="flex items-start gap-2 text-gray-700">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Email + password or Google sign-in</span>
 								</li>
-								<li class="flex items-start gap-2 text-gray-700">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Free to join, no hidden fees</span>
 								</li>
-								<li class="flex items-start gap-2 text-gray-700">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Instant dashboard access</span>
 								</li>
 							</ul>
 						</div>
-						<div class="w-full rounded-xl bg-white p-6 shadow-lg md:w-80">
+						<div
+							class="w-full rounded-xl p-6 shadow-lg md:w-80"
+							style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+						>
 							<div class="mb-4 flex items-center justify-between">
-								<h4 class="font-semibold text-gray-900">Account Created!</h4>
-								<UserPlus class="h-5 w-5 text-green-600" />
+								<h4
+									class="font-semibold"
+									style="color: var(--text); font-family: var(--font-head);"
+								>
+									Account Created!
+								</h4>
+								<UserPlus class="h-5 w-5" style="color: var(--status-success);" />
 							</div>
-							<div class="space-y-3 text-sm text-gray-600">
+							<div
+								class="space-y-3 text-sm"
+								style="color: var(--text-muted); font-family: var(--font-body);"
+							>
 								<div class="flex items-center gap-2">
-									<div class="h-2 w-2 rounded-full bg-green-500"></div>
+									<div
+										class="h-2 w-2 rounded-full"
+										style="background: var(--status-success);"
+									></div>
 									<span>Email verified</span>
 								</div>
 								<div class="flex items-center gap-2">
-									<div class="h-2 w-2 rounded-full bg-green-500"></div>
+									<div
+										class="h-2 w-2 rounded-full"
+										style="background: var(--status-success);"
+									></div>
 									<span>Dashboard ready</span>
 								</div>
 								<div class="flex items-center gap-2">
-									<div class="h-2 w-2 rounded-full bg-green-500"></div>
+									<div
+										class="h-2 w-2 rounded-full"
+										style="background: var(--status-success);"
+									></div>
 									<span>Wallet initialized</span>
 								</div>
 							</div>
@@ -165,8 +200,8 @@
 					<!-- Step 2: Fund Wallet -->
 					<div
 						class="flex flex-col items-center gap-8 md:flex-row-reverse {animatedSteps.includes(2)
-							? 'opacity-100 translate-y-0'
-							: 'opacity-0 translate-y-4'} transition-all duration-500"
+							? 'translate-y-0 opacity-100'
+							: 'translate-y-4 opacity-0'} transition-all duration-500"
 					>
 						<div class="flex-shrink-0">
 							<div
@@ -178,48 +213,69 @@
 						<div class="flex-1 text-center md:text-right">
 							<div class="mb-2 flex items-center justify-center gap-2 md:justify-end">
 								<span class="text-2xl font-bold text-green-600">Step 2</span>
-								<span
-									class="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700"
+								<span class="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700"
 									>Secure Payment</span
 								>
 							</div>
-							<h3 class="mb-3 text-2xl font-bold text-gray-900">Fund Your Wallet</h3>
-							<p class="mb-4 text-gray-600">
+							<h3
+								class="mb-3 text-2xl font-bold"
+								style="color: var(--text); font-family: var(--font-head);"
+							>
+								Fund Your Wallet
+							</h3>
+							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
 								Add money to your wallet using Korapay. We support cards, bank transfers, and mobile
 								money. Your funds are always secure.
 							</p>
 							<ul class="space-y-2">
-								<li class="flex items-start gap-2 text-gray-700 md:justify-end">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Multiple payment methods</span>
 								</li>
-								<li class="flex items-start gap-2 text-gray-700 md:justify-end">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Instant wallet credit (automated)</span>
 								</li>
-								<li class="flex items-start gap-2 text-gray-700 md:justify-end">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Minimum ₦100 funding</span>
 								</li>
 							</ul>
 						</div>
-						<div class="w-full rounded-xl bg-white p-6 shadow-lg md:w-80">
+						<div
+							class="w-full rounded-xl p-6 shadow-lg md:w-80"
+							style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+						>
 							<div class="mb-4 flex items-center justify-between">
-								<h4 class="font-semibold text-gray-900">Payment Options</h4>
-								<CreditCard class="h-5 w-5 text-blue-600" />
+								<h4
+									class="font-semibold"
+									style="color: var(--text); font-family: var(--font-head);"
+								>
+									Payment Options
+								</h4>
+								<CreditCard class="h-5 w-5" style="color: var(--brand-blue);" />
 							</div>
 							<div class="space-y-3">
-								<div class="flex items-center justify-between rounded-lg border p-3">
-									<span class="text-sm font-medium">Debit Card</span>
-									<Check class="h-5 w-5 text-green-600" />
+								<div
+									class="flex items-center justify-between rounded-lg p-3"
+									style="border: 1px solid var(--border);"
+								>
+									<span class="text-sm font-medium" style="color: var(--text);">Debit Card</span>
+									<Check class="h-5 w-5" style="color: var(--status-success);" />
 								</div>
-								<div class="flex items-center justify-between rounded-lg border p-3">
-									<span class="text-sm font-medium">Bank Transfer</span>
-									<Check class="h-5 w-5 text-green-600" />
+								<div
+									class="flex items-center justify-between rounded-lg p-3"
+									style="border: 1px solid var(--border);"
+								>
+									<span class="text-sm font-medium" style="color: var(--text);">Bank Transfer</span>
+									<Check class="h-5 w-5" style="color: var(--status-success);" />
 								</div>
-								<div class="flex items-center justify-between rounded-lg border p-3">
-									<span class="text-sm font-medium">Mobile Money</span>
-									<Check class="h-5 w-5 text-green-600" />
+								<div
+									class="flex items-center justify-between rounded-lg p-3"
+									style="border: 1px solid var(--border);"
+								>
+									<span class="text-sm font-medium" style="color: var(--text);">Mobile Money</span>
+									<Check class="h-5 w-5" style="color: var(--status-success);" />
 								</div>
 							</div>
 						</div>
@@ -232,8 +288,8 @@
 					<!-- Step 3: Browse & Purchase -->
 					<div
 						class="flex flex-col items-center gap-8 md:flex-row {animatedSteps.includes(3)
-							? 'opacity-100 translate-y-0'
-							: 'opacity-0 translate-y-4'} transition-all duration-500"
+							? 'translate-y-0 opacity-100'
+							: 'translate-y-4 opacity-0'} transition-all duration-500"
 					>
 						<div class="flex-shrink-0">
 							<div
@@ -250,48 +306,63 @@
 									>Wide Selection</span
 								>
 							</div>
-							<h3 class="mb-3 text-2xl font-bold text-gray-900">Browse & Buy Accounts</h3>
-							<p class="mb-4 text-gray-600">
+							<h3
+								class="mb-3 text-2xl font-bold"
+								style="color: var(--text); font-family: var(--font-head);"
+							>
+								Browse & Buy Accounts
+							</h3>
+							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
 								Choose from Instagram, TikTok, Twitter, YouTube and more. Filter by follower count,
 								price, and features. Pay instantly with your wallet balance.
 							</p>
 							<ul class="space-y-2">
-								<li class="flex items-start gap-2 text-gray-700">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Multiple platforms available</span>
 								</li>
-								<li class="flex items-start gap-2 text-gray-700">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Apply affiliate discount codes</span>
 								</li>
-								<li class="flex items-start gap-2 text-gray-700">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Instant wallet deduction</span>
 								</li>
 							</ul>
 						</div>
-						<div class="w-full rounded-xl bg-white p-6 shadow-lg md:w-80">
+						<div
+							class="w-full rounded-xl p-6 shadow-lg md:w-80"
+							style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+						>
 							<div class="mb-4 flex items-center justify-between">
-								<h4 class="font-semibold text-gray-900">Sample Account</h4>
-								<Package class="h-5 w-5 text-yellow-600" />
+								<h4
+									class="font-semibold"
+									style="color: var(--text); font-family: var(--font-head);"
+								>
+									Sample Account
+								</h4>
+								<Package class="h-5 w-5" style="color: var(--status-warning);" />
 							</div>
-							<div class="mb-3 rounded-lg bg-gradient-to-br from-pink-500 to-purple-600 p-4 text-white">
+							<div
+								class="mb-3 rounded-lg bg-gradient-to-br from-pink-500 to-purple-600 p-4 text-white"
+							>
 								<div class="mb-2 text-sm font-medium">Instagram Account</div>
 								<div class="text-2xl font-bold">50K Followers</div>
 							</div>
 							<div class="space-y-2 text-sm">
 								<div class="flex justify-between">
-									<span class="text-gray-600">Price:</span>
-									<span class="font-bold text-gray-900">₦15,000</span>
+									<span style="color: var(--text-muted);">Price:</span>
+									<span class="font-bold" style="color: var(--text);">₦15,000</span>
 								</div>
 								<div class="flex justify-between">
-									<span class="text-gray-600">Discount:</span>
-									<span class="font-bold text-green-600">-₦1,500</span>
+									<span style="color: var(--text-muted);">Discount:</span>
+									<span class="font-bold" style="color: var(--status-success);">-₦1,500</span>
 								</div>
-								<div class="border-t pt-2">
+								<div class="pt-2" style="border-top: 1px solid var(--border);">
 									<div class="flex justify-between">
-										<span class="font-semibold text-gray-900">Total:</span>
-										<span class="font-bold text-blue-600">₦13,500</span>
+										<span class="font-semibold" style="color: var(--text);">Total:</span>
+										<span class="font-bold" style="color: var(--brand-blue);">₦13,500</span>
 									</div>
 								</div>
 							</div>
@@ -305,8 +376,8 @@
 					<!-- Step 4: Get Accounts -->
 					<div
 						class="flex flex-col items-center gap-8 md:flex-row-reverse {animatedSteps.includes(4)
-							? 'opacity-100 translate-y-0'
-							: 'opacity-0 translate-y-4'} transition-all duration-500"
+							? 'translate-y-0 opacity-100'
+							: 'translate-y-4 opacity-0'} transition-all duration-500"
 					>
 						<div class="flex-shrink-0">
 							<div
@@ -323,51 +394,66 @@
 									>Instant Access</span
 								>
 							</div>
-							<h3 class="mb-3 text-2xl font-bold text-gray-900">Instant Account Delivery</h3>
-							<p class="mb-4 text-gray-600">
-								Accounts are delivered instantly to your dashboard. View credentials, copy details, and
-								start using your new account right away. Email notification sent automatically.
+							<h3
+								class="mb-3 text-2xl font-bold"
+								style="color: var(--text); font-family: var(--font-head);"
+							>
+								Instant Account Delivery
+							</h3>
+							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
+								Accounts are delivered instantly to your dashboard. View credentials, copy details,
+								and start using your new account right away. Email notification sent automatically.
 							</p>
 							<ul class="space-y-2">
-								<li class="flex items-start gap-2 text-gray-700 md:justify-end">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Immediate delivery to dashboard</span>
 								</li>
-								<li class="flex items-start gap-2 text-gray-700 md:justify-end">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Mask/unmask sensitive credentials</span>
 								</li>
-								<li class="flex items-start gap-2 text-gray-700 md:justify-end">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>One-click copy to clipboard</span>
 								</li>
 							</ul>
 						</div>
-						<div class="w-full rounded-xl bg-white p-6 shadow-lg md:w-80">
+						<div
+							class="w-full rounded-xl p-6 shadow-lg md:w-80"
+							style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+						>
 							<div class="mb-4 flex items-center justify-between">
-								<h4 class="font-semibold text-gray-900">Your Purchase</h4>
-								<Check class="h-5 w-5 text-green-600" />
+								<h4
+									class="font-semibold"
+									style="color: var(--text); font-family: var(--font-head);"
+								>
+									Your Purchase
+								</h4>
+								<Check class="h-5 w-5" style="color: var(--status-success);" />
 							</div>
 							<div class="space-y-3">
-								<div class="rounded-lg bg-gray-50 p-3">
-									<div class="mb-1 text-xs text-gray-500">Username</div>
+								<div class="rounded-lg p-3" style="background: var(--bg);">
+									<div class="mb-1 text-xs" style="color: var(--text-dim);">Username</div>
 									<div class="flex items-center justify-between">
-										<code class="text-sm font-mono">@premium_acc</code>
-										<Copy class="h-4 w-4 cursor-pointer text-gray-400 hover:text-gray-700" />
+										<code class="font-mono text-sm" style="color: var(--text);">@premium_acc</code>
+										<Copy class="h-4 w-4 cursor-pointer" style="color: var(--text-dim);" />
 									</div>
 								</div>
-								<div class="rounded-lg bg-gray-50 p-3">
-									<div class="mb-1 text-xs text-gray-500">Password</div>
+								<div class="rounded-lg p-3" style="background: var(--bg);">
+									<div class="mb-1 text-xs" style="color: var(--text-dim);">Password</div>
 									<div class="flex items-center justify-between">
-										<code class="text-sm font-mono">••••••••</code>
-										<Eye class="h-4 w-4 cursor-pointer text-gray-400 hover:text-gray-700" />
+										<code class="font-mono text-sm" style="color: var(--text);">••••••••</code>
+										<Eye class="h-4 w-4 cursor-pointer" style="color: var(--text-dim);" />
 									</div>
 								</div>
-								<div class="rounded-lg bg-gray-50 p-3">
-									<div class="mb-1 text-xs text-gray-500">Email</div>
+								<div class="rounded-lg p-3" style="background: var(--bg);">
+									<div class="mb-1 text-xs" style="color: var(--text-dim);">Email</div>
 									<div class="flex items-center justify-between">
-										<code class="text-sm font-mono">acc@example.com</code>
-										<Copy class="h-4 w-4 cursor-pointer text-gray-400 hover:text-gray-700" />
+										<code class="font-mono text-sm" style="color: var(--text);"
+											>acc@example.com</code
+										>
+										<Copy class="h-4 w-4 cursor-pointer" style="color: var(--text-dim);" />
 									</div>
 								</div>
 							</div>
@@ -388,9 +474,14 @@
 		</section>
 
 		<!-- Why Choose Us Section -->
-		<section class="bg-white px-4 py-16">
+		<section class="px-4 py-16" style="background: var(--bg-elev-1);">
 			<div class="mx-auto max-w-6xl">
-				<h2 class="mb-12 text-center text-3xl font-bold text-gray-900">Why Choose FastAccs?</h2>
+				<h2
+					class="mb-12 text-center text-3xl font-bold"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
+					Why Choose FastAccs?
+				</h2>
 				<div class="grid gap-8 md:grid-cols-3">
 					<div class="text-center">
 						<div
@@ -398,8 +489,13 @@
 						>
 							<Shield class="h-8 w-8 text-blue-600" />
 						</div>
-						<h3 class="mb-2 text-xl font-semibold text-gray-900">100% Secure</h3>
-						<p class="text-gray-600">
+						<h3
+							class="mb-2 text-xl font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							100% Secure
+						</h3>
+						<p style="color: var(--text-muted); font-family: var(--font-body);">
 							All transactions are encrypted and secure. Your payment information is never stored.
 						</p>
 					</div>
@@ -409,8 +505,13 @@
 						>
 							<Clock class="h-8 w-8 text-green-600" />
 						</div>
-						<h3 class="mb-2 text-xl font-semibold text-gray-900">Instant Delivery</h3>
-						<p class="text-gray-600">
+						<h3
+							class="mb-2 text-xl font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							Instant Delivery
+						</h3>
+						<p style="color: var(--text-muted); font-family: var(--font-body);">
 							Automated system delivers accounts immediately after payment. No waiting required.
 						</p>
 					</div>
@@ -420,8 +521,13 @@
 						>
 							<TrendingUp class="h-8 w-8 text-purple-600" />
 						</div>
-						<h3 class="mb-2 text-xl font-semibold text-gray-900">Premium Quality</h3>
-						<p class="text-gray-600">
+						<h3
+							class="mb-2 text-xl font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							Premium Quality
+						</h3>
+						<p style="color: var(--text-muted); font-family: var(--font-body);">
 							All accounts are verified and high-quality. Real followers, aged accounts, authentic
 							engagement.
 						</p>
@@ -433,7 +539,10 @@
 		<!-- Affiliate Flow Section -->
 		<section class="px-4 py-16">
 			<div class="mx-auto max-w-6xl">
-				<h2 class="mb-12 text-center text-3xl font-bold text-gray-900">
+				<h2
+					class="mb-12 text-center text-3xl font-bold"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
 					Earn Commissions as an Affiliate
 				</h2>
 
@@ -452,43 +561,53 @@
 							<div class="mb-2 flex items-center justify-center gap-2 md:justify-start">
 								<span class="text-2xl font-bold text-purple-600">Step 1</span>
 							</div>
-							<h3 class="mb-3 text-2xl font-bold text-gray-900">Enable Affiliate Mode</h3>
-							<p class="mb-4 text-gray-600">
+							<h3
+								class="mb-3 text-2xl font-bold"
+								style="color: var(--text); font-family: var(--font-head);"
+							>
+								Enable Affiliate Mode
+							</h3>
+							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
 								Go to your dashboard and click "Become an Affiliate". System automatically generates
 								your unique code using your initials + running number (e.g., "JD001").
 							</p>
 							<ul class="space-y-2">
-								<li class="flex items-start gap-2 text-gray-700">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Free to join, no fees</span>
 								</li>
-								<li class="flex items-start gap-2 text-gray-700">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Unique code generated instantly</span>
 								</li>
-								<li class="flex items-start gap-2 text-gray-700">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Access to affiliate dashboard</span>
 								</li>
 							</ul>
 						</div>
-						<div class="w-full rounded-xl bg-white p-6 shadow-lg md:w-80">
+						<div
+							class="w-full rounded-xl p-6 shadow-lg md:w-80"
+							style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+						>
 							<div class="mb-4 text-center">
-								<div class="mb-2 text-sm text-gray-600">Your Affiliate Code</div>
+								<div class="mb-2 text-sm" style="color: var(--text-muted);">
+									Your Affiliate Code
+								</div>
 								<div
 									class="rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4 text-3xl font-bold text-white"
 								>
 									JD001
 								</div>
 							</div>
-							<div class="space-y-2 text-sm text-gray-600">
+							<div class="space-y-2 text-sm" style="color: var(--text-muted);">
 								<div class="flex items-center justify-between">
 									<span>Commission Rate:</span>
-									<span class="font-bold text-green-600">10%</span>
+									<span class="font-bold" style="color: var(--status-success);">10%</span>
 								</div>
 								<div class="flex items-center justify-between">
 									<span>Status:</span>
-									<span class="font-bold text-green-600">Active</span>
+									<span class="font-bold" style="color: var(--status-success);">Active</span>
 								</div>
 							</div>
 						</div>
@@ -511,62 +630,77 @@
 							<div class="mb-2 flex items-center justify-center gap-2 md:justify-end">
 								<span class="text-2xl font-bold text-blue-600">Step 2</span>
 							</div>
-							<h3 class="mb-3 text-2xl font-bold text-gray-900">Share Your Code</h3>
-							<p class="mb-4 text-gray-600">
+							<h3
+								class="mb-3 text-2xl font-bold"
+								style="color: var(--text); font-family: var(--font-head);"
+							>
+								Share Your Code
+							</h3>
+							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
 								Share your affiliate code or referral link with friends, social media followers, or
 								customers. They get a discount, you earn commissions.
 							</p>
 							<ul class="space-y-2">
-								<li class="flex items-start gap-2 text-gray-700 md:justify-end">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Customers get 10% discount</span>
 								</li>
-								<li class="flex items-start gap-2 text-gray-700 md:justify-end">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Easy copy-paste sharing</span>
 								</li>
-								<li class="flex items-start gap-2 text-gray-700 md:justify-end">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Unique referral link provided</span>
 								</li>
 							</ul>
 						</div>
-						<div class="w-full rounded-xl bg-white p-6 shadow-lg md:w-80">
+						<div
+							class="w-full rounded-xl p-6 shadow-lg md:w-80"
+							style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+						>
 							<div class="mb-4">
-								<div class="mb-2 text-sm font-medium text-gray-700">Referral Link</div>
-								<div class="flex items-center gap-2 rounded-lg bg-gray-50 p-3">
-									<code class="flex-1 overflow-hidden text-ellipsis text-xs"
-										>fastaccs.vercel.app/?ref=JD001</code
+								<div class="mb-2 text-sm font-medium" style="color: var(--text);">
+									Referral Link
+								</div>
+								<div class="flex items-center gap-2 rounded-lg p-3" style="background: var(--bg);">
+									<code
+										class="flex-1 overflow-hidden text-xs text-ellipsis"
+										style="color: var(--text);">fastaccs.vercel.app/?ref=JD001</code
 									>
-									<Copy class="h-4 w-4 flex-shrink-0 cursor-pointer text-gray-400 hover:text-gray-700"
+									<Copy
+										class="h-4 w-4 flex-shrink-0 cursor-pointer"
+										style="color: var(--text-dim);"
 									/>
 								</div>
 							</div>
 							<div class="grid grid-cols-3 gap-2">
 								<button
-									class="rounded-lg border p-2 text-xs font-medium transition-colors hover:bg-gray-50"
+									class="rounded-lg p-2 text-xs font-medium transition-colors"
+									style="border: 1px solid var(--border); color: var(--text);"
 								>
 									WhatsApp
 								</button>
 								<button
-									class="rounded-lg border p-2 text-xs font-medium transition-colors hover:bg-gray-50"
+									class="rounded-lg p-2 text-xs font-medium transition-colors"
+									style="border: 1px solid var(--border); color: var(--text);"
 								>
 									Twitter
 								</button>
 								<button
-									class="rounded-lg border p-2 text-xs font-medium transition-colors hover:bg-gray-50"
+									class="rounded-lg p-2 text-xs font-medium transition-colors"
+									style="border: 1px solid var(--border); color: var(--text);"
 								>
-									Copy
+									Facebook
 								</button>
 							</div>
 						</div>
 					</div>
-
 					<div class="flex justify-center">
 						<div class="h-12 w-0.5 bg-gradient-to-b from-blue-600 to-green-600"></div>
 					</div>
 
-					<!-- Step 3: Earn Commissions -->
+					<!-- Step 3: Track Earnings -->
 					<div class="flex flex-col items-center gap-8 md:flex-row">
 						<div class="flex-shrink-0">
 							<div
@@ -579,22 +713,27 @@
 							<div class="mb-2 flex items-center justify-center gap-2 md:justify-start">
 								<span class="text-2xl font-bold text-green-600">Step 3</span>
 							</div>
-							<h3 class="mb-3 text-2xl font-bold text-gray-900">Track Your Earnings</h3>
-							<p class="mb-4 text-gray-600">
+							<h3
+								class="mb-3 text-2xl font-bold"
+								style="color: var(--text); font-family: var(--font-head);"
+							>
+								Track Your Earnings
+							</h3>
+							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
 								Every time someone uses your code, you earn 10% commission. Track all referrals,
 								sales, and commissions in your affiliate dashboard.
 							</p>
 							<ul class="space-y-2">
-								<li class="flex items-start gap-2 text-gray-700">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>10% commission on every order</span>
 								</li>
-								<li class="flex items-start gap-2 text-gray-700">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Real-time commission tracking</span>
 								</li>
-								<li class="flex items-start gap-2 text-gray-700">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0 text-green-600" />
+								<li class="flex items-start gap-2" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Monthly performance reports</span>
 								</li>
 							</ul>
@@ -636,45 +775,82 @@
 		</section>
 
 		<!-- Affiliate Benefits -->
-		<section class="bg-white px-4 py-16">
+		<section class="px-4 py-16" style="background: var(--bg-elev-1);">
 			<div class="mx-auto max-w-6xl">
-				<h2 class="mb-12 text-center text-3xl font-bold text-gray-900">Affiliate Benefits</h2>
+				<h2
+					class="mb-12 text-center text-3xl font-bold"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
+					Affiliate Benefits
+				</h2>
 				<div class="grid gap-8 md:grid-cols-4">
 					<div class="text-center">
 						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-purple-100"
+							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
+							style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 						>
-							<DollarSign class="h-8 w-8 text-purple-600" />
+							<DollarSign class="h-8 w-8" style="color: var(--primary);" />
 						</div>
-						<h3 class="mb-2 text-lg font-semibold text-gray-900">10% Commission</h3>
-						<p class="text-sm text-gray-600">Earn on every purchase made with your code</p>
+						<h3
+							class="mb-2 text-lg font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							10% Commission
+						</h3>
+						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
+							Earn on every purchase made with your code
+						</p>
 					</div>
 					<div class="text-center">
 						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100"
+							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
+							style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 						>
-							<Clock class="h-8 w-8 text-blue-600" />
+							<Clock class="h-8 w-8" style="color: var(--fa-blue-500);" />
 						</div>
-						<h3 class="mb-2 text-lg font-semibold text-gray-900">Instant Tracking</h3>
-						<p class="text-sm text-gray-600">Real-time updates on referrals and commissions</p>
+						<h3
+							class="mb-2 text-lg font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							Instant Tracking
+						</h3>
+						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
+							Real-time updates on referrals and commissions
+						</p>
 					</div>
 					<div class="text-center">
 						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100"
+							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
+							style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 						>
-							<TrendingUp class="h-8 w-8 text-green-600" />
+							<TrendingUp class="h-8 w-8" style="color: var(--fa-lime-700);" />
 						</div>
-						<h3 class="mb-2 text-lg font-semibold text-gray-900">No Limits</h3>
-						<p class="text-sm text-gray-600">Unlimited earning potential, refer as many as you can</p>
+						<h3
+							class="mb-2 text-lg font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							No Limits
+						</h3>
+						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
+							Unlimited earning potential, refer as many as you can
+						</p>
 					</div>
 					<div class="text-center">
 						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-orange-100"
+							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
+							style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 						>
-							<Lock class="h-8 w-8 text-orange-600" />
+							<Lock class="h-8 w-8" style="color: var(--status-warning);" />
 						</div>
-						<h3 class="mb-2 text-lg font-semibold text-gray-900">Free to Join</h3>
-						<p class="text-sm text-gray-600">No sign-up fees or hidden charges</p>
+						<h3
+							class="mb-2 text-lg font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							Free to Join
+						</h3>
+						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
+							No sign-up fees or hidden charges
+						</p>
 					</div>
 				</div>
 			</div>
@@ -682,75 +858,98 @@
 	{/if}
 
 	<!-- FAQ Section -->
-	<section class="bg-gray-100 px-4 py-16">
+	<section class="px-4 py-16" style="background: var(--bg-elev-2);">
 		<div class="mx-auto max-w-4xl">
-			<h2 class="mb-12 text-center text-3xl font-bold text-gray-900">
+			<h2
+				class="mb-12 text-center text-3xl font-bold"
+				style="color: var(--text); font-family: var(--font-head);"
+			>
 				Frequently Asked Questions
 			</h2>
 			<div class="space-y-6">
-				<details class="group rounded-lg bg-white p-6 shadow">
+				<details
+					class="group rounded-lg p-6 shadow"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
 					<summary
-						class="flex cursor-pointer items-center justify-between font-semibold text-gray-900"
+						class="flex cursor-pointer items-center justify-between font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
 					>
 						How long does delivery take?
-						<span class="ml-4 text-gray-400">+</span>
+						<span class="ml-4" style="color: var(--text-dim);">+</span>
 					</summary>
-					<p class="mt-4 text-gray-600">
-						Delivery is instant! Once your payment is confirmed, accounts are automatically allocated
-						and delivered to your dashboard within seconds. You'll also receive an email notification
-						with a link to access your purchases.
+					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
+						Delivery is instant! Once your payment is confirmed, accounts are automatically
+						allocated and delivered to your dashboard within seconds. You'll also receive an email
+						notification with a link to access your purchases.
 					</p>
 				</details>
 
-				<details class="group rounded-lg bg-white p-6 shadow">
+				<details
+					class="group rounded-lg p-6 shadow"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
 					<summary
-						class="flex cursor-pointer items-center justify-between font-semibold text-gray-900"
+						class="flex cursor-pointer items-center justify-between font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
 					>
 						What payment methods do you accept?
-						<span class="ml-4 text-gray-400">+</span>
+						<span class="ml-4" style="color: var(--text-dim);">+</span>
 					</summary>
-					<p class="mt-4 text-gray-600">
+					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
 						We use Korapay for secure payments. You can fund your wallet using debit/credit cards,
 						bank transfers, or mobile money. All transactions are encrypted and secure.
 					</p>
 				</details>
 
-				<details class="group rounded-lg bg-white p-6 shadow">
+				<details
+					class="group rounded-lg p-6 shadow"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
 					<summary
-						class="flex cursor-pointer items-center justify-between font-semibold text-gray-900"
+						class="flex cursor-pointer items-center justify-between font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
 					>
 						How do affiliate commissions work?
-						<span class="ml-4 text-gray-400">+</span>
+						<span class="ml-4" style="color: var(--text-dim);">+</span>
 					</summary>
-					<p class="mt-4 text-gray-600">
+					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
 						When you become an affiliate, you get a unique code (e.g., "JD001"). When someone uses
-						your code at checkout, they get a 10% discount and you earn 10% commission on their order
-						total. Commissions are tracked automatically in your dashboard.
+						your code at checkout, they get a 10% discount and you earn 10% commission on their
+						order total. Commissions are tracked automatically in your dashboard.
 					</p>
 				</details>
 
-				<details class="group rounded-lg bg-white p-6 shadow">
+				<details
+					class="group rounded-lg p-6 shadow"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
 					<summary
-						class="flex cursor-pointer items-center justify-between font-semibold text-gray-900"
+						class="flex cursor-pointer items-center justify-between font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
 					>
 						Can I get a refund if I'm not satisfied?
-						<span class="ml-4 text-gray-400">+</span>
+						<span class="ml-4" style="color: var(--text-dim);">+</span>
 					</summary>
-					<p class="mt-4 text-gray-600">
+					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
 						All accounts are verified before delivery. If you receive an account that doesn't match
 						the description or has issues, contact our support team immediately for a resolution or
 						refund.
 					</p>
 				</details>
 
-				<details class="group rounded-lg bg-white p-6 shadow">
+				<details
+					class="group rounded-lg p-6 shadow"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
 					<summary
-						class="flex cursor-pointer items-center justify-between font-semibold text-gray-900"
+						class="flex cursor-pointer items-center justify-between font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
 					>
 						Is my wallet balance safe?
-						<span class="ml-4 text-gray-400">+</span>
+						<span class="ml-4" style="color: var(--text-dim);">+</span>
 					</summary>
-					<p class="mt-4 text-gray-600">
+					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
 						Yes! Your wallet balance is stored securely in our database. All transactions are logged
 						and you can view your complete transaction history in the wallet tab of your dashboard.
 					</p>
@@ -760,7 +959,7 @@
 	</section>
 
 	<!-- Final CTA -->
-	<section class="bg-gradient-primary px-4 py-16 text-white">
+	<section class="px-4 py-16 text-white" style="background: var(--btn-primary-gradient);">
 		<div class="mx-auto max-w-4xl text-center">
 			<h2 class="mb-4 text-3xl font-bold md:text-4xl">Ready to Get Started?</h2>
 			<p class="mb-8 text-lg text-green-100">
@@ -769,13 +968,15 @@
 			<div class="flex flex-col items-center justify-center gap-4 sm:flex-row">
 				<button
 					onclick={() => goto('/auth/login')}
-					class="w-full rounded-full bg-white px-8 py-4 font-semibold text-blue-600 shadow-lg transition-transform hover:scale-105 sm:w-auto"
+					class="w-full rounded-full px-8 py-4 font-semibold shadow-lg transition-transform hover:scale-105 sm:w-auto"
+					style="background: var(--bg-elev-1); color: var(--brand-blue); font-family: var(--font-head);"
 				>
 					Create Free Account
 				</button>
 				<button
 					onclick={() => goto('/platforms')}
-					class="w-full rounded-full border-2 border-white px-8 py-4 font-semibold text-white transition-all hover:bg-white hover:text-blue-600 sm:w-auto"
+					class="w-full rounded-full px-8 py-4 font-semibold text-white transition-all sm:w-auto"
+					style="border: 2px solid white; background: transparent; font-family: var(--font-head);"
 				>
 					Browse Accounts
 				</button>

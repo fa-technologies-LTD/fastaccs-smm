@@ -25,18 +25,21 @@
 <div class="space-y-6">
 	<!-- Header -->
 	<div>
-		<h1 class="text-2xl font-bold text-gray-900">Analytics Dashboard</h1>
-		<p class="mt-1 text-gray-600">Track your business performance and metrics</p>
+		<h1 class="text-2xl font-bold" style="color: var(--text)">Analytics Dashboard</h1>
+		<p class="mt-1" style="color: var(--text-muted)">Track your business performance and metrics</p>
 	</div>
 
 	<!-- Key Metrics -->
 	<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
 		<!-- Total Revenue -->
-		<div class="group rounded-lg border border-gray-200 bg-white p-6">
+		<div
+			class="group rounded-lg p-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
-					<p class="text-sm font-medium text-gray-600">Total Revenue</p>
-					<p class="mt-2 text-3xl font-bold text-gray-900">
+					<p class="text-sm font-medium" style="color: var(--text-muted)">Total Revenue</p>
+					<p class="mt-2 text-3xl font-bold" style="color: var(--text)">
 						{formatPrice(stats.totalRevenue || 0)}
 					</p>
 					{#if stats.revenueChange !== undefined}
@@ -52,7 +55,7 @@
 									<span class="text-red-600">{stats.revenueChange.toFixed(1)}%</span>
 								</div>
 							{/if}
-							<span class="text-gray-500">vs last month</span>
+							<span style="color: var(--text-muted)">vs last month</span>
 						</div>
 					{/if}
 				</div>
@@ -63,11 +66,14 @@
 		</div>
 
 		<!-- Total Orders -->
-		<div class="group rounded-lg border border-gray-200 bg-white p-6">
+		<div
+			class="group rounded-lg p-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
-					<p class="text-sm font-medium text-gray-600">Total Orders</p>
-					<p class="mt-2 text-3xl font-bold text-gray-900">{stats.totalOrders || 0}</p>
+					<p class="text-sm font-medium" style="color: var(--text-muted)">Total Orders</p>
+					<p class="mt-2 text-3xl font-bold" style="color: var(--text)">{stats.totalOrders || 0}</p>
 					{#if stats.ordersChange !== undefined}
 						<div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
 							{#if stats.ordersChange >= 0}
@@ -81,7 +87,7 @@
 									<span class="text-red-600">{stats.ordersChange.toFixed(1)}%</span>
 								</div>
 							{/if}
-							<span class="text-gray-500">vs last month</span>
+							<span style="color: var(--text-muted)">vs last month</span>
 						</div>
 					{/if}
 				</div>
@@ -92,11 +98,16 @@
 		</div>
 
 		<!-- Total Customers -->
-		<div class="group rounded-lg border border-gray-200 bg-white p-6">
+		<div
+			class="group rounded-lg p-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
-					<p class="text-sm font-medium text-gray-600">Total Customers</p>
-					<p class="mt-2 text-3xl font-bold text-gray-900">{stats.totalCustomers || 0}</p>
+					<p class="text-sm font-medium" style="color: var(--text-muted)">Total Customers</p>
+					<p class="mt-2 text-3xl font-bold" style="color: var(--text)">
+						{stats.totalCustomers || 0}
+					</p>
 					{#if stats.customersChange !== undefined}
 						<div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
 							{#if stats.customersChange >= 0}
@@ -110,7 +121,7 @@
 									<span class="text-red-600">{stats.customersChange.toFixed(1)}%</span>
 								</div>
 							{/if}
-							<span class="text-gray-500">vs last month</span>
+							<span style="color: var(--text-muted)">vs last month</span>
 						</div>
 					{/if}
 				</div>
@@ -121,11 +132,16 @@
 		</div>
 
 		<!-- Accounts Sold -->
-		<div class="group rounded-lg border border-gray-200 bg-white p-6">
+		<div
+			class="group rounded-lg p-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
-					<p class="text-sm font-medium text-gray-600">Accounts Sold</p>
-					<p class="mt-2 text-3xl font-bold text-gray-900">{stats.accountsSold || 0}</p>
+					<p class="text-sm font-medium" style="color: var(--text-muted)">Accounts Sold</p>
+					<p class="mt-2 text-3xl font-bold" style="color: var(--text)">
+						{stats.accountsSold || 0}
+					</p>
 					{#if stats.accountsChange !== undefined}
 						<div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
 							{#if stats.accountsChange >= 0}
@@ -139,7 +155,7 @@
 									<span class="text-red-600">{stats.accountsChange.toFixed(1)}%</span>
 								</div>
 							{/if}
-							<span class="text-gray-500">vs last month</span>
+							<span style="color: var(--text-muted)">vs last month</span>
 						</div>
 					{/if}
 				</div>
@@ -153,17 +169,20 @@
 	<!-- Secondary Metrics -->
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 		<!-- Wallet Stats -->
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
-			<h2 class="mb-4 text-lg font-semibold text-gray-900">Wallet Statistics</h2>
+		<div
+			class="rounded-lg p-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
+			<h2 class="mb-4 text-lg font-semibold" style="color: var(--text)">Wallet Statistics</h2>
 			<div class="space-y-4">
 				<div class="flex items-center justify-between">
-					<span class="text-gray-600">Total Wallet Balance</span>
-					<span class="font-semibold text-gray-900">
+					<span style="color: var(--text-muted)">Total Wallet Balance</span>
+					<span class="font-semibold" style="color: var(--text)">
 						{formatPrice(stats.totalWalletBalance || 0)}
 					</span>
 				</div>
 				<div class="flex items-center justify-between">
-					<span class="text-gray-600">Total Deposits</span>
+					<span style="color: var(--text-muted)">Total Deposits</span>
 					<span class="font-semibold text-green-600">
 						{formatPrice(stats.totalDeposits || 0)}
 					</span>

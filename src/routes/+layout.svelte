@@ -47,7 +47,7 @@
 
 <PageLoadingBar />
 
-<div class="min-h-screen bg-white">
+<div class="min-h-screen" style="background: linear-gradient(180deg, #07090C 0%, #050607 100%);">
 	{@render children?.()}
 
 	<ToastContainer />

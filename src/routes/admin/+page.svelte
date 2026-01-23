@@ -150,13 +150,15 @@
 	<title>Admin Dashboard - FastAccs</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gray-50 p-6">
+<div class="min-h-screen p-6">
 	<div class="mx-auto max-w-7xl">
 		<!-- Enhanced Header -->
 		<div class="mb-6 sm:mb-8">
 			<div class="mb-4 flex flex-col gap-4 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
 				<div>
-					<h1 class="text-xl font-bold text-gray-600 sm:text-2xl">Overview of your FastAccs</h1>
+					<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
+						Overview of your FastAccs
+					</h1>
 					{#if !loading}
 						<span class="mt-1 block text-xs text-gray-500 sm:text-sm">
 							Last updated: {formatRelativeTime(lastUpdated)}
@@ -168,9 +170,12 @@
 					<!-- Auto-refresh toggle -->
 					<button
 						onclick={toggleAutoRefresh}
-						class="flex cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all hover:scale-[.95] active:scale-90 sm:px-4 {autoRefresh
+						class="flex cursor-pointer items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm transition-all hover:scale-[.95] active:scale-90 sm:px-4 {autoRefresh
 							? 'border-green-200 bg-green-50 text-green-700'
-							: 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'}"
+							: 'hover:opacity-80'}"
+						style={!autoRefresh
+							? 'background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text)'
+							: ''}
 					>
 						<Activity class="h-4 w-4" />
 						<span class="hidden sm:inline">Auto-refresh</span>
@@ -182,7 +187,8 @@
 					<button
 						onclick={refreshData}
 						disabled={loading}
-						class="flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white transition-all hover:scale-[.95] hover:bg-blue-700 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:px-4"
+						class="flex cursor-pointer items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm text-white transition-all hover:scale-[.95] active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:px-4"
+						style="background: var(--btn-primary-gradient)"
 					>
 						<RefreshCw class="h-4 w-4 {loading ? 'animate-spin' : ''}" />
 						Refresh
@@ -213,7 +219,10 @@
 		<!-- Main Statistics Grid -->
 		<div class=" mb-6 grid grid-cols-1 gap-4 sm:mb-8 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
 			<!-- Total Orders -->
-			<div class="group rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
+			<div
+				class="group rounded-lg p-4 sm:p-6"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+			>
 				<div class="flex items-center">
 					<div class="rounded-lg bg-blue-50 p-2 sm:p-3">
 						<ShoppingCart
@@ -221,10 +230,15 @@
 						/>
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
-						<p class="text-xs font-medium text-gray-500 sm:text-sm">Total Orders</p>
-						<p class="text-xl font-bold text-gray-900 sm:text-2xl">{orderStats.total_orders}</p>
+						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+							Total Orders
+						</p>
+						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
+							{orderStats.total_orders}
+						</p>
 						<div class="mt-1 flex items-center">
-							<span class="text-xs text-gray-600 sm:text-sm">Today: {orderStats.todays_orders}</span
+							<span class="text-xs sm:text-sm" style="color: var(--text-muted)"
+								>Today: {orderStats.todays_orders}</span
 							>
 						</div>
 					</div>
@@ -237,7 +251,10 @@
 			</AdminDashStatsCard> -->
 
 			<!-- Total Revenue -->
-			<div class="group rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
+			<div
+				class="group rounded-lg p-4 sm:p-6"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+			>
 				<div class="flex items-center">
 					<div class="rounded-lg bg-green-50 p-2 sm:p-3">
 						<DollarSign
@@ -245,12 +262,14 @@
 						/>
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
-						<p class="text-xs font-medium text-gray-500 sm:text-sm">Total Revenue</p>
-						<p class="text-xl font-bold text-gray-900 sm:text-2xl">
+						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+							Total Revenue
+						</p>
+						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
 							{formatPrice(orderStats.total_revenue)}
 						</p>
 						<div class="mt-1 flex items-center">
-							<span class="text-xs text-gray-600 sm:text-sm"
+							<span class="text-xs sm:text-sm" style="color: var(--text-muted)"
 								>Today: {formatPrice(orderStats.todays_revenue)}</span
 							>
 						</div>
@@ -259,7 +278,10 @@
 			</div>
 
 			<!-- Inventory Items -->
-			<div class="group rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
+			<div
+				class="group rounded-lg p-4 sm:p-6"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+			>
 				<div class="flex items-center">
 					<div class="rounded-lg bg-purple-50 p-2 sm:p-3">
 						<Package
@@ -267,12 +289,14 @@
 						/>
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
-						<p class="text-xs font-medium text-gray-500 sm:text-sm">Total Inventory</p>
-						<p class="text-xl font-bold text-gray-900 sm:text-2xl">
+						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+							Total Inventory
+						</p>
+						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
 							{inventoryStats.total_available}
 						</p>
 						<div class="mt-1 flex items-center">
-							<span class="text-xs text-gray-600 sm:text-sm"
+							<span class="text-xs sm:text-sm" style="color: var(--text-muted)"
 								>Reserved: {inventoryStats.total_reserved}</span
 							>
 						</div>
@@ -281,7 +305,10 @@
 			</div>
 
 			<!-- Stock Issues -->
-			<div class="group rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
+			<div
+				class="group rounded-lg p-4 sm:p-6"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+			>
 				<div class="flex items-center">
 					<div class="rounded-lg bg-orange-50 p-2 sm:p-3">
 						<AlertCircle
@@ -289,8 +316,10 @@
 						/>
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
-						<p class="text-xs font-medium text-gray-500 sm:text-sm">Stock Issues</p>
-						<p class="text-xl font-bold text-gray-900 sm:text-2xl">
+						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+							Stock Issues
+						</p>
+						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
 							{inventoryStats.accountsInOutOfStockTiers || 0}
 						</p>
 						<div class="mt-1 flex items-center">
@@ -311,13 +340,16 @@
 		<!-- System Overview -->
 		<div class="mb-6 grid grid-cols-1 gap-4 sm:mb-8 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
 			<!-- Platform Coverage -->
-			<div class="group rounded-lg border border-gray-200 bg-white p-6">
+			<div
+				class="group rounded-lg p-6"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+			>
 				<div class="flex items-center justify-between">
 					<div>
-						<p class="text-sm font-medium text-gray-500">Platforms</p>
-						<p class="text-2xl font-bold text-gray-900">{inventoryStats.platforms}</p>
+						<p class="text-sm font-medium" style="color: var(--text-muted)">Platforms</p>
+						<p class="text-2xl font-bold" style="color: var(--text)">{inventoryStats.platforms}</p>
 						<div class="mt-1 flex items-center">
-							<span class="text-sm text-gray-600">Active platforms</span>
+							<span class="text-sm" style="color: var(--text-muted)">Active platforms</span>
 						</div>
 					</div>
 					<div class="rounded-lg bg-indigo-50 p-3">
@@ -329,13 +361,18 @@
 			</div>
 
 			<!-- Total Tiers -->
-			<div class="group rounded-lg border border-gray-200 bg-white p-6">
+			<div
+				class="group rounded-lg p-6"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+			>
 				<div class="flex items-center justify-between">
 					<div>
-						<p class="text-sm font-medium text-gray-500">Product Tiers</p>
-						<p class="text-2xl font-bold text-gray-900">{inventoryStats.total_tiers}</p>
+						<p class="text-sm font-medium" style="color: var(--text-muted)">Product Tiers</p>
+						<p class="text-2xl font-bold" style="color: var(--text)">
+							{inventoryStats.total_tiers}
+						</p>
 						<div class="mt-1 flex items-center">
-							<span class="text-sm text-gray-600">Across all platforms</span>
+							<span class="text-sm" style="color: var(--text-muted)">Across all platforms</span>
 						</div>
 					</div>
 					<div class="rounded-lg bg-purple-50 p-3">
@@ -347,11 +384,14 @@
 			</div>
 
 			<!-- Success Rate -->
-			<div class="group rounded-lg border border-gray-200 bg-white p-6">
+			<div
+				class="group rounded-lg p-6"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+			>
 				<div class="flex items-center justify-between">
 					<div>
-						<p class="text-sm font-medium text-gray-500">Success Rate</p>
-						<p class="text-2xl font-bold text-gray-900">
+						<p class="text-sm font-medium" style="color: var(--text-muted)">Success Rate</p>
+						<p class="text-2xl font-bold" style="color: var(--text)">
 							{orderStats.total_orders > 0
 								? ((orderStats.completed_orders / orderStats.total_orders) * 100).toFixed(1)
 								: 0}%
@@ -374,23 +414,26 @@
 		<!-- Quick Actions & Navigation -->
 		<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 			<!-- Management Actions -->
-			<div class="rounded-lg border border-gray-200 bg-white">
-				<div class="border-b border-gray-200 p-6">
-					<h3 class="text-lg font-semibold text-gray-900">Management Center</h3>
-					<p class="mt-1 text-sm text-gray-600">Access key administrative functions</p>
+			<div class="rounded-lg" style="background: var(--bg-elev-1); border: 1px solid var(--border)">
+				<div class="p-6" style="border-bottom: 1px solid var(--border)">
+					<h3 class="text-lg font-semibold" style="color: var(--text)">Management Center</h3>
+					<p class="mt-1 text-sm" style="color: var(--text-muted)">
+						Access key administrative functions
+					</p>
 				</div>
 				<div class="p-6">
 					<div class="grid grid-cols-1 gap-3">
 						<a
 							href="/admin/orders"
 							data-sveltekit-preload-data="hover"
-							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-all hover:scale-95 hover:border-blue-300 hover:bg-blue-50"
+							class="group flex items-center justify-between rounded-lg p-4 transition-all hover:scale-95"
+							style="border: 1px solid var(--border)"
 						>
 							<div class="flex items-center">
 								<ShoppingCart class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
 								<div>
-									<p class="font-medium text-gray-900">Order Management</p>
-									<p class="text-sm text-gray-500">Process and track orders</p>
+									<p class="font-medium" style="color: var(--text)">Order Management</p>
+									<p class="text-sm" style="color: var(--text-muted)">Process and track orders</p>
 								</div>
 							</div>
 							<ArrowUpRight
@@ -401,13 +444,14 @@
 						<a
 							href="/admin/inventory"
 							data-sveltekit-preload-data="hover"
-							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-all hover:scale-95 hover:border-blue-300 hover:bg-blue-50"
+							class="group flex items-center justify-between rounded-lg p-4 transition-all hover:scale-95"
+							style="border: 1px solid var(--border)"
 						>
 							<div class="flex items-center">
 								<Package class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
 								<div>
-									<p class="font-medium text-gray-900">Inventory Dashboard</p>
-									<p class="text-sm text-gray-500">Monitor stock levels</p>
+									<p class="font-medium" style="color: var(--text)">Inventory Dashboard</p>
+									<p class="text-sm" style="color: var(--text-muted)">Monitor stock levels</p>
 								</div>
 							</div>
 							<ArrowUpRight
@@ -418,13 +462,14 @@
 						<a
 							href="/admin/platforms"
 							data-sveltekit-preload-data="hover"
-							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-all hover:scale-95 hover:border-blue-300 hover:bg-blue-50"
+							class="group flex items-center justify-between rounded-lg p-4 transition-all hover:scale-95"
+							style="border: 1px solid var(--border)"
 						>
 							<div class="flex items-center">
 								<Users class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
 								<div>
-									<p class="font-medium text-gray-900">Platform Management</p>
-									<p class="text-sm text-gray-500">Manage platforms & tiers</p>
+									<p class="font-medium" style="color: var(--text)">Platform Management</p>
+									<p class="text-sm" style="color: var(--text-muted)">Manage platforms & tiers</p>
 								</div>
 							</div>
 							<ArrowUpRight
@@ -435,13 +480,14 @@
 						<a
 							href="/admin/batches"
 							data-sveltekit-preload-data="hover"
-							class="group flex items-center justify-between rounded-lg border border-gray-200 p-4 transition-all hover:scale-95 hover:border-blue-300 hover:bg-blue-50"
+							class="group flex items-center justify-between rounded-lg p-4 transition-all hover:scale-95"
+							style="border: 1px solid var(--border)"
 						>
 							<div class="flex items-center">
 								<Activity class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
 								<div>
-									<p class="font-medium text-gray-900">Batch Operations</p>
-									<p class="text-sm text-gray-500">Bulk import accounts</p>
+									<p class="font-medium" style="color: var(--text)">Batch Operations</p>
+									<p class="text-sm" style="color: var(--text-muted)">Bulk import accounts</p>
 								</div>
 							</div>
 							<ArrowUpRight
@@ -453,17 +499,19 @@
 			</div>
 
 			<!-- System Status -->
-			<div class="rounded-lg border border-gray-200 bg-white">
-				<div class="border-b border-gray-200 p-6">
-					<h3 class="text-lg font-semibold text-gray-900">System Status</h3>
-					<p class="mt-1 text-sm text-gray-600">Current system health overview</p>
+			<div class="rounded-lg" style="background: var(--bg-elev-1); border: 1px solid var(--border)">
+				<div class="p-6" style="border-bottom: 1px solid var(--border)">
+					<h3 class="text-lg font-semibold" style="color: var(--text)">System Status</h3>
+					<p class="mt-1 text-sm" style="color: var(--text-muted)">
+						Current system health overview
+					</p>
 				</div>
 				<div class="space-y-4 p-6">
 					<!-- Order Processing Status -->
 					<div class="flex items-center justify-between">
 						<div class="flex items-center">
 							<div class="mr-3 h-3 w-3 rounded-full bg-green-500"></div>
-							<span class="text-sm font-medium text-gray-900">Order Processing</span>
+							<span class="text-sm font-medium" style="color: var(--text)">Order Processing</span>
 						</div>
 						<span class="text-sm text-green-600">Operational</span>
 					</div>
@@ -478,7 +526,7 @@
 									? 'bg-yellow-500'
 									: 'bg-green-500'} mr-3"
 							></div>
-							<span class="text-sm font-medium text-gray-900">Inventory System</span>
+							<span class="text-sm font-medium" style="color: var(--text)">Inventory System</span>
 						</div>
 						<span
 							class="text-sm {inventoryStats.low_stock + inventoryStats.out_of_stock > 0
@@ -495,16 +543,16 @@
 					<div class="flex items-center justify-between">
 						<div class="flex items-center">
 							<div class="mr-3 h-3 w-3 rounded-full bg-green-500"></div>
-							<span class="text-sm font-medium text-gray-900">Database</span>
+							<span class="text-sm font-medium" style="color: var(--text)">Database</span>
 						</div>
 						<span class="text-sm text-green-600">Connected</span>
 					</div>
 
 					<!-- Last Update -->
-					<div class="border-t border-gray-200 pt-4">
+					<div style="border-top: 1px solid var(--border)" class="pt-4">
 						<div class="flex items-center justify-between text-sm">
-							<span class="text-gray-500">Last system update:</span>
-							<span class="text-gray-900">{formatRelativeTime(lastUpdated)}</span>
+							<span style="color: var(--text-muted)">Last system update:</span>
+							<span style="color: var(--text)">{formatRelativeTime(lastUpdated)}</span>
 						</div>
 					</div>
 				</div>

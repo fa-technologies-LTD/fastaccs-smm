@@ -46,33 +46,46 @@
 
 <Navigation />
 
-<main class="bg-gradient-primary flex min-h-screen items-center justify-center px-4 py-6 sm:py-12">
+<main
+	style="background: var(--bg);"
+	class="flex min-h-screen items-center justify-center px-4 py-6 sm:py-12"
+>
 	<div class="w-full max-w-md">
 		<!-- Back Button -->
 		<button
 			onclick={goBack}
-			class="hover:text-primary-accent active:text-primary-accent-bright mb-6 flex items-center gap-2 text-white transition-colors"
+			style="color: var(--primary);"
+			class="mb-6 flex items-center gap-2 transition-colors hover:opacity-80"
 		>
 			<ArrowLeft size={20} />
 			<span class="text-sm sm:text-base">Back to Home</span>
 		</button>
 
 		<!-- Login Card -->
-		<div class="overflow-hidden rounded-2xl bg-white shadow-xl">
+		<div
+			style="background: var(--bg-elev-1); border: 1px solid var(--border); box-shadow: var(--shadow-1);"
+			class="overflow-hidden rounded-2xl"
+		>
 			<!-- Header -->
-			<div class="bg-neutral-dark px-6 py-6 text-center text-white sm:px-8 sm:py-8">
+			<div
+				style="background: var(--bg-elev-2); border-bottom: 1px solid var(--border); color: var(--text-primary); font-family: var(--font-heading);"
+				class="px-6 py-6 text-center sm:px-8 sm:py-8"
+			>
 				<h1 class="mb-2 text-2xl font-bold sm:text-3xl">Account Required</h1>
 			</div>
 
 			<!-- Content -->
 			<div class="px-6 py-6 sm:px-8 sm:py-8">
 				{#if error}
-					<div class="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
-						<div class="flex items-center gap-2 text-red-800">
+					<div
+						style="background: var(--status-error-bg); border: 1px solid var(--status-error-border); color: var(--status-error);"
+						class="mb-6 rounded-lg p-4"
+					>
+						<div class="flex items-center gap-2">
 							<Lock size={16} />
-							<span class="text-sm font-medium">Error</span>
+							<span style="font-family: var(--font-body);" class="text-sm font-medium">Error</span>
 						</div>
-						<p class="mt-1 text-sm text-red-700">{error}</p>
+						<p style="font-family: var(--font-body);" class="mt-1 text-sm">{error}</p>
 					</div>
 				{/if}
 
@@ -80,7 +93,8 @@
 				<div class="space-y-4">
 					<a
 						href="/auth/google?redirectTo={encodeURIComponent(redirectTo)}"
-						class="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-6 py-3 text-gray-700 transition-colors hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+						style="background: var(--btn-primary-gradient); color: var(--text-primary); border: 1px solid var(--border); font-family: var(--font-body);"
+						class="flex w-full items-center justify-center gap-3 rounded-lg px-6 py-3 transition-all hover:opacity-90 focus:ring-2 focus:ring-offset-2 focus:outline-none"
 					>
 						<svg class="h-5 w-5" viewBox="0 0 24 24">
 							<path
@@ -106,7 +120,8 @@
 					<div class="text-center">
 						<button
 							onclick={goBack}
-							class="text-sm text-gray-500 transition-colors hover:text-gray-700 active:scale-95"
+							style="color: var(--text-muted); font-family: var(--font-body);"
+							class="text-sm transition-colors hover:opacity-80 active:scale-95"
 						>
 							← Back to browsing
 						</button>
@@ -115,16 +130,25 @@
 
 				<!-- Features -->
 				<div class="mt-6 space-y-3 sm:mt-8">
-					<div class="flex items-center gap-3 text-sm text-gray-600">
-						<div class="bg-secondary h-2 w-2 rounded-full"></div>
+					<div
+						style="color: var(--text-muted); font-family: var(--font-body);"
+						class="flex items-center gap-3 text-sm"
+					>
+						<div style="background: var(--primary);" class="h-2 w-2 rounded-full"></div>
 						<span>Browse all available products</span>
 					</div>
-					<div class="flex items-center gap-3 text-sm text-gray-600">
-						<div class="bg-secondary h-2 w-2 rounded-full"></div>
+					<div
+						style="color: var(--text-muted); font-family: var(--font-body);"
+						class="flex items-center gap-3 text-sm"
+					>
+						<div style="background: var(--primary);" class="h-2 w-2 rounded-full"></div>
 						<span>View detailed product information</span>
 					</div>
-					<div class="flex items-center gap-3 text-sm text-gray-600">
-						<div class="bg-secondary h-2 w-2 rounded-full"></div>
+					<div
+						style="color: var(--text-muted); font-family: var(--font-body);"
+						class="flex items-center gap-3 text-sm"
+					>
+						<div style="background: var(--primary);" class="h-2 w-2 rounded-full"></div>
 						<span>Contact support for purchases</span>
 					</div>
 				</div>
@@ -132,12 +156,17 @@
 		</div>
 
 		<!-- Security Notice -->
-		<div class="mt-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-			<div class="mb-2 flex items-center gap-2 text-green-600">
+		<div
+			style="background: var(--status-success-bg); border: 1px solid var(--status-success-border); box-shadow: var(--shadow-1);"
+			class="mt-6 rounded-xl p-4"
+		>
+			<div style="color: var(--status-success);" class="mb-2 flex items-center gap-2">
 				<Lock size={16} />
-				<span class="text-sm font-medium">Secure Authentication</span>
+				<span style="font-family: var(--font-body);" class="text-sm font-medium"
+					>Secure Authentication</span
+				>
 			</div>
-			<p class="text-xs text-gray-600">
+			<p style="color: var(--text-muted); font-family: var(--font-body);" class="text-xs">
 				Your data is protected with industry-standard encryption. We never store your password or
 				share your information.
 			</p>

@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import type { CartItemWithTier } from '$lib/types/cart';
 	import { formatPrice } from '$lib/helpers/utils';
+	import { getPlatformIcon } from '$lib/helpers/platformColors';
 
 	// Reactive state
 	const isOpen = $derived(cart.isOpen);
@@ -57,28 +58,38 @@
 {#if isOpen}
 	<!-- Backdrop -->
 	<button
-		class="fixed inset-0 z-40 bg-black/20 transition-opacity"
+		class="fixed inset-0 z-40 transition-opacity"
+		style="background: rgba(0, 0, 0, 0.6);"
 		onclick={closeCart}
 		aria-label="Close cart"
 	></button>
 
 	<!-- Cart Dropdown -->
 	<div class="fixed top-1/2 left-1/2 z-50 w-80 -translate-x-1/2 -translate-y-1/2 transform sm:w-96">
-		<div class="overflow-hidden rounded-lg bg-white shadow-xl ring-1 ring-black/5">
+		<div
+			class="overflow-hidden"
+			style="background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-2);"
+		>
 			<!-- Header -->
-			<div class="bg-gradient-primary flex items-center justify-between px-4 py-3 text-white">
+			<div
+				class="flex items-center justify-between"
+				style="background: var(--btn-primary-gradient); padding: var(--space-md) var(--space-lg); color: #04140C;"
+			>
 				<div class="flex items-center gap-2">
 					<ShoppingBag size={20} />
-					<h3 class="font-semibold">Shopping Cart</h3>
+					<h4 style="font-weight: 600; font-family: var(--font-head);">Shopping Cart</h4>
 					{#if itemCount > 0}
-						<span class="rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium">
+						<span
+							style="border-radius: var(--r-xs); background: rgba(0, 0, 0, 0.15); padding: 2px 8px; font-size: 0.75rem; font-weight: 500;"
+						>
 							{itemCount} item{itemCount > 1 ? 's' : ''}
 						</span>
 					{/if}
 				</div>
 				<button
 					onclick={closeCart}
-					class="rounded-full p-1 transition-colors hover:bg-white/20"
+					style="border-radius: 50%; padding: 4px; transition: background 0.2s;"
+					class="hover:bg-black/10"
 					aria-label="Close cart"
 				>
 					<X size={18} />
@@ -89,34 +100,54 @@
 			<div class="max-h-96 overflow-y-auto">
 				{#if error}
 					<!-- Error State -->
-					<div class="px-4 py-8 text-center">
+					<div style="padding: var(--space-2xl) var(--space-lg); text-align: center;">
 						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100"
+							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center"
+							style="border-radius: 50%; background: var(--status-error-bg); border: 2px solid var(--status-error-border);"
 						>
-							<X size={24} class="text-red-500" />
+							<X size={24} style="color: var(--status-error);" />
 						</div>
-						<h4 class="mb-2 font-medium text-gray-900">Cart Error</h4>
-						<p class="mb-4 text-sm text-gray-600">{error}</p>
+						<h4
+							style="margin-bottom: var(--space-xs); font-weight: 500; color: var(--text); font-family: var(--font-head);"
+						>
+							Cart Error
+						</h4>
+						<p
+							style="margin-bottom: var(--space-md); font-size: 0.875rem; color: var(--text-muted); font-family: var(--font-body);"
+						>
+							{error}
+						</p>
 						<button
 							onclick={() => cart.clear()}
-							class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-red-700 active:scale-95"
+							style="background: var(--status-error); border: none; border-radius: var(--r-sm); padding: var(--space-sm) var(--space-md); font-size: 0.875rem; font-weight: 500; color: white; transition: opacity 0.2s;"
+							class="hover:opacity-90 active:scale-95"
 						>
 							Clear Cart
 						</button>
 					</div>
 				{:else if itemCount === 0}
 					<!-- Empty Cart -->
-					<div class="px-4 py-8 text-center">
+					<div style="padding: var(--space-2xl) var(--space-lg); text-align: center;">
 						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100"
+							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center"
+							style="border-radius: 50%; background: var(--bg-elev-1); border: 2px solid var(--border);"
 						>
-							<ShoppingCart size={24} class="text-gray-400" />
+							<ShoppingCart size={24} style="color: var(--text-dim);" />
 						</div>
-						<h4 class="mb-2 font-medium text-gray-900">Your cart is empty</h4>
-						<p class="mb-4 text-sm text-gray-600">Browse our accounts to get started!</p>
+						<h4
+							style="margin-bottom: var(--space-xs); font-weight: 500; color: var(--text); font-family: var(--font-head);"
+						>
+							Your cart is empty
+						</h4>
+						<p
+							style="margin-bottom: var(--space-md); font-size: 0.875rem; color: var(--text-muted); font-family: var(--font-body);"
+						>
+							Browse our accounts to get started!
+						</p>
 						<button
 							onclick={continueShopping}
-							class="bg-primary hover:bg-primary-dark rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors"
+							class="btn-checkout"
+							style="display: inline-flex; align-items: center; justify-content: center;"
 						>
 							Browse Accounts
 						</button>
@@ -124,42 +155,73 @@
 				{:else}
 					<!-- Loading State -->
 					{#if loading}
-						<div class="flex items-center justify-center py-8">
-							<Loader size={24} class="animate-spin text-gray-400" />
-							<span class="ml-2 text-sm text-gray-600">Loading cart...</span>
+						<div class="flex items-center justify-center" style="padding: var(--space-2xl);">
+							<Loader size={24} class="animate-spin" style="color: var(--text-dim);" />
+							<span
+								style="margin-left: var(--space-xs); font-size: 0.875rem; color: var(--text-muted); font-family: var(--font-body);"
+								>Loading cart...</span
+							>
 						</div>
 					{:else}
 						<!-- Cart Items -->
-						<div class="divide-y divide-gray-100">
+						<div style="border-top: 1px solid var(--border);">
 							{#each cartItems as item}
-								<div class="flex items-center gap-3 p-4">
-									<!-- Item Image/Icon Placeholder -->
-									<div class="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
-										<ShoppingBag size={20} class="text-gray-500" />
+								{@const PlatformIcon = getPlatformIcon(item.tier.platformSlug)}
+								<div
+									class="flex items-center gap-3"
+									style="padding: var(--space-md); border-bottom: 1px solid var(--border);"
+								>
+									<!-- Platform Icon with Gradient Background -->
+									<div
+										class="flex h-12 w-12 flex-shrink-0 items-center justify-center bg-gradient-to-br {item
+											.tier.platformSlug === 'instagram'
+											? 'from-pink-500 to-purple-600'
+											: item.tier.platformSlug === 'tiktok'
+												? 'from-black to-gray-800'
+												: item.tier.platformSlug === 'facebook'
+													? 'from-blue-600 to-blue-700'
+													: item.tier.platformSlug === 'twitter'
+														? 'from-blue-400 to-blue-500'
+														: 'from-gray-500 to-gray-600'}"
+										style="border-radius: var(--r-sm); box-shadow: 0 2px 8px rgba(0,0,0,0.2);"
+									>
+										<PlatformIcon size={24} class="text-white" />
 									</div>
 
 									<!-- Item Details -->
 									<div class="min-w-0 flex-1">
-										<h4 class="truncate text-sm font-medium text-gray-900">
+										<h4
+											class="truncate"
+											style="font-size: 0.875rem; font-weight: 500; color: var(--text); font-family: var(--font-body);"
+										>
 											{item.tier.name}
 										</h4>
-										<p class="text-xs text-gray-500">{item.tier.platformName}</p>
-										<p class="text-sm text-gray-600">
+										<p
+											style="font-size: 0.75rem; color: var(--text-dim); font-family: var(--font-body);"
+										>
+											{item.tier.platformName}
+										</p>
+										<p
+											style="font-size: 0.875rem; color: var(--text-muted); font-family: var(--font-body);"
+										>
 											Qty: {item.quantity} × {formatPrice(item.tier.price)}
 										</p>
 									</div>
 
 									<!-- Item Total & Remove -->
 									<div class="flex flex-col items-end gap-1">
-										<span class="text-sm font-semibold text-gray-900">
+										<span
+											style="font-size: 0.875rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
+										>
 											{formatPrice(item.tier.price * item.quantity)}
 										</span>
 										<button
 											onclick={() => removeItem(item.tierId)}
-											class="rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+											style="border-radius: var(--r-xs); padding: 4px; color: var(--text-dim); transition: all 0.2s;"
+											class="hover:bg-red-500/10"
 											aria-label="Remove item"
 										>
-											<Trash2 size={14} />
+											<Trash2 size={14} style="color: var(--status-error);" />
 										</button>
 									</div>
 								</div>
@@ -167,25 +229,33 @@
 						</div>
 
 						<!-- Cart Footer -->
-						<div class="border-t border-gray-100 bg-gray-50 p-4">
+						<div
+							style="border-top: 1px solid var(--border); background: var(--bg-elev-1); padding: var(--space-lg);"
+						>
 							<!-- Total -->
 							<div class="mb-4 flex items-center justify-between">
-								<span class="text-base font-medium text-gray-900">Total:</span>
-								<span class="text-primary text-lg font-bold">{formatPrice(total)}</span>
+								<span
+									style="font-size: 1rem; font-weight: 500; color: var(--text); font-family: var(--font-body);"
+									>Total:</span
+								>
+								<span
+									style="font-size: 1.125rem; font-weight: 700; color: var(--primary); font-family: var(--font-body);"
+									>{formatPrice(total)}</span
+								>
 							</div>
 
 							<!-- Action Buttons -->
 							<div class="space-y-2">
 								<button
 									onclick={goToCheckout}
-									class="bg-primary hover:bg-primary-dark active:bg-primary-dark flex w-full items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold text-white transition-colors"
+									class="btn-checkout flex w-full items-center justify-center gap-2"
 								>
 									<span>Checkout</span>
 									<ArrowRight size={16} />
 								</button>
 								<button
 									onclick={continueShopping}
-									class="flex w-full items-center justify-center rounded-lg border border-gray-300 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+									class="btn-continue flex w-full items-center justify-center"
 								>
 									Continue Shopping
 								</button>
@@ -197,3 +267,43 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	.btn-checkout {
+		background: var(--btn-primary-gradient);
+		border: none;
+		border-radius: var(--r-sm);
+		padding: var(--space-md) var(--space-lg);
+		font-family: var(--font-body);
+		font-weight: 600;
+		color: #04140c;
+		transition: all 0.2s ease;
+	}
+
+	.btn-checkout:hover {
+		background: var(--btn-primary-gradient-hover);
+		box-shadow: var(--glow-primary);
+		transform: translateY(-1px);
+	}
+
+	.btn-checkout:active {
+		transform: scale(0.98);
+	}
+
+	.btn-continue {
+		background: transparent;
+		border: 1px solid var(--border);
+		border-radius: var(--r-sm);
+		padding: var(--space-sm) var(--space-lg);
+		font-family: var(--font-body);
+		font-weight: 500;
+		color: var(--text-muted);
+		transition: all 0.2s ease;
+	}
+
+	.btn-continue:hover {
+		background: var(--surface);
+		border-color: var(--primary);
+		color: var(--text);
+	}
+</style>

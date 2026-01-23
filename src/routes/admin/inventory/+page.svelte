@@ -74,7 +74,7 @@
 	}
 </script>
 
-<div class="min-h-screen bg-gray-50 p-4 sm:p-6">
+<div class="min-h-screen p-4 sm:p-6">
 	<!-- Confirm Modal -->
 	<ConfirmModal
 		isOpen={showConfirmModal}
@@ -90,8 +90,8 @@
 
 	<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<div class="min-w-0 flex-1">
-			<h1 class="text-xl font-bold text-gray-900 sm:text-2xl">Account Inventory</h1>
-			<p class="mt-1 text-sm text-gray-500 sm:text-base">
+			<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">Account Inventory</h1>
+			<p class="mt-1 text-sm sm:text-base" style="color: var(--text-muted)">
 				Manage your social media account inventory by Platform & Tier
 			</p>
 		</div>

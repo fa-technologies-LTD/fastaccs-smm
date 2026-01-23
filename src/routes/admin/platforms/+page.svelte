@@ -232,8 +232,10 @@
 	<div class="mb-6">
 		<div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 			<div class="min-w-0 flex-1">
-				<h1 class="text-xl font-bold text-gray-900 sm:text-2xl">Platform Management</h1>
-				<p class="mt-1 text-sm text-gray-600 sm:text-base">
+				<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
+					Platform Management
+				</h1>
+				<p class="mt-1 text-sm sm:text-base" style="color: var(--text-muted)">
 					Manage social media platforms and their configurations
 				</p>
 			</div>
