@@ -102,12 +102,16 @@
 		});
 	}
 
-	function getUserTypeBadge(userType: string) {
-		return userType === 'REGISTERED' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800';
+	function getUserTypeStyle(userType: string) {
+		return userType === 'REGISTERED'
+			? 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border)'
+			: 'background: var(--bg-elev-2); color: var(--text-muted); border: 1px solid var(--border)';
 	}
 
-	function getStatusBadge(isActive: boolean) {
-		return isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+	function getStatusStyle(isActive: boolean) {
+		return isActive
+			? 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border)'
+			: 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border)';
 	}
 </script>
 
@@ -120,7 +124,7 @@
 		</div>
 		<button
 			onclick={exportData}
-			class="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-white transition-all hover:scale-95 active:scale-90"
+			class="flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-white transition-all hover:scale-95 active:scale-90"
 			style="background: var(--btn-primary-gradient)"
 		>
 			<Download class="h-4 w-4" />
@@ -173,69 +177,93 @@
 					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted)">
 						Active
 					</p>
-					<p class="mt-1 text-xl font-bold text-green-600">{stats.activeUsers}</p>
+					<p class="mt-1 text-xl font-bold" style="color: var(--status-success);">
+						{stats.activeUsers}
+					</p>
 				</div>
-				<div class="rounded-full bg-green-100 p-2">
-					<UserCheck class="h-5 w-5 text-green-600" />
-				</div>
-			</div>
-		</div>
-
-		<div class="rounded-lg border border-gray-200 bg-white p-4">
-			<div class="flex items-center justify-between">
-				<div class="flex-1">
-					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Guests</p>
-					<p class="mt-1 text-xl font-bold text-gray-900">{stats.guestUsers}</p>
-				</div>
-				<div class="rounded-full bg-gray-100 p-2">
-					<Users class="h-5 w-5 text-gray-600" />
+				<div class="rounded-full p-2" style="background: rgba(5,212,113,0.12);">
+					<UserCheck class="h-5 w-5" style="color: var(--status-success);" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-4">
+		<div
+			class="rounded-lg p-4"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
-					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Affiliates</p>
-					<p class="mt-1 text-xl font-bold text-purple-600">{stats.affiliates}</p>
+					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted)">
+						Guests
+					</p>
+					<p class="mt-1 text-xl font-bold" style="color: var(--text);">{stats.guestUsers}</p>
 				</div>
-				<div class="rounded-full bg-purple-100 p-2">
-					<Users class="h-5 w-5 text-purple-600" />
+				<div class="rounded-full p-2" style="background: var(--bg-elev-2);">
+					<Users class="h-5 w-5" style="color: var(--text-muted);" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-4">
+		<div
+			class="rounded-lg p-4"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
-					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Total Revenue</p>
-					<p class="mt-1 text-xl font-bold text-green-600">{formatPrice(stats.totalRevenue)}</p>
+					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted)">
+						Affiliates
+					</p>
+					<p class="mt-1 text-xl font-bold" style="color: #a855f7;">{stats.affiliates}</p>
 				</div>
-				<div class="rounded-full bg-green-100 p-2">
-					<Wallet class="h-5 w-5 text-green-600" />
+				<div class="rounded-full p-2" style="background: rgba(168,85,247,0.12);">
+					<Users class="h-5 w-5" style="color: #a855f7;" />
+				</div>
+			</div>
+		</div>
+
+		<div
+			class="rounded-lg p-4"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
+			<div class="flex items-center justify-between">
+				<div class="flex-1">
+					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted)">
+						Total Revenue
+					</p>
+					<p class="mt-1 text-xl font-bold" style="color: var(--status-success);">
+						{formatPrice(stats.totalRevenue)}
+					</p>
+				</div>
+				<div class="rounded-full p-2" style="background: rgba(5,212,113,0.12);">
+					<Wallet class="h-5 w-5" style="color: var(--status-success);" />
 				</div>
 			</div>
 		</div>
 	</div>
 
 	<!-- Filters and Search -->
-	<div class="rounded-lg border border-gray-200 bg-white p-4">
+	<div class="rounded-lg p-4" style="background: var(--bg-elev-1); border: 1px solid var(--border)">
 		<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 			<div class="flex-1">
 				<div class="relative">
-					<Search class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-gray-400" />
+					<Search
+						class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2"
+						style="color: var(--text-dim);"
+					/>
 					<input
 						type="text"
 						bind:value={searchQuery}
 						placeholder="Search by name, email, phone, or ID..."
-						class="w-full rounded-lg border border-gray-300 py-2 pr-4 pl-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+						class="w-full rounded-lg py-2 pr-4 pl-10 focus:ring-1 focus:outline-none"
+						style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
 					/>
 				</div>
 			</div>
 			<div class="flex gap-2">
 				<select
 					bind:value={filterType}
-					class="rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+					class="rounded-lg px-4 py-2 focus:ring-1 focus:outline-none"
+					style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
 				>
 					<option value="all">All Users</option>
 					<option value="registered">Registered</option>
@@ -249,102 +277,121 @@
 	</div>
 
 	<!-- Users Table -->
-	<div class="rounded-lg border border-gray-200 bg-white">
-		<div class="border-b border-gray-200 p-4">
-			<h2 class="text-base font-semibold text-gray-900">Users ({filteredUsers.length})</h2>
+	<div class="rounded-lg" style="background: var(--bg-elev-1); border: 1px solid var(--border)">
+		<div class="p-4" style="border-bottom: 1px solid var(--border)">
+			<h2 class="text-base font-semibold" style="color: var(--text)">
+				Users ({filteredUsers.length})
+			</h2>
 		</div>
 		<div class="overflow-x-auto">
 			<table class="w-full">
-				<thead class="bg-gray-50">
+				<thead style="background: var(--bg-elev-2);">
 					<tr>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							User
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Contact
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Type
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Status
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Orders
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Total Spent
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Wallet
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Registered
 						</th>
 					</tr>
 				</thead>
-				<tbody class="divide-y divide-gray-200 bg-white">
+				<tbody class="divide-y" style="border-color: var(--border); background: var(--bg-elev-1);">
 					{#if paginatedUsers.length === 0}
 						<tr>
-							<td colspan="8" class="px-6 py-12 text-center text-gray-500">No users found</td>
+							<td colspan="8" class="px-6 py-12 text-center" style="color: var(--text-muted);"
+								>No users found</td
+							>
 						</tr>
 					{:else}
 						{#each paginatedUsers as user}
-							<tr class="hover:bg-gray-50">
+							<tr
+								class="transition-colors"
+								style="--hover-bg: var(--bg-elev-2);"
+								onmouseenter={(e) => (e.currentTarget.style.background = 'var(--bg-elev-2)')}
+								onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
+							>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<div>
-										<div class="text-sm font-medium text-gray-900">
+										<div class="text-sm font-medium" style="color: var(--text);">
 											{user.fullName || 'No name'}
 										</div>
-										<div class="text-xs text-gray-500">{user.id.slice(0, 8)}...</div>
+										<div class="text-xs" style="color: var(--text-muted);">
+											{user.id.slice(0, 8)}...
+										</div>
 									</div>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
-									<div class="text-sm text-gray-900">
+									<div class="text-sm" style="color: var(--text);">
 										{#if user.email}
 											<div class="flex items-center gap-1">
-												<Mail class="h-3 w-3 text-gray-400" />
+												<Mail class="h-3 w-3" style="color: var(--text-dim);" />
 												<span>{user.email}</span>
 											</div>
 										{/if}
 										{#if user.phone}
 											<div class="mt-1 flex items-center gap-1">
-												<Phone class="h-3 w-3 text-gray-400" />
+												<Phone class="h-3 w-3" style="color: var(--text-dim);" />
 												<span>{user.phone}</span>
 											</div>
 										{/if}
 										{#if !user.email && !user.phone}
-											<span class="text-gray-400">No contact</span>
+											<span style="color: var(--text-dim);">No contact</span>
 										{/if}
 									</div>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<span
-										class="inline-flex rounded-full px-2 py-1 text-xs font-semibold {getUserTypeBadge(
-											user.userType
-										)}"
+										class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
+										style={getUserTypeStyle(user.userType)}
 									>
 										{user.userType}
 									</span>
 									{#if user.isAffiliateEnabled}
 										<span
-											class="mt-1 inline-flex rounded-full bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800"
+											class="mt-1 inline-flex rounded-full px-2 py-1 text-xs font-semibold"
+											style="background: rgba(168,85,247,0.12); color: #a855f7; border: 1px solid #a855f7;"
 										>
 											Affiliate
 										</span>
@@ -352,33 +399,34 @@
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<span
-										class="inline-flex rounded-full px-2 py-1 text-xs font-semibold {getStatusBadge(
-											user.isActive
-										)}"
+										class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
+										style={getStatusStyle(user.isActive)}
 									>
 										{user.isActive ? 'Active' : 'Inactive'}
 									</span>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<div class="flex items-center gap-1">
-										<ShoppingBag class="h-4 w-4 text-gray-400" />
-										<span class="text-sm text-gray-900">{user.orderCount}</span>
+										<ShoppingBag class="h-4 w-4" style="color: var(--text-dim);" />
+										<span class="text-sm" style="color: var(--text);">{user.orderCount}</span>
 									</div>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
-									<div class="text-sm font-medium text-gray-900">
+									<div class="text-sm font-medium" style="color: var(--text);">
 										{formatPrice(user.totalSpent)}
 									</div>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<div class="flex items-center gap-1">
-										<Wallet class="h-4 w-4 text-gray-400" />
-										<span class="text-sm text-gray-900">{formatPrice(user.walletBalance)}</span>
+										<Wallet class="h-4 w-4" style="color: var(--text-dim);" />
+										<span class="text-sm" style="color: var(--text);"
+											>{formatPrice(user.walletBalance)}</span
+										>
 									</div>
 								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-500">
+								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text-muted);">
 									<div class="flex items-center gap-1">
-										<Calendar class="h-4 w-4 text-gray-400" />
+										<Calendar class="h-4 w-4" style="color: var(--text-dim);" />
 										<span>{formatDate(user.registeredAt)}</span>
 									</div>
 								</td>
@@ -391,9 +439,12 @@
 
 		<!-- Pagination -->
 		{#if totalPages > 1}
-			<div class="border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-6">
+			<div
+				class="px-4 py-3 sm:px-6"
+				style="border-top: 1px solid var(--border); background: var(--bg-elev-2);"
+			>
 				<div class="flex items-center justify-between">
-					<div class="text-sm text-gray-700">
+					<div class="text-sm" style="color: var(--text-muted);">
 						Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(
 							currentPage * itemsPerPage,
 							filteredUsers.length
@@ -403,7 +454,8 @@
 						<button
 							onclick={() => (currentPage = Math.max(1, currentPage - 1))}
 							disabled={currentPage === 1}
-							class="rounded-lg border border-gray-300 bg-white px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+							class="rounded-full px-3 py-1 text-sm font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
 						>
 							Previous
 						</button>
@@ -414,9 +466,10 @@
 							}) as pageNum}
 								<button
 									onclick={() => (currentPage = pageNum)}
-									class="rounded-lg border px-3 py-1 text-sm font-medium {currentPage === pageNum
-										? 'border-blue-500 bg-blue-50 text-blue-600'
-										: 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}"
+									class="rounded-full px-3 py-1 text-sm font-medium transition-opacity hover:opacity-80"
+									style={currentPage === pageNum
+										? 'background: rgba(105,109,250,0.12); color: var(--link); border: 1px solid var(--link)'
+										: 'background: var(--bg); color: var(--text); border: 1px solid var(--border)'}
 								>
 									{pageNum}
 								</button>
@@ -425,7 +478,8 @@
 						<button
 							onclick={() => (currentPage = Math.min(totalPages, currentPage + 1))}
 							disabled={currentPage === totalPages}
-							class="rounded-lg border border-gray-300 bg-white px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+							class="rounded-full px-3 py-1 text-sm font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
 						>
 							Next
 						</button>

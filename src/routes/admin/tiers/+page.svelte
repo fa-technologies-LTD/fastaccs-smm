@@ -247,17 +247,18 @@
 		<div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 			<div class="min-w-0 flex-1">
 				<div class="mb-2 flex items-center gap-3">
-					<Target class="h-5 w-5 text-purple-600 sm:h-6 sm:w-6" />
-					<h1 class="text-xl font-bold text-gray-900 sm:text-2xl">Tier Management</h1>
+					<Target class="h-5 w-5 sm:h-6 sm:w-6" style="color: #a855f7;" />
+					<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">Tier Management</h1>
 				</div>
-				<p class="text-sm text-gray-600 sm:text-base">
+				<p class="text-sm sm:text-base" style="color: var(--text-muted)">
 					Manage follower tiers that work across all platforms. Accounts from any platform can be
 					assigned to these tiers.
 				</p>
 			</div>
 			<button
 				onclick={openCreateModal}
-				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-3 text-white transition-all hover:scale-95 hover:bg-purple-700 active:scale-90 sm:w-auto sm:py-2"
+				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-4 py-3 text-white transition-all hover:scale-95 active:scale-90 sm:w-auto sm:py-2"
+				style="background: #a855f7;"
 			>
 				<Plus size={18} />
 				Add Tier
@@ -265,12 +266,15 @@
 		</div>
 
 		<!-- Info Banner -->
-		<div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
+		<div
+			class="rounded-lg p-4"
+			style="border: 1px solid rgba(105,109,250,0.3); background: rgba(105,109,250,0.08);"
+		>
 			<div class="flex items-start gap-3">
-				<AlertCircle class="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600" />
+				<AlertCircle class="mt-0.5 h-5 w-5 flex-shrink-0" style="color: var(--link);" />
 				<div class="text-sm">
-					<p class="mb-1 font-medium text-blue-900">How Tiers Work</p>
-					<p class="text-blue-700">
+					<p class="mb-1 font-medium" style="color: var(--link)">How Tiers Work</p>
+					<p style="color: var(--text-muted)">
 						tiers (like "500 Followers") contain accounts from ALL platforms. When customers visit a
 						platform page, they see these tiers with account counts filtered by that platform. This
 						allows you to manage one set of tiers instead of separate tiers for each platform.
@@ -287,14 +291,15 @@
 		</div>
 	{:else if tiers.length === 0}
 		<div class="py-12 text-center">
-			<Target class="mx-auto mb-4 h-12 w-12 text-gray-400" />
-			<h3 class="mb-2 text-lg font-medium text-gray-900">No tiers found</h3>
-			<p class="mb-4 text-gray-500">
+			<Target class="mx-auto mb-4 h-12 w-12" style="color: var(--text-dim);" />
+			<h3 class="mb-2 text-lg font-medium" style="color: var(--text)">No tiers found</h3>
+			<p class="mb-4" style="color: var(--text-muted)">
 				Create your first follower tier to get started. It will be available across all platforms.
 			</p>
 			<button
 				onclick={openCreateModal}
-				class="inline-flex items-center rounded-md bg-purple-600 px-4 py-2 font-medium text-white transition-all hover:bg-purple-700 active:scale-95"
+				class="inline-flex items-center rounded-full px-4 py-2 font-medium text-white transition-all active:scale-95"
+				style="background: #a855f7;"
 			>
 				<Plus class="mr-2 h-4 w-4" />
 				Add Tier
@@ -306,28 +311,31 @@
 				{@const metadata = tier.metadata as any}
 				<div
 					animate:flip={{ duration: 500 }}
-					class="rounded-lg border border-gray-200 bg-white p-6"
+					class="rounded-lg p-6"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 				>
 					<!-- Tier Header -->
 					<div class="mb-4 flex items-start justify-between">
 						<div>
-							<h3 class="flex items-center gap-2 font-semibold text-gray-900">
-								<Target class="h-4 w-4 text-purple-600" />
+							<h3 class="flex items-center gap-2 font-semibold" style="color: var(--text);">
+								<Target class="h-4 w-4" style="color: #a855f7;" />
 								{tier.name}
 							</h3>
-							<p class="mt-1 text-sm text-gray-500">Tier • All Platforms</p>
+							<p class="mt-1 text-sm" style="color: var(--text-muted)">Tier • All Platforms</p>
 						</div>
 						<div class="flex items-center gap-1">
 							<button
 								onclick={() => openEditModal(tier)}
-								class="group rounded p-1 text-gray-400 transition-colors hover:text-purple-600"
+								class="group rounded p-1 transition-colors"
+								style="color: var(--text-dim);"
 								title="Edit Tier"
 							>
 								<Edit size={16} class="transition-transform group-hover:scale-90" />
 							</button>
 							<button
 								onclick={() => openDeleteModal(tier)}
-								class="group rounded p-1 text-gray-400 transition-colors hover:text-red-600"
+								class="group rounded p-1 transition-colors"
+								style="color: var(--text-dim);"
 								title="Delete Tier"
 							>
 								<Trash2 size={16} class="transition-transform group-hover:scale-90" />
@@ -337,7 +345,7 @@
 
 					<!-- Tier Description -->
 					{#if tier.description}
-						<p class="mb-4 text-sm text-gray-600">{tier.description}</p>
+						<p class="mb-4 text-sm" style="color: var(--text-muted);">{tier.description}</p>
 					{/if}
 
 					<!-- Tier Stats -->
@@ -345,10 +353,10 @@
 						<!-- Follower Range -->
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-2">
-								<Users size={16} class="text-gray-400" />
-								<span class="text-sm text-gray-600">Followers</span>
+								<Users size={16} style="color: var(--text-dim);" />
+								<span class="text-sm" style="color: var(--text-muted)">Followers</span>
 							</div>
-							<span class="text-sm font-medium text-gray-900">
+							<span class="text-sm font-medium" style="color: var(--text);">
 								{metadata?.follower_range?.display || 'N/A'}
 							</span>
 						</div>
@@ -356,10 +364,10 @@
 						<!-- Pricing -->
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-2">
-								<DollarSign size={16} class="text-gray-400" />
-								<span class="text-sm text-gray-600">Base Price</span>
+								<DollarSign size={16} style="color: var(--text-dim);" />
+								<span class="text-sm" style="color: var(--text-muted)">Base Price</span>
 							</div>
-							<span class="text-sm font-medium text-gray-900">
+							<span class="text-sm font-medium" style="color: var(--text);">
 								₦{metadata?.pricing?.base_price || 0}
 							</span>
 						</div>
@@ -367,15 +375,16 @@
 						<!-- Quality Score -->
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-2">
-								<Package size={16} class="text-gray-400" />
-								<span class="text-sm text-gray-600">Quality</span>
+								<Package size={16} style="color: var(--text-dim);" />
+								<span class="text-sm" style="color: var(--text-muted)">Quality</span>
 							</div>
 							<div class="flex items-center gap-1">
 								{#each Array(5) as _, i}
 									<div
-										class="h-2 w-2 rounded-full {i < (metadata?.quality_score || 0)
-											? 'bg-yellow-400'
-											: 'bg-gray-200'}"
+										class="h-2 w-2 rounded-full"
+										style="background: {i < (metadata?.quality_score || 0)
+											? '#fbbf24'
+											: 'var(--border)'}"
 									></div>
 								{/each}
 							</div>
@@ -384,10 +393,10 @@
 						<!-- Delivery Time -->
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-2">
-								<AlertCircle size={16} class="text-gray-400" />
-								<span class="text-sm text-gray-600">Delivery</span>
+								<AlertCircle size={16} style="color: var(--text-dim);" />
+								<span class="text-sm" style="color: var(--text-muted)">Delivery</span>
 							</div>
-							<span class="text-sm font-medium text-gray-900">
+							<span class="text-sm font-medium" style="color: var(--text);">
 								{metadata?.delivery_time || 'N/A'}
 							</span>
 						</div>
@@ -395,18 +404,21 @@
 
 					<!-- Features -->
 					{#if metadata?.features && metadata.features.length > 0}
-						<div class="mt-4 border-t border-gray-100 pt-4">
-							<h4 class="mb-2 text-sm font-semibold text-gray-700">Features:</h4>
+						<div class="mt-4 pt-4" style="border-top: 1px solid var(--border)">
+							<h4 class="mb-2 text-sm font-semibold" style="color: var(--text)">Features:</h4>
 							<div class="flex flex-wrap gap-1">
 								{#each metadata.features.slice(0, 3) as feature}
 									<span
-										class="inline-flex items-center rounded-full bg-purple-100 px-2 py-1 text-xs font-medium text-purple-800"
+										class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium"
+										style="background: rgba(168,85,247,0.12); color: #a855f7;"
 									>
 										{feature}
 									</span>
 								{/each}
 								{#if metadata.features.length > 3}
-									<span class="text-xs text-gray-500">+{metadata.features.length - 3} more</span>
+									<span class="text-xs" style="color: var(--text-muted)"
+										>+{metadata.features.length - 3} more</span
+									>
 								{/if}
 							</div>
 						</div>

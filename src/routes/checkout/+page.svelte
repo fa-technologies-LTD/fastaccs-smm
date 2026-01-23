@@ -379,7 +379,8 @@
 				</p>
 				<button
 					onclick={() => goto('/platforms')}
-					class="bg-primary hover:bg-primary-dark active:bg-primary-dark rounded-lg px-4 py-2.5 text-sm font-semibold text-white sm:px-6 sm:py-3 sm:text-base"
+					class="rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-all sm:px-8 sm:py-3 sm:text-base"
+					style="background: var(--btn-primary-gradient);"
 				>
 					Browse Accounts
 				</button>
@@ -676,7 +677,7 @@
 									walletBalance <
 										(affiliateCode ? cartTotal - (cartTotal * affiliateDiscount) / 100 : cartTotal)}
 								style="background: linear-gradient(180deg, rgba(5,212,113,0.95), rgba(13,145,82,0.95)); border: 1px solid rgba(5,212,113,0.40); color: #04140C; font-family: var(--font-head);"
-								class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-base"
+								class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full py-3 text-sm font-semibold active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-base"
 							>
 								{#if loading}
 									<div

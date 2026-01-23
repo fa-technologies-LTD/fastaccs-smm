@@ -160,7 +160,7 @@
 						Overview of your FastAccs
 					</h1>
 					{#if !loading}
-						<span class="mt-1 block text-xs text-gray-500 sm:text-sm">
+						<span class="mt-1 block text-xs sm:text-sm" style="color: var(--text-muted)">
 							Last updated: {formatRelativeTime(lastUpdated)}
 						</span>
 					{/if}
@@ -170,12 +170,10 @@
 					<!-- Auto-refresh toggle -->
 					<button
 						onclick={toggleAutoRefresh}
-						class="flex cursor-pointer items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm transition-all hover:scale-[.95] active:scale-90 sm:px-4 {autoRefresh
-							? 'border-green-200 bg-green-50 text-green-700'
-							: 'hover:opacity-80'}"
-						style={!autoRefresh
-							? 'background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text)'
-							: ''}
+						class="flex cursor-pointer items-center justify-center gap-2 rounded-full px-3 py-2 text-sm transition-all hover:scale-[.95] active:scale-90 sm:px-4"
+						style={autoRefresh
+							? 'border: 1px solid var(--status-success-border); background: var(--status-success-bg); color: var(--status-success)'
+							: 'background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text)'}
 					>
 						<Activity class="h-4 w-4" />
 						<span class="hidden sm:inline">Auto-refresh</span>
@@ -187,7 +185,7 @@
 					<button
 						onclick={refreshData}
 						disabled={loading}
-						class="flex cursor-pointer items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm text-white transition-all hover:scale-[.95] active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:px-4"
+						class="flex cursor-pointer items-center justify-center gap-2 rounded-full px-3 py-2 text-sm text-white transition-all hover:scale-[.95] active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:px-4"
 						style="background: var(--btn-primary-gradient)"
 					>
 						<RefreshCw class="h-4 w-4 {loading ? 'animate-spin' : ''}" />
@@ -199,15 +197,21 @@
 
 		<!-- Error Display -->
 		{#if error}
-			<div class="mb-8 rounded-lg border border-red-200 bg-red-50 p-4">
+			<div
+				class="mb-8 rounded-lg p-4"
+				style="border: 1px solid var(--status-error-border); background: var(--status-error-bg);"
+			>
 				<div class="flex items-center">
-					<AlertCircle class="mr-2 h-5 w-5 text-red-600" />
+					<AlertCircle class="mr-2 h-5 w-5" style="color: var(--status-error);" />
 					<div>
-						<h3 class="text-sm font-medium text-red-800">Dashboard Loading Error</h3>
-						<p class="mt-1 text-sm text-red-700">{error}</p>
+						<h3 class="text-sm font-medium" style="color: var(--status-error);">
+							Dashboard Loading Error
+						</h3>
+						<p class="mt-1 text-sm" style="color: var(--text-muted);">{error}</p>
 						<button
 							onclick={refreshData}
-							class="mt-2 text-sm text-red-800 underline hover:text-red-900"
+							class="mt-2 text-sm underline"
+							style="color: var(--status-error);"
 						>
 							Try Again
 						</button>
@@ -224,9 +228,10 @@
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 			>
 				<div class="flex items-center">
-					<div class="rounded-lg bg-blue-50 p-2 sm:p-3">
+					<div class="rounded-lg p-2 sm:p-3" style="background: rgba(105,109,250,0.12);">
 						<ShoppingCart
-							class="size-5 text-blue-600 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+							class="size-5 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+							style="color: var(--link);"
 						/>
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
@@ -256,9 +261,10 @@
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 			>
 				<div class="flex items-center">
-					<div class="rounded-lg bg-green-50 p-2 sm:p-3">
+					<div class="rounded-lg p-2 sm:p-3" style="background: rgba(5,212,113,0.12);">
 						<DollarSign
-							class="size-5 text-green-600 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6 "
+							class="size-5 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+							style="color: var(--primary);"
 						/>
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
@@ -283,9 +289,10 @@
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 			>
 				<div class="flex items-center">
-					<div class="rounded-lg bg-purple-50 p-2 sm:p-3">
+					<div class="rounded-lg p-2 sm:p-3" style="background: rgba(168,85,247,0.12);">
 						<Package
-							class="size-5 text-purple-600 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6 "
+							class="size-5 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+							style="color: #a855f7;"
 						/>
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
@@ -310,9 +317,10 @@
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 			>
 				<div class="flex items-center">
-					<div class="rounded-lg bg-orange-50 p-2 sm:p-3">
+					<div class="rounded-lg p-2 sm:p-3" style="background: rgba(249,115,22,0.12);">
 						<AlertCircle
-							class="size-5 text-orange-600 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+							class="size-5 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+							style="color: #f97316;"
 						/>
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
@@ -324,12 +332,14 @@
 						</p>
 						<div class="mt-1 flex items-center">
 							{#if (inventoryStats.outOfStockTiersCount || 0) > 0}
-								<span class="text-xs text-orange-600 sm:text-sm">
+								<span class="text-xs sm:text-sm" style="color: #f97316;">
 									{inventoryStats.accountsInOutOfStockTiers || 0} accounts in {inventoryStats.outOfStockTiersCount}
 									tiers
 								</span>
 							{:else}
-								<span class="text-xs text-green-600 sm:text-sm">All tiers have stock</span>
+								<span class="text-xs sm:text-sm" style="color: var(--status-success);"
+									>All tiers have stock</span
+								>
 							{/if}
 						</div>
 					</div>
@@ -352,9 +362,10 @@
 							<span class="text-sm" style="color: var(--text-muted)">Active platforms</span>
 						</div>
 					</div>
-					<div class="rounded-lg bg-indigo-50 p-3">
+					<div class="rounded-lg p-3" style="background: rgba(99,102,241,0.12);">
 						<BarChart3
-							class="size-6 text-indigo-600 transition-all group-hover:scale-80 group-hover:-rotate-20"
+							class="size-6 transition-all group-hover:scale-80 group-hover:-rotate-20"
+							style="color: #6366f1;"
 						/>
 					</div>
 				</div>
@@ -375,9 +386,10 @@
 							<span class="text-sm" style="color: var(--text-muted)">Across all platforms</span>
 						</div>
 					</div>
-					<div class="rounded-lg bg-purple-50 p-3">
+					<div class="rounded-lg p-3" style="background: rgba(168,85,247,0.12);">
 						<Package
-							class="size-6 text-purple-600 transition-all group-hover:scale-80 group-hover:-rotate-20"
+							class="size-6 transition-all group-hover:scale-80 group-hover:-rotate-20"
+							style="color: #a855f7;"
 						/>
 					</div>
 				</div>
@@ -397,14 +409,15 @@
 								: 0}%
 						</p>
 						<div class="mt-1 flex items-center">
-							<span class="text-sm text-gray-600">
+							<span class="text-sm" style="color: var(--text-muted);">
 								{orderStats.completed_orders}/{orderStats.total_orders} completed
 							</span>
 						</div>
 					</div>
-					<div class="rounded-lg bg-green-50 p-3">
+					<div class="rounded-lg p-3" style="background: rgba(5,212,113,0.12);">
 						<TrendingUp
-							class="size-6 text-green-600 transition-all group-hover:scale-80 group-hover:-rotate-20"
+							class="size-6 transition-all group-hover:scale-80 group-hover:-rotate-20"
+							style="color: var(--primary);"
 						/>
 					</div>
 				</div>
@@ -430,15 +443,13 @@
 							style="border: 1px solid var(--border)"
 						>
 							<div class="flex items-center">
-								<ShoppingCart class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
+								<ShoppingCart class="mr-3 h-5 w-5" style="color: var(--text-dim);" />
 								<div>
 									<p class="font-medium" style="color: var(--text)">Order Management</p>
 									<p class="text-sm" style="color: var(--text-muted)">Process and track orders</p>
 								</div>
 							</div>
-							<ArrowUpRight
-								class="h-4 w-4 text-gray-400 group-hover:rotate-45 group-hover:text-blue-600"
-							/>
+							<ArrowUpRight class="h-4 w-4 transition-all" style="color: var(--text-dim);" />
 						</a>
 
 						<a
@@ -448,15 +459,13 @@
 							style="border: 1px solid var(--border)"
 						>
 							<div class="flex items-center">
-								<Package class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
+								<Package class="mr-3 h-5 w-5" style="color: var(--text-dim);" />
 								<div>
 									<p class="font-medium" style="color: var(--text)">Inventory Dashboard</p>
 									<p class="text-sm" style="color: var(--text-muted)">Monitor stock levels</p>
 								</div>
 							</div>
-							<ArrowUpRight
-								class="h-4 w-4 text-gray-400 group-hover:rotate-45 group-hover:text-blue-600"
-							/>
+							<ArrowUpRight class="h-4 w-4 transition-all" style="color: var(--text-dim);" />
 						</a>
 
 						<a
@@ -466,15 +475,13 @@
 							style="border: 1px solid var(--border)"
 						>
 							<div class="flex items-center">
-								<Users class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
+								<Users class="mr-3 h-5 w-5" style="color: var(--text-dim);" />
 								<div>
 									<p class="font-medium" style="color: var(--text)">Platform Management</p>
 									<p class="text-sm" style="color: var(--text-muted)">Manage platforms & tiers</p>
 								</div>
 							</div>
-							<ArrowUpRight
-								class="h-4 w-4 text-gray-400 group-hover:rotate-45 group-hover:text-blue-600"
-							/>
+							<ArrowUpRight class="h-4 w-4 transition-all" style="color: var(--text-dim);" />
 						</a>
 
 						<a
@@ -484,15 +491,13 @@
 							style="border: 1px solid var(--border)"
 						>
 							<div class="flex items-center">
-								<Activity class="mr-3 h-5 w-5 text-gray-400 group-hover:text-blue-600" />
+								<Activity class="mr-3 h-5 w-5" style="color: var(--text-dim);" />
 								<div>
 									<p class="font-medium" style="color: var(--text)">Batch Operations</p>
 									<p class="text-sm" style="color: var(--text-muted)">Bulk import accounts</p>
 								</div>
 							</div>
-							<ArrowUpRight
-								class="h-4 w-4 text-gray-400 group-hover:rotate-45 group-hover:text-blue-600"
-							/>
+							<ArrowUpRight class="h-4 w-4 transition-all" style="color: var(--text-dim);" />
 						</a>
 					</div>
 				</div>
@@ -510,28 +515,31 @@
 					<!-- Order Processing Status -->
 					<div class="flex items-center justify-between">
 						<div class="flex items-center">
-							<div class="mr-3 h-3 w-3 rounded-full bg-green-500"></div>
+							<div
+								class="mr-3 h-3 w-3 rounded-full"
+								style="background: var(--status-success);"
+							></div>
 							<span class="text-sm font-medium" style="color: var(--text)">Order Processing</span>
 						</div>
-						<span class="text-sm text-green-600">Operational</span>
+						<span class="text-sm" style="color: var(--status-success);">Operational</span>
 					</div>
 
 					<!-- Inventory System -->
 					<div class="flex items-center justify-between">
 						<div class="flex items-center">
 							<div
-								class="h-3 w-3 rounded-full {inventoryStats.low_stock +
-									inventoryStats.out_of_stock >
-								0
-									? 'bg-yellow-500'
-									: 'bg-green-500'} mr-3"
+								class="mr-3 h-3 w-3 rounded-full"
+								style="background: {inventoryStats.low_stock + inventoryStats.out_of_stock > 0
+									? 'var(--status-warning)'
+									: 'var(--status-success)'};"
 							></div>
 							<span class="text-sm font-medium" style="color: var(--text)">Inventory System</span>
 						</div>
 						<span
-							class="text-sm {inventoryStats.low_stock + inventoryStats.out_of_stock > 0
-								? 'text-yellow-600'
-								: 'text-green-600'}"
+							class="text-sm"
+							style="color: {inventoryStats.low_stock + inventoryStats.out_of_stock > 0
+								? 'var(--status-warning)'
+								: 'var(--status-success)'};"
 						>
 							{inventoryStats.low_stock + inventoryStats.out_of_stock > 0
 								? `${inventoryStats.low_stock + inventoryStats.out_of_stock} Issues`
@@ -542,10 +550,13 @@
 					<!-- Database Status -->
 					<div class="flex items-center justify-between">
 						<div class="flex items-center">
-							<div class="mr-3 h-3 w-3 rounded-full bg-green-500"></div>
+							<div
+								class="mr-3 h-3 w-3 rounded-full"
+								style="background: var(--status-success);"
+							></div>
 							<span class="text-sm font-medium" style="color: var(--text)">Database</span>
 						</div>
-						<span class="text-sm text-green-600">Connected</span>
+						<span class="text-sm" style="color: var(--status-success);">Connected</span>
 					</div>
 
 					<!-- Last Update -->

@@ -33,7 +33,14 @@
 		onCreate: () => void;
 	}
 
-	let { open, platforms, tierForm = $bindable(), loading = false, onClose, onCreate }: Props = $props();
+	let {
+		open,
+		platforms,
+		tierForm = $bindable(),
+		loading = false,
+		onClose,
+		onCreate
+	}: Props = $props();
 </script>
 
 {#if open}
@@ -49,7 +56,8 @@
 
 			<!-- Modal content -->
 			<div
-				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl"
+				class="relative transform overflow-hidden rounded-lg text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl"
+				style="background: var(--bg-elev-1);"
 				in:fly={{ y: 200, duration: 300 }}
 				out:fade={{ duration: 300 }}
 			>
@@ -59,13 +67,13 @@
 						onCreate();
 					}}
 				>
-					<div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+					<div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
 						<div class="mb-4">
-							<h3 class="flex items-center gap-2 text-lg font-semibold text-gray-900">
-								<Target class="h-5 w-5 text-purple-600" />
+							<h3 class="flex items-center gap-2 text-lg font-semibold" style="color: var(--text);">
+								<Target class="h-5 w-5" style="color: var(--primary);" />
 								Add New Tier
 							</h3>
-							<p class="mt-1 text-sm text-gray-600">
+							<p class="mt-1 text-sm" style="color: var(--text-muted);">
 								This tier will be available for accounts from all platforms
 							</p>
 						</div>
@@ -73,28 +81,31 @@
 						<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 							<!-- Name -->
 							<div class="md:col-span-2">
-								<label for="name" class="block text-sm font-medium text-gray-700">Tier Name *</label
+								<label for="name" class="block text-sm font-medium" style="color: var(--text);"
+									>Tier Name *</label
 								>
 								<input
 									id="name"
 									type="text"
 									required
 									bind:value={tierForm.name}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-purple-500 focus:ring-purple-500"
+									class="mt-1 block w-full rounded-md px-4 py-2"
+									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 									placeholder="e.g., 1K Followers"
 								/>
 							</div>
 
 							<!-- Platform Selection -->
 							<div class="md:col-span-2">
-								<label for="platform" class="block text-sm font-medium text-gray-700"
-									>Platform *</label
-								>
+								<label for="platform" class="block text-sm font-medium" style="color: var(--text);">
+									Platform *
+								</label>
 								<select
 									id="platform"
 									required
 									bind:value={tierForm.parentId}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-purple-500 focus:ring-purple-500"
+									class="mt-1 block w-full rounded-md px-4 py-2"
+									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 								>
 									<option value="">Select a platform</option>
 									{#each platforms as platform}
@@ -105,43 +116,56 @@
 
 							<!-- Slug -->
 							<div class="md:col-span-2">
-								<label for="slug" class="block text-sm font-medium text-gray-700">URL Slug *</label>
+								<label for="slug" class="block text-sm font-medium" style="color: var(--text);"
+									>URL Slug *</label
+								>
 								<input
 									id="slug"
 									type="text"
 									required
 									bind:value={tierForm.slug}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-purple-500 focus:ring-purple-500"
+									class="mt-1 block w-full rounded-md px-4 py-2"
+									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 									placeholder="e.g., 1k-followers"
 								/>
 							</div>
 
 							<!-- Description -->
 							<div class="md:col-span-2">
-								<label for="description" class="block text-sm font-medium text-gray-700"
-									>Description</label
+								<label
+									for="description"
+									class="block text-sm font-medium"
+									style="color: var(--text);"
 								>
+									Description
+								</label>
 								<textarea
 									id="description"
 									bind:value={tierForm.description}
 									rows="2"
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-purple-500 focus:ring-purple-500"
+									class="mt-1 block w-full rounded-md px-4 py-2"
+									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 									placeholder="Brief description of this tier"
 								></textarea>
 							</div>
 
 							<!-- Features -->
 							<div class="md:col-span-2">
-								<label for="features" class="mb-2 block text-sm font-medium text-gray-700"
-									>Features</label
+								<label
+									for="features"
+									class="mb-2 block text-sm font-medium"
+									style="color: var(--text);"
 								>
+									Features
+								</label>
 								<div class="space-y-2">
 									{#each tierForm.metadata.features as feature, index}
 										<div class="flex gap-2">
 											<input
 												type="text"
 												bind:value={tierForm.metadata.features[index]}
-												class="flex-1 rounded-md border border-gray-300 px-3 py-2 focus:border-purple-500 focus:ring-purple-500"
+												class="flex-1 rounded-md px-3 py-2"
+												style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 												placeholder="Enter a feature"
 											/>
 											<button
@@ -151,7 +175,8 @@
 														(_, i) => i !== index
 													);
 												}}
-												class="rounded-md bg-red-50 px-3 py-2 text-red-600 hover:bg-red-100 focus:ring-2 focus:ring-red-500 focus:outline-none"
+												class="rounded-full px-3 py-2 text-red-600 focus:ring-2 focus:ring-red-500 focus:outline-none"
+												style="background: var(--surface);"
 											>
 												<Trash2 size={16} />
 											</button>
@@ -162,7 +187,8 @@
 										onclick={() => {
 											tierForm.metadata.features = [...tierForm.metadata.features, ''];
 										}}
-										class="flex items-center gap-2 rounded-md bg-gray-50 px-3 py-2 text-gray-600 hover:bg-gray-100 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+										class="flex items-center gap-2 rounded-full px-3 py-2 focus:ring-2 focus:outline-none"
+										style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
 									>
 										<Plus size={16} />
 										Add Feature
@@ -172,26 +198,36 @@
 
 							<!-- Follower Range -->
 							<div>
-								<label for="min followers" class="block text-sm font-medium text-gray-700"
-									>Min Followers</label
+								<label
+									for="min followers"
+									class="block text-sm font-medium"
+									style="color: var(--text);"
 								>
+									Min Followers
+								</label>
 								<input
 									type="number"
 									min="0"
 									bind:value={tierForm.metadata.follower_range.min}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-purple-500 focus:ring-purple-500"
+									class="mt-1 block w-full rounded-md px-4 py-2"
+									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 								/>
 							</div>
 
 							<div>
-								<label for="max followers" class="block text-sm font-medium text-gray-700"
-									>Max Followers</label
+								<label
+									for="max followers"
+									class="block text-sm font-medium"
+									style="color: var(--text);"
 								>
+									Max Followers
+								</label>
 								<input
 									type="number"
 									min="0"
 									bind:value={tierForm.metadata.follower_range.max}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-purple-500 focus:ring-purple-500"
+									class="mt-1 block w-full rounded-md px-4 py-2"
+									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 								/>
 							</div>
 
@@ -209,15 +245,20 @@
 
 							<!-- Pricing -->
 							<div>
-								<label for="base price" class="block text-sm font-medium text-gray-700"
-									>Base Price (₦)</label
+								<label
+									for="base price"
+									class="block text-sm font-medium"
+									style="color: var(--text);"
 								>
+									Base Price (₦)
+								</label>
 								<input
 									type="number"
 									step="0.01"
 									min="0"
 									bind:value={tierForm.metadata.pricing.base_price}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-purple-500 focus:ring-purple-500"
+									class="mt-1 block w-full rounded-md px-4 py-2"
+									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 								/>
 							</div>
 
@@ -235,31 +276,41 @@
 							</div>
 
 							<div class="md:col-span-2">
-								<label for="delivery time" class="block text-sm font-medium text-gray-700"
-									>Delivery Time</label
+								<label
+									for="delivery time"
+									class="block text-sm font-medium"
+									style="color: var(--text);"
 								>
+									Delivery Time
+								</label>
 								<input
 									type="text"
 									bind:value={tierForm.metadata.delivery_time}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-purple-500 focus:ring-purple-500"
+									class="mt-1 block w-full rounded-md px-4 py-2"
+									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 									placeholder="e.g., 24-48 hours"
 								/>
 							</div>
 						</div>
 					</div>
 
-					<div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+					<div
+						class="px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6"
+						style="background: var(--surface);"
+					>
 						<button
 							type="submit"
 							disabled={loading}
-							class="inline-flex w-full justify-center rounded-md bg-purple-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-500 disabled:opacity-50 sm:ml-3 sm:w-auto"
+							class="inline-flex w-full justify-center rounded-full px-3 py-2 text-sm font-semibold shadow-sm disabled:opacity-50 sm:ml-3 sm:w-auto"
+							style="background: var(--primary); color: #000;"
 						>
 							{loading ? 'Creating...' : 'Create  Tier'}
 						</button>
 						<button
 							type="button"
 							onclick={onClose}
-							class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow ring-1 ring-gray-300 ring-inset hover:bg-gray-50 sm:mt-0 sm:w-auto"
+							class="mt-3 inline-flex w-full justify-center rounded-full px-3 py-2 text-sm font-semibold shadow sm:mt-0 sm:w-auto"
+							style="border: 1px solid var(--border); color: var(--text); background: transparent;"
 						>
 							Cancel
 						</button>

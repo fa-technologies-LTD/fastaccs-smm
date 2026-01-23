@@ -241,7 +241,8 @@
 			</div>
 			<button
 				onclick={openCreateModal}
-				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm text-white transition-all hover:scale-95 hover:bg-blue-700 active:scale-90 sm:w-auto sm:py-2"
+				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium transition-all hover:scale-95 active:scale-90 sm:w-auto sm:py-2"
+				style="background: var(--primary); color: #000;"
 			>
 				<Plus size={18} />
 				Add Platform
@@ -252,18 +253,22 @@
 	<!-- Platforms Grid -->
 	{#if loading}
 		<div class="flex h-64 items-center justify-center">
-			<div class="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
+			<div
+				class="h-8 w-8 animate-spin rounded-full"
+				style="border-bottom: 2px solid var(--link);"
+			></div>
 		</div>
 	{:else if platforms.length === 0}
 		<div class="px-4 py-12 text-center">
-			<AlertCircle class="mx-auto mb-4 h-12 w-12 text-gray-400" />
-			<h3 class="mb-2 text-lg font-medium text-gray-900">No platforms found</h3>
-			<p class="mx-auto mb-6 max-w-md text-gray-500">
+			<AlertCircle class="mx-auto mb-4 h-12 w-12" style="color: var(--text-dim);" />
+			<h3 class="mb-2 text-lg font-medium" style="color: var(--text)">No platforms found</h3>
+			<p class="mx-auto mb-6 max-w-md" style="color: var(--text-muted)">
 				Get started by adding your first social media platform.
 			</p>
 			<button
 				onclick={openCreateModal}
-				class="inline-flex items-center justify-center rounded-md bg-blue-600 px-6 py-3 font-medium text-white transition-all hover:bg-blue-700 active:scale-95"
+				class="inline-flex items-center justify-center rounded-full px-6 py-3 font-medium text-white transition-all active:scale-95"
+				style="background: var(--link);"
 			>
 				<Plus class="mr-2 h-4 w-4" />
 				Add Platform
@@ -274,7 +279,8 @@
 			{#each platforms as platform (platform.id)}
 				<div
 					animate:flip={{ duration: 300 }}
-					class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6"
+					class="rounded-lg p-4 sm:p-6"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 				>
 					<!-- Platform Header -->
 					<div class="mb-4 flex items-start justify-between gap-3">
@@ -294,14 +300,15 @@
 								</div>
 							{/if}
 							<div class="min-w-0 flex-1">
-								<h3 class="truncate font-semibold text-gray-900">{platform.name}</h3>
-								<p class="truncate text-sm text-gray-500">{platform.slug}</p>
+								<h3 class="truncate font-semibold" style="color: var(--text);">{platform.name}</h3>
+								<p class="truncate text-sm" style="color: var(--text-muted);">{platform.slug}</p>
 							</div>
 						</div>
 						<div class="flex flex-shrink-0 items-center gap-1">
 							<button
 								onclick={() => viewTiers(platform)}
-								class="group rounded p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
+								class="group rounded p-2 transition-colors hover:bg-white/5"
+								style="color: var(--text-muted);"
 								title="View Tiers"
 								aria-label="View Tiers"
 							>
@@ -310,7 +317,8 @@
 							<button
 								onclick={() => openEditModal(platform)}
 								type="button"
-								class="group rounded p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
+								class="group rounded p-2 transition-colors hover:bg-white/5"
+								style="color: var(--text-muted);"
 								title="Edit Platform"
 								aria-label="Edit Platform"
 							>
@@ -319,7 +327,8 @@
 							<button
 								onclick={() => openDeleteModal(platform)}
 								type="button"
-								class="group rounded p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+								class="group rounded p-2 transition-colors hover:bg-red-500/10"
+								style="color: var(--text-muted);"
 								title="Delete Platform"
 								aria-label="Delete Platform"
 							>
@@ -330,28 +339,28 @@
 
 					<!-- Platform Info -->
 					{#if platform.description}
-						<p class="mb-4 text-sm text-gray-600">{platform.description}</p>
+						<p class="mb-4 text-sm" style="color: var(--text-muted);">{platform.description}</p>
 					{/if}
 
 					<!-- Platform Stats -->
 					<div class="space-y-2 text-sm">
 						<div class="flex items-center justify-between gap-2">
-							<span class="flex-shrink-0 text-gray-500">Status:</span>
+							<span class="flex-shrink-0" style="color: var(--text-muted)">Status:</span>
 							<span
-								class="font-medium {platform.isActive
-									? 'text-green-600'
-									: 'text-red-600'} text-right"
+								class="text-right font-medium"
+								style="color: {platform.isActive ? 'var(--status-success)' : 'var(--status-error)'}"
 							>
 								{platform.isActive ? 'Active' : 'Inactive'}
 							</span>
 						</div>
 						{#if (platform.metadata as any)?.website_url}
 							<div class="flex items-center justify-between gap-2">
-								<span class="flex-shrink-0 text-gray-500">Website:</span>
+								<span class="flex-shrink-0" style="color: var(--text-muted)">Website:</span>
 								<a
 									href={(platform.metadata as any).website_url}
 									target="_blank"
-									class="truncate text-right text-blue-600 hover:underline"
+									class="truncate text-right transition-opacity hover:opacity-80"
+									style="color: var(--link);"
 								>
 									Visit
 								</a>
@@ -360,10 +369,12 @@
 					</div>
 
 					<!-- Platform Info Note -->
-					<div class="mt-4 border-t border-gray-200 pt-4">
-						<p class="text-center text-xs text-gray-500">
-							Tiers are managed in the <a href="/admin/tiers" class="text-blue-600 hover:underline"
-								>Tiers</a
+					<div class="mt-4 pt-4" style="border-top: 1px solid var(--border)">
+						<p class="text-center text-xs" style="color: var(--text-muted)">
+							Tiers are managed in the <a
+								href="/admin/tiers"
+								class="transition-opacity hover:opacity-80"
+								style="color: var(--link);">Tiers</a
 							> section
 						</p>
 					</div>

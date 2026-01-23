@@ -78,7 +78,8 @@
 		aria-modal="true"
 		aria-label="Image preview"
 		tabindex="-1"
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+		class="fixed inset-0 z-50 flex items-center justify-center p-4"
+		style="background: rgba(0, 0, 0, 0.9);"
 	>
 		<!-- Close Button -->
 		<button

@@ -272,7 +272,7 @@
 	.btn-checkout {
 		background: var(--btn-primary-gradient);
 		border: none;
-		border-radius: var(--r-sm);
+		border-radius: 9999px;
 		padding: var(--space-md) var(--space-lg);
 		font-family: var(--font-body);
 		font-weight: 600;
@@ -293,7 +293,7 @@
 	.btn-continue {
 		background: transparent;
 		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
+		border-radius: 9999px;
 		padding: var(--space-sm) var(--space-lg);
 		font-family: var(--font-body);
 		font-weight: 500;

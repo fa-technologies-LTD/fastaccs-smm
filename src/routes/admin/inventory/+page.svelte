@@ -61,10 +61,12 @@
 		}
 	}
 
-	function getStatusColor(available: number): string {
-		if (available === 0) return 'text-red-600 bg-red-100';
-		if (available < 10) return 'text-yellow-600 bg-yellow-100';
-		return 'text-green-600 bg-green-100';
+	function getStatusStyle(available: number): string {
+		if (available === 0)
+			return 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border)';
+		if (available < 10)
+			return 'background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border)';
+		return 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border)';
 	}
 
 	function getStatusText(available: number): string {
@@ -99,7 +101,8 @@
 			<button
 				onclick={() => (showConfirmModal = true)}
 				disabled={cleanupLoading}
-				class="w-full rounded-lg bg-orange-600 px-4 py-3 text-white transition-all hover:scale-95 hover:bg-orange-700 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:w-auto sm:py-2"
+				class="w-full cursor-pointer rounded-full px-4 py-3 text-white transition-all hover:scale-95 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:w-auto sm:py-2"
+				style="background: #f97316;"
 			>
 				{cleanupLoading ? 'Cleaning...' : 'Fix Stuck Accounts'}
 			</button>
@@ -108,18 +111,22 @@
 
 	<!-- Error Message -->
 	{#if data.error}
-		<div class="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
-			<p class="font-medium">Error loading inventory</p>
-			<p class="mt-1 text-sm">{data.error}</p>
+		<div
+			class="mb-6 rounded-lg p-4"
+			style="border: 1px solid var(--status-error-border); background: var(--status-error-bg);"
+		>
+			<p class="font-medium" style="color: var(--status-error);">Error loading inventory</p>
+			<p class="mt-1 text-sm" style="color: var(--status-error);">{data.error}</p>
 		</div>
 	{/if}
 
 	<!-- Cleanup Message -->
 	{#if cleanupMessage}
 		<div
-			class="mb-6 rounded-lg border {cleanupMessage.startsWith('')
-				? 'border-green-200 bg-green-50 text-green-800'
-				: 'border-red-200 bg-red-50 text-red-800'} p-4"
+			class="mb-6 rounded-lg p-4"
+			style={cleanupMessage.startsWith('Error')
+				? 'border: 1px solid var(--status-error-border); background: var(--status-error-bg); color: var(--status-error)'
+				: 'border: 1px solid var(--status-success-border); background: var(--status-success-bg); color: var(--status-success)'}
 		>
 			<p class="font-medium">{cleanupMessage}</p>
 		</div>
@@ -127,33 +134,50 @@
 
 	<!-- Stats Cards -->
 	<div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
-		<div class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
-			<h3 class="text-xs font-medium text-gray-500 sm:text-sm">Total Accounts</h3>
-			<p class="text-lg font-bold text-gray-900 sm:text-2xl">
+		<div
+			class="rounded-lg p-4 sm:p-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
+			<h3 class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+				Total Accounts
+			</h3>
+			<p class="text-lg font-bold sm:text-2xl" style="color: var(--text)">
 				{summaryStats.total_accounts.toLocaleString()}
 			</p>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
-			<h3 class="text-xs font-medium text-gray-500 sm:text-sm">Available</h3>
-			<p class="text-lg font-bold text-green-600 sm:text-2xl">
+		<div
+			class="rounded-lg p-4 sm:p-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
+			<h3 class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Available</h3>
+			<p class="text-lg font-bold sm:text-2xl" style="color: var(--status-success);">
 				{summaryStats.available_accounts.toLocaleString()}
 			</p>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
-			<h3 class="text-xs font-medium text-gray-500 sm:text-sm">Assigned</h3>
-			<p class="text-lg font-bold text-yellow-600 sm:text-2xl">
+		<div
+			class="rounded-lg p-4 sm:p-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
+			<h3 class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Assigned</h3>
+			<p class="text-lg font-bold sm:text-2xl" style="color: var(--status-warning);">
 				{summaryStats.assigned_accounts.toLocaleString()}
 			</p>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
-			<h3 class="text-sm font-medium text-gray-500">Delivered</h3>
-			<p class="text-2xl font-bold text-blue-600">
+		<div
+			class="rounded-lg p-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
+			<h3 class="text-sm font-medium" style="color: var(--text-muted)">Delivered</h3>
+			<p class="text-2xl font-bold" style="color: var(--link);">
 				{summaryStats.delivered_accounts.toLocaleString()}
 			</p>
 		</div>
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
-			<h3 class="text-sm font-medium text-gray-500">Platforms</h3>
-			<p class="text-2xl font-bold text-purple-600">{summaryStats.platforms}</p>
+		<div
+			class="rounded-lg p-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
+			<h3 class="text-sm font-medium" style="color: var(--text-muted)">Platforms</h3>
+			<p class="text-2xl font-bold" style="color: #a855f7;">{summaryStats.platforms}</p>
 		</div>
 	</div>
 
@@ -163,108 +187,128 @@
 			type="text"
 			placeholder="Search platforms or tiers..."
 			bind:value={searchTerm}
-			class="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+			class="w-full rounded-lg px-4 py-2 focus:ring-1 focus:outline-none"
+			style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
 		/>
 	</div>
 
 	<!-- Inventory Table -->
-	<div class="overflow-hidden rounded-lg border border-gray-200 bg-white">
+	<div
+		class="overflow-hidden rounded-lg"
+		style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+	>
 		<div class="overflow-x-auto">
 			<table class="w-full">
-				<thead class="bg-gray-50">
+				<thead style="background: var(--bg-elev-2);">
 					<tr>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Platform & Tier
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Total Stock
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Available
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Assigned
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Delivered
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Price
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Status
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Last Restocked
 						</th>
 					</tr>
 				</thead>
-				<tbody class="divide-y divide-gray-200 bg-white">
+				<tbody class="divide-y" style="border-color: var(--border); background: var(--bg-elev-1);">
 					{#each filteredInventory as item}
-						<tr class="hover:bg-gray-50">
+						<tr
+							class="transition-colors"
+							style="--hover-bg: var(--bg-elev-2);"
+							onmouseenter={(e) => (e.currentTarget.style.background = 'var(--bg-elev-2)')}
+							onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
+						>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm font-medium text-gray-900">
+								<div class="text-sm font-medium" style="color: var(--text);">
 									{item.platform_name || 'Unknown'}
 								</div>
-								<div class="text-sm text-gray-500">{item.tier_name || 'Unknown'}</div>
+								<div class="text-sm" style="color: var(--text-muted);">
+									{item.tier_name || 'Unknown'}
+								</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm text-gray-900">
+								<div class="text-sm" style="color: var(--text);">
 									{item.total_accounts?.toLocaleString() || 0}
 								</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm text-green-600">
+								<div class="text-sm" style="color: var(--status-success);">
 									{item.available_accounts?.toLocaleString() || 0}
 								</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm text-yellow-600">
+								<div class="text-sm" style="color: var(--status-warning);">
 									{item.assigned_accounts?.toLocaleString() || 0}
 								</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm text-blue-600">
+								<div class="text-sm" style="color: var(--link);">
 									{item.delivered_accounts?.toLocaleString() || 0}
 								</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm text-gray-900">-</div>
+								<div class="text-sm" style="color: var(--text);">-</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
 								<span
-									class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {getStatusColor(
-										item.available_accounts || 0
-									)}"
+									class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+									style={getStatusStyle(item.available_accounts || 0)}
 								>
 									{getStatusText(item.available_accounts || 0)}
 								</span>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm text-gray-500">
+								<div class="text-sm" style="color: var(--text-muted);">
 									{item.created_at ? formatDate(new Date(item.created_at)) : 'N/A'}
 								</div>
 							</td>
 						</tr>
 					{:else}
 						<tr>
-							<td colspan="8" class="px-6 py-8 text-center text-gray-500"> No inventory found </td>
+							<td colspan="8" class="px-6 py-8 text-center" style="color: var(--text-muted);">
+								No inventory found
+							</td>
 						</tr>
 					{/each}
 				</tbody>
@@ -273,7 +317,7 @@
 	</div>
 
 	{#if filteredInventory.length > 0}
-		<div class="mt-4 text-sm text-gray-500">
+		<div class="mt-4 text-sm" style="color: var(--text-muted);">
 			Showing {filteredInventory.length} of {data.inventory?.length || 0} inventory items
 		</div>
 	{/if}

@@ -22,7 +22,6 @@
 <Navigation />
 
 <UserDashboard
-	user={data.user}
 	name={data.user.fullName}
 	orders={data.orders}
 	joinDate={data.user.createdAt}

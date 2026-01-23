@@ -54,7 +54,7 @@
 			case 'refund':
 				return 'text-blue-600';
 			default:
-				return 'text-gray-600';
+				return 'style="color: var(--text-muted);"';
 		}
 	}
 
@@ -92,7 +92,7 @@
 		</div>
 		<button
 			onclick={exportData}
-			class="flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-white transition-all hover:scale-95 active:scale-90"
+			class="flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-white transition-all hover:scale-95 active:scale-90"
 			style="background: var(--btn-primary-gradient)"
 		>
 			<Download class="h-4 w-4" />
@@ -120,81 +120,119 @@
 
 	<!-- Stats Cards -->
 	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-		<div class="group rounded-lg border border-gray-200 bg-white p-4">
+		<div
+			class="group rounded-lg p-4"
+			style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+		>
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
-					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Total Wallets</p>
-					<p class="mt-1 text-xl font-bold text-gray-900">{stats.totalWallets}</p>
-				</div>
-				<div class="rounded-full bg-blue-100 p-2">
-					<Users class="size-5 text-blue-600 group-hover:scale-80 group-hover:-rotate-20" />
-				</div>
-			</div>
-		</div>
-
-		<div class="group rounded-lg border border-gray-200 bg-white p-4">
-			<div class="flex items-center justify-between">
-				<div class="flex-1">
-					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Total Balance</p>
-					<p class="mt-1 text-xl font-bold text-gray-900">
-						{formatPrice(stats.totalBalance)}
+					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted);">
+						Total Wallets
 					</p>
+					<p class="mt-1 text-xl font-bold" style="color: var(--text);">{stats.totalWallets}</p>
 				</div>
-				<div class="rounded-full bg-green-100 p-2">
-					<Wallet class="size-5 text-green-600 group-hover:scale-80 group-hover:-rotate-20" />
-				</div>
-			</div>
-		</div>
-
-		<div class="group rounded-lg border border-gray-200 bg-white p-4">
-			<div class="flex items-center justify-between">
-				<div class="flex-1">
-					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Total Deposits</p>
-					<p class="mt-1 text-xl font-bold text-green-600">
-						{formatPrice(stats.totalDeposits)}
-					</p>
-				</div>
-				<div class="rounded-full bg-green-100 p-2">
-					<ArrowDownLeft
-						class="size-5 text-green-600 group-hover:scale-80 group-hover:-rotate-20"
+				<div class="rounded-full p-2" style="background: rgba(105,109,250,0.12);">
+					<Users
+						class="size-5 group-hover:scale-80 group-hover:-rotate-20"
+						style="color: var(--link);"
 					/>
 				</div>
 			</div>
 		</div>
 
-		<div class="group rounded-lg border border-gray-200 bg-white p-4">
+		<div
+			class="group rounded-lg p-4"
+			style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+		>
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
-					<p class="text-xs font-medium tracking-wide text-gray-500 uppercase">Total Withdrawals</p>
-					<p class="mt-1 text-xl font-bold text-red-600">
+					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted);">
+						Total Balance
+					</p>
+					<p class="mt-1 text-xl font-bold" style="color: var(--text);">
+						{formatPrice(stats.totalBalance)}
+					</p>
+				</div>
+				<div class="rounded-full p-2" style="background: rgba(5,212,113,0.12);">
+					<Wallet
+						class="size-5 group-hover:scale-80 group-hover:-rotate-20"
+						style="color: var(--status-success);"
+					/>
+				</div>
+			</div>
+		</div>
+
+		<div
+			class="group rounded-lg p-4"
+			style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+		>
+			<div class="flex items-center justify-between">
+				<div class="flex-1">
+					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted);">
+						Total Deposits
+					</p>
+					<p class="mt-1 text-xl font-bold" style="color: var(--status-success);">
+						{formatPrice(stats.totalDeposits)}
+					</p>
+				</div>
+				<div class="rounded-full p-2" style="background: rgba(5,212,113,0.12);">
+					<ArrowDownLeft
+						class="size-5 group-hover:scale-80 group-hover:-rotate-20"
+						style="color: var(--status-success);"
+					/>
+				</div>
+			</div>
+		</div>
+
+		<div
+			class="group rounded-lg p-4"
+			style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+		>
+			<div class="flex items-center justify-between">
+				<div class="flex-1">
+					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted);">
+						Total Withdrawals
+					</p>
+					<p class="mt-1 text-xl font-bold" style="color: var(--status-error);">
 						{formatPrice(stats.totalWithdrawals)}
 					</p>
 				</div>
-				<div class="rounded-full bg-red-100 p-2">
-					<ArrowUpRight class="size-5 text-red-600 group-hover:scale-80 group-hover:-rotate-20" />
+				<div class="rounded-full p-2" style="background: rgba(255,77,79,0.12);">
+					<ArrowUpRight
+						class="size-5 group-hover:scale-80 group-hover:-rotate-20"
+						style="color: var(--status-error);"
+					/>
 				</div>
 			</div>
 		</div>
 	</div>
 
 	<!-- Filters and Search -->
-	<div class="rounded-lg border border-gray-200 bg-white p-4">
+	<div
+		class="rounded-lg p-4"
+		style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+	>
 		<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 			<div class="flex-1">
 				<div class="relative">
-					<Search class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-gray-400" />
+					<Search
+						class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2"
+						style="color: var(--text-dim);"
+					/>
 					<input
 						type="text"
 						bind:value={searchQuery}
 						placeholder="Search by user email or transaction reference..."
-						class="w-full rounded-lg border border-gray-300 py-2 pr-4 pl-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+						class="w-full rounded-lg py-2 pr-4 pl-10 focus:ring-1 focus:outline-none"
+						style="border: 1px solid var(--border); color: var(--text); background: var(--bg);"
 					/>
 				</div>
 			</div>
 			<div class="flex gap-2">
 				<select
 					bind:value={filterType}
-					class="rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+					class="rounded-lg px-4 py-2 focus:ring-1 focus:outline-none"
+					style="border: 1px solid var(--border); color: var(--text); background: var(--bg);"
 				>
 					<option value="all">All Types</option>
 					<option value="deposit">Deposits</option>
@@ -206,69 +244,83 @@
 	</div>
 
 	<!-- Recent Transactions -->
-	<div class="rounded-lg border border-gray-200 bg-white">
-		<div class="border-b border-gray-200 p-4">
-			<h2 class="text-base font-semibold text-gray-900">Recent Transactions</h2>
+	<div class="rounded-lg" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
+		<div class="p-4" style="border-bottom: 1px solid var(--border);">
+			<h2 class="text-base font-semibold" style="color: var(--text);">Recent Transactions</h2>
 		</div>
 		<div class="overflow-x-auto">
 			<table class="w-full">
-				<thead class="bg-gray-50">
+				<thead style="background: var(--bg-elev-2);">
 					<tr>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							User
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Type
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Amount
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Balance
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Description
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Date
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Status
 						</th>
 					</tr>
 				</thead>
-				<tbody class="divide-y divide-gray-200 bg-white">
+				<tbody class="divide-y" style="border-color: var(--border); background: var(--bg-elev-1);">
 					{#if transactions.length === 0}
 						<tr>
-							<td colspan="7" class="px-6 py-12 text-center text-gray-500">
+							<td colspan="7" class="px-6 py-12 text-center" style="color: var(--text-muted);">
 								No transactions found
 							</td>
 						</tr>
 					{:else}
 						{#each transactions as transaction}
 							{@const TypeIcon = getTypeIcon(transaction.type)}
-							<tr class="hover:bg-gray-50">
+							<tr
+								class="transition-colors"
+								style="--hover-bg: var(--bg-elev-2);"
+								onmouseenter={(e) => (e.currentTarget.style.background = 'var(--bg-elev-2)')}
+								onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
+							>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<div class="flex items-center">
 										<div>
-											<div class="text-sm font-medium text-gray-900">
+											<div class="text-sm font-medium" style="color: var(--text);">
 												{transaction.user?.fullName || transaction.user?.email}
 											</div>
-											<div class="text-sm text-gray-500">{transaction.user?.email}</div>
+											<div class="text-sm" style="color: var(--text-muted);">
+												{transaction.user?.email}
+											</div>
 										</div>
 									</div>
 								</td>
@@ -287,14 +339,16 @@
 									</div>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
-									<div class="text-sm text-gray-900">
+									<div class="text-sm" style="color: var(--text);">
 										{formatPrice(Number(transaction.balanceAfter))}
 									</div>
 								</td>
 								<td class="max-w-xs truncate px-6 py-4">
-									<div class="text-sm text-gray-900">{transaction.description}</div>
+									<div class="text-sm" style="color: var(--text);">{transaction.description}</div>
 									{#if transaction.reference}
-										<div class="text-xs text-gray-500">Ref: {transaction.reference}</div>
+										<div class="text-xs" style="color: var(--text-muted);">
+											Ref: {transaction.reference}
+										</div>
 									{/if}
 								</td>
 								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-500">

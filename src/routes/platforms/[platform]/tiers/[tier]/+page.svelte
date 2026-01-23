@@ -195,7 +195,7 @@
 				<div class="flex justify-center gap-4">
 					<button
 						onclick={goBackToPlatforms}
-						class="rounded-lg bg-[var(--color-surface)] px-6 py-3 font-semibold text-[var(--color-text-primary)] transition-all hover:bg-[var(--color-surface-hover)] active:scale-95"
+						class="rounded-full bg-[var(--color-surface)] px-6 py-3 font-semibold text-[var(--color-text-primary)] transition-all hover:bg-[var(--color-surface-hover)] active:scale-95"
 					>
 						All Platforms
 					</button>
@@ -523,7 +523,7 @@
 							<button
 								onclick={addToCart}
 								disabled={data.tier.visible_available === 0 || addingToCart}
-								class="w-full rounded-lg py-4 font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
+								class="w-full rounded-full py-4 font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
 								style="background: var(--btn-primary-gradient);"
 							>
 								{#if addingToCart}

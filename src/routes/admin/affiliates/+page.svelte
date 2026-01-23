@@ -126,7 +126,8 @@
 		</div>
 		<button
 			onclick={exportData}
-			class="flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:scale-95 hover:bg-blue-700 active:scale-90"
+			class="flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-white transition-all hover:scale-95 active:scale-90"
+			style="background: var(--btn-primary-gradient)"
 		>
 			<Download class="h-4 w-4" />
 			Export Data
@@ -135,154 +136,191 @@
 
 	<!-- Stats Cards -->
 	<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+		<div
+			class="rounded-lg p-6"
+			style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+		>
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium text-gray-600">Total Affiliates</p>
-					<p class="mt-2 text-3xl font-bold text-gray-900">{stats.totalAffiliates}</p>
+					<p class="text-sm font-medium" style="color: var(--text-muted);">Total Affiliates</p>
+					<p class="mt-2 text-3xl font-bold" style="color: var(--text);">{stats.totalAffiliates}</p>
 				</div>
-				<div class="rounded-full bg-blue-100 p-3">
-					<Users class="h-6 w-6 text-blue-600" />
+				<div class="rounded-full p-3" style="background: rgba(105,109,250,0.12);">
+					<Users class="h-6 w-6" style="color: var(--link);" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+		<div
+			class="rounded-lg p-6"
+			style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+		>
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium text-gray-600">Active Affiliates</p>
-					<p class="mt-2 text-3xl font-bold text-green-600">{stats.activeAffiliates}</p>
+					<p class="text-sm font-medium" style="color: var(--text-muted);">Active Affiliates</p>
+					<p class="mt-2 text-3xl font-bold" style="color: var(--status-success);">
+						{stats.activeAffiliates}
+					</p>
 				</div>
-				<div class="rounded-full bg-green-100 p-3">
-					<CheckCircle class="h-6 w-6 text-green-600" />
+				<div class="rounded-full p-3" style="background: rgba(5,212,113,0.12);">
+					<CheckCircle class="h-6 w-6" style="color: var(--status-success);" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+		<div
+			class="rounded-lg p-6"
+			style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+		>
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium text-gray-600">Total Commissions</p>
-					<p class="mt-2 text-3xl font-bold text-purple-600">
+					<p class="text-sm font-medium" style="color: var(--text-muted);">Total Commissions</p>
+					<p class="mt-2 text-3xl font-bold" style="color: #a855f7;">
 						{formatPrice(stats.totalCommissions)}
 					</p>
 				</div>
-				<div class="rounded-full bg-purple-100 p-3">
-					<DollarSign class="h-6 w-6 text-purple-600" />
+				<div class="rounded-full p-3" style="background: rgba(168,85,247,0.12);">
+					<DollarSign class="h-6 w-6" style="color: #a855f7;" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
+		<div
+			class="rounded-lg p-6"
+			style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+		>
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium text-gray-600">Total Referrals</p>
-					<p class="mt-2 text-3xl font-bold text-orange-600">{stats.totalReferrals}</p>
+					<p class="text-sm font-medium" style="color: var(--text-muted);">Total Referrals</p>
+					<p class="mt-2 text-3xl font-bold" style="color: #f97316;">{stats.totalReferrals}</p>
 				</div>
-				<div class="rounded-full bg-orange-100 p-3">
-					<TrendingUp class="h-6 w-6 text-orange-600" />
+				<div class="rounded-full p-3" style="background: rgba(249,115,22,0.12);">
+					<TrendingUp class="h-6 w-6" style="color: #f97316;" />
 				</div>
 			</div>
 		</div>
 	</div>
 
 	<!-- Search -->
-	<div class="rounded-lg border border-gray-200 bg-white p-4">
+	<div
+		class="rounded-lg p-4"
+		style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+	>
 		<div class="relative">
-			<Search class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-gray-400" />
+			<Search
+				class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2"
+				style="color: var(--text-dim);"
+			/>
 			<input
 				type="text"
 				bind:value={searchQuery}
 				placeholder="Search by name, email, or affiliate code..."
-				class="w-full rounded-lg border border-gray-300 py-2 pr-4 pl-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+				class="w-full rounded-lg py-2 pr-4 pl-10 focus:ring-1 focus:outline-none"
+				style="border: 1px solid var(--border); color: var(--text); background: var(--bg);"
 			/>
 		</div>
 	</div>
 
 	<!-- Affiliates Table -->
-	<div class="rounded-lg border border-gray-200 bg-white">
-		<div class="border-b border-gray-200 p-6">
-			<h2 class="text-lg font-semibold text-gray-900">All Affiliates</h2>
+	<div class="rounded-lg" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
+		<div class="p-6" style="border-bottom: 1px solid var(--border);">
+			<h2 class="text-lg font-semibold" style="color: var(--text);">All Affiliates</h2>
 		</div>
 		<div class="overflow-x-auto">
 			<table class="w-full">
-				<thead class="bg-gray-50">
+				<thead style="background: var(--bg-elev-2);">
 					<tr>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							User
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Code
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Referrals
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Total Sales
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Commission
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Joined
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Status
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Actions
 						</th>
 					</tr>
 				</thead>
-				<tbody class="divide-y divide-gray-200 bg-white">
+				<tbody class="divide-y" style="border-color: var(--border); background: var(--bg-elev-1);">
 					{#if affiliates.length === 0}
 						<tr>
-							<td colspan="8" class="px-6 py-12 text-center text-gray-500">
+							<td colspan="8" class="px-6 py-12 text-center" style="color: var(--text-muted);">
 								No affiliates found
 							</td>
 						</tr>
 					{:else}
 						{#each affiliates as affiliate}
-							<tr class="hover:bg-gray-50">
+							<tr
+								class="transition-colors"
+								style="--hover-bg: var(--bg-elev-2);"
+								onmouseenter={(e) => (e.currentTarget.style.background = 'var(--bg-elev-2)')}
+								onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
+							>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<div>
-										<div class="text-sm font-medium text-gray-900">
+										<div class="text-sm font-medium" style="color: var(--text);">
 											{affiliate.fullName || 'N/A'}
 										</div>
-										<div class="text-sm text-gray-500">{affiliate.email}</div>
+										<div class="text-sm" style="color: var(--text-muted);">{affiliate.email}</div>
 									</div>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
-									<div class="font-mono text-sm font-semibold text-blue-600">
+									<div class="font-mono text-sm font-semibold" style="color: var(--link);">
 										{affiliate.affiliatePrograms[0]?.affiliateCode || 'N/A'}
 									</div>
 								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-900">
+								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
 									{affiliate.affiliatePrograms[0]?.totalReferrals || 0}
 								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-900">
+								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
 									{formatPrice(Number(affiliate.affiliatePrograms[0]?.totalSales || 0))}
 								</td>
-								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap text-green-600">
+								<td
+									class="px-6 py-4 text-sm font-medium whitespace-nowrap"
+									style="color: var(--status-success);"
+								>
 									{formatPrice(Number(affiliate.affiliatePrograms[0]?.totalCommission || 0))}
 								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-500">
+								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text-muted);">
 									{formatDate(affiliate.affiliatePrograms[0]?.createdAt || affiliate.createdAt)}
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">

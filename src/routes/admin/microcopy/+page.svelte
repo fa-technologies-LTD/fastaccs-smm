@@ -189,12 +189,15 @@
 	<!-- Header -->
 	<div class="flex items-center justify-between">
 		<div>
-			<h1 class="text-2xl font-bold text-gray-900">Microcopy Editor</h1>
-			<p class="mt-1 text-gray-600">Manage UI text content across the application</p>
+			<h1 class="text-2xl font-bold" style="color: var(--text);">Microcopy Editor</h1>
+			<p class="mt-1" style="color: var(--text-muted);">
+				Manage UI text content across the application
+			</p>
 		</div>
 		<button
 			onclick={openCreateModal}
-			class="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:bg-blue-700 active:scale-95"
+			class="flex items-center gap-2 rounded-full px-4 py-2 text-white transition-all active:scale-95"
+			style="background: var(--link);"
 		>
 			<Plus class="h-4 w-4" />
 			Add Microcopy
@@ -202,23 +205,31 @@
 	</div>
 
 	<!-- Filters -->
-	<div class="rounded-lg border border-gray-200 bg-white p-4">
+	<div
+		class="rounded-lg p-4"
+		style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+	>
 		<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 			<div class="flex-1">
 				<div class="relative">
-					<Search class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-gray-400" />
+					<Search
+						class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2"
+						style="color: var(--text-dim);"
+					/>
 					<input
 						type="text"
 						bind:value={searchQuery}
 						placeholder="Search by key, value, or description..."
-						class="w-full rounded-lg border border-gray-300 py-2 pr-4 pl-10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+						class="w-full rounded-lg py-2 pr-4 pl-10 focus:ring-1 focus:outline-none"
+						style="border: 1px solid var(--border); color: var(--text); background: var(--bg);"
 					/>
 				</div>
 			</div>
 			<div class="flex gap-2">
 				<select
 					bind:value={filterCategory}
-					class="rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+					class="rounded-lg px-4 py-2 focus:ring-1 focus:outline-none"
+					style="border: 1px solid var(--border); color: var(--text); background: var(--bg);"
 				>
 					<option value="all">All Categories</option>
 					{#each categories as cat}
@@ -230,72 +241,87 @@
 	</div>
 
 	<!-- Microcopy Table -->
-	<div class="rounded-lg border border-gray-200 bg-white">
+	<div class="rounded-lg" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
 		<div class="overflow-x-auto">
 			<table class="w-full">
-				<thead class="bg-gray-50">
+				<thead style="background: var(--bg-elev-2);">
 					<tr>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Key
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Value
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Category
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Description
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Status
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
 						>
 							Actions
 						</th>
 					</tr>
 				</thead>
-				<tbody class="divide-y divide-gray-200 bg-white">
+				<tbody class="divide-y" style="border-color: var(--border); background: var(--bg-elev-1);">
 					{#if microcopy.length === 0}
 						<tr>
-							<td colspan="6" class="px-6 py-12 text-center text-gray-500">
+							<td colspan="6" class="px-6 py-12 text-center" style="color: var(--text-muted);">
 								No microcopy found. Click "Add Microcopy" to create your first entry.
 							</td>
 						</tr>
 					{:else}
 						{#each microcopy as item}
-							<tr class="hover:bg-gray-50">
+							<tr
+								class="transition-colors"
+								style="--hover-bg: var(--bg-elev-2);"
+								onmouseenter={(e) => (e.currentTarget.style.background = 'var(--bg-elev-2)')}
+								onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
+							>
 								<td class="px-6 py-4 whitespace-nowrap">
-									<div class="font-mono text-sm font-medium text-blue-600">{item.key}</div>
+									<div class="font-mono text-sm font-medium" style="color: var(--link);">
+										{item.key}
+									</div>
 								</td>
 								<td class="px-6 py-4">
 									{#if editingItem && editingItem.id === item.id}
 										<textarea
 											bind:value={editingItem.value}
-											class="w-full rounded border border-gray-300 p-2 text-sm focus:border-blue-500 focus:outline-none"
+											class="w-full rounded p-2 text-sm focus:outline-none"
+											style="border: 1px solid var(--border); color: var(--text); background: var(--bg);"
 											rows="2"
 										></textarea>
 									{:else}
-										<div class="max-w-md text-sm text-gray-900">{item.value}</div>
+										<div class="max-w-md text-sm" style="color: var(--text);">{item.value}</div>
 									{/if}
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
 									{#if editingItem && editingItem.id === item.id}
 										<select
 											bind:value={editingItem.category}
-											class="rounded border border-gray-300 px-2 py-1 text-sm"
+											class="rounded px-2 py-1 text-sm"
+											style="border: 1px solid var(--border); color: var(--text); background: var(--bg);"
 										>
 											{#each categories as cat}
 												<option value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
@@ -314,10 +340,13 @@
 										<input
 											type="text"
 											bind:value={editingItem.description}
-											class="w-full rounded border border-gray-300 p-2 text-sm focus:border-blue-500 focus:outline-none"
+											class="w-full rounded p-2 text-sm focus:outline-none"
+											style="border: 1px solid var(--border); color: var(--text); background: var(--bg);"
 										/>
 									{:else}
-										<div class="max-w-xs text-sm text-gray-600">{item.description || '-'}</div>
+										<div class="max-w-xs text-sm" style="color: var(--text-muted);">
+											{item.description || '-'}
+										</div>
 									{/if}
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
@@ -331,7 +360,8 @@
 											</span>
 										{:else}
 											<span
-												class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-800"
+												class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold"
+												style="background: var(--bg-elev-2); color: var(--text-muted); border: 1px solid var(--border);"
 											>
 												<XCircle class="h-3 w-3" />
 												Inactive
@@ -361,14 +391,16 @@
 										<div class="flex gap-2">
 											<button
 												onclick={() => startEdit(item)}
-												class="text-blue-600 hover:text-blue-900"
+												class="transition-opacity hover:opacity-80"
+												style="color: var(--link);"
 												title="Edit"
 											>
 												<Edit class="h-5 w-5" />
 											</button>
 											<button
 												onclick={() => deleteMicrocopy(item.id)}
-												class="text-red-600 hover:text-red-900"
+												class="transition-opacity hover:opacity-80"
+												style="color: var(--status-error);"
 												title="Delete"
 											>
 												<Trash2 class="h-5 w-5" />
@@ -435,14 +467,16 @@
 				<div class="mt-6 flex justify-end gap-3">
 					<button
 						onclick={closeCreateModal}
-						class="rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50"
+						class="rounded-full px-4 py-2"
+						style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 					>
 						Cancel
 					</button>
 					<button
 						onclick={createMicrocopy}
 						disabled={!newItem.key || !newItem.value}
-						class="rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+						class="rounded-full px-4 py-2 text-white transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+						style="background: var(--link);"
 					>
 						Create
 					</button>

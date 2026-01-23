@@ -211,7 +211,7 @@
 				<div class="flex flex-wrap gap-2">
 					<button
 						onclick={() => (filterQuery = 'all')}
-						class="rounded-lg px-4 py-2 transition-all"
+						class="rounded-full px-4 py-2 transition-all"
 						style={filterQuery === 'all'
 							? 'background: var(--primary); color: white; font-family: var(--font-body); font-size: 0.875rem; font-weight: 500;'
 							: 'background: var(--bg-elev-2); color: var(--text-muted); font-family: var(--font-body); font-size: 0.875rem; font-weight: 500; border: 1px solid var(--border);'}
@@ -220,7 +220,7 @@
 					</button>
 					<button
 						onclick={() => (filterQuery = 'popular')}
-						class="rounded-lg px-4 py-2 transition-all"
+						class="rounded-full px-4 py-2 transition-all"
 						style={filterQuery === 'popular'
 							? 'background: var(--primary); color: white; font-family: var(--font-body); font-size: 0.875rem; font-weight: 500;'
 							: 'background: var(--bg-elev-2); color: var(--text-muted); font-family: var(--font-body); font-size: 0.875rem; font-weight: 500; border: 1px solid var(--border);'}
@@ -229,7 +229,7 @@
 					</button>
 					<button
 						onclick={() => (filterQuery = 'available')}
-						class="rounded-lg px-4 py-2 transition-all"
+						class="rounded-full px-4 py-2 transition-all"
 						style={filterQuery === 'available'
 							? 'background: var(--primary); color: white; font-family: var(--font-body); font-size: 0.875rem; font-weight: 500;'
 							: 'background: var(--bg-elev-2); color: var(--text-muted); font-family: var(--font-body); font-size: 0.875rem; font-weight: 500; border: 1px solid var(--border);'}
@@ -238,7 +238,7 @@
 					</button>
 					<button
 						onclick={() => (filterQuery = 'engagement')}
-						class="rounded-lg px-4 py-2 transition-all"
+						class="rounded-full px-4 py-2 transition-all"
 						style={filterQuery === 'engagement'
 							? 'background: var(--primary); color: white; font-family: var(--font-body); font-size: 0.875rem; font-weight: 500;'
 							: 'background: var(--bg-elev-2); color: var(--text-muted); font-family: var(--font-body); font-size: 0.875rem; font-weight: 500; border: 1px solid var(--border);'}

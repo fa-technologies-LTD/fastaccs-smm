@@ -53,7 +53,8 @@ export async function getOrders(
 		limit?: number;
 		status?: string;
 		userId?: string;
-	} = {}
+	} = {},
+	fetchFn: typeof fetch = fetch
 ) {
 	try {
 		const searchParams = new URLSearchParams();
@@ -62,7 +63,7 @@ export async function getOrders(
 		if (options.status) searchParams.set('status', options.status);
 		if (options.userId) searchParams.set('userId', options.userId);
 
-		const response = await fetch(`/api/orders?${searchParams.toString()}`);
+		const response = await fetchFn(`/api/orders?${searchParams.toString()}`);
 		return await handleApiCall(response);
 	} catch (error) {
 		console.error('Failed to fetch orders:', error);

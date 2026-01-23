@@ -22,48 +22,55 @@
 	}
 </script>
 
-<div class="rounded-lg border border-gray-200 bg-white">
-	<div class="border-b border-gray-200 p-6">
-		<h2 class="text-xl font-semibold">Order History</h2>
-		<p class="text-gray-600">Track your purchases and reorder items</p>
+<div
+	class="rounded-[var(--r-md)] border border-[var(--border)]"
+	style="background: linear-gradient(180deg, var(--surface-2), var(--surface));"
+>
+	<div class="border-b border-[var(--border)] p-6">
+		<h2 class="text-base font-semibold" style="color: var(--text); font-family: var(--font-head);">
+			Order History
+		</h2>
+		<p style="color: var(--text-muted);">Track your purchases and reorder items</p>
 	</div>
 
-	<div class="divide-y divide-gray-200">
+	<div class="divide-y divide-[var(--border)]">
 		{#each orders as order}
 			<div class="p-6">
 				<div class="mb-4 flex items-center justify-between">
 					<div class="flex items-center">
 						{#if order.status === 'delivered' || order.status === 'completed'}
-							<CheckCircle class="mr-2 h-5 w-5 text-green-600" />
+							<CheckCircle class="mr-2 h-5 w-5" style="color: var(--primary);" />
 						{:else if order.status === 'processing'}
-							<RefreshCw class="mr-2 h-5 w-5 text-blue-600" />
+							<RefreshCw class="mr-2 h-5 w-5" style="color: var(--link);" />
 						{:else}
-							<Clock class="mr-2 h-5 w-5 text-yellow-600" />
+							<Clock class="mr-2 h-5 w-5" style="color: var(--status-warning);" />
 						{/if}
 						<div>
-							<div class="font-semibold">Order {order.id}</div>
-							<div class="text-sm text-gray-600">{order.date}</div>
+							<div class="font-semibold" style="color: var(--text); font-family: var(--font-head);">
+								Order {order.id}
+							</div>
+							<div class="text-sm" style="color: var(--text-dim);">{order.date}</div>
 						</div>
 					</div>
 					<div class="text-right">
-						<div class="font-semibold">
+						<div class="font-semibold" style="color: var(--text); font-family: var(--font-head);">
 							₦{order.totalAmount ? Number(order.totalAmount).toLocaleString() : '0'}
 						</div>
-						<div class="text-sm text-gray-600 capitalize">{order.status}</div>
+						<div class="text-sm capitalize" style="color: var(--text-muted);">{order.status}</div>
 					</div>
 				</div>
 
 				<div class="mb-4 space-y-2">
 					{#each order.items as item}
-						<div class="flex justify-between text-sm">
+						<div class="flex justify-between text-sm" style="color: var(--text-muted);">
 							<span>{item.type}</span>
-							<span class="text-gray-600">{item.details}</span>
+							<span style="color: var(--text-dim);">{item.details}</span>
 						</div>
 					{/each}
 				</div>
 
 				<div class="flex items-center justify-between">
-					<div class="text-sm text-gray-600">
+					<div class="text-sm" style="color: var(--text-dim);">
 						Delivery: {order.deliveryMethod}
 						{#if order.deliveredAt}
 							• Delivered {order.deliveredAt}
@@ -75,14 +82,16 @@
 						<button
 							onclick={() => reorderItems(order)}
 							data-sveltekit-preload-data="hover"
-							class="cursor-pointer rounded-lg border border-blue-600 px-4 py-2 text-blue-600 transition-all hover:scale-101 hover:bg-blue-50 active:scale-95"
+							class="cursor-pointer rounded-full px-4 py-2 font-semibold transition-all hover:-translate-y-0.5"
+							style="background: linear-gradient(180deg, rgba(5,212,113,0.95), rgba(13,145,82,0.95)); border: 1px solid rgba(5,212,113,0.40); color: #04140C;"
 						>
 							Order Again
 						</button>
 						<button
 							onclick={() => viewOrderDetails(order.id)}
 							data-sveltekit-preload-data="hover"
-							class="cursor-pointer rounded-lg border border-gray-300 px-4 py-2 text-gray-600 transition-colors hover:scale-101 hover:bg-gray-50 active:scale-95"
+							class="cursor-pointer rounded-full px-4 py-2 font-semibold transition-all hover:-translate-y-0.5"
+							style="background: linear-gradient(180deg, rgba(105,109,250,0.18), rgba(170,173,255,0.10)); border: 1px solid rgba(170,173,255,0.25); color: var(--text);"
 						>
 							View Details
 						</button>

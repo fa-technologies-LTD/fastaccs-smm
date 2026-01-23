@@ -332,7 +332,7 @@
 			case 'failed':
 				return 'text-red-600';
 			default:
-				return 'text-gray-600';
+				return '';
 		}
 	};
 
@@ -365,7 +365,8 @@
 			</div>
 			<button
 				onclick={openUploadModal}
-				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-white transition-all hover:scale-95 hover:bg-blue-700 active:scale-90 sm:w-auto sm:py-2"
+				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-4 py-3 text-white transition-all hover:scale-95 active:scale-90 sm:w-auto sm:py-2"
+				style="background: var(--link);"
 			>
 				<Upload size={18} />
 				Import Batch
@@ -386,14 +387,15 @@
 	<!-- Batches List -->
 	{#if batches.length === 0}
 		<div class="px-4 py-12 text-center">
-			<FileText class="mx-auto mb-4 h-12 w-12 text-gray-400" />
-			<h3 class="mb-2 text-lg font-medium text-gray-900">No batches found</h3>
-			<p class="mx-auto mb-6 max-w-md text-gray-500">
+			<FileText class="mx-auto mb-4 h-12 w-12" style="color: var(--text-dim);" />
+			<h3 class="mb-2 text-lg font-medium" style="color: var(--text);">No batches found</h3>
+			<p class="mx-auto mb-6 max-w-md" style="color: var(--text-muted);">
 				Get started by importing your first batch of accounts.
 			</p>
 			<button
 				onclick={openUploadModal}
-				class="inline-flex items-center justify-center rounded-md bg-blue-600 px-6 py-3 font-medium text-white transition-all hover:bg-blue-700 active:scale-95"
+				class="inline-flex items-center justify-center rounded-full px-6 py-3 font-medium text-white transition-all active:scale-95"
+				style="background: var(--link);"
 			>
 				<Upload class="mr-2 h-4 w-4" />
 				Import Batch
@@ -403,14 +405,17 @@
 		<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 			{#each batches as batch}
 				{@const StatusIcon = getStatusIcon(batch.status)}
-				<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+				<div
+					class="rounded-lg p-6 shadow-sm"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
 					<!-- Batch Header -->
 					<div class="mb-4 flex items-start justify-between">
 						<div class="flex items-center gap-3">
 							<StatusIcon class="h-6 w-6 {getStatusColor(batch.status)}" />
 							<div>
-								<h3 class="font-semibold text-gray-900">{batch.name}</h3>
-								<p class="text-sm text-gray-500">
+								<h3 class="font-semibold" style="color: var(--text);">{batch.name}</h3>
+								<p class="text-sm" style="color: var(--text-muted);">
 									{new Date(batch.created_at).toLocaleDateString()}
 								</p>
 							</div>
@@ -418,7 +423,8 @@
 						<div class="flex items-center gap-1">
 							<button
 								onclick={() => viewBatchDetails(batch)}
-								class="group rounded p-1 text-gray-400 hover:text-blue-600"
+								class="group rounded p-1"
+								style="color: var(--text-dim);"
 								title="View Details"
 							>
 								<Eye size={16} class="transition-transform group-hover:scale-90" />
@@ -428,29 +434,30 @@
 
 					<!-- Batch Description -->
 					{#if batch.description}
-						<p class="mb-4 text-sm text-gray-600">{batch.description}</p>
+						<p class="mb-4 text-sm" style="color: var(--text-muted);">{batch.description}</p>
 					{/if}
 
 					<!-- Batch Stats -->
 					<div class="mb-4 grid grid-cols-2 gap-4 text-sm">
 						<div>
-							<span class="text-gray-500">Total Accounts:</span>
-							<span class="font-medium text-gray-900">{batch.total_accounts}</span>
+							<span style="color: var(--text-muted);">Total Accounts:</span>
+							<span class="font-medium" style="color: var(--text);">{batch.total_accounts}</span>
 						</div>
 						<div>
-							<span class="text-gray-500">Processed:</span>
-							<span class="font-medium text-gray-900">{batch.processed_accounts}</span>
+							<span style="color: var(--text-muted);">Processed:</span>
+							<span class="font-medium" style="color: var(--text);">{batch.processed_accounts}</span
+							>
 						</div>
 						<div>
-							<span class="text-gray-500">Status:</span>
+							<span style="color: var(--text-muted);">Status:</span>
 							<span class="font-medium {getStatusColor(batch.status)}">
 								{batch.status.charAt(0).toUpperCase() + batch.status.slice(1)}
 							</span>
 						</div>
 						{#if batch.metadata?.file_size}
 							<div>
-								<span class="text-gray-500">File Size:</span>
-								<span class="font-medium text-gray-900">
+								<span style="color: var(--text-muted);">File Size:</span>
+								<span class="font-medium" style="color: var(--text);">
 									{formatFileSize(batch.metadata.file_size)}
 								</span>
 							</div>
@@ -460,7 +467,7 @@
 					<!-- Status Display -->
 					<div class="mb-4">
 						<div class="flex items-center justify-between text-sm">
-							<span class="text-gray-600">Status:</span>
+							<span style="color: var(--text-muted);">Status:</span>
 							<div class="flex items-center gap-2">
 								<svelte:component
 									this={getStatusIcon(batch.status)}
@@ -476,17 +483,18 @@
 							</div>
 						</div>
 						{#if batch.total_accounts > 0}
-							<div class="mt-2 text-sm text-gray-600">
+							<div class="mt-2 text-sm" style="color: var(--text-muted);">
 								{batch.processed_accounts} / {batch.total_accounts} accounts processed
 							</div>
 						{/if}
 					</div>
 
 					<!-- Actions -->
-					<div class="border-t border-gray-200 pt-4">
+					<div class="pt-4" style="border-top: 1px solid var(--border);">
 						<button
 							onclick={() => viewBatchDetails(batch)}
-							class="group flex w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition-all hover:scale-95 hover:bg-gray-100"
+							class="group flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition-all hover:scale-95"
+							style="background: var(--bg-elev-2); color: var(--text);"
 						>
 							<Eye size={16} class="transition-transform group-hover:scale-90" />
 							View Details
@@ -504,13 +512,14 @@
 		<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
 			<!-- Background overlay -->
 			<div
-				class="fixed inset-0 bg-black/20 transition-opacity"
+				class="fixed inset-0 bg-black/50 transition-opacity"
 				onclick={() => !isUploading && (showUploadModal = false)}
 			></div>
 
 			<!-- Modal content -->
 			<div
-				class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg"
+				class="relative transform overflow-hidden rounded-lg text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg"
+				style="background: var(--bg-elev-1);"
 				in:fly={{ y: 200, duration: 500 }}
 				out:fade={{ duration: 500 }}
 			>
@@ -520,19 +529,21 @@
 						handleUpload();
 					}}
 				>
-					<div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+					<div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
 						<div class="mb-4">
-							<h3 class="text-lg font-semibold text-gray-900">Import Account Batch</h3>
-							<p class="mt-1 text-sm text-gray-600">
+							<h3 class="text-lg font-semibold" style="color: var(--text);">
+								Import Account Batch
+							</h3>
+							<p class="mt-1 text-sm" style="color: var(--text-muted);">
 								Upload a CSV file with account data. Required column: <strong>username</strong>.
 							</p>
-							<p class="mt-1 text-xs text-gray-500">
+							<p class="mt-1 text-xs" style="color: var(--text-muted);">
 								Supported columns: profile_link, username, password, email, email_password,
 								2fa_link, followers, engagement_rate, niche, quality_score
 							</p>
-							<p class="mt-1 text-xs text-gray-500">
-								Example: <code class="rounded bg-gray-100 px-1"
-									>profile_link,username,password,email,email_password,2fa_link</code
+							<p class="mt-1 text-xs" style="color: var(--text-muted);">
+								Example: <code class="rounded px-1" style="background: var(--surface);">
+									profile_link,username,password,email,email_password,2fa_link</code
 								>
 							</p>
 						</div>
@@ -549,11 +560,14 @@
 						<div class="space-y-4">
 							<!-- File Upload -->
 							<div>
-								<label class="mb-2 block text-sm font-medium text-gray-700">CSV File *</label>
+								<label class="mb-2 block text-sm font-medium" style="color: var(--text);"
+									>CSV File *</label
+								>
 								<div
-									class="rounded-lg border-2 border-dashed border-gray-300 p-6 text-center transition-colors {dragActive
-										? 'border-blue-400 bg-blue-50'
-										: ''}"
+									class="rounded-lg border-2 border-dashed p-6 text-center transition-colors"
+									style={dragActive
+										? 'border-color: var(--primary); background: var(--surface);'
+										: 'border-color: var(--border);'}
 									ondragover={handleDragOver}
 									ondragleave={handleDragLeave}
 									ondrop={handleDrop}
@@ -562,16 +576,18 @@
 										<div class="flex items-center justify-center gap-2 text-green-600">
 											<FileText size={20} />
 											<span class="font-medium">{selectedFile.name}</span>
-											<span class="text-sm text-gray-500">
+											<span class="text-sm" style="color: var(--text-muted);">
 												({formatFileSize(selectedFile.size)})
 											</span>
 										</div>
 									{:else}
 										<div class="space-y-2">
-											<Upload class="mx-auto h-8 w-8 text-gray-400" />
+											<Upload class="mx-auto h-8 w-8" style="color: var(--text-dim);" />
 											<div>
-												<p class="text-sm text-gray-600">Drop your CSV file here, or</p>
-												<label class="cursor-pointer text-blue-600 hover:text-blue-500">
+												<p class="text-sm" style="color: var(--text-muted);">
+													Drop your CSV file here, or
+												</p>
+												<label class="cursor-pointer" style="color: var(--primary);">
 													<span class="font-medium">browse to upload</span>
 													<input
 														type="file"
@@ -621,7 +637,11 @@
 
 							<!-- Tier Selection -->
 							<div>
-								<label for="tier-select" class="block text-sm font-medium text-gray-700">
+								<label
+									for="tier-select"
+									class="block text-sm font-medium"
+									style="color: var(--text);"
+								>
 									Tier *
 								</label>
 								<select
@@ -629,7 +649,8 @@
 									required
 									bind:value={uploadForm.tier_id}
 									disabled={!uploadForm.platform_id}
-									class="mt-1 block w-full rounded-md border border-gray-300 py-2 focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100"
+									class="mt-1 block w-full rounded-md py-2"
+									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 								>
 									<option value="">
 										{uploadForm.platform_id ? 'Select a tier...' : 'Select platform first'}
@@ -642,28 +663,37 @@
 
 							<!-- Description -->
 							<div>
-								<label for="batch-description" class="block text-sm font-medium text-gray-700">
+								<label
+									for="batch-description"
+									class="block text-sm font-medium"
+									style="color: var(--text);"
+								>
 									Description
 								</label>
 								<textarea
 									id="batch-description"
 									rows="3"
 									bind:value={uploadForm.description}
-									class="mt-1 block w-full rounded-md border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+									class="mt-1 block w-full rounded-md"
+									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 									placeholder="Optional description for this batch..."
 								></textarea>
 							</div>
 						</div>
 					</div>
 
-					<div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+					<div
+						class="px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6"
+						style="background: var(--surface);"
+					>
 						<button
 							type="submit"
 							disabled={isUploading || !selectedFile}
-							class="inline-flex w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 sm:ml-3 sm:w-auto"
+							class="inline-flex w-full justify-center rounded-full px-3 py-2 text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 sm:ml-3 sm:w-auto"
+							style="background: var(--primary); color: #000;"
 						>
 							{#if isUploading}
-								<div class="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
+								<div class="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-black"></div>
 								Processing...
 							{:else}
 								<Upload class="mr-2 h-4 w-4" />
@@ -674,7 +704,8 @@
 							type="button"
 							disabled={isUploading}
 							onclick={() => (showUploadModal = false)}
-							class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-gray-300 ring-inset hover:bg-gray-50 disabled:opacity-50 sm:mt-0 sm:w-auto"
+							class="mt-3 inline-flex w-full justify-center rounded-full px-3 py-2 text-sm font-semibold shadow-sm disabled:opacity-50 sm:mt-0 sm:w-auto"
+							style="border: 1px solid var(--border); color: var(--text); background: transparent;"
 						>
 							Cancel
 						</button>
