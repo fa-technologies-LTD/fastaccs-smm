@@ -29,7 +29,7 @@ export const GET: RequestHandler = async (event) => {
 	try {
 		// Exchange authorization code for tokens
 		const tokens: OAuth2Tokens = await google.validateAuthorizationCode(code, codeVerifier);
-	
+
 		// Decode the ID token to get user info
 		const claims = decodeIdToken(tokens.idToken()) as {
 			sub: string;
@@ -41,7 +41,7 @@ export const GET: RequestHandler = async (event) => {
 		const email = claims.email;
 		const name = claims.name;
 		const picture = claims.picture;
-	
+
 		if (!googleUserId || !email || !name) {
 			throw error(400, 'Incomplete user data from Google');
 		}
@@ -94,7 +94,20 @@ export const GET: RequestHandler = async (event) => {
 		if (e && typeof e === 'object' && 'status' in e && e.status === 302) {
 			throw e;
 		}
-		console.error('OAuth callback error:', e);
-		throw error(500, 'Authentication failed');
+
+		// Log detailed error information
+		console.error('OAuth callback error:', {
+			error: e,
+			message: e instanceof Error ? e.message : String(e),
+			stack: e instanceof Error ? e.stack : undefined,
+			hasCode: !!code,
+			hasStoredState: !!storedState,
+			hasCodeVerifier: !!codeVerifier,
+			stateMatch: state === storedState
+		});
+
+		// Return more helpful error message
+		const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+		throw error(500, `Authentication failed: ${errorMessage}`);
 	}
 };
