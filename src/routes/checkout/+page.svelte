@@ -705,7 +705,7 @@
 									<div class="text-xs" style="color: var(--text); font-family: var(--font-body);">
 										<p class="font-medium">Secure Payment & Instant Delivery</p>
 										<p>
-											Your purchase is protected. Accounts delivered within 2 hours or full refund.
+											Your purchase is protected.
 										</p>
 									</div>
 								</div>

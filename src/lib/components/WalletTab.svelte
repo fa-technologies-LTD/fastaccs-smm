@@ -151,7 +151,7 @@
 						<button
 							onclick={() => setQuickAmount(amount)}
 							disabled={loading}
-							class="rounded-[var(--r-sm)] border-2 px-4 py-2 text-sm font-semibold transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+							class="rounded-[var(--r-sm)] border-2 sm:px-4 py-2 text-sm font-semibold transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
 							style={fundAmount === amount.toString()
 								? 'border-color: var(--primary); background: rgba(5,212,113,0.12); color: var(--primary);'
 								: 'border-color: var(--border); background: var(--surface); color: var(--text-muted);'}
@@ -162,7 +162,7 @@
 				</div>
 			</div>
 
-			<div class="flex gap-3">
+			<div class="flex flex-col sm:flex-row gap-3">
 				<input
 					type="number"
 					bind:value={fundAmount}
@@ -176,7 +176,7 @@
 				<button
 					onclick={fundWallet}
 					disabled={loading}
-					class="flex items-center gap-2 rounded-full px-6 py-3 font-semibold transition-all duration-200 hover:-translate-y-0.5 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+					class="flex items-center justify-center gap-2  rounded-full px-6 py-3 font-semibold transition-all duration-200 hover:-translate-y-0.5 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
 					style="background: linear-gradient(180deg, rgba(5,212,113,0.95), rgba(13,145,82,0.95)); border: 1px solid rgba(5,212,113,0.40); color: #04140C; box-shadow: var(--glow-primary);"
 				>
 					{#if loading}
@@ -190,7 +190,7 @@
 			</div>
 
 			<!-- Helper Text -->
-			<div class="mt-4 space-y-2">
+			<div class="mt-4 space-y-4">
 				<div
 					class="flex items-start gap-2 rounded-[var(--r-sm)] border p-3"
 					style="background: rgba(5,212,113,0.08); border-color: rgba(5,212,113,0.2);"
@@ -259,7 +259,7 @@
 						style="background: linear-gradient(180deg, rgba(5,212,113,0.95), rgba(13,145,82,0.95)); border: 1px solid rgba(5,212,113,0.40); color: #04140C;"
 					>
 						<Plus class="h-5 w-5" />
-						Fund Wallet Now
+						Fund Wallet
 					</button>
 				</div>
 			{:else}

@@ -119,7 +119,7 @@
 
 		<!-- Platform Header -->
 		<section
-			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} py-8 text-white sm:py-12`}
+			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} py-4 text-white sm:py-12`}
 		>
 			<div class="mx-auto max-w-6xl px-4">
 				<!-- Enhanced Breadcrumb Navigation -->
@@ -331,58 +331,8 @@
 			</div>
 		</section>
 
-		<!-- Platform Benefits -->
-		<section class="py-16" style="background: var(--bg-elev-2);">
-			<div class="mx-auto max-w-4xl px-4 text-center">
-				<h2 class="mb-8 text-3xl font-bold" style="color: var(--text);">
-					Why Choose {data.platform.name} Accounts?
-				</h2>
-				<div class="grid grid-cols-1 gap-8 md:grid-cols-3">
-					<div class="text-center">
-						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
-							style="background: rgba(34, 197, 94, 0.2);"
-						>
-							<Users class="h-8 w-8" style="color: rgb(34, 197, 94);" />
-						</div>
-						<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">
-							Authentic Followers
-						</h3>
-						<p style="color: var(--text-muted);">
-							Real {data.platform.name} followers with genuine engagement and activity
-						</p>
-					</div>
-
-					<div class="text-center">
-						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
-							style="background: rgba(168, 85, 247, 0.2);"
-						>
-							<Package class="h-8 w-8" style="color: rgb(168, 85, 247);" />
-						</div>
-						<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">
-							Full Account Access
-						</h3>
-						<p style="color: var(--text-muted);">
-							Complete credentials including email access and password change ability
-						</p>
-					</div>
-
-					<div class="text-center">
-						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
-							style="background: rgba(59, 130, 246, 0.2);"
-						>
-							<ShoppingCart class="h-8 w-8" style="color: rgb(59, 130, 246);" />
-						</div>
-						<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">Instant Delivery</h3>
-						<p style="color: var(--text-muted);">
-							Receive your account details immediately after payment confirmation
-						</p>
-					</div>
-				</div>
-			</div>
-		</section>
+		
+		
 	{/if}
 </main>
 

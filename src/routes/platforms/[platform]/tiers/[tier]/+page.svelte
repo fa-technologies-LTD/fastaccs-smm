@@ -217,47 +217,13 @@
 					]}
 				/>
 
-				<!-- Step Indicator -->
-				<div
-					class="mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-[var(--color-surface)] px-3 py-2 sm:px-4"
-				>
-					<div class="flex items-center gap-2 opacity-50">
-						<div
-							class="flex h-6 w-6 items-center justify-center rounded-full bg-green-500 text-xs font-bold text-white"
-						>
-							✓
-						</div>
-						<span class="text-xs sm:text-sm">Platform</span>
-					</div>
-					<ChevronRight class="h-4 w-4 text-[var(--color-text-muted)]" />
-					<div class="flex items-center gap-2 opacity-50">
-						<div
-							class="flex h-6 w-6 items-center justify-center rounded-full bg-green-500 text-xs font-bold text-white"
-						>
-							✓
-						</div>
-						<span class="text-xs sm:text-sm">Category</span>
-					</div>
-					<ChevronRight class="h-4 w-4 text-[var(--color-text-muted)]" />
-					<div class="flex items-center gap-2">
-						<div
-							class="flex h-6 w-6 items-center justify-center rounded-full bg-purple-600 text-xs font-bold text-white"
-						>
-							3
-						</div>
-						<span class="text-xs font-medium text-[var(--color-text-primary)] sm:text-sm"
-							>Select Quantity</span
-						>
-					</div>
-					<ChevronRight class="h-4 w-4 text-[var(--color-text-muted)]" />
-					<span class="text-xs text-[var(--color-text-muted)] sm:text-sm">Checkout</span>
-				</div>
+			
 			</div>
 		</section>
 
 		<!-- Tier Header -->
 		<section
-			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} relative py-16 text-white`}
+			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} relative pt-8 pb-4 sm:py-8  text-white`}
 		>
 			<!-- Stock Status Badge - Small Corner Position -->
 			<div class="absolute top-4 right-4">
@@ -272,13 +238,13 @@
 				<div class="flex items-center justify-between">
 					<div class="flex items-center gap-6">
 						<div class="rounded-full bg-white/20 p-4">
-							<PlatformIcon class="h-12 w-12" />
+							<PlatformIcon class="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12" />
 						</div>
 						<div>
 							<div class="mb-2">
 								<h1 class="text-4xl font-bold">{data.tier.tier_name}</h1>
 							</div>
-							<p class="text-xl opacity-90">
+							<p class="text-base opacity-90">
 								{data.platform.name} accounts with
 								{#if data.tier.metadata?.follower_range}
 									{@const range = data.tier.metadata.follower_range}
@@ -288,7 +254,7 @@
 									{formatFollowers((data.tier.metadata?.follower_count as number) || 0)} followers
 								{/if}
 							</p>
-							<p class="mt-2 text-lg opacity-75">
+							<p class="mt-2 text-base opacity-75">
 								{data.tier.visible_available} accounts available
 								{#if data.tier.reservations_active > 0}
 									• {data.tier.reservations_active} reserved
@@ -299,7 +265,7 @@
 
 					<div class="text-right">
 						<div class="text-4xl font-bold">{formatPrice(data.tier.price)}</div>
-						<div class="text-lg opacity-75">per account</div>
+						<div class="text-base opacity-75">per account</div>
 					</div>
 				</div>
 			</div>
@@ -308,20 +274,6 @@
 		<!-- Main Content -->
 		<section class="py-8 sm:py-16">
 			<div class="mx-auto max-w-6xl px-4">
-				<!-- Instructional Banner -->
-				<div
-					class="mb-8 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-6"
-				>
-					<h2 class="mb-2 flex items-center gap-2 text-lg font-semibold text-[var(--color-accent)]">
-						<ShoppingCart class="h-5 w-5" />
-						Single Product Selection
-					</h2>
-					<p class="text-sm text-[var(--color-text-secondary)] sm:text-base">
-						This is a single SKU (Stock Keeping Unit). Choose your desired quantity below and add to
-						cart. Each purchase draws from our verified account inventory.
-					</p>
-				</div>
-
 				<div class="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:gap-12">
 					<!-- Left Column - Details -->
 					<div class="lg:col-span-2">
@@ -369,41 +321,7 @@
 										{/each}
 									</div>
 								</div>
-							{/if}
-
-							<!-- Standard Features -->
-							<div class="mb-6">
-								<h3 class="mb-4 text-lg font-semibold text-[var(--color-text-primary)]">
-									Standard Features:
-								</h3>
-								<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-									<div class="flex items-center gap-3">
-										<CheckCircle class="h-5 w-5 text-green-500" />
-										<span class="text-[var(--color-text-secondary)]">Full account access</span>
-									</div>
-									<div class="flex items-center gap-3">
-										<CheckCircle class="h-5 w-5 text-green-500" />
-										<span class="text-[var(--color-text-secondary)]">Original email included</span>
-									</div>
-									<div class="flex items-center gap-3">
-										<CheckCircle class="h-5 w-5 text-green-500" />
-										<span class="text-[var(--color-text-secondary)]">Password changeable</span>
-									</div>
-									<div class="flex items-center gap-3">
-										<CheckCircle class="h-5 w-5 text-green-500" />
-										<span class="text-[var(--color-text-secondary)]">Instant delivery</span>
-									</div>
-									<div class="flex items-center gap-3">
-										<CheckCircle class="h-5 w-5 text-green-500" />
-										<span class="text-[var(--color-text-secondary)]">24/7 support</span>
-									</div>
-									<div class="flex items-center gap-3">
-										<CheckCircle class="h-5 w-5 text-green-500" />
-										<span class="text-[var(--color-text-secondary)]">No violations history</span>
-									</div>
-								</div>
-							</div>
-
+							{/if}	
 							<!-- Account Age Info -->
 							{#if data.tier.metadata?.age_hint}
 								<div class="rounded-lg bg-[var(--color-surface)] p-4">
@@ -416,37 +334,6 @@
 									</div>
 								</div>
 							{/if}
-						</div>
-
-						<!-- Security Features -->
-						<div class="rounded-xl bg-[var(--color-card)] p-8 shadow">
-							<h2 class="mb-6 text-2xl font-bold text-[var(--color-text-primary)]">
-								Security & Safety
-							</h2>
-							<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-								<div class="flex items-center gap-3 rounded-lg bg-[var(--color-surface)] p-4">
-									<Shield class="h-6 w-6 text-green-500" />
-									<div>
-										<div class="font-semibold text-[var(--color-text-primary)]">
-											Secure Transfer
-										</div>
-										<div class="text-sm text-[var(--color-text-secondary)]">
-											Safe account handover process
-										</div>
-									</div>
-								</div>
-								<div class="flex items-center gap-3 rounded-lg bg-[var(--color-surface)] p-4">
-									<CheckCircle class="h-6 w-6 text-[var(--color-accent)]" />
-									<div>
-										<div class="font-semibold text-[var(--color-text-primary)]">
-											Quality Assured
-										</div>
-										<div class="text-sm text-[var(--color-text-secondary)]">
-											All accounts verified before sale
-										</div>
-									</div>
-								</div>
-							</div>
 						</div>
 					</div>
 

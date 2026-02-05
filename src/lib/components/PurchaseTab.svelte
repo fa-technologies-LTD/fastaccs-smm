@@ -97,27 +97,30 @@
 	{:else}
 		<div class="divide-y divide-[var(--border)]">
 			{#each purchases as purchase}
-				<div class="p-6">
-					<div class="mb-4 flex items-center justify-between">
-						<div>
+				<div class="p-4 sm:p-6">
+					<div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+						<div class="min-w-0">
 							<h3 class="font-semibold" style="color: var(--text); font-family: var(--font-head);">
 								{purchase.categoryName}
 							</h3>
-							<div class="flex items-center gap-3 text-sm" style="color: var(--text-muted);">
-								<span class="font-medium">Order #{purchase.orderNumber}</span>
-								<span>•</span>
+							<div
+								class="flex flex-wrap items-center gap-2 text-xs sm:gap-3 sm:text-sm"
+								style="color: var(--text-muted);"
+							>
+								<span class="min-w-0 truncate font-medium">Order #{purchase.orderNumber}</span>
+								<span class="text-[color:var(--text-dim)]">•</span>
 								<div class="flex items-center gap-1.5">
 									<Clock class="h-3.5 w-3.5" style="color: var(--text-dim);" />
-									<span style="color: var(--text-muted);">
+									<span class="whitespace-nowrap" style="color: var(--text-muted);">
 										{formatDateTime(purchase.deliveryDate || purchase.orderDate)}
 									</span>
 								</div>
-								<span>•</span>
+								<span class="text-[color:var(--text-dim)]">•</span>
 								<span class="font-medium" style="color: var(--primary);">Delivered</span>
 							</div>
 						</div>
-						<div class="flex items-center gap-3">
-							<div class="text-right">
+						<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+							<div class="text-left sm:text-right">
 								<div
 									class="font-semibold"
 									style="color: var(--text); font-family: var(--font-head);"
@@ -129,7 +132,7 @@
 							{#if purchase.accounts && purchase.accounts.length > 0}
 								<button
 									onclick={() => copyAllPurchaseAccounts(purchase)}
-									class="flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all hover:-translate-y-0.5"
+									class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all hover:-translate-y-0.5 sm:w-auto"
 									style="background: linear-gradient(180deg, rgba(5,212,113,0.95), rgba(13,145,82,0.95)); border: 1px solid rgba(5,212,113,0.40); color: #04140C;"
 									title="Copy all accounts in this order"
 								>
@@ -144,11 +147,13 @@
 						<div class="space-y-3">
 							{#each purchase.accounts as account, index}
 								<div
-									class="rounded-[var(--r-sm)] border-2 border-[var(--border-2)] p-5"
+									class="rounded-[var(--r-sm)] border-2 border-[var(--border-2)] p-4"
 									style="background: var(--surface);"
 								>
-									<div class="mb-4 flex items-center justify-between">
-										<div class="flex items-center gap-2">
+									<div
+										class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+									>
+										<div class="flex flex-wrap items-center gap-2">
 											<CheckCircle class="h-5 w-5" style="color: var(--primary);" />
 											<span class="text-sm font-medium" style="color: var(--text-dim);">
 												#{index + 1}
@@ -161,7 +166,7 @@
 										</div>
 										<button
 											onclick={() => copyAccount(account, index)}
-											class="flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all hover:-translate-y-0.5"
+											class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-all hover:-translate-y-0.5 sm:w-auto"
 											style="background: var(--surface-2); border: 1px solid var(--border-2); color: var(--text-muted);"
 											title="Copy this account's credentials"
 										>
@@ -175,16 +180,16 @@
 										style="background: rgba(0,0,0,0.3);"
 									>
 										<!-- Username -->
-										<div class="flex">
-											<span class="w-32 font-semibold" style="color: var(--text-muted);"
+										<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
+											<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
 												>Username:</span
 											>
 											<span class="flex-1" style="color: var(--text);">{account.username}</span>
 										</div>
 
 										<!-- Password -->
-										<div class="flex">
-											<span class="w-32 font-semibold" style="color: var(--text-muted);"
+										<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
+											<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
 												>Password:</span
 											>
 											<span class="flex-1" style="color: var(--text);">{account.password}</span>
@@ -192,8 +197,8 @@
 
 										<!-- Email (if available) -->
 										{#if account.email}
-											<div class="flex">
-												<span class="w-32 font-semibold" style="color: var(--text-muted);"
+											<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
+												<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
 													>Email:</span
 												>
 												<span class="flex-1" style="color: var(--text);">{account.email}</span>
@@ -202,8 +207,8 @@
 
 										<!-- Email Password (if available) -->
 										{#if account.emailPassword}
-											<div class="flex">
-												<span class="w-32 font-semibold" style="color: var(--text-muted);"
+											<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
+												<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
 													>Email Pass:</span
 												>
 												<span class="flex-1" style="color: var(--text);"
@@ -214,8 +219,8 @@
 
 										<!-- 2FA (if available) -->
 										{#if account.twoFa}
-											<div class="flex">
-												<span class="w-32 font-semibold" style="color: var(--text-muted);"
+											<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
+												<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
 													>2FA Code:</span
 												>
 												<span class="flex-1" style="color: var(--text);">{account.twoFa}</span>
@@ -224,15 +229,15 @@
 
 										<!-- Link (if available) -->
 										{#if account.linkUrl}
-											<div class="flex">
-												<span class="w-32 font-semibold" style="color: var(--text-muted);"
+											<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
+												<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
 													>Link:</span
 												>
 												<a
 													href={account.linkUrl}
 													target="_blank"
 													rel="noopener noreferrer"
-													class="flex-1 hover:underline"
+													class="flex-1 break-all hover:underline"
 													style="color: var(--link);"
 												>
 													{account.linkUrl}

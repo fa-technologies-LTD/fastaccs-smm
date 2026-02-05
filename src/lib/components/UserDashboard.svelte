@@ -17,7 +17,7 @@
 		// user
 	} = $props();
 
-	let activeTab = $state('orders');
+	let activeTab = $state('purchases');
 
 	// Calculate stats from orders
 	let totalOrders = $derived(orders.length);
@@ -36,7 +36,7 @@
 		class="mb-8 rounded-[var(--r-md)] border border-[var(--border-2)] p-6"
 		style="background: var(--surface-2);"
 	>
-		<div class="flex items-center justify-between">
+		<div class="flex flex-col items-center justify-between gap-4 sm:flex-row">
 			<div class="flex items-center">
 				<div
 					class="mr-4 flex h-16 w-16 items-center justify-center rounded-full text-sm font-semibold"
@@ -47,17 +47,19 @@
 						.map((n: string) => n[0])
 						.join('')}
 				</div>
-				<div>
+				<div class="space-y-2">
 					<h1
 						class="text-base font-semibold"
 						style="color: var(--text); font-family: var(--font-head);"
 					>
 						Welcome back, {name}!
 					</h1>
-					<p style="color: var(--text-muted);">Member since {new Date(joinDate).toDateString()}</p>
+					<p class="text-sm" style="color: var(--text-muted);">
+						Member since {new Date(joinDate).toDateString()}
+					</p>
 				</div>
 			</div>
-			<div class="text-right">
+			<div class="mt-2 self-start text-left sm:mt-0">
 				<div class="text-xs" style="color: var(--text-dim);">Wallet Balance</div>
 				<div class="text-base font-semibold" style="color: var(--primary);">
 					₦{Number(initialWalletBalance).toLocaleString('en-US', {
@@ -161,8 +163,8 @@
 	</div>
 
 	<!-- Navigation Tabs -->
-	<div class="mb-6 border-b border-[var(--border)]">
-		<nav class="flex space-x-8">
+	<div class="mb-6 overflow-x-auto border-b border-[var(--border)]">
+		<nav class="flex flex-nowrap gap-6 pb-2 whitespace-nowrap">
 			<button
 				onclick={() => (activeTab = 'orders')}
 				class="border-b-2 px-1 py-2 text-sm font-semibold transition-all"
@@ -172,7 +174,7 @@
 					? 'var(--primary)'
 					: 'var(--text-dim)'}; font-family: var(--font-head);"
 			>
-				Order History
+				Order
 			</button>
 			<button
 				onclick={() => (activeTab = 'purchases')}
