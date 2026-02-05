@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { addToast } from '$lib/stores/toasts';
 </script>
 
 <section
@@ -36,7 +37,7 @@
 			</button>
 			<button
 				class="btn-cta-secondary w-full cursor-pointer rounded-full border-2 px-6 py-3 text-base font-semibold sm:w-auto sm:px-8"
-				onclick={() => goto('/services')}
+				onclick={() => addToast({ type: 'info', title: 'Coming Soon!' })}
 			>
 				View Boosting Services
 			</button>

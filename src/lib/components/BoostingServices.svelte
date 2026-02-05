@@ -74,10 +74,10 @@
 
 <div class="mx-auto max-w-6xl px-4 py-8">
 	<div class="mb-8 text-center">
-		<h1 class="mb-4 text-3xl font-bold text-gray-900 md:text-4xl">
+		<h1 class="mb-4 text-3xl font-bold md:text-4xl" style="color: var(--text);">
 			Social Media Boosting Services
 		</h1>
-		<p class="text-xl text-gray-600">
+		<p class="text-xl" style="color: var(--text-muted);">
 			Grow your social media presence with our premium boosting services
 		</p>
 	</div>
@@ -85,24 +85,24 @@
 	<div class="grid grid-cols-1 gap-8 lg:grid-cols-3">
 		<!-- Service Selection -->
 		<div class="lg:col-span-1">
-			<h3 class="mb-4 text-xl font-bold">Select Service</h3>
+			<h3 class="mb-4 text-xl font-bold" style="color: var(--text);">Select Service</h3>
 			<div class="space-y-3">
 				{#each services as service}
 					<button
 						onclick={() => selectService(service)}
-						class="w-full rounded-lg border-2 p-4 text-left transition-all
-							{selectedService.id === service.id
-							? 'border-blue-500 bg-blue-50'
-							: 'border-gray-200 hover:border-gray-300'}"
+						class="w-full rounded-lg p-4 text-left transition-all"
+						style={selectedService.id === service.id
+							? 'border: 2px solid var(--primary); background: rgba(59, 130, 246, 0.1);'
+							: 'border: 2px solid var(--border);'}
 					>
 						<div class="mb-2 flex items-center">
 							<span class="mr-3 text-2xl">{service.icon}</span>
 							<div>
-								<div class="font-semibold text-gray-900">{service.title}</div>
-								<div class="text-sm text-gray-600">{service.platform}</div>
+								<div class="font-semibold" style="color: var(--text);">{service.title}</div>
+								<div class="text-sm" style="color: var(--text-muted);">{service.platform}</div>
 							</div>
 						</div>
-						<p class="text-sm text-gray-600">{service.description}</p>
+						<p class="text-sm" style="color: var(--text-muted);">{service.description}</p>
 					</button>
 				{/each}
 			</div>
@@ -110,21 +110,24 @@
 
 		<!-- Package Selection & Order Form -->
 		<div class="lg:col-span-2">
-			<div class="rounded-lg border border-gray-200 bg-white p-6">
-				<h3 class="mb-6 text-2xl font-bold">{selectedService.title}</h3>
+			<div
+				class="rounded-lg p-6"
+				style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+			>
+				<h3 class="mb-6 text-2xl font-bold" style="color: var(--text);">{selectedService.title}</h3>
 
 				<!-- Service Info -->
 				<div class="mb-6 grid grid-cols-2 gap-4">
-					<div class="rounded-lg bg-gray-50 p-3">
-						<div class="text-sm text-gray-600">Delivery Time</div>
-						<div class="flex items-center font-semibold">
+					<div class="rounded-lg p-3" style="background: var(--surface);">
+						<div class="text-sm" style="color: var(--text-muted);">Delivery Time</div>
+						<div class="flex items-center font-semibold" style="color: var(--text);">
 							<Clock class="mr-1 h-4 w-4" />
 							{selectedService.deliveryTime}
 						</div>
 					</div>
-					<div class="rounded-lg bg-gray-50 p-3">
-						<div class="text-sm text-gray-600">Quality</div>
-						<div class="flex items-center font-semibold">
+					<div class="rounded-lg p-3" style="background: var(--surface);">
+						<div class="text-sm" style="color: var(--text-muted);">Quality</div>
+						<div class="flex items-center font-semibold" style="color: var(--text);">
 							<TrendingUp class="mr-1 h-4 w-4" />
 							{selectedService.quality}
 						</div>
@@ -133,13 +136,15 @@
 
 				<!-- Package Options -->
 				<div class="mb-6">
-					<h4 class="mb-3 font-semibold">Select Package</h4>
+					<h4 class="mb-3 font-semibold" style="color: var(--text);">Select Package</h4>
 					<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
 						{#each selectedService.pricing as pkg}
 							<button
 								onclick={() => selectPackage(pkg)}
-								class="relative rounded-lg border-2 p-4 text-left transition-all
-									{selectedPackage === pkg ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}"
+								class="relative rounded-lg p-4 text-left transition-all"
+								style={selectedPackage === pkg
+									? 'border: 2px solid var(--primary); background: rgba(59, 130, 246, 0.1);'
+									: 'border: 2px solid var(--border);'}
 							>
 								{#if pkg.popular}
 									<div
@@ -150,13 +155,13 @@
 								{/if}
 								<div class="flex items-center justify-between">
 									<div>
-										<div class="font-semibold">
+										<div class="font-semibold" style="color: var(--text);">
 											{pkg.amount.toLocaleString()}
 											{selectedService.title.split(' ')[1]}
 										</div>
-										<div class="text-sm text-gray-600">₦{pkg.price}</div>
+										<div class="text-sm" style="color: var(--text-muted);">₦{pkg.price}</div>
 									</div>
-									<div class="font-semibold text-blue-600">
+									<div class="font-semibold" style="color: var(--link);">
 										₦{((pkg.price / pkg.amount) * 1000).toFixed(1)}/1K
 									</div>
 								</div>
@@ -167,12 +172,15 @@
 
 				<!-- Quantity Selector -->
 				<div class="mb-6">
-					<label for="quantity-input" class="mb-2 block font-semibold">Quantity</label>
+					<label for="quantity-input" class="mb-2 block font-semibold" style="color: var(--text);"
+						>Quantity</label
+					>
 					<div class="flex items-center gap-4">
-						<div class="flex items-center rounded-lg border">
+						<div class="flex items-center rounded-lg" style="border: 1px solid var(--border);">
 							<button
 								onclick={() => (quantity = Math.max(1, quantity - 1))}
-								class="p-2 hover:bg-gray-100"
+								class="p-2"
+								style="color: var(--text);"
 								aria-label="Decrease quantity"
 							>
 								<Minus class="h-4 w-4" />
@@ -182,18 +190,22 @@
 								type="number"
 								bind:value={quantity}
 								min="1"
-								class="min-w-[60px] border-x px-4 py-2 text-center focus:outline-none"
+								class="min-w-[60px] px-4 py-2 text-center focus:outline-none"
+								style="border-left: 1px solid var(--border); border-right: 1px solid var(--border); background: transparent; color: var(--text);"
 							/>
 							<button
 								onclick={() => (quantity += 1)}
-								class="p-2 hover:bg-gray-100"
+								class="p-2"
+								style="color: var(--text);"
 								aria-label="Increase quantity"
 							>
 								<Plus class="h-4 w-4" />
 							</button>
 						</div>
-						<div class="text-gray-600">
-							Total: <span class="font-semibold">{totalAmount.toLocaleString()}</span>
+						<div style="color: var(--text-muted);">
+							Total: <span class="font-semibold" style="color: var(--text);"
+								>{totalAmount.toLocaleString()}</span
+							>
 							{selectedService.title.split(' ')[1]}
 						</div>
 					</div>
@@ -201,7 +213,7 @@
 
 				<!-- Link Input -->
 				<div class="mb-6">
-					<label for="profile-link" class="mb-2 block font-semibold">
+					<label for="profile-link" class="mb-2 block font-semibold" style="color: var(--text);">
 						{selectedService.platform} Profile/Post Link
 					</label>
 					<input
@@ -209,19 +221,20 @@
 						type="url"
 						bind:value={userLink}
 						placeholder="Paste your {selectedService.platform} link here..."
-						class="w-full rounded-lg border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+						class="w-full rounded-lg px-4 py-3 focus:ring-2 focus:outline-none"
+						style="border: 1px solid var(--border); background: var(--surface); color: var(--text); --tw-ring-color: var(--primary);"
 					/>
-					<p class="mt-1 text-sm text-gray-600">
+					<p class="mt-1 text-sm" style="color: var(--text-muted);">
 						Make sure your account is public for faster delivery
 					</p>
 				</div>
 
 				<!-- Features -->
 				<div class="mb-6">
-					<h4 class="mb-3 font-semibold">What You Get:</h4>
+					<h4 class="mb-3 font-semibold" style="color: var(--text);">What You Get:</h4>
 					<ul class="space-y-2">
 						{#each selectedService.features as feature}
-							<li class="flex items-center text-gray-700">
+							<li class="flex items-center" style="color: var(--text);">
 								<div class="mr-3 h-2 w-2 rounded-full bg-green-500"></div>
 								{feature}
 							</li>
@@ -230,31 +243,37 @@
 				</div>
 
 				<!-- Order Summary -->
-				<div class="border-t pt-6">
-					<div class="mb-4 rounded-lg bg-gray-50 p-4">
-						<h4 class="mb-2 font-semibold">Order Summary</h4>
-						<div class="mb-2 flex items-center justify-between">
+				<div class="pt-6" style="border-top: 1px solid var(--border);">
+					<div class="mb-4 rounded-lg p-4" style="background: var(--surface);">
+						<h4 class="mb-2 font-semibold" style="color: var(--text);">Order Summary</h4>
+						<div class="mb-2 flex items-center justify-between" style="color: var(--text);">
 							<span>{selectedService.title}</span>
 							<span>₦{selectedPackage.price}</span>
 						</div>
-						<div class="mb-2 flex items-center justify-between">
+						<div class="mb-2 flex items-center justify-between" style="color: var(--text);">
 							<span>Quantity</span>
 							<span>×{quantity}</span>
 						</div>
-						<div class="mb-2 flex items-center justify-between text-sm text-gray-600">
+						<div
+							class="mb-2 flex items-center justify-between text-sm"
+							style="color: var(--text-muted);"
+						>
 							<span>Total {selectedService.title.split(' ')[1]}</span>
 							<span>{totalAmount.toLocaleString()}</span>
 						</div>
-						<hr class="my-2" />
+						<hr class="my-2" style="border-color: var(--border);" />
 						<div class="flex items-center justify-between text-lg font-bold">
-							<span>Total Price</span>
-							<span class="text-blue-600">₦{totalPrice.toLocaleString()}</span>
+							<span style="color: var(--text);">Total Price</span>
+							<span style="color: var(--link);">₦{totalPrice.toLocaleString()}</span>
 						</div>
 					</div>
 
 					<button
 						disabled={!userLink}
-						class="w-full rounded-lg bg-blue-600 py-4 font-semibold text-white transition-all hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:active:scale-100"
+						class="w-full rounded-full py-4 font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:active:scale-100"
+						style={!userLink
+							? 'background: var(--surface); color: var(--text-muted);'
+							: 'background: var(--primary); color: #000;'}
 					>
 						{userLink
 							? `Order Now - ₦${totalPrice.toLocaleString()}`

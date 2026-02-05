@@ -1,5 +1,6 @@
 <script>
 	import { Mail, MessageCircle, Send, Facebook, Twitter, Instagram } from '@lucide/svelte';
+	import { addToast } from '$lib/stores/toasts';
 	import footerLogo from '$lib/assets/footer-logo.png';
 </script>
 
@@ -45,8 +46,10 @@
 						>
 					</li>
 					<li>
-						<a href="/services" data-sveltekit-preload-data="hover" class="footer-link"
-							>Boosting Services</a
+						<button
+							class="footer-link text-left"
+							onclick={() => addToast({ type: 'info', title: 'Coming Soon!' })}
+							>Boosting Services</button
 						>
 					</li>
 					<li>

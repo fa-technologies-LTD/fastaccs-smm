@@ -387,67 +387,6 @@
 		</div>
 	</section>
 
-	<!-- Features Section -->
-	<section style="background: var(--bg-elev-1); padding: var(--space-4xl) var(--space-md);">
-		<div class="mx-auto max-w-4xl px-4 text-center">
-			<h2
-				style="margin-bottom: var(--space-2xl); font-size: 1.875rem; font-weight: 700; color: var(--text); font-family: var(--font-head);"
-			>
-				Why Choose FastAccs?
-			</h2>
-			<div class="grid grid-cols-1 gap-8 md:grid-cols-3">
-				<div class="text-center">
-					<div
-						class="mx-auto mb-4 flex h-16 w-16 items-center justify-center"
-						style="border-radius: 50%; background: var(--bg-elev-2); border: 2px solid var(--border);"
-					>
-						<Users class="h-8 w-8" style="color: var(--primary);" />
-					</div>
-					<h3
-						style="margin-bottom: var(--space-xs); font-size: 1.125rem; font-weight: 600; color: var(--text); font-family: var(--font-head);"
-					>
-						Real Followers
-					</h3>
-					<p style="color: var(--text-muted); font-family: var(--font-body);">
-						All accounts come with genuine followers and authentic engagement rates
-					</p>
-				</div>
-
-				<div class="text-center">
-					<div
-						class="mx-auto mb-4 flex h-16 w-16 items-center justify-center"
-						style="border-radius: 50%; background: var(--bg-elev-2); border: 2px solid var(--border);"
-					>
-						<Package class="h-8 w-8" style="color: var(--fa-lime-700);" />
-					</div>
-					<h3
-						style="margin-bottom: var(--space-xs); font-size: 1.125rem; font-weight: 600; color: var(--text); font-family: var(--font-head);"
-					>
-						Instant Delivery
-					</h3>
-					<p style="color: var(--text-muted); font-family: var(--font-body);">
-						Receive your account credentials immediately after payment confirmation
-					</p>
-				</div>
-
-				<div class="text-center">
-					<div
-						class="mx-auto mb-4 flex h-16 w-16 items-center justify-center"
-						style="border-radius: 50%; background: var(--bg-elev-2); border: 2px solid var(--border);"
-					>
-						<ArrowRight class="h-8 w-8" style="color: var(--fa-blue-500);" />
-					</div>
-					<h3
-						style="margin-bottom: var(--space-xs); font-size: 1.125rem; font-weight: 600; color: var(--text); font-family: var(--font-head);"
-					>
-						24/7 Support
-					</h3>
-					<p style="color: var(--text-muted); font-family: var(--font-body);">
-						Get help anytime with our dedicated customer support team
-					</p>
-				</div>
-			</div>
-		</div>
-	</section>
+	
 </main>
 <Footer />

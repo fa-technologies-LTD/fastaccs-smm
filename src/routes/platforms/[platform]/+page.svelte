@@ -4,6 +4,7 @@
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
+	
 	import type { PageData } from './$types';
 	import { getPlatformColor, getPlatformIcon } from '$lib/helpers/platformColors';
 	import { formatPrice } from '$lib/helpers/utils';
@@ -129,21 +130,8 @@
 					]}
 				/>
 
-				<!-- Step Indicator -->
-				<div class="mb-6 flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 backdrop-blur-sm">
-					<div class="flex items-center gap-2">
-						<div
-							class="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-bold text-blue-600"
-						>
-							2
-						</div>
-						<span class="text-sm font-medium">Choose Category</span>
-					</div>
-					<ChevronRight class="h-4 w-4 opacity-50" />
-					<span class="text-sm opacity-75">Select Quantity</span>
-					<ChevronRight class="h-4 w-4 opacity-50" />
-					<span class="text-sm opacity-75">Checkout</span>
-				</div>
+				<!-- Step Indicator - Commented Out -->
+				<!-- <StepIndicator currentStep={2} /> -->
 
 				<div class="flex items-start gap-4 sm:gap-6">
 					<div class="flex flex-col items-center gap-3">
@@ -176,24 +164,6 @@
 		<!-- Tier Selection -->
 		<section class="py-8 sm:py-16">
 			<div class="mx-auto max-w-6xl px-4">
-				<!-- Instructional Banner -->
-				<div
-					class="mb-8 rounded-xl p-4 sm:p-6"
-					style="background: var(--bg-elev-2); border: 1px solid var(--border);"
-				>
-					<h2
-						class="mb-2 flex items-center gap-2 text-lg font-semibold"
-						style="color: var(--text);"
-					>
-						<Package class="h-5 w-5" />
-						Choose Your Account Category
-					</h2>
-					<p class="text-sm sm:text-base" style="color: var(--text-muted);">
-						Select a follower tier below to see full details and purchase. Each category contains
-						verified accounts with the follower count shown. Click any card to continue.
-					</p>
-				</div>
-
 				<div class="mb-8 text-center">
 					<h2 class="mb-4 text-2xl font-bold sm:text-3xl" style="color: var(--text);">
 						Available Categories
@@ -231,7 +201,7 @@
 									e.key === 'Enter' && tier.visible_available > 0 && navigateToTier(tier.tier_slug)}
 								role="button"
 								tabindex={tier.visible_available > 0 ? 0 : -1}
-								class="group relative overflow-hidden rounded-xl shadow transition-all duration-300 {tier.visible_available >
+								class="group relative flex flex-col overflow-hidden rounded-xl shadow transition-all duration-300 {tier.visible_available >
 								0
 									? 'cursor-pointer hover:-translate-y-1 hover:shadow-md active:scale-[.98]'
 									: 'cursor-not-allowed opacity-75'}"
@@ -252,7 +222,7 @@
 								</div>
 
 								<!-- Tier Header -->
-								<div class="p-6">
+								<div class="flex flex-1 flex-col p-6">
 									<div class="mb-4 flex items-center justify-between">
 										<div>
 											<h3 class="text-xl font-bold" style="color: var(--text);">
@@ -338,21 +308,21 @@
 											</div>
 										</div>
 									{/if}
+								</div>
 
-									<!-- Action Label -->
-									<div
-										class="mt-4 flex items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-colors"
-										style={tier.visible_available === 0
-											? 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'
-											: 'background: var(--btn-primary-gradient); color: white;'}
-									>
-										{#if tier.visible_available === 0}
-											Sold Out
-										{:else}
-											<span>Select This Tier</span>
-											<ArrowRight class="h-4 w-4" />
-										{/if}
-									</div>
+								<!-- Action Label - Always at Bottom -->
+								<div
+									class="mx-6 mt-6 mb-6 flex items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-colors"
+									style={tier.visible_available === 0
+										? 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'
+										: 'background: var(--btn-primary-gradient); color: white;'}
+								>
+									{#if tier.visible_available === 0}
+										Sold Out
+									{:else}
+										<span>Select This Tier</span>
+										<ArrowRight class="h-4 w-4" />
+									{/if}
 								</div>
 							</div>
 						{/each}

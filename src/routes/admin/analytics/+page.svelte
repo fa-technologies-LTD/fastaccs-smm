@@ -59,7 +59,7 @@
 						</div>
 					{/if}
 				</div>
-				<div class="rounded-full bg-green-100 p-3">
+				<div class="rounded-full p-3" style="background: rgba(34, 197, 94, 0.1);">
 					<DollarSign class="h-6 w-6 text-green-600 group-hover:scale-80 group-hover:rotate-20" />
 				</div>
 			</div>
@@ -91,7 +91,7 @@
 						</div>
 					{/if}
 				</div>
-				<div class="rounded-full bg-blue-100 p-3">
+				<div class="rounded-full p-3" style="background: rgba(59, 130, 246, 0.1);">
 					<ShoppingCart class="h-6 w-6 text-blue-600 group-hover:scale-80 group-hover:rotate-20" />
 				</div>
 			</div>
@@ -125,7 +125,7 @@
 						</div>
 					{/if}
 				</div>
-				<div class="rounded-full bg-purple-100 p-3">
+				<div class="rounded-full p-3" style="background: rgba(168, 85, 247, 0.1);">
 					<Users class="h-6 w-6 text-purple-600 group-hover:scale-80 group-hover:rotate-20" />
 				</div>
 			</div>
@@ -188,38 +188,43 @@
 					</span>
 				</div>
 				<div class="flex items-center justify-between">
-					<span class="text-gray-600">Total Debits</span>
+					<span style="color: var(--text-muted);">Total Debits</span>
 					<span class="font-semibold text-red-600">
 						{formatPrice(stats.totalDebits || 0)}
 					</span>
 				</div>
 				<div class="flex items-center justify-between">
-					<span class="text-gray-600">Active Wallets</span>
-					<span class="font-semibold text-gray-900">{stats.activeWallets || 0}</span>
+					<span style="color: var(--text-muted);">Active Wallets</span>
+					<span class="font-semibold" style="color: var(--text);">{stats.activeWallets || 0}</span>
 				</div>
 			</div>
 		</div>
 
 		<!-- Affiliate Stats -->
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
-			<h2 class="mb-4 text-lg font-semibold text-gray-900">Affiliate Performance</h2>
+		<div
+			class="rounded-lg p-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+		>
+			<h2 class="mb-4 text-lg font-semibold" style="color: var(--text);">Affiliate Performance</h2>
 			<div class="space-y-4">
 				<div class="flex items-center justify-between">
-					<span class="text-gray-600">Active Affiliates</span>
-					<span class="font-semibold text-gray-900">{stats.activeAffiliates || 0}</span>
+					<span style="color: var(--text-muted);">Active Affiliates</span>
+					<span class="font-semibold" style="color: var(--text);"
+						>{stats.activeAffiliates || 0}</span
+					>
 				</div>
 				<div class="flex items-center justify-between">
-					<span class="text-gray-600">Total Referrals</span>
-					<span class="font-semibold text-gray-900">{stats.totalReferrals || 0}</span>
+					<span style="color: var(--text-muted);">Total Referrals</span>
+					<span class="font-semibold" style="color: var(--text);">{stats.totalReferrals || 0}</span>
 				</div>
 				<div class="flex items-center justify-between">
-					<span class="text-gray-600">Affiliate Sales</span>
-					<span class="font-semibold text-gray-900">
+					<span style="color: var(--text-muted);">Affiliate Sales</span>
+					<span class="font-semibold" style="color: var(--text);">
 						{formatPrice(stats.affiliateSales || 0)}
 					</span>
 				</div>
 				<div class="flex items-center justify-between">
-					<span class="text-gray-600">Total Commissions</span>
+					<span style="color: var(--text-muted);">Total Commissions</span>
 					<span class="font-semibold text-purple-600">
 						{formatPrice(stats.totalCommissions || 0)}
 					</span>
@@ -229,23 +234,28 @@
 	</div>
 
 	<!-- Inventory Stats -->
-	<div class="rounded-lg border border-gray-200 bg-white p-6">
-		<h2 class="mb-4 text-lg font-semibold text-gray-900">Inventory Overview</h2>
+	<div
+		class="rounded-lg p-6"
+		style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+	>
+		<h2 class="mb-4 text-lg font-semibold" style="color: var(--text);">Inventory Overview</h2>
 		<div class="grid grid-cols-1 gap-6 sm:grid-cols-4">
 			<div>
-				<p class="text-sm text-gray-600">Total Accounts</p>
-				<p class="mt-2 text-2xl font-bold text-gray-900">{stats.totalAccounts || 0}</p>
+				<p class="text-sm" style="color: var(--text-muted);">Total Accounts</p>
+				<p class="mt-2 text-2xl font-bold" style="color: var(--text);">
+					{stats.totalAccounts || 0}
+				</p>
 			</div>
 			<div>
-				<p class="text-sm text-gray-600">Available</p>
+				<p class="text-sm" style="color: var(--text-muted);">Available</p>
 				<p class="mt-2 text-2xl font-bold text-green-600">{stats.availableAccounts || 0}</p>
 			</div>
 			<div>
-				<p class="text-sm text-gray-600">Sold</p>
+				<p class="text-sm" style="color: var(--text-muted);">Sold</p>
 				<p class="mt-2 text-2xl font-bold text-blue-600">{stats.soldAccounts || 0}</p>
 			</div>
 			<div>
-				<p class="text-sm text-gray-600">Pending</p>
+				<p class="text-sm" style="color: var(--text-muted);">Pending</p>
 				<p class="mt-2 text-2xl font-bold text-yellow-600">{stats.pendingAccounts || 0}</p>
 			</div>
 		</div>
@@ -253,18 +263,30 @@
 
 	<!-- Top Performing Categories -->
 	{#if stats.topCategories && stats.topCategories.length > 0}
-		<div class="rounded-lg border border-gray-200 bg-white p-6">
-			<h2 class="mb-4 text-lg font-semibold text-gray-900">Top Performing Categories</h2>
+		<div
+			class="rounded-lg p-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+		>
+			<h2 class="mb-4 text-lg font-semibold" style="color: var(--text);">
+				Top Performing Categories
+			</h2>
 			<div class="space-y-3">
 				{#each stats.topCategories as category}
-					<div class="flex items-center justify-between rounded-lg bg-gray-50 p-4">
+					<div
+						class="flex items-center justify-between rounded-lg p-4"
+						style="background: var(--surface);"
+					>
 						<div>
-							<p class="font-medium text-gray-900">{category.name}</p>
-							<p class="text-sm text-gray-600">{category.orderCount} orders</p>
+							<p class="font-medium" style="color: var(--text);">{category.name}</p>
+							<p class="text-sm" style="color: var(--text-muted);">{category.orderCount} orders</p>
 						</div>
 						<div class="text-right">
-							<p class="font-semibold text-gray-900">{formatPrice(category.revenue)}</p>
-							<p class="text-sm text-gray-600">{category.unitsSold} accounts sold</p>
+							<p class="font-semibold" style="color: var(--text);">
+								{formatPrice(category.revenue)}
+							</p>
+							<p class="text-sm" style="color: var(--text-muted);">
+								{category.unitsSold} accounts sold
+							</p>
 						</div>
 					</div>
 				{/each}
