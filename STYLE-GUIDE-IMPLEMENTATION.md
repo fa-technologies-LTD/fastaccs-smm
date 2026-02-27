@@ -1,6 +1,11 @@
-# FastAccs Dark Theme Style Guide Implementation
+# FA Technologies Design System — FastAccs SMM Implementation
 
-This document provides quick reference for implementing the dark theme style guide across all components.
+Quick reference for implementing the design system in the FastAccs SMM SvelteKit app (`fastaccs.com/smm`).
+
+> **Architecture note:** FA Technologies uses a shared master palette with per-product theme overrides.
+> This file covers the **FastAccs SMM product theme** (default green). The FA Logistics product theme
+> (gold — `--fa-gold-*` tokens) lives in `fa-logistics/style.css` and is never used here.
+> See `style-guide.html` → Product Themes section for the full two-tier architecture.
 
 ## ✅ Completed Updates
 

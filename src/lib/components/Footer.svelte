@@ -90,32 +90,20 @@
 				</ul>
 			</div>
 
-			<!-- Legal -->
+			<!-- Policies -->
 			<div>
 				<h3
 					class="mb-4 text-lg font-semibold"
 					style="color: var(--text); font-family: var(--font-head);"
 				>
-					Legal
+					Policies
 				</h3>
 				<ul class="space-y-2">
 					<li>
-						<a href="/legal/privacy.html" class="footer-link">Privacy Policy</a>
+						<a href="/smm/policies.html" class="footer-link">Our Policies</a>
 					</li>
 					<li>
-						<a href="/legal/smm/privacy.html" class="footer-link">SMM Privacy</a>
-					</li>
-					<li>
-						<a href="/legal/smm/terms.html" class="footer-link">Terms of Service</a>
-					</li>
-					<li>
-						<a href="/legal/smm/refund.html" class="footer-link">Refund Policy</a>
-					</li>
-					<li>
-						<a href="/legal/smm/affiliate.html" class="footer-link">Affiliate Terms</a>
-					</li>
-					<li>
-						<a href="/legal/smm/cookies.html" class="footer-link">Cookie Notice</a>
+						<a href="/privacy.html" class="footer-link">Privacy</a>
 					</li>
 				</ul>
 			</div>

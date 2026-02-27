@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FastAccs Dark Theme Style Guide</title>
+  <title>FA Technologies Design System</title>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,7 +28,15 @@
   --fa-blue-800: #2E3192;
   --fa-blue-500: #696DFA;
   --fa-blue-300: #AAADFF;
-  
+
+  /* ── FA Logistics Product Theme ──────────────────────────────────
+     NOT in master brand PDF. Applied ONLY on fastaccs.com/logistics.
+     Do not use on FastAccs SMM, easyLogin, BatchPrep, or any other product.
+  ─────────────────────────────────────────────────────────────── */
+  --fa-gold-700: #A67C00;   /* deep/strong — button gradients, hover states   */
+  --fa-gold-600: #C9921A;   /* primary accent — CTAs, highlights               */
+  --fa-gold-400: #D4A017;   /* bright — decorative highlights only             */
+
   --fa-gray-600: #313131;
   --fa-white: #FFFFFF;
   --fa-black: #000000;
@@ -380,16 +388,115 @@ h1 {
   color: var(--fa-lime-700);
 }
 
+.theme-grid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  margin-top: 24px;
+}
+
+.theme-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.theme-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.theme-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 6px;
+  color: var(--text-dim);
+}
+
+.theme-name {
+  font-family: var(--font-head);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.theme-note {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.theme-swatches {
+  display: flex;
+}
+
+.theme-swatch {
+  flex: 1;
+  height: 48px;
+}
+
+.theme-tokens {
+  padding: 20px 24px;
+  display: grid;
+  gap: 10px;
+}
+
+.theme-token {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.theme-token-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.theme-token-name {
+  font-family: 'Courier New', monospace;
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.theme-token-value {
+  font-family: 'Courier New', monospace;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.arch-note {
+  background: rgba(170,173,255,0.04);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--fa-blue-300);
+  border-radius: 0 var(--r-xs) var(--r-xs) 0;
+  padding: 16px 20px;
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 28px;
+  line-height: 1.7;
+}
+
+.arch-note strong { color: var(--text); }
+
 @media (max-width: 768px) {
   body {
     padding: 20px 16px;
   }
-  
+
   .section-title {
     font-size: 24px;
   }
-  
+
   .color-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .theme-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -401,8 +508,8 @@ h1 {
     
     <!-- HEADER -->
     <div class="header">
-      <h1>FastAccs Dark Theme Style Guide</h1>
-      <p class="subtitle">Professional design system based on your brand guidelines</p>
+      <h1>FA Technologies Design System</h1>
+      <p class="subtitle">FA Technologies LTD &nbsp;·&nbsp; Master design system &nbsp;·&nbsp; v2.0 &nbsp;·&nbsp; February 2026</p>
     </div>
 
     <!-- 1. COLOR SYSTEM -->
@@ -706,6 +813,167 @@ h1 {
           </div>
         </div>
       </div>
+
+      <h3 style="font-family: var(--font-head); font-size: 24px; margin: 40px 0 12px; color: #C9921A;">FA Logistics Product Theme (Gold)</h3>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px; padding: 12px 16px; background: rgba(201,146,26,0.04); border: 1px solid rgba(201,146,26,0.15); border-radius: var(--r-xs); line-height: 1.6;">
+        Formal product extension — <strong style="color: var(--text);">not in the brand PDF. Applied exclusively on fastaccs.com/logistics. Do not use on any other product.</strong>
+        Two functional shades only. Gold should accent, not flood — use it on buttons, active states, price highlights, icons, and small dividers. Let the dark background do the heavy lifting.
+      </p>
+      <div class="color-grid">
+        <div class="color-card">
+          <div class="color-swatch" style="background: #C9921A; color: #1A1200;">
+            Hero Gold 
+          </div>
+          <div class="color-info">
+            <div class="color-name">Gold 600 — Primary</div>
+            <div class="color-values">
+              <div class="color-value"><span>HEX:</span><span>#C9921A</span></div>
+              <div class="color-value"><span>CSS:</span><span>--fa-gold-600 / --primary</span></div>
+            </div>
+            <div class="usage-tag" style="background: rgba(201,146,26,0.12); border-color: rgba(201,146,26,0.3); color: #C9921A;">CTAs · Highlights · Icons · Active tabs</div>
+          </div>
+        </div>
+        <div class="color-card">
+          <div class="color-swatch" style="background: #A67C00; color: rgba(255,255,255,0.85);">
+            Deep Gold
+          </div>
+          <div class="color-info">
+            <div class="color-name">Gold 700 — Strong</div>
+            <div class="color-values">
+              <div class="color-value"><span>HEX:</span><span>#A67C00</span></div>
+              <div class="color-value"><span>CSS:</span><span>--fa-gold-700 / --primary-strong</span></div>
+            </div>
+            <div class="usage-tag" style="background: rgba(166,124,0,0.12); border-color: rgba(166,124,0,0.3); color: #C9921A;">Button gradients · Hover · Pressed</div>
+          </div>
+        </div>
+        <div class="color-card" style="opacity: 0.55;">
+          <div class="color-swatch" style="background: #D4A017; color: #1A1200;">
+            Bright Gold
+          </div>
+          <div class="color-info">
+            <div class="color-name">Gold 400 — Decorative only</div>
+            <div class="color-values">
+              <div class="color-value"><span>HEX:</span><span>#D4A017</span></div>
+              <div class="color-value"><span>CSS:</span><span>--fa-gold-400</span></div>
+            </div>
+            <div class="usage-tag">Thin dividers · Decorative only — not for text or buttons</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRODUCT THEMES -->
+    <section class="section">
+      <h2 class="section-title">
+        <span class="section-number" style="background: rgba(170,173,255,0.12); border-color: rgba(170,173,255,0.3); color: var(--fa-blue-300);">⬡</span>
+        Product Themes
+      </h2>
+      <p class="section-desc">
+        FA Technologies uses a two-tier colour architecture. All products share the master palette and dark-theme foundation above. Each product overrides the semantic <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px;">--primary</code> group with a product-specific accent. No product theme colour should appear outside its own product.
+      </p>
+
+      <div class="arch-note">
+        <strong>Rule:</strong> The FA Technologies master palette (Greens, Limes, Blues, Neutrals) is shared across all products and defined in the brand PDF. Product theme tokens are <em>extensions</em> — they override only
+        <code style="background: rgba(0,0,0,0.2); padding: 2px 5px; border-radius: 3px;">--primary</code>,
+        <code style="background: rgba(0,0,0,0.2); padding: 2px 5px; border-radius: 3px;">--primary-strong</code>,
+        <code style="background: rgba(0,0,0,0.2); padding: 2px 5px; border-radius: 3px;">--glow-primary</code>, and
+        <code style="background: rgba(0,0,0,0.2); padding: 2px 5px; border-radius: 3px;">--focus</code>.
+        Everything else — backgrounds, typography, borders, spacing, radius, shadows — remains shared and unchanged.
+      </div>
+
+      <div class="theme-grid">
+
+        <!-- FastAccs SMM -->
+        <div class="theme-card">
+          <div class="theme-header" style="background: rgba(5,212,113,0.04);">
+            <div class="theme-label">fastaccs.com/smm</div>
+            <div class="theme-name" style="color: #05D471;">FastAccs SMM</div>
+            <div class="theme-note">Social media accounts marketplace. Electric green signals speed, tech, and hustle.</div>
+          </div>
+          <div class="theme-swatches">
+            <div class="theme-swatch" style="background: #076237;"></div>
+            <div class="theme-swatch" style="background: #0D9152;"></div>
+            <div class="theme-swatch" style="background: #25B570;"></div>
+            <div class="theme-swatch" style="background: #05D471;"></div>
+          </div>
+          <div class="theme-tokens">
+            <div class="theme-token">
+              <div class="theme-token-dot" style="background: #05D471;"></div>
+              <span class="theme-token-name">--primary</span>
+              <span class="theme-token-value">#05D471</span>
+            </div>
+            <div class="theme-token">
+              <div class="theme-token-dot" style="background: #25B570;"></div>
+              <span class="theme-token-name">--primary-strong</span>
+              <span class="theme-token-value">#25B570</span>
+            </div>
+            <div class="theme-token">
+              <div class="theme-token-dot" style="background: rgba(5,212,113,0.3); border: 1px solid rgba(5,212,113,0.5);"></div>
+              <span class="theme-token-name">--focus</span>
+              <span class="theme-token-value">rgba(5,212,113,0.35)</span>
+            </div>
+            <div style="font-size: 12px; color: var(--text-dim); margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--border);">
+              Default theme — no override needed. Master palette tokens apply directly.
+            </div>
+          </div>
+        </div>
+
+        <!-- FA Logistics -->
+        <div class="theme-card">
+          <div class="theme-header" style="background: rgba(201,146,26,0.04);">
+            <div class="theme-label">fastaccs.com/logistics</div>
+            <div class="theme-name" style="color: #C9921A;">FA Logistics</div>
+            <div class="theme-note">International gift delivery. Warm gold signals premium, trust, and care. Formal product extension — not in master brand PDF.</div>
+          </div>
+          <div class="theme-swatches">
+            <div class="theme-swatch" style="background: #A67C00;"></div>
+            <div class="theme-swatch" style="background: #C9921A;"></div>
+          </div>
+          <div class="theme-tokens">
+            <div class="theme-token">
+              <div class="theme-token-dot" style="background: #C9921A;"></div>
+              <span class="theme-token-name">--primary (--fa-gold-600)</span>
+              <span class="theme-token-value">#C9921A</span>
+            </div>
+            <div class="theme-token">
+              <div class="theme-token-dot" style="background: #A67C00;"></div>
+              <span class="theme-token-name">--primary-strong (--fa-gold-700)</span>
+              <span class="theme-token-value">#A67C00</span>
+            </div>
+            <div class="theme-token">
+              <div class="theme-token-dot" style="background: rgba(201,146,26,0.15); border: 1px solid rgba(201,146,26,0.35);"></div>
+              <span class="theme-token-name">--focus (soft — 0.20 opacity)</span>
+              <span class="theme-token-value">rgba(201,146,26,0.20)</span>
+            </div>
+            <div style="font-size: 12px; color: var(--text-dim); margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--border); line-height: 1.7;">
+              Override <code style="background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 3px;">--primary</code> at the stylesheet root. All other tokens unchanged.<br>
+              <span style="color: #FFB800;">&#9888;</span> <strong style="color: var(--text-muted);">Contrast check:</strong> <code style="background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 3px;">#A67C00</code> on dark backgrounds can fall below WCAG AA for text smaller than 18px. Use <code style="background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 3px;">#C9921A</code> for any text, labels, or links. Reserve <code style="background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 3px;">#A67C00</code> for button gradients and icons only.
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="code-block" style="margin-top: 28px;"><span class="comment">/* ── FA Logistics: semantic override (fastaccs.com/logistics/style.css) ── */</span>
+:root {
+  <span class="comment">/* Gold raw tokens are already declared in the master :root above.  */</span>
+  <span class="comment">/* Here we remap the shared semantic vars to the gold product theme. */</span>
+  <span class="property">--primary:</span>        <span class="value">var(--fa-gold-600)</span>;   <span class="comment">/* #C9921A */</span>
+  <span class="property">--primary-strong:</span> <span class="value">var(--fa-gold-700)</span>;   <span class="comment">/* #A67C00 */</span>
+  <span class="property">--glow-primary:</span>   <span class="value">0 0 0 1px rgba(201,146,26,0.18),
+                   0 10px 40px rgba(201,146,26,0.08)</span>;  <span class="comment">/* subtle — not gaming UI */</span>
+  <span class="property">--focus:</span>          <span class="value">rgba(201,146,26,0.20)</span>;          <span class="comment">/* soft — premium feel */</span>
+}
+
+<span class="comment">/* ── Gold usage rules ─────────────────────────────────────────────────── */</span>
+<span class="comment">/* Use #C9921A (--primary) for: buttons, active tabs, price text,          */</span>
+<span class="comment">/*   icons, small dividers, hover borders.                                 */</span>
+<span class="comment">/* Use #A67C00 (--primary-strong) for: button gradients, pressed state.   */</span>
+<span class="comment">/* Do NOT use gold for large fills or backgrounds — accent only.           */</span>
+<span class="comment">/* --fa-gold-400 (#D4A017) reserved for decorative thin lines only.        */</span>
+
+<span class="comment">/* ── FastAccs SMM: no override needed ─────────────────────────────────── */</span>
+<span class="comment">/* --primary is already var(--fa-green-500) = #05D471 from master :root.   */</span></div>
     </section>
 
     <!-- 2. IMPLEMENTATION -->
@@ -719,40 +987,48 @@ h1 {
       </p>
 
       <div class="code-block">
-<span class="comment">/* Add this to your main CSS file */</span>
+<span class="comment">/* ── Shared master palette — paste in every product's main CSS ── */</span>
 :root {
-  <span class="comment">/* Primary Greens */</span>
+  <span class="comment">/* Primary Greens (brand PDF) */</span>
   <span class="property">--fa-green-900:</span> <span class="value">#076237</span>;
   <span class="property">--fa-green-800:</span> <span class="value">#0D9152</span>;
   <span class="property">--fa-green-600:</span> <span class="value">#25B570</span>;
   <span class="property">--fa-green-500:</span> <span class="value">#05D471</span>;
 
-  <span class="comment">/* Accent Limes */</span>
+  <span class="comment">/* Accent Limes (brand PDF) */</span>
   <span class="property">--fa-lime-700:</span> <span class="value">#CADB2E</span>;
   <span class="property">--fa-lime-400:</span> <span class="value">#EEFF4E</span>;
 
-  <span class="comment">/* Secondary Blues */</span>
+  <span class="comment">/* Secondary Blues (brand PDF) */</span>
   <span class="property">--fa-blue-950:</span> <span class="value">#0F162F</span>;
   <span class="property">--fa-blue-800:</span> <span class="value">#2E3192</span>;
   <span class="property">--fa-blue-500:</span> <span class="value">#696DFA</span>;
   <span class="property">--fa-blue-300:</span> <span class="value">#AAADFF</span>;
 
-  <span class="comment">/* Semantic Tokens */</span>
+  <span class="comment">/* FA Logistics product theme — NOT for other products */</span>
+  <span class="property">--fa-gold-700:</span> <span class="value">#A67C00</span>;
+  <span class="property">--fa-gold-600:</span> <span class="value">#C9921A</span>;
+  <span class="property">--fa-gold-400:</span> <span class="value">#D4A017</span>;
+
+  <span class="comment">/* Shared semantic tokens */</span>
   <span class="property">--bg:</span> <span class="value">#07090C</span>;
   <span class="property">--surface:</span> <span class="value">rgba(255, 255, 255, 0.04)</span>;
   <span class="property">--border:</span> <span class="value">rgba(255, 255, 255, 0.10)</span>;
-  
+
   <span class="property">--text:</span> <span class="value">rgba(255, 255, 255, 0.92)</span>;
   <span class="property">--text-muted:</span> <span class="value">rgba(255, 255, 255, 0.68)</span>;
   <span class="property">--text-dim:</span> <span class="value">rgba(255, 255, 255, 0.55)</span>;
 
+  <span class="comment">/* Default primary = FastAccs SMM (green). FA Logistics overrides below. */</span>
   <span class="property">--primary:</span> <span class="value">var(--fa-green-500)</span>;
+  <span class="property">--primary-strong:</span> <span class="value">var(--fa-green-600)</span>;
   <span class="property">--link:</span> <span class="value">var(--fa-blue-300)</span>;
-  
+
   <span class="comment">/* Typography */</span>
   <span class="property">--font-head:</span> <span class="value">"DM Sans", system-ui, sans-serif</span>;
   <span class="property">--font-body:</span> <span class="value">"Open Sans", system-ui, sans-serif</span>;
 }
+<span class="comment">/* See Product Themes section for per-product semantic overrides. */</span>
       </div>
     </section>
 
@@ -1568,10 +1844,10 @@ h1 {
     <!-- FOOTER -->
     <div style="text-align: center; padding: 40px 0; border-top: 1px solid var(--border); margin-top: 60px;">
       <p style="color: var(--text-dim); font-size: 14px;">
-        FastAccs Dark Theme Style Guide • Based on Brand Guidelines PDF • January 2026
+        FA Technologies Design System v2.0 &nbsp;·&nbsp; FA Technologies LTD &nbsp;·&nbsp; February 2026
       </p>
       <p style="color: var(--text-dim); font-size: 13px; margin-top: 12px;">
-        For questions or customization requests, contact your development team
+        Master palette: Brand Guidelines PDF &nbsp;·&nbsp; FA Logistics gold theme: formal product extension
       </p>
     </div>
 

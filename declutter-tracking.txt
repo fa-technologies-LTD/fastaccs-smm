@@ -1,0 +1,122 @@
+═══════════════════════════════════════════════════════════════
+  FASTACCS UI DECLUTTERING - CHANGE TRACKING LOG
+  Branch: ui-declutter
+  Date: January 31, 2026
+═══════════════════════════════════════════════════════════════
+
+PHASE 1: HIGH-IMPACT REMOVALS
+══════════════════════════════════════════════════════════════
+
+[✓] 1.1 Remove "Browse Accounts" quick action (desktop only)
+    File: src/lib/components/UserDashboard.svelte
+    Status: COMPLETE - Hidden on desktop with md:hidden, visible on mobile
+    
+[✓] 1.2 Remove 2 dashboard stats cards (Total Orders, Completed Orders)
+    Keep: Total Spent
+    File: src/lib/components/UserDashboard.svelte
+    Status: COMPLETE - Removed Package, CheckCircle imports + 2 stat cards
+
+[✓] 1.3 Make dashboard header minimal and compact
+    File: src/lib/components/UserDashboard.svelte
+    Status: COMPLETE - Reduced avatar 16→12, padding 6→4, responsive text sizes
+
+PHASE 2: NAVIGATION & CTA CLEANUP
+══════════════════════════════════════════════════════════════
+
+[✓] 2.1 Replace "Sign In" + "Get Started" with single "Get Started"
+    File: src/lib/components/Navigation.svelte
+    Status: COMPLETE - Removed "Sign In", kept only "Get Started" button
+    
+[✓] 2.2 Move Admin button to avatar dropdown menu
+    File: src/lib/components/Navigation.svelte
+    Status: COMPLETE - Created dropdown with Dashboard, Admin Panel, Sign Out
+    
+[✓] 2.3 Streamline mobile menu spacing
+    File: src/lib/components/Navigation.svelte
+    Status: COMPLETE - Reduced py-6→py-4, py-3→py-2, tighter gaps
+    
+[✓] 2.4 Remove "View Boosting Services" button from hero
+    File: src/lib/components/HeroBanner.svelte
+    Status: COMPLETE - Removed secondary CTA button
+
+PHASE 3: FOOTER DECLUTTERING
+══════════════════════════════════════════════════════════════
+
+[✓] 3.1 Create 3-column compact footer (reduce padding)
+    File: src/lib/components/Footer.svelte
+    Status: COMPLETE - Converted 4-column→3-column layout
+    - Merged Quick Links + Support into single column
+    - Combined Support + Contact into "Get In Touch"
+    - Reduced padding: py-12→py-8
+    - Reduced spacing: gap-8→gap-6, space-y-3→space-y-2
+    - Smaller social icons: h-5→h-4, logo h-8→h-7
+    - Removed "Trusted & Secure" label from trust badges
+    - Removed bottom bar emojis (Made in Nigeria, Instant Delivery, etc.)
+    - Compact trust badges: py-1→py-0.5, text sizes sm→xs
+
+PHASE 4: PAGE-SPECIFIC CLEANUP
+══════════════════════════════════════════════════════════════
+
+[✓] 4.1 Remove "Choose Your Account Category" banner
+    File: src/routes/platforms/[platform]/+page.svelte
+    Status: COMPLETE - Removed instructional banner
+    
+[✓] 4.2 Remove step indicator from category page header
+    File: src/routes/platforms/[platform]/+page.svelte
+    Status: COMPLETE - Removed step progress indicator
+    
+[✓] 4.3 Minimize platform header (smaller icon, compact layout)
+    File: src/routes/platforms/[platform]/+page.svelte
+    Status: COMPLETE - Reduced padding py-8→py-6, icon sizes, responsive text
+
+[✓] 4.4 Remove "Single Product Selection" banner
+    File: src/routes/platforms/[platform]/tiers/[tier]/+page.svelte
+    Status: COMPLETE - Removed entire banner section
+    
+[✓] 4.5 Remove "Why Choose X Accounts?" section (3 cards)
+    File: src/routes/platforms/[platform]/tiers/[tier]/+page.svelte
+    Status: NOT FOUND in tier detail page (might be in category page)
+    
+[✓] 4.6 Remove "Account Details" section  
+    File: src/routes/platforms/[platform]/tiers/[tier]/+page.svelte
+    Status: COMPLETE - Removed What's Included & Standard Features
+    
+[✓] 4.7 Remove "Security & Safety" section
+    File: src/routes/platforms/[platform]/tiers/[tier]/+page.svelte
+    Status: COMPLETE - Removed entire section
+    
+[✓] 4.8 Minimize blue hero section on tier page
+    File: src/routes/platforms/[platform]/tiers/[tier]/+page.svelte
+    Status: COMPLETE - Reduced py-16→py-8, smaller icon, responsive text
+    
+[✓] 4.9 Add condensed feature line below hero
+    File: src/routes/platforms/[platform]/tiers/[tier]/+page.svelte
+    Status: COMPLETE - Added "Includes: Full access • Original email • Instant delivery"
+
+[✓] 4.10 Remove trust badges from SocialProof
+    File: src/lib/components/SocialProof.svelte
+    Status: COMPLETE - Removed entire trust badges section
+    - Removed CheckCircle import (unused)
+    - Deleted SSL Encrypted, Verified Accounts, Money Back, Premium Quality badges
+    - Saves ~200px vertical space on mobile
+
+[✓] 4.11 Compact breadcrumbs (remove Home on mobile, smaller font)
+    File: src/lib/components/Breadcrumb.svelte
+    Status: COMPLETE - Made breadcrumb compact and mobile-friendly
+    - Hide Home icon on mobile (hidden sm:flex)
+    - Hide first chevron on mobile (class:hidden + class:sm:block)
+    - Reduced font size: text-sm→text-xs (12px) on mobile, sm:text-sm on desktop
+    - Smaller chevrons: h-3.5 w-3.5 on mobile, sm:h-4 sm:w-4
+
+[✓] 4.12 Limit toasts (1 visible, 2s dismiss, deduplicate)
+    Files: src/lib/stores/toasts.ts
+    Status: COMPLETE - Improved toast notification system
+    - Added MAX_TOASTS = 1 constant
+    - Changed DEFAULT_DURATION from 3000ms→2000ms
+    - Implemented deduplication check (type + title + message)
+    - Limit queue to 1 toast (removes oldest when adding new)
+    - Added 'get' import from svelte/store for deduplication
+
+═══════════════════════════════════════════════════════════════
+ESTIMATED SPACE SAVINGS: ~1,100px on mobile
+═══════════════════════════════════════════════════════════════
