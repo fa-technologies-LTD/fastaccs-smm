@@ -8,7 +8,7 @@
 	style="background: var(--bg-elev-2); color: var(--text); border-top: 1px solid var(--border);"
 >
 	<div class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-		<div class="grid grid-cols-1 gap-8 md:grid-cols-4">
+		<div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-5">
 			<!-- Company Info -->
 			<div>
 				<div class="mb-4">
@@ -87,15 +87,35 @@
 					<li>
 						<a href="/faq" data-sveltekit-preload-data="hover" class="footer-link">FAQ</a>
 					</li>
+				</ul>
+			</div>
+
+			<!-- Legal -->
+			<div>
+				<h3
+					class="mb-4 text-lg font-semibold"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
+					Legal
+				</h3>
+				<ul class="space-y-2">
 					<li>
-						<a href="/terms" data-sveltekit-preload-data="hover" class="footer-link"
-							>Terms of Service</a
-						>
+						<a href="/legal/privacy.html" class="footer-link">Privacy Policy</a>
 					</li>
 					<li>
-						<a href="/privacy" data-sveltekit-preload-data="hover" class="footer-link"
-							>Privacy Policy</a
-						>
+						<a href="/legal/smm/privacy.html" class="footer-link">SMM Privacy</a>
+					</li>
+					<li>
+						<a href="/legal/smm/terms.html" class="footer-link">Terms of Service</a>
+					</li>
+					<li>
+						<a href="/legal/smm/refund.html" class="footer-link">Refund Policy</a>
+					</li>
+					<li>
+						<a href="/legal/smm/affiliate.html" class="footer-link">Affiliate Terms</a>
+					</li>
+					<li>
+						<a href="/legal/smm/cookies.html" class="footer-link">Cookie Notice</a>
 					</li>
 				</ul>
 			</div>
@@ -150,7 +170,7 @@
 		<div class="mt-8 pt-8 text-center" style="border-top: 1px solid var(--border);">
 			<div class="flex flex-col items-center justify-between md:flex-row">
 				<p class="text-sm" style="color: var(--text-dim); font-family: var(--font-body);">
-					© 2025 FastAccs. All rights reserved.
+					© 2026 FA Technologies LTD. All rights reserved.
 				</p>
 				<div class="mt-4 flex space-x-6 md:mt-0">
 					<span class="text-sm" style="color: var(--text-dim); font-family: var(--font-body);"
