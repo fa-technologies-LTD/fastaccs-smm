@@ -3,7 +3,7 @@
 	import OrderTab from './OrderTab.svelte';
 	import PurchaseTab from './PurchaseTab.svelte';
 	import AffiliateTab from './AffiliateTab.svelte';
-	import WalletTab from './WalletTab.svelte';
+	// import WalletTab from './WalletTab.svelte';
 	// import ProfileTab from './ProfileTab.svelte';
 
 	let {
@@ -11,8 +11,8 @@
 		orders,
 		joinDate,
 		affiliateData: initialAffiliateData = null,
-		walletBalance: initialWalletBalance = 0,
-		walletTransactions: initialWalletTransactions = [],
+		// walletBalance: initialWalletBalance = 0,
+		// walletTransactions: initialWalletTransactions = [],
 		purchases: initialPurchases = []
 		// user
 	} = $props();
@@ -59,6 +59,7 @@
 					</p>
 				</div>
 			</div>
+			<!-- Wallet Balance commented out
 			<div class="mt-2 self-start text-left sm:mt-0">
 				<div class="text-xs" style="color: var(--text-dim);">Wallet Balance</div>
 				<div class="text-base font-semibold" style="color: var(--primary);">
@@ -68,6 +69,7 @@
 					})}
 				</div>
 			</div>
+			-->
 		</div>
 	</div>
 
@@ -145,6 +147,7 @@
 			>
 				Browse Accounts
 			</a>
+			<!-- Add Funds button commented out
 			<button
 				onclick={() => (activeTab = 'wallet')}
 				class="flex items-center justify-center rounded-full px-6 py-3 font-semibold transition-all hover:-translate-y-0.5"
@@ -152,6 +155,7 @@
 			>
 				Add Funds
 			</button>
+			-->
 			<a
 				href="/support"
 				class="flex items-center justify-center rounded-full px-6 py-3 font-semibold transition-all hover:-translate-y-0.5"
@@ -198,6 +202,7 @@
 			>
 				Affiliate
 			</button>
+			<!-- Wallet tab commented out
 			<button
 				onclick={() => (activeTab = 'wallet')}
 				class="border-b-2 px-1 py-2 text-sm font-semibold transition-all"
@@ -209,6 +214,7 @@
 			>
 				Wallet
 			</button>
+			-->
 			<!-- Profile Settings tab commented out
 			<button
 				onclick={() => (activeTab = 'profile')}
@@ -228,8 +234,10 @@
 		<PurchaseTab {initialPurchases} />
 	{:else if activeTab === 'affiliate'}
 		<AffiliateTab {initialAffiliateData} />
+		<!-- Wallet tab commented out
 	{:else if activeTab === 'wallet'}
 		<WalletTab {initialWalletBalance} {initialWalletTransactions} />
+		-->
 		<!-- Profile Settings tab commented out
 	{:else if activeTab === 'profile'}
 		<ProfileTab {user} />

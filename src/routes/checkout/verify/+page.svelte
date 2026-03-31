@@ -33,10 +33,9 @@
 			if (result.success) {
 				success = true;
 				orderId = result.orderId;
+				cart.clear();
 				showSuccess('Payment successful!', 'Your order has been completed.');
-				goto('/dashboard').then(() => {
-					cart.clear();
-				});
+				goto('/dashboard');
 			} else {
 				errorMessage = result.error || 'Payment verification failed';
 				showError('Payment failed', errorMessage);

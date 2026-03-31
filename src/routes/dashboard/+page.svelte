@@ -26,8 +26,6 @@
 	orders={data.orders}
 	joinDate={data.user.createdAt}
 	affiliateData={data.affiliateData}
-	walletBalance={data.walletBalance}
-	walletTransactions={data.walletTransactions}
 	purchases={data.purchases}
 />
 
