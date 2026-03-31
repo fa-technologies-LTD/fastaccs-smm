@@ -28,3 +28,4 @@ SUPABASE_SETUP.md
 supabase-schema.sql
 nisc
 /../generated/prisma
+archive
