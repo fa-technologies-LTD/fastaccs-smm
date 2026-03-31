@@ -10,7 +10,6 @@
 		Check,
 		CreditCard,
 		Package,
-		Mail,
 		Share2,
 		TrendingUp,
 		Lock,

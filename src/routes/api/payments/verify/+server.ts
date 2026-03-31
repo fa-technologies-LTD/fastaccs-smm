@@ -11,14 +11,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 		}
 
-		const { reference } = await request.json();
+		const { transactionReference, paymentReference } = await request.json();
 
-		if (!reference) {
-			return json({ success: false, error: 'Payment reference is required' }, { status: 400 });
+		if (!transactionReference && !paymentReference) {
+			return json({ success: false, error: 'Transaction reference is required' }, { status: 400 });
 		}
 
-		// Verify payment with Korapay
-		const verificationResult = await verifyPayment(reference);
+		// Verify payment with Monnify (accepts either reference type)
+		const verificationResult = await verifyPayment(transactionReference || paymentReference);
 
 		if (!verificationResult.success) {
 			return json(
@@ -32,7 +32,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		// Get order from payment metadata
-		const orderId = verificationResult.metadata?.orderId as string;
+		const orderId = verificationResult.metaData?.orderId as string;
 
 		if (!orderId) {
 			return json(
@@ -76,7 +76,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			where: { id: orderId },
 			data: {
 				status: 'paid',
-				paymentReference: reference,
+				paymentReference: verificationResult.paymentReference,
 				paymentStatus: 'success',
 				paymentChannel: verificationResult.channel,
 				paidAt: verificationResult.paidAt || new Date()
@@ -93,8 +93,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				data: { status: 'completed' }
 			});
 		} catch (allocationError) {
-			// Payment succeeded but allocation failed
-			// Keep status as 'paid' and handle manually
+			// Payment succeeded but allocation failed — keep as 'paid' for manual handling
 			console.error('Account allocation error:', allocationError);
 			return json({
 				success: true,
@@ -109,7 +108,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			message: 'Payment verified and order completed',
 			orderId: order.id,
 			status: 'completed',
-			amount: verificationResult.amount,
+			amount: verificationResult.amountPaid,
 			currency: verificationResult.currency
 		});
 	} catch (error) {

@@ -1,8 +1,15 @@
+// ARCHIVED — wallet funding via payment gateway is disabled.
+// The wallet system is kept for potential future use but is not accessible to users.
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { initializePayment } from '$lib/services/payment';
 
-export const POST: RequestHandler = async ({ request, locals }) => {
+export const POST: RequestHandler = async () => {
+	return json(
+		{ success: false, error: 'Wallet funding is currently unavailable.' },
+		{ status: 410 }
+	);
+};
+
 	const user = locals.user;
 
 	if (!user) {

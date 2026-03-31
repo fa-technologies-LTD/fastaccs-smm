@@ -12,21 +12,20 @@
 	let orderId = $state<string | null>(null);
 
 	onMount(async () => {
-		// Get reference from URL query parameter
-		const reference = $page.url.searchParams.get('reference');
+		// Monnify redirects back with ?paymentReference=ORD_...
+		const paymentReference = $page.url.searchParams.get('paymentReference');
 
-		if (!reference) {
+		if (!paymentReference) {
 			errorMessage = 'No payment reference found';
 			verifying = false;
 			return;
 		}
 
 		try {
-			// Verify payment with backend
 			const response = await fetch('/api/payments/verify', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ reference })
+				body: JSON.stringify({ paymentReference })
 			});
 
 			const result = await response.json();
@@ -34,10 +33,7 @@
 			if (result.success) {
 				success = true;
 				orderId = result.orderId;
-
 				showSuccess('Payment successful!', 'Your order has been completed.');
-
-				// Redirect to dashboard immediately (clear cart after navigation)
 				goto('/dashboard').then(() => {
 					cart.clear();
 				});

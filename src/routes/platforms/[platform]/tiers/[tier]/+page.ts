@@ -45,12 +45,7 @@ export const load: PageLoad = async ({ params, fetch }) => {
 			accounts_available: tierData.accountCount || 0, // Use actual account count
 			reservations_active: 0, // No longer using database reservations
 			visible_available: tierData.accountCount || 0,
-			price:
-				typeof tierData.metadata === 'object' &&
-				tierData.metadata !== null &&
-				'price' in tierData.metadata
-					? Number(tierData.metadata.price)
-					: 0, // Get price from tier metadata
+			price: tierData.price || 0,
 			product_status: 'active',
 			tier_active: tierData.isActive,
 			platform_name: platformData.name,

@@ -2,14 +2,11 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import {
-		ArrowLeft,
 		ShoppingBag,
 		CreditCard,
-		Mail,
 		Check,
 		Lock,
 		Tag,
-		Wallet,
 		Shield,
 		X,
 		Minus,
@@ -29,13 +26,8 @@
 
 	// Reactive state
 	let loading = $state(false);
-	let processingPayment = $state(false);
-	let currentOrderId = $state<string | null>(null);
 	let affiliateCode = $state<string | null>(null);
 	let affiliateDiscount = $state<number>(0);
-	let validatingAffiliate = $state(false);
-	let walletBalance = $state<number>(0);
-	let loadingBalance = $state(true);
 	let loadingCartData = $state(true);
 
 	// Use user data directly from page data
@@ -48,7 +40,6 @@
 	// Load cart data and redirect if empty
 	$effect(() => {
 		loadCartData();
-		loadWalletBalance();
 		// Extract affiliate code from URL
 		const refCode = page.url.searchParams.get('ref');
 		if (refCode && !affiliateCode) {
@@ -73,24 +64,7 @@
 		}
 	}
 
-	async function loadWalletBalance() {
-		if (!user) return;
-
-		try {
-			const response = await fetch('/api/wallet/balance');
-			const data = await response.json();
-			if (data.success) {
-				walletBalance = data.balance || 0;
-			}
-		} catch (error) {
-			console.error('Failed to load wallet balance:', error);
-		} finally {
-			loadingBalance = false;
-		}
-	}
-
 	async function validateAffiliateCode(code: string) {
-		validatingAffiliate = true;
 		try {
 			const response = await fetch(`/api/affiliate/validate?code=${encodeURIComponent(code)}`);
 			const result = await response.json();
@@ -104,116 +78,13 @@
 			}
 		} catch (error) {
 			console.error('Error validating affiliate code:', error);
-		} finally {
-			validatingAffiliate = false;
 		}
 	}
 
-	function validateForm(): boolean {
-		// Since authentication is required, just check if user exists
-		return user !== null;
-	}
+	// ARCHIVED: wallet checkout (processCheckout) removed — wallet payments disabled.
+	// See src/lib/services/_archive/korapay.ts and git history for the original implementation.
 
-	async function processCheckout() {
-		// Check authentication first
-		if (!user) {
-			// Store current page for redirect after login
-			const currentUrl = new URL(window.location.href);
-			const returnUrl = encodeURIComponent(currentUrl.pathname + currentUrl.search);
-			goto(`/auth/login?returnUrl=${returnUrl}`);
-			return;
-		}
-
-		if (!validateForm()) return;
-
-		loading = true;
-		try {
-			// Calculate final total with affiliate discount
-			const discountAmount = affiliateCode ? (cartTotal * affiliateDiscount) / 100 : 0;
-			const finalTotal = cartTotal - discountAmount;
-
-			// Check wallet balance
-			if (walletBalance < finalTotal) {
-				showError(
-					'Insufficient balance',
-					`Your wallet balance (₦${walletBalance.toLocaleString()}) is insufficient. Please fund your wallet first.`
-				);
-				loading = false;
-				return;
-			}
-
-			// Stock validation to prevent overselling
-			for (const item of cartItems) {
-				const stockResponse = await fetch(`/api/categories/${item.tierId}/stock`);
-				if (stockResponse.ok) {
-					const stockData = await stockResponse.json();
-					if (stockData.available < item.quantity) {
-						showWarning(
-							'Insufficient stock',
-							`Sorry, only ${stockData.available} ${item.tier.name} accounts are currently available. Please reduce your quantity.`
-						);
-						loading = false;
-						return;
-					}
-				}
-			}
-
-			// Create order with wallet payment
-			const orderResult = await createOrder({
-				userId: user.id,
-				email: user.email || '',
-				phone: user.phone || '',
-				items: cartItems.map((item) => ({
-					categoryId: item.tierId,
-					quantity: item.quantity,
-					price: item.tier.price
-				})),
-				totalAmount: finalTotal,
-				currency: 'NGN',
-				paymentMethod: 'wallet',
-				affiliateCode: affiliateCode || undefined
-			});
-
-			if (!orderResult.success) {
-				throw new Error(orderResult.error || 'Failed to create order');
-			}
-
-			// Debit wallet
-			const debitResponse = await fetch('/api/wallet/debit', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					amount: finalTotal,
-					orderId: orderResult.orderId
-				})
-			});
-
-			const debitResult = await debitResponse.json();
-
-			if (!debitResult.success) {
-				throw new Error(debitResult.error || 'Failed to debit wallet');
-			}
-
-			// Clear cart and redirect to success
-			cart.clear();
-			showSuccess('Order successful!', 'Your accounts have been delivered to your dashboard');
-			goto('/dashboard');
-		} catch (error) {
-			console.error('Checkout error:', error);
-			showError(
-				'Order failed',
-				`Failed to process order: ${error instanceof Error ? error.message : 'Please try again.'}`
-			);
-		} finally {
-			loading = false;
-		}
-	}
-
-	function goBack() {
-		history.back();
-	}
-
-	async function payWithKorapay() {
+	async function payWithMonnify() {
 		if (!user) {
 			const currentUrl = new URL(window.location.href);
 			const returnUrl = encodeURIComponent(currentUrl.pathname + currentUrl.search);
@@ -223,26 +94,24 @@
 
 		loading = true;
 		try {
-			// Calculate final total with affiliate discount
 			const discountAmount = affiliateCode ? (cartTotal * affiliateDiscount) / 100 : 0;
 			const finalTotal = cartTotal - discountAmount;
 
-			// Verify stock availability for all items
+			// Stock check
 			for (const item of cartItems) {
 				const stockResponse = await fetch(`/api/categories/${item.tierId}/stock`);
 				const stockData = await stockResponse.json();
-
 				if (stockData.available < item.quantity) {
 					showError(
 						'Insufficient stock',
-						`Sorry, only ${stockData.available} ${item.tier.name} accounts are currently available. Please reduce your quantity.`
+						`Sorry, only ${stockData.available} ${item.tier.name} accounts are available.`
 					);
 					loading = false;
 					return;
 				}
 			}
 
-			// Create order with korapay payment method
+			// Create the order first
 			const orderResult = await createOrder({
 				userId: user.id,
 				email: user.email || '',
@@ -254,7 +123,7 @@
 				})),
 				totalAmount: finalTotal,
 				currency: 'NGN',
-				paymentMethod: 'korapay',
+				paymentMethod: 'monnify',
 				affiliateCode: affiliateCode || undefined
 			});
 
@@ -262,23 +131,19 @@
 				throw new Error(orderResult.error || 'Failed to create order');
 			}
 
-			// Initialize Korapay payment
-			const paymentResponse = await fetch('/api/payments/initialize', {
+			// Redirect to Monnify hosted checkout — keys never leave the server
+			const initResponse = await fetch('/api/payments/initialize', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					orderId: orderResult.orderId
-				})
+				body: JSON.stringify({ orderId: orderResult.orderId })
 			});
+			const initResult = await initResponse.json();
 
-			const paymentResult = await paymentResponse.json();
-
-			if (!paymentResult.success) {
-				throw new Error(paymentResult.error || 'Failed to initialize payment');
+			if (!initResult.success || !initResult.checkoutUrl) {
+				throw new Error(initResult.error || 'Failed to initialize payment');
 			}
 
-			// Redirect to Korapay checkout
-			goto(paymentResult.authorizationUrl);
+			window.location.href = initResult.checkoutUrl;
 		} catch (error) {
 			console.error('Payment initialization error:', error);
 			showError(
@@ -480,7 +345,7 @@
 
 						<!-- Cart Items -->
 						<div class="space-y-4 sm:space-y-5">
-							{#each cartItems as item}
+							{#each cartItems as item (item.tierId)}
 								{@const PlatformIcon = getPlatformIcon(item.tier.platformSlug)}
 								<div class="flex gap-3">
 									<div
@@ -634,7 +499,7 @@
 								<span
 									class="text-sm font-medium"
 									style="color: var(--text); font-family: var(--font-body);"
-									>Payments secured by Korapay</span
+									>Payments secured by Monnify</span
 								>
 							</div>
 							<a
@@ -644,55 +509,26 @@
 								Payment FAQ
 							</a>
 						</div>
-						<!-- Wallet Balance -->
-						<div
-							class="my-6 rounded-lg p-4"
-							style="background: var(--bg-elev-2); border: 1px solid var(--border-2);"
+						<!-- Pay with Monnify -->
+						<button
+							onclick={payWithMonnify}
+							disabled={loading || !user}
+							style="background: var(--btn-primary-gradient); color: #04140C; font-family: var(--font-head);"
+							class="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-full py-3 text-sm font-semibold active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-base"
 						>
-							<div class="flex items-center justify-between">
-								<div class="flex items-center gap-2">
-									<Wallet size={18} style="color: var(--primary);" />
-									<span
-										class="text-sm font-medium"
-										style="color: var(--text); font-family: var(--font-body);">Wallet Balance</span
-									>
-								</div>
-								<span
-									class="text-base font-bold sm:text-lg"
-									style="color: var(--primary); font-family: var(--font-head);"
-								>
-									{loadingBalance ? '...' : formatPrice(walletBalance)}
-								</span>
-							</div>
-						</div>
-
-						<!-- Payment Options -->
-						<div class="space-y-3">
-							<!-- Pay with Wallet -->
-							<button
-								onclick={processCheckout}
-								disabled={loading ||
-									!user ||
-									loadingBalance ||
-									walletBalance <
-										(affiliateCode ? cartTotal - (cartTotal * affiliateDiscount) / 100 : cartTotal)}
-								style="background: linear-gradient(180deg, rgba(5,212,113,0.95), rgba(13,145,82,0.95)); border: 1px solid rgba(5,212,113,0.40); color: #04140C; font-family: var(--font-head);"
-								class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full py-3 text-sm font-semibold active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-base"
-							>
-								{#if loading}
-									<div
-										class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent sm:h-5 sm:w-5"
-									></div>
-									<span class="text-sm sm:text-base">Processing...</span>
-								{:else if !user}
-									<Lock size={18} class="sm:h-5 sm:w-5" />
-									<span class="text-sm sm:text-base">Login Required</span>
-								{:else}
-									<Wallet size={18} class="sm:h-5 sm:w-5" />
-									<span class="text-sm sm:text-base">Pay with Wallet</span>
-								{/if}
-							</button>
-						</div>
+							{#if loading}
+								<div
+									class="h-4 w-4 animate-spin rounded-full border-2 border-[#04140C] border-t-transparent sm:h-5 sm:w-5"
+								></div>
+								<span class="text-sm sm:text-base">Processing...</span>
+							{:else if !user}
+								<Lock size={18} class="sm:h-5 sm:w-5" />
+								<span class="text-sm sm:text-base">Login Required</span>
+							{:else}
+								<CreditCard size={18} class="sm:h-5 sm:w-5" />
+								<span class="text-sm sm:text-base">Pay Now</span>
+							{/if}
+						</button>
 
 						<!-- Security Notice -->
 						<div class="mt-6 space-y-2">
@@ -704,9 +540,7 @@
 									<Shield size={14} class="mt-0.5" style="color: var(--primary);" />
 									<div class="text-xs" style="color: var(--text); font-family: var(--font-body);">
 										<p class="font-medium">Secure Payment & Instant Delivery</p>
-										<p>
-											Your purchase is protected.
-										</p>
+										<p>Your purchase is protected.</p>
 									</div>
 								</div>
 							</div>

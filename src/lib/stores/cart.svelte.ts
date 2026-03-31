@@ -5,7 +5,7 @@ interface TierData {
 	id: string;
 	name: string;
 	slug: string;
-	metadata: { price?: number } | null;
+	metadata: { price?: number | string; pricing?: { base_price?: number | string } } | null;
 	isActive: boolean;
 	parent?: {
 		name: string;
@@ -204,8 +204,8 @@ class CartStore {
 							id: tier.id,
 							name: tier.name,
 							price:
-								typeof tier.metadata === 'object' && tier.metadata?.price
-									? Number(tier.metadata.price)
+								tier.metadata
+									? Number((tier.metadata as any).pricing?.base_price || (tier.metadata as any).price || 0)
 									: 0,
 							slug: tier.slug,
 							platformName: tier.parent?.name || 'Unknown',

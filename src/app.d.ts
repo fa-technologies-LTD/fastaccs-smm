@@ -11,6 +11,10 @@ declare global {
 		// interface PageState {}
 		// interface Platform {}
 	}
+
+	interface Window {
+		gtag: (...args: any[]) => void;
+	}
 }
 
 export {};

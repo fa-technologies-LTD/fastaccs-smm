@@ -1,15 +1,11 @@
-// ARCHIVED — replaced by /api/webhooks/monnify/+server.ts
-// See src/routes/api/webhooks/_archive/korapay/+server.ts for the original.
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { verifyWebhookSignature, verifyPayment } from '$lib/services/payment';
+import { prisma } from '$lib/prisma';
+import { allocateAccountsForOrder } from '$lib/services/fulfillment';
+import { fundWallet, getTransactionByReference } from '$lib/services/wallet';
 
-export const POST: RequestHandler = async () => {
-	return json(
-		{ success: false, error: 'This webhook endpoint is no longer active.' },
-		{ status: 410 }
-	);
-};
-
+export const POST: RequestHandler = async ({ request }) => {
 	try {
 		// Parse the body first
 		const body = await request.json();
@@ -119,6 +115,7 @@ export const POST: RequestHandler = async () => {
 						where: { id: orderId },
 						data: { status: 'completed' }
 					});
+
 				} catch (error) {
 					console.error('Account allocation failed in webhook:', error);
 					// Keep status as 'paid' for manual processing

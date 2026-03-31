@@ -100,10 +100,13 @@
 				</h3>
 				<ul class="space-y-2">
 					<li>
-						<a href="/smm/policies.html" target="_blank" class="footer-link">Our Policies</a>
+						<a href="/smm/policies" class="footer-link">FastAccs Policies</a>
 					</li>
 					<li>
-						<a href="/privacy.html" target="_blank" class="footer-link">Privacy</a>
+						<a href="/logistics/policies" class="footer-link">Logistics Policies</a>
+					</li>
+					<li>
+						<a href="/privacy" class="footer-link">Privacy</a>
 					</li>
 				</ul>
 			</div>

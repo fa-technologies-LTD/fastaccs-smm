@@ -120,6 +120,16 @@ export async function POST({ request }) {
 		serverCache.invalidate('admin:order-stats');
 		serverCache.invalidate('admin:inventory-stats');
 
+		// For Monnify, payment hasn't been collected yet — fulfill after payment verification
+		if (orderData.paymentMethod === 'monnify') {
+			return json({
+				data,
+				success: true,
+				orderId: data.id,
+				error: null
+			});
+		}
+
 		try {
 			const fulfillmentResult = await fulfillOrder(data.id);
 
