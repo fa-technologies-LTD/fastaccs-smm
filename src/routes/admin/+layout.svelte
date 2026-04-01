@@ -49,7 +49,7 @@
 			<div class="flex flex-1 flex-col overflow-y-auto pt-5 pb-4">
 				<img src="/src/lib/assets/logo.png" alt="FastAccs" class="mx-12" />
 				<nav class="mt-5 flex-1 space-y-1 px-2">
-					{#each adminNavItems as item}
+					{#each adminNavItems as item (item.href)}
 						{@const IconComponent = item.icon}
 						<a
 							href={item.href}
@@ -99,7 +99,7 @@
 						</div>
 
 						<nav class="space-y-1 px-2">
-							{#each adminNavItems as item}
+							{#each adminNavItems as item (item.href)}
 								{@const IconComponent = item.icon}
 								<a
 									href={item.href}
