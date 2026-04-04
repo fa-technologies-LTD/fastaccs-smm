@@ -7,20 +7,14 @@
 		TrendingUp,
 		DollarSign,
 		AlertCircle,
-		Clock,
-		CheckCircle,
 		Activity,
 		RefreshCw,
-		Calendar,
 		BarChart3,
-		Eye,
-		ArrowUpRight,
-		ArrowDownRight
+		ArrowUpRight
 	} from '@lucide/svelte';
 	import { getOrderStats } from '$lib/services/orders';
 	import { getInventoryStats } from '$lib/services/inventory';
 	import { formatPrice } from '$lib/helpers/utils';
-	import AdminDashStatsCard from '$lib/components/AdminDashStatsCard.svelte';
 
 	// Props from load function
 	interface Props {

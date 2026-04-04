@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import {
 		Package,
@@ -15,6 +17,8 @@
 		UserCheck,
 		Type
 	} from '@lucide/svelte';
+
+	import logo from '$lib/assets/logo.png';
 
 	let { data, children } = $props();
 
@@ -33,6 +37,25 @@
 	];
 
 	let sidebarOpen = $state(false);
+
+	async function signOut() {
+		try {
+			const response = await fetch('/auth/logout', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				}
+			});
+
+			if (response.ok) {
+				await invalidateAll();
+				goto('/');
+			}
+		} catch (error) {
+			console.error('Logout error:', error);
+			goto('/');
+		}
+	}
 </script>
 
 <svelte:head>
@@ -47,7 +70,7 @@
 			style="border-right: 1px solid var(--border); background: var(--bg-elev-1);"
 		>
 			<div class="flex flex-1 flex-col overflow-y-auto pt-5 pb-4">
-				<img src="/src/lib/assets/logo.png" alt="FastAccs" class="mx-12" />
+				<img src={logo} alt="FastAccs" class="mx-12" />
 				<nav class="mt-5 flex-1 space-y-1 px-2">
 					{#each adminNavItems as item (item.href)}
 						{@const IconComponent = item.icon}
@@ -151,13 +174,14 @@
 					</div>
 
 					<!-- Sign out button -->
-					<a
-						href="/auth/logout"
+					<button
+						type="button"
+						onclick={signOut}
 						class="inline-flex cursor-pointer items-center rounded-full px-3 py-2 text-sm leading-4 font-medium transition-all hover:scale-[.98] focus:ring-2 focus:ring-offset-2 focus:outline-none"
 						style="border: 1px solid var(--border); background: var(--surface); color: var(--text);"
 					>
 						Sign Out
-					</a>
+					</button>
 				</div>
 			</div>
 		</div>
