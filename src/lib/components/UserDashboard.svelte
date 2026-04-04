@@ -193,12 +193,10 @@
 			</button>
 			<button
 				onclick={() => (activeTab = 'affiliate')}
-				class="border-b-2 px-1 py-2 text-sm font-semibold transition-all"
-				style="border-color: {activeTab === 'affiliate'
-					? 'var(--primary)'
-					: 'transparent'}; color: {activeTab === 'affiliate'
-					? 'var(--primary)'
-					: 'var(--text-dim)'}; font-family: var(--font-head);"
+				disabled
+				class="cursor-not-allowed border-b-2 px-1 py-2 text-sm font-semibold opacity-50 transition-all"
+				title="Coming Soon"
+				style="border-color: transparent; color: var(--text-dim); font-family: var(--font-head);"
 			>
 				Affiliate
 			</button>
