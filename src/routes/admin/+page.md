@@ -149,7 +149,6 @@ Located in sidebar or header:
 - Batches
 - Settings
 - Affiliate Management
-- Wallet Transactions
 - Reports (if exists)
 
 ## User Actions

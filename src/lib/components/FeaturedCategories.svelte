@@ -30,10 +30,7 @@
 
 				<div class="flex flex-1 flex-col" style="padding: var(--space-lg);">
 					<div class="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 sm:gap-4">
-						<button
-							onclick={() => goto('/platforms/instagram')}
-							class="platform-btn flex w-full cursor-pointer items-center"
-						>
+						<button class="platform-btn flex w-full items-center">
 							<Instagram class="mr-3 h-6 w-6 sm:h-8 sm:w-8" style="color: #E4405F;" />
 
 							<div class="text-left">
@@ -50,10 +47,7 @@
 							</div>
 						</button>
 
-						<button
-							onclick={() => goto('/platforms/tiktok')}
-							class="platform-btn flex w-full cursor-pointer items-center"
-						>
+						<button class="platform-btn flex w-full items-center">
 							<Music class="mr-3 h-6 w-6 sm:h-8 sm:w-8" style="color: #FE2C55;" />
 
 							<div class="text-left">
@@ -70,10 +64,7 @@
 							</div>
 						</button>
 
-						<button
-							onclick={() => goto('/platforms/facebook')}
-							class="platform-btn flex w-full cursor-pointer items-center"
-						>
+						<button class="platform-btn flex w-full items-center">
 							<Facebook class="mr-3 h-6 w-6 sm:h-8 sm:w-8" style="color: #1877F2;" />
 
 							<div class="text-left">
@@ -90,10 +81,7 @@
 							</div>
 						</button>
 
-						<button
-							onclick={() => goto('/platforms/twitter')}
-							class="platform-btn flex w-full cursor-pointer items-center"
-						>
+						<button class="platform-btn flex w-full items-center">
 							<Twitter class="mr-3 h-6 w-6 sm:h-8 sm:w-8" style="color: #1DA1F2;" />
 
 							<div class="text-left">

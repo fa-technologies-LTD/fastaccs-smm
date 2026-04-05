@@ -5,7 +5,6 @@
 		ShoppingCart,
 		Users,
 		Package,
-		Wallet,
 		ArrowUp,
 		ArrowDown
 	} from '@lucide/svelte';
@@ -15,11 +14,6 @@
 	let { data }: { data: PageData } = $props();
 
 	let stats = $derived(data.stats || {});
-
-	function calculatePercentageChange(current: number, previous: number): number {
-		if (previous === 0) return 0;
-		return ((current - previous) / previous) * 100;
-	}
 </script>
 
 <div class="space-y-6">
@@ -167,39 +161,7 @@
 	</div>
 
 	<!-- Secondary Metrics -->
-	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-		<!-- Wallet Stats -->
-		<div
-			class="rounded-lg p-6"
-			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
-		>
-			<h2 class="mb-4 text-lg font-semibold" style="color: var(--text)">Wallet Statistics</h2>
-			<div class="space-y-4">
-				<div class="flex items-center justify-between">
-					<span style="color: var(--text-muted)">Total Wallet Balance</span>
-					<span class="font-semibold" style="color: var(--text)">
-						{formatPrice(stats.totalWalletBalance || 0)}
-					</span>
-				</div>
-				<div class="flex items-center justify-between">
-					<span style="color: var(--text-muted)">Total Deposits</span>
-					<span class="font-semibold text-green-600">
-						{formatPrice(stats.totalDeposits || 0)}
-					</span>
-				</div>
-				<div class="flex items-center justify-between">
-					<span style="color: var(--text-muted);">Total Debits</span>
-					<span class="font-semibold text-red-600">
-						{formatPrice(stats.totalDebits || 0)}
-					</span>
-				</div>
-				<div class="flex items-center justify-between">
-					<span style="color: var(--text-muted);">Active Wallets</span>
-					<span class="font-semibold" style="color: var(--text);">{stats.activeWallets || 0}</span>
-				</div>
-			</div>
-		</div>
-
+	<div class="grid grid-cols-1 gap-6 lg:grid-cols-1">
 		<!-- Affiliate Stats -->
 		<div
 			class="rounded-lg p-6"

@@ -14,18 +14,13 @@
 	onMount(async () => {
 		// Monnify redirects back with ?paymentReference=ORD_...
 		const paymentReference = $page.url.searchParams.get('paymentReference');
-
-		if (!paymentReference) {
-			errorMessage = 'No payment reference found';
-			verifying = false;
-			return;
-		}
+		const orderIdParam = $page.url.searchParams.get('orderId');
 
 		try {
 			const response = await fetch('/api/payments/verify', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ paymentReference })
+				body: JSON.stringify({ paymentReference, orderId: orderIdParam })
 			});
 
 			const result = await response.json();

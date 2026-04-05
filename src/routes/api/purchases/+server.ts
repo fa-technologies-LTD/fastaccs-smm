@@ -10,23 +10,35 @@ export const GET: RequestHandler = async ({ locals }) => {
 			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
-		// Fetch all orders with delivered accounts for the user
+		// Fetch all orders with allocated or delivered accounts for the user
 		const orders = await prisma.order.findMany({
 			where: {
 				userId: userId,
-				status: 'completed',
-				deliveryStatus: 'delivered'
+				status: { in: ['paid', 'completed'] },
+				orderItems: {
+					some: {
+						accounts: {
+							some: {
+								status: { in: ['allocated', 'delivered'] }
+							}
+						}
+					}
+				}
 			},
 			include: {
 				orderItems: {
 					include: {
 						category: true,
-						accounts: true
+						accounts: {
+							where: {
+								status: { in: ['allocated', 'delivered'] }
+							}
+						}
 					}
 				}
 			},
 			orderBy: {
-				deliveredAt: 'desc'
+				createdAt: 'desc'
 			}
 		});
 

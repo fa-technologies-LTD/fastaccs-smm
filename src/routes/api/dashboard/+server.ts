@@ -14,7 +14,10 @@ export const GET: RequestHandler = async ({ locals }) => {
 		const [orders, affiliateProgram, wallet, walletTransactions, purchases] = await Promise.all([
 			// Orders - only fetch necessary fields
 			prisma.order.findMany({
-				where: { userId: user.id },
+				where: {
+					userId: user.id,
+					status: { notIn: ['pending_payment', 'cancelled'] }
+				},
 				select: {
 					id: true,
 					orderNumber: true,
@@ -79,12 +82,20 @@ export const GET: RequestHandler = async ({ locals }) => {
 				take: 20
 			}),
 
-			// Purchases (delivered orders)
+			// Purchases (orders with allocated or delivered accounts)
 			prisma.order.findMany({
 				where: {
 					userId: user.id,
-					status: 'completed',
-					deliveryStatus: 'delivered'
+					status: { in: ['paid', 'completed'] },
+					orderItems: {
+						some: {
+							accounts: {
+								some: {
+									status: { in: ['allocated', 'delivered'] }
+								}
+							}
+						}
+					}
 				},
 				select: {
 					id: true,
@@ -103,6 +114,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 								}
 							},
 							accounts: {
+								where: {
+									status: { in: ['allocated', 'delivered'] }
+								},
 								select: {
 									id: true,
 									platform: true,
@@ -121,7 +135,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 						}
 					}
 				},
-				orderBy: { deliveredAt: 'desc' }
+				orderBy: { createdAt: 'desc' }
 			})
 		]);
 

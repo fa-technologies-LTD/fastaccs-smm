@@ -11,16 +11,68 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 		}
 
-		const { transactionReference, paymentReference } = await request.json();
+		const {
+			transactionReference,
+			paymentReference,
+			orderId: requestedOrderId
+		} = await request.json();
 
 		if (!transactionReference && !paymentReference) {
-			return json({ success: false, error: 'Transaction reference is required' }, { status: 400 });
+			if (!requestedOrderId) {
+				return json(
+					{ success: false, error: 'Transaction reference is required' },
+					{ status: 400 }
+				);
+			}
+
+			const order = await prisma.order.findUnique({ where: { id: requestedOrderId } });
+
+			if (!order) {
+				return json({ success: false, error: 'Order not found' }, { status: 404 });
+			}
+
+			if (order.userId !== locals.user.id) {
+				return json({ success: false, error: 'Unauthorized access to order' }, { status: 403 });
+			}
+
+			if (order.status !== 'completed' && order.status !== 'paid') {
+				await prisma.order.update({
+					where: { id: order.id },
+					data: {
+						status: 'cancelled',
+						paymentStatus: 'failed'
+					}
+				});
+			}
+
+			return json(
+				{ success: false, error: 'Payment was cancelled', status: 'cancelled' },
+				{ status: 400 }
+			);
 		}
 
 		// Verify payment with Monnify (accepts either reference type)
 		const verificationResult = await verifyPayment(transactionReference || paymentReference);
 
 		if (!verificationResult.success) {
+			const failedOrder = requestedOrderId
+				? await prisma.order.findUnique({ where: { id: requestedOrderId } })
+				: paymentReference
+					? await prisma.order.findFirst({ where: { paymentReference } })
+					: null;
+
+			if (failedOrder && failedOrder.userId === locals.user.id) {
+				if (failedOrder.status !== 'completed' && failedOrder.status !== 'paid') {
+					await prisma.order.update({
+						where: { id: failedOrder.id },
+						data: {
+							status: 'cancelled',
+							paymentStatus: 'failed'
+						}
+					});
+				}
+			}
+
 			return json(
 				{
 					success: false,
@@ -32,7 +84,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		// Get order from payment metadata
-		const orderId = verificationResult.metaData?.orderId as string;
+		const orderId = (verificationResult.metaData?.orderId as string) || requestedOrderId;
 
 		if (!orderId) {
 			return json(

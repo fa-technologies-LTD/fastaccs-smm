@@ -63,37 +63,40 @@ export const load: PageServerLoad = async ({ locals }) => {
 		});
 
 		// Accounts Sold (delivered status)
-		const accountsSold = await prisma.account.count({
-			where: { status: 'delivered' }
-		});
-		const lastMonthAccounts = await prisma.account.count({
-			where: {
-				status: 'delivered',
-				deliveredAt: { gte: startOfLastMonth, lte: endOfLastMonth }
-			}
-		});
-		const thisMonthAccounts = await prisma.account.count({
-			where: {
-				status: 'delivered',
-				deliveredAt: { gte: startOfMonth }
-			}
-		});
+		// Accounts sold should come from successful order items, not delivered-only account status.
+		const [accountsSoldAggregate, lastMonthAccountsAggregate, thisMonthAccountsAggregate] =
+			await Promise.all([
+				prisma.orderItem.aggregate({
+					where: {
+						order: {
+							status: { in: ['paid', 'completed'] }
+						}
+					},
+					_sum: { quantity: true }
+				}),
+				prisma.orderItem.aggregate({
+					where: {
+						order: {
+							status: { in: ['paid', 'completed'] },
+							createdAt: { gte: startOfLastMonth, lte: endOfLastMonth }
+						}
+					},
+					_sum: { quantity: true }
+				}),
+				prisma.orderItem.aggregate({
+					where: {
+						order: {
+							status: { in: ['paid', 'completed'] },
+							createdAt: { gte: startOfMonth }
+						}
+					},
+					_sum: { quantity: true }
+				})
+			]);
 
-		// Wallet Stats
-		const walletStats = await prisma.wallet.aggregate({
-			_sum: { balance: true },
-			_count: { id: true }
-		});
-
-		const deposits = await prisma.walletTransaction.aggregate({
-			where: { type: 'deposit', status: 'completed' },
-			_sum: { amount: true }
-		});
-
-		const debits = await prisma.walletTransaction.aggregate({
-			where: { type: 'debit', status: 'completed' },
-			_sum: { amount: true }
-		});
+		const accountsSold = accountsSoldAggregate._sum.quantity || 0;
+		const lastMonthAccounts = lastMonthAccountsAggregate._sum.quantity || 0;
+		const thisMonthAccounts = thisMonthAccountsAggregate._sum.quantity || 0;
 
 		// Affiliate Stats
 		const affiliateStats = await prisma.affiliateProgram.aggregate({
@@ -107,15 +110,20 @@ export const load: PageServerLoad = async ({ locals }) => {
 			where: { status: 'available' }
 		});
 		const soldAccounts = await prisma.account.count({
-			where: { status: 'delivered' }
+			where: { status: { in: ['allocated', 'delivered'] } }
 		});
 		const pendingAccounts = await prisma.account.count({
-			where: { status: { in: ['allocated', 'assigned'] } }
+			where: { status: 'assigned' }
 		});
 
 		// Top Categories
 		const topCategories = await prisma.orderItem.groupBy({
 			by: ['categoryId'],
+			where: {
+				order: {
+					status: { in: ['paid', 'completed'] }
+				}
+			},
 			_sum: { totalPrice: true, quantity: true },
 			_count: { id: true },
 			orderBy: { _sum: { totalPrice: 'desc' } },
@@ -154,11 +162,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 				accountsSold,
 				accountsChange: ((thisMonthAccounts - lastMonthAccounts) / (lastMonthAccounts || 1)) * 100,
-
-				totalWalletBalance: Number(walletStats._sum.balance || 0),
-				totalDeposits: Number(deposits._sum.amount || 0),
-				totalDebits: Number(debits._sum.amount || 0),
-				activeWallets: walletStats._count.id || 0,
 
 				activeAffiliates: affiliateStats._count.id || 0,
 				totalReferrals: affiliateStats._sum.totalReferrals || 0,

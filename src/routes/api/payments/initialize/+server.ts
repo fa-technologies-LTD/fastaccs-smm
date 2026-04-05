@@ -31,7 +31,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 		const shortOrderId = orderId.substring(0, 8);
 		const paymentReference = `ORD_${shortOrderId}_${Date.now()}`;
-		const redirectUrl = `${url.origin}/checkout/verify`;
+		const redirectUrl = `${url.origin}/checkout/verify?orderId=${encodeURIComponent(orderId)}`;
 
 		const result = await initializeTransaction({
 			amount: Number(order.totalAmount),
