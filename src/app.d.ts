@@ -14,6 +14,14 @@ declare global {
 
 	interface Window {
 		gtag: (...args: any[]) => void;
+		Tawk_API?: {
+			maximize?: () => void;
+			minimize?: () => void;
+			toggle?: () => void;
+			showWidget?: () => void;
+			hideWidget?: () => void;
+		};
+		Tawk_LoadStart?: Date;
 	}
 }
 

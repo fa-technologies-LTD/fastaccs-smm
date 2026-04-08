@@ -4,69 +4,10 @@
 	import {
 		Mail,
 		MessageCircle,
-		Phone,
 		Clock,
 		HelpCircle,
-		Send,
-		ExternalLink,
-		CheckCircle
+		ExternalLink
 	} from '@lucide/svelte';
-	import { goto } from '$app/navigation';
-
-	let formData = $state({
-		name: '',
-		email: '',
-		subject: '',
-		message: ''
-	});
-
-	let submitting = $state(false);
-	let submitted = $state(false);
-	let error = $state<string | null>(null);
-
-	async function handleSubmit(e: Event) {
-		e.preventDefault();
-
-		// Validate
-		if (!formData.name || formData.name.length < 2) {
-			error = 'Name must be at least 2 characters';
-			return;
-		}
-		if (!formData.email || !formData.email.includes('@')) {
-			error = 'Please enter a valid email';
-			return;
-		}
-		if (!formData.subject) {
-			error = 'Subject is required';
-			return;
-		}
-		if (!formData.message || formData.message.length < 10) {
-			error = 'Message must be at least 10 characters';
-			return;
-		}
-
-		submitting = true;
-		error = null;
-
-		try {
-			const response = await fetch('/api/support/ticket', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(formData)
-			});
-
-			if (response.ok) {
-				submitted = true;
-				formData = { name: '', email: '', subject: '', message: '' };
-			} else {
-				error = 'Failed to send message. Please try again.';
-			}
-		} catch (err) {
-			error = 'Network error. Please check your connection.';
-		} finally {
-			submitting = false;
-		}
-	}
 
 	const faqs = [
 		{
@@ -75,39 +16,100 @@
 				'Most orders are delivered instantly to your dashboard. In rare cases, it may take up to a few minutes.'
 		},
 		{
-			question: 'What if my account has issues?',
+			question: 'How do I use the 2FA link in my delivery notes?',
 			answer:
-				'Contact our support team immediately via email or live chat. We offer replacements for accounts with technical issues.'
+				'If your account includes 2FA, open the 2FA link from your delivery notes when prompted, copy the latest 6-digit code, and paste it into the login screen. Codes refresh every ~30 seconds, so if one fails, use the next code.'
 		},
 		{
-			question: 'Can I get a refund?',
+			question: 'Do I need VPN to log in?',
 			answer:
-				'Refunds are available within 24 hours if the account has not been accessed. Digital products are non-refundable once delivered.'
+				'For most accounts, your normal connection works best. If your specific account includes different login instructions in your delivery notes, follow those first.'
+		},
+		{
+			question: 'What if my account has login issues?',
+			answer:
+				'Contact support immediately via WhatsApp or email so we can help quickly.'
+		},
+		{
+			question: 'When should I report login issues?',
+			answer:
+				'Please test login immediately after delivery. For fastest assistance, report login issues within 2 hours of purchase.'
+		},
+		{
+			question: 'Why can X follower count change after delivery?',
+			answer:
+				'Small follower movement can happen due to routine platform cleanups. Delivery counts are checked at handoff.'
 		},
 		{
 			question: 'How do I access my purchases?',
 			answer:
-				'Go to your Dashboard and click on the Purchases tab. All your account details will be listed there.'
+				'Go to your Dashboard and click on the Purchases tab. Your delivered account details will be listed there.'
 		},
 		{
 			question: 'What payment methods do you accept?',
 			answer:
-				'We accept wallet top-ups via card, bank transfer, and USSD. All purchases are made through your FastAccs wallet.'
-		},
-		{
-			question: 'Is it safe to buy accounts?',
-			answer:
-				'Yes! We use secure encryption, verified payment processors, and guarantee account quality. Your privacy and security are our top priorities.'
+				'Payments are processed securely via Monnify. Available channels can include card, bank transfer, and USSD based on current Monnify availability.'
 		},
 		{
 			question: 'Can I choose a specific account?',
 			answer:
-				'Accounts are distributed automatically from our inventory to ensure fairness and speed. You receive a quality-checked account instantly.'
+				'Accounts are distributed automatically from our inventory to keep delivery fair and fast.'
 		},
 		{
-			question: 'What about account warranty?',
+			question: 'Can I get a refund?',
 			answer:
-				'All accounts come with a warranty period. If you experience issues within this time, contact support for a replacement.'
+				'Refund eligibility depends on order state and policy terms. If you run into an issue, contact support quickly so we can review and assist.'
+		}
+	];
+
+	const afterPurchaseGuide = [
+		{
+			title: 'Quick 2FA Login',
+			points: [
+				'Open the 2FA link in your delivery notes when prompted for a code.',
+				'Copy the current 6-digit code and paste it into the login screen.',
+				'If a code fails, wait for refresh and try the next code.'
+			]
+		},
+		{
+			title: 'First Steps for Instagram and X',
+			points: [
+				'Use the same device for the first 24-48 hours where possible.',
+				'Make profile and security updates gradually.',
+				'Keep early activity natural before heavy edits.'
+			]
+		},
+		{
+			title: 'Follower Fluctuation on X',
+			points: [
+				'Minor follower movement can happen after delivery.',
+				'This is usually related to platform-side cleanup cycles.',
+				'Your delivered count is checked at handoff.'
+			]
+		},
+		{
+			title: 'Security Basics',
+			points: [
+				'Secure your recovery email first.',
+				'Keep credentials private and avoid sharing logins.',
+				'Avoid rapid security changes right after first login.'
+			]
+		},
+		{
+			title: 'Support Timing',
+			points: [
+				'Test login as soon as your order is delivered.',
+				'Report login issues quickly for the best support outcome.',
+				'For fastest help, message us within 2 hours of purchase.'
+			]
+		},
+		{
+			title: 'Platform-Specific Notes',
+			points: [
+				'If your delivery notes include account-specific instructions, follow those first.',
+				'When delivery notes differ from general tips, delivery notes take priority.',
+				'If anything is unclear, contact support before making major changes.'
+			]
 		}
 	];
 
@@ -118,7 +120,7 @@
 	<title>Support - FastAccs</title>
 	<meta
 		name="description"
-		content="Get help with your FastAccs account. Contact our 24/7 support team via email, chat, or phone."
+		content="Get help with your FastAccs account through WhatsApp support, email, and our help center FAQs."
 	/>
 </svelte:head>
 
@@ -132,14 +134,14 @@
 				We're Here to Help
 			</h1>
 			<p class="mx-auto max-w-2xl text-lg text-green-100 md:text-xl">
-				Have a question or need assistance? Our support team is available 24/7 to help you with any
-				issues or concerns.
+				Have a question or need assistance? Our support team can help with orders, payments, and
+				account-related issues.
 			</p>
 		</div>
 	</section>
 
 	<!-- Contact Methods -->
-	<section class="px-4 py-16">
+	<section id="contact" class="px-4 py-16">
 		<div class="mx-auto max-w-6xl">
 			<h2
 				class="mb-12 text-center text-3xl font-bold"
@@ -149,6 +151,38 @@
 			</h2>
 
 			<div class="grid gap-8 md:grid-cols-3">
+				<!-- WhatsApp Support -->
+				<div
+					class="rounded-xl p-6 transition-all duration-300 hover:shadow-lg"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
+					<div class="mb-4 inline-flex rounded-full p-3" style="background: var(--bg-elev-2);">
+						<MessageCircle class="h-6 w-6" style="color: var(--brand-green);" />
+					</div>
+					<h3
+						class="mb-2 text-xl font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
+					>
+						WhatsApp Support
+					</h3>
+					<p class="mb-4 text-sm" style="color: var(--text-muted);">
+						Fastest way to reach us for account and order issues
+					</p>
+					<a
+						href="https://wa.link/fast_accounts"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="font-medium hover:underline"
+						style="color: var(--brand-green);"
+					>
+						Chat on WhatsApp
+					</a>
+					<p class="mt-2 text-xs" style="color: var(--text-muted);">
+						<Clock class="mr-1 inline h-3 w-3" />
+						Quick-response support channel
+					</p>
+				</div>
+
 				<!-- Email Support -->
 				<div
 					class="rounded-xl p-6 transition-all duration-300 hover:shadow-lg"
@@ -164,14 +198,14 @@
 						Email Support
 					</h3>
 					<p class="mb-4 text-sm" style="color: var(--text-muted);">
-						For detailed issues and account problems
+						Best for detailed reports and follow-ups
 					</p>
 					<a
-						href="mailto:support@fastaccs.com"
+						href="mailto:verystronethan@gmail.com"
 						class="font-medium hover:underline"
 						style="color: var(--brand-blue);"
 					>
-						support@fastaccs.com
+						Support Email
 					</a>
 					<p class="mt-2 text-xs" style="color: var(--text-muted);">
 						<Clock class="mr-1 inline h-3 w-3" />
@@ -179,227 +213,41 @@
 					</p>
 				</div>
 
-				<!-- Live Chat -->
+				<!-- Help Center -->
 				<div
 					class="rounded-xl p-6 transition-all duration-300 hover:shadow-lg"
 					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 				>
 					<div class="mb-4 inline-flex rounded-full p-3" style="background: var(--bg-elev-2);">
-						<MessageCircle class="h-6 w-6" style="color: var(--brand-green);" />
+						<HelpCircle class="h-6 w-6" style="color: var(--brand-purple);" />
 					</div>
 					<h3
 						class="mb-2 text-xl font-semibold"
 						style="color: var(--text); font-family: var(--font-head);"
 					>
-						Live Chat
+						Help Center
 					</h3>
 					<p class="mb-4 text-sm" style="color: var(--text-muted);">
-						For quick questions and instant help
-					</p>
-					<button
-						class="font-medium hover:underline"
-						style="color: var(--brand-green);"
-						onclick={() => {
-							// TODO: Implement live chat
-							alert('Live chat coming soon!');
-						}}
-					>
-						Start Chat
-					</button>
-					<p class="mt-2 text-xs" style="color: var(--text-muted);">
-						<Clock class="mr-1 inline h-3 w-3" />
-						Available 24/7
-					</p>
-				</div>
-
-				<!-- Phone Support -->
-				<div
-					class="rounded-xl p-6 transition-all duration-300 hover:shadow-lg"
-					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-				>
-					<div class="mb-4 inline-flex rounded-full p-3" style="background: var(--bg-elev-2);">
-						<Phone class="h-6 w-6" style="color: var(--brand-purple);" />
-					</div>
-					<h3
-						class="mb-2 text-xl font-semibold"
-						style="color: var(--text); font-family: var(--font-head);"
-					>
-						Phone Support
-					</h3>
-					<p class="mb-4 text-sm" style="color: var(--text-muted);">
-						For urgent issues requiring immediate attention
+						Check answers for payments, login, and order flow
 					</p>
 					<a
-						href="tel:+234XXXXXXXXX"
+						href="/support#faq"
 						class="font-medium hover:underline"
 						style="color: var(--brand-purple);"
 					>
-						+234 XXX XXX XXXX
+						View FAQs
 					</a>
 					<p class="mt-2 text-xs" style="color: var(--text-muted);">
 						<Clock class="mr-1 inline h-3 w-3" />
-						Mon-Fri 9AM-6PM WAT
+						Always available
 					</p>
 				</div>
 			</div>
 		</div>
 	</section>
 
-	<!-- Contact Form -->
-	<section class="px-4 py-16" style="background: var(--bg-elev-1);">
-		<div class="mx-auto max-w-3xl">
-			<h2
-				class="mb-4 text-center text-3xl font-bold"
-				style="color: var(--text); font-family: var(--font-head);"
-			>
-				Send Us a Message
-			</h2>
-			<p class="mb-12 text-center" style="color: var(--text-muted);">
-				Fill out the form below and we'll get back to you as soon as possible.
-			</p>
-
-			{#if submitted}
-				<div
-					class="rounded-xl p-8 text-center"
-					style="background: var(--bg-elev-2); border: 1px solid var(--brand-green);"
-				>
-					<CheckCircle class="mx-auto mb-4 h-16 w-16" style="color: var(--brand-green);" />
-					<h3
-						class="mb-2 text-2xl font-bold"
-						style="color: var(--text); font-family: var(--font-head);"
-					>
-						Message Sent!
-					</h3>
-					<p style="color: var(--text-muted);">
-						Thank you for contacting us. We'll respond to your inquiry within 24 hours.
-					</p>
-					<button
-						onclick={() => (submitted = false)}
-						class="mt-6 rounded-lg px-6 py-3 font-semibold transition-opacity hover:opacity-90"
-						style="background: var(--btn-primary-gradient); color: white;"
-					>
-						Send Another Message
-					</button>
-				</div>
-			{:else}
-				<form onsubmit={handleSubmit} class="space-y-6">
-					<!-- Name -->
-					<div>
-						<label for="name" class="mb-2 block text-sm font-medium" style="color: var(--text);">
-							Name *
-						</label>
-						<input
-							type="text"
-							id="name"
-							bind:value={formData.name}
-							required
-							class="w-full rounded-lg px-4 py-3 transition-all focus:ring-2 focus:outline-none"
-							style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text); focus:ring-color: var(--brand-blue);"
-							placeholder="Your full name"
-						/>
-					</div>
-
-					<!-- Email -->
-					<div>
-						<label for="email" class="mb-2 block text-sm font-medium" style="color: var(--text);">
-							Email *
-						</label>
-						<input
-							type="email"
-							id="email"
-							bind:value={formData.email}
-							required
-							class="w-full rounded-lg px-4 py-3 transition-all focus:ring-2 focus:outline-none"
-							style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text); focus:ring-color: var(--brand-blue);"
-							placeholder="your.email@example.com"
-						/>
-					</div>
-
-					<!-- Subject -->
-					<div>
-						<label for="subject" class="mb-2 block text-sm font-medium" style="color: var(--text);">
-							Subject *
-						</label>
-						<input
-							type="text"
-							id="subject"
-							bind:value={formData.subject}
-							required
-							class="w-full rounded-lg px-4 py-3 transition-all focus:ring-2 focus:outline-none"
-							style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text); focus:ring-color: var(--brand-blue);"
-							placeholder="What is this regarding?"
-						/>
-					</div>
-
-					<!-- Message -->
-					<div>
-						<label for="message" class="mb-2 block text-sm font-medium" style="color: var(--text);">
-							Message *
-						</label>
-						<textarea
-							id="message"
-							bind:value={formData.message}
-							required
-							rows="6"
-							class="w-full rounded-lg px-4 py-3 transition-all focus:ring-2 focus:outline-none"
-							style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text); focus:ring-color: var(--brand-blue); resize: vertical;"
-							placeholder="Please describe your issue or question in detail..."
-						></textarea>
-					</div>
-
-					<!-- Error Message -->
-					{#if error}
-						<div
-							class="rounded-lg p-4"
-							style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgb(239, 68, 68); color: rgb(239, 68, 68);"
-						>
-							{error}
-						</div>
-					{/if}
-
-					<!-- Submit Button -->
-					<button
-						type="submit"
-						disabled={submitting}
-						class="w-full rounded-lg px-6 py-3 font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-						style="background: var(--btn-primary-gradient); color: white;"
-					>
-						{#if submitting}
-							<span class="inline-flex items-center">
-								<svg
-									class="mr-2 h-5 w-5 animate-spin"
-									xmlns="http://www.w3.org/2000/svg"
-									fill="none"
-									viewBox="0 0 24 24"
-								>
-									<circle
-										class="opacity-25"
-										cx="12"
-										cy="12"
-										r="10"
-										stroke="currentColor"
-										stroke-width="4"
-									></circle>
-									<path
-										class="opacity-75"
-										fill="currentColor"
-										d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-									></path>
-								</svg>
-								Sending...
-							</span>
-						{:else}
-							<Send class="mr-2 inline h-5 w-5" />
-							Send Message
-						{/if}
-					</button>
-				</form>
-			{/if}
-		</div>
-	</section>
-
 	<!-- FAQ Section -->
-	<section class="px-4 py-16">
+	<section id="faq" class="px-4 py-16">
 		<div class="mx-auto max-w-4xl">
 			<h2
 				class="mb-4 text-center text-3xl font-bold"
@@ -451,6 +299,43 @@
 								{faq.answer}
 							</div>
 						{/if}
+					</div>
+				{/each}
+			</div>
+		</div>
+	</section>
+
+	<!-- After Purchase Guide -->
+	<section class="px-4 py-16" style="background: var(--bg-elev-1);">
+		<div class="mx-auto max-w-6xl">
+			<h2
+				class="mb-4 text-center text-3xl font-bold"
+				style="color: var(--text); font-family: var(--font-head);"
+			>
+				After Purchase Guide
+			</h2>
+			<p class="mx-auto mb-10 max-w-3xl text-center" style="color: var(--text-muted);">
+				These quick tips help keep account access smooth after delivery. If your delivery notes include
+				account-specific instructions, follow those first.
+			</p>
+
+			<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+				{#each afterPurchaseGuide as card}
+					<div
+						class="rounded-xl p-6"
+						style="background: var(--bg-elev-2); border: 1px solid var(--border);"
+					>
+						<h3 class="mb-3 text-lg font-semibold" style="color: var(--text);">
+							{card.title}
+						</h3>
+						<ul class="space-y-2 text-sm" style="color: var(--text-muted);">
+							{#each card.points as point}
+								<li class="flex items-start gap-2">
+									<span style="color: var(--brand-green);">•</span>
+									<span>{point}</span>
+								</li>
+							{/each}
+						</ul>
 					</div>
 				{/each}
 			</div>
@@ -552,19 +437,19 @@
 				</h2>
 				<div class="grid gap-6 md:grid-cols-3">
 					<div class="text-center">
+						<MessageCircle class="mx-auto mb-2 h-8 w-8" style="color: var(--brand-green);" />
+						<h3 class="mb-1 font-semibold" style="color: var(--text);">WhatsApp</h3>
+						<p class="text-sm" style="color: var(--text-muted);">24/7 Support</p>
+					</div>
+					<div class="text-center">
 						<Mail class="mx-auto mb-2 h-8 w-8" style="color: var(--brand-blue);" />
 						<h3 class="mb-1 font-semibold" style="color: var(--text);">Email</h3>
 						<p class="text-sm" style="color: var(--text-muted);">24/7 Support</p>
 					</div>
 					<div class="text-center">
-						<MessageCircle class="mx-auto mb-2 h-8 w-8" style="color: var(--brand-green);" />
-						<h3 class="mb-1 font-semibold" style="color: var(--text);">Live Chat</h3>
-						<p class="text-sm" style="color: var(--text-muted);">24/7 Support</p>
-					</div>
-					<div class="text-center">
-						<Phone class="mx-auto mb-2 h-8 w-8" style="color: var(--brand-purple);" />
-						<h3 class="mb-1 font-semibold" style="color: var(--text);">Phone</h3>
-						<p class="text-sm" style="color: var(--text-muted);">Mon-Fri, 9AM-6PM WAT</p>
+						<HelpCircle class="mx-auto mb-2 h-8 w-8" style="color: var(--brand-purple);" />
+						<h3 class="mb-1 font-semibold" style="color: var(--text);">Help Center</h3>
+						<p class="text-sm" style="color: var(--text-muted);">Anytime</p>
 					</div>
 				</div>
 			</div>

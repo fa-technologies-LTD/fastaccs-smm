@@ -29,6 +29,7 @@
 		onNameInput: (value: string) => void;
 		onSlugInput: (value: string) => void;
 		onDescriptionInput: (value: string) => void;
+		onIconInput: (value: string) => void;
 		onColorInput: (value: string) => void;
 		onWebsiteInput: (value: string) => void;
 	}
@@ -42,6 +43,7 @@
 		onNameInput,
 		onSlugInput,
 		onDescriptionInput,
+		onIconInput,
 		onColorInput,
 		onWebsiteInput
 	}: Props = $props();
@@ -111,9 +113,9 @@
 							</div>
 
 							<!-- Description -->
-							<div>
-								<label
-									for="edit-description"
+								<div>
+									<label
+										for="edit-description"
 									class="block text-sm font-medium"
 									style="color: var(--text);"
 								>
@@ -127,11 +129,45 @@
 									oninput={(e) => onDescriptionInput((e.target as HTMLTextAreaElement).value)}
 									class="mt-1 block w-full rounded-md px-4 py-2 shadow-sm"
 									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
-								></textarea>
-							</div>
+									></textarea>
+								</div>
 
-							<!-- Color -->
-							<div>
+								<!-- Icon URL -->
+								<div>
+									<label
+										for="edit-icon"
+										class="block text-sm font-medium"
+										style="color: var(--text);"
+									>
+										Platform Icon URL
+									</label>
+									<input
+										id="edit-icon"
+										type="url"
+										value={platformForm.metadata.icon}
+										oninput={(e) => onIconInput((e.target as HTMLInputElement).value)}
+										class="mt-1 block w-full rounded-md px-4 py-2"
+										style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
+										placeholder="https://example.com/icon.png"
+									/>
+									{#if platformForm.metadata.icon}
+										<div class="mt-2 flex items-center gap-2">
+											<span class="text-xs" style="color: var(--text-muted);">Preview:</span>
+											<img
+												src={platformForm.metadata.icon}
+												alt="Icon preview"
+												class="h-8 w-8 rounded"
+												style="border: 1px solid var(--border);"
+												onerror={(e) => {
+													(e.target as HTMLImageElement).style.display = 'none';
+												}}
+											/>
+										</div>
+									{/if}
+								</div>
+
+								<!-- Color -->
+								<div>
 								<label
 									for="edit-color"
 									class="block text-sm font-medium"

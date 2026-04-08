@@ -1,5 +1,5 @@
 <script>
-	import { Mail, MessageCircle, Send, Facebook, Twitter, Instagram } from '@lucide/svelte';
+	import { Mail, MessageCircle, Facebook, Instagram, Music2 } from '@lucide/svelte';
 	import { addToast } from '$lib/stores/toasts';
 	import footerLogo from '$lib/assets/footer-logo.png';
 </script>
@@ -15,17 +15,16 @@
 					<img src={footerLogo} alt="FastAccs Logo" class="h-8 w-auto" />
 				</div>
 				<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-					Nigeria's most trusted marketplace for premium social media accounts and boosting
-					services. Fast, secure, and reliable.
+					Marketplace for social media accounts and growth services with secure checkout.
 				</p>
 				<div class="flex space-x-4">
-					<a href="https://facebook.com/fastaccs" class="footer-social">
+					<a href="https://web.facebook.com/profile.php?id=100089537246012" class="footer-social">
 						<Facebook class="h-5 w-5" />
 					</a>
-					<a href="https://twitter.com/fastaccs" class="footer-social">
-						<Twitter class="h-5 w-5" />
+					<a href="https://www.tiktok.com/@fastaccounts_" class="footer-social">
+						<Music2 class="h-5 w-5" />
 					</a>
-					<a href="https://instagram.com/fastaccs" class="footer-social">
+					<a href="https://www.instagram.com/fastaccounts_/" class="footer-social">
 						<Instagram class="h-5 w-5" />
 					</a>
 				</div>
@@ -41,7 +40,7 @@
 				</h3>
 				<ul class="space-y-2">
 					<li>
-						<a href="/accounts" data-sveltekit-preload-data="hover" class="footer-link"
+						<a href="/platforms" data-sveltekit-preload-data="hover" class="footer-link"
 							>Browse Accounts</a
 						>
 					</li>
@@ -49,7 +48,7 @@
 						<button
 							class="footer-link text-left"
 							onclick={() => addToast({ type: 'info', title: 'Coming Soon!' })}
-							>Boosting Services</button
+							>Growth Services</button
 						>
 					</li>
 					<li>
@@ -78,14 +77,14 @@
 				</h3>
 				<ul class="space-y-2">
 					<li>
-						<a href="/help" data-sveltekit-preload-data="hover" class="footer-link">Help Center</a>
+						<a href="/support" data-sveltekit-preload-data="hover" class="footer-link">Help Center</a>
 					</li>
 					<li>
-						<a href="/contact" data-sveltekit-preload-data="hover" class="footer-link">Contact Us</a
+						<a href="/support#contact" data-sveltekit-preload-data="hover" class="footer-link">Contact Us</a
 						>
 					</li>
 					<li>
-						<a href="/faq" data-sveltekit-preload-data="hover" class="footer-link">FAQ</a>
+						<a href="/support#faq" data-sveltekit-preload-data="hover" class="footer-link">FAQ</a>
 					</li>
 				</ul>
 			</div>
@@ -100,13 +99,34 @@
 				</h3>
 				<ul class="space-y-2">
 					<li>
-						<a href="/smm/policies" class="footer-link">FastAccs Policies</a>
+						<a href="/smm/policies" class="footer-link">Policy Center</a>
 					</li>
 					<li>
-						<a href="/logistics/policies" class="footer-link">Logistics Policies</a>
+						<a href="/terms" class="footer-link">Terms</a>
+					</li>
+					<li>
+						<a href="/refund-policy" class="footer-link">Refund Policy</a>
 					</li>
 					<li>
 						<a href="/privacy" class="footer-link">Privacy</a>
+					</li>
+					<li>
+						<a href="/acceptable-use" class="footer-link">Acceptable Use</a>
+					</li>
+					<li>
+						<a href="/cookies" class="footer-link">Cookie Policy</a>
+					</li>
+					<li>
+						<button
+							type="button"
+							class="footer-link text-left"
+							onclick={() => {
+								if (typeof window === 'undefined') return;
+								window.dispatchEvent(new CustomEvent('fa:privacy-open'));
+							}}
+						>
+							Privacy Settings
+						</button>
 					</li>
 				</ul>
 			</div>
@@ -121,23 +141,19 @@
 				</h3>
 				<div class="space-y-3">
 					<div class="flex items-center">
-						<Mail class="mr-2 h-5 w-5" style="color: var(--text-muted);" />
-						<a href="mailto:support@fastaccs.com" class="footer-link"> support@fastaccs.com </a>
-					</div>
-					<div class="flex items-center">
 						<MessageCircle class="mr-2 h-5 w-5" style="color: var(--text-muted);" />
-						<a href="https://wa.me/2348123456789" class="footer-link"> WhatsApp Support </a>
+						<a href="https://wa.link/fast_accounts" class="footer-link"> WhatsApp Support </a>
 					</div>
 					<div class="flex items-center">
-						<Send class="mr-2 h-5 w-5" style="color: var(--text-muted);" />
-						<a href="https://t.me/fastaccs_support" class="footer-link"> Telegram Support </a>
+						<Mail class="mr-2 h-5 w-5" style="color: var(--text-muted);" />
+						<a href="mailto:verystronethan@gmail.com" class="footer-link"> Support Email </a>
 					</div>
 				</div>
 
 				<!-- Trust Badges -->
 				<div class="mt-6">
 					<div class="mb-2 text-sm" style="color: var(--text-dim); font-family: var(--font-body);">
-						Trusted & Secure
+						Security & Support
 					</div>
 					<div class="flex space-x-2">
 						<div
@@ -150,7 +166,7 @@
 							class="rounded px-2 py-1 text-xs"
 							style="background: var(--status-success-bg); border: 1px solid var(--status-success-border); color: var(--primary); font-family: var(--font-body); font-weight: 600;"
 						>
-							24/7 Support
+							Support Team
 						</div>
 					</div>
 				</div>

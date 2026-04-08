@@ -6,9 +6,10 @@ export async function GET({ url }) {
 	try {
 		const type = url.searchParams.get('type');
 		const includeParent = url.searchParams.get('include_parent') === 'true';
+		const includeInactive = url.searchParams.get('include_inactive') === 'true';
 
 		const where = {
-			isActive: true,
+			...(includeInactive ? {} : { isActive: true }),
 			categoryType: type || 'platform'
 		};
 

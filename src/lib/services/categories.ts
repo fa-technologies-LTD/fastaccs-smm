@@ -55,12 +55,36 @@ export interface CategoryUpdate {
 	isActive?: boolean;
 }
 
+export interface RetireCategoryOptions {
+	moveAvailableInventory?: boolean;
+	targetCategoryId?: string;
+}
+
 // Helper function to handle API responses
 async function handleApiCall(response: Response) {
 	if (!response.ok) {
-		return { data: null, error: `HTTP ${response.status}: ${response.statusText}` };
+		try {
+			const payload = await response.json();
+			return {
+				data: null,
+				error: payload?.error || `HTTP ${response.status}: ${response.statusText}`
+			};
+		} catch {
+			return {
+				data: null,
+				error: `HTTP ${response.status}: ${response.statusText}`
+			};
+		}
 	}
-	return await response.json();
+
+	try {
+		return await response.json();
+	} catch {
+		return {
+			data: null,
+			error: 'Invalid API response'
+		};
+	}
 }
 
 // Get all platforms
@@ -157,6 +181,21 @@ export async function deleteCategory(id: string) {
 // Hard delete category (same as deleteCategory now)
 export async function hardDeleteCategory(id: string) {
 	return deleteCategory(id);
+}
+
+// Retire/archive category without hard delete
+export async function retireCategory(id: string, options: RetireCategoryOptions = {}) {
+	try {
+		const response = await fetch(`/api/categories/${id}/retire`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(options)
+		});
+		return await handleApiCall(response);
+	} catch (error) {
+		console.error('Failed to retire category:', error);
+		return { data: null, error: 'Failed to retire category' };
+	}
 }
 
 // Get category by slug

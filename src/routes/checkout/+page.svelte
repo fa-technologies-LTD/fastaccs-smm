@@ -529,6 +529,19 @@
 								<span class="text-sm sm:text-base">Pay Now</span>
 							{/if}
 						</button>
+						<p
+							class="mt-3 text-center text-xs leading-relaxed"
+							style="color: var(--text-dim); font-family: var(--font-body);"
+						>
+							By continuing with payment, you agree to our
+							<a href="/terms" class="hover:underline" style="color: var(--link);">Terms</a>,
+							<a href="/refund-policy" class="hover:underline" style="color: var(--link);">Refund Policy</a>,
+							<a href="/privacy" class="hover:underline" style="color: var(--link);">Privacy Notice</a>,
+							and
+							<a href="/acceptable-use" class="hover:underline" style="color: var(--link);"
+								>Acceptable Use Rules</a
+							>.
+						</p>
 
 						<!-- Security Notice -->
 						<div class="mt-6 space-y-2">

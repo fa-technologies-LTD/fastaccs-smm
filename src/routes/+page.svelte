@@ -4,14 +4,17 @@
 	import FeaturedCategories from '$lib/components/FeaturedCategories.svelte';
 	import SocialProof from '$lib/components/SocialProof.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import type { PageData } from './$types';
+
+	let { data }: { data: PageData } = $props();
 </script>
 
 
 <svelte:head>
-	<title>FastAccs - Premium Social Media Accounts & Boosting Services</title>
+	<title>FastAccs - Premium Social Media Accounts & Growth Services</title>
 	<meta
 		name="description"
-		content="Nigeria's most trusted marketplace for verified social media accounts and boosting services. Fast, secure, and reliable delivery guaranteed."
+		content="Nigeria's marketplace for social media accounts and growth services with secure checkout and fast order processing."
 	/>
 </svelte:head>
 
@@ -19,8 +22,7 @@
 
 <main>
 	<HeroBanner />
-	<FeaturedCategories />
+	<FeaturedCategories platforms={data.platforms} />
 	<SocialProof />
 </main>
 <Footer />
-

@@ -145,6 +145,20 @@
 					</div>
 				</div>
 
+				<div
+					class="mb-6 rounded-lg p-4"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
+					<p class="text-sm" style="color: var(--text-muted);">
+						For smooth access, test your login soon after delivery and report issues quickly. For the
+						fastest support response, message us within 2 hours of purchase. See the <a
+							href="/support#faq"
+							class="font-medium hover:underline"
+							style="color: var(--link);">Support FAQ</a
+						> for account-care tips.
+					</p>
+				</div>
+
 				<!-- Order Items -->
 				<div
 					class="rounded-lg p-6"

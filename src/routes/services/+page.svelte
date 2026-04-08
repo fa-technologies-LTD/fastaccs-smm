@@ -5,10 +5,10 @@
 </script>
 
 <svelte:head>
-	<title>Social Media Boosting Services | FastAccs</title>
+	<title>Social Media Growth Services | FastAccs</title>
 	<meta
 		name="description"
-		content="Grow your social media presence with our premium boosting services. Instagram followers, TikTok views, YouTube subscribers and more."
+		content="Grow your social media presence with our premium growth services. Instagram followers, TikTok views, YouTube subscribers and more."
 	/>
 </svelte:head>
 

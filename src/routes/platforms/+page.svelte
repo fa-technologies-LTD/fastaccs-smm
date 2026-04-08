@@ -4,7 +4,11 @@
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
-	import { getPlatformColor, getPlatformIcon } from '$lib/helpers/platformColors';
+	import {
+		getPlatformColor,
+		getPlatformIcon,
+		isPlatformImageUrl
+	} from '$lib/helpers/platformColors';
 
 	interface Props {
 		data: PageData;
@@ -14,9 +18,37 @@
 
 	let searchQuery = $state('');
 	let filterQuery = $state('all');
+	let failedPlatformIcons = $state<Record<string, boolean>>({});
+
+	interface PlatformMetadata {
+		icon?: unknown;
+		color?: unknown;
+	}
 
 	function navigateToPlatform(platformSlug: string) {
 		goto(`/platforms/${platformSlug}`);
+	}
+
+	function getPlatformMetadata(metadata: Record<string, unknown> | undefined): PlatformMetadata {
+		return (metadata as PlatformMetadata | undefined) || {};
+	}
+
+	function shouldRenderCustomIcon(platformId: string, metadata: PlatformMetadata): boolean {
+		return isPlatformImageUrl(metadata.icon) && !failedPlatformIcons[platformId];
+	}
+
+	function markPlatformIconFailed(platformId: string) {
+		failedPlatformIcons = {
+			...failedPlatformIcons,
+			[platformId]: true
+		};
+	}
+
+	function getPlatformHeaderStyle(metadata: PlatformMetadata | undefined): string | undefined {
+		const color = typeof metadata?.color === 'string' ? metadata.color.trim() : '';
+		if (!color) return undefined;
+
+		return `background: linear-gradient(135deg, ${color} 0%, rgba(15, 22, 47, 0.88) 100%);`;
 	}
 
 	// Format numbers with commas
@@ -38,7 +70,7 @@
 			platforms = platforms.filter(
 				(p) =>
 					p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-					p.description.toLowerCase().includes(searchQuery.toLowerCase())
+					(p.description || '').toLowerCase().includes(searchQuery.toLowerCase())
 			);
 		}
 
@@ -56,7 +88,7 @@
 	<title>Choose Your Platform - FastAccs</title>
 	<meta
 		name="description"
-		content="Select from our premium social media platforms: Instagram, TikTok, Twitter, and Facebook accounts with real followers and engagement."
+		content="Browse available social media platforms and account tiers with current stock and pricing."
 	/>
 </svelte:head>
 
@@ -103,8 +135,7 @@
 				class="mx-auto mb-8 max-w-2xl"
 				style="font-size: 1rem; color: var(--text-muted); font-family: var(--font-body); line-height: 1.6;"
 			>
-				Browse our collection of verified accounts across all major social media platforms. Ready to
-				use, secure, and backed by our guarantee.
+				Explore available account categories, compare tiers, and purchase through secure checkout.
 			</p>
 
 			<!-- Feature Badges -->
@@ -129,7 +160,7 @@
 					<span
 						style="font-size: 0.875rem; color: var(--text); font-family: var(--font-body); font-weight: 500;"
 					>
-						Real Followers
+						Multiple Tiers
 					</span>
 				</div>
 				<div
@@ -261,7 +292,7 @@
 					Available Platforms
 				</h2>
 				<p style="font-size: 1.125rem; color: var(--text-muted); font-family: var(--font-body);">
-					Choose from our collection of verified accounts with different follower tiers
+					Choose from available account tiers across active platforms
 				</p>
 			</div>
 
@@ -285,7 +316,7 @@
 				<div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-2">
 					{#each filteredPlatforms() as platform}
 						{@const PlatformIcon = getPlatformIcon(platform.slug)}
-						{@const platformMeta = platform.metadata as any}
+						{@const platformMeta = getPlatformMetadata(platform.metadata)}
 						<div
 							onclick={() => navigateToPlatform(platform.slug)}
 							onkeydown={(e) => e.key === 'Enter' && navigateToPlatform(platform.slug)}
@@ -295,12 +326,20 @@
 							style="background: var(--bg-elev-1); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-1);"
 						>
 							<!-- Platform Gradient Header -->
-							<div class={`bg-gradient-to-r ${getPlatformColor(platform.slug)} p-8 text-white`}>
+							<div
+								class={`p-8 text-white ${platformMeta?.color ? '' : `bg-gradient-to-r ${getPlatformColor(platform.slug)}`}`}
+								style={getPlatformHeaderStyle(platformMeta)}
+							>
 								<div class="flex items-center justify-between">
 									<div class="flex items-center gap-4">
 										<div class="rounded-full bg-white/20 p-3">
-											{#if platformMeta?.icon}
-												<img src={platformMeta.icon} alt={platform.name} class="h-8 w-8" />
+											{#if shouldRenderCustomIcon(platform.id, platformMeta)}
+												<img
+													src={platformMeta.icon as string}
+													alt={platform.name}
+													class="h-8 w-8"
+													onerror={() => markPlatformIconFailed(platform.id)}
+												/>
 											{:else}
 												<PlatformIcon class="h-8 w-8" />
 											{/if}

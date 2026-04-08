@@ -1,7 +1,60 @@
 <script lang="ts">
-	import { Instagram, Music, Facebook, Twitter } from '@lucide/svelte';
 	import { addToast } from '$lib/stores/toasts';
 	import { goto } from '$app/navigation';
+	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
+
+	interface PlatformData {
+		id: string;
+		name: string;
+		slug: string;
+		description?: string | null;
+		metadata?: Record<string, unknown>;
+	}
+
+	interface PlatformMetadata {
+		icon?: unknown;
+		color?: unknown;
+	}
+
+	let { platforms = [] }: { platforms?: PlatformData[] } = $props();
+	let failedPlatformIcons = $state<Record<string, boolean>>({});
+
+	function getPlatformSubLabel(platform: PlatformData): string {
+		const text = platform.description?.trim();
+		if (text) return text;
+		return `${platform.name} accounts`;
+	}
+
+	function getPlatformMetadata(platform: PlatformData): PlatformMetadata {
+		return (platform.metadata as PlatformMetadata | undefined) || {};
+	}
+
+	function shouldRenderCustomIcon(platform: PlatformData, metadata: PlatformMetadata): boolean {
+		return isPlatformImageUrl(metadata.icon) && !failedPlatformIcons[platform.id];
+	}
+
+	function markPlatformIconFailed(platformId: string) {
+		failedPlatformIcons = {
+			...failedPlatformIcons,
+			[platformId]: true
+		};
+	}
+
+	function getPlatformIconColor(platform: PlatformData): string {
+		const color = (platform.metadata as { color?: unknown } | undefined)?.color;
+		if (typeof color === 'string' && color.trim()) {
+			return color;
+		}
+
+		return 'var(--link)';
+	}
+
+	let featuredPlatforms = $derived.by(() =>
+		[...platforms]
+			.filter((platform) => platform?.slug && platform?.name)
+			.sort((a, b) => a.name.localeCompare(b.name))
+			.slice(0, 4)
+	);
 </script>
 
 <section style="background: var(--bg); padding: var(--space-4xl) var(--space-md);">
@@ -24,79 +77,56 @@
 						Social Media Accounts
 					</h3>
 					<p style="font-size: 0.9rem; opacity: 0.8; font-family: var(--font-body);">
-						Premium verified accounts with real followers
+						Curated social media accounts across multiple platforms and audience tiers
 					</p>
 				</div>
 
 				<div class="flex flex-1 flex-col" style="padding: var(--space-lg);">
 					<div class="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 sm:gap-4">
-						<button class="platform-btn flex w-full items-center">
-							<Instagram class="mr-3 h-6 w-6 sm:h-8 sm:w-8" style="color: #E4405F;" />
-
-							<div class="text-left">
-								<div
-									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
-								>
-									Instagram
-								</div>
-								<div
-									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
-								>
-									Premium accounts
-								</div>
+						{#if featuredPlatforms.length === 0}
+							<div
+								class="platform-btn col-span-full"
+								style="padding: var(--space-lg); text-align: center; color: var(--text-muted);"
+							>
+								No active platforms available yet.
 							</div>
-						</button>
-
-						<button class="platform-btn flex w-full items-center">
-							<Music class="mr-3 h-6 w-6 sm:h-8 sm:w-8" style="color: #FE2C55;" />
-
-							<div class="text-left">
-								<div
-									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
+						{:else}
+							{#each featuredPlatforms as platform (platform.id)}
+								{@const PlatformIcon = getPlatformIcon(platform.slug)}
+								{@const platformMeta = getPlatformMetadata(platform)}
+								<button
+									onclick={() => goto(`/platforms/${platform.slug}`)}
+									class="platform-btn flex w-full cursor-pointer items-center"
 								>
-									TikTok
-								</div>
-								<div
-									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
-								>
-									Verified accounts
-								</div>
-							</div>
-						</button>
+									{#if shouldRenderCustomIcon(platform, platformMeta)}
+										<img
+											src={platformMeta.icon as string}
+											alt={platform.name}
+											class="mr-3 h-6 w-6 rounded sm:h-8 sm:w-8"
+											onerror={() => markPlatformIconFailed(platform.id)}
+										/>
+									{:else}
+										<PlatformIcon
+											class="mr-3 h-6 w-6 sm:h-8 sm:w-8"
+											style={`color: ${getPlatformIconColor(platform)};`}
+										/>
+									{/if}
 
-						<button class="platform-btn flex w-full items-center">
-							<Facebook class="mr-3 h-6 w-6 sm:h-8 sm:w-8" style="color: #1877F2;" />
-
-							<div class="text-left">
-								<div
-									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
-								>
-									Facebook
-								</div>
-								<div
-									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
-								>
-									Active accounts
-								</div>
-							</div>
-						</button>
-
-						<button class="platform-btn flex w-full items-center">
-							<Twitter class="mr-3 h-6 w-6 sm:h-8 sm:w-8" style="color: #1DA1F2;" />
-
-							<div class="text-left">
-								<div
-									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
-								>
-									Twitter
-								</div>
-								<div
-									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
-								>
-									Quality profiles
-								</div>
-							</div>
-						</button>
+									<div class="text-left">
+										<div
+											style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
+										>
+											{platform.name}
+										</div>
+										<div
+											style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
+										>
+											{getPlatformSubLabel(platform)}
+										</div>
+									</div>
+								</button>
+							{/each}
+						{/if}
 					</div>
 
 					<div class="mt-auto">
@@ -110,7 +140,7 @@
 				</div>
 			</div>
 
-			<!-- Boosting Services -->
+			<!-- Growth Services -->
 			<div class="category-card flex flex-col overflow-hidden">
 				<div
 					style="background: var(--btn-secondary-gradient); padding: var(--space-lg); color: var(--text);"
@@ -118,10 +148,10 @@
 					<h3
 						style="margin-bottom: var(--space-xs); font-size: 1.25rem; font-weight: 700; font-family: var(--font-head);"
 					>
-						Boosting Services
+						Growth Services
 					</h3>
 					<p style="font-size: 0.9rem; color: var(--text-muted); font-family: var(--font-body);">
-						Grow your existing accounts with real engagement
+						Grow your existing accounts with tailored engagement packages
 					</p>
 				</div>
 
@@ -146,7 +176,7 @@
 								<div
 									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
 								>
-									High-quality, real followers
+									Followers packages for different growth goals
 								</div>
 							</div>
 						</div>

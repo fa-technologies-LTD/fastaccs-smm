@@ -1,10 +1,10 @@
-import {
-	MONNIFY_API_KEY,
-	MONNIFY_SECRET_KEY,
-	MONNIFY_BASE_URL,
-	MONNIFY_CONTRACT_CODE
-} from '$env/static/private';
+import { env } from '$env/dynamic/private';
 import { createHmac } from 'crypto';
+
+const MONNIFY_API_KEY = env.MONNIFY_API_KEY || '';
+const MONNIFY_SECRET_KEY = env.MONNIFY_SECRET_KEY || '';
+const MONNIFY_BASE_URL = env.MONNIFY_BASE_URL || '';
+const MONNIFY_CONTRACT_CODE = env.MONNIFY_CONTRACT_CODE || '';
 
 // Token cache — re-used until 5 minutes before expiry
 let cachedToken: { value: string; expiresAt: number } | null = null;

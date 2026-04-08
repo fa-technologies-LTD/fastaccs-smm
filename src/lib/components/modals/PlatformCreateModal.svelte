@@ -144,7 +144,7 @@
 								/>
 								<p class="mt-1 text-xs" style="color: var(--text-muted);">
 									💡 <strong>Leave blank</strong> for auto icons (Instagram, TikTok, Facebook,
-									Twitter).<br />
+									X).<br />
 									<strong>For new platforms:</strong> Provide an icon URL or upload to
 									<code class="rounded px-1" style="background: var(--surface);"
 										>/static/icons/</code

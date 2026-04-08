@@ -1,13 +1,13 @@
 // Google OAuth login initiation
 import { redirect } from '@sveltejs/kit';
 import { generateState, generateCodeVerifier } from 'arctic';
-import { google } from '$lib/auth/oauth';
-import { PUBLIC_BASE_URL } from '$env/static/public';
+import { getGoogleClient } from '$lib/auth/oauth';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ cookies, url }) => {
 	const state = generateState();
 	const codeVerifier = generateCodeVerifier();
+	const google = getGoogleClient(url.origin);
 
 	// Get redirect URL from query params, default to dashboard
 	const redirectTo = url.searchParams.get('redirectTo') || '/dashboard';
@@ -19,8 +19,8 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
 		'email'
 	]);
 
-	// Determine if we're in production (HTTPS)
-	const isProduction = url.protocol === 'https:' || PUBLIC_BASE_URL?.startsWith('https://');
+	// Local HTTP development must not use secure cookies or callback state will be lost.
+	const isSecureRequest = url.protocol === 'https:';
 
 	// Cookie settings that work in both local and production
 	const cookieOptions = {
@@ -28,7 +28,7 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
 		httpOnly: true,
 		maxAge: 60 * 10, // 10 minutes
 		sameSite: 'lax' as const,
-		secure: isProduction
+		secure: isSecureRequest
 	};
 
 	// Store state, code verifier, and redirect URL in cookies
