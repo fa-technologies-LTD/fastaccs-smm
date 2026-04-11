@@ -2,16 +2,10 @@
 	let skipSignature = $state(true);
 	let signature = $state('');
 	let webhookData = $state(`{
-  "event": "charge.success",
-  "data": {
-    "reference": "WLT_aa8f8d42_1765292495004",
-    "status": "success",
-    "amount": "500000.00",
-    "fee": 2000,
-    "currency": "NGN",
-    "customer": {
-      "email": "adetayo.lasisi@gmail.com"
-    }
+  "eventType": "SUCCESSFUL_TRANSACTION",
+  "eventData": {
+    "transactionReference": "MNFY|67|20260301101010|000001",
+    "paymentReference": "ORD_1234ABCD_1765292495004"
   }
 }`);
 	let result = $state<any>(null);
@@ -27,7 +21,7 @@
 			};
 
 			if (!skipSignature && signature) {
-				headers['x-korapay-signature'] = signature;
+				headers['monnify-signature'] = signature;
 			}
 
 			const response = await fetch('/api/test/webhook', {
@@ -54,10 +48,10 @@
 			};
 
 			if (!skipSignature && signature) {
-				headers['x-korapay-signature'] = signature;
+				headers['monnify-signature'] = signature;
 			}
 
-			const response = await fetch('/api/webhooks/korapay', {
+			const response = await fetch('/api/webhooks/monnify', {
 				method: 'POST',
 				headers,
 				body: webhookData
@@ -84,26 +78,26 @@
 				</label>
 			</div>
 
-			{#if !skipSignature}
-				<div class="mb-4">
-					<label class="mb-2 block text-sm font-medium"
-						>Webhook Signature (x-korapay-signature)</label
-					>
-					<input
-						type="text"
-						bind:value={signature}
-						placeholder="Enter signature from Korapay webhook"
-						class="w-full rounded-lg border px-4 py-2"
-					/>
-				</div>
-			{/if}
+				{#if !skipSignature}
+					<div class="mb-4">
+						<label class="mb-2 block text-sm font-medium"
+							>Webhook Signature (monnify-signature)</label
+						>
+						<input
+							type="text"
+							bind:value={signature}
+							placeholder="Enter signature from Monnify webhook"
+							class="w-full rounded-lg border px-4 py-2"
+						/>
+					</div>
+				{/if}``
 
 			<div class="mb-4">
 				<label class="mb-2 block text-sm font-medium">Webhook Payload</label>
 				<textarea
 					bind:value={webhookData}
 					rows="15"
-					class="w-full rounded-lg border px-4 py-2 font-mono text-sm"
+					class="w-full rounded-lg border px-4 py-2 font-mo`n`o text-sm"
 				></textarea>
 			</div>
 
@@ -143,16 +137,16 @@
 			</div>
 		{/if}
 
-		<div class="mt-8 rounded-lg border border-yellow-200 bg-yellow-50 p-4">
-			<h3 class="mb-2 font-bold">How to use:</h3>
-			<ol class="list-inside list-decimal space-y-1 text-sm">
-				<li>Go to your Korapay dashboard transaction</li>
-				<li>Find the webhook attempt in the Webhook/Metadata section</li>
-				<li>Copy the signature from the request headers</li>
-				<li>Copy the entire webhook payload</li>
-				<li>Paste both here and click Test Webhook</li>
-			</ol>
-		</div>
+			<div class="mt-8 rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+				<h3 class="mb-2 font-bold">How to use:</h3>
+				<ol class="list-inside list-decimal space-y-1 text-sm">
+					<li>Go to your Monnify dashboard transaction</li>
+					<li>Find the webhook attempt in the Webhook/Metadata section</li>
+					<li>Copy the signature from the request headers</li>
+					<li>Copy the entire webhook payload</li>
+					<li>Paste both here and click Test Webhook</li>
+				</ol>
+			</div>
 	</div>
 </div>
 

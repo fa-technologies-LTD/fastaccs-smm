@@ -57,7 +57,7 @@ interface Order {
 	orderNumber: string;
 	status: 'pending' | 'pending_payment' | 'processing' | 'completed' | 'failed' | 'refunded';
 	totalAmount: number;
-	paymentMethod: 'wallet' | 'korapay';
+	paymentMethod: 'monnify' | 'wallet';
 	paymentReference?: string;
 	affiliateCode?: string;
 	discountAmount?: number;
@@ -180,7 +180,7 @@ let showDetailsModal = $state(false);
 **Payment Method Badges:**
 
 - Wallet: Purple badge
-- Korapay: Blue badge
+- Monnify: Blue badge
 
 ### 4. Order Details Modal
 
@@ -467,7 +467,7 @@ pending_payment → processing → completed
 **Status Definitions:**
 
 - **pending**: Order created, no payment yet (shouldn't happen in current flow)
-- **pending_payment**: Awaiting payment confirmation from Korapay
+- **pending_payment**: Awaiting payment confirmation from Monnify
 - **processing**: Payment received, allocating accounts
 - **completed**: Accounts allocated and delivered
 - **failed**: Payment failed or cancelled
@@ -509,7 +509,7 @@ pending_payment → processing → completed
 ### Refund Destinations
 
 - **Wallet**: Credit user's FastAccs wallet
-- **Original Method**: Return to card/bank (via Korapay API)
+- **Original Method**: Return via payment gateway/manual process
 
 ## Notifications
 

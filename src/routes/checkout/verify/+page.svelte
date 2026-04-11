@@ -11,10 +11,16 @@
 	let errorMessage = $state('');
 	let orderId = $state<string | null>(null);
 
+	function sanitizeOrderId(value: string | null): string | null {
+		if (!value) return null;
+		const stripped = value.split('?')[0].split('&')[0].trim();
+		return stripped || null;
+	}
+
 	onMount(async () => {
 		// Monnify redirects back with ?paymentReference=ORD_...
 		const paymentReference = $page.url.searchParams.get('paymentReference');
-		const orderIdParam = $page.url.searchParams.get('orderId');
+		const orderIdParam = sanitizeOrderId($page.url.searchParams.get('orderId'));
 
 		try {
 			const response = await fetch('/api/payments/verify', {

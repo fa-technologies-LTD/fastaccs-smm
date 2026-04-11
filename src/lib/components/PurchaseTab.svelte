@@ -74,10 +74,11 @@
 					<Lock class="h-3.5 w-3.5" style="color: var(--primary);" />
 				</div>
 				<p class="mt-1 text-xs" style="color: var(--text-muted);">
-					All account details are encrypted and delivered only to you. Need help?
-					<a href="/support" class="font-medium underline" style="color: var(--link);">
-						Contact Support
+					All account details are encrypted and delivered only to you. Need login guidance? See the
+					<a href="/support#faq" class="font-medium underline" style="color: var(--link);">
+						quick account care guide
 					</a>
+					and report issues within 2 hours for the fastest support response.
 				</p>
 			</div>
 		</div>

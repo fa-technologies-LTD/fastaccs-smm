@@ -4,7 +4,7 @@ export interface Platform {
 	id: string;
 	name: string;
 	slug: string;
-	description: string;
+	description: string | null;
 	metadata?: Record<string, any>;
 	tier_count?: number;
 	total_accounts?: number;
@@ -34,7 +34,13 @@ export const load: PageLoad = async ({ fetch }): Promise<PageData> => {
 		// Get tier statistics for each platform
 		const platformsWithStats = await Promise.all(
 			platforms.map(
-				async (platform: { id: string; name: string; slug: string; description: string }) => {
+				async (platform: {
+					id: string;
+					name: string;
+					slug: string;
+					description: string;
+					metadata?: Record<string, unknown>;
+				}) => {
 					try {
 						// Get tiers for this platform
 						const tiersResponse = await fetch(`/api/categories/tiers/${platform.id}`);
@@ -64,6 +70,7 @@ export const load: PageLoad = async ({ fetch }): Promise<PageData> => {
 							name: platform.name,
 							slug: platform.slug,
 							description: platform.description,
+							metadata: platform.metadata || {},
 							tier_count: tiers.length,
 							total_accounts: totalAccounts,
 							sample_tiers: tiers.slice(0, 6).map((tier) => ({
@@ -79,6 +86,7 @@ export const load: PageLoad = async ({ fetch }): Promise<PageData> => {
 							name: platform.name,
 							slug: platform.slug,
 							description: platform.description,
+							metadata: platform.metadata || {},
 							tier_count: 0,
 							total_accounts: 0,
 							sample_tiers: []

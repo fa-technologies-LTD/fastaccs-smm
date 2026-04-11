@@ -4,6 +4,20 @@ import { verifyPayment } from '$lib/services/payment';
 import { prisma } from '$lib/prisma';
 import { allocateAccountsForOrder } from '$lib/services/fulfillment';
 
+function sanitizeOrderId(value: unknown): string | null {
+	if (typeof value !== 'string') return null;
+	const trimmed = value.trim();
+	if (!trimmed) return null;
+
+	// Guard against malformed callback URLs that may include extra query fragments.
+	const stripped = trimmed.split('?')[0].split('&')[0].trim();
+	return stripped || null;
+}
+
+function isUuid(value: string): boolean {
+	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
 		// Check authentication
@@ -16,16 +30,23 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			paymentReference,
 			orderId: requestedOrderId
 		} = await request.json();
+		const safeRequestedOrderId = sanitizeOrderId(requestedOrderId);
+		const validRequestedOrderId =
+			safeRequestedOrderId && isUuid(safeRequestedOrderId) ? safeRequestedOrderId : null;
 
 		if (!transactionReference && !paymentReference) {
-			if (!requestedOrderId) {
+			if (!validRequestedOrderId) {
 				return json(
-					{ success: false, error: 'Transaction reference is required' },
+					{
+						success: false,
+						error: 'Payment was cancelled',
+						status: 'cancelled'
+					},
 					{ status: 400 }
 				);
 			}
 
-			const order = await prisma.order.findUnique({ where: { id: requestedOrderId } });
+			const order = await prisma.order.findUnique({ where: { id: validRequestedOrderId } });
 
 			if (!order) {
 				return json({ success: false, error: 'Order not found' }, { status: 404 });
@@ -55,8 +76,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const verificationResult = await verifyPayment(transactionReference || paymentReference);
 
 		if (!verificationResult.success) {
-			const failedOrder = requestedOrderId
-				? await prisma.order.findUnique({ where: { id: requestedOrderId } })
+			const failedOrder = validRequestedOrderId
+				? await prisma.order.findUnique({ where: { id: validRequestedOrderId } })
 				: paymentReference
 					? await prisma.order.findFirst({ where: { paymentReference } })
 					: null;
@@ -84,9 +105,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		// Get order from payment metadata
-		const orderId = (verificationResult.metaData?.orderId as string) || requestedOrderId;
+		const metadataOrderId = sanitizeOrderId(verificationResult.metaData?.orderId);
+		const orderId = metadataOrderId || validRequestedOrderId;
 
-		if (!orderId) {
+		if (!orderId || !isUuid(orderId)) {
 			return json(
 				{ success: false, error: 'Order ID not found in payment metadata' },
 				{ status: 400 }

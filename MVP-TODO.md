@@ -1,5 +1,9 @@
 # FULL PROJECT BRIEF (MVP)
 
+> Legacy MVP brief from wallet-first planning phase.
+> Current production flow is Monnify hosted checkout (not wallet-first).
+> See `README.md` and `TODO.md` for current execution priorities.
+
 ## 1. Core Goals
 
 - Allow users to buy social media accounts instantly using an internal wallet.

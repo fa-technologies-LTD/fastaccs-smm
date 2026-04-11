@@ -1,122 +1,137 @@
-═══════════════════════════════════════════════════════════════
-  FASTACCS UI DECLUTTERING - CHANGE TRACKING LOG
-  Branch: ui-declutter
-  Date: January 31, 2026
-═══════════════════════════════════════════════════════════════
+FASTACCS COPY INVENTORY + MONNIFY/CX ALIGNMENT
+Branch: feature/next-improvements
+Date: April 8, 2026
 
-PHASE 1: HIGH-IMPACT REMOVALS
-══════════════════════════════════════════════════════════════
+Format: [Status] | Surface | File | Current Text | Applied Rewrite
+Status legend: APPLIED, QA-PENDING, PROPOSED-REVIEW
 
-[✓] 1.1 Remove "Browse Accounts" quick action (desktop only)
-    File: src/lib/components/UserDashboard.svelte
-    Status: COMPLETE - Hidden on desktop with md:hidden, visible on mobile
-    
-[✓] 1.2 Remove 2 dashboard stats cards (Total Orders, Completed Orders)
-    Keep: Total Spent
-    File: src/lib/components/UserDashboard.svelte
-    Status: COMPLETE - Removed Package, CheckCircle imports + 2 stat cards
+BATCH 1: TRUST-SENSITIVE COPY (CUSTOMER-FACING)
+[APPLIED] | SEO Meta | src/routes/+page.svelte | "...trusted...verified...guaranteed" | "Nigeria's marketplace for social media accounts and boosting services with secure checkout and fast order processing."
+[APPLIED] | Hero subtitle | src/lib/components/HeroBanner.svelte | "...trusted...verified...guaranteed" | "Shop social media accounts and boosting services with secure checkout and quick delivery after payment confirmation."
+[APPLIED] | Featured category subtitle | src/lib/components/FeaturedCategories.svelte | "Premium verified accounts with real followers" | "Curated social media accounts across multiple platforms and audience tiers"
+[APPLIED] | Boosting copy row | src/lib/components/FeaturedCategories.svelte | "High-quality, real followers" | "Followers packages for different growth goals"
+[APPLIED] | Social proof intro | src/lib/components/SocialProof.svelte | "Your trusted partner..." | "A reliable platform for social media accounts and growth services"
+[APPLIED] | Social proof card | src/lib/components/SocialProof.svelte | "Quality Guaranteed" + "verified...authentic" | "Quality Checked Listings" + "Listings are reviewed and matched to their stated category details"
+[APPLIED] | Platforms meta | src/routes/platforms/+page.svelte | "...real followers..." | "Browse available social media platforms and account tiers with current stock and pricing."
+[APPLIED] | Platforms hero text | src/routes/platforms/+page.svelte | "verified...guarantee" | "Explore available account categories, compare tiers, and purchase through secure checkout."
+[APPLIED] | Platforms badge | src/routes/platforms/+page.svelte | "Real Followers" | "Multiple Tiers"
+[APPLIED] | Platforms subtitle | src/routes/platforms/+page.svelte | "collection of verified accounts" | "Choose from available account tiers across active platforms"
+[APPLIED] | Platform detail meta | src/routes/platforms/[platform]/+page.svelte | "...real followers...instant delivery" | "Browse available [platform] account tiers and complete checkout securely on FastAccs."
+[APPLIED] | Support FAQ safety answer | src/routes/support/+page.svelte | "...verified processors...guarantee quality" | "Payments are processed securely, and our team can assist quickly if an order has issues."
+[APPLIED] | Support meta + hero helper text | src/routes/support/+page.svelte | "24/7 support team..." | neutral support wording without absolute guarantees
+[APPLIED] | How It Works trust/quality/refund copy | src/routes/how-it-works/+page.svelte | several absolute claims | neutral operational wording aligned to actual flow
 
-[✓] 1.3 Make dashboard header minimal and compact
-    File: src/lib/components/UserDashboard.svelte
-    Status: COMPLETE - Reduced avatar 16→12, padding 6→4, responsive text sizes
+BATCH 2: IA/NAV/FOOTER WORDING + SUPPORT PATHS
+[APPLIED] | Desktop nav label | src/lib/components/Navigation.svelte | "Services" | "Boosting Services"
+[APPLIED] | Mobile nav label | src/lib/components/Navigation.svelte | "Services" | "Boosting Services"
+[APPLIED] | Footer quick link | src/lib/components/Footer.svelte | "/accounts" | "/platforms"
+[APPLIED] | Footer support links | src/lib/components/Footer.svelte | /help /contact /faq | /support /support#contact /support#faq
+[APPLIED] | Support anchors added | src/routes/support/+page.svelte | no section anchors | added id="contact" and id="faq"
+[APPLIED] | Footer about text | src/lib/components/Footer.svelte | trust-heavy copy | neutral marketplace + secure checkout wording
 
-PHASE 2: NAVIGATION & CTA CLEANUP
-══════════════════════════════════════════════════════════════
+BATCH 3: SOCIAL/CONTACT URL ALIGNMENT
+[APPLIED] | Facebook | src/lib/components/Footer.svelte | old FB URL | https://web.facebook.com/profile.php?id=100089537246012
+[APPLIED] | TikTok | src/lib/components/Footer.svelte | missing | https://www.tiktok.com/@fastaccounts_
+[APPLIED] | Instagram | src/lib/components/Footer.svelte | old IG URL | https://www.instagram.com/fastaccounts_/
+[APPLIED] | WhatsApp support | src/lib/components/Footer.svelte | wa.me numeric link | https://wa.link/fast_accounts
+[APPLIED] | Telegram support | src/lib/components/Footer.svelte | present | removed
 
-[✓] 2.1 Replace "Sign In" + "Get Started" with single "Get Started"
-    File: src/lib/components/Navigation.svelte
-    Status: COMPLETE - Removed "Sign In", kept only "Get Started" button
-    
-[✓] 2.2 Move Admin button to avatar dropdown menu
-    File: src/lib/components/Navigation.svelte
-    Status: COMPLETE - Created dropdown with Dashboard, Admin Panel, Sign Out
-    
-[✓] 2.3 Streamline mobile menu spacing
-    File: src/lib/components/Navigation.svelte
-    Status: COMPLETE - Reduced py-6→py-4, py-3→py-2, tighter gaps
-    
-[✓] 2.4 Remove "View Boosting Services" button from hero
-    File: src/lib/components/HeroBanner.svelte
-    Status: COMPLETE - Removed secondary CTA button
+BATCH 4: ICON RESILIENCE + PLATFORM MAPPING
+[APPLIED] | Shared icon URL validator | src/lib/helpers/platformColors.ts | scattered checks | added isPlatformImageUrl(...)
+[APPLIED] | Home featured icons | src/lib/components/FeaturedCategories.svelte | broken image risk | added runtime image fallback to mapped icon
+[APPLIED] | Platforms list icons | src/routes/platforms/+page.svelte | broken image risk | added runtime image fallback to mapped icon
+[APPLIED] | Platform header icon | src/routes/platforms/[platform]/+page.svelte | broken image risk | added runtime image fallback to mapped icon
+[APPLIED] | Admin platform card icons | src/routes/admin/platforms/+page.svelte | broken image risk | added runtime image fallback to mapped icon + color
 
-PHASE 3: FOOTER DECLUTTERING
-══════════════════════════════════════════════════════════════
+BATCH 5: PLATFORM RETIRE FLOW (NO HARD DELETE REGRESSION)
+[APPLIED] | API category listing | src/routes/api/categories/+server.ts | active-only always | added include_inactive=true support for admin visibility
+[APPLIED] | Retire endpoint | src/routes/api/categories/[id]/retire/+server.ts | no archive workflow | archive category/platform (isActive=false) with optional available-inventory move
+[APPLIED] | Category service | src/lib/services/categories.ts | no retire helper | added retireCategory(...) API client helper
+[APPLIED] | Admin platforms load | src/routes/admin/platforms/+page.ts | hid inactive items | now loads include_inactive=true so archived platforms remain visible in admin
+[APPLIED] | Admin retire UX | src/routes/admin/platforms/+page.svelte + src/lib/components/modals/PlatformRetireModal.svelte | delete-only action | added Retire action + destination tier/category selector for available inventory move
+[APPLIED] | Delete modal guidance | src/lib/components/modals/PlatformDeleteModal.svelte | delete warning only | added note directing admins to Retire for used platforms
 
-[✓] 3.1 Create 3-column compact footer (reduce padding)
-    File: src/lib/components/Footer.svelte
-    Status: COMPLETE - Converted 4-column→3-column layout
-    - Merged Quick Links + Support into single column
-    - Combined Support + Contact into "Get In Touch"
-    - Reduced padding: py-12→py-8
-    - Reduced spacing: gap-8→gap-6, space-y-3→space-y-2
-    - Smaller social icons: h-5→h-4, logo h-8→h-7
-    - Removed "Trusted & Secure" label from trust badges
-    - Removed bottom bar emojis (Made in Nigeria, Instant Delivery, etc.)
-    - Compact trust badges: py-1→py-0.5, text sizes sm→xs
+BATCH 6: SUPPORT HOTFIX (WHATSAPP PRIMARY + NEW EMAIL)
+[APPLIED] | Footer contact priority | src/lib/components/Footer.svelte | WhatsApp + email (email first, old address) | WhatsApp Support (Primary) first, email changed to verystronethan@gmail.com
+[APPLIED] | Support page contact cards | src/routes/support/+page.svelte | Email + Live Chat + Phone placeholder | WhatsApp Support (Primary) + Email + Help Center card
+[APPLIED] | Support metadata + FAQ wording | src/routes/support/+page.svelte | live chat/phone oriented wording | WhatsApp-first wording + email updated
+[APPLIED] | Support docs page note | src/routes/support/+page.md | support@fastaccs + live chat wording | WhatsApp primary + verystronethan@gmail.com
+[APPLIED] | Policy contact emails | src/routes/privacy/+page.svelte, src/routes/logistics/policies/+page.svelte, src/routes/smm/policies/+page.svelte | support@fastaccs.com | verystronethan@gmail.com
 
-PHASE 4: PAGE-SPECIFIC CLEANUP
-══════════════════════════════════════════════════════════════
+BATCH 7: ACCOUNT USAGE GUIDANCE ROLLOUT
+[APPLIED] | Canonical "After Purchase Guide" section | src/routes/support/+page.svelte | general FAQ only | Added soft onboarding cards for 2FA, IG/X first steps, X follower fluctuation, security basics, support timing, and platform-specific notes
+[APPLIED] | FAQ replacement for high-friction items | src/routes/support/+page.svelte | generic support FAQ | Added account-usage FAQs: 2FA usage, VPN guidance (generic), issue timing, and X fluctuation
+[APPLIED] | How-it-works post-delivery tips | src/routes/how-it-works/+page.svelte | no early-usage accordion | Added "Best first 24 hours after delivery" FAQ with link to /support#faq
+[APPLIED] | Order success contextual tip | src/routes/order/[id]/+page.svelte | status messaging only | Added account-care reminder with "report issues within 2 hours" guidance + link to /support#faq
+[APPLIED] | Dashboard purchase helper text | src/lib/components/PurchaseTab.svelte | "Contact Support" generic line | Updated to account-care guide link + 2-hour support timing note
+[APPLIED] | Facebook VPN detail scope | customer-facing FAQ copy | mixed general/platform guidance | Kept Facebook-specific details out of public FAQ; guidance now says follow delivery notes when account-specific instructions are provided
+[APPLIED] | Refund/no-refund phrasing scope | support guide FAQ | risk of policy duplication | Kept hard "no refunds after login" wording out of support guide; left policy-bound wording to policy pages
 
-[✓] 4.1 Remove "Choose Your Account Category" banner
-    File: src/routes/platforms/[platform]/+page.svelte
-    Status: COMPLETE - Removed instructional banner
-    
-[✓] 4.2 Remove step indicator from category page header
-    File: src/routes/platforms/[platform]/+page.svelte
-    Status: COMPLETE - Removed step progress indicator
-    
-[✓] 4.3 Minimize platform header (smaller icon, compact layout)
-    File: src/routes/platforms/[platform]/+page.svelte
-    Status: COMPLETE - Reduced padding py-8→py-6, icon sizes, responsive text
+BATCH 8: SUPPORT PAGE STRUCTURE SIMPLIFICATION
+[APPLIED] | Remove "Send Us a Message" block | src/routes/support/+page.svelte | contact form present | Removed form section and streamlined support to WhatsApp, email, FAQ, and quick links
+[APPLIED] | Support page docs sync | src/routes/support/+page.md | form behavior documented as active | Updated docs to reflect form removal and channel-first support flow
 
-[✓] 4.4 Remove "Single Product Selection" banner
-    File: src/routes/platforms/[platform]/tiers/[tier]/+page.svelte
-    Status: COMPLETE - Removed entire banner section
-    
-[✓] 4.5 Remove "Why Choose X Accounts?" section (3 cards)
-    File: src/routes/platforms/[platform]/tiers/[tier]/+page.svelte
-    Status: NOT FOUND in tier detail page (might be in category page)
-    
-[✓] 4.6 Remove "Account Details" section  
-    File: src/routes/platforms/[platform]/tiers/[tier]/+page.svelte
-    Status: COMPLETE - Removed What's Included & Standard Features
-    
-[✓] 4.7 Remove "Security & Safety" section
-    File: src/routes/platforms/[platform]/tiers/[tier]/+page.svelte
-    Status: COMPLETE - Removed entire section
-    
-[✓] 4.8 Minimize blue hero section on tier page
-    File: src/routes/platforms/[platform]/tiers/[tier]/+page.svelte
-    Status: COMPLETE - Reduced py-16→py-8, smaller icon, responsive text
-    
-[✓] 4.9 Add condensed feature line below hero
-    File: src/routes/platforms/[platform]/tiers/[tier]/+page.svelte
-    Status: COMPLETE - Added "Includes: Full access • Original email • Instant delivery"
+BATCH 9: GROWTH LABEL + LOGISTICS POLICY REMOVAL
+[APPLIED] | Primary service label terminology | src/lib/components/Navigation.svelte, src/lib/components/HeroBanner.svelte, src/lib/components/FeaturedCategories.svelte, src/lib/components/Footer.svelte, src/routes/+page.svelte, src/routes/services/+page.svelte | "Boosting Services / boosting services" | "Growth Services / growth services"
+[APPLIED] | Home route docs sync | src/routes/+page.md | "Boosting Services" wording in behavior/meta docs | Updated to "Growth Services" wording
+[APPLIED] | Remove logistics policy from footer | src/lib/components/Footer.svelte | "/logistics/policies" link visible under Policies | Link removed from customer-facing footer
+[APPLIED] | Remove hosted logistics policy page | src/routes/logistics/policies/+page.svelte | logistics policy page rendered in this app | Replaced with 308 redirect to https://fastaccs.com/logistics/ via +page.server.ts
 
-[✓] 4.10 Remove trust badges from SocialProof
-    File: src/lib/components/SocialProof.svelte
-    Status: COMPLETE - Removed entire trust badges section
-    - Removed CheckCircle import (unused)
-    - Deleted SSL Encrypted, Verified Accounts, Money Back, Premium Quality badges
-    - Saves ~200px vertical space on mobile
+BATCH 10: LEGAL HARDENING ROLLOUT (OWNER RESPONSES APPLIED)
+[APPLIED] | Legal page architecture | src/routes/smm/policies/+page.svelte | one mixed policy page | converted into Policy Center hub linking to dedicated pages
+[APPLIED] | Dedicated legal pages | src/routes/terms/+page.svelte, src/routes/refund-policy/+page.svelte, src/routes/privacy/+page.svelte, src/routes/acceptable-use/+page.svelte, src/routes/cookies/+page.svelte, src/routes/affiliate-terms/+page.svelte | mixed legal copy in one location | split into focused policy pages; affiliate terms retained as requested
+[APPLIED] | Keep customer confidence while protecting owner | all new policy pages | strict/legal-heavy tone risk | plain-English opening + enforceable sections, without aggressive tone
+[APPLIED] | Unethical-use protection clause location | terms + acceptable use | concern about front-facing fear copy | enforced within policy pages (not pushed in hero/marketing copy)
+[APPLIED] | "Agreement by use/purchase" language | terms + policy center + checkout helper text | implied acceptance only | explicit browsewrap-style assent language added without extra click friction
+[APPLIED] | Checkout friction decision | src/routes/checkout/+page.svelte | proposed checkbox created concern | no checkbox added; replaced with concise legal assent line near payment action
+[APPLIED] | Cookie/analytics consent UX | src/lib/components/CookieConsentBar.svelte + src/routes/+layout.svelte | no consent UI | slim bottom bar with Accept Analytics / Necessary Only / Manage
+[APPLIED] | Privacy settings re-open control | src/lib/components/Footer.svelte | no re-open action | added "Privacy Settings" control in footer policies section
+[APPLIED] | Consent-gated analytics events | src/routes/privacy/+page.svelte, src/routes/smm/policies/+page.svelte, new legal pages | event calls unconditional | gtag page_view now runs only when analytics consent is granted
+[APPLIED] | Privacy/NDPA structure uplift | src/routes/privacy/+page.svelte | high-level summary only | added lawful basis, processor categories, cross-border handling, retention, rights, and cookie linkage in plain language
+[APPLIED] | Versioning signal | all new legal pages | no visible versioning | added effective date labels on each legal page
 
-[✓] 4.11 Compact breadcrumbs (remove Home on mobile, smaller font)
-    File: src/lib/components/Breadcrumb.svelte
-    Status: COMPLETE - Made breadcrumb compact and mobile-friendly
-    - Hide Home icon on mobile (hidden sm:flex)
-    - Hide first chevron on mobile (class:hidden + class:sm:block)
-    - Reduced font size: text-sm→text-xs (12px) on mobile, sm:text-sm on desktop
-    - Smaller chevrons: h-3.5 w-3.5 on mobile, sm:h-4 sm:w-4
+UNINTRUSIVE CONSENT UX (LIVE SPEC)
+1) Slim bottom cookie bar, no modal wall, no checkout blocking.
+2) Default to necessary cookies; analytics remains off until user opts in.
+3) Buttons: Accept Analytics, Necessary Only, Manage.
+4) Users can re-open anytime via footer Privacy Settings.
+5) Consent is remembered locally with version + expiry window.
 
-[✓] 4.12 Limit toasts (1 visible, 2s dismiss, deduplicate)
-    Files: src/lib/stores/toasts.ts
-    Status: COMPLETE - Improved toast notification system
-    - Added MAX_TOASTS = 1 constant
-    - Changed DEFAULT_DURATION from 3000ms→2000ms
-    - Implemented deduplication check (type + title + message)
-    - Limit queue to 1 toast (removes oldest when adding new)
-    - Added 'get' import from svelte/store for deduplication
+NO-FRICTION CHECKOUT LEGAL POSITION (LIVE)
+1) No checkbox gate was added.
+2) A short assent sentence appears near payment button: continuing with payment means acceptance of Terms, Refund Policy, Privacy Notice, and Acceptable Use Rules.
+3) This keeps purchase flow smooth while still improving legal defensibility.
 
-═══════════════════════════════════════════════════════════════
-ESTIMATED SPACE SAVINGS: ~1,100px on mobile
-═══════════════════════════════════════════════════════════════
+BATCH 11: PLATFORM-TIER COPY + ADMIN ORDERS ROUTING + REVENUE PRIVACY TOGGLE
+[APPLIED] | Platform detail section heading + helper text | src/routes/platforms/[platform]/+page.svelte | "Available Categories" + "Select the follower count that matches your needs..." | Replaced with tier-safe wording: "Available Tiers" + "Select the tier that matches your needs. Each tier shows current stock and pricing."
+[APPLIED] | Platform header stat label | src/routes/platforms/[platform]/+page.svelte | "Available Categories" | Replaced with "Available Tiers"
+[APPLIED] | Tier subtitle fallback logic | src/routes/platforms/[platform]/+page.svelte | follower-centric fallback always visible in many cases | Follower range/count shows only when metadata provides it; otherwise neutral descriptor: "Tier details available on selection"
+[APPLIED] | Admin Orders page crash fix | src/routes/admin/orders/+page.svelte | runtime throw from `getStatusColor` causes /admin/orders 500 page | Removed thrown placeholder and wired table badge style to existing status-style helper
+[APPLIED] | Admin Orders detail link reliability | src/routes/admin/orders/+page.svelte | href used literal braces for order id | Converted to dynamic path interpolation so "View" opens selected order
+[APPLIED] | Dashboard revenue privacy control (Phase 1) | src/routes/admin/+page.svelte | revenue always visible | Added local toggle (eye/eye-off) to hide/show displayed money amounts on admin dashboard
+[APPLIED] | Revenue mask behavior (Phase 1) | src/routes/admin/+page.svelte | raw amounts rendered directly | Added blur-block masking using numeric block replacement with subtle blur effect
+[APPLIED] | Preference persistence | src/routes/admin/+page.svelte | resets on refresh | Toggle state now persisted in localStorage per browser
+[PROPOSED-REVIEW] | Revenue privacy extension (Phase 2 after your sign-off) | src/routes/admin/orders/+page.svelte, src/routes/admin/analytics/+page.svelte, src/routes/admin/users/+page.svelte | dashboard-only masking can be bypassed by visiting other admin pages | Extend same toggle behavior to orders/analytics/users revenue displays for consistency
+[PROPOSED-REVIEW] | Owner decision (April 8, 2026) | Batch 11 scope | Phase 2 optional extension | Deferred as non-essential for now; keep dashboard-only money masking active
+
+APPROVAL CHECKPOINTS FOR BATCH 11
+1) Copy choice: "Available Tiers" and neutral tier helper text. yes
+2) Mask style: "NGN ***,***" (default) or blur block. blur block
+3) Scope now: Phase 1 dashboard-only, then Phase 2 full admin money surfaces. okay got it 
+
+IMPLEMENTATION NOTE
+All approved copy/link/icon items above have been applied in code.
+
+QA CHECKLIST (YOU SAID YOU'LL RUN MANUAL TESTS)
+[QA-PENDING] Home page text + nav labels + featured icon fallback
+[QA-PENDING] Platforms list/detail text + icon fallback
+[QA-PENDING] Footer links/socials + Telegram removal
+[QA-PENDING] Support page section links (#contact, #faq)
+[QA-PENDING] Admin platform create/edit with valid icon and broken icon URL
+[QA-PENDING] Growth Services label pass (desktop/mobile nav + hero + footer)
+[QA-PENDING] /logistics/policies redirect check
+[QA-PENDING] Policy Center + all new legal page links and content pass
+[QA-PENDING] Cookie consent bar flow (Accept Analytics / Necessary Only / Manage)
+[QA-PENDING] Footer Privacy Settings button opens consent manager
+[QA-PENDING] Checkout legal assent line visibility and no added click step
+[QA-PENDING] Desktop/mobile UI pass

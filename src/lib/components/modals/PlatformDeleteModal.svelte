@@ -57,6 +57,10 @@
 								<strong>Warning:</strong> If this platform has any tiers, services, accounts, or orders
 								associated with it, the deletion will be prevented.
 							</p>
+							<p class="mt-2 text-sm" style="color: var(--text-muted);">
+								Use <strong>Retire Platform</strong> when you need to hide a used platform without
+								breaking historical data.
+							</p>
 						</div>
 					</div>
 				</div>

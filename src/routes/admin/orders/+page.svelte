@@ -100,11 +100,6 @@
 				return 'background: var(--bg-elev-2); color: var(--text-muted); border: 1px solid var(--border)';
 		}
 	}
-
-
-	function getStatusColor(status: any): string | null | undefined {
-		throw new Error('Function not implemented.');
-	}
 </script>
 
 <div class="min-h-screen p-4 sm:p-6">
@@ -273,38 +268,38 @@
 								{/if}
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-								{#if order.affiliateCode}
-									<a
-										href="/admin/affiliates?code={order.affiliateCode}"
-										class="font-mono text-sm font-medium transition-colors"
-										style="color: var(--link);"
-									>
+									{#if order.affiliateCode}
+										<a
+											href={`/admin/affiliates?code=${order.affiliateCode}`}
+											class="font-mono text-sm font-medium transition-colors"
+											style="color: var(--link);"
+										>
 										{order.affiliateCode}
 									</a>
 								{:else}
 									<span class="text-sm" style="color: var(--text-dim);">—</span>
 								{/if}
 							</td>
-							<td class="px-6 py-4 whitespace-nowrap">
-								<span
-									class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
-									style={getStatusColor(order.status)}
-								>
-									{order.status}
-								</span>
-							</td>
+								<td class="px-6 py-4 whitespace-nowrap">
+									<span
+										class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
+										style={getStatusStyle(order.status)}
+									>
+										{order.status}
+									</span>
+								</td>
 							<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
 								{formatPrice(Number(order.totalAmount || 0))}
 							</td>
 							<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
 								{formatDate(order.createdAt)}
 							</td>
-							<td class="px-6 py-4 text-sm font-medium whitespace-nowrap">
-								<a
-									href="/admin/orders/{order.id}"
-									style="color: var(--link);"
-									class="transition-opacity hover:opacity-80"
-								>
+								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap">
+									<a
+										href={`/admin/orders/${order.id}`}
+										style="color: var(--link);"
+										class="transition-opacity hover:opacity-80"
+									>
 									View
 								</a>
 							</td>

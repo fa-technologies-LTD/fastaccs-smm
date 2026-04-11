@@ -1,5 +1,11 @@
 # Project Blueprint: Fast Accounts SMM Marketplace (fastaccs.com)
 
+> Legacy planning document from an earlier architecture phase.
+> For current implementation details, use:
+> - `README.md`
+> - `MONNIFY-MIGRATION.md`
+> - `src/routes/api/+api-routes.md`
+
 **Version:** 1.0  
 **Date:** July 27, 2025
 

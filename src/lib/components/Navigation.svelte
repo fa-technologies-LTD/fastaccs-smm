@@ -127,7 +127,7 @@
 						onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
 						class="nav-link cursor-pointer border-none bg-transparent font-medium"
 					>
-						Services
+						Growth Services
 					</button>
 					<a href="/how-it-works" data-sveltekit-preload-data="hover" class="nav-link font-medium">
 						How It Works
@@ -286,7 +286,7 @@
 							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
 							class="nav-link block w-full cursor-pointer border-none bg-transparent py-3 text-left text-sm font-medium"
 						>
-							Services
+							Growth Services
 						</button>
 						<a
 							href="/how-it-works"

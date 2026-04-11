@@ -4,18 +4,24 @@ import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } from '$env/static/private';
 import { PUBLIC_BASE_URL } from '$env/static/public';
 import { dev } from '$app/environment';
 
-// Use environment-based callback URL
-const callbackURL = dev
-	? 'http://localhost:5173/auth/google/callback'
-	: `${PUBLIC_BASE_URL || 'https://fastaccs.vercel.app'}/auth/google/callback`;
-
-// Log the callback URL in development to help with debugging
-if (dev) {
-	console.log('OAuth Callback URL:', callbackURL);
-} else if (!PUBLIC_BASE_URL) {
-	console.warn(
-		'PUBLIC_BASE_URL is not set, using fallback. Set it in Vercel environment variables.'
-	);
+function normalizeBaseUrl(baseUrl: string): string {
+	return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 }
 
-export const google = new Google(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, callbackURL);
+export function getGoogleCallbackUrl(origin?: string): string {
+	if (dev) {
+		const localBase =
+			origin?.trim() || PUBLIC_BASE_URL?.trim() || 'http://localhost:5173';
+		return `${normalizeBaseUrl(localBase)}/auth/google/callback`;
+	}
+
+	const publicBase = PUBLIC_BASE_URL?.trim() || 'https://fastaccs.vercel.app';
+	return `${normalizeBaseUrl(publicBase)}/auth/google/callback`;
+}
+
+export function getGoogleClient(origin?: string): Google {
+	return new Google(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, getGoogleCallbackUrl(origin));
+}
+
+// Backward-compatible export for places that do not pass request origin.
+export const google = getGoogleClient();

@@ -4,8 +4,21 @@ import { verifyWebhookSignature } from '$lib/services/payment';
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
-		const signature = request.headers.get('x-korapay-signature');
-		const body = await request.json();
+		const signature = request.headers.get('monnify-signature');
+		const rawBody = await request.text();
+
+		let body: unknown;
+		try {
+			body = JSON.parse(rawBody);
+		} catch {
+			return json(
+				{
+					success: false,
+					error: 'Invalid JSON payload'
+				},
+				{ status: 400 }
+			);
+		}
 
 		if (!signature) {
 			return json({
@@ -16,7 +29,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			});
 		}
 
-		const isValid = verifyWebhookSignature(signature, body.data);
+		const isValid = verifyWebhookSignature(signature, rawBody);
 
 		return json({
 			success: true,

@@ -1,6 +1,6 @@
 // Google OAuth callback handler
 import { redirect, error } from '@sveltejs/kit';
-import { google } from '$lib/auth/oauth';
+import { getGoogleClient } from '$lib/auth/oauth';
 import { decodeIdToken } from 'arctic';
 import { createSession, generateSessionToken, setSessionTokenCookie } from '$lib/auth/session';
 import { getUserFromGoogleId, createUserFromGoogle, updateUserFromGoogle } from '$lib/auth/user';
@@ -10,6 +10,7 @@ import type { OAuth2Tokens } from 'arctic';
 
 export const GET: RequestHandler = async (event) => {
 	const { url, cookies } = event;
+	const google = getGoogleClient(url.origin);
 	const code = url.searchParams.get('code');
 	const state = url.searchParams.get('state');
 	const storedState = cookies.get('google_oauth_state');

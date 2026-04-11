@@ -1,77 +1,27 @@
-# FastAccs TODO - Remaining Items
+# FastAccs TODO (Current)
 
-## Completed ✅
+Last updated: 2026-04-08
 
-1. Google OAuth Login System
-2. Navigation Auth Integration
-3. Checkout Auth Integration
+## Done
 
-## Pending Implementation 🔄
+1. Branch synced to current `main` baseline.
+2. Monnify cancel-path UUID crash guard added in payment verification flow.
+3. Platform identity canonicalization started (`instagram` / `x` alias handling + dynamic home platform cards).
 
-### Item 4: Admin Inventory Management System
+## In Progress
 
-**Status:** Needs Implementation (PRIORITY)
-**Description:** Admin dashboard to manage product inventory and availability
-**Requirements:**
+1. Documentation alignment to current runtime (Prisma + Monnify redirect flow).
+2. User-facing Korapay copy retirement in support/how-it-works/test pages.
+3. Live chat integration via Tawk (`PUBLIC_TAWK_EMBED_URL`, `PUBLIC_TAWK_WIDGET_LINK`).
 
-- Admin authentication and role-based access
-- Product inventory CRUD operations (Create, Read, Update, Delete)
-- Stock level management and tracking
-- Product status management (available/sold/reserved)
-- Bulk inventory operations
-- Inventory analytics and reporting
+## Next (Approved Direction)
 
-**Files to Create/Update:**
+1. Fully remove remaining Korapay references from active UI/docs/tests.
+2. Keep wallet domain model code dormant (no reactivation yet), but keep docs explicit that wallet is not active checkout path.
+3. Continue polishing platform icon/color consistency from admin metadata to storefront.
+4. Build support live-chat operating workflow (agent handoff and response SLAs).
 
-- Admin dashboard pages (`/admin/*`)
-- Inventory management components
-- Admin authentication middleware
-- Supabase RLS policies for admin access
-- Product management API endpoints
+## Deferred / Intentional Non-Changes
 
-### Item 5: Order Processing System
-
-**Status:** Needs Implementation
-**Description:** Currently checkout only console.logs order data
-**Requirements:**
-
-- Create database order creation function
-- Implement order validation and processing
-- Add inventory management (mark products as sold)
-- Create order confirmation system
-- Build order status tracking
-
-**Files to Create/Update:**
-
-- Supabase function: `create_order()`
-- Update checkout processCheckout() function
-- Add order confirmation page
-
-### Item 6: Payment & Delivery Automation
-
-**Status:** Needs Implementation
-**Description:** Full payment processing and automated delivery
-**Requirements:**
-
-- MicroDroid payment integration with webhooks
-- WhatsApp/Telegram delivery automation
-- Email delivery system
-- Dashboard order history integration
-- Automated inventory deduction
-- Real-time order status updates
-
-**Files to Create/Update:**
-
-- Payment webhook endpoint
-- Delivery automation functions
-- Order tracking system
-- User dashboard order history
-
-## Notes
-
-- **Item 4 (Admin Inventory) is the foundation** - Must be completed first
-- Items 5 & 6 depend on completing Supabase environment setup
-- Schema is already prepared in supabase-schema.sql
-- Google OAuth is fully functional and ready
-- Authentication system is complete and integrated
-- Need to establish admin user roles and permissions
+1. Public mutation API guard tightening is deferred by product decision.
+2. Wallet subsystem removal is deferred (kept for possible future reintroduction).

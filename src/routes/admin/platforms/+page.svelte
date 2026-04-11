@@ -1,15 +1,17 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { Plus, Settings, Trash2, Edit, Eye, AlertCircle } from '@lucide/svelte';
-	import { createCategory, updateCategory, deleteCategory } from '$lib/services/categories';
+	import { Plus, Trash2, Edit, Eye, AlertCircle, Archive } from '@lucide/svelte';
+	import { createCategory, updateCategory, deleteCategory, retireCategory } from '$lib/services/categories';
 	import { showSuccess, showError } from '$lib/stores/toasts';
 	import type { Category, CategoryInsert, CategoryUpdate } from '$lib/services/categories';
+	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
 	import type { PageData } from './$types';
 	import { fade, fly } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
 	import PlatformCreateModal from '$lib/components/modals/PlatformCreateModal.svelte';
 	import PlatformEditModal from '$lib/components/modals/PlatformEditModal.svelte';
 	import PlatformDeleteModal from '$lib/components/modals/PlatformDeleteModal.svelte';
+	import PlatformRetireModal from '$lib/components/modals/PlatformRetireModal.svelte';
 
 	interface Props {
 		data: PageData;
@@ -21,8 +23,30 @@
 	let showCreateModal = $state(false);
 	let showEditModal = $state(false);
 	let showDeleteModal = $state(false);
+	let showRetireModal = $state(false);
 	let selectedPlatform = $state<Category | null>(null);
 	let platformToDelete = $state<Category | null>(null);
+	let platformToRetire = $state<Category | null>(null);
+	let failedPlatformIcons = $state<Record<string, boolean>>({});
+	let moveAvailableInventory = $state(true);
+	let retireTargetCategoryId = $state('');
+	let retireTargetsLoading = $state(false);
+	let retireTargets = $state<
+		Array<
+			Category & {
+				parent?: {
+					id: string;
+					name: string;
+					slug: string;
+				} | null;
+			}
+		>
+	>([]);
+
+	interface PlatformMetadata {
+		icon?: unknown;
+		color?: unknown;
+	}
 
 	// Form state for creating/editing platforms
 	let platformForm = $state({
@@ -49,6 +73,22 @@
 	// Show error if data loading failed
 	if (data.error) {
 		showError('Failed to load platforms', data.error);
+	}
+
+	function getPlatformMetadata(platform: Category): PlatformMetadata {
+		return ((platform.metadata as PlatformMetadata | undefined) || {}) as PlatformMetadata;
+	}
+
+	function shouldRenderCustomIcon(platform: Category): boolean {
+		const metadata = getPlatformMetadata(platform);
+		return isPlatformImageUrl(metadata.icon) && !failedPlatformIcons[platform.id];
+	}
+
+	function markPlatformIconFailed(platformId: string) {
+		failedPlatformIcons = {
+			...failedPlatformIcons,
+			[platformId]: true
+		};
 	}
 
 	function openCreateModal() {
@@ -209,6 +249,101 @@
 		}
 	}
 
+	function closeRetireModal() {
+		showRetireModal = false;
+		platformToRetire = null;
+		moveAvailableInventory = true;
+		retireTargetCategoryId = '';
+		retireTargets = [];
+		retireTargetsLoading = false;
+	}
+
+	async function loadRetireTargets(platformId: string) {
+		retireTargetsLoading = true;
+		try {
+			const response = await fetch('/api/categories?type=tier&include_parent=true');
+			const result = await response.json();
+
+			if (!response.ok || result.error) {
+				throw new Error(result.error || 'Failed to load destination tiers');
+			}
+
+			const tiers = (result.data || []) as Array<
+				Category & {
+					parent?: {
+						id: string;
+						name: string;
+						slug: string;
+					} | null;
+				}
+			>;
+
+			retireTargets = tiers.filter((tier) => tier.id !== platformId && tier.parentId !== platformId);
+		} catch (error) {
+			console.error('Failed to load retire targets:', error);
+			showError('Could not load destination tiers', 'Please try again.');
+			retireTargets = [];
+		} finally {
+			retireTargetsLoading = false;
+		}
+	}
+
+	async function openRetireModal(platform: Category) {
+		platformToRetire = platform;
+		moveAvailableInventory = true;
+		retireTargetCategoryId = '';
+		showRetireModal = true;
+		await loadRetireTargets(platform.id);
+	}
+
+	async function confirmRetire() {
+		if (!platformToRetire) return;
+
+		if (moveAvailableInventory && !retireTargetCategoryId) {
+			showError('Destination required', 'Choose a destination tier/category before retiring.');
+			return;
+		}
+
+		loading = true;
+		try {
+			const result = await retireCategory(platformToRetire.id, {
+				moveAvailableInventory,
+				targetCategoryId: moveAvailableInventory ? retireTargetCategoryId : undefined
+			});
+
+			if (result.error) {
+				console.error('Failed to retire platform:', result.error);
+				showError('Failed to retire platform', result.error);
+				return;
+			}
+
+			const platformIndex = platforms.findIndex((platform) => platform.id === platformToRetire?.id);
+			if (platformIndex !== -1) {
+				platforms[platformIndex] = {
+					...platforms[platformIndex],
+					isActive: false
+				};
+				platforms = [...platforms];
+			}
+
+			const moveInfo = result.data?.inventoryMove;
+			const movedAccounts = moveInfo?.accountsMoved ?? 0;
+			const movedBatches = (moveInfo?.fullBatchesMoved ?? 0) + (moveInfo?.splitBatchesCreated ?? 0);
+
+			showSuccess(
+				'Platform retired',
+				`${platformToRetire.name} archived successfully. Moved ${movedAccounts} available account${movedAccounts === 1 ? '' : 's'} across ${movedBatches} batch${movedBatches === 1 ? '' : 'es'}.`
+			);
+
+			closeRetireModal();
+		} catch (error) {
+			console.error('Failed to retire platform:', error);
+			showError('Failed to retire platform', 'An unexpected error occurred.');
+		} finally {
+			loading = false;
+		}
+	}
+
 	function generateSlug(name: string) {
 		platformForm.slug = name
 			.toLowerCase()
@@ -277,6 +412,8 @@
 	{:else}
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
 			{#each platforms as platform (platform.id)}
+				{@const PlatformIcon = getPlatformIcon(platform.slug)}
+				{@const platformMeta = getPlatformMetadata(platform)}
 				<div
 					animate:flip={{ duration: 300 }}
 					class="rounded-lg p-4 sm:p-6"
@@ -285,18 +422,21 @@
 					<!-- Platform Header -->
 					<div class="mb-4 flex items-start justify-between gap-3">
 						<div class="flex min-w-0 flex-1 items-center gap-3">
-							{#if (platform.metadata as any)?.icon && ((platform.metadata as any).icon.startsWith('http') || (platform.metadata as any).icon.startsWith('/static') || (platform.metadata as any).icon.startsWith('data:'))}
+							{#if shouldRenderCustomIcon(platform)}
 								<img
-									src={(platform.metadata as any).icon}
+									src={platformMeta.icon as string}
 									alt={platform.name}
 									class="h-8 w-8 flex-shrink-0 rounded"
+									onerror={() => markPlatformIconFailed(platform.id)}
 								/>
 							{:else}
 								<div
 									class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded font-semibold text-white"
-									style="background-color: {(platform.metadata as any)?.color || '#3B82F6'}"
+									style="background-color: {typeof platformMeta.color === 'string' && platformMeta.color.trim()
+										? platformMeta.color
+										: '#3B82F6'}"
 								>
-									{platform.name.charAt(0)}
+									<PlatformIcon size={18} />
 								</div>
 							{/if}
 							<div class="min-w-0 flex-1">
@@ -323,6 +463,17 @@
 								aria-label="Edit Platform"
 							>
 								<Edit size={16} class="transition-transform group-hover:scale-90" />
+							</button>
+							<button
+								onclick={() => openRetireModal(platform)}
+								type="button"
+								disabled={!platform.isActive || loading}
+								class="group rounded p-2 transition-colors hover:bg-yellow-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+								style="color: var(--status-warning);"
+								title={platform.isActive ? 'Retire Platform' : 'Platform already retired'}
+								aria-label="Retire Platform"
+							>
+								<Archive size={16} class="transition-transform group-hover:scale-90" />
 							</button>
 							<button
 								onclick={() => openDeleteModal(platform)}
@@ -412,13 +563,14 @@
 		{loading}
 		onClose={() => (showEditModal = false)}
 		onUpdate={handleUpdate}
-		onNameInput={(value) => (platformForm.name = value)}
-		onSlugInput={(value) => (platformForm.slug = value)}
-		onDescriptionInput={(value) => (platformForm.description = value)}
-		onColorInput={(value) => (platformForm.metadata.color = value)}
-		onWebsiteInput={(value) => (platformForm.metadata.website_url = value)}
-	/>
-{/if}
+			onNameInput={(value) => (platformForm.name = value)}
+			onSlugInput={(value) => (platformForm.slug = value)}
+			onDescriptionInput={(value) => (platformForm.description = value)}
+			onIconInput={(value) => (platformForm.metadata.icon = value)}
+			onColorInput={(value) => (platformForm.metadata.color = value)}
+			onWebsiteInput={(value) => (platformForm.metadata.website_url = value)}
+		/>
+	{/if}
 
 <!-- Delete Confirmation Modal -->
 {#if showDeleteModal}
@@ -428,5 +580,22 @@
 		{loading}
 		onClose={closeDeleteModal}
 		onConfirm={confirmDelete}
+	/>
+{/if}
+
+<!-- Retire Platform Modal -->
+{#if showRetireModal}
+	<PlatformRetireModal
+		open={showRetireModal}
+		platform={platformToRetire}
+		loading={loading}
+		loadingTargets={retireTargetsLoading}
+		moveAvailableInventory={moveAvailableInventory}
+		targetCategoryId={retireTargetCategoryId}
+		targetOptions={retireTargets}
+		onClose={closeRetireModal}
+		onConfirm={confirmRetire}
+		onMoveToggle={(value) => (moveAvailableInventory = value)}
+		onTargetChange={(value) => (retireTargetCategoryId = value)}
 	/>
 {/if}

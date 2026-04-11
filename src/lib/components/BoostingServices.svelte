@@ -75,10 +75,10 @@
 <div class="mx-auto max-w-6xl px-4 py-8">
 	<div class="mb-8 text-center">
 		<h1 class="mb-4 text-3xl font-bold md:text-4xl" style="color: var(--text);">
-			Social Media Boosting Services
+			Social Media Growth Services
 		</h1>
 		<p class="text-xl" style="color: var(--text-muted);">
-			Grow your social media presence with our premium boosting services
+			Grow your social media presence with our premium growth services
 		</p>
 	</div>
 

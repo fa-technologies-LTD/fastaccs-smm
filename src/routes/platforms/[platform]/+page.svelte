@@ -6,7 +6,11 @@
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	
 	import type { PageData } from './$types';
-	import { getPlatformColor, getPlatformIcon } from '$lib/helpers/platformColors';
+	import {
+		getPlatformColor,
+		getPlatformIcon,
+		isPlatformImageUrl
+	} from '$lib/helpers/platformColors';
 	import { formatPrice } from '$lib/helpers/utils';
 
 	interface Props {
@@ -14,6 +18,12 @@
 	}
 
 	let { data }: Props = $props();
+	let platformHeaderIconFailed = $state(false);
+
+	interface PlatformMetadata {
+		icon?: unknown;
+		color?: unknown;
+	}
 
 	// Format follower count
 	function formatFollowers(count: number): string {
@@ -33,6 +43,21 @@
 
 	function goBack() {
 		goto('/platforms');
+	}
+
+	function getPlatformHeaderStyle(metadata: PlatformMetadata | undefined): string | undefined {
+		const color = typeof metadata?.color === 'string' ? metadata.color.trim() : '';
+		if (!color) return undefined;
+
+		return `background: linear-gradient(135deg, ${color} 0%, rgba(15, 22, 47, 0.88) 100%);`;
+	}
+
+	function getPlatformMetadata(metadata: Record<string, unknown> | undefined): PlatformMetadata {
+		return (metadata as PlatformMetadata | undefined) || {};
+	}
+
+	function shouldRenderPlatformHeaderImage(metadata: PlatformMetadata): boolean {
+		return isPlatformImageUrl(metadata.icon) && !platformHeaderIconFailed;
 	}
 
 	// Get tier status based on availability
@@ -62,6 +87,42 @@
 			.join(' ');
 	}
 
+	function getTierAudienceLabel(metadata: unknown): string {
+		if (!metadata || typeof metadata !== 'object') {
+			return 'Tier details available on selection';
+		}
+
+		const tierMetadata = metadata as Record<string, unknown>;
+		const followerRange = tierMetadata.follower_range;
+
+		if (followerRange && typeof followerRange === 'object') {
+			const range = followerRange as Record<string, unknown>;
+			const display =
+				typeof range.display === 'string' && range.display.trim().length > 0
+					? range.display.trim()
+					: '';
+
+			if (display) {
+				return /follower/i.test(display) ? display : `${display} followers`;
+			}
+
+			const min = typeof range.min === 'number' ? range.min : undefined;
+			const max = typeof range.max === 'number' ? range.max : undefined;
+
+			if (min !== undefined && max !== undefined) {
+				return `${formatFollowers(min)} - ${formatFollowers(max)} followers`;
+			}
+		}
+
+		const followerCount =
+			typeof tierMetadata.follower_count === 'number' ? tierMetadata.follower_count : undefined;
+		if (followerCount !== undefined && followerCount > 0) {
+			return `${formatFollowers(followerCount)} followers`;
+		}
+
+		return 'Tier details available on selection';
+	}
+
 	// Get tier features based on metadata
 	function getTierFeatures(metadata: any): string[] {
 		// First check for admin-defined features
@@ -87,8 +148,8 @@
 	<title>{data.platform?.name} Accounts - FastAccs</title>
 	<meta
 		name="description"
-		content="Premium {data.platform
-			?.name} accounts with real followers. Choose from different tiers and get instant delivery with full account access."
+		content="Browse available {data.platform
+			?.name} account tiers and complete checkout securely on FastAccs."
 	/>
 </svelte:head>
 
@@ -115,12 +176,13 @@
 		</section>
 	{:else}
 		{@const PlatformIcon = getPlatformIcon(data.platform.slug)}
-		{@const platformMeta = data.platform.metadata as any}
+		{@const platformMeta = getPlatformMetadata(data.platform.metadata)}
 
-		<!-- Platform Header -->
-		<section
-			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} py-4 text-white sm:py-12`}
-		>
+			<!-- Platform Header -->
+			<section
+				class={`py-4 text-white sm:py-12 ${platformMeta?.color ? '' : `bg-gradient-to-r ${getPlatformColor(data.platform.slug)}`}`}
+				style={getPlatformHeaderStyle(platformMeta)}
+			>
 			<div class="mx-auto max-w-6xl px-4">
 				<!-- Enhanced Breadcrumb Navigation -->
 				<Breadcrumb
@@ -136,22 +198,23 @@
 				<div class="flex items-start gap-4 sm:gap-6">
 					<div class="flex flex-col items-center gap-3">
 						<div class="rounded-full bg-white/20 p-3 sm:p-4">
-							{#if platformMeta?.icon}
+							{#if shouldRenderPlatformHeaderImage(platformMeta)}
 								<img
-									src={platformMeta.icon}
+									src={platformMeta.icon as string}
 									alt={data.platform.name}
 									class="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12"
+									onerror={() => (platformHeaderIconFailed = true)}
 								/>
 							{:else}
 								<PlatformIcon class="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12" />
 							{/if}
 						</div>
-						<div class="text-center">
-							<div class="text-2xl font-bold sm:text-3xl">{data.tiers.length}</div>
-							<div class="text-xs opacity-75 sm:text-sm">Available Categories</div>
+							<div class="text-center">
+								<div class="text-2xl font-bold sm:text-3xl">{data.tiers.length}</div>
+								<div class="text-xs opacity-75 sm:text-sm">Available Tiers</div>
+							</div>
 						</div>
-					</div>
-					<div class="flex-1">
+						<div class="flex-1">
 						<h1 class="mb-1 text-2xl font-bold sm:text-3xl md:text-4xl">
 							{data.platform.name} Accounts
 						</h1>
@@ -164,14 +227,14 @@
 		<!-- Tier Selection -->
 		<section class="py-8 sm:py-16">
 			<div class="mx-auto max-w-6xl px-4">
-				<div class="mb-8 text-center">
-					<h2 class="mb-4 text-2xl font-bold sm:text-3xl" style="color: var(--text);">
-						Available Categories
-					</h2>
-					<p class="text-base sm:text-lg" style="color: var(--text-muted);">
-						Select the follower count that matches your needs. All accounts come with full access.
-					</p>
-				</div>
+					<div class="mb-8 text-center">
+						<h2 class="mb-4 text-2xl font-bold sm:text-3xl" style="color: var(--text);">
+							Available Tiers
+						</h2>
+						<p class="text-base sm:text-lg" style="color: var(--text-muted);">
+							Select the tier that matches your needs. Each tier shows current stock and pricing.
+						</p>
+					</div>
 
 				{#if data.tiers.length === 0}
 					<div class="rounded-lg p-8 text-center" style="background: var(--bg-elev-2);">
@@ -225,23 +288,13 @@
 								<div class="flex flex-1 flex-col p-6">
 									<div class="mb-4 flex items-center justify-between">
 										<div>
-											<h3 class="text-xl font-bold" style="color: var(--text);">
-												{tier.tier_name}
-											</h3>
-											<p class="text-sm" style="color: var(--text-muted);">
-												{#if tier.metadata?.follower_range}
-													{@const range = (tier.metadata as any).follower_range}
-													{#if typeof range === 'object' && range.min !== undefined && range.max !== undefined}
-														{range.display ||
-															`${formatFollowers(range.min)} - ${formatFollowers(range.max)}`} followers
-													{:else}
-														{formatFollowers((tier.metadata?.follower_count as number) || 0)} followers
-													{/if}
-												{:else}
-													{formatFollowers((tier.metadata?.follower_count as number) || 0)} followers
-												{/if}
-											</p>
-										</div>
+												<h3 class="text-xl font-bold" style="color: var(--text);">
+													{tier.tier_name}
+												</h3>
+												<p class="text-sm" style="color: var(--text-muted);">
+													{getTierAudienceLabel(tier.metadata)}
+												</p>
+											</div>
 										<div class="text-right">
 											<div
 												class="text-2xl font-bold"

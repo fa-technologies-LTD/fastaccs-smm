@@ -1,6 +1,6 @@
 export const load = async ({ fetch }) => {
 	try {
-		const response = await fetch('/api/categories');
+		const response = await fetch('/api/categories?type=platform&include_inactive=true');
 		if (!response.ok) {
 			return {
 				platforms: [],

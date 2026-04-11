@@ -92,7 +92,7 @@
 				<!-- Google OAuth Login -->
 				<div class="space-y-4">
 					<a
-						href="/auth/google?redirectTo={encodeURIComponent(redirectTo)}"
+						href={`/auth/google?redirectTo=${encodeURIComponent(redirectTo)}`}
 						style="background: var(--btn-primary-gradient); color: var(--text-primary); border: 1px solid var(--border); font-family: var(--font-body);"
 						class="flex w-full items-center justify-center gap-3 rounded-lg px-6 py-3 transition-all hover:opacity-90 focus:ring-2 focus:ring-offset-2 focus:outline-none"
 					>

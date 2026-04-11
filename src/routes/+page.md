@@ -46,7 +46,7 @@ No reactive state managed directly in this component. All interactivity handled 
 1. **Hero Section**
    - Two primary CTAs:
      - "Browse Accounts" → `/platforms`
-     - "View Boosting Services" → `/services`
+     - "View Growth Services" → `/services`
    - Trust indicators (Premium, 24/7, Secure)
 
 2. **Featured Categories Display**
@@ -62,14 +62,14 @@ No reactive state managed directly in this component. All interactivity handled 
 ## User Actions
 
 - Click "Browse Accounts" → Navigate to `/platforms`
-- Click "View Boosting Services" → Navigate to `/services`
+- Click "View Growth Services" → Navigate to `/services`
 - Add featured items to cart (via FeaturedCategories component)
 - Navigate to other pages via header/footer links
 
 ## SEO Metadata
 
-- **Title**: "FastAccs - Premium Social Media Accounts & Boosting Services"
-- **Description**: "Nigeria's most trusted marketplace for verified social media accounts and boosting services. Fast, secure, and reliable delivery guaranteed."
+- **Title**: "FastAccs - Premium Social Media Accounts & Growth Services"
+- **Description**: "Nigeria's marketplace for social media accounts and growth services with secure checkout and fast order processing."
 
 ## Related Pages
 

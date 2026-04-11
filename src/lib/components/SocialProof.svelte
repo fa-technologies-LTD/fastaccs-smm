@@ -21,7 +21,7 @@
 		<p
 			style="margin-bottom: var(--space-3xl); text-align: center; font-size: 1rem; color: var(--text-muted); font-family: var(--font-body);"
 		>
-			Your trusted partner for premium social media accounts and growth services
+			A reliable platform for social media accounts and growth services
 		</p>
 
 		<div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-4">
@@ -63,10 +63,10 @@
 				<h3
 					style="margin-bottom: var(--space-xs); font-size: 1.1rem; font-weight: 600; color: var(--text); font-family: var(--font-head);"
 				>
-					Quality Guaranteed
+					Quality Checked Listings
 				</h3>
 				<p style="color: var(--text-muted); font-family: var(--font-body);">
-					Premium verified accounts with authentic activity
+					Listings are reviewed and matched to their stated category details
 				</p>
 			</div>
 
@@ -97,13 +97,13 @@
 				<div class="flex items-center">
 					<CheckCircle class="mr-2 h-5 w-5" style="color: var(--status-success);" />
 					<span style="color: var(--text-muted); font-family: var(--font-body);"
-						>Verified Accounts</span
+						>Tiered Listings</span
 					>
 				</div>
 				<div class="flex items-center">
 					<CheckCircle class="mr-2 h-5 w-5" style="color: var(--status-success);" />
 					<span style="color: var(--text-muted); font-family: var(--font-body);"
-						>Money Back Guarantee</span
+						>Issue Resolution</span
 					>
 				</div>
 				<div class="flex items-center">
