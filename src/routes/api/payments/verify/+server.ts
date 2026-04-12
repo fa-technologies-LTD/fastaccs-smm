@@ -18,6 +18,11 @@ function isUuid(value: string): boolean {
 	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function normalizeStatus(value: unknown): string {
+	if (typeof value !== 'string') return '';
+	return value.trim().toUpperCase();
+}
+
 export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
 		// Check authentication
@@ -26,31 +31,55 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		const {
-			transactionReference,
-			paymentReference,
-			orderId: requestedOrderId
+			transactionReference: rawTransactionReference,
+			paymentReference: rawPaymentReference,
+			orderId: requestedOrderId,
+			callbackContext
 		} = await request.json();
+
+		const transactionReference =
+			typeof rawTransactionReference === 'string' && rawTransactionReference.trim()
+				? rawTransactionReference.trim()
+				: null;
+		const paymentReference =
+			typeof rawPaymentReference === 'string' && rawPaymentReference.trim()
+				? rawPaymentReference.trim()
+				: null;
+
+		const callbackQueryKeys = Array.isArray(callbackContext?.queryKeys)
+			? callbackContext.queryKeys
+					.filter((value: unknown): value is string => typeof value === 'string')
+					.slice(0, 50)
+			: [];
 
 		console.info('[payments.verify] request_received', {
 			userId: locals.user.id,
 			orderId: requestedOrderId ?? null,
 			paymentReference: paymentReference ?? null,
-			transactionReference: transactionReference ?? null
+			transactionReference: transactionReference ?? null,
+			callbackQueryKeys
 		});
 
 		const safeRequestedOrderId = sanitizeOrderId(requestedOrderId);
 		const validRequestedOrderId =
 			safeRequestedOrderId && isUuid(safeRequestedOrderId) ? safeRequestedOrderId : null;
+		let referenceToVerify = transactionReference || paymentReference;
 
-		if (!transactionReference && !paymentReference) {
+		if (!referenceToVerify) {
 			if (!validRequestedOrderId) {
+				console.warn('[payments.verify] pending_missing_reference_no_order', {
+					userId: locals.user.id,
+					callbackQueryKeys
+				});
+
 				return json(
 					{
 						success: false,
-						error: 'Payment was cancelled',
-						status: 'cancelled'
+						pending: true,
+						status: 'pending',
+						message: 'Payment confirmation pending. Please wait while we confirm your transaction.'
 					},
-					{ status: 400 }
+					{ status: 202 }
 				);
 			}
 
@@ -78,28 +107,31 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				});
 			}
 
-			if (order.status !== 'completed' && order.status !== 'paid') {
-				await prisma.order.update({
-					where: { id: order.id },
-					data: {
-						status: 'cancelled',
-						paymentStatus: 'failed'
-					}
-				});
-
-				console.info('[payments.verify] cancelled_no_reference', {
+			if (!order.paymentReference) {
+				console.warn('[payments.verify] pending_missing_reference_no_order_payment_reference', {
 					orderId: order.id
 				});
+
+				return json(
+					{
+						success: false,
+						pending: true,
+						status: 'pending',
+						message: 'Payment received. We are still waiting for confirmation from Monnify.'
+					},
+					{ status: 202 }
+				);
 			}
 
-			return json(
-				{ success: false, error: 'Payment was cancelled', status: 'cancelled' },
-				{ status: 400 }
-			);
+			referenceToVerify = order.paymentReference;
+			console.info('[payments.verify] using_order_payment_reference_fallback', {
+				orderId: order.id,
+				paymentReference: order.paymentReference
+			});
 		}
 
 		// Verify payment with Monnify (accepts either reference type)
-		const verificationResult = await verifyPayment(transactionReference || paymentReference);
+		const verificationResult = await verifyPayment(referenceToVerify);
 
 		console.info('[payments.verify] gateway_verification_result', {
 			userId: locals.user.id,
@@ -107,50 +139,78 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			success: verificationResult.success,
 			status: verificationResult.status,
 			paymentReference: verificationResult.paymentReference || paymentReference || null,
-			transactionReference: verificationResult.transactionReference || transactionReference || null
+			transactionReference: verificationResult.transactionReference || transactionReference || null,
+			referenceUsed: referenceToVerify
 		});
+
+		const normalizedStatus = normalizeStatus(verificationResult.status);
 
 		if (!verificationResult.success) {
 			const failedOrder = validRequestedOrderId
 				? await prisma.order.findUnique({ where: { id: validRequestedOrderId } })
-				: paymentReference
-					? await prisma.order.findFirst({ where: { paymentReference } })
+				: paymentReference || verificationResult.paymentReference
+					? await prisma.order.findFirst({
+							where: { paymentReference: paymentReference || verificationResult.paymentReference }
+						})
 					: null;
 
-			const normalizedStatus = String(verificationResult.status || '').toUpperCase();
-
 			// Only cancel when gateway confirms an explicit FAILED transaction.
-			// Do not cancel for transient states like PENDING/ERROR.
-			if (failedOrder && failedOrder.userId === locals.user.id && normalizedStatus === 'FAILED') {
-				if (failedOrder.status !== 'completed' && failedOrder.status !== 'paid') {
-					await prisma.order.update({
-						where: { id: failedOrder.id },
-						data: {
-							status: 'cancelled',
-							paymentStatus: 'failed'
-						}
-					});
+			if (normalizedStatus === 'FAILED') {
+				if (failedOrder && failedOrder.userId === locals.user.id) {
+					if (failedOrder.status !== 'completed' && failedOrder.status !== 'paid') {
+						await prisma.order.update({
+							where: { id: failedOrder.id },
+							data: {
+								status: 'cancelled',
+								paymentStatus: 'failed'
+							}
+						});
 
-					console.info('[payments.verify] cancelled_gateway_failed', {
-						orderId: failedOrder.id,
-						gatewayStatus: normalizedStatus
-					});
+						console.info('[payments.verify] cancelled_gateway_failed', {
+							orderId: failedOrder.id,
+							gatewayStatus: normalizedStatus
+						});
+					}
 				}
+
+				return json(
+					{
+						success: false,
+						error: 'Payment failed',
+						status: normalizedStatus
+					},
+					{ status: 400 }
+				);
 			}
+
+			console.info('[payments.verify] pending_gateway_unconfirmed', {
+				userId: locals.user.id,
+				orderId: validRequestedOrderId,
+				status: normalizedStatus || null,
+				referenceUsed: referenceToVerify
+			});
 
 			return json(
 				{
 					success: false,
-					error: 'Payment verification failed',
-					status: verificationResult.status
+					pending: true,
+					status: normalizedStatus || 'PENDING',
+					message: 'Payment received. We are still confirming with Monnify.'
 				},
-				{ status: 400 }
+				{ status: 202 }
 			);
 		}
 
 		// Get order from payment metadata
 		const metadataOrderId = sanitizeOrderId(verificationResult.metaData?.orderId);
-		const orderId = metadataOrderId || validRequestedOrderId;
+		const orderByPaymentReference =
+			!metadataOrderId && !validRequestedOrderId && verificationResult.paymentReference
+				? await prisma.order.findFirst({
+						where: { paymentReference: verificationResult.paymentReference },
+						select: { id: true }
+					})
+				: null;
+		const orderId = metadataOrderId || validRequestedOrderId || orderByPaymentReference?.id || null;
 
 		if (!orderId || !isUuid(orderId)) {
 			return json(
@@ -199,7 +259,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			where: { id: orderId },
 			data: {
 				status: 'paid',
-				paymentReference: verificationResult.paymentReference,
+				paymentReference: verificationResult.paymentReference || referenceToVerify,
 				paymentStatus: 'success',
 				paymentChannel: verificationResult.channel,
 				paidAt: verificationResult.paidAt || new Date()
