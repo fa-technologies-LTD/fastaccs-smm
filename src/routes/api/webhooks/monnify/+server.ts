@@ -26,6 +26,12 @@ export const POST: RequestHandler = async ({ request }) => {
 		const eventType: string = body.eventType;
 		const eventData = body.eventData;
 
+		console.info('[payments.webhook] event_received', {
+			eventType,
+			transactionReference: eventData?.transactionReference ?? null,
+			paymentReference: eventData?.paymentReference ?? null
+		});
+
 		switch (eventType) {
 			case 'SUCCESSFUL_TRANSACTION': {
 				const transactionReference: string = eventData?.transactionReference;
@@ -37,6 +43,13 @@ export const POST: RequestHandler = async ({ request }) => {
 
 				// Verify with Monnify API before acting
 				const verificationResult = await verifyPayment(transactionReference);
+
+				console.info('[payments.webhook] successful_transaction_verify_result', {
+					transactionReference,
+					success: verificationResult.success,
+					status: verificationResult.status,
+					paymentReference: verificationResult.paymentReference || null
+				});
 
 				if (!verificationResult.success) {
 					console.error('Monnify webhook: payment verification failed for', transactionReference);
@@ -64,6 +77,11 @@ export const POST: RequestHandler = async ({ request }) => {
 
 				// Idempotency check
 				if (order.status === 'completed' || order.status === 'paid') {
+					console.info('[payments.webhook] already_processed', {
+						orderId,
+						status: order.status
+					});
+
 					return json({ success: true, message: 'Already processed' });
 				}
 
@@ -78,14 +96,27 @@ export const POST: RequestHandler = async ({ request }) => {
 					}
 				});
 
+				console.info('[payments.webhook] marked_paid', {
+					orderId,
+					paymentReference: verificationResult.paymentReference,
+					status: verificationResult.status
+				});
+
 				try {
 					await allocateAccountsForOrder(orderId);
 					await prisma.order.update({
 						where: { id: orderId },
 						data: { status: 'completed' }
 					});
+
+					console.info('[payments.webhook] completed_after_allocation', {
+						orderId
+					});
 				} catch (allocationError) {
 					console.error('Monnify webhook: account allocation failed for', orderId, allocationError);
+					console.warn('[payments.webhook] allocation_pending_manual', {
+						orderId
+					});
 					// Keep status as 'paid' for manual processing
 				}
 
@@ -111,6 +142,17 @@ export const POST: RequestHandler = async ({ request }) => {
 								paymentStatus: 'failed',
 								status: 'cancelled'
 							}
+						});
+
+						console.info('[payments.webhook] cancelled_failed_transaction', {
+							orderId: order.id,
+							paymentReference: paymentReference ?? null,
+							transactionReference: transactionReference ?? null
+						});
+					} else {
+						console.info('[payments.webhook] ignored_failed_transaction_already_paid', {
+							orderId: order.id,
+							status: order.status
 						});
 					}
 				}

@@ -30,6 +30,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			paymentReference,
 			orderId: requestedOrderId
 		} = await request.json();
+
+		console.info('[payments.verify] request_received', {
+			userId: locals.user.id,
+			orderId: requestedOrderId ?? null,
+			paymentReference: paymentReference ?? null,
+			transactionReference: transactionReference ?? null
+		});
+
 		const safeRequestedOrderId = sanitizeOrderId(requestedOrderId);
 		const validRequestedOrderId =
 			safeRequestedOrderId && isUuid(safeRequestedOrderId) ? safeRequestedOrderId : null;
@@ -58,6 +66,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 			// If payment already succeeded (possibly via webhook), do not downgrade status.
 			if (order.status === 'completed' || order.status === 'paid') {
+				console.info('[payments.verify] redirect_without_reference_already_paid', {
+					orderId: order.id,
+					status: order.status
+				});
+
 				return json({
 					success: true,
 					message: 'Order already processed',
@@ -73,6 +86,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						paymentStatus: 'failed'
 					}
 				});
+
+				console.info('[payments.verify] cancelled_no_reference', {
+					orderId: order.id
+				});
 			}
 
 			return json(
@@ -83,6 +100,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		// Verify payment with Monnify (accepts either reference type)
 		const verificationResult = await verifyPayment(transactionReference || paymentReference);
+
+		console.info('[payments.verify] gateway_verification_result', {
+			userId: locals.user.id,
+			orderId: validRequestedOrderId,
+			success: verificationResult.success,
+			status: verificationResult.status,
+			paymentReference: verificationResult.paymentReference || paymentReference || null,
+			transactionReference: verificationResult.transactionReference || transactionReference || null
+		});
 
 		if (!verificationResult.success) {
 			const failedOrder = validRequestedOrderId
@@ -103,6 +129,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 							status: 'cancelled',
 							paymentStatus: 'failed'
 						}
+					});
+
+					console.info('[payments.verify] cancelled_gateway_failed', {
+						orderId: failedOrder.id,
+						gatewayStatus: normalizedStatus
 					});
 				}
 			}
@@ -151,6 +182,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		// Check if order is already completed
 		if (order.status === 'completed' || order.status === 'paid') {
+			console.info('[payments.verify] already_processed', {
+				orderId: order.id,
+				status: order.status
+			});
+
 			return json({
 				success: true,
 				message: 'Order already processed',
@@ -170,6 +206,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 		});
 
+		console.info('[payments.verify] marked_paid', {
+			orderId,
+			paymentReference: verificationResult.paymentReference,
+			status: verificationResult.status
+		});
+
 		// Allocate accounts from inventory
 		try {
 			await allocateAccountsForOrder(orderId);
@@ -179,9 +221,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				where: { id: orderId },
 				data: { status: 'completed' }
 			});
+
+			console.info('[payments.verify] completed_after_allocation', {
+				orderId
+			});
 		} catch (allocationError) {
 			// Payment succeeded but allocation failed — keep as 'paid' for manual handling
 			console.error('Account allocation error:', allocationError);
+			console.warn('[payments.verify] allocation_pending_manual', {
+				orderId
+			});
 			return json({
 				success: true,
 				warning: 'Payment successful but account allocation pending. Contact support.',

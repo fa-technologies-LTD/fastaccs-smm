@@ -18,15 +18,16 @@
 	}
 
 	onMount(async () => {
-		// Monnify redirects back with ?paymentReference=ORD_...
+		// Monnify appends paymentReference, transactionReference, and amountPaid to the redirect URL
 		const paymentReference = $page.url.searchParams.get('paymentReference');
+		const transactionReference = $page.url.searchParams.get('transactionReference');
 		const orderIdParam = sanitizeOrderId($page.url.searchParams.get('orderId'));
 
 		try {
 			const response = await fetch('/api/payments/verify', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ paymentReference, orderId: orderIdParam })
+				body: JSON.stringify({ paymentReference, transactionReference, orderId: orderIdParam })
 			});
 
 			const result = await response.json();

@@ -94,19 +94,35 @@ export async function verifyTransaction(reference: string): Promise<TransactionV
 			};
 		}
 
-		const body = result.responseBody;
+		// v1 query endpoint returns a paginated wrapper ({ content: [...] });
+		// v2 endpoint returns the transaction object directly.
+		const tx = Array.isArray(result.responseBody?.content)
+			? result.responseBody.content[0]
+			: result.responseBody;
+
+		if (!tx) {
+			return {
+				success: false,
+				transactionReference: reference,
+				paymentReference: '',
+				amount: 0,
+				amountPaid: 0,
+				currency: 'NGN',
+				paymentStatus: 'not_found'
+			};
+		}
 
 		return {
-			success: body.paymentStatus === 'PAID',
-			transactionReference: body.transactionReference,
-			paymentReference: body.paymentReference,
-			amount: body.amount,
-			amountPaid: body.amountPaid,
-			currency: body.currencyCode,
-			paymentStatus: body.paymentStatus,
-			paidOn: body.paidOn ? new Date(body.paidOn) : undefined,
-			paymentMethod: body.paymentMethod,
-			metaData: body.metaData ?? {}
+			success: tx.paymentStatus === 'PAID',
+			transactionReference: tx.transactionReference,
+			paymentReference: tx.paymentReference,
+			amount: tx.amount,
+			amountPaid: tx.amountPaid,
+			currency: tx.currencyCode,
+			paymentStatus: tx.paymentStatus,
+			paidOn: tx.paidOn ? new Date(tx.paidOn) : undefined,
+			paymentMethod: tx.paymentMethod,
+			metaData: tx.metaData ?? {}
 		};
 	} catch (error) {
 		console.error('Monnify verification error:', error);
