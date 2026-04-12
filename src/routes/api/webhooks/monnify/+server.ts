@@ -103,13 +103,16 @@ export const POST: RequestHandler = async ({ request }) => {
 				});
 
 				if (order) {
-					await prisma.order.update({
-						where: { id: order.id },
-						data: {
-							paymentStatus: 'failed',
-							status: 'cancelled'
-						}
-					});
+					// Never downgrade a successfully paid/completed order.
+					if (order.status !== 'completed' && order.status !== 'paid') {
+						await prisma.order.update({
+							where: { id: order.id },
+							data: {
+								paymentStatus: 'failed',
+								status: 'cancelled'
+							}
+						});
+					}
 				}
 
 				break;

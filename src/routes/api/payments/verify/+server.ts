@@ -56,6 +56,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Unauthorized access to order' }, { status: 403 });
 			}
 
+			// If payment already succeeded (possibly via webhook), do not downgrade status.
+			if (order.status === 'completed' || order.status === 'paid') {
+				return json({
+					success: true,
+					message: 'Order already processed',
+					orderId: order.id
+				});
+			}
+
 			if (order.status !== 'completed' && order.status !== 'paid') {
 				await prisma.order.update({
 					where: { id: order.id },
@@ -82,7 +91,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					? await prisma.order.findFirst({ where: { paymentReference } })
 					: null;
 
-			if (failedOrder && failedOrder.userId === locals.user.id) {
+			const normalizedStatus = String(verificationResult.status || '').toUpperCase();
+
+			// Only cancel when gateway confirms an explicit FAILED transaction.
+			// Do not cancel for transient states like PENDING/ERROR.
+			if (failedOrder && failedOrder.userId === locals.user.id && normalizedStatus === 'FAILED') {
 				if (failedOrder.status !== 'completed' && failedOrder.status !== 'paid') {
 					await prisma.order.update({
 						where: { id: failedOrder.id },
