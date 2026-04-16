@@ -1,6 +1,6 @@
 # Wallet System Status (Dormant)
 
-Last updated: 2026-04-08
+Last updated: 2026-04-15
 
 ## Current State
 
@@ -13,6 +13,8 @@ Wallet-related Prisma models and service code are still present for possible fut
 - `WalletTransaction`
 - `src/lib/services/wallet.ts`
 - Admin wallet views/routes
+
+`/api/dashboard` still fetches wallet snapshot fields for compatibility, but the customer checkout/runtime flow does not use wallet funding or wallet debits.
 
 ## What Is Retired Right Now
 

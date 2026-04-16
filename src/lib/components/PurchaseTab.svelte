@@ -55,7 +55,7 @@
 	class="rounded-[var(--r-md)] border border-[var(--border)]"
 	style="background: linear-gradient(180deg, var(--surface-2), var(--surface));"
 >
-	<div class="border-b border-[var(--border)] p-6">
+	<div class="border-b border-[var(--border)] p-4 sm:p-6">
 		<h2 class="text-base font-semibold" style="color: var(--text); font-family: var(--font-head);">
 			Your Purchases
 		</h2>
@@ -98,7 +98,7 @@
 	{:else}
 		<div class="divide-y divide-[var(--border)]">
 			{#each purchases as purchase}
-				<div class="p-4 sm:p-6">
+				<div class="p-4 sm:p-5">
 					<div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 						<div class="min-w-0">
 							<h3 class="font-semibold" style="color: var(--text); font-family: var(--font-head);">
@@ -133,12 +133,12 @@
 							{#if purchase.accounts && purchase.accounts.length > 0}
 								<button
 									onclick={() => copyAllPurchaseAccounts(purchase)}
-									class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all hover:-translate-y-0.5 sm:w-auto"
-									style="background: linear-gradient(180deg, rgba(5,212,113,0.95), rgba(13,145,82,0.95)); border: 1px solid rgba(5,212,113,0.40); color: #04140C;"
+									class="copy-all-btn flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-all hover:-translate-y-0.5 sm:w-auto"
+									style="background: linear-gradient(180deg, rgba(5,212,113,0.92), rgba(13,145,82,0.92)); border: 1px solid rgba(5,212,113,0.45); color: #04140C;"
 									title="Copy all accounts in this order"
 								>
 									<Copy class="h-4 w-4" />
-									Copy All Accounts
+									Copy All
 								</button>
 							{/if}
 						</div>
@@ -177,7 +177,7 @@
 									</div>
 
 									<div
-										class="space-y-2 rounded-[var(--r-sm)] p-4 font-mono text-sm"
+										class="space-y-2 rounded-[var(--r-sm)] p-3 font-mono text-sm sm:p-4"
 										style="background: rgba(0,0,0,0.3);"
 									>
 										<!-- Username -->
@@ -185,7 +185,7 @@
 											<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
 												>Username:</span
 											>
-											<span class="flex-1" style="color: var(--text);">{account.username}</span>
+											<span class="credential-value flex-1" style="color: var(--text);">{account.username}</span>
 										</div>
 
 										<!-- Password -->
@@ -193,7 +193,7 @@
 											<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
 												>Password:</span
 											>
-											<span class="flex-1" style="color: var(--text);">{account.password}</span>
+											<span class="credential-value flex-1" style="color: var(--text);">{account.password}</span>
 										</div>
 
 										<!-- Email (if available) -->
@@ -202,7 +202,7 @@
 												<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
 													>Email:</span
 												>
-												<span class="flex-1" style="color: var(--text);">{account.email}</span>
+												<span class="credential-value flex-1" style="color: var(--text);">{account.email}</span>
 											</div>
 										{/if}
 
@@ -212,7 +212,7 @@
 												<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
 													>Email Pass:</span
 												>
-												<span class="flex-1" style="color: var(--text);"
+												<span class="credential-value flex-1" style="color: var(--text);"
 													>{account.emailPassword}</span
 												>
 											</div>
@@ -224,7 +224,7 @@
 												<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
 													>2FA Code:</span
 												>
-												<span class="flex-1" style="color: var(--text);">{account.twoFa}</span>
+												<span class="credential-value flex-1" style="color: var(--text);">{account.twoFa}</span>
 											</div>
 										{/if}
 
@@ -238,7 +238,7 @@
 													href={account.linkUrl}
 													target="_blank"
 													rel="noopener noreferrer"
-													class="flex-1 break-all hover:underline"
+													class="credential-value flex-1 hover:underline"
 													style="color: var(--link);"
 												>
 													{account.linkUrl}
@@ -300,3 +300,16 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.copy-all-btn {
+		letter-spacing: 0.01em;
+		box-shadow: 0 8px 18px rgba(5, 212, 113, 0.18);
+	}
+
+	.credential-value {
+		min-width: 0;
+		overflow-wrap: anywhere;
+		word-break: break-word;
+	}
+</style>

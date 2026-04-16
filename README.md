@@ -10,6 +10,7 @@ FastAccs is a SvelteKit + Prisma marketplace for selling social media account in
 - Payments: Monnify hosted checkout (redirect flow)
 - Fulfillment: Automated account allocation after verified payment
 - Email: Nodemailer (Gmail SMTP)
+- Notify subscriptions: `POST /api/restock-notify` capture path (dispatch automation pending hardening rollout)
 
 ## Active Payment Flow (Monnify)
 
@@ -101,3 +102,4 @@ npm run test:e2e
 
 - `src/lib/services/korapay.ts` and `_archive/korapay.ts` are legacy artifacts, not the active payment path.
 - Some mutation APIs are currently ungated; see `src/routes/api/+api-routes.md` for an up-to-date route map and auth notes.
+- Public test/debug routes exist in current runtime (`/api/test-email`, `/api/debug/account-connections`) and should be restricted before production hardening.

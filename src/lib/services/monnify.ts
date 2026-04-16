@@ -59,6 +59,107 @@ export interface TransactionVerificationResult {
 	metaData?: Record<string, unknown>;
 }
 
+interface MonnifyVerificationEnvelope {
+	requestSuccessful?: boolean;
+	responseCode?: string;
+	responseMessage?: string;
+	responseBody?: unknown;
+}
+
+interface MonnifyTransactionPayload {
+	transactionReference?: string;
+	paymentReference?: string;
+	amount?: number | string;
+	amountPaid?: number | string;
+	currencyCode?: string;
+	currency?: string;
+	paymentStatus?: string;
+	paidOn?: string;
+	paymentMethod?: string;
+	metaData?: Record<string, unknown>;
+}
+
+interface VerificationAttempt {
+	label: string;
+	url: string;
+}
+
+function parseAmount(value: unknown): number {
+	const amount = Number(value);
+	return Number.isFinite(amount) ? amount : 0;
+}
+
+function extractTransactionPayload(responseBody: unknown): MonnifyTransactionPayload | null {
+	if (!responseBody) return null;
+
+	// v1 query endpoint often returns { content: [...] }
+	if (
+		typeof responseBody === 'object' &&
+		responseBody !== null &&
+		Array.isArray((responseBody as { content?: unknown[] }).content)
+	) {
+		const row = (responseBody as { content: unknown[] }).content[0];
+		if (row && typeof row === 'object') {
+			return row as MonnifyTransactionPayload;
+		}
+	}
+
+	// Sometimes response body may already be an array.
+	if (Array.isArray(responseBody)) {
+		const row = responseBody[0];
+		if (row && typeof row === 'object') {
+			return row as MonnifyTransactionPayload;
+		}
+		return null;
+	}
+
+	// v2 endpoints usually return transaction object directly.
+	if (typeof responseBody === 'object' && responseBody !== null) {
+		return responseBody as MonnifyTransactionPayload;
+	}
+
+	return null;
+}
+
+function matchesRequestedReference(
+	reference: string,
+	isMonnifyReference: boolean,
+	transaction: MonnifyTransactionPayload
+): boolean {
+	const txReference = String(transaction.transactionReference || '').trim();
+	const paymentReference = String(transaction.paymentReference || '').trim();
+
+	if (isMonnifyReference) {
+		return txReference === reference;
+	}
+
+	return paymentReference === reference;
+}
+
+function mapVerificationResult(
+	reference: string,
+	transaction: MonnifyTransactionPayload
+): TransactionVerificationResult {
+	const paymentStatus = String(transaction.paymentStatus || '').toUpperCase();
+	const paidOn = typeof transaction.paidOn === 'string' ? new Date(transaction.paidOn) : undefined;
+
+	return {
+		success: paymentStatus === 'PAID',
+		transactionReference: String(transaction.transactionReference || reference),
+		paymentReference: String(transaction.paymentReference || ''),
+		amount: parseAmount(transaction.amount),
+		amountPaid: parseAmount(transaction.amountPaid),
+		currency: String(transaction.currencyCode || transaction.currency || 'NGN'),
+		paymentStatus: paymentStatus || 'UNKNOWN',
+		paidOn: paidOn && !Number.isNaN(paidOn.getTime()) ? paidOn : undefined,
+		paymentMethod: String(transaction.paymentMethod || ''),
+		metaData:
+			transaction.metaData && typeof transaction.metaData === 'object'
+				? transaction.metaData
+				: {}
+	};
+}
+
 /**
  * Verify a transaction with Monnify.
  * Accepts either our paymentReference (ORD_...) or Monnify's transactionReference (MNFY|...).
@@ -66,63 +167,97 @@ export interface TransactionVerificationResult {
 export async function verifyTransaction(reference: string): Promise<TransactionVerificationResult> {
 	try {
 		const token = await getAccessToken();
-
-		// Use the correct endpoint based on reference type
 		const isMonnifyRef = reference.startsWith('MNFY|');
-		const endpoint = isMonnifyRef
-			? `${MONNIFY_BASE_URL}/api/v2/transactions/${encodeURIComponent(reference)}`
-			: `${MONNIFY_BASE_URL}/api/v1/merchant/transactions/query?paymentReference=${encodeURIComponent(reference)}`;
+		const encodedReference = encodeURIComponent(reference);
 
-		const response = await fetch(endpoint, {
-			method: 'GET',
-			headers: {
-				Authorization: `Bearer ${token}`
+		// Safe rollout: v2-first, then fallback to current v1 route.
+		// We only treat an attempt as usable when transaction data is actually returned.
+		const attempts: VerificationAttempt[] = isMonnifyRef
+			? [
+					{
+						label: 'v2_transaction_reference',
+						url: `${MONNIFY_BASE_URL}/api/v2/transactions/${encodedReference}`
+					},
+					{
+						label: 'v2_query_transaction_reference',
+						url: `${MONNIFY_BASE_URL}/api/v2/merchant/transactions/query?transactionReference=${encodedReference}`
+					},
+					{
+						label: 'v1_query_transaction_reference',
+						url: `${MONNIFY_BASE_URL}/api/v1/merchant/transactions/query?transactionReference=${encodedReference}`
+					}
+				]
+			: [
+					{
+						label: 'v2_query_payment_reference',
+						url: `${MONNIFY_BASE_URL}/api/v2/merchant/transactions/query?paymentReference=${encodedReference}`
+					},
+					{
+						label: 'v1_query_payment_reference',
+						url: `${MONNIFY_BASE_URL}/api/v1/merchant/transactions/query?paymentReference=${encodedReference}`
+					}
+				];
+
+		for (const attempt of attempts) {
+			try {
+				const response = await fetch(attempt.url, {
+					method: 'GET',
+					headers: {
+						Authorization: `Bearer ${token}`
+					}
+				});
+
+				let payload: MonnifyVerificationEnvelope | null = null;
+				try {
+					payload = (await response.json()) as MonnifyVerificationEnvelope;
+				} catch {
+					payload = null;
+				}
+
+				const transaction = extractTransactionPayload(payload?.responseBody);
+				const referenceMatches = transaction
+					? matchesRequestedReference(reference, isMonnifyRef, transaction)
+					: false;
+
+				console.info('[monnify.verify] attempt_result', {
+					reference,
+					attempt: attempt.label,
+					httpStatus: response.status,
+					requestSuccessful: payload?.requestSuccessful ?? null,
+					responseCode: payload?.responseCode ?? null,
+					responseMessage: payload?.responseMessage ?? null,
+					hasTransaction: Boolean(transaction),
+					referenceMatches
+				});
+
+				if (!transaction || !referenceMatches) {
+					continue;
+				}
+
+				return mapVerificationResult(reference, transaction);
+			} catch (attemptError) {
+				console.warn('[monnify.verify] attempt_error', {
+					reference,
+					attempt: attempt.label,
+					error: attemptError instanceof Error ? attemptError.message : String(attemptError)
+				});
+				continue;
 			}
+		}
+
+		console.warn('[monnify.verify] no_transaction_found_after_fallback', {
+			reference,
+			referenceType: isMonnifyRef ? 'transaction_reference' : 'payment_reference'
 		});
 
-		const result = await response.json();
-
-		if (!result.requestSuccessful || !result.responseBody) {
-			return {
-				success: false,
-				transactionReference: reference,
-				paymentReference: '',
-				amount: 0,
-				amountPaid: 0,
-				currency: 'NGN',
-				paymentStatus: 'failed'
-			};
-		}
-
-		// v1 query endpoint returns a paginated wrapper ({ content: [...] });
-		// v2 endpoint returns the transaction object directly.
-		const tx = Array.isArray(result.responseBody?.content)
-			? result.responseBody.content[0]
-			: result.responseBody;
-
-		if (!tx) {
-			return {
-				success: false,
-				transactionReference: reference,
-				paymentReference: '',
-				amount: 0,
-				amountPaid: 0,
-				currency: 'NGN',
-				paymentStatus: 'not_found'
-			};
-		}
-
 		return {
-			success: tx.paymentStatus === 'PAID',
-			transactionReference: tx.transactionReference,
-			paymentReference: tx.paymentReference,
-			amount: tx.amount,
-			amountPaid: tx.amountPaid,
-			currency: tx.currencyCode,
-			paymentStatus: tx.paymentStatus,
-			paidOn: tx.paidOn ? new Date(tx.paidOn) : undefined,
-			paymentMethod: tx.paymentMethod,
-			metaData: tx.metaData ?? {}
+			success: false,
+			transactionReference: reference,
+			paymentReference: '',
+			amount: 0,
+			amountPaid: 0,
+			currency: 'NGN',
+			paymentStatus: 'not_found'
 		};
 	} catch (error) {
 		console.error('Monnify verification error:', error);

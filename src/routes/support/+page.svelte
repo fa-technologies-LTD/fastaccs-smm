@@ -6,7 +6,8 @@
 		MessageCircle,
 		Clock,
 		HelpCircle,
-		ExternalLink
+		ExternalLink,
+		ArrowRight
 	} from '@lucide/svelte';
 
 	const faqs = [
@@ -150,10 +151,13 @@
 				Get in Touch
 			</h2>
 
-			<div class="grid gap-8 md:grid-cols-3">
+			<div class="grid gap-6 md:grid-cols-3">
 				<!-- WhatsApp Support -->
-				<div
-					class="rounded-xl p-6 transition-all duration-300 hover:shadow-lg"
+				<a
+					href="https://wa.link/fast_accounts"
+					target="_blank"
+					rel="noopener noreferrer"
+					class="support-contact-card group rounded-xl p-6"
 					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 				>
 					<div class="mb-4 inline-flex rounded-full p-3" style="background: var(--bg-elev-2);">
@@ -168,24 +172,22 @@
 					<p class="mb-4 text-sm" style="color: var(--text-muted);">
 						Fastest way to reach us for account and order issues
 					</p>
-					<a
-						href="https://wa.link/fast_accounts"
-						target="_blank"
-						rel="noopener noreferrer"
-						class="font-medium hover:underline"
-						style="color: var(--brand-green);"
-					>
+					<p class="font-medium" style="color: var(--brand-green);">
 						Chat on WhatsApp
-					</a>
+					</p>
 					<p class="mt-2 text-xs" style="color: var(--text-muted);">
 						<Clock class="mr-1 inline h-3 w-3" />
 						Quick-response support channel
 					</p>
-				</div>
+					<span class="support-hover-arrow" aria-hidden="true">
+						<ArrowRight class="h-4 w-4" />
+					</span>
+				</a>
 
 				<!-- Email Support -->
-				<div
-					class="rounded-xl p-6 transition-all duration-300 hover:shadow-lg"
+				<a
+					href="mailto:verystronethan@gmail.com"
+					class="support-contact-card group rounded-xl p-6"
 					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 				>
 					<div class="mb-4 inline-flex rounded-full p-3" style="background: var(--bg-elev-2);">
@@ -200,22 +202,22 @@
 					<p class="mb-4 text-sm" style="color: var(--text-muted);">
 						Best for detailed reports and follow-ups
 					</p>
-					<a
-						href="mailto:verystronethan@gmail.com"
-						class="font-medium hover:underline"
-						style="color: var(--brand-blue);"
-					>
+					<p class="font-medium" style="color: var(--brand-blue);">
 						Support Email
-					</a>
+					</p>
 					<p class="mt-2 text-xs" style="color: var(--text-muted);">
 						<Clock class="mr-1 inline h-3 w-3" />
 						Response within 24 hours
 					</p>
-				</div>
+					<span class="support-hover-arrow" aria-hidden="true">
+						<ArrowRight class="h-4 w-4" />
+					</span>
+				</a>
 
 				<!-- Help Center -->
-				<div
-					class="rounded-xl p-6 transition-all duration-300 hover:shadow-lg"
+				<a
+					href="/support#faq"
+					class="support-contact-card group rounded-xl p-6"
 					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 				>
 					<div class="mb-4 inline-flex rounded-full p-3" style="background: var(--bg-elev-2);">
@@ -230,18 +232,17 @@
 					<p class="mb-4 text-sm" style="color: var(--text-muted);">
 						Check answers for payments, login, and order flow
 					</p>
-					<a
-						href="/support#faq"
-						class="font-medium hover:underline"
-						style="color: var(--brand-purple);"
-					>
+					<p class="font-medium" style="color: var(--brand-purple);">
 						View FAQs
-					</a>
+					</p>
 					<p class="mt-2 text-xs" style="color: var(--text-muted);">
 						<Clock class="mr-1 inline h-3 w-3" />
 						Always available
 					</p>
-				</div>
+					<span class="support-hover-arrow" aria-hidden="true">
+						<ArrowRight class="h-4 w-4" />
+					</span>
+				</a>
 			</div>
 		</div>
 	</section>
@@ -257,6 +258,12 @@
 			</h2>
 			<p class="mb-12 text-center" style="color: var(--text-muted);">
 				Find quick answers to common questions. Can't find what you're looking for? Contact us!
+			</p>
+			<p class="mb-8 text-center text-sm" style="color: var(--text-muted);">
+				Need post-delivery usage tips?
+				<a href="/support#after-purchase-guide" class="font-medium hover:underline" style="color: var(--link);"
+					>Jump to After Purchase Guide</a
+				>
 			</p>
 
 			<div class="space-y-4">
@@ -306,7 +313,7 @@
 	</section>
 
 	<!-- After Purchase Guide -->
-	<section class="px-4 py-16" style="background: var(--bg-elev-1);">
+	<section id="after-purchase-guide" class="px-4 py-16" style="background: var(--bg-elev-1);">
 		<div class="mx-auto max-w-6xl">
 			<h2
 				class="mb-4 text-center text-3xl font-bold"
@@ -422,39 +429,34 @@
 		</div>
 	</section>
 
-	<!-- Business Hours -->
-	<section class="px-4 py-16">
-		<div class="mx-auto max-w-4xl">
-			<div
-				class="rounded-xl p-8"
-				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-			>
-				<h2
-					class="mb-6 text-center text-2xl font-bold"
-					style="color: var(--text); font-family: var(--font-head);"
-				>
-					Support Hours
-				</h2>
-				<div class="grid gap-6 md:grid-cols-3">
-					<div class="text-center">
-						<MessageCircle class="mx-auto mb-2 h-8 w-8" style="color: var(--brand-green);" />
-						<h3 class="mb-1 font-semibold" style="color: var(--text);">WhatsApp</h3>
-						<p class="text-sm" style="color: var(--text-muted);">24/7 Support</p>
-					</div>
-					<div class="text-center">
-						<Mail class="mx-auto mb-2 h-8 w-8" style="color: var(--brand-blue);" />
-						<h3 class="mb-1 font-semibold" style="color: var(--text);">Email</h3>
-						<p class="text-sm" style="color: var(--text-muted);">24/7 Support</p>
-					</div>
-					<div class="text-center">
-						<HelpCircle class="mx-auto mb-2 h-8 w-8" style="color: var(--brand-purple);" />
-						<h3 class="mb-1 font-semibold" style="color: var(--text);">Help Center</h3>
-						<p class="text-sm" style="color: var(--text-muted);">Anytime</p>
-					</div>
-				</div>
-			</div>
-		</div>
-	</section>
 </main>
 
 <Footer />
+
+<style>
+	.support-contact-card {
+		position: relative;
+		display: block;
+		transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+	}
+
+	.support-contact-card:hover {
+		border-color: var(--primary) !important;
+		box-shadow: var(--glow-primary);
+		transform: translateY(-2px);
+	}
+
+	.support-hover-arrow {
+		position: absolute;
+		right: 1rem;
+		bottom: 1rem;
+		color: var(--text-dim);
+		opacity: 0;
+		transition: opacity 0.2s ease, transform 0.2s ease;
+	}
+
+	.support-contact-card:hover .support-hover-arrow {
+		opacity: 1;
+		transform: translateX(2px);
+	}
+</style>

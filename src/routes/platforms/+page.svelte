@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { ArrowRight, Users, Package } from '@lucide/svelte';
+	import { onMount } from 'svelte';
+	import { ArrowRight, Check, Zap, Search, SearchX, Package } from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
@@ -14,16 +15,41 @@
 		data: PageData;
 	}
 
-	let { data }: Props = $props();
-
-	let searchQuery = $state('');
-	let filterQuery = $state('all');
-	let failedPlatformIcons = $state<Record<string, boolean>>({});
-
 	interface PlatformMetadata {
 		icon?: unknown;
 		color?: unknown;
 	}
+
+	type FilterKey = 'all' | 'popular' | 'in-stock' | 'high-engagement';
+
+	interface FilterConfig {
+		key: FilterKey;
+		label: string;
+	}
+
+	let { data }: Props = $props();
+
+	let searchQuery = $state('');
+	let activeFilter = $state<FilterKey>('all');
+	let failedPlatformIcons = $state<Record<string, boolean>>({});
+	let showInitialSkeleton = $state(true);
+
+	const filters: FilterConfig[] = [
+		{ key: 'all', label: 'All' },
+		{ key: 'popular', label: 'Popular' },
+		{ key: 'in-stock', label: 'In Stock' },
+		{ key: 'high-engagement', label: 'High Engagement' }
+	];
+
+	const HIGH_ENGAGEMENT_PATTERN =
+		/(engage|engagement|follower|followers|likes|views|subscriber|subscribers|reach|boost)/i;
+
+	onMount(() => {
+		const timer = setTimeout(() => {
+			showInitialSkeleton = false;
+		}, 180);
+		return () => clearTimeout(timer);
+	});
 
 	function navigateToPlatform(platformSlug: string) {
 		goto(`/platforms/${platformSlug}`);
@@ -51,41 +77,91 @@
 		return `background: linear-gradient(135deg, ${color} 0%, rgba(15, 22, 47, 0.88) 100%);`;
 	}
 
-	// Format numbers with commas
+	function getPlatformSubLabel(platform: PageData['platforms'][number]): string {
+		return platform.description?.trim() || `${platform.name} accounts`;
+	}
+
 	function formatNumber(num: number): string {
-		return new Intl.NumberFormat().format(num);
+		return new Intl.NumberFormat().format(num || 0);
 	}
 
-	function handleSearch() {
-		// Search logic can be implemented here if needed
-		// For now, just reactive to searchQuery changes
+	function getSearchableText(platform: PageData['platforms'][number]): string {
+		return [
+			platform.name,
+			platform.slug,
+			platform.description || '',
+			...(platform.sample_tiers?.map((tier) => tier.name) || [])
+		]
+			.join(' ')
+			.toLowerCase();
 	}
 
-	// Filter platforms based on search and filter
-	let filteredPlatforms = $derived(() => {
-		let platforms = data.platforms || [];
+	function isHighEngagementPlatform(platform: PageData['platforms'][number]): boolean {
+		return HIGH_ENGAGEMENT_PATTERN.test(getSearchableText(platform));
+	}
 
-		// Apply search filter
-		if (searchQuery.trim()) {
-			platforms = platforms.filter(
-				(p) =>
-					p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-					(p.description || '').toLowerCase().includes(searchQuery.toLowerCase())
-			);
+	function baseSort(
+		a: PageData['platforms'][number],
+		b: PageData['platforms'][number]
+	): number {
+		const inStockA = (a.total_accounts || 0) > 0 ? 1 : 0;
+		const inStockB = (b.total_accounts || 0) > 0 ? 1 : 0;
+		if (inStockA !== inStockB) return inStockB - inStockA;
+
+		const stockDiff = (b.total_accounts || 0) - (a.total_accounts || 0);
+		if (stockDiff !== 0) return stockDiff;
+
+		return a.name.localeCompare(b.name);
+	}
+
+	const allPlatforms = $derived(data.platforms || []);
+	const hasAnyPlatforms = $derived(allPlatforms.length > 0);
+
+	const filteredPlatforms = $derived.by(() => {
+		const query = searchQuery.trim().toLowerCase();
+		let platforms = [...allPlatforms];
+
+		if (query) {
+			platforms = platforms.filter((p) => getSearchableText(p).includes(query));
 		}
 
-		// Apply category filter
-		if (filterQuery !== 'all') {
-			// You can implement specific filter logic here
-			// For now, just return all platforms
+		if (activeFilter === 'in-stock') {
+			platforms = platforms.filter((p) => (p.total_accounts || 0) > 0);
 		}
 
+		if (activeFilter === 'high-engagement') {
+			platforms = platforms.filter(isHighEngagementPlatform);
+		}
+
+		if (activeFilter === 'popular') {
+			platforms.sort((a, b) => {
+				const inStockA = (a.total_accounts || 0) > 0 ? 1 : 0;
+				const inStockB = (b.total_accounts || 0) > 0 ? 1 : 0;
+				if (inStockA !== inStockB) return inStockB - inStockA;
+
+				const tierDiff = (b.tier_count || 0) - (a.tier_count || 0);
+				if (tierDiff !== 0) return tierDiff;
+
+				const stockDiff = (b.total_accounts || 0) - (a.total_accounts || 0);
+				if (stockDiff !== 0) return stockDiff;
+
+				return a.name.localeCompare(b.name);
+			});
+			return platforms;
+		}
+
+		platforms.sort(baseSort);
 		return platforms;
 	});
+
+	function clearSearch() {
+		searchQuery = '';
+		activeFilter = 'all';
+	}
 </script>
 
 <svelte:head>
-	<title>Choose Your Platform - FastAccs</title>
+	<title>Browse Accounts - FastAccs</title>
 	<meta
 		name="description"
 		content="Browse available social media platforms and account tiers with current stock and pricing."
@@ -93,339 +169,494 @@
 </svelte:head>
 
 <Navigation />
+
 <main class="min-h-screen" style="background: var(--bg);">
-	<!-- Hero Section -->
-	<section
-		class="relative overflow-hidden"
-		style="padding: var(--space-4xl) var(--space-md); background: var(--bg);"
-	>
-		<div class="mx-auto max-w-4xl px-4 text-center">
-			<!-- All Platforms Label -->
-			<div class="mb-6 flex items-center justify-center gap-2">
-				<svg
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					style="color: var(--text-muted);"
+	<section class="mx-auto w-full max-w-6xl px-4 pb-3 pt-4 sm:pt-5">
+		<div class="filter-row">
+			{#each filters as filter}
+				<button
+					type="button"
+					class={`filter-chip ${activeFilter === filter.key ? 'active' : ''}`}
+					onclick={() => (activeFilter = filter.key)}
 				>
-					<polygon
-						points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
-					></polygon>
-				</svg>
-				<span
-					style="color: var(--text-muted); font-family: var(--font-body); font-size: 0.875rem; font-weight: 500;"
-				>
-					All Platforms
-				</span>
+					{filter.label}
+				</button>
+			{/each}
+		</div>
+
+		<div class="search-wrap">
+			<div class="search-control">
+				<Search size={16} class="search-icon" />
+				<input
+					type="text"
+					placeholder="Search platforms..."
+					bind:value={searchQuery}
+					class="search-input"
+				/>
 			</div>
+		</div>
 
-			<h1
-				class="mb-4"
-				style="font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; color: var(--text); font-family: var(--font-head); line-height: 1.2;"
-			>
-				Choose Your Platform
-			</h1>
-
-			<p
-				class="mx-auto mb-8 max-w-2xl"
-				style="font-size: 1rem; color: var(--text-muted); font-family: var(--font-body); line-height: 1.6;"
-			>
-				Explore available account categories, compare tiers, and purchase through secure checkout.
-			</p>
-
-			<!-- Feature Badges -->
-			<div class="mb-8 flex flex-wrap items-center justify-center gap-3">
-				<div
-					class="flex items-center gap-2 rounded-full px-4 py-2"
-					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-				>
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						style="color: var(--primary);"
-					>
-						<polyline points="20 6 9 17 4 12"></polyline>
-					</svg>
-					<span
-						style="font-size: 0.875rem; color: var(--text); font-family: var(--font-body); font-weight: 500;"
-					>
-						Multiple Tiers
-					</span>
-				</div>
-				<div
-					class="flex items-center gap-2 rounded-full px-4 py-2"
-					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-				>
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						style="color: #3B82F6;"
-					>
-						<circle cx="12" cy="12" r="10"></circle>
-						<polyline points="12 6 12 12 16 14"></polyline>
-					</svg>
-					<span
-						style="font-size: 0.875rem; color: var(--text); font-family: var(--font-body); font-weight: 500;"
-					>
-						Instant Delivery
-					</span>
-				</div>
-				<div
-					class="flex items-center gap-2 rounded-full px-4 py-2"
-					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-				>
-					<span
-						style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #FCD34D;"
-					></span>
-					<span
-						style="font-size: 0.875rem; color: var(--text); font-family: var(--font-body); font-weight: 500;"
-					>
-						24/7 Support
-					</span>
-				</div>
-			</div>
-
-			<!-- Search and Filter Section -->
-			<div
-				class="mx-auto max-w-3xl rounded-2xl p-6"
-				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-			>
-				<!-- Search Input -->
-				<div class="mb-4">
-					<div
-						class="flex items-center gap-3 rounded-lg px-4 py-3"
-						style="background: var(--bg-elev-2); border: 1px solid var(--border);"
-					>
-						<svg
-							width="20"
-							height="20"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							style="color: var(--text-muted);"
-						>
-							<circle cx="11" cy="11" r="8"></circle>
-							<path d="m21 21-4.35-4.35"></path>
-						</svg>
-						<input
-							type="text"
-							placeholder="Search platforms..."
-							bind:value={searchQuery}
-							oninput={handleSearch}
-							class="flex-1 bg-transparent outline-none"
-							style="color: var(--text); font-family: var(--font-body); font-size: 0.9375rem;"
-						/>
-					</div>
-				</div>
-
-				<!-- Filter Buttons -->
-				<div class="flex flex-wrap gap-2">
-					<button
-						onclick={() => (filterQuery = 'all')}
-						class="rounded-full px-4 py-2 transition-all"
-						style={filterQuery === 'all'
-							? 'background: var(--primary); color: white; font-family: var(--font-body); font-size: 0.875rem; font-weight: 500;'
-							: 'background: var(--bg-elev-2); color: var(--text-muted); font-family: var(--font-body); font-size: 0.875rem; font-weight: 500; border: 1px solid var(--border);'}
-					>
-						All
-					</button>
-					<button
-						onclick={() => (filterQuery = 'popular')}
-						class="rounded-full px-4 py-2 transition-all"
-						style={filterQuery === 'popular'
-							? 'background: var(--primary); color: white; font-family: var(--font-body); font-size: 0.875rem; font-weight: 500;'
-							: 'background: var(--bg-elev-2); color: var(--text-muted); font-family: var(--font-body); font-size: 0.875rem; font-weight: 500; border: 1px solid var(--border);'}
-					>
-						Most Popular
-					</button>
-					<button
-						onclick={() => (filterQuery = 'available')}
-						class="rounded-full px-4 py-2 transition-all"
-						style={filterQuery === 'available'
-							? 'background: var(--primary); color: white; font-family: var(--font-body); font-size: 0.875rem; font-weight: 500;'
-							: 'background: var(--bg-elev-2); color: var(--text-muted); font-family: var(--font-body); font-size: 0.875rem; font-weight: 500; border: 1px solid var(--border);'}
-					>
-						Available Now
-					</button>
-					<button
-						onclick={() => (filterQuery = 'engagement')}
-						class="rounded-full px-4 py-2 transition-all"
-						style={filterQuery === 'engagement'
-							? 'background: var(--primary); color: white; font-family: var(--font-body); font-size: 0.875rem; font-weight: 500;'
-							: 'background: var(--bg-elev-2); color: var(--text-muted); font-family: var(--font-body); font-size: 0.875rem; font-weight: 500; border: 1px solid var(--border);'}
-					>
-						High Engagement
-					</button>
-				</div>
-			</div>
+		<div class="trust-strip">
+			<span><Check size={12} class="trust-icon" /> Multiple tiers</span>
+			<span><Zap size={12} class="trust-icon" /> Instant delivery</span>
+			<span><span class="support-dot"></span> 24/7 support</span>
 		</div>
 	</section>
 
-	<!-- Platform Selection -->
-
-	<section class="py-16">
-		<div class="mx-auto max-w-6xl px-4">
-			<div class="mb-12 text-center">
-				<h2
-					style="margin-bottom: var(--space-md); font-size: 2rem; font-weight: 700; color: var(--text); font-family: var(--font-head);"
-				>
-					Available Platforms
-				</h2>
-				<p style="font-size: 1.125rem; color: var(--text-muted); font-family: var(--font-body);">
-					Choose from available account tiers across active platforms
-				</p>
+	<section class="mx-auto w-full max-w-6xl px-4 pb-16">
+		{#if showInitialSkeleton}
+			<div class="platform-grid">
+				{#each Array.from({ length: 4 }) as _, index}
+					<div class="platform-skeleton" style={`animation-delay: ${index * 70}ms;`}></div>
+				{/each}
 			</div>
-
-			{#if filteredPlatforms().length === 0}
-				<div
-					style="border-radius: var(--r-md); background: var(--status-warning-bg); border: 1px solid var(--status-warning-border); padding: var(--space-2xl); text-align: center;"
-				>
-					<Package class="mx-auto mb-4 h-12 w-12" style="color: var(--status-warning);" />
-					<h3
-						style="margin-bottom: var(--space-xs); font-size: 1.125rem; font-weight: 600; color: var(--text); font-family: var(--font-head);"
+		{:else if !hasAnyPlatforms}
+			<div class="empty-state">
+				<Package size={46} />
+				<p class="empty-title">No platforms available right now</p>
+				<p class="empty-subtitle">Check back soon - new stock is added regularly.</p>
+			</div>
+		{:else if filteredPlatforms.length === 0}
+			<div class="empty-state">
+				<SearchX size={46} />
+				<p class="empty-title">No platforms match your search</p>
+				<p class="empty-subtitle">Try a different term or browse all platforms.</p>
+				<button type="button" class="clear-search-btn" onclick={clearSearch}>Clear search</button>
+			</div>
+		{:else}
+			<div class="platform-grid">
+				{#each filteredPlatforms as platform, index (platform.id)}
+					{@const PlatformIcon = getPlatformIcon(platform.slug)}
+					{@const platformMeta = getPlatformMetadata(platform.metadata)}
+					{@const previewTiers = platform.sample_tiers?.slice(0, 4) || []}
+					<button
+						type="button"
+						class={`platform-card group ${(platform.total_accounts || 0) <= 0 ? 'sold-out' : ''}`}
+						onclick={() => navigateToPlatform(platform.slug)}
+						style={`animation-delay: ${index * 80}ms;`}
+						aria-label={`Browse ${platform.name} accounts`}
 					>
-						No Platforms Found
-					</h3>
-					<p style="color: var(--text-muted); font-family: var(--font-body);">
-						{searchQuery
-							? 'Try adjusting your search query.'
-							: 'No platforms available at the moment.'}
-					</p>
-				</div>
-			{:else}
-				<div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-2">
-					{#each filteredPlatforms() as platform}
-						{@const PlatformIcon = getPlatformIcon(platform.slug)}
-						{@const platformMeta = getPlatformMetadata(platform.metadata)}
 						<div
-							onclick={() => navigateToPlatform(platform.slug)}
-							onkeydown={(e) => e.key === 'Enter' && navigateToPlatform(platform.slug)}
-							role="button"
-							tabindex="0"
-							class="group relative cursor-pointer overflow-hidden transition-all duration-300 hover:-translate-y-2 active:scale-[0.98]"
-							style="background: var(--bg-elev-1); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-1);"
+							class={`platform-header ${platformMeta?.color ? '' : `bg-gradient-to-r ${getPlatformColor(platform.slug)}`}`}
+							style={getPlatformHeaderStyle(platformMeta)}
 						>
-							<!-- Platform Gradient Header -->
-							<div
-								class={`p-8 text-white ${platformMeta?.color ? '' : `bg-gradient-to-r ${getPlatformColor(platform.slug)}`}`}
-								style={getPlatformHeaderStyle(platformMeta)}
-							>
-								<div class="flex items-center justify-between">
-									<div class="flex items-center gap-4">
-										<div class="rounded-full bg-white/20 p-3">
-											{#if shouldRenderCustomIcon(platform.id, platformMeta)}
-												<img
-													src={platformMeta.icon as string}
-													alt={platform.name}
-													class="h-8 w-8"
-													onerror={() => markPlatformIconFailed(platform.id)}
-												/>
-											{:else}
-												<PlatformIcon class="h-8 w-8" />
-											{/if}
-										</div>
-										<div>
-											<h3 class="text-2xl font-bold">{platform.name}</h3>
-											<p class="text-sm opacity-90">{platform.description}</p>
-										</div>
+							<div class="flex items-center justify-between gap-3">
+								<div class="flex min-w-0 items-center gap-3 sm:gap-4">
+									<div class="icon-shell">
+										{#if shouldRenderCustomIcon(platform.id, platformMeta)}
+											<img
+												src={platformMeta.icon as string}
+												alt={platform.name}
+												class="h-8 w-8"
+												onerror={() => markPlatformIconFailed(platform.id)}
+											/>
+										{:else}
+											<PlatformIcon class="h-7 w-7 sm:h-8 sm:w-8" />
+										{/if}
 									</div>
-									<ArrowRight
-										class="h-6 w-6 opacity-70 transition-transform group-hover:translate-x-1"
-									/>
-								</div>
-							</div>
-
-							<!-- Platform Stats -->
-							<div style="padding: var(--space-2xl);">
-								<div class="mb-6 grid grid-cols-2 gap-4">
-									<div class="text-center">
-										<div
-											style="font-size: 1.5rem; font-weight: 700; color: var(--text); font-family: var(--font-body);"
-										>
-											{platform.tier_count || 0}
-										</div>
-										<div
-											style="font-size: 0.875rem; color: var(--text-muted); font-family: var(--font-body);"
-										>
-											Available Tiers
-										</div>
-									</div>
-									<div class="text-center">
-										<div
-											style="font-size: 1.5rem; font-weight: 700; color: var(--text); font-family: var(--font-body);"
-										>
-											{formatNumber(platform.total_accounts || 0)}
-										</div>
-										<div
-											style="font-size: 0.875rem; color: var(--text-muted); font-family: var(--font-body);"
-										>
-											Total Accounts
-										</div>
+									<div class="min-w-0 text-left">
+										<h3 class="platform-title">{platform.name}</h3>
+										<p class="platform-subtitle">{getPlatformSubLabel(platform)}</p>
 									</div>
 								</div>
-
-								<!-- Tier Preview -->
-								{#if platform.sample_tiers && platform.sample_tiers.length > 0}
-									<div class="mb-6">
-										<h4
-											style="margin-bottom: var(--space-sm); font-size: 0.875rem; font-weight: 600; color: var(--text-muted); font-family: var(--font-head);"
-										>
-											Available Tiers:
-										</h4>
-										<div class="flex flex-wrap gap-2">
-											{#each platform.sample_tiers.slice(0, 4) as tier}
-												<span
-													style="border-radius: var(--r-xs); background: var(--bg-elev-2); border: 1px solid var(--border); padding: 4px 12px; font-size: 0.75rem; font-weight: 500; color: var(--text-muted); font-family: var(--font-body);"
-												>
-													{tier.name}
-												</span>
-											{/each}
-											{#if platform.sample_tiers.length > 4}
-												<span
-													style="border-radius: var(--r-xs); background: var(--bg-elev-2); border: 1px solid var(--border); padding: 4px 12px; font-size: 0.75rem; font-weight: 500; color: var(--text-dim); font-family: var(--font-body);"
-												>
-													+{platform.sample_tiers.length - 4} more
-												</span>
-											{/if}
-										</div>
-									</div>
-								{/if}
-								<!-- Browse Action Label -->
-								<div
-									class="flex items-center justify-center gap-2 transition-colors"
-									style="font-size: 0.875rem; font-weight: 500; color: var(--text-muted); font-family: var(--font-body);"
-								>
-									<span>Browse {platform.name} Accounts</span>
-									<ArrowRight class="h-4 w-4" />
-								</div>
+								<ArrowRight
+									class="h-5 w-5 opacity-70 transition-transform group-hover:translate-x-1 sm:h-6 sm:w-6"
+								/>
 							</div>
 						</div>
-					{/each}
-				</div>
-			{/if}
-		</div>
-	</section>
 
-	
+						<div class="platform-body">
+							<div class="stats-grid">
+								<div class="text-center">
+									<div class="stat-value">{platform.tier_count || 0}</div>
+									<div class="stat-label">Available Tiers</div>
+								</div>
+								<div class="text-center">
+									<div class="stat-value">{formatNumber(platform.total_accounts || 0)}</div>
+									<div class="stat-label">Total Accounts</div>
+								</div>
+							</div>
+
+							{#if previewTiers.length > 0}
+								<div class="tiers-wrap">
+									<h4 class="tiers-label">Available Tiers:</h4>
+									<div class="flex flex-wrap gap-2">
+										{#each previewTiers as tier}
+											<span class="tier-pill">{tier.name}</span>
+										{/each}
+										{#if (platform.sample_tiers?.length || 0) > 4}
+											<span class="tier-pill dim">+{(platform.sample_tiers?.length || 0) - 4} more</span>
+										{/if}
+									</div>
+								</div>
+							{/if}
+
+							<div class="browse-row">
+								<span>Browse {platform.name} Accounts</span>
+								<ArrowRight class="h-4 w-4" />
+							</div>
+						</div>
+					</button>
+				{/each}
+			</div>
+		{/if}
+	</section>
 </main>
+
 <Footer />
+
+<style>
+	.filter-row {
+		display: flex;
+		gap: 0.5rem;
+		overflow-x: auto;
+		padding: 8px 0;
+		scrollbar-width: none;
+	}
+
+	.filter-row::-webkit-scrollbar {
+		display: none;
+	}
+
+	.filter-chip {
+		white-space: nowrap;
+		padding: 6px 14px;
+		border-radius: 20px;
+		font-size: 12px;
+		font-weight: 500;
+		font-family: var(--font-body);
+		color: #ccc;
+		background: rgba(255, 255, 255, 0.06);
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		transition: all 180ms ease;
+		cursor: pointer;
+	}
+
+	.filter-chip.active {
+		background: #25b570;
+		color: #fff;
+		border-color: #25b570;
+	}
+
+	.search-wrap {
+		margin: 0 0 8px;
+	}
+
+	.search-control {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		width: 100%;
+		padding: 10px 14px;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.04);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		transition: border-color 150ms ease, box-shadow 150ms ease;
+	}
+
+	.search-control:focus-within {
+		border-color: rgba(37, 181, 112, 0.4);
+		box-shadow: 0 0 0 2px rgba(37, 181, 112, 0.12);
+	}
+
+	.search-icon {
+		color: #555;
+		flex-shrink: 0;
+	}
+
+	.search-input {
+		flex: 1;
+		border: none;
+		background: transparent;
+		color: var(--text);
+		font-size: 13px;
+		font-family: var(--font-body);
+		outline: none;
+	}
+
+	.search-input::placeholder {
+		color: #555;
+		font-size: 13px;
+	}
+
+	.trust-strip {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 16px;
+		padding: 4px 0 10px;
+		flex-wrap: wrap;
+	}
+
+	.trust-strip span {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 10px;
+		color: #777;
+		font-family: var(--font-body);
+		white-space: nowrap;
+	}
+
+	.trust-icon {
+		color: #22c55e;
+	}
+
+	.support-dot {
+		display: inline-block;
+		width: 7px;
+		height: 7px;
+		border-radius: 999px;
+		background: #facc15;
+	}
+
+	.platform-grid {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 14px;
+	}
+
+	.platform-card {
+		position: relative;
+		overflow: hidden;
+		cursor: pointer;
+		border-radius: var(--r-md);
+		border: 1px solid var(--border);
+		background: var(--bg-elev-1);
+		box-shadow: var(--shadow-1);
+		transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+		animation: card-enter 300ms ease-out both;
+	}
+
+	.platform-card:hover {
+		border-color: var(--primary);
+		box-shadow: var(--shadow-1);
+		transform: scale(1.02);
+	}
+
+	.platform-card:active {
+		transform: scale(0.98);
+	}
+
+	.platform-card:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 2px;
+	}
+
+	.sold-out {
+		opacity: 0.6;
+	}
+
+	.platform-header {
+		padding: 1rem;
+		color: #fff;
+	}
+
+	.icon-shell {
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.2);
+		border: 1px solid rgba(255, 255, 255, 0.3);
+		padding: 0.6rem;
+		flex-shrink: 0;
+	}
+
+	.platform-title {
+		font-size: 1.2rem;
+		font-weight: 700;
+		font-family: var(--font-head);
+		line-height: 1.15;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.platform-subtitle {
+		font-size: 0.85rem;
+		opacity: 0.92;
+		font-family: var(--font-body);
+		margin-top: 0.2rem;
+	}
+
+	.platform-body {
+		padding: 1rem;
+	}
+
+	.stats-grid {
+		margin-bottom: 1rem;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.75rem;
+	}
+
+	.stat-value {
+		font-size: 1.45rem;
+		font-weight: 700;
+		color: var(--text);
+		font-family: var(--font-body);
+	}
+
+	.stat-label {
+		font-size: 0.82rem;
+		color: var(--text-muted);
+		font-family: var(--font-body);
+	}
+
+	.tiers-wrap {
+		margin-bottom: 1rem;
+	}
+
+	.tiers-label {
+		margin-bottom: 0.5rem;
+		font-size: 0.84rem;
+		font-weight: 600;
+		color: var(--text-muted);
+		font-family: var(--font-head);
+	}
+
+	.tier-pill {
+		border-radius: var(--r-xs);
+		background: var(--bg-elev-2);
+		border: 1px solid var(--border);
+		padding: 4px 12px;
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--text-muted);
+		font-family: var(--font-body);
+	}
+
+	.tier-pill.dim {
+		color: var(--text-dim);
+	}
+
+	.browse-row {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		font-size: 0.9rem;
+		font-weight: 500;
+		color: var(--text-muted);
+		font-family: var(--font-body);
+	}
+
+	.platform-skeleton {
+		height: 270px;
+		border-radius: var(--r-md);
+		border: 1px solid var(--border);
+		background: linear-gradient(
+			90deg,
+			rgba(255, 255, 255, 0.05) 0%,
+			rgba(255, 255, 255, 0.11) 50%,
+			rgba(255, 255, 255, 0.05) 100%
+		);
+		background-size: 220% 100%;
+		animation: shimmer 1.2s infinite linear, card-enter 300ms ease-out both;
+	}
+
+	.empty-state {
+		min-height: 220px;
+		border-radius: var(--r-md);
+		border: 1px solid var(--border);
+		background: var(--bg-elev-1);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		padding: 20px;
+		color: #7b7b7b;
+	}
+
+	.empty-title {
+		margin-top: 8px;
+		font-size: 14px;
+		font-weight: 600;
+		color: #9ca3af;
+	}
+
+	.empty-subtitle {
+		margin-top: 4px;
+		font-size: 12px;
+		color: #6b7280;
+	}
+
+	.clear-search-btn {
+		margin-top: 12px;
+		border: 1px solid rgba(255, 255, 255, 0.18);
+		background: rgba(255, 255, 255, 0.06);
+		color: var(--text);
+		font-size: 12px;
+		border-radius: 999px;
+		padding: 6px 12px;
+		font-family: var(--font-body);
+		cursor: pointer;
+	}
+
+	@keyframes shimmer {
+		0% {
+			background-position: 220% 0;
+		}
+		100% {
+			background-position: -220% 0;
+		}
+	}
+
+	@keyframes card-enter {
+		from {
+			opacity: 0;
+			transform: translateY(12px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	@media (min-width: 640px) {
+		.platform-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 16px;
+		}
+
+		.filter-chip {
+			font-size: 13px;
+			padding: 7px 15px;
+		}
+
+		.search-input {
+			font-size: 14px;
+		}
+	}
+
+	@media (min-width: 1024px) {
+		.filter-row {
+			justify-content: center;
+		}
+
+		.platform-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.search-wrap {
+			max-width: 520px;
+			margin-left: auto;
+			margin-right: auto;
+		}
+
+		.platform-header {
+			padding: 1.25rem;
+		}
+
+		.platform-body {
+			padding: 1.25rem;
+		}
+
+		.platform-title {
+			font-size: 1.38rem;
+		}
+
+		.platform-subtitle {
+			font-size: 0.95rem;
+		}
+	}
+</style>

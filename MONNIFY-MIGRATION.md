@@ -1,6 +1,6 @@
 # Monnify Migration Status
 
-Last updated: 2026-04-08
+Last updated: 2026-04-15
 
 ## Outcome
 
@@ -36,6 +36,7 @@ Current implementation uses **server-side transaction initialization + hosted re
 3. Account allocation happens only after successful verification.
 4. Webhook endpoint is a backstop and should remain configured in Monnify dashboard.
 5. If callback references are missing, verify flow now returns `pending` (no automatic cancellation) and retries confirmation.
+6. Verification now attempts Monnify v2 query paths first and falls back to v1 query routes for compatibility.
 
 ## Legacy / Archived Artifacts
 
@@ -54,3 +55,7 @@ Current implementation uses **server-side transaction initialization + hosted re
 1. Monnify webhook URL points to `/api/webhooks/monnify`.
 2. Contract code matches environment (test vs live).
 3. API credentials are set in runtime environment.
+
+## Current Caution
+
+v2-first verification is currently running in fallback mode (not hard-switched). Keep v1 fallback active until live logs confirm stable parity across callback permutations.

@@ -1,173 +1,147 @@
 <script lang="ts">
-	import { Package, CheckCircle, RefreshCw } from '@lucide/svelte';
+	import { BriefcaseBusiness, Compass, LifeBuoy, Lock, Unlock } from '@lucide/svelte';
 	import OrderTab from './OrderTab.svelte';
 	import PurchaseTab from './PurchaseTab.svelte';
 	import AffiliateTab from './AffiliateTab.svelte';
-	// import WalletTab from './WalletTab.svelte';
-	// import ProfileTab from './ProfileTab.svelte';
+
+	type DashboardTab = 'orders' | 'purchases' | 'affiliate';
+
+	interface DashboardUser {
+		fullName?: string | null;
+		emailVerified?: boolean;
+	}
+
+	interface DashboardOrder {
+		id: string;
+		status?: string | null;
+		totalAmount?: number | string | null;
+	}
+
+	interface DashboardPurchase {
+		platform?: string | null;
+		quantity?: number | null;
+	}
 
 	let {
-		name,
-		orders,
-		joinDate,
+		user = null,
+		name = '',
+		orders = [],
 		affiliateData: initialAffiliateData = null,
-		// walletBalance: initialWalletBalance = 0,
-		// walletTransactions: initialWalletTransactions = [],
 		purchases: initialPurchases = []
-		// user
+	}: {
+		user?: DashboardUser | null;
+		name?: string | null;
+		orders?: DashboardOrder[];
+		affiliateData?: unknown;
+		purchases?: DashboardPurchase[];
 	} = $props();
 
-	let activeTab = $state('purchases');
+	const AFFILIATE_ENABLED = false;
+	let activeTab = $state<DashboardTab>('purchases');
 
-	// Calculate stats from orders
-	let totalOrders = $derived(orders.length);
+	let displayName = $derived((name || user?.fullName || 'Customer').trim());
+	let firstName = $derived(displayName.split(/\s+/)[0] || 'Customer');
+	let initials = $derived(
+		displayName
+			.split(/\s+/)
+			.filter(Boolean)
+			.slice(0, 2)
+			.map((part) => part[0]?.toUpperCase())
+			.join('') || 'FA'
+	);
+
 	let completedOrders = $derived(
-		orders.filter((o: any) => o.status === 'delivered' || o.status === 'completed').length
+		orders.filter((order) => ['delivered', 'completed', 'paid'].includes(String(order.status || ''))).length
 	);
-	let processingOrders = $derived(orders.filter((o: any) => o.status === 'processing').length);
 	let totalSpent = $derived(
-		orders.reduce((sum: number, order: any) => sum + (Number(order.totalAmount) || 0), 0)
+		orders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0)
 	);
+	let accountsOwned = $derived(
+		initialPurchases.reduce((sum, purchase) => sum + Number(purchase.quantity || 0), 0)
+	);
+	let activePlatforms = $derived(
+		new Set(
+			initialPurchases
+				.map((purchase) => String(purchase.platform || '').trim().toLowerCase())
+				.filter(Boolean)
+		).size
+	);
+	let openIssues = $state(0);
+	let isSecured = $derived(Boolean(user?.emailVerified));
 </script>
 
-<div class="mx-auto max-w-6xl px-4 py-8">
-	<!-- Header -->
+<div class="mx-auto max-w-6xl px-4 py-6 sm:py-8">
 	<div
-		class="mb-8 rounded-[var(--r-md)] border border-[var(--border-2)] p-6"
+		class="mb-5 rounded-[var(--r-md)] border border-[var(--border-2)] px-4 py-3 sm:px-5"
 		style="background: var(--surface-2);"
 	>
-		<div class="flex flex-col items-center justify-between gap-4 sm:flex-row">
-			<div class="flex items-center">
+		<div class="flex items-center justify-between gap-3">
+			<div class="flex min-w-0 items-center gap-3">
 				<div
-					class="mr-4 flex h-16 w-16 items-center justify-center rounded-full text-sm font-semibold"
+					class="flex h-10 w-10 items-center justify-center rounded-full text-xs font-semibold"
 					style="background: linear-gradient(180deg, rgba(5,212,113,0.18), rgba(105,109,250,0.12)); border: 1px solid var(--border-2); color: var(--text);"
 				>
-					{name
-						.split(' ')
-						.map((n: string) => n[0])
-						.join('')}
+					{initials}
 				</div>
-				<div class="space-y-2">
-					<h1
-						class="text-base font-semibold"
-						style="color: var(--text); font-family: var(--font-head);"
-					>
-						Welcome back, {name}!
+				<div class="min-w-0">
+					<h1 class="truncate text-[15px] font-semibold" style="color: var(--text); font-family: var(--font-head);">
+						Hey, {firstName}
 					</h1>
-					<p class="text-sm" style="color: var(--text-muted);">
-						Member since {new Date(joinDate).toDateString()}
+					<p class="text-xs" style="color: var(--text-muted);">
+						{completedOrders} order{completedOrders === 1 ? '' : 's'} completed
 					</p>
 				</div>
 			</div>
-			<!-- Wallet Balance commented out
-			<div class="mt-2 self-start text-left sm:mt-0">
-				<div class="text-xs" style="color: var(--text-dim);">Wallet Balance</div>
-				<div class="text-base font-semibold" style="color: var(--primary);">
-					₦{Number(initialWalletBalance).toLocaleString('en-US', {
-						minimumFractionDigits: 2,
-						maximumFractionDigits: 2
-					})}
-				</div>
-			</div>
-			-->
+
+			{#if isSecured}
+				<span
+					class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold"
+					style="background: rgba(5,212,113,0.1); border: 1px solid rgba(5,212,113,0.22); color: var(--primary);"
+				>
+					<Lock size={12} />
+					Secured
+				</span>
+			{:else}
+				<a
+					href="/auth/login?returnUrl=/dashboard"
+					class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold"
+					style="background: rgba(226,75,74,0.1); border: 1px solid rgba(226,75,74,0.24); color: var(--status-danger);"
+				>
+					<Unlock size={12} />
+					Unsecured
+				</a>
+			{/if}
 		</div>
 	</div>
 
-	<!-- Stats Cards -->
-	<div class="mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
-		<div
-			class="rounded-[var(--r-md)] border border-[var(--border)] p-6"
-			style="background: linear-gradient(180deg, var(--surface-2), var(--surface));"
-		>
-			<div class="flex items-center">
-				<Package class="mr-3 h-8 w-8" style="color: var(--link);" />
-				<div>
-					<div
-						class="text-sm font-semibold"
-						style="color: var(--text); font-family: var(--font-head);"
-					>
-						{totalOrders}
-					</div>
-					<div style="color: var(--text-muted);">Total Orders</div>
-				</div>
+	<div class="mb-5 grid grid-cols-2 gap-3">
+		<div class="rounded-[var(--r-sm)] border border-[var(--border)] p-4" style="background: var(--surface-2);">
+			<div class="text-2xl font-semibold leading-none" style="color: var(--text); font-family: var(--font-head);">
+				{accountsOwned}
 			</div>
+			<div class="mt-1 text-xs" style="color: var(--text-muted);">Accounts owned</div>
 		</div>
-		<div
-			class="rounded-[var(--r-md)] border border-[var(--border)] p-6"
-			style="background: linear-gradient(180deg, var(--surface-2), var(--surface));"
-		>
-			<div class="flex items-center">
-				<CheckCircle class="mr-3 h-8 w-8" style="color: var(--primary);" />
-				<div>
-					<div
-						class="text-sm font-semibold"
-						style="color: var(--text); font-family: var(--font-head);"
-					>
-						{completedOrders}
-					</div>
-					<div style="color: var(--text-muted);">Completed Orders</div>
-				</div>
+		<div class="rounded-[var(--r-sm)] border border-[var(--border)] p-4" style="background: var(--surface-2);">
+			<div class="text-2xl font-semibold leading-none" style="color: var(--text); font-family: var(--font-head);">
+				₦{totalSpent.toLocaleString()}
 			</div>
+			<div class="mt-1 text-xs" style="color: var(--text-muted);">Total spent</div>
 		</div>
-		<div
-			class="rounded-[var(--r-md)] border border-[var(--border)] p-6"
-			style="background: linear-gradient(180deg, var(--surface-2), var(--surface));"
-		>
-			<div class="flex items-center">
-				<RefreshCw class="mr-3 h-8 w-8" style="color: var(--primary-strong);" />
-				<div>
-					<div
-						class="text-sm font-semibold"
-						style="color: var(--text); font-family: var(--font-head);"
-					>
-						₦{totalSpent.toLocaleString()}
-					</div>
-					<div style="color: var(--text-muted);">Total Spent</div>
-				</div>
+		<div class="rounded-[var(--r-sm)] border border-[var(--border)] p-4" style="background: var(--surface-2);">
+			<div class="text-2xl font-semibold leading-none" style="color: var(--text); font-family: var(--font-head);">
+				{activePlatforms}
 			</div>
+			<div class="mt-1 text-xs" style="color: var(--text-muted);">Active platforms</div>
+		</div>
+		<div class="rounded-[var(--r-sm)] border border-[var(--border)] p-4" style="background: var(--surface-2);">
+			<div class="text-2xl font-semibold leading-none" style="color: var(--text); font-family: var(--font-head);">
+				{openIssues}
+			</div>
+			<div class="mt-1 text-xs" style="color: var(--text-muted);">Open issues</div>
 		</div>
 	</div>
 
-	<!-- Quick Actions -->
-	<div
-		class="mb-8 rounded-[var(--r-md)] border border-[var(--border-2)] p-6"
-		style="background: var(--surface-2);"
-	>
-		<h3
-			class="mb-4 text-sm font-semibold"
-			style="color: var(--text); font-family: var(--font-head);"
-		>
-			Quick Actions
-		</h3>
-		<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-			<a
-				href="/platforms"
-				class="flex items-center justify-center rounded-full px-6 py-3 font-semibold transition-all hover:-translate-y-0.5"
-				style="background: linear-gradient(180deg, rgba(105,109,250,0.18), rgba(170,173,255,0.10)); border: 1px solid rgba(170,173,255,0.25); color: var(--text);"
-			>
-				Browse Accounts
-			</a>
-			<!-- Add Funds button commented out
-			<button
-				onclick={() => (activeTab = 'wallet')}
-				class="flex items-center justify-center rounded-full px-6 py-3 font-semibold transition-all hover:-translate-y-0.5"
-				style="background: linear-gradient(180deg, rgba(5,212,113,0.95), rgba(13,145,82,0.95)); border: 1px solid rgba(5,212,113,0.40); color: #04140C; box-shadow: var(--glow-primary);"
-			>
-				Add Funds
-			</button>
-			-->
-			<a
-				href="/support"
-				class="flex items-center justify-center rounded-full px-6 py-3 font-semibold transition-all hover:-translate-y-0.5"
-				style="background: linear-gradient(180deg, rgba(105,109,250,0.18), rgba(170,173,255,0.10)); border: 1px solid rgba(170,173,255,0.25); color: var(--text);"
-			>
-				Contact Support
-			</a>
-		</div>
-	</div>
-
-	<!-- Navigation Tabs -->
-	<div class="mb-6 overflow-x-auto border-b border-[var(--border)]">
+	<div class="mb-4 overflow-x-auto border-b border-[var(--border)]">
 		<nav class="flex flex-nowrap gap-6 pb-2 whitespace-nowrap">
 			<button
 				onclick={() => (activeTab = 'orders')}
@@ -178,7 +152,7 @@
 					? 'var(--primary)'
 					: 'var(--text-dim)'}; font-family: var(--font-head);"
 			>
-				Order
+				Orders
 			</button>
 			<button
 				onclick={() => (activeTab = 'purchases')}
@@ -192,53 +166,62 @@
 				Purchases
 			</button>
 			<button
-				onclick={() => (activeTab = 'affiliate')}
-				disabled
-				class="cursor-not-allowed border-b-2 px-1 py-2 text-sm font-semibold opacity-50 transition-all"
-				title="Coming Soon"
-				style="border-color: transparent; color: var(--text-dim); font-family: var(--font-head);"
-			>
-				Affiliate
-			</button>
-			<!-- Wallet tab commented out
-			<button
-				onclick={() => (activeTab = 'wallet')}
-				class="border-b-2 px-1 py-2 text-sm font-semibold transition-all"
-				style="border-color: {activeTab === 'wallet'
+				onclick={() => AFFILIATE_ENABLED && (activeTab = 'affiliate')}
+				disabled={!AFFILIATE_ENABLED}
+				class="border-b-2 px-1 py-2 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-60"
+				style="border-color: {activeTab === 'affiliate' && AFFILIATE_ENABLED
 					? 'var(--primary)'
-					: 'transparent'}; color: {activeTab === 'wallet'
+					: 'transparent'}; color: {activeTab === 'affiliate' && AFFILIATE_ENABLED
 					? 'var(--primary)'
 					: 'var(--text-dim)'}; font-family: var(--font-head);"
+				title="Affiliate coming soon"
 			>
-				Wallet
+				Affiliate · Coming Soon
 			</button>
-			-->
-			<!-- Profile Settings tab commented out
-			<button
-				onclick={() => (activeTab = 'profile')}
-				class="border-b-2 px-1 py-2 text-sm font-semibold transition-all"
-				style="border-color: {activeTab === 'profile' ? 'var(--primary)' : 'transparent'}; color: {activeTab === 'profile' ? 'var(--primary)' : 'var(--text-dim)'}; font-family: var(--font-head);"
-			>
-				Profile Settings
-			</button>
-			-->
 		</nav>
 	</div>
 
-	<!-- Tab Content -->
 	{#if activeTab === 'orders'}
 		<OrderTab initialOrders={orders} />
 	{:else if activeTab === 'purchases'}
 		<PurchaseTab {initialPurchases} />
-	{:else if activeTab === 'affiliate'}
+	{:else}
 		<AffiliateTab {initialAffiliateData} />
-		<!-- Wallet tab commented out
-	{:else if activeTab === 'wallet'}
-		<WalletTab {initialWalletBalance} {initialWalletTransactions} />
-		-->
-		<!-- Profile Settings tab commented out
-	{:else if activeTab === 'profile'}
-		<ProfileTab {user} />
-	-->
 	{/if}
+
+	<div class="mt-5 grid grid-cols-3 gap-2 sm:gap-3">
+		<a
+			href="/platforms"
+			class="quick-action-card flex min-h-[88px] flex-col items-center justify-center rounded-[var(--r-sm)] border border-[var(--border)] p-3 transition-all hover:-translate-y-0.5"
+			style="background: var(--surface-2); color: var(--text);"
+		>
+			<Compass size={20} strokeWidth={2.25} style="color: var(--primary);" />
+			<span class="mt-1 text-xs font-semibold">Buy more</span>
+		</a>
+		<a
+			href="/support"
+			class="quick-action-card flex min-h-[88px] flex-col items-center justify-center rounded-[var(--r-sm)] border border-[var(--border)] p-3 transition-all hover:-translate-y-0.5"
+			style="background: var(--surface-2); color: var(--text);"
+		>
+			<LifeBuoy size={20} strokeWidth={2.25} style="color: var(--primary);" />
+			<span class="mt-1 text-xs font-semibold">Support</span>
+		</a>
+		<button
+			type="button"
+			onclick={() => AFFILIATE_ENABLED && (activeTab = 'affiliate')}
+			disabled={!AFFILIATE_ENABLED}
+			class="quick-action-card flex min-h-[88px] flex-col items-center justify-center rounded-[var(--r-sm)] border border-[var(--border)] p-3 transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0"
+			style="background: var(--surface-2); color: var(--text);"
+		>
+			<BriefcaseBusiness size={20} strokeWidth={2.25} style="color: var(--text-dim);" />
+			<span class="mt-1 text-xs font-semibold" style="color: var(--text-dim);">Affiliate</span>
+			<span class="text-[10px] font-medium" style="color: var(--text-dim);">Coming Soon</span>
+		</button>
+	</div>
 </div>
+
+<style>
+	.quick-action-card {
+		background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+	}
+</style>
