@@ -6,34 +6,44 @@
 
 ## Current Purpose
 
-Authenticated customer hub for orders and delivered purchases.
+Authenticated customer workspace for order history, purchase credential access, and support shortcuts.
 
-## Data Source
+## Runtime Data Source
 
-- `+page.server.ts` enforces auth and loads:
-- user profile basics
-- order history
-- purchase data
-- affiliate data snapshot
+`src/routes/dashboard/+page.server.ts` loads from a single endpoint:
 
-## UI State (Current)
+- `GET /api/dashboard`
 
-In `UserDashboard.svelte`, active tabs are:
+If unauthenticated, users are redirected to:
 
-1. `orders`
-2. `purchases`
-3. `affiliate` (currently disabled in UI)
+- `/auth/login?returnUrl=/dashboard`
 
-Wallet tab and profile settings tab are intentionally commented out in the current runtime.
+## Current Tab State
 
-## APIs Used by Dashboard
+`UserDashboard.svelte` currently renders:
 
-- `GET /api/orders`
-- `GET /api/purchases`
-- `GET /api/affiliate/stats`
-- `POST /api/affiliate/enable`
+1. `Orders`
+2. `Purchases`
+3. `Affiliate · Coming Soon` (present but disabled)
+
+## Current Dashboard Structure
+
+1. Compact welcome/security row (avatar, first-name greeting, secured/unsecured pill).
+2. 2x2 compact stats grid:
+   - accounts owned
+   - total spent
+   - active platforms
+   - open issues
+3. Tabbed content:
+   - `OrderTab`
+   - `PurchaseTab`
+   - `AffiliateTab` (disabled entry)
+4. Bottom quick-action tiles:
+   - buy more
+   - support
+   - affiliate (muted/coming soon)
 
 ## Notes
 
-- Wallet models/services still exist in backend, but wallet user flow is not currently active in dashboard checkout UX.
-- Primary support CTA from dashboard points to `/support`.
+1. Wallet models/services still exist but wallet UX is intentionally dormant in customer checkout runtime.
+2. Purchases currently remain a separate tab (not merged into Orders) by product direction.

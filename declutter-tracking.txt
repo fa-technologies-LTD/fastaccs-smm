@@ -135,3 +135,92 @@ QA CHECKLIST (YOU SAID YOU'LL RUN MANUAL TESTS)
 [QA-PENDING] Footer Privacy Settings button opens consent manager
 [QA-PENDING] Checkout legal assent line visibility and no added click step
 [QA-PENDING] Desktop/mobile UI pass
+
+BATCH 12: HOMEPAGE STRUCTURE REFACTOR (MOCK LAB FIRST, PROD SECOND)
+Date: April 14, 2026
+Working branch context: feature/work-2026-04-12
+
+Owner-approved execution order (active):
+1) Fix compile blocker first (`restock-notify` Prisma JSON typing).
+2) Build final approved preview in Mock Lab.
+3) After owner review/signoff, migrate approved structure to production homepage files only.
+4) Run regression checks + mobile pass + QA checklist.
+
+Scope lock (confirmed):
+1) Structural/layout refactor only, not visual redesign.
+2) No changes to nav/auth flow.
+3) No changes to platforms page in this batch.
+4) No footer top CTA strip in this rollout (owner override).
+5) Keep existing design language (colors/fonts/components).
+
+Mock Lab deliverables (before production migration):
+[APPLIED-MOCK] Hero live activity pill (dynamic stock-driven ticker style) + "12K+ Accounts delivered" stat
+[APPLIED-MOCK-REV2] Featured platform cards: clean card layout with dominant "From ₦X", stock-dot state, and in-stock hover arrow
+[APPLIED-MOCK-REV2] Growth Services: launching-soon callout with chat action only ("Or chat now on WhatsApp"); notify input/button removed per owner instruction
+[APPLIED-MOCK] Social proof structure: KPI mini-grid + 3 simultaneous testimonial cards
+[APPLIED-MOCK-REV2] Footer in mock reverted to current site footer component (no custom CTA/footer-card redesign)
+[APPLIED-MOCK-REV3] Live ticker card removed from top hero preview per owner direction
+[APPLIED-MOCK-REV3] "Browse All Accounts" button restored in Social Media Accounts block
+[APPLIED-MOCK-REV3] Growth chat callout responsiveness improved (non-stretch right panel + full-width wrapped CTA text)
+[PENDING] Mobile density pass: reduce dead vertical space while preserving touch target safety
+
+Data/logic checkpoints:
+[APPLIED] Homepage route now fetches featured testimonials (`/api/reviews/featured?limit=3`) and platform stats
+[APPLIED] Reusable notify API scaffold exists (`/api/restock-notify`) for platform + growth topics
+[APPLIED] Resolved TypeScript compile blocker in `src/routes/api/restock-notify/+server.ts` metadata write typing
+[APPLIED] `npm run check` now passes with 0 errors (existing non-blocking warnings remain in unrelated admin/test files)
+
+Owner input checkpoint (must collect before production release):
+[PENDING-OWNER] Final testimonial content/source selection for the 3 social-proof cards.
+Instruction: ask owner for final testimonial set immediately before production wiring/signoff pass.
+
+Execution guardrails (no-regression):
+1) Production homepage files are only updated after Mock Lab approval.
+2) Payment/order/auth flows are out-of-scope and must remain unchanged in this batch.
+3) Any scope drift requires owner confirmation before implementation.
+
+BATCH 13: DOCS SYNC + THOROUGH AUDIT SNAPSHOT
+Date: April 15, 2026
+
+Docs updated in this pass:
+[APPLIED] | Tracker refresh | TODO.md | stale 2026-04-08 state | updated to 2026-04-15 with completed/in-progress/security backlog
+[APPLIED] | API map refresh | src/routes/api/+api-routes.md | missing new endpoints + stale auth notes | rebuilt full route map including `/api/restock-notify`, `/api/reviews/featured`, and current risk notes
+[APPLIED] | Homepage docs | src/routes/+page.md | incorrectly documented as static-only | updated to reflect live `+page.ts` data flow and current section behavior
+[APPLIED] | Platforms docs | src/routes/platforms/+page.md | stale hero-heavy docs | updated to compact controls + immediate-card layout reality
+[APPLIED] | Support docs | src/routes/support/+page.md | still implied support form | updated to contact-card + FAQ + After Purchase Guide model
+[APPLIED] | Dashboard docs | src/routes/dashboard/+page.md | stale API/tab references | updated to single `/api/dashboard` load and current tab/quick-action structure
+[APPLIED] | Monnify migration note | MONNIFY-MIGRATION.md | pre-v2-fallback note | added v2-first with v1 fallback status + caution note
+[APPLIED] | Wallet status note | WALLET-TODO.md | older date/snapshot | updated date and clarified wallet snapshot still fetched in dashboard API
+[APPLIED] | README operational notes | README.md | no mention of notify capture / debug route caution | added restock-notify capture note + debug/test caution
+
+Thorough scan findings (priority order):
+[CRITICAL] | Open mail-sending route | src/routes/api/send-email/+server.ts | public POST can send email if SMTP env exists | abuse/spam risk, domain reputation damage; recommended admin/auth guard + rate limit + captcha + allowlist
+[CRITICAL] | Public test-email trigger | src/routes/api/test-email/+server.ts | public GET triggers mail path | should be removed or admin-only in non-dev
+[CRITICAL] | Public destructive debug route | src/routes/api/debug/account-connections/+server.ts | public POST can run migration-style deletes/changes | gate to admin only or disable outside local/dev
+[HIGH] | Public mutation surface (inventory/orders/categories/accounts) | multiple routes under src/routes/api | no explicit auth guard on POST/PUT/PATCH/DELETE handlers | unauthorized writes possible by direct API calls
+[HIGH] | Public order data exposure vector | src/routes/api/orders/+server.ts (GET) | includes orderItems/accounts/user with query filters | customer/order data leakage risk if endpoint is internet-facing
+[MEDIUM] | N+1 fetch pattern on platforms pages | src/routes/platforms/+page.ts, src/routes/+page.ts | one request per platform to fetch tiers | scales poorly as platform count grows; recommend summary endpoint
+[MEDIUM] | Order number generation collision risk | src/routes/api/orders/+server.ts | `ORD-${Date.now()}` can collide under high concurrency | prefer sequence/ULID suffix for uniqueness + support readability
+[LOW] | Accessibility warnings remain | `npm run check` output (40 warnings) | mostly label associations and modal overlay semantics | non-blocking but should be cleaned for compliance
+
+Notify-me feature reality check (current):
+[APPLIED-BACKEND] | Subscription capture endpoint | src/routes/api/restock-notify/+server.ts | accepts email/platform/topic and stores subscribers
+[MISSING] | Automatic dispatch pipeline | no active sender job/trigger on restock | users are captured but not automatically emailed on restock yet
+[MISSING] | Unsubscribe and delivery logs | no tokenized unsubscribe + send history | needed before full production rollout
+[MISSING] | Frontend wiring coverage | no complete storefront-wide consume flow | requires final button wiring + UX success/error handling across all out-of-stock surfaces
+
+Recommendation snapshot (owner decision required):
+1) Easiest to automate now: Email notify (existing SMTP stack already in runtime).
+2) WhatsApp automation is possible but needs provider API, template approval/compliance, session rules, and higher ops complexity.
+3) Best rollout path: ship email notify first, add WhatsApp as optional channel later.
+
+Validation commands run in this pass:
+[CHECK] `npm run check` -> PASS (0 errors, 40 existing accessibility/deprecation warnings)
+[CHECK] `npm run lint` -> FAIL on formatting drift (Prettier reports 59 files not formatted)
+[CHECK] `npm run test:unit -- --run` -> FAIL (no tests + Playwright browser binary missing; requires `npx playwright install`)
+
+BATCH 14: POST-MOCK CLEANUP + FEATURED CARD DENSITY TWEAK
+Date: April 15, 2026
+
+[APPLIED] | Homepage featured platform card density | src/lib/components/FeaturedCategories.svelte | cards had excess bottom space from forced minimum height | removed fixed `min-height` from `.platform-entry` to let card height fit content naturally
+[APPLIED] | Mock lab removal | src/routes/mock-lab/** | temporary preview routes remained in codebase | removed mock-lab routes fully after owner sign-off to keep runtime clean

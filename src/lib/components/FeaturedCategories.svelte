@@ -1,7 +1,9 @@
 <script lang="ts">
-	import { addToast } from '$lib/stores/toasts';
 	import { goto } from '$app/navigation';
+	import { ArrowRight, MessageCircle } from '@lucide/svelte';
+	import { onDestroy } from 'svelte';
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
+	import { formatPrice } from '$lib/helpers/utils';
 
 	interface PlatformData {
 		id: string;
@@ -9,6 +11,9 @@
 		slug: string;
 		description?: string | null;
 		metadata?: Record<string, unknown>;
+		tierCount: number;
+		totalAccounts: number;
+		minPrice: number | null;
 	}
 
 	interface PlatformMetadata {
@@ -18,6 +23,8 @@
 
 	let { platforms = [] }: { platforms?: PlatformData[] } = $props();
 	let failedPlatformIcons = $state<Record<string, boolean>>({});
+	let launchCardShake = $state(false);
+	let launchCardShakeTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function getPlatformSubLabel(platform: PlatformData): string {
 		const text = platform.description?.trim();
@@ -49,12 +56,42 @@
 		return 'var(--link)';
 	}
 
+	function getPriceLabel(platform: PlatformData): string {
+		if (!platform.minPrice || platform.minPrice <= 0) {
+			return 'Pricing updates soon';
+		}
+
+		return `From ${formatPrice(platform.minPrice)}`;
+	}
+
 	let featuredPlatforms = $derived.by(() =>
 		[...platforms]
 			.filter((platform) => platform?.slug && platform?.name)
 			.sort((a, b) => a.name.localeCompare(b.name))
 			.slice(0, 4)
 	);
+
+	function triggerLaunchCardAttention() {
+		launchCardShake = false;
+		if (launchCardShakeTimer) {
+			clearTimeout(launchCardShakeTimer);
+			launchCardShakeTimer = null;
+		}
+
+		requestAnimationFrame(() => {
+			launchCardShake = true;
+			launchCardShakeTimer = setTimeout(() => {
+				launchCardShake = false;
+				launchCardShakeTimer = null;
+			}, 520);
+		});
+	}
+
+	onDestroy(() => {
+		if (launchCardShakeTimer) {
+			clearTimeout(launchCardShakeTimer);
+		}
+	});
 </script>
 
 <section style="background: var(--bg); padding: var(--space-4xl) var(--space-md);">
@@ -90,44 +127,56 @@
 							>
 								No active platforms available yet.
 							</div>
-						{:else}
-							{#each featuredPlatforms as platform (platform.id)}
-								{@const PlatformIcon = getPlatformIcon(platform.slug)}
-								{@const platformMeta = getPlatformMetadata(platform)}
-								<button
-									onclick={() => goto(`/platforms/${platform.slug}`)}
-									class="platform-btn flex w-full cursor-pointer items-center"
-								>
-									{#if shouldRenderCustomIcon(platform, platformMeta)}
-										<img
-											src={platformMeta.icon as string}
-											alt={platform.name}
-											class="mr-3 h-6 w-6 rounded sm:h-8 sm:w-8"
-											onerror={() => markPlatformIconFailed(platform.id)}
-										/>
-									{:else}
-										<PlatformIcon
-											class="mr-3 h-6 w-6 sm:h-8 sm:w-8"
-											style={`color: ${getPlatformIconColor(platform)};`}
-										/>
-									{/if}
+							{:else}
+								{#each featuredPlatforms as platform (platform.id)}
+									{@const PlatformIcon = getPlatformIcon(platform.slug)}
+									{@const platformMeta = getPlatformMetadata(platform)}
+									<button
+										onclick={() => goto(`/platforms/${platform.slug}`)}
+										class={`platform-btn platform-entry flex w-full cursor-pointer items-start ${
+											platform.totalAccounts > 0 ? 'clickable' : ''
+										}`}
+									>
+										{#if shouldRenderCustomIcon(platform, platformMeta)}
+											<img
+												src={platformMeta.icon as string}
+												alt={platform.name}
+												class="mr-3 mt-0.5 h-6 w-6 rounded sm:h-8 sm:w-8"
+												onerror={() => markPlatformIconFailed(platform.id)}
+											/>
+										{:else}
+											<PlatformIcon
+												class="mr-3 mt-0.5 h-6 w-6 sm:h-8 sm:w-8"
+												style={`color: ${getPlatformIconColor(platform)};`}
+											/>
+										{/if}
 
-									<div class="text-left">
-										<div
-											style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
-										>
-											{platform.name}
+										<div class="min-w-0 flex-1 text-left">
+											<div
+												style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
+											>
+												{platform.name}
 										</div>
 										<div
-											style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
-										>
-											{getPlatformSubLabel(platform)}
+												style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
+											>
+												{getPlatformSubLabel(platform)}
+											</div>
+											<div
+												style="font-size: 1.1rem; font-weight: 700; color: var(--primary); font-family: var(--font-head); margin-top: 8px;"
+											>
+												{getPriceLabel(platform)}
+											</div>
 										</div>
-									</div>
-								</button>
-							{/each}
-						{/if}
-					</div>
+										{#if platform.totalAccounts > 0}
+											<span class="hover-arrow">
+												<ArrowRight size={16} />
+											</span>
+										{/if}
+									</button>
+								{/each}
+							{/if}
+						</div>
 
 					<div class="mt-auto">
 						<button
@@ -155,109 +204,48 @@
 					</p>
 				</div>
 
-				<div class="flex flex-1 flex-col" style="padding: var(--space-lg);">
-					<div
-						style="margin-bottom: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-md);"
-					>
-						<div
-							class="platform-btn flex cursor-pointer items-center justify-between"
-							role="button"
-							tabindex="0"
-							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
-							onkeydown={(e) =>
-								e.key === 'Enter' && addToast({ title: 'Coming soon', type: 'info' })}
-						>
-							<div>
-								<div
-									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
-								>
+					<div class="flex flex-1 flex-col" style="padding: var(--space-lg);">
+						<div class="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 sm:gap-4">
+							<div class="growth-preview-list">
+								<button class="platform-btn growth-service-btn" type="button" onclick={triggerLaunchCardAttention}>
 									Instagram Followers
-								</div>
-								<div
-									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
-								>
-									Followers packages for different growth goals
-								</div>
-							</div>
-						</div>
-
-						<div
-							class="platform-btn flex cursor-pointer items-center justify-between"
-							role="button"
-							tabindex="0"
-							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
-							onkeydown={(e) =>
-								e.key === 'Enter' && addToast({ title: 'Coming soon', type: 'info' })}
-						>
-							<div>
-								<div
-									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
-								>
+								</button>
+								<button class="platform-btn growth-service-btn" type="button" onclick={triggerLaunchCardAttention}>
 									TikTok Views
-								</div>
-								<div
-									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
-								>
-									Boost your video reach
-								</div>
-							</div>
-						</div>
-
-						<div
-							class="platform-btn flex cursor-pointer items-center justify-between"
-							role="button"
-							tabindex="0"
-							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
-							onkeydown={(e) =>
-								e.key === 'Enter' && addToast({ title: 'Coming soon', type: 'info' })}
-						>
-							<div>
-								<div
-									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
-								>
+								</button>
+								<button class="platform-btn growth-service-btn" type="button" onclick={triggerLaunchCardAttention}>
 									YouTube Subscribers
-								</div>
-								<div
-									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
-								>
-									Grow your channel fast
-								</div>
-							</div>
-						</div>
-
-						<div
-							class="platform-btn flex cursor-pointer items-center justify-between"
-							role="button"
-							tabindex="0"
-							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
-							onkeydown={(e) =>
-								e.key === 'Enter' && addToast({ title: 'Coming soon', type: 'info' })}
-						>
-							<div>
-								<div
-									style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
-								>
+								</button>
+								<button class="platform-btn growth-service-btn" type="button" onclick={triggerLaunchCardAttention}>
 									Facebook Likes
-								</div>
-								<div
-									style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
+								</button>
+							</div>
+							<div class={`growth-callout ${launchCardShake ? 'shake-attention' : ''}`}>
+								<p
+									class="text-sm font-semibold uppercase"
+									style="letter-spacing: 0.06em; color: var(--primary); font-family: var(--font-head);"
 								>
-									Increase post engagement
-								</div>
+									Launching soon
+								</p>
+								<p
+									class="mt-2"
+									style="font-size: 0.95rem; font-weight: 500; color: var(--text); line-height: 1.45; font-family: var(--font-body);"
+								>
+									This section is under construction. Need a custom growth service package right now?
+								</p>
+								<a
+									href="https://wa.link/fast_accounts"
+									target="_blank"
+									rel="noopener noreferrer"
+									class="chat-btn mt-4"
+								>
+									<MessageCircle size={16} />
+									<span>Chat now on WhatsApp</span>
+								</a>
 							</div>
 						</div>
-					</div>
-
-					<div class="mt-auto">
-						<button
-							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
-							class="btn-secondary-cta block w-full cursor-pointer text-center"
-						>
-							View All Services
-						</button>
 					</div>
 				</div>
-			</div>
 		</div>
 	</div>
 </section>
@@ -276,13 +264,13 @@
 		border-color: var(--primary);
 	}
 
-	.platform-btn {
-		background: var(--bg-elev-2);
-		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
-		transition: all 0.2s ease;
-		padding: var(--space-md);
-	}
+		.platform-btn {
+			background: var(--bg-elev-2);
+			border: 1px solid var(--border);
+			border-radius: var(--r-sm);
+			transition: all 0.2s ease;
+			padding: var(--space-md);
+		}
 
 	.platform-btn:hover {
 		background: var(--surface);
@@ -290,9 +278,30 @@
 		transform: scale(1.02);
 	}
 
-	.platform-btn:active {
-		transform: scale(0.98);
-	}
+		.platform-btn:active {
+			transform: scale(0.98);
+		}
+
+		.platform-entry {
+			position: relative;
+		}
+
+		.platform-entry.clickable:hover {
+			border-color: var(--primary);
+		}
+
+		.hover-arrow {
+			position: absolute;
+			right: 12px;
+			bottom: 12px;
+			opacity: 0;
+			color: var(--text-dim);
+			transition: opacity 180ms ease;
+		}
+
+		.platform-entry.clickable:hover .hover-arrow {
+			opacity: 1;
+		}
 
 	.btn-primary-cta {
 		background: var(--btn-primary-gradient);
@@ -315,24 +324,96 @@
 		transform: scale(0.98);
 	}
 
-	.btn-secondary-cta {
-		background: transparent;
-		border: 2px solid var(--fa-blue-500);
-		border-radius: var(--r-sm);
-		padding: var(--space-md) var(--space-lg);
-		font-family: var(--font-body);
-		font-weight: 600;
-		color: var(--fa-blue-300);
-		transition: all 0.2s ease;
-	}
+		.growth-preview-list {
+			display: flex;
+			flex-direction: column;
+			gap: var(--space-md);
+		}
 
-	.btn-secondary-cta:hover {
-		background: var(--btn-secondary-gradient);
-		border-color: var(--fa-blue-300);
-		box-shadow: var(--shadow-1);
-	}
+		.growth-service-btn {
+			width: 100%;
+			text-align: left;
+			color: var(--text);
+			font-family: var(--font-body);
+			font-size: 1.05rem;
+			font-weight: 600;
+			cursor: pointer;
+		}
 
-	.btn-secondary-cta:active {
-		transform: scale(0.98);
-	}
-</style>
+		.growth-callout {
+			display: flex;
+			flex-direction: column;
+			align-self: start;
+			min-width: 0;
+			width: 100%;
+			border-radius: var(--r-sm);
+			border: 1px solid rgba(5, 212, 113, 0.35);
+			background: rgba(7, 9, 12, 0.55);
+			padding: var(--space-md);
+		}
+
+		.shake-attention {
+			animation: launch-shake 520ms ease-in-out;
+		}
+
+		.chat-btn {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			gap: 0.5rem;
+			width: 100%;
+			border-radius: var(--r-sm);
+			padding: 0.65rem 1rem;
+			border: 1px solid rgba(5, 212, 113, 0.35);
+			background: rgba(5, 212, 113, 0.12);
+			color: var(--primary);
+			font-family: var(--font-body);
+			font-size: 0.88rem;
+			font-weight: 600;
+			text-decoration: none;
+			text-align: center;
+			line-height: 1.25;
+			transition: transform 0.2s ease, opacity 0.2s ease, border-color 0.2s ease;
+			flex-wrap: wrap;
+			max-width: 100%;
+			min-width: 0;
+			word-break: break-word;
+		}
+
+		.chat-btn:hover {
+			border-color: rgba(5, 212, 113, 0.5);
+			transform: translateY(-1px);
+		}
+
+		.chat-btn:active {
+			transform: scale(0.98);
+		}
+
+		@keyframes launch-shake {
+			0% {
+				transform: translateX(0);
+			}
+			20% {
+				transform: translateX(-5px);
+			}
+			40% {
+				transform: translateX(4px);
+			}
+			60% {
+				transform: translateX(-3px);
+			}
+			80% {
+				transform: translateX(2px);
+			}
+			100% {
+				transform: translateX(0);
+			}
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			.shake-attention {
+				animation: none;
+			}
+		}
+
+	</style>
