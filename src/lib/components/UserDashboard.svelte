@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { BriefcaseBusiness, Compass, LifeBuoy, Lock, Unlock } from '@lucide/svelte';
 	import OrderTab from './OrderTab.svelte';
 	import PurchaseTab from './PurchaseTab.svelte';
@@ -38,6 +39,32 @@
 
 	const AFFILIATE_ENABLED = false;
 	let activeTab = $state<DashboardTab>('purchases');
+	let selectedOrderId = $state<string | null>(null);
+
+	function applyRouteContext(url: URL): void {
+		const tabParam = String(url.searchParams.get('tab') || '').toLowerCase();
+		if (tabParam === 'orders' || tabParam === 'purchases' || tabParam === 'affiliate') {
+			if (tabParam !== 'affiliate' || AFFILIATE_ENABLED) {
+				activeTab = tabParam as DashboardTab;
+			}
+		}
+
+		const orderIdParam = String(url.searchParams.get('orderId') || '').trim();
+		selectedOrderId = orderIdParam || null;
+	}
+
+	onMount(() => {
+		applyRouteContext(new URL(window.location.href));
+
+		const handlePopState = () => {
+			applyRouteContext(new URL(window.location.href));
+		};
+
+		window.addEventListener('popstate', handlePopState);
+		return () => {
+			window.removeEventListener('popstate', handlePopState);
+		};
+	});
 
 	let displayName = $derived((name || user?.fullName || 'Customer').trim());
 	let firstName = $derived(displayName.split(/\s+/)[0] || 'Customer');
@@ -51,18 +78,22 @@
 	);
 
 	let completedOrders = $derived(
-		orders.filter((order) => ['delivered', 'completed', 'paid'].includes(String(order.status || ''))).length
+		orders.filter((order) =>
+			['delivered', 'completed', 'paid'].includes(String(order.status || ''))
+		).length
 	);
-	let totalSpent = $derived(
-		orders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0)
-	);
+	let totalSpent = $derived(orders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0));
 	let accountsOwned = $derived(
 		initialPurchases.reduce((sum, purchase) => sum + Number(purchase.quantity || 0), 0)
 	);
 	let activePlatforms = $derived(
 		new Set(
 			initialPurchases
-				.map((purchase) => String(purchase.platform || '').trim().toLowerCase())
+				.map((purchase) =>
+					String(purchase.platform || '')
+						.trim()
+						.toLowerCase()
+				)
 				.filter(Boolean)
 		).size
 	);
@@ -84,7 +115,10 @@
 					{initials}
 				</div>
 				<div class="min-w-0">
-					<h1 class="truncate text-[15px] font-semibold" style="color: var(--text); font-family: var(--font-head);">
+					<h1
+						class="truncate text-[15px] font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
+					>
 						Hey, {firstName}
 					</h1>
 					<p class="text-xs" style="color: var(--text-muted);">
@@ -115,26 +149,50 @@
 	</div>
 
 	<div class="mb-5 grid grid-cols-2 gap-3">
-		<div class="rounded-[var(--r-sm)] border border-[var(--border)] p-4" style="background: var(--surface-2);">
-			<div class="text-2xl font-semibold leading-none" style="color: var(--text); font-family: var(--font-head);">
+		<div
+			class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
+			style="background: var(--surface-2);"
+		>
+			<div
+				class="text-2xl leading-none font-semibold"
+				style="color: var(--text); font-family: var(--font-head);"
+			>
 				{accountsOwned}
 			</div>
 			<div class="mt-1 text-xs" style="color: var(--text-muted);">Accounts owned</div>
 		</div>
-		<div class="rounded-[var(--r-sm)] border border-[var(--border)] p-4" style="background: var(--surface-2);">
-			<div class="text-2xl font-semibold leading-none" style="color: var(--text); font-family: var(--font-head);">
+		<div
+			class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
+			style="background: var(--surface-2);"
+		>
+			<div
+				class="text-2xl leading-none font-semibold"
+				style="color: var(--text); font-family: var(--font-head);"
+			>
 				₦{totalSpent.toLocaleString()}
 			</div>
 			<div class="mt-1 text-xs" style="color: var(--text-muted);">Total spent</div>
 		</div>
-		<div class="rounded-[var(--r-sm)] border border-[var(--border)] p-4" style="background: var(--surface-2);">
-			<div class="text-2xl font-semibold leading-none" style="color: var(--text); font-family: var(--font-head);">
+		<div
+			class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
+			style="background: var(--surface-2);"
+		>
+			<div
+				class="text-2xl leading-none font-semibold"
+				style="color: var(--text); font-family: var(--font-head);"
+			>
 				{activePlatforms}
 			</div>
 			<div class="mt-1 text-xs" style="color: var(--text-muted);">Active platforms</div>
 		</div>
-		<div class="rounded-[var(--r-sm)] border border-[var(--border)] p-4" style="background: var(--surface-2);">
-			<div class="text-2xl font-semibold leading-none" style="color: var(--text); font-family: var(--font-head);">
+		<div
+			class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
+			style="background: var(--surface-2);"
+		>
+			<div
+				class="text-2xl leading-none font-semibold"
+				style="color: var(--text); font-family: var(--font-head);"
+			>
 				{openIssues}
 			</div>
 			<div class="mt-1 text-xs" style="color: var(--text-muted);">Open issues</div>
@@ -182,7 +240,7 @@
 	</div>
 
 	{#if activeTab === 'orders'}
-		<OrderTab initialOrders={orders} />
+		<OrderTab initialOrders={orders} focusOrderId={selectedOrderId} />
 	{:else if activeTab === 'purchases'}
 		<PurchaseTab {initialPurchases} />
 	{:else}

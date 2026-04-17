@@ -28,8 +28,20 @@
 		estimatedDelivery?: string | null;
 	}
 
-	let { initialOrders = [] }: { initialOrders?: OrderRecord[] } = $props();
+	let {
+		initialOrders = [],
+		focusOrderId = null
+	}: { initialOrders?: OrderRecord[]; focusOrderId?: string | null } = $props();
 	let orders = $state<OrderRecord[]>(initialOrders);
+
+	$effect(() => {
+		if (!focusOrderId) return;
+		if (typeof document === 'undefined') return;
+		const target = document.getElementById(`order-${focusOrderId}`);
+		if (!target) return;
+
+		target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+	});
 
 	function formatOrderDate(order: OrderRecord): string {
 		const source = order.createdAt || order.date;
@@ -53,7 +65,9 @@
 	}
 
 	function getOrderStatus(order: OrderRecord): string {
-		return String(order.status || order.deliveryStatus || order.paymentStatus || 'processing').toLowerCase();
+		return String(
+			order.status || order.deliveryStatus || order.paymentStatus || 'processing'
+		).toLowerCase();
 	}
 
 	function getOrderItems(order: OrderRecord): OrderItem[] {
@@ -103,7 +117,13 @@
 	{:else}
 		<div class="divide-y divide-[var(--border)]">
 			{#each orders as order}
-				<div class="p-4 sm:p-6">
+				<div
+					id={`order-${order.id}`}
+					class="p-4 sm:p-6 {focusOrderId === order.id ? 'rounded-[var(--r-sm)]' : ''}"
+					style={focusOrderId === order.id
+						? 'border: 1px solid rgba(5,212,113,0.35); background: rgba(5,212,113,0.06);'
+						: undefined}
+				>
 					<div class="mb-3 flex items-center justify-between gap-4">
 						<div class="flex min-w-0 flex-1 items-center">
 							{#if ['delivered', 'completed', 'paid'].includes(getOrderStatus(order))}
@@ -114,7 +134,10 @@
 								<Clock class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--status-warning);" />
 							{/if}
 							<div class="min-w-0 flex-1">
-								<div class="truncate font-semibold" style="color: var(--text); font-family: var(--font-head);">
+								<div
+									class="truncate font-semibold"
+									style="color: var(--text); font-family: var(--font-head);"
+								>
 									Order {getDisplayOrderNumber(order)}
 								</div>
 								<div class="text-xs sm:text-sm" style="color: var(--text-dim);">
@@ -134,7 +157,10 @@
 
 					<div class="mb-4 space-y-2">
 						{#each getOrderItems(order) as item}
-							<div class="flex items-start justify-between gap-3 text-sm" style="color: var(--text-muted);">
+							<div
+								class="flex items-start justify-between gap-3 text-sm"
+								style="color: var(--text-muted);"
+							>
 								<span class="font-medium">{item.productName || item.type || 'Order item'}</span>
 								<span class="text-right text-xs sm:text-sm" style="color: var(--text-dim);">
 									Qty {item.quantity || 1}

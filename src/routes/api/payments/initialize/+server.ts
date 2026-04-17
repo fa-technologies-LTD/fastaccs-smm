@@ -31,7 +31,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 		const shortOrderId = orderId.substring(0, 8);
 		const paymentReference = `ORD_${shortOrderId}_${Date.now()}`;
-		const redirectUrl = `${url.origin}/checkout/verify`;
+		const redirectUrl = `${url.origin}/checkout/verify?orderId=${encodeURIComponent(orderId)}`;
 
 		console.info('[payments.initialize] starting', {
 			orderId,
@@ -59,7 +59,11 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 		await prisma.order.update({
 			where: { id: orderId },
-			data: { paymentReference, status: 'pending_payment' }
+			data: {
+				paymentReference,
+				status: 'pending_payment',
+				paymentStatus: 'pending'
+			}
 		});
 
 		console.info('[payments.initialize] pending_payment', {
@@ -67,7 +71,12 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			paymentReference
 		});
 
-		return json({ success: true, checkoutUrl: result.checkoutUrl });
+		return json({
+			success: true,
+			checkoutUrl: result.checkoutUrl,
+			orderId,
+			paymentReference
+		});
 	} catch (error) {
 		console.error('Payment initialization error:', error);
 		return json(
