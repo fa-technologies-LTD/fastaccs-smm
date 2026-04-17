@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import {
@@ -29,6 +30,7 @@
 	let affiliateCode = $state<string | null>(null);
 	let affiliateDiscount = $state<number>(0);
 	let loadingCartData = $state(true);
+	const PENDING_ORDER_STORAGE_KEY = 'fastaccs_pending_order_id';
 
 	// Use user data directly from page data
 	const user = $derived(data.user);
@@ -45,6 +47,20 @@
 		if (refCode && !affiliateCode) {
 			validateAffiliateCode(refCode);
 		}
+	});
+
+	onMount(() => {
+		loading = false;
+
+		const resetLoadingState = () => {
+			loading = false;
+		};
+
+		window.addEventListener('pageshow', resetLoadingState);
+
+		return () => {
+			window.removeEventListener('pageshow', resetLoadingState);
+		};
 	});
 
 	async function loadCartData() {
@@ -143,6 +159,7 @@
 				throw new Error(initResult.error || 'Failed to initialize payment');
 			}
 
+			sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, orderResult.orderId);
 			window.location.href = initResult.checkoutUrl;
 		} catch (error) {
 			console.error('Payment initialization error:', error);
@@ -535,9 +552,12 @@
 						>
 							By continuing with payment, you agree to our
 							<a href="/terms" class="hover:underline" style="color: var(--link);">Terms</a>,
-							<a href="/refund-policy" class="hover:underline" style="color: var(--link);">Refund Policy</a>,
-							<a href="/privacy" class="hover:underline" style="color: var(--link);">Privacy Notice</a>,
-							and
+							<a href="/refund-policy" class="hover:underline" style="color: var(--link);"
+								>Refund Policy</a
+							>,
+							<a href="/privacy" class="hover:underline" style="color: var(--link);"
+								>Privacy Notice</a
+							>, and
 							<a href="/acceptable-use" class="hover:underline" style="color: var(--link);"
 								>Acceptable Use Rules</a
 							>.

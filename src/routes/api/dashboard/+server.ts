@@ -15,8 +15,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			// Orders - only fetch necessary fields
 			prisma.order.findMany({
 				where: {
-					userId: user.id,
-					status: { notIn: ['pending_payment', 'cancelled'] }
+					userId: user.id
 				},
 				select: {
 					id: true,

@@ -8,11 +8,14 @@
 
 	const MAX_CONFIRMATION_WAIT_MS = 90_000;
 	const RETRY_INTERVAL_MS = 5_000;
+	const PENDING_ORDER_STORAGE_KEY = 'fastaccs_pending_order_id';
+	const TERMINAL_FAILURE_STATUSES = ['FAILED', 'CANCELLED', 'CANCELED', 'EXPIRED', 'ABANDONED'];
 
 	let verifying = $state(true);
 	let pending = $state(false);
 	let timedOut = $state(false);
 	let success = $state(false);
+	let cancelled = $state(false);
 	let errorMessage = $state('');
 	let pendingMessage = $state('');
 	let orderId = $state<string | null>(null);
@@ -36,8 +39,64 @@
 	function isPendingStatus(status: string): boolean {
 		return (
 			status === '' ||
-			['PENDING', 'PROCESSING', 'PENDING_PAYMENT', 'ERROR', 'NOT_FOUND'].includes(status)
+			['PENDING', 'PROCESSING', 'PENDING_PAYMENT', 'ERROR', 'NOT_FOUND', 'UNKNOWN'].includes(status)
 		);
+	}
+
+	function isTerminalFailureStatus(status: string): boolean {
+		return TERMINAL_FAILURE_STATUSES.includes(status);
+	}
+
+	function extractCallbackStatusHint(searchParams: URLSearchParams): string | null {
+		const statusKeys = ['paymentStatus', 'status', 'transactionStatus', 'txStatus'];
+
+		for (const key of statusKeys) {
+			const value = searchParams.get(key);
+			if (value?.trim()) {
+				return value.trim();
+			}
+		}
+
+		return null;
+	}
+
+	function extractCallbackMessageHint(searchParams: URLSearchParams): string | null {
+		const messageKeys = ['responseMessage', 'message', 'statusMessage'];
+
+		for (const key of messageKeys) {
+			const value = searchParams.get(key);
+			if (value?.trim()) {
+				return value.trim();
+			}
+		}
+
+		return null;
+	}
+
+	function clearPendingOrderStorage(): void {
+		sessionStorage.removeItem(PENDING_ORDER_STORAGE_KEY);
+	}
+
+	function getOrdersDashboardPath(targetOrderId: string | null): string {
+		return targetOrderId
+			? `/dashboard?tab=orders&orderId=${encodeURIComponent(targetOrderId)}`
+			: '/dashboard?tab=orders';
+	}
+
+	function getPurchasesDashboardPath(targetOrderId: string | null): string {
+		return targetOrderId
+			? `/dashboard?tab=purchases&orderId=${encodeURIComponent(targetOrderId)}`
+			: '/dashboard?tab=purchases';
+	}
+
+	function goToOrdersDashboard(): void {
+		clearPendingOrderStorage();
+		goto(getOrdersDashboardPath(orderId));
+	}
+
+	function retryCheckout(): void {
+		clearPendingOrderStorage();
+		goto('/checkout');
 	}
 
 	function clearRetryTimer(): void {
@@ -59,13 +118,24 @@
 	onMount(() => {
 		const paymentReference = $page.url.searchParams.get('paymentReference');
 		const transactionReference = $page.url.searchParams.get('transactionReference');
-		const orderIdParam = sanitizeOrderId($page.url.searchParams.get('orderId'));
+		const callbackStatus = extractCallbackStatusHint($page.url.searchParams);
+		const callbackMessage = extractCallbackMessageHint($page.url.searchParams);
+		const orderIdFromQuery = sanitizeOrderId($page.url.searchParams.get('orderId'));
+		const orderIdFromSession = sanitizeOrderId(sessionStorage.getItem(PENDING_ORDER_STORAGE_KEY));
+		const orderIdParam = orderIdFromQuery || orderIdFromSession;
 		const callbackQueryKeys = Array.from($page.url.searchParams.keys());
+
+		if (orderIdParam) {
+			sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, orderIdParam);
+		}
+
+		orderId = orderIdParam;
 
 		console.info('[checkout.verify] callback_received', {
 			hasPaymentReference: Boolean(paymentReference),
 			hasTransactionReference: Boolean(transactionReference),
 			hasOrderId: Boolean(orderIdParam),
+			callbackStatus,
 			callbackQueryKeys
 		});
 
@@ -83,6 +153,8 @@
 							paymentReference,
 							transactionReference,
 							orderId: orderIdParam,
+							callbackStatus,
+							callbackMessage,
 							callbackContext: {
 								queryKeys: callbackQueryKeys,
 								queryLength: $page.url.search.length
@@ -98,23 +170,55 @@
 						success = true;
 						pending = false;
 						verifying = false;
+						cancelled = false;
+						timedOut = false;
 						orderId = result.orderId || orderIdParam;
+						clearPendingOrderStorage();
 						cart.clear();
 						showSuccess('Payment successful!', 'Your order has been completed.');
-						goto('/dashboard');
+						goto(getPurchasesDashboardPath(orderId));
 						return;
 					}
 
 					const normalizedStatus = normalizeStatus(result.status);
+					const terminalFailure =
+						result.cancelled === true ||
+						result.failed === true ||
+						isTerminalFailureStatus(normalizedStatus);
+
+					if (terminalFailure) {
+						verifying = false;
+						pending = false;
+						timedOut = false;
+						cancelled =
+							result.cancelled === true ||
+							['CANCELLED', 'CANCELED', 'EXPIRED', 'ABANDONED'].includes(normalizedStatus);
+						errorMessage =
+							result.error ||
+							result.message ||
+							(cancelled
+								? 'Payment was cancelled before completion.'
+								: 'Payment verification failed.');
+						clearPendingOrderStorage();
+
+						if (cancelled) {
+							showWarning('Payment cancelled', errorMessage);
+						} else {
+							showError('Payment failed', errorMessage);
+						}
+						return;
+					}
+
 					const pendingResponse =
 						response.status === 202 || result.pending === true || isPendingStatus(normalizedStatus);
 
 					if (pendingResponse) {
 						verifying = false;
 						pending = true;
+						cancelled = false;
 						timedOut = false;
 						pendingMessage =
-							result.message || 'Payment received. We are still confirming your transaction.';
+							result.message || 'We are still confirming your payment status with Monnify.';
 
 						if (!pendingToastShown) {
 							showWarning(
@@ -134,6 +238,8 @@
 
 					verifying = false;
 					pending = false;
+					cancelled = false;
+					timedOut = false;
 					errorMessage = result.error || 'Payment verification failed';
 					showError('Payment failed', errorMessage);
 					return;
@@ -142,6 +248,8 @@
 
 					verifying = false;
 					pending = false;
+					cancelled = false;
+					timedOut = false;
 					errorMessage = error instanceof Error ? error.message : 'An error occurred';
 					showError('Verification failed', errorMessage);
 					return;
@@ -151,6 +259,7 @@
 			if (!isDisposed && !success) {
 				verifying = false;
 				pending = true;
+				cancelled = false;
 				timedOut = true;
 				pendingMessage =
 					'Payment is still being confirmed. Please check your dashboard shortly while processing completes in the background.';
@@ -250,7 +359,7 @@
 					class="text-xs sm:text-sm"
 					style="color: var(--text-dim); font-family: var(--font-body);"
 				>
-					Redirecting to your dashboard...
+					Redirecting to your purchases...
 				</p>
 			{:else if pending}
 				<!-- Pending State -->
@@ -296,11 +405,11 @@
 							Refresh Status
 						</button>
 						<button
-							onclick={() => goto('/dashboard')}
+							onclick={goToOrdersDashboard}
 							class="w-full rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
 							style="border: 1px solid var(--border); color: var(--text); font-family: var(--font-head);"
 						>
-							Go to Dashboard
+							View Orders
 						</button>
 					</div>
 				{:else}
@@ -325,7 +434,7 @@
 					class="mb-2 text-2xl font-bold"
 					style="color: var(--text); font-family: var(--font-head);"
 				>
-					Payment Failed
+					{cancelled ? 'Payment Cancelled' : 'Payment Failed'}
 				</h1>
 				<p
 					class="mb-6 text-sm sm:text-base"
@@ -335,18 +444,18 @@
 				</p>
 				<div class="space-y-3">
 					<button
-						onclick={() => goto('/checkout')}
+						onclick={goToOrdersDashboard}
 						class="w-full rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
 						style="background: var(--btn-primary-gradient); color: #04140C; font-family: var(--font-head);"
 					>
-						Try Again
+						View Orders
 					</button>
 					<button
-						onclick={() => goto('/dashboard')}
+						onclick={retryCheckout}
 						class="w-full rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
 						style="border: 1px solid var(--border); color: var(--text); font-family: var(--font-head);"
 					>
-						Go to Dashboard
+						Retry Payment
 					</button>
 				</div>
 			{/if}
