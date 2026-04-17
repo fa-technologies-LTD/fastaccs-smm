@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { BriefcaseBusiness, Compass, LifeBuoy, Lock, Unlock } from '@lucide/svelte';
+	import { BriefcaseBusiness, Compass, LifeBuoy, Lock, Unlock, Clock3, X } from '@lucide/svelte';
 	import OrderTab from './OrderTab.svelte';
 	import PurchaseTab from './PurchaseTab.svelte';
 	import AffiliateTab from './AffiliateTab.svelte';
@@ -40,6 +40,7 @@
 	const AFFILIATE_ENABLED = false;
 	let activeTab = $state<DashboardTab>('purchases');
 	let selectedOrderId = $state<string | null>(null);
+	let showPaymentPendingBanner = $state(false);
 
 	function applyRouteContext(url: URL): void {
 		const tabParam = String(url.searchParams.get('tab') || '').toLowerCase();
@@ -51,6 +52,20 @@
 
 		const orderIdParam = String(url.searchParams.get('orderId') || '').trim();
 		selectedOrderId = orderIdParam || null;
+
+		const paymentPendingParam = String(url.searchParams.get('paymentPending') || '').trim();
+		showPaymentPendingBanner = paymentPendingParam === '1';
+	}
+
+	function dismissPaymentPendingBanner(): void {
+		showPaymentPendingBanner = false;
+		if (typeof window === 'undefined') return;
+		const nextUrl = new URL(window.location.href);
+		nextUrl.searchParams.delete('paymentPending');
+		const pathWithQuery = nextUrl.searchParams.size
+			? `${nextUrl.pathname}?${nextUrl.searchParams.toString()}`
+			: nextUrl.pathname;
+		window.history.replaceState({}, '', pathWithQuery);
 	}
 
 	onMount(() => {
@@ -147,6 +162,35 @@
 			{/if}
 		</div>
 	</div>
+
+	{#if showPaymentPendingBanner}
+		<div
+			class="mb-5 flex items-start justify-between gap-3 rounded-[var(--r-sm)] border px-4 py-3"
+			style="background: rgba(202,219,46,0.12); border-color: rgba(202,219,46,0.32);"
+		>
+			<div class="flex items-start gap-2">
+				<Clock3 size={16} class="mt-0.5" style="color: var(--fa-lime-700);" />
+				<div>
+					<p class="text-sm font-semibold" style="color: var(--text); font-family: var(--font-head);">
+						Payment Confirmation Pending
+					</p>
+					<p class="text-xs sm:text-sm" style="color: var(--text-muted);">
+						We are still waiting for Monnify confirmation. This order will auto-update once payment is
+						verified.
+					</p>
+				</div>
+			</div>
+			<button
+				type="button"
+				onclick={dismissPaymentPendingBanner}
+				aria-label="Dismiss payment pending notice"
+				class="rounded-full p-1.5 transition hover:opacity-80"
+				style="border: 1px solid var(--border); color: var(--text-muted);"
+			>
+				<X size={14} />
+			</button>
+		</div>
+	{/if}
 
 	<div class="mb-5 grid grid-cols-2 gap-3">
 		<div

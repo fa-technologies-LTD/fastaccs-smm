@@ -1,10 +1,15 @@
 import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { serverCache, getCacheHeaders, CACHE_TTL } from '$lib/helpers/cache';
 
 // GET /api/orders/stats - Get order statistics for admin dashboard
-export async function GET() {
+export const GET: RequestHandler = async ({ locals }) => {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const cacheKey = 'admin:order-stats';
 
 		// Try cache first
@@ -95,4 +100,4 @@ export async function GET() {
 		console.error('Failed to get order statistics:', error);
 		return json({ data: null, error: 'Failed to get order statistics' }, { status: 500 });
 	}
-}
+};

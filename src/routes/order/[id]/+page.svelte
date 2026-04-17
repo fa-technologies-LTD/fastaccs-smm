@@ -4,11 +4,8 @@
 		CheckCircle,
 		Clock,
 		XCircle,
-		AlertCircle,
-		Download,
 		Mail,
 		MessageSquare,
-		Phone,
 		Copy
 	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
@@ -19,55 +16,71 @@
 
 	let { data }: { data: PageData } = $props();
 
-	function getStatusIcon(status: string) {
-		switch (status) {
-			case 'completed':
-				return CheckCircle;
-			case 'pending':
-			case 'processing':
-				return Clock;
-			case 'failed':
-				return XCircle;
-			case 'partial':
-				return AlertCircle;
-			default:
-				return Clock;
-		}
+	function normalizeLower(value: string | null | undefined): string {
+		return String(value || '')
+			.trim()
+			.toLowerCase();
 	}
 
-	function getStatusColor(status: string) {
-		switch (status) {
-			case 'completed':
+	function getPaymentState(status: string, paymentStatus: string): {
+		label: string;
+		tone: 'success' | 'pending' | 'failure';
+	} {
+		const orderStatus = normalizeLower(status);
+		const payment = normalizeLower(paymentStatus);
+
+		if (['paid', 'completed'].includes(orderStatus) || ['paid', 'success'].includes(payment)) {
+			return { label: 'Payment Confirmed', tone: 'success' };
+		}
+
+		if (
+			['failed'].includes(orderStatus) ||
+			['failed', 'rejected', 'rejected_payment', 'reversed'].includes(payment)
+		) {
+			return { label: 'Payment Failed', tone: 'failure' };
+		}
+
+		if (
+			['cancelled', 'abandoned', 'expired'].includes(orderStatus) ||
+			['cancelled', 'canceled', 'abandoned', 'expired', 'user_cancelled'].includes(payment)
+		) {
+			return { label: 'Payment Cancelled', tone: 'failure' };
+		}
+
+		if (orderStatus === 'pending_payment') {
+			if (payment === 'processing') return { label: 'Confirming with Monnify', tone: 'pending' };
+			return { label: 'Awaiting Payment', tone: 'pending' };
+		}
+
+		return { label: 'Awaiting Payment', tone: 'pending' };
+	}
+
+	function getFulfillmentState(
+		status: string,
+		deliveryStatus: string,
+		paymentTone: 'success' | 'pending' | 'failure'
+	): string {
+		if (paymentTone !== 'success') {
+			return 'Not Started';
+		}
+
+		const orderStatus = normalizeLower(status);
+		const delivery = normalizeLower(deliveryStatus);
+
+		if (delivery === 'delivered' || orderStatus === 'completed') return 'Completed';
+		if (delivery === 'processing' || orderStatus === 'processing') return 'Processing';
+		if (delivery === 'failed') return 'Failed';
+		return 'Processing';
+	}
+
+	function getStatusColorFromTone(tone: 'success' | 'pending' | 'failure') {
+		switch (tone) {
+			case 'success':
 				return 'status-success';
 			case 'pending':
-				return 'status-pending';
-			case 'processing':
-				return 'status-info';
-			case 'failed':
-				return 'status-error';
-			case 'partial':
 				return 'status-warning';
-			case 'cancelled':
-				return 'status-inactive';
-			default:
-				return 'status-inactive';
-		}
-	}
-
-	function getStatusText(status: string) {
-		switch (status) {
-			case 'completed':
-				return 'Completed';
-			case 'pending':
-				return 'Pending';
-			case 'processing':
-				return 'Processing';
-			case 'failed':
-				return 'Failed';
-			case 'partial':
-				return 'Partially Completed';
-			default:
-				return status;
+			case 'failure':
+				return 'status-error';
 		}
 	}
 </script>
@@ -105,45 +118,55 @@
 			<!-- Order Details -->
 			<div class="lg:col-span-2">
 				<!-- Status Card -->
-				<div
-					class="mb-6 rounded-lg p-6"
-					style="background: var(--surface); border: 1px solid var(--border);"
-				>
-					<div class="flex items-center gap-4">
-						<div class={`status-badge ${getStatusColor(data.order.status)}`}>
-							<!-- Use getStatusIcon inline instead of StatusIcon constant -->
-							{#if data.order.status === 'completed'}
-								<CheckCircle class="h-6 w-6" />
-							{:else if data.order.status === 'pending' || data.order.status === 'processing'}
-								<Clock class="h-6 w-6" />
-							{:else if data.order.status === 'failed'}
-								<XCircle class="h-6 w-6" />
-							{:else if data.order.status === 'partial'}
-								<AlertCircle class="h-6 w-6" />
-							{:else}
-								<Clock class="h-6 w-6" />
-							{/if}
-						</div>
-						<div>
-							<h2 class="text-xl font-semibold" style="color: var(--text);">
-								{getStatusText(data.order.status)}
-							</h2>
-							<p style="color: var(--text-muted);">
-								{#if data.order.status === 'completed'}
-									Your accounts have been successfully allocated and delivered.
-								{:else if data.order.status === 'pending'}
-									Your order is being processed. Please wait while we allocate your accounts.
-								{:else if data.order.status === 'processing'}
-									We're currently allocating your accounts. This should be completed shortly.
-								{:else if data.order.status === 'failed'}
-									We couldn't allocate accounts for your order. Please contact support.
-								{:else if data.order.status === 'partial'}
-									Some accounts were allocated successfully. Check the details below.
+					<div
+						class="mb-6 rounded-lg p-6"
+						style="background: var(--surface); border: 1px solid var(--border);"
+					>
+						<div class="flex items-center gap-4">
+							<div
+								class={`status-badge ${getStatusColorFromTone(
+									getPaymentState(data.order.status, data.order.paymentStatus).tone
+								)}`}
+							>
+								{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success'}
+									<CheckCircle class="h-6 w-6" />
+								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'failure'}
+									<XCircle class="h-6 w-6" />
+								{:else}
+									<Clock class="h-6 w-6" />
 								{/if}
-							</p>
+							</div>
+							<div>
+								<h2 class="text-xl font-semibold" style="color: var(--text);">
+									{getPaymentState(data.order.status, data.order.paymentStatus).label}
+								</h2>
+								<p style="color: var(--text-muted);">
+									{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.status === 'completed'}
+										Your accounts have been successfully allocated and delivered.
+									{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'pending'}
+										Payment not confirmed yet. No account allocation has started.
+									{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'failure'}
+										Payment did not complete for this order. No account allocation was made.
+									{:else}
+										Payment is confirmed. We are finalizing your account delivery.
+									{/if}
+								</p>
+								<div class="mt-2 flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+									<span style="color: var(--text-dim);">
+										Payment: {getPaymentState(data.order.status, data.order.paymentStatus).label}
+									</span>
+									<span style="color: var(--text-dim);">•</span>
+									<span style="color: var(--text-dim);">
+										Fulfillment: {getFulfillmentState(
+											data.order.status,
+											data.order.deliveryStatus,
+											getPaymentState(data.order.status, data.order.paymentStatus).tone
+										)}
+									</span>
+								</div>
+							</div>
 						</div>
 					</div>
-				</div>
 
 				<div
 					class="mb-6 rounded-lg p-4"
@@ -402,12 +425,28 @@
 								{data.order.id}
 							</div>
 						</div>
-						<div class="flex justify-between">
-							<span style="color: var(--text-muted);">Order Date:</span>
-							<span style="color: var(--text);">{formatDate(data.order.createdAt)}</span>
+							<div class="flex justify-between">
+								<span style="color: var(--text-muted);">Order Date:</span>
+								<span style="color: var(--text);">{formatDate(data.order.createdAt)}</span>
+							</div>
+							<div class="flex justify-between">
+								<span style="color: var(--text-muted);">Payment:</span>
+								<span style="color: var(--text);"
+									>{getPaymentState(data.order.status, data.order.paymentStatus).label}</span
+								>
+							</div>
+							<div class="flex justify-between">
+								<span style="color: var(--text-muted);">Fulfillment:</span>
+								<span style="color: var(--text);"
+									>{getFulfillmentState(
+										data.order.status,
+										data.order.deliveryStatus,
+										getPaymentState(data.order.status, data.order.paymentStatus).tone
+									)}</span
+								>
+							</div>
 						</div>
 					</div>
-				</div>
 
 				<!-- Delivery Info -->
 				<div

@@ -64,10 +64,63 @@
 		return `ORD-${order.id.slice(0, 8).toUpperCase()}`;
 	}
 
-	function getOrderStatus(order: OrderRecord): string {
-		return String(
-			order.status || order.deliveryStatus || order.paymentStatus || 'processing'
-		).toLowerCase();
+	function normalizeLower(value: string | null | undefined): string {
+		return String(value || '')
+			.trim()
+			.toLowerCase();
+	}
+
+	function getPaymentState(order: OrderRecord): { label: string; tone: 'success' | 'pending' | 'failure' } {
+		const orderStatus = normalizeLower(order.status);
+		const paymentStatus = normalizeLower(order.paymentStatus);
+
+		if (['paid', 'completed'].includes(orderStatus) || ['paid', 'success'].includes(paymentStatus)) {
+			return { label: 'Payment Confirmed', tone: 'success' };
+		}
+
+		if (
+			['failed'].includes(orderStatus) ||
+			['failed', 'rejected', 'rejected_payment', 'reversed'].includes(paymentStatus)
+		) {
+			return { label: 'Payment Failed', tone: 'failure' };
+		}
+
+		if (
+			['cancelled', 'abandoned', 'expired'].includes(orderStatus) ||
+			['cancelled', 'canceled', 'abandoned', 'expired', 'user_cancelled'].includes(paymentStatus)
+		) {
+			return { label: 'Payment Cancelled', tone: 'failure' };
+		}
+
+		if (orderStatus === 'pending_payment') {
+			if (paymentStatus === 'processing') {
+				return { label: 'Confirming with Monnify', tone: 'pending' };
+			}
+			return { label: 'Awaiting Payment', tone: 'pending' };
+		}
+
+		return { label: 'Awaiting Payment', tone: 'pending' };
+	}
+
+	function getFulfillmentState(order: OrderRecord): string {
+		const payment = getPaymentState(order);
+		if (payment.tone !== 'success') {
+			return 'Not Started';
+		}
+
+		const orderStatus = normalizeLower(order.status);
+		const deliveryStatus = normalizeLower(order.deliveryStatus);
+
+		if (deliveryStatus === 'delivered' || orderStatus === 'completed') {
+			return 'Completed';
+		}
+		if (deliveryStatus === 'processing' || orderStatus === 'processing') {
+			return 'Processing';
+		}
+		if (deliveryStatus === 'failed') {
+			return 'Failed';
+		}
+		return 'Processing';
 	}
 
 	function getOrderItems(order: OrderRecord): OrderItem[] {
@@ -124,14 +177,14 @@
 						? 'border: 1px solid rgba(5,212,113,0.35); background: rgba(5,212,113,0.06);'
 						: undefined}
 				>
-					<div class="mb-3 flex items-center justify-between gap-4">
-						<div class="flex min-w-0 flex-1 items-center">
-							{#if ['delivered', 'completed', 'paid'].includes(getOrderStatus(order))}
-								<CheckCircle class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--primary);" />
-							{:else if getOrderStatus(order) === 'processing'}
-								<RefreshCw class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--link);" />
-							{:else}
-								<Clock class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--status-warning);" />
+						<div class="mb-3 flex items-center justify-between gap-4">
+							<div class="flex min-w-0 flex-1 items-center">
+								{#if getPaymentState(order).tone === 'success'}
+									<CheckCircle class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--primary);" />
+								{:else if getPaymentState(order).label === 'Confirming with Monnify'}
+									<RefreshCw class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--link);" />
+								{:else}
+									<Clock class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--status-warning);" />
 							{/if}
 							<div class="min-w-0 flex-1">
 								<div
@@ -145,15 +198,15 @@
 								</div>
 							</div>
 						</div>
-						<div class="flex-shrink-0 text-right">
-							<div class="font-semibold" style="color: var(--text); font-family: var(--font-head);">
-								₦{Number(order.totalAmount || 0).toLocaleString()}
-							</div>
-							<div class="text-xs capitalize sm:text-sm" style="color: var(--text-muted);">
-								{getOrderStatus(order)}
+							<div class="flex-shrink-0 text-right">
+								<div class="font-semibold" style="color: var(--text); font-family: var(--font-head);">
+									₦{Number(order.totalAmount || 0).toLocaleString()}
+								</div>
+								<div class="text-xs sm:text-sm" style="color: var(--text-muted);">
+									{getPaymentState(order).label}
+								</div>
 							</div>
 						</div>
-					</div>
 
 					<div class="mb-4 space-y-2">
 						{#each getOrderItems(order) as item}
@@ -169,11 +222,11 @@
 						{/each}
 					</div>
 
-					<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-						<div class="text-xs sm:text-sm" style="color: var(--text-dim);">
-							Delivery status: {order.deliveryStatus || order.status || 'processing'}
-						</div>
-						<div class="flex flex-col gap-2 text-sm sm:flex-row sm:text-base">
+						<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+							<div class="text-xs sm:text-sm" style="color: var(--text-dim);">
+								Payment: {getPaymentState(order).label} · Fulfillment: {getFulfillmentState(order)}
+							</div>
+							<div class="flex flex-col gap-2 text-sm sm:flex-row sm:text-base">
 							<button
 								onclick={() => reorderItems(order)}
 								data-sveltekit-preload-data="hover"

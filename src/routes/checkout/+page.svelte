@@ -97,14 +97,23 @@
 		}
 	}
 
+	function redirectToLoginWithReturnUrl(): void {
+		const currentUrl = new URL(window.location.href);
+		const returnUrl = encodeURIComponent(currentUrl.pathname + currentUrl.search);
+		goto(`/auth/login?returnUrl=${returnUrl}`);
+	}
+
+	function isUnauthorizedApiError(errorText: unknown): boolean {
+		if (typeof errorText !== 'string') return false;
+		return errorText.includes('HTTP 401');
+	}
+
 	// ARCHIVED: wallet checkout (processCheckout) removed — wallet payments disabled.
 	// See src/lib/services/_archive/korapay.ts and git history for the original implementation.
 
 	async function payWithMonnify() {
 		if (!user) {
-			const currentUrl = new URL(window.location.href);
-			const returnUrl = encodeURIComponent(currentUrl.pathname + currentUrl.search);
-			goto(`/auth/login?returnUrl=${returnUrl}`);
+			redirectToLoginWithReturnUrl();
 			return;
 		}
 
@@ -127,12 +136,11 @@
 				}
 			}
 
-			// Create the order first
-			const orderResult = await createOrder({
-				userId: user.id,
-				email: user.email || '',
-				phone: user.phone || '',
-				items: cartItems.map((item) => ({
+				// Create the order first
+				const orderResult = await createOrder({
+					email: user.email || '',
+					phone: user.phone || '',
+					items: cartItems.map((item) => ({
 					categoryId: item.tierId,
 					quantity: item.quantity,
 					price: item.tier.price
@@ -141,31 +149,34 @@
 				currency: 'NGN',
 				paymentMethod: 'monnify',
 				affiliateCode: affiliateCode || undefined
-			});
+				});
 
-			if (!orderResult.success) {
-				throw new Error(orderResult.error || 'Failed to create order');
-			}
+				if (!orderResult.success) {
+					if (isUnauthorizedApiError(orderResult.error)) {
+						showWarning('Session expired', 'Please log in again to continue checkout.');
+						redirectToLoginWithReturnUrl();
+						return;
+					}
+					throw new Error(orderResult.error || 'Failed to create order');
+				}
 
-			// Redirect to Monnify hosted checkout — keys never leave the server
-			const initResponse = await fetch('/api/payments/initialize', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ orderId: orderResult.orderId })
-			});
-			const initResult = await initResponse.json();
+				if (!orderResult.checkoutUrl) {
+					throw new Error(orderResult.error || 'Failed to initialize payment');
+				}
 
-			if (!initResult.success || !initResult.checkoutUrl) {
-				throw new Error(initResult.error || 'Failed to initialize payment');
-			}
-
-			sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, orderResult.orderId);
-			window.location.href = initResult.checkoutUrl;
-		} catch (error) {
-			console.error('Payment initialization error:', error);
-			showError(
-				'Payment failed',
-				`Failed to initialize payment: ${error instanceof Error ? error.message : 'Please try again.'}`
+				sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, orderResult.orderId);
+				window.location.href = orderResult.checkoutUrl;
+			} catch (error) {
+				console.error('Payment initialization error:', error);
+				if (error instanceof Error && isUnauthorizedApiError(error.message)) {
+					showWarning('Session expired', 'Please log in again to continue checkout.');
+					redirectToLoginWithReturnUrl();
+					loading = false;
+					return;
+				}
+				showError(
+					'Payment failed',
+					`Failed to initialize payment: ${error instanceof Error ? error.message : 'Please try again.'}`
 			);
 			loading = false;
 		}

@@ -1,9 +1,14 @@
 import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 
 // GET /api/orders/[id] - Get specific order
-export async function GET({ params }) {
+export const GET: RequestHandler = async ({ params, locals }) => {
 	try {
+		if (!locals.user) {
+			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const data = await prisma.order.findUnique({
 			where: { id: params.id },
 			include: {
@@ -21,6 +26,11 @@ export async function GET({ params }) {
 			return json({ data: null, error: 'Order not found' }, { status: 404 });
 		}
 
+		const isAdmin = locals.user.userType === 'ADMIN';
+		if (!isAdmin && data.userId !== locals.user.id) {
+			return json({ data: null, error: 'Forbidden' }, { status: 403 });
+		}
+
 		return json({ data, error: null });
 	} catch (error) {
 		console.error('Database error:', error);
@@ -29,11 +39,15 @@ export async function GET({ params }) {
 			{ status: 500 }
 		);
 	}
-}
+};
 
 // PATCH /api/orders/[id] - Update order
-export async function PATCH({ params, request }) {
+export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const updateData = await request.json();
 
 		const data = await prisma.order.update({
@@ -56,11 +70,15 @@ export async function PATCH({ params, request }) {
 			{ status: 500 }
 		);
 	}
-}
+};
 
 // DELETE /api/orders/[id] - Delete order
-export async function DELETE({ params }) {
+export const DELETE: RequestHandler = async ({ params, locals }) => {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
+		}
+
 		// First, release any allocated accounts back to available
 		await prisma.account.updateMany({
 			where: {
@@ -91,4 +109,4 @@ export async function DELETE({ params }) {
 			{ status: 500 }
 		);
 	}
-}
+};

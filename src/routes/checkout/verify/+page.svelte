@@ -5,11 +5,15 @@
 	import { Check, X, Loader2, Clock3 } from '@lucide/svelte';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
+	import {
+		getFailureKind,
+		isPendingPaymentStatus,
+		normalizePaymentStatus
+	} from '$lib/helpers/payment-status';
 
-	const MAX_CONFIRMATION_WAIT_MS = 90_000;
+	const MAX_CONFIRMATION_WAIT_MS = 10_000;
 	const RETRY_INTERVAL_MS = 5_000;
 	const PENDING_ORDER_STORAGE_KEY = 'fastaccs_pending_order_id';
-	const TERMINAL_FAILURE_STATUSES = ['FAILED', 'CANCELLED', 'CANCELED', 'EXPIRED', 'ABANDONED'];
 
 	let verifying = $state(true);
 	let pending = $state(false);
@@ -29,22 +33,6 @@
 		if (!value) return null;
 		const stripped = value.split('?')[0].split('&')[0].trim();
 		return stripped || null;
-	}
-
-	function normalizeStatus(value: unknown): string {
-		if (typeof value !== 'string') return '';
-		return value.trim().toUpperCase();
-	}
-
-	function isPendingStatus(status: string): boolean {
-		return (
-			status === '' ||
-			['PENDING', 'PROCESSING', 'PENDING_PAYMENT', 'ERROR', 'NOT_FOUND', 'UNKNOWN'].includes(status)
-		);
-	}
-
-	function isTerminalFailureStatus(status: string): boolean {
-		return TERMINAL_FAILURE_STATUSES.includes(status);
 	}
 
 	function extractCallbackStatusHint(searchParams: URLSearchParams): string | null {
@@ -77,10 +65,15 @@
 		sessionStorage.removeItem(PENDING_ORDER_STORAGE_KEY);
 	}
 
-	function getOrdersDashboardPath(targetOrderId: string | null): string {
-		return targetOrderId
-			? `/dashboard?tab=orders&orderId=${encodeURIComponent(targetOrderId)}`
-			: '/dashboard?tab=orders';
+	function getOrdersDashboardPath(targetOrderId: string | null, showPendingBanner = false): string {
+		const query = new URLSearchParams({ tab: 'orders' });
+		if (targetOrderId) {
+			query.set('orderId', targetOrderId);
+		}
+		if (showPendingBanner) {
+			query.set('paymentPending', '1');
+		}
+		return `/dashboard?${query.toString()}`;
 	}
 
 	function getPurchasesDashboardPath(targetOrderId: string | null): string {
@@ -89,9 +82,13 @@
 			: '/dashboard?tab=purchases';
 	}
 
-	function goToOrdersDashboard(): void {
+	function goToOrdersDashboard(showPendingBanner = false): void {
 		clearPendingOrderStorage();
-		goto(getOrdersDashboardPath(orderId));
+		goto(getOrdersDashboardPath(orderId, showPendingBanner));
+	}
+
+	function closeVerificationScreen(): void {
+		goToOrdersDashboard(true);
 	}
 
 	function retryCheckout(): void {
@@ -167,26 +164,25 @@
 					if (isDisposed) return;
 
 					if (result.success) {
+						const resolvedOrderId = result.orderId || orderIdParam;
 						success = true;
 						pending = false;
 						verifying = false;
 						cancelled = false;
 						timedOut = false;
-						orderId = result.orderId || orderIdParam;
+						orderId = resolvedOrderId;
 						clearPendingOrderStorage();
 						cart.clear();
 						showSuccess('Payment successful!', 'Your order has been completed.');
-						goto(getPurchasesDashboardPath(orderId));
+						goto(getPurchasesDashboardPath(resolvedOrderId));
 						return;
 					}
 
-					const normalizedStatus = normalizeStatus(result.status);
-					const terminalFailure =
-						result.cancelled === true ||
-						result.failed === true ||
-						isTerminalFailureStatus(normalizedStatus);
+						const normalizedStatus = normalizePaymentStatus(result.status);
+						const terminalFailure =
+							result.cancelled === true || result.failed === true || getFailureKind(normalizedStatus);
 
-					if (terminalFailure) {
+						if (terminalFailure) {
 						verifying = false;
 						pending = false;
 						timedOut = false;
@@ -206,19 +202,39 @@
 						} else {
 							showError('Payment failed', errorMessage);
 						}
-						return;
-					}
+							return;
+						}
 
-					const pendingResponse =
-						response.status === 202 || result.pending === true || isPendingStatus(normalizedStatus);
+						if (response.status === 401) {
+							clearPendingOrderStorage();
+							showWarning('Session expired', 'Please log in again to complete payment verification.');
+							const returnUrl = encodeURIComponent($page.url.pathname + $page.url.search);
+							goto(`/auth/login?returnUrl=${returnUrl}`);
+							return;
+						}
 
-					if (pendingResponse) {
-						verifying = false;
-						pending = true;
-						cancelled = false;
-						timedOut = false;
-						pendingMessage =
-							result.message || 'We are still confirming your payment status with Monnify.';
+						if (!response.ok && response.status !== 202) {
+							verifying = false;
+							pending = false;
+							cancelled = false;
+							timedOut = false;
+							errorMessage =
+								result.error || result.message || `Verification failed with status ${response.status}`;
+							showError('Payment verification failed', errorMessage);
+							return;
+						}
+
+						const pendingResponse =
+							response.status === 202 ||
+							result.pending === true ||
+							isPendingPaymentStatus(normalizedStatus);
+
+						if (pendingResponse) {
+							verifying = false;
+							pending = true;
+							cancelled = false;
+							timedOut = false;
+							pendingMessage = result.message || 'Waiting for payment confirmation from Monnify.';
 
 						if (!pendingToastShown) {
 							showWarning(
@@ -256,19 +272,20 @@
 				}
 			}
 
-			if (!isDisposed && !success) {
-				verifying = false;
-				pending = true;
-				cancelled = false;
-				timedOut = true;
-				pendingMessage =
-					'Payment is still being confirmed. Please check your dashboard shortly while processing completes in the background.';
-				showWarning(
-					'Payment confirmation pending',
-					'You can refresh this page or check your dashboard in a moment.'
-				);
-			}
-		};
+				if (!isDisposed && !success) {
+					verifying = false;
+					pending = true;
+					cancelled = false;
+					timedOut = true;
+					pendingMessage =
+						'Waiting for payment confirmation from Monnify.';
+					showWarning(
+						'Payment confirmation pending',
+						'We are still confirming with Monnify. You will now be redirected to your orders.'
+					);
+					goToOrdersDashboard(true);
+				}
+			};
 
 		void runVerification();
 
@@ -297,11 +314,22 @@
 			</span>
 		</div>
 
-		<div
-			class="rounded-2xl p-6 text-center shadow-sm sm:p-8"
-			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-		>
-			{#if verifying}
+			<div
+				class="relative rounded-2xl p-6 text-center shadow-sm sm:p-8"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
+				{#if !success}
+					<button
+						onclick={closeVerificationScreen}
+						aria-label="Close and view orders"
+						class="absolute top-3 right-3 rounded-full p-2 transition hover:opacity-90"
+						style="border: 1px solid var(--border); color: var(--text-muted);"
+					>
+						<X size={16} />
+					</button>
+				{/if}
+
+				{#if verifying}
 				<!-- Verifying State -->
 				<div class="mb-6 flex justify-center">
 					<div
@@ -317,12 +345,12 @@
 				>
 					Verifying Payment
 				</h1>
-				<p
-					class="text-sm sm:text-base"
-					style="color: var(--text-muted); font-family: var(--font-body);"
-				>
-					Please wait while we confirm your payment with Monnify.
-				</p>
+					<p
+						class="text-sm sm:text-base"
+						style="color: var(--text-muted); font-family: var(--font-body);"
+					>
+						Waiting for payment confirmation from Monnify.
+					</p>
 			{:else if success}
 				<!-- Success State -->
 				<div class="mb-6 flex justify-center">
@@ -404,11 +432,11 @@
 						>
 							Refresh Status
 						</button>
-						<button
-							onclick={goToOrdersDashboard}
-							class="w-full rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
-							style="border: 1px solid var(--border); color: var(--text); font-family: var(--font-head);"
-						>
+							<button
+								onclick={() => goToOrdersDashboard(true)}
+								class="w-full rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
+								style="border: 1px solid var(--border); color: var(--text); font-family: var(--font-head);"
+							>
 							View Orders
 						</button>
 					</div>
@@ -443,11 +471,11 @@
 					{errorMessage}
 				</p>
 				<div class="space-y-3">
-					<button
-						onclick={goToOrdersDashboard}
-						class="w-full rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
-						style="background: var(--btn-primary-gradient); color: #04140C; font-family: var(--font-head);"
-					>
+						<button
+							onclick={() => goToOrdersDashboard(false)}
+							class="w-full rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
+							style="background: var(--btn-primary-gradient); color: #04140C; font-family: var(--font-head);"
+						>
 						View Orders
 					</button>
 					<button

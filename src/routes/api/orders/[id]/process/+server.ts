@@ -1,9 +1,14 @@
 import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 
 // POST /api/orders/[id]/process - Process order (allocate accounts)
-export async function POST({ params }) {
+export const POST: RequestHandler = async ({ params, locals }) => {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ error: 'Unauthorized' }, { status: 401 });
+		}
+
 		// ✅ FIXED: Implement actual account allocation logic - the critical missing piece
 		const orderId = params.id;
 
@@ -126,4 +131,4 @@ export async function POST({ params }) {
 			{ status: 500 }
 		);
 	}
-}
+};

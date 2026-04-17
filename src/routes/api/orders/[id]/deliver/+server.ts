@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import type { Decimal } from '@prisma/client/runtime/library';
 
@@ -27,8 +28,12 @@ interface AccountForEmail {
 }
 
 // POST /api/orders/[id]/deliver - Send allocated accounts to customer
-export async function POST({ params, request }) {
+export const POST: RequestHandler = async ({ params, request, locals }) => {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const orderId = params.id;
 		// Currently only email delivery is supported
 		await request.json(); // Parse request body but don't extract deliveryMethod since it's not used
@@ -122,7 +127,7 @@ export async function POST({ params, request }) {
 			{ status: 500 }
 		);
 	}
-}
+};
 
 /**
  * Generate formatted email content with account details

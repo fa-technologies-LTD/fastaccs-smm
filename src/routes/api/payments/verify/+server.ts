@@ -3,22 +3,16 @@ import type { RequestHandler } from './$types';
 import { verifyPayment } from '$lib/services/payment';
 import { prisma } from '$lib/prisma';
 import { allocateAccountsForOrder } from '$lib/services/fulfillment';
-
-const SUCCESS_STATUSES = new Set(['PAID', 'OVERPAID']);
-const PENDING_STATUSES = new Set([
-	'',
-	'PENDING',
-	'PROCESSING',
-	'PENDING_PAYMENT',
-	'PARTIALLY_PAID',
-	'NOT_FOUND',
-	'ERROR',
-	'UNKNOWN'
-]);
-const CANCELLED_STATUSES = new Set(['CANCELLED', 'CANCELED', 'ABANDONED', 'EXPIRED']);
-const FAILED_STATUSES = new Set(['FAILED', 'REJECTED', 'REJECTED_PAYMENT']);
-
-type FailureKind = 'cancelled' | 'failed';
+import {
+	getFailureKind,
+	getFailureOrderStatus,
+	getPendingPaymentPhase,
+	isPendingPaymentStatus,
+	isSuccessPaymentStatus,
+	normalizePaymentStatus
+} from '$lib/helpers/payment-status';
+import type { FailureKind } from '$lib/helpers/payment-status';
+import { logOrderStatusTransition } from '$lib/services/order-audit';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -37,26 +31,6 @@ function sanitizeOrderId(value: unknown): string | null {
 
 function isUuid(value: string): boolean {
 	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
-function normalizeStatus(value: unknown): string {
-	if (typeof value !== 'string') return '';
-	return value.trim().toUpperCase();
-}
-
-function isSuccessStatus(status: string): boolean {
-	return SUCCESS_STATUSES.has(status);
-}
-
-function isPendingStatus(status: string): boolean {
-	return PENDING_STATUSES.has(status);
-}
-
-function getFailureKind(status: string): FailureKind | null {
-	if (!status) return null;
-	if (CANCELLED_STATUSES.has(status)) return 'cancelled';
-	if (FAILED_STATUSES.has(status)) return 'failed';
-	return null;
 }
 
 function getFailureMessage(kind: FailureKind, fallbackMessage: string | null): string {
@@ -100,6 +74,37 @@ function buildFailureResponse(
 	);
 }
 
+function isPaymentAmountValid(orderTotal: number, paidAmount: number): boolean {
+	if (!Number.isFinite(orderTotal) || !Number.isFinite(paidAmount)) return false;
+	return paidAmount + 0.01 >= orderTotal;
+}
+
+function isPaymentCurrencyValid(orderCurrency: string | null | undefined, paidCurrency: string): boolean {
+	const expectedCurrency = String(orderCurrency || 'NGN').toUpperCase();
+	return expectedCurrency === String(paidCurrency || 'NGN').toUpperCase();
+}
+
+async function recoverPaidOrderIfNeeded(orderId: string) {
+	const allocationResult = await allocateAccountsForOrder(orderId);
+	if (allocationResult.success) {
+		return { fulfilled: true, warning: null };
+	}
+
+	const latest = await prisma.order.findUnique({
+		where: { id: orderId },
+		select: { status: true }
+	});
+
+	if (latest?.status === 'completed') {
+		return { fulfilled: true, warning: null };
+	}
+
+	return {
+		fulfilled: false,
+		warning: 'Payment successful but account allocation pending. Contact support.'
+	};
+}
+
 export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
 		if (!locals.user) {
@@ -117,7 +122,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		const transactionReference = pickString(rawTransactionReference);
 		const paymentReference = pickString(rawPaymentReference);
-		const callbackStatus = normalizeStatus(rawCallbackStatus);
+		const callbackStatus = normalizePaymentStatus(rawCallbackStatus);
 		const callbackMessage = pickString(rawCallbackMessage);
 
 		const callbackQueryKeys = Array.isArray(callbackContext?.queryKeys)
@@ -151,7 +156,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ success: false, error: 'Unauthorized access to order' }, { status: 403 });
 		}
 
-		if (orderById && (orderById.status === 'completed' || orderById.status === 'paid')) {
+		if (orderById?.status === 'completed') {
 			return json({
 				success: true,
 				state: 'SUCCESS',
@@ -161,7 +166,28 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			});
 		}
 
-		let referenceToVerify =
+		if (orderById?.status === 'paid') {
+			const recovered = await recoverPaidOrderIfNeeded(orderById.id);
+			if (recovered.fulfilled) {
+				return json({
+					success: true,
+					state: 'SUCCESS',
+					status: 'COMPLETED',
+					orderId: orderById.id,
+					message: 'Order already processed'
+				});
+			}
+
+			return json({
+				success: true,
+				state: 'SUCCESS',
+				warning: recovered.warning,
+				orderId: orderById.id,
+				status: 'PAID'
+			});
+		}
+
+		const referenceToVerify =
 			transactionReference || paymentReference || orderById?.paymentReference || null;
 
 		if (!referenceToVerify) {
@@ -173,12 +199,40 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				orderById.status !== 'completed' &&
 				orderById.status !== 'paid'
 			) {
+				const nextStatus = getFailureOrderStatus(callbackFailureKind);
 				await prisma.order.update({
 					where: { id: orderById.id },
 					data: {
-						status: 'cancelled',
+						status: nextStatus,
 						paymentStatus: callbackFailureKind === 'cancelled' ? 'cancelled' : 'failed'
 					}
+				});
+
+				logOrderStatusTransition({
+					orderId: orderById.id,
+					source: 'verify',
+					fromStatus: orderById.status,
+					toStatus: nextStatus,
+					fromPaymentStatus: orderById.paymentStatus,
+					toPaymentStatus: callbackFailureKind === 'cancelled' ? 'cancelled' : 'failed'
+				});
+			} else if (orderById && orderById.status !== 'completed' && orderById.status !== 'paid') {
+				const nextPaymentStatus = getPendingPaymentPhase(callbackStatus);
+				await prisma.order.update({
+					where: { id: orderById.id },
+					data: {
+						status: 'pending_payment',
+						paymentStatus: nextPaymentStatus
+					}
+				});
+
+				logOrderStatusTransition({
+					orderId: orderById.id,
+					source: 'verify',
+					fromStatus: orderById.status,
+					toStatus: 'pending_payment',
+					fromPaymentStatus: orderById.paymentStatus,
+					toPaymentStatus: nextPaymentStatus
 				});
 			}
 
@@ -192,12 +246,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 
 			return buildPendingResponse(
-				'Payment confirmation pending. Please wait while we confirm your transaction.'
+				'Waiting for payment confirmation from Monnify.',
+				callbackStatus || 'PENDING'
 			);
 		}
 
 		const verificationResult = await verifyPayment(referenceToVerify);
-		const gatewayStatus = normalizeStatus(verificationResult.status);
+		const gatewayStatus = normalizePaymentStatus(verificationResult.status);
 
 		console.info('[payments.verify] gateway_verification_result', {
 			userId: locals.user.id,
@@ -211,7 +266,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		const resolvedStatus = gatewayStatus || callbackStatus;
 
-		if (verificationResult.success || isSuccessStatus(gatewayStatus)) {
+		if (verificationResult.success || isSuccessPaymentStatus(gatewayStatus)) {
 			const metadataOrderId = sanitizeOrderId(verificationResult.metaData?.orderId);
 			const validMetadataOrderId =
 				metadataOrderId && isUuid(metadataOrderId) ? metadataOrderId : null;
@@ -251,14 +306,76 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Unauthorized access to order' }, { status: 403 });
 			}
 
-			if (order.status === 'completed' || order.status === 'paid') {
+			if (order.status === 'completed') {
 				return json({
 					success: true,
 					state: 'SUCCESS',
-					status: order.status.toUpperCase(),
+					status: 'COMPLETED',
 					orderId: order.id,
 					message: 'Order already processed'
 				});
+			}
+
+			if (order.status === 'paid') {
+				const recovered = await recoverPaidOrderIfNeeded(order.id);
+				if (recovered.fulfilled) {
+					return json({
+						success: true,
+						state: 'SUCCESS',
+						status: 'COMPLETED',
+						orderId: order.id,
+						message: 'Order already processed'
+					});
+				}
+
+				return json({
+					success: true,
+					state: 'SUCCESS',
+					warning: recovered.warning,
+					orderId: order.id,
+					status: 'PAID'
+				});
+			}
+
+			const settledAmount = Number(verificationResult.amountPaid || verificationResult.amount || 0);
+			const expectedAmount = Number(order.totalAmount);
+			const currencyIsValid = isPaymentCurrencyValid(order.currency, verificationResult.currency);
+			const amountIsValid = isPaymentAmountValid(expectedAmount, settledAmount);
+
+			if (!currencyIsValid || !amountIsValid) {
+				const mismatchMessage = !currencyIsValid
+					? `Payment currency mismatch. Expected ${order.currency}, got ${verificationResult.currency}.`
+					: `Payment amount mismatch. Expected ₦${expectedAmount.toLocaleString()}, got ₦${settledAmount.toLocaleString()}.`;
+
+				await prisma.order.update({
+					where: { id: order.id },
+					data: {
+						status: 'failed',
+						paymentStatus: 'failed'
+					}
+				});
+
+				logOrderStatusTransition({
+					orderId: order.id,
+					source: 'verify',
+					fromStatus: order.status,
+					toStatus: 'failed',
+					fromPaymentStatus: order.paymentStatus,
+					toPaymentStatus: 'failed'
+				});
+
+				return json(
+					{
+						success: false,
+						failed: true,
+						state: 'FAILED',
+						status: 'FAILED',
+						orderId: order.id,
+						error: mismatchMessage,
+						message: mismatchMessage
+					},
+					{ status: 400 }
+				);
 			}
 
 			const paidTransition = await prisma.order.updateMany({
@@ -270,11 +387,22 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					status: 'paid',
 					paymentReference:
 						verificationResult.paymentReference || order.paymentReference || referenceToVerify,
-					paymentStatus: 'success',
+					paymentStatus: 'paid',
 					paymentChannel: verificationResult.channel,
 					paidAt: verificationResult.paidAt || new Date()
 				}
 			});
+
+			if (paidTransition.count > 0) {
+				logOrderStatusTransition({
+					orderId: order.id,
+					source: 'verify',
+					fromStatus: order.status,
+					toStatus: 'paid',
+					fromPaymentStatus: order.paymentStatus,
+					toPaymentStatus: 'paid'
+				});
+			}
 
 			if (paidTransition.count === 0) {
 				const latestOrder = await prisma.order.findUnique({
@@ -282,13 +410,34 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					select: { status: true }
 				});
 
-				if (latestOrder && (latestOrder.status === 'paid' || latestOrder.status === 'completed')) {
+				if (latestOrder?.status === 'completed') {
 					return json({
 						success: true,
 						state: 'SUCCESS',
-						status: latestOrder.status.toUpperCase(),
+						status: 'COMPLETED',
 						orderId: order.id,
 						message: 'Order already processed'
+					});
+				}
+
+				if (latestOrder?.status === 'paid') {
+					const recovered = await recoverPaidOrderIfNeeded(order.id);
+					if (recovered.fulfilled) {
+						return json({
+							success: true,
+							state: 'SUCCESS',
+							status: 'COMPLETED',
+							orderId: order.id,
+							message: 'Order already processed'
+						});
+					}
+
+					return json({
+						success: true,
+						state: 'SUCCESS',
+						warning: recovered.warning,
+						orderId: order.id,
+						status: 'PAID'
 					});
 				}
 			}
@@ -348,12 +497,22 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				failedOrder.status !== 'completed' &&
 				failedOrder.status !== 'paid'
 			) {
+				const nextStatus = getFailureOrderStatus(failureKind);
 				await prisma.order.update({
 					where: { id: failedOrder.id },
 					data: {
-						status: 'cancelled',
+						status: nextStatus,
 						paymentStatus: failureKind === 'cancelled' ? 'cancelled' : 'failed'
 					}
+				});
+
+				logOrderStatusTransition({
+					orderId: failedOrder.id,
+					source: 'verify',
+					fromStatus: failedOrder.status,
+					toStatus: nextStatus,
+					fromPaymentStatus: failedOrder.paymentStatus,
+					toPaymentStatus: failureKind === 'cancelled' ? 'cancelled' : 'failed'
 				});
 			}
 
@@ -365,15 +524,35 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			);
 		}
 
-		if (isPendingStatus(resolvedStatus)) {
+		if (isPendingPaymentStatus(resolvedStatus)) {
+			if (orderById && orderById.status !== 'completed' && orderById.status !== 'paid') {
+				const nextPaymentStatus = getPendingPaymentPhase(resolvedStatus);
+				await prisma.order.update({
+					where: { id: orderById.id },
+					data: {
+						status: 'pending_payment',
+						paymentStatus: nextPaymentStatus
+					}
+				});
+
+				logOrderStatusTransition({
+					orderId: orderById.id,
+					source: 'verify',
+					fromStatus: orderById.status,
+					toStatus: 'pending_payment',
+					fromPaymentStatus: orderById.paymentStatus,
+					toPaymentStatus: nextPaymentStatus
+				});
+			}
+
 			return buildPendingResponse(
-				'Payment received. We are still confirming with Monnify.',
+				'Waiting for payment confirmation from Monnify.',
 				resolvedStatus || 'PENDING'
 			);
 		}
 
 		return buildPendingResponse(
-			'We are still confirming your payment status. Please wait a moment and retry.',
+			'Waiting for payment confirmation from Monnify.',
 			resolvedStatus || 'PENDING'
 		);
 	} catch (error) {

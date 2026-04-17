@@ -3,12 +3,14 @@ import type { RequestHandler } from './$types';
 import { verifyWebhookSignature, verifyPayment } from '$lib/services/payment';
 import { prisma } from '$lib/prisma';
 import { allocateAccountsForOrder } from '$lib/services/fulfillment';
-
-type FailureKind = 'cancelled' | 'failed';
-
-const CANCELLED_STATUSES = new Set(['CANCELLED', 'CANCELED', 'ABANDONED', 'EXPIRED']);
-const FAILED_STATUSES = new Set(['FAILED', 'REJECTED', 'REJECTED_PAYMENT']);
-const SUCCESS_STATUSES = new Set(['PAID', 'OVERPAID']);
+import {
+	getFailureKind,
+	getFailureOrderStatus,
+	isSuccessPaymentStatus,
+	normalizePaymentStatus
+} from '$lib/helpers/payment-status';
+import type { FailureKind } from '$lib/helpers/payment-status';
+import { logOrderStatusTransition } from '$lib/services/order-audit';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -16,16 +18,14 @@ function pickString(value: unknown): string | null {
 	return trimmed || null;
 }
 
-function normalizeStatus(value: unknown): string {
-	if (typeof value !== 'string') return '';
-	return value.trim().toUpperCase();
+function isPaymentAmountValid(orderTotal: number, paidAmount: number): boolean {
+	if (!Number.isFinite(orderTotal) || !Number.isFinite(paidAmount)) return false;
+	return paidAmount + 0.01 >= orderTotal;
 }
 
-function getFailureKind(status: string): FailureKind | null {
-	if (!status) return null;
-	if (CANCELLED_STATUSES.has(status)) return 'cancelled';
-	if (FAILED_STATUSES.has(status)) return 'failed';
-	return null;
+function isPaymentCurrencyValid(orderCurrency: string | null | undefined, paidCurrency: string): boolean {
+	const expectedCurrency = String(orderCurrency || 'NGN').toUpperCase();
+	return expectedCurrency === String(paidCurrency || 'NGN').toUpperCase();
 }
 
 async function findOrderByPaymentReference(paymentReference: string | null) {
@@ -41,7 +41,63 @@ async function markOrderPaidAndAllocate(params: {
 	channel: string | undefined;
 	paidAt: Date | undefined;
 	statusLabel: string | null;
+	amountPaid: number;
+	currency: string;
 }) {
+	const order = await prisma.order.findUnique({
+		where: { id: params.orderId },
+		select: {
+			id: true,
+			status: true,
+			paymentStatus: true,
+			totalAmount: true,
+			currency: true
+		}
+	});
+
+	if (!order) return;
+
+	if (order.status === 'completed') {
+		console.info('[payments.webhook] already_processed', {
+			orderId: params.orderId,
+			status: order.status
+		});
+		return;
+	}
+
+	const amountIsValid = isPaymentAmountValid(Number(order.totalAmount), Number(params.amountPaid || 0));
+	const currencyIsValid = isPaymentCurrencyValid(order.currency, params.currency);
+
+	if (!amountIsValid || !currencyIsValid) {
+		const previousStatus = order.status;
+		const previousPaymentStatus = order.paymentStatus;
+		await prisma.order.update({
+			where: { id: order.id },
+			data: {
+				status: 'failed',
+				paymentStatus: 'failed'
+			}
+		});
+
+		logOrderStatusTransition({
+			orderId: order.id,
+			source: 'webhook',
+			fromStatus: previousStatus,
+			toStatus: 'failed',
+			fromPaymentStatus: previousPaymentStatus,
+			toPaymentStatus: 'failed'
+		});
+
+		console.warn('[payments.webhook] amount_or_currency_mismatch', {
+			orderId: order.id,
+			expectedAmount: Number(order.totalAmount),
+			receivedAmount: Number(params.amountPaid || 0),
+			expectedCurrency: order.currency,
+			receivedCurrency: params.currency
+		});
+		return;
+	}
+
 	const paidTransition = await prisma.order.updateMany({
 		where: {
 			id: params.orderId,
@@ -50,25 +106,27 @@ async function markOrderPaidAndAllocate(params: {
 		data: {
 			status: 'paid',
 			paymentReference: params.paymentReference || undefined,
-			paymentStatus: 'success',
+			paymentStatus: 'paid',
 			paymentChannel: params.channel,
 			paidAt: params.paidAt || new Date()
 		}
 	});
 
-	if (paidTransition.count === 0) {
-		const existingOrder = await prisma.order.findUnique({
-			where: { id: params.orderId },
-			select: { status: true }
+	if (paidTransition.count > 0) {
+		logOrderStatusTransition({
+			orderId: order.id,
+			source: 'webhook',
+			fromStatus: order.status,
+			toStatus: 'paid',
+			fromPaymentStatus: order.paymentStatus,
+			toPaymentStatus: 'paid'
 		});
+	}
 
-		if (existingOrder?.status === 'paid' || existingOrder?.status === 'completed') {
-			console.info('[payments.webhook] already_processed', {
-				orderId: params.orderId,
-				status: existingOrder.status
-			});
-			return;
-		}
+	if (paidTransition.count === 0 && order.status === 'paid') {
+		console.info('[payments.webhook] already_paid_before_webhook', {
+			orderId: params.orderId
+		});
 	}
 
 	console.info('[payments.webhook] marked_paid', {
@@ -79,6 +137,15 @@ async function markOrderPaidAndAllocate(params: {
 
 	const allocationResult = await allocateAccountsForOrder(params.orderId);
 	if (!allocationResult.success) {
+		const latestOrder = await prisma.order.findUnique({
+			where: { id: params.orderId },
+			select: { status: true }
+		});
+
+		if (latestOrder?.status === 'completed') {
+			return;
+		}
+
 		console.warn('[payments.webhook] allocation_pending_manual', {
 			orderId: params.orderId,
 			error: allocationResult.error || null
@@ -111,12 +178,22 @@ async function markOrderFailed(params: {
 		return;
 	}
 
+	const nextStatus = getFailureOrderStatus(params.failureKind);
 	await prisma.order.update({
 		where: { id: order.id },
 		data: {
-			status: 'cancelled',
+			status: nextStatus,
 			paymentStatus: params.failureKind === 'cancelled' ? 'cancelled' : 'failed'
 		}
+	});
+
+	logOrderStatusTransition({
+		orderId: order.id,
+		source: 'webhook',
+		fromStatus: order.status,
+		toStatus: nextStatus,
+		fromPaymentStatus: order.paymentStatus,
+		toPaymentStatus: params.failureKind === 'cancelled' ? 'cancelled' : 'failed'
 	});
 
 	console.info('[payments.webhook] marked_failure', {
@@ -147,7 +224,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const eventData = body?.eventData || {};
 		const transactionReference = pickString(eventData?.transactionReference);
 		const paymentReference = pickString(eventData?.paymentReference);
-		const eventPaymentStatus = normalizeStatus(eventData?.paymentStatus);
+		const eventPaymentStatus = normalizePaymentStatus(eventData?.paymentStatus);
 
 		console.info('[payments.webhook] event_received', {
 			eventType,
@@ -164,7 +241,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 
 			const verificationResult = await verifyPayment(referenceForVerification);
-			const gatewayStatus = normalizeStatus(verificationResult.status);
+			const gatewayStatus = normalizePaymentStatus(verificationResult.status);
 
 			console.info('[payments.webhook] successful_transaction_verify_result', {
 				referenceForVerification,
@@ -173,7 +250,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				paymentReference: verificationResult.paymentReference || null
 			});
 
-			if (!verificationResult.success && !SUCCESS_STATUSES.has(gatewayStatus)) {
+			if (!verificationResult.success && !isSuccessPaymentStatus(gatewayStatus)) {
 				console.error(
 					'Monnify webhook: unable to confirm success transaction',
 					referenceForVerification
@@ -199,7 +276,9 @@ export const POST: RequestHandler = async ({ request }) => {
 				paymentReference: verificationResult.paymentReference || paymentReference,
 				channel: verificationResult.channel,
 				paidAt: verificationResult.paidAt,
-				statusLabel: gatewayStatus || verificationResult.status || null
+				statusLabel: gatewayStatus || verificationResult.status || null,
+				amountPaid: verificationResult.amountPaid || verificationResult.amount,
+				currency: verificationResult.currency
 			});
 
 			return json({ success: true });
@@ -213,9 +292,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			const referenceForVerification = transactionReference || paymentReference;
 			if (referenceForVerification) {
 				const verificationResult = await verifyPayment(referenceForVerification);
-				const gatewayStatus = normalizeStatus(verificationResult.status);
+				const gatewayStatus = normalizePaymentStatus(verificationResult.status);
 
-				if (verificationResult.success || SUCCESS_STATUSES.has(gatewayStatus)) {
+				if (verificationResult.success || isSuccessPaymentStatus(gatewayStatus)) {
 					const metadataOrderId = pickString(verificationResult.metaData?.orderId);
 					const fallbackOrder = !metadataOrderId
 						? await findOrderByPaymentReference(
@@ -230,7 +309,9 @@ export const POST: RequestHandler = async ({ request }) => {
 							paymentReference: verificationResult.paymentReference || paymentReference,
 							channel: verificationResult.channel,
 							paidAt: verificationResult.paidAt,
-							statusLabel: gatewayStatus || verificationResult.status || null
+							statusLabel: gatewayStatus || verificationResult.status || null,
+							amountPaid: verificationResult.amountPaid || verificationResult.amount,
+							currency: verificationResult.currency
 						});
 						return json({ success: true });
 					}
@@ -243,8 +324,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 
 			if (!resolvedFailureKind) {
-				// `REJECTED_PAYMENT` is terminal even when status field is absent.
-				resolvedFailureKind = eventType === 'REJECTED_PAYMENT' ? 'failed' : 'cancelled';
+				resolvedFailureKind = 'failed';
 			}
 
 			if (!resolvedOrderId) {
@@ -261,6 +341,20 @@ export const POST: RequestHandler = async ({ request }) => {
 				});
 			}
 
+			return json({ success: true });
+		}
+
+		const derivedFailureKind = getFailureKind(eventPaymentStatus);
+		if (derivedFailureKind) {
+			const orderByPaymentReference = await findOrderByPaymentReference(paymentReference);
+			if (orderByPaymentReference?.id) {
+				await markOrderFailed({
+					orderId: orderByPaymentReference.id,
+					failureKind: derivedFailureKind,
+					paymentReference,
+					transactionReference
+				});
+			}
 			return json({ success: true });
 		}
 

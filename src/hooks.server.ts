@@ -1,6 +1,9 @@
 // Server-side hooks for session management
 import { validateSessionToken } from '$lib/auth/session';
+import { startPaymentReconciliationScheduler } from '$lib/services/payment-reconciliation';
 import type { Handle } from '@sveltejs/kit';
+
+startPaymentReconciliationScheduler();
 
 export const handle: Handle = async ({ event, resolve }) => {
 	// Skip CSRF check for webhook endpoints
