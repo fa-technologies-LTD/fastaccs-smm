@@ -202,7 +202,8 @@
 		quickAddSubmitting = false;
 		quickAddOpen = true;
 
-		previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		previousActiveElement =
+			document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		previousBodyOverflow = document.body.style.overflow;
 		document.body.style.overflow = 'hidden';
 
@@ -367,11 +368,11 @@
 		{@const PlatformIcon = getPlatformIcon(data.platform.slug)}
 		{@const platformMeta = getPlatformMetadata(data.platform.metadata)}
 
-			<!-- Platform Header -->
-			<section
-				class={`py-4 text-white sm:py-12 ${platformMeta?.color ? '' : `bg-gradient-to-r ${getPlatformColor(data.platform.slug)}`}`}
-				style={getPlatformHeaderStyle(platformMeta)}
-			>
+		<!-- Platform Header -->
+		<section
+			class={`py-4 text-white sm:py-12 ${platformMeta?.color ? '' : `bg-gradient-to-r ${getPlatformColor(data.platform.slug)}`}`}
+			style={getPlatformHeaderStyle(platformMeta)}
+		>
 			<div class="mx-auto max-w-6xl px-4">
 				<!-- Enhanced Breadcrumb Navigation -->
 				<Breadcrumb
@@ -398,12 +399,12 @@
 								<PlatformIcon class="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12" />
 							{/if}
 						</div>
-							<div class="text-center">
-								<div class="text-2xl font-bold sm:text-3xl">{data.tiers.length}</div>
-								<div class="text-xs opacity-75 sm:text-sm">Available Tiers</div>
-							</div>
+						<div class="text-center">
+							<div class="text-2xl font-bold sm:text-3xl">{data.tiers.length}</div>
+							<div class="text-xs opacity-75 sm:text-sm">Available Tiers</div>
 						</div>
-						<div class="flex-1">
+					</div>
+					<div class="flex-1">
 						<h1 class="mb-1 text-2xl font-bold sm:text-3xl md:text-4xl">
 							{data.platform.name} Accounts
 						</h1>
@@ -416,14 +417,14 @@
 		<!-- Tier Selection -->
 		<section class="py-8 sm:py-16">
 			<div class="mx-auto max-w-6xl px-4">
-					<div class="mb-8 text-center">
-						<h2 class="mb-4 text-2xl font-bold sm:text-3xl" style="color: var(--text);">
-							Available Tiers
-						</h2>
-						<p class="text-base sm:text-lg" style="color: var(--text-muted);">
-							Select the tier that matches your needs. Each tier shows current stock and pricing.
-						</p>
-					</div>
+				<div class="mb-8 text-center">
+					<h2 class="mb-4 text-2xl font-bold sm:text-3xl" style="color: var(--text);">
+						Available Tiers
+					</h2>
+					<p class="text-base sm:text-lg" style="color: var(--text-muted);">
+						Select the tier that matches your needs. Each tier shows current stock and pricing.
+					</p>
+				</div>
 
 				{#if data.tiers.length === 0}
 					<div class="rounded-lg p-8 text-center" style="background: var(--bg-elev-2);">
@@ -444,7 +445,7 @@
 					</div>
 				{:else}
 					<div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-						{#each data.tiers as tier}
+						{#each data.tiers as tier, index (index)}
 							{@const tierStatus = getTierStatus(tier.visible_available)}
 							{@const tierFeatures = getTierFeatures(tier.metadata)}
 							<div
@@ -472,13 +473,13 @@
 								<div class="flex flex-1 flex-col p-6">
 									<div class="mb-4 flex items-center justify-between">
 										<div>
-												<h3 class="text-xl font-bold" style="color: var(--text);">
-													{tier.tier_name}
-												</h3>
-												<p class="text-sm" style="color: var(--text-muted);">
-													{getTierAudienceLabel(tier.metadata)}
-												</p>
-											</div>
+											<h3 class="text-xl font-bold" style="color: var(--text);">
+												{tier.tier_name}
+											</h3>
+											<p class="text-sm" style="color: var(--text-muted);">
+												{getTierAudienceLabel(tier.metadata)}
+											</p>
+										</div>
 										<div class="text-right">
 											<div
 												class="text-2xl font-bold"
@@ -516,7 +517,7 @@
 												Tier Features:
 											</h4>
 											<div class="space-y-2">
-												{#each tierFeatures as feature}
+												{#each tierFeatures as feature, featureIndex (featureIndex)}
 													<div
 														class="flex items-start gap-2 text-sm"
 														style="color: var(--text-muted);"
@@ -625,7 +626,9 @@
 					>
 						<div class="flex items-start justify-between gap-4">
 							<div>
-								<p class="text-sm font-medium" style="color: var(--text);">{quickAddTier.tier_name}</p>
+								<p class="text-sm font-medium" style="color: var(--text);">
+									{quickAddTier.tier_name}
+								</p>
 								<p class="mt-1 text-xs" style="color: var(--text-muted);">
 									{getTierAudienceLabel(quickAddTier.metadata)}
 								</p>
@@ -637,7 +640,10 @@
 					</div>
 
 					<div class="mb-5">
-						<div class="mb-2 flex items-center justify-between text-sm" style="color: var(--text-muted);">
+						<div
+							class="mb-2 flex items-center justify-between text-sm"
+							style="color: var(--text-muted);"
+						>
 							<span>Quantity</span>
 							<span>Maximum: {quickAddRemaining} available</span>
 						</div>
@@ -678,16 +684,25 @@
 						class="mb-5 rounded-xl p-4"
 						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 					>
-						<div class="flex items-center justify-between text-sm" style="color: var(--text-muted);">
+						<div
+							class="flex items-center justify-between text-sm"
+							style="color: var(--text-muted);"
+						>
 							<span>Price per account:</span>
 							<span>{formatPrice(quickAddTier.price)}</span>
 						</div>
-						<div class="mt-1 flex items-center justify-between text-sm" style="color: var(--text-muted);">
+						<div
+							class="mt-1 flex items-center justify-between text-sm"
+							style="color: var(--text-muted);"
+						>
 							<span>Quantity:</span>
 							<span>x{quickAddQuantity}</span>
 						</div>
 						<div class="my-3 h-px" style="background: var(--border);"></div>
-						<div class="flex items-center justify-between text-base font-semibold" style="color: var(--text);">
+						<div
+							class="flex items-center justify-between text-base font-semibold"
+							style="color: var(--text);"
+						>
 							<span>Total:</span>
 							<span style="color: var(--primary);">{formatPrice(getQuickAddTotalPrice())}</span>
 						</div>
