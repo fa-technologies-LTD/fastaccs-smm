@@ -219,6 +219,31 @@ Validation commands run in this pass:
 [CHECK] `npm run lint` -> FAIL on formatting drift (Prettier reports 59 files not formatted)
 [CHECK] `npm run test:unit -- --run` -> FAIL (no tests + Playwright browser binary missing; requires `npx playwright install`)
 
+BATCH 14: MONNIFY PAYMENT DETERMINISM + AUTH HARDENING
+Date: April 17, 2026
+Branch context: main (release commit `75bf5dd` pushed)
+Tracking update mode: LOCAL-ONLY (not pushed in this tracker update)
+
+Scope completed in this pass:
+[APPLIED] | Auth + ownership hardening on orders API create/read | src/routes/api/orders/+server.ts | anonymous order creation accepted + client userId trusted | requires auth and forces `userId = locals.user.id`
+[APPLIED] | Checkout flow hardening | src/routes/checkout/+page.svelte | split order-create + init path with weak 401 handling | unified authenticated order->Monnify init path with explicit session-expiry redirect
+[APPLIED] | Verify UX determinism (10s cap + explicit escape route) | src/routes/checkout/verify/+page.svelte | long indefinite pending impression + no direct close path | timeout at 10s, top-right close, auto-route to orders with pending-context banner
+[APPLIED] | Deterministic payment status normalization layer | src/lib/helpers/payment-status.ts | scattered status parsing | centralized success/pending/failure mapping used across verify/webhook/UI
+[APPLIED] | Verify endpoint state model + truthfulness | src/routes/api/payments/verify/+server.ts | ambiguous pending/failure transitions | explicit pending/cancelled/failed/paid transitions + amount/currency validation + idempotent paid recovery
+[APPLIED] | Webhook endpoint deterministic transitions | src/routes/api/webhooks/monnify/+server.ts | mixed event handling edge ambiguity | normalized failure classification + paid validation + idempotent transition handling
+[APPLIED] | Status transition audit logs | src/lib/services/order-audit.ts + verify/webhook/reconcile callers | no centralized transition trail | added transition logs with source/from/to for payment and order statuses
+[APPLIED] | Dashboard pending-confirmation context | src/lib/components/UserDashboard.svelte | no persisted pending-confirmation cue after verify exit | `paymentPending=1` banner with dismiss + URL cleanup
+[APPLIED] | Truthful customer order states | src/lib/components/OrderTab.svelte, src/routes/order/[id]/+page.svelte | unpaid orders reused fulfillment copy | payment state and fulfillment state split; unpaid copy now explicitly says allocation has not started
+[APPLIED] | Order ownership and admin-only mutation controls | src/routes/api/orders/[id]/+server.ts, src/routes/api/orders/[id]/process/+server.ts, src/routes/api/orders/[id]/deliver/+server.ts, src/routes/api/orders/stats/+server.ts, src/routes/order/[id]/+page.server.ts | sensitive routes reachable without full role checks | owner/admin checks and admin-only writes enforced
+[APPLIED] | Reconciliation engine for stale unresolved payments | src/lib/services/payment-reconciliation.ts | old pending rows could remain unresolved indefinitely | Monnify re-query + deterministic correction + stale cancel path
+[APPLIED] | Reconciliation scheduler wiring | src/hooks.server.ts | no background reconcile execution | opt-in scheduler bootstrap added
+[APPLIED] | Admin reconcile control endpoint (dry-run/backfill/rounds) | src/routes/api/payments/reconcile/+server.ts | no controlled trigger for one-off legacy cleanup | added admin GET/POST reconcile endpoint with parameterized controls
+
+Validation snapshot for this batch:
+[CHECK] `npm run check` -> PASS (0 errors, existing warnings only)
+[CHECK] `npm run build` -> PASS
+[CHECK] `npm run test:unit -- --run` -> blocked in this environment (Playwright browser binary missing)
+
 BATCH 14: POST-MOCK CLEANUP + FEATURED CARD DENSITY TWEAK
 Date: April 15, 2026
 
