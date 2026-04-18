@@ -10,6 +10,7 @@
 		isPendingPaymentStatus,
 		normalizePaymentStatus
 	} from '$lib/helpers/payment-status';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
 
 	const MAX_CONFIRMATION_WAIT_MS = 10_000;
 	const RETRY_INTERVAL_MS = 5_000;
@@ -66,7 +67,7 @@
 	}
 
 	function getOrdersDashboardPath(targetOrderId: string | null, showPendingBanner = false): string {
-		const query = new URLSearchParams({ tab: 'orders' });
+		const query = new SvelteURLSearchParams({ tab: 'orders' });
 		if (targetOrderId) {
 			query.set('orderId', targetOrderId);
 		}
@@ -178,11 +179,11 @@
 						return;
 					}
 
-						const normalizedStatus = normalizePaymentStatus(result.status);
-						const terminalFailure =
-							result.cancelled === true || result.failed === true || getFailureKind(normalizedStatus);
+					const normalizedStatus = normalizePaymentStatus(result.status);
+					const terminalFailure =
+						result.cancelled === true || result.failed === true || getFailureKind(normalizedStatus);
 
-						if (terminalFailure) {
+					if (terminalFailure) {
 						verifying = false;
 						pending = false;
 						timedOut = false;
@@ -202,39 +203,41 @@
 						} else {
 							showError('Payment failed', errorMessage);
 						}
-							return;
-						}
+						return;
+					}
 
-						if (response.status === 401) {
-							clearPendingOrderStorage();
-							showWarning('Session expired', 'Please log in again to complete payment verification.');
-							const returnUrl = encodeURIComponent($page.url.pathname + $page.url.search);
-							goto(`/auth/login?returnUrl=${returnUrl}`);
-							return;
-						}
+					if (response.status === 401) {
+						clearPendingOrderStorage();
+						showWarning('Session expired', 'Please log in again to complete payment verification.');
+						const returnUrl = encodeURIComponent($page.url.pathname + $page.url.search);
+						goto(`/auth/login?returnUrl=${returnUrl}`);
+						return;
+					}
 
-						if (!response.ok && response.status !== 202) {
-							verifying = false;
-							pending = false;
-							cancelled = false;
-							timedOut = false;
-							errorMessage =
-								result.error || result.message || `Verification failed with status ${response.status}`;
-							showError('Payment verification failed', errorMessage);
-							return;
-						}
+					if (!response.ok && response.status !== 202) {
+						verifying = false;
+						pending = false;
+						cancelled = false;
+						timedOut = false;
+						errorMessage =
+							result.error ||
+							result.message ||
+							`Verification failed with status ${response.status}`;
+						showError('Payment verification failed', errorMessage);
+						return;
+					}
 
-						const pendingResponse =
-							response.status === 202 ||
-							result.pending === true ||
-							isPendingPaymentStatus(normalizedStatus);
+					const pendingResponse =
+						response.status === 202 ||
+						result.pending === true ||
+						isPendingPaymentStatus(normalizedStatus);
 
-						if (pendingResponse) {
-							verifying = false;
-							pending = true;
-							cancelled = false;
-							timedOut = false;
-							pendingMessage = result.message || 'Waiting for payment confirmation from Monnify.';
+					if (pendingResponse) {
+						verifying = false;
+						pending = true;
+						cancelled = false;
+						timedOut = false;
+						pendingMessage = result.message || 'Waiting for payment confirmation from Monnify.';
 
 						if (!pendingToastShown) {
 							showWarning(
@@ -272,20 +275,19 @@
 				}
 			}
 
-				if (!isDisposed && !success) {
-					verifying = false;
-					pending = true;
-					cancelled = false;
-					timedOut = true;
-					pendingMessage =
-						'Waiting for payment confirmation from Monnify.';
-					showWarning(
-						'Payment confirmation pending',
-						'We are still confirming with Monnify. You will now be redirected to your orders.'
-					);
-					goToOrdersDashboard(true);
-				}
-			};
+			if (!isDisposed && !success) {
+				verifying = false;
+				pending = true;
+				cancelled = false;
+				timedOut = true;
+				pendingMessage = 'Waiting for payment confirmation from Monnify.';
+				showWarning(
+					'Payment confirmation pending',
+					'We are still confirming with Monnify. You will now be redirected to your orders.'
+				);
+				goToOrdersDashboard(true);
+			}
+		};
 
 		void runVerification();
 
@@ -314,22 +316,22 @@
 			</span>
 		</div>
 
-			<div
-				class="relative rounded-2xl p-6 text-center shadow-sm sm:p-8"
-				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-			>
-				{#if !success}
-					<button
-						onclick={closeVerificationScreen}
-						aria-label="Close and view orders"
-						class="absolute top-3 right-3 rounded-full p-2 transition hover:opacity-90"
-						style="border: 1px solid var(--border); color: var(--text-muted);"
-					>
-						<X size={16} />
-					</button>
-				{/if}
+		<div
+			class="relative rounded-2xl p-6 text-center shadow-sm sm:p-8"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+		>
+			{#if !success}
+				<button
+					onclick={closeVerificationScreen}
+					aria-label="Close and view orders"
+					class="absolute top-3 right-3 rounded-full p-2 transition hover:opacity-90"
+					style="border: 1px solid var(--border); color: var(--text-muted);"
+				>
+					<X size={16} />
+				</button>
+			{/if}
 
-				{#if verifying}
+			{#if verifying}
 				<!-- Verifying State -->
 				<div class="mb-6 flex justify-center">
 					<div
@@ -345,12 +347,12 @@
 				>
 					Verifying Payment
 				</h1>
-					<p
-						class="text-sm sm:text-base"
-						style="color: var(--text-muted); font-family: var(--font-body);"
-					>
-						Waiting for payment confirmation from Monnify.
-					</p>
+				<p
+					class="text-sm sm:text-base"
+					style="color: var(--text-muted); font-family: var(--font-body);"
+				>
+					Waiting for payment confirmation from Monnify.
+				</p>
 			{:else if success}
 				<!-- Success State -->
 				<div class="mb-6 flex justify-center">
@@ -432,11 +434,11 @@
 						>
 							Refresh Status
 						</button>
-							<button
-								onclick={() => goToOrdersDashboard(true)}
-								class="w-full rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
-								style="border: 1px solid var(--border); color: var(--text); font-family: var(--font-head);"
-							>
+						<button
+							onclick={() => goToOrdersDashboard(true)}
+							class="w-full rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
+							style="border: 1px solid var(--border); color: var(--text); font-family: var(--font-head);"
+						>
 							View Orders
 						</button>
 					</div>
@@ -471,11 +473,11 @@
 					{errorMessage}
 				</p>
 				<div class="space-y-3">
-						<button
-							onclick={() => goToOrdersDashboard(false)}
-							class="w-full rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
-							style="background: var(--btn-primary-gradient); color: #04140C; font-family: var(--font-head);"
-						>
+					<button
+						onclick={() => goToOrdersDashboard(false)}
+						class="w-full rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
+						style="background: var(--btn-primary-gradient); color: #04140C; font-family: var(--font-head);"
+					>
 						View Orders
 					</button>
 					<button
