@@ -1,10 +1,22 @@
 <script lang="ts">
+	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { ShoppingCart, Star, Users, Package, ArrowRight, ChevronRight } from '@lucide/svelte';
+	import {
+		ShoppingCart,
+		Star,
+		Users,
+		Package,
+		ArrowRight,
+		ChevronRight,
+		X,
+		Minus,
+		Plus
+	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
-	
+	import { cart } from '$lib/stores/cart.svelte';
+	import { showError, showSuccess, showWarning } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import {
 		getPlatformColor,
@@ -17,13 +29,24 @@
 		data: PageData;
 	}
 
-	let { data }: Props = $props();
-	let platformHeaderIconFailed = $state(false);
-
 	interface PlatformMetadata {
 		icon?: unknown;
 		color?: unknown;
 	}
+
+	type TierCard = PageData['tiers'][number];
+
+	let { data }: Props = $props();
+	let platformHeaderIconFailed = $state(false);
+	let quickAddOpen = $state(false);
+	let quickAddTier = $state<TierCard | null>(null);
+	let quickAddQuantity = $state(1);
+	let quickAddSubmitting = $state(false);
+
+	let quickAddDialog = $state<HTMLDivElement | null>(null);
+	let quickAddCloseButton = $state<HTMLButtonElement | null>(null);
+	let previousBodyOverflow = '';
+	let previousActiveElement: HTMLElement | null = null;
 
 	// Format follower count
 	function formatFollowers(count: number): string {
@@ -37,8 +60,8 @@
 		return count.toString();
 	}
 
-	function navigateToTier(tierSlug: string) {
-		goto(`/platforms/${data.platform?.slug}/tiers/${tierSlug}`);
+	function getTierRoute(tierSlug: string): string {
+		return `/platforms/${data.platform?.slug}/tiers/${tierSlug}`;
 	}
 
 	function goBack() {
@@ -70,13 +93,12 @@
 				color: 'text-yellow-600',
 				bgColor: 'bg-yellow-50 border-yellow-200'
 			};
-		} else {
-			return {
-				status: 'In Stock',
-				color: 'text-green-600',
-				bgColor: 'bg-green-50 border-green-200'
-			};
 		}
+		return {
+			status: 'In Stock',
+			color: 'text-green-600',
+			bgColor: 'bg-green-50 border-green-200'
+		};
 	}
 
 	// Format feature names (e.g., "viral_ready" -> "Viral Ready")
@@ -142,7 +164,174 @@
 		}
 		return features;
 	}
+
+	function getCurrentCartQuantity(tier: TierCard): number {
+		const existingCartItem = cart.items.find((item) => item.tierId === tier.category_id);
+		return existingCartItem ? existingCartItem.quantity : 0;
+	}
+
+	function getRemainingSelectableQuantity(tier: TierCard): number {
+		return Math.max(tier.visible_available - getCurrentCartQuantity(tier), 0);
+	}
+
+	function getQuickAddRemainingQuantity(): number {
+		if (!quickAddTier) return 0;
+		return getRemainingSelectableQuantity(quickAddTier);
+	}
+
+	function getQuickAddTotalPrice(): number {
+		if (!quickAddTier) return 0;
+		return quickAddTier.price * quickAddQuantity;
+	}
+
+	async function openQuickAddModal(tier: TierCard): Promise<void> {
+		if (tier.visible_available <= 0) return;
+
+		const currentCartQuantity = getCurrentCartQuantity(tier);
+		const remainingStock = tier.visible_available - currentCartQuantity;
+		if (remainingStock <= 0) {
+			showWarning(
+				'Maximum quantity reached',
+				`You already have the maximum available quantity (${tier.visible_available}) for this tier in your cart.`
+			);
+			return;
+		}
+
+		quickAddTier = tier;
+		quickAddQuantity = 1;
+		quickAddSubmitting = false;
+		quickAddOpen = true;
+
+		previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		previousBodyOverflow = document.body.style.overflow;
+		document.body.style.overflow = 'hidden';
+
+		await tick();
+		quickAddCloseButton?.focus();
+	}
+
+	function closeQuickAddModal(): void {
+		quickAddOpen = false;
+		quickAddSubmitting = false;
+		quickAddQuantity = 1;
+		quickAddTier = null;
+		document.body.style.overflow = previousBodyOverflow;
+
+		if (previousActiveElement) {
+			previousActiveElement.focus();
+			previousActiveElement = null;
+		}
+	}
+
+	function decreaseQuickAddQuantity(): void {
+		if (quickAddQuantity > 1) {
+			quickAddQuantity -= 1;
+		}
+	}
+
+	function increaseQuickAddQuantity(): void {
+		const maxAllowedSelection = getQuickAddRemainingQuantity();
+		if (quickAddQuantity < maxAllowedSelection) {
+			quickAddQuantity += 1;
+		}
+	}
+
+	function trapQuickAddFocus(event: KeyboardEvent): void {
+		if (!quickAddDialog) return;
+		const focusableElements = Array.from(
+			quickAddDialog.querySelectorAll<HTMLElement>(
+				'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+			)
+		);
+
+		if (focusableElements.length === 0) return;
+
+		const first = focusableElements[0];
+		const last = focusableElements[focusableElements.length - 1];
+		const activeElement = document.activeElement as HTMLElement | null;
+		const activeInsideDialog = activeElement ? quickAddDialog.contains(activeElement) : false;
+
+		if (event.shiftKey) {
+			if (!activeInsideDialog || activeElement === first) {
+				event.preventDefault();
+				last.focus();
+			}
+			return;
+		}
+
+		if (!activeInsideDialog || activeElement === last) {
+			event.preventDefault();
+			first.focus();
+		}
+	}
+
+	function handleQuickAddWindowKeydown(event: KeyboardEvent): void {
+		if (!quickAddOpen) return;
+
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			closeQuickAddModal();
+			return;
+		}
+
+		if (event.key === 'Tab') {
+			trapQuickAddFocus(event);
+		}
+	}
+
+	async function addQuickAddToCart(): Promise<void> {
+		const tier = quickAddTier;
+		if (!tier || quickAddSubmitting) return;
+
+		quickAddSubmitting = true;
+		try {
+			const existingCartItem = cart.items.find((item) => item.tierId === tier.category_id);
+			const currentCartQuantity = existingCartItem ? existingCartItem.quantity : 0;
+			const totalQuantityAfterAdd = currentCartQuantity + quickAddQuantity;
+
+			if (totalQuantityAfterAdd > tier.visible_available) {
+				const remainingStock = tier.visible_available - currentCartQuantity;
+				if (remainingStock <= 0) {
+					showWarning(
+						'Maximum quantity reached',
+						`You already have the maximum available quantity (${tier.visible_available}) for this tier in your cart.`
+					);
+				} else {
+					showWarning(
+						'Quantity limit exceeded',
+						`Only ${remainingStock} more accounts can be added to your cart for this tier. You already have ${currentCartQuantity} in your cart.`
+					);
+				}
+				return;
+			}
+
+			cart.addTier(tier.category_id, quickAddQuantity);
+			showSuccess(
+				'Added to cart!',
+				`${quickAddQuantity} ${tier.tier_name} ${quickAddQuantity === 1 ? 'account' : 'accounts'} added successfully. Click to view cart.`,
+				6000,
+				'/checkout'
+			);
+			closeQuickAddModal();
+		} catch (error) {
+			console.error('Error adding to cart:', error);
+			showError(
+				'Failed to add to cart',
+				'Please try again or contact support if the problem persists.'
+			);
+		} finally {
+			quickAddSubmitting = false;
+		}
+	}
+
+	onMount(() => {
+		return () => {
+			document.body.style.overflow = previousBodyOverflow;
+		};
+	});
 </script>
+
+<svelte:window onkeydown={handleQuickAddWindowKeydown} />
 
 <svelte:head>
 	<title>{data.platform?.name} Accounts - FastAccs</title>
@@ -259,15 +448,10 @@
 							{@const tierStatus = getTierStatus(tier.visible_available)}
 							{@const tierFeatures = getTierFeatures(tier.metadata)}
 							<div
-								onclick={() => tier.visible_available > 0 && navigateToTier(tier.tier_slug)}
-								onkeydown={(e) =>
-									e.key === 'Enter' && tier.visible_available > 0 && navigateToTier(tier.tier_slug)}
-								role="button"
-								tabindex={tier.visible_available > 0 ? 0 : -1}
 								class="group relative flex flex-col overflow-hidden rounded-xl shadow transition-all duration-300 {tier.visible_available >
 								0
-									? 'cursor-pointer hover:-translate-y-1 hover:shadow-md active:scale-[.98]'
-									: 'cursor-not-allowed opacity-75'}"
+									? 'hover:-translate-y-1 hover:shadow-md'
+									: 'opacity-75'}"
 								style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 							>
 								<!-- Stock Status Badge -->
@@ -364,11 +548,15 @@
 								</div>
 
 								<!-- Action Label - Always at Bottom -->
-								<div
-									class="mx-6 mt-6 mb-6 flex items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-colors"
+								<button
+									type="button"
+									onclick={() => openQuickAddModal(tier)}
+									disabled={tier.visible_available === 0}
+									aria-label={`Quick add ${tier.tier_name}`}
+									class="mx-6 mt-6 mb-6 flex items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:active:scale-100"
 									style={tier.visible_available === 0
 										? 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'
-										: 'background: var(--btn-primary-gradient); color: white;'}
+										: 'background: var(--btn-primary-gradient); color: #04140C;'}
 								>
 									{#if tier.visible_available === 0}
 										Sold Out
@@ -376,7 +564,7 @@
 										<span>Select This Tier</span>
 										<ArrowRight class="h-4 w-4" />
 									{/if}
-								</div>
+								</button>
 							</div>
 						{/each}
 					</div>
@@ -384,8 +572,170 @@
 			</div>
 		</section>
 
-		
-		
+		{#if quickAddOpen && quickAddTier}
+			{@const quickAddRemaining = getQuickAddRemainingQuantity()}
+			<div
+				class="fixed inset-0 z-40 bg-black/70 backdrop-blur-[1px]"
+				role="button"
+				tabindex={0}
+				aria-label="Close quick add"
+				onclick={closeQuickAddModal}
+				onkeydown={(event) => {
+					if (event.key === 'Enter' || event.key === ' ') {
+						event.preventDefault();
+						closeQuickAddModal();
+					}
+				}}
+			></div>
+
+			<div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+				<div
+					bind:this={quickAddDialog}
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="quick-add-title"
+					tabindex="-1"
+					class="w-full max-w-md rounded-2xl p-5 shadow-xl sm:p-6"
+					style="background: var(--bg-elev-2); border: 1px solid var(--border);"
+				>
+					<div class="mb-5 flex items-start justify-between">
+						<div>
+							<h3 id="quick-add-title" class="text-lg font-semibold" style="color: var(--text);">
+								Select Quantity
+							</h3>
+							<p class="mt-1 text-sm" style="color: var(--text-muted);">
+								Choose how many accounts you want to add now.
+							</p>
+						</div>
+						<button
+							bind:this={quickAddCloseButton}
+							type="button"
+							onclick={closeQuickAddModal}
+							class="rounded-md p-1.5 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+							style="color: var(--text-muted);"
+							aria-label="Close quick add"
+						>
+							<X class="h-5 w-5" />
+						</button>
+					</div>
+
+					<div
+						class="mb-5 rounded-xl p-4"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+					>
+						<div class="flex items-start justify-between gap-4">
+							<div>
+								<p class="text-sm font-medium" style="color: var(--text);">{quickAddTier.tier_name}</p>
+								<p class="mt-1 text-xs" style="color: var(--text-muted);">
+									{getTierAudienceLabel(quickAddTier.metadata)}
+								</p>
+							</div>
+							<p class="text-base font-semibold" style="color: var(--primary);">
+								{formatPrice(quickAddTier.price)}
+							</p>
+						</div>
+					</div>
+
+					<div class="mb-5">
+						<div class="mb-2 flex items-center justify-between text-sm" style="color: var(--text-muted);">
+							<span>Quantity</span>
+							<span>Maximum: {quickAddRemaining} available</span>
+						</div>
+						<div
+							class="flex items-center justify-between rounded-lg px-3 py-2"
+							style="border: 1px solid var(--border);"
+						>
+							<button
+								type="button"
+								onclick={decreaseQuickAddQuantity}
+								disabled={quickAddQuantity <= 1 || quickAddSubmitting}
+								class="flex h-9 w-9 items-center justify-center rounded-md transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+								style="background: var(--bg-elev-1); color: var(--text);"
+								aria-label="Decrease quantity"
+							>
+								<Minus class="h-4 w-4" />
+							</button>
+							<div class="text-center">
+								<div class="text-xl font-bold" style="color: var(--text);">{quickAddQuantity}</div>
+								<div class="text-xs" style="color: var(--text-muted);">
+									{quickAddQuantity === 1 ? 'account' : 'accounts'}
+								</div>
+							</div>
+							<button
+								type="button"
+								onclick={increaseQuickAddQuantity}
+								disabled={quickAddQuantity >= quickAddRemaining || quickAddSubmitting}
+								class="flex h-9 w-9 items-center justify-center rounded-md transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+								style="background: var(--bg-elev-1); color: var(--text);"
+								aria-label="Increase quantity"
+							>
+								<Plus class="h-4 w-4" />
+							</button>
+						</div>
+					</div>
+
+					<div
+						class="mb-5 rounded-xl p-4"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+					>
+						<div class="flex items-center justify-between text-sm" style="color: var(--text-muted);">
+							<span>Price per account:</span>
+							<span>{formatPrice(quickAddTier.price)}</span>
+						</div>
+						<div class="mt-1 flex items-center justify-between text-sm" style="color: var(--text-muted);">
+							<span>Quantity:</span>
+							<span>x{quickAddQuantity}</span>
+						</div>
+						<div class="my-3 h-px" style="background: var(--border);"></div>
+						<div class="flex items-center justify-between text-base font-semibold" style="color: var(--text);">
+							<span>Total:</span>
+							<span style="color: var(--primary);">{formatPrice(getQuickAddTotalPrice())}</span>
+						</div>
+					</div>
+
+					{#if quickAddRemaining <= 10 && quickAddRemaining > 0}
+						<div
+							class="mb-4 rounded-lg border border-yellow-500/30 px-3 py-2 text-sm text-yellow-500"
+							style="background: var(--bg-elev-1);"
+						>
+							⚠️ Only {quickAddRemaining} accounts left in stock!
+						</div>
+					{/if}
+
+					<div class="space-y-3">
+						<button
+							type="button"
+							onclick={addQuickAddToCart}
+							disabled={quickAddSubmitting || quickAddRemaining === 0}
+							class="w-full rounded-full py-3 font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
+							style="background: var(--btn-primary-gradient); color: #04140C;"
+						>
+							{#if quickAddSubmitting}
+								<div class="flex items-center justify-center gap-2">
+									<div
+										class="h-4 w-4 animate-spin rounded-full border-2 border-[#04140C] border-t-transparent"
+									></div>
+									Adding to Cart...
+								</div>
+							{:else}
+								<div class="flex items-center justify-center gap-2">
+									<ShoppingCart class="h-4 w-4" />
+									Add to Cart - {formatPrice(getQuickAddTotalPrice())}
+								</div>
+							{/if}
+						</button>
+						<a
+							href={getTierRoute(quickAddTier.tier_slug)}
+							class="inline-flex w-full items-center justify-center gap-1 text-sm underline-offset-2 transition-colors hover:underline"
+							style="color: var(--link);"
+						>
+							View full details
+							<ChevronRight class="h-4 w-4" />
+						</a>
+					</div>
+				</div>
+			</div>
+		{/if}
 	{/if}
 </main>
 

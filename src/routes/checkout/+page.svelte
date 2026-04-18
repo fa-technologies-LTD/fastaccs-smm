@@ -21,7 +21,7 @@
 	import { createOrder } from '$lib/services/orders';
 	import type { CartItemWithTier } from '$lib/types/cart';
 	import { formatPrice } from '$lib/helpers/utils';
-	import { getPlatformIcon } from '$lib/helpers/platformColors';
+	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
 
 	let { data }: { data: PageData } = $props();
 
@@ -38,6 +38,7 @@
 	// Cart items and total
 	let cartItems = $state<CartItemWithTier[]>([]);
 	let cartTotal = $state(0);
+	let failedCheckoutIcons = $state<Record<string, boolean>>({});
 
 	// Load cart data and redirect if empty
 	$effect(() => {
@@ -106,6 +107,17 @@
 	function isUnauthorizedApiError(errorText: unknown): boolean {
 		if (typeof errorText !== 'string') return false;
 		return errorText.includes('HTTP 401');
+	}
+
+	function shouldRenderCheckoutPlatformImage(item: CartItemWithTier): boolean {
+		return isPlatformImageUrl(item.tier.platformIcon) && !failedCheckoutIcons[item.tier.id];
+	}
+
+	function markCheckoutPlatformImageFailed(tierId: string): void {
+		failedCheckoutIcons = {
+			...failedCheckoutIcons,
+			[tierId]: true
+		};
 	}
 
 	// ARCHIVED: wallet checkout (processCheckout) removed — wallet payments disabled.
@@ -375,21 +387,33 @@
 						<div class="space-y-4 sm:space-y-5">
 							{#each cartItems as item (item.tierId)}
 								{@const PlatformIcon = getPlatformIcon(item.tier.platformSlug)}
+								{@const renderPlatformImage = shouldRenderCheckoutPlatformImage(item)}
 								<div class="flex gap-3">
 									<div
 										class="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br sm:h-16 sm:w-16 {item
-											.tier.platformSlug === 'instagram'
+											.tier.platformSlug === 'instagram' && !renderPlatformImage
 											? 'from-pink-500 to-purple-600'
-											: item.tier.platformSlug === 'tiktok'
+											: item.tier.platformSlug === 'tiktok' && !renderPlatformImage
 												? 'from-black to-gray-800'
-												: item.tier.platformSlug === 'facebook'
+												: item.tier.platformSlug === 'facebook' && !renderPlatformImage
 													? 'from-blue-600 to-blue-700'
-													: item.tier.platformSlug === 'twitter'
+													: item.tier.platformSlug === 'twitter' && !renderPlatformImage
 														? 'from-blue-400 to-blue-500'
-														: 'from-gray-500 to-gray-600'}"
+														: !renderPlatformImage
+															? 'from-gray-500 to-gray-600'
+															: ''}"
 									>
 										<div class="flex h-full w-full items-center justify-center">
-											<PlatformIcon size={20} class="text-white sm:h-6 sm:w-6" />
+											{#if renderPlatformImage}
+												<img
+													src={item.tier.platformIcon}
+													alt={item.tier.platformName}
+													class="h-full w-full object-cover"
+													onerror={() => markCheckoutPlatformImageFailed(item.tier.id)}
+												/>
+											{:else}
+												<PlatformIcon size={20} class="text-white sm:h-6 sm:w-6" />
+											{/if}
 										</div>
 									</div>
 									<div class="flex-1">

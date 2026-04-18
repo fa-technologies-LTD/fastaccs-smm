@@ -21,7 +21,8 @@ export const POST: RequestHandler = async ({ request }) => {
 					select: {
 						id: true,
 						name: true,
-						slug: true
+						slug: true,
+						metadata: true
 					}
 				}
 			}

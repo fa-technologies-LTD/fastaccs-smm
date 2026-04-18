@@ -12,6 +12,7 @@ export interface CartItemWithTier extends CartItem {
 		slug: string;
 		platformName: string;
 		platformSlug: string;
+		platformIcon?: string | null;
 		isActive: boolean;
 	};
 }

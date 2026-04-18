@@ -4,7 +4,7 @@
 	import { goto } from '$app/navigation';
 	import type { CartItemWithTier } from '$lib/types/cart';
 	import { formatPrice } from '$lib/helpers/utils';
-	import { getPlatformIcon } from '$lib/helpers/platformColors';
+	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
 
 	// Reactive state
 	const isOpen = $derived(cart.isOpen);
@@ -14,6 +14,7 @@
 
 	let cartItems = $state<CartItemWithTier[]>([]);
 	let total = $state<number>(0);
+	let failedCustomIcons = $state<Record<string, boolean>>({});
 
 	// Load cart items when cart opens or items change
 	$effect(() => {
@@ -51,6 +52,17 @@
 	function continueShopping() {
 		cart.close();
 		goto('/platforms');
+	}
+
+	function shouldRenderPlatformImage(item: CartItemWithTier): boolean {
+		return isPlatformImageUrl(item.tier.platformIcon) && !failedCustomIcons[item.tier.id];
+	}
+
+	function markPlatformImageFailed(tierId: string): void {
+		failedCustomIcons = {
+			...failedCustomIcons,
+			[tierId]: true
+		};
 	}
 </script>
 
@@ -167,6 +179,7 @@
 						<div style="border-top: 1px solid var(--border);">
 							{#each cartItems as item}
 								{@const PlatformIcon = getPlatformIcon(item.tier.platformSlug)}
+								{@const renderPlatformImage = shouldRenderPlatformImage(item)}
 								<div
 									class="flex items-center gap-3"
 									style="padding: var(--space-md); border-bottom: 1px solid var(--border);"
@@ -174,18 +187,29 @@
 									<!-- Platform Icon with Gradient Background -->
 									<div
 										class="flex h-12 w-12 flex-shrink-0 items-center justify-center bg-gradient-to-br {item
-											.tier.platformSlug === 'instagram'
+											.tier.platformSlug === 'instagram' && !renderPlatformImage
 											? 'from-pink-500 to-purple-600'
-											: item.tier.platformSlug === 'tiktok'
+											: item.tier.platformSlug === 'tiktok' && !renderPlatformImage
 												? 'from-black to-gray-800'
-												: item.tier.platformSlug === 'facebook'
+												: item.tier.platformSlug === 'facebook' && !renderPlatformImage
 													? 'from-blue-600 to-blue-700'
-													: item.tier.platformSlug === 'twitter'
+													: item.tier.platformSlug === 'twitter' && !renderPlatformImage
 														? 'from-blue-400 to-blue-500'
-														: 'from-gray-500 to-gray-600'}"
+														: !renderPlatformImage
+															? 'from-gray-500 to-gray-600'
+															: ''}"
 										style="border-radius: var(--r-sm); box-shadow: 0 2px 8px rgba(0,0,0,0.2);"
 									>
-										<PlatformIcon size={24} class="text-white" />
+										{#if renderPlatformImage}
+											<img
+												src={item.tier.platformIcon}
+												alt={item.tier.platformName}
+												class="h-full w-full object-cover"
+												onerror={() => markPlatformImageFailed(item.tier.id)}
+											/>
+										{:else}
+											<PlatformIcon size={24} class="text-white" />
+										{/if}
 									</div>
 
 									<!-- Item Details -->

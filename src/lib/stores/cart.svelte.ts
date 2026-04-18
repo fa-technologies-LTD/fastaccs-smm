@@ -10,7 +10,17 @@ interface TierData {
 	parent?: {
 		name: string;
 		slug: string;
+		metadata?: unknown;
 	} | null;
+}
+
+function getPlatformIconFromMetadata(metadata: unknown): string | null {
+	if (!metadata || typeof metadata !== 'object') {
+		return null;
+	}
+
+	const icon = (metadata as Record<string, unknown>).icon;
+	return typeof icon === 'string' && icon.trim().length > 0 ? icon.trim() : null;
 }
 
 const STORAGE_KEY = 'fastaccs_cart';
@@ -210,6 +220,7 @@ class CartStore {
 							slug: tier.slug,
 							platformName: tier.parent?.name || 'Unknown',
 							platformSlug: tier.parent?.slug || '',
+							platformIcon: getPlatformIconFromMetadata(tier.parent?.metadata),
 							isActive: tier.isActive
 						}
 					});
