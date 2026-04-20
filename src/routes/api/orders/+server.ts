@@ -103,6 +103,17 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 		}
 
+		if (!locals.user.emailVerified) {
+			return json(
+				{
+					success: false,
+					error: 'Email verification required before checkout.',
+					code: 'EMAIL_NOT_VERIFIED'
+				},
+				{ status: 403 }
+			);
+		}
+
 		const orderData = (await request.json()) as CreateOrderInput;
 		const items = Array.isArray(orderData.items) ? orderData.items : [];
 

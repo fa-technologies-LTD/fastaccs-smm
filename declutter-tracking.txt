@@ -249,3 +249,35 @@ Date: April 15, 2026
 
 [APPLIED] | Homepage featured platform card density | src/lib/components/FeaturedCategories.svelte | cards had excess bottom space from forced minimum height | removed fixed `min-height` from `.platform-entry` to let card height fit content naturally
 [APPLIED] | Mock lab removal | src/routes/mock-lab/** | temporary preview routes remained in codebase | removed mock-lab routes fully after owner sign-off to keep runtime clean
+
+BATCH 15: FULL OWNERSHIP TRANSFER (FASTACCS-SMM)
+Date: April 20, 2026
+Owner directive: Full ownership and control by FA Technologies LTD, launch target on `smm.fastaccs.com`, no new feature work before MVP launch.
+
+Scope lock for this batch:
+1) Transfer or re-home FastAccs repo to `fa-technologies-LTD/fastaccs-smm`.
+2) Move deployment ownership to owner-controlled Vercel team with Git auto-build.
+3) Keep `fastaccs.com` apex static flow unchanged during takeover.
+4) Launch app on `smm.fastaccs.com` first for low-risk cutover.
+5) Rotate env secrets and integration credentials under owner control.
+6) Validate app health, payment flow, DB migrations, and email pipeline after cutover.
+
+Execution tracker:
+[IN-PROGRESS] | Ownership audit | local workspace + sibling projects | mixed ownership detected (`adetyaz/fastaccs` remote on core repo, org-owned siblings) | takeover runbook activated
+[IN-PROGRESS] | Tracking instrumentation | declutter-tracking.txt | no dedicated ownership transfer batch | Batch 15 created with milestone control points
+[APPLIED] | Transfer runbook doc | OWNERSHIP-TRANSFER-RUNBOOK.md | no single operator guide for takeover execution | added end-to-end runbook with transfer-first/fallback paths, DNS, Vercel, DB, env rotation, integration cutover, and smoke test sequence
+[PENDING] | GitHub transfer attempt | adetyaz/fastaccs -> fa-technologies-LTD/fastaccs-smm | current upstream not under org | attempt transfer first; fallback to fresh org repo push if blocked
+[PENDING] | Git fallback path readiness | local git history -> new org repo | transfer may require old owner confirmation | fallback will preserve full local git history via mirror-style push
+[PENDING] | Vercel owner project binding | org repo -> owner team project | deployment ownership currently uncertain | bind project to owner team and enable auto deploy on `main`
+[PENDING] | Domain routing setup | Namecheap DNS -> `smm.fastaccs.com` | apex currently tied to static/GitHub Pages | add subdomain DNS for SMM app, keep root untouched
+[PENDING] | Fresh DB migration path | owner-controlled Neon DB | legacy migration command reliability issues on old target | run on fresh Neon project + verify schema
+[PENDING] | Env reset and secret rotation | Vercel env + provider dashboards | old test/dev secrets present in legacy contexts | rotate Monnify, Google OAuth secret, SMTP, DB credentials
+[PENDING] | Integration endpoint cutover | Monnify + Google OAuth | callbacks still may point to old host/project | update redirect/webhook/origin URLs to `smm.fastaccs.com`
+[PENDING] | Cutover verification | preview + production checks | launch quality not yet re-verified under new ownership | run smoke pass and freeze for MVP launch
+
+Decision log (approved):
+1) Canonical repo name: `fastaccs-smm`
+2) Transfer-first strategy approved; fallback requires explicit reconfirmation
+3) Vercel auto-deploy tied to Git approved
+4) Apex (`fastaccs.com`) remains unchanged during takeover
+5) Post-takeover access cleanup (remove old developer control) approved

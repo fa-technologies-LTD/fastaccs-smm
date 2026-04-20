@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import { onMount } from 'svelte';
 	import {
 		ShoppingCart,
 		Users,
@@ -8,7 +10,8 @@
 		Minus,
 		Shield,
 		CheckCircle,
-		ChevronRight
+		ChevronRight,
+		BellRing
 	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -28,6 +31,10 @@
 	// Reactive state for quantity selection
 	let selectedQuantity = $state(1);
 	let addingToCart = $state(false);
+	let notifyLoading = $state(false);
+	let notifySubscribed = $state(false);
+	let autoSubscribeHandled = $state(false);
+	const currentUser = $derived((page.data as { user?: { id: string } | null }).user || null);
 
 	// Format follower count
 	function formatFollowers(count: number): string {
@@ -148,6 +155,55 @@
 		}
 	}
 
+	async function loadNotifySubscriptionStatus(): Promise<void> {
+		if (!currentUser || !data.tierCategory || data.tier.visible_available > 0) return;
+
+		try {
+			const response = await fetch(
+				`/api/restock-subscriptions?tierId=${encodeURIComponent(data.tierCategory.id)}`
+			);
+			if (!response.ok) return;
+			const result = await response.json();
+			notifySubscribed = Boolean(result?.data?.subscribed);
+		} catch (error) {
+			console.error('Failed to load restock subscription status:', error);
+		}
+	}
+
+	async function subscribeForRestock(): Promise<void> {
+		if (!data.tierCategory || notifyLoading || notifySubscribed) return;
+
+		if (!currentUser) {
+			const nextUrl = new URL(page.url);
+			nextUrl.searchParams.set('notifyRestock', '1');
+			const returnUrl = encodeURIComponent(nextUrl.pathname + nextUrl.search);
+			goto(`/auth/login?returnUrl=${returnUrl}`);
+			return;
+		}
+
+		notifyLoading = true;
+		try {
+			const response = await fetch('/api/restock-subscriptions', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ tierId: data.tierCategory.id })
+			});
+			const result = await response.json();
+			if (!response.ok || !result.success) {
+				showError('Subscription failed', result.error || 'Unable to subscribe right now.');
+				return;
+			}
+
+			notifySubscribed = true;
+			showSuccess('Subscribed', result.message || "You'll be notified when this tier is back.");
+		} catch (error) {
+			console.error('Failed to subscribe for restock:', error);
+			showError('Subscription failed', 'Unable to subscribe right now. Please try again.');
+		} finally {
+			notifyLoading = false;
+		}
+	}
+
 	// Get tier status
 	function getTierStatus(available: number): { status: string; color: string; bgColor: string } {
 		if (available === 0) {
@@ -166,6 +222,26 @@
 			};
 		}
 	}
+
+	onMount(async () => {
+		await loadNotifySubscriptionStatus();
+
+		const shouldAutoSubscribe =
+			Boolean(currentUser) &&
+			!notifySubscribed &&
+			!autoSubscribeHandled &&
+			data.tier.visible_available === 0 &&
+			page.url.searchParams.get('notifyRestock') === '1';
+
+		if (shouldAutoSubscribe) {
+			autoSubscribeHandled = true;
+			await subscribeForRestock();
+
+			const cleaned = new URL(window.location.href);
+			cleaned.searchParams.delete('notifyRestock');
+			window.history.replaceState({}, '', cleaned.pathname + cleaned.search);
+		}
+	});
 </script>
 
 <svelte:head>
@@ -406,27 +482,55 @@
 								</div>
 							</div>
 
-							<!-- Add to Cart Button -->
-							<button
-								onclick={addToCart}
-								disabled={data.tier.visible_available === 0 || addingToCart}
-								class="w-full rounded-full py-4 font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
-								style="background: var(--btn-primary-gradient);"
-							>
-								{#if addingToCart}
-									<div class="flex items-center justify-center gap-2">
-										<div
-											class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-										></div>
-										Adding to Cart...
-									</div>
-								{:else}
-									<div class="flex items-center justify-center gap-2">
-										<ShoppingCart class="h-5 w-5" />
-										Add to Cart - {formatPrice(totalPrice)}
-									</div>
-								{/if}
-							</button>
+							{#if data.tier.visible_available === 0}
+								<button
+									onclick={subscribeForRestock}
+									disabled={notifyLoading || notifySubscribed}
+									class="w-full rounded-full py-4 font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
+									style="background: var(--btn-primary-gradient);"
+								>
+									{#if notifyLoading}
+										<div class="flex items-center justify-center gap-2">
+											<div
+												class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+											></div>
+											Saving...
+										</div>
+									{:else if notifySubscribed}
+										<div class="flex items-center justify-center gap-2">
+											<CheckCircle class="h-5 w-5" />
+											You'll be notified
+										</div>
+									{:else}
+										<div class="flex items-center justify-center gap-2">
+											<BellRing class="h-5 w-5" />
+											Notify me when back in stock
+										</div>
+									{/if}
+								</button>
+							{:else}
+								<!-- Add to Cart Button -->
+								<button
+									onclick={addToCart}
+									disabled={addingToCart}
+									class="w-full rounded-full py-4 font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
+									style="background: var(--btn-primary-gradient);"
+								>
+									{#if addingToCart}
+										<div class="flex items-center justify-center gap-2">
+											<div
+												class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+											></div>
+											Adding to Cart...
+										</div>
+									{:else}
+										<div class="flex items-center justify-center gap-2">
+											<ShoppingCart class="h-5 w-5" />
+											Add to Cart - {formatPrice(totalPrice)}
+										</div>
+									{/if}
+								</button>
+							{/if}
 
 							<!-- Stock Warning -->
 							{#if data.tier.visible_available <= 10 && data.tier.visible_available > 0}

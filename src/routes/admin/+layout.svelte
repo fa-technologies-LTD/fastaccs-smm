@@ -15,7 +15,8 @@
 		Menu,
 		X,
 		UserCheck,
-		Type
+		Type,
+		Mail
 	} from '@lucide/svelte';
 
 	import logo from '$lib/assets/logo.png';
@@ -33,6 +34,7 @@
 		{ href: '/admin/users', label: 'Users', icon: Users },
 		{ href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
 		{ href: '/admin/microcopy', label: 'Microcopy', icon: Type },
+		{ href: '/admin/broadcast', label: 'Broadcast', icon: Mail },
 		{ href: '/admin/settings', label: 'Settings', icon: Settings }
 	];
 

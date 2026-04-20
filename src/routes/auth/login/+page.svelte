@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import { Lock, ArrowLeft } from '@lucide/svelte';
+	import { Lock, ArrowLeft, Mail } from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
@@ -14,6 +14,9 @@
 	let { data }: Props = $props();
 
 	let error = $state('');
+	let email = $state('');
+	let password = $state('');
+	let submitting = $state(false);
 
 	// Get redirect URL from server data or query params
 	const redirectTo = data.returnUrl || page.url.searchParams.get('returnUrl') || '/dashboard';
@@ -27,9 +30,48 @@
 
 		// Check if user is already logged in
 		if (data.user) {
+			if (!data.user.emailVerified) {
+				goto(`/verify-email?next=${encodeURIComponent(redirectTo)}`);
+				return;
+			}
 			goto(redirectTo);
 		}
 	});
+
+	async function handleEmailLogin(event: SubmitEvent): Promise<void> {
+		event.preventDefault();
+		error = '';
+
+		if (!email.trim() || !password) {
+			error = 'Email and password are required.';
+			return;
+		}
+
+		submitting = true;
+		try {
+			const response = await fetch('/api/auth/login', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					email,
+					password,
+					redirectTo
+				})
+			});
+			const result = await response.json();
+			if (!response.ok || !result.success) {
+				error = result.error || 'Login failed.';
+				return;
+			}
+
+			await goto(result.redirectTo || redirectTo);
+		} catch (loginError) {
+			console.error('Login failed:', loginError);
+			error = 'Unable to log in right now. Please try again.';
+		} finally {
+			submitting = false;
+		}
+	}
 
 	function goBack() {
 		goto('/');
@@ -89,6 +131,67 @@
 					</div>
 				{/if}
 
+				<div class="mb-5">
+					<form class="space-y-3" onsubmit={handleEmailLogin}>
+						<div>
+							<label
+								for="email-login"
+								class="mb-1 block text-sm font-medium"
+								style="color: var(--text);"
+							>
+								Email
+							</label>
+							<input
+								id="email-login"
+								type="email"
+								bind:value={email}
+								autocomplete="email"
+								class="w-full rounded-lg px-3 py-2"
+								style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
+								placeholder="you@example.com"
+								required
+							/>
+						</div>
+						<div>
+							<label
+								for="password-login"
+								class="mb-1 block text-sm font-medium"
+								style="color: var(--text);"
+							>
+								Password
+							</label>
+							<input
+								id="password-login"
+								type="password"
+								bind:value={password}
+								autocomplete="current-password"
+								class="w-full rounded-lg px-3 py-2"
+								style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
+								placeholder="Enter your password"
+								required
+							/>
+						</div>
+						<button
+							type="submit"
+							disabled={submitting}
+							class="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+							style="background: var(--btn-primary-gradient); color: #04140C;"
+						>
+							<Mail class="h-4 w-4" />
+							{submitting ? 'Signing in...' : 'Sign in with email'}
+						</button>
+					</form>
+				</div>
+
+				<div class="relative mb-5">
+					<div class="h-px" style="background: var(--border);"></div>
+					<span
+						class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-2 text-xs"
+						style="background: var(--bg-elev-1); color: var(--text-muted);"
+						>or continue with</span
+					>
+				</div>
+
 				<!-- Google OAuth Login -->
 				<div class="space-y-4">
 					<a
@@ -125,6 +228,17 @@
 						>
 							← Back to browsing
 						</button>
+					</div>
+
+					<div class="text-center text-sm" style="color: var(--text-muted);">
+						No account yet?
+						<a
+							href={`/auth/signup?returnUrl=${encodeURIComponent(redirectTo)}`}
+							class="ml-1 font-semibold underline-offset-2 hover:underline"
+							style="color: var(--link);"
+						>
+							Create account
+						</a>
 					</div>
 				</div>
 
@@ -167,8 +281,8 @@
 				>
 			</div>
 			<p style="color: var(--text-muted); font-family: var(--font-body);" class="text-xs">
-				Your data is protected with industry-standard encryption. We never store your password or
-				share your information.
+				Your data is protected with industry-standard encryption. Passwords are securely hashed, and
+				we never share your personal information.
 			</p>
 		</div>
 	</div>

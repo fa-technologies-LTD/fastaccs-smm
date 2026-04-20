@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import {
 		ShoppingCart,
 		Star,
@@ -10,7 +11,9 @@
 		ChevronRight,
 		X,
 		Minus,
-		Plus
+		Plus,
+		BellRing,
+		CheckCircle
 	} from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -42,6 +45,10 @@
 	let quickAddTier = $state<TierCard | null>(null);
 	let quickAddQuantity = $state(1);
 	let quickAddSubmitting = $state(false);
+	let restockLoadingByTier = $state<Record<string, boolean>>({});
+	let restockSubscribedByTier = $state<Record<string, boolean>>({});
+	let autoNotifyHandled = $state(false);
+	const currentUser = $derived((page.data as { user?: { id: string } | null }).user || null);
 
 	let quickAddDialog = $state<HTMLDivElement | null>(null);
 	let quickAddCloseButton = $state<HTMLButtonElement | null>(null);
@@ -325,7 +332,106 @@
 		}
 	}
 
+	function isTierRestockSubscribed(tierId: string): boolean {
+		return Boolean(restockSubscribedByTier[tierId]);
+	}
+
+	function isTierRestockLoading(tierId: string): boolean {
+		return Boolean(restockLoadingByTier[tierId]);
+	}
+
+	function setTierRestockLoading(tierId: string, value: boolean): void {
+		restockLoadingByTier = {
+			...restockLoadingByTier,
+			[tierId]: value
+		};
+	}
+
+	function setTierRestockSubscribed(tierId: string, value: boolean): void {
+		restockSubscribedByTier = {
+			...restockSubscribedByTier,
+			[tierId]: value
+		};
+	}
+
+	async function loadRestockStatusForSoldOutTiers(): Promise<void> {
+		if (!currentUser) return;
+		const soldOutTiers = data.tiers.filter((tier) => tier.visible_available === 0);
+		if (soldOutTiers.length === 0) return;
+
+		await Promise.all(
+			soldOutTiers.map(async (tier) => {
+				try {
+					const response = await fetch(
+						`/api/restock-subscriptions?tierId=${encodeURIComponent(tier.category_id)}`
+					);
+					if (!response.ok) return;
+					const result = await response.json();
+					setTierRestockSubscribed(tier.category_id, Boolean(result?.data?.subscribed));
+				} catch (error) {
+					console.error('Failed to load restock status:', error);
+				}
+			})
+		);
+	}
+
+	async function subscribeToRestock(tier: TierCard): Promise<void> {
+		if (tier.visible_available > 0) return;
+		if (isTierRestockLoading(tier.category_id) || isTierRestockSubscribed(tier.category_id)) return;
+
+		if (!currentUser) {
+			const nextUrl = new URL(page.url);
+			nextUrl.searchParams.set('notifyTier', tier.category_id);
+			const returnUrl = encodeURIComponent(nextUrl.pathname + nextUrl.search);
+			goto(`/auth/login?returnUrl=${returnUrl}`);
+			return;
+		}
+
+		setTierRestockLoading(tier.category_id, true);
+		try {
+			const response = await fetch('/api/restock-subscriptions', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ tierId: tier.category_id })
+			});
+			const result = await response.json();
+
+			if (!response.ok || !result.success) {
+				showError('Subscription failed', result.error || 'Unable to subscribe right now.');
+				return;
+			}
+
+			setTierRestockSubscribed(tier.category_id, true);
+			showSuccess('Subscribed', result.message || "You'll be notified when this tier is back.");
+		} catch (error) {
+			console.error('Failed to subscribe for restock:', error);
+			showError('Subscription failed', 'Unable to subscribe right now. Please try again.');
+		} finally {
+			setTierRestockLoading(tier.category_id, false);
+		}
+	}
+
 	onMount(() => {
+		void loadRestockStatusForSoldOutTiers().then(async () => {
+			const notifyTierId = page.url.searchParams.get('notifyTier');
+			if (
+				!autoNotifyHandled &&
+				currentUser &&
+				notifyTierId &&
+				data.tiers.some((tier) => tier.category_id === notifyTierId && tier.visible_available === 0)
+			) {
+				autoNotifyHandled = true;
+				const targetTier = data.tiers.find((tier) => tier.category_id === notifyTierId);
+				if (targetTier) {
+					await subscribeToRestock(targetTier);
+				}
+
+				const cleaned = new URL(window.location.href);
+				cleaned.searchParams.delete('notifyTier');
+				window.history.replaceState({}, '', cleaned.pathname + cleaned.search);
+			}
+		});
+
 		return () => {
 			document.body.style.overflow = previousBodyOverflow;
 		};
@@ -549,23 +655,37 @@
 								</div>
 
 								<!-- Action Label - Always at Bottom -->
-								<button
-									type="button"
-									onclick={() => openQuickAddModal(tier)}
-									disabled={tier.visible_available === 0}
-									aria-label={`Quick add ${tier.tier_name}`}
-									class="mx-6 mt-6 mb-6 flex items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:active:scale-100"
-									style={tier.visible_available === 0
-										? 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'
-										: 'background: var(--btn-primary-gradient); color: #04140C;'}
-								>
-									{#if tier.visible_available === 0}
-										Sold Out
-									{:else}
-										<span>Select This Tier</span>
-										<ArrowRight class="h-4 w-4" />
-									{/if}
-								</button>
+									<button
+										type="button"
+										onclick={() =>
+											tier.visible_available === 0 ? subscribeToRestock(tier) : openQuickAddModal(tier)}
+										disabled={tier.visible_available === 0
+											? isTierRestockLoading(tier.category_id) ||
+												isTierRestockSubscribed(tier.category_id)
+											: false}
+										aria-label={tier.visible_available === 0
+											? `Notify me for ${tier.tier_name}`
+											: `Quick add ${tier.tier_name}`}
+										class="mx-6 mt-6 mb-6 flex items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:active:scale-100"
+										style={tier.visible_available === 0
+											? 'background: var(--btn-primary-gradient); color: #04140C;'
+											: 'background: var(--btn-primary-gradient); color: #04140C;'}
+									>
+										{#if tier.visible_available === 0}
+											{#if isTierRestockLoading(tier.category_id)}
+												<span>Saving...</span>
+											{:else if isTierRestockSubscribed(tier.category_id)}
+												<CheckCircle class="h-4 w-4" />
+												<span>You'll be notified</span>
+											{:else}
+												<BellRing class="h-4 w-4" />
+												<span>Notify me</span>
+											{/if}
+										{:else}
+											<span>Select This Tier</span>
+											<ArrowRight class="h-4 w-4" />
+										{/if}
+									</button>
 							</div>
 						{/each}
 					</div>

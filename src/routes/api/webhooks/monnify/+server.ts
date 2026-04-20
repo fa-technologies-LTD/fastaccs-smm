@@ -11,6 +11,7 @@ import {
 } from '$lib/helpers/payment-status';
 import type { FailureKind } from '$lib/helpers/payment-status';
 import { logOrderStatusTransition } from '$lib/services/order-audit';
+import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -134,6 +135,12 @@ async function markOrderPaidAndAllocate(params: {
 		paymentReference: params.paymentReference,
 		status: params.statusLabel
 	});
+
+	try {
+		await sendOrderConfirmationEmailIfNeeded(params.orderId);
+	} catch (emailError) {
+		console.error('Failed to send webhook order confirmation email:', emailError);
+	}
 
 	const allocationResult = await allocateAccountsForOrder(params.orderId);
 	if (!allocationResult.success) {

@@ -109,6 +109,11 @@
 		return errorText.includes('HTTP 401');
 	}
 
+	function isEmailVerificationError(errorText: unknown): boolean {
+		if (typeof errorText !== 'string') return false;
+		return errorText.includes('EMAIL_NOT_VERIFIED') || errorText.includes('Email verification required');
+	}
+
 	function shouldRenderCheckoutPlatformImage(item: CartItemWithTier): boolean {
 		return isPlatformImageUrl(item.tier.platformIcon) && !failedCheckoutIcons[item.tier.id];
 	}
@@ -126,6 +131,14 @@
 	async function payWithMonnify() {
 		if (!user) {
 			redirectToLoginWithReturnUrl();
+			return;
+		}
+
+		if (!user.emailVerified) {
+			showWarning('Verify your email', 'Please verify your email before completing checkout.');
+			const currentUrl = new URL(window.location.href);
+			const nextPath = currentUrl.pathname + currentUrl.search;
+			goto(`/verify-email?next=${encodeURIComponent(nextPath)}`);
 			return;
 		}
 
@@ -169,6 +182,13 @@
 						redirectToLoginWithReturnUrl();
 						return;
 					}
+					if (isEmailVerificationError(orderResult.error)) {
+						showWarning('Verify your email', 'Please verify your email before completing checkout.');
+						const currentUrl = new URL(window.location.href);
+						const nextPath = currentUrl.pathname + currentUrl.search;
+						goto(`/verify-email?next=${encodeURIComponent(nextPath)}`);
+						return;
+					}
 					throw new Error(orderResult.error || 'Failed to create order');
 				}
 
@@ -183,6 +203,14 @@
 				if (error instanceof Error && isUnauthorizedApiError(error.message)) {
 					showWarning('Session expired', 'Please log in again to continue checkout.');
 					redirectToLoginWithReturnUrl();
+					loading = false;
+					return;
+				}
+				if (error instanceof Error && isEmailVerificationError(error.message)) {
+					showWarning('Verify your email', 'Please verify your email before completing checkout.');
+					const currentUrl = new URL(window.location.href);
+					const nextPath = currentUrl.pathname + currentUrl.search;
+					goto(`/verify-email?next=${encodeURIComponent(nextPath)}`);
 					loading = false;
 					return;
 				}

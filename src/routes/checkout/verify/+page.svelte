@@ -89,7 +89,7 @@
 	}
 
 	function closeVerificationScreen(): void {
-		goToOrdersDashboard(true);
+		goToOrdersDashboard(verifying || pending);
 	}
 
 	function retryCheckout(): void {
@@ -320,7 +320,7 @@
 			class="relative rounded-2xl p-6 text-center shadow-sm sm:p-8"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
-			{#if !success}
+			{#if verifying || pending}
 				<button
 					onclick={closeVerificationScreen}
 					aria-label="Close and view orders"

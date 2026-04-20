@@ -11,6 +11,7 @@ model User {
   id                      String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email                   String?             @unique
   googleId                String?             @unique @map("google_id")
+  passwordHash            String?             @map("password_hash")
   fullName                String?             @map("full_name")
   avatarUrl               String?             @map("avatar_url")
   phone                   String?
@@ -20,6 +21,7 @@ model User {
   restrictedCategories    String[]            @map("restricted_categories")
   isActive                Boolean             @default(true) @map("is_active")
   emailVerified           Boolean             @default(false) @map("email_verified")
+  emailVerifiedAt         DateTime?           @map("email_verified_at")
   registeredAt            DateTime            @default(now()) @map("registered_at")
   lastLogin               DateTime?           @map("last_login")
   createdAt               DateTime            @default(now()) @map("created_at")
@@ -33,9 +35,12 @@ model User {
   affiliateOrders         Order[]             @relation("AffiliateOrders")
   orders                  Order[]
   reviews                 Review[]
+  restockSubscriptions    RestockSubscription[]
   sessions                Session[]
+  verificationCodes       VerificationCode[]
   walletTransactions      WalletTransaction[]
   wallet                  Wallet?
+  emailNotifications      EmailNotification[]
 
   @@map("users")
 }
@@ -356,6 +361,64 @@ model Microcopy {
 
   @@index([category, isActive])
   @@map("microcopy")
+}
+
+model EmailNotification {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String?   @map("user_id") @db.Uuid
+  email            String
+  notificationType String    @map("notification_type")
+  referenceId      String?   @map("reference_id")
+  subject          String?
+  body             String?
+  status           String    @default("pending")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  sentAt           DateTime? @map("sent_at")
+  failedAt         DateTime? @map("failed_at")
+  errorMessage     String?   @map("error_message")
+  broadcastId      String?   @map("broadcast_id") @db.Uuid
+  user             User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([notificationType])
+  @@index([status])
+  @@index([userId])
+  @@index([broadcastId])
+  @@index([referenceId])
+  @@index([createdAt])
+  @@map("email_notifications")
+}
+
+model RestockSubscription {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  email        String
+  tierId       String    @map("tier_id") @db.Uuid
+  platformName String    @map("platform_name")
+  tierName     String    @map("tier_name")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  notifiedAt   DateTime? @map("notified_at")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tierId])
+  @@index([tierId, notifiedAt])
+  @@index([email])
+  @@map("restock_subscriptions")
+}
+
+model VerificationCode {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @unique @map("user_id") @db.Uuid
+  code       String
+  expiresAt  DateTime @map("expires_at")
+  attempts   Int      @default(0)
+  lastSentAt DateTime @default(now()) @map("last_sent_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @map("updated_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([updatedAt])
+  @@map("verification_codes")
 }
 
 enum UserType {

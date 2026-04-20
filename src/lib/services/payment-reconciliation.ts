@@ -11,6 +11,7 @@ import {
 	normalizePaymentStatus
 } from '$lib/helpers/payment-status';
 import { logOrderStatusTransition } from '$lib/services/order-audit';
+import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
 
 interface ReconcileOptions {
 	limit?: number;
@@ -111,6 +112,12 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 		}
 
 		if (order.status === 'paid') {
+			try {
+				await sendOrderConfirmationEmailIfNeeded(order.id);
+			} catch (emailError) {
+				console.error('[payments.reconcile] failed to send order confirmation email:', emailError);
+			}
+
 			const allocationResult = await allocateAccountsForOrder(order.id);
 			if (allocationResult.success) {
 				summary.completed += 1;
@@ -207,6 +214,12 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 					fromPaymentStatus: order.paymentStatus,
 					toPaymentStatus: 'paid'
 				});
+
+				try {
+					await sendOrderConfirmationEmailIfNeeded(order.id);
+				} catch (emailError) {
+					console.error('[payments.reconcile] failed to send order confirmation email:', emailError);
+				}
 			}
 			summary.paid += 1;
 

@@ -35,7 +35,8 @@ export async function createUserFromGoogle(googleUser: GoogleUserData): Promise<
 			fullName: googleUser.name,
 			avatarUrl: googleUser.picture,
 			userType,
-			emailVerified: true, // Google OAuth means email is verified
+			emailVerified: false,
+			emailVerifiedAt: null,
 			registeredAt: new Date(),
 			lastLogin: new Date()
 		}

@@ -88,6 +88,10 @@ export const GET: RequestHandler = async (event) => {
 			finalRedirectTo = '/admin';
 		}
 
+		if (!user.emailVerified) {
+			finalRedirectTo = `/verify-email?next=${encodeURIComponent(finalRedirectTo)}`;
+		}
+
 		// Redirect to intended destination
 		throw redirect(302, finalRedirectTo);
 	} catch (e) {

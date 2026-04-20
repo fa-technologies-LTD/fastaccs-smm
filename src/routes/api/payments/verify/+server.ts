@@ -13,6 +13,7 @@ import {
 } from '$lib/helpers/payment-status';
 import type { FailureKind } from '$lib/helpers/payment-status';
 import { logOrderStatusTransition } from '$lib/services/order-audit';
+import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -85,6 +86,12 @@ function isPaymentCurrencyValid(orderCurrency: string | null | undefined, paidCu
 }
 
 async function recoverPaidOrderIfNeeded(orderId: string) {
+	try {
+		await sendOrderConfirmationEmailIfNeeded(orderId);
+	} catch (emailError) {
+		console.error('Failed to send order confirmation email for paid order recovery:', emailError);
+	}
+
 	const allocationResult = await allocateAccountsForOrder(orderId);
 	if (allocationResult.success) {
 		return { fulfilled: true, warning: null };
@@ -392,6 +399,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					paidAt: verificationResult.paidAt || new Date()
 				}
 			});
+
+			try {
+				await sendOrderConfirmationEmailIfNeeded(order.id);
+			} catch (emailError) {
+				console.error('Failed to send payment verification confirmation email:', emailError);
+			}
 
 			if (paidTransition.count > 0) {
 				logOrderStatusTransition({

@@ -1,9 +1,6 @@
 import { prisma } from '$lib/prisma';
-import type { Decimal } from '@prisma/client/runtime/library';
-import nodemailer from 'nodemailer';
-import { env } from '$env/dynamic/private';
-import { PUBLIC_BASE_URL } from '$env/static/public';
 import { recordCommission } from './affiliate';
+import { sendOrderConfirmationEmailIfNeeded } from './email';
 
 // Type definitions
 interface AllocationResult {
@@ -18,35 +15,6 @@ interface DeliveryResult {
 	accountsDelivered: number;
 	messageId?: string;
 	customerEmail: string;
-}
-
-interface OrderWithItems {
-	id: string;
-	orderNumber: string;
-	guestEmail: string | null;
-	createdAt: Date;
-	totalAmount: Decimal;
-	status: string;
-	orderItems: OrderItemWithAccounts[];
-}
-
-interface OrderItemWithAccounts {
-	id: string;
-	productName: string;
-	quantity: number;
-	accounts: AccountData[];
-}
-
-interface AccountData {
-	id: string;
-	username: string | null;
-	password: string | null;
-	email: string | null;
-	emailPassword: string | null;
-	twoFa: string | null;
-	linkUrl: string | null;
-	followers: number | null;
-	ageMonths: number | null;
 }
 
 /**
@@ -173,6 +141,12 @@ async function allocateAccounts(orderId: string) {
 			}
 		});
 
+		try {
+			await sendOrderConfirmationEmailIfNeeded(orderId);
+		} catch (emailError) {
+			console.error('Failed to send order confirmation email:', emailError);
+		}
+
 		// Record affiliate commission if order has affiliate code
 		if (order.affiliateCode) {
 			const orderTotal = Number(order.totalAmount);
@@ -216,6 +190,9 @@ async function deliverAccounts(orderId: string) {
 							}
 						}
 					}
+				},
+				user: {
+					select: { email: true }
 				}
 			}
 		});
@@ -234,23 +211,16 @@ async function deliverAccounts(orderId: string) {
 			return { success: false, error: 'No accounts allocated for this order' };
 		}
 
-		// Generate email content
-		const emailContent = generateAccountDeliveryEmail(order);
-		const customerEmail = order.guestEmail;
+		const customerEmail = order.guestEmail || order.user?.email || '';
 
 		if (!customerEmail) {
 			return { success: false, error: 'No customer email found' };
 		}
 
-		// Send email via our email service
-		const emailResult = await sendEmail({
-			to: customerEmail,
-			subject: `Order ${order.orderNumber} Delivered - View Your Accounts`,
-			content: emailContent
-		});
-
-		if (!emailResult.success) {
-			return { success: false, error: 'Failed to send email: ' + emailResult.error };
+		try {
+			await sendOrderConfirmationEmailIfNeeded(order.id);
+		} catch (emailError) {
+			console.error('Failed to send order confirmation email after delivery:', emailError);
 		}
 
 		// Update order delivery status
@@ -276,7 +246,7 @@ async function deliverAccounts(orderId: string) {
 			success: true,
 			data: {
 				accountsDelivered: totalAllocated,
-				messageId: emailResult.messageId,
+				messageId: undefined,
 				customerEmail
 			}
 		};
@@ -287,121 +257,4 @@ async function deliverAccounts(orderId: string) {
 			error: error instanceof Error ? error.message : 'Delivery failed'
 		};
 	}
-}
-
-/**
- * Send email using our email service
- */
-async function sendEmail({
-	to,
-	subject,
-	content
-}: {
-	to: string;
-	subject: string;
-	content: string;
-}) {
-	try {
-		// Import nodemailer and env here to avoid issues
-
-		const gmailUser = env.GMAIL_USER;
-		const gmailPassword = env.GMAIL_APP_PASSWORD;
-
-		if (!gmailUser || !gmailPassword) {
-			return { success: false, error: 'Email service not configured' };
-		}
-
-		// Create transporter
-		const transporter = nodemailer.createTransport({
-			service: 'gmail',
-			auth: {
-				user: gmailUser,
-				pass: gmailPassword
-			}
-		});
-
-		// Email options
-		const mailOptions = {
-			from: `"FastAccs" <${gmailUser}>`,
-			to: to,
-			subject: subject,
-			text: content,
-			html: formatEmailContent(content)
-		};
-
-		// Send email
-		const result = await transporter.sendMail(mailOptions);
-
-		return {
-			success: true,
-			messageId: result.messageId
-		};
-	} catch (error) {
-		console.error('Error sending email:', error);
-		return { success: false, error: error instanceof Error ? error.message : 'Email send failed' };
-	}
-}
-
-/**
- * Generate notification email content (without credentials - dashboard only)
- */
-function generateAccountDeliveryEmail(order: OrderWithItems): string {
-	const orderItems = order.orderItems;
-	const totalAccounts = orderItems.reduce((sum, item) => sum + item.accounts.length, 0);
-
-	let content = `**Dear Customer,**
-
-Great news! Your order is ready and has been delivered to your dashboard.
-
-**Order Details:**
-- Order Number: ${order.orderNumber}
-- Order Date: ${new Date(order.createdAt).toLocaleDateString()}
-- Total Amount: ₦${order.totalAmount}
-- Accounts Delivered: ${totalAccounts}
-
-**Purchased Items:**
-
-`;
-
-	orderItems.forEach((item: OrderItemWithAccounts) => {
-		if (item.accounts.length > 0) {
-			content += `- ${item.productName}: ${item.accounts.length} account${item.accounts.length > 1 ? 's' : ''}\n`;
-		}
-	});
-
-	content += `
-
-**Access Your Accounts:**
-
-To view your account credentials and details, please visit your dashboard:
-
-👉 **View Purchases:** ${PUBLIC_BASE_URL || 'http://localhost:5173'}/dashboard
-
-Go to the "Purchases" tab to see all your account details including usernames, passwords, and login links.
-
-**Important Security Notes:**
-- Your credentials are securely stored and only visible in your dashboard
-- Please change passwords immediately after accessing accounts
-- Never share your account credentials with anyone
-- Contact support immediately if you notice any issues
-
-**Need Help?**
-If you have any questions or need assistance accessing your accounts, our support team is here to help.
-
-Thank you for choosing FastAccs!
-
-**The FastAccs Team**`;
-
-	return content;
-}
-
-/**
- * Format email content as HTML
- */
-function formatEmailContent(content: string): string {
-	return content
-		.replace(/\n/g, '<br>')
-		.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-		.replace(/^- (.*$)/gim, '<li>$1</li>')
-		.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
 }
