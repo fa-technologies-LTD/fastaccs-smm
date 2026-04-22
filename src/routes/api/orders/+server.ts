@@ -4,7 +4,7 @@ import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { fulfillOrder } from '$lib/services/fulfillment';
 import { initializeTransaction } from '$lib/services/monnify';
-import { serverCache } from '$lib/helpers/cache';
+import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 
 interface CreateOrderItemInput {
 	categoryId: string;
@@ -223,8 +223,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		}); // Automatically fulfill order (allocate + deliver accounts)
 
 		// Invalidate admin stats cache after order creation
-		serverCache.invalidate('admin:order-stats');
-		serverCache.invalidate('admin:inventory-stats');
+		invalidateAdminStatsCache();
 
 		if (paymentMethod === 'monnify') {
 			const shortOrderId = data.id.substring(0, 8);
@@ -244,6 +243,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			if (!initResult.success || !initResult.checkoutUrl) {
 				try {
 					await cleanupOrderCreation(data.id);
+					invalidateAdminStatsCache();
 				} catch (cleanupError) {
 					console.error('Failed to cleanup order after Monnify init failure:', cleanupError);
 					try {
@@ -254,6 +254,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 								paymentStatus: 'failed'
 							}
 						});
+						invalidateAdminStatsCache();
 					} catch (markFailedError) {
 						console.error('Failed to mark order failed after Monnify init failure:', markFailedError);
 					}
@@ -276,6 +277,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					paymentStatus: 'pending'
 				}
 			});
+			invalidateAdminStatsCache();
 
 			return json({
 				data,

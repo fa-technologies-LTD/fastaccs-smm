@@ -1,5 +1,8 @@
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
+import { getInventoryStatsSnapshot, getOrderStatsSnapshot } from '$lib/services/admin-metrics';
+
+const REVENUE_STATUSES = ['paid', 'completed'] as const;
 
 export const load: PageServerLoad = async ({ locals }) => {
 	try {
@@ -7,6 +10,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 		if (!locals.user || locals.user.userType !== 'ADMIN') {
 			return { stats: {} };
 		}
+
+		const [orderStatsSnapshot, inventorySnapshot] = await Promise.all([
+			getOrderStatsSnapshot(),
+			getInventoryStatsSnapshot()
+		]);
 
 		// Get date ranges
 		const now = new Date();
@@ -16,13 +24,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 		// Total Revenue
 		const revenueResult = await prisma.order.aggregate({
-			where: { status: 'completed' },
+			where: { status: { in: [...REVENUE_STATUSES] } },
 			_sum: { totalAmount: true }
 		});
 
 		const lastMonthRevenue = await prisma.order.aggregate({
 			where: {
-				status: 'completed',
+				status: { in: [...REVENUE_STATUSES] },
 				createdAt: { gte: startOfLastMonth, lte: endOfLastMonth }
 			},
 			_sum: { totalAmount: true }
@@ -30,14 +38,14 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 		const thisMonthRevenue = await prisma.order.aggregate({
 			where: {
-				status: 'completed',
+				status: { in: [...REVENUE_STATUSES] },
 				createdAt: { gte: startOfMonth }
 			},
 			_sum: { totalAmount: true }
 		});
 
 		// Total Orders
-		const totalOrders = await prisma.order.count();
+		const totalOrders = orderStatsSnapshot.total_orders;
 		const lastMonthOrders = await prisma.order.count({
 			where: { createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } }
 		});
@@ -146,7 +154,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 		return {
 			stats: {
-				totalRevenue: Number(revenueResult._sum.totalAmount || 0),
+				totalRevenue: Number(revenueResult._sum.totalAmount || orderStatsSnapshot.total_revenue || 0),
 				revenueChange:
 					((Number(thisMonthRevenue._sum.totalAmount || 0) -
 						Number(lastMonthRevenue._sum.totalAmount || 0)) /
@@ -169,7 +177,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				totalCommissions: Number(affiliateStats._sum.totalCommission || 0),
 
 				totalAccounts,
-				availableAccounts,
+				availableAccounts: inventorySnapshot.total_available || availableAccounts,
 				soldAccounts,
 				pendingAccounts,
 

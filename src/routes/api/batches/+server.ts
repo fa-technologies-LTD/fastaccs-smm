@@ -1,9 +1,14 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
+import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 
 // GET /api/batches - Get all batches with optional filters
-export async function GET({ url }) {
+export async function GET({ url, locals }) {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const categoryId = url.searchParams.get('categoryId');
 		const status = url.searchParams.get('status');
 		const limit = url.searchParams.get('limit');
@@ -40,8 +45,12 @@ export async function GET({ url }) {
 }
 
 // POST /api/batches - Create new batch
-export async function POST({ request }) {
+export async function POST({ request, locals }) {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const batchData = await request.json();
 
 		const data = await prisma.accountBatch.create({
@@ -54,6 +63,8 @@ export async function POST({ request }) {
 				accounts: true
 			}
 		});
+
+		invalidateAdminStatsCache();
 
 		return json({ data, error: null });
 	} catch (error) {

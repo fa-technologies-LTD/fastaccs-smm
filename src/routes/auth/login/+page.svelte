@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { Lock, ArrowLeft, Mail } from '@lucide/svelte';
@@ -59,13 +59,14 @@
 				})
 			});
 			const result = await response.json();
-			if (!response.ok || !result.success) {
-				error = result.error || 'Login failed.';
-				return;
-			}
+				if (!response.ok || !result.success) {
+					error = result.error || 'Login failed.';
+					return;
+				}
 
-			await goto(result.redirectTo || redirectTo);
-		} catch (loginError) {
+				await invalidateAll();
+				await goto(result.redirectTo || redirectTo);
+			} catch (loginError) {
 			console.error('Login failed:', loginError);
 			error = 'Unable to log in right now. Please try again.';
 		} finally {

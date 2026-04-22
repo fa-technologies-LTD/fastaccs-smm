@@ -29,6 +29,7 @@ export const load: PageServerLoad = async () => {
 			createdAt: user.createdAt,
 			orderCount: user.orders.length,
 			totalSpent: user.orders.reduce((sum, order) => sum + Number(order.totalAmount), 0),
+			storeCreditBalance: user.wallet ? Number(user.wallet.balance) : 0,
 			walletBalance: user.wallet ? Number(user.wallet.balance) : 0
 		}));
 

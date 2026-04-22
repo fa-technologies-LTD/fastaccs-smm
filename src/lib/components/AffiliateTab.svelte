@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { Share2, Copy, DollarSign, CheckCircle } from '@lucide/svelte';
+	import { PUBLIC_BASE_URL } from '$env/static/public';
+	import { env as publicEnv } from '$env/dynamic/public';
 	import { addToast } from '$lib/stores/toasts';
 	import { copyToClipboard } from '$lib/helpers/utils';
 
@@ -7,6 +9,14 @@
 
 	let isLoadingAffiliate = $state(false);
 	let affiliateData = $state<any>(initialAffiliateData);
+	const referralBaseUrl = $derived(
+		(publicEnv.PUBLIC_SITE_URL || PUBLIC_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : ''))
+			.trim()
+			.replace(/\/+$/, '') || 'https://fastaccs-smm.vercel.app'
+	);
+	const referralLink = $derived(
+		affiliateData?.affiliateCode ? `${referralBaseUrl}/?ref=${affiliateData.affiliateCode}` : ''
+	);
 
 	async function enableAffiliate() {
 		isLoadingAffiliate = true;
@@ -143,20 +153,20 @@
 						class="mb-2 block text-sm font-medium"
 						style="color: var(--text-muted); font-family: var(--font-head);">Referral Link</label
 					>
-					<div class="flex gap-2">
-						<input
-							type="text"
-							value={`https://fastaccs.vercel.app/?ref=${affiliateData.affiliateCode}`}
-							readonly
-							class="flex-1 rounded-[var(--r-sm)] border border-[var(--border)] px-4 py-3 text-sm"
-							style="background: rgba(0,0,0,0.3); color: var(--text);"
-						/>
-						<button
-							onclick={() =>
-								copyToClipboard(`https://fastaccs.vercel.app/?ref=${affiliateData.affiliateCode}`, {
-									label: 'Referral link',
-									showToast: addToast
-								})}
+						<div class="flex gap-2">
+							<input
+								type="text"
+								value={referralLink}
+								readonly
+								class="flex-1 rounded-[var(--r-sm)] border border-[var(--border)] px-4 py-3 text-sm"
+								style="background: rgba(0,0,0,0.3); color: var(--text);"
+							/>
+							<button
+								onclick={() =>
+									copyToClipboard(referralLink, {
+										label: 'Referral link',
+										showToast: addToast
+									})}
 							class="rounded-full px-4 py-2 transition-all hover:-translate-y-0.5"
 							style="background: linear-gradient(180deg, rgba(5,212,113,0.95), rgba(13,145,82,0.95)); border: 1px solid rgba(5,212,113,0.40); color: #04140C;"
 						>

@@ -8,7 +8,9 @@
 		ShoppingBag,
 		Calendar,
 		Search,
-		Download
+		Download,
+		ShieldOff,
+		ShieldCheck
 	} from '@lucide/svelte';
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
@@ -30,10 +32,10 @@
 		totalRevenue: data.stats?.totalRevenue || 0
 	});
 
-	let allUsers = $derived(data.users || []);
+	let users = $state(data.users || []);
 
 	let filteredUsers = $derived.by(() => {
-		let filtered = allUsers;
+		let filtered = users;
 
 		if (filterType !== 'all') {
 			filtered = filtered.filter((user: any) => {
@@ -88,7 +90,7 @@
 			'Email Verified': user.emailVerified ? 'Yes' : 'No',
 			'Total Orders': user.orderCount,
 			'Total Spent': user.totalSpent,
-			'Wallet Balance': user.walletBalance,
+			'Store Credit': user.storeCreditBalance || 0,
 			'Registered At': formatDate(user.registeredAt),
 			'Last Login': user.lastLogin ? formatDate(user.lastLogin) : 'Never'
 		}));
@@ -112,6 +114,37 @@
 		return isActive
 			? 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border)'
 			: 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border)';
+	}
+
+	async function toggleUserAccess(userId: string, isCurrentlyActive: boolean, label: string) {
+		try {
+			const response = await fetch(`/api/admin/users/${userId}/status`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ isActive: !isCurrentlyActive })
+			});
+			const result = await response.json();
+
+			if (!response.ok || !result.success) {
+				throw new Error(result.error || `Failed to update ${label}`);
+			}
+
+			users = users.map((user: any) =>
+				user.id === userId ? { ...user, isActive: result.data.isActive } : user
+			);
+
+			addToast({
+				type: 'success',
+				title: result.data.isActive ? `${label} reactivated` : `${label} suspended`,
+				duration: 2800
+			});
+		} catch (error) {
+			addToast({
+				type: 'error',
+				title: error instanceof Error ? error.message : 'Failed to update user access',
+				duration: 3500
+			});
+		}
 	}
 </script>
 
@@ -327,7 +360,7 @@
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
-							Wallet
+							Store Credit
 						</th>
 						<th
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
@@ -335,12 +368,18 @@
 						>
 							Registered
 						</th>
+						<th
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
+						>
+							Actions
+						</th>
 					</tr>
 				</thead>
 				<tbody class="divide-y" style="border-color: var(--border); background: var(--bg-elev-1);">
 					{#if paginatedUsers.length === 0}
 						<tr>
-							<td colspan="8" class="px-6 py-12 text-center" style="color: var(--text-muted);"
+							<td colspan="9" class="px-6 py-12 text-center" style="color: var(--text-muted);"
 								>No users found</td
 							>
 						</tr>
@@ -417,18 +456,40 @@
 									</div>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
-									<div class="flex items-center gap-1">
-										<Wallet class="h-4 w-4" style="color: var(--text-dim);" />
-										<span class="text-sm" style="color: var(--text);"
-											>{formatPrice(user.walletBalance)}</span
-										>
-									</div>
+									{#if user.isAffiliateEnabled}
+										<div class="flex items-center gap-1">
+											<Wallet class="h-4 w-4" style="color: var(--text-dim);" />
+											<span class="text-sm" style="color: var(--text);"
+												>{formatPrice(user.storeCreditBalance || 0)}</span
+											>
+										</div>
+									{:else}
+										<span class="text-sm" style="color: var(--text-dim);">—</span>
+									{/if}
 								</td>
 								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text-muted);">
 									<div class="flex items-center gap-1">
 										<Calendar class="h-4 w-4" style="color: var(--text-dim);" />
 										<span>{formatDate(user.registeredAt)}</span>
 									</div>
+								</td>
+								<td class="px-6 py-4 whitespace-nowrap">
+									<button
+										onclick={() =>
+											toggleUserAccess(user.id, user.isActive, user.fullName || user.email || 'User')}
+										class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all hover:scale-95 active:scale-90"
+										style={user.isActive
+											? 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border)'
+											: 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border)'}
+									>
+										{#if user.isActive}
+											<ShieldOff class="h-3.5 w-3.5" />
+											Suspend
+										{:else}
+											<ShieldCheck class="h-3.5 w-3.5" />
+											Unblock
+										{/if}
+									</button>
 								</td>
 							</tr>
 						{/each}

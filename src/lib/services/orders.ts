@@ -72,9 +72,9 @@ export async function getOrders(
 }
 
 // Get order by ID
-export async function getOrderById(orderId: string) {
+export async function getOrderById(orderId: string, fetchFn: typeof fetch = fetch) {
 	try {
-		const response = await fetch(`/api/orders/${orderId}`);
+		const response = await fetchFn(`/api/orders/${orderId}`);
 		return await handleApiCall(response);
 	} catch (error) {
 		console.error('Failed to fetch order:', error);
@@ -83,9 +83,9 @@ export async function getOrderById(orderId: string) {
 }
 
 // Get tier order details (comprehensive order information for customer view)
-export async function getTierOrderDetails(orderId: string) {
+export async function getTierOrderDetails(orderId: string, fetchFn: typeof fetch = fetch) {
 	try {
-		const response = await fetch(`/api/orders/${orderId}`);
+		const response = await fetchFn(`/api/orders/${orderId}`);
 		const result = await handleApiCall(response);
 
 		if (result.error) {

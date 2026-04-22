@@ -42,7 +42,8 @@ export const POST: RequestHandler = async (event) => {
 				id: true,
 				passwordHash: true,
 				emailVerified: true,
-				googleId: true
+				googleId: true,
+				isActive: true
 			}
 		});
 
@@ -56,6 +57,16 @@ export const POST: RequestHandler = async (event) => {
 		const isValidPassword = await verifyPassword(password, user.passwordHash);
 		if (!isValidPassword) {
 			return json({ success: false, error: 'Invalid email or password.' }, { status: 401 });
+		}
+
+		if (!user.isActive) {
+			return json(
+				{
+					success: false,
+					error: 'Your account is currently suspended. Please contact support.'
+				},
+				{ status: 403 }
+			);
 		}
 
 		await prisma.user.update({

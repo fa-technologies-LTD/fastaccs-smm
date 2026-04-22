@@ -283,9 +283,9 @@
 				</button>
 			</form>
 
-			<div class="mt-5 text-center text-sm">
-				<span style="color: var(--text-muted);">Didn't receive it?</span>
-				<button
+				<div class="mt-5 text-center text-sm">
+					<span style="color: var(--text-muted);">Didn't receive it?</span>
+					<button
 					type="button"
 					disabled={resendCooldown > 0 || resendLoading}
 					onclick={() => ensureCode(true)}
@@ -298,11 +298,14 @@
 						Resend in {resendCooldown}s
 					{:else}
 						Resend code
-					{/if}
-				</button>
-			</div>
+						{/if}
+					</button>
+				</div>
+				<p class="mt-2 text-center text-xs" style="color: var(--text-dim);">
+					Check Spam or Promotions if the code is not in your inbox.
+				</p>
 
-			<div class="mt-4 text-center">
+				<div class="mt-4 text-center">
 				<button
 					type="button"
 					onclick={signOutToSwitchEmail}

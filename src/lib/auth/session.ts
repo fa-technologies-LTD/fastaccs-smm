@@ -18,6 +18,14 @@ interface CachedSession {
 const sessionCache = new Map<string, CachedSession>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+function clearUserSessionsFromCache(userId: string, keepSessionId?: string): void {
+	for (const [sessionId, cached] of sessionCache.entries()) {
+		if (cached.user.id !== userId) continue;
+		if (keepSessionId && sessionId === keepSessionId) continue;
+		sessionCache.delete(sessionId);
+	}
+}
+
 // Clean up expired cache entries periodically
 if (typeof setInterval !== 'undefined') {
 	setInterval(() => {
@@ -64,6 +72,12 @@ export async function validateSessionToken(token: string): Promise<SessionValida
 	// Check cache first
 	const cached = sessionCache.get(sessionId);
 	if (cached && Date.now() - cached.cachedAt < CACHE_TTL) {
+		if (!cached.user.isActive) {
+			await prisma.session.deleteMany({ where: { id: sessionId } });
+			sessionCache.delete(sessionId);
+			return { session: null, user: null };
+		}
+
 		// Check if cached session is still valid
 		if (Date.now() < cached.session.expiresAt.getTime()) {
 			return { session: cached.session, user: cached.user };
@@ -85,6 +99,12 @@ export async function validateSessionToken(token: string): Promise<SessionValida
 	}
 
 	const { user, ...session } = result;
+
+	if (!user.isActive) {
+		await prisma.session.deleteMany({ where: { id: sessionId } });
+		sessionCache.delete(sessionId);
+		return { session: null, user: null };
+	}
 
 	if (Date.now() >= session.expiresAt.getTime()) {
 		await prisma.session.delete({ where: { id: sessionId } });
@@ -125,7 +145,24 @@ export async function validateSessionToken(token: string): Promise<SessionValida
 
 // Invalidate session
 export async function invalidateSession(sessionId: string): Promise<void> {
-	await prisma.session.delete({ where: { id: sessionId } });
+	await prisma.session.deleteMany({ where: { id: sessionId } });
+	sessionCache.delete(sessionId);
+}
+
+export async function invalidateUserSessions(
+	userId: string,
+	options: { keepSessionId?: string } = {}
+): Promise<void> {
+	const where =
+		options.keepSessionId && options.keepSessionId.trim()
+			? {
+					userId,
+					id: { not: options.keepSessionId.trim() }
+				}
+			: { userId };
+
+	await prisma.session.deleteMany({ where });
+	clearUserSessionsFromCache(userId, options.keepSessionId);
 }
 
 // Set session cookie
@@ -133,6 +170,7 @@ export function setSessionTokenCookie(event: RequestEvent, token: string, expire
 	event.cookies.set('session', token, {
 		httpOnly: true,
 		sameSite: 'lax',
+		secure: event.url.protocol === 'https:',
 		expires: expiresAt,
 		path: '/'
 	});
@@ -143,6 +181,7 @@ export function deleteSessionTokenCookie(event: RequestEvent): void {
 	event.cookies.set('session', '', {
 		httpOnly: true,
 		sameSite: 'lax',
+		secure: event.url.protocol === 'https:',
 		maxAge: 0,
 		path: '/'
 	});

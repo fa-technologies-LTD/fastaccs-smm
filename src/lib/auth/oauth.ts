@@ -2,6 +2,7 @@
 import { Google } from 'arctic';
 import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } from '$env/static/private';
 import { PUBLIC_BASE_URL } from '$env/static/public';
+import { env as publicEnv } from '$env/dynamic/public';
 import { dev } from '$app/environment';
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -9,13 +10,18 @@ function normalizeBaseUrl(baseUrl: string): string {
 }
 
 export function getGoogleCallbackUrl(origin?: string): string {
+	const runtimeOrigin = origin?.trim();
+	if (runtimeOrigin) {
+		return `${normalizeBaseUrl(runtimeOrigin)}/auth/google/callback`;
+	}
+
 	if (dev) {
-		const localBase =
-			origin?.trim() || PUBLIC_BASE_URL?.trim() || 'http://localhost:5173';
+		const localBase = PUBLIC_BASE_URL?.trim() || 'http://localhost:5173';
 		return `${normalizeBaseUrl(localBase)}/auth/google/callback`;
 	}
 
-	const publicBase = PUBLIC_BASE_URL?.trim() || 'https://fastaccs.vercel.app';
+	const publicBase =
+		publicEnv.PUBLIC_SITE_URL?.trim() || PUBLIC_BASE_URL?.trim() || 'https://fastaccs-smm.vercel.app';
 	return `${normalizeBaseUrl(publicBase)}/auth/google/callback`;
 }
 

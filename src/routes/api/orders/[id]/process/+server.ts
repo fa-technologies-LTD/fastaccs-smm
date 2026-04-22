@@ -1,6 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
+import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
+import { sendLowStockAdminAlertIfNeeded } from '$lib/services/admin-alerts';
 
 // POST /api/orders/[id]/process - Process order (allocate accounts)
 export const POST: RequestHandler = async ({ params, locals }) => {
@@ -97,6 +99,11 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 				},
 				user: true
 			}
+		});
+
+		invalidateAdminStatsCache();
+		void sendLowStockAdminAlertIfNeeded('manual_order_processing').catch((error) => {
+			console.error('Failed to evaluate low-stock alert after manual order processing:', error);
 		});
 
 		return json({

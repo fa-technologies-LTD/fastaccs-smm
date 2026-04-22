@@ -12,6 +12,8 @@ import {
 import type { FailureKind } from '$lib/helpers/payment-status';
 import { logOrderStatusTransition } from '$lib/services/order-audit';
 import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
+import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
+import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -79,6 +81,7 @@ async function markOrderPaidAndAllocate(params: {
 				paymentStatus: 'failed'
 			}
 		});
+		invalidateAdminStatsCache();
 
 		logOrderStatusTransition({
 			orderId: order.id,
@@ -114,6 +117,7 @@ async function markOrderPaidAndAllocate(params: {
 	});
 
 	if (paidTransition.count > 0) {
+		invalidateAdminStatsCache();
 		logOrderStatusTransition({
 			orderId: order.id,
 			source: 'webhook',
@@ -193,6 +197,7 @@ async function markOrderFailed(params: {
 			paymentStatus: params.failureKind === 'cancelled' ? 'cancelled' : 'failed'
 		}
 	});
+	invalidateAdminStatsCache();
 
 	logOrderStatusTransition({
 		orderId: order.id,
@@ -369,6 +374,14 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ success: true });
 	} catch (error) {
 		console.error('Monnify webhook processing error:', error);
+		void sendCriticalAdminAlert({
+			title: 'Monnify webhook processing error',
+			message: error instanceof Error ? error.message : 'Unknown webhook processing failure.',
+			source: 'api.webhooks.monnify',
+			dedupeKey: 'monnify-webhook-processing-error'
+		}).catch((notifyError) => {
+			console.error('Failed to send admin alert for webhook processing error:', notifyError);
+		});
 		return json(
 			{
 				success: false,

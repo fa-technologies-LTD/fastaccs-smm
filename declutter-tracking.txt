@@ -425,3 +425,38 @@ Rescan findings (April 22, 2026):
 [LOW-MEDIUM] | Restock-notify capture endpoint lacks anti-abuse throttling | src/routes/api/restock-notify/+server.ts | open endpoint can accept repeated submissions | add lightweight IP/email rate-limit + optional captcha when enabling broad public campaigns
 [LOW-MEDIUM] | Tier batch fetch endpoint has no payload size cap | src/routes/api/categories/tiers/batch/+server.ts | accepts arbitrary `ids` array length | add upper bound to avoid accidental heavy queries under abuse/high load
 [RESOLVED] | Manual admin delivery email logging type split | src/routes/api/orders/[id]/deliver/+server.ts, src/lib/services/email.ts | manual delivery previously logged as `order_confirmation` | now uses dedicated `order_delivery` notification_type for clean analytics/audit separation
+
+BATCH 18: PHASE 1 STABILITY + ADMIN OPS HARDENING (IMPLEMENTATION PASS)
+Date: April 22, 2026
+Tracking update mode: LOCAL-ONLY (not pushed in this tracker update)
+
+Phase-1 decisions applied in this pass:
+[APPLIED] | Admin settings route no longer empty | src/routes/admin/settings/+page.server.ts, src/routes/admin/settings/+page.svelte, src/lib/services/admin-settings.ts | `/admin/settings` had no operational controls | Added Business Profile + Notification Thresholds + env-readonly Payment Configuration
+[APPLIED] | Admin notification recipients configurable | src/lib/services/admin-settings.ts | single hardcoded admin receiver only | Added persisted extra recipients while retaining hardcoded owner allowlist fallback
+[APPLIED] | Low-stock auto-alert pipeline | src/lib/services/admin-alerts.ts + fulfillment/order-process hooks | no proactive stock warning delivery | Added threshold-based low-stock email alerts with cooldown + dedupe signature
+[APPLIED] | Critical issue auto-alert pipeline | src/lib/services/admin-alerts.ts + payment verify/webhook/reconcile catch paths | payment failures only visible in logs | Added admin critical-alert email dispatch with cooldown
+[APPLIED] | Shared admin metrics source of truth | src/lib/services/admin-metrics.ts + stats endpoints | metric drift between dashboard/analytics/orders | Unified order+inventory stats snapshots and centralized cache invalidation
+[APPLIED] | Cache invalidation after payment/order state mutations | multiple payment/order handlers | stale admin stats after transitions | Added `invalidateAdminStatsCache()` on create/update/delete/verify/webhook/reconcile/process/deliver transitions
+[APPLIED] | Revenue masking UX polish | src/routes/admin/+page.svelte | heavy blur rendering looked broken | Replaced blur blocks with cleaner masked numeric rendering while keeping persisted toggle
+[APPLIED] | User suspend/unblock control | src/routes/admin/users/+page.svelte, src/routes/api/admin/users/[id]/status/+server.ts, src/lib/auth/session.ts | no rapid containment control for suspicious users | Added suspend/unblock action with immediate session invalidation
+[APPLIED] | Login guard for suspended users (email + Google) | src/routes/api/auth/login/+server.ts, src/routes/auth/google/callback/+server.ts | suspended users could still obtain session via some paths | Added explicit suspension checks before session creation
+[APPLIED] | Store credit wording alignment (wallet->store credit policy) | src/routes/admin/users/+page.server.ts, src/routes/admin/users/+page.svelte | wallet naming persisted in admin user list | Renamed display/export to Store Credit and only surfaced balance for affiliate-enabled users
+[APPLIED] | Admin order detail "View" determinism (SSR-safe) | src/lib/services/orders.ts, src/routes/admin/orders/[id]/+page.ts | relative fetch in server load could fail, causing detail navigation issues | wired load to use server `fetch` dependency and normalized detail payload mapping
+[APPLIED] | Tier-batch API request cap | src/routes/api/categories/tiers/batch/+server.ts | potentially unbounded IDs array | Added UUID normalization + dedupe + max 100 IDs guard
+[APPLIED] | Manual delivery notification type split | src/routes/api/orders/[id]/deliver/+server.ts | manual delivery mail could pollute order-confirmation analytics | `notificationType` now `order_delivery`
+
+Security hardening verification in this pass:
+[APPLIED-CHECKED] | Account mutation/listing routes admin-only | src/routes/api/accounts/+server.ts, src/routes/api/accounts/[id]/+server.ts
+[APPLIED-CHECKED] | Batch/category mutation routes admin-only | src/routes/api/batches/*, src/routes/api/categories/*
+[APPLIED-CHECKED] | Debug + test webhook/test-email routes dev-only | src/routes/api/debug/account-connections/+server.ts, src/routes/api/test-email/+server.ts, src/routes/api/test/webhook/+server.ts, src/routes/test/webhook/+page.server.ts
+[APPLIED-CHECKED] | CSRF origin check enabled | svelte.config.js (`csrf.checkOrigin = true`)
+[APPLIED-CHECKED] | Session cookie secure-by-protocol + inactive-user session invalidation | src/lib/auth/session.ts
+
+Validation snapshot for this batch:
+[CHECK] `npm run check` -> PASS (0 errors, existing accessibility warnings unchanged)
+[CHECK] `npm run build` -> PASS
+[CHECK] `npm run test:unit -- --run` -> FAIL in current sandbox (no tests discovered + Vitest listen EPERM on ephemeral port)
+[CHECK] `npm run lint` -> FAIL on existing Prettier drift across broader codebase (not introduced by this batch)
+
+Open note before push:
+[LOW] | Example copy still references old domain in one help text sample | src/routes/how-it-works/+page.svelte | replace `fastaccs.vercel.app/?ref=JD001` with `smm.fastaccs.com/?ref=JD001` in next copy pass

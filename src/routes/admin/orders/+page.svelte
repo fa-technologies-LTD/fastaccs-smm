@@ -40,12 +40,17 @@
 
 	// Calculate summary stats from filtered orders
 	const summaryStats = $derived.by(() => {
+		const pendingStatuses = new Set(['pending', 'pending_payment']);
+		const processingStatuses = new Set(['processing', 'paid']);
+		const completedStatuses = new Set(['completed']);
+		const revenueStatuses = new Set(['paid', 'completed']);
+
 		const totalOrders = filteredOrders.length;
-		const pendingOrders = filteredOrders.filter((o: any) => o.status === 'pending').length;
-		const processingOrders = filteredOrders.filter((o: any) => o.status === 'processing').length;
-		const completedOrders = filteredOrders.filter((o: any) => o.status === 'completed').length;
+		const pendingOrders = filteredOrders.filter((o: any) => pendingStatuses.has(o.status)).length;
+		const processingOrders = filteredOrders.filter((o: any) => processingStatuses.has(o.status)).length;
+		const completedOrders = filteredOrders.filter((o: any) => completedStatuses.has(o.status)).length;
 		const totalRevenue = filteredOrders
-			.filter((o: any) => o.status === 'completed')
+			.filter((o: any) => revenueStatuses.has(o.status))
 			.reduce((sum: number, o: any) => sum + Number(o.totalAmount || 0), 0);
 
 		return {
@@ -88,8 +93,10 @@
 		switch (status) {
 			case 'completed':
 				return 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border)';
+			case 'paid':
 			case 'processing':
 				return 'background: rgba(105,109,250,0.12); color: var(--link); border: 1px solid var(--link)';
+			case 'pending_payment':
 			case 'pending':
 				return 'background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border)';
 			case 'failed':

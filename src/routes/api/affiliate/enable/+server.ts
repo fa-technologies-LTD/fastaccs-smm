@@ -15,7 +15,8 @@ export const POST: RequestHandler = async ({ locals }) => {
 		return json({ success: false, error: result.error }, { status: 400 });
 	}
 
-	const referralLink = `${process.env.PUBLIC_SITE_URL || 'https://fastaccs.vercel.app'}/?ref=${result.affiliateCode}`;
+	const referralBase = (process.env.PUBLIC_SITE_URL || process.env.PUBLIC_BASE_URL || '').trim();
+	const referralLink = `${(referralBase || 'https://fastaccs-smm.vercel.app').replace(/\/+$/, '')}/?ref=${result.affiliateCode}`;
 
 	return json({
 		success: true,

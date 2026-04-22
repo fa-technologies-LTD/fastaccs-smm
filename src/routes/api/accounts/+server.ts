@@ -1,10 +1,16 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 import { triggerRestockNotificationsForTier } from '$lib/services/restock-notifications';
+import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
+import { sendLowStockAdminAlertIfNeeded } from '$lib/services/admin-alerts';
 
 // GET /api/accounts - Get all accounts with optional filters
-export async function GET({ url }) {
+export async function GET({ url, locals }) {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const categoryId = url.searchParams.get('categoryId');
 		const status = url.searchParams.get('status');
 		const platform = url.searchParams.get('platform');
@@ -32,8 +38,12 @@ export async function GET({ url }) {
 }
 
 // POST /api/accounts - Create new account
-export async function POST({ request }) {
+export async function POST({ request, locals }) {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const accountData = await request.json();
 		const categoryId = typeof accountData.categoryId === 'string' ? accountData.categoryId : '';
 
@@ -61,6 +71,11 @@ export async function POST({ request }) {
 				console.error('Failed to trigger restock notifications:', error);
 			});
 		}
+
+		invalidateAdminStatsCache();
+		void sendLowStockAdminAlertIfNeeded('account_create').catch((error) => {
+			console.error('Failed to evaluate low-stock alert after account create:', error);
+		});
 
 		return json({ data, error: null });
 	} catch (error) {

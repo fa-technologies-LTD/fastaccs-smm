@@ -2,6 +2,8 @@ import { env } from '$env/dynamic/private';
 import { prisma } from '$lib/prisma';
 import { verifyPayment } from '$lib/services/payment';
 import { allocateAccountsForOrder } from '$lib/services/fulfillment';
+import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
+import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
 import {
 	getFailureKind,
 	getFailureOrderStatus,
@@ -77,6 +79,7 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 		skipped: 0,
 		dryRun
 	};
+	let didMutate = false;
 
 	if (!hasMonnifyConfig()) {
 		summary.skipped = limit;
@@ -150,6 +153,7 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 						paymentStatus: 'cancelled'
 					}
 				});
+				didMutate = true;
 
 				logOrderStatusTransition({
 					orderId: order.id,
@@ -181,6 +185,7 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 							paymentStatus: 'failed'
 						}
 					});
+					didMutate = true;
 
 					logOrderStatusTransition({
 						orderId: order.id,
@@ -205,6 +210,7 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 						paymentChannel: verificationResult.channel || order.paymentChannel || null
 					}
 				});
+				didMutate = true;
 
 				logOrderStatusTransition({
 					orderId: order.id,
@@ -243,6 +249,7 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 						paymentStatus: failureKind === 'cancelled' ? 'cancelled' : 'failed'
 					}
 				});
+				didMutate = true;
 
 				logOrderStatusTransition({
 					orderId: order.id,
@@ -272,6 +279,7 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 						paymentStatus: 'cancelled'
 					}
 				});
+				didMutate = true;
 
 				logOrderStatusTransition({
 					orderId: order.id,
@@ -295,6 +303,7 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 					paymentStatus: pendingPhase
 				}
 			});
+			didMutate = true;
 
 			logOrderStatusTransition({
 				orderId: order.id,
@@ -307,6 +316,10 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 		}
 
 		summary.keptPending += 1;
+	}
+
+	if (!dryRun && didMutate) {
+		invalidateAdminStatsCache();
 	}
 
 	return summary;
@@ -329,6 +342,15 @@ export function startPaymentReconciliationScheduler(): void {
 	setInterval(() => {
 		void reconcilePendingPayments({ limit: 50 }).catch((error) => {
 			console.error('[payments.reconcile] scheduler_error', error);
+			void sendCriticalAdminAlert({
+				title: 'Payment reconciliation scheduler error',
+				message:
+					error instanceof Error ? error.message : 'Unknown reconciliation scheduler failure.',
+				source: 'payments.reconcile.scheduler',
+				dedupeKey: 'payments-reconcile-scheduler-error'
+			}).catch((notifyError) => {
+				console.error('Failed to notify admin about reconciliation scheduler error:', notifyError);
+			});
 		});
 	}, intervalMs);
 

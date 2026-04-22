@@ -1,10 +1,6 @@
 // Admin configuration for FastAccs
 
-const ADMIN_EMAILS = [
-	'tuneymitch@gmail.com',
-	'verystrongethan@gmail.com'
-	// Add more admin emails here as needed
-];
+const ADMIN_EMAILS = ['verystrongethan@gmail.com'];
 
 export function isAdminEmail(email: string): boolean {
 	return ADMIN_EMAILS.includes(email.toLowerCase());

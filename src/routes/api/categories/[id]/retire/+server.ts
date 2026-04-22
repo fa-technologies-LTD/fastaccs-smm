@@ -1,5 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
+import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
+import { sendLowStockAdminAlertIfNeeded } from '$lib/services/admin-alerts';
 
 interface RetireRequestBody {
 	targetCategoryId?: string;
@@ -24,8 +26,12 @@ function groupAvailableAccountsByBatch(accounts: AvailableAccountRef[]): Map<str
 }
 
 // POST /api/categories/[id]/retire - Archive category/platform and optionally move available inventory
-export async function POST({ params, request }) {
+export async function POST({ params, request, locals }) {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const id = params.id;
 
 		if (!id) {
@@ -290,6 +296,11 @@ export async function POST({ params, request }) {
 					sourceBatchesRecounted
 				}
 			};
+		});
+
+		invalidateAdminStatsCache();
+		void sendLowStockAdminAlertIfNeeded('category_retire').catch((notifyError) => {
+			console.error('Failed to evaluate low-stock alert after category retirement:', notifyError);
 		});
 
 		return json({ data: result, error: null });

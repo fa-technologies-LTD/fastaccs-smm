@@ -4,6 +4,7 @@ import { env } from '$env/dynamic/private';
 import { PUBLIC_BASE_URL } from '$env/static/public';
 import { prisma } from '$lib/prisma';
 import { sendEmail } from '$lib/services/email';
+import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import type { Decimal } from '@prisma/client/runtime/library';
 
 // Type definitions for email generation
@@ -122,6 +123,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				deliveredAt: new Date()
 			}
 		});
+
+		invalidateAdminStatsCache();
 
 		return json({
 			success: true,

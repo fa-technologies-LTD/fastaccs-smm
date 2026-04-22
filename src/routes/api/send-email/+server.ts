@@ -1,40 +1,34 @@
 import { json } from '@sveltejs/kit';
-import nodemailer from 'nodemailer';
-import { env } from '$env/dynamic/private';
+import { sendEmail } from '$lib/services/email';
+import type { RequestHandler } from './$types';
 
-export async function POST({ request }) {
+export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
-		const { to, subject, content } = await request.json();
-
-		// Gmail SMTP configuration
-		const gmailUser = env.GMAIL_USER;
-		const gmailPassword = env.GMAIL_APP_PASSWORD; // Use App Password, not regular password
-
-		if (!gmailUser || !gmailPassword) {
-			console.error('Gmail configuration missing');
-			return json({ error: 'Email service not configured' }, { status: 500 });
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
-		// Create transporter
-		const transporter = nodemailer.createTransport({
-			service: 'gmail',
-			auth: {
-				user: gmailUser,
-				pass: gmailPassword
-			}
+		const { to, subject, content } = await request.json();
+		const recipient = typeof to === 'string' ? to.trim() : '';
+		const emailSubject = typeof subject === 'string' ? subject.trim() : '';
+		const emailBody = typeof content === 'string' ? content.trim() : '';
+
+		if (!recipient || !emailSubject || !emailBody) {
+			return json({ error: 'to, subject and content are required' }, { status: 400 });
+		}
+
+		const result = await sendEmail({
+			to: recipient,
+			subject: emailSubject,
+			body: emailBody,
+			notificationType: 'admin_broadcast',
+			userId: locals.user.id
 		});
 
-		// Email options
-		const mailOptions = {
-			from: `"FastAccs" <${gmailUser}>`,
-			to: to,
-			subject: subject,
-			text: content,
-			html: formatEmailContent(content)
-		};
+		if (!result.success) {
+			return json({ error: result.error || 'Failed to send email' }, { status: 500 });
+		}
 
-		// Send email
-		const result = await transporter.sendMail(mailOptions);
 		return json({
 			success: true,
 			messageId: result.messageId
@@ -45,18 +39,7 @@ export async function POST({ request }) {
 			{
 				error: 'Failed to send email: ' + (error instanceof Error ? error.message : 'Unknown error')
 			},
-			{ status: 500 }
-		);
+				{ status: 500 }
+			);
 	}
-}
-
-/**
- * Format email content as HTML
- */
-function formatEmailContent(content: string): string {
-	return content
-		.replace(/\n/g, '<br>')
-		.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-		.replace(/^- (.*$)/gim, '<li>$1</li>')
-		.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
-}
+};

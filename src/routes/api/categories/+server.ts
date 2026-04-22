@@ -1,12 +1,15 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
+import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 
 // GET /api/categories - Get categories with optional filtering
-export async function GET({ url }) {
+export async function GET({ url, locals }) {
 	try {
 		const type = url.searchParams.get('type');
 		const includeParent = url.searchParams.get('include_parent') === 'true';
-		const includeInactive = url.searchParams.get('include_inactive') === 'true';
+		const includeInactiveRequested = url.searchParams.get('include_inactive') === 'true';
+		const isAdmin = Boolean(locals.user && locals.user.userType === 'ADMIN');
+		const includeInactive = includeInactiveRequested && isAdmin;
 
 		const where = {
 			...(includeInactive ? {} : { isActive: true }),
@@ -39,8 +42,12 @@ export async function GET({ url }) {
 }
 
 // POST /api/categories - Create new category
-export async function POST({ request }) {
+export async function POST({ request, locals }) {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const category = await request.json();
 		const { parentId, ...rest } = category;
 
@@ -60,6 +67,8 @@ export async function POST({ request }) {
 				})
 			}
 		});
+
+		invalidateAdminStatsCache();
 
 		return json({ data, error: null });
 	} catch (error) {

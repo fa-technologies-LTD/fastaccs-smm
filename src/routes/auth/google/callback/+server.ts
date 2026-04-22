@@ -68,6 +68,16 @@ export const GET: RequestHandler = async (event) => {
 			});
 		}
 
+		if (!user.isActive) {
+			cookies.delete('google_oauth_state', { path: '/' });
+			cookies.delete('google_code_verifier', { path: '/' });
+			cookies.delete('auth_redirect_to', { path: '/' });
+			throw redirect(
+				302,
+				`/auth/login?error=${encodeURIComponent('Your account is currently suspended. Contact support.')}&returnUrl=${encodeURIComponent(redirectTo)}`
+			);
+		}
+
 		// Create session
 		const sessionToken = generateSessionToken();
 		const session = await createSession(sessionToken, user.id);
@@ -111,8 +121,21 @@ export const GET: RequestHandler = async (event) => {
 			stateMatch: state === storedState
 		});
 
-		// Return more helpful error message
 		const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+
+		// `invalid_grant` usually means an expired/reused OAuth code or callback-domain mismatch.
+		if (errorMessage.includes('invalid_grant')) {
+			cookies.delete('google_oauth_state', { path: '/' });
+			cookies.delete('google_code_verifier', { path: '/' });
+			cookies.delete('auth_redirect_to', { path: '/' });
+
+			throw redirect(
+				302,
+				`/auth/login?error=${encodeURIComponent('Google session expired. Please try signing in again.')}&returnUrl=${encodeURIComponent(redirectTo)}`
+			);
+		}
+
+		// Return more helpful error message
 		throw error(500, `Authentication failed: ${errorMessage}`);
 	}
 };

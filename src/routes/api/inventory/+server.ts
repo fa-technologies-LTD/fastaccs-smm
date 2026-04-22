@@ -1,10 +1,16 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 import { serverCache, getCacheHeaders, CACHE_TTL } from '$lib/helpers/cache';
+import { getInventoryStatsSnapshot } from '$lib/services/admin-metrics';
+import { getLowStockThresholdSetting } from '$lib/services/admin-settings';
 
 // GET /api/inventory - Get inventory stats and data
-export async function GET({ url }) {
+export async function GET({ url, locals }) {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const type = url.searchParams.get('type') || 'all';
 
 		if (type === 'stats') {
@@ -23,77 +29,7 @@ export async function GET({ url }) {
 				);
 			}
 
-			// Get total tiers (child categories)
-			const totalTiers = await prisma.category.count({
-				where: {
-					categoryType: 'tier',
-					isActive: true
-				}
-			});
-
-			// Get total platforms (parent categories)
-			const totalPlatforms = await prisma.category.count({
-				where: {
-					categoryType: 'platform',
-					isActive: true
-				}
-			});
-
-			// Get inventory data from accounts (which are the actual inventory items)
-			const [totalAvailable, totalReserved, tiersWithoutStockData] = await Promise.all([
-				// Count all available accounts
-				prisma.account.count({
-					where: { status: 'available' }
-				}),
-
-				// Count all reserved accounts
-				prisma.account.count({
-					where: { status: 'reserved' }
-				}),
-
-				// Get tiers with no available accounts and count non-delivered accounts in those tiers
-				prisma.category.findMany({
-					where: {
-						categoryType: 'tier',
-						isActive: true,
-						parentId: { not: null }, // Platform-specific tiers only
-						accounts: {
-							none: {
-								status: 'available'
-							}
-						}
-					},
-					include: {
-						_count: {
-							select: {
-								accounts: {
-									where: {
-										status: { not: 'delivered' } // Only count non-delivered accounts
-									}
-								}
-							}
-						}
-					}
-				})
-			]);
-
-			// Calculate non-delivered accounts in out-of-stock tiers (reserved accounts that can't be fulfilled)
-			const accountsInOutOfStockTiers = tiersWithoutStockData.reduce(
-				(sum, tier) => sum + tier._count.accounts,
-				0
-			);
-			const outOfStockTiersCount = tiersWithoutStockData.length;
-
-			const stats = {
-				total_tiers: totalTiers,
-				total_available: totalAvailable,
-				total_reserved: totalReserved,
-				out_of_stock: outOfStockTiersCount, // Keep original field for compatibility
-				low_stock: 0, // TODO: Implement low stock detection
-				platforms: totalPlatforms,
-				accountsInOutOfStockTiers: accountsInOutOfStockTiers,
-				outOfStockTiersCount: outOfStockTiersCount
-			};
+			const stats = await getInventoryStatsSnapshot();
 
 			// Cache the result
 			serverCache.set(cacheKey, stats);
@@ -220,8 +156,10 @@ export async function GET({ url }) {
 			}
 		});
 
+		const lowStockThreshold = await getLowStockThresholdSetting().catch(() => 10);
 		const lowStockBatches = batchesWithCounts.filter(
-			(batch) => batch._count.accounts > 0 && batch._count.accounts < 10
+			(batch) =>
+				batch._count.accounts > 0 && batch._count.accounts < Math.max(1, lowStockThreshold)
 		).length;
 
 		const platformsCount = await prisma.account.groupBy({

@@ -1,8 +1,19 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { dev } from '$app/environment';
 import { verifyWebhookSignature } from '$lib/services/payment';
 
 export const POST: RequestHandler = async ({ request }) => {
+	if (!dev) {
+		return json(
+			{
+				success: false,
+				error: 'Not found'
+			},
+			{ status: 404 }
+		);
+	}
+
 	try {
 		const signature = request.headers.get('monnify-signature');
 		const rawBody = await request.text();

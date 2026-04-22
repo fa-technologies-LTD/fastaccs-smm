@@ -1,6 +1,8 @@
 import { prisma } from '$lib/prisma';
 import { recordCommission } from './affiliate';
 import { sendOrderConfirmationEmailIfNeeded } from './email';
+import { invalidateAdminStatsCache } from './admin-metrics';
+import { sendLowStockAdminAlertIfNeeded } from './admin-alerts';
 
 // Type definitions
 interface AllocationResult {
@@ -141,6 +143,11 @@ async function allocateAccounts(orderId: string) {
 			}
 		});
 
+		invalidateAdminStatsCache();
+		void sendLowStockAdminAlertIfNeeded('order_allocation').catch((error) => {
+			console.error('Failed to evaluate low-stock alert after allocation:', error);
+		});
+
 		try {
 			await sendOrderConfirmationEmailIfNeeded(orderId);
 		} catch (emailError) {
@@ -241,6 +248,8 @@ async function deliverAccounts(orderId: string) {
 				deliveredAt: new Date()
 			}
 		});
+
+		invalidateAdminStatsCache();
 
 		return {
 			success: true,

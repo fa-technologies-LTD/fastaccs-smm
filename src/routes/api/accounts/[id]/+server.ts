@@ -1,10 +1,16 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 import { triggerRestockNotificationsForTier } from '$lib/services/restock-notifications';
+import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
+import { sendLowStockAdminAlertIfNeeded } from '$lib/services/admin-alerts';
 
 // PUT /api/accounts/[id] - Update account
-export async function PUT({ params, request }) {
+export async function PUT({ params, request, locals }) {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const id = params.id;
 		const updates = await request.json();
 		const existing = await prisma.account.findUnique({
@@ -53,6 +59,11 @@ export async function PUT({ params, request }) {
 			});
 		}
 
+		invalidateAdminStatsCache();
+		void sendLowStockAdminAlertIfNeeded('account_update').catch((error) => {
+			console.error('Failed to evaluate low-stock alert after account update:', error);
+		});
+
 		return json({ data, error: null });
 	} catch (error) {
 		console.error('Database error:', error);
@@ -64,12 +75,21 @@ export async function PUT({ params, request }) {
 }
 
 // DELETE /api/accounts/[id] - Delete account
-export async function DELETE({ params }) {
+export async function DELETE({ params, locals }) {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const id = params.id;
 
 		const data = await prisma.account.delete({
 			where: { id }
+		});
+
+		invalidateAdminStatsCache();
+		void sendLowStockAdminAlertIfNeeded('account_delete').catch((error) => {
+			console.error('Failed to evaluate low-stock alert after account delete:', error);
 		});
 
 		return json({ data, error: null });

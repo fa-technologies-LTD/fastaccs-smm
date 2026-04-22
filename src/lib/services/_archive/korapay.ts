@@ -1,11 +1,19 @@
-import { KORAPAY_SECRET_KEY } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 import { PUBLIC_BASE_URL } from '$env/static/public';
 import { createHmac } from 'crypto';
 import { dev } from '$app/environment';
 
 const KORAPAY_API_URL = 'https://api.korapay.com/merchant/api/v1';
 
-const BASE_URL = dev ? ' https://matha-excursionary-veraciously.ngrok-free.dev' : PUBLIC_BASE_URL;
+const BASE_URL = dev ? 'https://matha-excursionary-veraciously.ngrok-free.dev' : PUBLIC_BASE_URL;
+
+function getKorapaySecretKey(): string {
+	const key = (env.KORAPAY_SECRET_KEY || '').trim();
+	if (!key) {
+		throw new Error('KORAPAY_SECRET_KEY is not configured');
+	}
+	return key;
+}
 
 export interface InitializeChargeParams {
 	email: string;
@@ -49,14 +57,14 @@ export async function initializeCharge(params: InitializeChargeParams) {
 			channels: ['card', 'bank_transfer', 'pay_with_bank', 'mobile_money']
 		};
 
-		const response = await fetch(`${KORAPAY_API_URL}/charges/initialize`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${KORAPAY_SECRET_KEY}`
-			},
-			body: JSON.stringify(payload)
-		});
+			const response = await fetch(`${KORAPAY_API_URL}/charges/initialize`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${getKorapaySecretKey()}`
+				},
+				body: JSON.stringify(payload)
+			});
 
 		const data = await response.json();
 
@@ -88,12 +96,12 @@ export async function initializeCharge(params: InitializeChargeParams) {
  */
 export async function verifyCharge(reference: string): Promise<ChargeVerificationResult> {
 	try {
-		const response = await fetch(`${KORAPAY_API_URL}/charges/${encodeURIComponent(reference)}`, {
-			method: 'GET',
-			headers: {
-				Authorization: `Bearer ${KORAPAY_SECRET_KEY}`
-			}
-		});
+			const response = await fetch(`${KORAPAY_API_URL}/charges/${encodeURIComponent(reference)}`, {
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${getKorapaySecretKey()}`
+				}
+			});
 
 		const result = await response.json();
 
@@ -140,7 +148,7 @@ export async function verifyCharge(reference: string): Promise<ChargeVerificatio
  */
 export function verifyWebhookSignature(signature: string, dataObject: unknown): boolean {
 	try {
-		const hash = createHmac('sha256', KORAPAY_SECRET_KEY)
+		const hash = createHmac('sha256', getKorapaySecretKey())
 			.update(JSON.stringify(dataObject))
 			.digest('hex');
 		return hash === signature;

@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
+import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 
 // GET /api/categories/[id] - Get single category
 export async function GET({ params }) {
@@ -29,8 +30,12 @@ export async function GET({ params }) {
 }
 
 // PUT /api/categories/[id] - Update category
-export async function PUT({ params, request }) {
+export async function PUT({ params, request, locals }) {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const id = params.id;
 		const updates = await request.json();
 		const { parentId, metadata, ...rest } = updates;
@@ -52,6 +57,8 @@ export async function PUT({ params, request }) {
 			}
 		});
 
+		invalidateAdminStatsCache();
+
 		return json({ data, error: null });
 	} catch (error) {
 		console.error('Failed to update category:', error);
@@ -60,8 +67,12 @@ export async function PUT({ params, request }) {
 }
 
 // DELETE /api/categories/[id] - Delete category
-export async function DELETE({ params }) {
+export async function DELETE({ params, locals }) {
 	try {
+		if (!locals.user || locals.user.userType !== 'ADMIN') {
+			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const id = params.id;
 
 		// Check if category has children (tiers, services, etc.)
@@ -100,6 +111,8 @@ export async function DELETE({ params }) {
 		const data = await prisma.category.delete({
 			where: { id }
 		});
+
+		invalidateAdminStatsCache();
 
 		return json({ data, error: null });
 	} catch (error) {

@@ -1,25 +1,23 @@
 import { json } from '@sveltejs/kit';
+import { dev } from '$app/environment';
+import { sendEmail } from '$lib/services/email';
+import type { RequestHandler } from './$types';
 
-export async function GET() {
+export const GET: RequestHandler = async () => {
+	if (!dev) {
+		return json({ status: 'error', error: 'Not found' }, { status: 404 });
+	}
+
 	try {
-		// Test email sending
-		const response = await fetch('/api/send-email', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({
-				to: 'test@example.com',
-				subject: 'FastAccs Test Email',
-				content:
-					'This is a test email from FastAccs.\n\n**Bold text**\n- List item 1\n- List item 2'
-			})
+		const result = await sendEmail({
+			to: 'test@example.com',
+			subject: 'FastAccs Test Email',
+			body: 'This is a test email from FastAccs.\n\n**Bold text**\n- List item 1\n- List item 2',
+			notificationType: 'admin_broadcast'
 		});
 
-		const result = await response.json();
-
 		return json({
-			status: response.ok ? 'success' : 'error',
+			status: result.success ? 'success' : 'error',
 			result
 		});
 	} catch (error) {
@@ -28,4 +26,4 @@ export async function GET() {
 			error: error instanceof Error ? error.message : 'Unknown error'
 		});
 	}
-}
+};

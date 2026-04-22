@@ -130,7 +130,7 @@
 		if (!hideMonetaryAmounts) {
 			return formatted;
 		}
-		return formatted.replace(/[0-9]/g, '█');
+		return formatted.replace(/[0-9]/g, '•');
 	}
 
 	function formatRelativeTime(date: Date): string {
@@ -301,16 +301,12 @@
 								Total Revenue
 							</p>
 							<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
-								<span class:money-amount-censored={hideMonetaryAmounts}>
-									{formatMonetaryAmount(orderStats.total_revenue)}
-								</span>
+								{formatMonetaryAmount(orderStats.total_revenue)}
 							</p>
 							<div class="mt-1 flex items-center">
 								<span class="text-xs sm:text-sm" style="color: var(--text-muted)"
 									>Today:
-									<span class:money-amount-censored={hideMonetaryAmounts}>
-										{formatMonetaryAmount(orderStats.todays_revenue)}
-									</span></span
+									{formatMonetaryAmount(orderStats.todays_revenue)}</span
 								>
 							</div>
 						</div>
@@ -605,12 +601,3 @@
 		</div>
 		</div>
 	</div>
-
-<style>
-	.money-amount-censored {
-		display: inline-block;
-		filter: blur(1px);
-		letter-spacing: 0.04em;
-		user-select: none;
-	}
-</style>

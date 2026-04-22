@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
+import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 
 // GET /api/orders/[id] - Get specific order
 export const GET: RequestHandler = async ({ params, locals }) => {
@@ -15,7 +16,11 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 				orderItems: {
 					include: {
 						accounts: true,
-						category: true
+						category: {
+							include: {
+								parent: true
+							}
+						}
 					}
 				},
 				user: true
@@ -62,6 +67,8 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 			}
 		});
 
+		invalidateAdminStatsCache();
+
 		return json({ data, error: null });
 	} catch (error) {
 		console.error('Database error:', error);
@@ -100,6 +107,8 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 		const data = await prisma.order.delete({
 			where: { id: params.id }
 		});
+
+		invalidateAdminStatsCache();
 
 		return json({ data, error: null });
 	} catch (error) {

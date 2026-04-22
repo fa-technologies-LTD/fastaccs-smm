@@ -1,8 +1,13 @@
 import { json } from '@sveltejs/kit';
+import { dev } from '$app/environment';
 import { prisma } from '$lib/prisma';
 
 // GET /api/debug/account-connections - Debug account-category connections
 export async function GET() {
+	if (!dev) {
+		return json({ data: null, error: 'Not found' }, { status: 404 });
+	}
+
 	try {
 		// Get all platforms
 		const platforms = await prisma.category.findMany({
@@ -115,6 +120,10 @@ export async function GET() {
 
 // POST /api/debug/account-connections - Fix tier structure (remove platform-specific tiers)
 export async function POST() {
+	if (!dev) {
+		return json({ data: null, error: 'Not found' }, { status: 404 });
+	}
+
 	try {
 		// Step 1: Get all platform-specific tiers (these are wrong)
 		const platformSpecificTiers = await prisma.category.findMany({

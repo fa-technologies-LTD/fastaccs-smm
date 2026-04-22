@@ -14,6 +14,8 @@ import {
 import type { FailureKind } from '$lib/helpers/payment-status';
 import { logOrderStatusTransition } from '$lib/services/order-audit';
 import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
+import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
+import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -214,6 +216,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						paymentStatus: callbackFailureKind === 'cancelled' ? 'cancelled' : 'failed'
 					}
 				});
+				invalidateAdminStatsCache();
 
 				logOrderStatusTransition({
 					orderId: orderById.id,
@@ -232,6 +235,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						paymentStatus: nextPaymentStatus
 					}
 				});
+				invalidateAdminStatsCache();
 
 				logOrderStatusTransition({
 					orderId: orderById.id,
@@ -361,6 +365,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						paymentStatus: 'failed'
 					}
 				});
+				invalidateAdminStatsCache();
 
 				logOrderStatusTransition({
 					orderId: order.id,
@@ -407,6 +412,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 
 			if (paidTransition.count > 0) {
+				invalidateAdminStatsCache();
 				logOrderStatusTransition({
 					orderId: order.id,
 					source: 'verify',
@@ -518,6 +524,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						paymentStatus: failureKind === 'cancelled' ? 'cancelled' : 'failed'
 					}
 				});
+				invalidateAdminStatsCache();
 
 				logOrderStatusTransition({
 					orderId: failedOrder.id,
@@ -547,6 +554,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						paymentStatus: nextPaymentStatus
 					}
 				});
+				invalidateAdminStatsCache();
 
 				logOrderStatusTransition({
 					orderId: orderById.id,
@@ -570,6 +578,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		);
 	} catch (error) {
 		console.error('Payment verification error:', error);
+		void sendCriticalAdminAlert({
+			title: 'Payment verification endpoint error',
+			message: error instanceof Error ? error.message : 'Unknown payment verification failure.',
+			source: 'api.payments.verify',
+			dedupeKey: 'payments-verify-endpoint-error'
+		}).catch((notifyError) => {
+			console.error('Failed to send admin alert for payment verification error:', notifyError);
+		});
 		return json(
 			{
 				success: false,
