@@ -1,6 +1,9 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { env } from '$env/dynamic/private';
+import { PUBLIC_BASE_URL } from '$env/static/public';
 import { prisma } from '$lib/prisma';
+import { sendEmail } from '$lib/services/email';
 import type { Decimal } from '@prisma/client/runtime/library';
 
 // Type definitions for email generation
@@ -25,6 +28,14 @@ interface AccountForEmail {
 	linkUrl?: string | null;
 	followers?: number | null;
 	ageMonths?: number | null;
+}
+
+function getBaseUrl(): string {
+	const configuredBaseUrl = (env.PUBLIC_BASE_URL || PUBLIC_BASE_URL || '').trim();
+	if (configuredBaseUrl) {
+		return configuredBaseUrl.replace(/\/+$/, '');
+	}
+	return 'https://fastaccs-smm.vercel.app';
 }
 
 // POST /api/orders/[id]/deliver - Send allocated accounts to customer
@@ -69,7 +80,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		}
 
 		// ✅ FIXED: Generate email content with allocated account details
-		const emailContent = generateAccountDeliveryEmail(order);
+		const baseUrl = getBaseUrl();
+		const emailContent = generateAccountDeliveryEmail(order, baseUrl);
 		const customerEmail = order.guestEmail;
 
 		if (!customerEmail) {
@@ -77,21 +89,18 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		}
 
 		// Send email with account details
-		const emailResponse = await fetch('/api/send-email', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({
-				to: customerEmail,
-				subject: `Your FastAccs Order ${order.orderNumber} - Account Details`,
-				content: emailContent
-			})
+		const emailResult = await sendEmail({
+			to: customerEmail,
+			subject: `Your FastAccs Order ${order.orderNumber} - Account Details`,
+			body: emailContent,
+			ctaText: 'Open your dashboard',
+			ctaUrl: `${baseUrl}/dashboard?tab=purchases`,
+			notificationType: 'order_delivery',
+			referenceId: orderId,
+			userId: order.userId || null
 		});
 
-		const emailResult = await emailResponse.json();
-
-		if (!emailResponse.ok) {
+		if (!emailResult.success) {
 			return json({ error: 'Failed to send email: ' + emailResult.error }, { status: 500 });
 		}
 
@@ -132,7 +141,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 /**
  * Generate formatted email content with account details
  */
-function generateAccountDeliveryEmail(order: OrderForEmail): string {
+function generateAccountDeliveryEmail(order: OrderForEmail, baseUrl: string): string {
 	const orderItems = order.orderItems;
 	let content = `**Dear Customer,**
 
@@ -173,9 +182,9 @@ Thank you for your order with FastAccs! Your accounts are ready.
 - Contact support if you face any issues
 
 **Quick Links:**
-- Access Passwords & Full Details: https://fastaccs.com/dashboard
-- Browse More Accounts: https://fastaccs.com/platforms
-- Contact Support: https://fastaccs.com/support
+- Access Passwords & Full Details: ${baseUrl}/dashboard?tab=purchases
+- Browse More Accounts: ${baseUrl}/platforms
+- Contact Support: ${baseUrl}/support
 
 **Support:**
 For any questions or issues, please contact our support team.

@@ -7,6 +7,7 @@ export type EmailNotificationType =
 	| 'verification'
 	| 'welcome'
 	| 'order_confirmation'
+	| 'order_delivery'
 	| 'restock_alert'
 	| 'win_back'
 	| 'admin_broadcast';

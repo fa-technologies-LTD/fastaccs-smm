@@ -264,10 +264,12 @@ Scope lock for this batch:
 
 Execution tracker:
 [IN-PROGRESS] | Ownership audit | local workspace + sibling projects | mixed ownership detected (`adetyaz/fastaccs` remote on core repo, org-owned siblings) | takeover runbook activated
-[IN-PROGRESS] | Tracking instrumentation | declutter-tracking.txt | no dedicated ownership transfer batch | Batch 15 created with milestone control points
+[APPLIED] | Tracking instrumentation | declutter-tracking.txt | no dedicated ownership transfer batch | Batch 15 created with milestone control points
 [APPLIED] | Transfer runbook doc | OWNERSHIP-TRANSFER-RUNBOOK.md | no single operator guide for takeover execution | added end-to-end runbook with transfer-first/fallback paths, DNS, Vercel, DB, env rotation, integration cutover, and smoke test sequence
-[PENDING] | GitHub transfer attempt | adetyaz/fastaccs -> fa-technologies-LTD/fastaccs-smm | current upstream not under org | attempt transfer first; fallback to fresh org repo push if blocked
-[PENDING] | Git fallback path readiness | local git history -> new org repo | transfer may require old owner confirmation | fallback will preserve full local git history via mirror-style push
+[APPLIED] | GitHub target repo ready | fa-technologies-LTD/fastaccs-smm | transfer path could be blocked by prior owner availability | target repo created under owner org and confirmed reachable
+[APPLIED] | Fallback sync execution | local git history -> org repo | source transfer not required for progress | pushed `main` + feature branches to `fa-technologies-LTD/fastaccs-smm`
+[APPLIED] | Canonical remote switch | local git remote config | mixed remotes (`origin` old repo, `legacy-origin` backup) | `origin` now points to org repo and `legacy-origin` removed
+[APPLIED] | Admin allowlist ownership lock | src/lib/auth/admin.ts | old shared admin emails still present | restricted admin allowlist to `verystrongethan@gmail.com` only
 [PENDING] | Vercel owner project binding | org repo -> owner team project | deployment ownership currently uncertain | bind project to owner team and enable auto deploy on `main`
 [PENDING] | Domain routing setup | Namecheap DNS -> `smm.fastaccs.com` | apex currently tied to static/GitHub Pages | add subdomain DNS for SMM app, keep root untouched
 [PENDING] | Fresh DB migration path | owner-controlled Neon DB | legacy migration command reliability issues on old target | run on fresh Neon project + verify schema
@@ -281,3 +283,145 @@ Decision log (approved):
 3) Vercel auto-deploy tied to Git approved
 4) Apex (`fastaccs.com`) remains unchanged during takeover
 5) Post-takeover access cleanup (remove old developer control) approved
+
+BATCH 16: PROD HARDENING + SESSION CONSISTENCY
+Date: April 22, 2026
+Tracking update mode: LOCAL-ONLY (not pushed in this tracker update)
+
+Scope completed in this pass:
+[APPLIED] | Session/nav consistency after login | src/routes/+layout.server.ts, src/routes/auth/login/+page.svelte, src/routes/auth/signup/+page.svelte | auth UI could appear stale across navigations | root layout now tracks path and login/signup invalidate app data before redirect
+[APPLIED] | Session cookie transport hardening | src/lib/auth/session.ts | cookie `secure` flag was not explicit in HTTPS contexts | secure cookie now enforced on HTTPS requests for set/delete
+[APPLIED] | CSRF origin protection restored | svelte.config.js | origin checking disabled globally | `csrf.checkOrigin` set back to `true`
+[APPLIED] | Verify-email inbox guidance | src/routes/verify-email/+page.svelte | new verification users had no spam-folder guidance | added clear “check Spam/Promotions” hint under resend control
+[APPLIED] | Admin-only protection on sensitive inventory/account APIs | src/routes/api/accounts/**, src/routes/api/batches/**, src/routes/api/inventory/+server.ts, src/routes/api/categories/** | critical account/inventory mutation/read surfaces were public | all sensitive methods now require authenticated admin user
+[APPLIED] | Include-inactive category query guard | src/routes/api/categories/+server.ts | non-admin clients could request inactive categories | `include_inactive=true` now only honored for admins
+[APPLIED] | Debug/test endpoint lockdown for production | src/routes/api/debug/account-connections/+server.ts, src/routes/api/test-email/+server.ts, src/routes/api/test/webhook/+server.ts, src/routes/test/webhook/+page.server.ts | public debug/test helpers exposed in prod | these routes now return 404 outside dev
+[APPLIED] | Public email relay risk reduction | src/routes/api/send-email/+server.ts | open email relay path with direct SMTP usage | route now requires admin and uses centralized email service
+[APPLIED] | Order delivery email path hardening | src/routes/api/orders/[id]/deliver/+server.ts | delivery endpoint depended on public `/api/send-email` and hardcoded links | now sends via internal email service + env-based base URL links
+[APPLIED] | Stale domain fallback cleanup (auth/affiliate) | src/lib/auth/oauth.ts, src/routes/api/affiliate/enable/+server.ts, src/lib/components/AffiliateTab.svelte | old `fastaccs.vercel.app` fallback persisted | defaults now align to current deployment/env origin
+[APPLIED] | OAuth callback domain consistency | src/lib/auth/oauth.ts, src/routes/auth/google/callback/+server.ts | `invalid_grant` can occur when callback domain/env drift exists | callback now prioritizes request origin and gracefully redirects login on expired/reused Google code
+[APPLIED] | Korapay env typing blocker removal | src/lib/services/korapay.ts, src/lib/services/_archive/korapay.ts | static env import required missing `KORAPAY_SECRET_KEY` at typecheck | migrated to dynamic env with runtime guard; `npm run check` now passes errors-free
+
+Validation snapshot for this batch:
+[CHECK] `npm run build` -> PASS
+[CHECK] `npm run check` -> PASS (0 errors, existing accessibility/deprecation warnings remain)
+
+BATCH 17: EMAIL INBOX CATALOG (EXACT LIVE COPY + TRIGGERS)
+Date: April 22, 2026
+Tracking update mode: LOCAL-ONLY (not pushed in this tracker update)
+
+Source of truth:
+1) Template and sender pipeline: `src/lib/services/email.ts`
+2) Verification flow: `src/lib/services/email-verification.ts`
+3) Restock flow: `src/lib/services/restock-notifications.ts`
+4) Win-back flow: `src/lib/services/winback.ts`
+5) Payment success flow: `src/routes/api/payments/verify/+server.ts`, `src/routes/api/webhooks/monnify/+server.ts`, `src/lib/services/payment-reconciliation.ts`
+6) Admin/manual delivery flow: `src/routes/api/orders/[id]/deliver/+server.ts`
+
+GLOBAL TEMPLATE (applies to all emails sent via `sendEmail`)
+[LIVE] | Template shell | src/lib/services/email.ts | Shared branded HTML wrapper used for all email types
+Header text (exact): `FAST ACCOUNTS`
+Footer text (exact):
+1) `Fast Accounts by Teerex`
+2) `WhatsApp Support | Support Email`
+3) `© 2026 FA Technologies LTD`
+4) `You received this because you have an account on Fast Accounts.`
+CTA behavior: Green button shown when `ctaText` + `ctaUrl` exist and `showCta !== false`
+Support email source: `SMTP_FROM_EMAIL` fallback to `GMAIL_USER` then `support@fastaccs.com`
+
+USER INBOX EMAILS (EXACT CURRENT CONTENT)
+[LIVE] | Verification OTP | notification_type=`verification` | Trigger: first verify-email visit with no active code, resend click, or auto-regeneration after too many invalid attempts
+Subject (exact): `Your Fast Accounts verification code`
+Body (exact):
+`Use this verification code to confirm your email: {6-digit-code}
+
+This code expires in {VERIFICATION_CODE_EXPIRY_MINUTES} minutes.
+
+Do not share this code with anyone.`
+CTA: none (`showCta: false`)
+
+[LIVE] | Welcome Email | notification_type=`welcome` | Trigger: immediately after successful OTP verification (`email_verified` flips true), one-time only per user
+Subject (exact): `Welcome to Fast Accounts`
+Body (exact):
+`Welcome to Fast Accounts.
+
+You are all set to browse premium account tiers, complete secure checkout, and access purchases from your dashboard.
+
+Head to platforms to find the right accounts for your needs.`
+CTA (exact): `Browse Accounts` -> `{PUBLIC_BASE_URL}/platforms`
+
+[LIVE] | Purchase Confirmation (Automatic) | notification_type=`order_confirmation` | Trigger: payment success confirmation paths (verify endpoint, Monnify webhook, reconciliation paid recovery), idempotent by order reference
+Subject format (exact): `Order confirmed — FA-{order_number_suffix}`
+Body template (exact):
+`Your payment was successful and your order has been confirmed.
+
+Order: FA-{order_number_suffix}
+Amount paid: ₦{formatted_total}
+
+Items:
+- {item_name} x{qty} ({item_total})
+- ...
+
+Your account credentials are available on your dashboard. For security, we never send login details via email.`
+CTA (exact): `View your account details` -> `{PUBLIC_BASE_URL}/dashboard?tab=purchases`
+Credential policy in this email: credentials are NOT included
+
+[LIVE] | Restock Alert | notification_type=`restock_alert` | Trigger: tier moves to available stock and subscriber exists with `notifiedAt = null`; sent once per subscription
+Subject format (exact): `{tier_name} accounts are back in stock!`
+Body template (exact):
+`{platform_name} - {tier_name} is back in stock.
+
+Available now: {available_count}
+Price per account: ₦{tier_price}
+
+{urgency_line}`
+Urgency line logic:
+1) `Only {n} left — these go fast.` when `available_count <= 5`
+2) `{n} accounts are currently available.` otherwise
+CTA (exact): `Get yours before they sell out` -> `{PUBLIC_BASE_URL}/platforms/{platform_slug}/tiers/{tier_slug}`
+
+[LIVE] | Win-Back | notification_type=`win_back` | Trigger: scheduler run for verified users inactive for threshold days, cooldown-enforced (max once per 30 days)
+Subject (exact): `We've got fresh stock waiting for you`
+Body template (exact):
+`Hi {first_name},
+
+We've added fresh inventory since your last order.
+
+{platform_line}
+
+Take a quick look and grab what fits your goals.`
+CTA (exact): `See what's new` -> `{PUBLIC_BASE_URL}/platforms`
+
+[LIVE] | Admin Broadcast | notification_type=`admin_broadcast` | Trigger: admin composes and dispatches audience campaign from admin broadcast flow
+Subject: admin-defined
+Body: admin-defined
+CTA: none (`showCta: false`)
+Delivery model: queued `pending` rows processed in batches (`BROADCAST_BATCH_SIZE`, `BROADCAST_BATCH_DELAY_MS`)
+
+[LIVE] | Manual Admin Delivery Email (order detail summary) | notification_type=`order_delivery` | Trigger: admin invokes `POST /api/orders/[id]/deliver`
+Subject format (exact): `Your FastAccs Order {orderNumber} - Account Details`
+Body includes:
+1) order number/date/total
+2) per-account listing fields when present (username/email/login link/followers/age)
+3) explicit note: password available in dashboard
+4) support and dashboard links
+CTA (exact): `Open your dashboard` -> `{PUBLIC_BASE_URL}/dashboard?tab=purchases`
+Note: this is admin-driven/manual, not the automatic payment confirmation path
+
+EMAIL DELIVERY + LOGGING BEHAVIOR
+[LIVE] | Transport selection | src/lib/services/email.ts | uses SMTP config first, then Gmail fallback
+[LIVE] | From identity | src/lib/services/email.ts | `"${SMTP_FROM_NAME || 'Fast Accounts'}" <${SMTP_FROM_EMAIL || GMAIL_USER || 'no-reply@fastaccs.com'}>`
+[LIVE] | Notification logs | prisma `email_notifications` | all sends recorded as `sent`/`failed` with timestamps; broadcast rows can start as `pending`
+
+Validation snapshot for this batch:
+[CHECK] `npm run check` -> PASS (0 errors, 40 existing warnings in admin/test UI surfaces)
+[CHECK] `npm run build` -> PASS
+[CHECK] `npm run lint` -> FAIL (Prettier reports formatting drift across 79 files; no new functional compile error from this result)
+[CHECK] `npm run test:unit -- --run` -> FAIL in current environment (no tests discovered + sandbox `listen EPERM` on ephemeral port)
+
+Rescan findings (April 22, 2026):
+[LOW] | Stale example referral domain in docs-like UI copy | src/routes/how-it-works/+page.svelte | still shows `fastaccs.vercel.app/?ref=JD001` example | replace with `smm.fastaccs.com` to avoid user confusion after cutover
+[LOW] | Korapay dev redirect fallback still hardcoded for local dev | src/lib/services/korapay.ts, src/lib/services/_archive/korapay.ts | dev mode uses old ngrok URL fallback | safe while Korapay is inactive, but should be removed/neutralized before any future Korapay re-enable
+[LOW-MEDIUM] | Restock-notify capture endpoint lacks anti-abuse throttling | src/routes/api/restock-notify/+server.ts | open endpoint can accept repeated submissions | add lightweight IP/email rate-limit + optional captcha when enabling broad public campaigns
+[LOW-MEDIUM] | Tier batch fetch endpoint has no payload size cap | src/routes/api/categories/tiers/batch/+server.ts | accepts arbitrary `ids` array length | add upper bound to avoid accidental heavy queries under abuse/high load
+[RESOLVED] | Manual admin delivery email logging type split | src/routes/api/orders/[id]/deliver/+server.ts, src/lib/services/email.ts | manual delivery previously logged as `order_confirmation` | now uses dedicated `order_delivery` notification_type for clean analytics/audit separation
