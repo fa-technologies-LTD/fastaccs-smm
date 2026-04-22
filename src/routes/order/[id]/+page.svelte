@@ -16,6 +16,30 @@
 
 	let { data }: { data: PageData } = $props();
 
+	function isLikelyUrl(value: string | null | undefined): boolean {
+		const raw = String(value || '').trim();
+		if (!raw) return false;
+		return (
+			/^https?:\/\//i.test(raw) ||
+			/^www\./i.test(raw) ||
+			raw.includes('fastaccs.com/') ||
+			raw.includes('x.com/') ||
+			raw.includes('instagram.com/')
+		);
+	}
+
+	function normalizeUrlLike(value: string | null | undefined): string {
+		return String(value || '')
+			.trim()
+			.replace(/\s+/g, '');
+	}
+
+	function toExternalHref(value: string): string {
+		const cleaned = normalizeUrlLike(value);
+		if (/^https?:\/\//i.test(cleaned)) return cleaned;
+		return `https://${cleaned.replace(/^\/+/, '')}`;
+	}
+
 	function normalizeLower(value: string | null | undefined): string {
 		return String(value || '')
 			.trim()
@@ -96,13 +120,13 @@
 	<div class="mx-auto max-w-4xl px-4">
 		<!-- Header -->
 		<div class="mb-8">
-			<div class="flex items-center gap-4">
-				<button
-					onclick={() => goto('/dashboard')}
-					style="background: var(--surface); border: 1px solid var(--border); color: var(--link);"
-					class="cursor-pointer rounded-lg px-4 py-2 transition-transform hover:scale-101 active:scale-95"
-				>
-					← Back to Dashboard
+				<div class="flex items-center gap-4">
+					<button
+						onclick={() => goto(`/dashboard?tab=${data.fromTab || 'orders'}&orderId=${data.order.id}`)}
+						style="background: var(--surface); border: 1px solid var(--border); color: var(--link);"
+						class="cursor-pointer rounded-lg px-4 py-2 transition-transform hover:scale-101 active:scale-95"
+					>
+						← Back to Dashboard
 				</button>
 			</div>
 			<h1
@@ -331,19 +355,31 @@
 															</div>
 														{/if}
 														{#if account.twoFa}
-															<div class="flex items-center justify-between">
+															<div class="flex items-start justify-between gap-3">
 																<div class="flex-1">
 																	<span
 																		class="text-xs font-medium uppercase"
 																		style="color: var(--text-dim);">2FA</span
 																	>
-																	<div class="font-mono text-sm" style="color: var(--text);">
-																		{account.twoFa}
-																	</div>
+																	{#if isLikelyUrl(account.twoFa)}
+																		<a
+																			href={toExternalHref(String(account.twoFa))}
+																			target="_blank"
+																			rel="noopener noreferrer"
+																			class="font-mono text-sm break-all hover:underline"
+																			style="color: var(--link);"
+																		>
+																			{normalizeUrlLike(account.twoFa)}
+																		</a>
+																	{:else}
+																		<div class="font-mono text-sm break-all" style="color: var(--text);">
+																			{account.twoFa}
+																		</div>
+																	{/if}
 																</div>
 																<button
 																	onclick={() =>
-																		copyToClipboard(account.twoFa || '', {
+																		copyToClipboard(normalizeUrlLike(account.twoFa) || '', {
 																			label: '2FA',
 																			showToast: (toast: any) => addToast(toast as any)
 																		})}
@@ -355,22 +391,25 @@
 															</div>
 														{/if}
 														{#if account.linkUrl}
-															<div class="flex items-center justify-between">
+															<div class="flex items-start justify-between gap-3">
 																<div class="flex-1">
 																	<span
 																		class="text-xs font-medium uppercase"
 																		style="color: var(--text-dim);">Link</span
 																	>
-																	<div
-																		class="font-mono text-sm break-all"
-																		style="color: var(--text);"
+																	<a
+																		href={toExternalHref(String(account.linkUrl))}
+																		target="_blank"
+																		rel="noopener noreferrer"
+																		class="font-mono text-sm break-all hover:underline"
+																		style="color: var(--link);"
 																	>
-																		{account.linkUrl}
-																	</div>
+																		{normalizeUrlLike(account.linkUrl)}
+																	</a>
 																</div>
 																<button
 																	onclick={() =>
-																		copyToClipboard(account.linkUrl || '', {
+																		copyToClipboard(normalizeUrlLike(account.linkUrl) || '', {
 																			label: 'Link',
 																			showToast: (toast: any) => addToast(toast as any)
 																		})}

@@ -107,9 +107,20 @@
 				return 'background: var(--bg-elev-2); color: var(--text-muted); border: 1px solid var(--border)';
 		}
 	}
+
+	function formatStatusLabel(status: string): string {
+		return String(status || '')
+			.replace(/_/g, ' ')
+			.replace(/\b\w/g, (char) => char.toUpperCase());
+	}
+
+	function getDisplayOrderRef(order: any): string {
+		if (order.orderNumber) return order.orderNumber;
+		return `ORD-${String(order.id || '').slice(0, 8).toUpperCase()}`;
+	}
 </script>
 
-<div class="min-h-screen p-4 sm:p-6">
+<div class="min-h-screen p-3 sm:p-6">
 	<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<div class="min-w-0 flex-1">
 			<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">Order Management</h1>
@@ -202,8 +213,60 @@
 	</div>
 
 	<!-- Orders Table -->
+	<div class="space-y-3 lg:hidden">
+		{#each filteredOrders as order}
+			<article
+				class="rounded-lg p-3"
+				style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+			>
+				<div class="mb-2 flex items-start justify-between gap-3">
+					<div class="min-w-0">
+						<div class="truncate text-sm font-semibold" style="color: var(--text);">
+							{getDisplayOrderRef(order)}
+						</div>
+						<div class="truncate text-xs" style="color: var(--text-muted);">
+							{order.guestEmail || 'N/A'}
+						</div>
+					</div>
+					<span
+						class="inline-flex rounded-full px-2 py-1 text-[11px] font-semibold"
+						style={getStatusStyle(order.status)}
+					>
+						{formatStatusLabel(order.status)}
+					</span>
+				</div>
+
+				<div class="mb-3 grid grid-cols-2 gap-2 text-xs">
+					<div>
+						<div style="color: var(--text-dim);">Total</div>
+						<div class="font-semibold" style="color: var(--text);">
+							{formatPrice(Number(order.totalAmount || 0))}
+						</div>
+					</div>
+					<div>
+						<div style="color: var(--text-dim);">Date</div>
+						<div style="color: var(--text);">{formatDate(order.createdAt)}</div>
+					</div>
+				</div>
+
+				<div class="flex items-center justify-between gap-2">
+					<div class="truncate text-xs" style="color: var(--text-muted);">
+						{order.affiliateCode ? `Affiliate: ${order.affiliateCode}` : 'No affiliate'}
+					</div>
+					<a
+						href={`/admin/orders/${order.id}`}
+						class="rounded-full px-3 py-1.5 text-xs font-semibold"
+						style="background: rgba(105,109,250,0.14); border: 1px solid rgba(170,173,255,0.25); color: var(--link);"
+					>
+						View
+					</a>
+				</div>
+			</article>
+		{/each}
+	</div>
+
 	<div
-		class="overflow-hidden rounded-lg"
+		class="hidden overflow-hidden rounded-lg lg:block"
 		style="border: 1px solid var(--border); background: var(--bg-elev-1);"
 	>
 		<div class="overflow-x-auto">
@@ -292,7 +355,7 @@
 										class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
 										style={getStatusStyle(order.status)}
 									>
-										{order.status}
+										{formatStatusLabel(order.status)}
 									</span>
 								</td>
 							<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">

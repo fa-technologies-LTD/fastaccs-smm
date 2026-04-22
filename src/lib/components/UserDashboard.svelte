@@ -38,7 +38,7 @@
 	} = $props();
 
 	const AFFILIATE_ENABLED = false;
-	let activeTab = $state<DashboardTab>('purchases');
+	let activeTab = $state<DashboardTab>('orders');
 	let selectedOrderId = $state<string | null>(null);
 	let showPaymentPendingBanner = $state(false);
 

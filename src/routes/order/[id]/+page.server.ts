@@ -36,8 +36,14 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		throw error(403, 'Unauthorized access to order');
 	}
 
+	const fromTabParam = String(url.searchParams.get('fromTab') || '').toLowerCase();
+	const fromTab = ['orders', 'purchases', 'affiliate'].includes(fromTabParam)
+		? fromTabParam
+		: 'orders';
+
 	// Convert Decimal fields to numbers for serialization
 	return {
+		fromTab,
 		order: {
 			...order,
 			subtotal: Number(order.subtotal),

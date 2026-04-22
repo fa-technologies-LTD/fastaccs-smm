@@ -109,11 +109,11 @@
 					class="relative flex w-full max-w-xs flex-1 flex-col"
 					style="background: var(--bg-elev-1);"
 				>
-					<div class="h-0 flex-1 overflow-y-auto pt-5 pb-4">
-						<!-- Logo and Close Button -->
-						<div class="mb-6 flex items-center justify-between px-4">
-							<img src="/src/lib/assets/logo.png" alt="FastAccs" class="size-3/5" />
-							<button
+						<div class="h-0 flex-1 overflow-y-auto pt-5 pb-4">
+							<!-- Logo and Close Button -->
+							<div class="mb-6 flex items-center justify-between px-4">
+								<img src={logo} alt="FastAccs" class="h-8 w-auto" />
+								<button
 								type="button"
 								class="flex h-10 w-10 items-center justify-center rounded-full transition-colors focus:ring-2 focus:outline-none"
 								style="color: var(--text-muted);"
@@ -154,7 +154,7 @@
 			class="sticky top-0 z-10"
 			style="border-bottom: 1px solid var(--border); background: var(--bg-elev-1);"
 		>
-			<div class="flex items-center justify-between px-4 py-3">
+			<div class="flex items-center justify-between px-3 py-2 sm:px-4 sm:py-3">
 				<!-- Mobile menu button -->
 				<button
 					type="button"
@@ -170,7 +170,7 @@
 					<!-- Admin status -->
 					<div class="flex items-center space-x-2">
 						<div class="h-2 w-2 rounded-full" style="background: var(--status-success);"></div>
-						<span class="text-sm" style="color: var(--text-muted);"
+						<span class="max-w-[46vw] truncate text-sm" style="color: var(--text-muted);"
 							>{data?.user?.email || 'admin@fastaccs.com'}</span
 						>
 					</div>
@@ -190,10 +190,39 @@
 
 		<main class="flex-1">
 			<div class="py-6">
-				<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+				<div class="admin-content-shell mx-auto max-w-7xl px-3 sm:px-6 lg:px-8">
 					{@render children()}
 				</div>
 			</div>
 		</main>
 	</div>
 </div>
+
+<style>
+	@media (max-width: 767px) {
+		:global(.admin-content-shell .p-6) {
+			padding: 0.85rem;
+		}
+
+		:global(.admin-content-shell .mb-8) {
+			margin-bottom: 1rem;
+		}
+
+		:global(.admin-content-shell .mb-6) {
+			margin-bottom: 0.85rem;
+		}
+
+		:global(.admin-content-shell .gap-8) {
+			gap: 0.9rem;
+		}
+
+		:global(.admin-content-shell .gap-6) {
+			gap: 0.75rem;
+		}
+
+		:global(.admin-content-shell .text-2xl) {
+			font-size: 1.35rem;
+			line-height: 1.25;
+		}
+	}
+</style>

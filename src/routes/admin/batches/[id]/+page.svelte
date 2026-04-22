@@ -170,7 +170,7 @@
 	<title>{batch.name} - Batch Details - Admin Panel</title>
 </svelte:head>
 
-<div class="p-6">
+<div class="p-3 sm:p-6">
 	<!-- Header -->
 	<div class="mb-6">
 		<div class="mb-4 flex items-center gap-4">

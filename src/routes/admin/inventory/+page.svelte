@@ -76,7 +76,7 @@
 	}
 </script>
 
-<div class="min-h-screen p-4 sm:p-6">
+<div class="min-h-screen p-3 sm:p-6">
 	<!-- Confirm Modal -->
 	<ConfirmModal
 		isOpen={showConfirmModal}

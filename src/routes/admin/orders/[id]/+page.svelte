@@ -23,6 +23,7 @@
 	import { updateOrderStatus, processOrderDelivery, addOrderNote } from '$lib/services/orders';
 	import { addToast } from '$lib/stores/toasts';
 	import type { OrderMetadata, OrderItemWithDetails } from '$lib/services/orders';
+	import { formatPrice } from '$lib/helpers/utils';
 
 	// Props from load function
 	interface Props {
@@ -64,6 +65,9 @@
 				return 'text-green-600 bg-green-100';
 			case 'processing':
 				return 'text-blue-600 bg-blue-100';
+			case 'pending':
+			case 'pending_payment':
+				return 'text-yellow-700 bg-yellow-100';
 			case 'failed':
 				return 'text-red-600 bg-red-100';
 			case 'cancelled':
@@ -71,6 +75,18 @@
 			default:
 				return 'text-yellow-600 bg-yellow-100';
 		}
+	}
+
+	function formatStatusLabel(status: string) {
+		return String(status || '')
+			.replace(/_/g, ' ')
+			.replace(/\b\w/g, (char) => char.toUpperCase());
+	}
+
+	function getDisplayOrderId(id: string): string {
+		if (!id) return '';
+		if (id.length <= 18) return id;
+		return `${id.slice(0, 8)}...${id.slice(-6)}`;
 	}
 
 	function formatDeliveryMethod(method: string) {
@@ -229,11 +245,12 @@
 	<title>Order #{order.id} - Order Details - Admin Panel</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gray-50 p-6">
+<div class="admin-order-page min-h-screen p-3 sm:p-6">
 	<div class="mx-auto max-w-7xl">
 		<!-- Header -->
 		<div class="mb-8">
-			<div class="mb-6 flex items-center gap-4">
+			<div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center">
+				<div class="flex items-start gap-3 sm:gap-4">
 				<button
 					onclick={goBack}
 					class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 transition-colors hover:bg-gray-50"
@@ -245,30 +262,33 @@
 						{#if order}
 							{@const StatusIcon = getStatusIcon(order.status)}
 							<StatusIcon class="h-6 w-6 {getStatusColor(order.status).split(' ')[0]}" />
-							<h1 class="text-2xl font-bold text-gray-900">Order #{order.id}</h1>
+							<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text);">
+								Order #{getDisplayOrderId(order.id)}
+							</h1>
 							<span
 								class="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium {getStatusColor(
 									order.status
 								)}"
 							>
-								{order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+								{formatStatusLabel(order.status)}
 							</span>
 						{/if}
 					</div>
-					<p class="text-gray-600">
+					<p style="color: var(--text-muted);">
 						Placed on {new Date(order.created_at).toLocaleDateString()} at {new Date(
 							order.created_at
 						).toLocaleTimeString()}
 					</p>
 				</div>
+				</div>
 
 				<!-- Quick Actions -->
-				<div class="flex items-center gap-3">
-					{#if order.status === 'pending'}
+				<div class="flex flex-wrap items-center gap-2 sm:gap-3">
+					{#if order.status === 'pending' || order.status === 'pending_payment'}
 						<button
 							onclick={() => updateStatus('processing')}
 							disabled={isProcessing}
-							class="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+							class="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs text-white hover:bg-blue-700 disabled:opacity-50 sm:px-4 sm:text-sm"
 						>
 							<Clock class="h-4 w-4" />
 							Start Processing
@@ -279,7 +299,7 @@
 						<button
 							onclick={processDelivery}
 							disabled={isProcessing}
-							class="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
+							class="flex items-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-xs text-white hover:bg-green-700 disabled:opacity-50 sm:px-4 sm:text-sm"
 						>
 							<Send class="h-4 w-4" />
 							Deliver Now
@@ -290,7 +310,7 @@
 						<button
 							onclick={() => updateStatus('completed')}
 							disabled={isProcessing}
-							class="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
+							class="flex items-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-xs text-white hover:bg-green-700 disabled:opacity-50 sm:px-4 sm:text-sm"
 						>
 							<CheckCircle class="h-4 w-4" />
 							Mark Complete
@@ -330,7 +350,9 @@
 								<CreditCard class="mr-2 h-4 w-4 text-gray-400" />
 								<span class="text-sm font-medium text-gray-500">Total Amount</span>
 							</div>
-							<p class="text-2xl font-bold text-gray-900">${order.total_amount.toFixed(2)}</p>
+							<p class="text-2xl font-bold" style="color: var(--text);">
+								{formatPrice(Number(order.total_amount || 0))}
+							</p>
 							<p class="text-sm text-gray-500">
 								{#if order.payment_id}
 									Payment ID: {order.payment_id}
@@ -357,21 +379,23 @@
 				<!-- Allocated Accounts -->
 				<div class="rounded-lg border border-gray-200 bg-white shadow-sm">
 					<div class="border-b border-gray-200 px-6 py-4">
-						<div class="flex items-center justify-between">
+						<div class="flex flex-wrap items-center justify-between gap-2">
 							<h2 class="text-lg font-semibold text-gray-900">Allocated Accounts</h2>
 							<div class="flex items-center gap-3">
-								<button
-									onclick={() => (showCredentials = !showCredentials)}
-									class="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:bg-gray-50"
-								>
-									{#if showCredentials}
-										<EyeOff class="h-4 w-4" />
-										Hide Credentials
-									{:else}
-										<Eye class="h-4 w-4" />
-										Show Credentials
-									{/if}
-								</button>
+								{#if items.length > 0}
+									<button
+										onclick={() => (showCredentials = !showCredentials)}
+										class="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:bg-gray-50"
+									>
+										{#if showCredentials}
+											<EyeOff class="h-4 w-4" />
+											Hide Credentials
+										{:else}
+											<Eye class="h-4 w-4" />
+											Show Credentials
+										{/if}
+									</button>
+								{/if}
 								<span class="text-sm text-gray-500">
 									{items.length} accounts
 								</span>
@@ -386,7 +410,53 @@
 							<p class="text-gray-500">Accounts will be allocated when the order is processed.</p>
 						</div>
 					{:else}
-						<div class="overflow-x-auto">
+						<div class="space-y-3 p-3 lg:hidden">
+							{#each items as item}
+								<div class="rounded-lg border border-gray-200 p-3">
+									<div class="mb-2 flex items-start justify-between gap-2">
+										<div class="min-w-0">
+											<div class="truncate text-sm font-semibold text-gray-900">
+												@{item.account_username}
+											</div>
+											<div class="truncate text-xs text-gray-500">
+												{item.account_email || 'No email'}
+											</div>
+										</div>
+										<span
+											class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-800"
+										>
+											Allocated
+										</span>
+									</div>
+									<div class="mb-3 text-xs text-gray-600">
+										{item.platform_name} · {item.tier_name}
+									</div>
+
+									{#if showCredentials}
+										<div class="mb-3 rounded border border-gray-200 bg-gray-50 p-2">
+											<div class="text-[11px] text-gray-500">Password</div>
+											<div class="font-mono text-xs text-gray-900 break-all">
+												{item.account_password || 'No password'}
+											</div>
+										</div>
+									{/if}
+
+									<button
+										onclick={() =>
+											copyToClipboard(
+												`Username: ${item.account_username}\nPassword: ${item.account_password}`
+											)}
+										class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
+										title="Copy account details"
+									>
+										<Copy class="h-3.5 w-3.5" />
+										Copy
+									</button>
+								</div>
+							{/each}
+						</div>
+
+						<div class="hidden overflow-x-auto lg:block">
 							<table class="min-w-full divide-y divide-gray-200">
 								<thead class="bg-gray-50">
 									<tr>
@@ -552,7 +622,9 @@
 								<span class="text-sm font-medium text-gray-700">Commission Earned</span>
 								<span class="text-sm font-bold text-green-600">
 									{#if order.total_amount && order.metadata?.commissionRate}
-										${((Number(order.total_amount) * Number(order.metadata.commissionRate)) / 100).toFixed(2)}
+										{formatPrice(
+											(Number(order.total_amount) * Number(order.metadata.commissionRate)) / 100
+										)}
 									{:else}
 										Pending calculation
 									{/if}
@@ -603,7 +675,7 @@
 					<h3 class="mb-4 text-lg font-semibold text-gray-900">Status Management</h3>
 
 					<div class="space-y-3">
-						{#if order.status === 'pending'}
+						{#if order.status === 'pending' || order.status === 'pending_payment'}
 							<button
 								onclick={() => updateStatus('processing')}
 								disabled={isProcessing}
@@ -686,3 +758,49 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	:global(.admin-order-page) {
+		background: var(--bg);
+	}
+
+	:global(.admin-order-page .bg-gray-50) {
+		background: var(--bg-elev-1) !important;
+	}
+
+	:global(.admin-order-page .bg-white) {
+		background: var(--surface) !important;
+	}
+
+	:global(.admin-order-page .border-gray-200),
+	:global(.admin-order-page .border-gray-300) {
+		border-color: var(--border) !important;
+	}
+
+	:global(.admin-order-page .text-gray-900) {
+		color: var(--text) !important;
+	}
+
+	:global(.admin-order-page .text-gray-800),
+	:global(.admin-order-page .text-gray-700),
+	:global(.admin-order-page .text-gray-600) {
+		color: var(--text-muted) !important;
+	}
+
+	:global(.admin-order-page .text-gray-500),
+	:global(.admin-order-page .text-gray-400) {
+		color: var(--text-dim) !important;
+	}
+
+	:global(.admin-order-page code) {
+		background: var(--bg-elev-2) !important;
+		color: var(--text) !important;
+		border: 1px solid var(--border);
+	}
+
+	@media (max-width: 767px) {
+		:global(.admin-order-page .p-12) {
+			padding: 1rem !important;
+		}
+	}
+</style>

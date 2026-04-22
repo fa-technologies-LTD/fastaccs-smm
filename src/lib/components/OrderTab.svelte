@@ -142,7 +142,7 @@
 	}
 
 	function viewOrderDetails(orderId: string) {
-		goto(`/order/${orderId}`);
+		goto(`/order/${orderId}?fromTab=orders`);
 	}
 </script>
 
@@ -187,12 +187,12 @@
 									<Clock class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--status-warning);" />
 							{/if}
 							<div class="min-w-0 flex-1">
-								<div
-									class="truncate font-semibold"
-									style="color: var(--text); font-family: var(--font-head);"
-								>
-									Order {getDisplayOrderNumber(order)}
-								</div>
+									<div
+										class="truncate font-semibold"
+										style="color: var(--text); font-family: var(--font-head);"
+									>
+										{getDisplayOrderNumber(order)}
+									</div>
 								<div class="text-xs sm:text-sm" style="color: var(--text-dim);">
 									{formatOrderDate(order)}
 								</div>

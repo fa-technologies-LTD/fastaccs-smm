@@ -8,6 +8,24 @@ type Account = {
 	linkUrl?: string | null;
 };
 
+function isLikelyUrl(value: string | null | undefined): boolean {
+	const raw = String(value || '').trim();
+	if (!raw) return false;
+	return (
+		/^https?:\/\//i.test(raw) ||
+		/^www\./i.test(raw) ||
+		raw.includes('fastaccs.com/') ||
+		raw.includes('x.com/') ||
+		raw.includes('instagram.com/')
+	);
+}
+
+function normalizeUrlLike(value: string | null | undefined): string {
+	return String(value || '')
+		.trim()
+		.replace(/\s+/g, '');
+}
+
 // Format price to Nigerian Naira
 export function formatPrice(price: number): string {
 	return new Intl.NumberFormat('en-NG', {
@@ -77,11 +95,13 @@ export function copyAccountDetails(
 		}) => void;
 	}
 ): void {
+	const twoFa = isLikelyUrl(account.twoFa) ? normalizeUrlLike(account.twoFa) : account.twoFa;
+	const link = normalizeUrlLike(account.linkUrl);
 	let details = `Username: ${account.username}\nPassword: ${account.password}`;
 	if (account.email) details += `\nEmail: ${account.email}`;
 	if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
-	if (account.twoFa) details += `\n2FA: ${account.twoFa}`;
-	if (account.linkUrl) details += `\nLink: ${account.linkUrl}`;
+	if (twoFa) details += `\n2FA: ${twoFa}`;
+	if (link) details += `\nLink: ${link}`;
 
 	copyToClipboard(details, {
 		successMessage: 'Account details copied to clipboard!',
@@ -102,11 +122,13 @@ export function copyAllAccounts(
 ): void {
 	const allDetails = accounts
 		.map((account, index) => {
+			const twoFa = isLikelyUrl(account.twoFa) ? normalizeUrlLike(account.twoFa) : account.twoFa;
+			const link = normalizeUrlLike(account.linkUrl);
 			let details = `Account ${index + 1}:\nUsername: ${account.username}\nPassword: ${account.password}`;
 			if (account.email) details += `\nEmail: ${account.email}`;
 			if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
-			if (account.twoFa) details += `\n2FA: ${account.twoFa}`;
-			if (account.linkUrl) details += `\nLink: ${account.linkUrl}`;
+			if (twoFa) details += `\n2FA: ${twoFa}`;
+			if (link) details += `\nLink: ${link}`;
 			return details;
 		})
 		.join('\n\n');

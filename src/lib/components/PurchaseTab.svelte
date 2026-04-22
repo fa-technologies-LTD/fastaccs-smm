@@ -6,14 +6,50 @@
 	let { initialPurchases } = $props();
 	let purchases = $state<any[]>(initialPurchases);
 
+	function isLikelyUrl(value: string | null | undefined): boolean {
+		const raw = String(value || '').trim();
+		if (!raw) return false;
+		return (
+			/^https?:\/\//i.test(raw) ||
+			/^www\./i.test(raw) ||
+			raw.includes('fastaccs.com/') ||
+			raw.includes('x.com/') ||
+			raw.includes('instagram.com/')
+		);
+	}
+
+	function normalizeUrlLike(value: string): string {
+		return value.trim().replace(/\s+/g, '');
+	}
+
+	function getTwoFaDisplay(twoFa: string | null | undefined): string {
+		const raw = String(twoFa || '').trim();
+		if (!raw) return '';
+		return isLikelyUrl(raw) ? normalizeUrlLike(raw) : raw;
+	}
+
+	function getLinkDisplay(linkUrl: string | null | undefined): string {
+		const raw = String(linkUrl || '').trim();
+		if (!raw) return '';
+		return normalizeUrlLike(raw);
+	}
+
+	function toExternalHref(value: string): string {
+		const cleaned = normalizeUrlLike(value);
+		if (/^https?:\/\//i.test(cleaned)) return cleaned;
+		return `https://${cleaned.replace(/^\/+/, '')}`;
+	}
+
 	function copyAccount(account: any, index: number) {
-		let details = `=== Account ${index + 1} ===\n`;
+		const twoFa = getTwoFaDisplay(account.twoFa);
+		const link = getLinkDisplay(account.linkUrl);
+		let details = `Account ${index + 1}\n`;
 		details += `Username: ${account.username}\n`;
 		details += `Password: ${account.password}`;
 		if (account.email) details += `\nEmail: ${account.email}`;
 		if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
-		if (account.twoFa) details += `\n2FA: ${account.twoFa}`;
-		if (account.linkUrl) details += `\nLink: ${account.linkUrl}`;
+		if (twoFa) details += `\n2FA: ${twoFa}`;
+		if (link) details += `\nLink: ${link}`;
 
 		copyToClipboard(details, {
 			successMessage: 'Account credentials copied',
@@ -22,13 +58,15 @@
 	}
 
 	function copyAllPurchaseAccounts(purchase: any) {
-		const header = `${purchase.categoryName} - Order #${purchase.orderNumber}\n${purchase.platform}\nDelivered: ${formatDateTime(purchase.deliveryDate || purchase.orderDate)}\n\n`;
+		const header = `${purchase.categoryName} • ${purchase.orderNumber}\n${purchase.platform}\nDelivered: ${formatDateTime(purchase.deliveryDate || purchase.orderDate)}\n\n`;
 		const accountsWithHeader = purchase.accounts.map((account: any, index: number) => {
-			let details = `=== Account ${index + 1} ===\nUsername: ${account.username}\nPassword: ${account.password}`;
+			const twoFa = getTwoFaDisplay(account.twoFa);
+			const link = getLinkDisplay(account.linkUrl);
+			let details = `Account ${index + 1}\nUsername: ${account.username}\nPassword: ${account.password}`;
 			if (account.email) details += `\nEmail: ${account.email}`;
 			if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
-			if (account.twoFa) details += `\n2FA: ${account.twoFa}`;
-			if (account.linkUrl) details += `\nLink: ${account.linkUrl}`;
+			if (twoFa) details += `\n2FA: ${twoFa}`;
+			if (link) details += `\nLink: ${link}`;
 			return details;
 		});
 
@@ -108,7 +146,7 @@
 								class="flex flex-wrap items-center gap-2 text-xs sm:gap-3 sm:text-sm"
 								style="color: var(--text-muted);"
 							>
-								<span class="min-w-0 truncate font-medium">Order #{purchase.orderNumber}</span>
+									<span class="min-w-0 truncate font-medium">#{purchase.orderNumber}</span>
 								<span class="text-[color:var(--text-dim)]">•</span>
 								<div class="flex items-center gap-1.5">
 									<Clock class="h-3.5 w-3.5" style="color: var(--text-dim);" />
@@ -224,7 +262,21 @@
 												<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
 													>2FA Code:</span
 												>
-												<span class="credential-value flex-1" style="color: var(--text);">{account.twoFa}</span>
+												{#if isLikelyUrl(getTwoFaDisplay(account.twoFa))}
+													<a
+														href={toExternalHref(getTwoFaDisplay(account.twoFa))}
+														target="_blank"
+														rel="noopener noreferrer"
+														class="credential-value flex-1 hover:underline"
+														style="color: var(--link);"
+													>
+														{getTwoFaDisplay(account.twoFa)}
+													</a>
+												{:else}
+													<span class="credential-value flex-1" style="color: var(--text);"
+														>{getTwoFaDisplay(account.twoFa)}</span
+													>
+												{/if}
 											</div>
 										{/if}
 
@@ -235,13 +287,13 @@
 													>Link:</span
 												>
 												<a
-													href={account.linkUrl}
+													href={toExternalHref(getLinkDisplay(account.linkUrl))}
 													target="_blank"
 													rel="noopener noreferrer"
 													class="credential-value flex-1 hover:underline"
 													style="color: var(--link);"
 												>
-													{account.linkUrl}
+													{getLinkDisplay(account.linkUrl)}
 												</a>
 											</div>
 										{/if}

@@ -162,7 +162,7 @@
 	<title>Admin Dashboard - FastAccs</title>
 </svelte:head>
 
-<div class="min-h-screen p-6">
+<div class="min-h-screen p-3 sm:p-6">
 	<div class="mx-auto max-w-7xl">
 		<!-- Enhanced Header -->
 		<div class="mb-6 sm:mb-8">
@@ -250,7 +250,7 @@
 		{/if}
 
 		<!-- Main Statistics Grid -->
-		<div class=" mb-6 grid grid-cols-1 gap-4 sm:mb-8 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+		<div class=" mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
 			<!-- Total Orders -->
 			<div
 				class="group rounded-lg p-4 sm:p-6"
@@ -378,7 +378,7 @@
 		</div>
 
 		<!-- System Overview -->
-		<div class="mb-6 grid grid-cols-1 gap-4 sm:mb-8 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+		<div class="mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
 			<!-- Platform Coverage -->
 			<div
 				class="group rounded-lg p-6"
