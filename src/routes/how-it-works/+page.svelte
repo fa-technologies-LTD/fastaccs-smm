@@ -664,7 +664,7 @@
 								<div class="flex items-center gap-2 rounded-lg p-3" style="background: var(--bg);">
 									<code
 										class="flex-1 overflow-hidden text-xs text-ellipsis"
-										style="color: var(--text);">fastaccs.vercel.app/?ref=JD001</code
+										style="color: var(--text);">smm.fastaccs.com/?ref=JD001</code
 									>
 									<Copy
 										class="h-4 w-4 flex-shrink-0 cursor-pointer"

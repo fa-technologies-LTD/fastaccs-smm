@@ -21,7 +21,7 @@ export function getGoogleCallbackUrl(origin?: string): string {
 	}
 
 	const publicBase =
-		publicEnv.PUBLIC_SITE_URL?.trim() || PUBLIC_BASE_URL?.trim() || 'https://fastaccs-smm.vercel.app';
+		publicEnv.PUBLIC_SITE_URL?.trim() || PUBLIC_BASE_URL?.trim() || 'https://smm.fastaccs.com';
 	return `${normalizeBaseUrl(publicBase)}/auth/google/callback`;
 }
 

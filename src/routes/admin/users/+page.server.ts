@@ -1,9 +1,12 @@
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
 import { ORDER_STATUS_GROUPS } from '$lib/helpers/order-status';
+import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ locals }) => {
 	try {
+		const revenueVisible = canViewRevenue(locals);
+
 		// Get all users with their order and wallet info
 		const usersRaw = await prisma.user.findMany({
 			include: {
@@ -36,9 +39,11 @@ export const load: PageServerLoad = async () => {
 			lastLogin: user.lastLogin,
 			createdAt: user.createdAt,
 			orderCount: user.orders.length,
-			totalSpent: user.orders
-				.filter((order) => revenueStatuses.has(order.status))
-				.reduce((sum, order) => sum + Number(order.totalAmount), 0),
+			totalSpent: revenueVisible
+				? user.orders
+						.filter((order) => revenueStatuses.has(order.status))
+						.reduce((sum, order) => sum + Number(order.totalAmount), 0)
+				: 0,
 			storeCreditBalance: user.wallet ? Number(user.wallet.balance) : 0,
 			walletBalance: user.wallet ? Number(user.wallet.balance) : 0
 		}));
@@ -50,12 +55,13 @@ export const load: PageServerLoad = async () => {
 			guestUsers: users.filter((u) => u.userType === 'GUEST').length,
 			affiliates: users.filter((u) => u.isAffiliateEnabled).length,
 			activeUsers: users.filter((u) => u.isActive).length,
-			totalRevenue: users.reduce((sum, user) => sum + user.totalSpent, 0)
+			totalRevenue: revenueVisible ? users.reduce((sum, user) => sum + user.totalSpent, 0) : 0
 		};
 
 		return {
 			users,
-			stats
+			stats,
+			canViewRevenue: revenueVisible
 		};
 	} catch (error) {
 		console.error('Error loading users:', error);
@@ -68,7 +74,8 @@ export const load: PageServerLoad = async () => {
 				affiliates: 0,
 				activeUsers: 0,
 				totalRevenue: 0
-			}
+			},
+			canViewRevenue: false
 		};
 	}
 };

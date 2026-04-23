@@ -4,16 +4,20 @@
 	import { getOrders, getOrderStats } from '$lib/services/orders';
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
 	import { ORDER_STATUS_GROUPS, getOrderStatusLabel } from '$lib/helpers/order-status';
+	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
 
 	// Props from page data
 	let { data } = $props<{
 		data: {
 			orders: any[];
 			error: string | null;
+			canViewRevenue?: boolean;
 		};
 	}>();
 
 	// State
+	const canViewRevenue = Boolean(data.canViewRevenue);
+	let hideMonetaryAmounts = $state(false);
 	let searchTerm = $state('');
 	let loading = $state(false);
 	let orders = $state(data.orders || []);
@@ -89,10 +93,19 @@
 
 	// Initialize data
 	onMount(() => {
+		hideMonetaryAmounts = localStorage.getItem(ADMIN_MONEY_VISIBILITY_KEY) === 'true';
 		if (!data.orders || data.orders.length === 0) {
 			loadOrders();
 		}
 	});
+
+	function formatAdminAmount(amount: number): string {
+		return formatAdminMoney(amount, {
+			canViewRevenue,
+			hideMonetaryAmounts,
+			format: formatPrice
+		});
+	}
 
 	// Get status color
 	function getStatusStyle(status: string): string {
@@ -202,7 +215,7 @@
 		>
 			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Revenue</div>
 			<div class="text-lg font-bold sm:text-2xl" style="color: var(--primary);">
-				{formatPrice(summaryStats.total_revenue)}
+				{formatAdminAmount(summaryStats.total_revenue)}
 			</div>
 		</div>
 	</div>
@@ -246,7 +259,7 @@
 					<div>
 						<div style="color: var(--text-dim);">Total</div>
 						<div class="font-semibold" style="color: var(--text);">
-							{formatPrice(Number(order.totalAmount || 0))}
+							{formatAdminAmount(Number(order.totalAmount || 0))}
 						</div>
 					</div>
 					<div>
@@ -369,7 +382,7 @@
 								</span>
 							</td>
 							<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
-								{formatPrice(Number(order.totalAmount || 0))}
+								{formatAdminAmount(Number(order.totalAmount || 0))}
 							</td>
 							<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
 								{formatDate(order.createdAt)}

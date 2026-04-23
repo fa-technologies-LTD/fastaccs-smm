@@ -5,6 +5,12 @@ import { prisma } from '$lib/prisma';
 import { fulfillOrder } from '$lib/services/fulfillment';
 import { initializeTransaction } from '$lib/services/monnify';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
+import { validatePromotionCode } from '$lib/services/promotions';
+import {
+	getMinimumOrderValueSetting,
+	isCheckoutEnabledSetting
+} from '$lib/services/admin-settings';
+import { canViewRevenue, redactOrderFinancials } from '$lib/services/admin-revenue-visibility';
 
 interface CreateOrderItemInput {
 	categoryId: string;
@@ -20,6 +26,7 @@ interface CreateOrderInput {
 	currency?: string;
 	paymentMethod?: string;
 	affiliateCode?: string;
+	promotionCode?: string;
 }
 
 function isAdminUser(user: { userType?: string } | null | undefined): boolean {
@@ -85,8 +92,10 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			orderBy: { createdAt: 'desc' },
 			...(limit ? { take: limit } : {})
 		});
+		const responseData =
+			admin && !canViewRevenue(locals) ? data.map((order) => redactOrderFinancials(order)) : data;
 
-		return json({ data, error: null });
+		return json({ data: responseData, error: null });
 	} catch (error) {
 		console.error('Database error:', error);
 		return json(
@@ -101,6 +110,11 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 	try {
 		if (!locals.user) {
 			return json({ success: false, error: 'Unauthorized' }, { status: 401 });
+		}
+
+		const checkoutEnabled = await isCheckoutEnabledSetting().catch(() => true);
+		if (!checkoutEnabled && locals.user.userType !== 'ADMIN') {
+			return json({ success: false, error: 'Checkout is temporarily disabled.' }, { status: 503 });
 		}
 
 		if (!locals.user.emailVerified) {
@@ -140,14 +154,26 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			return json({ success: false, error: 'Invalid order item payload' }, { status: 400 });
 		}
 
-		const totalAmount = Number(orderData.totalAmount);
-		if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+		const requestedTotalAmount = Number(orderData.totalAmount);
+		if (!Number.isFinite(requestedTotalAmount) || requestedTotalAmount <= 0) {
 			return json({ success: false, error: 'Invalid total amount' }, { status: 400 });
 		}
 
-		const paymentMethod = String(orderData.paymentMethod || '').trim().toLowerCase() || 'monnify';
+		const subtotalAmount = normalizedItems.reduce(
+			(sum, item) => sum + item.quantity * item.price,
+			0
+		);
+		if (!Number.isFinite(subtotalAmount) || subtotalAmount <= 0) {
+			return json({ success: false, error: 'Invalid order subtotal' }, { status: 400 });
+		}
+
+		const paymentMethod =
+			String(orderData.paymentMethod || '')
+				.trim()
+				.toLowerCase() || 'monnify';
 		const customerEmail = String(orderData.email || locals.user.email || '').trim();
 		const customerPhone = String(orderData.phone || locals.user.phone || '').trim();
+		const minimumOrderValue = await getMinimumOrderValueSetting().catch(() => 0);
 
 		if (!customerEmail) {
 			return json({ success: false, error: 'Customer email is required' }, { status: 400 });
@@ -171,6 +197,45 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 		const itemsWithNames = await Promise.all(categoryPromises);
 
+		const promotionCode = String(orderData.promotionCode || '')
+			.trim()
+			.toUpperCase();
+		let promotionId: string | null = null;
+		let appliedPromotionCode: string | null = null;
+		let discountAmount = 0;
+		let finalOrderTotal = Math.round(subtotalAmount * 100) / 100;
+
+		if (promotionCode) {
+			const promotionResult = await validatePromotionCode({
+				code: promotionCode,
+				userId: locals.user.id,
+				subtotal: subtotalAmount,
+				categoryIds: normalizedItems.map((item) => item.categoryId)
+			});
+
+			if (!promotionResult.valid || !promotionResult.promotion) {
+				return json(
+					{ success: false, error: promotionResult.error || 'Promo code is invalid.' },
+					{ status: 400 }
+				);
+			}
+
+			promotionId = promotionResult.promotion.id;
+			appliedPromotionCode = promotionResult.promotion.code;
+			discountAmount = promotionResult.discountAmount;
+			finalOrderTotal = promotionResult.finalTotal;
+		}
+
+		if (finalOrderTotal < minimumOrderValue) {
+			return json(
+				{
+					success: false,
+					error: `Order must be at least ₦${Number(minimumOrderValue).toLocaleString()}.`
+				},
+				{ status: 400 }
+			);
+		}
+
 		// Validate affiliate code if provided
 		let affiliateUserId: string | undefined;
 		if (orderData.affiliateCode) {
@@ -193,8 +258,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				orderNumber: `ORD-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`,
 				guestEmail: customerEmail,
 				guestPhone: customerPhone || null,
-				subtotal: totalAmount,
-				totalAmount: totalAmount,
+				subtotal: subtotalAmount,
+				discountAmount,
+				totalAmount: finalOrderTotal,
 				currency: orderData.currency || 'NGN',
 				paymentMethod: paymentMethod,
 				deliveryMethod: 'email', // Default delivery method
@@ -202,6 +268,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				status: 'pending',
 				affiliateCode: orderData.affiliateCode?.toUpperCase(),
 				affiliateUserId,
+				promotionId,
+				promotionCode: appliedPromotionCode,
 				orderItems: {
 					create: itemsWithNames.map((item) => ({
 						categoryId: item.categoryId,
@@ -256,7 +324,10 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						});
 						invalidateAdminStatsCache();
 					} catch (markFailedError) {
-						console.error('Failed to mark order failed after Monnify init failure:', markFailedError);
+						console.error(
+							'Failed to mark order failed after Monnify init failure:',
+							markFailedError
+						);
 					}
 				}
 
@@ -299,7 +370,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					orderId: data.id,
 					allocation: fulfillmentResult.allocation,
 					delivery: fulfillmentResult.delivery,
-					message: 'Order created and fulfilled successfully! Check your email for account details.',
+					message:
+						'Order created and fulfilled successfully! Check your email for account details.',
 					error: null
 				});
 			}

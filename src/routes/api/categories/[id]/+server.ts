@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { applyTierSampleScreenshotSanitization } from '$lib/helpers/tierSampleScreenshots';
+import { applyTierMerchandisingSanitization } from '$lib/helpers/tier-merchandising';
 
 // GET /api/categories/[id] - Get single category
 export async function GET({ params }) {
@@ -60,7 +61,9 @@ export async function PUT({ params, request, locals }) {
 					metadata && typeof metadata === 'object' && !Array.isArray(metadata)
 						? (metadata as Record<string, unknown>)
 						: {};
-				nextMetadata = applyTierSampleScreenshotSanitization(metadataObject);
+				nextMetadata = applyTierMerchandisingSanitization(
+					applyTierSampleScreenshotSanitization(metadataObject)
+				);
 			}
 		}
 

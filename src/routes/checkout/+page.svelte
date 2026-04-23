@@ -29,6 +29,10 @@
 	let loading = $state(false);
 	let affiliateCode = $state<string | null>(null);
 	let affiliateDiscount = $state<number>(0);
+	let promoCodeInput = $state('');
+	let promoAppliedCode = $state<string | null>(null);
+	let promoDiscountAmount = $state(0);
+	let promoValidationLoading = $state(false);
 	let loadingCartData = $state(true);
 	const PENDING_ORDER_STORAGE_KEY = 'fastaccs_pending_order_id';
 
@@ -39,6 +43,7 @@
 	let cartItems = $state<CartItemWithTier[]>([]);
 	let cartTotal = $state(0);
 	let failedCheckoutIcons = $state<Record<string, boolean>>({});
+	const checkoutTotal = $derived(Math.max(0, cartTotal - promoDiscountAmount));
 
 	// Load cart data and redirect if empty
 	$effect(() => {
@@ -74,6 +79,11 @@
 		try {
 			cartItems = await cart.getItemsWithTiers();
 			cartTotal = await cart.getTotal();
+			// Cart mutation invalidates promo context. Re-apply manually for deterministic totals.
+			if (promoAppliedCode) {
+				promoAppliedCode = null;
+				promoDiscountAmount = 0;
+			}
 		} catch (error) {
 			console.error('Failed to load cart data:', error);
 		} finally {
@@ -89,13 +99,58 @@
 			if (result.valid) {
 				affiliateCode = code.toUpperCase();
 				affiliateDiscount = result.commissionRate || 10;
-				showSuccess('Affiliate code applied!', `You'll receive ${affiliateDiscount}% discount`);
+				showSuccess(
+					'Referral detected',
+					`${affiliateCode} captured. Promo discounts are currently active in checkout.`
+				);
 			} else {
 				showWarning('Invalid affiliate code', 'The code you entered is not valid');
 			}
 		} catch (error) {
 			console.error('Error validating affiliate code:', error);
 		}
+	}
+
+	async function applyPromoCode() {
+		if (!promoCodeInput.trim() || promoValidationLoading) {
+			return;
+		}
+
+		promoValidationLoading = true;
+		try {
+			const response = await fetch('/api/promotions/validate', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					code: promoCodeInput.trim(),
+					subtotal: cartTotal,
+					categoryIds: cartItems.map((item) => item.tierId)
+				})
+			});
+			const result = await response.json();
+
+			if (!response.ok || !result.success) {
+				throw new Error(result.error || 'Promo code is invalid.');
+			}
+
+			promoAppliedCode = result.data.code;
+			promoDiscountAmount = Number(result.data.discountAmount || 0);
+			showSuccess('Promo applied', `${result.data.code} saved ${formatPrice(promoDiscountAmount)}`);
+		} catch (error) {
+			promoAppliedCode = null;
+			promoDiscountAmount = 0;
+			showWarning('Promo not applied', error instanceof Error ? error.message : 'Invalid promo code');
+		} finally {
+			promoValidationLoading = false;
+		}
+	}
+
+	function clearPromoCode() {
+		promoAppliedCode = null;
+		promoDiscountAmount = 0;
+		promoCodeInput = '';
 	}
 
 	function redirectToLoginWithReturnUrl(): void {
@@ -144,8 +199,7 @@
 
 		loading = true;
 		try {
-			const discountAmount = affiliateCode ? (cartTotal * affiliateDiscount) / 100 : 0;
-			const finalTotal = cartTotal - discountAmount;
+			const finalTotal = checkoutTotal;
 
 			// Stock check
 			for (const item of cartItems) {
@@ -173,7 +227,8 @@
 				totalAmount: finalTotal,
 				currency: 'NGN',
 				paymentMethod: 'monnify',
-				affiliateCode: affiliateCode || undefined
+				affiliateCode: affiliateCode || undefined,
+				promotionCode: promoAppliedCode || undefined
 				});
 
 				if (!orderResult.success) {
@@ -523,6 +578,46 @@
 
 						<hr class="my-8" style="border-color: var(--border);" />
 
+						<div class="mb-4 rounded-lg p-3" style="border: 1px solid var(--border); background: var(--bg);">
+							<p class="mb-2 text-xs font-semibold uppercase" style="color: var(--text-muted);">
+								Promo Code
+							</p>
+							<div class="flex items-center gap-2">
+								<input
+									type="text"
+									bind:value={promoCodeInput}
+									placeholder="Enter promo code"
+									class="w-full rounded-lg px-3 py-2 text-sm"
+									style="border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text);"
+								/>
+								<button
+									type="button"
+									onclick={applyPromoCode}
+									disabled={promoValidationLoading || !promoCodeInput.trim()}
+									class="rounded-full px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+									style="background: var(--btn-primary-gradient);"
+								>
+									{promoValidationLoading ? 'Checking...' : 'Apply'}
+								</button>
+							</div>
+							{#if promoAppliedCode}
+								<div
+									class="mt-2 flex items-center justify-between rounded-lg p-2 text-xs"
+									style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.3); color: var(--primary);"
+								>
+									<span>Applied: <strong>{promoAppliedCode}</strong></span>
+									<button
+										type="button"
+										onclick={clearPromoCode}
+										class="rounded-full px-2 py-1 font-semibold"
+										style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
+									>
+										Remove
+									</button>
+								</div>
+							{/if}
+						</div>
+
 						<!-- Total -->
 						<div class="space-y-3">
 							<div class="flex justify-between text-xs sm:text-sm">
@@ -533,22 +628,16 @@
 									>{formatPrice(cartTotal)}</span
 								>
 							</div>
-							{#if affiliateCode}
+							{#if promoAppliedCode && promoDiscountAmount > 0}
 								<div
 									class="flex justify-between text-xs font-semibold sm:text-sm"
 									style="color: var(--primary); font-family: var(--font-body);"
 								>
 									<span class="flex items-center gap-1">
 										<Tag size={14} />
-										Affiliate Discount ({affiliateDiscount}%)
+										Promo Discount
 									</span>
-									<span>-{formatPrice((cartTotal * affiliateDiscount) / 100)}</span>
-								</div>
-								<div
-									class="rounded-lg p-2 text-xs"
-									style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.3); color: var(--primary); font-family: var(--font-body);"
-								>
-									Referred by: <strong>{affiliateCode}</strong>
+									<span>-{formatPrice(promoDiscountAmount)}</span>
 								</div>
 							{/if}
 							<div class="flex justify-between text-xs sm:text-sm">
@@ -563,9 +652,7 @@
 							<div class="flex justify-between text-base font-bold sm:text-lg">
 								<span style="color: var(--text); font-family: var(--font-head);">Total</span>
 								<span style="color: var(--primary); font-family: var(--font-head);">
-									{formatPrice(
-										affiliateCode ? cartTotal - (cartTotal * affiliateDiscount) / 100 : cartTotal
-									)}
+									{formatPrice(checkoutTotal)}
 								</span>
 							</div>
 						</div>

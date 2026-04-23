@@ -6,6 +6,7 @@ declare global {
 		interface Locals {
 			user: import('@prisma/client').User | null;
 			session: import('@prisma/client').Session | null;
+			adminContext: import('$lib/auth/admin-roles').AdminContext | null;
 		}
 		// interface PageData {}
 		// interface PageState {}

@@ -41,6 +41,10 @@ model User {
   walletTransactions      WalletTransaction[]
   wallet                  Wallet?
   emailNotifications      EmailNotification[]
+  adminRoleAssignment     AdminRoleAssignment?
+  adminAuditActions       AdminAuditLog[]     @relation("AdminAuditActor")
+  adminAuditTargets       AdminAuditLog[]     @relation("AdminAuditTarget")
+  promotionRedemptions    PromotionRedemption[]
 
   @@map("users")
 }
@@ -164,9 +168,13 @@ model Order {
   createdAt          DateTime       @default(now()) @map("created_at")
   updatedAt          DateTime       @default(now()) @map("updated_at")
   paymentChannel     String?        @map("payment_channel")
+  promotionId        String?        @map("promotion_id") @db.Uuid
+  promotionCode      String?        @map("promotion_code")
   notifications      Notification[]
   orderItems         OrderItem[]
   affiliateUser      User?          @relation("AffiliateOrders", fields: [affiliateUserId], references: [id])
+  promotion          PromotionCode? @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  promotionRedemption PromotionRedemption?
   user               User?          @relation(fields: [userId], references: [id])
 
   @@index([userId, createdAt])
@@ -175,6 +183,7 @@ model Order {
   @@index([affiliateUserId])
   @@index([affiliateCode])
   @@index([createdAt])
+  @@index([promotionId])
   @@map("orders")
 }
 
@@ -405,6 +414,83 @@ model RestockSubscription {
   @@map("restock_subscriptions")
 }
 
+model AdminRoleAssignment {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @unique @map("user_id") @db.Uuid
+  role      AdminRole @default(FULL_ADMIN)
+  createdBy String?   @map("created_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @map("updated_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([role])
+  @@map("admin_role_assignments")
+}
+
+model AdminAuditLog {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorUserId  String?  @map("actor_user_id") @db.Uuid
+  targetUserId String?  @map("target_user_id") @db.Uuid
+  action       String
+  resourceType String   @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  description  String?
+  metadata     Json     @default("{}")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  createdAt    DateTime @default(now()) @map("created_at")
+  actorUser    User?    @relation("AdminAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  targetUser   User?    @relation("AdminAuditTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId, createdAt])
+  @@index([targetUserId, createdAt])
+  @@index([action, createdAt])
+  @@map("admin_audit_logs")
+}
+
+model PromotionCode {
+  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code             String               @unique
+  type             PromotionType
+  value            Decimal              @db.Decimal(10, 2)
+  currency         String               @default("NGN")
+  minOrderValue    Decimal              @default(0) @map("min_order_value") @db.Decimal(10, 2)
+  usageCap         Int?                 @map("usage_cap")
+  usageCount       Int                  @default(0) @map("usage_count")
+  singleUsePerUser Boolean              @default(false) @map("single_use_per_user")
+  platformIds      String[]             @map("platform_ids")
+  startsAt         DateTime?            @map("starts_at")
+  endsAt           DateTime?            @map("ends_at")
+  isActive         Boolean              @default(true) @map("is_active")
+  createdBy        String?              @map("created_by") @db.Uuid
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @default(now()) @map("updated_at")
+  orders           Order[]
+  redemptions      PromotionRedemption[]
+
+  @@index([isActive, code])
+  @@index([startsAt, endsAt])
+  @@map("promotion_codes")
+}
+
+model PromotionRedemption {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  promotionId    String        @map("promotion_id") @db.Uuid
+  orderId        String        @unique @map("order_id") @db.Uuid
+  userId         String?       @map("user_id") @db.Uuid
+  codeSnapshot   String        @map("code_snapshot")
+  discountAmount Decimal       @map("discount_amount") @db.Decimal(10, 2)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  promotion      PromotionCode @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  order          Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([promotionId, orderId])
+  @@index([userId, createdAt])
+  @@index([promotionId, createdAt])
+  @@map("promotion_redemptions")
+}
+
 model VerificationCode {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId     String   @unique @map("user_id") @db.Uuid
@@ -432,4 +518,15 @@ enum UserType {
 enum DeliveryMethod {
   EMAIL
   DASHBOARD
+}
+
+enum AdminRole {
+  FULL_ADMIN
+  ORDER_MANAGER
+  READ_ONLY
+}
+
+enum PromotionType {
+  PERCENT
+  FIXED
 }

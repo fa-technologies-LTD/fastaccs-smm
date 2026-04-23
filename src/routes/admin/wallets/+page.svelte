@@ -5,7 +5,6 @@
 		Users,
 		DollarSign,
 		Search,
-		Filter,
 		Download,
 		ArrowUpRight,
 		ArrowDownLeft,
@@ -73,7 +72,7 @@
 			Date: formatDate(txn.createdAt)
 		}));
 
-		exportToCSV(exportData, `wallet-transactions-${today}.csv`);
+		exportToCSV(exportData, `store-credit-transactions-${today}.csv`);
 
 		addToast({
 			type: 'success',
@@ -87,8 +86,10 @@
 	<!-- Header -->
 	<div class="flex items-center justify-between">
 		<div>
-			<h1 class="text-2xl font-bold" style="color: var(--text)">Wallet Oversight</h1>
-			<p class="mt-1" style="color: var(--text-muted)">Monitor all user wallets and transactions</p>
+			<h1 class="text-2xl font-bold" style="color: var(--text)">Store Credit Oversight</h1>
+			<p class="mt-1" style="color: var(--text-muted)">
+				Affiliate-only store credit monitoring and transaction history.
+			</p>
 		</div>
 		<button
 			onclick={exportData}
@@ -127,7 +128,7 @@
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted);">
-						Total Wallets
+						Affiliate Credit Wallets
 					</p>
 					<p class="mt-1 text-xl font-bold" style="color: var(--text);">{stats.totalWallets}</p>
 				</div>
@@ -147,7 +148,7 @@
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted);">
-						Total Balance
+						Total Store Credit
 					</p>
 					<p class="mt-1 text-xl font-bold" style="color: var(--text);">
 						{formatPrice(stats.totalBalance)}
@@ -169,7 +170,7 @@
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted);">
-						Total Deposits
+						Credit Added
 					</p>
 					<p class="mt-1 text-xl font-bold" style="color: var(--status-success);">
 						{formatPrice(stats.totalDeposits)}
@@ -191,7 +192,7 @@
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted);">
-						Total Withdrawals
+						Credit Used
 					</p>
 					<p class="mt-1 text-xl font-bold" style="color: var(--status-error);">
 						{formatPrice(stats.totalWithdrawals)}
@@ -274,7 +275,7 @@
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
-							Balance
+							Credit Balance
 						</th>
 						<th
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"

@@ -14,6 +14,8 @@ import { logOrderStatusTransition } from '$lib/services/order-audit';
 import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
+import { recordPromotionRedemption } from '$lib/services/promotions';
+import { isAutoDeliveryPausedSetting } from '$lib/services/admin-settings';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -126,9 +128,17 @@ async function markOrderPaidAndAllocate(params: {
 			fromPaymentStatus: order.paymentStatus,
 			toPaymentStatus: 'paid'
 		});
+
+		await recordPromotionRedemption(order.id).catch((error) => {
+			console.warn('Failed to record promotion redemption from webhook:', error);
+		});
 	}
 
 	if (paidTransition.count === 0 && order.status === 'paid') {
+		await recordPromotionRedemption(order.id).catch((error) => {
+			console.warn('Failed to record promotion redemption for already-paid webhook order:', error);
+		});
+
 		console.info('[payments.webhook] already_paid_before_webhook', {
 			orderId: params.orderId
 		});
@@ -144,6 +154,12 @@ async function markOrderPaidAndAllocate(params: {
 		await sendOrderConfirmationEmailIfNeeded(params.orderId);
 	} catch (emailError) {
 		console.error('Failed to send webhook order confirmation email:', emailError);
+	}
+
+	const autoDeliveryPaused = await isAutoDeliveryPausedSetting().catch(() => false);
+	if (autoDeliveryPaused) {
+		console.info('[payments.webhook] auto_delivery_paused', { orderId: params.orderId });
+		return;
 	}
 
 	const allocationResult = await allocateAccountsForOrder(params.orderId);

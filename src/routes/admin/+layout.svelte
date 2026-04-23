@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
+	import type { AdminPermission } from '$lib/auth/admin-roles';
 	import {
 		Package,
 		ShoppingCart,
@@ -16,27 +17,100 @@
 		X,
 		UserCheck,
 		Type,
-		Mail
+		Mail,
+		Tag
 	} from '@lucide/svelte';
 
 	import logo from '$lib/assets/logo.png';
 
 	let { data, children } = $props();
+	const adminPermissions = $derived(
+		Array.isArray(data?.adminPermissions)
+			? (data.adminPermissions as AdminPermission[])
+			: ([] as AdminPermission[])
+	);
+	const adminPermissionSet = $derived(new Set(adminPermissions));
 
-	const adminNavItems = [
-		{ href: '/admin', label: 'Dashboard', icon: Home },
-		{ href: '/admin/platforms', label: 'Platforms', icon: Layers },
-		{ href: '/admin/tiers', label: 'Tiers', icon: Target },
-		{ href: '/admin/inventory', label: 'Inventory', icon: Package },
-		{ href: '/admin/batches', label: 'Batch Import', icon: Plus },
-		{ href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
-		{ href: '/admin/affiliates', label: 'Affiliates', icon: UserCheck },
-		{ href: '/admin/users', label: 'Users', icon: Users },
-		{ href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
-		{ href: '/admin/microcopy', label: 'Microcopy', icon: Type },
-		{ href: '/admin/broadcast', label: 'Broadcast', icon: Mail },
-		{ href: '/admin/settings', label: 'Settings', icon: Settings }
-	];
+	const featureFlags = $derived(
+		data?.featureFlags || {
+			adminPromotions: false,
+			adminAnnouncementBanner: false,
+			adminAdvancedAnalytics: true,
+			adminRoleManagement: true,
+			adminStoreControls: true
+		}
+	);
+
+	const adminNavItems = $derived.by(() => {
+		const allItems: Array<{
+			href: string;
+			label: string;
+			icon: any;
+			permission?: AdminPermission;
+			enabled?: boolean;
+		}> = [
+			{ href: '/admin', label: 'Dashboard', icon: Home },
+			{
+				href: '/admin/platforms',
+				label: 'Platforms',
+				icon: Layers,
+				permission: 'admin:catalog:manage'
+			},
+			{ href: '/admin/tiers', label: 'Tiers', icon: Target, permission: 'admin:catalog:manage' },
+			{
+				href: '/admin/inventory',
+				label: 'Inventory',
+				icon: Package,
+				permission: 'admin:inventory:manage'
+			},
+			{
+				href: '/admin/batches',
+				label: 'Batch Import',
+				icon: Plus,
+				permission: 'admin:inventory:manage'
+			},
+			{ href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
+			{
+				href: '/admin/affiliates',
+				label: 'Affiliates',
+				icon: UserCheck,
+				permission: 'admin:affiliates:manage'
+			},
+			{ href: '/admin/users', label: 'Users', icon: Users },
+			{ href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
+			{
+				href: '/admin/promotions',
+				label: 'Promotions',
+				icon: Tag,
+				permission: 'admin:promotions:manage',
+				enabled: featureFlags.adminPromotions
+			},
+			{
+				href: '/admin/microcopy',
+				label: 'Microcopy',
+				icon: Type,
+				permission: 'admin:content:manage'
+			},
+			{
+				href: '/admin/broadcast',
+				label: 'Broadcast',
+				icon: Mail,
+				permission: 'admin:broadcast:manage'
+			},
+			{
+				href: '/admin/settings',
+				label: 'Settings',
+				icon: Settings,
+				permission: 'admin:settings:manage'
+			}
+		];
+
+		return allItems.filter((item) => {
+			if (item.enabled === false) return false;
+			if (!item.permission) return true;
+			return adminPermissionSet.has(item.permission);
+		});
+	});
 
 	let sidebarOpen = $state(false);
 
@@ -109,11 +183,11 @@
 					class="relative flex w-full max-w-xs flex-1 flex-col"
 					style="background: var(--bg-elev-1);"
 				>
-						<div class="h-0 flex-1 overflow-y-auto pt-5 pb-4">
-							<!-- Logo and Close Button -->
-							<div class="mb-6 flex items-center justify-between px-4">
-								<img src={logo} alt="FastAccs" class="h-8 w-auto" />
-								<button
+					<div class="h-0 flex-1 overflow-y-auto pt-5 pb-4">
+						<!-- Logo and Close Button -->
+						<div class="mb-6 flex items-center justify-between px-4">
+							<img src={logo} alt="FastAccs" class="h-8 w-auto" />
+							<button
 								type="button"
 								class="flex h-10 w-10 items-center justify-center rounded-full transition-colors focus:ring-2 focus:outline-none"
 								style="color: var(--text-muted);"
@@ -173,6 +247,12 @@
 						<span class="max-w-[46vw] truncate text-sm" style="color: var(--text-muted);"
 							>{data?.user?.email || 'admin@fastaccs.com'}</span
 						>
+						<span
+							class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+							style="background: var(--bg-elev-2); color: var(--text-muted); border: 1px solid var(--border);"
+						>
+							{data?.adminRole || 'FULL_ADMIN'}
+						</span>
 					</div>
 
 					<!-- Sign out button -->

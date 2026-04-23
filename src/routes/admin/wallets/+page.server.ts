@@ -5,12 +5,18 @@ export const load: PageServerLoad = async () => {
 	try {
 		// Get all wallets with user info
 		const walletsRaw = await prisma.wallet.findMany({
+			where: {
+				user: {
+					isAffiliateEnabled: true
+				}
+			},
 			include: {
 				user: {
 					select: {
 						id: true,
 						email: true,
-						fullName: true
+						fullName: true,
+						isAffiliateEnabled: true
 					}
 				}
 			},
@@ -21,13 +27,19 @@ export const load: PageServerLoad = async () => {
 
 		// Get recent transactions (last 100)
 		const transactionsRaw = await prisma.walletTransaction.findMany({
+			where: {
+				user: {
+					isAffiliateEnabled: true
+				}
+			},
 			take: 100,
 			include: {
 				user: {
 					select: {
 						id: true,
 						email: true,
-						fullName: true
+						fullName: true,
+						isAffiliateEnabled: true
 					}
 				}
 			},
@@ -53,12 +65,12 @@ export const load: PageServerLoad = async () => {
 		const totalBalance = wallets.reduce((sum, wallet) => sum + wallet.balance, 0);
 
 		const deposits = await prisma.walletTransaction.aggregate({
-			where: { type: 'deposit', status: 'completed' },
+			where: { type: 'deposit', status: 'completed', user: { isAffiliateEnabled: true } },
 			_sum: { amount: true }
 		});
 
 		const debits = await prisma.walletTransaction.aggregate({
-			where: { type: 'debit', status: 'completed' },
+			where: { type: 'debit', status: 'completed', user: { isAffiliateEnabled: true } },
 			_sum: { amount: true }
 		});
 

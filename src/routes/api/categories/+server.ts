@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { applyTierSampleScreenshotSanitization } from '$lib/helpers/tierSampleScreenshots';
+import { applyTierMerchandisingSanitization } from '$lib/helpers/tier-merchandising';
 
 // GET /api/categories - Get categories with optional filtering
 export async function GET({ url, locals }) {
@@ -54,7 +55,9 @@ export async function POST({ request, locals }) {
 		const rawMetadata = JSON.parse(JSON.stringify(rest.metadata || {}));
 		const metadata =
 			rest.categoryType === 'tier'
-				? applyTierSampleScreenshotSanitization(rawMetadata as Record<string, unknown>)
+				? applyTierMerchandisingSanitization(
+						applyTierSampleScreenshotSanitization(rawMetadata as Record<string, unknown>)
+					)
 				: rawMetadata;
 
 		const data = await prisma.category.create({

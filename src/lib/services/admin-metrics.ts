@@ -1,7 +1,11 @@
 import { prisma } from '$lib/prisma';
 import { serverCache } from '$lib/helpers/cache';
-import { getLowStockThresholdSetting } from '$lib/services/admin-settings';
+import {
+	getBusinessTimezoneSetting,
+	getLowStockThresholdSetting
+} from '$lib/services/admin-settings';
 import { ORDER_STATUS_GROUPS } from '$lib/helpers/order-status';
+import { getStartOfBusinessDayUtc } from '$lib/helpers/business-timezone';
 
 export interface AdminOrderStatsSnapshot {
 	total_orders: number;
@@ -26,14 +30,9 @@ export interface AdminInventoryStatsSnapshot {
 	lowStockThreshold: number;
 }
 
-function startOfToday(): Date {
-	const date = new Date();
-	date.setHours(0, 0, 0, 0);
-	return date;
-}
-
 export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> {
-	const today = startOfToday();
+	const businessTimezone = await getBusinessTimezoneSetting().catch(() => 'Africa/Lagos');
+	const today = getStartOfBusinessDayUtc(new Date(), businessTimezone);
 
 	const [
 		totalOrders,

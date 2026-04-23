@@ -16,6 +16,17 @@
 	}
 
 	let { children, data }: Props = $props();
+	let bannerDismissed = $state(false);
+	let lastBannerCookieName = $state<string | null>(null);
+	const announcementBanner = $derived(data.announcementBanner || null);
+
+	$effect(() => {
+		const nextCookieName = announcementBanner?.dismissCookieName || null;
+		if (nextCookieName !== lastBannerCookieName) {
+			lastBannerCookieName = nextCookieName;
+			bannerDismissed = false;
+		}
+	});
 
 	function loadTawkWidget() {
 		const tawkEmbedUrl = publicEnv.PUBLIC_TAWK_EMBED_URL;
@@ -68,6 +79,15 @@
 			});
 		});
 	});
+
+	function dismissAnnouncementBanner(): void {
+		if (!announcementBanner || !announcementBanner.dismissible || typeof document === 'undefined') return;
+
+		bannerDismissed = true;
+		const maxAgeSeconds = 60 * 60 * 24 * 365;
+		const secureFlag = window.location.protocol === 'https:' ? '; Secure' : '';
+		document.cookie = `${announcementBanner.dismissCookieName}=1; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax${secureFlag}`;
+	}
 </script>
 
 <svelte:head>
@@ -77,6 +97,40 @@
 <PageLoadingBar />
 
 <div class="min-h-screen" style="background: linear-gradient(180deg, #07090C 0%, #050607 100%);">
+	{#if announcementBanner && !bannerDismissed}
+		<div
+			class="border-b px-4 py-2 text-sm"
+			style="border-color: rgba(59, 130, 246, 0.35); background: linear-gradient(90deg, rgba(30, 64, 175, 0.28) 0%, rgba(15, 23, 42, 0.8) 100%); color: #dbeafe;"
+		>
+			<div class="mx-auto flex max-w-6xl flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+				<div class="min-w-0">
+					<span class="font-semibold tracking-wide uppercase" style="color: #93c5fd;">Announcement</span>
+					<span class="ml-2 break-words">{announcementBanner.text}</span>
+					{#if announcementBanner.link}
+						<a
+							href={announcementBanner.link}
+							class="ml-3 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold transition-opacity hover:opacity-90"
+							style="background: rgba(59, 130, 246, 0.28); color: #bfdbfe; border: 1px solid rgba(147, 197, 253, 0.3);"
+						>
+							Learn more
+						</a>
+					{/if}
+				</div>
+				{#if announcementBanner.dismissible}
+					<button
+						type="button"
+						class="rounded-full px-2 py-0.5 text-xs font-semibold transition-opacity hover:opacity-90"
+						style="border: 1px solid rgba(147, 197, 253, 0.4); color: #dbeafe;"
+						onclick={dismissAnnouncementBanner}
+						aria-label="Dismiss announcement"
+					>
+						Dismiss
+					</button>
+				{/if}
+			</div>
+		</div>
+	{/if}
+
 	{@render children?.()}
 
 	<CookieConsentBar />

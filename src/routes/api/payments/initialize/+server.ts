@@ -2,11 +2,17 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { initializeTransaction } from '$lib/services/monnify';
+import { isCheckoutEnabledSetting } from '$lib/services/admin-settings';
 
 export const POST: RequestHandler = async ({ request, locals, url }) => {
 	try {
 		if (!locals.user) {
 			return json({ success: false, error: 'Unauthorized' }, { status: 401 });
+		}
+
+		const checkoutEnabled = await isCheckoutEnabledSetting().catch(() => true);
+		if (!checkoutEnabled && locals.user.userType !== 'ADMIN') {
+			return json({ success: false, error: 'Checkout is temporarily disabled.' }, { status: 503 });
 		}
 
 		if (!locals.user.emailVerified) {

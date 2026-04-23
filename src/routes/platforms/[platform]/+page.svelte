@@ -171,6 +171,13 @@
 		return features;
 	}
 
+	function getFeaturedBadgeLabel(tier: TierCard): string {
+		if (typeof tier.featured_badge === 'string' && tier.featured_badge.trim().length > 0) {
+			return tier.featured_badge.trim();
+		}
+		return 'Featured';
+	}
+
 	function getCurrentCartQuantity(tier: TierCard): number {
 		const existingCartItem = cart.items.find((item) => item.tierId === tier.category_id);
 		return existingCartItem ? existingCartItem.quantity : 0;
@@ -550,7 +557,7 @@
 					</div>
 				{:else}
 					<div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-						{#each data.tiers as tier, index (index)}
+						{#each data.tiers as tier (tier.category_id)}
 							{@const tierStatus = getTierStatus(tier.visible_available)}
 							{@const tierFeatures = getTierFeatures(tier.metadata)}
 							<div
@@ -576,6 +583,27 @@
 
 								<!-- Tier Header -->
 								<div class="flex flex-1 flex-col p-6">
+									{#if tier.is_pinned || tier.is_featured}
+										<div class="mb-3 flex flex-wrap gap-1.5">
+											{#if tier.is_pinned}
+												<span
+													class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
+													style="background: rgba(251, 191, 36, 0.16); color: rgb(217, 119, 6); border: 1px solid rgba(251, 191, 36, 0.28);"
+												>
+													Pinned{tier.pin_priority ? ` #${tier.pin_priority}` : ''}
+												</span>
+											{/if}
+											{#if tier.is_featured}
+												<span
+													class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
+													style="background: rgba(34, 197, 94, 0.14); color: rgb(22, 163, 74); border: 1px solid rgba(34, 197, 94, 0.3);"
+												>
+													{getFeaturedBadgeLabel(tier)}
+												</span>
+											{/if}
+										</div>
+									{/if}
+
 									<div class="mb-4 flex items-center justify-between">
 										<div>
 											<h3 class="text-xl font-bold" style="color: var(--text);">

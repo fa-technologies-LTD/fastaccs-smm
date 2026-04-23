@@ -64,6 +64,7 @@ git ls-remote --heads origin
 3. Project name: `fastaccs-smm`.
 4. Production branch: `main`.
 5. Confirm auto deployments are enabled for pushes to `main`.
+6. In `Project Settings -> Build and Deployment -> Node.js Version`, set `20.x` (or exact `20.12+`).
 
 ## 3) Domain Strategy (No Apex Disruption)
 

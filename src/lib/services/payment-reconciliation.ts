@@ -14,6 +14,8 @@ import {
 } from '$lib/helpers/payment-status';
 import { logOrderStatusTransition } from '$lib/services/order-audit';
 import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
+import { recordPromotionRedemption } from '$lib/services/promotions';
+import { isAutoDeliveryPausedSetting } from '$lib/services/admin-settings';
 
 interface ReconcileOptions {
 	limit?: number;
@@ -80,6 +82,7 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 		dryRun
 	};
 	let didMutate = false;
+	const autoDeliveryPaused = await isAutoDeliveryPausedSetting().catch(() => false);
 
 	if (!hasMonnifyConfig()) {
 		summary.skipped = limit;
@@ -115,25 +118,33 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 		}
 
 		if (order.status === 'paid') {
+			await recordPromotionRedemption(order.id).catch((error) => {
+				console.warn('[payments.reconcile] failed to record promo redemption for paid order:', error);
+			});
+
 			try {
 				await sendOrderConfirmationEmailIfNeeded(order.id);
 			} catch (emailError) {
 				console.error('[payments.reconcile] failed to send order confirmation email:', emailError);
 			}
 
-			const allocationResult = await allocateAccountsForOrder(order.id);
-			if (allocationResult.success) {
-				summary.completed += 1;
-			} else {
-				const latestOrder = await prisma.order.findUnique({
-					where: { id: order.id },
-					select: { status: true }
-				});
-				if (latestOrder?.status === 'completed') {
+			if (!autoDeliveryPaused) {
+				const allocationResult = await allocateAccountsForOrder(order.id);
+				if (allocationResult.success) {
 					summary.completed += 1;
 				} else {
-					summary.paid += 1;
+					const latestOrder = await prisma.order.findUnique({
+						where: { id: order.id },
+						select: { status: true }
+					});
+					if (latestOrder?.status === 'completed') {
+						summary.completed += 1;
+					} else {
+						summary.paid += 1;
+					}
 				}
+			} else {
+				summary.paid += 1;
 			}
 			continue;
 		}
@@ -226,10 +237,14 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 				} catch (emailError) {
 					console.error('[payments.reconcile] failed to send order confirmation email:', emailError);
 				}
+
+				await recordPromotionRedemption(order.id).catch((error) => {
+					console.warn('[payments.reconcile] failed to record promo redemption after paid transition:', error);
+				});
 			}
 			summary.paid += 1;
 
-			if (!dryRun) {
+			if (!dryRun && !autoDeliveryPaused) {
 				const allocationResult = await allocateAccountsForOrder(order.id);
 				if (allocationResult.success) {
 					summary.completed += 1;

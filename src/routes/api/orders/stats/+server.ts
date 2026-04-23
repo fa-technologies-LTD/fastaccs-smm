@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { serverCache, getCacheHeaders, CACHE_TTL } from '$lib/helpers/cache';
 import { getOrderStatsSnapshot } from '$lib/services/admin-metrics';
+import { canViewRevenue, redactOrderStatsRevenue } from '$lib/services/admin-revenue-visibility';
 
 // GET /api/orders/stats - Get order statistics for admin dashboard
 export const GET: RequestHandler = async ({ locals }) => {
@@ -15,12 +16,13 @@ export const GET: RequestHandler = async ({ locals }) => {
 		// Try cache first
 		const cached = serverCache.get(cacheKey, CACHE_TTL.ADMIN_STATS);
 		if (cached) {
+			const responseStats = canViewRevenue(locals) ? cached : redactOrderStatsRevenue(cached);
 			const headers = getCacheHeaders('dynamic');
 			const cleanHeaders = Object.fromEntries(
 				Object.entries(headers).filter(([, v]) => v !== undefined)
 			);
 			return json(
-				{ data: cached, error: null },
+				{ data: responseStats, error: null },
 				{
 					headers: cleanHeaders
 				}
@@ -28,6 +30,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		}
 
 		const stats = await getOrderStatsSnapshot();
+		const responseStats = canViewRevenue(locals) ? stats : redactOrderStatsRevenue(stats);
 
 		// Cache the result
 		serverCache.set(cacheKey, stats);
@@ -38,7 +41,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		);
 
 		return json(
-			{ data: stats, error: null },
+			{ data: responseStats, error: null },
 			{
 				headers: cleanHeaders
 			}

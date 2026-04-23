@@ -26,6 +26,10 @@
 				delivery_time: string;
 				replacement_guarantee: boolean;
 				sample_screenshot_urls: string[];
+				is_pinned: boolean;
+				pin_priority: number;
+				is_featured: boolean;
+				featured_badge: string;
 			};
 		};
 		loading?: boolean;
@@ -119,6 +123,102 @@
 							</div>
 
 							<TierSampleScreenshotFields bind:urls={tierForm.metadata.sample_screenshot_urls} />
+
+							<div
+								class="md:col-span-2 rounded-lg p-3"
+								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+							>
+								<div class="mb-2">
+									<p class="text-sm font-semibold" style="color: var(--text);">Merchandising</p>
+									<p class="text-xs" style="color: var(--text-muted);">
+										Control tier prominence on storefront with pinning and featured badges.
+									</p>
+								</div>
+								<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+									<label
+										class="flex items-center justify-between rounded-md px-3 py-2 text-sm"
+										style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
+									>
+										<span>Pin this tier</span>
+										<input
+											type="checkbox"
+											bind:checked={tierForm.metadata.is_pinned}
+											onchange={() => {
+												if (!tierForm.metadata.is_pinned) {
+													tierForm.metadata.pin_priority = 100;
+													return;
+												}
+												if (
+													typeof tierForm.metadata.pin_priority !== 'number' ||
+													tierForm.metadata.pin_priority < 1
+												) {
+													tierForm.metadata.pin_priority = 100;
+												}
+											}}
+										/>
+									</label>
+									<label
+										class="flex items-center justify-between rounded-md px-3 py-2 text-sm"
+										style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
+									>
+										<span>Mark as featured</span>
+										<input
+											type="checkbox"
+											bind:checked={tierForm.metadata.is_featured}
+											onchange={() => {
+												if (!tierForm.metadata.is_featured) {
+													tierForm.metadata.featured_badge = 'Featured';
+													return;
+												}
+												if (!tierForm.metadata.featured_badge.trim()) {
+													tierForm.metadata.featured_badge = 'Featured';
+												}
+											}}
+										/>
+									</label>
+								</div>
+
+								{#if tierForm.metadata.is_pinned}
+									<div class="mt-3">
+										<label
+											for="edit-pin-priority"
+											class="block text-sm font-medium"
+											style="color: var(--text);"
+										>
+											Pin Priority (lower appears first)
+										</label>
+										<input
+											id="edit-pin-priority"
+											type="number"
+											min="1"
+											bind:value={tierForm.metadata.pin_priority}
+											class="mt-1 block w-full rounded-md px-4 py-2 sm:max-w-xs"
+											style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
+										/>
+									</div>
+								{/if}
+
+								{#if tierForm.metadata.is_featured}
+									<div class="mt-3">
+										<label
+											for="edit-featured-badge"
+											class="block text-sm font-medium"
+											style="color: var(--text);"
+										>
+											Featured Badge Text
+										</label>
+										<input
+											id="edit-featured-badge"
+											type="text"
+											maxlength="40"
+											bind:value={tierForm.metadata.featured_badge}
+											class="mt-1 block w-full rounded-md px-4 py-2 sm:max-w-xs"
+											style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
+											placeholder="Featured"
+										/>
+									</div>
+								{/if}
+							</div>
 
 							<!-- Features -->
 							<div class="md:col-span-2">

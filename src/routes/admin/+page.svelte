@@ -17,6 +17,7 @@
 	import { getOrderStats } from '$lib/services/orders';
 	import { getInventoryStats } from '$lib/services/inventory';
 	import { formatPrice } from '$lib/helpers/utils';
+	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
 
 	// Props from load function
 	interface Props {
@@ -42,6 +43,7 @@
 				outOfStockTiersCount: number;
 			};
 			error: string | null;
+			canViewRevenue?: boolean;
 		};
 	}
 
@@ -54,8 +56,8 @@
 	let autoRefresh = $state(false);
 	let refreshInterval: NodeJS.Timeout | null = null;
 	let lastUpdated = $state<Date>(new Date());
+	const canViewRevenue = Boolean(data.canViewRevenue);
 	let hideMonetaryAmounts = $state(false);
-	const ADMIN_MONEY_VISIBILITY_KEY = 'fastaccs-admin-hide-monetary-amounts';
 
 	async function refreshData() {
 		loading = true;
@@ -121,16 +123,17 @@
 	}
 
 	function toggleMonetaryVisibility() {
+		if (!canViewRevenue) return;
 		hideMonetaryAmounts = !hideMonetaryAmounts;
 		localStorage.setItem(ADMIN_MONEY_VISIBILITY_KEY, hideMonetaryAmounts ? 'true' : 'false');
 	}
 
 	function formatMonetaryAmount(amount: number): string {
-		const formatted = formatPrice(amount);
-		if (!hideMonetaryAmounts) {
-			return formatted;
-		}
-		return formatted.replace(/[0-9]/g, '•');
+		return formatAdminMoney(amount, {
+			canViewRevenue,
+			hideMonetaryAmounts,
+			format: formatPrice
+		});
 	}
 
 	function formatRelativeTime(date: Date): string {
@@ -145,7 +148,9 @@
 	}
 
 	onMount(() => {
-		hideMonetaryAmounts = localStorage.getItem(ADMIN_MONEY_VISIBILITY_KEY) === 'true';
+		hideMonetaryAmounts = canViewRevenue
+			? localStorage.getItem(ADMIN_MONEY_VISIBILITY_KEY) === 'true'
+			: false;
 		if (autoRefresh) {
 			startAutoRefresh();
 		}
@@ -178,8 +183,9 @@
 					{/if}
 				</div>
 
-					<div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
-						<!-- Money visibility toggle -->
+				<div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
+					<!-- Money visibility toggle -->
+					{#if canViewRevenue}
 						<button
 							onclick={toggleMonetaryVisibility}
 							class="flex cursor-pointer items-center justify-center gap-2 rounded-full px-3 py-2 text-sm transition-all hover:scale-[.95] active:scale-90 sm:px-4"
@@ -195,10 +201,20 @@
 								<span class="sm:hidden">Hide</span>
 							{/if}
 						</button>
+					{:else}
+						<div
+							class="flex items-center justify-center gap-2 rounded-full px-3 py-2 text-sm sm:px-4"
+							style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text-dim)"
+						>
+							<EyeOff class="h-4 w-4" />
+							<span class="hidden sm:inline">Revenue Restricted</span>
+							<span class="sm:hidden">Restricted</span>
+						</div>
+					{/if}
 
-						<!-- Auto-refresh toggle -->
-						<button
-							onclick={toggleAutoRefresh}
+					<!-- Auto-refresh toggle -->
+					<button
+						onclick={toggleAutoRefresh}
 						class="flex cursor-pointer items-center justify-center gap-2 rounded-full px-3 py-2 text-sm transition-all hover:scale-[.95] active:scale-90 sm:px-4"
 						style={autoRefresh
 							? 'border: 1px solid var(--status-success-border); background: var(--status-success-bg); color: var(--status-success)'
@@ -297,19 +313,19 @@
 						/>
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
-							<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
-								Total Revenue
-							</p>
-							<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
-								{formatMonetaryAmount(orderStats.total_revenue)}
-							</p>
-							<div class="mt-1 flex items-center">
-								<span class="text-xs sm:text-sm" style="color: var(--text-muted)"
-									>Today:
-									{formatMonetaryAmount(orderStats.todays_revenue)}</span
-								>
-							</div>
+						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+							Total Revenue
+						</p>
+						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
+							{formatMonetaryAmount(orderStats.total_revenue)}
+						</p>
+						<div class="mt-1 flex items-center">
+							<span class="text-xs sm:text-sm" style="color: var(--text-muted)"
+								>Today:
+								{formatMonetaryAmount(orderStats.todays_revenue)}</span
+							>
 						</div>
+					</div>
 				</div>
 			</div>
 
@@ -599,5 +615,5 @@
 				</div>
 			</div>
 		</div>
-		</div>
 	</div>
+</div>

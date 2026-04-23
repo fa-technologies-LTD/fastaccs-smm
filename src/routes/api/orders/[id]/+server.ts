@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
+import { canViewRevenue, redactOrderFinancials } from '$lib/services/admin-revenue-visibility';
 
 // GET /api/orders/[id] - Get specific order
 export const GET: RequestHandler = async ({ params, locals }) => {
@@ -35,8 +36,9 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 		if (!isAdmin && data.userId !== locals.user.id) {
 			return json({ data: null, error: 'Forbidden' }, { status: 403 });
 		}
+		const responseData = isAdmin && !canViewRevenue(locals) ? redactOrderFinancials(data) : data;
 
-		return json({ data, error: null });
+		return json({ data: responseData, error: null });
 	} catch (error) {
 		console.error('Database error:', error);
 		return json(

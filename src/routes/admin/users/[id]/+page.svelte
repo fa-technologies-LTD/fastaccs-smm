@@ -1,9 +1,11 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { addToast } from '$lib/stores/toasts';
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
 	import { getOrderStatusLabel } from '$lib/helpers/order-status';
 	import { ArrowLeft, ShieldCheck, ShieldOff, Clock3, ShoppingBag, Activity } from '@lucide/svelte';
+	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -13,7 +15,50 @@
 	const orders = $derived(data.orders || []);
 	const timeline = $derived(data.timeline || []);
 	const recentSessions = $derived(data.recentSessions || []);
+	const canViewRevenue = Boolean(data.canViewRevenue);
+	let hideMonetaryAmounts = $state(false);
+	let orderSearchQuery = $state('');
+	let orderStatusFilter = $state<'all' | 'paid' | 'failed' | 'pending' | 'processing'>('all');
+	let timelineTypeFilter = $state<'all' | 'account' | 'login' | 'order' | 'payment' | 'admin'>(
+		'all'
+	);
 	let togglingStatus = $state(false);
+
+	const filteredOrders = $derived.by(() => {
+		let rows = orders as Array<any>;
+		if (orderStatusFilter !== 'all') {
+			rows = rows.filter((order) => {
+				if (orderStatusFilter === 'paid')
+					return order.status === 'paid' || order.status === 'completed';
+				if (orderStatusFilter === 'failed')
+					return order.status === 'failed' || order.status === 'cancelled';
+				if (orderStatusFilter === 'pending')
+					return order.status === 'pending' || order.status === 'pending_payment';
+				if (orderStatusFilter === 'processing') return order.status === 'processing';
+				return true;
+			});
+		}
+
+		const query = orderSearchQuery.trim().toLowerCase();
+		if (query) {
+			rows = rows.filter(
+				(order) =>
+					String(order.orderNumber || '')
+						.toLowerCase()
+						.includes(query) ||
+					String(order.id || '')
+						.toLowerCase()
+						.includes(query)
+			);
+		}
+
+		return rows;
+	});
+
+	const filteredTimeline = $derived.by(() => {
+		if (timelineTypeFilter === 'all') return timeline;
+		return (timeline as Array<any>).filter((item) => item.type === timelineTypeFilter);
+	});
 
 	async function toggleUserAccess() {
 		if (togglingStatus) return;
@@ -53,6 +98,18 @@
 		if (type === 'login') return 'var(--link)';
 		return 'var(--text-dim)';
 	}
+
+	function formatAdminAmount(amount: number): string {
+		return formatAdminMoney(amount, {
+			canViewRevenue,
+			hideMonetaryAmounts,
+			format: formatPrice
+		});
+	}
+
+	onMount(() => {
+		hideMonetaryAmounts = localStorage.getItem(ADMIN_MONEY_VISIBILITY_KEY) === 'true';
+	});
 </script>
 
 <div class="space-y-4 p-3 sm:space-y-6 sm:p-6">
@@ -146,7 +203,7 @@
 			>
 				<p class="text-xs uppercase" style="color: var(--text-dim);">Total Spent</p>
 				<p class="mt-1 text-lg font-bold" style="color: var(--text);">
-					{formatPrice(stats.totalSpent)}
+					{formatAdminAmount(stats.totalSpent)}
 				</p>
 			</div>
 			<div
@@ -154,9 +211,13 @@
 				style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 			>
 				<p class="text-xs uppercase" style="color: var(--text-dim);">Store Credit</p>
-				<p class="mt-1 text-lg font-bold" style="color: var(--text);">
-					{formatPrice(user.storeCreditBalance || 0)}
-				</p>
+				{#if user.isAffiliateEnabled}
+					<p class="mt-1 text-lg font-bold" style="color: var(--text);">
+						{formatAdminAmount(user.storeCreditBalance || 0)}
+					</p>
+				{:else}
+					<p class="mt-1 text-sm font-semibold" style="color: var(--text-dim);">Not enabled</p>
+				{/if}
 			</div>
 		</div>
 	</section>
@@ -170,11 +231,31 @@
 				<h2 class="text-base font-semibold sm:text-lg" style="color: var(--text);">Order Logs</h2>
 				<ShoppingBag class="h-4 w-4" style="color: var(--text-dim);" />
 			</div>
-			{#if orders.length === 0}
+			<div class="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+				<input
+					type="text"
+					placeholder="Search order number..."
+					bind:value={orderSearchQuery}
+					class="rounded-lg px-3 py-2 text-sm"
+					style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+				/>
+				<select
+					bind:value={orderStatusFilter}
+					class="rounded-lg px-3 py-2 text-sm"
+					style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+				>
+					<option value="all">All statuses</option>
+					<option value="paid">Paid / Completed</option>
+					<option value="processing">Processing</option>
+					<option value="pending">Pending</option>
+					<option value="failed">Failed / Cancelled</option>
+				</select>
+			</div>
+			{#if filteredOrders.length === 0}
 				<p class="text-sm" style="color: var(--text-muted);">No orders for this user yet.</p>
 			{:else}
 				<div class="space-y-2">
-					{#each orders as order}
+					{#each filteredOrders as order}
 						<div
 							class="rounded-lg p-3"
 							style="background: var(--bg-elev-2); border: 1px solid var(--border);"
@@ -206,7 +287,7 @@
 								</span>
 								<span style="color: var(--text-muted);">•</span>
 								<span style="color: var(--text); font-weight: 600;">
-									{formatPrice(order.totalAmount)}
+									{formatAdminAmount(order.totalAmount)}
 								</span>
 							</div>
 						</div>
@@ -225,11 +306,25 @@
 				</h2>
 				<Activity class="h-4 w-4" style="color: var(--text-dim);" />
 			</div>
-			{#if timeline.length === 0}
+			<div class="mb-3">
+				<select
+					bind:value={timelineTypeFilter}
+					class="rounded-lg px-3 py-2 text-sm"
+					style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+				>
+					<option value="all">All activity types</option>
+					<option value="account">Account</option>
+					<option value="login">Login</option>
+					<option value="order">Order</option>
+					<option value="payment">Payment</option>
+					<option value="admin">Admin actions</option>
+				</select>
+			</div>
+			{#if filteredTimeline.length === 0}
 				<p class="text-sm" style="color: var(--text-muted);">No activity recorded yet.</p>
 			{:else}
 				<div class="space-y-3">
-					{#each timeline as item}
+					{#each filteredTimeline as item}
 						<div class="flex gap-3">
 							<div
 								class="mt-2 h-2.5 w-2.5 rounded-full"

@@ -50,10 +50,13 @@ prisma/
 ```bash
 git clone https://github.com/adetyaz/fastaccs.git
 cd fastaccs
+nvm use 20
 npm install
 npx prisma generate
 npm run dev
 ```
+
+Runtime requirement: Node `>=20.12.0 <21`
 
 ## Environment Variables
 
@@ -93,6 +96,7 @@ PUBLIC_TAWK_WIDGET_LINK=
 npm run dev
 npm run build
 npm run check
+npm run release:verify
 npm run lint
 npm run test
 npm run test:e2e

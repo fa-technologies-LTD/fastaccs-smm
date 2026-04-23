@@ -115,6 +115,16 @@
 		return features;
 	}
 
+	function getFeaturedBadgeLabel(): string {
+		if (
+			typeof data.tier?.featured_badge === 'string' &&
+			data.tier.featured_badge.trim().length > 0
+		) {
+			return data.tier.featured_badge.trim();
+		}
+		return 'Featured';
+	}
+
 	// Add to cart functionality
 	async function addToCart() {
 		if (!data.tierCategory || !data.tier || addingToCart) return;
@@ -335,6 +345,26 @@
 							<div class="mb-2">
 								<h1 class="text-4xl font-bold">{data.tier.tier_name}</h1>
 							</div>
+							{#if data.tier.is_pinned || data.tier.is_featured}
+								<div class="mb-2 flex flex-wrap gap-1.5">
+									{#if data.tier.is_pinned}
+										<span
+											class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
+											style="background: rgba(251, 191, 36, 0.22); color: rgb(251, 191, 36); border: 1px solid rgba(251, 191, 36, 0.4);"
+										>
+											Pinned{data.tier.pin_priority ? ` #${data.tier.pin_priority}` : ''}
+										</span>
+									{/if}
+									{#if data.tier.is_featured}
+										<span
+											class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
+											style="background: rgba(34, 197, 94, 0.24); color: rgb(187, 247, 208); border: 1px solid rgba(34, 197, 94, 0.35);"
+										>
+											{getFeaturedBadgeLabel()}
+										</span>
+									{/if}
+								</div>
+							{/if}
 							<p class="text-base opacity-90">
 								{data.platform.name} accounts with
 								{#if data.tier.metadata?.follower_range}

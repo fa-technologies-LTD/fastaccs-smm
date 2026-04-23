@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
 import { ORDER_STATUS_GROUPS, getOrderStatusLabel } from '$lib/helpers/order-status';
+import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
 
 interface TimelineEntry {
 	id: string;
@@ -11,6 +12,19 @@ interface TimelineEntry {
 	at: string;
 	orderId?: string;
 	orderNumber?: string;
+}
+
+interface OrderSummary {
+	id: string;
+	orderNumber: string;
+	status: string;
+	paymentStatus: string;
+	totalAmount: number;
+	currency: string;
+	createdAt: Date;
+	updatedAt: Date;
+	paidAt: Date | null;
+	itemCount: number;
 }
 
 const FAILED_ORDER_STATUS_SET = new Set<string>(ORDER_STATUS_GROUPS.failed);
@@ -40,6 +54,17 @@ function buildTimeline(input: {
 		body: string | null;
 		createdAt: Date;
 	}>;
+	adminAuditLogs: Array<{
+		id: string;
+		action: string;
+		description: string | null;
+		createdAt: Date;
+		actorUser: {
+			email: string | null;
+			fullName: string | null;
+		} | null;
+	}>;
+	revenueVisible: boolean;
 }): TimelineEntry[] {
 	const events: TimelineEntry[] = [];
 	const registrationDate = input.user.registeredAt || input.user.createdAt;
@@ -98,7 +123,9 @@ function buildTimeline(input: {
 				id: `${order.id}-paid`,
 				type: 'payment',
 				title: `Payment confirmed (${order.orderNumber})`,
-				description: `Amount: ₦${Number(order.totalAmount || 0).toLocaleString()}`,
+				description: input.revenueVisible
+					? `Amount: ₦${Number(order.totalAmount || 0).toLocaleString()}`
+					: 'Payment confirmed.',
 				at: order.paidAt.toISOString(),
 				orderId: order.id,
 				orderNumber: order.orderNumber
@@ -126,6 +153,19 @@ function buildTimeline(input: {
 		});
 	});
 
+	input.adminAuditLogs.forEach((log) => {
+		const actorLabel = log.actorUser?.fullName || log.actorUser?.email || 'An admin';
+		const description = log.description?.trim() || log.action.replace(/_/g, ' ').toLowerCase();
+
+		events.push({
+			id: `${log.id}-admin-audit`,
+			type: 'admin',
+			title: 'Admin operation',
+			description: `${actorLabel}: ${description}`,
+			at: log.createdAt.toISOString()
+		});
+	});
+
 	return events.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 }
 
@@ -133,97 +173,126 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	if (!locals.user || locals.user.userType !== 'ADMIN') {
 		throw error(403, 'Unauthorized');
 	}
+	const revenueVisible = canViewRevenue(locals);
 
-	const user = await prisma.user.findUnique({
-		where: { id: params.id },
-		select: {
-			id: true,
-			email: true,
-			fullName: true,
-			phone: true,
-			userType: true,
-			isActive: true,
-			isAffiliateEnabled: true,
-			emailVerified: true,
-			emailVerifiedAt: true,
-			registeredAt: true,
-			lastLogin: true,
-			createdAt: true,
-			updatedAt: true,
-			wallet: {
-				select: {
-					balance: true
-				}
-			},
-			sessions: {
-				select: {
-					id: true,
-					createdAt: true,
-					expiresAt: true,
-					lastRefreshedAt: true
-				},
-				orderBy: { createdAt: 'desc' },
-				take: 8
-			},
-			orders: {
-				select: {
-					id: true,
-					orderNumber: true,
-					status: true,
-					paymentStatus: true,
-					totalAmount: true,
-					currency: true,
-					createdAt: true,
-					updatedAt: true,
-					paidAt: true,
-					orderItems: {
-						select: {
-							quantity: true
-						}
+	const [user, adminAuditLogs] = await Promise.all([
+		prisma.user.findUnique({
+			where: { id: params.id },
+			select: {
+				id: true,
+				email: true,
+				fullName: true,
+				phone: true,
+				userType: true,
+				isActive: true,
+				isAffiliateEnabled: true,
+				emailVerified: true,
+				emailVerifiedAt: true,
+				registeredAt: true,
+				lastLogin: true,
+				createdAt: true,
+				updatedAt: true,
+				wallet: {
+					select: {
+						balance: true
 					}
 				},
-				orderBy: { createdAt: 'desc' },
-				take: 80
-			},
-			emailNotifications: {
-				where: {
-					notificationType: 'admin_user_status'
+				sessions: {
+					select: {
+						id: true,
+						createdAt: true,
+						expiresAt: true,
+						lastRefreshedAt: true
+					},
+					orderBy: { createdAt: 'desc' },
+					take: 8
 				},
-				select: {
-					id: true,
-					body: true,
-					createdAt: true
+				orders: {
+					select: {
+						id: true,
+						orderNumber: true,
+						status: true,
+						paymentStatus: true,
+						totalAmount: true,
+						currency: true,
+						createdAt: true,
+						updatedAt: true,
+						paidAt: true,
+						orderItems: {
+							select: {
+								quantity: true
+							}
+						}
+					},
+					orderBy: { createdAt: 'desc' },
+					take: 80
 				},
-				orderBy: { createdAt: 'desc' },
-				take: 30
+				emailNotifications: {
+					where: {
+						notificationType: 'admin_user_status'
+					},
+					select: {
+						id: true,
+						body: true,
+						createdAt: true
+					},
+					orderBy: { createdAt: 'desc' },
+					take: 30
+				}
 			}
-		}
-	});
+		}),
+		prisma.adminAuditLog.findMany({
+			where: {
+				targetUserId: params.id
+			},
+			select: {
+				id: true,
+				action: true,
+				description: true,
+				createdAt: true,
+				actorUser: {
+					select: {
+						email: true,
+						fullName: true
+					}
+				}
+			},
+			orderBy: { createdAt: 'desc' },
+			take: 40
+		})
+	]);
 
 	if (!user) {
 		throw error(404, 'User not found');
 	}
 
-	const orderSummaries = user.orders.map((order) => ({
-		id: order.id,
-		orderNumber: order.orderNumber,
-		status: order.status,
-		paymentStatus: order.paymentStatus,
-		totalAmount: Number(order.totalAmount || 0),
-		currency: order.currency,
-		createdAt: order.createdAt,
-		updatedAt: order.updatedAt,
-		paidAt: order.paidAt,
-		itemCount: order.orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
-	}));
+	const orderSummaries: OrderSummary[] = user.orders.map((order) => ({
+			id: order.id,
+			orderNumber: order.orderNumber,
+			status: order.status,
+			paymentStatus: order.paymentStatus,
+			totalAmount: revenueVisible ? Number(order.totalAmount || 0) : 0,
+			currency: order.currency,
+			createdAt: order.createdAt,
+			updatedAt: order.updatedAt,
+			paidAt: order.paidAt,
+			itemCount: order.orderItems.reduce(
+				(sum: number, item: { quantity: number }) => sum + Number(item.quantity || 0),
+				0
+			)
+		})
+	);
 
 	const totals = {
 		orderCount: orderSummaries.length,
-		paidOrderCount: orderSummaries.filter((order) => REVENUE_ORDER_STATUS_SET.has(order.status))
-			.length,
-		totalSpent: orderSummaries
-			.filter((order) => REVENUE_ORDER_STATUS_SET.has(order.status))
-			.reduce((sum, order) => sum + order.totalAmount, 0)
+		paidOrderCount: orderSummaries.filter((order: OrderSummary) =>
+			REVENUE_ORDER_STATUS_SET.has(order.status)
+		).length,
+		totalSpent: revenueVisible
+			? orderSummaries
+					.filter((order: OrderSummary) => REVENUE_ORDER_STATUS_SET.has(order.status))
+					.reduce((sum: number, order: OrderSummary) => sum + order.totalAmount, 0)
+			: 0
 	};
 
 	const timeline = buildTimeline({
@@ -235,8 +304,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			lastLogin: user.lastLogin
 		},
 		orders: orderSummaries,
-		sessionLogins: user.sessions.map((session) => session.createdAt),
-		adminActionLogs: user.emailNotifications
+		sessionLogins: user.sessions.map((session: { createdAt: Date }) => session.createdAt),
+		adminActionLogs: user.emailNotifications,
+		adminAuditLogs,
+		revenueVisible
 	});
 
 	return {
@@ -257,13 +328,16 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			storeCreditBalance: Number(user.wallet?.balance || 0)
 		},
 		stats: totals,
-		recentSessions: user.sessions.map((session) => ({
-			id: session.id,
-			createdAt: session.createdAt,
-			lastRefreshedAt: session.lastRefreshedAt,
-			expiresAt: session.expiresAt
-		})),
+		recentSessions: user.sessions.map(
+			(session: { id: string; createdAt: Date; lastRefreshedAt: Date; expiresAt: Date }) => ({
+				id: session.id,
+				createdAt: session.createdAt,
+				lastRefreshedAt: session.lastRefreshedAt,
+				expiresAt: session.expiresAt
+			})
+		),
 		orders: orderSummaries,
-		timeline
+		timeline,
+		canViewRevenue: revenueVisible
 	};
 };

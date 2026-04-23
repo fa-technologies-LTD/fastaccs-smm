@@ -478,3 +478,21 @@ Validation snapshot for this batch:
 [CHECK] `npm run check` -> PASS (0 errors, existing accessibility warnings unchanged)
 [CHECK] `npm run build` -> PASS
 [CHECK] `npm run test:unit -- --run` -> FAIL in sandbox (Vitest listen EPERM + no discovered tests)
+
+BATCH 20: PHASE CLOSURE PASS — ROLES, PROMO, ANALYTICS, SETTINGS, QA PACK
+Date: April 23, 2026
+Tracking update mode: LOCAL-ONLY (pending push)
+
+[APPLIED] | Admin role model completed and wired through hooks | src/lib/auth/admin-roles.ts, src/hooks.server.ts | server-side enforcement needed beyond UI checks | centralized route-permission gate now blocks unauthorized role access for admin routes/APIs
+[APPLIED] | Finance visibility hardened for non-full-admin roles | src/lib/services/admin-revenue-visibility.ts + orders/users/analytics APIs and pages | non-full roles could still read monetary fields on some surfaces | server-side redaction + role-aware UI masking now applied
+[APPLIED] | Promotions engine completed for create/validate/redeem lifecycle | prisma schema + promotions services/routes + checkout/order/payment flows | promo-only scope approved, affiliate kept intact | end-to-end promo flow now authoritative on server and idempotent on payment success
+[APPLIED] | Lagos-timezone analytics depth added | src/lib/helpers/business-timezone.ts, src/routes/admin/analytics/+page.server.ts, src/routes/admin/analytics/+page.svelte | phase-2 breakdown and velocity widgets were missing | added platform/tier/day/week/month breakdowns, trend, conversion, stock velocity, stagnant-stock signals
+[APPLIED] | Settings architecture advanced (config-only controls) | src/routes/admin/settings/+page.server.ts, src/routes/admin/settings/+page.svelte, src/lib/services/admin-settings.ts | SMTP health/session controls missing | added SMTP health + test email, session list/revoke, role flag gating, invite placeholder
+[APPLIED] | Customer ops enrichment completed | src/routes/admin/users/+page.svelte, src/routes/admin/users/[id]/+page.server.ts, src/routes/admin/users/[id]/+page.svelte | timeline and history filter depth was partial | added admin audit timeline enrichment + quick filters for order/activity review
+[APPLIED] | Store credit admin wording + affiliate context hardening | src/routes/admin/wallets/+page.server.ts, src/routes/admin/wallets/+page.svelte | wallet terminology/context drift remained | admin surface now framed as Store Credit and scoped to affiliate-enabled users
+[APPLIED] | Formal regression + release scenario packs added | QA-REGRESSION-CHECKLIST.md, RELEASE-SCENARIO-PACK.md | Phase 0/7 checklist artifacts were missing | added explicit manual scenario and regression gating documents
+
+Validation snapshot for this batch:
+[CHECK] `npm run check` -> BLOCKED in this local runtime (`node v16.18.0` lacks required `structuredClone`/WebCrypto features used by current Svelte/Vite stack)
+[CHECK] `npx prisma generate` -> BLOCKED in this local runtime (`WebAssembly externref` unsupported on node v16; requires node v18+)
+[CHECK] Functional verification -> completed by targeted code-path review and static consistency sweep; full green validation remains required on project runtime (node 20+)

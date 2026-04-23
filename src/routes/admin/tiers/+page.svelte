@@ -16,6 +16,10 @@
 		applyTierSampleScreenshotSanitization,
 		sanitizeTierSampleScreenshotUrls
 	} from '$lib/helpers/tierSampleScreenshots';
+	import {
+		applyTierMerchandisingSanitization,
+		getTierMerchandisingState
+	} from '$lib/helpers/tier-merchandising';
 	import type { PageData } from './$types';
 	import { fade, fly } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
@@ -58,7 +62,11 @@
 			quality_score: 5,
 			delivery_time: '24-48 hours',
 			replacement_guarantee: true,
-			sample_screenshot_urls: [] as string[]
+			sample_screenshot_urls: [] as string[],
+			is_pinned: false,
+			pin_priority: 100,
+			is_featured: false,
+			featured_badge: 'Featured'
 		}
 	});
 
@@ -90,6 +98,7 @@
 	function openEditModal(tier: CategoryMetadata) {
 		selectedTier = tier;
 		const metadata = tier.metadata as any;
+		const merchandising = getTierMerchandisingState(metadata);
 		tierForm = {
 			name: tier.name as string,
 			slug: tier.slug as string,
@@ -110,7 +119,11 @@
 				quality_score: metadata?.quality_score || 5,
 				delivery_time: metadata?.delivery_time || '24-48 hours',
 				replacement_guarantee: metadata?.replacement_guarantee ?? true,
-				sample_screenshot_urls: sanitizeTierSampleScreenshotUrls(metadata?.sample_screenshot_urls)
+				sample_screenshot_urls: sanitizeTierSampleScreenshotUrls(metadata?.sample_screenshot_urls),
+				is_pinned: merchandising.isPinned,
+				pin_priority: merchandising.pinPriority ?? 100,
+				is_featured: merchandising.isFeatured,
+				featured_badge: merchandising.featuredBadge || 'Featured'
 			}
 		};
 		showEditModal = true;
@@ -137,7 +150,11 @@
 				quality_score: 5,
 				delivery_time: '24-48 hours',
 				replacement_guarantee: true,
-				sample_screenshot_urls: []
+				sample_screenshot_urls: [],
+				is_pinned: false,
+				pin_priority: 100,
+				is_featured: false,
+				featured_badge: 'Featured'
 			}
 		};
 	}
@@ -145,10 +162,12 @@
 	async function handleCreate() {
 		try {
 			// Clean up empty features
-			const cleanedMetadata = applyTierSampleScreenshotSanitization({
-				...tierForm.metadata,
-				features: tierForm.metadata.features.filter((feature) => feature.trim() !== '')
-			});
+			const cleanedMetadata = applyTierMerchandisingSanitization(
+				applyTierSampleScreenshotSanitization({
+					...tierForm.metadata,
+					features: tierForm.metadata.features.filter((feature) => feature.trim() !== '')
+				})
+			);
 
 			const newTier: CategoryInsert = {
 				name: tierForm.name,
@@ -186,10 +205,12 @@
 		loading = true;
 		try {
 			// Clean up empty features
-			const cleanedMetadata = applyTierSampleScreenshotSanitization({
-				...tierForm.metadata,
-				features: tierForm.metadata.features.filter((feature) => feature.trim() !== '')
-			});
+			const cleanedMetadata = applyTierMerchandisingSanitization(
+				applyTierSampleScreenshotSanitization({
+					...tierForm.metadata,
+					features: tierForm.metadata.features.filter((feature) => feature.trim() !== '')
+				})
+			);
 
 			const updates: CategoryUpdate = {
 				name: tierForm.name,
@@ -316,6 +337,7 @@
 		<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
 			{#each tiers as tier (tier.id)}
 				{@const metadata = tier.metadata as any}
+				{@const merchandising = getTierMerchandisingState(metadata)}
 				<div
 					animate:flip={{ duration: 500 }}
 					class="rounded-lg p-6"
@@ -329,6 +351,26 @@
 								{tier.name}
 							</h3>
 							<p class="mt-1 text-sm" style="color: var(--text-muted)">Tier • All Platforms</p>
+							{#if merchandising.isPinned || merchandising.isFeatured}
+								<div class="mt-2 flex flex-wrap gap-1.5">
+									{#if merchandising.isPinned}
+										<span
+											class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold"
+											style="background: rgba(251, 191, 36, 0.18); color: rgb(217, 119, 6); border: 1px solid rgba(251, 191, 36, 0.3);"
+										>
+											Pinned {merchandising.pinPriority ? `#${merchandising.pinPriority}` : ''}
+										</span>
+									{/if}
+									{#if merchandising.isFeatured}
+										<span
+											class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold"
+											style="background: rgba(34, 197, 94, 0.16); color: rgb(22, 163, 74); border: 1px solid rgba(34, 197, 94, 0.28);"
+										>
+											{merchandising.featuredBadge || 'Featured'}
+										</span>
+									{/if}
+								</div>
+							{/if}
 						</div>
 						<div class="flex items-center gap-1">
 							<button

@@ -12,7 +12,7 @@
 	const referralBaseUrl = $derived(
 		(publicEnv.PUBLIC_SITE_URL || PUBLIC_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : ''))
 			.trim()
-			.replace(/\/+$/, '') || 'https://fastaccs-smm.vercel.app'
+			.replace(/\/+$/, '') || 'https://smm.fastaccs.com'
 	);
 	const referralLink = $derived(
 		affiliateData?.affiliateCode ? `${referralBaseUrl}/?ref=${affiliateData.affiliateCode}` : ''

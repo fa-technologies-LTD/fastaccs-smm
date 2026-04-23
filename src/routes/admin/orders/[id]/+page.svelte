@@ -24,6 +24,7 @@
 	import { addToast } from '$lib/stores/toasts';
 	import type { OrderMetadata, OrderItemWithDetails } from '$lib/services/orders';
 	import { formatPrice } from '$lib/helpers/utils';
+	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
 
 	// Props from load function
 	interface Props {
@@ -31,10 +32,13 @@
 			order: OrderMetadata;
 			items: OrderItemWithDetails[];
 			error: string | null;
+			canViewRevenue?: boolean;
 		};
 	}
 
 	let { data }: Props = $props();
+	const canViewRevenue = Boolean(data.canViewRevenue);
+	let hideMonetaryAmounts = $state(false);
 
 	let order = $state(data.order);
 	let items = $state<OrderItemWithDetails[]>(data.items);
@@ -42,6 +46,9 @@
 	let showCredentials = $state(false);
 	let newNote = $state('');
 	let selectedDeliveryMethod = $state<'email' | 'whatsapp' | 'telegram'>('email');
+	if (typeof window !== 'undefined') {
+		hideMonetaryAmounts = localStorage.getItem(ADMIN_MONEY_VISIBILITY_KEY) === 'true';
+	}
 
 	// Helper functions
 	function getStatusIcon(status: string) {
@@ -100,6 +107,14 @@
 			default:
 				return 'Email';
 		}
+	}
+
+	function formatAdminAmount(amount: number): string {
+		return formatAdminMoney(amount, {
+			canViewRevenue,
+			hideMonetaryAmounts,
+			format: formatPrice
+		});
 	}
 
 	// Actions
@@ -251,35 +266,35 @@
 		<div class="mb-8">
 			<div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center">
 				<div class="flex items-start gap-3 sm:gap-4">
-				<button
-					onclick={goBack}
-					class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 transition-colors hover:bg-gray-50"
-				>
-					<ArrowLeft class="h-5 w-5" />
-				</button>
-				<div class="flex-1">
-					<div class="mb-2 flex items-center gap-3">
-						{#if order}
-							{@const StatusIcon = getStatusIcon(order.status)}
-							<StatusIcon class="h-6 w-6 {getStatusColor(order.status).split(' ')[0]}" />
-							<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text);">
-								Order #{getDisplayOrderId(order.id)}
-							</h1>
-							<span
-								class="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium {getStatusColor(
-									order.status
-								)}"
-							>
-								{formatStatusLabel(order.status)}
-							</span>
-						{/if}
+					<button
+						onclick={goBack}
+						class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 transition-colors hover:bg-gray-50"
+					>
+						<ArrowLeft class="h-5 w-5" />
+					</button>
+					<div class="flex-1">
+						<div class="mb-2 flex items-center gap-3">
+							{#if order}
+								{@const StatusIcon = getStatusIcon(order.status)}
+								<StatusIcon class="h-6 w-6 {getStatusColor(order.status).split(' ')[0]}" />
+								<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text);">
+									Order #{getDisplayOrderId(order.id)}
+								</h1>
+								<span
+									class="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium {getStatusColor(
+										order.status
+									)}"
+								>
+									{formatStatusLabel(order.status)}
+								</span>
+							{/if}
+						</div>
+						<p style="color: var(--text-muted);">
+							Placed on {new Date(order.created_at).toLocaleDateString()} at {new Date(
+								order.created_at
+							).toLocaleTimeString()}
+						</p>
 					</div>
-					<p style="color: var(--text-muted);">
-						Placed on {new Date(order.created_at).toLocaleDateString()} at {new Date(
-							order.created_at
-						).toLocaleTimeString()}
-					</p>
-				</div>
 				</div>
 
 				<!-- Quick Actions -->
@@ -351,7 +366,7 @@
 								<span class="text-sm font-medium text-gray-500">Total Amount</span>
 							</div>
 							<p class="text-2xl font-bold" style="color: var(--text);">
-								{formatPrice(Number(order.total_amount || 0))}
+								{formatAdminAmount(Number(order.total_amount || 0))}
 							</p>
 							<p class="text-sm text-gray-500">
 								{#if order.payment_id}
@@ -435,7 +450,7 @@
 									{#if showCredentials}
 										<div class="mb-3 rounded border border-gray-200 bg-gray-50 p-2">
 											<div class="text-[11px] text-gray-500">Password</div>
-											<div class="font-mono text-xs text-gray-900 break-all">
+											<div class="font-mono text-xs break-all text-gray-900">
 												{item.account_password || 'No password'}
 											</div>
 										</div>
@@ -622,7 +637,7 @@
 								<span class="text-sm font-medium text-gray-700">Commission Earned</span>
 								<span class="text-sm font-bold text-green-600">
 									{#if order.total_amount && order.metadata?.commissionRate}
-										{formatPrice(
+										{formatAdminAmount(
 											(Number(order.total_amount) * Number(order.metadata.commissionRate)) / 100
 										)}
 									{:else}

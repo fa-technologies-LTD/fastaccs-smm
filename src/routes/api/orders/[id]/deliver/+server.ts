@@ -36,7 +36,7 @@ function getBaseUrl(): string {
 	if (configuredBaseUrl) {
 		return configuredBaseUrl.replace(/\/+$/, '');
 	}
-	return 'https://fastaccs-smm.vercel.app';
+	return 'https://smm.fastaccs.com';
 }
 
 // POST /api/orders/[id]/deliver - Send allocated accounts to customer

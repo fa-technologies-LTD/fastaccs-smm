@@ -16,6 +16,8 @@ import { logOrderStatusTransition } from '$lib/services/order-audit';
 import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
+import { recordPromotionRedemption } from '$lib/services/promotions';
+import { isAutoDeliveryPausedSetting } from '$lib/services/admin-settings';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -88,6 +90,18 @@ function isPaymentCurrencyValid(orderCurrency: string | null | undefined, paidCu
 }
 
 async function recoverPaidOrderIfNeeded(orderId: string) {
+	await recordPromotionRedemption(orderId).catch((error) => {
+		console.warn('Failed to record promotion redemption during paid recovery:', error);
+	});
+
+	const autoDeliveryPaused = await isAutoDeliveryPausedSetting().catch(() => false);
+	if (autoDeliveryPaused) {
+		return {
+			fulfilled: false,
+			warning: 'Payment successful. Auto-delivery is currently paused by admin.'
+		};
+	}
+
 	try {
 		await sendOrderConfirmationEmailIfNeeded(orderId);
 	} catch (emailError) {
@@ -421,6 +435,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					fromPaymentStatus: order.paymentStatus,
 					toPaymentStatus: 'paid'
 				});
+
+				await recordPromotionRedemption(order.id).catch((error) => {
+					console.warn('Failed to record promotion redemption after verification:', error);
+				});
 			}
 
 			if (paidTransition.count === 0) {
@@ -459,6 +477,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						status: 'PAID'
 					});
 				}
+			}
+
+			const autoDeliveryPaused = await isAutoDeliveryPausedSetting().catch(() => false);
+			if (autoDeliveryPaused) {
+				return json({
+					success: true,
+					state: 'SUCCESS',
+					warning: 'Payment successful. Auto-delivery is currently paused by admin.',
+					orderId: order.id,
+					status: 'PAID'
+				});
 			}
 
 			const allocationResult = await allocateAccountsForOrder(order.id);

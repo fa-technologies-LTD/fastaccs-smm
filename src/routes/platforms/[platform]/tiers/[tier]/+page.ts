@@ -49,7 +49,14 @@ export const load: PageLoad = async ({ params, fetch }) => {
 			product_status: 'active',
 			tier_active: tierData.isActive,
 			platform_name: platformData.name,
-			platform_slug: platformData.slug
+			platform_slug: platformData.slug,
+			is_pinned: Boolean(tierData.isPinned),
+			pin_priority: typeof tierData.pinPriority === 'number' ? tierData.pinPriority : null,
+			is_featured: Boolean(tierData.isFeatured),
+			featured_badge:
+				typeof tierData.featuredBadge === 'string' && tierData.featuredBadge.trim().length > 0
+					? tierData.featuredBadge.trim()
+					: null
 		};
 
 		return {

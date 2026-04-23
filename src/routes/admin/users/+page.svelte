@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import {
 		Users,
 		UserCheck,
@@ -16,8 +17,11 @@
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import { formatPrice, formatDate, exportToCSV } from '$lib/helpers/utils';
+	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
 
 	let { data }: { data: PageData } = $props();
+	const canViewRevenue = Boolean(data.canViewRevenue);
+	let hideMonetaryAmounts = $state(false);
 
 	let searchQuery = $state('');
 	let filterType = $state('all');
@@ -90,7 +94,7 @@
 			'Is Affiliate': user.isAffiliateEnabled ? 'Yes' : 'No',
 			'Email Verified': user.emailVerified ? 'Yes' : 'No',
 			'Total Orders': user.orderCount,
-			'Total Spent': user.totalSpent,
+			'Total Spent': canViewRevenue ? user.totalSpent : 'RESTRICTED',
 			'Store Credit': user.storeCreditBalance || 0,
 			'Registered At': formatDate(user.registeredAt),
 			'Last Login': user.lastLogin ? formatDate(user.lastLogin) : 'Never'
@@ -102,6 +106,14 @@
 			type: 'success',
 			title: 'Export completed successfully',
 			duration: 3000
+		});
+	}
+
+	function formatAdminAmount(amount: number): string {
+		return formatAdminMoney(amount, {
+			canViewRevenue,
+			hideMonetaryAmounts,
+			format: formatPrice
 		});
 	}
 
@@ -147,6 +159,10 @@
 			});
 		}
 	}
+
+	onMount(() => {
+		hideMonetaryAmounts = localStorage.getItem(ADMIN_MONEY_VISIBILITY_KEY) === 'true';
+	});
 </script>
 
 <div class="space-y-6">
@@ -265,7 +281,7 @@
 						Total Revenue
 					</p>
 					<p class="mt-1 text-xl font-bold" style="color: var(--status-success);">
-						{formatPrice(stats.totalRevenue)}
+						{formatAdminAmount(stats.totalRevenue)}
 					</p>
 				</div>
 				<div class="rounded-full p-2" style="background: rgba(5,212,113,0.12);">
@@ -453,7 +469,7 @@
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<div class="text-sm font-medium" style="color: var(--text);">
-										{formatPrice(user.totalSpent)}
+										{formatAdminAmount(user.totalSpent)}
 									</div>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
@@ -482,7 +498,7 @@
 											style="background: rgba(105,109,250,0.14); color: var(--link); border: 1px solid rgba(170,173,255,0.25);"
 										>
 											<ArrowUpRight class="h-3.5 w-3.5" />
-											Details
+											View Activity
 										</a>
 										<button
 											onclick={() =>

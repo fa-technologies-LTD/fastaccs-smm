@@ -17,6 +17,10 @@ export interface TierInventory {
 	tier_active: boolean;
 	platform_name: string;
 	platform_slug: string;
+	is_pinned: boolean;
+	pin_priority: number | null;
+	is_featured: boolean;
+	featured_badge: string | null;
 }
 
 export interface Platform {
@@ -70,6 +74,10 @@ export const load: PageLoad = async ({ params, fetch }): Promise<PageData> => {
 					price: number;
 					productId: string | null;
 					productStatus: string;
+					isPinned?: boolean;
+					pinPriority?: number | null;
+					isFeatured?: boolean;
+					featuredBadge?: string | null;
 				}) => ({
 					product_id: tier.productId || tier.id,
 					tier_name: tier.name,
@@ -84,7 +92,14 @@ export const load: PageLoad = async ({ params, fetch }): Promise<PageData> => {
 					product_status: tier.productStatus,
 					tier_active: tier.isActive,
 					platform_name: platform.name,
-					platform_slug: platform.slug
+					platform_slug: platform.slug,
+					is_pinned: Boolean(tier.isPinned),
+					pin_priority: typeof tier.pinPriority === 'number' ? tier.pinPriority : null,
+					is_featured: Boolean(tier.isFeatured),
+					featured_badge:
+						typeof tier.featuredBadge === 'string' && tier.featuredBadge.trim().length > 0
+							? tier.featuredBadge.trim()
+							: null
 				})
 			);
 		} else {

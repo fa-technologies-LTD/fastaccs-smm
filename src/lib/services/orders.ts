@@ -25,6 +25,7 @@ export interface CreateOrderData {
 	currency: string;
 	paymentMethod: string;
 	affiliateCode?: string;
+	promotionCode?: string;
 }
 
 export interface OrderSummary {
@@ -156,7 +157,8 @@ export async function getOrderStats(
 		startDate?: string;
 		endDate?: string;
 		status?: string;
-	} = {}
+	} = {},
+	fetchFn: typeof fetch = fetch
 ) {
 	try {
 		const searchParams = new URLSearchParams();
@@ -164,7 +166,7 @@ export async function getOrderStats(
 		if (options.endDate) searchParams.set('endDate', options.endDate);
 		if (options.status) searchParams.set('status', options.status);
 
-		const response = await fetch(`/api/orders/stats?${searchParams.toString()}`);
+		const response = await fetchFn(`/api/orders/stats?${searchParams.toString()}`);
 		return await handleApiCall(response);
 	} catch (error) {
 		console.error('Failed to fetch order stats:', error);
