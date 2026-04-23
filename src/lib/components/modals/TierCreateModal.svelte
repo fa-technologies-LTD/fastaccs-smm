@@ -2,6 +2,7 @@
 	import { fade, fly } from 'svelte/transition';
 	import { Plus, Trash2, Target } from '@lucide/svelte';
 	import type { CategoryMetadata } from '$lib/services/categories';
+	import TierSampleScreenshotFields from '$lib/components/modals/TierSampleScreenshotFields.svelte';
 
 	interface Props {
 		open: boolean;
@@ -26,6 +27,7 @@
 				quality_score: number;
 				delivery_time: string;
 				replacement_guarantee: boolean;
+				sample_screenshot_urls: string[];
 			};
 		};
 		loading?: boolean;
@@ -148,6 +150,8 @@
 									placeholder="Brief description of this tier"
 								></textarea>
 							</div>
+
+							<TierSampleScreenshotFields bind:urls={tierForm.metadata.sample_screenshot_urls} />
 
 							<!-- Features -->
 							<div class="md:col-span-2">

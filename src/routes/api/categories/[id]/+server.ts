@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
+import { applyTierSampleScreenshotSanitization } from '$lib/helpers/tierSampleScreenshots';
 
 // GET /api/categories/[id] - Get single category
 export async function GET({ params }) {
@@ -39,12 +40,35 @@ export async function PUT({ params, request, locals }) {
 		const id = params.id;
 		const updates = await request.json();
 		const { parentId, metadata, ...rest } = updates;
+		let nextMetadata = metadata;
+
+		if (metadata !== undefined) {
+			const existingCategory = await prisma.category.findUnique({
+				where: { id },
+				select: { categoryType: true }
+			});
+
+			if (!existingCategory) {
+				return json({ data: null, error: 'Category not found' }, { status: 404 });
+			}
+
+			const targetCategoryType =
+				typeof rest.categoryType === 'string' ? rest.categoryType : existingCategory.categoryType;
+
+			if (targetCategoryType === 'tier') {
+				const metadataObject =
+					metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+						? (metadata as Record<string, unknown>)
+						: {};
+				nextMetadata = applyTierSampleScreenshotSanitization(metadataObject);
+			}
+		}
 
 		const data = await prisma.category.update({
 			where: { id },
 			data: {
 				...rest,
-				...(metadata && { metadata: JSON.parse(JSON.stringify(metadata)) }),
+				...(metadata !== undefined && { metadata: JSON.parse(JSON.stringify(nextMetadata)) }),
 				...(parentId !== undefined && {
 					parent: parentId
 						? {

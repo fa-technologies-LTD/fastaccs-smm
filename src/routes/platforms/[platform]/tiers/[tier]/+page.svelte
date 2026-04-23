@@ -16,11 +16,14 @@
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
+	import ImagePreviewModal from '$lib/components/ImagePreviewModal.svelte';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { showError, showWarning, showSuccess } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import { getPlatformColor, getPlatformIcon } from '$lib/helpers/platformColors';
 	import { formatPrice } from '$lib/helpers/utils';
+	import { getTierSampleScreenshotUrls } from '$lib/helpers/tierSampleScreenshots';
+	import { buildCloudinaryOptimizedImageUrl } from '$lib/helpers/cloudinary';
 
 	interface Props {
 		data: PageData;
@@ -34,7 +37,16 @@
 	let notifyLoading = $state(false);
 	let notifySubscribed = $state(false);
 	let autoSubscribeHandled = $state(false);
+	let samplePreviewOpen = $state(false);
+	let samplePreviewIndex = $state(0);
 	const currentUser = $derived((page.data as { user?: { id: string } | null }).user || null);
+	const tierSampleScreenshots = $derived(getTierSampleScreenshotUrls(data.tier?.metadata));
+	const tierSampleScreenshotsGallery = $derived(
+		tierSampleScreenshots.map((url) => buildCloudinaryOptimizedImageUrl(url, { width: 720 }))
+	);
+	const tierSampleScreenshotsModal = $derived(
+		tierSampleScreenshots.map((url) => buildCloudinaryOptimizedImageUrl(url, { width: 1280 }))
+	);
 
 	// Format follower count
 	function formatFollowers(count: number): string {
@@ -223,6 +235,11 @@
 		}
 	}
 
+	function openSamplePreview(index: number): void {
+		samplePreviewIndex = index;
+		samplePreviewOpen = true;
+	}
+
 	onMount(async () => {
 		await loadNotifySubscriptionStatus();
 
@@ -292,14 +309,12 @@
 						{ label: data.tier.tier_name, active: true }
 					]}
 				/>
-
-			
 			</div>
 		</section>
 
 		<!-- Tier Header -->
 		<section
-			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} relative pt-8 pb-4 sm:py-8  text-white`}
+			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} relative pt-8 pb-4 text-white  sm:py-8`}
 		>
 			<!-- Stock Status Badge - Small Corner Position -->
 			<div class="absolute top-4 right-4">
@@ -353,6 +368,46 @@
 				<div class="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:gap-12">
 					<!-- Left Column - Details -->
 					<div class="lg:col-span-2">
+						{#if tierSampleScreenshots.length > 0}
+							<div class="mb-8 rounded-xl bg-[var(--color-card)] p-6 shadow sm:p-8">
+								<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+									<h2 class="text-xl font-bold text-[var(--color-text-primary)] sm:text-2xl">
+										Sample Screenshots
+									</h2>
+									<span
+										class="rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase"
+										style="background: rgba(59, 130, 246, 0.14); color: rgb(37, 99, 235); border: 1px solid rgba(59, 130, 246, 0.28);"
+									>
+										Sample Only
+									</span>
+								</div>
+								<p class="mb-4 text-sm text-[var(--color-text-muted)] sm:text-base">
+									These are sample previews to help your decision before checkout. Delivered
+									accounts can vary in exact appearance.
+								</p>
+
+								<div class="sample-screenshot-scroll">
+									{#each tierSampleScreenshotsGallery as screenshotUrl, screenshotIndex (screenshotUrl)}
+										<button
+											type="button"
+											class="sample-screenshot-item"
+											onclick={() => openSamplePreview(screenshotIndex)}
+											aria-label={`View sample screenshot ${screenshotIndex + 1}`}
+										>
+											<img
+												src={screenshotUrl}
+												alt={`${data.tier.tier_name} sample screenshot ${screenshotIndex + 1}`}
+												class="h-full w-full object-cover"
+												loading="lazy"
+												decoding="async"
+											/>
+											<span class="sample-screenshot-tag">Sample Screenshot</span>
+										</button>
+									{/each}
+								</div>
+							</div>
+						{/if}
+
 						<!-- Tier Description -->
 						<div class="mb-8 rounded-xl bg-[var(--color-card)] p-6 shadow sm:p-8">
 							<h2 class="mb-4 text-xl font-bold text-[var(--color-text-primary)] sm:text-2xl">
@@ -397,7 +452,7 @@
 										{/each}
 									</div>
 								</div>
-							{/if}	
+							{/if}
 							<!-- Account Age Info -->
 							{#if data.tier.metadata?.age_hint}
 								<div class="rounded-lg bg-[var(--color-surface)] p-4">
@@ -550,4 +605,68 @@
 	{/if}
 </main>
 
+{#if tierSampleScreenshots.length > 0}
+	<ImagePreviewModal
+		images={tierSampleScreenshotsModal}
+		isOpen={samplePreviewOpen}
+		onClose={() => (samplePreviewOpen = false)}
+		initialIndex={samplePreviewIndex}
+	/>
+{/if}
+
 <Footer />
+
+<style>
+	.sample-screenshot-scroll {
+		display: grid;
+		grid-auto-flow: column;
+		grid-auto-columns: minmax(220px, 78%);
+		gap: 0.75rem;
+		overflow-x: auto;
+		padding-bottom: 0.25rem;
+		scroll-snap-type: x mandatory;
+	}
+
+	.sample-screenshot-item {
+		position: relative;
+		aspect-ratio: 9 / 16;
+		min-height: 220px;
+		overflow: hidden;
+		border-radius: 0.75rem;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+		scroll-snap-align: start;
+	}
+
+	.sample-screenshot-item:focus-visible {
+		outline: 2px solid var(--color-accent);
+		outline-offset: 2px;
+	}
+
+	.sample-screenshot-tag {
+		position: absolute;
+		left: 0.5rem;
+		bottom: 0.5rem;
+		border-radius: 0.375rem;
+		border: 1px solid rgba(148, 163, 184, 0.4);
+		background: rgba(2, 6, 23, 0.7);
+		padding: 0.2rem 0.4rem;
+		font-size: 0.65rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		color: #f8fafc;
+	}
+
+	@media (min-width: 768px) {
+		.sample-screenshot-scroll {
+			grid-auto-flow: row;
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+			overflow: visible;
+		}
+
+		.sample-screenshot-item {
+			min-height: 0;
+		}
+	}
+</style>

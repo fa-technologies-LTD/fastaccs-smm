@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { Plus, Trash2, Target } from '@lucide/svelte';
+	import TierSampleScreenshotFields from '$lib/components/modals/TierSampleScreenshotFields.svelte';
 
 	interface Props {
 		open: boolean;
@@ -24,6 +25,7 @@
 				quality_score: number;
 				delivery_time: string;
 				replacement_guarantee: boolean;
+				sample_screenshot_urls: string[];
 			};
 		};
 		loading?: boolean;
@@ -115,6 +117,8 @@
 									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 								></textarea>
 							</div>
+
+							<TierSampleScreenshotFields bind:urls={tierForm.metadata.sample_screenshot_urls} />
 
 							<!-- Features -->
 							<div class="md:col-span-2">

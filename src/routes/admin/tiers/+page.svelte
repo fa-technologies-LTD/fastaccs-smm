@@ -12,6 +12,10 @@
 	import { createCategory, updateCategory, deleteCategory } from '$lib/services/categories';
 	import { showSuccess, showError } from '$lib/stores/toasts';
 	import type { CategoryMetadata, CategoryInsert, CategoryUpdate } from '$lib/services/categories';
+	import {
+		applyTierSampleScreenshotSanitization,
+		sanitizeTierSampleScreenshotUrls
+	} from '$lib/helpers/tierSampleScreenshots';
 	import type { PageData } from './$types';
 	import { fade, fly } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
@@ -53,7 +57,8 @@
 			features: [] as string[],
 			quality_score: 5,
 			delivery_time: '24-48 hours',
-			replacement_guarantee: true
+			replacement_guarantee: true,
+			sample_screenshot_urls: [] as string[]
 		}
 	});
 
@@ -104,7 +109,8 @@
 				features: metadata?.features || [],
 				quality_score: metadata?.quality_score || 5,
 				delivery_time: metadata?.delivery_time || '24-48 hours',
-				replacement_guarantee: metadata?.replacement_guarantee ?? true
+				replacement_guarantee: metadata?.replacement_guarantee ?? true,
+				sample_screenshot_urls: sanitizeTierSampleScreenshotUrls(metadata?.sample_screenshot_urls)
 			}
 		};
 		showEditModal = true;
@@ -130,7 +136,8 @@
 				features: [],
 				quality_score: 5,
 				delivery_time: '24-48 hours',
-				replacement_guarantee: true
+				replacement_guarantee: true,
+				sample_screenshot_urls: []
 			}
 		};
 	}
@@ -138,10 +145,10 @@
 	async function handleCreate() {
 		try {
 			// Clean up empty features
-			const cleanedMetadata = {
+			const cleanedMetadata = applyTierSampleScreenshotSanitization({
 				...tierForm.metadata,
 				features: tierForm.metadata.features.filter((feature) => feature.trim() !== '')
-			};
+			});
 
 			const newTier: CategoryInsert = {
 				name: tierForm.name,
@@ -179,10 +186,10 @@
 		loading = true;
 		try {
 			// Clean up empty features
-			const cleanedMetadata = {
+			const cleanedMetadata = applyTierSampleScreenshotSanitization({
 				...tierForm.metadata,
 				features: tierForm.metadata.features.filter((feature) => feature.trim() !== '')
-			};
+			});
 
 			const updates: CategoryUpdate = {
 				name: tierForm.name,

@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
+import { applyTierSampleScreenshotSanitization } from '$lib/helpers/tierSampleScreenshots';
 
 // GET /api/categories - Get categories with optional filtering
 export async function GET({ url, locals }) {
@@ -50,6 +51,11 @@ export async function POST({ request, locals }) {
 
 		const category = await request.json();
 		const { parentId, ...rest } = category;
+		const rawMetadata = JSON.parse(JSON.stringify(rest.metadata || {}));
+		const metadata =
+			rest.categoryType === 'tier'
+				? applyTierSampleScreenshotSanitization(rawMetadata as Record<string, unknown>)
+				: rawMetadata;
 
 		const data = await prisma.category.create({
 			data: {
@@ -57,7 +63,7 @@ export async function POST({ request, locals }) {
 				slug: rest.slug,
 				description: rest.description,
 				categoryType: rest.categoryType,
-				metadata: JSON.parse(JSON.stringify(rest.metadata || {})),
+				metadata: JSON.parse(JSON.stringify(metadata)),
 				sortOrder: rest.sortOrder || 0,
 				isActive: rest.isActive ?? true,
 				...(parentId && {

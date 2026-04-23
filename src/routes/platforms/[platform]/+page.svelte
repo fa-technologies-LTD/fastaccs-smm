@@ -7,7 +7,6 @@
 		Star,
 		Users,
 		Package,
-		ArrowRight,
 		ChevronRight,
 		X,
 		Minus,
@@ -654,24 +653,18 @@
 									{/if}
 								</div>
 
-								<!-- Action Label - Always at Bottom -->
-									<button
-										type="button"
-										onclick={() =>
-											tier.visible_available === 0 ? subscribeToRestock(tier) : openQuickAddModal(tier)}
-										disabled={tier.visible_available === 0
-											? isTierRestockLoading(tier.category_id) ||
-												isTierRestockSubscribed(tier.category_id)
-											: false}
-										aria-label={tier.visible_available === 0
-											? `Notify me for ${tier.tier_name}`
-											: `Quick add ${tier.tier_name}`}
-										class="mx-6 mt-6 mb-6 flex items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:active:scale-100"
-										style={tier.visible_available === 0
-											? 'background: var(--btn-primary-gradient); color: #04140C;'
-											: 'background: var(--btn-primary-gradient); color: #04140C;'}
-									>
-										{#if tier.visible_available === 0}
+								<!-- Actions -->
+								<div class="mx-6 mt-6 mb-6 space-y-2">
+									{#if tier.visible_available === 0}
+										<button
+											type="button"
+											onclick={() => subscribeToRestock(tier)}
+											disabled={isTierRestockLoading(tier.category_id) ||
+												isTierRestockSubscribed(tier.category_id)}
+											aria-label={`Notify me for ${tier.tier_name}`}
+											class="flex w-full items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:active:scale-100"
+											style="background: var(--btn-primary-gradient); color: #04140C;"
+										>
 											{#if isTierRestockLoading(tier.category_id)}
 												<span>Saving...</span>
 											{:else if isTierRestockSubscribed(tier.category_id)}
@@ -681,11 +674,30 @@
 												<BellRing class="h-4 w-4" />
 												<span>Notify me</span>
 											{/if}
-										{:else}
-											<span>Select This Tier</span>
-											<ArrowRight class="h-4 w-4" />
-										{/if}
-									</button>
+										</button>
+									{:else}
+										<button
+											type="button"
+											onclick={() => openQuickAddModal(tier)}
+											aria-label={`Quick add ${tier.tier_name}`}
+											class="flex w-full items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+											style="background: var(--btn-primary-gradient); color: #04140C;"
+										>
+											<ShoppingCart class="h-4 w-4" />
+											<span>Add to Cart</span>
+										</button>
+									{/if}
+
+									<a
+										href={getTierRoute(tier.tier_slug)}
+										class="inline-flex w-full items-center justify-center gap-1 rounded-lg py-3 text-center text-sm font-semibold transition-colors hover:opacity-90"
+										style="border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text);"
+										aria-label={`See details for ${tier.tier_name}`}
+									>
+										See Details
+										<ChevronRight class="h-4 w-4" />
+									</a>
+								</div>
 							</div>
 						{/each}
 					</div>
