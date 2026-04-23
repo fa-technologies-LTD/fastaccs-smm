@@ -14,6 +14,13 @@
 	let { data }: { data: PageData } = $props();
 
 	let stats = $derived(data.stats || {});
+	let integrity = $derived(
+		data.integrity || {
+			ok: true,
+			checks: [],
+			mismatches: []
+		}
+	);
 </script>
 
 <div class="space-y-6">
@@ -21,6 +28,33 @@
 	<div>
 		<h1 class="text-2xl font-bold" style="color: var(--text)">Analytics Dashboard</h1>
 		<p class="mt-1" style="color: var(--text-muted)">Track your business performance and metrics</p>
+	</div>
+
+	<!-- Integrity Signal -->
+	<div
+		class="rounded-lg border p-4"
+		style={`background: ${integrity.ok ? 'var(--status-success-bg)' : 'var(--status-warning-bg)'}; border-color: ${integrity.ok ? 'var(--status-success-border)' : 'var(--status-warning-border)'}`}
+	>
+		<div class="flex flex-wrap items-center justify-between gap-2">
+			<p
+				class="text-sm font-semibold"
+				style={`color: ${integrity.ok ? 'var(--status-success)' : 'var(--status-warning)'}`}
+			>
+				{integrity.ok
+					? 'Metrics integrity checks passed'
+					: `${integrity.mismatches.length} metric check${integrity.mismatches.length === 1 ? '' : 's'} need attention`}
+			</p>
+			<span class="text-xs" style="color: var(--text-muted);"> Admin-only consistency gate </span>
+		</div>
+		{#if !integrity.ok}
+			<div class="mt-3 space-y-1 text-sm" style="color: var(--text);">
+				{#each integrity.mismatches as check}
+					<div>
+						{check.label}: expected {check.expected}, actual {check.actual} (delta {check.delta})
+					</div>
+				{/each}
+			</div>
+		{/if}
 	</div>
 
 	<!-- Key Metrics -->

@@ -460,3 +460,21 @@ Validation snapshot for this batch:
 
 Open note before push:
 [LOW] | Example copy still references old domain in one help text sample | src/routes/how-it-works/+page.svelte | replace `fastaccs.vercel.app/?ref=JD001` with `smm.fastaccs.com/?ref=JD001` in next copy pass
+
+BATCH 19: PHASE 2A — DATA TRUTH LAYER + USER OPS (WORKING)
+Date: April 22, 2026
+Tracking update mode: LOCAL-ONLY (pending push)
+
+[APPLIED] | Canonical order status mapper module | src/lib/helpers/order-status.ts | status/revenue grouping was duplicated across admin surfaces | centralized status groups + helpers used by server and client
+[APPLIED] | Admin metrics service now uses canonical mapper | src/lib/services/admin-metrics.ts | local constants could drift from UI/API logic | switched snapshot counting/revenue filters to shared mapper
+[APPLIED] | Analytics server status/revenue unification | src/routes/admin/analytics/+page.server.ts | hardcoded revenue/status arrays in analytics loader | all revenue-sensitive queries now use canonical mapper
+[APPLIED] | Admin-only metrics integrity checks | src/routes/admin/analytics/+page.server.ts, src/routes/admin/analytics/+page.svelte | no mismatch detection between aggregates/snapshots | added integrity checks (orders count + revenue consistency) with visible warning panel
+[APPLIED] | Orders page "View" navigation reliability | src/routes/admin/orders/+page.svelte | anchor-only behavior could be brittle in some mobile/admin states | added explicit client navigation fallback via `goto(...)`
+[APPLIED] | User revenue consistency with canonical statuses | src/routes/admin/users/+page.server.ts | totalSpent included cancelled/failed orders | totals now count only successful payment statuses
+[APPLIED] | User detail operations page (timeline + sold logs) | src/routes/admin/users/[id]/+page.server.ts, src/routes/admin/users/[id]/+page.svelte, src/routes/admin/users/+page.svelte | no per-user timeline or direct order drill-in | added user detail route with activity timeline, order logs, recent sessions, and one-click admin order links
+[APPLIED] | Admin suspend/unblock action audit trail | src/routes/api/admin/users/[id]/status/+server.ts | status toggles had no persistent admin-action record | writes `admin_user_status` audit rows to `email_notifications` while preserving immediate session invalidation on suspend
+
+Validation snapshot for this batch:
+[CHECK] `npm run check` -> PASS (0 errors, existing accessibility warnings unchanged)
+[CHECK] `npm run build` -> PASS
+[CHECK] `npm run test:unit -- --run` -> FAIL in sandbox (Vitest listen EPERM + no discovered tests)

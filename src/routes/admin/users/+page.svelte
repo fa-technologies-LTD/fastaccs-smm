@@ -9,6 +9,7 @@
 		Calendar,
 		Search,
 		Download,
+		ArrowUpRight,
 		ShieldOff,
 		ShieldCheck
 	} from '@lucide/svelte';
@@ -474,22 +475,36 @@
 									</div>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
-									<button
-										onclick={() =>
-											toggleUserAccess(user.id, user.isActive, user.fullName || user.email || 'User')}
-										class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all hover:scale-95 active:scale-90"
-										style={user.isActive
-											? 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border)'
-											: 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border)'}
-									>
-										{#if user.isActive}
-											<ShieldOff class="h-3.5 w-3.5" />
-											Suspend
-										{:else}
-											<ShieldCheck class="h-3.5 w-3.5" />
-											Unblock
-										{/if}
-									</button>
+									<div class="flex flex-col items-start gap-1.5">
+										<a
+											href={`/admin/users/${user.id}`}
+											class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all hover:opacity-80"
+											style="background: rgba(105,109,250,0.14); color: var(--link); border: 1px solid rgba(170,173,255,0.25);"
+										>
+											<ArrowUpRight class="h-3.5 w-3.5" />
+											Details
+										</a>
+										<button
+											onclick={() =>
+												toggleUserAccess(
+													user.id,
+													user.isActive,
+													user.fullName || user.email || 'User'
+												)}
+											class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all hover:scale-95 active:scale-90"
+											style={user.isActive
+												? 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border)'
+												: 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border)'}
+										>
+											{#if user.isActive}
+												<ShieldOff class="h-3.5 w-3.5" />
+												Suspend
+											{:else}
+												<ShieldCheck class="h-3.5 w-3.5" />
+												Unblock
+											{/if}
+										</button>
+									</div>
 								</td>
 							</tr>
 						{/each}

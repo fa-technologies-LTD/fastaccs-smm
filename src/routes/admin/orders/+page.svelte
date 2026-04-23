@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { getOrders, getOrderStats } from '$lib/services/orders';
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
+	import { ORDER_STATUS_GROUPS, getOrderStatusLabel } from '$lib/helpers/order-status';
 
 	// Props from page data
 	let { data } = $props<{
@@ -40,15 +42,19 @@
 
 	// Calculate summary stats from filtered orders
 	const summaryStats = $derived.by(() => {
-		const pendingStatuses = new Set(['pending', 'pending_payment']);
-		const processingStatuses = new Set(['processing', 'paid']);
-		const completedStatuses = new Set(['completed']);
-		const revenueStatuses = new Set(['paid', 'completed']);
+		const pendingStatuses = new Set(ORDER_STATUS_GROUPS.pending);
+		const processingStatuses = new Set(ORDER_STATUS_GROUPS.processing);
+		const completedStatuses = new Set(ORDER_STATUS_GROUPS.completed);
+		const revenueStatuses = new Set(ORDER_STATUS_GROUPS.revenue);
 
 		const totalOrders = filteredOrders.length;
 		const pendingOrders = filteredOrders.filter((o: any) => pendingStatuses.has(o.status)).length;
-		const processingOrders = filteredOrders.filter((o: any) => processingStatuses.has(o.status)).length;
-		const completedOrders = filteredOrders.filter((o: any) => completedStatuses.has(o.status)).length;
+		const processingOrders = filteredOrders.filter((o: any) =>
+			processingStatuses.has(o.status)
+		).length;
+		const completedOrders = filteredOrders.filter((o: any) =>
+			completedStatuses.has(o.status)
+		).length;
 		const totalRevenue = filteredOrders
 			.filter((o: any) => revenueStatuses.has(o.status))
 			.reduce((sum: number, o: any) => sum + Number(o.totalAmount || 0), 0);
@@ -109,14 +115,14 @@
 	}
 
 	function formatStatusLabel(status: string): string {
-		return String(status || '')
-			.replace(/_/g, ' ')
-			.replace(/\b\w/g, (char) => char.toUpperCase());
+		return getOrderStatusLabel(status);
 	}
 
 	function getDisplayOrderRef(order: any): string {
 		if (order.orderNumber) return order.orderNumber;
-		return `ORD-${String(order.id || '').slice(0, 8).toUpperCase()}`;
+		return `ORD-${String(order.id || '')
+			.slice(0, 8)
+			.toUpperCase()}`;
 	}
 </script>
 
@@ -255,6 +261,10 @@
 					</div>
 					<a
 						href={`/admin/orders/${order.id}`}
+						onclick={(event) => {
+							event.preventDefault();
+							goto(`/admin/orders/${order.id}`);
+						}}
 						class="rounded-full px-3 py-1.5 text-xs font-semibold"
 						style="background: rgba(105,109,250,0.14); border: 1px solid rgba(170,173,255,0.25); color: var(--link);"
 					>
@@ -338,38 +348,42 @@
 								{/if}
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-									{#if order.affiliateCode}
-										<a
-											href={`/admin/affiliates?code=${order.affiliateCode}`}
-											class="font-mono text-sm font-medium transition-colors"
-											style="color: var(--link);"
-										>
+								{#if order.affiliateCode}
+									<a
+										href={`/admin/affiliates?code=${order.affiliateCode}`}
+										class="font-mono text-sm font-medium transition-colors"
+										style="color: var(--link);"
+									>
 										{order.affiliateCode}
 									</a>
 								{:else}
 									<span class="text-sm" style="color: var(--text-dim);">—</span>
 								{/if}
 							</td>
-								<td class="px-6 py-4 whitespace-nowrap">
-									<span
-										class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
-										style={getStatusStyle(order.status)}
-									>
-										{formatStatusLabel(order.status)}
-									</span>
-								</td>
+							<td class="px-6 py-4 whitespace-nowrap">
+								<span
+									class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
+									style={getStatusStyle(order.status)}
+								>
+									{formatStatusLabel(order.status)}
+								</span>
+							</td>
 							<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
 								{formatPrice(Number(order.totalAmount || 0))}
 							</td>
 							<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
 								{formatDate(order.createdAt)}
 							</td>
-								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap">
-									<a
-										href={`/admin/orders/${order.id}`}
-										style="color: var(--link);"
-										class="transition-opacity hover:opacity-80"
-									>
+							<td class="px-6 py-4 text-sm font-medium whitespace-nowrap">
+								<a
+									href={`/admin/orders/${order.id}`}
+									onclick={(event) => {
+										event.preventDefault();
+										goto(`/admin/orders/${order.id}`);
+									}}
+									style="color: var(--link);"
+									class="transition-opacity hover:opacity-80"
+								>
 									View
 								</a>
 							</td>

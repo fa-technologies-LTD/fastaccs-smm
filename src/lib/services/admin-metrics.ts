@@ -1,12 +1,7 @@
 import { prisma } from '$lib/prisma';
 import { serverCache } from '$lib/helpers/cache';
 import { getLowStockThresholdSetting } from '$lib/services/admin-settings';
-
-const PENDING_ORDER_STATUSES = ['pending', 'pending_payment'] as const;
-const PROCESSING_ORDER_STATUSES = ['processing', 'paid'] as const;
-const COMPLETED_ORDER_STATUSES = ['completed'] as const;
-const FAILED_ORDER_STATUSES = ['failed', 'cancelled'] as const;
-const REVENUE_ORDER_STATUSES = ['paid', 'completed'] as const;
+import { ORDER_STATUS_GROUPS } from '$lib/helpers/order-status';
 
 export interface AdminOrderStatsSnapshot {
 	total_orders: number;
@@ -51,19 +46,19 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 		todaysRevenue
 	] = await Promise.all([
 		prisma.order.count(),
-		prisma.order.count({ where: { status: { in: [...PENDING_ORDER_STATUSES] } } }),
-		prisma.order.count({ where: { status: { in: [...PROCESSING_ORDER_STATUSES] } } }),
-		prisma.order.count({ where: { status: { in: [...COMPLETED_ORDER_STATUSES] } } }),
-		prisma.order.count({ where: { status: { in: [...FAILED_ORDER_STATUSES] } } }),
+		prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.pending] } } }),
+		prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.processing] } } }),
+		prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.completed] } } }),
+		prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.failed] } } }),
 		prisma.order.count({ where: { createdAt: { gte: today } } }),
 		prisma.order.aggregate({
 			_sum: { totalAmount: true },
-			where: { status: { in: [...REVENUE_ORDER_STATUSES] } }
+			where: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } }
 		}),
 		prisma.order.aggregate({
 			_sum: { totalAmount: true },
 			where: {
-				status: { in: [...REVENUE_ORDER_STATUSES] },
+				status: { in: [...ORDER_STATUS_GROUPS.revenue] },
 				createdAt: { gte: today }
 			}
 		})
@@ -159,10 +154,4 @@ export function invalidateAdminStatsCache(): void {
 	serverCache.invalidate('admin:inventory-stats');
 }
 
-export const ORDER_STATUS_GROUPS = {
-	pending: [...PENDING_ORDER_STATUSES],
-	processing: [...PROCESSING_ORDER_STATUSES],
-	completed: [...COMPLETED_ORDER_STATUSES],
-	failed: [...FAILED_ORDER_STATUSES],
-	revenue: [...REVENUE_ORDER_STATUSES]
-} as const;
+export { ORDER_STATUS_GROUPS } from '$lib/helpers/order-status';

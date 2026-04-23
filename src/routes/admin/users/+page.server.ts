@@ -1,18 +1,26 @@
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
+import { ORDER_STATUS_GROUPS } from '$lib/helpers/order-status';
 
 export const load: PageServerLoad = async () => {
 	try {
 		// Get all users with their order and wallet info
 		const usersRaw = await prisma.user.findMany({
 			include: {
-				orders: true,
+				orders: {
+					select: {
+						status: true,
+						totalAmount: true
+					}
+				},
 				wallet: true
 			},
 			orderBy: {
 				createdAt: 'desc'
 			}
 		});
+
+		const revenueStatuses = new Set<string>(ORDER_STATUS_GROUPS.revenue);
 
 		// Convert Decimal types to numbers and aggregate stats
 		const users = usersRaw.map((user) => ({
@@ -28,7 +36,9 @@ export const load: PageServerLoad = async () => {
 			lastLogin: user.lastLogin,
 			createdAt: user.createdAt,
 			orderCount: user.orders.length,
-			totalSpent: user.orders.reduce((sum, order) => sum + Number(order.totalAmount), 0),
+			totalSpent: user.orders
+				.filter((order) => revenueStatuses.has(order.status))
+				.reduce((sum, order) => sum + Number(order.totalAmount), 0),
 			storeCreditBalance: user.wallet ? Number(user.wallet.balance) : 0,
 			walletBalance: user.wallet ? Number(user.wallet.balance) : 0
 		}));

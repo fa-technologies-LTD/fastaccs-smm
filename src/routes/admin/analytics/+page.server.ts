@@ -1,8 +1,16 @@
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
 import { getInventoryStatsSnapshot, getOrderStatsSnapshot } from '$lib/services/admin-metrics';
+import { ORDER_STATUS_GROUPS } from '$lib/helpers/order-status';
 
-const REVENUE_STATUSES = ['paid', 'completed'] as const;
+type IntegrityCheckResult = {
+	key: string;
+	label: string;
+	expected: number;
+	actual: number;
+	delta: number;
+	ok: boolean;
+};
 
 export const load: PageServerLoad = async ({ locals }) => {
 	try {
@@ -22,62 +30,60 @@ export const load: PageServerLoad = async ({ locals }) => {
 		const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 		const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-		// Total Revenue
-		const revenueResult = await prisma.order.aggregate({
-			where: { status: { in: [...REVENUE_STATUSES] } },
-			_sum: { totalAmount: true }
-		});
-
-		const lastMonthRevenue = await prisma.order.aggregate({
-			where: {
-				status: { in: [...REVENUE_STATUSES] },
-				createdAt: { gte: startOfLastMonth, lte: endOfLastMonth }
-			},
-			_sum: { totalAmount: true }
-		});
-
-		const thisMonthRevenue = await prisma.order.aggregate({
-			where: {
-				status: { in: [...REVENUE_STATUSES] },
-				createdAt: { gte: startOfMonth }
-			},
-			_sum: { totalAmount: true }
-		});
+		const [lastMonthRevenue, thisMonthRevenue] = await Promise.all([
+			prisma.order.aggregate({
+				where: {
+					status: { in: [...ORDER_STATUS_GROUPS.revenue] },
+					createdAt: { gte: startOfLastMonth, lte: endOfLastMonth }
+				},
+				_sum: { totalAmount: true }
+			}),
+			prisma.order.aggregate({
+				where: {
+					status: { in: [...ORDER_STATUS_GROUPS.revenue] },
+					createdAt: { gte: startOfMonth }
+				},
+				_sum: { totalAmount: true }
+			})
+		]);
 
 		// Total Orders
 		const totalOrders = orderStatsSnapshot.total_orders;
-		const lastMonthOrders = await prisma.order.count({
-			where: { createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } }
-		});
-		const thisMonthOrders = await prisma.order.count({
-			where: { createdAt: { gte: startOfMonth } }
-		});
+		const [lastMonthOrders, thisMonthOrders] = await Promise.all([
+			prisma.order.count({
+				where: { createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } }
+			}),
+			prisma.order.count({
+				where: { createdAt: { gte: startOfMonth } }
+			})
+		]);
 
 		// Total Customers
-		const totalCustomers = await prisma.user.count({
-			where: { userType: { in: ['REGISTERED', 'CONVERTED'] } }
-		});
-		const lastMonthCustomers = await prisma.user.count({
-			where: {
-				userType: { in: ['REGISTERED', 'CONVERTED'] },
-				createdAt: { gte: startOfLastMonth, lte: endOfLastMonth }
-			}
-		});
-		const thisMonthCustomers = await prisma.user.count({
-			where: {
-				userType: { in: ['REGISTERED', 'CONVERTED'] },
-				createdAt: { gte: startOfMonth }
-			}
-		});
+		const [totalCustomers, lastMonthCustomers, thisMonthCustomers] = await Promise.all([
+			prisma.user.count({
+				where: { userType: { in: ['REGISTERED', 'CONVERTED'] } }
+			}),
+			prisma.user.count({
+				where: {
+					userType: { in: ['REGISTERED', 'CONVERTED'] },
+					createdAt: { gte: startOfLastMonth, lte: endOfLastMonth }
+				}
+			}),
+			prisma.user.count({
+				where: {
+					userType: { in: ['REGISTERED', 'CONVERTED'] },
+					createdAt: { gte: startOfMonth }
+				}
+			})
+		]);
 
-		// Accounts Sold (delivered status)
 		// Accounts sold should come from successful order items, not delivered-only account status.
 		const [accountsSoldAggregate, lastMonthAccountsAggregate, thisMonthAccountsAggregate] =
 			await Promise.all([
 				prisma.orderItem.aggregate({
 					where: {
 						order: {
-							status: { in: ['paid', 'completed'] }
+							status: { in: [...ORDER_STATUS_GROUPS.revenue] }
 						}
 					},
 					_sum: { quantity: true }
@@ -85,7 +91,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				prisma.orderItem.aggregate({
 					where: {
 						order: {
-							status: { in: ['paid', 'completed'] },
+							status: { in: [...ORDER_STATUS_GROUPS.revenue] },
 							createdAt: { gte: startOfLastMonth, lte: endOfLastMonth }
 						}
 					},
@@ -94,7 +100,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				prisma.orderItem.aggregate({
 					where: {
 						order: {
-							status: { in: ['paid', 'completed'] },
+							status: { in: [...ORDER_STATUS_GROUPS.revenue] },
 							createdAt: { gte: startOfMonth }
 						}
 					},
@@ -113,25 +119,24 @@ export const load: PageServerLoad = async ({ locals }) => {
 		});
 
 		// Inventory Stats
-		const totalAccounts = await prisma.account.count();
-		const availableAccounts = await prisma.account.count({
-			where: { status: 'available' }
-		});
-		const soldAccounts = await prisma.account.count({
-			where: { status: { in: ['allocated', 'delivered'] } }
-		});
-		const pendingAccounts = await prisma.account.count({
-			where: { status: 'assigned' }
-		});
+		const [totalAccounts, soldAccounts, pendingAccounts] = await Promise.all([
+			prisma.account.count(),
+			prisma.account.count({
+				where: { status: { in: ['allocated', 'delivered'] } }
+			}),
+			prisma.account.count({
+				where: { status: 'assigned' }
+			})
+		]);
 
 		// Top Categories
 		const topCategories = await prisma.orderItem.groupBy({
-			by: ['categoryId'],
 			where: {
 				order: {
-					status: { in: ['paid', 'completed'] }
+					status: { in: [...ORDER_STATUS_GROUPS.revenue] }
 				}
 			},
+			by: ['categoryId'],
 			_sum: { totalPrice: true, quantity: true },
 			_count: { id: true },
 			orderBy: { _sum: { totalPrice: 'desc' } },
@@ -152,9 +157,61 @@ export const load: PageServerLoad = async ({ locals }) => {
 			})
 		);
 
+		// Integrity checks: compare canonical snapshot values with direct aggregates.
+		const [directTotalOrders, directRevenueAggregate, revenueFromOrderItemsAggregate] =
+			await Promise.all([
+				prisma.order.count(),
+				prisma.order.aggregate({
+					where: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } },
+					_sum: { totalAmount: true }
+				}),
+				prisma.orderItem.aggregate({
+					where: { order: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } } },
+					_sum: { totalPrice: true }
+				})
+			]);
+
+		const integrityChecks: IntegrityCheckResult[] = [
+			{
+				key: 'orders_total',
+				label: 'Total orders snapshot matches direct count',
+				expected: orderStatsSnapshot.total_orders,
+				actual: directTotalOrders,
+				delta: directTotalOrders - orderStatsSnapshot.total_orders,
+				ok: orderStatsSnapshot.total_orders === directTotalOrders
+			},
+			{
+				key: 'revenue_snapshot_vs_orders',
+				label: 'Revenue snapshot matches order aggregate',
+				expected: orderStatsSnapshot.total_revenue,
+				actual: Number(directRevenueAggregate._sum.totalAmount || 0),
+				delta:
+					Number(directRevenueAggregate._sum.totalAmount || 0) - orderStatsSnapshot.total_revenue,
+				ok:
+					Math.abs(
+						Number(directRevenueAggregate._sum.totalAmount || 0) - orderStatsSnapshot.total_revenue
+					) < 0.01
+			},
+			{
+				key: 'revenue_orders_vs_items',
+				label: 'Revenue from orders matches revenue from order items',
+				expected: Number(directRevenueAggregate._sum.totalAmount || 0),
+				actual: Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0),
+				delta:
+					Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0) -
+					Number(directRevenueAggregate._sum.totalAmount || 0),
+				ok:
+					Math.abs(
+						Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0) -
+							Number(directRevenueAggregate._sum.totalAmount || 0)
+					) < 0.01
+			}
+		];
+		const integrityMismatches = integrityChecks.filter((check) => !check.ok);
+
 		return {
 			stats: {
-				totalRevenue: Number(revenueResult._sum.totalAmount || orderStatsSnapshot.total_revenue || 0),
+				totalRevenue: Number(orderStatsSnapshot.total_revenue || 0),
 				revenueChange:
 					((Number(thisMonthRevenue._sum.totalAmount || 0) -
 						Number(lastMonthRevenue._sum.totalAmount || 0)) /
@@ -177,11 +234,17 @@ export const load: PageServerLoad = async ({ locals }) => {
 				totalCommissions: Number(affiliateStats._sum.totalCommission || 0),
 
 				totalAccounts,
-				availableAccounts: inventorySnapshot.total_available || availableAccounts,
+				availableAccounts: inventorySnapshot.total_available,
 				soldAccounts,
 				pendingAccounts,
 
 				topCategories: categoriesWithNames
+			},
+			integrity: {
+				checkedAt: new Date().toISOString(),
+				ok: integrityMismatches.length === 0,
+				checks: integrityChecks,
+				mismatches: integrityMismatches
 			}
 		};
 	} catch (error) {

@@ -68,6 +68,29 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 		}
 	});
 
+	try {
+		const actionLabel = nextIsActive ? 'unblocked' : 'suspended';
+		const adminActor =
+			locals.user.fullName || locals.user.email || `admin:${locals.user.id.slice(0, 8)}`;
+		const targetLabel =
+			existingUser.email || existingUser.fullName || `user:${targetUserId.slice(0, 8)}`;
+
+		await prisma.emailNotification.create({
+			data: {
+				userId: targetUserId,
+				email: existingUser.email || `${targetUserId.slice(0, 8)}@users.fastaccs.local`,
+				notificationType: 'admin_user_status',
+				referenceId: targetUserId,
+				subject: `User access ${actionLabel}`,
+				body: `${adminActor} ${actionLabel} ${targetLabel}.`,
+				status: 'sent',
+				sentAt: new Date()
+			}
+		});
+	} catch (auditError) {
+		console.warn('Failed to persist admin user status audit log:', auditError);
+	}
+
 	if (!nextIsActive) {
 		await invalidateUserSessions(targetUserId);
 	}
