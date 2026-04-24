@@ -56,11 +56,14 @@ export async function updateUserFromGoogle(
 	userId: string,
 	googleUser: GoogleUserData
 ): Promise<User> {
+	const userType = getUserTypeFromEmail(googleUser.email);
+
 	return await prisma.user.update({
 		where: { id: userId },
 		data: {
 			fullName: googleUser.name,
 			avatarUrl: googleUser.picture,
+			userType,
 			lastLogin: new Date()
 		}
 	});

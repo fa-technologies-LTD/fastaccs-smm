@@ -42,11 +42,22 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	const requiredPermission = getRequiredAdminPermission(event.url.pathname, event.request.method);
 	if (requiredPermission && !hasAdminPermission(event.locals.adminContext, requiredPermission)) {
+		const isAdminPage = event.url.pathname.startsWith('/admin');
 		if (event.url.pathname.startsWith('/api/')) {
 			return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), {
 				status: 403,
 				headers: {
 					'content-type': 'application/json'
+				}
+			});
+		}
+
+		if (isAdminPage && !event.locals.user) {
+			const returnUrl = encodeURIComponent(event.url.pathname + event.url.search);
+			return new Response(null, {
+				status: 302,
+				headers: {
+					location: `/auth/login?returnUrl=${returnUrl}`
 				}
 			});
 		}

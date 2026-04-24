@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { verifyPassword } from '$lib/auth/password';
 import { createSession, generateSessionToken, setSessionTokenCookie } from '$lib/auth/session';
+import { getUserTypeFromEmail } from '$lib/auth/admin';
 
 interface LoginPayload {
 	email?: unknown;
@@ -71,7 +72,10 @@ export const POST: RequestHandler = async (event) => {
 
 		await prisma.user.update({
 			where: { id: user.id },
-			data: { lastLogin: new Date() }
+			data: {
+				lastLogin: new Date(),
+				userType: getUserTypeFromEmail(email)
+			}
 		});
 
 		const sessionToken = generateSessionToken();
