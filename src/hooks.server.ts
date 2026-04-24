@@ -1,4 +1,5 @@
 // Server-side hooks for session management
+import { env } from '$env/dynamic/private';
 import { validateSessionToken } from '$lib/auth/session';
 import {
 	getAdminContext,
@@ -12,12 +13,81 @@ import {
 } from '$lib/services/admin-audit';
 import { startPaymentReconciliationScheduler } from '$lib/services/payment-reconciliation';
 import { startWinBackScheduler } from '$lib/services/winback';
-import type { Handle } from '@sveltejs/kit';
+import type { Handle, RequestEvent } from '@sveltejs/kit';
 
 startPaymentReconciliationScheduler();
 startWinBackScheduler();
 
+function getCanonicalBaseUrl(): URL | null {
+	const candidates = [env.PUBLIC_BASE_URL, env.PUBLIC_SITE_URL]
+		.map((value) => (value || '').trim())
+		.filter(Boolean);
+
+	for (const candidate of candidates) {
+		try {
+			return new URL(candidate);
+		} catch {
+			// Ignore invalid URL values and continue.
+		}
+	}
+
+	return null;
+}
+
+function getIncomingHost(event: RequestEvent): string {
+	const forwardedHost = event.request.headers.get('x-forwarded-host');
+	const host = forwardedHost || event.url.host;
+	return (host || '').split(',')[0].trim().toLowerCase();
+}
+
+function getRedirectSourceHosts(): Set<string> {
+	const fromEnv = (env.CANONICAL_REDIRECT_SOURCE_HOSTS || '')
+		.split(',')
+		.map((value) => value.trim().toLowerCase())
+		.filter(Boolean);
+
+	const defaults = ['fastaccs-smm.vercel.app'];
+	return new Set([...defaults, ...fromEnv]);
+}
+
+function getCanonicalRedirectTarget(event: RequestEvent): URL | null {
+	if (event.url.pathname.startsWith('/api/webhooks/')) {
+		return null;
+	}
+
+	const canonicalBase = getCanonicalBaseUrl();
+	if (!canonicalBase) {
+		return null;
+	}
+
+	const incomingHost = getIncomingHost(event);
+	if (!incomingHost) {
+		return null;
+	}
+
+	const sourceHosts = getRedirectSourceHosts();
+	if (!sourceHosts.has(incomingHost)) {
+		return null;
+	}
+
+	if (incomingHost === canonicalBase.host.toLowerCase()) {
+		return null;
+	}
+
+	return new URL(`${event.url.pathname}${event.url.search}`, canonicalBase);
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
+	const canonicalRedirectTarget = getCanonicalRedirectTarget(event);
+	if (canonicalRedirectTarget) {
+		return new Response(null, {
+			status: 308,
+			headers: {
+				location: canonicalRedirectTarget.toString()
+			}
+		});
+	}
+
 	// Skip CSRF check for webhook endpoints
 	// if (event.url.pathname.startsWith('/api/webhooks/')) {
 	// 	return resolve(event, {
