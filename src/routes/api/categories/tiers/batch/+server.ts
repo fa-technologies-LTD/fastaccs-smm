@@ -8,6 +8,10 @@ function isUuid(value: string): boolean {
 	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function isSlug(value: string): boolean {
+	return /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(value);
+}
+
 export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const { ids } = await request.json();
@@ -16,20 +20,25 @@ export const POST: RequestHandler = async ({ request }) => {
 			return json({ error: 'Invalid tier IDs' }, { status: 400 });
 		}
 
-		const normalizedIds = Array.from(
+		const normalizedInputs = Array.from(
 			new Set(
 				ids
 					.filter((id): id is string => typeof id === 'string')
 					.map((id) => id.trim())
-					.filter((id) => id.length > 0 && isUuid(id))
+					.filter((id) => id.length > 0)
 			)
 		);
 
-		if (normalizedIds.length === 0) {
+		const uuidIds = normalizedInputs.filter((id) => isUuid(id));
+		const slugIds = normalizedInputs
+			.filter((id) => !isUuid(id) && isSlug(id))
+			.map((id) => id.toLowerCase());
+
+		if (uuidIds.length === 0 && slugIds.length === 0) {
 			return json({ error: 'Invalid tier IDs' }, { status: 400 });
 		}
 
-		if (normalizedIds.length > MAX_TIER_BATCH_IDS) {
+		if (uuidIds.length + slugIds.length > MAX_TIER_BATCH_IDS) {
 			return json(
 				{
 					error: `Too many tier IDs requested. Maximum ${MAX_TIER_BATCH_IDS} IDs per request.`
@@ -40,9 +49,12 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		const tiers = await prisma.category.findMany({
 			where: {
-				id: { in: normalizedIds },
 				categoryType: 'tier',
-				isActive: true
+				isActive: true,
+				OR: [
+					...(uuidIds.length > 0 ? [{ id: { in: uuidIds } }] : []),
+					...(slugIds.length > 0 ? [{ slug: { in: slugIds } }] : [])
+				]
 			},
 			include: {
 				parent: {

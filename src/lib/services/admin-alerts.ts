@@ -149,6 +149,24 @@ export async function sendCriticalAdminAlert(params: {
 
 	const dedupeKey = params.dedupeKey || `${params.source}:${params.title}`;
 	const cooldownMs = Math.max(1_000, params.cooldownMs ?? CRITICAL_ALERT_COOLDOWN_MS);
+	const referenceId = `critical:${dedupeKey}`;
+
+	const recentlySentInDb = await prisma.emailNotification.findFirst({
+		where: {
+			notificationType: 'admin_broadcast',
+			referenceId,
+			status: 'sent',
+			createdAt: {
+				gte: new Date(Date.now() - cooldownMs)
+			}
+		},
+		select: { id: true }
+	});
+	if (recentlySentInDb) {
+		criticalAlertCooldown.set(dedupeKey, Date.now());
+		return { sent: false, reason: 'cooldown' };
+	}
+
 	const lastSent = criticalAlertCooldown.get(dedupeKey);
 	if (lastSent && Date.now() - lastSent < cooldownMs) {
 		return { sent: false, reason: 'cooldown' };
@@ -161,7 +179,7 @@ export async function sendCriticalAdminAlert(params: {
 			subject: `[FastAccs Ops] ${params.title}`,
 			body: `${params.message}\n\nSource: ${params.source}`,
 			notificationType: 'admin_broadcast',
-			referenceId: `critical:${params.source}`,
+			referenceId,
 			showCta: false
 		});
 

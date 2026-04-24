@@ -4,7 +4,6 @@
 	import { onMount } from 'svelte';
 	import { env as publicEnv } from '$env/dynamic/public';
 
-	import favicon from '$lib/assets/favicon.png';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import PageLoadingBar from '$lib/components/PageLoadingBar.svelte';
 	import CookieConsentBar from '$lib/components/CookieConsentBar.svelte';
@@ -89,10 +88,6 @@
 		document.cookie = `${announcementBanner.dismissCookieName}=1; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax${secureFlag}`;
 	}
 </script>
-
-<svelte:head>
-	<link rel="icon" href={favicon} />
-</svelte:head>
 
 <PageLoadingBar />
 

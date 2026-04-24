@@ -43,6 +43,33 @@ function hasMonnifyConfig(): boolean {
 	return Boolean(env.MONNIFY_API_KEY && env.MONNIFY_SECRET_KEY && env.MONNIFY_BASE_URL);
 }
 
+function isMissingPromotionColumnError(error: unknown): boolean {
+	if (!error || typeof error !== 'object') return false;
+
+	const candidate = error as {
+		code?: unknown;
+		message?: unknown;
+		meta?: { column_name?: unknown; column?: unknown };
+	};
+
+	const code = typeof candidate.code === 'string' ? candidate.code : '';
+	if (code !== 'P2022') return false;
+
+	const message = typeof candidate.message === 'string' ? candidate.message : '';
+	const metaColumn =
+		typeof candidate.meta?.column_name === 'string'
+			? candidate.meta.column_name
+			: typeof candidate.meta?.column === 'string'
+				? candidate.meta.column
+				: '';
+
+	return (
+		message.includes('orders.promotion_id') ||
+		metaColumn.includes('orders.promotion_id') ||
+		metaColumn.includes('promotion_id')
+	);
+}
+
 function isPaymentAmountValid(orderTotal: number, paidAmount: number): boolean {
 	if (!Number.isFinite(orderTotal) || !Number.isFinite(paidAmount)) return false;
 	return paidAmount + 0.01 >= orderTotal;
@@ -346,6 +373,7 @@ export function startPaymentReconciliationScheduler(): void {
 	if (!hasMonnifyConfig()) return;
 
 	const globalKey = '__fastaccsPaymentReconcileIntervalStarted__';
+	const pausedKey = '__fastaccsPaymentReconcilePaused__';
 	const globalScope = globalThis as unknown as Record<string, boolean>;
 	if (globalScope[globalKey]) {
 		return;
@@ -355,7 +383,32 @@ export function startPaymentReconciliationScheduler(): void {
 	const intervalMs = Math.max(Number(env.PAYMENT_RECONCILE_INTERVAL_MS || 300000), 60000);
 
 	setInterval(() => {
+		if (globalScope[pausedKey]) {
+			return;
+		}
+
 		void reconcilePendingPayments({ limit: 50 }).catch((error) => {
+			if (isMissingPromotionColumnError(error)) {
+				globalScope[pausedKey] = true;
+				console.error(
+					'[payments.reconcile] paused: database schema is missing orders.promotion_id; run prisma migrations'
+				);
+				void sendCriticalAdminAlert({
+					title: 'Payment reconciliation paused (migration required)',
+					message:
+						'Database schema is behind code: missing orders.promotion_id. Run `npx prisma migrate deploy && npx prisma generate` on production and redeploy.',
+					source: 'payments.reconcile.scheduler',
+					dedupeKey: 'payments-reconcile-schema-mismatch',
+					cooldownMs: 24 * 60 * 60 * 1000
+				}).catch((notifyError) => {
+					console.error(
+						'Failed to notify admin about reconciliation schema mismatch:',
+						notifyError
+					);
+				});
+				return;
+			}
+
 			console.error('[payments.reconcile] scheduler_error', error);
 			void sendCriticalAdminAlert({
 				title: 'Payment reconciliation scheduler error',

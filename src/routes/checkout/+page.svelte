@@ -79,6 +79,13 @@
 		try {
 			cartItems = await cart.getItemsWithTiers();
 			cartTotal = await cart.getTotal();
+			if (cartItems.length === 0 && cart.itemCount === 0) {
+				if (cart.error) {
+					showWarning('Cart refreshed', cart.error);
+				}
+				goto('/platforms');
+				return;
+			}
 			// Cart mutation invalidates promo context. Re-apply manually for deterministic totals.
 			if (promoAppliedCode) {
 				promoAppliedCode = null;

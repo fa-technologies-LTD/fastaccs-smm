@@ -14,6 +14,14 @@ interface TierData {
 	} | null;
 }
 
+function isUuid(value: string): boolean {
+	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function normalizeLookupValue(value: string): string {
+	return value.trim();
+}
+
 function getPlatformIconFromMetadata(metadata: unknown): string | null {
 	if (!metadata || typeof metadata !== 'object') {
 		return null;
@@ -96,7 +104,8 @@ class CartStore {
 			// Validate and filter items
 			const validItems = data.items.filter(
 				(item) =>
-					item.tierId &&
+					typeof item.tierId === 'string' &&
+					item.tierId.trim().length > 0 &&
 					typeof item.quantity === 'number' &&
 					item.quantity > 0 &&
 					typeof item.addedAt === 'number'
@@ -189,7 +198,20 @@ class CartStore {
 		this.state.error = null;
 
 		try {
-			const tierIds = this.state.items.map((item) => item.tierId);
+			const tierIds = Array.from(
+				new Set(
+					this.state.items
+						.map((item) => normalizeLookupValue(item.tierId))
+						.filter((value) => value.length > 0)
+				)
+			);
+
+			if (tierIds.length === 0) {
+				this.state.items = [];
+				this.saveToStorage();
+				return [];
+			}
+
 			const response = await fetch('/api/categories/tiers/batch', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -197,19 +219,41 @@ class CartStore {
 			});
 
 			if (!response.ok) {
+				if (response.status === 400) {
+					this.state.items = [];
+					this.saveToStorage();
+					this.state.error = 'Your cart was refreshed. Please add items again.';
+					return [];
+				}
 				throw new Error('Failed to fetch tier data');
 			}
 
 			const { data: tiers }: { data: TierData[] } = await response.json();
+			const tiersById = new Map<string, TierData>();
+			const tiersBySlug = new Map<string, TierData>();
+
+			for (const tier of tiers) {
+				tiersById.set(tier.id, tier);
+				tiersBySlug.set(tier.slug.toLowerCase(), tier);
+			}
 
 			// Match items with tier data
 			const itemsWithTiers: CartItemWithTier[] = [];
+			let didNormalizeIds = false;
 
 			for (const item of this.state.items) {
-				const tier = tiers.find((t: TierData) => t.id === item.tierId);
+				const lookupValue = normalizeLookupValue(item.tierId);
+				const tier = isUuid(lookupValue)
+					? tiersById.get(lookupValue)
+					: tiersBySlug.get(lookupValue.toLowerCase()) || tiersById.get(lookupValue);
 				if (tier) {
+					if (item.tierId !== tier.id) {
+						didNormalizeIds = true;
+					}
+
 					itemsWithTiers.push({
 						...item,
+						tierId: tier.id,
 						tier: {
 							id: tier.id,
 							name: tier.name,
@@ -227,13 +271,25 @@ class CartStore {
 				}
 			}
 
-			// Remove items for deleted/inactive tiers
-			if (itemsWithTiers.length !== this.state.items.length) {
-				this.state.items = itemsWithTiers.map((item) => ({
-					tierId: item.tierId,
-					quantity: item.quantity,
-					addedAt: item.addedAt
-				}));
+			// Remove unavailable tiers and normalize legacy slug-based entries to canonical tier IDs.
+			if (itemsWithTiers.length !== this.state.items.length || didNormalizeIds) {
+				const mergedItems = new Map<string, CartItem>();
+				for (const item of itemsWithTiers) {
+					const existing = mergedItems.get(item.tierId);
+					if (existing) {
+						existing.quantity += item.quantity;
+						existing.addedAt = Math.min(existing.addedAt, item.addedAt);
+						continue;
+					}
+
+					mergedItems.set(item.tierId, {
+						tierId: item.tierId,
+						quantity: item.quantity,
+						addedAt: item.addedAt
+					});
+				}
+
+				this.state.items = Array.from(mergedItems.values());
 				this.saveToStorage();
 			}
 
