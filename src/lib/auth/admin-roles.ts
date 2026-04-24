@@ -241,6 +241,11 @@ export function getRequiredAdminPermission(
 ): AdminPermission | null {
 	const normalizedMethod = method.toUpperCase();
 
+	// Public storefront cart lookup endpoint.
+	if (pathname === '/api/categories/tiers/batch') {
+		return null;
+	}
+
 	if (pathname.startsWith('/api/categories')) {
 		return isWriteMethod(normalizedMethod) ? 'admin:catalog:manage' : null;
 	}
