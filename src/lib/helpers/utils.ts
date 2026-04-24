@@ -1,4 +1,6 @@
 // Account type definition
+import { resolveCredentialField } from '$lib/helpers/credential-links';
+
 type Account = {
 	username: string | null;
 	password: string | null;
@@ -7,24 +9,6 @@ type Account = {
 	twoFa?: string | null;
 	linkUrl?: string | null;
 };
-
-function isLikelyUrl(value: string | null | undefined): boolean {
-	const raw = String(value || '').trim();
-	if (!raw) return false;
-	return (
-		/^https?:\/\//i.test(raw) ||
-		/^www\./i.test(raw) ||
-		raw.includes('fastaccs.com/') ||
-		raw.includes('x.com/') ||
-		raw.includes('instagram.com/')
-	);
-}
-
-function normalizeUrlLike(value: string | null | undefined): string {
-	return String(value || '')
-		.trim()
-		.replace(/\s+/g, '');
-}
 
 // Format price to Nigerian Naira
 export function formatPrice(price: number): string {
@@ -95,13 +79,13 @@ export function copyAccountDetails(
 		}) => void;
 	}
 ): void {
-	const twoFa = isLikelyUrl(account.twoFa) ? normalizeUrlLike(account.twoFa) : account.twoFa;
-	const link = normalizeUrlLike(account.linkUrl);
+	const twoFa = resolveCredentialField(account.twoFa);
+	const link = resolveCredentialField(account.linkUrl);
 	let details = `Username: ${account.username}\nPassword: ${account.password}`;
 	if (account.email) details += `\nEmail: ${account.email}`;
 	if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
-	if (twoFa) details += `\n2FA: ${twoFa}`;
-	if (link) details += `\nLink: ${link}`;
+	if (twoFa.display) details += `\n2FA: ${twoFa.display}`;
+	if (link.display) details += `\nLink: ${link.display}`;
 
 	copyToClipboard(details, {
 		successMessage: 'Account details copied to clipboard!',
@@ -122,13 +106,13 @@ export function copyAllAccounts(
 ): void {
 	const allDetails = accounts
 		.map((account, index) => {
-			const twoFa = isLikelyUrl(account.twoFa) ? normalizeUrlLike(account.twoFa) : account.twoFa;
-			const link = normalizeUrlLike(account.linkUrl);
+			const twoFa = resolveCredentialField(account.twoFa);
+			const link = resolveCredentialField(account.linkUrl);
 			let details = `Account ${index + 1}:\nUsername: ${account.username}\nPassword: ${account.password}`;
 			if (account.email) details += `\nEmail: ${account.email}`;
 			if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
-			if (twoFa) details += `\n2FA: ${twoFa}`;
-			if (link) details += `\nLink: ${link}`;
+			if (twoFa.display) details += `\n2FA: ${twoFa.display}`;
+			if (link.display) details += `\nLink: ${link.display}`;
 			return details;
 		})
 		.join('\n\n');

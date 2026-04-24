@@ -2,54 +2,21 @@
 	import { Package, CheckCircle, Copy, Clock, Shield, Lock } from '@lucide/svelte';
 	import { addToast } from '$lib/stores/toasts';
 	import { copyToClipboard } from '$lib/helpers/utils';
+	import { resolveCredentialField } from '$lib/helpers/credential-links';
 
 	let { initialPurchases } = $props();
 	let purchases = $state<any[]>(initialPurchases);
 
-	function isLikelyUrl(value: string | null | undefined): boolean {
-		const raw = String(value || '').trim();
-		if (!raw) return false;
-		return (
-			/^https?:\/\//i.test(raw) ||
-			/^www\./i.test(raw) ||
-			raw.includes('fastaccs.com/') ||
-			raw.includes('x.com/') ||
-			raw.includes('instagram.com/')
-		);
-	}
-
-	function normalizeUrlLike(value: string): string {
-		return value.trim().replace(/\s+/g, '');
-	}
-
-	function getTwoFaDisplay(twoFa: string | null | undefined): string {
-		const raw = String(twoFa || '').trim();
-		if (!raw) return '';
-		return isLikelyUrl(raw) ? normalizeUrlLike(raw) : raw;
-	}
-
-	function getLinkDisplay(linkUrl: string | null | undefined): string {
-		const raw = String(linkUrl || '').trim();
-		if (!raw) return '';
-		return normalizeUrlLike(raw);
-	}
-
-	function toExternalHref(value: string): string {
-		const cleaned = normalizeUrlLike(value);
-		if (/^https?:\/\//i.test(cleaned)) return cleaned;
-		return `https://${cleaned.replace(/^\/+/, '')}`;
-	}
-
 	function copyAccount(account: any, index: number) {
-		const twoFa = getTwoFaDisplay(account.twoFa);
-		const link = getLinkDisplay(account.linkUrl);
+		const twoFa = resolveCredentialField(account.twoFa);
+		const link = resolveCredentialField(account.linkUrl);
 		let details = `Account ${index + 1}\n`;
 		details += `Username: ${account.username}\n`;
 		details += `Password: ${account.password}`;
 		if (account.email) details += `\nEmail: ${account.email}`;
 		if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
-		if (twoFa) details += `\n2FA: ${twoFa}`;
-		if (link) details += `\nLink: ${link}`;
+		if (twoFa.display) details += `\n2FA: ${twoFa.display}`;
+		if (link.display) details += `\nLink: ${link.display}`;
 
 		copyToClipboard(details, {
 			successMessage: 'Account credentials copied',
@@ -60,13 +27,13 @@
 	function copyAllPurchaseAccounts(purchase: any) {
 		const header = `${purchase.categoryName} • ${purchase.orderNumber}\n${purchase.platform}\nDelivered: ${formatDateTime(purchase.deliveryDate || purchase.orderDate)}\n\n`;
 		const accountsWithHeader = purchase.accounts.map((account: any, index: number) => {
-			const twoFa = getTwoFaDisplay(account.twoFa);
-			const link = getLinkDisplay(account.linkUrl);
+			const twoFa = resolveCredentialField(account.twoFa);
+			const link = resolveCredentialField(account.linkUrl);
 			let details = `Account ${index + 1}\nUsername: ${account.username}\nPassword: ${account.password}`;
 			if (account.email) details += `\nEmail: ${account.email}`;
 			if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
-			if (twoFa) details += `\n2FA: ${twoFa}`;
-			if (link) details += `\nLink: ${link}`;
+			if (twoFa.display) details += `\n2FA: ${twoFa.display}`;
+			if (link.display) details += `\nLink: ${link.display}`;
 			return details;
 		});
 
@@ -146,7 +113,7 @@
 								class="flex flex-wrap items-center gap-2 text-xs sm:gap-3 sm:text-sm"
 								style="color: var(--text-muted);"
 							>
-									<span class="min-w-0 truncate font-medium">#{purchase.orderNumber}</span>
+								<span class="min-w-0 truncate font-medium">#{purchase.orderNumber}</span>
 								<span class="text-[color:var(--text-dim)]">•</span>
 								<div class="flex items-center gap-1.5">
 									<Clock class="h-3.5 w-3.5" style="color: var(--text-dim);" />
@@ -223,7 +190,9 @@
 											<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
 												>Username:</span
 											>
-											<span class="credential-value flex-1" style="color: var(--text);">{account.username}</span>
+											<span class="credential-value flex-1" style="color: var(--text);"
+												>{account.username}</span
+											>
 										</div>
 
 										<!-- Password -->
@@ -231,7 +200,9 @@
 											<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
 												>Password:</span
 											>
-											<span class="credential-value flex-1" style="color: var(--text);">{account.password}</span>
+											<span class="credential-value flex-1" style="color: var(--text);"
+												>{account.password}</span
+											>
 										</div>
 
 										<!-- Email (if available) -->
@@ -240,7 +211,9 @@
 												<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
 													>Email:</span
 												>
-												<span class="credential-value flex-1" style="color: var(--text);">{account.email}</span>
+												<span class="credential-value flex-1" style="color: var(--text);"
+													>{account.email}</span
+												>
 											</div>
 										{/if}
 
@@ -258,44 +231,56 @@
 
 										<!-- 2FA (if available) -->
 										{#if account.twoFa}
-											<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
-												<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
-													>2FA Code:</span
-												>
-												{#if isLikelyUrl(getTwoFaDisplay(account.twoFa))}
-													<a
-														href={toExternalHref(getTwoFaDisplay(account.twoFa))}
-														target="_blank"
-														rel="noopener noreferrer"
-														class="credential-value flex-1 hover:underline"
-														style="color: var(--link);"
+											{@const twoFaField = resolveCredentialField(account.twoFa)}
+											{#if twoFaField.display}
+												<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
+													<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
+														>2FA Code:</span
 													>
-														{getTwoFaDisplay(account.twoFa)}
-													</a>
-												{:else}
-													<span class="credential-value flex-1" style="color: var(--text);"
-														>{getTwoFaDisplay(account.twoFa)}</span
-													>
-												{/if}
-											</div>
+													{#if twoFaField.isUrl && twoFaField.href}
+														<a
+															href={twoFaField.href}
+															target="_blank"
+															rel="noopener noreferrer"
+															class="credential-value flex-1 hover:underline"
+															style="color: var(--link);"
+														>
+															{twoFaField.display}
+														</a>
+													{:else}
+														<span class="credential-value flex-1" style="color: var(--text);"
+															>{twoFaField.display}</span
+														>
+													{/if}
+												</div>
+											{/if}
 										{/if}
 
 										<!-- Link (if available) -->
 										{#if account.linkUrl}
-											<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
-												<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
-													>Link:</span
-												>
-												<a
-													href={toExternalHref(getLinkDisplay(account.linkUrl))}
-													target="_blank"
-													rel="noopener noreferrer"
-													class="credential-value flex-1 hover:underline"
-													style="color: var(--link);"
-												>
-													{getLinkDisplay(account.linkUrl)}
-												</a>
-											</div>
+											{@const linkField = resolveCredentialField(account.linkUrl)}
+											{#if linkField.display}
+												<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
+													<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
+														>Link:</span
+													>
+													{#if linkField.isUrl && linkField.href}
+														<a
+															href={linkField.href}
+															target="_blank"
+															rel="noopener noreferrer"
+															class="credential-value flex-1 hover:underline"
+															style="color: var(--link);"
+														>
+															{linkField.display}
+														</a>
+													{:else}
+														<span class="credential-value flex-1" style="color: var(--text);"
+															>{linkField.display}</span
+														>
+													{/if}
+												</div>
+											{/if}
 										{/if}
 									</div>
 

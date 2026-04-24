@@ -1,44 +1,14 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import {
-		CheckCircle,
-		Clock,
-		XCircle,
-		Mail,
-		MessageSquare,
-		Copy
-	} from '@lucide/svelte';
+	import { CheckCircle, Clock, XCircle, Mail, MessageSquare, Copy } from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import { formatDate, formatPrice, copyToClipboard, copyAllAccounts } from '$lib/helpers/utils';
+	import { resolveCredentialField } from '$lib/helpers/credential-links';
 
 	let { data }: { data: PageData } = $props();
-
-	function isLikelyUrl(value: string | null | undefined): boolean {
-		const raw = String(value || '').trim();
-		if (!raw) return false;
-		return (
-			/^https?:\/\//i.test(raw) ||
-			/^www\./i.test(raw) ||
-			raw.includes('fastaccs.com/') ||
-			raw.includes('x.com/') ||
-			raw.includes('instagram.com/')
-		);
-	}
-
-	function normalizeUrlLike(value: string | null | undefined): string {
-		return String(value || '')
-			.trim()
-			.replace(/\s+/g, '');
-	}
-
-	function toExternalHref(value: string): string {
-		const cleaned = normalizeUrlLike(value);
-		if (/^https?:\/\//i.test(cleaned)) return cleaned;
-		return `https://${cleaned.replace(/^\/+/, '')}`;
-	}
 
 	function normalizeLower(value: string | null | undefined): string {
 		return String(value || '')
@@ -46,7 +16,10 @@
 			.toLowerCase();
 	}
 
-	function getPaymentState(status: string, paymentStatus: string): {
+	function getPaymentState(
+		status: string,
+		paymentStatus: string
+	): {
 		label: string;
 		tone: 'success' | 'pending' | 'failure';
 	} {
@@ -120,13 +93,14 @@
 	<div class="mx-auto max-w-4xl px-4">
 		<!-- Header -->
 		<div class="mb-8">
-				<div class="flex items-center gap-4">
-					<button
-						onclick={() => goto(`/dashboard?tab=${data.fromTab || 'orders'}&orderId=${data.order.id}`)}
-						style="background: var(--surface); border: 1px solid var(--border); color: var(--link);"
-						class="cursor-pointer rounded-lg px-4 py-2 transition-transform hover:scale-101 active:scale-95"
-					>
-						← Back to Dashboard
+			<div class="flex items-center gap-4">
+				<button
+					onclick={() =>
+						goto(`/dashboard?tab=${data.fromTab || 'orders'}&orderId=${data.order.id}`)}
+					style="background: var(--surface); border: 1px solid var(--border); color: var(--link);"
+					class="cursor-pointer rounded-lg px-4 py-2 transition-transform hover:scale-101 active:scale-95"
+				>
+					← Back to Dashboard
 				</button>
 			</div>
 			<h1
@@ -142,63 +116,63 @@
 			<!-- Order Details -->
 			<div class="lg:col-span-2">
 				<!-- Status Card -->
-					<div
-						class="mb-6 rounded-lg p-6"
-						style="background: var(--surface); border: 1px solid var(--border);"
-					>
-						<div class="flex items-center gap-4">
-							<div
-								class={`status-badge ${getStatusColorFromTone(
-									getPaymentState(data.order.status, data.order.paymentStatus).tone
-								)}`}
-							>
-								{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success'}
-									<CheckCircle class="h-6 w-6" />
+				<div
+					class="mb-6 rounded-lg p-6"
+					style="background: var(--surface); border: 1px solid var(--border);"
+				>
+					<div class="flex items-center gap-4">
+						<div
+							class={`status-badge ${getStatusColorFromTone(
+								getPaymentState(data.order.status, data.order.paymentStatus).tone
+							)}`}
+						>
+							{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success'}
+								<CheckCircle class="h-6 w-6" />
+							{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'failure'}
+								<XCircle class="h-6 w-6" />
+							{:else}
+								<Clock class="h-6 w-6" />
+							{/if}
+						</div>
+						<div>
+							<h2 class="text-xl font-semibold" style="color: var(--text);">
+								{getPaymentState(data.order.status, data.order.paymentStatus).label}
+							</h2>
+							<p style="color: var(--text-muted);">
+								{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.status === 'completed'}
+									Your accounts have been successfully allocated and delivered.
+								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'pending'}
+									Payment not confirmed yet. No account allocation has started.
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'failure'}
-									<XCircle class="h-6 w-6" />
+									Payment did not complete for this order. No account allocation was made.
 								{:else}
-									<Clock class="h-6 w-6" />
+									Payment is confirmed. We are finalizing your account delivery.
 								{/if}
-							</div>
-							<div>
-								<h2 class="text-xl font-semibold" style="color: var(--text);">
-									{getPaymentState(data.order.status, data.order.paymentStatus).label}
-								</h2>
-								<p style="color: var(--text-muted);">
-									{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.status === 'completed'}
-										Your accounts have been successfully allocated and delivered.
-									{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'pending'}
-										Payment not confirmed yet. No account allocation has started.
-									{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'failure'}
-										Payment did not complete for this order. No account allocation was made.
-									{:else}
-										Payment is confirmed. We are finalizing your account delivery.
-									{/if}
-								</p>
-								<div class="mt-2 flex flex-wrap items-center gap-2 text-xs sm:text-sm">
-									<span style="color: var(--text-dim);">
-										Payment: {getPaymentState(data.order.status, data.order.paymentStatus).label}
-									</span>
-									<span style="color: var(--text-dim);">•</span>
-									<span style="color: var(--text-dim);">
-										Fulfillment: {getFulfillmentState(
-											data.order.status,
-											data.order.deliveryStatus,
-											getPaymentState(data.order.status, data.order.paymentStatus).tone
-										)}
-									</span>
-								</div>
+							</p>
+							<div class="mt-2 flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+								<span style="color: var(--text-dim);">
+									Payment: {getPaymentState(data.order.status, data.order.paymentStatus).label}
+								</span>
+								<span style="color: var(--text-dim);">•</span>
+								<span style="color: var(--text-dim);">
+									Fulfillment: {getFulfillmentState(
+										data.order.status,
+										data.order.deliveryStatus,
+										getPaymentState(data.order.status, data.order.paymentStatus).tone
+									)}
+								</span>
 							</div>
 						</div>
 					</div>
+				</div>
 
 				<div
 					class="mb-6 rounded-lg p-4"
 					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 				>
 					<p class="text-sm" style="color: var(--text-muted);">
-						For smooth access, test your login soon after delivery and report issues quickly. For the
-						fastest support response, message us within 2 hours of purchase. See the <a
+						For smooth access, test your login soon after delivery and report issues quickly. For
+						the fastest support response, message us within 2 hours of purchase. See the <a
 							href="/support#faq"
 							class="font-medium hover:underline"
 							style="color: var(--link);">Support FAQ</a
@@ -335,16 +309,19 @@
 																<div class="flex-1">
 																	<span
 																		class="text-xs font-medium uppercase"
-																		style="color: var(--text-dim);">Password</span
+																		style="color: var(--text-dim);">Email Pass</span
 																	>
-																	<div class="font-mono text-sm" style="color: var(--text);">
-																		{account.password}
+																	<div
+																		class="credential-value font-mono text-sm"
+																		style="color: var(--text);"
+																	>
+																		{account.emailPassword}
 																	</div>
 																</div>
 																<button
 																	onclick={() =>
-																		copyToClipboard(account.password || '', {
-																			label: 'Password',
+																		copyToClipboard(account.emailPassword || '', {
+																			label: 'Email Password',
 																			showToast: (toast: any) => addToast(toast as any)
 																		})}
 																	style="color: var(--text-dim);"
@@ -355,70 +332,88 @@
 															</div>
 														{/if}
 														{#if account.twoFa}
-															<div class="flex items-start justify-between gap-3">
-																<div class="flex-1">
-																	<span
-																		class="text-xs font-medium uppercase"
-																		style="color: var(--text-dim);">2FA</span
-																	>
-																	{#if isLikelyUrl(account.twoFa)}
-																		<a
-																			href={toExternalHref(String(account.twoFa))}
-																			target="_blank"
-																			rel="noopener noreferrer"
-																			class="font-mono text-sm break-all hover:underline"
-																			style="color: var(--link);"
+															{@const twoFaField = resolveCredentialField(account.twoFa)}
+															{#if twoFaField.display}
+																<div class="flex items-start justify-between gap-3">
+																	<div class="flex-1">
+																		<span
+																			class="text-xs font-medium uppercase"
+																			style="color: var(--text-dim);">2FA</span
 																		>
-																			{normalizeUrlLike(account.twoFa)}
-																		</a>
-																	{:else}
-																		<div class="font-mono text-sm break-all" style="color: var(--text);">
-																			{account.twoFa}
-																		</div>
-																	{/if}
+																		{#if twoFaField.isUrl && twoFaField.href}
+																			<a
+																				href={twoFaField.href}
+																				target="_blank"
+																				rel="noopener noreferrer"
+																				class="credential-value font-mono text-sm break-all hover:underline"
+																				style="color: var(--link);"
+																			>
+																				{twoFaField.display}
+																			</a>
+																		{:else}
+																			<div
+																				class="credential-value font-mono text-sm break-all"
+																				style="color: var(--text);"
+																			>
+																				{twoFaField.display}
+																			</div>
+																		{/if}
+																	</div>
+																	<button
+																		onclick={() =>
+																			copyToClipboard(twoFaField.display || '', {
+																				label: '2FA',
+																				showToast: (toast: any) => addToast(toast as any)
+																			})}
+																		style="color: var(--text-dim);"
+																		class="ml-2 rounded p-2 hover:brightness-125"
+																	>
+																		<Copy class="h-4 w-4" />
+																	</button>
 																</div>
-																<button
-																	onclick={() =>
-																		copyToClipboard(normalizeUrlLike(account.twoFa) || '', {
-																			label: '2FA',
-																			showToast: (toast: any) => addToast(toast as any)
-																		})}
-																	style="color: var(--text-dim);"
-																	class="ml-2 rounded p-2 hover:brightness-125"
-																>
-																	<Copy class="h-4 w-4" />
-																</button>
-															</div>
+															{/if}
 														{/if}
 														{#if account.linkUrl}
-															<div class="flex items-start justify-between gap-3">
-																<div class="flex-1">
-																	<span
-																		class="text-xs font-medium uppercase"
-																		style="color: var(--text-dim);">Link</span
+															{@const linkField = resolveCredentialField(account.linkUrl)}
+															{#if linkField.display}
+																<div class="flex items-start justify-between gap-3">
+																	<div class="flex-1">
+																		<span
+																			class="text-xs font-medium uppercase"
+																			style="color: var(--text-dim);">Link</span
+																		>
+																		{#if linkField.isUrl && linkField.href}
+																			<a
+																				href={linkField.href}
+																				target="_blank"
+																				rel="noopener noreferrer"
+																				class="credential-value font-mono text-sm break-all hover:underline"
+																				style="color: var(--link);"
+																			>
+																				{linkField.display}
+																			</a>
+																		{:else}
+																			<div
+																				class="credential-value font-mono text-sm break-all"
+																				style="color: var(--text);"
+																			>
+																				{linkField.display}
+																			</div>
+																		{/if}
+																	</div>
+																	<button
+																		onclick={() =>
+																			copyToClipboard(linkField.display || '', {
+																				label: 'Link',
+																				showToast: (toast: any) => addToast(toast as any)
+																			})}
+																		style="color: var(--text-dim);"
+																		class="ml-2 rounded p-2 hover:brightness-125"
 																	>
-																	<a
-																		href={toExternalHref(String(account.linkUrl))}
-																		target="_blank"
-																		rel="noopener noreferrer"
-																		class="font-mono text-sm break-all hover:underline"
-																		style="color: var(--link);"
-																	>
-																		{normalizeUrlLike(account.linkUrl)}
-																	</a>
+																		<Copy class="h-4 w-4" />
+																	</button>
 																</div>
-																<button
-																	onclick={() =>
-																		copyToClipboard(normalizeUrlLike(account.linkUrl) || '', {
-																			label: 'Link',
-																			showToast: (toast: any) => addToast(toast as any)
-																		})}
-																	style="color: var(--text-dim);"
-																	class="ml-2 rounded p-2 hover:brightness-125"
-																>
-																	<Copy class="h-4 w-4" />
-																</button>
-															</div>
+															{/if}
 														{/if}
 														{#if account.deliveryNotes}
 															<div class="mt-2">
@@ -464,28 +459,28 @@
 								{data.order.id}
 							</div>
 						</div>
-							<div class="flex justify-between">
-								<span style="color: var(--text-muted);">Order Date:</span>
-								<span style="color: var(--text);">{formatDate(data.order.createdAt)}</span>
-							</div>
-							<div class="flex justify-between">
-								<span style="color: var(--text-muted);">Payment:</span>
-								<span style="color: var(--text);"
-									>{getPaymentState(data.order.status, data.order.paymentStatus).label}</span
-								>
-							</div>
-							<div class="flex justify-between">
-								<span style="color: var(--text-muted);">Fulfillment:</span>
-								<span style="color: var(--text);"
-									>{getFulfillmentState(
-										data.order.status,
-										data.order.deliveryStatus,
-										getPaymentState(data.order.status, data.order.paymentStatus).tone
-									)}</span
-								>
-							</div>
+						<div class="flex justify-between">
+							<span style="color: var(--text-muted);">Order Date:</span>
+							<span style="color: var(--text);">{formatDate(data.order.createdAt)}</span>
+						</div>
+						<div class="flex justify-between">
+							<span style="color: var(--text-muted);">Payment:</span>
+							<span style="color: var(--text);"
+								>{getPaymentState(data.order.status, data.order.paymentStatus).label}</span
+							>
+						</div>
+						<div class="flex justify-between">
+							<span style="color: var(--text-muted);">Fulfillment:</span>
+							<span style="color: var(--text);"
+								>{getFulfillmentState(
+									data.order.status,
+									data.order.deliveryStatus,
+									getPaymentState(data.order.status, data.order.paymentStatus).tone
+								)}</span
+							>
 						</div>
 					</div>
+				</div>
 
 				<!-- Delivery Info -->
 				<div
@@ -603,5 +598,11 @@
 		background: rgba(255, 255, 255, 0.04);
 		border-color: rgba(255, 255, 255, 0.1);
 		color: var(--status-inactive);
+	}
+
+	.credential-value {
+		min-width: 0;
+		overflow-wrap: anywhere;
+		word-break: break-word;
 	}
 </style>

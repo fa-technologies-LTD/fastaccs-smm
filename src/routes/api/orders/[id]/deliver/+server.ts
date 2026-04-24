@@ -6,6 +6,7 @@ import { prisma } from '$lib/prisma';
 import { sendEmail } from '$lib/services/email';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import type { Decimal } from '@prisma/client/runtime/library';
+import { resolveCredentialField } from '$lib/helpers/credential-links';
 
 // Type definitions for email generation
 interface OrderForEmail {
@@ -167,7 +168,12 @@ Thank you for your order with FastAccs! Your accounts are ready.
 				content += `\nAccount ${accIndex + 1}:\n`;
 				if (account.username) content += `- Username: ${account.username}\n`;
 				if (account.email) content += `- Email: ${account.email}\n`;
-				if (account.linkUrl) content += `- Login Link: ${account.linkUrl}\n`;
+				if (account.linkUrl) {
+					const sanitizedLink = resolveCredentialField(account.linkUrl);
+					if (sanitizedLink.display) {
+						content += `- Login Link: ${sanitizedLink.display}\n`;
+					}
+				}
 				if (account.followers !== null) content += `- Followers: ${account.followers}\n`;
 				if (account.ageMonths) content += `- Account Age: ${account.ageMonths} months\n`;
 				content += `- Password: Available in your dashboard\n`;

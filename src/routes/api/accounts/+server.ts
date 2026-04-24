@@ -3,6 +3,7 @@ import { prisma } from '$lib/prisma';
 import { triggerRestockNotificationsForTier } from '$lib/services/restock-notifications';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { sendLowStockAdminAlertIfNeeded } from '$lib/services/admin-alerts';
+import { sanitizeStoredCredentialValue } from '$lib/helpers/credential-links';
 
 // GET /api/accounts - Get all accounts with optional filters
 export async function GET({ url, locals }) {
@@ -46,6 +47,14 @@ export async function POST({ request, locals }) {
 
 		const accountData = await request.json();
 		const categoryId = typeof accountData.categoryId === 'string' ? accountData.categoryId : '';
+
+		if (Object.prototype.hasOwnProperty.call(accountData, 'twoFa')) {
+			accountData.twoFa = sanitizeStoredCredentialValue(accountData.twoFa);
+		}
+
+		if (Object.prototype.hasOwnProperty.call(accountData, 'linkUrl')) {
+			accountData.linkUrl = sanitizeStoredCredentialValue(accountData.linkUrl);
+		}
 
 		// Remove metadata field if it exists since Account model doesn't have it
 		if ('metadata' in accountData) {

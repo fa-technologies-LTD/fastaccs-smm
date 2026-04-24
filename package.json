@@ -10,6 +10,8 @@
 		"verify:runtime": "node ./scripts/verify-runtime.mjs",
 		"prisma:generate": "prisma generate",
 		"prisma:deploy": "prisma migrate deploy",
+		"credentials:normalize": "node ./scripts/normalize-credential-links.mjs",
+		"credentials:normalize:dry": "node ./scripts/normalize-credential-links.mjs --dry-run",
 		"dev": "npm run verify:runtime && npm run prisma:generate && vite dev",
 		"build": "npm run verify:runtime && npm run prisma:generate && vite build",
 		"preview": "vite preview",

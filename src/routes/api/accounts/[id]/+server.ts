@@ -3,6 +3,7 @@ import { prisma } from '$lib/prisma';
 import { triggerRestockNotificationsForTier } from '$lib/services/restock-notifications';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { sendLowStockAdminAlertIfNeeded } from '$lib/services/admin-alerts';
+import { sanitizeStoredCredentialValue } from '$lib/helpers/credential-links';
 
 // PUT /api/accounts/[id] - Update account
 export async function PUT({ params, request, locals }) {
@@ -13,6 +14,14 @@ export async function PUT({ params, request, locals }) {
 
 		const id = params.id;
 		const updates = await request.json();
+
+		if (Object.prototype.hasOwnProperty.call(updates, 'twoFa')) {
+			updates.twoFa = sanitizeStoredCredentialValue(updates.twoFa);
+		}
+
+		if (Object.prototype.hasOwnProperty.call(updates, 'linkUrl')) {
+			updates.linkUrl = sanitizeStoredCredentialValue(updates.linkUrl);
+		}
 		const existing = await prisma.account.findUnique({
 			where: { id },
 			select: {

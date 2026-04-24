@@ -28,6 +28,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 					orderItems: {
 						select: {
 							id: true,
+							categoryId: true,
 							productName: true,
 							quantity: true,
 							unitPrice: true,

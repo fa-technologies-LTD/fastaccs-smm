@@ -2,9 +2,11 @@
 	import { CheckCircle, RefreshCw, Clock } from '@lucide/svelte';
 	import { showSuccess, showError } from '$lib/stores/toasts';
 	import { goto } from '$app/navigation';
+	import { cart } from '$lib/stores/cart.svelte';
 
 	interface OrderItem {
 		id?: string;
+		categoryId?: string;
 		productName?: string;
 		productCategory?: string;
 		quantity?: number;
@@ -70,11 +72,17 @@
 			.toLowerCase();
 	}
 
-	function getPaymentState(order: OrderRecord): { label: string; tone: 'success' | 'pending' | 'failure' } {
+	function getPaymentState(order: OrderRecord): {
+		label: string;
+		tone: 'success' | 'pending' | 'failure';
+	} {
 		const orderStatus = normalizeLower(order.status);
 		const paymentStatus = normalizeLower(order.paymentStatus);
 
-		if (['paid', 'completed'].includes(orderStatus) || ['paid', 'success'].includes(paymentStatus)) {
+		if (
+			['paid', 'completed'].includes(orderStatus) ||
+			['paid', 'success'].includes(paymentStatus)
+		) {
 			return { label: 'Payment Confirmed', tone: 'success' };
 		}
 
@@ -135,10 +143,23 @@
 			showError('No items found in this order');
 			return;
 		}
-		showSuccess('Items added to cart! Redirecting to checkout...');
-		setTimeout(() => {
-			goto('/platforms');
-		}, 1500);
+
+		const reorderableItems = items.filter(
+			(item) => typeof item.categoryId === 'string' && item.categoryId.trim().length > 0
+		);
+
+		if (reorderableItems.length === 0) {
+			showError('This order cannot be reordered yet');
+			return;
+		}
+
+		for (const item of reorderableItems) {
+			const quantity = Number(item.quantity || 1);
+			cart.addTier(item.categoryId!, Number.isFinite(quantity) && quantity > 0 ? quantity : 1);
+		}
+
+		showSuccess('Items added to cart. Redirecting to checkout...');
+		goto('/checkout');
 	}
 
 	function viewOrderDetails(orderId: string) {
@@ -177,36 +198,36 @@
 						? 'border: 1px solid rgba(5,212,113,0.35); background: rgba(5,212,113,0.06);'
 						: undefined}
 				>
-						<div class="mb-3 flex items-center justify-between gap-4">
-							<div class="flex min-w-0 flex-1 items-center">
-								{#if getPaymentState(order).tone === 'success'}
-									<CheckCircle class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--primary);" />
-								{:else if getPaymentState(order).label === 'Confirming with Monnify'}
-									<RefreshCw class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--link);" />
-								{:else}
-									<Clock class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--status-warning);" />
+					<div class="mb-3 flex items-center justify-between gap-4">
+						<div class="flex min-w-0 flex-1 items-center">
+							{#if getPaymentState(order).tone === 'success'}
+								<CheckCircle class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--primary);" />
+							{:else if getPaymentState(order).label === 'Confirming with Monnify'}
+								<RefreshCw class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--link);" />
+							{:else}
+								<Clock class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--status-warning);" />
 							{/if}
 							<div class="min-w-0 flex-1">
-									<div
-										class="truncate font-semibold"
-										style="color: var(--text); font-family: var(--font-head);"
-									>
-										{getDisplayOrderNumber(order)}
-									</div>
+								<div
+									class="truncate font-semibold"
+									style="color: var(--text); font-family: var(--font-head);"
+								>
+									{getDisplayOrderNumber(order)}
+								</div>
 								<div class="text-xs sm:text-sm" style="color: var(--text-dim);">
 									{formatOrderDate(order)}
 								</div>
 							</div>
 						</div>
-							<div class="flex-shrink-0 text-right">
-								<div class="font-semibold" style="color: var(--text); font-family: var(--font-head);">
-									₦{Number(order.totalAmount || 0).toLocaleString()}
-								</div>
-								<div class="text-xs sm:text-sm" style="color: var(--text-muted);">
-									{getPaymentState(order).label}
-								</div>
+						<div class="flex-shrink-0 text-right">
+							<div class="font-semibold" style="color: var(--text); font-family: var(--font-head);">
+								₦{Number(order.totalAmount || 0).toLocaleString()}
+							</div>
+							<div class="text-xs sm:text-sm" style="color: var(--text-muted);">
+								{getPaymentState(order).label}
 							</div>
 						</div>
+					</div>
 
 					<div class="mb-4 space-y-2">
 						{#each getOrderItems(order) as item}
@@ -222,11 +243,11 @@
 						{/each}
 					</div>
 
-						<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-							<div class="text-xs sm:text-sm" style="color: var(--text-dim);">
-								Payment: {getPaymentState(order).label} · Fulfillment: {getFulfillmentState(order)}
-							</div>
-							<div class="flex flex-col gap-2 text-sm sm:flex-row sm:text-base">
+					<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+						<div class="text-xs sm:text-sm" style="color: var(--text-dim);">
+							Fulfillment: {getFulfillmentState(order)}
+						</div>
+						<div class="flex flex-col gap-2 text-sm sm:flex-row sm:text-base">
 							<button
 								onclick={() => reorderItems(order)}
 								data-sveltekit-preload-data="hover"

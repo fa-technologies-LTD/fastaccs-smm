@@ -18,6 +18,7 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
 		'profile',
 		'email'
 	]);
+	authUrl.searchParams.set('prompt', 'select_account');
 
 	// Local HTTP development must not use secure cookies or callback state will be lost.
 	const isSecureRequest = url.protocol === 'https:';
