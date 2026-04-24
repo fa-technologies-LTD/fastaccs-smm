@@ -1,4 +1,5 @@
 // Server-side hooks for session management
+import { env as publicEnv } from '$env/dynamic/public';
 import { env } from '$env/dynamic/private';
 import { validateSessionToken } from '$lib/auth/session';
 import {
@@ -19,7 +20,7 @@ startPaymentReconciliationScheduler();
 startWinBackScheduler();
 
 function getCanonicalBaseUrl(): URL | null {
-	const candidates = [env.PUBLIC_BASE_URL, env.PUBLIC_SITE_URL]
+	const candidates = [env.CANONICAL_BASE_URL, publicEnv.PUBLIC_BASE_URL, publicEnv.PUBLIC_SITE_URL]
 		.map((value) => (value || '').trim())
 		.filter(Boolean);
 
