@@ -33,6 +33,3 @@ export function getGoogleClient(origin?: string): Google {
 
 	return new Google(clientId, clientSecret, getGoogleCallbackUrl(origin));
 }
-
-// Backward-compatible export for places that do not pass request origin.
-export const google = getGoogleClient();
