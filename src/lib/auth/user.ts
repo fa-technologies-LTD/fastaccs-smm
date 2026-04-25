@@ -63,7 +63,7 @@ export async function updateUserFromGoogle(
 		data: {
 			fullName: googleUser.name,
 			avatarUrl: googleUser.picture,
-			userType,
+			...(userType === 'ADMIN' ? { userType } : {}),
 			lastLogin: new Date()
 		}
 	});

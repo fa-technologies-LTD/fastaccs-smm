@@ -251,7 +251,7 @@
 							class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
 							style="background: var(--bg-elev-2); color: var(--text-muted); border: 1px solid var(--border);"
 						>
-							{data?.adminRole || 'FULL_ADMIN'}
+							{data?.adminRole || 'UNASSIGNED'}
 						</span>
 					</div>
 

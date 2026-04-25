@@ -1,9 +1,20 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
-import { hashPassword } from '$lib/auth/password';
+import {
+	MAX_PASSWORD_BYTES,
+	MIN_PASSWORD_LENGTH,
+	getPasswordByteLength,
+	hashPassword
+} from '$lib/auth/password';
 import { getUserTypeFromEmail } from '$lib/auth/admin';
 import { createSession, generateSessionToken, setSessionTokenCookie } from '$lib/auth/session';
+import {
+	SIGNUP_RATE_LIMITS,
+	checkRateLimit,
+	getRequestClientIp,
+	recordRateLimitAttempt
+} from '$lib/auth/rate-limit';
 
 interface SignupPayload {
 	email?: unknown;
@@ -35,14 +46,74 @@ export const POST: RequestHandler = async (event) => {
 		const password = typeof body.password === 'string' ? body.password : '';
 		const fullName = typeof body.fullName === 'string' ? body.fullName.trim() : '';
 		const redirectTo = sanitizeRedirectPath(body.redirectTo);
+		const clientIp = getRequestClientIp(event.request);
+		const ipKey = `ip:${clientIp}`;
+		const identityKey = `email:${email || 'unknown'}|ip:${clientIp}`;
+
+		const [ipLimitState, identityLimitState] = await Promise.all([
+			checkRateLimit({
+				scope: 'signup_ip',
+				key: ipKey,
+				limit: SIGNUP_RATE_LIMITS.ip.limit,
+				windowMs: SIGNUP_RATE_LIMITS.ip.windowMs
+			}),
+			checkRateLimit({
+				scope: 'signup_identity',
+				key: identityKey,
+				limit: SIGNUP_RATE_LIMITS.identity.limit,
+				windowMs: SIGNUP_RATE_LIMITS.identity.windowMs
+			})
+		]);
+
+		if (!ipLimitState.allowed || !identityLimitState.allowed) {
+			const retryAfterSeconds = Math.max(
+				ipLimitState.retryAfterSeconds,
+				identityLimitState.retryAfterSeconds
+			);
+			return json(
+				{
+					success: false,
+					error: `Too many signup attempts. Try again in ${retryAfterSeconds}s.`
+				},
+				{ status: 429, headers: { 'retry-after': String(retryAfterSeconds) } }
+			);
+		}
+
+		const registerFailedAttempt = async (reason: string) => {
+			await Promise.allSettled([
+				recordRateLimitAttempt({
+					scope: 'signup_ip',
+					key: ipKey,
+					context: reason
+				}),
+				recordRateLimitAttempt({
+					scope: 'signup_identity',
+					key: identityKey,
+					context: reason
+				})
+			]);
+		};
 
 		if (!isValidEmail(email)) {
+			await registerFailedAttempt('invalid_email');
 			return json({ success: false, error: 'Please enter a valid email address.' }, { status: 400 });
 		}
 
-		if (password.length < 8) {
+		if (password.length < MIN_PASSWORD_LENGTH) {
+			await registerFailedAttempt('password_too_short');
 			return json(
-				{ success: false, error: 'Password must be at least 8 characters.' },
+				{ success: false, error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` },
+				{ status: 400 }
+			);
+		}
+
+		if (getPasswordByteLength(password) > MAX_PASSWORD_BYTES) {
+			await registerFailedAttempt('password_too_long');
+			return json(
+				{
+					success: false,
+					error: `Password is too long. Maximum allowed is ${MAX_PASSWORD_BYTES} bytes.`
+				},
 				{ status: 400 }
 			);
 		}
@@ -57,6 +128,7 @@ export const POST: RequestHandler = async (event) => {
 		});
 
 		if (existingUser) {
+			await registerFailedAttempt('duplicate_email');
 			if (existingUser.googleId && !existingUser.passwordHash) {
 				return json(
 					{

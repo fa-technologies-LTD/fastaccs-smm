@@ -66,82 +66,85 @@ export async function allocateAccountsForOrder(orderId: string) {
  */
 async function allocateAccounts(orderId: string) {
 	try {
-		// Get order with items
-		const order = await prisma.order.findUnique({
-			where: { id: orderId },
-			include: {
-				orderItems: true
+		const allocationTransaction = await prisma.$transaction(async (tx) => {
+			const lockedOrders = await tx.$queryRaw<Array<{ id: string }>>`
+				SELECT id
+				FROM orders
+				WHERE id = ${orderId}::uuid
+				FOR UPDATE
+			`;
+			if (lockedOrders.length === 0) {
+				throw new Error('ORDER_NOT_FOUND');
 			}
-		});
 
-		if (!order) {
-			return { success: false, error: 'Order not found' };
-		}
-
-		if (order.status === 'completed') {
-			return { success: false, error: 'Order already processed' };
-		}
-
-		// Process each order item and allocate accounts
-		const allocationResults = [];
-
-		for (const item of order.orderItems) {
-			// Use the field that exists in current database schema
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const categoryId = (item as any).productId || (item as any).categoryId;
-
-			// Find available accounts for this tier
-			const availableAccounts = await prisma.account.findMany({
-				where: {
-					categoryId: categoryId,
-					status: 'available'
-				},
-				take: item.quantity,
-				orderBy: { createdAt: 'asc' } // First in, first allocated
+			const order = await tx.order.findUnique({
+				where: { id: orderId },
+				include: {
+					orderItems: true
+				}
 			});
 
-			if (availableAccounts.length < item.quantity) {
-				// Not enough accounts available - rollback any previous allocations
-				for (const result of allocationResults) {
-					await prisma.account.updateMany({
-						where: { id: { in: result.accountIds } },
-						data: { status: 'available', orderItemId: null }
-					});
-				}
-
-				return {
-					success: false,
-					error: `Insufficient accounts available for ${item.productName}. Requested: ${item.quantity}, Available: ${availableAccounts.length}`
-				};
+			if (!order) {
+				throw new Error('ORDER_NOT_FOUND');
 			}
 
-			// Allocate accounts to this order item
-			const accountIds = availableAccounts.map((acc) => acc.id);
-			await prisma.account.updateMany({
-				where: { id: { in: accountIds } },
+			if (order.status === 'completed') {
+				throw new Error('ORDER_ALREADY_PROCESSED');
+			}
+
+			const allocationResults: AllocationResult[] = [];
+
+			for (const item of order.orderItems) {
+				const allocatedRows = await tx.$queryRaw<Array<{ id: string }>>`
+					WITH candidate AS (
+						SELECT id
+						FROM accounts
+						WHERE category_id = ${item.categoryId}::uuid
+							AND status = 'available'
+						ORDER BY created_at ASC
+						LIMIT ${item.quantity}
+						FOR UPDATE SKIP LOCKED
+					)
+					UPDATE accounts AS a
+					SET
+						status = 'allocated',
+						order_item_id = ${item.id}::uuid,
+						updated_at = NOW()
+					FROM candidate
+					WHERE a.id = candidate.id
+					RETURNING a.id;
+				`;
+
+				if (allocatedRows.length < item.quantity) {
+					throw new Error(
+						`INSUFFICIENT_ACCOUNTS:${item.productName}:${item.quantity}:${allocatedRows.length}`
+					);
+				}
+
+				allocationResults.push({
+					orderItemId: item.id,
+					categoryName: item.productName,
+					requestedQuantity: item.quantity,
+					allocatedQuantity: allocatedRows.length,
+					accountIds: allocatedRows.map((row) => row.id)
+				});
+			}
+
+			await tx.order.update({
+				where: { id: orderId },
 				data: {
-					status: 'allocated',
-					orderItemId: item.id
+					status: 'completed',
+					updatedAt: new Date()
 				}
 			});
 
-			allocationResults.push({
-				orderItemId: item.id,
-				categoryName: item.productName,
-				requestedQuantity: item.quantity,
-				allocatedQuantity: availableAccounts.length,
-				accountIds
-			});
-		}
-
-		// Update order status to completed
-		await prisma.order.update({
-			where: { id: orderId },
-			data: {
-				status: 'completed',
-				updatedAt: new Date()
-			}
+			return {
+				order,
+				allocationResults
+			};
 		});
+
+		const { order, allocationResults } = allocationTransaction;
 
 		invalidateAdminStatsCache();
 		void sendLowStockAdminAlertIfNeeded('order_allocation').catch((error) => {
@@ -172,6 +175,24 @@ async function allocateAccounts(orderId: string) {
 			data: allocationResults
 		};
 	} catch (error) {
+		if (error instanceof Error) {
+			if (error.message === 'ORDER_NOT_FOUND') {
+				return { success: false, error: 'Order not found' };
+			}
+
+			if (error.message === 'ORDER_ALREADY_PROCESSED') {
+				return { success: false, error: 'Order already processed' };
+			}
+
+			if (error.message.startsWith('INSUFFICIENT_ACCOUNTS:')) {
+				const [, productName, requested, available] = error.message.split(':');
+				return {
+					success: false,
+					error: `Insufficient accounts available for ${productName}. Requested: ${requested}, Available: ${available}`
+				};
+			}
+		}
+
 		console.error('Account allocation error:', error);
 		return {
 			success: false,

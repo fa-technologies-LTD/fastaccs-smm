@@ -2,6 +2,7 @@ import nodemailer, { type Transporter } from 'nodemailer';
 import { env } from '$env/dynamic/private';
 import { PUBLIC_BASE_URL } from '$env/static/public';
 import { prisma } from '$lib/prisma';
+import { randomInt } from 'crypto';
 
 export type EmailNotificationType =
 	| 'verification'
@@ -317,7 +318,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 }
 
 export function generateVerificationCode(): string {
-	return Math.floor(100000 + Math.random() * 900000).toString();
+	return randomInt(100000, 1_000_000).toString();
 }
 
 export function maskEmailAddress(email: string): string {
@@ -383,29 +384,130 @@ Head to platforms to find the right accounts for your needs.`,
 	});
 }
 
-export async function sendOrderConfirmationEmailIfNeeded(orderId: string): Promise<void> {
-	const existing = await prisma.emailNotification.findFirst({
-		where: {
-			referenceId: orderId,
-			notificationType: 'order_confirmation',
-			status: 'sent'
-		},
-		select: { id: true }
-	});
+const ORDER_CONFIRMATION_PENDING_STALE_MS = 10 * 60 * 1000;
 
-	if (existing) return;
+interface ReservedOrderConfirmation {
+	notificationId: string;
+	targetEmail: string;
+	order: {
+		id: string;
+		orderNumber: string;
+		totalAmount: unknown;
+		userId: string | null;
+		guestEmail: string | null;
+		orderItems: Array<{
+			productName: string;
+			quantity: number;
+			totalPrice: unknown;
+		}>;
+		user: {
+			email: string | null;
+		} | null;
+	};
+}
 
-	const order = await prisma.order.findUnique({
-		where: { id: orderId },
-		include: {
-			orderItems: true,
-			user: true
+async function reserveOrderConfirmationNotification(
+	orderId: string
+): Promise<ReservedOrderConfirmation | null> {
+	return prisma.$transaction(async (tx) => {
+		const lockedOrders = await tx.$queryRaw<Array<{ id: string }>>`
+			SELECT id
+			FROM orders
+			WHERE id = ${orderId}::uuid
+			FOR UPDATE
+		`;
+		if (lockedOrders.length === 0) {
+			return null;
 		}
-	});
 
-	if (!order) return;
-	const targetEmail = (order.user?.email || order.guestEmail || '').trim();
-	if (!targetEmail) return;
+		const existing = await tx.emailNotification.findFirst({
+			where: {
+				referenceId: orderId,
+				notificationType: 'order_confirmation',
+				status: {
+					in: ['pending', 'sent']
+				}
+			},
+			orderBy: {
+				createdAt: 'desc'
+			},
+			select: {
+				id: true,
+				status: true,
+				createdAt: true
+			}
+		});
+
+		if (existing?.status === 'sent') {
+			return null;
+		}
+
+		const order = await tx.order.findUnique({
+			where: { id: orderId },
+			include: {
+				orderItems: true,
+				user: true
+			}
+		});
+		if (!order) {
+			return null;
+		}
+
+		const targetEmail = (order.user?.email || order.guestEmail || '').trim().toLowerCase();
+		if (!targetEmail) {
+			return null;
+		}
+
+		if (existing?.status === 'pending') {
+			const ageMs = Date.now() - existing.createdAt.getTime();
+			if (ageMs < ORDER_CONFIRMATION_PENDING_STALE_MS) {
+				return null;
+			}
+
+			await tx.emailNotification.update({
+				where: { id: existing.id },
+				data: {
+					userId: order.userId || null,
+					email: targetEmail,
+					status: 'pending',
+					errorMessage: null,
+					failedAt: null
+				}
+			});
+
+			return {
+				notificationId: existing.id,
+				order,
+				targetEmail
+			};
+		}
+
+		const created = await tx.emailNotification.create({
+			data: {
+				userId: order.userId || null,
+				email: targetEmail,
+				notificationType: 'order_confirmation',
+				referenceId: order.id,
+				status: 'pending'
+			},
+			select: {
+				id: true
+			}
+		});
+
+		return {
+			notificationId: created.id,
+			order,
+			targetEmail
+		};
+	});
+}
+
+export async function sendOrderConfirmationEmailIfNeeded(orderId: string): Promise<void> {
+	const reservation = await reserveOrderConfirmationNotification(orderId);
+	if (!reservation?.order) return;
+
+	const { order, targetEmail, notificationId } = reservation;
 
 	const itemLines = order.orderItems.map(
 		(item) => `- ${item.productName} x${item.quantity} (${Number(item.totalPrice).toLocaleString('en-US')})`
@@ -423,6 +525,14 @@ ${itemLines.join('\n')}
 
 Your account credentials are available on your dashboard. For security, we never send login details via email.`;
 
+	await prisma.emailNotification.update({
+		where: { id: notificationId },
+		data: {
+			subject: `Order confirmed — ${humanOrderNumber}`,
+			body
+		}
+	});
+
 	await sendEmail({
 		to: targetEmail,
 		subject: `Order confirmed — ${humanOrderNumber}`,
@@ -431,6 +541,7 @@ Your account credentials are available on your dashboard. For security, we never
 		ctaUrl: `${getBaseUrl()}/dashboard?tab=purchases`,
 		userId: order.userId || null,
 		notificationType: 'order_confirmation',
-		referenceId: order.id
+		referenceId: order.id,
+		notificationId
 	});
 }

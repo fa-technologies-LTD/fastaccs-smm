@@ -1,5 +1,6 @@
 import type { AdminRole, User } from '@prisma/client';
 import { prisma } from '$lib/prisma';
+import { isAdminEmail } from '$lib/auth/admin';
 
 export type AdminPermission =
 	| 'admin:access'
@@ -52,13 +53,13 @@ export function hasAdminPermission(
 	return adminContext.permissions.includes(permission);
 }
 
-export async function getAdminRole(userId: string): Promise<AdminRole> {
+export async function getAdminRole(userId: string): Promise<AdminRole | null> {
 	const assignment = await prisma.adminRoleAssignment.findUnique({
 		where: { userId },
 		select: { role: true }
 	});
 
-	return assignment?.role || 'FULL_ADMIN';
+	return assignment?.role || null;
 }
 
 export async function ensureAdminRoleAssignment(userId: string): Promise<AdminRole> {
@@ -80,7 +81,18 @@ export async function getAdminContext(user: User | null | undefined): Promise<Ad
 		return null;
 	}
 
-	const role = await getAdminRole(user.id);
+	let role = await getAdminRole(user.id);
+	if (!role) {
+		// Safe bootstrap: only explicitly allowlisted admin emails can auto-bootstrap.
+		if (user.email && isAdminEmail(user.email)) {
+			role = await ensureAdminRoleAssignment(user.id);
+		}
+	}
+
+	if (!role) {
+		return null;
+	}
+
 	const permissions = ROLE_PERMISSION_MAP[role];
 
 	return {

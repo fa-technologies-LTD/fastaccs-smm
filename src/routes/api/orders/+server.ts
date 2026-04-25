@@ -15,7 +15,7 @@ import { canViewRevenue, redactOrderFinancials } from '$lib/services/admin-reven
 interface CreateOrderItemInput {
 	categoryId: string;
 	quantity: number;
-	price: number;
+	price?: number;
 }
 
 interface CreateOrderInput {
@@ -38,6 +38,21 @@ function sanitizeLimit(value: string | null): number | undefined {
 	const parsed = Number.parseInt(value, 10);
 	if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
 	return Math.min(parsed, 200);
+}
+
+type TierMetadataShape = {
+	pricing?: {
+		base_price?: unknown;
+	};
+	price?: unknown;
+};
+
+function extractTierUnitPrice(metadata: unknown): number {
+	const typedMetadata =
+		metadata && typeof metadata === 'object' ? (metadata as TierMetadataShape) : undefined;
+	const rawPrice = typedMetadata?.pricing?.base_price ?? typedMetadata?.price;
+	const parsedPrice = Number(rawPrice);
+	return Number.isFinite(parsedPrice) ? parsedPrice : 0;
 }
 
 const cleanupOrderCreation = async (orderId: string) => {
@@ -137,34 +152,18 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 		const normalizedItems = items.map((item) => ({
 			categoryId: String(item.categoryId || '').trim(),
-			quantity: Number(item.quantity),
-			price: Number(item.price)
+			quantity: Number(item.quantity)
 		}));
 
 		const invalidItem = normalizedItems.find(
 			(item) =>
 				!item.categoryId ||
 				!Number.isFinite(item.quantity) ||
-				item.quantity <= 0 ||
-				!Number.isFinite(item.price) ||
-				item.price < 0
+				item.quantity <= 0
 		);
 
 		if (invalidItem) {
 			return json({ success: false, error: 'Invalid order item payload' }, { status: 400 });
-		}
-
-		const requestedTotalAmount = Number(orderData.totalAmount);
-		if (!Number.isFinite(requestedTotalAmount) || requestedTotalAmount <= 0) {
-			return json({ success: false, error: 'Invalid total amount' }, { status: 400 });
-		}
-
-		const subtotalAmount = normalizedItems.reduce(
-			(sum, item) => sum + item.quantity * item.price,
-			0
-		);
-		if (!Number.isFinite(subtotalAmount) || subtotalAmount <= 0) {
-			return json({ success: false, error: 'Invalid order subtotal' }, { status: 400 });
 		}
 
 		const paymentMethod =
@@ -179,23 +178,59 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			return json({ success: false, error: 'Customer email is required' }, { status: 400 });
 		}
 
-		// Get category information to get proper tier names
-		const categoryPromises = normalizedItems.map(async (item) => {
-			const category = await prisma.category.findUnique({
-				where: { id: item.categoryId },
-				include: {
-					parent: true // Include parent category (which should be the platform)
-				}
-			});
-			return {
-				...item,
-				categoryName: category
-					? `${category.parent?.name || 'Unknown Platform'} ${category.name}`
-					: `Tier-${item.categoryId}`
-			};
+		// Server-authoritative pricing: never trust client-supplied prices.
+		const uniqueCategoryIds = [...new Set(normalizedItems.map((item) => item.categoryId))];
+		const categories = await prisma.category.findMany({
+			where: {
+				id: { in: uniqueCategoryIds },
+				categoryType: 'tier',
+				isActive: true
+			},
+			include: {
+				parent: true
+			}
 		});
+		const categoryById = new Map(categories.map((category) => [category.id, category]));
 
-		const itemsWithNames = await Promise.all(categoryPromises);
+		const itemsWithNames: Array<{
+			categoryId: string;
+			quantity: number;
+			unitPrice: number;
+			categoryName: string;
+		}> = [];
+
+		for (const item of normalizedItems) {
+			const category = categoryById.get(item.categoryId);
+			if (!category) {
+				return json(
+					{ success: false, error: `Tier unavailable: ${item.categoryId}` },
+					{ status: 400 }
+				);
+			}
+
+			const unitPrice = extractTierUnitPrice(category.metadata);
+			if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+				return json(
+					{ success: false, error: `Tier has invalid price: ${category.id}` },
+					{ status: 400 }
+				);
+			}
+
+			itemsWithNames.push({
+				categoryId: item.categoryId,
+				quantity: item.quantity,
+				unitPrice,
+				categoryName: `${category.parent?.name || 'Unknown Platform'} ${category.name}`
+			});
+		}
+
+		const subtotalAmount = itemsWithNames.reduce(
+			(sum, item) => sum + item.quantity * item.unitPrice,
+			0
+		);
+		if (!Number.isFinite(subtotalAmount) || subtotalAmount <= 0) {
+			return json({ success: false, error: 'Invalid order subtotal' }, { status: 400 });
+		}
 
 		const promotionCode = String(orderData.promotionCode || '')
 			.trim()
@@ -210,7 +245,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				code: promotionCode,
 				userId: locals.user.id,
 				subtotal: subtotalAmount,
-				categoryIds: normalizedItems.map((item) => item.categoryId)
+				categoryIds: itemsWithNames.map((item) => item.categoryId)
 			});
 
 			if (!promotionResult.valid || !promotionResult.promotion) {
@@ -270,16 +305,16 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				affiliateUserId,
 				promotionId,
 				promotionCode: appliedPromotionCode,
-				orderItems: {
-					create: itemsWithNames.map((item) => ({
-						categoryId: item.categoryId,
-						quantity: item.quantity,
-						unitPrice: item.price,
-						totalPrice: item.price * item.quantity,
-						productName: item.categoryName,
-						productCategory: 'tier'
-					}))
-				}
+					orderItems: {
+						create: itemsWithNames.map((item) => ({
+							categoryId: item.categoryId,
+							quantity: item.quantity,
+							unitPrice: item.unitPrice,
+							totalPrice: item.unitPrice * item.quantity,
+							productName: item.categoryName,
+							productCategory: 'tier'
+						}))
+					}
 			},
 			include: {
 				orderItems: {

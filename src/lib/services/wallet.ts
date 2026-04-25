@@ -102,28 +102,50 @@ export async function debitWallet(
 	description: string = 'Order payment'
 ): Promise<{ success: boolean; transaction?: WalletTransaction; error?: string }> {
 	try {
-		const wallet = await getOrCreateWallet(userId);
-		const balanceBefore = Number(wallet.balance);
-
-		// Check sufficient balance
-		if (balanceBefore < amount) {
-			return {
-				success: false,
-				error: `Insufficient balance. Available: ₦${balanceBefore.toLocaleString()}, Required: ₦${amount.toLocaleString()}`
-			};
-		}
-
-		const balanceAfter = balanceBefore - amount;
-
-		// Debit wallet and create transaction
+		// Atomic debit: balance check and decrement happen in the same transaction.
 		const result = await prisma.$transaction(async (tx) => {
-			// Update wallet balance
-			const updatedWallet = await tx.wallet.update({
-				where: { id: wallet.id },
-				data: { balance: balanceAfter }
+			const wallet = await tx.wallet.upsert({
+				where: { userId },
+				update: {},
+				create: {
+					userId,
+					balance: 0,
+					currency: 'NGN'
+				}
 			});
 
-			// Create transaction record
+			const debited = await tx.wallet.updateMany({
+				where: {
+					id: wallet.id,
+					balance: {
+						gte: amount
+					}
+				},
+				data: {
+					balance: {
+						decrement: amount
+					}
+				}
+			});
+
+			if (debited.count === 0) {
+				const currentWallet = await tx.wallet.findUnique({
+					where: { id: wallet.id },
+					select: { balance: true }
+				});
+				const currentBalance = Number(currentWallet?.balance || 0);
+				throw new Error(
+					`INSUFFICIENT_BALANCE:${currentBalance.toLocaleString()}:${amount.toLocaleString()}`
+				);
+			}
+
+			const updatedWallet = await tx.wallet.findUnique({
+				where: { id: wallet.id },
+				select: { balance: true }
+			});
+			const balanceAfter = Number(updatedWallet?.balance || 0);
+			const balanceBefore = balanceAfter + amount;
+
 			const transaction = await tx.walletTransaction.create({
 				data: {
 					walletId: wallet.id,
@@ -138,11 +160,18 @@ export async function debitWallet(
 				}
 			});
 
-			return { wallet: updatedWallet, transaction };
+			return { transaction };
 		});
 
 		return { success: true, transaction: result.transaction };
 	} catch (error) {
+		if (error instanceof Error && error.message.startsWith('INSUFFICIENT_BALANCE:')) {
+			const [, available, required] = error.message.split(':');
+			return {
+				success: false,
+				error: `Insufficient balance. Available: ₦${available}, Required: ₦${required}`
+			};
+		}
 		console.error('Error debiting wallet:', error);
 		return { success: false, error: 'Failed to debit wallet' };
 	}

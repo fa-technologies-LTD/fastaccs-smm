@@ -32,6 +32,12 @@ interface AccountForEmail {
 	ageMonths?: number | null;
 }
 
+interface DeliveryPayload {
+	deliveryMethod?: unknown;
+}
+
+const SUPPORTED_DELIVERY_METHODS = new Set(['email', 'whatsapp', 'telegram', 'dashboard']);
+
 function getBaseUrl(): string {
 	const configuredBaseUrl = (env.PUBLIC_BASE_URL || PUBLIC_BASE_URL || '').trim();
 	if (configuredBaseUrl) {
@@ -48,8 +54,13 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		}
 
 		const orderId = params.id;
-		// Currently only email delivery is supported
-		await request.json(); // Parse request body but don't extract deliveryMethod since it's not used
+		const payload = (await request.json().catch(() => ({}))) as DeliveryPayload;
+		const requestedDeliveryMethod =
+			typeof payload.deliveryMethod === 'string' ? payload.deliveryMethod.trim().toLowerCase() : 'email';
+		if (!SUPPORTED_DELIVERY_METHODS.has(requestedDeliveryMethod)) {
+			return json({ error: 'Unsupported delivery method' }, { status: 400 });
+		}
+		const fallbackToEmail = requestedDeliveryMethod !== 'email';
 
 		// Get order with allocated accounts
 		const order = await prisma.order.findUnique({
@@ -107,13 +118,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		}
 
 		// Update order delivery status
-		await prisma.order.update({
-			where: { id: orderId },
-			data: {
-				deliveryStatus: 'delivered',
-				deliveredAt: new Date()
-			}
-		});
+			await prisma.order.update({
+				where: { id: orderId },
+				data: {
+					deliveryMethod: requestedDeliveryMethod,
+					deliveryStatus: 'delivered',
+					deliveredAt: new Date()
+				}
+			});
 
 		// Update account status to delivered
 		const accountIds = order.orderItems.flatMap((item) => item.accounts.map((acc) => acc.id));
@@ -127,12 +139,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 		invalidateAdminStatsCache();
 
-		return json({
-			success: true,
-			message: 'Accounts successfully delivered to customer',
-			messageId: emailResult.messageId,
-			accountsDelivered: totalAllocated
-		});
+			return json({
+				success: true,
+				message: 'Accounts successfully delivered to customer',
+				messageId: emailResult.messageId,
+				accountsDelivered: totalAllocated,
+				deliveryMethod: requestedDeliveryMethod,
+				deliveryFallback: fallbackToEmail ? 'email' : null
+			});
 	} catch (error) {
 		console.error('Database error:', error);
 		return json(

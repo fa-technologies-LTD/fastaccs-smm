@@ -3,6 +3,16 @@ import { promisify } from 'node:util';
 
 const scrypt = promisify(scryptCallback);
 const HASH_KEY_LENGTH = 64;
+export const MIN_PASSWORD_LENGTH = 8;
+export const MAX_PASSWORD_BYTES = 72;
+
+export function getPasswordByteLength(password: string): number {
+	return new TextEncoder().encode(password).length;
+}
+
+export function isPasswordTooLong(password: string): boolean {
+	return getPasswordByteLength(password) > MAX_PASSWORD_BYTES;
+}
 
 export async function hashPassword(password: string): Promise<string> {
 	const salt = randomBytes(16).toString('hex');

@@ -12,12 +12,7 @@ import {
 	createAdminAuditLog,
 	shouldLogAdminMutation
 } from '$lib/services/admin-audit';
-import { startPaymentReconciliationScheduler } from '$lib/services/payment-reconciliation';
-import { startWinBackScheduler } from '$lib/services/winback';
 import type { Handle, RequestEvent } from '@sveltejs/kit';
-
-startPaymentReconciliationScheduler();
-startWinBackScheduler();
 
 function getCanonicalBaseUrl(): URL | null {
 	const candidates = [env.CANONICAL_BASE_URL, publicEnv.PUBLIC_BASE_URL, publicEnv.PUBLIC_SITE_URL]

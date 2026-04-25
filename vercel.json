@@ -1,0 +1,12 @@
+{
+	"crons": [
+		{
+			"path": "/api/internal/cron/payments-reconcile",
+			"schedule": "*/5 * * * *"
+		},
+		{
+			"path": "/api/internal/cron/winback",
+			"schedule": "0 8 * * *"
+		}
+	]
+}

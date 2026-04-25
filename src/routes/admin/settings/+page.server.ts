@@ -96,12 +96,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 				isActive: session.user.isActive
 			}
 		})),
-		admins: admins.map((admin) => ({
-			id: admin.id,
-			email: admin.email,
-			fullName: admin.fullName,
-			role: admin.adminRoleAssignment?.role || 'FULL_ADMIN'
-		})),
+			admins: admins.map((admin) => ({
+				id: admin.id,
+				email: admin.email,
+				fullName: admin.fullName,
+				role: admin.adminRoleAssignment?.role || 'UNASSIGNED'
+			})),
 		canManageSettings,
 		canManageRoles,
 		envConfig: {

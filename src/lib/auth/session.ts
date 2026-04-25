@@ -2,6 +2,7 @@
 import { prisma } from '$lib/prisma';
 import type { User, Session } from '@prisma/client';
 import type { RequestEvent } from '@sveltejs/kit';
+import { createHash } from 'crypto';
 
 export interface SessionValidationResult {
 	session: Session | null;
@@ -46,10 +47,14 @@ export function generateSessionToken(): string {
 	return token;
 }
 
+function hashSessionToken(token: string): string {
+	return createHash('sha256').update(token).digest('hex');
+}
+
 // Create a new session
 export async function createSession(token: string, userId: string): Promise<Session> {
-	// Use the token directly as session ID for simplicity
-	const sessionId = token;
+	// Store only a hash at rest so DB leaks can't immediately hijack active sessions.
+	const sessionId = hashSessionToken(token);
 	const session = {
 		id: sessionId,
 		userId,
@@ -67,7 +72,7 @@ export async function createSession(token: string, userId: string): Promise<Sess
 
 // Validate session token
 export async function validateSessionToken(token: string): Promise<SessionValidationResult> {
-	const sessionId = token;
+	const sessionId = hashSessionToken(token);
 
 	// Check cache first
 	const cached = sessionCache.get(sessionId);

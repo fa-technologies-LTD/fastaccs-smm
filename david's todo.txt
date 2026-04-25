@@ -1,0 +1,215 @@
+FASTACCS — DAVID'S TODO
+Date: 2026-04-25 (Africa/Lagos)
+
+Current assessment:
+- Product UX remains stable for controlled launch testing.
+- P0 hardening items below are now implemented in code.
+- P1 hardening items are implemented except one business-policy decision (#14).
+
+Execution status update (2026-04-25):
+- P0 status: COMPLETE in code.
+- P1 status: COMPLETE in code except #14 (policy decision: manual payout vs auto-credit wallet).
+- Verification status: partial in this runtime because local Node is v16.18.0 and project enforces Node >=20.12.0.
+- Next verification on Node 20+:
+  1. npm run check
+  2. npm run build
+  3. smoke test login/signup, checkout, verify, webhook, reconcile cron, admin order process/deliver, note add.
+- Risk notes:
+  1. Session-token hashing change will invalidate old sessions once deployed.
+  2. CRON_SECRET must be set in Vercel for new cron routes.
+  3. Admin bootstrapping now depends on ADMIN_EMAILS allowlist.
+
+Suggested branch plan:
+1) hardening/p0-security-correctness
+2) hardening/p1-business-ops
+3) hardening/p2-performance-cleanup
+
+==================================================
+P0 — MUST FIX BEFORE FULL LIVE TRAFFIC
+==================================================
+
+[#1] Client price is trusted during order creation (critical)
+- Problem: order amount is derived from client-sent item.price.
+- Status: DONE (server now resolves tier prices from DB and ignores client price).
+- Fix plan:
+  1. Ignore client price entirely.
+  2. Fetch authoritative tier price from DB by categoryId.
+  3. Recompute subtotal/total server-side only.
+  4. Save order item unitPrice/totalPrice from DB price.
+  5. Reject request if any tier price missing/invalid.
+
+[#4] Account allocation race (TOCTOU)
+- Problem: find available accounts, then update later (non-atomic).
+- Status: DONE (allocation is transactional with row locks / SKIP LOCKED, including manual process path).
+- Fix plan:
+  1. Move allocation into a single DB transaction.
+  2. Use row locking / atomic update pattern to prevent double allocation.
+  3. Fail cleanly if requested quantity cannot be atomically reserved.
+  4. Add concurrency test (two parallel checkouts same tier).
+
+[#5] Wallet debit race
+- Problem: balance check happens before transaction.
+- Status: DONE (balance guard and decrement are now atomic in one transaction).
+- Fix plan:
+  1. Move balance read + sufficiency check inside transaction.
+  2. Use atomic decrement guard (only update when balance >= amount).
+  3. Return deterministic insufficient-balance error if guarded update fails.
+
+[#3] Admin order PATCH mass assignment
+- Problem: spreads unvalidated request body into prisma update.
+- Status: DONE (strict allowlist + value validation + unknown-field rejection).
+- Fix plan:
+  1. Introduce explicit allowlist of editable fields.
+  2. Validate each field type/value.
+  3. Reject unknown keys.
+
+[#2] Raw session token stored as session ID
+- Problem: DB compromise instantly reuses active sessions.
+- Status: DONE (session IDs now store sha256(token); token is hashed on lookup).
+- Fix plan:
+  1. Store sha256(token) as session id.
+  2. Hash cookie token before DB lookup.
+  3. Rotate/invalidate existing sessions during migration.
+
+[#6] Background schedulers not reliable on serverless
+- Problem: setInterval in app process is unreliable on Vercel.
+- Status: DONE (moved to authenticated cron endpoints + vercel.json schedules).
+- Fix plan:
+  1. Move payment reconciliation to scheduled trigger (Vercel Cron or external).
+  2. Move winback to scheduled trigger.
+  3. Keep idempotency so repeated runs are safe.
+
+[#9] Verification code uses Math.random
+- Problem: weak entropy for security code.
+- Status: DONE (uses crypto.randomInt).
+- Fix plan:
+  1. Replace with crypto.randomInt(100000, 1000000).
+
+[#8] Missing rate limits for login/signup
+- Problem: brute-force risk.
+- Status: DONE (IP + identity rate limits added to login/signup).
+- Fix plan:
+  1. Add IP/email based rate limiting for login and signup.
+  2. Add short lockouts/backoff after repeated failures.
+  3. Keep current verification rate limits.
+
+[#23] Password max length not enforced
+- Problem: potential scrypt abuse on huge passwords.
+- Status: DONE (max 72-byte cap enforced).
+- Fix plan:
+  1. Enforce max password length (e.g. 72 bytes or chosen cap).
+  2. Return clean validation error.
+
+==================================================
+P1 — STRONGLY RECOMMENDED IMMEDIATELY AFTER P0
+==================================================
+
+[#10] Admin role fallback grants FULL_ADMIN when assignment missing
+- Fix plan:
+- Status: DONE (removed blind FULL_ADMIN fallback; bootstrap limited to allowlisted admin emails).
+  1. Remove default FULL_ADMIN fallback from runtime path.
+  2. Require explicit role assignment.
+  3. Keep one-time bootstrap flow for first admin only.
+
+[#17] Order confirmation email duplicate race
+- Problem: check-then-send can race under concurrent paths.
+- Status: DONE (reservation + lock-based idempotent send path for order confirmation).
+- Fix plan:
+  1. Add idempotency key + DB uniqueness guard for order_confirmation per order.
+  2. Acquire/send through single guarded path.
+
+[#18] deliveryMethod ignored in deliver endpoint
+- Fix plan:
+- Status: DONE (validated and persisted; unsupported methods rejected; current delivery fallback is explicit).
+  1. Validate and persist selected deliveryMethod.
+  2. Either implement methods shown in UI or remove unsupported options.
+
+[#12] Test/debug page route is still public path (API is dev-gated)
+- Fix plan:
+- Status: DONE (/test/webhook page is dev-gated server-side).
+  1. Add environment guard to /test/webhook page route or remove route in production.
+
+[#7] Hardcoded admin email fallback
+- Fix plan:
+- Status: DONE (removed hardcoded fallback, env-only, plus production warning when empty).
+  1. Remove hardcoded default.
+  2. Use ADMIN_EMAILS env only.
+  3. Add startup warning if empty.
+
+[#14] Affiliate commission not credited to wallet automatically
+- Decision needed:
+- Status: PENDING DECISION (left unchanged to avoid policy regression before launch).
+  - Option A: keep manual payout model and document clearly in UI/admin.
+  - Option B: auto-credit wallet on confirmed commission.
+- Implement chosen policy consistently.
+
+[#13] orders service references non-existent endpoints
+- Fix plan:
+- Status: DONE (service wrappers mapped to existing APIs; missing notes route implemented).
+  1. Remove dead client methods or implement missing APIs.
+  2. Ensure no frontend path calls missing routes.
+
+[#24] Overlap/inconsistency between ensureAdminRoleAssignment and getAdminRole fallback
+- Fix plan:
+- Status: DONE (single strategy: explicit role source + allowlisted bootstrap path).
+  1. Define one single role-source strategy.
+  2. Keep bootstrap explicit; no hidden defaults.
+
+==================================================
+P2 — PERFORMANCE / CLEANUP / TECH-DEBT
+==================================================
+
+[#15] Winback N+1 query pattern
+- Fix plan:
+  1. Batch query users with last order and recent winback status in fewer queries.
+
+[#16] Settings in microcopy table
+- Fix plan:
+  1. Move operational settings to dedicated settings table/service.
+  2. Keep microcopy for content only.
+
+[#19] Settings snapshot hits DB frequently
+- Fix plan:
+  1. Add short TTL cache with explicit invalidation on settings update.
+
+[#20] getAdminContext causes per-request role query
+- Fix plan:
+  1. Cache role in session context (short TTL).
+  2. Invalidate when role assignment changes.
+
+[#11] In-memory caches on serverless (session/monnify/cooldown)
+- Fix plan:
+  1. Treat these caches as opportunistic only.
+  2. Move critical coordination to DB/redis-based state where needed.
+
+[#21] Dead migration code (productId || categoryId)
+- Fix plan:
+  1. Remove legacy any cast and use categoryId only.
+
+[#22] orders.ts mixes types + fetch wrappers
+- Fix plan:
+  1. Split into orders.types.ts and orders.client.ts.
+  2. Prevent accidental server imports of browser fetch wrappers.
+
+==================================================
+FINAL PRE-LAUNCH VALIDATION AFTER FIXES
+==================================================
+
+Security/Correctness checks:
+1) Attempt client-side price tampering -> server must reject/ignore tampered amount.
+2) Run parallel order placement on same low-stock tier -> no duplicate allocation.
+3) Run parallel wallet debits -> no negative balance.
+4) Verify admin PATCH cannot update forbidden fields.
+5) Verify session tokens in DB are hashed values.
+6) Verify cron-triggered reconciliation and winback run independently of request traffic.
+7) Verify auth rate limits trigger and recover correctly.
+8) Verify single order sends one order confirmation email even under webhook+verify+reconcile overlap.
+
+Operational checks:
+1) Promo, checkout, fulfillment, delivery, and reconciliation flows all pass.
+2) Logs include enough context for incident tracing.
+3) Rollback plan documented (DB + deployment).
+
+Go-live recommendation:
+- Soft launch: acceptable after P0 is complete and validated.
+- Full launch scale: after P1 is complete or explicitly risk-accepted.

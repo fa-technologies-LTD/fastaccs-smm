@@ -1,7 +1,7 @@
 // Admin configuration for FastAccs
 import { env } from '$env/dynamic/private';
 
-const DEFAULT_ADMIN_EMAILS = ['verystrongethan@gmail.com'];
+let warnedMissingAdminEmails = false;
 
 function getConfiguredAdminEmails(): Set<string> {
 	const configured = (env.ADMIN_EMAILS || '')
@@ -9,7 +9,14 @@ function getConfiguredAdminEmails(): Set<string> {
 		.map((email) => email.trim().toLowerCase())
 		.filter((email) => email.length > 0);
 
-	return new Set([...DEFAULT_ADMIN_EMAILS, ...configured]);
+	if (configured.length === 0 && env.NODE_ENV === 'production' && !warnedMissingAdminEmails) {
+		warnedMissingAdminEmails = true;
+		console.warn(
+			'[auth.admin] ADMIN_EMAILS is empty in production. No users can be auto-classified as admin.'
+		);
+	}
+
+	return new Set(configured);
 }
 
 export function isAdminEmail(email: string): boolean {

@@ -19,7 +19,7 @@ export interface CreateOrderData {
 	items: {
 		categoryId: string;
 		quantity: number;
-		price: number;
+		price?: number;
 	}[];
 	totalAmount: number;
 	currency: string;
@@ -125,8 +125,11 @@ export async function updateOrderStatus(orderId: string, status: string, notes?:
 			headers: {
 				'Content-Type': 'application/json'
 			},
-			body: JSON.stringify({ status, notes })
+			body: JSON.stringify({ status })
 		});
+		if (response.ok && notes && notes.trim()) {
+			void addOrderNote(orderId, notes.trim());
+		}
 		return await handleApiCall(response);
 	} catch (error) {
 		console.error('Failed to update order status:', error);
@@ -137,13 +140,20 @@ export async function updateOrderStatus(orderId: string, status: string, notes?:
 // Cancel order
 export async function cancelOrder(orderId: string, reason?: string) {
 	try {
-		const response = await fetch(`/api/orders/${orderId}/cancel`, {
-			method: 'POST',
+		const response = await fetch(`/api/orders/${orderId}`, {
+			method: 'PATCH',
 			headers: {
 				'Content-Type': 'application/json'
 			},
-			body: JSON.stringify({ reason })
+			body: JSON.stringify({
+				status: 'cancelled',
+				paymentStatus: 'cancelled',
+				deliveryStatus: 'cancelled'
+			})
 		});
+		if (response.ok && reason && reason.trim()) {
+			void addOrderNote(orderId, `Cancellation reason: ${reason.trim()}`);
+		}
 		return await handleApiCall(response);
 	} catch (error) {
 		console.error('Failed to cancel order:', error);
@@ -207,12 +217,18 @@ export async function processOrderPayment(
 	}
 ) {
 	try {
-		const response = await fetch(`/api/orders/${orderId}/payment`, {
-			method: 'POST',
+		const response = await fetch(`/api/orders/${orderId}`, {
+			method: 'PATCH',
 			headers: {
 				'Content-Type': 'application/json'
 			},
-			body: JSON.stringify(paymentData)
+			body: JSON.stringify({
+				status: 'processing',
+				paymentStatus: 'paid',
+				paidAt: new Date().toISOString(),
+				paymentReference: paymentData.paymentReference || null,
+				paymentChannel: paymentData.paymentMethod || null
+			})
 		});
 		return await handleApiCall(response);
 	} catch (error) {
@@ -224,7 +240,7 @@ export async function processOrderPayment(
 // Fulfill order (assign accounts)
 export async function fulfillOrder(orderId: string) {
 	try {
-		const response = await fetch(`/api/orders/${orderId}/fulfill`, {
+		const response = await fetch(`/api/orders/${orderId}/process`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json'
@@ -253,8 +269,20 @@ export async function deleteOrder(orderId: string) {
 // Get order delivery details
 export async function getOrderDelivery(orderId: string) {
 	try {
-		const response = await fetch(`/api/orders/${orderId}/delivery`);
-		return await handleApiCall(response);
+		const response = await fetch(`/api/orders/${orderId}`);
+		const result = await handleApiCall(response);
+		if (result?.error) return result;
+		const order = result?.data;
+		return {
+			data: {
+				orderId,
+				deliveryStatus: order?.deliveryStatus || 'pending',
+				deliveryMethod: order?.deliveryMethod || 'email',
+				deliveryContact: order?.deliveryContact || null,
+				deliveredAt: order?.deliveredAt || null
+			},
+			error: null
+		};
 	} catch (error) {
 		console.error('Failed to fetch delivery details:', error);
 		return { data: null, error: 'Failed to fetch delivery details' };
@@ -355,11 +383,12 @@ export async function addOrderNote(orderId: string, note: string) {
 // Retry failed delivery
 export async function retryOrderDelivery(orderId: string) {
 	try {
-		const response = await fetch(`/api/orders/${orderId}/retry-delivery`, {
+		const response = await fetch(`/api/orders/${orderId}/deliver`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json'
-			}
+			},
+			body: JSON.stringify({ deliveryMethod: 'email' })
 		});
 		return await handleApiCall(response);
 	} catch (error) {

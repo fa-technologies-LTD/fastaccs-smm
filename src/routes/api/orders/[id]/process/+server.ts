@@ -1,8 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
-import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
-import { sendLowStockAdminAlertIfNeeded } from '$lib/services/admin-alerts';
+import { allocateAccountsForOrder } from '$lib/services/fulfillment';
 
 // POST /api/orders/[id]/process - Process order (allocate accounts)
 export const POST: RequestHandler = async ({ params, locals }) => {
@@ -11,86 +10,21 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
-		// ✅ FIXED: Implement actual account allocation logic - the critical missing piece
 		const orderId = params.id;
-
-		// Get order with items and categories
-		const order = await prisma.order.findUnique({
-			where: { id: orderId },
-			include: {
-				orderItems: true
+		const allocationResult = await allocateAccountsForOrder(orderId);
+		if (!allocationResult.success) {
+			const errorMessage = allocationResult.error || 'Failed to process order';
+			if (errorMessage === 'Order not found') {
+				return json({ error: errorMessage }, { status: 404 });
 			}
-		});
-
-		if (!order) {
-			return json({ error: 'Order not found' }, { status: 404 });
-		}
-
-		if (order.status === 'completed') {
-			return json({ error: 'Order already processed' }, { status: 400 });
-		}
-
-		// Process each order item and allocate accounts
-		const allocationResults = [];
-
-		for (const item of order.orderItems) {
-			// ✅ FIXED: Use the field that exists in current database schema (suppressing TS for DB mismatch)
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const categoryId = (item as any).productId || (item as any).categoryId;
-
-			// Find available accounts for this tier
-			const availableAccounts = await prisma.account.findMany({
-				where: {
-					categoryId: categoryId,
-					status: 'available'
-				},
-				take: item.quantity,
-				orderBy: { createdAt: 'asc' } // First in, first allocated
-			});
-
-			if (availableAccounts.length < item.quantity) {
-				// Not enough accounts available - rollback any previous allocations
-				for (const result of allocationResults) {
-					await prisma.account.updateMany({
-						where: { id: { in: result.accountIds } },
-						data: { status: 'available', orderItemId: null }
-					});
-				}
-
-				return json(
-					{
-						error: `Insufficient accounts available for ${item.productName}. Requested: ${item.quantity}, Available: ${availableAccounts.length}`
-					},
-					{ status: 400 }
-				);
+			if (errorMessage === 'Order already processed') {
+				return json({ error: errorMessage }, { status: 409 });
 			}
-
-			// Allocate accounts to this order item
-			const accountIds = availableAccounts.map((acc) => acc.id);
-			await prisma.account.updateMany({
-				where: { id: { in: accountIds } },
-				data: {
-					status: 'allocated',
-					orderItemId: item.id
-				}
-			});
-
-			allocationResults.push({
-				orderItemId: item.id,
-				categoryName: item.productName,
-				requestedQuantity: item.quantity,
-				allocatedQuantity: availableAccounts.length,
-				accountIds
-			});
+			return json({ error: errorMessage }, { status: 400 });
 		}
 
-		// Update order status to completed
-		const updatedOrder = await prisma.order.update({
+		const updatedOrder = await prisma.order.findUnique({
 			where: { id: orderId },
-			data: {
-				status: 'completed',
-				updatedAt: new Date()
-			},
 			include: {
 				orderItems: {
 					include: {
@@ -100,38 +34,18 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 				user: true
 			}
 		});
-
-		invalidateAdminStatsCache();
-		void sendLowStockAdminAlertIfNeeded('manual_order_processing').catch((error) => {
-			console.error('Failed to evaluate low-stock alert after manual order processing:', error);
-		});
+		if (!updatedOrder) {
+			return json({ error: 'Order not found after processing' }, { status: 404 });
+		}
 
 		return json({
 			data: updatedOrder,
-			allocation: allocationResults,
+			allocation: allocationResult.data || [],
 			message: 'Accounts allocated successfully. Use /deliver endpoint to send to customer.',
 			error: null
 		});
 	} catch (error) {
 		console.error('Database error during order processing:', error);
-
-		// Rollback any allocated accounts for this order on error
-		try {
-			const orderId = params.id;
-			await prisma.account.updateMany({
-				where: {
-					orderItem: { orderId: orderId },
-					status: 'allocated'
-				},
-				data: {
-					status: 'available',
-					orderItemId: null
-				}
-			});
-			
-		} catch (rollbackError) {
-			console.error('Failed to rollback allocated accounts:', rollbackError);
-		}
 
 		return json(
 			{ data: null, error: error instanceof Error ? error.message : 'Unknown error' },
