@@ -1,7 +1,6 @@
 // Google OAuth setup using Arctic
 import { Google } from 'arctic';
-import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } from '$env/static/private';
-import { PUBLIC_BASE_URL } from '$env/static/public';
+import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
 import { dev } from '$app/environment';
 
@@ -16,17 +15,23 @@ export function getGoogleCallbackUrl(origin?: string): string {
 	}
 
 	if (dev) {
-		const localBase = PUBLIC_BASE_URL?.trim() || 'http://localhost:5173';
+		const localBase = publicEnv.PUBLIC_BASE_URL?.trim() || 'http://localhost:5173';
 		return `${normalizeBaseUrl(localBase)}/auth/google/callback`;
 	}
 
-	const publicBase =
-		publicEnv.PUBLIC_SITE_URL?.trim() || PUBLIC_BASE_URL?.trim() || 'https://smm.fastaccs.com';
+	const publicBase = publicEnv.PUBLIC_SITE_URL?.trim() || publicEnv.PUBLIC_BASE_URL?.trim() || 'https://smm.fastaccs.com';
 	return `${normalizeBaseUrl(publicBase)}/auth/google/callback`;
 }
 
 export function getGoogleClient(origin?: string): Google {
-	return new Google(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, getGoogleCallbackUrl(origin));
+	const clientId = (env.GOOGLE_CLIENT_ID || '').trim();
+	const clientSecret = (env.GOOGLE_CLIENT_SECRET || '').trim();
+
+	if (!clientId || !clientSecret) {
+		throw new Error('Google OAuth credentials are not configured');
+	}
+
+	return new Google(clientId, clientSecret, getGoogleCallbackUrl(origin));
 }
 
 // Backward-compatible export for places that do not pass request origin.

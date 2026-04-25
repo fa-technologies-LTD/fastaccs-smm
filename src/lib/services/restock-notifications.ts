@@ -1,7 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { sendEmail } from './email';
 import { env } from '$env/dynamic/private';
-import { PUBLIC_BASE_URL } from '$env/static/public';
 
 interface RestockTierInfo {
 	id: string;
@@ -62,7 +61,7 @@ export async function triggerRestockNotificationsForTier(tierId: string): Promis
 
 	if (subscribers.length === 0) return;
 
-	const baseUrl = (env.PUBLIC_BASE_URL || PUBLIC_BASE_URL || 'http://localhost:5173').replace(/\/+$/, '');
+	const baseUrl = (env.PUBLIC_BASE_URL || process.env.PUBLIC_BASE_URL || 'http://localhost:5173').replace(/\/+$/, '');
 	const tierUrl = `${baseUrl}/platforms/${tierInfo.platformSlug}/tiers/${tierInfo.slug}`;
 	const urgencyNote =
 		tierInfo.availableCount <= 5

@@ -1,7 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
-import { PUBLIC_BASE_URL } from '$env/static/public';
 import { prisma } from '$lib/prisma';
 import { sendEmail } from '$lib/services/email';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
@@ -39,7 +38,7 @@ interface DeliveryPayload {
 const SUPPORTED_DELIVERY_METHODS = new Set(['email', 'whatsapp', 'telegram', 'dashboard']);
 
 function getBaseUrl(): string {
-	const configuredBaseUrl = (env.PUBLIC_BASE_URL || PUBLIC_BASE_URL || '').trim();
+	const configuredBaseUrl = (env.PUBLIC_BASE_URL || process.env.PUBLIC_BASE_URL || '').trim();
 	if (configuredBaseUrl) {
 		return configuredBaseUrl.replace(/\/+$/, '');
 	}

@@ -1,6 +1,5 @@
 import nodemailer, { type Transporter } from 'nodemailer';
 import { env } from '$env/dynamic/private';
-import { PUBLIC_BASE_URL } from '$env/static/public';
 import { prisma } from '$lib/prisma';
 import { randomInt } from 'crypto';
 
@@ -50,7 +49,7 @@ interface EmailLogParams {
 let transporterCache: Transporter | null = null;
 
 function getBaseUrl(): string {
-	const candidate = (env.PUBLIC_BASE_URL || PUBLIC_BASE_URL || '').trim();
+	const candidate = (env.PUBLIC_BASE_URL || process.env.PUBLIC_BASE_URL || '').trim();
 	if (candidate) {
 		return candidate.replace(/\/+$/, '');
 	}

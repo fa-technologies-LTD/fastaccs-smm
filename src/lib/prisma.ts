@@ -1,14 +1,16 @@
 import { PrismaClient } from '@prisma/client';
-import { DATABASE_URL } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 
 const globalForPrisma = globalThis as unknown as {
 	prisma: PrismaClient | undefined;
 };
 
+const databaseUrl = (env.DATABASE_URL || process.env.DATABASE_URL || '').trim();
+
 export const prisma =
 	globalForPrisma.prisma ??
 	new PrismaClient({
-		datasources: { db: { url: DATABASE_URL } },
+		...(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : {}),
 		log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
 		errorFormat: 'minimal'
 	});

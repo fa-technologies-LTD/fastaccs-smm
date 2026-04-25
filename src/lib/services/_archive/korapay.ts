@@ -1,11 +1,14 @@
 import { env } from '$env/dynamic/private';
-import { PUBLIC_BASE_URL } from '$env/static/public';
 import { createHmac } from 'crypto';
 import { dev } from '$app/environment';
 
 const KORAPAY_API_URL = 'https://api.korapay.com/merchant/api/v1';
 
-const BASE_URL = dev ? 'https://matha-excursionary-veraciously.ngrok-free.dev' : PUBLIC_BASE_URL;
+const BASE_URL = (
+	dev
+		? 'https://matha-excursionary-veraciously.ngrok-free.dev'
+		: env.PUBLIC_BASE_URL || 'https://smm.fastaccs.com'
+).replace(/\/+$/, '');
 
 function getKorapaySecretKey(): string {
 	const key = (env.KORAPAY_SECRET_KEY || '').trim();

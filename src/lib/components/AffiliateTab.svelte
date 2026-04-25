@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Share2, Copy, DollarSign, CheckCircle } from '@lucide/svelte';
-	import { PUBLIC_BASE_URL } from '$env/static/public';
 	import { env as publicEnv } from '$env/dynamic/public';
 	import { addToast } from '$lib/stores/toasts';
 	import { copyToClipboard } from '$lib/helpers/utils';
@@ -10,7 +9,7 @@
 	let isLoadingAffiliate = $state(false);
 	let affiliateData = $state<any>(initialAffiliateData);
 	const referralBaseUrl = $derived(
-		(publicEnv.PUBLIC_SITE_URL || PUBLIC_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : ''))
+		(publicEnv.PUBLIC_SITE_URL || publicEnv.PUBLIC_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : ''))
 			.trim()
 			.replace(/\/+$/, '') || 'https://smm.fastaccs.com'
 	);

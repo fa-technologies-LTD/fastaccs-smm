@@ -1,5 +1,4 @@
 import { env } from '$env/dynamic/private';
-import { PUBLIC_BASE_URL } from '$env/static/public';
 import { prisma } from '$lib/prisma';
 import { sendEmail } from './email';
 
@@ -7,7 +6,7 @@ const WINBACK_DAYS = Math.max(Number(env.WINBACK_DAYS_THRESHOLD || 30), 1);
 const WINBACK_COOLDOWN_DAYS = 30;
 
 function getBaseUrl(): string {
-	const candidate = (env.PUBLIC_BASE_URL || PUBLIC_BASE_URL || '').trim();
+	const candidate = (env.PUBLIC_BASE_URL || process.env.PUBLIC_BASE_URL || '').trim();
 	return candidate ? candidate.replace(/\/+$/, '') : 'http://localhost:5173';
 }
 
@@ -182,4 +181,3 @@ export function startWinBackScheduler(): void {
 
 	console.info('[winback.scheduler] started', { intervalMs, timezone: 'Africa/Lagos' });
 }
-
