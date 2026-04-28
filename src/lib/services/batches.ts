@@ -498,14 +498,18 @@ export async function getBatchById(id: string, fetchFn: typeof fetch = fetch) {
 		// Convert to BatchMetadata format
 		const descriptors = data.descriptors as Record<string, unknown> | null;
 		const status = descriptors?.status as string;
+		const totalUnits = Number(data.totalUnits ?? data.total_units ?? 0);
+		const remainingUnits = Number(data.remainingUnits ?? data.remaining_units ?? 0);
+		const createdAt = (data.createdAt ?? data.created_at ?? null) as string | null;
+		const updatedAt = (data.updatedAt ?? data.updated_at ?? createdAt ?? null) as string | null;
 
 		const batch: BatchMetadata = {
 			id: data.id,
 			name: data.supplier || 'Unnamed Batch',
 			description: data.notes,
-			tier_id: data.category_id,
-			total_accounts: data.total_units,
-			processed_accounts: data.total_units - data.remaining_units,
+			tier_id: data.categoryId || data.category_id,
+			total_accounts: totalUnits,
+			processed_accounts: totalUnits - remainingUnits,
 			status:
 				status === 'failed' ||
 				status === 'pending' ||
@@ -513,8 +517,8 @@ export async function getBatchById(id: string, fetchFn: typeof fetch = fetch) {
 				status === 'completed'
 					? status
 					: 'pending',
-			created_at: data.created_at,
-			updated_at: data.created_at,
+			created_at: createdAt || '',
+			updated_at: updatedAt || createdAt || '',
 			metadata: descriptors || {}
 		};
 

@@ -18,13 +18,15 @@
 		RefreshCw,
 		Download,
 		Eye,
-		EyeOff
+		EyeOff,
+		ExternalLink
 	} from '@lucide/svelte';
 	import { updateOrderStatus, processOrderDelivery, addOrderNote } from '$lib/services/orders';
 	import { addToast } from '$lib/stores/toasts';
 	import type { OrderMetadata, OrderItemWithDetails } from '$lib/services/orders';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
+	import { resolveCredentialField } from '$lib/helpers/credential-links';
 
 	// Props from load function
 	interface Props {
@@ -115,6 +117,59 @@
 			hideMonetaryAmounts,
 			format: formatPrice
 		});
+	}
+
+	function formatDateTime(value: string | Date | null | undefined): string {
+		if (!value) return 'N/A';
+		const date = value instanceof Date ? value : new Date(value);
+		if (Number.isNaN(date.getTime())) return 'N/A';
+		return date.toLocaleString();
+	}
+
+	function getAccountStatus(item: OrderItemWithDetails): string {
+		const status = String(item.account_status || '').trim().toLowerCase();
+		return status || 'allocated';
+	}
+
+	function getAccountStatusColor(status: string): string {
+		switch (status) {
+			case 'delivered':
+			case 'completed':
+			case 'sold':
+				return 'text-green-600 bg-green-100';
+			case 'reserved':
+			case 'processing':
+				return 'text-yellow-700 bg-yellow-100';
+			case 'failed':
+			case 'retired':
+			case 'unavailable':
+				return 'text-red-600 bg-red-100';
+			case 'assigned':
+			case 'allocated':
+				return 'text-blue-600 bg-blue-100';
+			default:
+				return 'text-gray-600 bg-gray-100';
+		}
+	}
+
+	function buildAccountLogText(item: OrderItemWithDetails): string {
+		const status = getAccountStatus(item);
+		return [
+			`Username: ${item.account_username || ''}`,
+			`Password: ${item.account_password || ''}`,
+			`Email: ${item.account_email || ''}`,
+			`Email Password: ${item.account_email_password || ''}`,
+			`2FA: ${item.account_two_fa || ''}`,
+			`Link: ${item.account_link_url || ''}`,
+			`Status: ${status}`,
+			`Created At: ${item.account_created_at ? formatDateTime(item.account_created_at) : ''}`,
+			`Delivered At: ${item.account_delivered_at ? formatDateTime(item.account_delivered_at) : ''}`,
+			`Notes: ${item.account_delivery_notes || ''}`,
+			`Platform: ${item.platform_name || ''}`,
+			`Tier: ${item.tier_name || ''}`
+		]
+			.join('\n')
+			.trim();
 	}
 
 	// Actions
@@ -418,53 +473,111 @@
 						</div>
 					</div>
 
-					{#if items.length === 0}
-						<div class="p-12 text-center">
-							<Package class="mx-auto mb-4 h-12 w-12 text-gray-300" />
-							<h3 class="mb-2 text-lg font-medium text-gray-900">No accounts allocated</h3>
-							<p class="text-gray-500">Accounts will be allocated when the order is processed.</p>
-						</div>
-					{:else}
-						<div class="space-y-3 p-3 lg:hidden">
-							{#each items as item}
-								<div class="rounded-lg border border-gray-200 p-3">
-									<div class="mb-2 flex items-start justify-between gap-2">
-										<div class="min-w-0">
-											<div class="truncate text-sm font-semibold text-gray-900">
-												@{item.account_username}
+						{#if items.length === 0}
+							<div class="p-12 text-center">
+								<Package class="mx-auto mb-4 h-12 w-12 text-gray-300" />
+								<h3 class="mb-2 text-lg font-medium text-gray-900">No accounts allocated</h3>
+								<p class="text-gray-500">Accounts will be allocated when the order is processed.</p>
+							</div>
+						{:else}
+							<div class="space-y-3 p-3 lg:hidden">
+								{#each items as item}
+									{@const accountStatus = getAccountStatus(item)}
+									{@const twoFaField = resolveCredentialField(item.account_two_fa)}
+									{@const linkField = resolveCredentialField(item.account_link_url)}
+									<div class="rounded-lg border border-gray-200 p-3">
+										<div class="mb-2 flex items-start justify-between gap-2">
+											<div class="min-w-0">
+												<div class="truncate text-sm font-semibold text-gray-900">
+													@{item.account_username || 'N/A'}
+												</div>
+												<div class="truncate text-xs text-gray-500">
+													{item.account_email || 'No email'}
+												</div>
 											</div>
-											<div class="truncate text-xs text-gray-500">
-												{item.account_email || 'No email'}
-											</div>
+											<span
+												class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium {getAccountStatusColor(
+													accountStatus
+												)}"
+											>
+												{formatStatusLabel(accountStatus)}
+											</span>
 										</div>
-										<span
-											class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-800"
+										<div class="mb-3 text-xs text-gray-600">
+											{item.platform_name} · {item.tier_name}
+										</div>
+
+										{#if showCredentials}
+											<div class="mb-3 space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs">
+												<div><span class="font-semibold">Password:</span> {item.account_password || 'N/A'}</div>
+												<div>
+													<span class="font-semibold">Email Pass:</span> {item.account_email_password || 'N/A'}
+												</div>
+												<div>
+													<span class="font-semibold">2FA:</span>
+													{#if twoFaField.display}
+														{#if twoFaField.isUrl && twoFaField.href}
+															<a
+																href={twoFaField.href}
+																target="_blank"
+																rel="noopener noreferrer"
+																class="ml-1 inline-flex items-center gap-1 underline"
+																style="color: var(--link);"
+															>
+																{twoFaField.display}
+																<ExternalLink class="h-3 w-3" />
+															</a>
+														{:else}
+															<span class="ml-1">{twoFaField.display}</span>
+														{/if}
+													{:else}
+														N/A
+													{/if}
+												</div>
+												<div>
+													<span class="font-semibold">Link:</span>
+													{#if linkField.display}
+														{#if linkField.isUrl && linkField.href}
+															<a
+																href={linkField.href}
+																target="_blank"
+																rel="noopener noreferrer"
+																class="ml-1 inline-flex items-center gap-1 underline"
+																style="color: var(--link);"
+															>
+																{linkField.display}
+																<ExternalLink class="h-3 w-3" />
+															</a>
+														{:else}
+															<span class="ml-1">{linkField.display}</span>
+														{/if}
+													{:else}
+														N/A
+													{/if}
+												</div>
+												{#if item.account_delivery_notes}
+													<div><span class="font-semibold">Note:</span> {item.account_delivery_notes}</div>
+												{/if}
+												<div><span class="font-semibold">Added:</span> {formatDateTime(item.account_created_at)}</div>
+												{#if item.account_delivered_at}
+													<div><span class="font-semibold">Delivered:</span> {formatDateTime(item.account_delivered_at)}</div>
+												{/if}
+											</div>
+										{:else}
+											<div class="mb-3 rounded border border-gray-200 bg-gray-50 p-2">
+												<div class="text-[11px] text-gray-500">Password</div>
+												<div class="font-mono text-xs break-all text-gray-900">
+													{item.account_password || 'No password'}
+												</div>
+											</div>
+										{/if}
+
+										<button
+											onclick={() => copyToClipboard(buildAccountLogText(item))}
+											class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
+											title="Copy account details"
 										>
-											Allocated
-										</span>
-									</div>
-									<div class="mb-3 text-xs text-gray-600">
-										{item.platform_name} · {item.tier_name}
-									</div>
-
-									{#if showCredentials}
-										<div class="mb-3 rounded border border-gray-200 bg-gray-50 p-2">
-											<div class="text-[11px] text-gray-500">Password</div>
-											<div class="font-mono text-xs break-all text-gray-900">
-												{item.account_password || 'No password'}
-											</div>
-										</div>
-									{/if}
-
-									<button
-										onclick={() =>
-											copyToClipboard(
-												`Username: ${item.account_username}\nPassword: ${item.account_password}`
-											)}
-										class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
-										title="Copy account details"
-									>
-										<Copy class="h-3.5 w-3.5" />
+											<Copy class="h-3.5 w-3.5" />
 										Copy
 									</button>
 								</div>
@@ -489,7 +602,7 @@
 											<th
 												class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
 											>
-												Credentials
+												Credentials Log
 											</th>
 										{/if}
 										<th
@@ -497,8 +610,15 @@
 										>
 											Status
 										</th>
+										{#if showCredentials}
+											<th
+												class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+											>
+												Timeline
+											</th>
+										{/if}
 										<th
-											class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+											class="px-6 py-3 text-right text-xs font-medium tracking-wider text-gray-500 uppercase"
 										>
 											Actions
 										</th>
@@ -506,11 +626,14 @@
 								</thead>
 								<tbody class="divide-y divide-gray-200 bg-white">
 									{#each items as item}
+										{@const accountStatus = getAccountStatus(item)}
+										{@const twoFaField = resolveCredentialField(item.account_two_fa)}
+										{@const linkField = resolveCredentialField(item.account_link_url)}
 										<tr class="hover:bg-gray-50">
 											<td class="px-6 py-4 whitespace-nowrap">
 												<div>
 													<div class="text-sm font-medium text-gray-900">
-														@{item.account_username}
+														@{item.account_username || 'N/A'}
 													</div>
 													<div class="text-sm text-gray-500">
 														{item.account_email || 'No email'}
@@ -528,37 +651,80 @@
 												</div>
 											</td>
 											{#if showCredentials}
-												<td class="px-6 py-4 whitespace-nowrap">
-													<div class="flex items-center space-x-2">
-														<code class="rounded bg-gray-100 px-2 py-1 font-mono text-sm">
-															{item.account_password || 'No password'}
-														</code>
-														<button
-															onclick={() =>
-																copyToClipboard(
-																	`${item.account_username}:${item.account_password}`
-																)}
-															class="text-gray-400 hover:text-gray-600"
-															title="Copy credentials"
-														>
-															<Copy class="h-4 w-4" />
-														</button>
+												<td class="px-6 py-4 align-top">
+													<div class="space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs">
+														<div><span class="font-semibold">Password:</span> {item.account_password || 'N/A'}</div>
+														<div>
+															<span class="font-semibold">Email Pass:</span> {item.account_email_password || 'N/A'}
+														</div>
+														<div>
+															<span class="font-semibold">2FA:</span>
+															{#if twoFaField.display}
+																{#if twoFaField.isUrl && twoFaField.href}
+																	<a
+																		href={twoFaField.href}
+																		target="_blank"
+																		rel="noopener noreferrer"
+																		class="inline-flex items-center gap-1 underline"
+																		style="color: var(--link);"
+																	>
+																		{twoFaField.display}
+																		<ExternalLink class="h-3 w-3" />
+																	</a>
+																{:else}
+																	<span>{twoFaField.display}</span>
+																{/if}
+															{:else}
+																N/A
+															{/if}
+														</div>
+														<div>
+															<span class="font-semibold">Link:</span>
+															{#if linkField.display}
+																{#if linkField.isUrl && linkField.href}
+																	<a
+																		href={linkField.href}
+																		target="_blank"
+																		rel="noopener noreferrer"
+																		class="inline-flex items-center gap-1 underline"
+																		style="color: var(--link);"
+																	>
+																		{linkField.display}
+																		<ExternalLink class="h-3 w-3" />
+																	</a>
+																{:else}
+																	<span>{linkField.display}</span>
+																{/if}
+															{:else}
+																N/A
+															{/if}
+														</div>
+														{#if item.account_delivery_notes}
+															<div><span class="font-semibold">Note:</span> {item.account_delivery_notes}</div>
+														{/if}
 													</div>
 												</td>
 											{/if}
-											<td class="px-6 py-4 whitespace-nowrap">
+											<td class="px-6 py-4 align-top whitespace-nowrap">
 												<span
-													class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800"
+													class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {getAccountStatusColor(
+														accountStatus
+													)}"
 												>
-													Allocated
+													{formatStatusLabel(accountStatus)}
 												</span>
 											</td>
+											{#if showCredentials}
+												<td class="px-6 py-4 align-top text-xs text-gray-500">
+													<div>Added: {formatDateTime(item.account_created_at)}</div>
+													{#if item.account_delivered_at}
+														<div class="mt-1">Delivered: {formatDateTime(item.account_delivered_at)}</div>
+													{/if}
+												</td>
+											{/if}
 											<td class="px-6 py-4 text-right text-sm font-medium whitespace-nowrap">
 												<button
-													onclick={() =>
-														copyToClipboard(
-															`Username: ${item.account_username}\nPassword: ${item.account_password}`
-														)}
+													onclick={() => copyToClipboard(buildAccountLogText(item))}
 													class="text-blue-600 hover:text-blue-900"
 													title="Copy account details"
 												>
