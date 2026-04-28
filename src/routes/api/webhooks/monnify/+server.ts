@@ -16,6 +16,8 @@ import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
 import { recordPromotionRedemption } from '$lib/services/promotions';
 import { isAutoDeliveryPausedSetting } from '$lib/services/admin-settings';
+import { isManualHandoverOrder } from '$lib/services/order-delivery-mode';
+import { notifyManualHandoverOrderPaid } from '$lib/services/manual-handover';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -154,6 +156,24 @@ async function markOrderPaidAndAllocate(params: {
 		await sendOrderConfirmationEmailIfNeeded(params.orderId);
 	} catch (emailError) {
 		console.error('Failed to send webhook order confirmation email:', emailError);
+	}
+
+	const manualHandoverOrder = await isManualHandoverOrder(params.orderId);
+	if (manualHandoverOrder) {
+		await prisma.order.update({
+			where: { id: params.orderId },
+			data: {
+				deliveryStatus: 'processing',
+				deliveryMethod: 'whatsapp'
+			}
+		});
+		invalidateAdminStatsCache();
+		await notifyManualHandoverOrderPaid(params.orderId, 'payments.webhook.manual-handover');
+
+		console.info('[payments.webhook] manual_handover_order_paid', {
+			orderId: params.orderId
+		});
+		return;
 	}
 
 	const autoDeliveryPaused = await isAutoDeliveryPausedSetting().catch(() => false);

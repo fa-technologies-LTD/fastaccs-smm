@@ -3,6 +3,7 @@
 	import { showSuccess, showError } from '$lib/stores/toasts';
 	import { goto } from '$app/navigation';
 	import { cart } from '$lib/stores/cart.svelte';
+	import { normalizeTierDeliveryMode, type TierDeliveryMode } from '$lib/helpers/tier-delivery-config';
 
 	interface OrderItem {
 		id?: string;
@@ -118,6 +119,11 @@
 
 		const orderStatus = normalizeLower(order.status);
 		const deliveryStatus = normalizeLower(order.deliveryStatus);
+		const deliveryMethod = normalizeLower(order.deliveryMethod);
+
+		if (deliveryMethod === 'whatsapp' && deliveryStatus === 'processing') {
+			return 'Manual Handover';
+		}
 
 		if (deliveryStatus === 'delivered' || orderStatus === 'completed') {
 			return 'Completed';
@@ -137,7 +143,43 @@
 		return [];
 	}
 
-	function reorderItems(order: OrderRecord) {
+	async function fetchIncomingDeliveryMode(
+		reorderableItems: Array<OrderItem & { categoryId: string }>
+	): Promise<TierDeliveryMode | null> {
+		const ids = Array.from(new Set(reorderableItems.map((item) => item.categoryId)));
+		if (ids.length === 0) return null;
+
+		const response = await fetch('/api/categories/tiers/batch', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ ids })
+		});
+
+		if (!response.ok) {
+			throw new Error('Failed to validate delivery mode for reorder');
+		}
+
+		const payload = (await response.json()) as {
+			data?: Array<{ id: string; metadata?: { delivery_mode?: string | null } | null }>;
+		};
+		const rows = Array.isArray(payload.data) ? payload.data : [];
+		const modeById = new Map(
+			rows.map((row) => [row.id, normalizeTierDeliveryMode(row.metadata?.delivery_mode)])
+		);
+
+		const incomingModes = new Set<TierDeliveryMode>();
+		for (const item of reorderableItems) {
+			incomingModes.add(modeById.get(item.categoryId) || 'instant_auto');
+		}
+
+		if (incomingModes.size > 1) {
+			return null;
+		}
+
+		return incomingModes.has('manual_handover') ? 'manual_handover' : 'instant_auto';
+	}
+
+	async function reorderItems(order: OrderRecord) {
 		const items = getOrderItems(order);
 		if (items.length === 0) {
 			showError('No items found in this order');
@@ -151,6 +193,40 @@
 		if (reorderableItems.length === 0) {
 			showError('This order cannot be reordered yet');
 			return;
+		}
+
+		let incomingMode: TierDeliveryMode | null = null;
+		try {
+			incomingMode = await fetchIncomingDeliveryMode(
+				reorderableItems as Array<OrderItem & { categoryId: string }>
+			);
+		} catch (error) {
+			console.error('Failed to validate reorder delivery mode:', error);
+			showError('Could not reorder now', 'Please try again.');
+			return;
+		}
+
+		if (!incomingMode) {
+			showError(
+				'Reorder blocked',
+				'This order contains mixed delivery modes and must be added manually.'
+			);
+			return;
+		}
+
+		const compatibility = await cart.ensureDeliveryModeCompatibility(
+			reorderableItems[0].categoryId!,
+			incomingMode
+		);
+		if (!compatibility.compatible) {
+			const incomingLabel = incomingMode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto';
+			const existingLabel =
+				compatibility.existingMode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto';
+			const shouldReplace = window.confirm(
+				`You already have ${existingLabel} item(s) in your cart.\n\n${incomingLabel} items must be checked out separately.\n\nPress OK to clear your cart and continue, or Cancel to keep your current cart.`
+			);
+			if (!shouldReplace) return;
+			cart.clear();
 		}
 
 		for (const item of reorderableItems) {

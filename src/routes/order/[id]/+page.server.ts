@@ -1,6 +1,7 @@
 import { prisma } from '$lib/prisma';
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { getAdminSettingsSnapshot } from '$lib/services/admin-settings';
 
 export const load: PageServerLoad = async ({ params, locals, url }) => {
 	if (!locals.user) {
@@ -40,10 +41,15 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 	const fromTab = ['orders', 'purchases', 'affiliate'].includes(fromTabParam)
 		? fromTabParam
 		: 'orders';
+	const settings = await getAdminSettingsSnapshot().catch(() => null);
 
 	// Convert Decimal fields to numbers for serialization
 	return {
 		fromTab,
+		support: {
+			whatsappNumber: settings?.business.whatsappNumber || '',
+			loginGuideFallbackUrl: 'https://smm.fastaccs.com/support#after-purchase-guide'
+		},
 		order: {
 			...order,
 			subtotal: Number(order.subtotal),

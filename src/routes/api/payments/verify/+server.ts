@@ -18,6 +18,8 @@ import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
 import { recordPromotionRedemption } from '$lib/services/promotions';
 import { isAutoDeliveryPausedSetting } from '$lib/services/admin-settings';
+import { isManualHandoverOrder } from '$lib/services/order-delivery-mode';
+import { notifyManualHandoverOrderPaid } from '$lib/services/manual-handover';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -93,6 +95,27 @@ async function recoverPaidOrderIfNeeded(orderId: string) {
 	await recordPromotionRedemption(orderId).catch((error) => {
 		console.warn('Failed to record promotion redemption during paid recovery:', error);
 	});
+
+	const manualHandoverOrder = await isManualHandoverOrder(orderId);
+	if (manualHandoverOrder) {
+		await prisma.order.update({
+			where: { id: orderId },
+			data: {
+				status: 'paid',
+				paymentStatus: 'paid',
+				deliveryStatus: 'processing',
+				deliveryMethod: 'whatsapp'
+			}
+		});
+		invalidateAdminStatsCache();
+
+		await notifyManualHandoverOrderPaid(orderId, 'payments.verify.manual-handover');
+
+		return {
+			fulfilled: false,
+			warning: 'Payment confirmed. Manual handover is in progress on WhatsApp.'
+		};
+	}
 
 	const autoDeliveryPaused = await isAutoDeliveryPausedSetting().catch(() => false);
 	if (autoDeliveryPaused) {
@@ -477,6 +500,28 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						status: 'PAID'
 					});
 				}
+			}
+
+			const manualHandoverOrder = await isManualHandoverOrder(order.id);
+			if (manualHandoverOrder) {
+				await prisma.order.update({
+					where: { id: order.id },
+					data: {
+						deliveryStatus: 'processing',
+						deliveryMethod: 'whatsapp'
+					}
+				});
+				invalidateAdminStatsCache();
+				await notifyManualHandoverOrderPaid(order.id, 'payments.verify.manual-handover');
+
+				return json({
+					success: true,
+					state: 'SUCCESS',
+					warning: 'Payment confirmed. Manual handover is in progress on WhatsApp.',
+					orderId: order.id,
+					status: 'PAID',
+					manualHandover: true
+				});
 			}
 
 			const autoDeliveryPaused = await isAutoDeliveryPausedSetting().catch(() => false);

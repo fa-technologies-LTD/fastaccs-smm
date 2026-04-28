@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import type { CartItem, CartItemWithTier, CartStorage, CartState } from '$lib/types/cart';
+import { normalizeTierDeliveryMode, type TierDeliveryMode } from '$lib/helpers/tier-delivery-config';
 
 interface TierData {
 	id: string;
@@ -12,6 +13,11 @@ interface TierData {
 		slug: string;
 		metadata?: unknown;
 	} | null;
+}
+
+interface TierDeliveryLookup {
+	id: string;
+	metadata: { delivery_mode?: string | null } | null;
 }
 
 function isUuid(value: string): boolean {
@@ -307,6 +313,65 @@ class CartStore {
 	async getTotal(): Promise<number> {
 		const items = await this.getItemsWithTiers();
 		return items.reduce((sum, item) => sum + item.tier.price * item.quantity, 0);
+	}
+
+	private async fetchTierDeliveryModesById(ids: string[]): Promise<Map<string, TierDeliveryMode>> {
+		if (ids.length === 0) return new Map();
+
+		const response = await fetch('/api/categories/tiers/batch', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ ids })
+		});
+
+		if (!response.ok) {
+			throw new Error('Failed to resolve tier delivery modes');
+		}
+
+		const payload = (await response.json()) as { data?: TierDeliveryLookup[] };
+		const rows = Array.isArray(payload.data) ? payload.data : [];
+		const modeMap = new Map<string, TierDeliveryMode>();
+
+		for (const row of rows) {
+			modeMap.set(row.id, normalizeTierDeliveryMode(row.metadata?.delivery_mode));
+		}
+
+		return modeMap;
+	}
+
+	async ensureDeliveryModeCompatibility(
+		targetTierId: string,
+		targetMode: TierDeliveryMode
+	): Promise<{
+		compatible: boolean;
+		existingMode: TierDeliveryMode | null;
+	}> {
+		const existingTierIds = Array.from(
+			new Set(
+				this.state.items
+					.map((item) => normalizeLookupValue(item.tierId))
+					.filter((value) => value.length > 0 && value !== targetTierId)
+			)
+		);
+
+		if (existingTierIds.length === 0) {
+			return { compatible: true, existingMode: null };
+		}
+
+		const modeMap = await this.fetchTierDeliveryModesById(existingTierIds);
+		const existingModes = new Set<TierDeliveryMode>(
+			Array.from(modeMap.values()).filter((mode): mode is TierDeliveryMode => Boolean(mode))
+		);
+
+		if (existingModes.size === 0) {
+			return { compatible: true, existingMode: null };
+		}
+
+		const existingMode = existingModes.has('manual_handover') ? 'manual_handover' : 'instant_auto';
+		return {
+			compatible: existingMode === targetMode,
+			existingMode
+		};
 	}
 }
 

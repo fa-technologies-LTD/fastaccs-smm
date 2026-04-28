@@ -11,6 +11,10 @@ import {
 	isCheckoutEnabledSetting
 } from '$lib/services/admin-settings';
 import { canViewRevenue, redactOrderFinancials } from '$lib/services/admin-revenue-visibility';
+import {
+	normalizeTierDeliveryMode,
+	type TierDeliveryMode
+} from '$lib/helpers/tier-delivery-config';
 
 interface CreateOrderItemInput {
 	categoryId: string;
@@ -197,7 +201,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			quantity: number;
 			unitPrice: number;
 			categoryName: string;
+			deliveryMode: TierDeliveryMode;
 		}> = [];
+		const deliveryModes = new Set<TierDeliveryMode>();
 
 		for (const item of normalizedItems) {
 			const category = categoryById.get(item.categoryId);
@@ -220,9 +226,33 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				categoryId: item.categoryId,
 				quantity: item.quantity,
 				unitPrice,
-				categoryName: `${category.parent?.name || 'Unknown Platform'} ${category.name}`
+				categoryName: `${category.parent?.name || 'Unknown Platform'} ${category.name}`,
+				deliveryMode: normalizeTierDeliveryMode(
+					(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
+				)
 			});
+			deliveryModes.add(
+				normalizeTierDeliveryMode(
+					(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
+				)
+			);
 		}
+
+		if (deliveryModes.size > 1) {
+			return json(
+				{
+					success: false,
+					error:
+						'Manual Handover items must be checked out separately from Instant Auto items.'
+				},
+				{ status: 400 }
+			);
+		}
+
+		const orderDeliveryMode = deliveryModes.has('manual_handover')
+			? 'manual_handover'
+			: 'instant_auto';
+		const isManualHandoverOrder = orderDeliveryMode === 'manual_handover';
 
 		const subtotalAmount = itemsWithNames.reduce(
 			(sum, item) => sum + item.quantity * item.unitPrice,
@@ -298,8 +328,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				totalAmount: finalOrderTotal,
 				currency: orderData.currency || 'NGN',
 				paymentMethod: paymentMethod,
-				deliveryMethod: 'email', // Default delivery method
+				deliveryMethod: isManualHandoverOrder ? 'whatsapp' : 'email',
 				deliveryContact: customerEmail,
+				deliveryStatus: isManualHandoverOrder ? 'processing' : 'pending',
 				status: 'pending',
 				affiliateCode: orderData.affiliateCode?.toUpperCase(),
 				affiliateUserId,
@@ -391,6 +422,30 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				orderId: data.id,
 				checkoutUrl: initResult.checkoutUrl,
 				paymentReference,
+				deliveryMode: orderDeliveryMode,
+				error: null
+			});
+		}
+
+		if (isManualHandoverOrder) {
+			await prisma.order.update({
+				where: { id: data.id },
+				data: {
+					status: 'paid',
+					paymentStatus: 'paid',
+					deliveryStatus: 'processing',
+					deliveryMethod: 'whatsapp',
+					paidAt: new Date()
+				}
+			});
+			invalidateAdminStatsCache();
+
+			return json({
+				data,
+				success: true,
+				orderId: data.id,
+				deliveryMode: orderDeliveryMode,
+				message: 'Payment confirmed. Manual handover is now in progress.',
 				error: null
 			});
 		}
@@ -405,6 +460,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					orderId: data.id,
 					allocation: fulfillmentResult.allocation,
 					delivery: fulfillmentResult.delivery,
+					deliveryMode: orderDeliveryMode,
 					message:
 						'Order created and fulfilled successfully! Check your email for account details.',
 					error: null
@@ -415,6 +471,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				data,
 				success: true,
 				orderId: data.id,
+				deliveryMode: orderDeliveryMode,
 				warning: 'Order created but fulfillment failed: ' + fulfillmentResult.error,
 				error: null
 			});
@@ -424,6 +481,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				data,
 				success: true,
 				orderId: data.id,
+				deliveryMode: orderDeliveryMode,
 				warning: 'Order created but automatic fulfillment failed. Please process manually.',
 				error: null
 			});

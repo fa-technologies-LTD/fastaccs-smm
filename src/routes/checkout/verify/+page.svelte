@@ -174,8 +174,16 @@
 						orderId = resolvedOrderId;
 						clearPendingOrderStorage();
 						cart.clear();
-						showSuccess('Payment successful!', 'Your order has been completed.');
-						goto(getPurchasesDashboardPath(resolvedOrderId));
+						if (result.manualHandover === true || String(result.status || '').toUpperCase() === 'PAID') {
+							showSuccess(
+								'Payment confirmed!',
+								'Manual handover is now in progress. Continue on WhatsApp from your order details.'
+							);
+							goto(getOrdersDashboardPath(resolvedOrderId));
+						} else {
+							showSuccess('Payment successful!', 'Your order has been completed.');
+							goto(getPurchasesDashboardPath(resolvedOrderId));
+						}
 						return;
 					}
 

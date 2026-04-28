@@ -20,6 +20,12 @@
 		applyTierMerchandisingSanitization,
 		getTierMerchandisingState
 	} from '$lib/helpers/tier-merchandising';
+	import {
+		applyTierDeliveryConfigSanitization,
+		DEFAULT_LOGIN_GUIDE_LABEL,
+		DEFAULT_MANUAL_HANDOVER_PROMISE,
+		getTierDeliveryConfig
+	} from '$lib/helpers/tier-delivery-config';
 	import type { PageData } from './$types';
 	import { fade, fly } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
@@ -66,7 +72,11 @@
 			is_pinned: false,
 			pin_priority: 100,
 			is_featured: false,
-			featured_badge: 'Featured'
+			featured_badge: 'Featured',
+			delivery_mode: 'instant_auto' as 'instant_auto' | 'manual_handover',
+			manual_handover_promise: DEFAULT_MANUAL_HANDOVER_PROMISE,
+			login_guide_url: '',
+			login_guide_label: DEFAULT_LOGIN_GUIDE_LABEL
 		}
 	});
 
@@ -99,6 +109,7 @@
 		selectedTier = tier;
 		const metadata = tier.metadata as any;
 		const merchandising = getTierMerchandisingState(metadata);
+		const deliveryConfig = getTierDeliveryConfig(metadata);
 		tierForm = {
 			name: tier.name as string,
 			slug: tier.slug as string,
@@ -123,7 +134,12 @@
 				is_pinned: merchandising.isPinned,
 				pin_priority: merchandising.pinPriority ?? 100,
 				is_featured: merchandising.isFeatured,
-				featured_badge: merchandising.featuredBadge || 'Featured'
+				featured_badge: merchandising.featuredBadge || 'Featured',
+				delivery_mode: deliveryConfig.mode,
+				manual_handover_promise:
+					deliveryConfig.manualHandoverPromise || DEFAULT_MANUAL_HANDOVER_PROMISE,
+				login_guide_url: deliveryConfig.loginGuideUrl || '',
+				login_guide_label: deliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL
 			}
 		};
 		showEditModal = true;
@@ -154,7 +170,11 @@
 				is_pinned: false,
 				pin_priority: 100,
 				is_featured: false,
-				featured_badge: 'Featured'
+				featured_badge: 'Featured',
+				delivery_mode: 'instant_auto',
+				manual_handover_promise: DEFAULT_MANUAL_HANDOVER_PROMISE,
+				login_guide_url: '',
+				login_guide_label: DEFAULT_LOGIN_GUIDE_LABEL
 			}
 		};
 	}
@@ -164,7 +184,7 @@
 			// Clean up empty features
 			const cleanedMetadata = applyTierMerchandisingSanitization(
 				applyTierSampleScreenshotSanitization({
-					...tierForm.metadata,
+					...applyTierDeliveryConfigSanitization(tierForm.metadata),
 					features: tierForm.metadata.features.filter((feature) => feature.trim() !== '')
 				})
 			);
@@ -207,7 +227,7 @@
 			// Clean up empty features
 			const cleanedMetadata = applyTierMerchandisingSanitization(
 				applyTierSampleScreenshotSanitization({
-					...tierForm.metadata,
+					...applyTierDeliveryConfigSanitization(tierForm.metadata),
 					features: tierForm.metadata.features.filter((feature) => feature.trim() !== '')
 				})
 			);
@@ -449,6 +469,16 @@
 								{metadata?.delivery_time || 'N/A'}
 							</span>
 						</div>
+
+						<div class="flex items-center justify-between">
+							<div class="flex items-center gap-2">
+								<AlertCircle size={16} style="color: var(--text-dim);" />
+								<span class="text-sm" style="color: var(--text-muted)">Mode</span>
+							</div>
+							<span class="text-sm font-medium" style="color: var(--text);">
+								{metadata?.delivery_mode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto'}
+							</span>
+						</div>
 					</div>
 
 					<!-- Features -->
@@ -470,6 +500,12 @@
 									>
 								{/if}
 							</div>
+						</div>
+					{/if}
+
+					{#if metadata?.login_guide_url}
+						<div class="mt-4 rounded-md p-2 text-xs" style="background: rgba(59,130,246,0.08); color: var(--text-muted); border: 1px solid rgba(59,130,246,0.2);">
+							Login guide attached for buyers
 						</div>
 					{/if}
 				</div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import '../app.css';
 	import { onNavigate } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -18,6 +19,29 @@
 	let bannerDismissed = $state(false);
 	let lastBannerCookieName = $state<string | null>(null);
 	const announcementBanner = $derived(data.announcementBanner || null);
+	const defaultShareTitle = 'FastAccs - Premium Social Media Accounts & Growth Services';
+	const defaultShareDescription =
+		"Nigeria's marketplace for social media accounts and growth services with secure checkout and fast order processing.";
+
+	function normalizeBaseUrl(value: string | undefined): string {
+		const fallback = 'https://smm.fastaccs.com';
+		const trimmed = String(value || '').trim();
+		if (!trimmed) return fallback;
+
+		try {
+			const parsed = new URL(trimmed);
+			return parsed.origin.replace(/\/+$/, '');
+		} catch {
+			return fallback;
+		}
+	}
+
+	const publicBaseUrl = $derived(normalizeBaseUrl(publicEnv.PUBLIC_BASE_URL));
+	const shareImagePath = '/og-share-1200x630.png?v=20260428a';
+	const shareImageUrl = $derived(`${publicBaseUrl}${shareImagePath}`);
+	const currentPageUrl = $derived(
+		`${publicBaseUrl}${page.url?.pathname || '/'}${page.url?.search || ''}`
+	);
 
 	$effect(() => {
 		const nextCookieName = announcementBanner?.dismissCookieName || null;
@@ -88,6 +112,23 @@
 		document.cookie = `${announcementBanner.dismissCookieName}=1; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax${secureFlag}`;
 	}
 </script>
+
+<svelte:head>
+	<meta property="og:site_name" content="FastAccs" />
+	<meta property="og:type" content="website" />
+	<meta property="og:title" content={defaultShareTitle} />
+	<meta property="og:description" content={defaultShareDescription} />
+	<meta property="og:url" content={currentPageUrl} />
+	<meta property="og:image" content={shareImageUrl} />
+	<meta property="og:image:secure_url" content={shareImageUrl} />
+	<meta property="og:image:type" content="image/png" />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content={defaultShareTitle} />
+	<meta name="twitter:description" content={defaultShareDescription} />
+	<meta name="twitter:image" content={shareImageUrl} />
+</svelte:head>
 
 <PageLoadingBar />
 

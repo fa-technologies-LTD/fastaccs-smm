@@ -1,6 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
+import {
+	DEFAULT_LOGIN_GUIDE_LABEL,
+	DEFAULT_LOGIN_GUIDE_URL,
+	getTierDeliveryConfig
+} from '$lib/helpers/tier-delivery-config';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	try {
@@ -87,15 +92,23 @@ export const GET: RequestHandler = async ({ locals }) => {
 				where: {
 					userId: user.id,
 					status: { in: ['paid', 'completed'] },
-					orderItems: {
-						some: {
-							accounts: {
+					OR: [
+						{
+							orderItems: {
 								some: {
-									status: { in: ['allocated', 'delivered'] }
+									accounts: {
+										some: {
+											status: { in: ['allocated', 'delivered'] }
+										}
+									}
 								}
 							}
+						},
+						{
+							deliveryMethod: 'whatsapp',
+							paymentStatus: 'paid'
 						}
-					}
+					]
 				},
 				select: {
 					id: true,
@@ -110,7 +123,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 							quantity: true,
 							category: {
 								select: {
-									name: true
+									name: true,
+									metadata: true
 								}
 							},
 							accounts: {
@@ -141,16 +155,22 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 		// Transform purchases data
 		const purchasesFormatted = purchases.flatMap((order) =>
-			order.orderItems.map((item) => ({
-				orderId: order.id,
-				orderNumber: order.orderNumber,
-				orderDate: order.createdAt,
-				deliveredAt: order.deliveredAt,
-				categoryName: item.category.name,
-				platform: item.productCategory || item.category.name,
-				quantity: item.quantity,
-				accounts: item.accounts
-			}))
+			order.orderItems.map((item) => {
+				const deliveryConfig = getTierDeliveryConfig(item.category.metadata);
+				return {
+					orderId: order.id,
+					orderNumber: order.orderNumber,
+					orderDate: order.createdAt,
+					deliveredAt: order.deliveredAt,
+					categoryName: item.category.name,
+					platform: item.productCategory || item.category.name,
+					quantity: item.quantity,
+					accounts: item.accounts,
+					deliveryMode: deliveryConfig.mode,
+					loginGuideUrl: deliveryConfig.loginGuideUrl || DEFAULT_LOGIN_GUIDE_URL,
+					loginGuideLabel: deliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL
+				};
+			})
 		);
 
 		return json({

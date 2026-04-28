@@ -3,6 +3,7 @@ import { prisma } from '$lib/prisma';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { applyTierSampleScreenshotSanitization } from '$lib/helpers/tierSampleScreenshots';
 import { applyTierMerchandisingSanitization } from '$lib/helpers/tier-merchandising';
+import { applyTierDeliveryConfigSanitization } from '$lib/helpers/tier-delivery-config';
 
 // GET /api/categories - Get categories with optional filtering
 export async function GET({ url, locals }) {
@@ -56,7 +57,9 @@ export async function POST({ request, locals }) {
 		const metadata =
 			rest.categoryType === 'tier'
 				? applyTierMerchandisingSanitization(
-						applyTierSampleScreenshotSanitization(rawMetadata as Record<string, unknown>)
+						applyTierSampleScreenshotSanitization(
+							applyTierDeliveryConfigSanitization(rawMetadata as Record<string, unknown>)
+						)
 					)
 				: rawMetadata;
 

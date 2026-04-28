@@ -15,15 +15,23 @@ export const GET: RequestHandler = async ({ locals }) => {
 			where: {
 				userId: userId,
 				status: { in: ['paid', 'completed'] },
-				orderItems: {
-					some: {
-						accounts: {
+				OR: [
+					{
+						orderItems: {
 							some: {
-								status: { in: ['allocated', 'delivered'] }
+								accounts: {
+									some: {
+										status: { in: ['allocated', 'delivered'] }
+									}
+								}
 							}
 						}
+					},
+					{
+						deliveryMethod: 'whatsapp',
+						paymentStatus: 'paid'
 					}
-				}
+				]
 			},
 			include: {
 				orderItems: {

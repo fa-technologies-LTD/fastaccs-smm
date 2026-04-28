@@ -16,6 +16,8 @@ import { logOrderStatusTransition } from '$lib/services/order-audit';
 import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
 import { recordPromotionRedemption } from '$lib/services/promotions';
 import { isAutoDeliveryPausedSetting } from '$lib/services/admin-settings';
+import { isManualHandoverOrder } from '$lib/services/order-delivery-mode';
+import { notifyManualHandoverOrderPaid } from '$lib/services/manual-handover';
 
 interface ReconcileOptions {
 	limit?: number;
@@ -155,6 +157,21 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 				console.error('[payments.reconcile] failed to send order confirmation email:', emailError);
 			}
 
+			const manualHandoverOrder = await isManualHandoverOrder(order.id);
+			if (!dryRun && manualHandoverOrder) {
+				await prisma.order.update({
+					where: { id: order.id },
+					data: {
+						deliveryStatus: 'processing',
+						deliveryMethod: 'whatsapp'
+					}
+				});
+				didMutate = true;
+				await notifyManualHandoverOrderPaid(order.id, 'payments.reconcile.manual-handover');
+				summary.paid += 1;
+				continue;
+			}
+
 			if (!autoDeliveryPaused) {
 				const allocationResult = await allocateAccountsForOrder(order.id);
 				if (allocationResult.success) {
@@ -270,6 +287,20 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 				});
 			}
 			summary.paid += 1;
+
+			const manualHandoverOrder = await isManualHandoverOrder(order.id);
+			if (!dryRun && manualHandoverOrder) {
+				await prisma.order.update({
+					where: { id: order.id },
+					data: {
+						deliveryStatus: 'processing',
+						deliveryMethod: 'whatsapp'
+					}
+				});
+				didMutate = true;
+				await notifyManualHandoverOrderPaid(order.id, 'payments.reconcile.manual-handover');
+				continue;
+			}
 
 			if (!dryRun && !autoDeliveryPaused) {
 				const allocationResult = await allocateAccountsForOrder(order.id);

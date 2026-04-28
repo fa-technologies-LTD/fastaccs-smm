@@ -149,6 +149,27 @@
 						</div>
 					</div>
 
+					{#if purchase.loginGuideUrl}
+						<div
+							class="mb-4 rounded-[var(--r-sm)] border p-3 text-sm"
+							style="border-color: rgba(5, 212, 113, 0.3); background: rgba(5, 212, 113, 0.08);"
+						>
+							<div class="font-medium" style="color: var(--text);">Login Instructions</div>
+							<p class="mt-1 text-xs" style="color: var(--text-muted);">
+								Follow the setup guide for this exact tier to avoid login issues.
+							</p>
+							<a
+								href={purchase.loginGuideUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="mt-2 inline-block text-xs font-semibold underline"
+								style="color: var(--link);"
+							>
+								{purchase.loginGuideLabel || 'How to login this account'}
+							</a>
+						</div>
+					{/if}
+
 					{#if purchase.accounts && purchase.accounts.length > 0}
 						<div class="space-y-3">
 							{#each purchase.accounts as account, index}
@@ -330,6 +351,27 @@
 									{/if}
 								</div>
 							{/each}
+						</div>
+					{:else}
+						<div
+							class="rounded-[var(--r-sm)] border p-4 text-sm"
+							style="border-color: rgba(147, 197, 253, 0.3); background: rgba(59, 130, 246, 0.1); color: #dbeafe;"
+						>
+							Payment is confirmed. This purchase is handled via manual handover on WhatsApp.
+							Open your order details from the Orders tab to continue handover.
+							{#if purchase.loginGuideUrl}
+								<div class="mt-2">
+									<a
+										href={purchase.loginGuideUrl}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="text-xs font-semibold underline"
+										style="color: #bfdbfe;"
+									>
+										{purchase.loginGuideLabel || 'Open login guide'}
+									</a>
+								</div>
+							{/if}
 						</div>
 					{/if}
 				</div>

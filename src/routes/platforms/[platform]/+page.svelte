@@ -26,6 +26,10 @@
 		isPlatformImageUrl
 	} from '$lib/helpers/platformColors';
 	import { formatPrice } from '$lib/helpers/utils';
+	import {
+		getTierDeliveryConfig,
+		type TierDeliveryMode
+	} from '$lib/helpers/tier-delivery-config';
 
 	interface Props {
 		data: PageData;
@@ -178,6 +182,48 @@
 		return 'Featured';
 	}
 
+	function getTierDeliveryModeLabel(tier: TierCard): string {
+		const config = getTierDeliveryConfig(tier.metadata);
+		return config.mode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto';
+	}
+
+	function getTierManualHandoverPromise(tier: TierCard): string | null {
+		const config = getTierDeliveryConfig(tier.metadata);
+		return config.mode === 'manual_handover' ? config.manualHandoverPromise : null;
+	}
+
+	async function ensureAddModeCompatibility(tier: TierCard): Promise<boolean> {
+		const mode = getTierDeliveryConfig(tier.metadata).mode;
+		let compatibility: { compatible: boolean; existingMode: TierDeliveryMode | null };
+
+		try {
+			compatibility = await cart.ensureDeliveryModeCompatibility(tier.category_id, mode);
+		} catch (error) {
+			console.error('Failed to validate cart delivery mode compatibility:', error);
+			showError('Could not update cart', 'Please try again.');
+			return false;
+		}
+
+		if (compatibility.compatible) {
+			return true;
+		}
+
+		const incomingLabel = mode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto';
+		const existingLabel =
+			compatibility.existingMode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto';
+		const shouldReplace = window.confirm(
+			`You already have ${existingLabel} item(s) in your cart.\n\n${incomingLabel} items must be checked out separately.\n\nPress OK to clear your cart and add this item, or Cancel to keep your current cart.`
+		);
+
+		if (!shouldReplace) {
+			return false;
+		}
+
+		cart.clear();
+		showWarning('Cart cleared', `Previous ${existingLabel} items were removed.`);
+		return true;
+	}
+
 	function getCurrentCartQuantity(tier: TierCard): number {
 		const existingCartItem = cart.items.find((item) => item.tierId === tier.category_id);
 		return existingCartItem ? existingCartItem.quantity : 0;
@@ -199,6 +245,7 @@
 
 	async function openQuickAddModal(tier: TierCard): Promise<void> {
 		if (tier.visible_available <= 0) return;
+		if (!(await ensureAddModeCompatibility(tier))) return;
 
 		const currentCartQuantity = getCurrentCartQuantity(tier);
 		const remainingStock = tier.visible_available - currentCartQuantity;
@@ -296,6 +343,7 @@
 	async function addQuickAddToCart(): Promise<void> {
 		const tier = quickAddTier;
 		if (!tier || quickAddSubmitting) return;
+		if (!(await ensureAddModeCompatibility(tier))) return;
 
 		quickAddSubmitting = true;
 		try {
@@ -640,6 +688,20 @@
 											<span class="text-yellow-600">
 												• {tier.reservations_active} reserved
 											</span>
+										{/if}
+									</div>
+
+									<div class="mb-4">
+										<span
+											class="inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold"
+											style="background: rgba(59, 130, 246, 0.15); color: rgb(147, 197, 253); border: 1px solid rgba(147, 197, 253, 0.25);"
+										>
+											{getTierDeliveryModeLabel(tier)}
+										</span>
+										{#if getTierManualHandoverPromise(tier)}
+											<p class="mt-2 text-xs" style="color: var(--text-muted);">
+												{getTierManualHandoverPromise(tier)}
+											</p>
 										{/if}
 									</div>
 

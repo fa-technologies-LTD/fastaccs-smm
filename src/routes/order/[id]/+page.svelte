@@ -7,6 +7,12 @@
 	import type { PageData } from './$types';
 	import { formatDate, formatPrice, copyToClipboard, copyAllAccounts } from '$lib/helpers/utils';
 	import { resolveCredentialField } from '$lib/helpers/credential-links';
+	import {
+		DEFAULT_LOGIN_GUIDE_LABEL,
+		DEFAULT_LOGIN_GUIDE_URL,
+		getTierDeliveryConfig
+	} from '$lib/helpers/tier-delivery-config';
+	import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
 
 	let { data }: { data: PageData } = $props();
 
@@ -80,6 +86,31 @@
 				return 'status-error';
 		}
 	}
+
+	function isManualHandoverItem(item: (typeof data.order.orderItems)[number]): boolean {
+		return getTierDeliveryConfig(item.category?.metadata).mode === 'manual_handover';
+	}
+
+	function getItemLoginGuide(item: (typeof data.order.orderItems)[number]): {
+		url: string;
+		label: string;
+	} {
+		const config = getTierDeliveryConfig(item.category?.metadata);
+		return {
+			url: config.loginGuideUrl || data.support?.loginGuideFallbackUrl || DEFAULT_LOGIN_GUIDE_URL,
+			label: config.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL
+		};
+	}
+
+	function getManualHandoverLink(): string | null {
+		const paymentState = getPaymentState(data.order.status, data.order.paymentStatus);
+		if (paymentState.tone !== 'success') return null;
+		if (data.order.deliveryMethod !== 'whatsapp') return null;
+
+		const orderLabel = data.order.orderNumber || `ORD-${data.order.id.slice(0, 8).toUpperCase()}`;
+		const message = `Hi, I just paid for order ${orderLabel}. Manual handover in progress.`;
+		return buildWhatsAppSupportLink(data.support?.whatsappNumber, message);
+	}
 </script>
 
 <svelte:head>
@@ -141,6 +172,8 @@
 							<p style="color: var(--text-muted);">
 								{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.status === 'completed'}
 									Your accounts have been successfully allocated and delivered.
+								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.deliveryMethod === 'whatsapp' && data.order.deliveryStatus === 'processing'}
+									Payment confirmed. Manual handover is in progress on WhatsApp.
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'pending'}
 									Payment not confirmed yet. No account allocation has started.
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'failure'}
@@ -180,6 +213,31 @@
 					</p>
 				</div>
 
+				{#if getManualHandoverLink()}
+					<div
+						class="mb-6 rounded-lg p-4"
+						style="background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(147, 197, 253, 0.3);"
+					>
+						<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p class="text-sm font-semibold" style="color: #bfdbfe;">Manual handover in progress</p>
+								<p class="text-xs" style="color: #dbeafe;">
+									Secure WhatsApp handover by our team, usually within 15–60 minutes.
+								</p>
+							</div>
+							<a
+								href={getManualHandoverLink()}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold"
+								style="background: rgba(16, 185, 129, 0.18); border: 1px solid rgba(16, 185, 129, 0.35); color: rgb(52, 211, 153);"
+							>
+								Continue on WhatsApp
+							</a>
+						</div>
+					</div>
+				{/if}
+
 				<!-- Order Items -->
 				<div
 					class="rounded-lg p-6"
@@ -196,19 +254,38 @@
 											Quantity: {item.quantity} • {formatPrice(item.unitPrice)} each
 										</p>
 										<div class="mt-2">
-											<span
-												class={`status-badge ${
-													item.allocationStatus === 'allocated'
-														? 'status-success'
-														: item.allocationStatus === 'partial'
-															? 'status-warning'
-															: item.allocationStatus === 'failed'
-																? 'status-error'
-																: 'status-inactive'
-												}`}
+											{#if isManualHandoverItem(item)}
+												<span class="status-badge status-info">Manual handover via WhatsApp</span>
+											{:else}
+												<span
+													class={`status-badge ${
+														item.allocationStatus === 'allocated'
+															? 'status-success'
+															: item.allocationStatus === 'partial'
+																? 'status-warning'
+																: item.allocationStatus === 'failed'
+																	? 'status-error'
+																	: 'status-inactive'
+													}`}
+												>
+													{item.allocatedCount} of {item.quantity} allocated
+												</span>
+											{/if}
+										</div>
+										<div class="mt-2">
+											<a
+												href={getItemLoginGuide(item).url}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="text-xs font-medium hover:underline"
+												style="color: var(--link);"
 											>
-												{item.allocatedCount} of {item.quantity} allocated
-											</span>
+												{getItemLoginGuide(item).label}
+											</a>
+											<span class="ml-2 text-xs" style="color: var(--text-dim);"
+												>For more help: {data.support?.loginGuideFallbackUrl ||
+													'https://smm.fastaccs.com/support#after-purchase-guide'}</span
+											>
 										</div>
 									</div>
 									<div class="text-right">
@@ -430,6 +507,14 @@
 												</div>
 											{/each}
 										</div>
+									</div>
+								{:else if isManualHandoverItem(item)}
+									<div
+										class="mt-4 rounded-lg p-3 text-sm"
+										style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(147, 197, 253, 0.25); color: #dbeafe;"
+									>
+										Payment is confirmed. Our team will hand over this listing manually on WhatsApp.
+										Use the button above to continue the handover chat.
 									</div>
 								{/if}
 							</div>

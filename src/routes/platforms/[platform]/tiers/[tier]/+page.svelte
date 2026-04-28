@@ -24,6 +24,12 @@
 	import { formatPrice } from '$lib/helpers/utils';
 	import { getTierSampleScreenshotUrls } from '$lib/helpers/tierSampleScreenshots';
 	import { buildCloudinaryOptimizedImageUrl } from '$lib/helpers/cloudinary';
+	import {
+		DEFAULT_LOGIN_GUIDE_LABEL,
+		DEFAULT_LOGIN_GUIDE_URL,
+		getTierDeliveryConfig,
+		type TierDeliveryMode
+	} from '$lib/helpers/tier-delivery-config';
 
 	interface Props {
 		data: PageData;
@@ -46,6 +52,11 @@
 	);
 	const tierSampleScreenshotsModal = $derived(
 		tierSampleScreenshots.map((url) => buildCloudinaryOptimizedImageUrl(url, { width: 1280 }))
+	);
+	const tierDeliveryConfig = $derived(getTierDeliveryConfig(data.tier?.metadata));
+	const tierLoginGuideUrl = $derived(tierDeliveryConfig.loginGuideUrl || DEFAULT_LOGIN_GUIDE_URL);
+	const tierLoginGuideLabel = $derived(
+		tierDeliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL
 	);
 
 	// Format follower count
@@ -131,6 +142,35 @@
 
 		addingToCart = true;
 		try {
+			let compatibility: { compatible: boolean; existingMode: TierDeliveryMode | null };
+			try {
+				compatibility = await cart.ensureDeliveryModeCompatibility(
+					data.tierCategory.id,
+					tierDeliveryConfig.mode
+				);
+			} catch (error) {
+				console.error('Failed to validate cart delivery mode compatibility:', error);
+				showError('Could not update cart', 'Please try again.');
+				return;
+			}
+
+			if (!compatibility.compatible) {
+				const incomingLabel =
+					tierDeliveryConfig.mode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto';
+				const existingLabel =
+					compatibility.existingMode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto';
+				const shouldReplace = window.confirm(
+					`You already have ${existingLabel} item(s) in your cart.\n\n${incomingLabel} items must be checked out separately.\n\nPress OK to clear your cart and add this item, or Cancel to keep your current cart.`
+				);
+
+				if (!shouldReplace) {
+					return;
+				}
+
+				cart.clear();
+				showWarning('Cart cleared', `Previous ${existingLabel} items were removed.`);
+			}
+
 			// Check existing quantity in cart for this tier
 			const existingCartItem = cart.items.find((item) => item.tierId === data.tierCategory.id);
 			const currentCartQuantity = existingCartItem ? existingCartItem.quantity : 0;
@@ -565,6 +605,50 @@
 									<span>Total:</span>
 									<span class="text-[var(--color-accent)]">{formatPrice(totalPrice)}</span>
 								</div>
+							</div>
+
+							<div
+								class="mb-6 rounded-lg border p-4"
+								style="border-color: var(--color-border); background: var(--color-surface);"
+							>
+								<div class="mb-2 flex items-center justify-between">
+									<span class="text-sm font-semibold text-[var(--color-text-primary)]">
+										Delivery Mode
+									</span>
+									<span
+										class="rounded-full px-2 py-0.5 text-xs font-semibold"
+										style={tierDeliveryConfig.mode === 'manual_handover'
+											? 'background: rgba(59, 130, 246, 0.18); color: rgb(147, 197, 253); border: 1px solid rgba(147, 197, 253, 0.28);'
+											: 'background: rgba(5, 212, 113, 0.15); color: rgb(5, 212, 113); border: 1px solid rgba(5, 212, 113, 0.25);'}
+									>
+										{tierDeliveryConfig.mode === 'manual_handover'
+											? 'Manual Handover'
+											: 'Instant Auto'}
+									</span>
+								</div>
+								{#if tierDeliveryConfig.mode === 'manual_handover' && tierDeliveryConfig.manualHandoverPromise}
+									<p class="text-xs text-[var(--color-text-muted)]">
+										{tierDeliveryConfig.manualHandoverPromise}
+									</p>
+								{/if}
+							</div>
+
+							<div class="mb-6 rounded-lg bg-[var(--color-surface)] p-4">
+								<div class="mb-2 text-sm font-semibold text-[var(--color-text-primary)]">
+									{tierLoginGuideLabel}
+								</div>
+								<p class="mb-2 text-xs text-[var(--color-text-muted)]">
+									Quick setup steps for this tier are available here.
+								</p>
+								<a
+									href={tierLoginGuideUrl}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="text-sm font-medium underline"
+									style="color: var(--color-accent);"
+								>
+									Open Guide
+								</a>
 							</div>
 
 							{#if data.tier.visible_available === 0}
