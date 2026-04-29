@@ -3,6 +3,7 @@
 	import { addToast } from '$lib/stores/toasts';
 	import { copyToClipboard } from '$lib/helpers/utils';
 	import { resolveCredentialField } from '$lib/helpers/credential-links';
+	import { getCredentialExtraEntries } from '$lib/helpers/account-credentials';
 
 	let { initialPurchases } = $props();
 	let purchases = $state<any[]>(initialPurchases);
@@ -10,6 +11,7 @@
 	function copyAccount(account: any, index: number) {
 		const twoFa = resolveCredentialField(account.twoFa);
 		const link = resolveCredentialField(account.linkUrl);
+		const extraFields = getCredentialExtraEntries(account.credentialExtras || account.credential_extras || {});
 		let details = `Account ${index + 1}\n`;
 		details += `Username: ${account.username}\n`;
 		details += `Password: ${account.password}`;
@@ -17,6 +19,9 @@
 		if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
 		if (twoFa.display) details += `\n2FA: ${twoFa.display}`;
 		if (link.display) details += `\nLink: ${link.display}`;
+		for (const field of extraFields) {
+			details += `\n${field.label}: ${field.value}`;
+		}
 
 		copyToClipboard(details, {
 			successMessage: 'Account credentials copied',
@@ -29,11 +34,17 @@
 		const accountsWithHeader = purchase.accounts.map((account: any, index: number) => {
 			const twoFa = resolveCredentialField(account.twoFa);
 			const link = resolveCredentialField(account.linkUrl);
+			const extraFields = getCredentialExtraEntries(
+				account.credentialExtras || account.credential_extras || {}
+			);
 			let details = `Account ${index + 1}\nUsername: ${account.username}\nPassword: ${account.password}`;
 			if (account.email) details += `\nEmail: ${account.email}`;
 			if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
 			if (twoFa.display) details += `\n2FA: ${twoFa.display}`;
 			if (link.display) details += `\nLink: ${link.display}`;
+			for (const field of extraFields) {
+				details += `\n${field.label}: ${field.value}`;
+			}
 			return details;
 		});
 
@@ -171,12 +182,15 @@
 					{/if}
 
 					{#if purchase.accounts && purchase.accounts.length > 0}
-						<div class="space-y-3">
-							{#each purchase.accounts as account, index}
-								<div
-									class="rounded-[var(--r-sm)] border-2 border-[var(--border-2)] p-4"
-									style="background: var(--surface);"
-								>
+							<div class="space-y-3">
+								{#each purchase.accounts as account, index}
+									{@const extraFields = getCredentialExtraEntries(
+										account.credentialExtras || account.credential_extras || {}
+									)}
+									<div
+										class="rounded-[var(--r-sm)] border-2 border-[var(--border-2)] p-4"
+										style="background: var(--surface);"
+									>
 									<div
 										class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
 									>
@@ -278,8 +292,8 @@
 										{/if}
 
 										<!-- Link (if available) -->
-										{#if account.linkUrl}
-											{@const linkField = resolveCredentialField(account.linkUrl)}
+											{#if account.linkUrl}
+												{@const linkField = resolveCredentialField(account.linkUrl)}
 											{#if linkField.display}
 												<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
 													<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
@@ -301,9 +315,21 @@
 														>
 													{/if}
 												</div>
+												{/if}
 											{/if}
-										{/if}
-									</div>
+											{#if extraFields.length > 0}
+												{#each extraFields as field}
+													<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
+														<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
+															>{field.label}:</span
+														>
+														<span class="credential-value flex-1" style="color: var(--text);"
+															>{field.value}</span
+														>
+													</div>
+												{/each}
+											{/if}
+										</div>
 
 									<!-- Account Stats (if available) -->
 									{#if account.followers || account.following || account.postsCount}

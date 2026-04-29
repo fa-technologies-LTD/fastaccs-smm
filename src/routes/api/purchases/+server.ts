@@ -60,17 +60,21 @@ export const GET: RequestHandler = async ({ locals }) => {
 				categoryName: item.category.name,
 				platform: item.productCategory || item.category.name,
 				quantity: item.quantity,
-				accounts: item.accounts.map((account) => ({
-					id: account.id,
-					platform: account.platform,
-					linkUrl: account.linkUrl,
-					username: account.username,
-					password: account.password,
-					email: account.email,
-					emailPassword: account.emailPassword,
-					twoFa: account.twoFa,
-					twoFactorEnabled: account.twoFactorEnabled,
-					easyLoginEnabled: account.easyLoginEnabled,
+					accounts: item.accounts.map((account) => ({
+						id: account.id,
+						platform: account.platform,
+						linkUrl: account.linkUrl,
+						username: account.username,
+						password: account.password,
+						email: account.email,
+						emailPassword: account.emailPassword,
+						twoFa: account.twoFa,
+						credentialExtras:
+							account.credentialExtras && typeof account.credentialExtras === 'object'
+								? account.credentialExtras
+								: {},
+						twoFactorEnabled: account.twoFactorEnabled,
+						easyLoginEnabled: account.easyLoginEnabled,
 					followers: account.followers,
 					following: account.following,
 					postsCount: account.postsCount,

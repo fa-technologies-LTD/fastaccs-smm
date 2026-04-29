@@ -22,10 +22,14 @@ export const load = async ({ params, fetch }: { params: { id: string }; fetch: t
 			account_username: account.username || '',
 			account_email: account.email || '',
 			account_password: account.password || '',
-			account_email_password: account.emailPassword || '',
-			account_two_fa: account.twoFa || '',
-			account_link_url: account.linkUrl || '',
-			account_status: account.status || '',
+				account_email_password: account.emailPassword || '',
+				account_two_fa: account.twoFa || '',
+				account_link_url: account.linkUrl || '',
+				account_credential_extras:
+					account.credentialExtras && typeof account.credentialExtras === 'object'
+						? account.credentialExtras
+						: {},
+				account_status: account.status || '',
 			account_delivery_notes: account.deliveryNotes || null,
 			account_created_at: account.createdAt || null,
 			account_delivered_at: account.deliveredAt || null,

@@ -299,6 +299,7 @@ export interface OrderItemWithDetails extends OrderItem {
 	account_email_password?: string;
 	account_two_fa?: string;
 	account_link_url?: string;
+	account_credential_extras?: Record<string, string>;
 	account_status?: string;
 	account_delivery_notes?: string | null;
 	account_created_at?: string | Date | null;

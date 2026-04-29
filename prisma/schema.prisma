@@ -120,6 +120,7 @@ model Account {
   ageMonths        Int?         @map("age_months")
   niche            String?
   qualityScore     Int?         @map("quality_score")
+  credentialExtras Json         @default("{}") @map("credential_extras")
   status           String       @default("available")
   reservedUntil    DateTime?    @map("reserved_until")
   orderItemId      String?      @map("order_item_id") @db.Uuid

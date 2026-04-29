@@ -140,6 +140,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 									email: true,
 									emailPassword: true,
 									twoFa: true,
+									credentialExtras: true,
 									followers: true,
 									following: true,
 									postsCount: true,

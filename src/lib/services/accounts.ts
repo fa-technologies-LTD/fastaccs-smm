@@ -27,6 +27,7 @@ export interface Account {
 	age_months: number | null;
 	niche: string | null;
 	quality_score: number | null;
+	credential_extras: Record<string, string> | null;
 	status: 'available' | 'reserved' | 'assigned' | 'delivered' | 'failed' | 'retired';
 	reserved_until: string | null;
 	order_item_id: string | null;
@@ -55,6 +56,8 @@ export interface AccountInsert {
 	age_months?: number | null;
 	niche?: string | null;
 	quality_score?: number | null;
+	credentialExtras?: Record<string, string> | null;
+	credential_extras?: Record<string, string> | null;
 	status?: 'available' | 'reserved' | 'assigned' | 'delivered' | 'failed' | 'retired';
 	followers?: number;
 	engagement_rate?: number;
@@ -76,6 +79,8 @@ export interface AccountUpdate {
 	age_months?: number | null;
 	niche?: string | null;
 	quality_score?: number | null;
+	credentialExtras?: Record<string, string> | null;
+	credential_extras?: Record<string, string> | null;
 	status?: 'available' | 'reserved' | 'assigned' | 'delivered' | 'failed' | 'retired';
 	reserved_until?: string | null;
 	order_item_id?: string | null;

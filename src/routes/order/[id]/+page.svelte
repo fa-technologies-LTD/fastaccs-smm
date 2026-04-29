@@ -7,6 +7,7 @@
 	import type { PageData } from './$types';
 	import { formatDate, formatPrice, copyToClipboard, copyAllAccounts } from '$lib/helpers/utils';
 	import { resolveCredentialField } from '$lib/helpers/credential-links';
+	import { getCredentialExtraEntries } from '$lib/helpers/account-credentials';
 	import {
 		DEFAULT_LOGIN_GUIDE_LABEL,
 		DEFAULT_LOGIN_GUIDE_URL,
@@ -314,11 +315,14 @@
 												Copy All
 											</button>
 										</div>
-										<div class="space-y-2">
-											{#each item.accounts as account}
-												<div
-													class="rounded-lg p-3"
-													style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+											<div class="space-y-2">
+												{#each item.accounts as account}
+													{@const extraFields = getCredentialExtraEntries(
+														(account as any).credentialExtras || (account as any).credential_extras || {}
+													)}
+													<div
+														class="rounded-lg p-3"
+														style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 												>
 													<div class="space-y-3">
 														<div class="flex items-center justify-between">
@@ -450,8 +454,8 @@
 																</div>
 															{/if}
 														{/if}
-														{#if account.linkUrl}
-															{@const linkField = resolveCredentialField(account.linkUrl)}
+															{#if account.linkUrl}
+																{@const linkField = resolveCredentialField(account.linkUrl)}
 															{#if linkField.display}
 																<div class="flex items-start justify-between gap-3">
 																	<div class="flex-1">
@@ -490,10 +494,28 @@
 																		<Copy class="h-4 w-4" />
 																	</button>
 																</div>
+																{/if}
 															{/if}
-														{/if}
-														{#if account.deliveryNotes}
-															<div class="mt-2">
+															{#if extraFields.length > 0}
+																{#each extraFields as field}
+																	<div class="flex items-center justify-between">
+																		<div class="flex-1">
+																			<span
+																				class="text-xs font-medium uppercase"
+																				style="color: var(--text-dim);">{field.label}</span
+																			>
+																			<div
+																				class="credential-value font-mono text-sm break-all"
+																				style="color: var(--text);"
+																			>
+																				{field.value}
+																			</div>
+																		</div>
+																	</div>
+																{/each}
+															{/if}
+															{#if account.deliveryNotes}
+																<div class="mt-2">
 																<span
 																	class="text-xs font-medium uppercase"
 																	style="color: var(--text-dim);">Notes:</span

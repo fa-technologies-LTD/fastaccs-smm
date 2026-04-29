@@ -27,6 +27,7 @@
 	import { formatPrice } from '$lib/helpers/utils';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
 	import { resolveCredentialField } from '$lib/helpers/credential-links';
+	import { getCredentialExtraEntries } from '$lib/helpers/account-credentials';
 
 	// Props from load function
 	interface Props {
@@ -154,7 +155,7 @@
 
 	function buildAccountLogText(item: OrderItemWithDetails): string {
 		const status = getAccountStatus(item);
-		return [
+		const lines = [
 			`Username: ${item.account_username || ''}`,
 			`Password: ${item.account_password || ''}`,
 			`Email: ${item.account_email || ''}`,
@@ -167,9 +168,11 @@
 			`Notes: ${item.account_delivery_notes || ''}`,
 			`Platform: ${item.platform_name || ''}`,
 			`Tier: ${item.tier_name || ''}`
-		]
-			.join('\n')
-			.trim();
+		];
+		for (const entry of getCredentialExtraEntries(item.account_credential_extras || {})) {
+			lines.push(`${entry.label}: ${entry.value}`);
+		}
+		return lines.join('\n').trim();
 	}
 
 	// Actions
@@ -480,12 +483,13 @@
 								<p class="text-gray-500">Accounts will be allocated when the order is processed.</p>
 							</div>
 						{:else}
-							<div class="space-y-3 p-3 lg:hidden">
-								{#each items as item}
-									{@const accountStatus = getAccountStatus(item)}
-									{@const twoFaField = resolveCredentialField(item.account_two_fa)}
-									{@const linkField = resolveCredentialField(item.account_link_url)}
-									<div class="rounded-lg border border-gray-200 p-3">
+								<div class="space-y-3 p-3 lg:hidden">
+									{#each items as item}
+										{@const accountStatus = getAccountStatus(item)}
+										{@const twoFaField = resolveCredentialField(item.account_two_fa)}
+										{@const linkField = resolveCredentialField(item.account_link_url)}
+										{@const extraFields = getCredentialExtraEntries(item.account_credential_extras || {})}
+										<div class="rounded-lg border border-gray-200 p-3">
 										<div class="mb-2 flex items-start justify-between gap-2">
 											<div class="min-w-0">
 												<div class="truncate text-sm font-semibold text-gray-900">
@@ -534,8 +538,8 @@
 														N/A
 													{/if}
 												</div>
-												<div>
-													<span class="font-semibold">Link:</span>
+													<div>
+														<span class="font-semibold">Link:</span>
 													{#if linkField.display}
 														{#if linkField.isUrl && linkField.href}
 															<a
@@ -553,10 +557,17 @@
 														{/if}
 													{:else}
 														N/A
+														{/if}
+													</div>
+													{#if extraFields.length > 0}
+														{#each extraFields as field}
+															<div>
+																<span class="font-semibold">{field.label}:</span> {field.value}
+															</div>
+														{/each}
 													{/if}
-												</div>
-												{#if item.account_delivery_notes}
-													<div><span class="font-semibold">Note:</span> {item.account_delivery_notes}</div>
+													{#if item.account_delivery_notes}
+														<div><span class="font-semibold">Note:</span> {item.account_delivery_notes}</div>
 												{/if}
 												<div><span class="font-semibold">Added:</span> {formatDateTime(item.account_created_at)}</div>
 												{#if item.account_delivered_at}
@@ -624,12 +635,13 @@
 										</th>
 									</tr>
 								</thead>
-								<tbody class="divide-y divide-gray-200 bg-white">
-									{#each items as item}
-										{@const accountStatus = getAccountStatus(item)}
-										{@const twoFaField = resolveCredentialField(item.account_two_fa)}
-										{@const linkField = resolveCredentialField(item.account_link_url)}
-										<tr class="hover:bg-gray-50">
+									<tbody class="divide-y divide-gray-200 bg-white">
+										{#each items as item}
+											{@const accountStatus = getAccountStatus(item)}
+											{@const twoFaField = resolveCredentialField(item.account_two_fa)}
+											{@const linkField = resolveCredentialField(item.account_link_url)}
+											{@const extraFields = getCredentialExtraEntries(item.account_credential_extras || {})}
+											<tr class="hover:bg-gray-50">
 											<td class="px-6 py-4 whitespace-nowrap">
 												<div>
 													<div class="text-sm font-medium text-gray-900">
@@ -678,8 +690,8 @@
 																N/A
 															{/if}
 														</div>
-														<div>
-															<span class="font-semibold">Link:</span>
+															<div>
+																<span class="font-semibold">Link:</span>
 															{#if linkField.display}
 																{#if linkField.isUrl && linkField.href}
 																	<a
@@ -697,10 +709,18 @@
 																{/if}
 															{:else}
 																N/A
+																{/if}
+															</div>
+															{#if extraFields.length > 0}
+																{#each extraFields as field}
+																	<div>
+																		<span class="font-semibold">{field.label}:</span>
+																		<span>{field.value}</span>
+																	</div>
+																{/each}
 															{/if}
-														</div>
-														{#if item.account_delivery_notes}
-															<div><span class="font-semibold">Note:</span> {item.account_delivery_notes}</div>
+															{#if item.account_delivery_notes}
+																<div><span class="font-semibold">Note:</span> {item.account_delivery_notes}</div>
 														{/if}
 													</div>
 												</td>

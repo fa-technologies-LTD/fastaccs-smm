@@ -1,13 +1,14 @@
 import { json } from '@sveltejs/kit';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { triggerRestockNotificationsForTier } from '$lib/services/restock-notifications';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { sendLowStockAdminAlertIfNeeded } from '$lib/services/admin-alerts';
-import { sanitizeStoredCredentialValue } from '$lib/helpers/credential-links';
+import { normalizeAccountDataForPersistence } from '$lib/helpers/account-credentials';
 
 // GET /api/accounts - Get all accounts with optional filters
 export async function GET({ url, locals }) {
-	try {
+		try {
 		if (!locals.user || locals.user.userType !== 'ADMIN') {
 			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
 		}
@@ -45,21 +46,21 @@ export async function POST({ request, locals }) {
 			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
 		}
 
-		const accountData = await request.json();
-		const categoryId = typeof accountData.categoryId === 'string' ? accountData.categoryId : '';
+			const rawAccountData = await request.json();
+			const accountData =
+				rawAccountData && typeof rawAccountData === 'object' && !Array.isArray(rawAccountData)
+					? normalizeAccountDataForPersistence(rawAccountData as Record<string, unknown>)
+					: {};
+			const categoryId = typeof accountData.categoryId === 'string' ? accountData.categoryId : '';
+			const batchId = typeof accountData.batchId === 'string' ? accountData.batchId : '';
+			const platform = typeof accountData.platform === 'string' ? accountData.platform : '';
 
-		if (Object.prototype.hasOwnProperty.call(accountData, 'twoFa')) {
-			accountData.twoFa = sanitizeStoredCredentialValue(accountData.twoFa);
-		}
-
-		if (Object.prototype.hasOwnProperty.call(accountData, 'linkUrl')) {
-			accountData.linkUrl = sanitizeStoredCredentialValue(accountData.linkUrl);
-		}
-
-		// Remove metadata field if it exists since Account model doesn't have it
-		if ('metadata' in accountData) {
-			delete accountData.metadata;
-		}
+			if (!categoryId || !batchId || !platform) {
+				return json(
+					{ data: null, error: 'batchId, categoryId, and platform are required fields' },
+					{ status: 400 }
+				);
+			}
 
 		let availableBefore = 0;
 		if (categoryId) {
@@ -71,9 +72,9 @@ export async function POST({ request, locals }) {
 			});
 		}
 
-		const data = await prisma.account.create({
-			data: accountData
-		});
+			const data = await prisma.account.create({
+				data: accountData as Prisma.AccountUncheckedCreateInput
+			});
 
 		if (categoryId && data.status === 'available' && availableBefore === 0) {
 			void triggerRestockNotificationsForTier(categoryId).catch((error) => {

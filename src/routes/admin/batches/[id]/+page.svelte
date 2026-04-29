@@ -14,6 +14,7 @@
 	} from '@lucide/svelte';
 	import type { BatchMetadata } from '$lib/services/batches';
 	import { resolveCredentialField } from '$lib/helpers/credential-links';
+	import { getCredentialExtraEntries } from '$lib/helpers/account-credentials';
 	import { addToast } from '$lib/stores/toasts';
 
 	interface BatchAccountLog {
@@ -35,6 +36,7 @@
 		qualityScore: number | null;
 		niche: string | null;
 		orderItemId: string | null;
+		credentialExtras: Record<string, string>;
 	}
 
 	// Props from load function
@@ -95,6 +97,9 @@
 			`Link: ${account.linkUrl || ''}`,
 			`Status: ${account.status || ''}`
 		];
+		for (const entry of getCredentialExtraEntries(account.credentialExtras)) {
+			lines.push(`${entry.label}: ${entry.value}`);
+		}
 		return lines.join('\n').trim();
 	}
 
@@ -117,19 +122,20 @@
 
 		if (searchTerm.trim()) {
 			const term = searchTerm.toLowerCase();
-			filtered = filtered.filter((account) => {
-				const fields = [
-					account.username,
-					account.email,
-					account.emailPassword,
-					account.twoFa,
-					account.linkUrl,
-					account.platform,
-					account.status
-				];
-				return fields.some((value) => toSearchableText(value).includes(term));
-			});
-		}
+				filtered = filtered.filter((account) => {
+					const fields = [
+						account.username,
+						account.email,
+						account.emailPassword,
+						account.twoFa,
+						account.linkUrl,
+						account.platform,
+						account.status,
+						...Object.values(account.credentialExtras || {})
+					];
+					return fields.some((value) => toSearchableText(value).includes(term));
+				});
+			}
 
 		return filtered;
 	});
@@ -199,7 +205,7 @@
 	};
 
 	const exportAccounts = () => {
-		const headers = [
+		const baseHeaders = [
 			'Username',
 			'Password',
 			'Email',
@@ -212,9 +218,21 @@
 			'Delivered At',
 			'Notes'
 		];
+		const extraHeaders: string[] = [];
+		for (const account of filteredAccounts()) {
+			for (const entry of getCredentialExtraEntries(account.credentialExtras)) {
+				if (!extraHeaders.includes(entry.label)) {
+					extraHeaders.push(entry.label);
+				}
+			}
+		}
+		const headers = [...baseHeaders, ...extraHeaders];
 
-		const rows = filteredAccounts().map((account) =>
-			[
+		const rows = filteredAccounts().map((account) => {
+			const extrasByLabel = Object.fromEntries(
+				getCredentialExtraEntries(account.credentialExtras).map((entry) => [entry.label, entry.value])
+			);
+			return [
 				account.username || '',
 				account.password || '',
 				account.email || '',
@@ -225,11 +243,12 @@
 				account.status || '',
 				account.createdAt || '',
 				account.deliveredAt || '',
-				account.deliveryNotes || ''
+				account.deliveryNotes || '',
+				...extraHeaders.map((header) => extrasByLabel[header] || '')
 			]
 				.map((value) => escapeCsv(value))
-				.join(',')
-		);
+				.join(',');
+		});
 
 		const csvContent = [headers.join(','), ...rows].join('\n');
 		const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -436,11 +455,12 @@
 				</div>
 			{:else}
 				<!-- Mobile cards -->
-				<div class="space-y-3 p-3 lg:hidden">
-					{#each filteredAccounts() as account}
-						{@const twoFaField = resolveCredentialField(account.twoFa)}
-						{@const linkField = resolveCredentialField(account.linkUrl)}
-						<div class="rounded-lg border border-gray-200 p-3">
+					<div class="space-y-3 p-3 lg:hidden">
+						{#each filteredAccounts() as account}
+							{@const twoFaField = resolveCredentialField(account.twoFa)}
+							{@const linkField = resolveCredentialField(account.linkUrl)}
+							{@const extraFields = getCredentialExtraEntries(account.credentialExtras)}
+							<div class="rounded-lg border border-gray-200 p-3">
 							<div class="mb-3 flex items-start justify-between gap-3">
 								<div>
 									<div class="text-sm font-semibold text-gray-900">@{account.username || 'N/A'}</div>
@@ -480,8 +500,8 @@
 										N/A
 									{/if}
 								</div>
-								<div>
-									<span class="font-semibold">Link:</span>
+									<div>
+										<span class="font-semibold">Link:</span>
 									{#if linkField.display}
 										{#if linkField.isUrl && linkField.href}
 											<a
@@ -498,9 +518,17 @@
 										{/if}
 									{:else}
 										N/A
+										{/if}
+									</div>
+									{#if extraFields.length > 0}
+										{#each extraFields as field}
+											<div>
+												<span class="font-semibold">{field.label}:</span>
+												<span class="ml-1">{field.value}</span>
+											</div>
+										{/each}
 									{/if}
 								</div>
-							</div>
 
 							<div class="mt-3 flex items-center justify-between text-xs text-gray-500">
 								<span>Added: {formatDateTime(account.createdAt)}</span>
@@ -548,12 +576,13 @@
 								</th>
 							</tr>
 						</thead>
-						<tbody class="divide-y divide-gray-200 bg-white">
-							{#each filteredAccounts() as account}
-								{@const StatusIcon = getStatusIcon(account.status)}
-								{@const twoFaField = resolveCredentialField(account.twoFa)}
-								{@const linkField = resolveCredentialField(account.linkUrl)}
-								<tr class="hover:bg-gray-50">
+							<tbody class="divide-y divide-gray-200 bg-white">
+								{#each filteredAccounts() as account}
+									{@const StatusIcon = getStatusIcon(account.status)}
+									{@const twoFaField = resolveCredentialField(account.twoFa)}
+									{@const linkField = resolveCredentialField(account.linkUrl)}
+									{@const extraFields = getCredentialExtraEntries(account.credentialExtras)}
+									<tr class="hover:bg-gray-50">
 									<td class="px-6 py-4 align-top">
 										<div class="flex items-start gap-3">
 											<StatusIcon
@@ -595,8 +624,8 @@
 													N/A
 												{/if}
 											</div>
-											<div>
-												<span class="font-semibold">Link:</span>
+												<div>
+													<span class="font-semibold">Link:</span>
 												{#if linkField.display}
 													{#if linkField.isUrl && linkField.href}
 														<a
@@ -614,10 +643,18 @@
 													{/if}
 												{:else}
 													N/A
+													{/if}
+												</div>
+												{#if extraFields.length > 0}
+													{#each extraFields as field}
+														<div>
+															<span class="font-semibold">{field.label}:</span>
+															<span>{field.value}</span>
+														</div>
+													{/each}
 												{/if}
 											</div>
-										</div>
-									</td>
+										</td>
 									<td class="px-6 py-4 align-top">
 										<span
 											class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {getStatusColor(

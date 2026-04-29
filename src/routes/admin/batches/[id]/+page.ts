@@ -1,6 +1,7 @@
 import { getBatchById } from '$lib/services/batches';
 import { getAccountsByBatch } from '$lib/services/accounts';
 import { error } from '@sveltejs/kit';
+import { normalizeCredentialExtras } from '$lib/helpers/account-credentials';
 
 interface BatchAccountLog {
 	id: string;
@@ -21,6 +22,7 @@ interface BatchAccountLog {
 	qualityScore: number | null;
 	niche: string | null;
 	orderItemId: string | null;
+	credentialExtras: Record<string, string>;
 }
 
 function readString(record: Record<string, unknown>, ...keys: string[]): string | null {
@@ -70,7 +72,8 @@ function normalizeBatchAccountLog(input: unknown): BatchAccountLog {
 		engagementRate: readNumber(record, 'engagementRate', 'engagement_rate'),
 		qualityScore: readNumber(record, 'qualityScore', 'quality_score'),
 		niche: readString(record, 'niche'),
-		orderItemId: readString(record, 'orderItemId', 'order_item_id')
+		orderItemId: readString(record, 'orderItemId', 'order_item_id'),
+		credentialExtras: normalizeCredentialExtras(record.credentialExtras ?? record.credential_extras)
 	};
 }
 

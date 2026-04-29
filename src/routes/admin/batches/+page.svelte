@@ -6,6 +6,13 @@
 	import { uploadAccountsBatch } from '$lib/services/accounts';
 	import type { BatchMetadata } from '$lib/services/batches';
 	import { addToast } from '$lib/stores/toasts';
+	import { parseCsvText } from '$lib/helpers/csv';
+	import {
+		buildCsvHeaderDescriptors,
+		getCredentialDisplayLabel,
+		parseKnownAccountFieldValue,
+		type CredentialExtras
+	} from '$lib/helpers/account-credentials';
 	import { fade, fly } from 'svelte/transition';
 
 	// Props from load function
@@ -27,7 +34,6 @@
 	let isUploading = $state(false);
 	let uploadError = $state('');
 	let selectedFile: File | null = $state(null);
-	let selectedPlatform = $state('');
 	let dragActive = $state(false);
 
 	// Upload form data
@@ -114,90 +120,110 @@
 		uploadError = '';
 
 		try {
-			// Read and parse CSV file
+			const selectedPlatformRecord = platforms.find((p) => p.id === uploadForm.platform_id);
+			if (!selectedPlatformRecord) {
+				uploadError = 'Please select a valid platform';
+				return;
+			}
+
+			// Read and parse CSV file with quote/comma support.
 			const csvText = await selectedFile.text();
-			const lines = csvText.split('\n').filter((line) => line.trim());
-
-			if (lines.length === 0) {
-				uploadError = 'CSV file is empty';
+			let parsedCsv: ReturnType<typeof parseCsvText>;
+			try {
+				parsedCsv = parseCsvText(csvText);
+			} catch (error) {
+				uploadError =
+					error instanceof Error ? error.message : 'Invalid CSV format. Please check your file and retry.';
 				return;
 			}
 
-			// Validate CSV format (should have headers: username at minimum)
-			const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
-			const requiredHeaders = ['username'];
-			const missingHeaders = requiredHeaders.filter((h) => !headers.includes(h));
-
-			if (missingHeaders.length > 0) {
-				uploadError = `Missing required columns: ${missingHeaders.join(', ')}`;
+			if (parsedCsv.headers.length === 0) {
+				uploadError = 'CSV file is empty or missing header row';
 				return;
 			}
 
-			// Parse accounts data
-			const accounts = [];
+			if (parsedCsv.rows.length === 0) {
+				uploadError = 'CSV file has headers but no data rows';
+				return;
+			}
 
-			// Column mapping - maps CSV headers to our Prisma field names
-			const columnMap: Record<string, string> = {
-				profile_link: 'linkUrl',
-				username: 'username',
-				password: 'password',
-				email: 'email',
-				email_password: 'emailPassword',
-				'2fa_link': 'twoFa',
-				followers: 'followers',
-				engagement_rate: 'engagementRate',
-				niche: 'niche',
-				quality_score: 'qualityScore',
-				two_factor_enabled: 'twoFactorEnabled',
-				easy_login_enabled: 'easyLoginEnabled',
-				age_months: 'ageMonths'
-			};
+			const headerDescriptors = buildCsvHeaderDescriptors(parsedCsv.headers);
 
-			for (let i = 1; i < lines.length; i++) {
-				const values = lines[i].split(',').map((v) => v.trim());
-				if (values.length >= headers.length) {
-					const account: any = {};
-					headers.forEach((csvHeader, index) => {
-						// Map CSV header to database field name
-						const dbField = columnMap[csvHeader] || csvHeader;
-						const value = values[index];
-
-						if (value) {
-							if (dbField === 'followers' || dbField === 'ageMonths') {
-								account[dbField] = parseInt(value) || null;
-							} else if (dbField === 'engagementRate') {
-								account[dbField] = parseFloat(value) || null;
-							} else if (dbField === 'qualityScore') {
-								const score = parseInt(value);
-								account[dbField] = score >= 1 && score <= 10 ? score : null;
-							} else if (dbField === 'twoFactorEnabled' || dbField === 'easyLoginEnabled') {
-								const val = value.toLowerCase();
-								account[dbField] =
-									val === 'true' || val === '1' || val === 'yes'
-										? true
-										: val === 'false' || val === '0' || val === 'no'
-											? false
-											: null;
-							} else {
-								account[dbField] = value;
-							}
-						} else {
-							account[dbField] = null;
-						}
-					});
-
-					// Add required fields
-					const selectedPlatform = platforms.find((p) => p.id === uploadForm.platform_id);
-					account.categoryId = uploadForm.tier_id;
-					account.platform = selectedPlatform?.name || 'Unknown';
-					account.status = 'available';
-
-					accounts.push(account);
+			const duplicateHeaders: string[] = [];
+			const seenHeaders = new Map<string, string>();
+			for (const descriptor of headerDescriptors) {
+				const key = descriptor.knownField
+					? `known:${descriptor.knownField}`
+					: `extra:${descriptor.normalized || descriptor.original.toLowerCase()}`;
+				const previous = seenHeaders.get(key);
+				if (previous) {
+					duplicateHeaders.push(`${previous} and ${descriptor.original || `Column ${descriptor.index + 1}`}`);
+					continue;
 				}
+				seenHeaders.set(key, descriptor.original || `Column ${descriptor.index + 1}`);
+			}
+
+			if (duplicateHeaders.length > 0) {
+				uploadError = `Duplicate CSV columns detected: ${duplicateHeaders.slice(0, 3).join('; ')}`;
+				return;
+			}
+
+			const rowErrors: string[] = [];
+			const accounts: Record<string, unknown>[] = [];
+
+			for (const row of parsedCsv.rows) {
+				if (row.values.length !== headerDescriptors.length) {
+					rowErrors.push(
+						`Line ${row.line}: expected ${headerDescriptors.length} columns but found ${row.values.length}`
+					);
+					continue;
+				}
+
+				const account: Record<string, unknown> = {
+					categoryId: uploadForm.tier_id,
+					platform: selectedPlatformRecord.name || 'Unknown',
+					status: 'available'
+				};
+				const credentialExtras: CredentialExtras = {};
+
+				for (const descriptor of headerDescriptors) {
+					const rawValue = row.values[descriptor.index] ?? '';
+					const value = rawValue.trim();
+					if (!value) continue;
+
+					if (descriptor.knownField) {
+						const parsed = parseKnownAccountFieldValue(descriptor.knownField, value);
+						if (!parsed.ok) {
+							rowErrors.push(
+								`Line ${row.line} (${getCredentialDisplayLabel(descriptor.original)}): ${parsed.error}`
+							);
+							continue;
+						}
+						account[descriptor.knownField] = parsed.value;
+						continue;
+					}
+
+					const extraKey = descriptor.original || `Column ${descriptor.index + 1}`;
+					credentialExtras[extraKey] = value;
+				}
+
+				if (Object.keys(credentialExtras).length > 0) {
+					account.credentialExtras = credentialExtras;
+				}
+
+				accounts.push(account);
+			}
+
+			// Hard-fail strategy: if any row has an issue, no batch/account records are created.
+			if (rowErrors.length > 0) {
+				const preview = rowErrors.slice(0, 5).join(' | ');
+				const suffix = rowErrors.length > 5 ? ` | +${rowErrors.length - 5} more error(s)` : '';
+				uploadError = `Import failed validation. ${preview}${suffix}`;
+				return;
 			}
 
 			if (accounts.length === 0) {
-				uploadError = 'No valid accounts found in CSV';
+				uploadError = 'No non-empty account rows found in CSV';
 				return;
 			}
 
@@ -214,7 +240,13 @@
 						filename: selectedFile.name,
 						upload_date: new Date().toISOString(),
 						file_size: selectedFile.size,
-						headers: headers
+						headers: parsedCsv.headers,
+						field_map: headerDescriptors.map((descriptor) => ({
+							header: descriptor.original,
+							normalized: descriptor.normalized,
+							mapped_to: descriptor.knownField || null,
+							label: getCredentialDisplayLabel(descriptor.original)
+						}))
 					}
 				},
 				fetch
@@ -250,7 +282,13 @@
 					};
 				}
 
-				uploadError = uploadResult.error;
+				// Hard-fail policy means no partial imports should remain.
+				await fetch(`/api/batches/${batch.id}`, { method: 'DELETE' }).catch((rollbackError) => {
+					console.error('Failed to rollback batch after upload error:', rollbackError);
+				});
+				batches = batches.filter((b) => b.id !== batch.id);
+
+				uploadError = `${uploadResult.error}. Import was rolled back to avoid partial data.`;
 				return;
 			}
 			// Update batch as completed
@@ -530,23 +568,26 @@
 					}}
 				>
 					<div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-						<div class="mb-4">
-							<h3 class="text-lg font-semibold" style="color: var(--text);">
-								Import Account Batch
-							</h3>
-							<p class="mt-1 text-sm" style="color: var(--text-muted);">
-								Upload a CSV file with account data. Required column: <strong>username</strong>.
-							</p>
-							<p class="mt-1 text-xs" style="color: var(--text-muted);">
-								Supported columns: profile_link, username, password, email, email_password,
-								2fa_link, followers, engagement_rate, niche, quality_score
-							</p>
-							<p class="mt-1 text-xs" style="color: var(--text-muted);">
-								Example: <code class="rounded px-1" style="background: var(--surface);">
-									profile_link,username,password,email,email_password,2fa_link</code
-								>
-							</p>
-						</div>
+							<div class="mb-4">
+								<h3 class="text-lg font-semibold" style="color: var(--text);">
+									Import Account Batch
+								</h3>
+								<p class="mt-1 text-sm" style="color: var(--text-muted);">
+									Upload a CSV file with any credential/log schema. Columns are auto-detected.
+								</p>
+								<p class="mt-1 text-xs" style="color: var(--text-muted);">
+									Known fields (mapped automatically when present): profile link, username, password,
+									email, email password, 2FA link, followers, engagement rate, niche, quality score.
+								</p>
+								<p class="mt-1 text-xs" style="color: var(--text-muted);">
+									Example: <code class="rounded px-1" style="background: var(--surface);">
+										Profile Link,Username,Password,Email,Email Password,2FA Link,Backup Email</code
+									>
+								</p>
+								<p class="mt-1 text-xs" style="color: var(--text-muted);">
+									Hard-fail mode: if any row is invalid, nothing is imported.
+								</p>
+							</div>
 
 						{#if uploadError}
 							<div class="mb-4 rounded-lg border border-red-200 bg-red-50 p-3">

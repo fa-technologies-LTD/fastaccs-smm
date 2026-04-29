@@ -41,6 +41,7 @@ export interface Account {
 	ageMonths: number | null;
 	niche: string | null;
 	qualityScore: number | null;
+	credentialExtras: Record<string, string> | null;
 	status: 'available' | 'reserved' | 'assigned' | 'delivered' | 'failed' | 'retired';
 	reservedUntil: string | null;
 	orderItemId: string | null;
@@ -64,6 +65,7 @@ export interface AccountInsert {
 	ageMonths?: number | null;
 	niche?: string | null;
 	qualityScore?: number | null;
+	credentialExtras?: Record<string, string> | null;
 }
 
 export interface ParsedAccount {
@@ -390,6 +392,12 @@ export interface BatchMetadata {
 		upload_date?: string;
 		file_size?: number;
 		headers?: string[];
+		field_map?: Array<{
+			header: string;
+			normalized: string;
+			mapped_to: string | null;
+			label: string;
+		}>;
 	};
 }
 

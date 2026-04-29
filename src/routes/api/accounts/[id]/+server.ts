@@ -3,7 +3,7 @@ import { prisma } from '$lib/prisma';
 import { triggerRestockNotificationsForTier } from '$lib/services/restock-notifications';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { sendLowStockAdminAlertIfNeeded } from '$lib/services/admin-alerts';
-import { sanitizeStoredCredentialValue } from '$lib/helpers/credential-links';
+import { normalizeAccountDataForPersistence } from '$lib/helpers/account-credentials';
 
 // PUT /api/accounts/[id] - Update account
 export async function PUT({ params, request, locals }) {
@@ -12,16 +12,12 @@ export async function PUT({ params, request, locals }) {
 			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
 		}
 
-		const id = params.id;
-		const updates = await request.json();
-
-		if (Object.prototype.hasOwnProperty.call(updates, 'twoFa')) {
-			updates.twoFa = sanitizeStoredCredentialValue(updates.twoFa);
-		}
-
-		if (Object.prototype.hasOwnProperty.call(updates, 'linkUrl')) {
-			updates.linkUrl = sanitizeStoredCredentialValue(updates.linkUrl);
-		}
+			const id = params.id;
+			const rawUpdates = await request.json();
+			const updates =
+				rawUpdates && typeof rawUpdates === 'object' && !Array.isArray(rawUpdates)
+					? normalizeAccountDataForPersistence(rawUpdates as Record<string, unknown>)
+					: {};
 		const existing = await prisma.account.findUnique({
 			where: { id },
 			select: {
@@ -54,13 +50,10 @@ export async function PUT({ params, request, locals }) {
 			});
 		}
 
-		const data = await prisma.account.update({
-			where: { id },
-			data: {
-				...updates,
-				...(updates.metadata && { metadata: JSON.parse(JSON.stringify(updates.metadata)) })
-			}
-		});
+			const data = await prisma.account.update({
+				where: { id },
+				data: updates
+			});
 
 		if (targetCategoryId && targetStatus === 'available' && availableBefore === 0) {
 			void triggerRestockNotificationsForTier(targetCategoryId).catch((error) => {
