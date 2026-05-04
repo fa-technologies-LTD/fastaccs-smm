@@ -3,7 +3,11 @@
 	import { showSuccess, showError } from '$lib/stores/toasts';
 	import { goto } from '$app/navigation';
 	import { cart } from '$lib/stores/cart.svelte';
-	import { normalizeTierDeliveryMode, type TierDeliveryMode } from '$lib/helpers/tier-delivery-config';
+	import {
+		getTierDeliveryModeLabel,
+		normalizeTierDeliveryMode,
+		type TierDeliveryMode
+	} from '$lib/helpers/tier-delivery-config';
 
 	interface OrderItem {
 		id?: string;
@@ -122,7 +126,7 @@
 		const deliveryMethod = normalizeLower(order.deliveryMethod);
 
 		if (deliveryMethod === 'whatsapp' && deliveryStatus === 'processing') {
-			return 'Manual Handover';
+			return 'Manual Handover (WhatsApp)';
 		}
 
 		if (deliveryStatus === 'delivered' || orderStatus === 'completed') {
@@ -218,10 +222,11 @@
 			reorderableItems[0].categoryId!,
 			incomingMode
 		);
-		if (!compatibility.compatible) {
-			const incomingLabel = incomingMode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto';
-			const existingLabel =
-				compatibility.existingMode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto';
+			if (!compatibility.compatible) {
+				const incomingLabel = getTierDeliveryModeLabel(incomingMode);
+				const existingLabel = compatibility.existingMode
+					? getTierDeliveryModeLabel(compatibility.existingMode)
+					: getTierDeliveryModeLabel('instant_auto');
 			const shouldReplace = window.confirm(
 				`You already have ${existingLabel} item(s) in your cart.\n\n${incomingLabel} items must be checked out separately.\n\nPress OK to clear your cart and continue, or Cancel to keep your current cart.`
 			);

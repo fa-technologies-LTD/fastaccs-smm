@@ -13,8 +13,12 @@
 		ExternalLink
 	} from '@lucide/svelte';
 	import type { BatchMetadata } from '$lib/services/batches';
-	import { resolveCredentialField } from '$lib/helpers/credential-links';
 	import { getCredentialExtraEntries } from '$lib/helpers/account-credentials';
+	import {
+		buildCredentialPlainText,
+		getCanonicalCredentialEntries
+	} from '$lib/helpers/credential-contract';
+	import { normalizeAccountStatus } from '$lib/helpers/account-status';
 	import { addToast } from '$lib/stores/toasts';
 
 	interface BatchAccountLog {
@@ -88,19 +92,20 @@
 	}
 
 	function buildCredentialText(account: BatchAccountLog): string {
-		const lines = [
-			`Username: ${account.username || ''}`,
-			`Password: ${account.password || ''}`,
-			`Email: ${account.email || ''}`,
-			`Email Password: ${account.emailPassword || ''}`,
-			`2FA: ${account.twoFa || ''}`,
-			`Link: ${account.linkUrl || ''}`,
-			`Status: ${account.status || ''}`
-		];
-		for (const entry of getCredentialExtraEntries(account.credentialExtras)) {
-			lines.push(`${entry.label}: ${entry.value}`);
-		}
-		return lines.join('\n').trim();
+		return buildCredentialPlainText(
+			{
+				username: account.username,
+				password: account.password,
+				email: account.email,
+				emailPassword: account.emailPassword,
+				twoFa: account.twoFa,
+				linkUrl: account.linkUrl,
+				credentialExtras: account.credentialExtras
+			},
+			{
+				footerLines: [`Status: ${normalizeAccountStatus(account.status || '')}`]
+			}
+		);
 	}
 
 	async function copyAccountDetails(account: BatchAccountLog): Promise<void> {
@@ -117,7 +122,9 @@
 		let filtered = accounts;
 
 		if (filterStatus !== 'all') {
-			filtered = filtered.filter((account) => account.status === filterStatus);
+			filtered = filtered.filter(
+				(account) => normalizeAccountStatus(account.status) === normalizeAccountStatus(filterStatus)
+			);
 		}
 
 		if (searchTerm.trim()) {
@@ -145,6 +152,9 @@
 			case 'delivered':
 			case 'sold':
 				return CheckCircle;
+			case 'allocated':
+			case 'assigned':
+				return Clock;
 			case 'reserved':
 			case 'processing':
 				return Clock;
@@ -164,6 +174,9 @@
 			case 'delivered':
 			case 'sold':
 				return 'text-green-600 bg-green-100';
+			case 'allocated':
+			case 'assigned':
+				return 'text-blue-600 bg-blue-100';
 			case 'reserved':
 			case 'processing':
 				return 'text-yellow-700 bg-yellow-100';
@@ -179,7 +192,7 @@
 	};
 
 	const formatStatusLabel = (status: string) =>
-		String(status || '')
+		String(normalizeAccountStatus(status) || '')
 			.replace(/_/g, ' ')
 			.replace(/\b\w/g, (char) => char.toUpperCase()) || 'Unknown';
 
@@ -236,12 +249,12 @@
 				account.username || '',
 				account.password || '',
 				account.email || '',
-				account.emailPassword || '',
-				account.twoFa || '',
-				account.linkUrl || '',
-				account.platform || '',
-				account.status || '',
-				account.createdAt || '',
+					account.emailPassword || '',
+					account.twoFa || '',
+					account.linkUrl || '',
+					account.platform || '',
+					normalizeAccountStatus(account.status || ''),
+					account.createdAt || '',
 				account.deliveredAt || '',
 				account.deliveryNotes || '',
 				...extraHeaders.map((header) => extrasByLabel[header] || '')
@@ -438,7 +451,7 @@
 							<option value="all">All Status</option>
 							<option value="available">Available</option>
 							<option value="reserved">Reserved</option>
-							<option value="assigned">Assigned</option>
+							<option value="allocated">Allocated</option>
 							<option value="delivered">Delivered</option>
 							<option value="failed">Failed</option>
 							<option value="retired">Retired</option>
@@ -454,13 +467,11 @@
 					<p class="text-gray-500">Try adjusting your search or filter criteria.</p>
 				</div>
 			{:else}
-				<!-- Mobile cards -->
-					<div class="space-y-3 p-3 lg:hidden">
-						{#each filteredAccounts() as account}
-							{@const twoFaField = resolveCredentialField(account.twoFa)}
-							{@const linkField = resolveCredentialField(account.linkUrl)}
-							{@const extraFields = getCredentialExtraEntries(account.credentialExtras)}
-							<div class="rounded-lg border border-gray-200 p-3">
+					<!-- Mobile cards -->
+						<div class="space-y-3 p-3 lg:hidden">
+							{#each filteredAccounts() as account}
+								{@const credentialEntries = getCanonicalCredentialEntries(account as any)}
+								<div class="rounded-lg border border-gray-200 p-3">
 							<div class="mb-3 flex items-start justify-between gap-3">
 								<div>
 									<div class="text-sm font-semibold text-gray-900">@{account.username || 'N/A'}</div>
@@ -477,58 +488,30 @@
 								</span>
 							</div>
 
-							<div class="space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs">
-								<div><span class="font-semibold">Password:</span> {account.password || 'N/A'}</div>
-								<div><span class="font-semibold">Email Pass:</span> {account.emailPassword || 'N/A'}</div>
-								<div>
-									<span class="font-semibold">2FA:</span>
-									{#if twoFaField.display}
-										{#if twoFaField.isUrl && twoFaField.href}
-											<a
-												href={twoFaField.href}
-												target="_blank"
-												rel="noopener noreferrer"
-												class="ml-1 underline"
-												style="color: var(--link);"
-											>
-												{twoFaField.display}
-											</a>
-										{:else}
-											<span class="ml-1">{twoFaField.display}</span>
-										{/if}
+								<div class="space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs">
+									{#if credentialEntries.length === 0}
+										<div class="text-[11px] text-gray-500">No credential fields found.</div>
 									{:else}
-										N/A
-									{/if}
-								</div>
-									<div>
-										<span class="font-semibold">Link:</span>
-									{#if linkField.display}
-										{#if linkField.isUrl && linkField.href}
-											<a
-												href={linkField.href}
-												target="_blank"
-												rel="noopener noreferrer"
-												class="ml-1 underline"
-												style="color: var(--link);"
-											>
-												{linkField.display}
-											</a>
-										{:else}
-											<span class="ml-1">{linkField.display}</span>
-										{/if}
-									{:else}
-										N/A
-										{/if}
-									</div>
-									{#if extraFields.length > 0}
-										{#each extraFields as field}
+										{#each credentialEntries as entry}
 											<div>
-												<span class="font-semibold">{field.label}:</span>
-												<span class="ml-1">{field.value}</span>
+												<span class="font-semibold">{entry.label}:</span>
+												{#if entry.isUrl && entry.href}
+													<a
+														href={entry.href}
+														target="_blank"
+														rel="noopener noreferrer"
+														class="ml-1 underline"
+														style="color: var(--link);"
+													>
+														{entry.value}
+													</a>
+												{:else}
+													<span class="ml-1">{entry.value}</span>
+												{/if}
 											</div>
 										{/each}
 									{/if}
-								</div>
+									</div>
 
 							<div class="mt-3 flex items-center justify-between text-xs text-gray-500">
 								<span>Added: {formatDateTime(account.createdAt)}</span>
@@ -576,13 +559,11 @@
 								</th>
 							</tr>
 						</thead>
-							<tbody class="divide-y divide-gray-200 bg-white">
-								{#each filteredAccounts() as account}
-									{@const StatusIcon = getStatusIcon(account.status)}
-									{@const twoFaField = resolveCredentialField(account.twoFa)}
-									{@const linkField = resolveCredentialField(account.linkUrl)}
-									{@const extraFields = getCredentialExtraEntries(account.credentialExtras)}
-									<tr class="hover:bg-gray-50">
+								<tbody class="divide-y divide-gray-200 bg-white">
+									{#each filteredAccounts() as account}
+										{@const StatusIcon = getStatusIcon(account.status)}
+										{@const credentialEntries = getCanonicalCredentialEntries(account as any)}
+										<tr class="hover:bg-gray-50">
 									<td class="px-6 py-4 align-top">
 										<div class="flex items-start gap-3">
 											<StatusIcon
@@ -597,64 +578,33 @@
 											</div>
 										</div>
 									</td>
-									<td class="px-6 py-4 align-top">
-										<div class="space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs">
-											<div><span class="font-semibold">Password:</span> {account.password || 'N/A'}</div>
-											<div>
-												<span class="font-semibold">Email Pass:</span> {account.emailPassword || 'N/A'}
-											</div>
-											<div>
-												<span class="font-semibold">2FA:</span>
-												{#if twoFaField.display}
-													{#if twoFaField.isUrl && twoFaField.href}
-														<a
-															href={twoFaField.href}
-															target="_blank"
-															rel="noopener noreferrer"
-															class="inline-flex items-center gap-1 underline"
-															style="color: var(--link);"
-														>
-															{twoFaField.display}
-															<ExternalLink class="h-3 w-3" />
-														</a>
-													{:else}
-														<span>{twoFaField.display}</span>
-													{/if}
+										<td class="px-6 py-4 align-top">
+											<div class="space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs">
+												{#if credentialEntries.length === 0}
+													<div class="text-[11px] text-gray-500">No credential fields found.</div>
 												{:else}
-													N/A
-												{/if}
-											</div>
-												<div>
-													<span class="font-semibold">Link:</span>
-												{#if linkField.display}
-													{#if linkField.isUrl && linkField.href}
-														<a
-															href={linkField.href}
-															target="_blank"
-															rel="noopener noreferrer"
-															class="inline-flex items-center gap-1 underline"
-															style="color: var(--link);"
-														>
-															{linkField.display}
-															<ExternalLink class="h-3 w-3" />
-														</a>
-													{:else}
-														<span>{linkField.display}</span>
-													{/if}
-												{:else}
-													N/A
-													{/if}
-												</div>
-												{#if extraFields.length > 0}
-													{#each extraFields as field}
+													{#each credentialEntries as entry}
 														<div>
-															<span class="font-semibold">{field.label}:</span>
-															<span>{field.value}</span>
+															<span class="font-semibold">{entry.label}:</span>
+															{#if entry.isUrl && entry.href}
+																<a
+																	href={entry.href}
+																	target="_blank"
+																	rel="noopener noreferrer"
+																	class="inline-flex items-center gap-1 underline"
+																	style="color: var(--link);"
+																>
+																	{entry.value}
+																	<ExternalLink class="h-3 w-3" />
+																</a>
+															{:else}
+																<span>{entry.value}</span>
+															{/if}
 														</div>
 													{/each}
 												{/if}
-											</div>
-										</td>
+												</div>
+											</td>
 									<td class="px-6 py-4 align-top">
 										<span
 											class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {getStatusColor(

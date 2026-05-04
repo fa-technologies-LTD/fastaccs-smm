@@ -26,8 +26,11 @@
 	import type { OrderMetadata, OrderItemWithDetails } from '$lib/services/orders';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
-	import { resolveCredentialField } from '$lib/helpers/credential-links';
-	import { getCredentialExtraEntries } from '$lib/helpers/account-credentials';
+	import {
+		buildCredentialPlainText,
+		getCanonicalCredentialEntries
+	} from '$lib/helpers/credential-contract';
+	import { normalizeAccountStatus } from '$lib/helpers/account-status';
 
 	// Props from load function
 	interface Props {
@@ -128,7 +131,7 @@
 	}
 
 	function getAccountStatus(item: OrderItemWithDetails): string {
-		const status = String(item.account_status || '').trim().toLowerCase();
+		const status = normalizeAccountStatus(item.account_status);
 		return status || 'allocated';
 	}
 
@@ -155,24 +158,27 @@
 
 	function buildAccountLogText(item: OrderItemWithDetails): string {
 		const status = getAccountStatus(item);
-		const lines = [
-			`Username: ${item.account_username || ''}`,
-			`Password: ${item.account_password || ''}`,
-			`Email: ${item.account_email || ''}`,
-			`Email Password: ${item.account_email_password || ''}`,
-			`2FA: ${item.account_two_fa || ''}`,
-			`Link: ${item.account_link_url || ''}`,
-			`Status: ${status}`,
-			`Created At: ${item.account_created_at ? formatDateTime(item.account_created_at) : ''}`,
-			`Delivered At: ${item.account_delivered_at ? formatDateTime(item.account_delivered_at) : ''}`,
-			`Notes: ${item.account_delivery_notes || ''}`,
-			`Platform: ${item.platform_name || ''}`,
-			`Tier: ${item.tier_name || ''}`
-		];
-		for (const entry of getCredentialExtraEntries(item.account_credential_extras || {})) {
-			lines.push(`${entry.label}: ${entry.value}`);
-		}
-		return lines.join('\n').trim();
+		return buildCredentialPlainText(
+			{
+				username: item.account_username,
+				password: item.account_password,
+				email: item.account_email,
+				emailPassword: item.account_email_password,
+				twoFa: item.account_two_fa,
+				linkUrl: item.account_link_url,
+				deliveryNotes: item.account_delivery_notes,
+				credentialExtras: item.account_credential_extras || {}
+			},
+			{
+				footerLines: [
+					`Status: ${status}`,
+					`Created At: ${item.account_created_at ? formatDateTime(item.account_created_at) : ''}`,
+					`Delivered At: ${item.account_delivered_at ? formatDateTime(item.account_delivered_at) : ''}`,
+					`Platform: ${item.platform_name || ''}`,
+					`Tier: ${item.tier_name || ''}`
+				]
+			}
+		);
 	}
 
 	// Actions
@@ -230,7 +236,7 @@
 					title: 'Delivery initiated successfully!',
 					duration: 3000
 				});
-				order = { ...order, status: 'processing' };
+				order = { ...order, deliveryStatus: 'delivered' };
 			}
 		} catch (error) {
 			console.error('Failed to process delivery:', error);
@@ -483,13 +489,20 @@
 								<p class="text-gray-500">Accounts will be allocated when the order is processed.</p>
 							</div>
 						{:else}
-								<div class="space-y-3 p-3 lg:hidden">
-									{#each items as item}
-										{@const accountStatus = getAccountStatus(item)}
-										{@const twoFaField = resolveCredentialField(item.account_two_fa)}
-										{@const linkField = resolveCredentialField(item.account_link_url)}
-										{@const extraFields = getCredentialExtraEntries(item.account_credential_extras || {})}
-										<div class="rounded-lg border border-gray-200 p-3">
+									<div class="space-y-3 p-3 lg:hidden">
+										{#each items as item}
+											{@const accountStatus = getAccountStatus(item)}
+											{@const credentialEntries = getCanonicalCredentialEntries({
+												username: item.account_username,
+												password: item.account_password,
+												email: item.account_email,
+												emailPassword: item.account_email_password,
+												twoFa: item.account_two_fa,
+												linkUrl: item.account_link_url,
+												deliveryNotes: item.account_delivery_notes,
+												credentialExtras: item.account_credential_extras || {}
+											})}
+											<div class="rounded-lg border border-gray-200 p-3">
 										<div class="mb-2 flex items-start justify-between gap-2">
 											<div class="min-w-0">
 												<div class="truncate text-sm font-semibold text-gray-900">
@@ -511,67 +524,34 @@
 											{item.platform_name} · {item.tier_name}
 										</div>
 
-										{#if showCredentials}
-											<div class="mb-3 space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs">
-												<div><span class="font-semibold">Password:</span> {item.account_password || 'N/A'}</div>
-												<div>
-													<span class="font-semibold">Email Pass:</span> {item.account_email_password || 'N/A'}
-												</div>
-												<div>
-													<span class="font-semibold">2FA:</span>
-													{#if twoFaField.display}
-														{#if twoFaField.isUrl && twoFaField.href}
-															<a
-																href={twoFaField.href}
-																target="_blank"
-																rel="noopener noreferrer"
-																class="ml-1 inline-flex items-center gap-1 underline"
-																style="color: var(--link);"
-															>
-																{twoFaField.display}
-																<ExternalLink class="h-3 w-3" />
-															</a>
-														{:else}
-															<span class="ml-1">{twoFaField.display}</span>
-														{/if}
+											{#if showCredentials}
+												<div class="mb-3 space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs">
+													{#if credentialEntries.length === 0}
+														<div class="text-[11px] text-gray-500">No credential fields found.</div>
 													{:else}
-														N/A
-													{/if}
-												</div>
-													<div>
-														<span class="font-semibold">Link:</span>
-													{#if linkField.display}
-														{#if linkField.isUrl && linkField.href}
-															<a
-																href={linkField.href}
-																target="_blank"
-																rel="noopener noreferrer"
-																class="ml-1 inline-flex items-center gap-1 underline"
-																style="color: var(--link);"
-															>
-																{linkField.display}
-																<ExternalLink class="h-3 w-3" />
-															</a>
-														{:else}
-															<span class="ml-1">{linkField.display}</span>
-														{/if}
-													{:else}
-														N/A
-														{/if}
-													</div>
-													{#if extraFields.length > 0}
-														{#each extraFields as field}
+														{#each credentialEntries as entry}
 															<div>
-																<span class="font-semibold">{field.label}:</span> {field.value}
+																<span class="font-semibold">{entry.label}:</span>
+																{#if entry.isUrl && entry.href}
+																	<a
+																		href={entry.href}
+																		target="_blank"
+																		rel="noopener noreferrer"
+																		class="ml-1 inline-flex items-center gap-1 underline"
+																		style="color: var(--link);"
+																	>
+																		{entry.value}
+																		<ExternalLink class="h-3 w-3" />
+																	</a>
+																{:else}
+																	<span>{entry.value}</span>
+																{/if}
 															</div>
 														{/each}
 													{/if}
-													{#if item.account_delivery_notes}
-														<div><span class="font-semibold">Note:</span> {item.account_delivery_notes}</div>
-												{/if}
-												<div><span class="font-semibold">Added:</span> {formatDateTime(item.account_created_at)}</div>
-												{#if item.account_delivered_at}
-													<div><span class="font-semibold">Delivered:</span> {formatDateTime(item.account_delivered_at)}</div>
+													<div><span class="font-semibold">Added:</span> {formatDateTime(item.account_created_at)}</div>
+													{#if item.account_delivered_at}
+														<div><span class="font-semibold">Delivered:</span> {formatDateTime(item.account_delivered_at)}</div>
 												{/if}
 											</div>
 										{:else}
@@ -635,13 +615,20 @@
 										</th>
 									</tr>
 								</thead>
-									<tbody class="divide-y divide-gray-200 bg-white">
-										{#each items as item}
-											{@const accountStatus = getAccountStatus(item)}
-											{@const twoFaField = resolveCredentialField(item.account_two_fa)}
-											{@const linkField = resolveCredentialField(item.account_link_url)}
-											{@const extraFields = getCredentialExtraEntries(item.account_credential_extras || {})}
-											<tr class="hover:bg-gray-50">
+										<tbody class="divide-y divide-gray-200 bg-white">
+											{#each items as item}
+												{@const accountStatus = getAccountStatus(item)}
+												{@const credentialEntries = getCanonicalCredentialEntries({
+													username: item.account_username,
+													password: item.account_password,
+													email: item.account_email,
+													emailPassword: item.account_email_password,
+													twoFa: item.account_two_fa,
+													linkUrl: item.account_link_url,
+													deliveryNotes: item.account_delivery_notes,
+													credentialExtras: item.account_credential_extras || {}
+												})}
+												<tr class="hover:bg-gray-50">
 											<td class="px-6 py-4 whitespace-nowrap">
 												<div>
 													<div class="text-sm font-medium text-gray-900">
@@ -662,69 +649,35 @@
 													</div>
 												</div>
 											</td>
-											{#if showCredentials}
-												<td class="px-6 py-4 align-top">
-													<div class="space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs">
-														<div><span class="font-semibold">Password:</span> {item.account_password || 'N/A'}</div>
-														<div>
-															<span class="font-semibold">Email Pass:</span> {item.account_email_password || 'N/A'}
-														</div>
-														<div>
-															<span class="font-semibold">2FA:</span>
-															{#if twoFaField.display}
-																{#if twoFaField.isUrl && twoFaField.href}
-																	<a
-																		href={twoFaField.href}
-																		target="_blank"
-																		rel="noopener noreferrer"
-																		class="inline-flex items-center gap-1 underline"
-																		style="color: var(--link);"
-																	>
-																		{twoFaField.display}
-																		<ExternalLink class="h-3 w-3" />
-																	</a>
-																{:else}
-																	<span>{twoFaField.display}</span>
-																{/if}
+												{#if showCredentials}
+													<td class="px-6 py-4 align-top">
+														<div class="space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs">
+															{#if credentialEntries.length === 0}
+																<div class="text-[11px] text-gray-500">No credential fields found.</div>
 															{:else}
-																N/A
-															{/if}
-														</div>
-															<div>
-																<span class="font-semibold">Link:</span>
-															{#if linkField.display}
-																{#if linkField.isUrl && linkField.href}
-																	<a
-																		href={linkField.href}
-																		target="_blank"
-																		rel="noopener noreferrer"
-																		class="inline-flex items-center gap-1 underline"
-																		style="color: var(--link);"
-																	>
-																		{linkField.display}
-																		<ExternalLink class="h-3 w-3" />
-																	</a>
-																{:else}
-																	<span>{linkField.display}</span>
-																{/if}
-															{:else}
-																N/A
-																{/if}
-															</div>
-															{#if extraFields.length > 0}
-																{#each extraFields as field}
+																{#each credentialEntries as entry}
 																	<div>
-																		<span class="font-semibold">{field.label}:</span>
-																		<span>{field.value}</span>
+																		<span class="font-semibold">{entry.label}:</span>
+																		{#if entry.isUrl && entry.href}
+																			<a
+																				href={entry.href}
+																				target="_blank"
+																				rel="noopener noreferrer"
+																				class="inline-flex items-center gap-1 underline"
+																				style="color: var(--link);"
+																			>
+																				{entry.value}
+																				<ExternalLink class="h-3 w-3" />
+																			</a>
+																		{:else}
+																			<span>{entry.value}</span>
+																		{/if}
 																	</div>
 																{/each}
 															{/if}
-															{#if item.account_delivery_notes}
-																<div><span class="font-semibold">Note:</span> {item.account_delivery_notes}</div>
-														{/if}
-													</div>
-												</td>
-											{/if}
+														</div>
+													</td>
+												{/if}
 											<td class="px-6 py-4 align-top whitespace-nowrap">
 												<span
 													class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {getAccountStatusColor(

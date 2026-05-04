@@ -89,7 +89,9 @@ if (typeof setInterval !== 'undefined') {
 /**
  * Cache headers for HTTP responses
  */
-export function getCacheHeaders(strategy: 'static' | 'dynamic' | 'private' | 'no-cache') {
+export function getCacheHeaders(
+	strategy: 'static' | 'dynamic' | 'private' | 'no-cache' | 'admin-live'
+) {
 	switch (strategy) {
 		case 'static':
 			// For data that rarely changes (platforms, categories)
@@ -111,6 +113,13 @@ export function getCacheHeaders(strategy: 'static' | 'dynamic' | 'private' | 'no
 			// For sensitive operations (checkout, payments)
 			return {
 				'Cache-Control': 'no-store, no-cache, must-revalidate',
+				Pragma: 'no-cache',
+				Expires: '0'
+			};
+		case 'admin-live':
+			// For authenticated admin metrics that must be fresh and never publicly cached
+			return {
+				'Cache-Control': 'private, no-store, no-cache, must-revalidate',
 				Pragma: 'no-cache',
 				Expires: '0'
 			};

@@ -42,14 +42,42 @@ export async function PATCH({ params, request, locals }) {
 			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
 		}
 
-		const updateData = await request.json();
+			const updateData = await request.json();
+			const nextData: Record<string, unknown> = { ...updateData };
+			const normalizedStatus =
+				typeof updateData?.status === 'string' && updateData.status.trim()
+					? updateData.status.trim().toLowerCase()
+					: typeof updateData?.importStatus === 'string' && updateData.importStatus.trim()
+						? updateData.importStatus.trim().toLowerCase()
+						: null;
 
-		const data = await prisma.accountBatch.update({
-			where: { id: params.id },
-			data: {
-				...updateData,
-				updatedAt: new Date()
-			},
+			const descriptorsSource =
+				updateData?.descriptors && typeof updateData.descriptors === 'object'
+					? updateData.descriptors
+					: updateData?.metadata && typeof updateData.metadata === 'object'
+						? updateData.metadata
+						: null;
+			if (descriptorsSource) {
+				nextData.descriptors = { ...(descriptorsSource as Record<string, unknown>) };
+			}
+			if (normalizedStatus) {
+				nextData.importStatus = normalizedStatus;
+				const nextDescriptors =
+					nextData.descriptors && typeof nextData.descriptors === 'object'
+						? { ...(nextData.descriptors as Record<string, unknown>) }
+						: {};
+				nextDescriptors.status = normalizedStatus;
+				nextData.descriptors = nextDescriptors;
+			}
+			delete nextData.status;
+			delete nextData.metadata;
+
+			const data = await prisma.accountBatch.update({
+				where: { id: params.id },
+				data: {
+					...nextData,
+					updatedAt: new Date()
+				},
 			include: {
 				category: true,
 				accounts: true

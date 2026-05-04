@@ -24,7 +24,8 @@
 		applyTierDeliveryConfigSanitization,
 		DEFAULT_LOGIN_GUIDE_LABEL,
 		DEFAULT_MANUAL_HANDOVER_PROMISE,
-		getTierDeliveryConfig
+		getTierDeliveryConfig,
+		getTierDeliveryModeLabel
 	} from '$lib/helpers/tier-delivery-config';
 	import type { PageData } from './$types';
 	import { fade, fly } from 'svelte/transition';
@@ -475,10 +476,10 @@
 								<AlertCircle size={16} style="color: var(--text-dim);" />
 								<span class="text-sm" style="color: var(--text-muted)">Mode</span>
 							</div>
-							<span class="text-sm font-medium" style="color: var(--text);">
-								{metadata?.delivery_mode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto'}
-							</span>
-						</div>
+								<span class="text-sm font-medium" style="color: var(--text);">
+									{getTierDeliveryModeLabel(getTierDeliveryConfig(metadata).mode)}
+								</span>
+							</div>
 					</div>
 
 					<!-- Features -->

@@ -3,6 +3,7 @@ import { recordCommission } from './affiliate';
 import { sendOrderConfirmationEmailIfNeeded } from './email';
 import { invalidateAdminStatsCache } from './admin-metrics';
 import { sendLowStockAdminAlertIfNeeded } from './admin-alerts';
+import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 
 // Type definitions
 interface AllocationResult {
@@ -212,12 +213,12 @@ async function deliverAccounts(orderId: string) {
 			include: {
 				orderItems: {
 					include: {
-						accounts: {
-							where: {
-								status: 'allocated'
+							accounts: {
+								where: {
+									status: { in: getAllocatedLikeAccountStatuses() }
+								}
 							}
 						}
-					}
 				},
 				user: {
 					select: { email: true }

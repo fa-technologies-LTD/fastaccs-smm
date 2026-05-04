@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
+import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 
 // POST /api/admin/cleanup/allocated-accounts - Reset orphaned allocated accounts
 export async function POST({ locals }) {
@@ -10,9 +11,9 @@ export async function POST({ locals }) {
 
 	try {
 		// Find accounts that are allocated but their orders are not in processing/completed state
-		const orphanedAccounts = await prisma.account.findMany({
-			where: {
-				status: 'allocated',
+			const orphanedAccounts = await prisma.account.findMany({
+				where: {
+					status: { in: getAllocatedLikeAccountStatuses() },
 				OR: [
 					{ orderItemId: null }, // No order item linked
 					{

@@ -241,10 +241,10 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		if (deliveryModes.size > 1) {
 			return json(
 				{
-					success: false,
-					error:
-						'Manual Handover items must be checked out separately from Instant Auto items.'
-				},
+						success: false,
+						error:
+							'Manual Handover (WhatsApp) items must be checked out separately from Instant Delivery items.'
+					},
 				{ status: 400 }
 			);
 		}

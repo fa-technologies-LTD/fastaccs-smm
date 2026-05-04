@@ -6,8 +6,7 @@
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import { formatDate, formatPrice, copyToClipboard, copyAllAccounts } from '$lib/helpers/utils';
-	import { resolveCredentialField } from '$lib/helpers/credential-links';
-	import { getCredentialExtraEntries } from '$lib/helpers/account-credentials';
+	import { getCanonicalCredentialEntries } from '$lib/helpers/credential-contract';
 	import {
 		DEFAULT_LOGIN_GUIDE_LABEL,
 		DEFAULT_LOGIN_GUIDE_URL,
@@ -315,219 +314,64 @@
 												Copy All
 											</button>
 										</div>
-											<div class="space-y-2">
-												{#each item.accounts as account}
-													{@const extraFields = getCredentialExtraEntries(
-														(account as any).credentialExtras || (account as any).credential_extras || {}
-													)}
-													<div
-														class="rounded-lg p-3"
-														style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-												>
-													<div class="space-y-3">
-														<div class="flex items-center justify-between">
-															<div class="flex-1">
-																<span
-																	class="text-xs font-medium uppercase"
-																	style="color: var(--text-dim);">Username</span
-																>
-																<div class="font-mono text-sm" style="color: var(--text);">
-																	{account.username}
-																</div>
-															</div>
-															<button
-																onclick={() =>
-																	copyToClipboard(account.username || '', {
-																		label: 'Username',
-																		showToast: (toast: any) => addToast(toast as any)
-																	})}
-																class="ml-2 rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-															>
-																<Copy class="h-4 w-4" />
-															</button>
-														</div>
-														<div class="flex items-center justify-between">
-															<div class="flex-1">
-																<span class="text-xs font-medium text-gray-500 uppercase"
-																	>Password</span
-																>
-																<div class="font-mono text-sm">{account.password}</div>
-															</div>
-															<button
-																onclick={() =>
-																	copyToClipboard(account.password || '', {
-																		label: 'Password',
-																		showToast: (toast: any) => addToast(toast as any)
-																	})}
-																class="ml-2 rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-															>
-																<Copy class="h-4 w-4" />
-															</button>
-														</div>
-														{#if account.email}
-															<div class="flex items-center justify-between">
-																<div class="flex-1">
-																	<span class="text-xs font-medium text-gray-500 uppercase"
-																		>Email</span
-																	>
-																	<div class="font-mono text-sm">{account.email}</div>
-																</div>
-																<button
-																	onclick={() =>
-																		copyToClipboard(account.email || '', {
-																			label: 'Email',
-																			showToast: (toast: any) => addToast(toast as any)
-																		})}
-																	style="color: var(--text-dim);"
-																	class="ml-2 rounded p-2 hover:brightness-125"
-																>
-																	<Copy class="h-4 w-4" />
-																</button>
-															</div>
-														{/if}
-														{#if account.emailPassword}
-															<div class="flex items-center justify-between">
-																<div class="flex-1">
-																	<span
-																		class="text-xs font-medium uppercase"
-																		style="color: var(--text-dim);">Email Pass</span
-																	>
-																	<div
-																		class="credential-value font-mono text-sm"
-																		style="color: var(--text);"
-																	>
-																		{account.emailPassword}
-																	</div>
-																</div>
-																<button
-																	onclick={() =>
-																		copyToClipboard(account.emailPassword || '', {
-																			label: 'Email Password',
-																			showToast: (toast: any) => addToast(toast as any)
-																		})}
-																	style="color: var(--text-dim);"
-																	class="ml-2 rounded p-2 hover:brightness-125"
-																>
-																	<Copy class="h-4 w-4" />
-																</button>
-															</div>
-														{/if}
-														{#if account.twoFa}
-															{@const twoFaField = resolveCredentialField(account.twoFa)}
-															{#if twoFaField.display}
-																<div class="flex items-start justify-between gap-3">
-																	<div class="flex-1">
-																		<span
-																			class="text-xs font-medium uppercase"
-																			style="color: var(--text-dim);">2FA</span
-																		>
-																		{#if twoFaField.isUrl && twoFaField.href}
-																			<a
-																				href={twoFaField.href}
-																				target="_blank"
-																				rel="noopener noreferrer"
-																				class="credential-value font-mono text-sm break-all hover:underline"
-																				style="color: var(--link);"
-																			>
-																				{twoFaField.display}
-																			</a>
-																		{:else}
-																			<div
-																				class="credential-value font-mono text-sm break-all"
-																				style="color: var(--text);"
-																			>
-																				{twoFaField.display}
-																			</div>
-																		{/if}
-																	</div>
-																	<button
-																		onclick={() =>
-																			copyToClipboard(twoFaField.display || '', {
-																				label: '2FA',
-																				showToast: (toast: any) => addToast(toast as any)
-																			})}
-																		style="color: var(--text-dim);"
-																		class="ml-2 rounded p-2 hover:brightness-125"
-																	>
-																		<Copy class="h-4 w-4" />
-																	</button>
-																</div>
-															{/if}
-														{/if}
-															{#if account.linkUrl}
-																{@const linkField = resolveCredentialField(account.linkUrl)}
-															{#if linkField.display}
-																<div class="flex items-start justify-between gap-3">
-																	<div class="flex-1">
-																		<span
-																			class="text-xs font-medium uppercase"
-																			style="color: var(--text-dim);">Link</span
-																		>
-																		{#if linkField.isUrl && linkField.href}
-																			<a
-																				href={linkField.href}
-																				target="_blank"
-																				rel="noopener noreferrer"
-																				class="credential-value font-mono text-sm break-all hover:underline"
-																				style="color: var(--link);"
-																			>
-																				{linkField.display}
-																			</a>
-																		{:else}
-																			<div
-																				class="credential-value font-mono text-sm break-all"
-																				style="color: var(--text);"
-																			>
-																				{linkField.display}
-																			</div>
-																		{/if}
-																	</div>
-																	<button
-																		onclick={() =>
-																			copyToClipboard(linkField.display || '', {
-																				label: 'Link',
-																				showToast: (toast: any) => addToast(toast as any)
-																			})}
-																		style="color: var(--text-dim);"
-																		class="ml-2 rounded p-2 hover:brightness-125"
-																	>
-																		<Copy class="h-4 w-4" />
-																	</button>
-																</div>
-																{/if}
-															{/if}
-															{#if extraFields.length > 0}
-																{#each extraFields as field}
-																	<div class="flex items-center justify-between">
+												<div class="space-y-2">
+													{#each item.accounts as account}
+														{@const credentialEntries = getCanonicalCredentialEntries(
+															account as any
+														)}
+														<div
+															class="rounded-lg p-3"
+															style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+													>
+														<div class="space-y-3">
+															{#if credentialEntries.length === 0}
+																<p class="text-xs" style="color: var(--text-muted);">
+																	No credentials available for this account.
+																</p>
+															{:else}
+																{#each credentialEntries as entry}
+																	<div class="flex items-start justify-between gap-3">
 																		<div class="flex-1">
 																			<span
 																				class="text-xs font-medium uppercase"
-																				style="color: var(--text-dim);">{field.label}</span
+																				style="color: var(--text-dim);">{entry.label}</span
 																			>
-																			<div
-																				class="credential-value font-mono text-sm break-all"
-																				style="color: var(--text);"
-																			>
-																				{field.value}
-																			</div>
+																			{#if entry.isUrl && entry.href}
+																				<a
+																					href={entry.href}
+																					target="_blank"
+																					rel="noopener noreferrer"
+																					class="credential-value font-mono text-sm break-all hover:underline"
+																					style="color: var(--link);"
+																				>
+																					{entry.value}
+																				</a>
+																			{:else}
+																				<div
+																					class="credential-value font-mono text-sm break-all"
+																					style="color: var(--text);"
+																				>
+																					{entry.value}
+																				</div>
+																			{/if}
 																		</div>
+																		<button
+																			onclick={() =>
+																				copyToClipboard(entry.value, {
+																					label: entry.label,
+																					showToast: (toast: any) => addToast(toast as any)
+																				})}
+																			style="color: var(--text-dim);"
+																			class="ml-2 rounded p-2 hover:brightness-125"
+																		>
+																			<Copy class="h-4 w-4" />
+																		</button>
 																	</div>
 																{/each}
 															{/if}
-															{#if account.deliveryNotes}
-																<div class="mt-2">
-																<span
-																	class="text-xs font-medium uppercase"
-																	style="color: var(--text-dim);">Notes:</span
-																>
-																<p class="mt-1 text-sm" style="color: var(--text-muted);">
-																	{account.deliveryNotes}
-																</p>
-															</div>
-														{/if}
+														</div>
 													</div>
-												</div>
-											{/each}
+												{/each}
 										</div>
 									</div>
 								{:else if isManualHandoverItem(item)}

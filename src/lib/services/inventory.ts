@@ -2,7 +2,8 @@
 export interface InventoryStats {
 	total_accounts: number;
 	available_accounts: number;
-	assigned_accounts: number;
+	allocated_accounts: number;
+	assigned_accounts?: number; // Backward compatibility
 	delivered_accounts: number;
 	platforms: number;
 	total_tiers: number;

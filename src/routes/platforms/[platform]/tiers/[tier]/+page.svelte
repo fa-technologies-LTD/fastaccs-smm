@@ -28,6 +28,7 @@
 		DEFAULT_LOGIN_GUIDE_LABEL,
 		DEFAULT_LOGIN_GUIDE_URL,
 		getTierDeliveryConfig,
+		getTierDeliveryModeLabel,
 		type TierDeliveryMode
 	} from '$lib/helpers/tier-delivery-config';
 
@@ -154,11 +155,11 @@
 				return;
 			}
 
-			if (!compatibility.compatible) {
-				const incomingLabel =
-					tierDeliveryConfig.mode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto';
-				const existingLabel =
-					compatibility.existingMode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto';
+				if (!compatibility.compatible) {
+					const incomingLabel = getTierDeliveryModeLabel(tierDeliveryConfig.mode);
+					const existingLabel = compatibility.existingMode
+						? getTierDeliveryModeLabel(compatibility.existingMode)
+						: getTierDeliveryModeLabel('instant_auto');
 				const shouldReplace = window.confirm(
 					`You already have ${existingLabel} item(s) in your cart.\n\n${incomingLabel} items must be checked out separately.\n\nPress OK to clear your cart and add this item, or Cancel to keep your current cart.`
 				);
@@ -620,11 +621,9 @@
 										style={tierDeliveryConfig.mode === 'manual_handover'
 											? 'background: rgba(59, 130, 246, 0.18); color: rgb(147, 197, 253); border: 1px solid rgba(147, 197, 253, 0.28);'
 											: 'background: rgba(5, 212, 113, 0.15); color: rgb(5, 212, 113); border: 1px solid rgba(5, 212, 113, 0.25);'}
-									>
-										{tierDeliveryConfig.mode === 'manual_handover'
-											? 'Manual Handover'
-											: 'Instant Auto'}
-									</span>
+										>
+											{getTierDeliveryModeLabel(tierDeliveryConfig.mode)}
+										</span>
 								</div>
 								{#if tierDeliveryConfig.mode === 'manual_handover' && tierDeliveryConfig.manualHandoverPromise}
 									<p class="text-xs text-[var(--color-text-muted)]">

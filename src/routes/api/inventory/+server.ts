@@ -1,8 +1,9 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
-import { serverCache, getCacheHeaders, CACHE_TTL } from '$lib/helpers/cache';
+import { getCacheHeaders } from '$lib/helpers/cache';
 import { getInventoryStatsSnapshot } from '$lib/services/admin-metrics';
 import { getLowStockThresholdSetting } from '$lib/services/admin-settings';
+import { getAllocatedLikeAccountStatuses, normalizeAccountStatus } from '$lib/helpers/account-status';
 
 // GET /api/inventory - Get inventory stats and data
 export async function GET({ url, locals }) {
@@ -14,42 +15,26 @@ export async function GET({ url, locals }) {
 		const type = url.searchParams.get('type') || 'all';
 
 		if (type === 'stats') {
-			const cacheKey = 'admin:inventory-stats';
-
-			// Try cache first
-			const cached = serverCache.get(cacheKey, CACHE_TTL.ADMIN_STATS);
-			if (cached) {
-				return json(
-					{ data: cached, error: null },
-					{
-						headers: Object.fromEntries(
-							Object.entries(getCacheHeaders('dynamic')).filter(([, v]) => v !== undefined)
-						)
-					}
-				);
-			}
-
 			const stats = await getInventoryStatsSnapshot();
-
-			// Cache the result
-			serverCache.set(cacheKey, stats);
 
 			return json(
 				{ data: stats, error: null },
 				{
 					headers: Object.fromEntries(
-						Object.entries(getCacheHeaders('dynamic')).filter(([, v]) => v !== undefined)
+						Object.entries(getCacheHeaders('admin-live')).filter(([, v]) => v !== undefined)
 					)
 				}
 			);
 		}
 
-		if (type === 'batches') {
-			// Get PLATFORM/TIER inventory by grouping accounts by category hierarchy
-			const categories = await prisma.category.findMany({
-				where: {
-					parentId: { not: null } // Get child categories (tiers)
-				},
+			if (type === 'batches') {
+				// Get PLATFORM/TIER inventory by grouping accounts by category hierarchy
+				const categories = await prisma.category.findMany({
+					where: {
+						parentId: { not: null }, // Get child categories (tiers)
+						categoryType: 'tier',
+						isActive: true
+					},
 				include: {
 					parent: true, // Get parent category (platform)
 					accounts: {
@@ -62,27 +47,29 @@ export async function GET({ url, locals }) {
 				}
 			});
 
-			const tierInventory = categories.map((tier) => {
-				const accounts = tier.accounts;
-				const availableCount = accounts.filter((a) => a.status === 'available').length;
-				const reservedCount = accounts.filter((a) => a.status === 'reserved').length;
+				const tierInventory = categories.map((tier) => {
+					const accounts = tier.accounts;
+					const availableCount = accounts.filter((a) => a.status === 'available').length;
+					const reservedCount = accounts.filter((a) => a.status === 'reserved').length;
+					const allocatedCount = accounts.filter((a) => normalizeAccountStatus(a.status) === 'allocated').length;
 
-				return {
-					id: tier.id,
-					tier_name: tier.name, // This is the actual tier name
+					return {
+						id: tier.id,
+						tier_name: tier.name, // This is the actual tier name
 					platform_name: tier.parent?.name || 'Unknown Platform', // This is the actual platform name
 					category_name: tier.name,
 					platform: tier.parent?.name || 'Unknown', // Keep for backwards compatibility
 					total_accounts: accounts.length,
-					available_accounts: availableCount,
-					accounts_available: availableCount, // UI expects this field name
-					reserved_accounts: reservedCount,
-					reservations_active: reservedCount, // UI expects this field name
-					assigned_accounts: accounts.filter((a) => a.status === 'assigned').length,
-					delivered_accounts: accounts.filter((a) => a.status === 'delivered').length,
-					visible_available: availableCount, // UI expects this field name
-					created_at: tier.createdAt,
-					updated_at: tier.updatedAt,
+						available_accounts: availableCount,
+						accounts_available: availableCount, // UI expects this field name
+						reserved_accounts: reservedCount,
+						reservations_active: reservedCount, // UI expects this field name
+						allocated_accounts: allocatedCount,
+						assigned_accounts: allocatedCount, // Backward compatibility
+						delivered_accounts: accounts.filter((a) => a.status === 'delivered').length,
+						visible_available: availableCount, // UI expects this field name
+						created_at: tier.createdAt,
+						updated_at: tier.updatedAt,
 					last_updated: tier.updatedAt // UI expects this field name
 				};
 			});
@@ -98,23 +85,26 @@ export async function GET({ url, locals }) {
 				prisma.account.count(),
 				prisma.account.count({ where: { status: 'available' } }),
 				prisma.account.count({ where: { status: 'reserved' } })
-			]).then(([totalBatches, totalAccounts, availableAccounts, reservedAccounts]) => ({
-				total_batches: totalBatches,
-				total_accounts: totalAccounts,
-				available_accounts: availableAccounts,
-				reserved_accounts: reservedAccounts,
-				assigned_accounts: 0, // Will be filled below
-				delivered_accounts: 0,
-				out_of_stock: 0, // Will be filled below
-				low_stock: 0, // Will be filled below
-				platforms: 0 // Will be filled below
-			})),
+				]).then(([totalBatches, totalAccounts, availableAccounts, reservedAccounts]) => ({
+					total_batches: totalBatches,
+					total_accounts: totalAccounts,
+					available_accounts: availableAccounts,
+					reserved_accounts: reservedAccounts,
+					allocated_accounts: 0, // Will be filled below
+					assigned_accounts: 0, // Backward compatibility
+					delivered_accounts: 0,
+					out_of_stock: 0, // Will be filled below
+					low_stock: 0, // Will be filled below
+					platforms: 0 // Will be filled below
+				})),
 
 			// Get PLATFORM/TIER data from categories
-			prisma.category.findMany({
-				where: {
-					parentId: { not: null } // Get child categories (tiers)
-				},
+				prisma.category.findMany({
+					where: {
+						parentId: { not: null }, // Get child categories (tiers)
+						categoryType: 'tier',
+						isActive: true
+					},
 				include: {
 					parent: true, // Get parent category (platform)
 					accounts: {
@@ -130,8 +120,10 @@ export async function GET({ url, locals }) {
 		]);
 
 		// Complete stats calculation
-		const assignedCount = await prisma.account.count({ where: { status: 'assigned' } });
-		const deliveredCount = await prisma.account.count({ where: { status: 'delivered' } });
+			const allocatedCount = await prisma.account.count({
+				where: { status: { in: getAllocatedLikeAccountStatuses() } }
+			});
+			const deliveredCount = await prisma.account.count({ where: { status: 'delivered' } });
 
 		// Calculate missing stats
 		const outOfStockBatches = await prisma.accountBatch.count({
@@ -167,31 +159,34 @@ export async function GET({ url, locals }) {
 			where: { platform: { not: '' } }
 		});
 
-		stats.assigned_accounts = assignedCount;
-		stats.delivered_accounts = deliveredCount;
+			stats.allocated_accounts = allocatedCount;
+			stats.assigned_accounts = allocatedCount;
+			stats.delivered_accounts = deliveredCount;
 		stats.out_of_stock = outOfStockBatches;
 		stats.low_stock = lowStockBatches;
 		stats.platforms = platformsCount.length;
 
 		// Transform categories to show PLATFORM/TIER inventory
-		const tierInventoryData = categories.map((tier) => {
-			const accounts = tier.accounts;
-			const availableCount = accounts.filter((a) => a.status === 'available').length;
-			const reservedCount = accounts.filter((a) => a.status === 'reserved').length;
+			const tierInventoryData = categories.map((tier) => {
+				const accounts = tier.accounts;
+				const availableCount = accounts.filter((a) => a.status === 'available').length;
+				const reservedCount = accounts.filter((a) => a.status === 'reserved').length;
+				const allocatedCount = accounts.filter((a) => normalizeAccountStatus(a.status) === 'allocated').length;
 
-			return {
+				return {
 				id: tier.id,
 				tier_name: tier.name, // This is the actual tier name
 				platform_name: tier.parent?.name || 'Unknown Platform', // This is the actual platform name
 				category_name: tier.name,
 				platform: tier.parent?.name || 'Unknown', // Keep for backwards compatibility
 				total_accounts: accounts.length,
-				available_accounts: availableCount,
-				accounts_available: availableCount, // UI expects this field name
-				reserved_accounts: reservedCount,
-				reservations_active: reservedCount, // UI expects this field name
-				assigned_accounts: accounts.filter((a) => a.status === 'assigned').length,
-				delivered_accounts: accounts.filter((a) => a.status === 'delivered').length,
+					available_accounts: availableCount,
+					accounts_available: availableCount, // UI expects this field name
+					reserved_accounts: reservedCount,
+					reservations_active: reservedCount, // UI expects this field name
+					allocated_accounts: allocatedCount,
+					assigned_accounts: allocatedCount, // Backward compatibility
+					delivered_accounts: accounts.filter((a) => a.status === 'delivered').length,
 				visible_available: availableCount, // UI expects this field name
 				created_at: tier.createdAt,
 				updated_at: tier.updatedAt,

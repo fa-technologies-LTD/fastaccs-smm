@@ -2,26 +2,18 @@
 	import { Package, CheckCircle, Copy, Clock, Shield, Lock } from '@lucide/svelte';
 	import { addToast } from '$lib/stores/toasts';
 	import { copyToClipboard } from '$lib/helpers/utils';
-	import { resolveCredentialField } from '$lib/helpers/credential-links';
-	import { getCredentialExtraEntries } from '$lib/helpers/account-credentials';
+	import {
+		buildCredentialPlainText,
+		getCanonicalCredentialEntries
+	} from '$lib/helpers/credential-contract';
 
 	let { initialPurchases } = $props();
 	let purchases = $state<any[]>(initialPurchases);
 
 	function copyAccount(account: any, index: number) {
-		const twoFa = resolveCredentialField(account.twoFa);
-		const link = resolveCredentialField(account.linkUrl);
-		const extraFields = getCredentialExtraEntries(account.credentialExtras || account.credential_extras || {});
-		let details = `Account ${index + 1}\n`;
-		details += `Username: ${account.username}\n`;
-		details += `Password: ${account.password}`;
-		if (account.email) details += `\nEmail: ${account.email}`;
-		if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
-		if (twoFa.display) details += `\n2FA: ${twoFa.display}`;
-		if (link.display) details += `\nLink: ${link.display}`;
-		for (const field of extraFields) {
-			details += `\n${field.label}: ${field.value}`;
-		}
+		const details = buildCredentialPlainText(account, {
+			headerLines: [`Account ${index + 1}`]
+		});
 
 		copyToClipboard(details, {
 			successMessage: 'Account credentials copied',
@@ -30,23 +22,12 @@
 	}
 
 	function copyAllPurchaseAccounts(purchase: any) {
-		const header = `${purchase.categoryName} • ${purchase.orderNumber}\n${purchase.platform}\nDelivered: ${formatDateTime(purchase.deliveryDate || purchase.orderDate)}\n\n`;
-		const accountsWithHeader = purchase.accounts.map((account: any, index: number) => {
-			const twoFa = resolveCredentialField(account.twoFa);
-			const link = resolveCredentialField(account.linkUrl);
-			const extraFields = getCredentialExtraEntries(
-				account.credentialExtras || account.credential_extras || {}
-			);
-			let details = `Account ${index + 1}\nUsername: ${account.username}\nPassword: ${account.password}`;
-			if (account.email) details += `\nEmail: ${account.email}`;
-			if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
-			if (twoFa.display) details += `\n2FA: ${twoFa.display}`;
-			if (link.display) details += `\nLink: ${link.display}`;
-			for (const field of extraFields) {
-				details += `\n${field.label}: ${field.value}`;
-			}
-			return details;
-		});
+		const header = `${purchase.categoryName} • ${purchase.orderNumber}\n${purchase.platform}\nDelivered: ${formatDateTime(purchase.deliveredAt || purchase.orderDate)}\n\n`;
+		const accountsWithHeader = purchase.accounts.map((account: any, index: number) =>
+			buildCredentialPlainText(account, {
+				headerLines: [`Account ${index + 1}`]
+			})
+		);
 
 		copyToClipboard(header + accountsWithHeader.join('\n\n'), {
 			successMessage: 'All accounts copied',
@@ -129,7 +110,7 @@
 								<div class="flex items-center gap-1.5">
 									<Clock class="h-3.5 w-3.5" style="color: var(--text-dim);" />
 									<span class="whitespace-nowrap" style="color: var(--text-muted);">
-										{formatDateTime(purchase.deliveryDate || purchase.orderDate)}
+										{formatDateTime(purchase.deliveredAt || purchase.orderDate)}
 									</span>
 								</div>
 								<span class="text-[color:var(--text-dim)]">•</span>
@@ -181,16 +162,17 @@
 						</div>
 					{/if}
 
-					{#if purchase.accounts && purchase.accounts.length > 0}
-							<div class="space-y-3">
-								{#each purchase.accounts as account, index}
-									{@const extraFields = getCredentialExtraEntries(
-										account.credentialExtras || account.credential_extras || {}
-									)}
-									<div
-										class="rounded-[var(--r-sm)] border-2 border-[var(--border-2)] p-4"
-										style="background: var(--surface);"
-									>
+								{#if purchase.accounts && purchase.accounts.length > 0}
+									<div class="space-y-3">
+										{#each purchase.accounts as account, index}
+											{@const credentialEntries = getCanonicalCredentialEntries(account as any, {
+												knownKeys: ['username', 'password', 'email', 'emailPassword', 'twoFa', 'linkUrl'],
+												includeExtras: true
+											})}
+											<div
+												class="rounded-[var(--r-sm)] border-2 border-[var(--border-2)] p-4"
+												style="background: var(--surface);"
+										>
 									<div
 										class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
 									>
@@ -216,120 +198,39 @@
 										</button>
 									</div>
 
-									<div
-										class="space-y-2 rounded-[var(--r-sm)] p-3 font-mono text-sm sm:p-4"
-										style="background: rgba(0,0,0,0.3);"
-									>
-										<!-- Username -->
-										<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
-											<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
-												>Username:</span
+											<div
+												class="space-y-2 rounded-[var(--r-sm)] p-3 font-mono text-sm sm:p-4"
+												style="background: rgba(0,0,0,0.3);"
 											>
-											<span class="credential-value flex-1" style="color: var(--text);"
-												>{account.username}</span
-											>
-										</div>
-
-										<!-- Password -->
-										<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
-											<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
-												>Password:</span
-											>
-											<span class="credential-value flex-1" style="color: var(--text);"
-												>{account.password}</span
-											>
-										</div>
-
-										<!-- Email (if available) -->
-										{#if account.email}
-											<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
-												<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
-													>Email:</span
-												>
-												<span class="credential-value flex-1" style="color: var(--text);"
-													>{account.email}</span
-												>
-											</div>
-										{/if}
-
-										<!-- Email Password (if available) -->
-										{#if account.emailPassword}
-											<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
-												<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
-													>Email Pass:</span
-												>
-												<span class="credential-value flex-1" style="color: var(--text);"
-													>{account.emailPassword}</span
-												>
-											</div>
-										{/if}
-
-										<!-- 2FA (if available) -->
-										{#if account.twoFa}
-											{@const twoFaField = resolveCredentialField(account.twoFa)}
-											{#if twoFaField.display}
-												<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
-													<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
-														>2FA Code:</span
-													>
-													{#if twoFaField.isUrl && twoFaField.href}
-														<a
-															href={twoFaField.href}
-															target="_blank"
-															rel="noopener noreferrer"
-															class="credential-value flex-1 hover:underline"
-															style="color: var(--link);"
-														>
-															{twoFaField.display}
-														</a>
-													{:else}
-														<span class="credential-value flex-1" style="color: var(--text);"
-															>{twoFaField.display}</span
-														>
-													{/if}
-												</div>
-											{/if}
-										{/if}
-
-										<!-- Link (if available) -->
-											{#if account.linkUrl}
-												{@const linkField = resolveCredentialField(account.linkUrl)}
-											{#if linkField.display}
-												<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
-													<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
-														>Link:</span
-													>
-													{#if linkField.isUrl && linkField.href}
-														<a
-															href={linkField.href}
-															target="_blank"
-															rel="noopener noreferrer"
-															class="credential-value flex-1 hover:underline"
-															style="color: var(--link);"
-														>
-															{linkField.display}
-														</a>
-													{:else}
-														<span class="credential-value flex-1" style="color: var(--text);"
-															>{linkField.display}</span
-														>
-													{/if}
-												</div>
-												{/if}
-											{/if}
-											{#if extraFields.length > 0}
-												{#each extraFields as field}
+												{#if credentialEntries.length === 0}
+													<p class="text-xs" style="color: var(--text-muted);">
+														No credentials available for this account.
+													</p>
+											{:else}
+												{#each credentialEntries as entry}
 													<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
 														<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
-															>{field.label}:</span
+															>{entry.label}:</span
 														>
-														<span class="credential-value flex-1" style="color: var(--text);"
-															>{field.value}</span
-														>
+														{#if entry.isUrl && entry.href}
+															<a
+																href={entry.href}
+																target="_blank"
+																rel="noopener noreferrer"
+																class="credential-value flex-1 hover:underline"
+																style="color: var(--link);"
+															>
+																{entry.value}
+															</a>
+														{:else}
+															<span class="credential-value flex-1" style="color: var(--text);"
+																>{entry.value}</span
+															>
+														{/if}
 													</div>
 												{/each}
 											{/if}
-										</div>
+											</div>
 
 									<!-- Account Stats (if available) -->
 									{#if account.followers || account.following || account.postsCount}

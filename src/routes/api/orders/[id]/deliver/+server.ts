@@ -5,7 +5,8 @@ import { prisma } from '$lib/prisma';
 import { sendEmail } from '$lib/services/email';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import type { Decimal } from '@prisma/client/runtime/library';
-import { resolveCredentialField } from '$lib/helpers/credential-links';
+import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
+import { getCanonicalCredentialEntries } from '$lib/helpers/credential-contract';
 
 // Type definitions for email generation
 interface OrderForEmail {
@@ -29,6 +30,7 @@ interface AccountForEmail {
 	linkUrl?: string | null;
 	followers?: number | null;
 	ageMonths?: number | null;
+	credentialExtras?: unknown;
 }
 
 interface DeliveryPayload {
@@ -67,12 +69,12 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			include: {
 				orderItems: {
 					include: {
-						accounts: {
-							where: {
-								status: 'allocated'
+							accounts: {
+								where: {
+									status: { in: getAllocatedLikeAccountStatuses() }
+								}
 							}
 						}
-					}
 				}
 			}
 		});
@@ -177,20 +179,27 @@ Thank you for your order with FastAccs! Your accounts are ready.
 		if (item.accounts.length > 0) {
 			content += `**${item.productName}** (${item.accounts.length} account${item.accounts.length > 1 ? 's' : ''})\n`;
 
-			item.accounts.forEach((account: AccountForEmail, accIndex: number) => {
-				content += `\nAccount ${accIndex + 1}:\n`;
-				if (account.username) content += `- Username: ${account.username}\n`;
-				if (account.email) content += `- Email: ${account.email}\n`;
-				if (account.linkUrl) {
-					const sanitizedLink = resolveCredentialField(account.linkUrl);
-					if (sanitizedLink.display) {
-						content += `- Login Link: ${sanitizedLink.display}\n`;
+				item.accounts.forEach((account: AccountForEmail, accIndex: number) => {
+					content += `\nAccount ${accIndex + 1}:\n`;
+					const entryRecord = {
+						username: account.username,
+						password: account.password,
+						email: account.email,
+						emailPassword: account.emailPassword,
+						twoFa: account.twoFa,
+						linkUrl: account.linkUrl,
+						followers: account.followers,
+						ageMonths: account.ageMonths,
+						credentialExtras: account.credentialExtras
+					};
+					const entries = getCanonicalCredentialEntries(entryRecord).filter(
+						(entry) => entry.key !== 'password'
+					);
+					for (const entry of entries) {
+						content += `- ${entry.label}: ${entry.value}\n`;
 					}
-				}
-				if (account.followers !== null) content += `- Followers: ${account.followers}\n`;
-				if (account.ageMonths) content += `- Account Age: ${account.ageMonths} months\n`;
-				content += `- Password: Available in your dashboard\n`;
-			});
+					content += `- Password: Available in your dashboard\n`;
+				});
 
 			content += `\n`;
 		}

@@ -28,7 +28,7 @@ export interface Account {
 	niche: string | null;
 	quality_score: number | null;
 	credential_extras: Record<string, string> | null;
-	status: 'available' | 'reserved' | 'assigned' | 'delivered' | 'failed' | 'retired';
+	status: 'available' | 'reserved' | 'allocated' | 'delivered' | 'failed' | 'retired';
 	reserved_until: string | null;
 	order_item_id: string | null;
 	delivered_at: string | null;
@@ -58,7 +58,7 @@ export interface AccountInsert {
 	quality_score?: number | null;
 	credentialExtras?: Record<string, string> | null;
 	credential_extras?: Record<string, string> | null;
-	status?: 'available' | 'reserved' | 'assigned' | 'delivered' | 'failed' | 'retired';
+	status?: 'available' | 'reserved' | 'allocated' | 'delivered' | 'failed' | 'retired';
 	followers?: number;
 	engagement_rate?: number;
 	price?: number;
@@ -81,7 +81,7 @@ export interface AccountUpdate {
 	quality_score?: number | null;
 	credentialExtras?: Record<string, string> | null;
 	credential_extras?: Record<string, string> | null;
-	status?: 'available' | 'reserved' | 'assigned' | 'delivered' | 'failed' | 'retired';
+	status?: 'available' | 'reserved' | 'allocated' | 'delivered' | 'failed' | 'retired';
 	reserved_until?: string | null;
 	order_item_id?: string | null;
 	delivered_at?: string | null;
@@ -174,56 +174,6 @@ export async function getAvailableAccountsByTier(categoryId: string) {
 	} catch (error) {
 		console.error('Failed to fetch available accounts:', error);
 		return { data: null, error: 'Failed to fetch available accounts' };
-	}
-}
-
-// Upload accounts batch
-export async function uploadAccountsBatch(batchId: string, accounts: Partial<AccountInsert>[]) {
-	try {
-		// First, get the batch to ensure we have correct categoryId
-		const batchResponse = await fetch(`/api/batches?id=${batchId}`);
-		const batchResult = await batchResponse.json();
-
-		if (batchResult.error || !batchResult.data || batchResult.data.length === 0) {
-			throw new Error('Could not find batch with ID: ' + batchId);
-		}
-
-		const batch = batchResult.data[0];
-		const correctCategoryId = batch.categoryId;
-
-		// Add batchId and ensure correct categoryId for each account
-		const accountsWithBatchId = accounts.map((account) => ({
-			...account,
-			batchId: batchId,
-			categoryId: correctCategoryId // Ensure categoryId matches the batch's categoryId
-		}));
-
-		// Create multiple accounts via API
-		const promises = accountsWithBatchId.map((account) =>
-			fetch('/api/accounts', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(account)
-			})
-		);
-
-		const responses = await Promise.all(promises);
-		const results = await Promise.all(responses.map((r) => r.json()));
-
-		const successful = results.filter((r) => r.data && !r.error);
-		const failed = results.filter((r) => r.error);
-
-		if (failed.length > 0) {
-			console.error('Some accounts failed to upload:', failed);
-		}
-
-		return {
-			data: successful.map((r) => r.data),
-			error: failed.length > 0 ? `${failed.length} accounts failed to upload` : null
-		};
-	} catch (error) {
-		console.error('Error uploading accounts batch:', error);
-		return { data: null, error: 'Failed to upload accounts batch' };
 	}
 }
 

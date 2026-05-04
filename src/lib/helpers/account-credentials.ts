@@ -157,15 +157,35 @@ function normalizeText(value: string): string {
 	return value.replace(/\s+/g, ' ').trim();
 }
 
+function normalizeNumericInput(
+	value: string,
+	options: { allowPercentSuffix?: boolean } = {}
+): string | null {
+	let candidate = normalizeText(value).replace(/[\s,_]/g, '');
+	if (!candidate) return null;
+
+	if (candidate.endsWith('%')) {
+		if (!options.allowPercentSuffix) return null;
+		candidate = candidate.slice(0, -1);
+	}
+	if (!candidate || candidate.includes('%')) return null;
+
+	// Remove common thousands separators while keeping decimal points and leading sign
+	candidate = candidate.replace(/,/g, '');
+	return candidate;
+}
+
 function parseStrictInteger(value: string): number | null {
-	if (!/^[+-]?\d+$/.test(value)) return null;
-	const parsed = Number(value);
+	const normalized = normalizeNumericInput(value, { allowPercentSuffix: false });
+	if (!normalized || !/^[+-]?\d+$/.test(normalized)) return null;
+	const parsed = Number(normalized);
 	return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 function parseStrictFloat(value: string): number | null {
-	if (!/^[+-]?(?:\d+\.\d+|\d+|\.\d+)$/.test(value)) return null;
-	const parsed = Number(value);
+	const normalized = normalizeNumericInput(value, { allowPercentSuffix: true });
+	if (!normalized || !/^[+-]?(?:\d+\.\d+|\d+|\.\d+)$/.test(normalized)) return null;
+	const parsed = Number(normalized);
 	return Number.isFinite(parsed) ? parsed : null;
 }
 

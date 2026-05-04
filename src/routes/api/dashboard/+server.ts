@@ -6,10 +6,12 @@ import {
 	DEFAULT_LOGIN_GUIDE_URL,
 	getTierDeliveryConfig
 } from '$lib/helpers/tier-delivery-config';
+import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	try {
 		const user = locals.user;
+		const purchasedAccountStatuses = [...getAllocatedLikeAccountStatuses(), 'delivered'];
 
 		if (!user) {
 			return json({ error: 'Unauthorized' }, { status: 401 });
@@ -96,11 +98,11 @@ export const GET: RequestHandler = async ({ locals }) => {
 						{
 							orderItems: {
 								some: {
-									accounts: {
-										some: {
-											status: { in: ['allocated', 'delivered'] }
-										}
-									}
+							accounts: {
+								some: {
+									status: { in: purchasedAccountStatuses }
+								}
+							}
 								}
 							}
 						},
@@ -129,7 +131,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 							},
 							accounts: {
 								where: {
-									status: { in: ['allocated', 'delivered'] }
+									status: { in: purchasedAccountStatuses }
 								},
 								select: {
 									id: true,

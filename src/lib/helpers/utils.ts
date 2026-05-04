@@ -1,6 +1,5 @@
 // Account type definition
-import { resolveCredentialField } from '$lib/helpers/credential-links';
-import { getCredentialExtraEntries } from '$lib/helpers/account-credentials';
+import { buildCredentialPlainText } from '$lib/helpers/credential-contract';
 
 type Account = {
 	username: string | null;
@@ -82,17 +81,7 @@ export function copyAccountDetails(
 		}) => void;
 	}
 ): void {
-	const twoFa = resolveCredentialField(account.twoFa);
-	const link = resolveCredentialField(account.linkUrl);
-	const extraFields = getCredentialExtraEntries(account.credentialExtras || account.credential_extras || {});
-	let details = `Username: ${account.username}\nPassword: ${account.password}`;
-	if (account.email) details += `\nEmail: ${account.email}`;
-	if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
-	if (twoFa.display) details += `\n2FA: ${twoFa.display}`;
-	if (link.display) details += `\nLink: ${link.display}`;
-	for (const field of extraFields) {
-		details += `\n${field.label}: ${field.value}`;
-	}
+	const details = buildCredentialPlainText(account);
 
 	copyToClipboard(details, {
 		successMessage: 'Account details copied to clipboard!',
@@ -113,20 +102,9 @@ export function copyAllAccounts(
 ): void {
 	const allDetails = accounts
 		.map((account, index) => {
-			const twoFa = resolveCredentialField(account.twoFa);
-			const link = resolveCredentialField(account.linkUrl);
-			const extraFields = getCredentialExtraEntries(
-				account.credentialExtras || account.credential_extras || {}
-			);
-			let details = `Account ${index + 1}:\nUsername: ${account.username}\nPassword: ${account.password}`;
-			if (account.email) details += `\nEmail: ${account.email}`;
-			if (account.emailPassword) details += `\nEmail Password: ${account.emailPassword}`;
-			if (twoFa.display) details += `\n2FA: ${twoFa.display}`;
-			if (link.display) details += `\nLink: ${link.display}`;
-			for (const field of extraFields) {
-				details += `\n${field.label}: ${field.value}`;
-			}
-			return details;
+			return buildCredentialPlainText(account, {
+				headerLines: [`Account ${index + 1}`]
+			});
 		})
 		.join('\n\n');
 

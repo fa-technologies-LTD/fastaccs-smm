@@ -1,10 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
+import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	try {
 		const userId = locals.user?.id;
+		const purchasedAccountStatuses = [...getAllocatedLikeAccountStatuses(), 'delivered'];
 
 		if (!userId) {
 			return json({ error: 'Unauthorized' }, { status: 401 });
@@ -21,7 +23,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 							some: {
 								accounts: {
 									some: {
-										status: { in: ['allocated', 'delivered'] }
+										status: { in: purchasedAccountStatuses }
 									}
 								}
 							}
@@ -37,11 +39,11 @@ export const GET: RequestHandler = async ({ locals }) => {
 				orderItems: {
 					include: {
 						category: true,
-						accounts: {
-							where: {
-								status: { in: ['allocated', 'delivered'] }
+							accounts: {
+								where: {
+									status: { in: purchasedAccountStatuses }
+								}
 							}
-						}
 					}
 				}
 			},

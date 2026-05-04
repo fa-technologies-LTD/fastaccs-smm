@@ -1,4 +1,5 @@
 import type { PageServerLoad } from './$types';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { getInventoryStatsSnapshot, getOrderStatsSnapshot } from '$lib/services/admin-metrics';
 import { ORDER_STATUS_GROUPS } from '$lib/helpers/order-status';
@@ -10,6 +11,7 @@ import {
 	getRollingBusinessDateKeys,
 	getStartOfBusinessDayUtc
 } from '$lib/helpers/business-timezone';
+import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
 import { getFeatureFlagSnapshot } from '$lib/services/feature-flags';
 
@@ -104,6 +106,22 @@ function mapBuckets(map: Map<string, { revenue: number; orderIds: Set<string> }>
 		}));
 }
 
+function buildSettledRevenueOrderWhere(bounds?: { gte: Date; lte?: Date }): Prisma.OrderWhereInput {
+	const base: Prisma.OrderWhereInput = { status: { in: [...ORDER_STATUS_GROUPS.revenue] } };
+	if (!bounds) return base;
+
+	const paidAtWindow = bounds.lte ? { gte: bounds.gte, lte: bounds.lte } : { gte: bounds.gte };
+	const createdAtWindow = bounds.lte ? { gte: bounds.gte, lte: bounds.lte } : { gte: bounds.gte };
+
+	return {
+		...base,
+		OR: [
+			{ paidAt: paidAtWindow },
+			{ paidAt: null, createdAt: createdAtWindow } // Legacy fallback for older paid rows
+		]
+	};
+}
+
 export const load: PageServerLoad = async ({ locals }) => {
 	try {
 		if (!locals.user || locals.user.userType !== 'ADMIN') {
@@ -157,29 +175,28 @@ export const load: PageServerLoad = async ({ locals }) => {
 			totalAccounts,
 			soldAccounts,
 			pendingAccounts,
-			directTotalOrders,
-			directRevenueAggregate,
-			revenueFromOrderItemsAggregate,
-			advancedRevenueOrders,
+				directTotalOrders,
+				directRevenueAggregate,
+				directDiscountAggregate,
+				directTaxAggregate,
+				revenueFromOrderItemsAggregate,
+				advancedRevenueOrders,
 			tierCatalog,
 			recentSoldByTier,
 			paidOrderCount,
 			cancelledFailedOrderCount
 		] = await Promise.all([
-			prisma.order.aggregate({
-				where: {
-					status: { in: [...ORDER_STATUS_GROUPS.revenue] },
-					createdAt: { gte: startOfLastMonth, lte: endOfLastMonth }
-				},
-				_sum: { totalAmount: true }
-			}),
-			prisma.order.aggregate({
-				where: {
-					status: { in: [...ORDER_STATUS_GROUPS.revenue] },
-					createdAt: { gte: startOfMonth }
-				},
-				_sum: { totalAmount: true }
-			}),
+				prisma.order.aggregate({
+					where: buildSettledRevenueOrderWhere({
+						gte: startOfLastMonth,
+						lte: endOfLastMonth
+					}),
+					_sum: { totalAmount: true }
+				}),
+				prisma.order.aggregate({
+					where: buildSettledRevenueOrderWhere({ gte: startOfMonth }),
+					_sum: { totalAmount: true }
+				}),
 			prisma.order.count({
 				where: { createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } }
 			}),
@@ -209,55 +226,58 @@ export const load: PageServerLoad = async ({ locals }) => {
 				},
 				_sum: { quantity: true }
 			}),
-			prisma.orderItem.aggregate({
-				where: {
-					order: {
-						status: { in: [...ORDER_STATUS_GROUPS.revenue] },
-						createdAt: { gte: startOfLastMonth, lte: endOfLastMonth }
-					}
-				},
-				_sum: { quantity: true }
-			}),
-			prisma.orderItem.aggregate({
-				where: {
-					order: {
-						status: { in: [...ORDER_STATUS_GROUPS.revenue] },
-						createdAt: { gte: startOfMonth }
-					}
-				},
-				_sum: { quantity: true }
-			}),
+				prisma.orderItem.aggregate({
+					where: {
+						order: buildSettledRevenueOrderWhere({
+							gte: startOfLastMonth,
+							lte: endOfLastMonth
+						})
+					},
+					_sum: { quantity: true }
+				}),
+				prisma.orderItem.aggregate({
+					where: {
+						order: buildSettledRevenueOrderWhere({ gte: startOfMonth })
+					},
+					_sum: { quantity: true }
+				}),
 			prisma.affiliateProgram.aggregate({
 				_sum: { totalReferrals: true, totalSales: true, totalCommission: true },
 				_count: { id: true }
 			}),
 			prisma.account.count(),
-			prisma.account.count({
-				where: { status: { in: ['allocated', 'delivered'] } }
-			}),
-			prisma.account.count({
-				where: { status: 'assigned' }
-			}),
+				prisma.account.count({
+					where: { status: { in: ['allocated', 'delivered'] } }
+				}),
+				prisma.account.count({
+					where: { status: { in: getAllocatedLikeAccountStatuses() } }
+				}),
 			prisma.order.count(),
-			prisma.order.aggregate({
-				where: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } },
-				_sum: { totalAmount: true }
-			}),
-			prisma.orderItem.aggregate({
-				where: { order: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } } },
-				_sum: { totalPrice: true }
-			}),
-			featureFlags.adminAdvancedAnalytics
-				? prisma.order.findMany({
-						where: {
-							status: { in: [...ORDER_STATUS_GROUPS.revenue] },
-							createdAt: { gte: advancedWindowStart }
-						},
-						select: {
-							id: true,
-							createdAt: true,
-							totalAmount: true,
-							orderItems: {
+				prisma.order.aggregate({
+					where: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } },
+					_sum: { totalAmount: true }
+				}),
+				prisma.order.aggregate({
+					where: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } },
+					_sum: { discountAmount: true }
+				}),
+				prisma.order.aggregate({
+					where: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } },
+					_sum: { taxAmount: true }
+				}),
+				prisma.orderItem.aggregate({
+					where: { order: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } } },
+					_sum: { totalPrice: true }
+				}),
+				featureFlags.adminAdvancedAnalytics
+					? prisma.order.findMany({
+							where: buildSettledRevenueOrderWhere({ gte: advancedWindowStart }),
+							select: {
+								id: true,
+								createdAt: true,
+								paidAt: true,
+								totalAmount: true,
+								orderItems: {
 								select: {
 									categoryId: true,
 									quantity: true,
@@ -307,17 +327,14 @@ export const load: PageServerLoad = async ({ locals }) => {
 						orderBy: { name: 'asc' }
 					})
 				: Promise.resolve([]),
-			featureFlags.adminAdvancedAnalytics
-				? prisma.orderItem.groupBy({
-						by: ['categoryId'],
-						where: {
-							order: {
-								status: { in: [...ORDER_STATUS_GROUPS.revenue] },
-								createdAt: { gte: last30DaysStart }
-							}
-						},
-						_sum: { quantity: true }
-					})
+				featureFlags.adminAdvancedAnalytics
+					? prisma.orderItem.groupBy({
+							by: ['categoryId'],
+							where: {
+								order: buildSettledRevenueOrderWhere({ gte: last30DaysStart })
+							},
+							_sum: { quantity: true }
+						})
 				: Promise.resolve([]),
 			prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } } }),
 			prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.failed] } } })
@@ -348,9 +365,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 		for (const order of advancedRevenueOrders) {
 			const orderTotal = toAmount(order.totalAmount);
-			const dayKey = getBusinessDateKey(order.createdAt, businessTimezone);
-			const weekKey = getBusinessWeekKey(order.createdAt, businessTimezone);
-			const monthKey = getBusinessMonthKey(order.createdAt, businessTimezone);
+			const settlementDate = order.paidAt || order.createdAt;
+			const dayKey = getBusinessDateKey(settlementDate, businessTimezone);
+			const weekKey = getBusinessWeekKey(settlementDate, businessTimezone);
+			const monthKey = getBusinessMonthKey(settlementDate, businessTimezone);
 
 			pushBucket(byDayMap, dayKey, order.id, orderTotal);
 			pushBucket(byWeekMap, weekKey, order.id, orderTotal);
@@ -491,7 +509,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 					) / 10
 				: null;
 
-		const integrityChecks: IntegrityCheckResult[] = [
+			const integrityChecks: IntegrityCheckResult[] = [
 			{
 				key: 'orders_total',
 				label: 'Total orders snapshot matches direct count',
@@ -512,21 +530,28 @@ export const load: PageServerLoad = async ({ locals }) => {
 						Number(directRevenueAggregate._sum.totalAmount || 0) - orderStatsSnapshot.total_revenue
 					) < 0.01
 			},
-			{
-				key: 'revenue_orders_vs_items',
-				label: 'Revenue from orders matches revenue from order items',
-				expected: Number(directRevenueAggregate._sum.totalAmount || 0),
-				actual: Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0),
-				delta:
-					Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0) -
-					Number(directRevenueAggregate._sum.totalAmount || 0),
-				ok:
-					Math.abs(
+				{
+					key: 'revenue_orders_vs_items',
+					label: 'Revenue from orders matches item totals net discounts plus tax',
+					expected: Number(directRevenueAggregate._sum.totalAmount || 0),
+					actual:
 						Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0) -
-							Number(directRevenueAggregate._sum.totalAmount || 0)
-					) < 0.01
-			}
-		];
+						Number(directDiscountAggregate._sum.discountAmount || 0) +
+						Number(directTaxAggregate._sum.taxAmount || 0),
+					delta:
+						(Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0) -
+							Number(directDiscountAggregate._sum.discountAmount || 0) +
+							Number(directTaxAggregate._sum.taxAmount || 0)) -
+						Number(directRevenueAggregate._sum.totalAmount || 0),
+					ok:
+						Math.abs(
+							(Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0) -
+								Number(directDiscountAggregate._sum.discountAmount || 0) +
+								Number(directTaxAggregate._sum.taxAmount || 0)) -
+								Number(directRevenueAggregate._sum.totalAmount || 0)
+						) < 0.01
+				}
+			];
 
 		const visibleIntegrityChecks = revenueVisible
 			? integrityChecks
@@ -546,9 +571,15 @@ export const load: PageServerLoad = async ({ locals }) => {
 			orderCount: row.orderCount
 		}));
 
-		const stats = {
-			timezone: businessTimezone,
-			advancedAnalyticsEnabled: featureFlags.adminAdvancedAnalytics,
+			const stats = {
+				timezone: businessTimezone,
+				metricDefinitions: {
+					orders:
+						'Order volume metrics use order createdAt in the configured business timezone.',
+					revenue:
+						'Revenue timing metrics use paidAt, with createdAt fallback only when paidAt is missing on legacy paid orders.'
+				},
+				advancedAnalyticsEnabled: featureFlags.adminAdvancedAnalytics,
 			totalRevenue: revenueVisible ? Number(orderStatsSnapshot.total_revenue || 0) : 0,
 			revenueChange: revenueVisible
 				? ((Number(thisMonthRevenue._sum.totalAmount || 0) -

@@ -44,12 +44,16 @@
 
 <div class="space-y-6">
 	<div class="flex flex-wrap items-center justify-between gap-3">
-		<div>
-			<h1 class="text-2xl font-bold" style="color: var(--text)">Analytics Dashboard</h1>
-			<p class="mt-1 text-sm" style="color: var(--text-muted)">
-				Business timezone: <span class="font-semibold">{stats.timezone || 'Africa/Lagos'}</span>
-			</p>
-		</div>
+			<div>
+				<h1 class="text-2xl font-bold" style="color: var(--text)">Analytics Dashboard</h1>
+				<p class="mt-1 text-sm" style="color: var(--text-muted)">
+					Business timezone: <span class="font-semibold">{stats.timezone || 'Africa/Lagos'}</span>
+				</p>
+				<p class="mt-1 text-xs" style="color: var(--text-dim)">
+					Order KPIs use <span class="font-semibold">createdAt</span>; revenue timing KPIs use
+					<span class="font-semibold">paidAt</span> (legacy fallback to createdAt when paidAt is missing).
+				</p>
+			</div>
 		{#if !canViewRevenue}
 			<span
 				class="rounded-full px-3 py-1 text-xs font-semibold"

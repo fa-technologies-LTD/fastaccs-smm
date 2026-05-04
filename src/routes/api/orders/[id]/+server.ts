@@ -4,6 +4,7 @@ import { prisma } from '$lib/prisma';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { canViewRevenue, redactOrderFinancials } from '$lib/services/admin-revenue-visibility';
 import type { Prisma } from '@prisma/client';
+import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 
 const ALLOWED_PATCH_FIELDS = new Set([
 	'status',
@@ -288,13 +289,13 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 		}
 
 		// First, release any allocated accounts back to available
-		await prisma.account.updateMany({
-			where: {
-				orderItem: { orderId: params.id },
-				status: { in: ['allocated'] } // Only reset allocated accounts, not delivered ones
-			},
-			data: {
-				status: 'available',
+			await prisma.account.updateMany({
+				where: {
+					orderItem: { orderId: params.id },
+					status: { in: getAllocatedLikeAccountStatuses() } // Only reset allocated-like accounts, not delivered ones
+				},
+				data: {
+					status: 'available',
 				orderItemId: null
 			}
 		});

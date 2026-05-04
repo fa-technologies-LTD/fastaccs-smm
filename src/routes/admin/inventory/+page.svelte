@@ -19,22 +19,22 @@
 	});
 
 	const summaryStats = $derived.by(() => {
-		return {
-			total_accounts: filteredInventory.reduce(
-				(sum: number, item: any) => sum + (item.total_accounts || 0),
-				0
-			),
-			available_accounts: filteredInventory.reduce(
-				(sum: number, item: any) => sum + (item.available_accounts || 0),
-				0
-			),
-			assigned_accounts: filteredInventory.reduce(
-				(sum: number, item: any) => sum + (item.assigned_accounts || 0),
-				0
-			),
-			delivered_accounts: filteredInventory.reduce(
-				(sum: number, item: any) => sum + (item.delivered_accounts || 0),
-				0
+			return {
+				total_accounts: filteredInventory.reduce(
+					(sum: number, item: any) => sum + (item.total_accounts || 0),
+					0
+				),
+				available_accounts: filteredInventory.reduce(
+					(sum: number, item: any) => sum + (item.available_accounts || 0),
+					0
+				),
+				allocated_accounts: filteredInventory.reduce(
+					(sum: number, item: any) => sum + (item.allocated_accounts || item.assigned_accounts || 0),
+					0
+				),
+				delivered_accounts: filteredInventory.reduce(
+					(sum: number, item: any) => sum + (item.delivered_accounts || 0),
+					0
 			),
 			platforms: new Set(filteredInventory.map((item: any) => item.platform_name)).size
 		};
@@ -154,15 +154,15 @@
 				{summaryStats.available_accounts.toLocaleString()}
 			</p>
 		</div>
-		<div
-			class="rounded-lg p-4 sm:p-6"
-			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
-		>
-			<h3 class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Assigned</h3>
-			<p class="text-lg font-bold sm:text-2xl" style="color: var(--status-warning);">
-				{summaryStats.assigned_accounts.toLocaleString()}
-			</p>
-		</div>
+			<div
+				class="rounded-lg p-4 sm:p-6"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+			>
+				<h3 class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Allocated</h3>
+				<p class="text-lg font-bold sm:text-2xl" style="color: var(--status-warning);">
+					{summaryStats.allocated_accounts.toLocaleString()}
+				</p>
+			</div>
 		<div
 			class="rounded-lg p-6"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
@@ -219,12 +219,12 @@
 						>
 							Available
 						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-muted);"
-						>
-							Assigned
-						</th>
+							<th
+								class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+								style="color: var(--text-muted);"
+							>
+								Allocated
+							</th>
 						<th
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
@@ -279,7 +279,7 @@
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
 								<div class="text-sm" style="color: var(--status-warning);">
-									{item.assigned_accounts?.toLocaleString() || 0}
+									{(item.allocated_accounts ?? item.assigned_accounts ?? 0).toLocaleString()}
 								</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">

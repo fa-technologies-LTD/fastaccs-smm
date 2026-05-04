@@ -14,6 +14,12 @@
 	import { createCategory, updateCategory, deleteCategory } from '$lib/services/categories';
 	import { addToast } from '$lib/stores/toasts';
 	import type { CategoryMetadata, CategoryInsert, CategoryUpdate } from '$lib/services/categories';
+	import {
+		DEFAULT_MANUAL_HANDOVER_PROMISE,
+		applyTierDeliveryConfigSanitization,
+		getTierDeliveryConfig,
+		getTierDeliveryModeLabel
+	} from '$lib/helpers/tier-delivery-config';
 
 	// Props from load function
 	interface Props {
@@ -32,12 +38,19 @@
 	let showEditModal = $state(false);
 	let selectedTier = $state<CategoryMetadata | null>(null);
 
-	// Form state for creating/editing tiers
-	let tierForm = $state({
-		name: '',
-		slug: '',
-		description: '',
-		metadata: {
+	type TierFormMetadata = {
+		follower_range: { min: number; max: number; display: string };
+		pricing: { base_price: number; bulk_discount: number; currency: string };
+		features: string[];
+		quality_score: number;
+		delivery_time: string;
+		replacement_guarantee: boolean;
+		delivery_mode: 'instant_auto' | 'manual_handover';
+		manual_handover_promise: string;
+	};
+
+	function createDefaultTierMetadata(): TierFormMetadata {
+		return {
 			follower_range: {
 				min: 0,
 				max: 1000,
@@ -46,13 +59,88 @@
 			pricing: {
 				base_price: 0.0,
 				bulk_discount: 0,
-				currency: 'NGN'
+				currency: 'USD'
 			},
 			features: [],
 			quality_score: 5,
 			delivery_time: '24-48 hours',
-			replacement_guarantee: true
-		}
+			replacement_guarantee: true,
+			delivery_mode: 'instant_auto',
+			manual_handover_promise: DEFAULT_MANUAL_HANDOVER_PROMISE
+		};
+	}
+
+	function normalizeTierFormMetadata(metadata: unknown): TierFormMetadata {
+		const defaults = createDefaultTierMetadata();
+		const record =
+			metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+				? (metadata as Record<string, unknown>)
+				: {};
+		const deliveryConfig = getTierDeliveryConfig(record);
+
+		const followerRange =
+			record.follower_range && typeof record.follower_range === 'object'
+				? (record.follower_range as Record<string, unknown>)
+				: {};
+		const pricing =
+			record.pricing && typeof record.pricing === 'object'
+				? (record.pricing as Record<string, unknown>)
+				: {};
+
+		return {
+			...defaults,
+			follower_range: {
+				min:
+					typeof followerRange.min === 'number'
+						? followerRange.min
+						: defaults.follower_range.min,
+				max:
+					typeof followerRange.max === 'number'
+						? followerRange.max
+						: defaults.follower_range.max,
+				display:
+					typeof followerRange.display === 'string' && followerRange.display.trim().length > 0
+						? followerRange.display
+						: defaults.follower_range.display
+			},
+			pricing: {
+				base_price:
+					typeof pricing.base_price === 'number' ? pricing.base_price : defaults.pricing.base_price,
+				bulk_discount:
+					typeof pricing.bulk_discount === 'number'
+						? pricing.bulk_discount
+						: defaults.pricing.bulk_discount,
+				currency:
+					typeof pricing.currency === 'string' && pricing.currency.trim().length > 0
+						? pricing.currency
+						: defaults.pricing.currency
+			},
+			features: Array.isArray(record.features)
+				? record.features.filter((feature): feature is string => typeof feature === 'string')
+				: defaults.features,
+			quality_score:
+				typeof record.quality_score === 'number'
+					? record.quality_score
+					: defaults.quality_score,
+			delivery_time:
+				typeof record.delivery_time === 'string' && record.delivery_time.trim().length > 0
+					? record.delivery_time
+					: defaults.delivery_time,
+			replacement_guarantee:
+				typeof record.replacement_guarantee === 'boolean'
+					? record.replacement_guarantee
+					: defaults.replacement_guarantee,
+			delivery_mode: deliveryConfig.mode,
+			manual_handover_promise: deliveryConfig.manualHandoverPromise || DEFAULT_MANUAL_HANDOVER_PROMISE
+		};
+	}
+
+	// Form state for creating/editing tiers
+	let tierForm = $state({
+		name: '',
+		slug: '',
+		description: '',
+		metadata: createDefaultTierMetadata()
 	});
 
 	// Auto-generate slug from name (GLOBAL SLUG - no platform prefix)
@@ -81,7 +169,7 @@
 			name: tier.name as string,
 			slug: tier.slug as string,
 			description: (tier.description as string) || '',
-			metadata: { ...(tier.metadata as any) }
+			metadata: normalizeTierFormMetadata(tier.metadata)
 		};
 		showEditModal = true;
 	}
@@ -91,22 +179,7 @@
 			name: '',
 			slug: '',
 			description: '',
-			metadata: {
-				follower_range: {
-					min: 0,
-					max: 1000,
-					display: '0-1K'
-				},
-				pricing: {
-					base_price: 0.0,
-					bulk_discount: 0,
-					currency: 'USD'
-				},
-				features: [],
-				quality_score: 5,
-				delivery_time: '24-48 hours',
-				replacement_guarantee: true
-			}
+			metadata: createDefaultTierMetadata()
 		};
 	}
 
@@ -115,16 +188,18 @@
 
 		loading = true;
 		try {
-			const newTier: CategoryInsert = {
-				name: tierForm.name,
-				slug: tierForm.slug,
-				description: tierForm.description || null,
-				categoryType: 'tier',
-				parentId: null, // GLOBAL TIER - no parent platform
-				metadata: tierForm.metadata,
-				isActive: true,
-				sortOrder: tiers.length + 1
-			};
+				const newTier: CategoryInsert = {
+					name: tierForm.name,
+					slug: tierForm.slug,
+					description: tierForm.description || null,
+					categoryType: 'tier',
+					parentId: null, // GLOBAL TIER - no parent platform
+					metadata: applyTierDeliveryConfigSanitization(
+						tierForm.metadata as unknown as Record<string, unknown>
+					),
+					isActive: true,
+					sortOrder: tiers.length + 1
+				};
 
 			const result = await createCategory(newTier);
 			if (result.error) {
@@ -163,12 +238,14 @@
 
 		loading = true;
 		try {
-			const updates: CategoryUpdate = {
-				name: tierForm.name,
-				slug: tierForm.slug,
-				description: tierForm.description || null,
-				metadata: tierForm.metadata
-			};
+				const updates: CategoryUpdate = {
+					name: tierForm.name,
+					slug: tierForm.slug,
+					description: tierForm.description || null,
+					metadata: applyTierDeliveryConfigSanitization(
+						tierForm.metadata as unknown as Record<string, unknown>
+					)
+				};
 
 			const result = await updateCategory(selectedTier.id as string, updates);
 			if (result.error) {
@@ -437,13 +514,23 @@
 							</div>
 						</div>
 
-						<!-- Delivery Time -->
-						<div class="flex items-center justify-between">
-							<span class="text-sm text-gray-600">Delivery</span>
-							<span class="text-sm font-medium text-gray-900">
-								{(tier.metadata as any)?.delivery_time || 'N/A'}
-							</span>
-						</div>
+							<!-- Delivery Time -->
+							<div class="flex items-center justify-between">
+								<span class="text-sm text-gray-600">Delivery</span>
+								<span class="text-sm font-medium text-gray-900">
+									{(tier.metadata as any)?.delivery_time || 'N/A'}
+								</span>
+							</div>
+
+							<!-- Delivery Mode -->
+							<div class="flex items-center justify-between">
+								<span class="text-sm text-gray-600">Mode</span>
+								<span class="text-sm font-medium text-gray-900">
+									{getTierDeliveryModeLabel(
+										getTierDeliveryConfig((tier.metadata as Record<string, unknown>) || {}).mode
+									)}
+								</span>
+							</div>
 
 						<!-- Status -->
 						<div class="flex items-center justify-between">
@@ -620,20 +707,67 @@
 								/>
 							</div>
 
-							<!-- Delivery Time -->
-							<div class="md:col-span-2">
-								<label class="block text-sm font-medium text-gray-700">Delivery Time</label>
-								<input
-									type="text"
+								<!-- Delivery Time -->
+								<div class="md:col-span-2">
+									<label class="block text-sm font-medium text-gray-700">Delivery Time</label>
+									<input
+										type="text"
 									value={tierForm.metadata.delivery_time}
 									oninput={(e) =>
 										(tierForm.metadata.delivery_time = (e.target as HTMLInputElement).value)}
 									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
-									placeholder="e.g., 24-48 hours"
-								/>
+										placeholder="e.g., 24-48 hours"
+									/>
+								</div>
+
+								<!-- Delivery Handling -->
+								<div class="md:col-span-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+									<div class="mb-2">
+										<p class="text-sm font-semibold text-gray-900">Delivery Handling</p>
+										<p class="text-xs text-gray-600">
+											Choose whether this tier is delivered instantly or by manual WhatsApp handover.
+										</p>
+									</div>
+									<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+										<label class="flex items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900">
+											<span>Instant Delivery</span>
+											<input
+												type="radio"
+												value="instant_auto"
+												bind:group={tierForm.metadata.delivery_mode}
+											/>
+										</label>
+										<label class="flex items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900">
+											<span>Manual Handover (WhatsApp)</span>
+											<input
+												type="radio"
+												value="manual_handover"
+												bind:group={tierForm.metadata.delivery_mode}
+											/>
+										</label>
+									</div>
+
+									{#if tierForm.metadata.delivery_mode === 'manual_handover'}
+										<div class="mt-3">
+											<label
+												for="manual-handover-promise"
+												class="block text-sm font-medium text-gray-700"
+											>
+												Customer Message (Manual Handover (WhatsApp))
+											</label>
+											<input
+												id="manual-handover-promise"
+												type="text"
+												maxlength="180"
+												bind:value={tierForm.metadata.manual_handover_promise}
+												class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
+												placeholder="Secure WhatsApp handover by our team, usually within 15-60 minutes."
+											/>
+										</div>
+									{/if}
+								</div>
 							</div>
 						</div>
-					</div>
 
 					<div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
 						<button
@@ -792,18 +926,65 @@
 								/>
 							</div>
 
-							<div class="md:col-span-2">
-								<label class="block text-sm font-medium text-gray-700">Delivery Time</label>
-								<input
-									type="text"
+								<div class="md:col-span-2">
+									<label class="block text-sm font-medium text-gray-700">Delivery Time</label>
+									<input
+										type="text"
 									value={tierForm.metadata.delivery_time}
 									oninput={(e) =>
 										(tierForm.metadata.delivery_time = (e.target as HTMLInputElement).value)}
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-								/>
+										class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+									/>
+								</div>
+
+								<!-- Delivery Handling -->
+								<div class="md:col-span-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+									<div class="mb-2">
+										<p class="text-sm font-semibold text-gray-900">Delivery Handling</p>
+										<p class="text-xs text-gray-600">
+											Choose whether this tier is delivered instantly or by manual WhatsApp handover.
+										</p>
+									</div>
+									<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+										<label class="flex items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900">
+											<span>Instant Delivery</span>
+											<input
+												type="radio"
+												value="instant_auto"
+												bind:group={tierForm.metadata.delivery_mode}
+											/>
+										</label>
+										<label class="flex items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900">
+											<span>Manual Handover (WhatsApp)</span>
+											<input
+												type="radio"
+												value="manual_handover"
+												bind:group={tierForm.metadata.delivery_mode}
+											/>
+										</label>
+									</div>
+
+									{#if tierForm.metadata.delivery_mode === 'manual_handover'}
+										<div class="mt-3">
+											<label
+												for="edit-manual-handover-promise"
+												class="block text-sm font-medium text-gray-700"
+											>
+												Customer Message (Manual Handover (WhatsApp))
+											</label>
+											<input
+												id="edit-manual-handover-promise"
+												type="text"
+												maxlength="180"
+												bind:value={tierForm.metadata.manual_handover_promise}
+												class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
+												placeholder="Secure WhatsApp handover by our team, usually within 15-60 minutes."
+											/>
+										</div>
+									{/if}
+								</div>
 							</div>
 						</div>
-					</div>
 
 					<div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
 						<button

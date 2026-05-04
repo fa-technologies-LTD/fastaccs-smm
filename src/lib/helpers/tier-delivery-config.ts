@@ -7,6 +7,8 @@ export const DEFAULT_MANUAL_HANDOVER_PROMISE =
 	'Secure WhatsApp handover by our team, usually within 15–60 minutes.';
 export const DEFAULT_LOGIN_GUIDE_URL = 'https://smm.fastaccs.com/support#after-purchase-guide';
 export const DEFAULT_LOGIN_GUIDE_LABEL = 'How to login this account';
+export const INSTANT_DELIVERY_LABEL = 'Instant Delivery';
+export const MANUAL_HANDOVER_WHATSAPP_LABEL = 'Manual Handover (WhatsApp)';
 
 export type TierDeliveryMode = 'instant_auto' | 'manual_handover';
 
@@ -15,6 +17,10 @@ export interface TierDeliveryConfig {
 	manualHandoverPromise: string | null;
 	loginGuideUrl: string | null;
 	loginGuideLabel: string | null;
+}
+
+export function getTierDeliveryModeLabel(mode: TierDeliveryMode): string {
+	return mode === 'manual_handover' ? MANUAL_HANDOVER_WHATSAPP_LABEL : INSTANT_DELIVERY_LABEL;
 }
 
 function sanitizeText(value: unknown, maxLength: number): string | null {

@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 
@@ -14,10 +15,10 @@ export async function GET({ url, locals }) {
 		const limit = url.searchParams.get('limit');
 		const id = url.searchParams.get('id');
 
-		const where: Record<string, string> = {};
-		if (categoryId) where.categoryId = categoryId;
-		if (status) where.status = status;
-		if (id) where.id = id;
+			const where: Prisma.AccountBatchWhereInput = {};
+			if (categoryId) where.categoryId = categoryId;
+			if (status) where.importStatus = status;
+			if (id) where.id = id;
 
 		const data = await prisma.accountBatch.findMany({
 			where,
@@ -51,14 +52,37 @@ export async function POST({ request, locals }) {
 			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
 		}
 
-		const batchData = await request.json();
+			const batchData = await request.json();
+			const descriptors =
+				batchData?.descriptors && typeof batchData.descriptors === 'object'
+					? batchData.descriptors
+					: batchData?.metadata && typeof batchData.metadata === 'object'
+						? batchData.metadata
+						: {};
+			const importStatus =
+				typeof batchData?.importStatus === 'string' && batchData.importStatus.trim()
+					? batchData.importStatus.trim().toLowerCase()
+					: typeof (descriptors as Record<string, unknown>)?.status === 'string'
+						? String((descriptors as Record<string, unknown>).status).trim().toLowerCase()
+						: 'pending';
 
-		const data = await prisma.accountBatch.create({
-			data: {
-				...batchData,
-				descriptors: batchData.metadata || {}
-			},
-			include: {
+			const data = await prisma.accountBatch.create({
+				data: {
+					categoryId: batchData.categoryId,
+					supplier: batchData.supplier || null,
+					costPerUnit: batchData.costPerUnit ?? null,
+					descriptors: {
+						...(descriptors as Record<string, unknown>),
+						status: importStatus
+					},
+					linksRaw: batchData.linksRaw || null,
+					logsRaw: batchData.logsRaw || null,
+					notes: batchData.notes || null,
+					totalUnits: Number(batchData.totalUnits || 0),
+					remainingUnits: Number(batchData.remainingUnits || 0),
+					importStatus
+				},
+				include: {
 				category: true,
 				accounts: true
 			}

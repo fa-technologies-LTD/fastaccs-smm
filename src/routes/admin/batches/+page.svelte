@@ -2,17 +2,8 @@
 	import { goto } from '$app/navigation';
 
 	import { Upload, FileText, AlertCircle, CheckCircle, Clock, X, Eye } from '@lucide/svelte';
-	import { createBatch, updateBatchStatus } from '$lib/services/batches';
-	import { uploadAccountsBatch } from '$lib/services/accounts';
 	import type { BatchMetadata } from '$lib/services/batches';
 	import { addToast } from '$lib/stores/toasts';
-	import { parseCsvText } from '$lib/helpers/csv';
-	import {
-		buildCsvHeaderDescriptors,
-		getCredentialDisplayLabel,
-		parseKnownAccountFieldValue,
-		type CredentialExtras
-	} from '$lib/helpers/account-credentials';
 	import { fade, fly } from 'svelte/transition';
 
 	// Props from load function
@@ -126,189 +117,33 @@
 				return;
 			}
 
-			// Read and parse CSV file with quote/comma support.
-			const csvText = await selectedFile.text();
-			let parsedCsv: ReturnType<typeof parseCsvText>;
-			try {
-				parsedCsv = parseCsvText(csvText);
-			} catch (error) {
+			const formData = new FormData();
+			formData.append('file', selectedFile);
+			formData.append('name', uploadForm.name.trim());
+			formData.append('description', uploadForm.description.trim());
+			formData.append('platform_id', uploadForm.platform_id);
+			formData.append('tier_id', uploadForm.tier_id);
+
+			const response = await fetch('/api/batches/import', {
+				method: 'POST',
+				body: formData
+			});
+			const result = await response.json();
+
+			if (!response.ok || result.error || !result.data) {
 				uploadError =
-					error instanceof Error ? error.message : 'Invalid CSV format. Please check your file and retry.';
+					(typeof result.error === 'string' && result.error) || 'Failed to import batch';
 				return;
 			}
 
-			if (parsedCsv.headers.length === 0) {
-				uploadError = 'CSV file is empty or missing header row';
-				return;
-			}
-
-			if (parsedCsv.rows.length === 0) {
-				uploadError = 'CSV file has headers but no data rows';
-				return;
-			}
-
-			const headerDescriptors = buildCsvHeaderDescriptors(parsedCsv.headers);
-
-			const duplicateHeaders: string[] = [];
-			const seenHeaders = new Map<string, string>();
-			for (const descriptor of headerDescriptors) {
-				const key = descriptor.knownField
-					? `known:${descriptor.knownField}`
-					: `extra:${descriptor.normalized || descriptor.original.toLowerCase()}`;
-				const previous = seenHeaders.get(key);
-				if (previous) {
-					duplicateHeaders.push(`${previous} and ${descriptor.original || `Column ${descriptor.index + 1}`}`);
-					continue;
-				}
-				seenHeaders.set(key, descriptor.original || `Column ${descriptor.index + 1}`);
-			}
-
-			if (duplicateHeaders.length > 0) {
-				uploadError = `Duplicate CSV columns detected: ${duplicateHeaders.slice(0, 3).join('; ')}`;
-				return;
-			}
-
-			const rowErrors: string[] = [];
-			const accounts: Record<string, unknown>[] = [];
-
-			for (const row of parsedCsv.rows) {
-				if (row.values.length !== headerDescriptors.length) {
-					rowErrors.push(
-						`Line ${row.line}: expected ${headerDescriptors.length} columns but found ${row.values.length}`
-					);
-					continue;
-				}
-
-				const account: Record<string, unknown> = {
-					categoryId: uploadForm.tier_id,
-					platform: selectedPlatformRecord.name || 'Unknown',
-					status: 'available'
-				};
-				const credentialExtras: CredentialExtras = {};
-
-				for (const descriptor of headerDescriptors) {
-					const rawValue = row.values[descriptor.index] ?? '';
-					const value = rawValue.trim();
-					if (!value) continue;
-
-					if (descriptor.knownField) {
-						const parsed = parseKnownAccountFieldValue(descriptor.knownField, value);
-						if (!parsed.ok) {
-							rowErrors.push(
-								`Line ${row.line} (${getCredentialDisplayLabel(descriptor.original)}): ${parsed.error}`
-							);
-							continue;
-						}
-						account[descriptor.knownField] = parsed.value;
-						continue;
-					}
-
-					const extraKey = descriptor.original || `Column ${descriptor.index + 1}`;
-					credentialExtras[extraKey] = value;
-				}
-
-				if (Object.keys(credentialExtras).length > 0) {
-					account.credentialExtras = credentialExtras;
-				}
-
-				accounts.push(account);
-			}
-
-			// Hard-fail strategy: if any row has an issue, no batch/account records are created.
-			if (rowErrors.length > 0) {
-				const preview = rowErrors.slice(0, 5).join(' | ');
-				const suffix = rowErrors.length > 5 ? ` | +${rowErrors.length - 5} more error(s)` : '';
-				uploadError = `Import failed validation. ${preview}${suffix}`;
-				return;
-			}
-
-			if (accounts.length === 0) {
-				uploadError = 'No non-empty account rows found in CSV';
-				return;
-			}
-
-			// Create batch record
-			const batchResult = await createBatch(
-				{
-					name: uploadForm.name,
-					description: uploadForm.description || null,
-					tier_id: uploadForm.tier_id,
-					total_accounts: accounts.length,
-					processed_accounts: 0,
-					status: 'processing',
-					metadata: {
-						filename: selectedFile.name,
-						upload_date: new Date().toISOString(),
-						file_size: selectedFile.size,
-						headers: parsedCsv.headers,
-						field_map: headerDescriptors.map((descriptor) => ({
-							header: descriptor.original,
-							normalized: descriptor.normalized,
-							mapped_to: descriptor.knownField || null,
-							label: getCredentialDisplayLabel(descriptor.original)
-						}))
-					}
-				},
-				fetch
-			);
-
-			if (batchResult.error) {
-				const error = batchResult.error;
-				uploadError =
-					typeof error === 'string' ? error : (error as any)?.message || 'Failed to create batch';
-				return;
-			}
-
-			const batch = batchResult.data!;
-
-			// Add the new batch to the list immediately (with processing status)
-			batches = [batch, ...batches];
-
-			// Upload accounts in batch
-
-			const uploadResult = await uploadAccountsBatch(batch.id, accounts);
-
-			if (uploadResult.error) {
-				console.error('Account upload failed:', uploadResult.error);
-				// Update batch status to failed
-				await updateBatchStatus(batch.id, 'failed', fetch);
-
-				// Update the batch in the local array
-				const batchIndex = batches.findIndex((b) => b.id === batch.id);
-				if (batchIndex !== -1) {
-					batches[batchIndex] = {
-						...batches[batchIndex],
-						status: 'failed'
-					};
-				}
-
-				// Hard-fail policy means no partial imports should remain.
-				await fetch(`/api/batches/${batch.id}`, { method: 'DELETE' }).catch((rollbackError) => {
-					console.error('Failed to rollback batch after upload error:', rollbackError);
-				});
-				batches = batches.filter((b) => b.id !== batch.id);
-
-				uploadError = `${uploadResult.error}. Import was rolled back to avoid partial data.`;
-				return;
-			}
-			// Update batch as completed
-			await updateBatchStatus(batch.id, 'completed', fetch);
-
-			// Update the batch status in the local array
-			const batchIndex = batches.findIndex((b) => b.id === batch.id);
-			if (batchIndex !== -1) {
-				batches[batchIndex] = {
-					...batches[batchIndex],
-					status: 'completed',
-					processed_accounts: accounts.length // Use the actual number of accounts processed
-				};
-			}
+			const importedBatch = result.data as BatchMetadata;
+			batches = [importedBatch, ...batches];
 
 			// Show success notification
 			addToast({
 				type: 'success',
 				title: 'Batch Upload Successful',
-				message: `Successfully uploaded ${accounts.length} accounts to ${batch.name}`,
+				message: `Successfully uploaded ${importedBatch.total_accounts} accounts to ${importedBatch.name}`,
 				duration: 5000
 			});
 

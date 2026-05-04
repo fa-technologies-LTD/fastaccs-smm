@@ -244,7 +244,7 @@ export interface Database {
 						niche: string | null;
 						quality_score: number | null;
 						credential_extras: Record<string, string> | null;
-						status: 'available' | 'reserved' | 'assigned' | 'delivered' | 'failed' | 'retired';
+						status: 'available' | 'reserved' | 'allocated' | 'delivered' | 'failed' | 'retired';
 					reserved_until: string | null;
 					order_item_id: string | null;
 					delivered_at: string | null;
@@ -273,7 +273,7 @@ export interface Database {
 						niche?: string | null;
 						quality_score?: number | null;
 						credential_extras?: Record<string, string> | null;
-						status?: 'available' | 'reserved' | 'assigned' | 'delivered' | 'failed' | 'retired';
+						status?: 'available' | 'reserved' | 'allocated' | 'delivered' | 'failed' | 'retired';
 					reserved_until?: string | null;
 					order_item_id?: string | null;
 					delivered_at?: string | null;
@@ -302,7 +302,7 @@ export interface Database {
 						niche?: string | null;
 						quality_score?: number | null;
 						credential_extras?: Record<string, string> | null;
-						status?: 'available' | 'reserved' | 'assigned' | 'delivered' | 'failed' | 'retired';
+						status?: 'available' | 'reserved' | 'allocated' | 'delivered' | 'failed' | 'retired';
 					reserved_until?: string | null;
 					order_item_id?: string | null;
 					delivered_at?: string | null;
@@ -752,7 +752,7 @@ export interface Database {
 				| 'cancelled'
 				| 'refunded';
 			payment_status: 'pending' | 'paid' | 'failed' | 'refunded' | 'cancelled';
-			account_status: 'available' | 'reserved' | 'assigned' | 'delivered' | 'failed' | 'retired';
+			account_status: 'available' | 'reserved' | 'allocated' | 'delivered' | 'failed' | 'retired';
 			product_status: 'active' | 'inactive' | 'out_of_stock' | 'discontinued';
 			allocation_status: 'pending' | 'allocating' | 'allocated' | 'partial' | 'failed';
 		};

@@ -27,6 +27,7 @@
 	} from '$lib/helpers/platformColors';
 	import { formatPrice } from '$lib/helpers/utils';
 	import {
+		getTierDeliveryModeLabel as getDeliveryModeLabel,
 		getTierDeliveryConfig,
 		type TierDeliveryMode
 	} from '$lib/helpers/tier-delivery-config';
@@ -184,7 +185,7 @@
 
 	function getTierDeliveryModeLabel(tier: TierCard): string {
 		const config = getTierDeliveryConfig(tier.metadata);
-		return config.mode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto';
+		return getDeliveryModeLabel(config.mode);
 	}
 
 	function getTierManualHandoverPromise(tier: TierCard): string | null {
@@ -208,9 +209,10 @@
 			return true;
 		}
 
-		const incomingLabel = mode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto';
-		const existingLabel =
-			compatibility.existingMode === 'manual_handover' ? 'Manual Handover' : 'Instant Auto';
+		const incomingLabel = getDeliveryModeLabel(mode);
+		const existingLabel = compatibility.existingMode
+			? getDeliveryModeLabel(compatibility.existingMode)
+			: getDeliveryModeLabel('instant_auto');
 		const shouldReplace = window.confirm(
 			`You already have ${existingLabel} item(s) in your cart.\n\n${incomingLabel} items must be checked out separately.\n\nPress OK to clear your cart and add this item, or Cancel to keep your current cart.`
 		);

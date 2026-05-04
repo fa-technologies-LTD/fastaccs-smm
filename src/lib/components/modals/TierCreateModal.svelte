@@ -272,7 +272,7 @@
 										class="flex items-center justify-between rounded-md px-3 py-2 text-sm"
 										style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 									>
-										<span>Instant Auto</span>
+										<span>Instant Delivery</span>
 										<input
 											type="radio"
 											value="instant_auto"
@@ -283,7 +283,7 @@
 										class="flex items-center justify-between rounded-md px-3 py-2 text-sm"
 										style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 									>
-										<span>Manual Handover</span>
+										<span>Manual Handover (WhatsApp)</span>
 										<input
 											type="radio"
 											value="manual_handover"
@@ -299,7 +299,7 @@
 											class="block text-sm font-medium"
 											style="color: var(--text);"
 										>
-											Customer Message (Manual Handover)
+												Customer Message (Manual Handover (WhatsApp))
 										</label>
 										<input
 											id="manual-handover-promise"
