@@ -42,8 +42,8 @@
 	}
 </script>
 
-<div class="space-y-6">
-	<div class="flex flex-wrap items-center justify-between gap-3">
+<div class="space-y-4">
+	<div class="flex flex-wrap items-center justify-between gap-2">
 			<div>
 				<h1 class="text-2xl font-bold" style="color: var(--text)">Analytics Dashboard</h1>
 				<p class="mt-1 text-sm" style="color: var(--text-muted)">
@@ -65,7 +65,7 @@
 	</div>
 
 	<div
-		class="rounded-lg border p-4"
+		class="rounded-lg border p-3"
 		style={`background: ${integrity.ok ? 'var(--status-success-bg)' : 'var(--status-warning-bg)'}; border-color: ${integrity.ok ? 'var(--status-success-border)' : 'var(--status-warning-border)'}`}
 	>
 		<p
@@ -85,9 +85,9 @@
 		{/if}
 	</div>
 
-	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
 		<div
-			class="rounded-lg p-4"
+			class="rounded-lg p-3"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
 			<p class="text-sm" style="color: var(--text-muted)">Total Revenue</p>
@@ -104,7 +104,7 @@
 			</div>
 		</div>
 		<div
-			class="rounded-lg p-4"
+			class="rounded-lg p-3"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
 			<p class="text-sm" style="color: var(--text-muted)">Total Orders</p>
@@ -114,7 +114,7 @@
 			</p>
 		</div>
 		<div
-			class="rounded-lg p-4"
+			class="rounded-lg p-3"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
 			<p class="text-sm" style="color: var(--text-muted)">Total Customers</p>
@@ -124,7 +124,7 @@
 			</p>
 		</div>
 		<div
-			class="rounded-lg p-4"
+			class="rounded-lg p-3"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
 			<p class="text-sm" style="color: var(--text-muted)">Accounts Sold</p>
@@ -136,9 +136,9 @@
 	</div>
 
 	{#if stats.advancedAnalyticsEnabled}
-		<div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+		<div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
 			<section
-				class="rounded-lg p-4"
+				class="rounded-lg p-3"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 			>
 				<h2 class="text-base font-semibold" style="color: var(--text)">
@@ -169,7 +169,7 @@
 			</section>
 
 			<section
-				class="rounded-lg p-4"
+				class="rounded-lg p-3"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 			>
 				<h2 class="text-base font-semibold" style="color: var(--text)">Top Tier Revenue</h2>
@@ -203,7 +203,7 @@
 		</div>
 
 		<section
-			class="rounded-lg p-4"
+			class="rounded-lg p-3"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
 			<h2 class="text-base font-semibold" style="color: var(--text)">
@@ -228,13 +228,13 @@
 		</section>
 
 		<section
-			class="rounded-lg p-4"
+			class="rounded-lg p-3"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
 			<h2 class="text-base font-semibold" style="color: var(--text)">
 				Revenue by Day / Week / Month
 			</h2>
-			<div class="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-3">
+			<div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
 				<div class="space-y-2">
 					<p class="text-xs font-semibold uppercase" style="color: var(--text-dim);">Day</p>
 					{#each (stats.revenueBreakdown?.byDay || []).slice(-5) as row}
@@ -280,9 +280,9 @@
 			</div>
 		</section>
 
-		<div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+		<div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
 			<section
-				class="rounded-lg p-4"
+				class="rounded-lg p-3"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 			>
 				<h2 class="text-base font-semibold" style="color: var(--text)">Sales Performance</h2>
@@ -318,7 +318,7 @@
 			</section>
 
 			<section
-				class="rounded-lg p-4"
+				class="rounded-lg p-3"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 			>
 				<h2 class="text-base font-semibold" style="color: var(--text)">Stock Velocity</h2>

@@ -139,19 +139,19 @@
 	}
 </script>
 
-<div class="min-h-screen p-3 sm:p-6">
-	<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+<div class="p-2 sm:p-4">
+	<div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 		<div class="min-w-0 flex-1">
 			<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">Order Management</h1>
 			<p class="mt-1 text-sm sm:text-base" style="color: var(--text-muted)">
 				Manage customer orders and processing status
 			</p>
 		</div>
-		<div class="flex space-x-3">
+		<div class="flex flex-wrap items-center gap-2">
 			<button
 				onclick={loadOrders}
 				disabled={loading}
-				class="w-full cursor-pointer rounded-full px-4 py-3 text-white transition-all hover:scale-95 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:w-auto sm:py-2"
+				class="cursor-pointer rounded-full px-3 py-1.5 text-xs text-white transition-all hover:scale-[.98] active:scale-95 disabled:opacity-50 disabled:active:scale-100 sm:text-sm"
 				style="background: var(--btn-primary-gradient)"
 			>
 				{loading ? 'Refreshing...' : 'Refresh'}
@@ -170,9 +170,9 @@
 	{/if}
 
 	<!-- Stats Cards -->
-	<div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
+	<div class="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
 		<div
-			class="rounded-lg p-4 sm:p-6"
+			class="rounded-lg p-3 sm:p-4"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 		>
 			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
@@ -183,7 +183,7 @@
 			</div>
 		</div>
 		<div
-			class="rounded-lg p-4 sm:p-6"
+			class="rounded-lg p-3 sm:p-4"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 		>
 			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Pending</div>
@@ -192,7 +192,7 @@
 			</div>
 		</div>
 		<div
-			class="rounded-lg p-4 sm:p-6"
+			class="rounded-lg p-3 sm:p-4"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 		>
 			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Processing</div>
@@ -201,7 +201,7 @@
 			</div>
 		</div>
 		<div
-			class="rounded-lg p-4 sm:p-6"
+			class="rounded-lg p-3 sm:p-4"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 		>
 			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Completed</div>
@@ -210,7 +210,7 @@
 			</div>
 		</div>
 		<div
-			class="col-span-2 rounded-lg p-4 sm:col-span-1 sm:p-6"
+			class="col-span-2 rounded-lg p-3 sm:col-span-1 sm:p-4"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 		>
 			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Revenue</div>
@@ -221,12 +221,12 @@
 	</div>
 
 	<!-- Search -->
-	<div class="mb-6">
+	<div class="mb-4">
 		<input
 			type="text"
 			placeholder="Search orders by ID, email, or order number..."
 			bind:value={searchTerm}
-			class="w-full rounded-lg px-4 py-2 focus:ring-1 focus:outline-none"
+			class="w-full rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:outline-none"
 			style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
 		/>
 	</div>

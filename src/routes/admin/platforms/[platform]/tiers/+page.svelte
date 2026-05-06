@@ -356,10 +356,10 @@
 	<title>{platform?.name} Tiers - Admin Panel</title>
 </svelte:head>
 
-<div class="p-3 sm:p-6">
+<div class="p-2 sm:p-4">
 	<!-- Header -->
-	<div class="mb-6">
-		<div class="mb-4 flex items-center gap-4">
+		<div class="mb-4">
+			<div class="mb-3 flex items-center gap-3">
 			<button
 				onclick={() => goto('/admin/platforms')}
 				class="flex items-center gap-2 text-gray-600 hover:text-gray-900"
@@ -404,7 +404,7 @@
 		</div>
 
 		<!-- Global Tiers Notice -->
-		<div class="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+			<div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
 			<div class="flex items-start gap-3">
 				<AlertCircle class="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
 				<div class="text-sm">
@@ -438,9 +438,9 @@
 			</button>
 		</div>
 	{:else}
-		<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-			{#each tiers as tier}
-				<div class="rounded-lg border border-gray-200 bg-white p-6 shadow">
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+				{#each tiers as tier}
+					<div class="rounded-lg border border-gray-200 bg-white p-4 shadow">
 					<!-- Tier Header -->
 					<div class="mb-4 flex items-start justify-between">
 						<div>

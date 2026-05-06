@@ -167,11 +167,11 @@
 	<title>Admin Dashboard - FastAccs</title>
 </svelte:head>
 
-<div class="min-h-screen p-3 sm:p-6">
+<div class="p-2 sm:p-4">
 	<div class="mx-auto max-w-7xl">
 		<!-- Enhanced Header -->
-		<div class="mb-6 sm:mb-8">
-			<div class="mb-4 flex flex-col gap-4 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+		<div class="mb-4 sm:mb-6">
+			<div class="mb-3 flex flex-col gap-2 sm:mb-4 sm:flex-row sm:items-center sm:justify-between">
 				<div>
 					<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
 						Overview of your FastAccs
@@ -183,12 +183,12 @@
 					{/if}
 				</div>
 
-				<div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
+				<div class="flex flex-row flex-wrap items-center gap-1.5 sm:gap-2">
 					<!-- Money visibility toggle -->
 					{#if canViewRevenue}
 						<button
 							onclick={toggleMonetaryVisibility}
-							class="flex cursor-pointer items-center justify-center gap-2 rounded-full px-3 py-2 text-sm transition-all hover:scale-[.95] active:scale-90 sm:px-4"
+							class="flex cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs transition-all hover:scale-[.98] active:scale-95 sm:px-3 sm:text-sm"
 							style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text)"
 						>
 							{#if hideMonetaryAmounts}
@@ -203,7 +203,7 @@
 						</button>
 					{:else}
 						<div
-							class="flex items-center justify-center gap-2 rounded-full px-3 py-2 text-sm sm:px-4"
+							class="flex items-center justify-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs sm:px-3 sm:text-sm"
 							style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text-dim)"
 						>
 							<EyeOff class="h-4 w-4" />
@@ -215,7 +215,7 @@
 					<!-- Auto-refresh toggle -->
 					<button
 						onclick={toggleAutoRefresh}
-						class="flex cursor-pointer items-center justify-center gap-2 rounded-full px-3 py-2 text-sm transition-all hover:scale-[.95] active:scale-90 sm:px-4"
+						class="flex cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs transition-all hover:scale-[.98] active:scale-95 sm:px-3 sm:text-sm"
 						style={autoRefresh
 							? 'border: 1px solid var(--status-success-border); background: var(--status-success-bg); color: var(--status-success)'
 							: 'background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text)'}
@@ -230,7 +230,7 @@
 					<button
 						onclick={refreshData}
 						disabled={loading}
-						class="flex cursor-pointer items-center justify-center gap-2 rounded-full px-3 py-2 text-sm text-white transition-all hover:scale-[.95] active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:px-4"
+						class="flex cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs text-white transition-all hover:scale-[.98] active:scale-95 disabled:opacity-50 disabled:active:scale-100 sm:px-3 sm:text-sm"
 						style="background: var(--btn-primary-gradient)"
 					>
 						<RefreshCw class="h-4 w-4 {loading ? 'animate-spin' : ''}" />
@@ -266,10 +266,10 @@
 		{/if}
 
 		<!-- Main Statistics Grid -->
-		<div class=" mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+		<div class="mb-4 grid grid-cols-2 gap-2.5 sm:mb-6 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
 			<!-- Total Orders -->
 			<div
-				class="group rounded-lg p-4 sm:p-6"
+				class="group rounded-lg p-3 sm:p-4"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 			>
 				<div class="flex items-center">
@@ -302,7 +302,7 @@
 
 			<!-- Total Revenue -->
 			<div
-				class="group rounded-lg p-4 sm:p-6"
+				class="group rounded-lg p-3 sm:p-4"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 			>
 				<div class="flex items-center">
@@ -331,7 +331,7 @@
 
 			<!-- Inventory Items -->
 			<div
-				class="group rounded-lg p-4 sm:p-6"
+				class="group rounded-lg p-3 sm:p-4"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 			>
 				<div class="flex items-center">
@@ -359,7 +359,7 @@
 
 			<!-- Stock Issues -->
 			<div
-				class="group rounded-lg p-4 sm:p-6"
+				class="group rounded-lg p-3 sm:p-4"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 			>
 				<div class="flex items-center">
@@ -394,10 +394,10 @@
 		</div>
 
 		<!-- System Overview -->
-		<div class="mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+		<div class="mb-4 grid grid-cols-2 gap-2.5 sm:mb-6 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
 			<!-- Platform Coverage -->
 			<div
-				class="group rounded-lg p-6"
+				class="group rounded-lg p-4"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 			>
 				<div class="flex items-center justify-between">
@@ -419,7 +419,7 @@
 
 			<!-- Total Tiers -->
 			<div
-				class="group rounded-lg p-6"
+				class="group rounded-lg p-4"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 			>
 				<div class="flex items-center justify-between">
@@ -443,7 +443,7 @@
 
 			<!-- Success Rate -->
 			<div
-				class="group rounded-lg p-6"
+				class="group rounded-lg p-4"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 			>
 				<div class="flex items-center justify-between">
@@ -471,21 +471,21 @@
 		</div>
 
 		<!-- Quick Actions & Navigation -->
-		<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+		<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
 			<!-- Management Actions -->
 			<div class="rounded-lg" style="background: var(--bg-elev-1); border: 1px solid var(--border)">
-				<div class="p-6" style="border-bottom: 1px solid var(--border)">
+				<div class="p-4" style="border-bottom: 1px solid var(--border)">
 					<h3 class="text-lg font-semibold" style="color: var(--text)">Management Center</h3>
 					<p class="mt-1 text-sm" style="color: var(--text-muted)">
 						Access key administrative functions
 					</p>
 				</div>
-				<div class="p-6">
+				<div class="p-4">
 					<div class="grid grid-cols-1 gap-3">
 						<a
 							href="/admin/orders"
 							data-sveltekit-preload-data="hover"
-							class="group flex items-center justify-between rounded-lg p-4 transition-all hover:scale-95"
+							class="group flex items-center justify-between rounded-lg p-3 transition-all hover:scale-[.99]"
 							style="border: 1px solid var(--border)"
 						>
 							<div class="flex items-center">
@@ -501,7 +501,7 @@
 						<a
 							href="/admin/inventory"
 							data-sveltekit-preload-data="hover"
-							class="group flex items-center justify-between rounded-lg p-4 transition-all hover:scale-95"
+							class="group flex items-center justify-between rounded-lg p-3 transition-all hover:scale-[.99]"
 							style="border: 1px solid var(--border)"
 						>
 							<div class="flex items-center">
@@ -517,7 +517,7 @@
 						<a
 							href="/admin/platforms"
 							data-sveltekit-preload-data="hover"
-							class="group flex items-center justify-between rounded-lg p-4 transition-all hover:scale-95"
+							class="group flex items-center justify-between rounded-lg p-3 transition-all hover:scale-[.99]"
 							style="border: 1px solid var(--border)"
 						>
 							<div class="flex items-center">
@@ -533,7 +533,7 @@
 						<a
 							href="/admin/batches"
 							data-sveltekit-preload-data="hover"
-							class="group flex items-center justify-between rounded-lg p-4 transition-all hover:scale-95"
+							class="group flex items-center justify-between rounded-lg p-3 transition-all hover:scale-[.99]"
 							style="border: 1px solid var(--border)"
 						>
 							<div class="flex items-center">
@@ -551,13 +551,13 @@
 
 			<!-- System Status -->
 			<div class="rounded-lg" style="background: var(--bg-elev-1); border: 1px solid var(--border)">
-				<div class="p-6" style="border-bottom: 1px solid var(--border)">
+				<div class="p-4" style="border-bottom: 1px solid var(--border)">
 					<h3 class="text-lg font-semibold" style="color: var(--text)">System Status</h3>
 					<p class="mt-1 text-sm" style="color: var(--text-muted)">
 						Current system health overview
 					</p>
 				</div>
-				<div class="space-y-4 p-6">
+				<div class="space-y-3 p-4">
 					<!-- Order Processing Status -->
 					<div class="flex items-center justify-between">
 						<div class="flex items-center">

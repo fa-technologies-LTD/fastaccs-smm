@@ -138,9 +138,9 @@
 	<title>Admin Panel - FastAccs</title>
 </svelte:head>
 
-<div class="min-h-screen" style="background: var(--bg);">
+<div class="admin-shell min-h-screen" style="background: var(--bg);">
 	<!-- Desktop Sidebar -->
-	<div class="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
+	<div class="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-56 lg:flex-col">
 		<div
 			class="flex min-h-0 flex-1 flex-col"
 			style="border-right: 1px solid var(--border); background: var(--bg-elev-1);"
@@ -153,13 +153,13 @@
 						<a
 							href={item.href}
 							data-sveltekit-preload-data="hover"
-							class="group flex items-center rounded-md px-2 py-2 text-sm font-medium transition-all {page
+							class="group flex items-center rounded-md px-2 py-1.5 text-xs font-medium transition-all {page
 								.url.pathname === item.href
 								? 'bg-white/10 text-white'
 								: 'text-gray-300 hover:bg-white/5 hover:text-white'}"
 						>
 							<IconComponent
-								class="mr-3 h-5 w-5 flex-shrink-0 transition-transform group-hover:scale-95 group-hover:rotate-12"
+								class="mr-3 h-4 w-4 flex-shrink-0 transition-transform group-hover:scale-95 group-hover:rotate-12"
 							/>
 							{item.label}
 						</a>
@@ -222,13 +222,13 @@
 	{/if}
 
 	<!-- Main content -->
-	<div class="lg:pl-64">
+	<div class="lg:pl-56">
 		<!-- Admin Navbar -->
 		<div
 			class="sticky top-0 z-10"
 			style="border-bottom: 1px solid var(--border); background: var(--bg-elev-1);"
 		>
-			<div class="flex items-center justify-between px-3 py-2 sm:px-4 sm:py-3">
+			<div class="flex items-center justify-between gap-2 px-2 py-2 sm:px-3">
 				<!-- Mobile menu button -->
 				<button
 					type="button"
@@ -240,15 +240,15 @@
 				</button>
 
 				<!-- Admin info and actions -->
-				<div class="ml-auto flex items-center space-x-4">
+				<div class="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
 					<!-- Admin status -->
-					<div class="flex items-center space-x-2">
+					<div class="flex min-w-0 items-center gap-1.5 sm:gap-2">
 						<div class="h-2 w-2 rounded-full" style="background: var(--status-success);"></div>
-						<span class="max-w-[46vw] truncate text-sm" style="color: var(--text-muted);"
+						<span class="max-w-[36vw] truncate text-xs sm:max-w-[42vw] sm:text-sm" style="color: var(--text-muted);"
 							>{data?.user?.email || 'admin@fastaccs.com'}</span
 						>
 						<span
-							class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+							class="hidden rounded-full px-2 py-0.5 text-[10px] font-semibold sm:inline-flex"
 							style="background: var(--bg-elev-2); color: var(--text-muted); border: 1px solid var(--border);"
 						>
 							{data?.adminRole || 'UNASSIGNED'}
@@ -259,18 +259,19 @@
 					<button
 						type="button"
 						onclick={signOut}
-						class="inline-flex cursor-pointer items-center rounded-full px-3 py-2 text-sm leading-4 font-medium transition-all hover:scale-[.98] focus:ring-2 focus:ring-offset-2 focus:outline-none"
+						class="inline-flex cursor-pointer items-center rounded-full px-2.5 py-1.5 text-xs leading-4 font-medium transition-all hover:scale-[.98] focus:ring-2 focus:ring-offset-2 focus:outline-none sm:px-3 sm:text-sm"
 						style="border: 1px solid var(--border); background: var(--surface); color: var(--text);"
 					>
-						Sign Out
+						<span class="hidden sm:inline">Sign Out</span>
+						<span class="sm:hidden">Out</span>
 					</button>
 				</div>
 			</div>
 		</div>
 
 		<main class="flex-1">
-			<div class="py-6">
-				<div class="admin-content-shell mx-auto max-w-7xl px-3 sm:px-6 lg:px-8">
+			<div class="py-4">
+				<div class="admin-content-shell mx-auto max-w-7xl px-2.5 sm:px-4 lg:px-6">
 					{@render children()}
 				</div>
 			</div>
@@ -279,30 +280,88 @@
 </div>
 
 <style>
+	:global(.admin-content-shell .min-h-screen) {
+		min-height: auto;
+	}
+
+	:global(.admin-content-shell .p-6) {
+		padding: 1rem;
+	}
+
+	:global(.admin-content-shell .mb-8) {
+		margin-bottom: 1rem;
+	}
+
+	:global(.admin-content-shell .mb-6) {
+		margin-bottom: 0.85rem;
+	}
+
+	:global(.admin-content-shell .gap-8) {
+		gap: 1rem;
+	}
+
+	:global(.admin-content-shell .gap-6) {
+		gap: 0.85rem;
+	}
+
+	:global(.admin-content-shell .text-2xl) {
+		font-size: 1.4rem;
+		line-height: 1.2;
+	}
+
+	:global(.admin-content-shell .text-xl) {
+		font-size: 1.1rem;
+		line-height: 1.25;
+	}
+
+	:global(.admin-content-shell .text-base) {
+		font-size: 0.95rem;
+		line-height: 1.35;
+	}
+
+	:global(.admin-content-shell .text-sm) {
+		font-size: 0.84rem;
+		line-height: 1.35;
+	}
+
+	:global(.admin-content-shell .rounded-lg) {
+		border-radius: 12px;
+	}
+
 	@media (max-width: 767px) {
 		:global(.admin-content-shell .p-6) {
-			padding: 0.85rem;
+			padding: 0.75rem;
 		}
 
 		:global(.admin-content-shell .mb-8) {
-			margin-bottom: 1rem;
+			margin-bottom: 0.75rem;
 		}
 
 		:global(.admin-content-shell .mb-6) {
-			margin-bottom: 0.85rem;
+			margin-bottom: 0.7rem;
 		}
 
 		:global(.admin-content-shell .gap-8) {
-			gap: 0.9rem;
+			gap: 0.7rem;
 		}
 
 		:global(.admin-content-shell .gap-6) {
-			gap: 0.75rem;
+			gap: 0.6rem;
 		}
 
 		:global(.admin-content-shell .text-2xl) {
-			font-size: 1.35rem;
+			font-size: 1.25rem;
 			line-height: 1.25;
+		}
+
+		:global(.admin-content-shell .text-xl) {
+			font-size: 1.02rem;
+			line-height: 1.25;
+		}
+
+		:global(.admin-content-shell .text-sm) {
+			font-size: 0.8rem;
+			line-height: 1.35;
 		}
 	}
 </style>

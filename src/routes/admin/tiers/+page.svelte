@@ -290,10 +290,10 @@
 	<title>Tier Management - Admin Panel</title>
 </svelte:head>
 
-<div class="p-4 sm:p-6">
+<div class="p-2 sm:p-4">
 	<!-- Header -->
-	<div class="mb-6">
-		<div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+	<div class="mb-4">
+		<div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 			<div class="min-w-0 flex-1">
 				<div class="mb-2 flex items-center gap-3">
 					<Target class="h-5 w-5 sm:h-6 sm:w-6" style="color: #a855f7;" />
@@ -306,7 +306,7 @@
 			</div>
 			<button
 				onclick={openCreateModal}
-				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-4 py-3 text-white transition-all hover:scale-95 active:scale-90 sm:w-auto sm:py-2"
+				class="flex cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-white transition-all hover:scale-[.98] active:scale-95 sm:text-sm"
 				style="background: #a855f7;"
 			>
 				<Plus size={18} />
@@ -355,13 +355,13 @@
 			</button>
 		</div>
 	{:else}
-		<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+		<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
 			{#each tiers as tier (tier.id)}
 				{@const metadata = tier.metadata as any}
 				{@const merchandising = getTierMerchandisingState(metadata)}
 				<div
 					animate:flip={{ duration: 500 }}
-					class="rounded-lg p-6"
+					class="rounded-lg p-4"
 					style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 				>
 					<!-- Tier Header -->

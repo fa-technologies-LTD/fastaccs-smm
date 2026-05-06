@@ -26,6 +26,7 @@
 	let uploadError = $state('');
 	let selectedFile: File | null = $state(null);
 	let dragActive = $state(false);
+	const batchCsvInputId = 'batch-csv-file-input';
 
 	// Upload form data
 	let uploadForm = $state({
@@ -41,6 +42,30 @@
 		if (!uploadForm.platform_id) return [];
 		return allTiers.filter((tier) => tier.parentId === uploadForm.platform_id);
 	});
+
+	const CSV_MIME_TYPES = new Set([
+		'text/csv',
+		'application/csv',
+		'text/comma-separated-values',
+		'application/vnd.ms-excel'
+	]);
+
+	function isCsvFile(file: File): boolean {
+		const normalizedName = file.name.trim().toLowerCase();
+		return CSV_MIME_TYPES.has(file.type) || normalizedName.endsWith('.csv');
+	}
+
+	function selectCsvFile(file: File) {
+		if (!isCsvFile(file)) {
+			uploadError = 'Please select a CSV file';
+			selectedFile = null;
+			return;
+		}
+
+		selectedFile = file;
+		uploadForm.name = file.name.replace(/\.csv$/i, '');
+		uploadError = '';
+	}
 
 	// Reset tier when platform changes
 	$effect(() => {
@@ -66,13 +91,7 @@
 
 		const files = e.dataTransfer?.files;
 		if (files && files.length > 0) {
-			const file = files[0];
-			if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
-				selectedFile = file;
-				uploadForm.name = file.name.replace('.csv', '');
-			} else {
-				uploadError = 'Please select a CSV file';
-			}
+			selectCsvFile(files[0]);
 		}
 	};
 
@@ -80,14 +99,9 @@
 		const input = e.target as HTMLInputElement;
 		const file = input.files?.[0];
 		if (file) {
-			if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
-				selectedFile = file;
-				uploadForm.name = file.name.replace('.csv', '');
-				uploadError = '';
-			} else {
-				uploadError = 'Please select a CSV file';
-			}
+			selectCsvFile(file);
 		}
+		input.value = '';
 	};
 
 	// Process CSV file and create batch
@@ -226,10 +240,10 @@
 	<title>Batch Import - Admin Panel</title>
 </svelte:head>
 
-<div class="p-4 sm:p-6">
+<div class="p-2 sm:p-4">
 	<!-- Header -->
-	<div class="mb-6">
-		<div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+	<div class="mb-4">
+		<div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 			<div class="min-w-0 flex-1">
 				<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">Batch Management</h1>
 				<p class="mt-1 text-sm sm:text-base" style="color: var(--text-muted)">
@@ -238,7 +252,7 @@
 			</div>
 			<button
 				onclick={openUploadModal}
-				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-4 py-3 text-white transition-all hover:scale-95 active:scale-90 sm:w-auto sm:py-2"
+				class="flex cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-white transition-all hover:scale-[.98] active:scale-95 sm:text-sm"
 				style="background: var(--link);"
 			>
 				<Upload size={18} />
@@ -275,11 +289,11 @@
 			</button>
 		</div>
 	{:else}
-		<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+		<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
 			{#each batches as batch}
 				{@const StatusIcon = getStatusIcon(batch.status)}
 				<div
-					class="rounded-lg p-6 shadow-sm"
+					class="rounded-lg p-4 shadow-sm"
 					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 				>
 					<!-- Batch Header -->
@@ -311,7 +325,7 @@
 					{/if}
 
 					<!-- Batch Stats -->
-					<div class="mb-4 grid grid-cols-2 gap-4 text-sm">
+					<div class="mb-3 grid grid-cols-2 gap-3 text-sm">
 						<div>
 							<span style="color: var(--text-muted);">Total Accounts:</span>
 							<span class="font-medium" style="color: var(--text);">{batch.total_accounts}</span>
@@ -363,12 +377,12 @@
 					</div>
 
 					<!-- Actions -->
-					<div class="pt-4" style="border-top: 1px solid var(--border);">
-						<button
-							onclick={() => viewBatchDetails(batch)}
-							class="group flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition-all hover:scale-95"
-							style="background: var(--bg-elev-2); color: var(--text);"
-						>
+						<div class="pt-3" style="border-top: 1px solid var(--border);">
+							<button
+								onclick={() => viewBatchDetails(batch)}
+								class="group flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-all hover:scale-[.99] sm:text-sm"
+								style="background: var(--bg-elev-2); color: var(--text);"
+							>
 							<Eye size={16} class="transition-transform group-hover:scale-90" />
 							View Details
 						</button>
@@ -433,50 +447,66 @@
 							</div>
 						{/if}
 
-						<div class="space-y-4">
-							<!-- File Upload -->
-							<div>
-								<label class="mb-2 block text-sm font-medium" style="color: var(--text);"
-									>CSV File *</label
-								>
-								<div
-									class="rounded-lg border-2 border-dashed p-6 text-center transition-colors"
-									style={dragActive
-										? 'border-color: var(--primary); background: var(--surface);'
-										: 'border-color: var(--border);'}
-									ondragover={handleDragOver}
-									ondragleave={handleDragLeave}
-									ondrop={handleDrop}
-								>
-									{#if selectedFile}
-										<div class="flex items-center justify-center gap-2 text-green-600">
-											<FileText size={20} />
-											<span class="font-medium">{selectedFile.name}</span>
-											<span class="text-sm" style="color: var(--text-muted);">
-												({formatFileSize(selectedFile.size)})
-											</span>
-										</div>
-									{:else}
-										<div class="space-y-2">
-											<Upload class="mx-auto h-8 w-8" style="color: var(--text-dim);" />
-											<div>
-												<p class="text-sm" style="color: var(--text-muted);">
-													Drop your CSV file here, or
-												</p>
-												<label class="cursor-pointer" style="color: var(--primary);">
-													<span class="font-medium">browse to upload</span>
-													<input
-														type="file"
-														accept=".csv"
-														class="hidden"
-														onchange={handleFileSelect}
-													/>
-												</label>
+							<div class="space-y-4">
+								<!-- File Upload -->
+								<div>
+									<label for={batchCsvInputId} class="mb-2 block text-sm font-medium" style="color: var(--text);"
+										>CSV File *</label
+									>
+									<input
+										id={batchCsvInputId}
+										type="file"
+										accept=".csv,text/csv,application/csv,text/comma-separated-values,application/vnd.ms-excel"
+										class="sr-only"
+										onchange={handleFileSelect}
+									/>
+									<div
+										class="rounded-lg border border-dashed p-4 text-center transition-colors sm:p-5"
+										role="group"
+										style={dragActive
+											? 'border-color: var(--primary); background: var(--surface);'
+											: 'border-color: var(--border);'}
+										ondragover={handleDragOver}
+										ondragleave={handleDragLeave}
+										ondrop={handleDrop}
+									>
+										{#if selectedFile}
+											<div class="flex flex-wrap items-center justify-center gap-1.5 text-green-600">
+												<FileText size={18} />
+												<span class="max-w-full truncate text-sm font-medium">{selectedFile.name}</span>
+												<span class="text-xs" style="color: var(--text-muted);">
+													({formatFileSize(selectedFile.size)})
+												</span>
 											</div>
-										</div>
-									{/if}
+											<label
+												for={batchCsvInputId}
+												class="mt-2 inline-flex cursor-pointer items-center justify-center rounded-full px-3 py-1 text-xs font-medium"
+												style="border: 1px solid var(--border); color: var(--text); background: var(--bg-elev-2);"
+											>
+												Choose Another File
+											</label>
+										{:else}
+											<div class="space-y-2">
+												<Upload class="mx-auto h-6 w-6" style="color: var(--text-dim);" />
+												<div>
+													<p class="text-xs sm:text-sm" style="color: var(--text-muted);">
+														Drop your CSV file here, or tap to choose one
+													</p>
+													<label
+														for={batchCsvInputId}
+														class="mt-2 inline-flex cursor-pointer items-center justify-center rounded-full px-3 py-1 text-xs font-medium sm:text-sm"
+														style="border: 1px solid var(--status-info-border); color: var(--link); background: rgba(105,109,250,0.12);"
+													>
+														Choose CSV File
+													</label>
+													<p class="mt-2 text-[11px]" style="color: var(--text-dim);">
+														Mobile: use the file picker button above.
+													</p>
+												</div>
+											</div>
+										{/if}
+									</div>
 								</div>
-							</div>
 
 							<!-- Batch Name -->
 							<div>
@@ -565,7 +595,7 @@
 						<button
 							type="submit"
 							disabled={isUploading || !selectedFile}
-							class="inline-flex w-full justify-center rounded-full px-3 py-2 text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 sm:ml-3 sm:w-auto"
+							class="inline-flex w-full justify-center rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 sm:ml-3 sm:w-auto sm:text-sm"
 							style="background: var(--primary); color: #000;"
 						>
 							{#if isUploading}
@@ -580,7 +610,7 @@
 							type="button"
 							disabled={isUploading}
 							onclick={() => (showUploadModal = false)}
-							class="mt-3 inline-flex w-full justify-center rounded-full px-3 py-2 text-sm font-semibold shadow-sm disabled:opacity-50 sm:mt-0 sm:w-auto"
+							class="mt-2 inline-flex w-full justify-center rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm disabled:opacity-50 sm:mt-0 sm:w-auto sm:text-sm"
 							style="border: 1px solid var(--border); color: var(--text); background: transparent;"
 						>
 							Cancel

@@ -362,10 +362,10 @@
 	<title>Platform Management - Admin Panel</title>
 </svelte:head>
 
-<div class="p-4 sm:p-6">
+<div class="p-2 sm:p-4">
 	<!-- Header -->
-	<div class="mb-6">
-		<div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+	<div class="mb-4">
+		<div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 			<div class="min-w-0 flex-1">
 				<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
 					Platform Management
@@ -376,7 +376,7 @@
 			</div>
 			<button
 				onclick={openCreateModal}
-				class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium transition-all hover:scale-95 active:scale-90 sm:w-auto sm:py-2"
+				class="flex cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all hover:scale-[.98] active:scale-95 sm:text-sm"
 				style="background: var(--primary); color: #000;"
 			>
 				<Plus size={18} />
