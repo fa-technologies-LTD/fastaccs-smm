@@ -4,7 +4,8 @@ import {
 	createBroadcast,
 	getBroadcastBatchConfig,
 	parseBroadcastAudience,
-	sanitizePlatformIds
+	sanitizePlatformIds,
+	sanitizeTierIds
 } from '$lib/services/admin-broadcast';
 
 interface BroadcastSendPayload {
@@ -12,6 +13,7 @@ interface BroadcastSendPayload {
 	body?: unknown;
 	audience?: unknown;
 	platformIds?: unknown;
+	tierIds?: unknown;
 }
 
 export const POST: RequestHandler = async ({ locals, request }) => {
@@ -24,6 +26,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	const body = typeof payload.body === 'string' ? payload.body.trim() : '';
 	const audience = parseBroadcastAudience(payload.audience);
 	const platformIds = sanitizePlatformIds(payload.platformIds);
+	const tierIds = sanitizeTierIds(payload.tierIds);
 
 	if (!subject) {
 		return json({ success: false, error: 'Subject is required.' }, { status: 400 });
@@ -40,12 +43,19 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			{ status: 400 }
 		);
 	}
+	if (audience === 'platform_tier_buyers' && (platformIds.length === 0 || tierIds.length === 0)) {
+		return json(
+			{ success: false, error: 'Select at least one platform and one tier for this audience.' },
+			{ status: 400 }
+		);
+	}
 
 	const { broadcastId, total } = await createBroadcast({
 		subject,
 		body,
 		audience,
-		platformIds
+		platformIds,
+		tierIds
 	});
 
 	if (total === 0) {

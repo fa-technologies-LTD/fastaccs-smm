@@ -23,6 +23,7 @@ export const load: PageLoad = async ({ params, fetch }) => {
 			throw error(404, 'Tiers not found');
 		}
 		const tiersResult = await tiersResponse.json();
+		const lowStockThreshold = Math.max(1, Number(tiersResult.lowStockThreshold || 10));
 		const tiers = tiersResult.data || [];
 
 		// Find the specific tier by slug
@@ -62,7 +63,8 @@ export const load: PageLoad = async ({ params, fetch }) => {
 		return {
 			platform: platformData,
 			tier: tierInventoryData,
-			tierCategory: tierData // Pass the actual Category data for cart
+			tierCategory: tierData, // Pass the actual Category data for cart
+			lowStockThreshold
 		};
 	} catch (err) {
 		console.error('Error loading tier data:', err);

@@ -24,6 +24,12 @@
 	let showUploadModal = $state(false);
 	let isUploading = $state(false);
 	let uploadError = $state('');
+	let duplicateImportWarning = $state<{
+		existing_batch_name?: string;
+		existing_batch_created_at?: string;
+		existing_batch_total_units?: number;
+		existing_batch_status?: string;
+	} | null>(null);
 	let selectedFile: File | null = $state(null);
 	let dragActive = $state(false);
 	const batchCsvInputId = 'batch-csv-file-input';
@@ -65,6 +71,7 @@
 		selectedFile = file;
 		uploadForm.name = file.name.replace(/\.csv$/i, '');
 		uploadError = '';
+		duplicateImportWarning = null;
 	}
 
 	// Reset tier when platform changes
@@ -105,7 +112,7 @@
 	};
 
 	// Process CSV file and create batch
-	const handleUpload = async () => {
+	const handleUpload = async (forceImport = false) => {
 		if (!selectedFile) {
 			uploadError = 'Please select a file';
 			return;
@@ -123,6 +130,9 @@
 
 		isUploading = true;
 		uploadError = '';
+		if (!forceImport) {
+			duplicateImportWarning = null;
+		}
 
 		try {
 			const selectedPlatformRecord = platforms.find((p) => p.id === uploadForm.platform_id);
@@ -137,6 +147,9 @@
 			formData.append('description', uploadForm.description.trim());
 			formData.append('platform_id', uploadForm.platform_id);
 			formData.append('tier_id', uploadForm.tier_id);
+			if (forceImport) {
+				formData.append('force_import', 'true');
+			}
 
 			const response = await fetch('/api/batches/import', {
 				method: 'POST',
@@ -145,6 +158,9 @@
 			const result = await response.json();
 
 			if (!response.ok || result.error || !result.data) {
+				if (response.status === 409 && result?.code === 'DUPLICATE_IMPORT_DETECTED') {
+					duplicateImportWarning = result?.warning || null;
+				}
 				uploadError =
 					(typeof result.error === 'string' && result.error) || 'Failed to import batch';
 				return;
@@ -190,6 +206,7 @@
 			expected_count: 0
 		};
 		uploadError = '';
+		duplicateImportWarning = null;
 	};
 
 	const openUploadModal = () => {
@@ -413,7 +430,7 @@
 				<form
 					onsubmit={(e) => {
 						e.preventDefault();
-						handleUpload();
+						handleUpload(false);
 					}}
 				>
 					<div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
@@ -444,6 +461,37 @@
 									<AlertCircle class="mr-2 h-4 w-4 text-red-600" />
 									<p class="text-sm text-red-800">{uploadError}</p>
 								</div>
+							</div>
+						{/if}
+						{#if duplicateImportWarning}
+							<div
+								class="mb-4 rounded-lg border p-3"
+								style="border-color: var(--status-warning-border); background: var(--status-warning-bg);"
+							>
+								<p class="text-sm font-semibold" style="color: var(--status-warning);">
+									Duplicate import detected
+								</p>
+								<p class="mt-1 text-xs" style="color: var(--text);">
+									Existing batch:
+									<strong>{duplicateImportWarning.existing_batch_name || 'Unknown batch'}</strong>
+									({duplicateImportWarning.existing_batch_total_units || 0} accounts,
+									{duplicateImportWarning.existing_batch_status || 'unknown status'}) on
+									{duplicateImportWarning.existing_batch_created_at
+										? new Date(duplicateImportWarning.existing_batch_created_at).toLocaleString()
+										: 'unknown time'}.
+								</p>
+								<p class="mt-1 text-xs" style="color: var(--text-muted);">
+									If this duplicate is intentional, use Import Anyway once.
+								</p>
+								<button
+									type="button"
+									disabled={isUploading || !selectedFile}
+									onclick={() => handleUpload(true)}
+									class="mt-2 inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95 disabled:opacity-50"
+									style="background: var(--status-warning); color: #111827;"
+								>
+									Import Anyway
+								</button>
 							</div>
 						{/if}
 

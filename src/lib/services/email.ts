@@ -6,6 +6,8 @@ import { randomInt } from 'crypto';
 export type EmailNotificationType =
 	| 'verification'
 	| 'welcome'
+	| 'onboarding_step'
+	| 'abandoned_order'
 	| 'order_confirmation'
 	| 'order_delivery'
 	| 'restock_alert'
@@ -94,6 +96,34 @@ function toBodyHtml(content: string): string {
 		.join('');
 }
 
+const INBOX_REMINDER_LINE =
+	'**Important:** To avoid missing future updates, mark this email as Not Spam and move it to your Primary inbox.';
+
+function resolveEmailLogoUrl(baseUrl: string): string {
+	const configured = (env.EMAIL_LOGO_URL || '').trim();
+	if (!configured) return `${baseUrl}/favicon-32x32.png`;
+	if (/^https?:\/\//i.test(configured)) return configured;
+	if (configured.startsWith('/')) return `${baseUrl}${configured}`;
+	return `${baseUrl}/${configured.replace(/^\/+/, '')}`;
+}
+
+function isOperationalAdminAlert(params: SendEmailParams): boolean {
+	if (params.notificationType !== 'admin_broadcast') return false;
+	const referenceId = String(params.referenceId || '').trim().toLowerCase();
+	return referenceId.startsWith('critical:') || referenceId.startsWith('low_stock_alert:');
+}
+
+function shouldShowInboxReminder(params: SendEmailParams): boolean {
+	if (isOperationalAdminAlert(params)) return false;
+	if (params.notificationType !== 'admin_broadcast') return true;
+	return Boolean(params.broadcastId);
+}
+
+function appendInboxReminderIfMissing(body: string): string {
+	if (/not spam/i.test(body) && /primary/i.test(body)) return body;
+	return `${body}\n\n${INBOX_REMINDER_LINE}`;
+}
+
 function renderEmailTemplate(params: {
 	firstName?: string | null;
 	body: string;
@@ -104,6 +134,7 @@ function renderEmailTemplate(params: {
 	const showCta = Boolean(params.showCta && params.ctaText && params.ctaUrl);
 	const baseUrl = getBaseUrl();
 	const supportEmail = env.SMTP_FROM_EMAIL || env.GMAIL_USER || 'support@fastaccs.com';
+	const logoUrl = resolveEmailLogoUrl(baseUrl);
 
 	return `<!doctype html>
 <html>
@@ -114,7 +145,10 @@ function renderEmailTemplate(params: {
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#141414;border-radius:8px;border:1px solid #232323;overflow:hidden;">
             <tr>
               <td style="padding:20px 24px;border-bottom:1px solid #232323;">
-                <div style="font-size:18px;font-weight:700;color:#ffffff;letter-spacing:0.3px;">FAST ACCOUNTS</div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <img src="${escapeHtml(logoUrl)}" alt="Fast Accounts logo" width="34" height="34" style="display:block;border-radius:8px;border:1px solid #2A2A2A;background:#0f0f0f;" />
+                  <div style="font-size:18px;font-weight:700;color:#ffffff;letter-spacing:0.3px;">FAST ACCOUNTS</div>
+                </div>
               </td>
             </tr>
             <tr>
@@ -132,9 +166,9 @@ function renderEmailTemplate(params: {
             </tr>
             <tr>
               <td style="padding:18px 24px;border-top:1px solid #232323;color:#9A9A9A;font-size:12px;line-height:1.6;">
-                <div style="color:#E4E4E4;font-weight:600;">Fast Accounts by Teerex</div>
+                <div style="color:#E4E4E4;font-weight:600;">Fast Accounts</div>
                 <div style="margin-top:6px;">
-                  <a href="https://wa.me/2347047914208" style="color:#9A9A9A;text-decoration:underline;">WhatsApp Support</a>
+                  <a href="https://wa.link/fast_accounts" style="color:#9A9A9A;text-decoration:underline;">WhatsApp Support</a>
                   &nbsp;|&nbsp;
                   <a href="mailto:${escapeHtml(supportEmail)}" style="color:#9A9A9A;text-decoration:underline;">Support Email</a>
                 </div>
@@ -250,7 +284,8 @@ export async function logEmailNotification(params: EmailLogParams): Promise<stri
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
 	const recipient = params.to.trim().toLowerCase();
 	const subject = params.subject.trim();
-	const body = params.body.trim();
+	const rawBody = params.body.trim();
+	const body = shouldShowInboxReminder(params) ? appendInboxReminderIfMissing(rawBody) : rawBody;
 
 	const bodyHtml = toBodyHtml(body);
 	const html = renderEmailTemplate({

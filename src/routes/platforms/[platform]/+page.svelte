@@ -52,6 +52,7 @@
 	let restockLoadingByTier = $state<Record<string, boolean>>({});
 	let restockSubscribedByTier = $state<Record<string, boolean>>({});
 	let autoNotifyHandled = $state(false);
+	const lowStockThreshold = $derived(Math.max(1, Number(data.lowStockThreshold || 10)));
 	const currentUser = $derived((page.data as { user?: { id: string } | null }).user || null);
 
 	let quickAddDialog = $state<HTMLDivElement | null>(null);
@@ -98,7 +99,7 @@
 	function getTierStatus(available: number): { status: string; color: string; bgColor: string } {
 		if (available === 0) {
 			return { status: 'Sold Out', color: 'text-red-600', bgColor: 'bg-red-50 border-red-200' };
-		} else if (available <= 10) {
+		} else if (available <= lowStockThreshold) {
 			return {
 				status: 'Few Left',
 				color: 'text-yellow-600',
@@ -618,9 +619,9 @@
 								style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 							>
 								<!-- Stock Status Badge -->
-								<div class="absolute top-32 right-3 z-10">
+								<div class="absolute top-0 right-4 z-10">
 									<span
-										class="rounded-full px-2 py-1 text-xs font-medium"
+										class="tag-chip tag-chip--border-seat rounded-full px-2 py-1 text-xs font-medium"
 										style={tierStatus.status === 'In Stock'
 											? 'background: rgba(34, 197, 94, 0.2); color: rgb(34, 197, 94); border: 1px solid rgba(34, 197, 94, 0.3);'
 											: tierStatus.status === 'Few Left'
@@ -637,7 +638,7 @@
 										<div class="mb-3 flex flex-wrap gap-1.5">
 											{#if tier.is_pinned}
 												<span
-													class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
+													class="tag-chip inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
 													style="background: rgba(251, 191, 36, 0.16); color: rgb(217, 119, 6); border: 1px solid rgba(251, 191, 36, 0.28);"
 												>
 													Pinned{tier.pin_priority ? ` #${tier.pin_priority}` : ''}
@@ -645,7 +646,7 @@
 											{/if}
 											{#if tier.is_featured}
 												<span
-													class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
+													class="tag-chip inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
 													style="background: rgba(34, 197, 94, 0.14); color: rgb(22, 163, 74); border: 1px solid rgba(34, 197, 94, 0.3);"
 												>
 													{getFeaturedBadgeLabel(tier)}
@@ -695,7 +696,7 @@
 
 									<div class="mb-4">
 										<span
-											class="inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold"
+											class="tag-chip inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold"
 											style="background: rgba(59, 130, 246, 0.15); color: rgb(147, 197, 253); border: 1px solid rgba(147, 197, 253, 0.25);"
 										>
 											{getTierDeliveryModeLabel(tier)}
@@ -932,7 +933,7 @@
 						</div>
 					</div>
 
-					{#if quickAddRemaining <= 10 && quickAddRemaining > 0}
+					{#if quickAddRemaining <= lowStockThreshold && quickAddRemaining > 0}
 						<div
 							class="mb-4 rounded-lg border border-yellow-500/30 px-3 py-2 text-sm text-yellow-500"
 							style="background: var(--bg-elev-1);"

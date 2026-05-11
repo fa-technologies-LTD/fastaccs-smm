@@ -21,13 +21,14 @@ const SETTINGS_KEYS = {
 	broadcastBatchSize: 'config.notifications.broadcast_batch_size',
 	broadcastBatchDelayMs: 'config.notifications.broadcast_batch_delay_ms',
 	lowStockLastSignature: 'alert.low_stock.last_signature',
-	lowStockLastSentAt: 'alert.low_stock.last_sent_at'
+	lowStockLastSentAt: 'alert.low_stock.last_sent_at',
+	lowStockPolicyState: 'alert.low_stock.policy_state'
 } as const;
 
 const DEFAULTS = {
 	businessName: 'Fast Accounts',
 	businessEmail: (env.SMTP_FROM_EMAIL || env.GMAIL_USER || 'support@fastaccs.com').trim(),
-	whatsappNumber: '+2347047914208',
+	whatsappNumber: 'https://wa.link/fast_accounts',
 	currencyCode: 'NGN',
 	businessTimezone: (env.BUSINESS_TIMEZONE || 'Africa/Lagos').trim() || 'Africa/Lagos',
 	paymentMinOrderValue: Math.max(0, Number(env.MIN_ORDER_VALUE || 0)),
@@ -74,6 +75,28 @@ export interface AdminSettingsSnapshot {
 	storeControls: StoreControlSettings;
 	notifications: NotificationSettings;
 }
+
+export interface LowStockPolicyState {
+	version: number;
+	availabilityByTier: Record<string, number>;
+	unresolvedZeroTierIds: string[];
+	lastDigestAt: string | null;
+	dayKey: string | null;
+	sentToday: number;
+	suppressedCount: number;
+	lastAlertAt: string | null;
+}
+
+const DEFAULT_LOW_STOCK_POLICY_STATE: LowStockPolicyState = {
+	version: 1,
+	availabilityByTier: {},
+	unresolvedZeroTierIds: [],
+	lastDigestAt: null,
+	dayKey: null,
+	sentToday: 0,
+	suppressedCount: 0,
+	lastAlertAt: null
+};
 
 export interface SmtpHealthSnapshot {
 	configured: boolean;
@@ -154,6 +177,56 @@ function parseBooleanSetting(value: string | null, fallback: boolean): boolean {
 	const normalized = value.trim().toLowerCase();
 	if (!normalized) return fallback;
 	return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
+function parseLowStockPolicyState(value: string | null): LowStockPolicyState {
+	if (!value) return { ...DEFAULT_LOW_STOCK_POLICY_STATE };
+
+	try {
+		const parsed = JSON.parse(value);
+		const record = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+		if (!record) return { ...DEFAULT_LOW_STOCK_POLICY_STATE };
+
+		const rawAvailability = record.availabilityByTier;
+		const availabilityByTier: Record<string, number> = {};
+		if (rawAvailability && typeof rawAvailability === 'object') {
+			for (const [key, rawCount] of Object.entries(rawAvailability as Record<string, unknown>)) {
+				const count = Number(rawCount);
+				if (key && Number.isFinite(count) && count >= 0) {
+					availabilityByTier[key] = Math.floor(count);
+				}
+			}
+		}
+
+		const unresolvedZeroTierIds = Array.isArray(record.unresolvedZeroTierIds)
+			? record.unresolvedZeroTierIds.filter((entry): entry is string => typeof entry === 'string')
+			: [];
+		const dayKey = typeof record.dayKey === 'string' && record.dayKey.trim() ? record.dayKey.trim() : null;
+		const lastDigestAt =
+			typeof record.lastDigestAt === 'string' && record.lastDigestAt.trim()
+				? record.lastDigestAt.trim()
+				: null;
+		const lastAlertAt =
+			typeof record.lastAlertAt === 'string' && record.lastAlertAt.trim()
+				? record.lastAlertAt.trim()
+				: null;
+		const sentToday = Number(record.sentToday);
+		const suppressedCount = Number(record.suppressedCount);
+
+		return {
+			version: 1,
+			availabilityByTier,
+			unresolvedZeroTierIds,
+			dayKey,
+			lastDigestAt,
+			sentToday: Number.isFinite(sentToday) && sentToday >= 0 ? Math.floor(sentToday) : 0,
+			suppressedCount:
+				Number.isFinite(suppressedCount) && suppressedCount >= 0 ? Math.floor(suppressedCount) : 0,
+			lastAlertAt
+		};
+	} catch {
+		return { ...DEFAULT_LOW_STOCK_POLICY_STATE };
+	}
 }
 
 function previewSecret(value: string, visibleStart = 2, visibleEnd = 2): string {
@@ -289,7 +362,7 @@ export async function saveBusinessSettings(input: Partial<BusinessSettings>): Pr
 		upsertSetting(
 			SETTINGS_KEYS.whatsappNumber,
 			whatsappNumber || DEFAULTS.whatsappNumber,
-			'WhatsApp support number used across links and messaging.'
+			'WhatsApp support channel used across links and messaging.'
 		),
 		upsertSetting(
 			SETTINGS_KEYS.currencyCode,
@@ -523,4 +596,26 @@ export async function setLowStockAlertState(signature: string, sentAtIso: string
 			'Internal timestamp for low-stock alert cooldown checks.'
 		)
 	]);
+}
+
+export async function getLowStockPolicyState(): Promise<LowStockPolicyState> {
+	const values = await getSettingsMap([SETTINGS_KEYS.lowStockPolicyState]);
+	return parseLowStockPolicyState(values.get(SETTINGS_KEYS.lowStockPolicyState) || null);
+}
+
+export async function setLowStockPolicyState(state: LowStockPolicyState): Promise<void> {
+	await upsertSetting(
+		SETTINGS_KEYS.lowStockPolicyState,
+		JSON.stringify({
+			version: 1,
+			availabilityByTier: state.availabilityByTier,
+			unresolvedZeroTierIds: state.unresolvedZeroTierIds,
+			lastDigestAt: state.lastDigestAt,
+			dayKey: state.dayKey,
+			sentToday: state.sentToday,
+			suppressedCount: state.suppressedCount,
+			lastAlertAt: state.lastAlertAt
+		}),
+		'Internal policy state for low-stock alert dedupe, daily cap, and digest tracking.'
+	);
 }

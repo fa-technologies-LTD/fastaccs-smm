@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 import { getTierMerchandisingState } from '$lib/helpers/tier-merchandising';
+import { getLowStockThresholdSetting } from '$lib/services/admin-settings';
 
 interface TierMetadata {
 	pricing?: {
@@ -31,6 +32,7 @@ interface TierListItem {
 export async function GET({ params }) {
 	try {
 		const platformId = params.platformId;
+		const lowStockThreshold = await getLowStockThresholdSetting().catch(() => 10);
 
 		// First, get the platform info to get the platform slug
 		const platform = await prisma.category.findUnique({
@@ -117,7 +119,11 @@ export async function GET({ params }) {
 			return left.name.localeCompare(right.name, undefined, { sensitivity: 'base' });
 		});
 
-		return json({ data: sortedTiers, error: null });
+		return json({
+			data: sortedTiers,
+			lowStockThreshold: Math.max(1, lowStockThreshold),
+			error: null
+		});
 	} catch (error) {
 		console.error('Failed to fetch tiers:', error);
 		return json({ data: null, error: 'Failed to fetch tiers' }, { status: 500 });

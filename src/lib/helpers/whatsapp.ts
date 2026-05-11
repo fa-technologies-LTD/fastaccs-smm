@@ -19,7 +19,9 @@ export function buildWhatsAppSupportLink(
 	rawPhone: string | null | undefined,
 	message: string
 ): string | null {
-	const phone = normalizeWhatsAppNumber(rawPhone);
-	if (!phone) return null;
-	return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+	void rawPhone;
+	const baseLink = 'https://wa.link/fast_accounts';
+	const normalizedMessage = String(message || '').trim();
+	if (!normalizedMessage) return baseLink;
+	return `${baseLink}?text=${encodeURIComponent(normalizedMessage)}`;
 }

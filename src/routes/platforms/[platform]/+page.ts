@@ -34,6 +34,7 @@ export interface Platform {
 export interface PageData {
 	platform: Platform | null;
 	tiers: TierInventory[];
+	lowStockThreshold: number;
 }
 
 export const load: PageLoad = async ({ params, fetch }): Promise<PageData> => {
@@ -58,9 +59,11 @@ export const load: PageLoad = async ({ params, fetch }): Promise<PageData> => {
 		// Get tiers for this platform
 		const tiersResponse = await fetch(`/api/categories/tiers/${platform.id}`);
 		let tiers: TierInventory[] = [];
+		let lowStockThreshold = 10;
 
 		if (tiersResponse.ok) {
 			const tiersResult = await tiersResponse.json();
+			lowStockThreshold = Math.max(1, Number(tiersResult.lowStockThreshold || 10));
 			// Convert tier data to TierInventory format
 			tiers = (tiersResult.data || []).map(
 				(tier: {
@@ -114,7 +117,8 @@ export const load: PageLoad = async ({ params, fetch }): Promise<PageData> => {
 				description: platform.description,
 				metadata: platform.metadata || {}
 			},
-			tiers
+			tiers,
+			lowStockThreshold
 		};
 	} catch (err) {
 		console.error('Error in platform page load:', err);

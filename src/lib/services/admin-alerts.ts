@@ -1,13 +1,18 @@
 import { prisma } from '$lib/prisma';
 import { sendEmail } from '$lib/services/email';
 import {
-	getLowStockAlertState,
+	getBusinessTimezoneSetting,
 	getLowStockThresholdSetting,
+	getLowStockPolicyState,
 	getOperationalAlertRecipients,
+	setLowStockPolicyState,
 	setLowStockAlertState
 } from '$lib/services/admin-settings';
+import { getBusinessDateKey, getStartOfBusinessDayUtc } from '$lib/helpers/business-timezone';
 
-const LOW_STOCK_ALERT_COOLDOWN_MS = 30 * 60 * 1000;
+const LOW_STOCK_DIGEST_INTERVAL_MS = 12 * 60 * 60 * 1000;
+const LOW_STOCK_MAX_EMAILS_PER_DAY = 3;
+const LOW_STOCK_EMAIL_PREVIEW_LIMIT = 20;
 const CRITICAL_ALERT_COOLDOWN_MS = 30 * 60 * 1000;
 
 const criticalAlertCooldown = new Map<string, number>();
@@ -39,6 +44,9 @@ export async function sendLowStockAdminAlertIfNeeded(
 	}
 
 	const threshold = await getLowStockThresholdSetting();
+	const timezone = await getBusinessTimezoneSetting().catch(() => 'Africa/Lagos');
+	const now = new Date();
+	const todayDateKey = getBusinessDateKey(now, timezone);
 
 	const tiers = await prisma.category.findMany({
 		where: {
@@ -66,58 +74,141 @@ export async function sendLowStockAdminAlertIfNeeded(
 		}
 	});
 
-	const impacted = tiers
-		.filter((tier) => tier._count.accounts <= threshold)
+	const zeroStockTiers = tiers
+		.filter((tier) => tier._count.accounts === 0)
 		.sort((a, b) => a._count.accounts - b._count.accounts);
+	const previousState = await getLowStockPolicyState();
+	const previousAvailability = previousState.availabilityByTier || {};
+	const previousDayKey = safeText(previousState.dayKey);
+	const previousSentToday = Number(previousState.sentToday) || 0;
+	const previousSuppressedCount = Number(previousState.suppressedCount) || 0;
 
-	if (impacted.length === 0) {
-		return { sent: false, reason: 'no_low_stock' };
+	const currentAvailabilityByTier = Object.fromEntries(
+		tiers.map((tier) => [tier.id, tier._count.accounts])
+	);
+	const unresolvedZeroTierIds = zeroStockTiers.map((tier) => tier.id);
+
+	const sentTodayCounter = previousDayKey === todayDateKey ? previousSentToday : 0;
+	const sentTodayRows = await prisma.emailNotification.findMany({
+		where: {
+			notificationType: 'admin_broadcast',
+			referenceId: {
+				startsWith: 'low_stock_alert:'
+			},
+			status: 'sent',
+			createdAt: {
+				gte: getStartOfBusinessDayUtc(now, timezone)
+			}
+		},
+		select: {
+			referenceId: true
+		}
+	});
+	const dbSentTodayCount = new Set(
+		sentTodayRows
+			.map((row) => safeText(row.referenceId))
+			.filter((referenceId) => referenceId.length > 0)
+	).size;
+	const effectiveSentToday = Math.max(sentTodayCounter, dbSentTodayCount);
+
+	const newZeroStockTiers = zeroStockTiers.filter((tier) => {
+		const previousCount = Number(previousAvailability[tier.id]);
+		return Number.isFinite(previousCount) && previousCount > 0;
+	});
+
+	const lastDigestAtTs = safeText(previousState.lastDigestAt)
+		? Date.parse(String(previousState.lastDigestAt))
+		: Number.NaN;
+	const digestDue =
+		zeroStockTiers.length > 0 &&
+		(!Number.isFinite(lastDigestAtTs) || now.getTime() - lastDigestAtTs >= LOW_STOCK_DIGEST_INTERVAL_MS);
+
+	let mode: 'new_zero_hit' | 'digest' | null = null;
+	if (newZeroStockTiers.length > 0) {
+		mode = 'new_zero_hit';
+	} else if (digestDue) {
+		mode = 'digest';
 	}
 
-	const signature = `${threshold}:${impacted
-		.map((tier) => `${tier.id}:${tier._count.accounts}`)
-		.join('|')}`;
-
-	const previousState = await getLowStockAlertState();
-	const previousSignature = safeText(previousState.signature);
-	const previousSentAt = safeText(previousState.sentAt);
-	const previousSentTs = previousSentAt ? Date.parse(previousSentAt) : Number.NaN;
-
-	if (
-		previousSignature === signature &&
-		Number.isFinite(previousSentTs) &&
-		Date.now() - previousSentTs < LOW_STOCK_ALERT_COOLDOWN_MS
-	) {
-		return { sent: false, reason: 'cooldown' };
+	if (!mode) {
+		await setLowStockPolicyState({
+			version: 1,
+			availabilityByTier: currentAvailabilityByTier,
+			unresolvedZeroTierIds,
+			lastDigestAt: previousState.lastDigestAt,
+			dayKey: todayDateKey,
+			sentToday: effectiveSentToday,
+			suppressedCount: previousSuppressedCount,
+			lastAlertAt: previousState.lastAlertAt
+		});
+		return { sent: false, reason: zeroStockTiers.length === 0 ? 'no_zero_stock' : 'no_action_needed' };
 	}
 
-	const previewRows = impacted.slice(0, 20);
+	if (effectiveSentToday >= LOW_STOCK_MAX_EMAILS_PER_DAY) {
+		await setLowStockPolicyState({
+			version: 1,
+			availabilityByTier: currentAvailabilityByTier,
+			unresolvedZeroTierIds,
+			lastDigestAt: previousState.lastDigestAt,
+			dayKey: todayDateKey,
+			sentToday: effectiveSentToday,
+			suppressedCount: previousSuppressedCount + 1,
+			lastAlertAt: previousState.lastAlertAt
+		});
+		return { sent: false, reason: 'daily_cap' };
+	}
+
+	const subject =
+		mode === 'new_zero_hit'
+			? `[FastAccs Ops] Zero-stock hit (${newZeroStockTiers.length} tier${newZeroStockTiers.length > 1 ? 's' : ''})`
+			: `[FastAccs Ops] Zero-stock reminder (${zeroStockTiers.length} tier${zeroStockTiers.length > 1 ? 's' : ''})`;
+
+	const previewRows = zeroStockTiers.slice(0, LOW_STOCK_EMAIL_PREVIEW_LIMIT);
+	const newHitRows = newZeroStockTiers.slice(0, LOW_STOCK_EMAIL_PREVIEW_LIMIT);
 	const bodyLines = [
-		`Low-stock alert triggered (${source}).`,
+		mode === 'new_zero_hit'
+			? `New zero-stock tier hit detected (${source}).`
+			: `Zero-stock reminder digest (${source}).`,
 		'',
-		`Threshold: ${threshold}`,
-		`Impacted tiers: ${impacted.length}`,
+		`Configured low-stock threshold: ${threshold}`,
+		`Unresolved zero-stock tiers: ${zeroStockTiers.length}`,
+		`Alert limit: ${LOW_STOCK_MAX_EMAILS_PER_DAY}/day | Digest window: 12h`,
 		'',
-		'Current tier availability:',
+		mode === 'new_zero_hit' ? `New zero-stock hits: ${newZeroStockTiers.length}` : '',
+		...(mode === 'new_zero_hit'
+			? newHitRows.map((tier) => {
+					const platformName = tier.parent?.name || 'Unknown platform';
+					return `- NEW: ${platformName} / ${tier.name}`;
+				})
+			: []),
+		newHitRows.length < newZeroStockTiers.length
+			? `- ...and ${newZeroStockTiers.length - newHitRows.length} more new zero-stock tier(s).`
+			: '',
+		mode === 'new_zero_hit' ? '' : '',
+		'Current unresolved zero-stock tiers:',
 		...previewRows.map((tier) => {
 			const platformName = tier.parent?.name || 'Unknown platform';
 			return `- ${platformName} / ${tier.name}: ${tier._count.accounts} available`;
 		}),
-		previewRows.length < impacted.length
-			? `- ...and ${impacted.length - previewRows.length} more tier(s).`
+		previewRows.length < zeroStockTiers.length
+			? `- ...and ${zeroStockTiers.length - previewRows.length} more tier(s).`
+			: '',
+		previousSuppressedCount > 0
+			? `Suppressed alerts since last successful send (daily cap): ${previousSuppressedCount}`
 			: '',
 		'',
 		'Open admin inventory for action: /admin/inventory'
 	].filter(Boolean);
+	const alertEventReferenceId = `low_stock_alert:${mode}:${todayDateKey}:${now.getTime()}`;
 
 	let atLeastOneSent = false;
 	for (const email of recipients) {
 		const result = await sendEmail({
 			to: email,
-			subject: `[FastAccs Ops] Low stock alert (${impacted.length} tier${impacted.length > 1 ? 's' : ''})`,
+			subject,
 			body: bodyLines.join('\n'),
 			notificationType: 'admin_broadcast',
-			referenceId: 'low_stock_alert',
+			referenceId: alertEventReferenceId,
 			showCta: false
 		});
 
@@ -126,11 +217,38 @@ export async function sendLowStockAdminAlertIfNeeded(
 		}
 	}
 
-	if (atLeastOneSent) {
-		await setLowStockAlertState(signature, toIso(new Date()));
+	if (!atLeastOneSent) {
+		await setLowStockPolicyState({
+			version: 1,
+			availabilityByTier: currentAvailabilityByTier,
+			unresolvedZeroTierIds,
+			lastDigestAt: previousState.lastDigestAt,
+			dayKey: todayDateKey,
+			sentToday: effectiveSentToday,
+			suppressedCount: previousSuppressedCount,
+			lastAlertAt: previousState.lastAlertAt
+		});
+		return { sent: false, reason: 'send_failed' };
 	}
 
-	return { sent: atLeastOneSent, reason: atLeastOneSent ? undefined : 'send_failed' };
+	const signature = `zero:${zeroStockTiers.map((tier) => `${tier.id}:0`).join('|')}`;
+	const sentAtIso = toIso(now);
+
+	await Promise.all([
+		setLowStockAlertState(signature, sentAtIso),
+		setLowStockPolicyState({
+			version: 1,
+			availabilityByTier: currentAvailabilityByTier,
+			unresolvedZeroTierIds,
+			lastDigestAt: sentAtIso,
+			dayKey: todayDateKey,
+			sentToday: effectiveSentToday + 1,
+			suppressedCount: 0,
+			lastAlertAt: sentAtIso
+		})
+	]);
+
+	return { sent: true };
 }
 
 export async function sendCriticalAdminAlert(params: {

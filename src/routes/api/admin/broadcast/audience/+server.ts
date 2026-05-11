@@ -3,7 +3,8 @@ import type { RequestHandler } from './$types';
 import {
 	getBroadcastAudienceCount,
 	parseBroadcastAudience,
-	sanitizePlatformIds
+	sanitizePlatformIds,
+	sanitizeTierIds
 } from '$lib/services/admin-broadcast';
 
 function parsePlatformIdsFromQuery(url: URL): string[] {
@@ -14,6 +15,16 @@ function parsePlatformIdsFromQuery(url: URL): string[] {
 		.map((value) => value.trim())
 		.filter(Boolean);
 	return sanitizePlatformIds(splitValues);
+}
+
+function parseTierIdsFromQuery(url: URL): string[] {
+	const raw = url.searchParams.get('tierIds');
+	if (!raw) return [];
+	const splitValues = raw
+		.split(',')
+		.map((value) => value.trim())
+		.filter(Boolean);
+	return sanitizeTierIds(splitValues);
 }
 
 export const GET: RequestHandler = async ({ locals, url }) => {
@@ -27,7 +38,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 	}
 
 	const platformIds = parsePlatformIdsFromQuery(url);
-	const count = await getBroadcastAudienceCount(audience, platformIds);
+	const tierIds = parseTierIdsFromQuery(url);
+	const count = await getBroadcastAudienceCount(audience, platformIds, tierIds);
 
 	return json({
 		success: true,

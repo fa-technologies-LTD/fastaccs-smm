@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { Prisma } from '@prisma/client';
+import { createHash } from 'crypto';
 import { prisma } from '$lib/prisma';
 import { parseCsvText } from '$lib/helpers/csv';
 import {
@@ -17,6 +18,17 @@ function asText(value: FormDataEntryValue | null): string {
 	return typeof value === 'string' ? value.trim() : '';
 }
 
+function asBoolean(value: FormDataEntryValue | null): boolean {
+	if (typeof value !== 'string') return false;
+	const normalized = value.trim().toLowerCase();
+	return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
+function buildImportFingerprint(tierId: string, csvText: string): string {
+	const normalizedCsv = csvText.replace(/\r\n/g, '\n').trim();
+	return createHash('sha256').update(`${tierId}\n${normalizedCsv}`).digest('hex');
+}
+
 export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
 		if (!locals.user || locals.user.userType !== 'ADMIN') {
@@ -28,6 +40,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const tierId = asText(formData.get('tier_id') || formData.get('tierId'));
 		const requestedName = asText(formData.get('name'));
 		const description = asText(formData.get('description'));
+		const forceImport = asBoolean(formData.get('force_import'));
 
 		if (!(fileEntry instanceof File)) {
 			return json({ data: null, error: 'CSV file is required' }, { status: 400 });
@@ -54,6 +67,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		const csvText = await fileEntry.text();
+		const importFingerprint = buildImportFingerprint(tierId, csvText);
 		let parsedCsv: ReturnType<typeof parseCsvText>;
 		try {
 			parsedCsv = parseCsvText(csvText);
@@ -167,11 +181,62 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ data: null, error: 'No non-empty account rows found in CSV' }, { status: 400 });
 		}
 
+		const recentBatches = await prisma.accountBatch.findMany({
+			where: { categoryId: tierId },
+			select: {
+				id: true,
+				supplier: true,
+				createdAt: true,
+				totalUnits: true,
+				importStatus: true,
+				descriptors: true
+			},
+			orderBy: { createdAt: 'desc' },
+			take: 200
+		});
+
+		const duplicateBatch = recentBatches.find((batch) => {
+			const descriptors =
+				batch.descriptors && typeof batch.descriptors === 'object'
+					? (batch.descriptors as Record<string, unknown>)
+					: {};
+			const fingerprint =
+				typeof descriptors.import_fingerprint === 'string'
+					? descriptors.import_fingerprint
+					: '';
+			return fingerprint === importFingerprint;
+		});
+
+		if (duplicateBatch && !forceImport) {
+			return json(
+				{
+					data: null,
+					error:
+						`Duplicate import warning: this file appears identical to a previous import for this tier ` +
+						`(Batch "${duplicateBatch.supplier || duplicateBatch.id}" on ${duplicateBatch.createdAt.toISOString()}). ` +
+						`To continue anyway, confirm "Import Anyway".`,
+					code: 'DUPLICATE_IMPORT_DETECTED',
+					warning: {
+						existing_batch_id: duplicateBatch.id,
+						existing_batch_name: duplicateBatch.supplier || duplicateBatch.id,
+						existing_batch_created_at: duplicateBatch.createdAt.toISOString(),
+						existing_batch_status: duplicateBatch.importStatus,
+						existing_batch_total_units: duplicateBatch.totalUnits,
+						fingerprint: importFingerprint
+					}
+				},
+				{ status: 409 }
+			);
+		}
+
 		const nowIso = new Date().toISOString();
 		const metadata = {
 			filename: fileEntry.name,
 			upload_date: nowIso,
 			file_size: fileEntry.size,
+			import_fingerprint: importFingerprint,
+			import_fingerprint_algo: 'sha256-tier-csv',
+			force_import: forceImport,
 			headers: parsedCsv.headers,
 			field_map: headerDescriptors.map((descriptor) => ({
 				header: descriptor.original,

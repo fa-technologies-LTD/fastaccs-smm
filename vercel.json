@@ -5,6 +5,18 @@
 			"schedule": "5 0 * * *"
 		},
 		{
+			"path": "/api/internal/cron/low-stock-alerts",
+			"schedule": "*/30 * * * *"
+		},
+		{
+			"path": "/api/internal/cron/abandoned-orders",
+			"schedule": "*/30 * * * *"
+		},
+		{
+			"path": "/api/internal/cron/onboarding",
+			"schedule": "15 * * * *"
+		},
+		{
 			"path": "/api/internal/cron/winback",
 			"schedule": "15 0 * * *"
 		}

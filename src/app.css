@@ -293,3 +293,54 @@ h3 {
 .platform-linkedin {
 	background: var(--gradient-linkedin);
 }
+
+/* ===== TAG CHIP SYSTEM ===== */
+.tag-chip {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+	overflow: hidden;
+	isolation: isolate;
+	backdrop-filter: saturate(120%) blur(2px);
+	-webkit-backdrop-filter: saturate(120%) blur(2px);
+}
+
+.tag-chip--border-seat {
+	transform: translateY(-45%);
+	box-shadow: 0 10px 20px rgba(0, 0, 0, 0.28);
+}
+
+.tag-chip::after {
+	content: '';
+	position: absolute;
+	top: -80%;
+	left: -52%;
+	width: 38%;
+	height: 260%;
+	pointer-events: none;
+	background: linear-gradient(
+		115deg,
+		rgba(255, 255, 255, 0) 0%,
+		rgba(255, 255, 255, 0.42) 48%,
+		rgba(255, 255, 255, 0) 100%
+	);
+	transform: translateX(-220%) skewX(-20deg);
+	animation: tag-chip-gloss 4.8s ease-in-out infinite;
+}
+
+@keyframes tag-chip-gloss {
+	0%,
+	72%,
+	100% {
+		transform: translateX(-220%) skewX(-20deg);
+		opacity: 0;
+	}
+	76% {
+		opacity: 0.9;
+	}
+	88% {
+		transform: translateX(530%) skewX(-20deg);
+		opacity: 0;
+	}
+}

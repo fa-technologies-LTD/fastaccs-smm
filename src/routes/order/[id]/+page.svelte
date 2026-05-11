@@ -111,6 +111,10 @@
 		const message = `Hi, I just paid for order ${orderLabel}. Manual handover in progress.`;
 		return buildWhatsAppSupportLink(data.support?.whatsappNumber, message);
 	}
+
+	function getSupportGuideUrl(): string {
+		return data.support?.loginGuideFallbackUrl || DEFAULT_LOGIN_GUIDE_URL;
+	}
 </script>
 
 <svelte:head>
@@ -282,10 +286,18 @@
 											>
 												{getItemLoginGuide(item).label}
 											</a>
-											<span class="ml-2 text-xs" style="color: var(--text-dim);"
-												>For more help: {data.support?.loginGuideFallbackUrl ||
-													'https://smm.fastaccs.com/support#after-purchase-guide'}</span
+											<span class="ml-2 text-xs" style="color: var(--text-dim);">
+												For more help:
+											</span>
+											<a
+												href={getSupportGuideUrl()}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="ml-1 text-xs font-medium hover:underline break-all"
+												style="color: var(--link);"
 											>
+												{getSupportGuideUrl()}
+											</a>
 										</div>
 									</div>
 									<div class="text-right">

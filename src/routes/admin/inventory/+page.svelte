@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { formatDate } from '$lib/helpers/utils';
+	import { formatDate, formatPrice } from '$lib/helpers/utils';
 	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
 
 	let { data } = $props();
@@ -8,6 +8,10 @@
 	let showConfirmModal = $state(false);
 	let cleanupLoading = $state(false);
 	let cleanupMessage = $state<string | null>(null);
+	const lowStockThreshold = $derived.by(() =>
+		Math.max(1, Number(data.lowStockThreshold || data?.stats?.low_stock_threshold || 10))
+	);
+	const lowStockPolicy = $derived.by(() => data.lowStockPolicy || null);
 
 	const filteredInventory = $derived.by(() => {
 		if (!searchTerm) return data.inventory || [];
@@ -21,19 +25,17 @@
 	const summaryStats = $derived.by(() => {
 			return {
 				total_accounts: filteredInventory.reduce(
-					(sum: number, item: any) => sum + (item.total_accounts || 0),
+					(sum: number, item: any) =>
+						sum + (item.lifetime_total_accounts || item.total_accounts || 0),
 					0
 				),
 				available_accounts: filteredInventory.reduce(
 					(sum: number, item: any) => sum + (item.available_accounts || 0),
 					0
 				),
-				allocated_accounts: filteredInventory.reduce(
-					(sum: number, item: any) => sum + (item.allocated_accounts || item.assigned_accounts || 0),
-					0
-				),
 				delivered_accounts: filteredInventory.reduce(
-					(sum: number, item: any) => sum + (item.delivered_accounts || 0),
+					(sum: number, item: any) =>
+						sum + (item.delivered_accounts || item.sold_accounts || item.allocated_accounts || 0),
 					0
 			),
 			platforms: new Set(filteredInventory.map((item: any) => item.platform_name)).size
@@ -61,18 +63,25 @@
 		}
 	}
 
-	function getStatusStyle(available: number): string {
+	function getStatusStyle(available: number, threshold: number): string {
 		if (available === 0)
 			return 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border)';
-		if (available < 10)
+		if (available <= threshold)
 			return 'background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border)';
 		return 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border)';
 	}
 
-	function getStatusText(available: number): string {
+	function getStatusText(available: number, threshold: number): string {
 		if (available === 0) return 'out of stock';
-		if (available < 10) return 'low stock';
+		if (available <= threshold) return 'low stock';
 		return 'in stock';
+	}
+
+	function formatPolicyTimestamp(value: string | null | undefined): string {
+		if (!value) return 'N/A';
+		const parsed = new Date(value);
+		if (Number.isNaN(parsed.getTime())) return 'N/A';
+		return parsed.toLocaleString();
 	}
 </script>
 
@@ -132,14 +141,40 @@
 		</div>
 	{/if}
 
+	<div
+		class="mb-4 rounded-lg p-3 sm:p-4"
+		style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+	>
+		<p class="text-xs sm:text-sm" style="color: var(--text-muted);">
+			Low-stock threshold:
+			<span class="font-semibold" style="color: var(--text);">{lowStockThreshold}</span>
+			• Alerts sent today:
+			<span class="font-semibold" style="color: var(--text);"
+				>{lowStockPolicy?.alerts_sent_today ?? 0}</span
+			>
+			• Suppressed today:
+			<span class="font-semibold" style="color: var(--text);"
+				>{lowStockPolicy?.suppressed_today ?? 0}</span
+			>
+			• Unresolved zero-stock tiers:
+			<span class="font-semibold" style="color: var(--text);"
+				>{lowStockPolicy?.unresolved_zero_tiers ?? 0}</span
+			>
+		</p>
+		<p class="mt-1 text-xs" style="color: var(--text-dim);">
+			Last alert: {formatPolicyTimestamp(lowStockPolicy?.last_alert_at)} • Last digest:
+			{formatPolicyTimestamp(lowStockPolicy?.last_digest_at)}
+		</p>
+	</div>
+
 	<!-- Stats Cards -->
-	<div class="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
+	<div class="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-2 sm:gap-3 lg:grid-cols-4">
 		<div
 			class="rounded-lg p-3 sm:p-4"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 		>
 			<h3 class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
-				Total Accounts
+				Lifetime Stock
 			</h3>
 			<p class="text-lg font-bold sm:text-2xl" style="color: var(--text)">
 				{summaryStats.total_accounts.toLocaleString()}
@@ -154,15 +189,6 @@
 				{summaryStats.available_accounts.toLocaleString()}
 			</p>
 		</div>
-			<div
-				class="rounded-lg p-3 sm:p-4"
-				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
-			>
-				<h3 class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Allocated</h3>
-				<p class="text-lg font-bold sm:text-2xl" style="color: var(--status-warning);">
-					{summaryStats.allocated_accounts.toLocaleString()}
-				</p>
-			</div>
 		<div
 			class="rounded-lg p-4"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
@@ -211,7 +237,7 @@
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
-							Total Stock
+							Lifetime Stock
 						</th>
 						<th
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
@@ -219,12 +245,6 @@
 						>
 							Available
 						</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-								style="color: var(--text-muted);"
-							>
-								Allocated
-							</th>
 						<th
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
@@ -269,7 +289,7 @@
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
 								<div class="text-sm" style="color: var(--text);">
-									{item.total_accounts?.toLocaleString() || 0}
+									{(item.lifetime_total_accounts ?? item.total_accounts ?? 0).toLocaleString()}
 								</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
@@ -278,24 +298,27 @@
 								</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm" style="color: var(--status-warning);">
-									{(item.allocated_accounts ?? item.assigned_accounts ?? 0).toLocaleString()}
-								</div>
-							</td>
-							<td class="px-6 py-4 whitespace-nowrap">
 								<div class="text-sm" style="color: var(--link);">
-									{item.delivered_accounts?.toLocaleString() || 0}
+									{(
+										item.delivered_accounts ??
+										item.sold_accounts ??
+										item.allocated_accounts ??
+										item.assigned_accounts ??
+										0
+									).toLocaleString()}
 								</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm" style="color: var(--text);">-</div>
+								<div class="text-sm" style="color: var(--text);">
+									{item.tier_price && item.tier_price > 0 ? formatPrice(item.tier_price) : 'N/A'}
+								</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
 								<span
 									class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-									style={getStatusStyle(item.available_accounts || 0)}
+									style={getStatusStyle(item.available_accounts || 0, lowStockThreshold)}
 								>
-									{getStatusText(item.available_accounts || 0)}
+									{getStatusText(item.available_accounts || 0, lowStockThreshold)}
 								</span>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
@@ -306,7 +329,7 @@
 						</tr>
 					{:else}
 						<tr>
-							<td colspan="8" class="px-6 py-8 text-center" style="color: var(--text-muted);">
+							<td colspan="7" class="px-6 py-8 text-center" style="color: var(--text-muted);">
 								No inventory found
 							</td>
 						</tr>

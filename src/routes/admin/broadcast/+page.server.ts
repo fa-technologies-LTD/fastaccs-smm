@@ -6,12 +6,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 	if (!locals.user || locals.user.userType !== 'ADMIN') {
 		return {
 			platforms: [],
+			tiers: [],
 			history: [],
 			initialAudienceCount: 0
 		};
 	}
 
-	const [platforms, history, initialAudienceCount] = await Promise.all([
+	const [platforms, tiers, history, initialAudienceCount] = await Promise.all([
 		prisma.category.findMany({
 			where: {
 				categoryType: 'platform',
@@ -24,12 +25,38 @@ export const load: PageServerLoad = async ({ locals }) => {
 			},
 			orderBy: { name: 'asc' }
 		}),
+		prisma.category.findMany({
+			where: {
+				categoryType: 'tier',
+				isActive: true,
+				parentId: { not: null },
+				parent: {
+					is: {
+						isActive: true,
+						categoryType: 'platform'
+					}
+				}
+			},
+			select: {
+				id: true,
+				name: true,
+				slug: true,
+				parentId: true,
+				parent: {
+					select: {
+						name: true
+					}
+				}
+			},
+			orderBy: [{ parent: { name: 'asc' } }, { name: 'asc' }]
+		}),
 		getBroadcastHistory(30),
-		getBroadcastAudienceCount('all_verified', [])
+		getBroadcastAudienceCount('all_verified', [], [])
 	]);
 
 	return {
 		platforms,
+		tiers,
 		history,
 		initialAudienceCount
 	};

@@ -10,7 +10,18 @@ export type BroadcastAudience =
 	| 'purchased_60'
 	| 'purchased_90'
 	| 'never_purchased'
-	| 'specific_platform_buyers';
+	| 'specific_platform_buyers'
+	| 'new_users_no_purchase_7'
+	| 'new_users_no_purchase_14'
+	| 'first_time_buyers'
+	| 'repeat_buyers'
+	| 'high_spenders'
+	| 'inactive_30'
+	| 'inactive_60'
+	| 'inactive_90'
+	| 'recent_abandoned_checkout'
+	| 'platform_tier_buyers'
+	| 'failed_payment_users';
 
 export interface BroadcastRecipient {
 	id: string;
@@ -56,6 +67,17 @@ const BROADCAST_TYPE = 'admin_broadcast';
 const SUCCESSFUL_ORDER_FILTER: Prisma.OrderWhereInput = {
 	OR: [{ paymentStatus: 'paid' }, { status: { in: ['paid', 'completed'] } }]
 };
+const FAILED_ORDER_FILTER: Prisma.OrderWhereInput = {
+	OR: [{ paymentStatus: { in: ['failed', 'cancelled'] } }, { status: { in: ['failed', 'cancelled'] } }]
+};
+const HIGH_SPENDER_MIN_TOTAL = Math.max(Number(env.BROADCAST_HIGH_SPENDER_MIN_TOTAL || 100000), 1);
+const RECENT_ABANDONED_LOOKBACK_DAYS = clamp(
+	Number(env.BROADCAST_ABANDONED_LOOKBACK_DAYS || 14),
+	1,
+	90
+);
+const ABANDONED_ORDER_PENDING_STATUSES = ['pending', 'pending_payment'];
+const ABANDONED_ORDER_EXCLUDED_PAYMENT_STATUSES = ['paid', 'failed', 'cancelled'];
 
 const AUDIENCE_LABELS: Record<BroadcastAudience, string> = {
 	all_verified: 'All verified users',
@@ -63,7 +85,18 @@ const AUDIENCE_LABELS: Record<BroadcastAudience, string> = {
 	purchased_60: 'Purchased in last 60 days',
 	purchased_90: 'Purchased in last 90 days',
 	never_purchased: 'Never purchased',
-	specific_platform_buyers: 'Specific platform buyers'
+	specific_platform_buyers: 'Specific platform buyers',
+	new_users_no_purchase_7: 'New users (7d), no purchase',
+	new_users_no_purchase_14: 'New users (14d), no purchase',
+	first_time_buyers: 'First-time buyers only',
+	repeat_buyers: 'Repeat buyers',
+	high_spenders: 'High spenders',
+	inactive_30: 'Inactive buyers (30d)',
+	inactive_60: 'Inactive buyers (60d)',
+	inactive_90: 'Inactive buyers (90d)',
+	recent_abandoned_checkout: 'Recent abandoned checkout users',
+	platform_tier_buyers: 'Platform + tier buyers',
+	failed_payment_users: 'Failed payment users'
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -92,7 +125,18 @@ export function parseBroadcastAudience(value: unknown): BroadcastAudience | null
 		normalized === 'purchased_60' ||
 		normalized === 'purchased_90' ||
 		normalized === 'never_purchased' ||
-		normalized === 'specific_platform_buyers'
+		normalized === 'specific_platform_buyers' ||
+		normalized === 'new_users_no_purchase_7' ||
+		normalized === 'new_users_no_purchase_14' ||
+		normalized === 'first_time_buyers' ||
+		normalized === 'repeat_buyers' ||
+		normalized === 'high_spenders' ||
+		normalized === 'inactive_30' ||
+		normalized === 'inactive_60' ||
+		normalized === 'inactive_90' ||
+		normalized === 'recent_abandoned_checkout' ||
+		normalized === 'platform_tier_buyers' ||
+		normalized === 'failed_payment_users'
 	) {
 		return normalized;
 	}
@@ -118,9 +162,29 @@ export function sanitizePlatformIds(input: unknown): string[] {
 	return Array.from(ids);
 }
 
-function getAudienceReference(audience: BroadcastAudience, platformIds: string[]): string {
-	const sortedIds = [...platformIds].sort();
-	return `audience=${audience};platformIds=${sortedIds.join(',')}`;
+export function sanitizeTierIds(input: unknown): string[] {
+	if (!Array.isArray(input)) return [];
+
+	const ids = new Set<string>();
+	for (const value of input) {
+		if (typeof value !== 'string') continue;
+		const trimmed = value.trim();
+		if (!trimmed || !isUuid(trimmed)) continue;
+		ids.add(trimmed);
+	}
+
+	return Array.from(ids);
+}
+
+interface BroadcastAudienceFilters {
+	platformIds: string[];
+	tierIds: string[];
+}
+
+function getAudienceReference(audience: BroadcastAudience, filters: BroadcastAudienceFilters): string {
+	const sortedPlatformIds = [...filters.platformIds].sort();
+	const sortedTierIds = [...filters.tierIds].sort();
+	return `audience=${audience};platformIds=${sortedPlatformIds.join(',')};tierIds=${sortedTierIds.join(',')}`;
 }
 
 function parseAudienceReference(referenceId: string | null): {
@@ -151,15 +215,45 @@ function parseAudienceReference(referenceId: string | null): {
 	};
 }
 
-function getAudienceWhereClause(
-	audience: BroadcastAudience,
-	platformIds: string[]
-): Prisma.UserWhereInput {
-	const baseWhere: Prisma.UserWhereInput = {
+function getBaseAudienceWhere(): Prisma.UserWhereInput {
+	return {
 		emailVerified: true,
 		isActive: true,
 		email: { not: null }
 	};
+}
+
+function getSinceDate(days: number): Date {
+	return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+}
+
+async function getSuccessfulOrderStatsByUser(): Promise<
+	Array<{ userId: string; count: number; totalAmount: number }>
+> {
+	const rows = await prisma.order.groupBy({
+		by: ['userId'],
+		where: {
+			userId: { not: null },
+			...SUCCESSFUL_ORDER_FILTER
+		},
+		_count: { _all: true },
+		_sum: { totalAmount: true }
+	});
+
+	return rows
+		.filter((row): row is typeof row & { userId: string } => Boolean(row.userId))
+		.map((row) => ({
+			userId: row.userId,
+			count: row._count._all,
+			totalAmount: Number(row._sum.totalAmount || 0)
+		}));
+}
+
+async function getAudienceWhereClause(
+	audience: BroadcastAudience,
+	filters: BroadcastAudienceFilters
+): Promise<Prisma.UserWhereInput> {
+	const baseWhere = getBaseAudienceWhere();
 
 	if (audience === 'all_verified') {
 		return baseWhere;
@@ -175,7 +269,7 @@ function getAudienceWhereClause(
 	}
 
 	if (audience === 'specific_platform_buyers') {
-		if (platformIds.length === 0) {
+		if (filters.platformIds.length === 0) {
 			return {
 				...baseWhere,
 				id: { in: [] }
@@ -192,7 +286,7 @@ function getAudienceWhereClause(
 							orderItems: {
 								some: {
 									category: {
-										parentId: { in: platformIds }
+										parentId: { in: filters.platformIds }
 									}
 								}
 							}
@@ -203,42 +297,154 @@ function getAudienceWhereClause(
 		};
 	}
 
-	const days = audience === 'purchased_30' ? 30 : audience === 'purchased_60' ? 60 : 90;
-	const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+	if (audience === 'platform_tier_buyers') {
+		if (filters.platformIds.length === 0 || filters.tierIds.length === 0) {
+			return {
+				...baseWhere,
+				id: { in: [] }
+			};
+		}
+
+		return {
+			...baseWhere,
+			orders: {
+				some: {
+					AND: [
+						SUCCESSFUL_ORDER_FILTER,
+						{
+							orderItems: {
+								some: {
+									categoryId: { in: filters.tierIds },
+									category: {
+										parentId: { in: filters.platformIds }
+									}
+								}
+							}
+						}
+					]
+				}
+			}
+		};
+	}
+
+	if (audience === 'purchased_30' || audience === 'purchased_60' || audience === 'purchased_90') {
+		const days = audience === 'purchased_30' ? 30 : audience === 'purchased_60' ? 60 : 90;
+		const since = getSinceDate(days);
+		return {
+			...baseWhere,
+			orders: {
+				some: {
+					AND: [SUCCESSFUL_ORDER_FILTER, { createdAt: { gte: since } }]
+				}
+			}
+		};
+	}
+
+	if (audience === 'new_users_no_purchase_7' || audience === 'new_users_no_purchase_14') {
+		const days = audience === 'new_users_no_purchase_7' ? 7 : 14;
+		const since = getSinceDate(days);
+		return {
+			...baseWhere,
+			registeredAt: { gte: since },
+			orders: {
+				none: SUCCESSFUL_ORDER_FILTER
+			}
+		};
+	}
+
+	if (audience === 'inactive_30' || audience === 'inactive_60' || audience === 'inactive_90') {
+		const days = audience === 'inactive_30' ? 30 : audience === 'inactive_60' ? 60 : 90;
+		const since = getSinceDate(days);
+		return {
+			...baseWhere,
+			orders: {
+				some: SUCCESSFUL_ORDER_FILTER,
+				none: {
+					AND: [SUCCESSFUL_ORDER_FILTER, { createdAt: { gte: since } }]
+				}
+			}
+		};
+	}
+
+	if (audience === 'recent_abandoned_checkout') {
+		const since = getSinceDate(RECENT_ABANDONED_LOOKBACK_DAYS);
+		return {
+			...baseWhere,
+			orders: {
+				some: {
+					createdAt: { gte: since },
+					status: { in: ABANDONED_ORDER_PENDING_STATUSES },
+					paymentStatus: { notIn: ABANDONED_ORDER_EXCLUDED_PAYMENT_STATUSES }
+				}
+			}
+		};
+	}
+
+	if (audience === 'failed_payment_users') {
+		return {
+			...baseWhere,
+			orders: {
+				some: FAILED_ORDER_FILTER
+			}
+		};
+	}
+
+	if (audience === 'first_time_buyers' || audience === 'repeat_buyers' || audience === 'high_spenders') {
+		const stats = await getSuccessfulOrderStatsByUser();
+		const filteredIds = stats
+			.filter((row) => {
+				if (audience === 'first_time_buyers') return row.count === 1;
+				if (audience === 'repeat_buyers') return row.count >= 2;
+				return row.totalAmount >= HIGH_SPENDER_MIN_TOTAL;
+			})
+			.map((row) => row.userId);
+
+		return {
+			...baseWhere,
+			id: { in: filteredIds }
+		};
+	}
 
 	return {
 		...baseWhere,
-		orders: {
-			some: {
-				AND: [SUCCESSFUL_ORDER_FILTER, { createdAt: { gte: since } }]
-			}
-		}
+		id: { in: [] }
 	};
 }
 
 export async function getBroadcastAudienceCount(
 	audience: BroadcastAudience,
-	platformIds: string[]
+	platformIds: string[],
+	tierIds: string[]
 ): Promise<number> {
-	if (audience === 'specific_platform_buyers' && platformIds.length === 0) {
+	const filters: BroadcastAudienceFilters = { platformIds, tierIds };
+
+	if (audience === 'specific_platform_buyers' && filters.platformIds.length === 0) {
+		return 0;
+	}
+	if (audience === 'platform_tier_buyers' && (filters.platformIds.length === 0 || filters.tierIds.length === 0)) {
 		return 0;
 	}
 
-	return prisma.user.count({
-		where: getAudienceWhereClause(audience, platformIds)
-	});
+	const where = await getAudienceWhereClause(audience, filters);
+	return prisma.user.count({ where });
 }
 
 export async function getBroadcastRecipients(
 	audience: BroadcastAudience,
-	platformIds: string[]
+	platformIds: string[],
+	tierIds: string[]
 ): Promise<BroadcastRecipient[]> {
-	if (audience === 'specific_platform_buyers' && platformIds.length === 0) {
+	const filters: BroadcastAudienceFilters = { platformIds, tierIds };
+
+	if (audience === 'specific_platform_buyers' && filters.platformIds.length === 0) {
+		return [];
+	}
+	if (audience === 'platform_tier_buyers' && (filters.platformIds.length === 0 || filters.tierIds.length === 0)) {
 		return [];
 	}
 
 	const users = await prisma.user.findMany({
-		where: getAudienceWhereClause(audience, platformIds),
+		where: await getAudienceWhereClause(audience, filters),
 		select: {
 			id: true,
 			email: true,
@@ -270,9 +476,10 @@ export async function createBroadcast(
 		body: string;
 		audience: BroadcastAudience;
 		platformIds: string[];
+		tierIds: string[];
 	}
 ): Promise<{ broadcastId: string; total: number }> {
-	const recipients = await getBroadcastRecipients(params.audience, params.platformIds);
+	const recipients = await getBroadcastRecipients(params.audience, params.platformIds, params.tierIds);
 	if (recipients.length === 0) {
 		return {
 			broadcastId: randomUUID(),
@@ -281,7 +488,10 @@ export async function createBroadcast(
 	}
 
 	const broadcastId = randomUUID();
-	const audienceReference = getAudienceReference(params.audience, params.platformIds);
+	const audienceReference = getAudienceReference(params.audience, {
+		platformIds: params.platformIds,
+		tierIds: params.tierIds
+	});
 	const subject = params.subject.trim();
 	const body = params.body.trim();
 

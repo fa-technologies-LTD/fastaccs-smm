@@ -2,8 +2,28 @@ import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 import { getCacheHeaders } from '$lib/helpers/cache';
 import { getInventoryStatsSnapshot } from '$lib/services/admin-metrics';
-import { getLowStockThresholdSetting } from '$lib/services/admin-settings';
+import { getLowStockPolicyState, getLowStockThresholdSetting } from '$lib/services/admin-settings';
 import { getAllocatedLikeAccountStatuses, normalizeAccountStatus } from '$lib/helpers/account-status';
+
+interface TierMetadataShape {
+	pricing?: {
+		base_price?: unknown;
+	};
+	price?: unknown;
+}
+
+function extractTierPrice(metadata: unknown): number {
+	const typedMetadata =
+		metadata && typeof metadata === 'object' ? (metadata as TierMetadataShape) : undefined;
+	const rawPrice = typedMetadata?.pricing?.base_price ?? typedMetadata?.price;
+	const parsed = Number(rawPrice);
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function isSoldAccountStatus(status: unknown): boolean {
+	const normalized = normalizeAccountStatus(status);
+	return normalized === 'delivered' || normalized === 'allocated';
+}
 
 // GET /api/inventory - Get inventory stats and data
 export async function GET({ url, locals }) {
@@ -15,10 +35,25 @@ export async function GET({ url, locals }) {
 		const type = url.searchParams.get('type') || 'all';
 
 		if (type === 'stats') {
-			const stats = await getInventoryStatsSnapshot();
+			const [stats, lowStockPolicyState] = await Promise.all([
+				getInventoryStatsSnapshot(),
+				getLowStockPolicyState().catch(() => null)
+			]);
 
 			return json(
-				{ data: stats, error: null },
+				{
+					data: stats,
+					low_stock_policy: lowStockPolicyState
+						? {
+								last_alert_at: lowStockPolicyState.lastAlertAt,
+								last_digest_at: lowStockPolicyState.lastDigestAt,
+								alerts_sent_today: lowStockPolicyState.sentToday,
+								suppressed_today: lowStockPolicyState.suppressedCount,
+								unresolved_zero_tiers: lowStockPolicyState.unresolvedZeroTierIds.length
+							}
+						: null,
+					error: null
+				},
 				{
 					headers: Object.fromEntries(
 						Object.entries(getCacheHeaders('admin-live')).filter(([, v]) => v !== undefined)
@@ -51,7 +86,8 @@ export async function GET({ url, locals }) {
 					const accounts = tier.accounts;
 					const availableCount = accounts.filter((a) => a.status === 'available').length;
 					const reservedCount = accounts.filter((a) => a.status === 'reserved').length;
-					const allocatedCount = accounts.filter((a) => normalizeAccountStatus(a.status) === 'allocated').length;
+					const soldCount = accounts.filter((a) => isSoldAccountStatus(a.status)).length;
+					const tierPrice = extractTierPrice(tier.metadata);
 
 					return {
 						id: tier.id,
@@ -59,14 +95,17 @@ export async function GET({ url, locals }) {
 					platform_name: tier.parent?.name || 'Unknown Platform', // This is the actual platform name
 					category_name: tier.name,
 					platform: tier.parent?.name || 'Unknown', // Keep for backwards compatibility
+					lifetime_total_accounts: accounts.length,
 					total_accounts: accounts.length,
 						available_accounts: availableCount,
 						accounts_available: availableCount, // UI expects this field name
 						reserved_accounts: reservedCount,
 						reservations_active: reservedCount, // UI expects this field name
-						allocated_accounts: allocatedCount,
-						assigned_accounts: allocatedCount, // Backward compatibility
-						delivered_accounts: accounts.filter((a) => a.status === 'delivered').length,
+						allocated_accounts: soldCount, // Backward compatibility (now treated as delivered/sold)
+						assigned_accounts: soldCount, // Backward compatibility
+						delivered_accounts: soldCount,
+						sold_accounts: soldCount,
+						tier_price: tierPrice,
 						visible_available: availableCount, // UI expects this field name
 						created_at: tier.createdAt,
 						updated_at: tier.updatedAt,
@@ -78,7 +117,7 @@ export async function GET({ url, locals }) {
 		}
 
 		// Default: return combined data
-		const [stats, categories] = await Promise.all([
+		const [stats, categories, lowStockPolicyState] = await Promise.all([
 			// Stats
 			Promise.all([
 				prisma.accountBatch.count(),
@@ -87,14 +126,17 @@ export async function GET({ url, locals }) {
 				prisma.account.count({ where: { status: 'reserved' } })
 				]).then(([totalBatches, totalAccounts, availableAccounts, reservedAccounts]) => ({
 					total_batches: totalBatches,
-					total_accounts: totalAccounts,
+					total_accounts: totalAccounts, // Lifetime stock currently tracked in account rows
+					lifetime_total_accounts: totalAccounts,
 					available_accounts: availableAccounts,
 					reserved_accounts: reservedAccounts,
 					allocated_accounts: 0, // Will be filled below
 					assigned_accounts: 0, // Backward compatibility
 					delivered_accounts: 0,
+					sold_accounts: 0,
 					out_of_stock: 0, // Will be filled below
 					low_stock: 0, // Will be filled below
+					low_stock_threshold: 0,
 					platforms: 0 // Will be filled below
 				})),
 
@@ -116,14 +158,15 @@ export async function GET({ url, locals }) {
 					}
 				},
 				orderBy: { createdAt: 'desc' }
-			})
+			}),
+			getLowStockPolicyState().catch(() => null)
 		]);
 
 		// Complete stats calculation
-			const allocatedCount = await prisma.account.count({
-				where: { status: { in: getAllocatedLikeAccountStatuses() } }
+			const soldStatuses = [...new Set([...getAllocatedLikeAccountStatuses(), 'delivered'])];
+			const soldCount = await prisma.account.count({
+				where: { status: { in: soldStatuses } }
 			});
-			const deliveredCount = await prisma.account.count({ where: { status: 'delivered' } });
 
 		// Calculate missing stats
 		const outOfStockBatches = await prisma.accountBatch.count({
@@ -159,9 +202,11 @@ export async function GET({ url, locals }) {
 			where: { platform: { not: '' } }
 		});
 
-			stats.allocated_accounts = allocatedCount;
-			stats.assigned_accounts = allocatedCount;
-			stats.delivered_accounts = deliveredCount;
+			stats.allocated_accounts = soldCount;
+			stats.assigned_accounts = soldCount;
+			stats.delivered_accounts = soldCount;
+			stats.sold_accounts = soldCount;
+			stats.low_stock_threshold = Math.max(1, lowStockThreshold);
 		stats.out_of_stock = outOfStockBatches;
 		stats.low_stock = lowStockBatches;
 		stats.platforms = platformsCount.length;
@@ -171,7 +216,8 @@ export async function GET({ url, locals }) {
 				const accounts = tier.accounts;
 				const availableCount = accounts.filter((a) => a.status === 'available').length;
 				const reservedCount = accounts.filter((a) => a.status === 'reserved').length;
-				const allocatedCount = accounts.filter((a) => normalizeAccountStatus(a.status) === 'allocated').length;
+				const soldCount = accounts.filter((a) => isSoldAccountStatus(a.status)).length;
+				const tierPrice = extractTierPrice(tier.metadata);
 
 				return {
 				id: tier.id,
@@ -179,14 +225,17 @@ export async function GET({ url, locals }) {
 				platform_name: tier.parent?.name || 'Unknown Platform', // This is the actual platform name
 				category_name: tier.name,
 				platform: tier.parent?.name || 'Unknown', // Keep for backwards compatibility
+				lifetime_total_accounts: accounts.length,
 				total_accounts: accounts.length,
 					available_accounts: availableCount,
 					accounts_available: availableCount, // UI expects this field name
 					reserved_accounts: reservedCount,
 					reservations_active: reservedCount, // UI expects this field name
-					allocated_accounts: allocatedCount,
-					assigned_accounts: allocatedCount, // Backward compatibility
-					delivered_accounts: accounts.filter((a) => a.status === 'delivered').length,
+					allocated_accounts: soldCount, // Backward compatibility (now treated as delivered/sold)
+					assigned_accounts: soldCount, // Backward compatibility
+					delivered_accounts: soldCount,
+					sold_accounts: soldCount,
+					tier_price: tierPrice,
 				visible_available: availableCount, // UI expects this field name
 				created_at: tier.createdAt,
 				updated_at: tier.updatedAt,
@@ -197,6 +246,15 @@ export async function GET({ url, locals }) {
 		return json({
 			data: {
 				stats,
+				low_stock_policy: lowStockPolicyState
+					? {
+							last_alert_at: lowStockPolicyState.lastAlertAt,
+							last_digest_at: lowStockPolicyState.lastDigestAt,
+							alerts_sent_today: lowStockPolicyState.sentToday,
+							suppressed_today: lowStockPolicyState.suppressedCount,
+							unresolved_zero_tiers: lowStockPolicyState.unresolvedZeroTierIds.length
+						}
+					: null,
 				batches: tierInventoryData
 			},
 			error: null

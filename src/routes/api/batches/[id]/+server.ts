@@ -106,7 +106,41 @@ export async function DELETE({ params, locals }) {
 			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
 		}
 
-		// First delete related accounts
+		const statusCounts = await prisma.account.groupBy({
+			by: ['status'],
+			where: { batchId: params.id },
+			_count: { _all: true }
+		});
+		const byStatus = new Map(statusCounts.map((row) => [row.status, row._count._all]));
+		const allocatedCount = byStatus.get('allocated') || 0;
+		const deliveredCount = byStatus.get('delivered') || 0;
+		const nonAvailableCount = statusCounts
+			.filter((row) => row.status !== 'available')
+			.reduce((sum, row) => sum + row._count._all, 0);
+
+		if (allocatedCount > 0 || deliveredCount > 0) {
+			return json(
+				{
+					data: null,
+					error: `Batch recall blocked. ${allocatedCount} allocated and ${deliveredCount} delivered account(s) detected. Only fully available batches can be recalled.`,
+					code: 'BATCH_RECALL_BLOCKED_ALLOCATED_OR_DELIVERED'
+				},
+				{ status: 409 }
+			);
+		}
+
+		if (nonAvailableCount > 0) {
+			return json(
+				{
+					data: null,
+					error: `Batch recall blocked. ${nonAvailableCount} account(s) are not available. Recall/delete is allowed only when every account in the batch is available.`,
+					code: 'BATCH_RECALL_BLOCKED_NOT_FULLY_AVAILABLE'
+				},
+				{ status: 409 }
+			);
+		}
+
+		// Delete related accounts only after safety checks pass.
 		await prisma.account.deleteMany({
 			where: { batchId: params.id }
 		});

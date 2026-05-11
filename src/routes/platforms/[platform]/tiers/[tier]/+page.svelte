@@ -59,6 +59,7 @@
 	const tierLoginGuideLabel = $derived(
 		tierDeliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL
 	);
+	const lowStockThreshold = $derived(Math.max(1, Number(data.lowStockThreshold || 10)));
 
 	// Format follower count
 	function formatFollowers(count: number): string {
@@ -271,7 +272,7 @@
 	function getTierStatus(available: number): { status: string; color: string; bgColor: string } {
 		if (available === 0) {
 			return { status: 'Sold Out', color: 'text-red-600', bgColor: 'bg-red-50 border-red-200' };
-		} else if (available <= 10) {
+		} else if (available <= lowStockThreshold) {
 			return {
 				status: 'Low Stock',
 				color: 'text-yellow-600',
@@ -367,10 +368,10 @@
 		<section
 			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} relative pt-8 pb-4 text-white  sm:py-8`}
 		>
-			<!-- Stock Status Badge - Small Corner Position -->
-			<div class="absolute top-4 right-4">
+			<!-- Stock Status Badge - Border-seated -->
+			<div class="absolute top-0 right-4">
 				<span
-					class={`rounded-full px-2 py-1 text-xs font-medium ${tierStatus.status === 'In Stock' ? 'border border-green-300/30 bg-green-500/20 text-green-100' : tierStatus.status === 'Low Stock' ? 'border border-yellow-300/30 bg-yellow-500/20 text-yellow-100' : 'border border-red-300/30 bg-red-500/20 text-red-100'}`}
+					class={`tag-chip tag-chip--border-seat rounded-full px-2 py-1 text-xs font-medium ${tierStatus.status === 'In Stock' ? 'border border-green-300/30 bg-green-500/20 text-green-100' : tierStatus.status === 'Low Stock' ? 'border border-yellow-300/30 bg-yellow-500/20 text-yellow-100' : 'border border-red-300/30 bg-red-500/20 text-red-100'}`}
 				>
 					{tierStatus.status}
 				</span>
@@ -390,7 +391,7 @@
 								<div class="mb-2 flex flex-wrap gap-1.5">
 									{#if data.tier.is_pinned}
 										<span
-											class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
+											class="tag-chip inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
 											style="background: rgba(251, 191, 36, 0.22); color: rgb(251, 191, 36); border: 1px solid rgba(251, 191, 36, 0.4);"
 										>
 											Pinned{data.tier.pin_priority ? ` #${data.tier.pin_priority}` : ''}
@@ -398,7 +399,7 @@
 									{/if}
 									{#if data.tier.is_featured}
 										<span
-											class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
+											class="tag-chip inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
 											style="background: rgba(34, 197, 94, 0.24); color: rgb(187, 247, 208); border: 1px solid rgba(34, 197, 94, 0.35);"
 										>
 											{getFeaturedBadgeLabel()}
@@ -446,7 +447,7 @@
 										Sample Screenshots
 									</h2>
 									<span
-										class="rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase"
+										class="tag-chip rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase"
 										style="background: rgba(59, 130, 246, 0.14); color: rgb(37, 99, 235); border: 1px solid rgba(59, 130, 246, 0.28);"
 									>
 										Sample Only
@@ -701,7 +702,7 @@
 							{/if}
 
 							<!-- Stock Warning -->
-							{#if data.tier.visible_available <= 10 && data.tier.visible_available > 0}
+							{#if data.tier.visible_available <= lowStockThreshold && data.tier.visible_available > 0}
 								<div
 									class="mt-4 rounded-lg border border-yellow-500/30 bg-[var(--color-surface)] p-3"
 								>

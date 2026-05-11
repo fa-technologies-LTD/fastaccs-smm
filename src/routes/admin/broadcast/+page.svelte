@@ -15,7 +15,18 @@
 			| 'purchased_60'
 			| 'purchased_90'
 			| 'never_purchased'
-			| 'specific_platform_buyers';
+			| 'specific_platform_buyers'
+			| 'new_users_no_purchase_7'
+			| 'new_users_no_purchase_14'
+			| 'first_time_buyers'
+			| 'repeat_buyers'
+			| 'high_spenders'
+			| 'inactive_30'
+			| 'inactive_60'
+			| 'inactive_90'
+			| 'recent_abandoned_checkout'
+			| 'platform_tier_buyers'
+			| 'failed_payment_users';
 		label: string;
 		description: string;
 	};
@@ -78,6 +89,61 @@
 			value: 'specific_platform_buyers',
 			label: 'Specific platform buyers',
 			description: 'Users who have bought from selected platforms.'
+		},
+		{
+			value: 'new_users_no_purchase_7',
+			label: 'New users, no purchase (7d)',
+			description: 'Users who signed up in the last 7 days and have no successful order yet.'
+		},
+		{
+			value: 'new_users_no_purchase_14',
+			label: 'New users, no purchase (14d)',
+			description: 'Users who signed up in the last 14 days and have no successful order yet.'
+		},
+		{
+			value: 'first_time_buyers',
+			label: 'First-time buyers only',
+			description: 'Users with exactly one successful purchase.'
+		},
+		{
+			value: 'repeat_buyers',
+			label: 'Repeat buyers',
+			description: 'Users with two or more successful purchases.'
+		},
+		{
+			value: 'high_spenders',
+			label: 'High spenders',
+			description: 'Users with high successful purchase totals.'
+		},
+		{
+			value: 'inactive_30',
+			label: 'Inactive buyers (30d)',
+			description: 'Users who bought before but have no successful purchase in the last 30 days.'
+		},
+		{
+			value: 'inactive_60',
+			label: 'Inactive buyers (60d)',
+			description: 'Users who bought before but have no successful purchase in the last 60 days.'
+		},
+		{
+			value: 'inactive_90',
+			label: 'Inactive buyers (90d)',
+			description: 'Users who bought before but have no successful purchase in the last 90 days.'
+		},
+		{
+			value: 'recent_abandoned_checkout',
+			label: 'Recent abandoned checkout',
+			description: 'Users with recent unpaid/incomplete checkout activity.'
+		},
+		{
+			value: 'platform_tier_buyers',
+			label: 'Platform + tier buyers',
+			description: 'Users who purchased from specific platforms and tiers.'
+		},
+		{
+			value: 'failed_payment_users',
+			label: 'Failed payment users',
+			description: 'Users with failed or cancelled payment attempts.'
 		}
 	];
 
@@ -85,6 +151,7 @@
 	let messageBody = $state('');
 	let audience = $state<AudienceOption['value']>('all_verified');
 	let selectedPlatformIds = $state<string[]>([]);
+	let selectedTierIds = $state<string[]>([]);
 	let recipientCount = $state<number>(data.initialAudienceCount || 0);
 	let countLoading = $state(false);
 	let audienceCountSeq = 0;
@@ -105,12 +172,39 @@
 	}
 
 	function togglePlatformSelection(platformId: string): void {
+		let nextSelectedPlatformIds: string[];
 		if (selectedPlatformIds.includes(platformId)) {
-			selectedPlatformIds = selectedPlatformIds.filter((id) => id !== platformId);
+			nextSelectedPlatformIds = selectedPlatformIds.filter((id) => id !== platformId);
+		} else {
+			nextSelectedPlatformIds = [...selectedPlatformIds, platformId];
+		}
+
+		selectedPlatformIds = nextSelectedPlatformIds;
+		selectedTierIds = selectedTierIds.filter((tierId) => {
+			const tier = data.tiers.find((row) => row.id === tierId);
+			if (!tier) return false;
+			if (nextSelectedPlatformIds.length === 0) return true;
+			const parentId = tier.parentId || '';
+			return nextSelectedPlatformIds.includes(parentId);
+		});
+	}
+
+	function isTierSelected(tierId: string): boolean {
+		return selectedTierIds.includes(tierId);
+	}
+
+	function toggleTierSelection(tierId: string): void {
+		if (selectedTierIds.includes(tierId)) {
+			selectedTierIds = selectedTierIds.filter((id) => id !== tierId);
 			return;
 		}
 
-		selectedPlatformIds = [...selectedPlatformIds, platformId];
+		selectedTierIds = [...selectedTierIds, tierId];
+	}
+
+	function getVisibleTiers() {
+		if (selectedPlatformIds.length === 0) return data.tiers;
+		return data.tiers.filter((tier) => selectedPlatformIds.includes(tier.parentId || ''));
 	}
 
 	function formatDate(value: string): string {
@@ -157,8 +251,14 @@
 		const sequenceId = ++audienceCountSeq;
 		const currentAudience = audience;
 		const currentPlatformIds = [...selectedPlatformIds];
+		const currentTierIds = [...selectedTierIds];
 
 		if (currentAudience === 'specific_platform_buyers' && currentPlatformIds.length === 0) {
+			recipientCount = 0;
+			countLoading = false;
+			return;
+		}
+		if (currentAudience === 'platform_tier_buyers' && (currentPlatformIds.length === 0 || currentTierIds.length === 0)) {
 			recipientCount = 0;
 			countLoading = false;
 			return;
@@ -169,6 +269,9 @@
 			const query = new URLSearchParams({ audience: currentAudience });
 			if (currentPlatformIds.length > 0) {
 				query.set('platformIds', currentPlatformIds.join(','));
+			}
+			if (currentTierIds.length > 0) {
+				query.set('tierIds', currentTierIds.join(','));
 			}
 
 			const response = await fetch(`/api/admin/broadcast/audience?${query.toString()}`);
@@ -286,6 +389,10 @@
 			showWarning('Select platforms', 'Choose at least one platform for this audience.');
 			return;
 		}
+		if (audience === 'platform_tier_buyers' && (selectedPlatformIds.length === 0 || selectedTierIds.length === 0)) {
+			showWarning('Select filters', 'Choose at least one platform and one tier for this audience.');
+			return;
+		}
 		if (recipientCount <= 0) {
 			showWarning('No recipients', 'No users currently match this audience.');
 			return;
@@ -305,7 +412,8 @@
 					subject: trimmedSubject,
 					body: trimmedBody,
 					audience,
-					platformIds: selectedPlatformIds
+					platformIds: selectedPlatformIds,
+					tierIds: selectedTierIds
 				})
 			});
 			const result = await response.json();
@@ -333,6 +441,7 @@
 			showSuccess('Broadcast completed', 'Email broadcast processing has completed.');
 			subject = '';
 			messageBody = '';
+			selectedTierIds = [];
 			previewOpen = false;
 			await refreshAudienceCount();
 			await refreshHistory();
@@ -459,8 +568,12 @@
 								checked={audience === option.value}
 								onchange={() => {
 									audience = option.value;
-									if (option.value !== 'specific_platform_buyers') {
+									if (
+										option.value !== 'specific_platform_buyers' &&
+										option.value !== 'platform_tier_buyers'
+									) {
 										selectedPlatformIds = [];
+										selectedTierIds = [];
 									}
 								}}
 							/>
@@ -473,7 +586,7 @@
 				</div>
 			</div>
 
-			{#if audience === 'specific_platform_buyers'}
+			{#if audience === 'specific_platform_buyers' || audience === 'platform_tier_buyers'}
 				<div>
 					<h3 class="mb-2 text-sm font-semibold" style="color: var(--text);">Select platforms</h3>
 					<div class="max-h-44 space-y-2 overflow-auto rounded-lg p-3" style="background: var(--bg); border: 1px solid var(--border);">
@@ -488,6 +601,30 @@
 										onchange={() => togglePlatformSelection(platform.id)}
 									/>
 									<span>{platform.name}</span>
+								</label>
+							{/each}
+						{/if}
+					</div>
+				</div>
+			{/if}
+
+			{#if audience === 'platform_tier_buyers'}
+				<div>
+					<h3 class="mb-2 text-sm font-semibold" style="color: var(--text);">Select tiers</h3>
+					<div class="max-h-44 space-y-2 overflow-auto rounded-lg p-3" style="background: var(--bg); border: 1px solid var(--border);">
+						{#if getVisibleTiers().length === 0}
+							<p class="text-sm" style="color: var(--text-muted);">
+								No active tiers found for the selected platform(s).
+							</p>
+						{:else}
+							{#each getVisibleTiers() as tier}
+								<label class="flex cursor-pointer items-center gap-2 text-sm" style="color: var(--text);">
+									<input
+										type="checkbox"
+										checked={isTierSelected(tier.id)}
+										onchange={() => toggleTierSelection(tier.id)}
+									/>
+									<span>{tier.parent?.name || 'Platform'} - {tier.name}</span>
 								</label>
 							{/each}
 						{/if}
