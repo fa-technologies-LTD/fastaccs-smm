@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Package, CheckCircle, Copy, Clock, Shield, Lock } from '@lucide/svelte';
+	import { Package, CheckCircle, Copy, Clock, Shield, Lock, ExternalLink, CircleHelp } from '@lucide/svelte';
 	import { addToast } from '$lib/stores/toasts';
 	import { copyToClipboard } from '$lib/helpers/utils';
 	import {
@@ -150,15 +150,26 @@
 							<p class="mt-1 text-xs" style="color: var(--text-muted);">
 								Follow the setup guide for this exact tier to avoid login issues.
 							</p>
-							<a
-								href={purchase.loginGuideUrl}
-								target="_blank"
-								rel="noopener noreferrer"
-								class="mt-2 inline-block text-xs font-semibold underline"
-								style="color: var(--link);"
-							>
-								{purchase.loginGuideLabel || 'How to login this account'}
-							</a>
+							<div class="mt-2 flex flex-wrap items-center gap-2">
+								<a
+									href={purchase.loginGuideUrl}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all hover:-translate-y-0.5"
+									style="background: rgba(5, 212, 113, 0.18); border: 1px solid rgba(5, 212, 113, 0.35); color: var(--text);"
+								>
+									{purchase.loginGuideLabel || 'How to login this account'}
+									<ExternalLink class="h-3.5 w-3.5" />
+								</a>
+								<a
+									href="/support#after-purchase-guide"
+									class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all hover:-translate-y-0.5"
+									style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);"
+								>
+									<CircleHelp class="h-3.5 w-3.5" />
+									Support guide
+								</a>
+							</div>
 						</div>
 					{/if}
 

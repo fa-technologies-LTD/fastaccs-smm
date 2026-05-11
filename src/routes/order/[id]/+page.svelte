@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { CheckCircle, Clock, XCircle, Mail, MessageSquare, Copy } from '@lucide/svelte';
+	import { CheckCircle, Clock, XCircle, Mail, MessageSquare, Copy, ExternalLink, CircleHelp } from '@lucide/svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { addToast } from '$lib/stores/toasts';
@@ -276,28 +276,35 @@
 												</span>
 											{/if}
 										</div>
-										<div class="mt-2">
-											<a
-												href={getItemLoginGuide(item).url}
-												target="_blank"
-												rel="noopener noreferrer"
-												class="text-xs font-medium hover:underline"
-												style="color: var(--link);"
-											>
-												{getItemLoginGuide(item).label}
-											</a>
-											<span class="ml-2 text-xs" style="color: var(--text-dim);">
-												For more help:
-											</span>
-											<a
-												href={getSupportGuideUrl()}
-												target="_blank"
-												rel="noopener noreferrer"
-												class="ml-1 text-xs font-medium hover:underline break-all"
-												style="color: var(--link);"
-											>
-												{getSupportGuideUrl()}
-											</a>
+										<div
+											class="mt-3 rounded-lg border p-3"
+											style="border-color: rgba(170, 173, 255, 0.25); background: rgba(170, 173, 255, 0.08);"
+										>
+											<p class="mb-2 text-xs font-medium" style="color: var(--text);">
+												Login & Support Guide
+											</p>
+											<div class="flex flex-wrap items-center gap-2">
+												<a
+													href={getItemLoginGuide(item).url}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all hover:-translate-y-0.5"
+													style="background: rgba(5, 212, 113, 0.18); border: 1px solid rgba(5, 212, 113, 0.35); color: var(--text);"
+												>
+													{getItemLoginGuide(item).label}
+													<ExternalLink class="h-3.5 w-3.5" />
+												</a>
+												<a
+													href={getSupportGuideUrl()}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all hover:-translate-y-0.5"
+													style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);"
+												>
+													<CircleHelp class="h-3.5 w-3.5" />
+													Support guide
+												</a>
+											</div>
 										</div>
 									</div>
 									<div class="text-right">
