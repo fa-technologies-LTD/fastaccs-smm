@@ -357,17 +357,17 @@
 
 		<!-- Tier Header -->
 		<section
-			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} relative pt-8 pb-4 text-white  sm:py-8`}
+			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} relative pt-6 pb-5 text-white sm:py-8`}
 		>
 			<div class="mx-auto max-w-6xl px-4">
-				<div class="flex items-center justify-between">
-					<div class="flex items-center gap-6">
-						<div class="rounded-full bg-white/20 p-4">
-							<PlatformIcon class="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12" />
+				<div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+					<div class="flex w-full items-start gap-3 sm:gap-5">
+						<div class="rounded-full bg-white/20 p-3 sm:p-4">
+							<PlatformIcon class="h-7 w-7 sm:h-10 sm:w-10 md:h-12 md:w-12" />
 						</div>
-						<div>
+						<div class="min-w-0 flex-1">
 							<div class="mb-2">
-								<h1 class="text-4xl font-bold">{data.tier.tier_name}</h1>
+								<h1 class="text-3xl leading-tight font-bold sm:text-4xl">{data.tier.tier_name}</h1>
 							</div>
 							{#if data.tier.is_pinned || data.tier.is_featured}
 								<div class="mb-2 flex flex-wrap gap-1.5">
@@ -389,7 +389,7 @@
 									{/if}
 								</div>
 							{/if}
-							<p class="text-base opacity-90">
+							<p class="text-base leading-relaxed opacity-90 sm:text-lg">
 								{data.platform.name} accounts with
 								{#if data.tier.metadata?.follower_range}
 									{@const range = data.tier.metadata.follower_range}
@@ -399,7 +399,7 @@
 									{formatFollowers((data.tier.metadata?.follower_count as number) || 0)} followers
 								{/if}
 							</p>
-							<div class="mt-2 flex flex-wrap items-center gap-2 text-base opacity-75">
+							<div class="mt-2 flex flex-wrap items-center gap-2 text-base opacity-75 sm:text-lg">
 								<span>{data.tier.visible_available} accounts available</span>
 								{#if tierStatus}
 									<span
@@ -415,9 +415,11 @@
 						</div>
 					</div>
 
-					<div class="text-right">
-						<div class="text-4xl font-bold">{formatPrice(data.tier.price)}</div>
-						<div class="text-base opacity-75">per account</div>
+					<div
+						class="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-left lg:w-auto lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:text-right"
+					>
+						<div class="text-3xl leading-tight font-bold sm:text-4xl">{formatPrice(data.tier.price)}</div>
+						<div class="text-sm opacity-75 sm:text-base">per account</div>
 					</div>
 				</div>
 			</div>
@@ -531,7 +533,7 @@
 
 					<!-- Right Column - Purchase -->
 					<div class="lg:col-span-1">
-						<div class="sticky top-6 rounded-xl bg-[var(--color-card)] p-8 shadow">
+						<div class="sticky top-6 rounded-xl bg-[var(--color-card)] p-5 shadow sm:p-8">
 							<h3 class="mb-6 text-xl font-bold text-[var(--color-text-primary)]">
 								Select Quantity
 							</h3>

@@ -628,24 +628,24 @@
 								{/if}
 
 								<!-- Tier Header -->
-								<div class="flex flex-1 flex-col p-6">
-									<div class="mb-4 flex items-center justify-between">
-										<div>
-											<h3 class="text-xl font-bold" style="color: var(--text);">
+								<div class="flex flex-1 flex-col p-4 sm:p-6">
+									<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+										<div class="min-w-0">
+											<h3 class="text-lg font-bold sm:text-xl" style="color: var(--text);">
 												{tier.tier_name}
 											</h3>
-											<p class="text-sm" style="color: var(--text-muted);">
+											<p class="mt-1 text-sm leading-relaxed" style="color: var(--text-muted);">
 												{getTierAudienceLabel(tier.metadata)}
 											</p>
 										</div>
-										<div class="text-right">
+										<div class="text-left sm:text-right">
 											<div
-												class="text-2xl font-bold"
+												class="text-xl font-bold sm:text-2xl"
 												style="background: var(--btn-primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"
 											>
 												{formatPrice(tier.price)}
 											</div>
-											<div class="text-sm" style="color: var(--text-muted);">per account</div>
+											<div class="text-xs sm:text-sm" style="color: var(--text-muted);">per account</div>
 										</div>
 									</div>
 
