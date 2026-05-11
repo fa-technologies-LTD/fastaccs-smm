@@ -627,14 +627,6 @@
 									</div>
 								{/if}
 
-								{#if tierStatus}
-									<div class="card-stock-chip">
-										<span class="card-border-chip card-border-chip--warning card-border-chip--gloss">
-											{tierStatus.status}
-										</span>
-									</div>
-								{/if}
-
 								<!-- Tier Header -->
 								<div class="flex flex-1 flex-col p-6">
 									<div class="mb-4 flex items-center justify-between">
@@ -667,8 +659,13 @@
 									{/if}
 
 									<!-- Availability -->
-									<div class="mb-4 text-sm" style="color: var(--text-muted);">
-										<span class="font-medium">{tier.visible_available}</span> accounts available
+									<div class="mb-4 flex flex-wrap items-center gap-2 text-sm" style="color: var(--text-muted);">
+										<span><span class="font-medium">{tier.visible_available}</span> accounts available</span>
+										{#if tierStatus}
+											<span class="card-border-chip card-border-chip--warning card-border-chip--gloss">
+												{tierStatus.status}
+											</span>
+										{/if}
 										{#if tier.reservations_active > 0}
 											<span class="text-yellow-600">
 												• {tier.reservations_active} reserved
@@ -964,8 +961,7 @@
 <Footer />
 
 <style>
-	.card-merch-tags,
-	.card-stock-chip {
+	.card-merch-tags {
 		position: absolute;
 		top: 0;
 		z-index: 20;
@@ -977,11 +973,6 @@
 
 	.card-merch-tags {
 		left: 0.9rem;
-		transform: translateY(-50%);
-	}
-
-	.card-stock-chip {
-		right: 0.9rem;
 		transform: translateY(-50%);
 	}
 

@@ -359,15 +359,6 @@
 		<section
 			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} relative pt-8 pb-4 text-white  sm:py-8`}
 		>
-			<!-- Stock Status Badge - Border-seated -->
-			{#if tierStatus}
-				<div class="absolute top-0 right-4 z-10">
-					<span class="tag-chip tag-chip--border-seat rounded-full border border-yellow-300/30 bg-yellow-500/20 px-2 py-1 text-xs font-medium text-yellow-100">
-						{tierStatus.status}
-					</span>
-				</div>
-			{/if}
-
 			<div class="mx-auto max-w-6xl px-4">
 				<div class="flex items-center justify-between">
 					<div class="flex items-center gap-6">
@@ -408,12 +399,19 @@
 									{formatFollowers((data.tier.metadata?.follower_count as number) || 0)} followers
 								{/if}
 							</p>
-							<p class="mt-2 text-base opacity-75">
-								{data.tier.visible_available} accounts available
-								{#if data.tier.reservations_active > 0}
-									• {data.tier.reservations_active} reserved
+							<div class="mt-2 flex flex-wrap items-center gap-2 text-base opacity-75">
+								<span>{data.tier.visible_available} accounts available</span>
+								{#if tierStatus}
+									<span
+										class="tag-chip rounded-full border border-yellow-300/30 bg-yellow-500/20 px-2 py-0.5 text-[11px] font-semibold text-yellow-100"
+									>
+										{tierStatus.status}
+									</span>
 								{/if}
-							</p>
+								{#if data.tier.reservations_active > 0}
+									<span>• {data.tier.reservations_active} reserved</span>
+								{/if}
+							</div>
 						</div>
 					</div>
 
