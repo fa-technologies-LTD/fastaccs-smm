@@ -268,23 +268,14 @@
 		}
 	}
 
-	// Get tier status
-	function getTierStatus(available: number): { status: string; color: string; bgColor: string } {
-		if (available === 0) {
-			return { status: 'Sold Out', color: 'text-red-600', bgColor: 'bg-red-50 border-red-200' };
-		} else if (available <= lowStockThreshold) {
+	// Show stock badge only when inventory is low (no "In stock" chip).
+	function getTierStatus(available: number): { status: 'Few Left' } | null {
+		if (available > 0 && available <= lowStockThreshold) {
 			return {
-				status: 'Low Stock',
-				color: 'text-yellow-600',
-				bgColor: 'bg-yellow-50 border-yellow-200'
-			};
-		} else {
-			return {
-				status: 'In Stock',
-				color: 'text-green-600',
-				bgColor: 'bg-green-50 border-green-200'
+				status: 'Few Left'
 			};
 		}
+		return null;
 	}
 
 	function openSamplePreview(index: number): void {
@@ -369,13 +360,13 @@
 			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} relative pt-8 pb-4 text-white  sm:py-8`}
 		>
 			<!-- Stock Status Badge - Border-seated -->
-			<div class="absolute top-0 right-4">
-				<span
-					class={`tag-chip tag-chip--border-seat rounded-full px-2 py-1 text-xs font-medium ${tierStatus.status === 'In Stock' ? 'border border-green-300/30 bg-green-500/20 text-green-100' : tierStatus.status === 'Low Stock' ? 'border border-yellow-300/30 bg-yellow-500/20 text-yellow-100' : 'border border-red-300/30 bg-red-500/20 text-red-100'}`}
-				>
-					{tierStatus.status}
-				</span>
-			</div>
+			{#if tierStatus}
+				<div class="absolute top-0 right-4 z-10">
+					<span class="tag-chip tag-chip--border-seat rounded-full border border-yellow-300/30 bg-yellow-500/20 px-2 py-1 text-xs font-medium text-yellow-100">
+						{tierStatus.status}
+					</span>
+				</div>
+			{/if}
 
 			<div class="mx-auto max-w-6xl px-4">
 				<div class="flex items-center justify-between">

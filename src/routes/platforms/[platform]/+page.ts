@@ -63,7 +63,12 @@ export const load: PageLoad = async ({ params, fetch }): Promise<PageData> => {
 
 		if (tiersResponse.ok) {
 			const tiersResult = await tiersResponse.json();
-			lowStockThreshold = Math.max(1, Number(tiersResult.lowStockThreshold || 10));
+			const parsedLowStockThreshold = Number(
+				tiersResult?.lowStockThreshold ?? tiersResult?.meta?.lowStockThreshold ?? 10
+			);
+			if (Number.isFinite(parsedLowStockThreshold)) {
+				lowStockThreshold = Math.max(1, parsedLowStockThreshold);
+			}
 			// Convert tier data to TierInventory format
 			tiers = (tiersResult.data || []).map(
 				(tier: {

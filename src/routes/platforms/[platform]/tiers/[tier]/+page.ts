@@ -23,8 +23,14 @@ export const load: PageLoad = async ({ params, fetch }) => {
 			throw error(404, 'Tiers not found');
 		}
 		const tiersResult = await tiersResponse.json();
-		const lowStockThreshold = Math.max(1, Number(tiersResult.lowStockThreshold || 10));
 		const tiers = tiersResult.data || [];
+		let lowStockThreshold = 10;
+		const parsedLowStockThreshold = Number(
+			tiersResult?.lowStockThreshold ?? tiersResult?.meta?.lowStockThreshold ?? 10
+		);
+		if (Number.isFinite(parsedLowStockThreshold)) {
+			lowStockThreshold = Math.max(1, parsedLowStockThreshold);
+		}
 
 		// Find the specific tier by slug
 		const tierData = tiers.find((t: { slug: string }) => t.slug === tier);

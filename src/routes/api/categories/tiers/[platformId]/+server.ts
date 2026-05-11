@@ -119,10 +119,14 @@ export async function GET({ params }) {
 			return left.name.localeCompare(right.name, undefined, { sensitivity: 'base' });
 		});
 
+		const normalizedLowStockThreshold = Math.max(1, Number(lowStockThreshold || 10));
 		return json({
 			data: sortedTiers,
-			lowStockThreshold: Math.max(1, lowStockThreshold),
-			error: null
+			lowStockThreshold: normalizedLowStockThreshold,
+			error: null,
+			meta: {
+				lowStockThreshold: normalizedLowStockThreshold
+			}
 		});
 	} catch (error) {
 		console.error('Failed to fetch tiers:', error);
