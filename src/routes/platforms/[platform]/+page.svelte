@@ -94,22 +94,15 @@
 		return isPlatformImageUrl(metadata.icon) && !platformHeaderIconFailed;
 	}
 
-	// Get tier status based on availability
-	function getTierStatus(available: number): { status: string; color: string; bgColor: string } {
-		if (available === 0) {
-			return { status: 'Sold Out', color: 'text-red-600', bgColor: 'bg-red-50 border-red-200' };
-		} else if (available <= 10) {
+	// Show stock badge only when inventory is low (no "In stock" chip).
+	function getTierStatus(available: number): { status: 'Few Left' } | null {
+		const lowStockThreshold = Math.max(Number(data.lowStockThreshold || 10), 0);
+		if (available > 0 && available <= lowStockThreshold) {
 			return {
-				status: 'Few Left',
-				color: 'text-yellow-600',
-				bgColor: 'bg-yellow-50 border-yellow-200'
+				status: 'Few Left'
 			};
 		}
-		return {
-			status: 'In Stock',
-			color: 'text-green-600',
-			bgColor: 'bg-green-50 border-green-200'
-		};
+		return null;
 	}
 
 	// Format feature names (e.g., "viral_ready" -> "Viral Ready")
@@ -611,49 +604,39 @@
 							{@const tierStatus = getTierStatus(tier.visible_available)}
 							{@const tierFeatures = getTierFeatures(tier.metadata)}
 							<div
-								class="group relative flex flex-col overflow-hidden rounded-xl shadow transition-all duration-300 {tier.visible_available >
+								class="group relative flex flex-col overflow-visible rounded-xl shadow transition-all duration-300 {tier.visible_available >
 								0
 									? 'hover:-translate-y-1 hover:shadow-md'
 									: 'opacity-75'}"
 								style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 							>
-								<!-- Stock Status Badge -->
-								<div class="absolute top-32 right-3 z-10">
-									<span
-										class="rounded-full px-2 py-1 text-xs font-medium"
-										style={tierStatus.status === 'In Stock'
-											? 'background: rgba(34, 197, 94, 0.2); color: rgb(34, 197, 94); border: 1px solid rgba(34, 197, 94, 0.3);'
-											: tierStatus.status === 'Few Left'
-												? 'background: rgba(234, 179, 8, 0.2); color: rgb(234, 179, 8); border: 1px solid rgba(234, 179, 8, 0.3);'
-												: 'background: rgba(239, 68, 68, 0.2); color: rgb(239, 68, 68); border: 1px solid rgba(239, 68, 68, 0.3);'}
-									>
-										{tierStatus.status}
-									</span>
-								</div>
+								{#if tier.is_pinned || tier.is_featured}
+									<div class="card-merch-tags">
+										{#if tier.is_pinned}
+											<span
+												class="card-border-chip card-border-chip--warning card-border-chip--gloss"
+											>
+												Pinned{tier.pin_priority ? ` #${tier.pin_priority}` : ''}
+											</span>
+										{/if}
+										{#if tier.is_featured}
+											<span class="card-border-chip card-border-chip--featured card-border-chip--gloss">
+												{getFeaturedBadgeLabel(tier)}
+											</span>
+										{/if}
+									</div>
+								{/if}
+
+								{#if tierStatus}
+									<div class="card-stock-chip">
+										<span class="card-border-chip card-border-chip--warning card-border-chip--gloss">
+											{tierStatus.status}
+										</span>
+									</div>
+								{/if}
 
 								<!-- Tier Header -->
 								<div class="flex flex-1 flex-col p-6">
-									{#if tier.is_pinned || tier.is_featured}
-										<div class="mb-3 flex flex-wrap gap-1.5">
-											{#if tier.is_pinned}
-												<span
-													class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
-													style="background: rgba(251, 191, 36, 0.16); color: rgb(217, 119, 6); border: 1px solid rgba(251, 191, 36, 0.28);"
-												>
-													Pinned{tier.pin_priority ? ` #${tier.pin_priority}` : ''}
-												</span>
-											{/if}
-											{#if tier.is_featured}
-												<span
-													class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
-													style="background: rgba(34, 197, 94, 0.14); color: rgb(22, 163, 74); border: 1px solid rgba(34, 197, 94, 0.3);"
-												>
-													{getFeaturedBadgeLabel(tier)}
-												</span>
-											{/if}
-										</div>
-									{/if}
-
 									<div class="mb-4 flex items-center justify-between">
 										<div>
 											<h3 class="text-xl font-bold" style="color: var(--text);">
@@ -932,7 +915,7 @@
 						</div>
 					</div>
 
-					{#if quickAddRemaining <= 10 && quickAddRemaining > 0}
+					{#if quickAddRemaining <= Math.max(Number(data.lowStockThreshold || 10), 0) && quickAddRemaining > 0}
 						<div
 							class="mb-4 rounded-lg border border-yellow-500/30 px-3 py-2 text-sm text-yellow-500"
 							style="background: var(--bg-elev-1);"
@@ -979,3 +962,81 @@
 </main>
 
 <Footer />
+
+<style>
+	.card-merch-tags,
+	.card-stock-chip {
+		position: absolute;
+		top: 0;
+		z-index: 20;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		pointer-events: none;
+	}
+
+	.card-merch-tags {
+		left: 0.9rem;
+		transform: translateY(-50%);
+	}
+
+	.card-stock-chip {
+		right: 0.9rem;
+		transform: translateY(-50%);
+	}
+
+	.card-border-chip {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		overflow: hidden;
+		white-space: nowrap;
+		border-radius: 9999px;
+		border: 1px solid rgba(251, 191, 36, 0.35);
+		background: rgba(251, 191, 36, 0.18);
+		color: rgb(251, 191, 36);
+		padding: 0.3rem 0.7rem;
+		font-size: 0.68rem;
+		font-weight: 700;
+		letter-spacing: 0.01em;
+	}
+
+	.card-border-chip--featured {
+		border-color: rgba(34, 197, 94, 0.35);
+		background: rgba(34, 197, 94, 0.18);
+		color: rgb(134, 239, 172);
+	}
+
+	.card-border-chip--warning {
+		border-color: rgba(251, 191, 36, 0.35);
+		background: rgba(251, 191, 36, 0.18);
+		color: rgb(251, 191, 36);
+	}
+
+	.card-border-chip--gloss::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(
+			120deg,
+			rgba(255, 255, 255, 0) 20%,
+			rgba(255, 255, 255, 0.35) 45%,
+			rgba(255, 255, 255, 0) 70%
+		);
+		transform: translateX(-130%);
+		animation: chipGlossSweep 4.2s ease-in-out infinite;
+	}
+
+	@keyframes chipGlossSweep {
+		0%,
+		18% {
+			transform: translateX(-130%);
+		}
+		45% {
+			transform: translateX(130%);
+		}
+		100% {
+			transform: translateX(130%);
+		}
+	}
+</style>

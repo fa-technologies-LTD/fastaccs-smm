@@ -24,6 +24,11 @@ export const load: PageLoad = async ({ params, fetch }) => {
 		}
 		const tiersResult = await tiersResponse.json();
 		const tiers = tiersResult.data || [];
+		let lowStockThreshold = 10;
+		const parsedLowStockThreshold = Number(tiersResult?.meta?.lowStockThreshold);
+		if (Number.isFinite(parsedLowStockThreshold) && parsedLowStockThreshold >= 0) {
+			lowStockThreshold = parsedLowStockThreshold;
+		}
 
 		// Find the specific tier by slug
 		const tierData = tiers.find((t: { slug: string }) => t.slug === tier);
@@ -62,7 +67,8 @@ export const load: PageLoad = async ({ params, fetch }) => {
 		return {
 			platform: platformData,
 			tier: tierInventoryData,
-			tierCategory: tierData // Pass the actual Category data for cart
+			tierCategory: tierData, // Pass the actual Category data for cart
+			lowStockThreshold
 		};
 	} catch (err) {
 		console.error('Error loading tier data:', err);

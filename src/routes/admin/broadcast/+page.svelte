@@ -113,6 +113,11 @@
 		selectedPlatformIds = [...selectedPlatformIds, platformId];
 	}
 
+	function getSelectedAudienceOption(): AudienceOption {
+		const selected = audienceOptions.find((option) => option.value === audience);
+		return selected || audienceOptions[0];
+	}
+
 	function formatDate(value: string): string {
 		const date = new Date(value);
 		if (Number.isNaN(date.getTime())) return value;
@@ -447,29 +452,28 @@
 
 			<div>
 				<h2 class="mb-2 text-sm font-semibold" style="color: var(--text);">Audience</h2>
-				<div class="space-y-2">
-					{#each audienceOptions as option}
-						<label
-							class="flex cursor-pointer items-start gap-3 rounded-lg p-3"
-							style={`border: 1px solid var(--border); background: ${audience === option.value ? 'var(--bg)' : 'transparent'};`}
-						>
-							<input
-								type="radio"
-								name="broadcast-audience"
-								checked={audience === option.value}
-								onchange={() => {
-									audience = option.value;
-									if (option.value !== 'specific_platform_buyers') {
-										selectedPlatformIds = [];
-									}
-								}}
-							/>
-							<span>
-								<span class="block text-sm font-medium" style="color: var(--text);">{option.label}</span>
-								<span class="block text-xs" style="color: var(--text-muted);">{option.description}</span>
-							</span>
-						</label>
-					{/each}
+				<div class="space-y-2 rounded-lg p-3" style="border: 1px solid var(--border); background: var(--bg);">
+					<label for="broadcast-audience" class="block text-xs font-semibold uppercase tracking-wide" style="color: var(--text-dim);">
+						Select audience
+					</label>
+					<select
+						id="broadcast-audience"
+						bind:value={audience}
+						onchange={() => {
+							if (audience !== 'specific_platform_buyers') {
+								selectedPlatformIds = [];
+							}
+						}}
+						class="w-full rounded-lg px-3 py-2.5 text-sm font-medium"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
+					>
+						{#each audienceOptions as option}
+							<option value={option.value}>{option.label}</option>
+						{/each}
+					</select>
+					<p class="text-xs" style="color: var(--text-muted);">
+						{getSelectedAudienceOption().description}
+					</p>
 				</div>
 			</div>
 
