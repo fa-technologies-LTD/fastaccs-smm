@@ -16,7 +16,7 @@
 		Eye,
 		Copy,
 		DollarSign
-	} from '@lucide/svelte';
+	} from '$lib/icons';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 

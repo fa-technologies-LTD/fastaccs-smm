@@ -10,7 +10,7 @@
 		Package,
 		AlertCircle,
 		Target
-	} from '@lucide/svelte';
+	} from '$lib/icons';
 	import { createCategory, updateCategory, deleteCategory } from '$lib/services/categories';
 	import { addToast } from '$lib/stores/toasts';
 	import type { CategoryMetadata, CategoryInsert, CategoryUpdate } from '$lib/services/categories';

@@ -2,6 +2,7 @@
 import { redirect } from '@sveltejs/kit';
 import { generateState, generateCodeVerifier } from 'arctic';
 import { getGoogleClient } from '$lib/auth/oauth';
+import { sanitizeInternalRedirectPath } from '$lib/auth/redirect';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ cookies, url }) => {
@@ -10,7 +11,7 @@ export const GET: RequestHandler = async ({ cookies, url }) => {
 	const google = getGoogleClient(url.origin);
 
 	// Get redirect URL from query params, default to dashboard
-	const redirectTo = url.searchParams.get('redirectTo') || '/dashboard';
+	const redirectTo = sanitizeInternalRedirectPath(url.searchParams.get('redirectTo'));
 
 	// Create Google OAuth URL with required scopes
 	const authUrl = google.createAuthorizationURL(state, codeVerifier, [

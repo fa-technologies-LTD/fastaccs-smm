@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
-	import { Archive, AlertTriangle } from '@lucide/svelte';
+	import { Archive, AlertTriangle } from '$lib/icons';
 	import type { Category } from '$lib/services/categories';
 
 	interface TierOption {

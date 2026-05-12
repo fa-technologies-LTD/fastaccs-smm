@@ -13,7 +13,7 @@
 		Settings,
 		ExternalLink,
 		Wallet
-	} from '@lucide/svelte';
+	} from '$lib/icons';
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import { formatPrice, formatDate } from '$lib/helpers/utils';

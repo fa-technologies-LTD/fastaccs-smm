@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { CheckCircle, RefreshCw, Clock } from '@lucide/svelte';
+	import { CheckCircle, RefreshCw, Clock } from '$lib/icons';
 	import { showSuccess, showError } from '$lib/stores/toasts';
 	import { goto } from '$app/navigation';
 	import { cart } from '$lib/stores/cart.svelte';

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Share2, Copy, DollarSign, CheckCircle } from '@lucide/svelte';
+	import { Share2, Copy, DollarSign, CheckCircle } from '$lib/icons';
 	import { env as publicEnv } from '$env/dynamic/public';
 	import { addToast } from '$lib/stores/toasts';
 	import { copyToClipboard } from '$lib/helpers/utils';

@@ -1,5 +1,14 @@
 <script>
-	import { Mail, MessageCircle, Facebook, Instagram, Music2 } from '@lucide/svelte';
+	import {
+		Mail,
+		MessageCircle,
+		Facebook,
+		Instagram,
+		Music2,
+		MapPin,
+		Zap,
+		ShieldCheck
+	} from '$lib/icons';
 	import { addToast } from '$lib/stores/toasts';
 	import footerLogo from '$lib/assets/footer-logo.png';
 </script>
@@ -77,10 +86,13 @@
 				</h3>
 				<ul class="space-y-2">
 					<li>
-						<a href="/support" data-sveltekit-preload-data="hover" class="footer-link">Help Center</a>
+						<a href="/support" data-sveltekit-preload-data="hover" class="footer-link"
+							>Help Center</a
+						>
 					</li>
 					<li>
-						<a href="/support#contact" data-sveltekit-preload-data="hover" class="footer-link">Contact Us</a
+						<a href="/support#contact" data-sveltekit-preload-data="hover" class="footer-link"
+							>Contact Us</a
 						>
 					</li>
 					<li>
@@ -180,15 +192,27 @@
 					© 2026 FA Technologies LTD. All rights reserved.
 				</p>
 				<div class="mt-4 flex space-x-6 md:mt-0">
-					<span class="text-sm" style="color: var(--text-dim); font-family: var(--font-body);"
-						>🇳🇬 Made in Nigeria</span
+					<span
+						class="inline-flex items-center gap-1 text-sm"
+						style="color: var(--text-dim); font-family: var(--font-body);"
 					>
-					<span class="text-sm" style="color: var(--text-dim); font-family: var(--font-body);"
-						>⚡ Instant Delivery</span
+						<MapPin class="h-4 w-4" />
+						Made in Nigeria
+					</span>
+					<span
+						class="inline-flex items-center gap-1 text-sm"
+						style="color: var(--text-dim); font-family: var(--font-body);"
 					>
-					<span class="text-sm" style="color: var(--text-dim); font-family: var(--font-body);"
-						>🔒 100% Secure</span
+						<Zap class="h-4 w-4" />
+						Instant Delivery
+					</span>
+					<span
+						class="inline-flex items-center gap-1 text-sm"
+						style="color: var(--text-dim); font-family: var(--font-body);"
 					>
+						<ShieldCheck class="h-4 w-4" />
+						100% Secure
+					</span>
 				</div>
 			</div>
 		</div>

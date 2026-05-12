@@ -12,8 +12,9 @@
 		Minus,
 		Plus,
 		BellRing,
-		CheckCircle
-	} from '@lucide/svelte';
+		CheckCircle,
+		AlertTriangle
+	} from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
@@ -74,6 +75,31 @@
 
 	function getTierRoute(tierSlug: string): string {
 		return `/platforms/${data.platform?.slug}/tiers/${tierSlug}`;
+	}
+
+	function isTierCardActionTarget(target: EventTarget | null): boolean {
+		if (!(target instanceof Element)) return false;
+		return Boolean(
+			target.closest(
+				'a, button, input, select, textarea, [data-card-action], [role="button"], [role="link"]'
+			)
+		);
+	}
+
+	function openTierSamples(tier: TierCard): void {
+		void goto(getTierRoute(tier.tier_slug));
+	}
+
+	function handleTierCardClick(event: MouseEvent, tier: TierCard): void {
+		if (isTierCardActionTarget(event.target)) return;
+		openTierSamples(tier);
+	}
+
+	function handleTierCardKeydown(event: KeyboardEvent, tier: TierCard): void {
+		if (event.key !== 'Enter' && event.key !== ' ') return;
+		if (isTierCardActionTarget(event.target)) return;
+		event.preventDefault();
+		openTierSamples(tier);
 	}
 
 	function goBack() {
@@ -604,11 +630,16 @@
 							{@const tierStatus = getTierStatus(tier.visible_available)}
 							{@const tierFeatures = getTierFeatures(tier.metadata)}
 							<div
-								class="group relative flex flex-col overflow-visible rounded-xl shadow transition-all duration-300 {tier.visible_available >
+								class="group relative flex cursor-pointer flex-col overflow-visible rounded-xl shadow transition-all duration-300 {tier.visible_available >
 								0
 									? 'hover:-translate-y-1 hover:shadow-md'
 									: 'opacity-75'}"
 								style="background: var(--bg-elev-2); border: 1px solid var(--border);"
+								role="link"
+								tabindex="0"
+								aria-label={`View samples for ${tier.tier_name}`}
+								onclick={(event) => handleTierCardClick(event, tier)}
+								onkeydown={(event) => handleTierCardKeydown(event, tier)}
 							>
 								{#if tier.is_pinned || tier.is_featured}
 									<div class="card-merch-tags">
@@ -620,7 +651,9 @@
 											</span>
 										{/if}
 										{#if tier.is_featured}
-											<span class="card-border-chip card-border-chip--featured card-border-chip--gloss">
+											<span
+												class="card-border-chip card-border-chip--featured card-border-chip--gloss"
+											>
 												{getFeaturedBadgeLabel(tier)}
 											</span>
 										{/if}
@@ -629,7 +662,9 @@
 
 								<!-- Tier Header -->
 								<div class="flex flex-1 flex-col p-4 sm:p-6">
-									<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+									<div
+										class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+									>
 										<div class="min-w-0">
 											<h3 class="text-lg font-bold sm:text-xl" style="color: var(--text);">
 												{tier.tier_name}
@@ -645,7 +680,9 @@
 											>
 												{formatPrice(tier.price)}
 											</div>
-											<div class="text-xs sm:text-sm" style="color: var(--text-muted);">per account</div>
+											<div class="text-xs sm:text-sm" style="color: var(--text-muted);">
+												per account
+											</div>
 										</div>
 									</div>
 
@@ -659,10 +696,17 @@
 									{/if}
 
 									<!-- Availability -->
-									<div class="mb-4 flex flex-wrap items-center gap-2 text-sm" style="color: var(--text-muted);">
-										<span><span class="font-medium">{tier.visible_available}</span> accounts available</span>
+									<div
+										class="mb-4 flex flex-wrap items-center gap-2 text-sm"
+										style="color: var(--text-muted);"
+									>
+										<span
+											><span class="font-medium">{tier.visible_available}</span> accounts available</span
+										>
 										{#if tierStatus}
-											<span class="card-border-chip card-border-chip--warning card-border-chip--gloss">
+											<span
+												class="card-border-chip card-border-chip--warning card-border-chip--gloss"
+											>
 												{tierStatus.status}
 											</span>
 										{/if}
@@ -733,6 +777,7 @@
 											onclick={() => subscribeToRestock(tier)}
 											disabled={isTierRestockLoading(tier.category_id) ||
 												isTierRestockSubscribed(tier.category_id)}
+											data-card-action
 											aria-label={`Notify me for ${tier.tier_name}`}
 											class="flex w-full items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:active:scale-100"
 											style="background: var(--btn-primary-gradient); color: #04140C;"
@@ -751,8 +796,9 @@
 										<button
 											type="button"
 											onclick={() => openQuickAddModal(tier)}
+											data-card-action
 											aria-label={`Quick add ${tier.tier_name}`}
-											class="flex w-full items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+											class="flex w-full items-center justify-center gap-2 rounded-lg border border-transparent py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-[#7CFFC0] focus-visible:ring-offset-2 focus-visible:outline-none active:scale-[0.99] active:border-[#7CFFC0] active:shadow-[0_0_0_2px_rgba(52,211,153,0.45)]"
 											style="background: var(--btn-primary-gradient); color: #04140C;"
 										>
 											<ShoppingCart class="h-4 w-4" />
@@ -762,11 +808,12 @@
 
 									<a
 										href={getTierRoute(tier.tier_slug)}
+										data-card-action
 										class="inline-flex w-full items-center justify-center gap-1 rounded-lg py-3 text-center text-sm font-semibold transition-colors hover:opacity-90"
 										style="border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text);"
-										aria-label={`See details for ${tier.tier_name}`}
+										aria-label={`View samples for ${tier.tier_name}`}
 									>
-										See Details
+										View Samples
 										<ChevronRight class="h-4 w-4" />
 									</a>
 								</div>
@@ -917,7 +964,10 @@
 							class="mb-4 rounded-lg border border-yellow-500/30 px-3 py-2 text-sm text-yellow-500"
 							style="background: var(--bg-elev-1);"
 						>
-							⚠️ Only {quickAddRemaining} accounts left in stock!
+							<div class="flex items-center gap-2">
+								<AlertTriangle class="h-4 w-4" />
+								<span>Only {quickAddRemaining} accounts left in stock!</span>
+							</div>
 						</div>
 					{/if}
 

@@ -19,7 +19,7 @@
 		Type,
 		Mail,
 		Tag
-	} from '@lucide/svelte';
+	} from '$lib/icons';
 
 	import logo from '$lib/assets/logo.png';
 

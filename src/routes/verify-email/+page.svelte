@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import { ArrowLeft, RefreshCcw, ShieldCheck, LogOut } from '@lucide/svelte';
+	import { ArrowLeft, RefreshCcw, ShieldCheck, LogOut } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { showError, showSuccess, showWarning } from '$lib/stores/toasts';

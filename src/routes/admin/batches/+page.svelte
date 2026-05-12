@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 
-	import { Upload, FileText, AlertCircle, CheckCircle, Clock, X, Eye } from '@lucide/svelte';
+	import { Upload, FileText, AlertCircle, CheckCircle, Clock, X, Eye } from '$lib/icons';
 	import type { BatchMetadata } from '$lib/services/batches';
 	import { addToast } from '$lib/stores/toasts';
 	import { fade, fly } from 'svelte/transition';

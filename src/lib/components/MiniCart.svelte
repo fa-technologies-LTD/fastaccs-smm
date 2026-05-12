@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { cart } from '$lib/stores/cart.svelte';
-	import { ShoppingCart, X, Trash2, ArrowRight, ShoppingBag, Loader } from '@lucide/svelte';
+	import { ShoppingCart, X, Trash2, ArrowRight, ShoppingBag, Loader } from '$lib/icons';
 	import { goto } from '$app/navigation';
 	import type { CartItemWithTier } from '$lib/types/cart';
 	import { formatPrice } from '$lib/helpers/utils';

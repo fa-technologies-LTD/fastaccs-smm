@@ -8,7 +8,7 @@
 		Zap,
 		HeartHandshake,
 		Phone
-	} from '@lucide/svelte';
+	} from '$lib/icons';
 </script>
 
 <section style="background: var(--bg-elev-1); padding: var(--space-4xl) var(--space-md);">

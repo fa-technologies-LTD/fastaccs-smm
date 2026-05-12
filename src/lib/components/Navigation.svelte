@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Menu, X, ShoppingCart } from '@lucide/svelte';
+	import { Menu, X, ShoppingCart } from '$lib/icons';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';

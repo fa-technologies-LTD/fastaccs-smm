@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { Check, X, Loader2, Clock3 } from '@lucide/svelte';
+	import { Check, X, Loader2, Clock3 } from '$lib/icons';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import {

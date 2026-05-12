@@ -5,6 +5,7 @@ import { decodeIdToken } from 'arctic';
 import { createSession, generateSessionToken, setSessionTokenCookie } from '$lib/auth/session';
 import { getUserFromGoogleId, createUserFromGoogle, updateUserFromGoogle } from '$lib/auth/user';
 import { isAdminEmail } from '$lib/auth/admin';
+import { sanitizeInternalRedirectPath } from '$lib/auth/redirect';
 import type { RequestHandler } from './$types';
 import type { OAuth2Tokens } from 'arctic';
 
@@ -15,7 +16,7 @@ export const GET: RequestHandler = async (event) => {
 	const state = url.searchParams.get('state');
 	const storedState = cookies.get('google_oauth_state');
 	const codeVerifier = cookies.get('google_code_verifier');
-	const redirectTo = cookies.get('auth_redirect_to') || '/dashboard';
+	const redirectTo = sanitizeInternalRedirectPath(cookies.get('auth_redirect_to'));
 
 	// Validate required parameters
 	if (!code || !state || !storedState || !codeVerifier) {
@@ -135,7 +136,6 @@ export const GET: RequestHandler = async (event) => {
 			);
 		}
 
-		// Return more helpful error message
-		throw error(500, `Authentication failed: ${errorMessage}`);
+		throw error(500, 'Authentication failed. Please try again.');
 	}
 };

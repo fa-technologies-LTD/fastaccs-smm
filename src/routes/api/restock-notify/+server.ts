@@ -2,6 +2,12 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { Prisma } from '@prisma/client';
+import {
+	RESTOCK_NOTIFY_RATE_LIMITS,
+	checkRestockNotifyRateLimit,
+	getRequestClientIp,
+	recordRestockNotifyRateLimitAttempt
+} from '$lib/auth/rate-limit';
 
 interface NotifyBody {
 	email?: unknown;
@@ -89,10 +95,71 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const platformSlug =
 			typeof body.platformSlug === 'string' ? body.platformSlug.trim().toLowerCase() : '';
 		const email = normalizeEmail(body.email) || normalizeEmail(locals.user?.email);
+		const clientIp = getRequestClientIp(request);
+		const ipKey = `ip:${clientIp}`;
+
+		const ipLimit = await checkRestockNotifyRateLimit({
+			scope: 'restock_notify_ip',
+			key: ipKey,
+			limit: RESTOCK_NOTIFY_RATE_LIMITS.ip.limit,
+			windowMs: RESTOCK_NOTIFY_RATE_LIMITS.ip.windowMs
+		});
+		if (!ipLimit.allowed) {
+			return json(
+				{
+					success: false,
+					error: `Too many notify requests. Try again in ${ipLimit.retryAfterSeconds}s.`
+				},
+				{ status: 429, headers: { 'retry-after': String(ipLimit.retryAfterSeconds) } }
+			);
+		}
 
 		if (!isValidEmail(email)) {
-			return json({ success: false, error: 'Please provide a valid email address.' }, { status: 400 });
+			await recordRestockNotifyRateLimitAttempt({
+				scope: 'restock_notify_ip',
+				key: ipKey,
+				context: 'invalid_email'
+			});
+			return json(
+				{ success: false, error: 'Please provide a valid email address.' },
+				{ status: 400 }
+			);
 		}
+
+		const emailKey = `email:${email}`;
+		const emailLimit = await checkRestockNotifyRateLimit({
+			scope: 'restock_notify_email',
+			key: emailKey,
+			limit: RESTOCK_NOTIFY_RATE_LIMITS.email.limit,
+			windowMs: RESTOCK_NOTIFY_RATE_LIMITS.email.windowMs
+		});
+		if (!emailLimit.allowed) {
+			await recordRestockNotifyRateLimitAttempt({
+				scope: 'restock_notify_ip',
+				key: ipKey,
+				context: 'email_limit_block'
+			});
+			return json(
+				{
+					success: false,
+					error: `Too many notify requests for this email. Try again in ${emailLimit.retryAfterSeconds}s.`
+				},
+				{ status: 429, headers: { 'retry-after': String(emailLimit.retryAfterSeconds) } }
+			);
+		}
+
+		await Promise.all([
+			recordRestockNotifyRateLimitAttempt({
+				scope: 'restock_notify_ip',
+				key: ipKey,
+				context: `${topic || 'platform'}:${platformSlug || 'global'}`
+			}),
+			recordRestockNotifyRateLimitAttempt({
+				scope: 'restock_notify_email',
+				key: emailKey,
+				context: `${topic || 'platform'}:${platformSlug || 'global'}`
+			})
+		]);
 
 		if (topic === 'growth_services') {
 			const key = 'growth_services.notify_subscribers';
@@ -154,7 +221,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		const metadataValue =
-			platform.metadata && typeof platform.metadata === 'object' && !Array.isArray(platform.metadata)
+			platform.metadata &&
+			typeof platform.metadata === 'object' &&
+			!Array.isArray(platform.metadata)
 				? (platform.metadata as Record<string, unknown>)
 				: {};
 

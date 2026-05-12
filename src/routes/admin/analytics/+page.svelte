@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { formatPrice } from '$lib/helpers/utils';
 	import type { PageData } from './$types';
-	import { ArrowDown, ArrowUp } from '@lucide/svelte';
+	import { ArrowDown, ArrowUp } from '$lib/icons';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
 
 	let { data }: { data: PageData } = $props();

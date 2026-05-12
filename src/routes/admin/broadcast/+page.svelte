@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Mail, Send, Users, Eye, Loader2, RefreshCcw, CheckCircle2, AlertTriangle } from '@lucide/svelte';
+	import { Mail, Send, Users, Eye, Loader2, RefreshCcw, CheckCircle2, AlertTriangle } from '$lib/icons';
 	import { showError, showSuccess, showWarning } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 

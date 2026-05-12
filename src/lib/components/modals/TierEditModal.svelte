@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
-	import { Plus, Trash2, Target } from '@lucide/svelte';
+	import { Plus, Trash2, Target } from '$lib/icons';
 	import TierSampleScreenshotFields from '$lib/components/modals/TierSampleScreenshotFields.svelte';
 
 	interface Props {

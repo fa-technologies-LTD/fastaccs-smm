@@ -1,5 +1,5 @@
 <script>
-	import { Activity, ArrowUpRight } from "@lucide/svelte";
+	import { Activity, ArrowUpRight } from "$lib/icons";
 
 </script>
 <a

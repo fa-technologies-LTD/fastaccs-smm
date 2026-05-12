@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Plus, Minus, TrendingUp, Clock } from '@lucide/svelte';
+	import { Plus, Minus, TrendingUp, Clock, Instagram, Music2, Youtube } from '$lib/icons';
 
 	let services = [
 		{
@@ -7,7 +7,7 @@
 			title: 'Instagram Followers',
 			description: 'High-quality followers from real accounts',
 			platform: 'Instagram',
-			icon: '📷',
+			icon: Instagram,
 			pricing: [
 				{ amount: 100, price: 50, popular: false },
 				{ amount: 500, price: 200, popular: true },
@@ -23,7 +23,7 @@
 			title: 'TikTok Views',
 			description: 'Boost your video reach and engagement',
 			platform: 'TikTok',
-			icon: '🎵',
+			icon: Music2,
 			pricing: [
 				{ amount: 1000, price: 30, popular: false },
 				{ amount: 10000, price: 250, popular: true },
@@ -39,7 +39,7 @@
 			title: 'YouTube Subscribers',
 			description: 'Grow your channel with real subscribers',
 			platform: 'YouTube',
-			icon: '▶️',
+			icon: Youtube,
 			pricing: [
 				{ amount: 50, price: 100, popular: false },
 				{ amount: 250, price: 450, popular: true },
@@ -88,6 +88,7 @@
 			<h3 class="mb-4 text-xl font-bold" style="color: var(--text);">Select Service</h3>
 			<div class="space-y-3">
 				{#each services as service}
+					{@const ServiceIcon = service.icon}
 					<button
 						onclick={() => selectService(service)}
 						class="w-full rounded-lg p-4 text-left transition-all"
@@ -96,7 +97,12 @@
 							: 'border: 2px solid var(--border);'}
 					>
 						<div class="mb-2 flex items-center">
-							<span class="mr-3 text-2xl">{service.icon}</span>
+							<span
+								class="mr-3 inline-flex h-10 w-10 items-center justify-center rounded-full"
+								style="background: var(--surface); color: var(--primary);"
+							>
+								<ServiceIcon class="h-5 w-5" />
+							</span>
 							<div>
 								<div class="font-semibold" style="color: var(--text);">{service.title}</div>
 								<div class="text-sm" style="color: var(--text-muted);">{service.platform}</div>

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
-	import { AlertCircle } from '@lucide/svelte';
+	import { AlertCircle } from '$lib/icons';
 	import type { Category } from '$lib/services/categories';
 
 	interface Props {

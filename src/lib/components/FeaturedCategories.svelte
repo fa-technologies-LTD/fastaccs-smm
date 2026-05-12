@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { ArrowRight, MessageCircle } from '@lucide/svelte';
+	import { ArrowRight, MessageCircle } from '$lib/icons';
 	import { onDestroy } from 'svelte';
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
 	import { formatPrice } from '$lib/helpers/utils';

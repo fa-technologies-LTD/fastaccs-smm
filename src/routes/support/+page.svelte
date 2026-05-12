@@ -8,7 +8,7 @@
 		HelpCircle,
 		ExternalLink,
 		ArrowRight
-	} from '@lucide/svelte';
+	} from '$lib/icons';
 
 	const faqs = [
 		{

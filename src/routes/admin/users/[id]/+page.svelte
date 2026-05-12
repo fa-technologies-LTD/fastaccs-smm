@@ -4,7 +4,7 @@
 	import { addToast } from '$lib/stores/toasts';
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
 	import { getOrderStatusLabel } from '$lib/helpers/order-status';
-	import { ArrowLeft, ShieldCheck, ShieldOff, Clock3, ShoppingBag, Activity } from '@lucide/svelte';
+	import { ArrowLeft, ShieldCheck, ShieldOff, Clock3, ShoppingBag, Activity } from '$lib/icons';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
 	import type { PageData } from './$types';
 

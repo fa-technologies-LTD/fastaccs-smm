@@ -11,8 +11,9 @@
 		Shield,
 		CheckCircle,
 		ChevronRight,
-		BellRing
-	} from '@lucide/svelte';
+		BellRing,
+		AlertTriangle
+	} from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
@@ -156,11 +157,11 @@
 				return;
 			}
 
-				if (!compatibility.compatible) {
-					const incomingLabel = getTierDeliveryModeLabel(tierDeliveryConfig.mode);
-					const existingLabel = compatibility.existingMode
-						? getTierDeliveryModeLabel(compatibility.existingMode)
-						: getTierDeliveryModeLabel('instant_auto');
+			if (!compatibility.compatible) {
+				const incomingLabel = getTierDeliveryModeLabel(tierDeliveryConfig.mode);
+				const existingLabel = compatibility.existingMode
+					? getTierDeliveryModeLabel(compatibility.existingMode)
+					: getTierDeliveryModeLabel('instant_auto');
 				const shouldReplace = window.confirm(
 					`You already have ${existingLabel} item(s) in your cart.\n\n${incomingLabel} items must be checked out separately.\n\nPress OK to clear your cart and add this item, or Cancel to keep your current cart.`
 				);
@@ -389,8 +390,8 @@
 									{/if}
 								</div>
 							{/if}
-								<p class="text-sm leading-relaxed opacity-90 sm:text-lg">
-									{data.platform.name} accounts with
+							<p class="text-sm leading-relaxed opacity-90 sm:text-lg">
+								{data.platform.name} accounts with
 								{#if data.tier.metadata?.follower_range}
 									{@const range = data.tier.metadata.follower_range}
 									{range.display ||
@@ -399,8 +400,8 @@
 									{formatFollowers((data.tier.metadata?.follower_count as number) || 0)} followers
 								{/if}
 							</p>
-								<div class="mt-2 flex flex-wrap items-center gap-2 text-sm opacity-75 sm:text-base">
-									<span>{data.tier.visible_available} accounts available</span>
+							<div class="mt-2 flex flex-wrap items-center gap-2 text-sm opacity-75 sm:text-base">
+								<span>{data.tier.visible_available} accounts available</span>
 								{#if tierStatus}
 									<span
 										class="tag-chip rounded-full border border-yellow-300/30 bg-yellow-500/20 px-2 py-0.5 text-[11px] font-semibold text-yellow-100"
@@ -415,34 +416,30 @@
 						</div>
 					</div>
 
-						<div
-							class="w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2.5 text-left lg:w-auto lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:text-right"
-						>
-							<div class="text-2xl leading-tight font-bold sm:text-4xl">{formatPrice(data.tier.price)}</div>
-							<div class="text-sm opacity-75 sm:text-base">per account</div>
+					<div
+						class="w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2.5 text-left lg:w-auto lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:text-right"
+					>
+						<div class="text-2xl leading-tight font-bold sm:text-4xl">
+							{formatPrice(data.tier.price)}
 						</div>
+						<div class="text-sm opacity-75 sm:text-base">per account</div>
 					</div>
 				</div>
-			</section>
+			</div>
+		</section>
 
 		<!-- Main Content -->
-			<section class="py-6 sm:py-16">
-				<div class="mx-auto max-w-6xl px-4">
-					<div class="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-12">
-						<!-- Left Column - Details -->
-						<div class="lg:col-span-2">
-							{#if tierSampleScreenshots.length > 0}
-								<div class="mb-6 rounded-xl bg-[var(--color-card)] p-4 shadow sm:mb-8 sm:p-8">
-									<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-										<h2 class="text-lg font-bold text-[var(--color-text-primary)] sm:text-2xl">
-											Sample Screenshots
-										</h2>
-									<span
-										class="tag-chip rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase"
-										style="background: rgba(59, 130, 246, 0.14); color: rgb(37, 99, 235); border: 1px solid rgba(59, 130, 246, 0.28);"
-									>
-										Sample Only
-									</span>
+		<section class="py-6 sm:py-16">
+			<div class="mx-auto max-w-6xl px-4">
+				<div class="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-12">
+					<!-- Left Column - Details -->
+					<div class="lg:col-span-2">
+						{#if tierSampleScreenshots.length > 0}
+							<div class="mb-6 rounded-xl bg-[var(--color-card)] p-4 shadow sm:mb-8 sm:p-8">
+								<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+									<h2 class="text-lg font-bold text-[var(--color-text-primary)] sm:text-2xl">
+										Sample Screenshots
+									</h2>
 								</div>
 								<p class="mb-4 text-sm text-[var(--color-text-muted)] sm:text-base">
 									These are sample previews to help your decision before checkout. Delivered
@@ -464,7 +461,6 @@
 												loading="lazy"
 												decoding="async"
 											/>
-											<span class="sample-screenshot-tag">Sample Screenshot</span>
 										</button>
 									{/each}
 								</div>
@@ -472,10 +468,10 @@
 						{/if}
 
 						<!-- Tier Description -->
-								<div class="mb-6 rounded-xl bg-[var(--color-card)] p-4 shadow sm:mb-8 sm:p-8">
-									<h2 class="mb-4 text-lg font-bold text-[var(--color-text-primary)] sm:text-2xl">
-										Account Details
-									</h2>
+						<div class="mb-6 rounded-xl bg-[var(--color-card)] p-4 shadow sm:mb-8 sm:p-8">
+							<h2 class="mb-4 text-lg font-bold text-[var(--color-text-primary)] sm:text-2xl">
+								Account Details
+							</h2>
 							<!-- Tier-specific description -->
 							{#if data.tier.description}
 								<p
@@ -532,10 +528,12 @@
 					</div>
 
 					<!-- Right Column - Purchase -->
-						<div class="lg:col-span-1">
-							<div class="rounded-xl bg-[var(--color-card)] p-4 shadow sm:p-6 lg:sticky lg:top-24 lg:p-8">
-								<h3 class="mb-6 text-xl font-bold text-[var(--color-text-primary)]">
-									Select Quantity
+					<div class="lg:col-span-1">
+						<div
+							class="rounded-xl bg-[var(--color-card)] p-4 shadow sm:p-6 lg:sticky lg:top-24 lg:p-8"
+						>
+							<h3 class="mb-6 text-xl font-bold text-[var(--color-text-primary)]">
+								Select Quantity
 							</h3>
 							<div class="mb-6">
 								<label
@@ -613,9 +611,9 @@
 										style={tierDeliveryConfig.mode === 'manual_handover'
 											? 'background: rgba(59, 130, 246, 0.18); color: rgb(147, 197, 253); border: 1px solid rgba(147, 197, 253, 0.28);'
 											: 'background: rgba(5, 212, 113, 0.15); color: rgb(5, 212, 113); border: 1px solid rgba(5, 212, 113, 0.25);'}
-										>
-											{getTierDeliveryModeLabel(tierDeliveryConfig.mode)}
-										</span>
+									>
+										{getTierDeliveryModeLabel(tierDeliveryConfig.mode)}
+									</span>
 								</div>
 								{#if tierDeliveryConfig.mode === 'manual_handover' && tierDeliveryConfig.manualHandoverPromise}
 									<p class="text-xs text-[var(--color-text-muted)]">
@@ -697,8 +695,9 @@
 								<div
 									class="mt-4 rounded-lg border border-yellow-500/30 bg-[var(--color-surface)] p-3"
 								>
-									<div class="text-sm text-yellow-500">
-										⚠️ Only {data.tier.visible_available} accounts left in stock!
+									<div class="flex items-center gap-2 text-sm text-yellow-500">
+										<AlertTriangle class="h-4 w-4" />
+										<span>Only {data.tier.visible_available} accounts left in stock!</span>
 									</div>
 								</div>
 							{/if}
@@ -746,21 +745,6 @@
 	.sample-screenshot-item:focus-visible {
 		outline: 2px solid var(--color-accent);
 		outline-offset: 2px;
-	}
-
-	.sample-screenshot-tag {
-		position: absolute;
-		left: 0.5rem;
-		bottom: 0.5rem;
-		border-radius: 0.375rem;
-		border: 1px solid rgba(148, 163, 184, 0.4);
-		background: rgba(2, 6, 23, 0.7);
-		padding: 0.2rem 0.4rem;
-		font-size: 0.65rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
-		color: #f8fafc;
 	}
 
 	@media (min-width: 768px) {

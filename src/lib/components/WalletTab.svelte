@@ -8,7 +8,7 @@
 		Zap,
 		Shield,
 		Lock
-	} from '@lucide/svelte';
+	} from '$lib/icons';
 	import { showError, showSuccess } from '$lib/stores/toasts';
 
 	let { initialWalletBalance, initialWalletTransactions } = $props();

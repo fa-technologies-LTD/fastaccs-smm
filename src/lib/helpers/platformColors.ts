@@ -1,11 +1,10 @@
-import { Instagram, Music, Facebook, X as XIcon, Package } from '@lucide/svelte';
-import type { Component } from 'svelte';
+import { Instagram, Music, Facebook, X as XIcon, Package } from '$lib/icons';
 
 /**
  * Platform Icon Management:
  *
  * 1. PRIORITY: Uses metadata.icon from database if provided (image URL)
- * 2. FALLBACK: Maps to Lucide icons for known platforms (Instagram, TikTok, Facebook, Twitter)
+ * 2. FALLBACK: Maps to Tabler icons for known platforms (Instagram, TikTok, Facebook, Twitter)
  * 3. DEFAULT: Generic Package icon for unmapped platforms
  *
  * Admin users can provide custom icon URLs in Platform Management.
@@ -50,8 +49,10 @@ export function isPlatformImageUrl(value: unknown): value is string {
 	);
 }
 
-// Hardcoded icon mapping for major platforms (Lucide icons)
-const platformIcons: Record<string, Component> = {
+type PlatformIconComponent = typeof Package;
+
+// Hardcoded icon mapping for major platforms (Tabler icons)
+const platformIcons: Record<string, PlatformIconComponent> = {
 	instagram: Instagram,
 	tiktok: Music,
 	facebook: Facebook,
@@ -68,7 +69,7 @@ const platformColors: Record<string, string> = {
 
 /**
  * Get platform icon component.
- * Returns Lucide icon component for known platforms, Package icon otherwise.
+ * Returns Tabler icon component for known platforms, Package icon otherwise.
  * Frontend should check metadata.icon first for custom image URLs.
  */
 function getPlatformIcon(platform: string) {

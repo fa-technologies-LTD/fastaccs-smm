@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Package, CheckCircle, Copy, Clock, Shield, Lock, ExternalLink, CircleHelp } from '@lucide/svelte';
+	import { Package, CheckCircle, Copy, Clock, Shield, Lock, ExternalLink, CircleHelp } from '$lib/icons';
 	import { addToast } from '$lib/stores/toasts';
 	import { copyToClipboard } from '$lib/helpers/utils';
 	import {

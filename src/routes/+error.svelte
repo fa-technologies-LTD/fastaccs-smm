@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import { AlertCircle } from '@lucide/svelte';
+	import { AlertCircle } from '$lib/icons';
 
 	const status = $derived($page.status);
 	const message = $derived($page.error?.message || 'Something went wrong');

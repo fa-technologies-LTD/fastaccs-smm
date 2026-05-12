@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { toasts, removeToast, type Toast } from '$lib/stores/toasts';
-	import { CheckCircle, AlertCircle, AlertTriangle, Info, X } from '@lucide/svelte';
+	import { CheckCircle, AlertCircle, AlertTriangle, Info, X } from '$lib/icons';
 	import { fly } from 'svelte/transition';
 
 	function getToastIcon(type: Toast['type']) {

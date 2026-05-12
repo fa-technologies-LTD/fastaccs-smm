@@ -1,6 +1,7 @@
 // Server-side hooks for session management
 import { env as publicEnv } from '$env/dynamic/public';
 import { env } from '$env/dynamic/private';
+import { randomUUID } from 'node:crypto';
 import { validateSessionToken } from '$lib/auth/session';
 import {
 	getAdminContext,
@@ -13,6 +14,73 @@ import {
 	shouldLogAdminMutation
 } from '$lib/services/admin-audit';
 import type { Handle, RequestEvent } from '@sveltejs/kit';
+
+const GENERIC_API_ERROR_MESSAGE = 'Internal server error';
+
+function isJsonResponse(response: Response): boolean {
+	const contentType = (response.headers.get('content-type') || '').toLowerCase();
+	return contentType.includes('application/json');
+}
+
+function buildSafeApiErrorBody(payload: unknown, traceId: string): Record<string, unknown> {
+	const base =
+		payload && typeof payload === 'object' && !Array.isArray(payload)
+			? ({ ...(payload as Record<string, unknown>) } as Record<string, unknown>)
+			: {};
+
+	const safe: Record<string, unknown> = {
+		...base,
+		traceId
+	};
+
+	if ('success' in safe && typeof safe.success === 'boolean') {
+		safe.success = false;
+	}
+
+	if ('error' in safe) {
+		safe.error = GENERIC_API_ERROR_MESSAGE;
+	} else if ('message' in safe) {
+		safe.message = GENERIC_API_ERROR_MESSAGE;
+	} else {
+		safe.error = GENERIC_API_ERROR_MESSAGE;
+	}
+
+	return safe;
+}
+
+async function sanitizeApiServerErrorResponse(
+	event: RequestEvent,
+	response: Response
+): Promise<Response> {
+	if (!event.url.pathname.startsWith('/api/')) return response;
+	if (response.status < 500) return response;
+	if (!isJsonResponse(response)) return response;
+
+	const traceId = randomUUID();
+	console.error('[api.error.redacted]', {
+		traceId,
+		path: event.url.pathname,
+		method: event.request.method,
+		status: response.status
+	});
+
+	let payload: unknown = null;
+	try {
+		payload = await response.clone().json();
+	} catch {
+		payload = null;
+	}
+
+	const safeBody = buildSafeApiErrorBody(payload, traceId);
+	const headers = new Headers(response.headers);
+	headers.set('content-type', 'application/json; charset=utf-8');
+	headers.delete('content-length');
+
+	return new Response(JSON.stringify(safeBody), {
+		status: response.status,
+		headers
+	});
+}
 
 function getCanonicalBaseUrl(): URL | null {
 	const candidates = [env.CANONICAL_BASE_URL, publicEnv.PUBLIC_BASE_URL, publicEnv.PUBLIC_SITE_URL]
@@ -159,5 +227,5 @@ export const handle: Handle = async ({ event, resolve }) => {
 		});
 	}
 
-	return response;
+	return sanitizeApiServerErrorResponse(event, response);
 };

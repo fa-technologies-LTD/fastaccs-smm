@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X, ChevronLeft, ChevronRight } from '@lucide/svelte';
+	import { X, ChevronLeft, ChevronRight } from '$lib/icons';
 	import { onMount } from 'svelte';
 
 	interface Props {

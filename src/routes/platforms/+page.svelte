@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import { ArrowRight, Check, Zap, Search, SearchX, Package } from '@lucide/svelte';
+	import { ArrowRight, Check, Zap, Search, SearchX, Package } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';

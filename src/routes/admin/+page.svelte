@@ -13,7 +13,7 @@
 		RefreshCw,
 		BarChart3,
 		ArrowUpRight
-	} from '@lucide/svelte';
+	} from '$lib/icons';
 	import { getOrderStats } from '$lib/services/orders';
 	import { getInventoryStats } from '$lib/services/inventory';
 	import { formatPrice } from '$lib/helpers/utils';

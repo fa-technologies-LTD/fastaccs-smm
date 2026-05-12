@@ -13,7 +13,7 @@
 		ArrowUpRight,
 		ShieldOff,
 		ShieldCheck
-	} from '@lucide/svelte';
+	} from '$lib/icons';
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import { formatPrice, formatDate, exportToCSV } from '$lib/helpers/utils';

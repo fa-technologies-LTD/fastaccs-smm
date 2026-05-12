@@ -1,8 +1,9 @@
 import { redirect } from '@sveltejs/kit';
+import { sanitizeInternalRedirectPath } from '$lib/auth/redirect';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url }) => {
-	const next = url.searchParams.get('redirectTo') ?? '/dashboard';
+	const next = sanitizeInternalRedirectPath(url.searchParams.get('redirectTo'));
 	const error = url.searchParams.get('error');
 
 	// If there's an error parameter from OAuth provider

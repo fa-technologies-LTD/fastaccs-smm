@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { Plus, Trash2, Edit, Eye, AlertCircle, Archive } from '@lucide/svelte';
+	import { Plus, Trash2, Edit, Eye, AlertCircle, Archive } from '$lib/icons';
 	import { createCategory, updateCategory, deleteCategory, retireCategory } from '$lib/services/categories';
 	import { showSuccess, showError } from '$lib/stores/toasts';
 	import type { Category, CategoryInsert, CategoryUpdate } from '$lib/services/categories';

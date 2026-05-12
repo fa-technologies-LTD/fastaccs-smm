@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Eye } from '@lucide/svelte';
+	import { Eye } from '$lib/icons';
 
 	let { initialMessages } = $props();
 	let messages = $state<any[]>(initialMessages);

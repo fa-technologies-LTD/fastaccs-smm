@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { BriefcaseBusiness, Compass, LifeBuoy, Lock, Unlock, Clock3, X } from '@lucide/svelte';
+	import { BriefcaseBusiness, Compass, LifeBuoy, Lock, Unlock, Clock3, X } from '$lib/icons';
 	import OrderTab from './OrderTab.svelte';
 	import PurchaseTab from './PurchaseTab.svelte';
 	import AffiliateTab from './AffiliateTab.svelte';
@@ -171,12 +171,15 @@
 			<div class="flex items-start gap-2">
 				<Clock3 size={16} class="mt-0.5" style="color: var(--fa-lime-700);" />
 				<div>
-					<p class="text-sm font-semibold" style="color: var(--text); font-family: var(--font-head);">
+					<p
+						class="text-sm font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
+					>
 						Payment Confirmation Pending
 					</p>
 					<p class="text-xs sm:text-sm" style="color: var(--text-muted);">
-						We are still waiting for Monnify confirmation. This order will auto-update once payment is
-						verified.
+						We are still waiting for Monnify confirmation. This order will auto-update once payment
+						is verified.
 					</p>
 				</div>
 			</div>
@@ -297,7 +300,7 @@
 			class="quick-action-card flex min-h-[88px] flex-col items-center justify-center rounded-[var(--r-sm)] border border-[var(--border)] p-3 transition-all hover:-translate-y-0.5"
 			style="background: var(--surface-2); color: var(--text);"
 		>
-			<Compass size={20} strokeWidth={2.25} style="color: var(--primary);" />
+			<Compass size={20} stroke={2.25} style="color: var(--primary);" />
 			<span class="mt-1 text-xs font-semibold">Buy more</span>
 		</a>
 		<a
@@ -305,7 +308,7 @@
 			class="quick-action-card flex min-h-[88px] flex-col items-center justify-center rounded-[var(--r-sm)] border border-[var(--border)] p-3 transition-all hover:-translate-y-0.5"
 			style="background: var(--surface-2); color: var(--text);"
 		>
-			<LifeBuoy size={20} strokeWidth={2.25} style="color: var(--primary);" />
+			<LifeBuoy size={20} stroke={2.25} style="color: var(--primary);" />
 			<span class="mt-1 text-xs font-semibold">Support</span>
 		</a>
 		<button
@@ -315,7 +318,7 @@
 			class="quick-action-card flex min-h-[88px] flex-col items-center justify-center rounded-[var(--r-sm)] border border-[var(--border)] p-3 transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0"
 			style="background: var(--surface-2); color: var(--text);"
 		>
-			<BriefcaseBusiness size={20} strokeWidth={2.25} style="color: var(--text-dim);" />
+			<BriefcaseBusiness size={20} stroke={2.25} style="color: var(--text-dim);" />
 			<span class="mt-1 text-xs font-semibold" style="color: var(--text-dim);">Affiliate</span>
 			<span class="text-[10px] font-medium" style="color: var(--text-dim);">Coming Soon</span>
 		</button>

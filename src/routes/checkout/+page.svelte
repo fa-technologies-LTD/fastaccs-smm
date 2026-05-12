@@ -12,7 +12,7 @@
 		X,
 		Minus,
 		Plus
-	} from '@lucide/svelte';
+	} from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { cart } from '$lib/stores/cart.svelte';

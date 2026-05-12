@@ -1,6 +1,6 @@
 <script>
 	import { fly, fade } from 'svelte/transition';
-	import { X } from '@lucide/svelte';
+	import { X } from '$lib/icons';
 	import { formatPrice } from '$lib/helpers/utils';
 
 	let {

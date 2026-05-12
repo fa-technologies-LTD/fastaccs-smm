@@ -1,8 +1,9 @@
 import { redirect } from '@sveltejs/kit';
+import { sanitizeInternalRedirectPath } from '$lib/auth/redirect';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
-	const returnUrl = url.searchParams.get('returnUrl') || '/dashboard';
+	const returnUrl = sanitizeInternalRedirectPath(url.searchParams.get('returnUrl'));
 
 	if (locals.user) {
 		if (locals.user.emailVerified) {

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ImagePlus, Trash2, Upload } from '@lucide/svelte';
+	import { ImagePlus, Trash2, Upload } from '$lib/icons';
 	import { showError, showSuccess } from '$lib/stores/toasts';
 	import { MAX_TIER_SAMPLE_SCREENSHOTS } from '$lib/helpers/tierSampleScreenshots';
 

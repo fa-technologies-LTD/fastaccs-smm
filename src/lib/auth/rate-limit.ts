@@ -11,7 +11,18 @@ export const SIGNUP_RATE_LIMITS = {
 	identity: { limit: 6, windowMs: 60 * 60 * 1000 }
 } as const;
 
-type RateLimitScope = 'login_ip' | 'login_identity' | 'signup_ip' | 'signup_identity';
+export const RESTOCK_NOTIFY_RATE_LIMITS = {
+	ip: { limit: 18, windowMs: 60 * 60 * 1000 },
+	email: { limit: 6, windowMs: 60 * 60 * 1000 }
+} as const;
+
+type RateLimitScope =
+	| 'login_ip'
+	| 'login_identity'
+	| 'signup_ip'
+	| 'signup_identity'
+	| 'restock_notify_ip'
+	| 'restock_notify_email';
 
 interface RateLimitResult {
 	allowed: boolean;
@@ -19,14 +30,15 @@ interface RateLimitResult {
 	retryAfterSeconds: number;
 }
 
-const NOTIFICATION_TYPE = 'auth_rate_limit';
+const AUTH_NOTIFICATION_TYPE = 'auth_rate_limit';
+const RESTOCK_NOTIFY_NOTIFICATION_TYPE = 'restock_notify_rate_limit';
 
 function hashKey(raw: string): string {
 	return createHash('sha256').update(raw).digest('hex');
 }
 
-function toReferenceId(scope: RateLimitScope, key: string): string {
-	return `auth_rl:${scope}:${hashKey(key)}`;
+function toReferenceId(prefix: string, scope: RateLimitScope, key: string): string {
+	return `${prefix}:${scope}:${hashKey(key)}`;
 }
 
 export function getRequestClientIp(request: Request): string {
@@ -36,21 +48,20 @@ export function getRequestClientIp(request: Request): string {
 	return candidate || 'unknown';
 }
 
-export async function checkRateLimit(params: {
-	scope: RateLimitScope;
-	key: string;
+async function checkRateLimitWindow(params: {
+	notificationType: string;
+	referenceId: string;
 	limit: number;
 	windowMs: number;
 }): Promise<RateLimitResult> {
 	const now = Date.now();
 	const windowStart = new Date(now - params.windowMs);
-	const referenceId = toReferenceId(params.scope, params.key);
 
 	const [attemptCount, oldestAttempt] = await Promise.all([
 		prisma.emailNotification.count({
 			where: {
-				notificationType: NOTIFICATION_TYPE,
-				referenceId,
+				notificationType: params.notificationType,
+				referenceId: params.referenceId,
 				createdAt: {
 					gte: windowStart
 				}
@@ -58,8 +69,8 @@ export async function checkRateLimit(params: {
 		}),
 		prisma.emailNotification.findFirst({
 			where: {
-				notificationType: NOTIFICATION_TYPE,
-				referenceId,
+				notificationType: params.notificationType,
+				referenceId: params.referenceId,
 				createdAt: {
 					gte: windowStart
 				}
@@ -91,21 +102,79 @@ export async function checkRateLimit(params: {
 	};
 }
 
-export async function recordRateLimitAttempt(params: {
-	scope: RateLimitScope;
+export async function checkRateLimit(params: {
+	scope: Exclude<RateLimitScope, 'restock_notify_ip' | 'restock_notify_email'>;
 	key: string;
+	limit: number;
+	windowMs: number;
+}): Promise<RateLimitResult> {
+	return checkRateLimitWindow({
+		notificationType: AUTH_NOTIFICATION_TYPE,
+		referenceId: toReferenceId('auth_rl', params.scope, params.key),
+		limit: params.limit,
+		windowMs: params.windowMs
+	});
+}
+
+export async function checkRestockNotifyRateLimit(params: {
+	scope: 'restock_notify_ip' | 'restock_notify_email';
+	key: string;
+	limit: number;
+	windowMs: number;
+}): Promise<RateLimitResult> {
+	return checkRateLimitWindow({
+		notificationType: RESTOCK_NOTIFY_NOTIFICATION_TYPE,
+		referenceId: toReferenceId('restock_notify_rl', params.scope, params.key),
+		limit: params.limit,
+		windowMs: params.windowMs
+	});
+}
+
+async function recordRateLimitAttemptInternal(params: {
+	notificationType: string;
+	referenceId: string;
+	scope: string;
 	context?: string;
+	email: string;
 }): Promise<void> {
 	await prisma.emailNotification.create({
 		data: {
 			userId: null,
-			email: 'auth-rate-limit@fastaccs.local',
-			notificationType: NOTIFICATION_TYPE,
-			referenceId: toReferenceId(params.scope, params.key),
+			email: params.email,
+			notificationType: params.notificationType,
+			referenceId: params.referenceId,
 			subject: params.scope,
 			body: params.context ? params.context.slice(0, 400) : null,
 			status: 'failed',
 			failedAt: new Date()
 		}
+	});
+}
+
+export async function recordRateLimitAttempt(params: {
+	scope: Exclude<RateLimitScope, 'restock_notify_ip' | 'restock_notify_email'>;
+	key: string;
+	context?: string;
+}): Promise<void> {
+	await recordRateLimitAttemptInternal({
+		notificationType: AUTH_NOTIFICATION_TYPE,
+		referenceId: toReferenceId('auth_rl', params.scope, params.key),
+		scope: params.scope,
+		context: params.context,
+		email: 'auth-rate-limit@fastaccs.local'
+	});
+}
+
+export async function recordRestockNotifyRateLimitAttempt(params: {
+	scope: 'restock_notify_ip' | 'restock_notify_email';
+	key: string;
+	context?: string;
+}): Promise<void> {
+	await recordRateLimitAttemptInternal({
+		notificationType: RESTOCK_NOTIFY_NOTIFICATION_TYPE,
+		referenceId: toReferenceId('restock_notify_rl', params.scope, params.key),
+		scope: params.scope,
+		context: params.context,
+		email: 'restock-notify-rate-limit@fastaccs.local'
 	});
 }

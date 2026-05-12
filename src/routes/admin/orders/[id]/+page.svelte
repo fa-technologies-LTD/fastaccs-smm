@@ -20,7 +20,7 @@
 		Eye,
 		EyeOff,
 		ExternalLink
-	} from '@lucide/svelte';
+	} from '$lib/icons';
 	import { updateOrderStatus, processOrderDelivery, addOrderNote } from '$lib/services/orders';
 	import { addToast } from '$lib/stores/toasts';
 	import type { OrderMetadata, OrderItemWithDetails } from '$lib/services/orders';

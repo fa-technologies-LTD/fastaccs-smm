@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { CheckCircle, Clock, XCircle, Mail, MessageSquare, Copy, ExternalLink, CircleHelp } from '@lucide/svelte';
+	import { CheckCircle, Clock, XCircle, Mail, MessageSquare, Copy, ExternalLink, CircleHelp } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { addToast } from '$lib/stores/toasts';

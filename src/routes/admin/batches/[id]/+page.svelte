@@ -11,7 +11,7 @@
 		X,
 		Copy,
 		ExternalLink
-	} from '@lucide/svelte';
+	} from '$lib/icons';
 	import type { BatchMetadata } from '$lib/services/batches';
 	import { getCredentialExtraEntries } from '$lib/helpers/account-credentials';
 	import {
