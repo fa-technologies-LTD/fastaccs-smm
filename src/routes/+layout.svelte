@@ -18,6 +18,7 @@
 	let { children, data }: Props = $props();
 	let bannerDismissed = $state(false);
 	let lastBannerCookieName = $state<string | null>(null);
+	let tawkLoadRequested = false;
 	const announcementBanner = $derived(data.announcementBanner || null);
 	const defaultShareTitle = 'FastAccs - Premium Social Media Accounts & Growth Services';
 	const defaultShareDescription =
@@ -73,13 +74,55 @@
 		document.head.appendChild(script);
 	}
 
-	onMount(() => {
+	function requestTawkWidgetLoad() {
+		if (tawkLoadRequested) return;
+		tawkLoadRequested = true;
 		loadTawkWidget();
+	}
+
+	onMount(() => {
+		const tawkEmbedUrl = String(publicEnv.PUBLIC_TAWK_EMBED_URL || '').trim();
+		if (!tawkEmbedUrl || typeof window === 'undefined') return;
+
+		const intentEvents: Array<keyof WindowEventMap> = ['pointerdown', 'touchstart', 'keydown', 'scroll'];
+		const supportsPassive = { passive: true } as AddEventListenerOptions;
+		let fallbackTimer = 0;
+		let listenersAttached = false;
+
+		const detachIntentListeners = () => {
+			if (!listenersAttached) return;
+			intentEvents.forEach((eventName) => {
+				window.removeEventListener(eventName, onUserIntent);
+			});
+			listenersAttached = false;
+		};
+
+		const onUserIntent = () => {
+			requestTawkWidgetLoad();
+			detachIntentListeners();
+			window.clearTimeout(fallbackTimer);
+		};
+
+		intentEvents.forEach((eventName) => {
+			window.addEventListener(eventName, onUserIntent, supportsPassive);
+		});
+		listenersAttached = true;
+
+		fallbackTimer = window.setTimeout(() => {
+			requestTawkWidgetLoad();
+			detachIntentListeners();
+		}, 8000);
+
+		return () => {
+			detachIntentListeners();
+			window.clearTimeout(fallbackTimer);
+		};
 	});
 
 	onNavigate((navigation) => {
 		// Skip if view transitions not supported
 		if (!document.startViewTransition) return;
+		if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
 
 		const from = navigation.from?.route.id;
 		const to = navigation.to?.route.id;

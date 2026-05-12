@@ -71,8 +71,9 @@
 		position: fixed;
 		top: 1rem;
 		right: 1rem;
+		left: auto;
 		z-index: 50;
-		width: 100%;
+		width: min(24rem, calc(100vw - 2rem));
 		max-width: 24rem;
 		display: flex;
 		flex-direction: column;
@@ -177,5 +178,19 @@
 	.toast-close-icon {
 		height: 1rem;
 		width: 1rem;
+	}
+
+	@media (max-width: 640px) {
+		.toast-container {
+			top: 4.5rem;
+			right: 0.75rem;
+			left: 0.75rem;
+			width: auto;
+			max-width: none;
+		}
+
+		.toast {
+			padding: 0.875rem;
+		}
 	}
 </style>

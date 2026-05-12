@@ -57,7 +57,7 @@
 
 	<!-- Tab Navigation -->
 	<section
-		class="sticky top-0 z-10 shadow-sm"
+		class="sticky top-16 z-10 shadow-sm"
 		style="background: var(--bg-elev-1); border-bottom: 1px solid var(--border);"
 	>
 		<div class="mx-auto max-w-6xl px-4">

@@ -24,15 +24,21 @@
 </svelte:head>
 
 <main
-	class="flex min-h-screen items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50"
+	class="flex min-h-screen items-center justify-center px-4"
+	style="background: linear-gradient(180deg, #07090C 0%, #050607 100%);"
 >
-	<div class="text-center">
-		<div class="rounded-2xl bg-white p-12 shadow-xl">
+	<div class="w-full max-w-md text-center">
+		<div
+			class="rounded-2xl p-8 sm:p-10"
+			style="background: var(--bg-elev-2); border: 1px solid var(--border); box-shadow: var(--shadow-1);"
+		>
 			<div
-				class="mx-auto mb-6 h-16 w-16 animate-spin rounded-full border-4 border-purple-600 border-t-transparent"
+				class="mx-auto mb-5 h-14 w-14 animate-spin rounded-full border-4 border-[var(--primary)] border-t-transparent"
 			></div>
-			<h1 class="mb-2 text-2xl font-bold text-gray-900">Completing authentication...</h1>
-			<p class="text-gray-600">Please wait a moment</p>
+			<h1 class="mb-2 text-xl font-bold sm:text-2xl" style="color: var(--text);">
+				Completing authentication...
+			</h1>
+			<p style="color: var(--text-muted);">Please wait a moment</p>
 		</div>
 	</div>
 </main>

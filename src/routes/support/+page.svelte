@@ -395,7 +395,7 @@
 				</a>
 
 				<a
-					href="/dashboard?tab=profile"
+					href="/dashboard"
 					class="group rounded-xl p-6 transition-all hover:shadow-lg"
 					style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 				>
@@ -405,7 +405,9 @@
 					>
 						Manage Account
 					</h3>
-					<p class="text-sm" style="color: var(--text-muted);">Update your profile and settings</p>
+					<p class="text-sm" style="color: var(--text-muted);">
+						Open your dashboard for account and order tools
+					</p>
 					<ExternalLink class="mt-4 h-5 w-5" style="color: var(--brand-blue);" />
 				</a>
 
@@ -434,6 +436,12 @@
 <Footer />
 
 <style>
+	#contact,
+	#faq,
+	#after-purchase-guide {
+		scroll-margin-top: 5.75rem;
+	}
+
 	.support-contact-card {
 		position: relative;
 		display: block;

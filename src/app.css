@@ -137,6 +137,23 @@
 	--color-neutral: var(--fa-gray-600);
 	--color-white: var(--fa-white);
 	--color-black: var(--fa-black);
+
+	/* ===== COMPATIBILITY ALIASES (legacy screens) ===== */
+	--color-background: var(--bg);
+	--color-card: var(--bg-elev-2);
+	--color-surface: var(--bg-elev-1);
+	--color-surface-hover: var(--surface);
+	--color-border: var(--border);
+	--color-text-primary: var(--text);
+	--color-text-secondary: var(--text-muted);
+	--color-text-muted: var(--text-muted);
+	--color-accent: var(--primary);
+	--brand-green: var(--primary);
+	--brand-blue: var(--link);
+	--brand-purple: var(--fa-blue-300);
+	--font-heading: var(--font-head);
+	--status-danger: var(--status-error);
+	--text-primary: var(--text);
 }
 
 /* ===== BASE STYLES ===== */
@@ -342,5 +359,21 @@ h3 {
 	88% {
 		transform: translateX(530%) skewX(-20deg);
 		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+
+	.tag-chip::after {
+		animation: none !important;
+		opacity: 0 !important;
 	}
 }

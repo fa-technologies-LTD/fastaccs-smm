@@ -357,17 +357,17 @@
 
 		<!-- Tier Header -->
 		<section
-			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} relative pt-6 pb-5 text-white sm:py-8`}
+			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} relative pt-4 pb-4 text-white sm:py-8`}
 		>
 			<div class="mx-auto max-w-6xl px-4">
-				<div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+				<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 					<div class="flex w-full items-start gap-3 sm:gap-5">
-						<div class="rounded-full bg-white/20 p-3 sm:p-4">
-							<PlatformIcon class="h-7 w-7 sm:h-10 sm:w-10 md:h-12 md:w-12" />
+						<div class="rounded-full bg-white/20 p-2.5 sm:p-4">
+							<PlatformIcon class="h-6 w-6 sm:h-10 sm:w-10 md:h-12 md:w-12" />
 						</div>
 						<div class="min-w-0 flex-1">
 							<div class="mb-2">
-								<h1 class="text-3xl leading-tight font-bold sm:text-4xl">{data.tier.tier_name}</h1>
+								<h1 class="text-2xl leading-tight font-bold sm:text-4xl">{data.tier.tier_name}</h1>
 							</div>
 							{#if data.tier.is_pinned || data.tier.is_featured}
 								<div class="mb-2 flex flex-wrap gap-1.5">
@@ -389,8 +389,8 @@
 									{/if}
 								</div>
 							{/if}
-							<p class="text-base leading-relaxed opacity-90 sm:text-lg">
-								{data.platform.name} accounts with
+								<p class="text-sm leading-relaxed opacity-90 sm:text-lg">
+									{data.platform.name} accounts with
 								{#if data.tier.metadata?.follower_range}
 									{@const range = data.tier.metadata.follower_range}
 									{range.display ||
@@ -399,8 +399,8 @@
 									{formatFollowers((data.tier.metadata?.follower_count as number) || 0)} followers
 								{/if}
 							</p>
-							<div class="mt-2 flex flex-wrap items-center gap-2 text-base opacity-75 sm:text-lg">
-								<span>{data.tier.visible_available} accounts available</span>
+								<div class="mt-2 flex flex-wrap items-center gap-2 text-sm opacity-75 sm:text-base">
+									<span>{data.tier.visible_available} accounts available</span>
 								{#if tierStatus}
 									<span
 										class="tag-chip rounded-full border border-yellow-300/30 bg-yellow-500/20 px-2 py-0.5 text-[11px] font-semibold text-yellow-100"
@@ -415,28 +415,28 @@
 						</div>
 					</div>
 
-					<div
-						class="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-left lg:w-auto lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:text-right"
-					>
-						<div class="text-3xl leading-tight font-bold sm:text-4xl">{formatPrice(data.tier.price)}</div>
-						<div class="text-sm opacity-75 sm:text-base">per account</div>
+						<div
+							class="w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2.5 text-left lg:w-auto lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:text-right"
+						>
+							<div class="text-2xl leading-tight font-bold sm:text-4xl">{formatPrice(data.tier.price)}</div>
+							<div class="text-sm opacity-75 sm:text-base">per account</div>
+						</div>
 					</div>
 				</div>
-			</div>
-		</section>
+			</section>
 
 		<!-- Main Content -->
-		<section class="py-8 sm:py-16">
-			<div class="mx-auto max-w-6xl px-4">
-				<div class="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:gap-12">
-					<!-- Left Column - Details -->
-					<div class="lg:col-span-2">
-						{#if tierSampleScreenshots.length > 0}
-							<div class="mb-8 rounded-xl bg-[var(--color-card)] p-6 shadow sm:p-8">
-								<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-									<h2 class="text-xl font-bold text-[var(--color-text-primary)] sm:text-2xl">
-										Sample Screenshots
-									</h2>
+			<section class="py-6 sm:py-16">
+				<div class="mx-auto max-w-6xl px-4">
+					<div class="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-12">
+						<!-- Left Column - Details -->
+						<div class="lg:col-span-2">
+							{#if tierSampleScreenshots.length > 0}
+								<div class="mb-6 rounded-xl bg-[var(--color-card)] p-4 shadow sm:mb-8 sm:p-8">
+									<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+										<h2 class="text-lg font-bold text-[var(--color-text-primary)] sm:text-2xl">
+											Sample Screenshots
+										</h2>
 									<span
 										class="tag-chip rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase"
 										style="background: rgba(59, 130, 246, 0.14); color: rgb(37, 99, 235); border: 1px solid rgba(59, 130, 246, 0.28);"
@@ -472,10 +472,10 @@
 						{/if}
 
 						<!-- Tier Description -->
-						<div class="mb-8 rounded-xl bg-[var(--color-card)] p-6 shadow sm:p-8">
-							<h2 class="mb-4 text-xl font-bold text-[var(--color-text-primary)] sm:text-2xl">
-								Account Details
-							</h2>
+								<div class="mb-6 rounded-xl bg-[var(--color-card)] p-4 shadow sm:mb-8 sm:p-8">
+									<h2 class="mb-4 text-lg font-bold text-[var(--color-text-primary)] sm:text-2xl">
+										Account Details
+									</h2>
 							<!-- Tier-specific description -->
 							{#if data.tier.description}
 								<p
@@ -532,10 +532,10 @@
 					</div>
 
 					<!-- Right Column - Purchase -->
-					<div class="lg:col-span-1">
-						<div class="sticky top-6 rounded-xl bg-[var(--color-card)] p-5 shadow sm:p-8">
-							<h3 class="mb-6 text-xl font-bold text-[var(--color-text-primary)]">
-								Select Quantity
+						<div class="lg:col-span-1">
+							<div class="rounded-xl bg-[var(--color-card)] p-4 shadow sm:p-6 lg:sticky lg:top-24 lg:p-8">
+								<h3 class="mb-6 text-xl font-bold text-[var(--color-text-primary)]">
+									Select Quantity
 							</h3>
 							<div class="mb-6">
 								<label

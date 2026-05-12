@@ -77,9 +77,11 @@
 	></button>
 
 	<!-- Cart Dropdown -->
-	<div class="fixed top-1/2 left-1/2 z-50 w-80 -translate-x-1/2 -translate-y-1/2 transform sm:w-96">
+	<div
+		class="fixed inset-x-3 bottom-3 z-50 md:top-1/2 md:right-auto md:bottom-auto md:left-1/2 md:w-96 md:-translate-x-1/2 md:-translate-y-1/2 md:transform"
+	>
 		<div
-			class="overflow-hidden"
+			class="flex max-h-[82vh] flex-col overflow-hidden md:max-h-none"
 			style="background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-2);"
 		>
 			<!-- Header -->
@@ -109,7 +111,7 @@
 			</div>
 
 			<!-- Cart Content -->
-			<div class="max-h-96 overflow-y-auto">
+			<div class="max-h-[52vh] overflow-y-auto md:max-h-96">
 				{#if error}
 					<!-- Error State -->
 					<div style="padding: var(--space-2xl) var(--space-lg); text-align: center;">
