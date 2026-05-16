@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getAffiliateStats } from '$lib/services/affiliate';
+import { getAffiliateDashboardState, getAffiliateStats } from '$lib/services/affiliate';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	const user = locals.user;
@@ -9,14 +9,16 @@ export const GET: RequestHandler = async ({ locals }) => {
 		return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 	}
 
-	const result = await getAffiliateStats(user.id);
-
-	if (!result.success) {
-		return json({ success: false, error: result.error }, { status: 404 });
-	}
+	const [legacyStats, dashboard] = await Promise.all([
+		getAffiliateStats(user.id),
+		getAffiliateDashboardState(user.id)
+	]);
 
 	return json({
 		success: true,
-		data: result.data
+		data: {
+			program: legacyStats.success ? legacyStats.data : null,
+			dashboard
+		}
 	});
 };

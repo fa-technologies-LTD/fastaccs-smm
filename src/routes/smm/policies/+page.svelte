@@ -33,7 +33,7 @@
 		{
 			title: 'Affiliate Terms',
 			href: '/affiliate-terms',
-			description: 'Affiliate program rules and commission safeguards.'
+			description: 'Affiliate program rules and Store Credit safeguards.'
 		}
 	];
 

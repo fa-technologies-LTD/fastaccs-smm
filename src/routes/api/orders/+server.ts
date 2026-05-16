@@ -7,6 +7,13 @@ import { initializeTransaction } from '$lib/services/monnify';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { validatePromotionCode } from '$lib/services/promotions';
 import {
+	getAffiliateDiscountForOrder,
+	maybeSendAffiliateUnlockInvite,
+	recordAffiliateStoreCreditForOrder,
+	resolveOrderAffiliateAttribution,
+	validateAffiliateCode
+} from '$lib/services/affiliate';
+import {
 	getMinimumOrderValueSetting,
 	isCheckoutEnabledSetting
 } from '$lib/services/admin-settings';
@@ -262,9 +269,51 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			return json({ success: false, error: 'Invalid order subtotal' }, { status: 400 });
 		}
 
-		const promotionCode = String(orderData.promotionCode || '')
+		const requestedPromotionCode = String(orderData.promotionCode || '')
 			.trim()
 			.toUpperCase();
+		const requestedAffiliateCode = String(orderData.affiliateCode || '')
+			.trim()
+			.toUpperCase();
+
+		let affiliateCodeInput = requestedAffiliateCode || null;
+		if (!affiliateCodeInput && requestedPromotionCode) {
+			const affiliateFromPromotionCode = await validateAffiliateCode(requestedPromotionCode);
+			if (affiliateFromPromotionCode.valid) {
+				affiliateCodeInput = requestedPromotionCode;
+			}
+		}
+
+		const attribution = await resolveOrderAffiliateAttribution({
+			buyerUserId: locals.user.id,
+			explicitAffiliateCode: affiliateCodeInput
+		});
+
+		if (attribution.error && affiliateCodeInput) {
+			return json({ success: false, error: attribution.error }, { status: 400 });
+		}
+
+		const hasAffiliateAttribution = Boolean(attribution.affiliateCode && attribution.affiliateUserId);
+
+		let promotionCode = requestedPromotionCode;
+		if (
+			hasAffiliateAttribution &&
+			promotionCode &&
+			promotionCode === String(attribution.affiliateCode || '').toUpperCase()
+		) {
+			promotionCode = '';
+		}
+
+		if (hasAffiliateAttribution && promotionCode) {
+			return json(
+				{
+					success: false,
+					error: 'Promo codes cannot be combined with affiliate referral pricing on the same order.'
+				},
+				{ status: 400 }
+			);
+		}
+
 		let promotionId: string | null = null;
 		let appliedPromotionCode: string | null = null;
 		let discountAmount = 0;
@@ -289,6 +338,14 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			appliedPromotionCode = promotionResult.promotion.code;
 			discountAmount = promotionResult.discountAmount;
 			finalOrderTotal = promotionResult.finalTotal;
+		} else if (hasAffiliateAttribution && attribution.affiliateUserId) {
+			const affiliateDiscount = await getAffiliateDiscountForOrder({
+				buyerUserId: locals.user.id,
+				affiliateUserId: attribution.affiliateUserId,
+				subtotalAmount
+			});
+			discountAmount = affiliateDiscount.discountAmount;
+			finalOrderTotal = Math.max(0, Math.round((subtotalAmount - discountAmount) * 100) / 100);
 		}
 
 		if (finalOrderTotal < minimumOrderValue) {
@@ -299,21 +356,6 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				},
 				{ status: 400 }
 			);
-		}
-
-		// Validate affiliate code if provided
-		let affiliateUserId: string | undefined;
-		if (orderData.affiliateCode) {
-			const affiliateProgram = await prisma.affiliateProgram.findUnique({
-				where: {
-					affiliateCode: orderData.affiliateCode.toUpperCase(),
-					status: 'active'
-				},
-				select: { userId: true }
-			});
-			if (affiliateProgram) {
-				affiliateUserId = affiliateProgram.userId;
-			}
 		}
 
 		// Create order with proper structure for account allocation
@@ -332,8 +374,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				deliveryContact: customerEmail,
 				deliveryStatus: isManualHandoverOrder ? 'processing' : 'pending',
 				status: 'pending',
-				affiliateCode: orderData.affiliateCode?.toUpperCase(),
-				affiliateUserId,
+				affiliateCode: attribution.affiliateCode || null,
+				affiliateUserId: attribution.affiliateUserId || null,
 				promotionId,
 				promotionCode: appliedPromotionCode,
 					orderItems: {
@@ -439,6 +481,20 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				}
 			});
 			invalidateAdminStatsCache();
+
+			if (data.affiliateCode && data.affiliateUserId) {
+				const creditResult = await recordAffiliateStoreCreditForOrder(data.id);
+				if (!creditResult.success) {
+					console.error(
+						'Failed to record affiliate store credit for manual handover order:',
+						creditResult.error
+					);
+				}
+			}
+
+			void maybeSendAffiliateUnlockInvite(locals.user.id).catch((inviteError) => {
+				console.error('Failed to evaluate affiliate unlock after manual handover order:', inviteError);
+			});
 
 			return json({
 				data,

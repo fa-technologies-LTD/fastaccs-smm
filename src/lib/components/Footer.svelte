@@ -1,14 +1,5 @@
 <script>
-	import {
-		Mail,
-		MessageCircle,
-		Facebook,
-		Instagram,
-		Music2,
-		MapPin,
-		Zap,
-		ShieldCheck
-	} from '$lib/icons';
+	import { Mail, MessageCircle, Facebook, Instagram, Music2 } from '$lib/icons';
 	import { addToast } from '$lib/stores/toasts';
 	import footerLogo from '$lib/assets/footer-logo.png';
 </script>
@@ -16,15 +7,21 @@
 <footer
 	style="background: var(--bg-elev-2); color: var(--text); border-top: 1px solid var(--border);"
 >
-	<div class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-		<div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-5">
+	<div class="mx-auto max-w-7xl px-5 py-7 sm:px-6 lg:px-8">
+		<div class="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-5">
 			<!-- Company Info -->
 			<div>
-				<div class="mb-4">
+				<div class="mb-2">
 					<img src={footerLogo} alt="FastAccs Logo" class="h-8 w-auto" />
 				</div>
-				<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-					Marketplace for social media accounts and growth services with secure checkout.
+				<p
+					class="mb-2 text-sm font-semibold"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
+					FAST ACCOUNTS
+				</p>
+				<p class="mb-3 text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
+					Secure marketplace for social media accounts and growth services.
 				</p>
 				<div class="flex space-x-4">
 					<a href="https://web.facebook.com/profile.php?id=100089537246012" class="footer-social">
@@ -42,31 +39,26 @@
 			<!-- Quick Links -->
 			<div>
 				<h3
-					class="mb-4 text-lg font-semibold"
+					class="mb-2 text-base font-semibold"
 					style="color: var(--text); font-family: var(--font-head);"
 				>
 					Quick Links
 				</h3>
-				<ul class="space-y-2">
+				<ul class="space-y-1.5 text-sm">
 					<li>
 						<a href="/platforms" data-sveltekit-preload-data="hover" class="footer-link"
 							>Browse Accounts</a
 						>
 					</li>
-					<li>
-						<button
-							class="footer-link text-left"
-							onclick={() => addToast({ type: 'info', title: 'Coming Soon!' })}
-							>Growth Services</button
-						>
-					</li>
+						<li>
+							<a href="/services" data-sveltekit-preload-data="hover" class="footer-link"
+								>Growth Services</a
+							>
+						</li>
 					<li>
 						<a href="/how-it-works" data-sveltekit-preload-data="hover" class="footer-link"
 							>How It Works</a
 						>
-					</li>
-					<li>
-						<a href="/pricing" data-sveltekit-preload-data="hover" class="footer-link">Pricing</a>
 					</li>
 					<li>
 						<a href="/affiliate" data-sveltekit-preload-data="hover" class="footer-link"
@@ -79,12 +71,12 @@
 			<!-- Support -->
 			<div>
 				<h3
-					class="mb-4 text-lg font-semibold"
+					class="mb-2 text-base font-semibold"
 					style="color: var(--text); font-family: var(--font-head);"
 				>
 					Support
 				</h3>
-				<ul class="space-y-2">
+				<ul class="space-y-1.5 text-sm">
 					<li>
 						<a href="/support" data-sveltekit-preload-data="hover" class="footer-link"
 							>Help Center</a
@@ -104,15 +96,12 @@
 			<!-- Policies -->
 			<div>
 				<h3
-					class="mb-4 text-lg font-semibold"
+					class="mb-2 text-base font-semibold"
 					style="color: var(--text); font-family: var(--font-head);"
 				>
 					Policies
 				</h3>
-				<ul class="space-y-2">
-					<li>
-						<a href="/smm/policies" class="footer-link">Policy Center</a>
-					</li>
+				<ul class="space-y-1.5 text-sm">
 					<li>
 						<a href="/terms" class="footer-link">Terms</a>
 					</li>
@@ -125,95 +114,45 @@
 					<li>
 						<a href="/acceptable-use" class="footer-link">Acceptable Use</a>
 					</li>
-					<li>
-						<a href="/cookies" class="footer-link">Cookie Policy</a>
-					</li>
-					<li>
-						<button
-							type="button"
-							class="footer-link text-left"
-							onclick={() => {
-								if (typeof window === 'undefined') return;
-								window.dispatchEvent(new CustomEvent('fa:privacy-open'));
-							}}
-						>
-							Privacy Settings
-						</button>
-					</li>
 				</ul>
 			</div>
 
 			<!-- Contact Info -->
 			<div>
 				<h3
-					class="mb-4 text-lg font-semibold"
+					class="mb-2 text-base font-semibold"
 					style="color: var(--text); font-family: var(--font-head);"
 				>
-					Get In Touch
+					Contact
 				</h3>
-				<div class="space-y-3">
+				<div class="space-y-2 text-sm">
 					<div class="flex items-center">
-						<MessageCircle class="mr-2 h-5 w-5" style="color: var(--text-muted);" />
+						<MessageCircle class="mr-2 h-4 w-4" style="color: var(--text-muted);" />
 						<a href="https://wa.link/fast_accounts" class="footer-link"> WhatsApp Support </a>
 					</div>
 					<div class="flex items-center">
-						<Mail class="mr-2 h-5 w-5" style="color: var(--text-muted);" />
-						<a href="mailto:verystronethan@gmail.com" class="footer-link"> Support Email </a>
-					</div>
-				</div>
-
-				<!-- Trust Badges -->
-				<div class="mt-6">
-					<div class="mb-2 text-sm" style="color: var(--text-dim); font-family: var(--font-body);">
-						Security & Support
-					</div>
-					<div class="flex space-x-2">
-						<div
-							class="rounded px-2 py-1 text-xs"
-							style="background: var(--status-success-bg); border: 1px solid var(--status-success-border); color: var(--primary); font-family: var(--font-body); font-weight: 600;"
-						>
-							SSL Secured
-						</div>
-						<div
-							class="rounded px-2 py-1 text-xs"
-							style="background: var(--status-success-bg); border: 1px solid var(--status-success-border); color: var(--primary); font-family: var(--font-body); font-weight: 600;"
-						>
-							Support Team
-						</div>
+						<Mail class="mr-2 h-4 w-4" style="color: var(--text-muted);" />
+						<a href="mailto:support@fastaccs.com" class="footer-link"> Support Email </a>
 					</div>
 				</div>
 			</div>
 		</div>
 
 		<!-- Bottom Bar -->
-		<div class="mt-8 pt-8 text-center" style="border-top: 1px solid var(--border);">
-			<div class="flex flex-col items-center justify-between md:flex-row">
-				<p class="text-sm" style="color: var(--text-dim); font-family: var(--font-body);">
+		<div class="mt-5 pt-4 text-center" style="border-top: 1px solid var(--border);">
+			<div class="flex flex-col items-center justify-between gap-2 md:flex-row">
+				<div
+					class="text-xs sm:text-sm"
+					style="color: var(--text-dim); font-family: var(--font-body);"
+				>
+					SSL Secured · Support Team
+				</div>
+				<p
+					class="text-xs sm:text-sm"
+					style="color: var(--text-dim); font-family: var(--font-body);"
+				>
 					© 2026 FA Technologies LTD. All rights reserved.
 				</p>
-				<div class="mt-4 flex space-x-6 md:mt-0">
-					<span
-						class="inline-flex items-center gap-1 text-sm"
-						style="color: var(--text-dim); font-family: var(--font-body);"
-					>
-						<MapPin class="h-4 w-4" />
-						Made in Nigeria
-					</span>
-					<span
-						class="inline-flex items-center gap-1 text-sm"
-						style="color: var(--text-dim); font-family: var(--font-body);"
-					>
-						<Zap class="h-4 w-4" />
-						Instant Delivery
-					</span>
-					<span
-						class="inline-flex items-center gap-1 text-sm"
-						style="color: var(--text-dim); font-family: var(--font-body);"
-					>
-						<ShieldCheck class="h-4 w-4" />
-						100% Secure
-					</span>
-				</div>
 			</div>
 		</div>
 	</div>

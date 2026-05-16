@@ -1,5 +1,5 @@
 import { prisma } from '$lib/prisma';
-import { recordCommission } from './affiliate';
+import { maybeSendAffiliateUnlockInvite, recordAffiliateStoreCreditForOrder } from './affiliate';
 import { sendOrderConfirmationEmailIfNeeded } from './email';
 import { invalidateAdminStatsCache } from './admin-metrics';
 import { sendLowStockAdminAlertIfNeeded } from './admin-alerts';
@@ -158,17 +158,17 @@ async function allocateAccounts(orderId: string) {
 			console.error('Failed to send order confirmation email:', emailError);
 		}
 
-		// Record affiliate commission if order has affiliate code
-		if (order.affiliateCode) {
-			const orderTotal = Number(order.totalAmount);
-			const commissionResult = await recordCommission(orderId, order.affiliateCode, orderTotal);
-			if (commissionResult.success) {
-				console.log(
-					`Recorded affiliate commission: ₦${commissionResult.commission} for code ${order.affiliateCode}`
-				);
-			} else {
-				console.error('Failed to record commission:', commissionResult.error);
+		if (order.affiliateCode && order.affiliateUserId) {
+			const creditResult = await recordAffiliateStoreCreditForOrder(orderId);
+			if (!creditResult.success) {
+				console.error('Failed to record affiliate store credit:', creditResult.error);
 			}
+		}
+
+		if (order.userId) {
+			void maybeSendAffiliateUnlockInvite(order.userId).catch((error) => {
+				console.error('Failed to evaluate affiliate unlock invite:', error);
+			});
 		}
 
 		return {

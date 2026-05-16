@@ -428,3 +428,39 @@ Important limitations (still true):
 - No rich editor toolbar (WYSIWYG) yet
 - No advanced markdown (headings/tables/italics parser rules are limited)
 - No custom per-broadcast CTA button (currently disabled for broadcast sends) what the mean?
+
+==================================================
+AFFILIATE PAGE CONTENT REVIEW DRAFT (FOR APPROVAL)
+Date: 2026-05-13
+Route: /affiliate
+
+Hero / Value Proposition
+- Tag: "Cashable Store Credit"
+- Headline: "Turn FastAccs referrals into cashable earnings"
+- Intro: Qualified buyers unlock affiliate access, share code/link, earn Store Credit from successful referred orders, and can request payout once eligible.
+
+How It Works (3 cards)
+1) Unlock
+- Reach the lifetime completed-spend threshold.
+2) Share
+- Share your referral link/code for eligible orders.
+3) Earn
+- Store Credit is earned from successful referred orders and tracked on dashboard.
+
+Program Basics (current copy intent)
+- Buyer discounts follow fixed order-stage rules (up to 10 successful referred purchases per buyer).
+- Affiliate earnings are credited as Store Credit via SKU-safe logic.
+- Referral pricing and separate promo code do not stack.
+- Store Credit can be withdrawn once payout requirements are met.
+
+Current CTAs on /affiliate
+- Primary (if logged in): "Open Affiliate Dashboard" -> /dashboard?tab=affiliate
+- Secondary: "Submit bank details" -> Google Form
+  https://docs.google.com/forms/d/e/1FAIpQLSfCmv6ADTG51ooEjm9-UBz2GzsxFDqxxSep6Lo_Gb-OMQv8UA/viewform?usp=dialog
+
+Affiliate Tab UX (dashboard) updates now aligned
+- Share button renamed: "Share referral link on WhatsApp"
+- Guidance button added: "See how it works" -> /affiliate
+- Bank details CTA added: "Submit bank details" -> Google Form above
+- Payout request remains only when eligible ("ripe")
+- Extra lifecycle chips removed from user-facing view for cleaner UX

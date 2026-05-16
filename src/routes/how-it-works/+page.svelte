@@ -600,8 +600,8 @@
 							</div>
 							<div class="space-y-2 text-sm" style="color: var(--text-muted);">
 								<div class="flex items-center justify-between">
-									<span>Commission Rate:</span>
-									<span class="font-bold" style="color: var(--status-success);">10%</span>
+									<span>Earnings Model:</span>
+									<span class="font-bold" style="color: var(--status-success);">Store Credit</span>
 								</div>
 								<div class="flex items-center justify-between">
 									<span>Status:</span>
@@ -636,12 +636,12 @@
 							</h3>
 							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
 								Share your affiliate code or referral link with friends, social media followers, or
-								customers. They get a discount, you earn commissions.
+								customers. They get checkout discounts, you earn Cashable Store Credit.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Customers get 10% discount</span>
+									<span>New buyers get referral discounts</span>
 								</li>
 								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
@@ -664,7 +664,7 @@
 								<div class="flex items-center gap-2 rounded-lg p-3" style="background: var(--bg);">
 									<code
 										class="flex-1 overflow-hidden text-xs text-ellipsis"
-										style="color: var(--text);">smm.fastaccs.com/?ref=JD001</code
+										style="color: var(--text);">smm.fastaccs.com/ref/JD001</code
 									>
 									<Copy
 										class="h-4 w-4 flex-shrink-0 cursor-pointer"
@@ -718,17 +718,17 @@
 								Track Your Earnings
 							</h3>
 							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Every time someone uses your code, you earn 10% commission. Track all referrals,
-								sales, and commissions in your affiliate dashboard.
+								Track referred users, successful referred orders, and Store Credit activity in your
+								affiliate dashboard.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>10% commission on every order</span>
+									<span>Earn Store Credit from eligible successful referred orders</span>
 								</li>
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Real-time commission tracking</span>
+									<span>Real-time Store Credit tracking</span>
 								</li>
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
@@ -793,10 +793,10 @@
 							class="mb-2 text-lg font-semibold"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
-							10% Commission
+							Cashable Store Credit
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Earn on every purchase made with your code
+							Earn from eligible successful referred orders
 						</p>
 					</div>
 					<div class="text-center">
@@ -813,7 +813,7 @@
 							Instant Tracking
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Real-time updates on referrals and commissions
+							Real-time updates on referrals and Store Credit
 						</p>
 					</div>
 					<div class="text-center">
@@ -908,13 +908,13 @@
 						class="flex cursor-pointer items-center justify-between font-semibold"
 						style="color: var(--text); font-family: var(--font-head);"
 					>
-						How do affiliate commissions work?
+						How do affiliate earnings work?
 						<span class="ml-4" style="color: var(--text-dim);">+</span>
 					</summary>
 					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						When you become an affiliate, you get a unique code (e.g., "JD001"). When someone uses
-						your code at checkout, they get a 10% discount and you earn 10% commission on their
-						order total. Commissions are tracked automatically in your dashboard.
+						When you become an affiliate, you get a unique code and referral link. When someone uses
+						your code at checkout, they get referral discounts and you earn Cashable Store Credit on
+						eligible successful referred orders. Earnings are tracked automatically in your dashboard.
 					</p>
 				</details>
 

@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { Menu, X, ShoppingCart } from '$lib/icons';
+	import { onMount } from 'svelte';
+	import { Menu, X, ShoppingCart, BellRing } from '$lib/icons';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
@@ -11,6 +12,22 @@
 
 	// Get auth data from page data (comes from hooks.server.ts)
 	const user = $derived(page.data.user);
+	interface AffiliateNotificationItem {
+		id: string;
+		type: string;
+		title: string;
+		message: string;
+		read: boolean;
+		createdAt: string;
+	}
+
+	let affiliateCanShowBell = $state(false);
+	let affiliateUnreadCount = $state(0);
+	let affiliateNotifications = $state<AffiliateNotificationItem[]>([]);
+	let affiliateInboxOpen = $state(false);
+	let affiliateInboxLoading = $state(false);
+	let affiliateBellDesktopAnchor = $state<HTMLElement | null>(null);
+	let affiliateBellMobileAnchor = $state<HTMLElement | null>(null);
 
 	// Cart item count using the new cart structure
 	const cartItemCount = $derived(cart.itemCount);
@@ -85,6 +102,129 @@
 			goto('/');
 		}
 	}
+
+	function formatTimeAgo(value: string): string {
+		const date = new Date(value);
+		const ts = date.getTime();
+		if (!Number.isFinite(ts)) return 'just now';
+
+		const diffMs = Math.max(0, Date.now() - ts);
+		const minute = 60 * 1000;
+		const hour = 60 * minute;
+		const day = 24 * hour;
+
+		if (diffMs < minute) return 'just now';
+		if (diffMs < hour) return `${Math.floor(diffMs / minute)}m ago`;
+		if (diffMs < day) return `${Math.floor(diffMs / hour)}h ago`;
+		return `${Math.floor(diffMs / day)}d ago`;
+	}
+
+	async function loadAffiliateNotifications(limit = 20): Promise<void> {
+		if (!user) return;
+		affiliateInboxLoading = true;
+		try {
+			const response = await fetch(`/api/affiliate/notifications?limit=${limit}`);
+			const result = await response.json();
+			if (!response.ok || !result?.success) {
+				return;
+			}
+
+			const data = result.data || {};
+			affiliateCanShowBell = Boolean(data.canShowBell);
+			affiliateUnreadCount = Math.max(0, Number(data.unreadCount || 0));
+			affiliateNotifications = Array.isArray(data.notifications)
+				? data.notifications.map((raw: unknown) => {
+						const item = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+						return {
+							id: String(item.id || ''),
+							type: String(item.type || ''),
+							title: String(item.title || 'Notification'),
+							message: String(item.message || ''),
+							read: Boolean(item.read),
+							createdAt: String(item.createdAt || new Date().toISOString())
+						};
+					})
+				: [];
+		} catch (error) {
+			console.error('Failed to load affiliate notifications:', error);
+		} finally {
+			affiliateInboxLoading = false;
+		}
+	}
+
+	async function markAffiliateNotificationRead(notificationId: string): Promise<void> {
+		if (!notificationId) return;
+		try {
+			const response = await fetch('/api/affiliate/notifications/read', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ notificationId })
+			});
+			if (!response.ok) return;
+			affiliateNotifications = affiliateNotifications.map((item) =>
+				item.id === notificationId ? { ...item, read: true } : item
+			);
+			affiliateUnreadCount = Math.max(
+				0,
+				affiliateNotifications.filter((item) => !item.read).length
+			);
+		} catch (error) {
+			console.error('Failed to mark affiliate notification as read:', error);
+		}
+	}
+
+	async function markAllAffiliateNotificationsRead(): Promise<void> {
+		if (affiliateUnreadCount <= 0) return;
+		try {
+			const response = await fetch('/api/affiliate/notifications/read', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ markAll: true })
+			});
+			if (!response.ok) return;
+			affiliateNotifications = affiliateNotifications.map((item) => ({ ...item, read: true }));
+			affiliateUnreadCount = 0;
+		} catch (error) {
+			console.error('Failed to mark all affiliate notifications as read:', error);
+		}
+	}
+
+	function toggleAffiliateInbox(): void {
+		affiliateInboxOpen = !affiliateInboxOpen;
+		if (affiliateInboxOpen && user) {
+			void loadAffiliateNotifications(20);
+		}
+	}
+
+	onMount(() => {
+		if (user) {
+			void loadAffiliateNotifications(20);
+		}
+
+		const handleOutsideClick = (event: MouseEvent) => {
+			if (!affiliateInboxOpen) return;
+			const target = event.target as Node | null;
+			const isInsideDesktop = Boolean(target && affiliateBellDesktopAnchor?.contains(target));
+			const isInsideMobile = Boolean(target && affiliateBellMobileAnchor?.contains(target));
+			if (target && !isInsideDesktop && !isInsideMobile) {
+				affiliateInboxOpen = false;
+			}
+		};
+
+		document.addEventListener('click', handleOutsideClick);
+		return () => {
+			document.removeEventListener('click', handleOutsideClick);
+		};
+	});
+
+	$effect(() => {
+		if (!user) {
+			affiliateCanShowBell = false;
+			affiliateUnreadCount = 0;
+			affiliateNotifications = [];
+			affiliateInboxOpen = false;
+		}
+	});
 </script>
 
 <nav
@@ -170,6 +310,93 @@
 				{#if user}
 					<div class="relative">
 						<div class="flex items-center space-x-4">
+							{#if affiliateCanShowBell}
+								<div class="relative" bind:this={affiliateBellDesktopAnchor}>
+									<button
+										type="button"
+										onclick={toggleAffiliateInbox}
+										class="cart-btn relative p-2"
+										aria-label="Affiliate notifications"
+										aria-expanded={affiliateInboxOpen}
+									>
+										<BellRing size={22} />
+										{#if affiliateUnreadCount > 0}
+											<span class="affiliate-indicator-dot"></span>
+										{/if}
+									</button>
+
+									{#if affiliateInboxOpen}
+										<div
+											class="absolute right-0 z-50 mt-2 w-[320px] rounded-[var(--r-sm)] border border-[var(--border)] p-2 shadow-xl"
+											style="background: linear-gradient(180deg, var(--surface-2), var(--surface));"
+										>
+											<div class="mb-2 flex items-center justify-between px-2 py-1">
+												<div class="text-sm font-semibold" style="color: var(--text);">Updates</div>
+												{#if affiliateUnreadCount > 0}
+													<button
+														type="button"
+														onclick={markAllAffiliateNotificationsRead}
+														class="text-xs font-semibold"
+														style="color: var(--link);"
+													>
+														Mark all read
+													</button>
+												{/if}
+											</div>
+											{#if affiliateInboxLoading}
+												<div class="px-2 py-5 text-sm" style="color: var(--text-muted);">
+													Loading...
+												</div>
+											{:else if affiliateNotifications.length === 0}
+												<div class="px-2 py-5 text-sm" style="color: var(--text-muted);">
+													No updates yet.
+												</div>
+											{:else}
+												<div class="max-h-[320px] space-y-1 overflow-y-auto pr-1">
+													{#each affiliateNotifications as note (note.id)}
+														<button
+															type="button"
+															onclick={() => !note.read && markAffiliateNotificationRead(note.id)}
+															class="w-full rounded-[10px] border p-2 text-left transition-colors"
+															style="border-color: {note.read
+																? 'rgba(255,255,255,0.08)'
+																: 'rgba(5,212,113,0.36)'}; background: {note.read
+																? 'rgba(255,255,255,0.02)'
+																: 'rgba(5,212,113,0.08)'};"
+														>
+															<div class="flex items-start justify-between gap-2">
+																<div class="min-w-0">
+																	<p
+																		class="truncate text-sm font-semibold"
+																		style="color: var(--text);"
+																	>
+																		{note.title}
+																	</p>
+																	<p
+																		class="mt-1 text-xs leading-5"
+																		style="color: var(--text-muted);"
+																	>
+																		{note.message}
+																	</p>
+																</div>
+																{#if !note.read}
+																	<span
+																		class="mt-1 h-2 w-2 rounded-full"
+																		style="background: var(--primary); box-shadow: 0 0 0 4px rgba(5,212,113,0.16);"
+																	></span>
+																{/if}
+															</div>
+															<div class="mt-1 text-[11px]" style="color: var(--text-dim);">
+																{formatTimeAgo(note.createdAt)}
+															</div>
+														</button>
+													{/each}
+												</div>
+											{/if}
+										</div>
+									{/if}
+								</div>
+							{/if}
 							<a href="/dashboard" class="nav-link flex items-center space-x-2">
 								{#if user.avatarUrl}
 									<img src={user.avatarUrl} alt="Profile" class="h-6 w-6 rounded-full" />
@@ -231,6 +458,84 @@
 							</span>
 						{/if}
 					</button>
+				{/if}
+
+				{#if user && affiliateCanShowBell}
+					<div class="relative" bind:this={affiliateBellMobileAnchor}>
+						<button
+							type="button"
+							onclick={toggleAffiliateInbox}
+							class="cart-btn relative p-2"
+							aria-label="Affiliate notifications"
+						>
+							<BellRing size={22} />
+							{#if affiliateUnreadCount > 0}
+								<span class="affiliate-indicator-dot"></span>
+							{/if}
+						</button>
+						{#if affiliateInboxOpen}
+							<div
+								class="absolute right-0 z-50 mt-2 w-[88vw] max-w-[340px] rounded-[var(--r-sm)] border border-[var(--border)] p-2 shadow-xl"
+								style="background: linear-gradient(180deg, var(--surface-2), var(--surface));"
+							>
+								<div class="mb-2 flex items-center justify-between px-2 py-1">
+									<div class="text-sm font-semibold" style="color: var(--text);">Updates</div>
+									{#if affiliateUnreadCount > 0}
+										<button
+											type="button"
+											onclick={markAllAffiliateNotificationsRead}
+											class="text-xs font-semibold"
+											style="color: var(--link);"
+										>
+											Mark all read
+										</button>
+									{/if}
+								</div>
+								{#if affiliateInboxLoading}
+									<div class="px-2 py-5 text-sm" style="color: var(--text-muted);">Loading...</div>
+								{:else if affiliateNotifications.length === 0}
+									<div class="px-2 py-5 text-sm" style="color: var(--text-muted);">
+										No updates yet.
+									</div>
+								{:else}
+									<div class="max-h-[300px] space-y-1 overflow-y-auto pr-1">
+										{#each affiliateNotifications as note (note.id)}
+											<button
+												type="button"
+												onclick={() => !note.read && markAffiliateNotificationRead(note.id)}
+												class="w-full rounded-[10px] border p-2 text-left transition-colors"
+												style="border-color: {note.read
+													? 'rgba(255,255,255,0.08)'
+													: 'rgba(5,212,113,0.36)'}; background: {note.read
+													? 'rgba(255,255,255,0.02)'
+													: 'rgba(5,212,113,0.08)'};"
+											>
+												<div class="flex items-start justify-between gap-2">
+													<div class="min-w-0">
+														<p class="truncate text-sm font-semibold" style="color: var(--text);">
+															{note.title}
+														</p>
+														<p class="mt-1 text-xs leading-5" style="color: var(--text-muted);">
+															{note.message}
+														</p>
+													</div>
+													{#if !note.read}
+														<span
+															class="mt-1 h-2 w-2 rounded-full"
+															style="background: var(--primary); box-shadow: 0 0 0 4px rgba(5,212,113,0.16);"
+														></span>
+													{/if}
+												</div>
+												<div class="mt-1 text-[11px]" style="color: var(--text-dim);">
+													{formatTimeAgo(note.createdAt)}
+												</div>
+											</button>
+										{/each}
+									</div>
+								{/if}
+							</div>
+						{/if}
+					</div>
 				{/if}
 
 				<button
@@ -428,5 +733,29 @@
 	}
 	.btn-ghost:hover {
 		background: rgba(255, 255, 255, 0.08);
+	}
+	.affiliate-indicator-dot {
+		position: absolute;
+		right: 2px;
+		top: 2px;
+		height: 10px;
+		width: 10px;
+		border-radius: 999px;
+		background: radial-gradient(circle at 30% 30%, #a6ffd2, #05d471 70%);
+		box-shadow:
+			0 0 0 3px rgba(5, 212, 113, 0.17),
+			0 0 12px rgba(5, 212, 113, 0.44);
+		animation: bellGlow 1.8s ease-in-out infinite;
+	}
+	@keyframes bellGlow {
+		0%,
+		100% {
+			transform: scale(1);
+			opacity: 0.95;
+		}
+		50% {
+			transform: scale(1.1);
+			opacity: 1;
+		}
 	}
 </style>

@@ -2,17 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import {
-		ShoppingBag,
-		CreditCard,
-		Check,
-		Lock,
-		Tag,
-		Shield,
-		X,
-		Minus,
-		Plus
-	} from '$lib/icons';
+	import { ShoppingBag, CreditCard, Check, Lock, Tag, Shield, X, Minus, Plus } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { cart } from '$lib/stores/cart.svelte';
@@ -28,7 +18,6 @@
 	// Reactive state
 	let loading = $state(false);
 	let affiliateCode = $state<string | null>(null);
-	let affiliateDiscount = $state<number>(0);
 	let promoCodeInput = $state('');
 	let promoAppliedCode = $state<string | null>(null);
 	let promoDiscountAmount = $state(0);
@@ -105,10 +94,9 @@
 
 			if (result.valid) {
 				affiliateCode = code.toUpperCase();
-				affiliateDiscount = result.commissionRate || 10;
 				showSuccess(
 					'Referral detected',
-					`${affiliateCode} captured. Promo discounts are currently active in checkout.`
+					`${affiliateCode} captured for referral pricing on eligible orders.`
 				);
 			} else {
 				showWarning('Invalid affiliate code', 'The code you entered is not valid');
@@ -148,7 +136,10 @@
 		} catch (error) {
 			promoAppliedCode = null;
 			promoDiscountAmount = 0;
-			showWarning('Promo not applied', error instanceof Error ? error.message : 'Invalid promo code');
+			showWarning(
+				'Promo not applied',
+				error instanceof Error ? error.message : 'Invalid promo code'
+			);
 		} finally {
 			promoValidationLoading = false;
 		}
@@ -173,7 +164,9 @@
 
 	function isEmailVerificationError(errorText: unknown): boolean {
 		if (typeof errorText !== 'string') return false;
-		return errorText.includes('EMAIL_NOT_VERIFIED') || errorText.includes('Email verification required');
+		return (
+			errorText.includes('EMAIL_NOT_VERIFIED') || errorText.includes('Email verification required')
+		);
 	}
 
 	function shouldRenderCheckoutPlatformImage(item: CartItemWithTier): boolean {
@@ -222,11 +215,11 @@
 				}
 			}
 
-				// Create the order first
-				const orderResult = await createOrder({
-					email: user.email || '',
-					phone: user.phone || '',
-					items: cartItems.map((item) => ({
+			// Create the order first
+			const orderResult = await createOrder({
+				email: user.email || '',
+				phone: user.phone || '',
+				items: cartItems.map((item) => ({
 					categoryId: item.tierId,
 					quantity: item.quantity,
 					price: item.tier.price
@@ -236,49 +229,49 @@
 				paymentMethod: 'monnify',
 				affiliateCode: affiliateCode || undefined,
 				promotionCode: promoAppliedCode || undefined
-				});
+			});
 
-				if (!orderResult.success) {
-					if (isUnauthorizedApiError(orderResult.error)) {
-						showWarning('Session expired', 'Please log in again to continue checkout.');
-						redirectToLoginWithReturnUrl();
-						return;
-					}
-					if (isEmailVerificationError(orderResult.error)) {
-						showWarning('Verify your email', 'Please verify your email before completing checkout.');
-						const currentUrl = new URL(window.location.href);
-						const nextPath = currentUrl.pathname + currentUrl.search;
-						goto(`/verify-email?next=${encodeURIComponent(nextPath)}`);
-						return;
-					}
-					throw new Error(orderResult.error || 'Failed to create order');
-				}
-
-				if (!orderResult.checkoutUrl) {
-					throw new Error(orderResult.error || 'Failed to initialize payment');
-				}
-
-				sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, orderResult.orderId);
-				window.location.href = orderResult.checkoutUrl;
-			} catch (error) {
-				console.error('Payment initialization error:', error);
-				if (error instanceof Error && isUnauthorizedApiError(error.message)) {
+			if (!orderResult.success) {
+				if (isUnauthorizedApiError(orderResult.error)) {
 					showWarning('Session expired', 'Please log in again to continue checkout.');
 					redirectToLoginWithReturnUrl();
-					loading = false;
 					return;
 				}
-				if (error instanceof Error && isEmailVerificationError(error.message)) {
+				if (isEmailVerificationError(orderResult.error)) {
 					showWarning('Verify your email', 'Please verify your email before completing checkout.');
 					const currentUrl = new URL(window.location.href);
 					const nextPath = currentUrl.pathname + currentUrl.search;
 					goto(`/verify-email?next=${encodeURIComponent(nextPath)}`);
-					loading = false;
 					return;
 				}
-				showError(
-					'Payment failed',
-					`Failed to initialize payment: ${error instanceof Error ? error.message : 'Please try again.'}`
+				throw new Error(orderResult.error || 'Failed to create order');
+			}
+
+			if (!orderResult.checkoutUrl) {
+				throw new Error(orderResult.error || 'Failed to initialize payment');
+			}
+
+			sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, orderResult.orderId);
+			window.location.href = orderResult.checkoutUrl;
+		} catch (error) {
+			console.error('Payment initialization error:', error);
+			if (error instanceof Error && isUnauthorizedApiError(error.message)) {
+				showWarning('Session expired', 'Please log in again to continue checkout.');
+				redirectToLoginWithReturnUrl();
+				loading = false;
+				return;
+			}
+			if (error instanceof Error && isEmailVerificationError(error.message)) {
+				showWarning('Verify your email', 'Please verify your email before completing checkout.');
+				const currentUrl = new URL(window.location.href);
+				const nextPath = currentUrl.pathname + currentUrl.search;
+				goto(`/verify-email?next=${encodeURIComponent(nextPath)}`);
+				loading = false;
+				return;
+			}
+			showError(
+				'Payment failed',
+				`Failed to initialize payment: ${error instanceof Error ? error.message : 'Please try again.'}`
 			);
 			loading = false;
 		}
@@ -498,7 +491,8 @@
 												<img
 													src={item.tier.platformIcon}
 													alt={item.tier.platformName}
-													class="h-full w-full object-cover"
+													class="h-full w-full object-contain p-2"
+													style="background: rgba(255,255,255,0.06);"
 													onerror={() => markCheckoutPlatformImageFailed(item.tier.id)}
 												/>
 											{:else}
@@ -585,7 +579,10 @@
 
 						<hr class="my-8" style="border-color: var(--border);" />
 
-						<div class="mb-4 rounded-lg p-3" style="border: 1px solid var(--border); background: var(--bg);">
+						<div
+							class="mb-4 rounded-lg p-3"
+							style="border: 1px solid var(--border); background: var(--bg);"
+						>
 							<p class="mb-2 text-xs font-semibold uppercase" style="color: var(--text-muted);">
 								Promo Code
 							</p>

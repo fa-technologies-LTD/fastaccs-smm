@@ -6,6 +6,7 @@ import { createSession, generateSessionToken, setSessionTokenCookie } from '$lib
 import { getUserFromGoogleId, createUserFromGoogle, updateUserFromGoogle } from '$lib/auth/user';
 import { isAdminEmail } from '$lib/auth/admin';
 import { sanitizeInternalRedirectPath } from '$lib/auth/redirect';
+import { maybeLockReferralFromCookie } from '$lib/services/affiliate';
 import type { RequestHandler } from './$types';
 import type { OAuth2Tokens } from 'arctic';
 
@@ -50,6 +51,7 @@ export const GET: RequestHandler = async (event) => {
 
 		// Check if user already exists
 		let user = await getUserFromGoogleId(googleUserId);
+		let isNewUser = false;
 
 		if (user) {
 			// Update existing user's info and last login
@@ -61,6 +63,7 @@ export const GET: RequestHandler = async (event) => {
 			});
 		} else {
 			// Create new user
+			isNewUser = true;
 			user = await createUserFromGoogle({
 				sub: googleUserId,
 				email,
@@ -77,6 +80,15 @@ export const GET: RequestHandler = async (event) => {
 				302,
 				`/auth/login?error=${encodeURIComponent('Your account is currently suspended. Contact support.')}&returnUrl=${encodeURIComponent(redirectTo)}`
 			);
+		}
+
+		if (isNewUser) {
+			await maybeLockReferralFromCookie({
+				cookies,
+				isSecureRequest: url.protocol === 'https:',
+				referredUserId: user.id,
+				source: 'google_signup'
+			});
 		}
 
 		// Create session

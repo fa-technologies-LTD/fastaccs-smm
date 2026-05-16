@@ -13,7 +13,7 @@
 
 <svelte:head>
 	<title>Affiliate Terms - FastAccs</title>
-	<meta name="description" content="Terms for FastAccs affiliate participation and commissions." />
+	<meta name="description" content="Terms for FastAccs affiliate participation and Store Credit earnings." />
 </svelte:head>
 
 <Navigation />
@@ -37,10 +37,10 @@
 			</section>
 
 			<section>
-				<h2 class="mb-2 text-2xl font-semibold" style="color: var(--text); font-family: var(--font-head);">Commissions</h2>
+				<h2 class="mb-2 text-2xl font-semibold" style="color: var(--text); font-family: var(--font-head);">Store Credit Earnings</h2>
 				<p>
-					Commission rates, qualification rules, and payout timing are shown in your affiliate dashboard and may
-					be updated from time to time.
+					Store Credit earning rules, qualification requirements, and payout timing are shown in your affiliate
+					dashboard and may be updated from time to time.
 				</p>
 			</section>
 
@@ -57,15 +57,15 @@
 				<ul class="ml-6 list-disc space-y-1">
 					<li>Impersonation, misleading claims, or fake guarantees.</li>
 					<li>Spam messaging, bot promotion, or manipulative traffic schemes.</li>
-					<li>Self-referrals, fraudulent orders, or payout abuse patterns.</li>
+					<li>Self-referrals, policy abuse patterns, or payout abuse patterns.</li>
 				</ul>
 			</section>
 
 			<section>
 				<h2 class="mb-2 text-2xl font-semibold" style="color: var(--text); font-family: var(--font-head);">Enforcement</h2>
 				<p>
-					We may suspend payouts, reverse commissions, or terminate affiliate access for policy violations,
-					fraud signals, or unresolved verification issues.
+					We may suspend payouts, reverse affected Store Credit, or restrict affiliate access for policy
+					violations, suspicious activity signals, or unresolved verification issues.
 				</p>
 			</section>
 		</div>

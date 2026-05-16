@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
+import { randomUUID } from 'crypto';
 import { prisma } from '$lib/prisma';
 import {
 	DEFAULT_LOGIN_GUIDE_LABEL,
@@ -7,6 +8,7 @@ import {
 	getTierDeliveryConfig
 } from '$lib/helpers/tier-delivery-config';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
+import { getAffiliateDashboardState } from '$lib/services/affiliate';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	try {
@@ -18,7 +20,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		}
 
 		// Fetch all dashboard data in parallel with optimized queries
-		const [orders, affiliateProgram, wallet, walletTransactions, purchases] = await Promise.all([
+		const [orders, affiliateData, wallet, walletTransactions, purchases] = await Promise.all([
 			// Orders - only fetch necessary fields
 			prisma.order.findMany({
 				where: {
@@ -48,20 +50,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 				take: 50
 			}),
 
-			// Affiliate stats
-			prisma.affiliateProgram.findFirst({
-				where: { userId: user.id },
-				select: {
-					id: true,
-					affiliateCode: true,
-					commissionRate: true,
-					totalReferrals: true,
-					totalSales: true,
-					totalCommission: true,
-					totalPaid: true,
-					status: true
-				}
-			}),
+			// Affiliate dashboard state
+			getAffiliateDashboardState(user.id),
 
 			// Wallet balance
 			prisma.wallet.findUnique({
@@ -180,7 +170,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			success: true,
 			data: {
 				orders,
-				affiliateData: affiliateProgram,
+				affiliateData,
 				walletBalance: wallet?.balance || 0,
 				walletCurrency: wallet?.currency || 'NGN',
 				walletTransactions,
@@ -188,11 +178,12 @@ export const GET: RequestHandler = async ({ locals }) => {
 			}
 		});
 	} catch (error) {
-		console.error('Dashboard API error:', error);
+		const traceId = randomUUID();
+		console.error('Dashboard API error:', { traceId, error });
 		return json(
 			{
 				success: false,
-				error: error instanceof Error ? error.message : 'Failed to load dashboard data'
+				error: `Failed to load dashboard data. Reference: ${traceId}`
 			},
 			{ status: 500 }
 		);

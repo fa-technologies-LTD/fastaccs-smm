@@ -23,6 +23,12 @@
 		quantity?: number | null;
 	}
 
+	interface AffiliateStateFlags {
+		unlocked?: boolean;
+		isActive?: boolean;
+		eligible?: boolean;
+	}
+
 	let {
 		user = null,
 		name = '',
@@ -37,7 +43,19 @@
 		purchases?: DashboardPurchase[];
 	} = $props();
 
-	const AFFILIATE_ENABLED = false;
+	const affiliateState = $derived(
+		initialAffiliateData && typeof initialAffiliateData === 'object'
+			? (initialAffiliateData as AffiliateStateFlags)
+			: null
+	);
+	const AFFILIATE_ENABLED = $derived(
+		Boolean(
+			affiliateState &&
+				(Boolean(affiliateState.unlocked) ||
+					Boolean(affiliateState.isActive) ||
+					Boolean(affiliateState.eligible))
+		)
+	);
 	let activeTab = $state<DashboardTab>('orders');
 	let selectedOrderId = $state<string | null>(null);
 	let showPaymentPendingBanner = $state(false);
@@ -279,9 +297,9 @@
 					: 'transparent'}; color: {activeTab === 'affiliate' && AFFILIATE_ENABLED
 					? 'var(--primary)'
 					: 'var(--text-dim)'}; font-family: var(--font-head);"
-				title="Affiliate coming soon"
+				title={AFFILIATE_ENABLED ? 'Affiliate dashboard' : 'Affiliate coming soon'}
 			>
-				Affiliate · Coming Soon
+				{AFFILIATE_ENABLED ? 'Affiliate' : 'Affiliate · Coming Soon'}
 			</button>
 		</nav>
 	</div>
@@ -311,17 +329,26 @@
 			<LifeBuoy size={20} stroke={2.25} style="color: var(--primary);" />
 			<span class="mt-1 text-xs font-semibold">Support</span>
 		</a>
-		<button
-			type="button"
-			onclick={() => AFFILIATE_ENABLED && (activeTab = 'affiliate')}
-			disabled={!AFFILIATE_ENABLED}
-			class="quick-action-card flex min-h-[88px] flex-col items-center justify-center rounded-[var(--r-sm)] border border-[var(--border)] p-3 transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0"
+		<a
+			href="/affiliate"
+			class="quick-action-card flex min-h-[88px] flex-col items-center justify-center rounded-[var(--r-sm)] border border-[var(--border)] p-3 transition-all hover:-translate-y-0.5"
 			style="background: var(--surface-2); color: var(--text);"
 		>
-			<BriefcaseBusiness size={20} stroke={2.25} style="color: var(--text-dim);" />
-			<span class="mt-1 text-xs font-semibold" style="color: var(--text-dim);">Affiliate</span>
-			<span class="text-[10px] font-medium" style="color: var(--text-dim);">Coming Soon</span>
-		</button>
+			<BriefcaseBusiness
+				size={20}
+				stroke={2.25}
+				style="color: {AFFILIATE_ENABLED ? 'var(--primary)' : 'var(--text-dim)'};"
+			/>
+			<span
+				class="mt-1 text-xs font-semibold"
+				style="color: {AFFILIATE_ENABLED ? 'var(--text)' : 'var(--text-dim)'};"
+			>
+				Affiliate
+			</span>
+			<span class="text-[10px] font-medium" style="color: var(--text-dim);">
+				{AFFILIATE_ENABLED ? 'Unlocked' : 'Coming Soon'}
+			</span>
+		</a>
 	</div>
 </div>
 

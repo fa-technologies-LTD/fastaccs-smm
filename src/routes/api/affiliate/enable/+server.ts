@@ -1,6 +1,10 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { enableAffiliateMode } from '$lib/services/affiliate';
+import {
+	enableAffiliateMode,
+	getAffiliateDashboardState,
+	getAffiliateReferralBaseUrl
+} from '$lib/services/affiliate';
 
 export const POST: RequestHandler = async ({ locals }) => {
 	const user = locals.user;
@@ -11,16 +15,17 @@ export const POST: RequestHandler = async ({ locals }) => {
 
 	const result = await enableAffiliateMode(user.id);
 
-	if (!result.success) {
+	if (!result.success || !result.affiliateCode) {
 		return json({ success: false, error: result.error }, { status: 400 });
 	}
 
-	const referralBase = (process.env.PUBLIC_SITE_URL || process.env.PUBLIC_BASE_URL || '').trim();
-	const referralLink = `${(referralBase || 'https://smm.fastaccs.com').replace(/\/+$/, '')}/?ref=${result.affiliateCode}`;
+	const referralLink = `${getAffiliateReferralBaseUrl()}/ref/${result.affiliateCode}`;
+	const dashboard = await getAffiliateDashboardState(user.id);
 
 	return json({
 		success: true,
 		affiliateCode: result.affiliateCode,
-		referralLink
+		referralLink,
+		dashboard
 	});
 };

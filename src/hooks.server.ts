@@ -166,13 +166,32 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.user = null;
 		event.locals.session = null;
 	} else {
-		// Validate session
-		const { session, user } = await validateSessionToken(sessionToken);
-		event.locals.session = session;
-		event.locals.user = user;
+		try {
+			// Validate session
+			const { session, user } = await validateSessionToken(sessionToken);
+			event.locals.session = session;
+			event.locals.user = user;
+		} catch (error) {
+			console.error('[session.validation.failed]', {
+				path: event.url.pathname,
+				method: event.request.method,
+				error
+			});
+			event.locals.user = null;
+			event.locals.session = null;
+		}
 	}
 
-	event.locals.adminContext = await getAdminContext(event.locals.user);
+	try {
+		event.locals.adminContext = await getAdminContext(event.locals.user);
+	} catch (error) {
+		console.error('[admin.context.failed]', {
+			path: event.url.pathname,
+			method: event.request.method,
+			error
+		});
+		event.locals.adminContext = null;
+	}
 
 	const requiredPermission = getRequiredAdminPermission(event.url.pathname, event.request.method);
 	if (requiredPermission && !hasAdminPermission(event.locals.adminContext, requiredPermission)) {

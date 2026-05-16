@@ -25,6 +25,7 @@
 
 	let searchQuery = $state('');
 	let filterType = $state('all');
+	let sortType = $state('newest');
 	let currentPage = $state(1);
 	let itemsPerPage = 20;
 
@@ -45,6 +46,8 @@
 		if (filterType !== 'all') {
 			filtered = filtered.filter((user: any) => {
 				switch (filterType) {
+					case 'paying':
+						return Number(user.orderCount || 0) > 0;
 					case 'registered':
 						return user.userType === 'REGISTERED';
 					case 'guest':
@@ -71,6 +74,35 @@
 					user.phone?.includes(query)
 			);
 		}
+
+		filtered = [...filtered].sort((a: any, b: any) => {
+			const aCreatedAt = new Date(a.createdAt || a.registeredAt || 0).getTime() || 0;
+			const bCreatedAt = new Date(b.createdAt || b.registeredAt || 0).getTime() || 0;
+			const aLastLogin = a.lastLogin ? new Date(a.lastLogin).getTime() || 0 : 0;
+			const bLastLogin = b.lastLogin ? new Date(b.lastLogin).getTime() || 0 : 0;
+			const aSpent = Number(a.totalSpent || 0);
+			const bSpent = Number(b.totalSpent || 0);
+			const aOrders = Number(a.orderCount || 0);
+			const bOrders = Number(b.orderCount || 0);
+			const aName = String(a.fullName || a.email || '').toLowerCase();
+			const bName = String(b.fullName || b.email || '').toLowerCase();
+
+			switch (sortType) {
+				case 'top_spender':
+					return bSpent - aSpent || bOrders - aOrders || bCreatedAt - aCreatedAt;
+				case 'most_orders':
+					return bOrders - aOrders || bSpent - aSpent || bCreatedAt - aCreatedAt;
+				case 'oldest':
+					return aCreatedAt - bCreatedAt;
+				case 'recent_login':
+					return bLastLogin - aLastLogin || bCreatedAt - aCreatedAt;
+				case 'name_az':
+					return aName.localeCompare(bName) || bCreatedAt - aCreatedAt;
+				case 'newest':
+				default:
+					return bCreatedAt - aCreatedAt;
+			}
+		});
 
 		return filtered;
 	});
@@ -162,6 +194,13 @@
 
 	onMount(() => {
 		hideMonetaryAmounts = localStorage.getItem(ADMIN_MONEY_VISIBILITY_KEY) === 'true';
+	});
+
+	$effect(() => {
+		searchQuery;
+		filterType;
+		sortType;
+		currentPage = 1;
 	});
 </script>
 
@@ -316,11 +355,24 @@
 					style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
 				>
 					<option value="all">All Users</option>
+					<option value="paying">Paying Customers</option>
 					<option value="registered">Registered</option>
 					<option value="guest">Guest</option>
 					<option value="affiliate">Affiliates</option>
 					<option value="active">Active</option>
 					<option value="inactive">Inactive</option>
+				</select>
+				<select
+					bind:value={sortType}
+					class="rounded-lg px-4 py-2 focus:ring-1 focus:outline-none"
+					style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+				>
+					<option value="newest">Newest</option>
+					<option value="oldest">Oldest</option>
+					<option value="most_orders">Most Orders</option>
+					<option value="top_spender">Top Spender</option>
+					<option value="recent_login">Recent Login</option>
+					<option value="name_az">Name (A-Z)</option>
 				</select>
 			</div>
 		</div>

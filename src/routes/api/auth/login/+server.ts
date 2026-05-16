@@ -1,9 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { randomUUID } from 'crypto';
 import { prisma } from '$lib/prisma';
 import { MAX_PASSWORD_BYTES, getPasswordByteLength, verifyPassword } from '$lib/auth/password';
 import { createSession, generateSessionToken, setSessionTokenCookie } from '$lib/auth/session';
 import { getUserTypeFromEmail } from '$lib/auth/admin';
+import { sanitizeInternalRedirectPath } from '$lib/auth/redirect';
 import {
 	LOGIN_RATE_LIMITS,
 	checkRateLimit,
@@ -22,19 +24,14 @@ function normalizeEmail(value: unknown): string {
 	return value.trim().toLowerCase();
 }
 
-function sanitizeRedirectPath(value: unknown): string {
-	if (typeof value !== 'string') return '/dashboard';
-	const trimmed = value.trim();
-	if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return '/dashboard';
-	return trimmed;
-}
-
 export const POST: RequestHandler = async (event) => {
 	try {
 		const body = (await event.request.json()) as LoginPayload;
 		const email = normalizeEmail(body.email);
 		const password = typeof body.password === 'string' ? body.password : '';
-		const redirectTo = sanitizeRedirectPath(body.redirectTo);
+		const redirectTo = sanitizeInternalRedirectPath(
+			typeof body.redirectTo === 'string' ? body.redirectTo : null
+		);
 		const clientIp = getRequestClientIp(event.request);
 		const ipKey = `ip:${clientIp}`;
 		const identityKey = `email:${email || 'unknown'}|ip:${clientIp}`;
@@ -102,17 +99,17 @@ export const POST: RequestHandler = async (event) => {
 			);
 		}
 
-			const user = await prisma.user.findUnique({
-				where: { email },
-				select: {
-					id: true,
-					passwordHash: true,
-					emailVerified: true,
-					googleId: true,
-					isActive: true,
-					userType: true
-				}
-			});
+		const user = await prisma.user.findUnique({
+			where: { email },
+			select: {
+				id: true,
+				passwordHash: true,
+				emailVerified: true,
+				googleId: true,
+				isActive: true,
+				userType: true
+			}
+		});
 
 		if (!user || !user.passwordHash) {
 			await registerFailedAttempt('unknown_user_or_passwordless');
@@ -138,13 +135,13 @@ export const POST: RequestHandler = async (event) => {
 			);
 		}
 
-			await prisma.user.update({
-				where: { id: user.id },
-				data: {
-					lastLogin: new Date(),
-					...(getUserTypeFromEmail(email) === 'ADMIN' ? { userType: 'ADMIN' as const } : {})
-				}
-			});
+		await prisma.user.update({
+			where: { id: user.id },
+			data: {
+				lastLogin: new Date(),
+				...(getUserTypeFromEmail(email) === 'ADMIN' ? { userType: 'ADMIN' as const } : {})
+			}
+		});
 
 		const sessionToken = generateSessionToken();
 		const session = await createSession(sessionToken, user.id);
@@ -159,11 +156,12 @@ export const POST: RequestHandler = async (event) => {
 			redirectTo: finalRedirect
 		});
 	} catch (error) {
-		console.error('Login error:', error);
+		const traceId = randomUUID();
+		console.error('Login error:', { traceId, error });
 		return json(
 			{
 				success: false,
-				error: error instanceof Error ? error.message : 'Login failed'
+				error: `Login failed. Reference: ${traceId}`
 			},
 			{ status: 500 }
 		);

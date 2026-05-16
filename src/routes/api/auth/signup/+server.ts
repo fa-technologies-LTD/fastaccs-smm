@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { randomUUID } from 'crypto';
 import { prisma } from '$lib/prisma';
 import {
 	MAX_PASSWORD_BYTES,
@@ -15,6 +16,8 @@ import {
 	getRequestClientIp,
 	recordRateLimitAttempt
 } from '$lib/auth/rate-limit';
+import { sanitizeInternalRedirectPath } from '$lib/auth/redirect';
+import { maybeLockReferralFromCookie } from '$lib/services/affiliate';
 
 interface SignupPayload {
 	email?: unknown;
@@ -32,20 +35,15 @@ function isValidEmail(email: string): boolean {
 	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function sanitizeRedirectPath(value: unknown): string {
-	if (typeof value !== 'string') return '/dashboard';
-	const trimmed = value.trim();
-	if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return '/dashboard';
-	return trimmed;
-}
-
 export const POST: RequestHandler = async (event) => {
 	try {
 		const body = (await event.request.json()) as SignupPayload;
 		const email = normalizeEmail(body.email);
 		const password = typeof body.password === 'string' ? body.password : '';
 		const fullName = typeof body.fullName === 'string' ? body.fullName.trim() : '';
-		const redirectTo = sanitizeRedirectPath(body.redirectTo);
+		const redirectTo = sanitizeInternalRedirectPath(
+			typeof body.redirectTo === 'string' ? body.redirectTo : null
+		);
 		const clientIp = getRequestClientIp(event.request);
 		const ipKey = `ip:${clientIp}`;
 		const identityKey = `email:${email || 'unknown'}|ip:${clientIp}`;
@@ -161,6 +159,13 @@ export const POST: RequestHandler = async (event) => {
 			}
 		});
 
+		await maybeLockReferralFromCookie({
+			cookies: event.cookies,
+			isSecureRequest: event.url.protocol === 'https:',
+			referredUserId: user.id,
+			source: 'signup'
+		});
+
 		const sessionToken = generateSessionToken();
 		const session = await createSession(sessionToken, user.id);
 		setSessionTokenCookie(event, sessionToken, session.expiresAt);
@@ -171,11 +176,12 @@ export const POST: RequestHandler = async (event) => {
 			redirectTo: verifyRedirect
 		});
 	} catch (error) {
-		console.error('Signup error:', error);
+		const traceId = randomUUID();
+		console.error('Signup error:', { traceId, error });
 		return json(
 			{
 				success: false,
-				error: error instanceof Error ? error.message : 'Failed to create account'
+				error: `Failed to create account. Reference: ${traceId}`
 			},
 			{ status: 500 }
 		);
