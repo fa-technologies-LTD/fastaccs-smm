@@ -47,6 +47,7 @@
 	let autoSubscribeHandled = $state(false);
 	let samplePreviewOpen = $state(false);
 	let samplePreviewIndex = $state(0);
+	let isCompactViewport = $state(false);
 	const currentUser = $derived((page.data as { user?: { id: string } | null }).user || null);
 	const tierSampleScreenshots = $derived(getTierSampleScreenshotUrls(data.tier?.metadata));
 	const tierSampleScreenshotsGallery = $derived(
@@ -61,6 +62,11 @@
 		tierDeliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL
 	);
 	const lowStockThreshold = $derived(Math.max(1, Number(data.lowStockThreshold || 10)));
+	const compactTierLabel = $derived(
+		isCompactViewport
+			? getCompactTierLabel(data.tier?.tier_name || '')
+			: (data.tier?.tier_name ?? 'Tier')
+	);
 
 	// Format follower count
 	function formatFollowers(count: number): string {
@@ -70,6 +76,19 @@
 			return `${(count / 1000).toFixed(1)}K`;
 		}
 		return count.toString();
+	}
+
+	function getCompactTierLabel(label: string): string {
+		const normalized = String(label || '')
+			.trim()
+			.replace(/\bfollowers?\b/gi, 'F')
+			.replace(/\baccounts?\b/gi, '')
+			.replace(/\s+/g, ' ')
+			.trim()
+			.replace(/(\d)\s+F\b/g, '$1F');
+
+		if (!normalized) return 'Tier';
+		return normalized.length > 20 ? `${normalized.slice(0, 19)}…` : normalized;
 	}
 
 	// Navigation functions
@@ -284,24 +303,37 @@
 		samplePreviewOpen = true;
 	}
 
-	onMount(async () => {
-		await loadNotifySubscriptionStatus();
+	onMount(() => {
+		const updateViewportMode = () => {
+			isCompactViewport = window.innerWidth < 520;
+		};
 
-		const shouldAutoSubscribe =
-			Boolean(currentUser) &&
-			!notifySubscribed &&
-			!autoSubscribeHandled &&
-			data.tier.visible_available === 0 &&
-			page.url.searchParams.get('notifyRestock') === '1';
+		updateViewportMode();
+		window.addEventListener('resize', updateViewportMode);
 
-		if (shouldAutoSubscribe) {
-			autoSubscribeHandled = true;
-			await subscribeForRestock();
+		void (async () => {
+			await loadNotifySubscriptionStatus();
 
-			const cleaned = new URL(window.location.href);
-			cleaned.searchParams.delete('notifyRestock');
-			window.history.replaceState({}, '', cleaned.pathname + cleaned.search);
-		}
+			const shouldAutoSubscribe =
+				Boolean(currentUser) &&
+				!notifySubscribed &&
+				!autoSubscribeHandled &&
+				data.tier.visible_available === 0 &&
+				page.url.searchParams.get('notifyRestock') === '1';
+
+			if (shouldAutoSubscribe) {
+				autoSubscribeHandled = true;
+				await subscribeForRestock();
+
+				const cleaned = new URL(window.location.href);
+				cleaned.searchParams.delete('notifyRestock');
+				window.history.replaceState({}, '', cleaned.pathname + cleaned.search);
+			}
+		})();
+
+		return () => {
+			window.removeEventListener('resize', updateViewportMode);
+		};
 	});
 </script>
 
@@ -343,35 +375,31 @@
 		{@const PlatformIcon = getPlatformIcon(data.platform.slug)}
 		{@const tierStatus = getTierStatus(data.tier.visible_available)}
 
-		<!-- Enhanced Breadcrumb & Progress -->
-		<section class="bg-[var(--color-card)] py-4 shadow sm:py-6">
+		<section class="bg-[var(--color-card)] py-2 shadow-sm sm:py-3">
 			<div class="mx-auto max-w-6xl px-4">
 				<Breadcrumb
 					items={[
 						{ label: 'Platforms', href: '/platforms' },
 						{ label: data.platform.name, href: `/platforms/${data.platform.slug}` },
-						{ label: data.tier.tier_name, active: true }
+						{ label: compactTierLabel, active: true }
 					]}
 				/>
 			</div>
 		</section>
 
-		<!-- Tier Header -->
 		<section
-			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} relative pt-4 pb-4 text-white sm:py-8`}
+			class={`bg-gradient-to-r ${getPlatformColor(data.platform.slug)} py-4 text-white sm:py-5`}
 		>
 			<div class="mx-auto max-w-6xl px-4">
-				<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-					<div class="flex w-full items-start gap-3 sm:gap-5">
-						<div class="rounded-full bg-white/20 p-2.5 sm:p-4">
-							<PlatformIcon class="h-6 w-6 sm:h-10 sm:w-10 md:h-12 md:w-12" />
+				<div class="rounded-xl border border-white/15 bg-black/15 p-4 sm:p-5">
+					<div class="flex items-start gap-3">
+						<div class="rounded-full bg-white/20 p-2.5">
+							<PlatformIcon class="h-7 w-7 sm:h-9 sm:w-9" />
 						</div>
 						<div class="min-w-0 flex-1">
-							<div class="mb-2">
-								<h1 class="text-2xl leading-tight font-bold sm:text-4xl">{data.tier.tier_name}</h1>
-							</div>
+							<h1 class="text-xl leading-tight font-bold sm:text-2xl">{data.tier.tier_name}</h1>
 							{#if data.tier.is_pinned || data.tier.is_featured}
-								<div class="mb-2 flex flex-wrap gap-1.5">
+								<div class="mt-2 flex flex-wrap gap-1.5">
 									{#if data.tier.is_pinned}
 										<span
 											class="tag-chip inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
@@ -390,62 +418,66 @@
 									{/if}
 								</div>
 							{/if}
-							<p class="text-sm leading-relaxed opacity-90 sm:text-lg">
-								{data.platform.name} accounts with
+							<p class="mt-2 text-sm leading-relaxed opacity-90 sm:text-base">
 								{#if data.tier.metadata?.follower_range}
 									{@const range = data.tier.metadata.follower_range}
-									{range.display ||
+									{data.platform.name} accounts with {range.display ||
 										`${formatFollowers(range.min || 0)} - ${formatFollowers(range.max || 0)}`} followers
 								{:else}
-									{formatFollowers((data.tier.metadata?.follower_count as number) || 0)} followers
+									{data.platform.name} accounts with {formatFollowers(
+										(data.tier.metadata?.follower_count as number) || 0
+									)}
+									followers
 								{/if}
 							</p>
-							<div class="mt-2 flex flex-wrap items-center gap-2 text-sm opacity-75 sm:text-base">
-								<span>{data.tier.visible_available} accounts available</span>
+							<div class="mt-3 flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+								<span
+									class="rounded-full border border-white/20 bg-black/20 px-2.5 py-1 font-semibold"
+								>
+									{formatPrice(data.tier.price)} / account
+								</span>
+								<span>{data.tier.visible_available} available</span>
+								<span
+									class="rounded-full border px-2 py-0.5 font-semibold"
+									style={tierDeliveryConfig.mode === 'manual_handover'
+										? 'background: rgba(59, 130, 246, 0.18); color: rgb(147, 197, 253); border-color: rgba(147, 197, 253, 0.28);'
+										: 'background: rgba(5, 212, 113, 0.15); color: rgb(5, 212, 113); border-color: rgba(5, 212, 113, 0.25);'}
+								>
+									{getTierDeliveryModeLabel(tierDeliveryConfig.mode)}
+								</span>
 								{#if tierStatus}
 									<span
-										class="tag-chip rounded-full border border-yellow-300/30 bg-yellow-500/20 px-2 py-0.5 text-[11px] font-semibold text-yellow-100"
+										class="rounded-full border border-yellow-300/30 bg-yellow-500/20 px-2 py-0.5 font-semibold text-yellow-100"
 									>
 										{tierStatus.status}
 									</span>
 								{/if}
-								{#if data.tier.reservations_active > 0}
-									<span>• {data.tier.reservations_active} reserved</span>
-								{/if}
 							</div>
 						</div>
-					</div>
-
-					<div
-						class="w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2.5 text-left lg:w-auto lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:text-right"
-					>
-						<div class="text-2xl leading-tight font-bold sm:text-4xl">
-							{formatPrice(data.tier.price)}
-						</div>
-						<div class="text-sm opacity-75 sm:text-base">per account</div>
 					</div>
 				</div>
 			</div>
 		</section>
 
-		<!-- Main Content -->
-		<section class="py-6 sm:py-16">
+		<section class="pt-4 pb-28 sm:pt-6 lg:pb-12">
 			<div class="mx-auto max-w-6xl px-4">
-				<div class="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-12">
-					<!-- Left Column - Details -->
-					<div class="lg:col-span-2">
+				<div class="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:gap-7">
+					<div class="order-1 space-y-5 lg:col-span-2">
 						{#if tierSampleScreenshots.length > 0}
-							<div class="mb-6 rounded-xl bg-[var(--color-card)] p-4 shadow sm:mb-8 sm:p-8">
-								<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-									<h2 class="text-lg font-bold text-[var(--color-text-primary)] sm:text-2xl">
+							<div class="rounded-xl bg-[var(--color-card)] p-4 shadow sm:p-5">
+								<div class="mb-2 flex items-center justify-between gap-2">
+									<h2 class="text-lg font-bold text-[var(--color-text-primary)] sm:text-xl">
 										Sample Screenshots
 									</h2>
+									<span class="text-xs text-[var(--color-text-muted)]">
+										{tierSampleScreenshots.length} sample{tierSampleScreenshots.length === 1
+											? ''
+											: 's'}
+									</span>
 								</div>
-								<p class="mb-4 text-sm text-[var(--color-text-muted)] sm:text-base">
-									These are sample previews to help your decision before checkout. Delivered
-									accounts can vary in exact appearance.
+								<p class="mb-3 text-sm text-[var(--color-text-muted)]">
+									Preview examples before checkout. Delivered accounts may vary slightly.
 								</p>
-
 								<div class="sample-screenshot-scroll">
 									{#each tierSampleScreenshotsGallery as screenshotUrl, screenshotIndex (screenshotUrl)}
 										<button
@@ -467,245 +499,214 @@
 							</div>
 						{/if}
 
-						<!-- Tier Description -->
-						<div class="mb-6 rounded-xl bg-[var(--color-card)] p-4 shadow sm:mb-8 sm:p-8">
-							<h2 class="mb-4 text-lg font-bold text-[var(--color-text-primary)] sm:text-2xl">
-								Account Details
+						<div class="rounded-xl bg-[var(--color-card)] p-4 shadow sm:p-5">
+							<h2 class="mb-3 text-lg font-bold text-[var(--color-text-primary)] sm:text-xl">
+								Included
 							</h2>
-							<!-- Tier-specific description -->
-							{#if data.tier.description}
-								<p
-									class="mb-4 text-base leading-relaxed text-[var(--color-text-secondary)] sm:text-lg"
-								>
-									{data.tier.description}
-								</p>
-							{/if}
-
-							<!-- Default description -->
-							<p class="mb-6 text-base text-[var(--color-text-secondary)] sm:text-lg">
-								{#if data.tier.metadata?.follower_range}
-									{@const range = data.tier.metadata.follower_range}
-									Premium {data.platform.name} accounts with {range.display ||
-										`${formatFollowers(range.min || 0)} - ${formatFollowers(range.max || 0)}`} followers.
-									{!data.tier.description ? 'High-quality accounts ready for immediate use.' : ''}
-								{:else}
-									{!data.tier.description
-										? `Premium ${data.platform.name} accounts with ${formatFollowers((data.tier.metadata?.follower_count as number) || 0)} followers.`
-										: ''}
-								{/if}
-							</p>
-
-							<!-- Features -->
-							{#if getTierFeatures(data.tier.metadata).length > 0}
-								{@const features = getTierFeatures(data.tier.metadata)}
-								<div class="mb-6">
-									<h3 class="mb-4 text-lg font-semibold text-[var(--color-text-primary)]">
-										What's Included:
-									</h3>
-									<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-										{#each features as feature}
-											<div class="flex items-center gap-3">
-												<CheckCircle class="h-5 w-5 text-green-500" />
-												<span class="text-[var(--color-text-secondary)]">{feature}</span>
-											</div>
-										{/each}
-									</div>
-								</div>
-							{/if}
-							<!-- Account Age Info -->
-							{#if data.tier.metadata?.age_hint}
-								<div class="rounded-lg bg-[var(--color-surface)] p-4">
-									<div class="flex items-center gap-3">
-										<Users class="h-5 w-5 text-[var(--color-accent)]" />
-										<span class="font-medium text-[var(--color-text-primary)]">Account Age:</span>
-										<span class="text-[var(--color-text-secondary)]"
-											>{data.tier.metadata.age_hint}</span
+							{#if getTierFeatures(data.tier.metadata).length > 0 || data.tier.metadata?.age_hint}
+								<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+									{#each getTierFeatures(data.tier.metadata) as feature}
+										<div
+											class="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text-secondary)]"
 										>
-									</div>
+											<CheckCircle class="h-4 w-4 text-green-500" />
+											<span>{feature}</span>
+										</div>
+									{/each}
+									{#if data.tier.metadata?.age_hint}
+										<div
+											class="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text-secondary)]"
+										>
+											<Users class="h-4 w-4 text-[var(--color-accent)]" />
+											<span>{data.tier.metadata.age_hint}</span>
+										</div>
+									{/if}
 								</div>
+							{:else}
+								<p class="text-sm text-[var(--color-text-muted)]">
+									No additional feature tags available for this tier yet.
+								</p>
 							{/if}
 						</div>
 					</div>
 
-					<!-- Right Column - Purchase -->
-					<div class="lg:col-span-1">
-						<div
-							class="rounded-xl bg-[var(--color-card)] p-4 shadow sm:p-6 lg:sticky lg:top-24 lg:p-8"
-						>
-							<h3 class="mb-6 text-xl font-bold text-[var(--color-text-primary)]">
-								Select Quantity
+					<div class="order-2 lg:col-span-1">
+						<div class="rounded-xl bg-[var(--color-card)] p-4 shadow sm:p-5 lg:sticky lg:top-24">
+							<h3 class="text-lg font-bold text-[var(--color-text-primary)] sm:text-xl">
+								Buy This Tier
 							</h3>
-							<div class="mb-6">
-								<label
-									class="mb-3 block text-sm font-medium text-[var(--color-text-secondary)]"
-									for="quantity-selector"
+							<p class="mt-1 text-sm text-[var(--color-text-muted)]">
+								How many accounts do you need?
+							</p>
+
+							<div
+								class="mt-4 flex items-center gap-3"
+								role="group"
+								aria-labelledby="quantity-selector"
+							>
+								<button
+									onclick={decreaseQuantity}
+									disabled={selectedQuantity <= 1 || data.tier.visible_available === 0}
+									class="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+									aria-label="Decrease quantity"
 								>
-									How many accounts do you need?
-								</label>
-								<div
-									class="flex items-center gap-4"
-									role="group"
-									aria-labelledby="quantity-selector"
-								>
-									<button
-										onclick={decreaseQuantity}
-										disabled={selectedQuantity <= 1}
-										class="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-									>
-										<Minus class="h-4 w-4" />
-									</button>
-									<div class="flex-1 text-center">
-										<div class="text-2xl font-bold text-[var(--color-text-primary)]">
-											{selectedQuantity}
-										</div>
-										<div class="text-sm text-[var(--color-text-muted)]">
-											{selectedQuantity === 1 ? 'account' : 'accounts'}
-										</div>
+									<Minus class="h-4 w-4" />
+								</button>
+								<div class="flex-1 text-center">
+									<div class="text-2xl font-bold text-[var(--color-text-primary)]">
+										{selectedQuantity}
 									</div>
-									<button
-										onclick={increaseQuantity}
-										disabled={selectedQuantity >= data.tier.visible_available}
-										class="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-									>
-										<Plus class="h-4 w-4" />
-									</button>
+									<div class="text-xs text-[var(--color-text-muted)]">
+										{selectedQuantity === 1 ? 'account' : 'accounts'}
+									</div>
 								</div>
-								<div class="mt-2 text-center text-sm text-[var(--color-text-muted)]">
-									Maximum: {data.tier.visible_available} available
-								</div>
+								<button
+									onclick={increaseQuantity}
+									disabled={selectedQuantity >= data.tier.visible_available ||
+										data.tier.visible_available === 0}
+									class="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+									aria-label="Increase quantity"
+								>
+									<Plus class="h-4 w-4" />
+								</button>
+							</div>
+							<div class="mt-2 text-xs text-[var(--color-text-muted)]">
+								Max: {data.tier.visible_available} available
 							</div>
 
-							<!-- Price Summary -->
-							<div class="mb-6 rounded-lg bg-[var(--color-surface)] p-4">
+							<div class="mt-4 rounded-lg bg-[var(--color-surface)] p-3">
 								<div
 									class="flex items-center justify-between text-sm text-[var(--color-text-secondary)]"
 								>
-									<span>Price per account:</span>
+									<span>Price per account</span>
 									<span>{formatPrice(data.tier.price)}</span>
 								</div>
 								<div
-									class="flex items-center justify-between text-sm text-[var(--color-text-secondary)]"
+									class="mt-1 flex items-center justify-between text-sm text-[var(--color-text-secondary)]"
 								>
-									<span>Quantity:</span>
+									<span>Quantity</span>
 									<span>×{selectedQuantity}</span>
 								</div>
-								<hr class="my-3" />
 								<div
-									class="flex items-center justify-between text-lg font-bold text-[var(--color-text-primary)]"
+									class="mt-2 flex items-center justify-between border-t border-[var(--color-border)] pt-2 text-base font-semibold text-[var(--color-text-primary)]"
 								>
-									<span>Total:</span>
+									<span>Total</span>
 									<span class="text-[var(--color-accent)]">{formatPrice(totalPrice)}</span>
 								</div>
-							</div>
-
-							<div
-								class="mb-6 rounded-lg border p-4"
-								style="border-color: var(--color-border); background: var(--color-surface);"
-							>
-								<div class="mb-2 flex items-center justify-between">
-									<span class="text-sm font-semibold text-[var(--color-text-primary)]">
-										Delivery Mode
-									</span>
-									<span
-										class="rounded-full px-2 py-0.5 text-xs font-semibold"
-										style={tierDeliveryConfig.mode === 'manual_handover'
-											? 'background: rgba(59, 130, 246, 0.18); color: rgb(147, 197, 253); border: 1px solid rgba(147, 197, 253, 0.28);'
-											: 'background: rgba(5, 212, 113, 0.15); color: rgb(5, 212, 113); border: 1px solid rgba(5, 212, 113, 0.25);'}
-									>
-										{getTierDeliveryModeLabel(tierDeliveryConfig.mode)}
-									</span>
-								</div>
-								{#if tierDeliveryConfig.mode === 'manual_handover' && tierDeliveryConfig.manualHandoverPromise}
-									<p class="text-xs text-[var(--color-text-muted)]">
-										{tierDeliveryConfig.manualHandoverPromise}
-									</p>
-								{/if}
-							</div>
-
-							<div class="mb-6 rounded-lg bg-[var(--color-surface)] p-4">
-								<div class="mb-2 text-sm font-semibold text-[var(--color-text-primary)]">
-									{tierLoginGuideLabel}
-								</div>
-								<p class="mb-2 text-xs text-[var(--color-text-muted)]">
-									Quick setup steps for this tier are available here.
-								</p>
-								<a
-									href={tierLoginGuideUrl}
-									target="_blank"
-									rel="noopener noreferrer"
-									class="text-sm font-medium underline"
-									style="color: var(--color-accent);"
-								>
-									Open Guide
-								</a>
 							</div>
 
 							{#if data.tier.visible_available === 0}
 								<button
 									onclick={subscribeForRestock}
 									disabled={notifyLoading || notifySubscribed}
-									class="w-full rounded-full py-4 font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
+									class="mt-4 hidden w-full rounded-full py-3.5 text-sm font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100 lg:block"
 									style="background: var(--btn-primary-gradient);"
 								>
 									{#if notifyLoading}
-										<div class="flex items-center justify-center gap-2">
-											<div
-												class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-											></div>
-											Saving...
-										</div>
+										Saving...
 									{:else if notifySubscribed}
-										<div class="flex items-center justify-center gap-2">
-											<CheckCircle class="h-5 w-5" />
-											You'll be notified
-										</div>
+										You'll be notified
 									{:else}
-										<div class="flex items-center justify-center gap-2">
-											<BellRing class="h-5 w-5" />
-											Notify me when back in stock
-										</div>
+										Notify me when back in stock
 									{/if}
 								</button>
 							{:else}
-								<!-- Add to Cart Button -->
 								<button
 									onclick={addToCart}
 									disabled={addingToCart}
-									class="w-full rounded-full py-4 font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
+									class="mt-4 hidden w-full rounded-full py-3.5 text-sm font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 lg:block"
 									style="background: var(--btn-primary-gradient);"
 								>
 									{#if addingToCart}
-										<div class="flex items-center justify-center gap-2">
-											<div
-												class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-											></div>
-											Adding to Cart...
-										</div>
+										Adding to Cart...
 									{:else}
-										<div class="flex items-center justify-center gap-2">
-											<ShoppingCart class="h-5 w-5" />
-											Add to Cart - {formatPrice(totalPrice)}
-										</div>
+										Add to Cart - {formatPrice(totalPrice)}
 									{/if}
 								</button>
 							{/if}
 
-							<!-- Stock Warning -->
 							{#if data.tier.visible_available <= lowStockThreshold && data.tier.visible_available > 0}
 								<div
-									class="mt-4 rounded-lg border border-yellow-500/30 bg-[var(--color-surface)] p-3"
+									class="mt-3 rounded-lg border border-yellow-500/30 bg-[var(--color-surface)] p-2.5"
 								>
-									<div class="flex items-center gap-2 text-sm text-yellow-500">
+									<div class="flex items-center gap-2 text-xs text-yellow-500">
 										<AlertTriangle class="h-4 w-4" />
-										<span>Only {data.tier.visible_available} accounts left in stock!</span>
+										<span>Only {data.tier.visible_available} accounts left in stock.</span>
 									</div>
 								</div>
 							{/if}
+
+							<details
+								class="mt-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
+							>
+								<summary
+									class="cursor-pointer text-sm font-semibold text-[var(--color-text-primary)]"
+								>
+									Need help after purchase?
+								</summary>
+								<div class="mt-2">
+									<p class="mb-2 text-xs text-[var(--color-text-muted)]">
+										Quick setup steps for this tier are available here.
+									</p>
+									<a
+										href={tierLoginGuideUrl}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="text-sm font-medium underline"
+										style="color: var(--color-accent);"
+									>
+										{tierLoginGuideLabel}
+									</a>
+								</div>
+							</details>
 						</div>
 					</div>
 				</div>
 			</div>
 		</section>
+
+		<div
+			class="fixed right-0 bottom-0 left-0 z-40 border-t border-[var(--color-border)] bg-[var(--color-card)]/95 px-4 py-3 backdrop-blur lg:hidden"
+			style="padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));"
+		>
+			<div class="mx-auto flex max-w-6xl items-center gap-3">
+				<div class="min-w-0 flex-1">
+					<div class="text-xs text-[var(--color-text-muted)]">Total</div>
+					<div class="truncate text-base font-semibold text-[var(--color-text-primary)]">
+						{formatPrice(totalPrice)}
+					</div>
+				</div>
+				{#if data.tier.visible_available === 0}
+					<button
+						onclick={subscribeForRestock}
+						disabled={notifyLoading || notifySubscribed}
+						class="rounded-full px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
+						style="background: var(--btn-primary-gradient);"
+					>
+						{#if notifyLoading}
+							Saving...
+						{:else if notifySubscribed}
+							Subscribed
+						{:else}
+							Notify me
+						{/if}
+					</button>
+				{:else}
+					<button
+						onclick={addToCart}
+						disabled={addingToCart}
+						class="rounded-full px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
+						style="background: var(--btn-primary-gradient);"
+					>
+						{#if addingToCart}
+							Adding...
+						{:else}
+							Add to Cart
+						{/if}
+					</button>
+				{/if}
+			</div>
+		</div>
 	{/if}
 </main>
 
@@ -728,7 +729,12 @@
 		gap: 0.75rem;
 		overflow-x: auto;
 		padding-bottom: 0.25rem;
+		scroll-behavior: smooth;
 		scroll-snap-type: x mandatory;
+		scrollbar-width: thin;
+		overscroll-behavior-x: contain;
+		-webkit-overflow-scrolling: touch;
+		touch-action: pan-x;
 	}
 
 	.sample-screenshot-item {
@@ -740,6 +746,10 @@
 		border: 1px solid var(--color-border);
 		background: var(--color-surface);
 		scroll-snap-align: start;
+		scroll-snap-stop: always;
+		touch-action: pan-x;
+		-webkit-user-select: none;
+		user-select: none;
 	}
 
 	.sample-screenshot-item:focus-visible {

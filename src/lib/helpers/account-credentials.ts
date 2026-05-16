@@ -35,7 +35,7 @@ const KNOWN_FIELD_DEFINITIONS: KnownFieldDefinition[] = [
 		field: 'linkUrl',
 		label: 'Profile Link',
 		type: 'string',
-		aliases: ['profile_link', 'profile link', 'link', 'link_url', 'login_link', 'url']
+		aliases: ['profile_link', 'profile link', 'link', 'link_url', 'linkurl', 'login_link', 'url']
 	},
 	{
 		field: 'username',
@@ -59,13 +59,13 @@ const KNOWN_FIELD_DEFINITIONS: KnownFieldDefinition[] = [
 		field: 'emailPassword',
 		label: 'Email Password',
 		type: 'string',
-		aliases: ['email_password', 'email pass', 'email_pass']
+		aliases: ['email_password', 'email pass', 'email_pass', 'emailpassword']
 	},
 	{
 		field: 'twoFa',
-		label: '2FA Link',
+		label: 'Two-FA',
 		type: 'string',
-		aliases: ['2fa', '2fa_link', 'two_fa', 'two factor', 'two_factor', 'otp', '2fa code']
+		aliases: ['2fa', '2fa_link', 'two_fa', 'twofa', 'two factor', 'two_factor', 'otp', '2fa code']
 	},
 	{
 		field: 'twoFactorEnabled',
