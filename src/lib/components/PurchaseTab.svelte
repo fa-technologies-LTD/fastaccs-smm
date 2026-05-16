@@ -177,7 +177,7 @@
 									<div class="space-y-3">
 										{#each purchase.accounts as account, index}
 											{@const credentialEntries = getCanonicalCredentialEntries(account as any, {
-												knownKeys: ['username', 'password', 'email', 'emailPassword', 'twoFa', 'linkUrl'],
+												knownKeys: ['linkUrl', 'username', 'password', 'email', 'emailPassword', 'twoFa'],
 												includeExtras: true
 											})}
 											<div

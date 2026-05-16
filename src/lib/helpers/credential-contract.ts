@@ -1,4 +1,8 @@
-import { getCredentialDisplayLabel, getCredentialExtraEntries } from '$lib/helpers/account-credentials';
+import {
+	getCredentialDisplayLabel,
+	getCredentialExtraEntries,
+	resolveKnownAccountField
+} from '$lib/helpers/account-credentials';
 import { resolveCredentialField } from '$lib/helpers/credential-links';
 
 export interface CanonicalCredentialRecord {
@@ -36,12 +40,12 @@ interface CredentialEntryOptions {
 }
 
 const DEFAULT_KNOWN_RENDER_ORDER = [
+	'linkUrl',
 	'username',
 	'password',
 	'email',
 	'emailPassword',
 	'twoFa',
-	'linkUrl',
 	'followers',
 	'following',
 	'postsCount',
@@ -61,6 +65,27 @@ function toScalarText(value: unknown): string {
 	return '';
 }
 
+function resolveKnownFieldValue(
+	recordMap: Record<string, unknown>,
+	knownKey: string
+): { value: string; sourceKey: string | null } {
+	const directValue = toScalarText(recordMap[knownKey]);
+	if (directValue) {
+		return { value: directValue, sourceKey: knownKey };
+	}
+
+	for (const [rawKey, rawValue] of Object.entries(recordMap)) {
+		if (rawKey === knownKey) continue;
+		const mappedField = resolveKnownAccountField(rawKey);
+		if (mappedField !== knownKey) continue;
+		const aliasValue = toScalarText(rawValue);
+		if (!aliasValue) continue;
+		return { value: aliasValue, sourceKey: rawKey };
+	}
+
+	return { value: '', sourceKey: null };
+}
+
 export function getCanonicalCredentialEntries(
 	record: CanonicalCredentialRecord,
 	options: CredentialEntryOptions = {}
@@ -74,7 +99,8 @@ export function getCanonicalCredentialEntries(
 	const seenKeys = new Set<string>();
 
 	for (const knownKey of knownKeys) {
-		const value = toScalarText(recordMap[knownKey]);
+		const resolvedValue = resolveKnownFieldValue(recordMap, knownKey);
+		const value = resolvedValue.value;
 		if (!value && !includeEmpty) continue;
 
 		if (URL_FIELD_KEYS.has(knownKey)) {
@@ -89,6 +115,9 @@ export function getCanonicalCredentialEntries(
 				source: 'known'
 			});
 			seenKeys.add(knownKey);
+			if (resolvedValue.sourceKey) {
+				seenKeys.add(resolvedValue.sourceKey);
+			}
 			continue;
 		}
 
@@ -101,6 +130,9 @@ export function getCanonicalCredentialEntries(
 			source: 'known'
 		});
 		seenKeys.add(knownKey);
+		if (resolvedValue.sourceKey) {
+			seenKeys.add(resolvedValue.sourceKey);
+		}
 	}
 
 	if (!includeExtras) {
@@ -132,21 +164,25 @@ export function buildCredentialPlainText(
 	} = {}
 ): string {
 	const lines: string[] = [];
+	const headerLines = (options.headerLines || []).map((header) => header.trim()).filter(Boolean);
+	const footerLines = (options.footerLines || []).map((footer) => footer.trim()).filter(Boolean);
 
-	for (const header of options.headerLines || []) {
-		if (header.trim()) lines.push(header.trim());
-	}
+	lines.push(...headerLines);
 
 	const entries = getCanonicalCredentialEntries(record, {
 		includeEmpty: options.includeEmpty ?? false,
 		includeExtras: true
 	});
+	if (headerLines.length > 0 && entries.length > 0) {
+		lines.push('');
+	}
 	for (const entry of entries) {
 		lines.push(`${entry.label}: ${entry.value}`);
 	}
 
-	for (const footer of options.footerLines || []) {
-		if (footer.trim()) lines.push(footer.trim());
+	if (footerLines.length > 0) {
+		if (entries.length > 0) lines.push('');
+		lines.push(...footerLines);
 	}
 
 	return lines.join('\n').trim();

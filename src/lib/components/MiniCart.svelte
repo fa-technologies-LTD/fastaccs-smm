@@ -179,7 +179,7 @@
 					{:else}
 						<!-- Cart Items -->
 						<div style="border-top: 1px solid var(--border);">
-							{#each cartItems as item}
+							{#each cartItems as item (item.tierId)}
 								{@const PlatformIcon = getPlatformIcon(item.tier.platformSlug)}
 								{@const renderPlatformImage = shouldRenderPlatformImage(item)}
 								<div
@@ -206,7 +206,8 @@
 											<img
 												src={item.tier.platformIcon}
 												alt={item.tier.platformName}
-												class="h-full w-full object-cover"
+												class="h-full w-full object-contain p-2"
+												style="background: rgba(255,255,255,0.06);"
 												onerror={() => markPlatformImageFailed(item.tier.id)}
 											/>
 										{:else}

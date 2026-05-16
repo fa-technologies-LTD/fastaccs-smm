@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { page } from '$app/state';
 	import {
 		ArrowLeft,
 		User,
@@ -35,8 +34,7 @@
 	let payoutNotes = $state('');
 	let isProcessingPayout = $state(false);
 	let payoutError = $state('');
-
-
+	const referralBaseUrl = 'https://smm.fastaccs.com';
 
 	// Calculate unpaid commission
 	const unpaidCommission = $derived(data.program.totalCommission - (data.program.totalPaid || 0));
@@ -195,7 +193,6 @@
 			<div class="flex gap-2">
 				<button
 					onclick={() => {
-						
 						showCommissionModal = true;
 					}}
 					class="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 transition-colors hover:bg-gray-50"
@@ -209,19 +206,19 @@
 
 	<!-- Stats Overview -->
 	<div class="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-		<div class="rounded-lg border border-gray-200 bg-white p-6 group">
+		<div class="group rounded-lg border border-gray-200 bg-white p-6">
 			<div class="flex items-center justify-between">
 				<div>
 					<p class="text-sm font-medium text-gray-600">Total Referrals</p>
 					<p class="mt-2 text-3xl font-bold text-gray-900">{data.program.totalReferrals}</p>
 				</div>
 				<div class="rounded-full bg-blue-100 p-3">
-					<User class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-blue-600" />
+					<User class="size-5 text-blue-600 group-hover:scale-80 group-hover:-rotate-20" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-6 group">
+		<div class="group rounded-lg border border-gray-200 bg-white p-6">
 			<div class="flex items-center justify-between">
 				<div>
 					<p class="text-sm font-medium text-gray-600">Total Sales</p>
@@ -230,12 +227,12 @@
 					</p>
 				</div>
 				<div class="rounded-full bg-green-100 p-3">
-					<TrendingUp class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-green-600" />
+					<TrendingUp class="size-5 text-green-600 group-hover:scale-80 group-hover:-rotate-20" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-6 group">
+		<div class="group rounded-lg border border-gray-200 bg-white p-6">
 			<div class="flex items-center justify-between">
 				<div>
 					<p class="text-sm font-medium text-gray-600">Total Commission</p>
@@ -244,19 +241,19 @@
 					</p>
 				</div>
 				<div class="rounded-full bg-purple-100 p-3">
-					<DollarSign class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-purple-600" />
+					<DollarSign class="size-5 text-purple-600 group-hover:scale-80 group-hover:-rotate-20" />
 				</div>
 			</div>
 		</div>
 
-		<div class="rounded-lg border border-gray-200 bg-white p-6 group">
+		<div class="group rounded-lg border border-gray-200 bg-white p-6">
 			<div class="flex items-center justify-between">
 				<div>
 					<p class="text-sm font-medium text-gray-600">Commission Rate</p>
 					<p class="mt-2 text-3xl font-bold text-orange-600">{data.program.commissionRate}%</p>
 				</div>
 				<div class="rounded-full bg-orange-100 p-3">
-					<BarChart3 class="size-5 group-hover:scale-80 group-hover:-rotate-20 text-orange-600" />
+					<BarChart3 class="size-5 text-orange-600 group-hover:scale-80 group-hover:-rotate-20" />
 				</div>
 			</div>
 		</div>
@@ -281,7 +278,7 @@
 						/>
 						<button
 							onclick={() => copyToClipboard(data.program.affiliateCode, 'Code')}
-							class="rounded-lg cursor-copy active:scale-90 bg-blue-600 px-3 py-2 text-white transition-colors hover:bg-blue-700"
+							class="cursor-copy rounded-lg bg-blue-600 px-3 py-2 text-white transition-colors hover:bg-blue-700 active:scale-90"
 						>
 							<Copy class="h-4 w-4" />
 						</button>
@@ -298,14 +295,14 @@
 					<div class="flex gap-2">
 						<input
 							type="text"
-							value={`${page.url.origin}/?ref=${data.program.affiliateCode}`}
+							value={`${referralBaseUrl}/ref/${data.program.affiliateCode}`}
 							readonly
 							class="flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
 						/>
 						<button
 							onclick={() =>
-								copyToClipboard(`${page.url.origin}/?ref=${data.program.affiliateCode}`, 'Link')}
-							class="rounded-lg cursor-copy active:scale-90 bg-blue-600 px-3 py-2 text-white transition-colors hover:bg-blue-700"
+								copyToClipboard(`${referralBaseUrl}/ref/${data.program.affiliateCode}`, 'Link')}
+							class="cursor-copy rounded-lg bg-blue-600 px-3 py-2 text-white transition-colors hover:bg-blue-700 active:scale-90"
 						>
 							<Copy class="h-4 w-4" />
 						</button>
@@ -648,7 +645,7 @@
 <!-- Commission Rate Adjustment Modal -->
 {#if showCommissionModal}
 	<CommissionModal
-		bind:newCommissionRate={newCommissionRate}
+		bind:newCommissionRate
 		{commissionError}
 		{updateCommissionRate}
 		{isUpdatingRate}
@@ -665,11 +662,11 @@
 		{isProcessingPayout}
 		{recordPayout}
 		{payoutError}
-		bind:payoutAmount={payoutAmount}
-		bind:payoutMethod={payoutMethod}
-		bind:payoutReference={payoutReference}
-		bind:payoutDate={payoutDate}
-		bind:payoutNotes={payoutNotes}
+		bind:payoutAmount
+		bind:payoutMethod
+		bind:payoutReference
+		bind:payoutDate
+		bind:payoutNotes
 		{unpaidCommission}
 		onclick={() => {
 			showPayoutModal = false;

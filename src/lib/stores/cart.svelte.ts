@@ -1,6 +1,9 @@
 import { browser } from '$app/environment';
 import type { CartItem, CartItemWithTier, CartStorage, CartState } from '$lib/types/cart';
-import { normalizeTierDeliveryMode, type TierDeliveryMode } from '$lib/helpers/tier-delivery-config';
+import {
+	normalizeTierDeliveryMode,
+	type TierDeliveryMode
+} from '$lib/helpers/tier-delivery-config';
 
 interface TierData {
 	id: string;
@@ -33,8 +36,16 @@ function getPlatformIconFromMetadata(metadata: unknown): string | null {
 		return null;
 	}
 
-	const icon = (metadata as Record<string, unknown>).icon;
-	return typeof icon === 'string' && icon.trim().length > 0 ? icon.trim() : null;
+	const record = metadata as Record<string, unknown>;
+	const candidates = [record.icon, record.iconUrl, record.icon_url, record.image, record.logo];
+
+	for (const candidate of candidates) {
+		if (typeof candidate === 'string' && candidate.trim().length > 0) {
+			return candidate.trim();
+		}
+	}
+
+	return null;
 }
 
 const STORAGE_KEY = 'fastaccs_cart';
@@ -263,10 +274,11 @@ class CartStore {
 						tier: {
 							id: tier.id,
 							name: tier.name,
-							price:
-								tier.metadata
-									? Number((tier.metadata as any).pricing?.base_price || (tier.metadata as any).price || 0)
-									: 0,
+							price: tier.metadata
+								? Number(
+										(tier.metadata as any).pricing?.base_price || (tier.metadata as any).price || 0
+									)
+								: 0,
 							slug: tier.slug,
 							platformName: tier.parent?.name || 'Unknown',
 							platformSlug: tier.parent?.slug || '',

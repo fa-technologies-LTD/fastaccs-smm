@@ -25,16 +25,24 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 			);
 		}
 
-		// Update user's affiliate enabled status
-		const updatedUser = await prisma.user.update({
-			where: { id: userId },
-			data: { isAffiliateEnabled },
-			select: {
-				id: true,
-				email: true,
-				fullName: true,
-				isAffiliateEnabled: true
-			}
+		const updatedUser = await prisma.$transaction(async (tx) => {
+			const nextProgramStatus = isAffiliateEnabled ? 'active' : 'inactive';
+
+			await tx.affiliateProgram.updateMany({
+				where: { userId },
+				data: { status: nextProgramStatus }
+			});
+
+			return tx.user.update({
+				where: { id: userId },
+				data: { isAffiliateEnabled },
+				select: {
+					id: true,
+					email: true,
+					fullName: true,
+					isAffiliateEnabled: true
+				}
+			});
 		});
 
 		return json({
@@ -43,9 +51,6 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 		});
 	} catch (error) {
 		console.error('Error toggling affiliate status:', error);
-		return json(
-			{ success: false, error: 'Failed to update affiliate status' },
-			{ status: 500 }
-		);
+		return json({ success: false, error: 'Failed to update affiliate status' }, { status: 500 });
 	}
 };

@@ -13,7 +13,11 @@
 		Plus,
 		BellRing,
 		CheckCircle,
-		AlertTriangle
+		AlertTriangle,
+		Zap,
+		Wallet,
+		Filter,
+		Compass
 	} from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -43,6 +47,19 @@
 	}
 
 	type TierCard = PageData['tiers'][number];
+	type MobileQuickFilter = 'popular' | 'budget' | 'organic';
+	type MobileSortKey = 'default' | 'price_asc' | 'price_desc' | 'stock_desc';
+
+	interface MobileSortOption {
+		key: MobileSortKey;
+		label: string;
+		shortLabel: string;
+	}
+
+	interface TierBadgeDisplay {
+		label: string;
+		tone: 'warning' | 'featured' | 'hot';
+	}
 
 	let { data }: Props = $props();
 	let platformHeaderIconFailed = $state(false);
@@ -60,6 +77,10 @@
 	let quickAddCloseButton = $state<HTMLButtonElement | null>(null);
 	let previousBodyOverflow = '';
 	let previousActiveElement: HTMLElement | null = null;
+	let mobileQuickFilter = $state<MobileQuickFilter | null>('popular');
+	let mobileSortKey = $state<MobileSortKey>('default');
+	let expandedTierDetailsById = $state<Record<string, boolean>>({});
+	let isMobileViewport = $state(false);
 
 	// Format follower count
 	function formatFollowers(count: number): string {
@@ -75,6 +96,67 @@
 
 	function getTierRoute(tierSlug: string): string {
 		return `/platforms/${data.platform?.slug}/tiers/${tierSlug}`;
+	}
+
+	function isOrganicTier(tier: TierCard): boolean {
+		const metadataFeatures = getTierFeatures(tier.metadata);
+		const searchable = [
+			tier.tier_name || '',
+			tier.description || '',
+			tier.featured_badge || '',
+			...metadataFeatures
+		]
+			.join(' ')
+			.toLowerCase();
+		return /\borganic\b/.test(searchable);
+	}
+
+	function hasPopularSignal(tier: TierCard): boolean {
+		if (tier.is_pinned || tier.is_featured) return true;
+		const featuredLabel = (tier.featured_badge || '').toLowerCase();
+		return /(hot|best|popular|top|pinned)/.test(featuredLabel);
+	}
+
+	function getTierPopularityScore(tier: TierCard): number {
+		let score = 0;
+		if (tier.is_pinned) {
+			score += 1000;
+			if (typeof tier.pin_priority === 'number') {
+				score += Math.max(0, 80 - tier.pin_priority);
+			}
+		}
+		if (tier.is_featured) score += 220;
+		const featuredLabel = (tier.featured_badge || '').toLowerCase();
+		if (/hot/.test(featuredLabel)) score += 120;
+		if (/best/.test(featuredLabel)) score += 90;
+		if (/popular|top/.test(featuredLabel)) score += 75;
+		if (tier.visible_available > 0) score += 40;
+		score += Math.min(tier.visible_available || 0, 25);
+		return score;
+	}
+
+	function compareTierByPriceAsc(a: TierCard, b: TierCard): number {
+		const priceDiff = a.price - b.price;
+		if (priceDiff !== 0) return priceDiff;
+		return a.tier_name.localeCompare(b.tier_name);
+	}
+
+	function compareTierByPriceDesc(a: TierCard, b: TierCard): number {
+		const priceDiff = b.price - a.price;
+		if (priceDiff !== 0) return priceDiff;
+		return a.tier_name.localeCompare(b.tier_name);
+	}
+
+	function compareTierByStockDesc(a: TierCard, b: TierCard): number {
+		const stockDiff = b.visible_available - a.visible_available;
+		if (stockDiff !== 0) return stockDiff;
+		return compareTierByPriceAsc(a, b);
+	}
+
+	function compareTierByPopularity(a: TierCard, b: TierCard): number {
+		const scoreDiff = getTierPopularityScore(b) - getTierPopularityScore(a);
+		if (scoreDiff !== 0) return scoreDiff;
+		return compareTierByPriceAsc(a, b);
 	}
 
 	function isTierCardActionTarget(target: EventTarget | null): boolean {
@@ -201,6 +283,173 @@
 		}
 		return 'Featured';
 	}
+
+	function getPrimaryTierBadge(tier: TierCard): TierBadgeDisplay | null {
+		if (tier.is_pinned) {
+			return {
+				label: `Pinned${tier.pin_priority ? ` #${tier.pin_priority}` : ''}`,
+				tone: 'warning'
+			};
+		}
+
+		if (!tier.is_featured) {
+			return null;
+		}
+
+		const label = getFeaturedBadgeLabel(tier);
+		const normalized = label.toLowerCase();
+		const tone: TierBadgeDisplay['tone'] = /hot/.test(normalized)
+			? 'hot'
+			: /best|price|deal|pick/.test(normalized)
+				? 'featured'
+				: 'featured';
+
+		return { label, tone };
+	}
+
+	function getTopTierFeatures(tierFeatures: string[]): string[] {
+		return tierFeatures.slice(0, 3);
+	}
+
+	function getAdditionalTierFeatures(tierFeatures: string[]): string[] {
+		return tierFeatures.slice(3);
+	}
+
+	function isTierDetailsExpanded(tierId: string): boolean {
+		return Boolean(expandedTierDetailsById[tierId]);
+	}
+
+	function toggleTierDetails(tierId: string): void {
+		expandedTierDetailsById = {
+			...expandedTierDetailsById,
+			[tierId]: !expandedTierDetailsById[tierId]
+		};
+	}
+
+	const tierPrices = $derived(
+		data.tiers
+			.map((tier) => Number(tier.price))
+			.filter((value) => Number.isFinite(value))
+			.sort((a, b) => a - b)
+	);
+	const tierStocks = $derived(
+		data.tiers
+			.map((tier) => Number(tier.visible_available))
+			.filter((value) => Number.isFinite(value))
+			.sort((a, b) => a - b)
+	);
+	const hasPriceVariance = $derived(
+		tierPrices.length > 1 && tierPrices[0] !== tierPrices[tierPrices.length - 1]
+	);
+	const hasStockVariance = $derived(
+		tierStocks.length > 1 && tierStocks[0] !== tierStocks[tierStocks.length - 1]
+	);
+	const hasPopularTiers = $derived(data.tiers.some(hasPopularSignal));
+	const hasOrganicTiers = $derived(data.tiers.some(isOrganicTier));
+	const showPopularControl = $derived(hasPopularTiers);
+	const showBudgetControl = $derived(hasPriceVariance);
+	const showOrganicControl = $derived(hasOrganicTiers);
+
+	const mobileSortOptions = $derived.by(() => {
+		const options: MobileSortOption[] = [
+			{ key: 'default', label: 'Recommended', shortLabel: 'Auto' }
+		];
+		if (hasPriceVariance) {
+			options.push({ key: 'price_asc', label: 'Price: Low to High', shortLabel: 'Price ↑' });
+			options.push({ key: 'price_desc', label: 'Price: High to Low', shortLabel: 'Price ↓' });
+		}
+		if (hasStockVariance) {
+			options.push({ key: 'stock_desc', label: 'Most in stock first', shortLabel: 'Stock' });
+		}
+		return options;
+	});
+
+	const showSortControl = $derived(mobileSortOptions.length > 1);
+	const showMobileTierControls = $derived(
+		data.tiers.length >= 10 &&
+			(Boolean(showPopularControl) ||
+				Boolean(showBudgetControl) ||
+				Boolean(showOrganicControl) ||
+				Boolean(showSortControl))
+	);
+	const shouldUseMobileTierControls = $derived(showMobileTierControls && isMobileViewport);
+
+	const activeMobileSortOption = $derived.by(
+		() =>
+			mobileSortOptions.find((option) => option.key === mobileSortKey) || {
+				key: 'default',
+				label: 'Recommended',
+				shortLabel: 'Auto'
+			}
+	);
+
+	const displayedTiers = $derived.by(() => {
+		if (!shouldUseMobileTierControls) {
+			return [...data.tiers];
+		}
+
+		let tiers = [...data.tiers];
+
+		if (mobileQuickFilter === 'organic') {
+			tiers = tiers.filter(isOrganicTier);
+		} else if (mobileQuickFilter === 'popular') {
+			tiers.sort(compareTierByPopularity);
+		} else if (mobileQuickFilter === 'budget') {
+			tiers.sort(compareTierByPriceAsc);
+		}
+
+		const effectiveSort =
+			mobileSortKey === 'default'
+				? mobileQuickFilter === 'budget'
+					? 'price_asc'
+					: mobileQuickFilter === 'popular'
+						? 'default'
+						: 'default'
+				: mobileSortKey;
+
+		if (effectiveSort === 'price_asc') {
+			tiers.sort(compareTierByPriceAsc);
+		} else if (effectiveSort === 'price_desc') {
+			tiers.sort(compareTierByPriceDesc);
+		} else if (effectiveSort === 'stock_desc') {
+			tiers.sort(compareTierByStockDesc);
+		}
+
+		return tiers;
+	});
+
+	function setMobileQuickFilter(filter: MobileQuickFilter): void {
+		mobileQuickFilter = mobileQuickFilter === filter ? null : filter;
+	}
+
+	function cycleMobileSort(): void {
+		if (mobileSortOptions.length <= 1) return;
+		const optionKeys = mobileSortOptions.map((option) => option.key);
+		const currentIndex = optionKeys.indexOf(mobileSortKey);
+		const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % optionKeys.length : 0;
+		mobileSortKey = optionKeys[nextIndex] as MobileSortKey;
+	}
+
+	function resetMobileTierControls(): void {
+		mobileQuickFilter = shouldUseMobileTierControls && showPopularControl ? 'popular' : null;
+		mobileSortKey = 'default';
+	}
+
+	function syncViewportFlag(): void {
+		isMobileViewport = window.innerWidth < 640;
+	}
+
+	$effect(() => {
+		if (!shouldUseMobileTierControls) {
+			if (mobileQuickFilter !== null) mobileQuickFilter = null;
+			if (mobileSortKey !== 'default') mobileSortKey = 'default';
+			return;
+		}
+
+		if (showPopularControl && mobileQuickFilter === null) {
+			mobileQuickFilter = 'popular';
+		}
+	});
 
 	function getTierDeliveryModeLabel(tier: TierCard): string {
 		const config = getTierDeliveryConfig(tier.metadata);
@@ -487,6 +736,10 @@
 	}
 
 	onMount(() => {
+		syncViewportFlag();
+		resetMobileTierControls();
+		window.addEventListener('resize', syncViewportFlag);
+
 		void loadRestockStatusForSoldOutTiers().then(async () => {
 			const notifyTierId = page.url.searchParams.get('notifyTier');
 			if (
@@ -508,6 +761,7 @@
 		});
 
 		return () => {
+			window.removeEventListener('resize', syncViewportFlag);
 			document.body.style.overflow = previousBodyOverflow;
 		};
 	});
@@ -555,7 +809,6 @@
 			style={getPlatformHeaderStyle(platformMeta)}
 		>
 			<div class="mx-auto max-w-6xl px-4">
-				<!-- Enhanced Breadcrumb Navigation -->
 				<Breadcrumb
 					items={[
 						{ label: 'Platforms', href: '/platforms' },
@@ -563,10 +816,35 @@
 					]}
 				/>
 
-				<!-- Step Indicator - Commented Out -->
-				<!-- <StepIndicator currentStep={2} /> -->
+				<div class="mt-3 sm:hidden">
+					<div class="flex items-center gap-3">
+						<div class="rounded-full bg-white/18 p-2.5">
+							{#if shouldRenderPlatformHeaderImage(platformMeta)}
+								<img
+									src={platformMeta.icon as string}
+									alt={data.platform.name}
+									class="h-8 w-8"
+									onerror={() => (platformHeaderIconFailed = true)}
+								/>
+							{:else}
+								<PlatformIcon class="h-8 w-8" />
+							{/if}
+						</div>
+						<div class="min-w-0 flex-1">
+							<h1 class="text-[2rem] leading-tight font-bold">{data.platform.name} Accounts</h1>
+							<p class="mt-1 text-sm opacity-90">{data.platform.description}</p>
+						</div>
+						<div
+							class="rounded-[14px] border px-3 py-2 text-center"
+							style="border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.06);"
+						>
+							<div class="text-[1.55rem] leading-none font-bold">{data.tiers.length}</div>
+							<div class="mt-1 text-[0.68rem] tracking-wide uppercase opacity-85">tiers</div>
+						</div>
+					</div>
+				</div>
 
-				<div class="flex items-start gap-4 sm:gap-6">
+				<div class="hidden items-start gap-4 sm:flex sm:gap-6">
 					<div class="flex flex-col items-center gap-3">
 						<div class="rounded-full bg-white/20 p-3 sm:p-4">
 							{#if shouldRenderPlatformHeaderImage(platformMeta)}
@@ -596,16 +874,75 @@
 		</section>
 
 		<!-- Tier Selection -->
-		<section class="py-8 sm:py-16">
+		<section class="py-5 sm:py-16">
 			<div class="mx-auto max-w-6xl px-4">
-				<div class="mb-8 text-center">
-					<h2 class="mb-4 text-2xl font-bold sm:text-3xl" style="color: var(--text);">
+				<div class="mb-5 text-left sm:mb-8 sm:text-center">
+					<h2 class="mb-2 text-xl font-bold sm:mb-4 sm:text-3xl" style="color: var(--text);">
 						Available Tiers
 					</h2>
-					<p class="text-base sm:text-lg" style="color: var(--text-muted);">
+					<p class="text-sm sm:text-lg" style="color: var(--text-muted);">
 						Select the tier that matches your needs. Each tier shows current stock and pricing.
 					</p>
 				</div>
+
+				{#if showMobileTierControls}
+					<div class="mobile-tier-control-sticky sm:hidden">
+						<div class="mobile-tier-control-row">
+							{#if showPopularControl}
+								<button
+									type="button"
+									onclick={() => setMobileQuickFilter('popular')}
+									class={`mobile-tier-chip ${mobileQuickFilter === 'popular' ? 'active' : ''}`}
+									aria-pressed={mobileQuickFilter === 'popular'}
+								>
+									<Zap class="h-4 w-4" />
+									<span>Popular</span>
+								</button>
+							{/if}
+
+							{#if showBudgetControl}
+								<button
+									type="button"
+									onclick={() => setMobileQuickFilter('budget')}
+									class={`mobile-tier-chip ${mobileQuickFilter === 'budget' ? 'active' : ''}`}
+									aria-pressed={mobileQuickFilter === 'budget'}
+								>
+									<Wallet class="h-4 w-4" />
+									<span>Budget</span>
+								</button>
+							{/if}
+
+							{#if showOrganicControl}
+								<button
+									type="button"
+									onclick={() => setMobileQuickFilter('organic')}
+									class={`mobile-tier-chip ${mobileQuickFilter === 'organic' ? 'active' : ''}`}
+									aria-pressed={mobileQuickFilter === 'organic'}
+								>
+									<Compass class="h-4 w-4" />
+									<span>Organic</span>
+								</button>
+							{/if}
+
+							{#if showSortControl}
+								<button
+									type="button"
+									onclick={cycleMobileSort}
+									class={`mobile-tier-chip ${mobileSortKey !== 'default' ? 'active' : ''}`}
+									aria-label={`Sort tiers. Current mode: ${activeMobileSortOption.label}`}
+								>
+									<Filter class="h-4 w-4" />
+									<span>Sort</span>
+								</button>
+							{/if}
+						</div>
+						{#if mobileSortKey !== 'default'}
+							<p class="mt-2 text-[11px]" style="color: var(--text-muted);">
+								Sorting by: {activeMobileSortOption.shortLabel}
+							</p>
+						{/if}
+					</div>
+				{/if}
 
 				{#if data.tiers.length === 0}
 					<div class="rounded-lg p-8 text-center" style="background: var(--bg-elev-2);">
@@ -624,16 +961,45 @@
 							Browse Other Platforms
 						</button>
 					</div>
+				{:else if displayedTiers.length === 0}
+					<div
+						class="rounded-xl border p-6 text-left sm:text-center"
+						style="background: var(--bg-elev-2); border-color: var(--border);"
+					>
+						<h3 class="text-base font-semibold sm:text-lg" style="color: var(--text);">
+							No tiers match this filter
+						</h3>
+						<p class="mt-2 text-sm" style="color: var(--text-muted);">
+							Try another view to see all available options.
+						</p>
+						<button
+							type="button"
+							onclick={resetMobileTierControls}
+							class="mt-4 rounded-full px-4 py-2 text-sm font-semibold transition-all active:scale-95"
+							style="background: rgba(105,109,250,0.14); border: 1px solid rgba(105,109,250,0.34); color: var(--text);"
+						>
+							Reset filters
+						</button>
+					</div>
 				{:else}
-					<div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-						{#each data.tiers as tier (tier.category_id)}
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-8 lg:grid-cols-3">
+						{#each displayedTiers as tier (tier.category_id)}
 							{@const tierStatus = getTierStatus(tier.visible_available)}
 							{@const tierFeatures = getTierFeatures(tier.metadata)}
+							{@const primaryBadge = getPrimaryTierBadge(tier)}
+							{@const topFeatures = getTopTierFeatures(tierFeatures)}
+							{@const additionalFeatures = getAdditionalTierFeatures(tierFeatures)}
+							{@const hasExpandableDetails = Boolean(
+								additionalFeatures.length > 0 ||
+									tier.description ||
+									tier.metadata?.age_hint ||
+									getTierManualHandoverPromise(tier)
+							)}
+							{@const isExpanded = isTierDetailsExpanded(tier.category_id)}
 							<div
-								class="group relative flex cursor-pointer flex-col overflow-visible rounded-xl shadow transition-all duration-300 {tier.visible_available >
-								0
-									? 'hover:-translate-y-1 hover:shadow-md'
-									: 'opacity-75'}"
+								class={`tier-card group relative flex cursor-pointer flex-col overflow-visible rounded-xl shadow transition-all duration-300 ${
+									primaryBadge ? 'tier-card--with-badge' : ''
+								} ${tier.visible_available > 0 ? 'hover:-translate-y-1 hover:shadow-md' : 'opacity-75'}`}
 								style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 								role="link"
 								tabindex="0"
@@ -641,41 +1007,44 @@
 								onclick={(event) => handleTierCardClick(event, tier)}
 								onkeydown={(event) => handleTierCardKeydown(event, tier)}
 							>
-								{#if tier.is_pinned || tier.is_featured}
+								{#if primaryBadge}
 									<div class="card-merch-tags">
-										{#if tier.is_pinned}
-											<span
-												class="card-border-chip card-border-chip--warning card-border-chip--gloss"
-											>
-												Pinned{tier.pin_priority ? ` #${tier.pin_priority}` : ''}
-											</span>
-										{/if}
-										{#if tier.is_featured}
-											<span
-												class="card-border-chip card-border-chip--featured card-border-chip--gloss"
-											>
-												{getFeaturedBadgeLabel(tier)}
-											</span>
-										{/if}
+										<span
+											class={`card-border-chip card-border-chip--gloss ${
+												primaryBadge.tone === 'warning'
+													? 'card-border-chip--warning'
+													: primaryBadge.tone === 'hot'
+														? 'card-border-chip--hot'
+														: 'card-border-chip--featured'
+											}`}
+										>
+											{primaryBadge.label}
+										</span>
 									</div>
 								{/if}
 
-								<!-- Tier Header -->
-								<div class="flex flex-1 flex-col p-4 sm:p-6">
+								<div
+									class={`tier-card-body flex flex-1 flex-col p-4 sm:p-6 ${
+										primaryBadge ? 'pt-10 sm:pt-11' : ''
+									}`}
+								>
 									<div
-										class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+										class="mb-3 flex flex-col gap-2 sm:mb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
 									>
 										<div class="min-w-0">
 											<h3 class="text-lg font-bold sm:text-xl" style="color: var(--text);">
 												{tier.tier_name}
 											</h3>
-											<p class="mt-1 text-sm leading-relaxed" style="color: var(--text-muted);">
+											<p
+												class="mt-1 text-sm leading-snug sm:leading-relaxed"
+												style="color: var(--text-muted);"
+											>
 												{getTierAudienceLabel(tier.metadata)}
 											</p>
 										</div>
-										<div class="text-left sm:text-right">
+										<div class="mobile-price-block text-left sm:text-right">
 											<div
-												class="text-xl font-bold sm:text-2xl"
+												class="text-[2.18rem] leading-none font-bold sm:text-2xl"
 												style="background: var(--btn-primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"
 											>
 												{formatPrice(tier.price)}
@@ -686,54 +1055,39 @@
 										</div>
 									</div>
 
-									<!-- Tier Description -->
-									{#if tier.description}
-										<div class="mb-4">
-											<p class="text-sm leading-relaxed" style="color: var(--text-muted);">
-												{tier.description}
-											</p>
-										</div>
-									{/if}
-
-									<!-- Availability -->
 									<div
-										class="mb-4 flex flex-wrap items-center gap-2 text-sm"
+										class="mb-3 flex flex-wrap items-center gap-2 text-sm"
 										style="color: var(--text-muted);"
 									>
-										<span
-											><span class="font-medium">{tier.visible_available}</span> accounts available</span
-										>
+										<span>
+											<span class="font-medium">{tier.visible_available}</span> accounts available
+										</span>
+										<span aria-hidden="true" class="opacity-60">•</span>
+										<span>{getTierDeliveryModeLabel(tier)}</span>
 										{#if tierStatus}
-											<span
-												class="card-border-chip card-border-chip--warning card-border-chip--gloss"
-											>
+											<span class="tier-status-chip tier-status-chip--warning">
 												{tierStatus.status}
 											</span>
 										{/if}
 										{#if tier.reservations_active > 0}
-											<span class="text-yellow-600">
-												• {tier.reservations_active} reserved
+											<span class="tier-status-chip tier-status-chip--soft">
+												{tier.reservations_active} reserved
 											</span>
 										{/if}
 									</div>
 
-									<div class="mb-4">
-										<span
-											class="tag-chip inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold"
-											style="background: rgba(59, 130, 246, 0.15); color: rgb(147, 197, 253); border: 1px solid rgba(147, 197, 253, 0.25);"
-										>
-											{getTierDeliveryModeLabel(tier)}
-										</span>
-										{#if getTierManualHandoverPromise(tier)}
-											<p class="mt-2 text-xs" style="color: var(--text-muted);">
-												{getTierManualHandoverPromise(tier)}
-											</p>
-										{/if}
-									</div>
-
-									<!-- Tier Features -->
 									{#if tierFeatures.length > 0}
-										<div class="mb-6">
+										<div class="mb-3 sm:hidden">
+											<div class="flex flex-wrap gap-2">
+												{#each topFeatures as feature, featureIndex (featureIndex)}
+													<span class="mobile-feature-pill">
+														<Star class="h-3.5 w-3.5" />
+														{feature}
+													</span>
+												{/each}
+											</div>
+										</div>
+										<div class="mb-6 hidden sm:block">
 											<h4 class="mb-3 text-sm font-semibold" style="color: var(--text);">
 												Tier Features:
 											</h4>
@@ -744,17 +1098,72 @@
 														style="color: var(--text-muted);"
 													>
 														<Star class="mt-0.5 h-3 w-3 flex-shrink-0 text-green-500" />
-														<span>{formatFeatureName(feature)}</span>
+														<span>{feature}</span>
 													</div>
 												{/each}
 											</div>
 										</div>
 									{/if}
 
-									<!-- Age Hint -->
+									{#if hasExpandableDetails}
+										<button
+											type="button"
+											data-card-action
+											onclick={() => toggleTierDetails(tier.category_id)}
+											class="mb-4 inline-flex items-center gap-1 text-xs font-semibold sm:hidden"
+											style="color: var(--link);"
+										>
+											{isExpanded ? 'Less details' : 'More details'}
+											<ChevronRight
+												class={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+											/>
+										</button>
+									{/if}
+
+									{#if isExpanded}
+										<div
+											class="mb-4 space-y-2 rounded-lg p-3 sm:hidden"
+											style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+										>
+											{#if additionalFeatures.length > 0}
+												<div class="space-y-1.5">
+													{#each additionalFeatures as feature, featureIndex (featureIndex)}
+														<div
+															class="flex items-start gap-2 text-sm"
+															style="color: var(--text-muted);"
+														>
+															<Star class="mt-0.5 h-3 w-3 flex-shrink-0 text-green-500" />
+															<span>{feature}</span>
+														</div>
+													{/each}
+												</div>
+											{/if}
+											{#if tier.description}
+												<p class="text-sm leading-relaxed" style="color: var(--text-muted);">
+													{tier.description}
+												</p>
+											{/if}
+											{#if tier.metadata?.age_hint}
+												<div
+													class="flex items-center gap-2 text-sm"
+													style="color: var(--text-muted);"
+												>
+													<Users class="h-4 w-4" />
+													<span class="font-medium">Account Age:</span>
+													<span>{tier.metadata.age_hint}</span>
+												</div>
+											{/if}
+											{#if getTierManualHandoverPromise(tier)}
+												<p class="text-xs" style="color: var(--text-muted);">
+													{getTierManualHandoverPromise(tier)}
+												</p>
+											{/if}
+										</div>
+									{/if}
+
 									{#if tier.metadata?.age_hint}
 										<div
-											class="mb-4 rounded-lg p-3"
+											class="mb-4 hidden rounded-lg p-3 sm:block"
 											style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 										>
 											<div
@@ -767,10 +1176,15 @@
 											</div>
 										</div>
 									{/if}
+
+									{#if getTierManualHandoverPromise(tier)}
+										<p class="mt-1 mb-4 hidden text-xs sm:block" style="color: var(--text-muted);">
+											{getTierManualHandoverPromise(tier)}
+										</p>
+									{/if}
 								</div>
 
-								<!-- Actions -->
-								<div class="mx-6 mt-6 mb-6 space-y-2">
+								<div class="mx-4 mt-1 mb-4 space-y-2 sm:mx-6 sm:mt-6 sm:mb-6">
 									{#if tier.visible_available === 0}
 										<button
 											type="button"
@@ -809,8 +1223,18 @@
 									<a
 										href={getTierRoute(tier.tier_slug)}
 										data-card-action
-										class="inline-flex w-full items-center justify-center gap-1 rounded-lg py-3 text-center text-sm font-semibold transition-colors hover:opacity-90"
+										class="hidden w-full items-center justify-center gap-1 rounded-lg py-3 text-center text-sm font-semibold transition-colors hover:opacity-90 sm:inline-flex"
 										style="border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text);"
+										aria-label={`View samples for ${tier.tier_name}`}
+									>
+										View Samples
+										<ChevronRight class="h-4 w-4" />
+									</a>
+									<a
+										href={getTierRoute(tier.tier_slug)}
+										data-card-action
+										class="inline-flex w-full items-center justify-center gap-1 py-1 text-center text-sm font-semibold sm:hidden"
+										style="color: var(--text-muted);"
 										aria-label={`View samples for ${tier.tier_name}`}
 									>
 										View Samples
@@ -1011,6 +1435,91 @@
 <Footer />
 
 <style>
+	.mobile-tier-control-sticky {
+		position: sticky;
+		top: 4.2rem;
+		z-index: 25;
+		margin: 0 -0.25rem 0.9rem;
+		padding: 0.35rem 0.25rem 0.45rem;
+		background: linear-gradient(180deg, rgba(3, 10, 22, 0.95), rgba(3, 10, 22, 0.85));
+		border-radius: 14px;
+		backdrop-filter: blur(5px);
+	}
+
+	.mobile-tier-control-row {
+		display: flex;
+		gap: 0.55rem;
+		overflow-x: auto;
+		padding: 0.1rem;
+		scrollbar-width: none;
+	}
+
+	.mobile-tier-control-row::-webkit-scrollbar {
+		display: none;
+	}
+
+	.mobile-tier-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		white-space: nowrap;
+		border-radius: 999px;
+		border: 1px solid rgba(255, 255, 255, 0.18);
+		background: rgba(255, 255, 255, 0.03);
+		color: var(--text);
+		padding: 0.46rem 0.82rem;
+		font-size: 0.79rem;
+		font-weight: 600;
+		transition:
+			border-color 180ms ease,
+			background-color 180ms ease,
+			color 180ms ease;
+	}
+
+	.mobile-tier-chip.active {
+		border-color: rgba(5, 212, 113, 0.5);
+		background: rgba(5, 212, 113, 0.16);
+		color: rgb(167, 243, 208);
+	}
+
+	.mobile-feature-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		border-radius: 999px;
+		border: 1px solid rgba(5, 212, 113, 0.32);
+		background: rgba(5, 212, 113, 0.08);
+		color: rgb(209, 250, 229);
+		padding: 0.32rem 0.62rem;
+		font-size: 0.74rem;
+		font-weight: 600;
+		line-height: 1.1;
+	}
+
+	.tier-status-chip {
+		display: inline-flex;
+		align-items: center;
+		border-radius: 999px;
+		border: 1px solid rgba(255, 255, 255, 0.24);
+		padding: 0.18rem 0.56rem;
+		font-size: 0.68rem;
+		font-weight: 700;
+		letter-spacing: 0.01em;
+		line-height: 1.15;
+	}
+
+	.tier-status-chip--warning {
+		border-color: rgba(251, 191, 36, 0.35);
+		background: rgba(251, 191, 36, 0.16);
+		color: rgb(251, 191, 36);
+	}
+
+	.tier-status-chip--soft {
+		border-color: rgba(250, 204, 21, 0.22);
+		background: rgba(250, 204, 21, 0.1);
+		color: rgb(250, 204, 21);
+	}
+
 	.card-merch-tags {
 		position: absolute;
 		top: 0;
@@ -1019,11 +1528,12 @@
 		flex-wrap: wrap;
 		gap: 0.4rem;
 		pointer-events: none;
+		max-width: calc(100% - 2rem);
 	}
 
 	.card-merch-tags {
-		left: 0.9rem;
-		transform: translateY(-50%);
+		left: 0.95rem;
+		transform: translateY(-52%);
 	}
 
 	.card-border-chip {
@@ -1032,6 +1542,8 @@
 		align-items: center;
 		overflow: hidden;
 		white-space: nowrap;
+		max-width: 100%;
+		text-overflow: ellipsis;
 		border-radius: 9999px;
 		border: 1px solid rgba(251, 191, 36, 0.35);
 		background: rgba(251, 191, 36, 0.18);
@@ -1052,6 +1564,12 @@
 		border-color: rgba(251, 191, 36, 0.35);
 		background: rgba(251, 191, 36, 0.18);
 		color: rgb(251, 191, 36);
+	}
+
+	.card-border-chip--hot {
+		border-color: rgba(248, 113, 113, 0.45);
+		background: rgba(248, 113, 113, 0.14);
+		color: rgb(254, 202, 202);
 	}
 
 	.card-border-chip--gloss::after {
@@ -1078,6 +1596,13 @@
 		}
 		100% {
 			transform: translateX(130%);
+		}
+	}
+
+	@media (min-width: 640px) {
+		.mobile-price-block > div:first-child {
+			font-size: 1.5rem;
+			line-height: 1.15;
 		}
 	}
 </style>
