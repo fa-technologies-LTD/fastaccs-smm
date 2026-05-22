@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { CheckCircle, RefreshCw, Clock } from '$lib/icons';
-	import { showSuccess, showError } from '$lib/stores/toasts';
+	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import { goto } from '$app/navigation';
 	import { cart } from '$lib/stores/cart.svelte';
+	import { normalizePaymentStatus } from '$lib/helpers/payment-status';
 	import {
 		getTierDeliveryModeLabel,
 		normalizeTierDeliveryMode,
@@ -25,6 +26,7 @@
 		totalAmount?: number | string | null;
 		status?: string | null;
 		paymentStatus?: string | null;
+		paymentReference?: string | null;
 		deliveryStatus?: string | null;
 		createdAt?: string | Date;
 		date?: string;
@@ -40,6 +42,7 @@
 		focusOrderId = null
 	}: { initialOrders?: OrderRecord[]; focusOrderId?: string | null } = $props();
 	let orders = $state<OrderRecord[]>(initialOrders);
+	let checkingPaymentByOrderId = $state<Record<string, boolean>>({});
 
 	$effect(() => {
 		if (!focusOrderId) return;
@@ -147,6 +150,95 @@
 		return [];
 	}
 
+	function isPaymentRecheckable(order: OrderRecord): boolean {
+		return getPaymentState(order).tone === 'pending' && Boolean(order.id);
+	}
+
+	function patchOrder(orderId: string, patch: Partial<OrderRecord>): void {
+		orders = orders.map((order) => (order.id === orderId ? { ...order, ...patch } : order));
+	}
+
+	async function checkPaymentStatus(order: OrderRecord): Promise<void> {
+		if (checkingPaymentByOrderId[order.id]) return;
+
+		checkingPaymentByOrderId = {
+			...checkingPaymentByOrderId,
+			[order.id]: true
+		};
+
+		try {
+			const response = await fetch('/api/payments/verify', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					orderId: order.id,
+					paymentReference: order.paymentReference || null
+				})
+			});
+
+			const result = await response.json().catch(() => ({}));
+			const normalizedStatus = normalizePaymentStatus(result.status);
+
+			if (result.success) {
+				const nextStatus = normalizedStatus === 'COMPLETED' ? 'completed' : 'paid';
+				patchOrder(order.id, {
+					status: nextStatus,
+					paymentStatus: 'paid'
+				});
+				showSuccess(
+					'Payment confirmed',
+					nextStatus === 'completed'
+						? 'Your order has been completed.'
+						: 'Payment is confirmed. Fulfillment is now in progress.'
+				);
+				return;
+			}
+
+			if (result.cancelled === true || normalizedStatus === 'CANCELLED' || normalizedStatus === 'EXPIRED') {
+				patchOrder(order.id, {
+					status: 'cancelled',
+					paymentStatus: 'cancelled'
+				});
+				showWarning(
+					'Payment expired',
+					result.message || 'Payment was not confirmed in time. Please place a fresh order.'
+				);
+				return;
+			}
+
+			if (result.failed === true || normalizedStatus === 'FAILED') {
+				patchOrder(order.id, {
+					status: 'failed',
+					paymentStatus: 'failed'
+				});
+				showError('Payment failed', result.error || result.message || 'Please try again.');
+				return;
+			}
+
+			if (response.status === 202 || result.pending === true) {
+				patchOrder(order.id, {
+					status: 'pending_payment',
+					paymentStatus: normalizedStatus === 'PROCESSING' ? 'processing' : 'pending'
+				});
+				showWarning(
+					'Still confirming',
+					result.message || 'Monnify has not confirmed this payment yet.'
+				);
+				return;
+			}
+
+			showError('Could not check payment', result.error || 'Please try again.');
+		} catch (error) {
+			console.error('Payment recheck failed:', error);
+			showError('Could not check payment', 'Please try again.');
+		} finally {
+			checkingPaymentByOrderId = {
+				...checkingPaymentByOrderId,
+				[order.id]: false
+			};
+		}
+	}
+
 	async function fetchIncomingDeliveryMode(
 		reorderableItems: Array<OrderItem & { categoryId: string }>
 	): Promise<TierDeliveryMode | null> {
@@ -171,16 +263,16 @@
 			rows.map((row) => [row.id, normalizeTierDeliveryMode(row.metadata?.delivery_mode)])
 		);
 
-		const incomingModes = new Set<TierDeliveryMode>();
-		for (const item of reorderableItems) {
-			incomingModes.add(modeById.get(item.categoryId) || 'instant_auto');
-		}
+		const incomingModes = reorderableItems.map(
+			(item) => modeById.get(item.categoryId) || 'instant_auto'
+		);
+		const firstMode = incomingModes[0] || 'instant_auto';
 
-		if (incomingModes.size > 1) {
+		if (incomingModes.some((mode) => mode !== firstMode)) {
 			return null;
 		}
 
-		return incomingModes.has('manual_handover') ? 'manual_handover' : 'instant_auto';
+		return firstMode === 'manual_handover' ? 'manual_handover' : 'instant_auto';
 	}
 
 	async function reorderItems(order: OrderRecord) {
@@ -222,11 +314,11 @@
 			reorderableItems[0].categoryId!,
 			incomingMode
 		);
-			if (!compatibility.compatible) {
-				const incomingLabel = getTierDeliveryModeLabel(incomingMode);
-				const existingLabel = compatibility.existingMode
-					? getTierDeliveryModeLabel(compatibility.existingMode)
-					: getTierDeliveryModeLabel('instant_auto');
+		if (!compatibility.compatible) {
+			const incomingLabel = getTierDeliveryModeLabel(incomingMode);
+			const existingLabel = compatibility.existingMode
+				? getTierDeliveryModeLabel(compatibility.existingMode)
+				: getTierDeliveryModeLabel('instant_auto');
 			const shouldReplace = window.confirm(
 				`You already have ${existingLabel} item(s) in your cart.\n\n${incomingLabel} items must be checked out separately.\n\nPress OK to clear your cart and continue, or Cancel to keep your current cart.`
 			);
@@ -271,7 +363,7 @@
 		</div>
 	{:else}
 		<div class="divide-y divide-[var(--border)]">
-			{#each orders as order}
+			{#each orders as order (order.id)}
 				<div
 					id={`order-${order.id}`}
 					class="p-4 sm:p-6 {focusOrderId === order.id ? 'rounded-[var(--r-sm)]' : ''}"
@@ -311,7 +403,7 @@
 					</div>
 
 					<div class="mb-4 space-y-2">
-						{#each getOrderItems(order) as item}
+						{#each getOrderItems(order) as item, index (item.id || item.categoryId || `${order.id}-${index}`)}
 							<div
 								class="flex items-start justify-between gap-3 text-sm"
 								style="color: var(--text-muted);"
@@ -329,6 +421,17 @@
 							Fulfillment: {getFulfillmentState(order)}
 						</div>
 						<div class="flex flex-col gap-2 text-sm sm:flex-row sm:text-base">
+							{#if isPaymentRecheckable(order)}
+								<button
+									type="button"
+									onclick={() => checkPaymentStatus(order)}
+									disabled={checkingPaymentByOrderId[order.id]}
+									class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
+									style="background: rgba(202,219,46,0.12); border: 1px solid rgba(202,219,46,0.32); color: var(--text);"
+								>
+									{checkingPaymentByOrderId[order.id] ? 'Checking...' : 'Check Payment'}
+								</button>
+							{/if}
 							<button
 								onclick={() => reorderItems(order)}
 								data-sveltekit-preload-data="hover"

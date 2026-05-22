@@ -3,7 +3,6 @@ import { prisma } from '$lib/prisma';
 import { error } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ locals, params }) => {
-	// Verify admin access
 	if (!locals.user || locals.user.userType !== 'ADMIN') {
 		throw error(403, 'Unauthorized');
 	}
@@ -11,11 +10,26 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	const { id } = params;
 
 	try {
-		// Get affiliate user with program details
 		const affiliate = await prisma.user.findUnique({
 			where: { id },
-			include: {
-				affiliatePrograms: true
+			select: {
+				id: true,
+				fullName: true,
+				email: true,
+				avatarUrl: true,
+				isAffiliateEnabled: true,
+				createdAt: true,
+				affiliatePrograms: {
+					select: {
+						id: true,
+						affiliateCode: true,
+						status: true,
+						createdAt: true,
+						totalReferrals: true
+					},
+					orderBy: { createdAt: 'asc' },
+					take: 1
+				}
 			}
 		});
 
@@ -29,77 +43,138 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 
 		const affiliateProgram = affiliate.affiliatePrograms[0];
 
-		// Get all orders using this affiliate's code
-		const orders = await prisma.order.findMany({
-			where: {
-				affiliateCode: affiliateProgram.affiliateCode
-			},
-			include: {
-				user: {
-					select: {
-						email: true,
-						fullName: true
-					}
+		const [orders, ledgerRows] = await Promise.all([
+			prisma.order.findMany({
+				where: {
+					affiliateUserId: affiliate.id,
+					OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
 				},
-				orderItems: {
-					include: {
-						category: {
-							select: {
-								name: true
-							}
+				include: {
+					user: {
+						select: {
+							email: true,
+							fullName: true
+						}
+					},
+					orderItems: {
+						select: {
+							id: true
 						}
 					}
+				},
+				orderBy: { createdAt: 'desc' }
+			}),
+			prisma.walletTransaction.findMany({
+				where: {
+					userId: affiliate.id,
+					type: { in: ['affiliate_credit', 'affiliate_payout'] }
+				},
+				select: {
+					id: true,
+					type: true,
+					status: true,
+					amount: true,
+					description: true,
+					reference: true,
+					metadata: true,
+					createdAt: true,
+					updatedAt: true
+				},
+				orderBy: { createdAt: 'desc' }
+			})
+		]);
+
+		const creditByOrder = new Map<string, number>();
+		const creditByStatus: Record<string, number> = {};
+		const payoutByStatus: Record<string, number> = {};
+
+		for (const row of ledgerRows) {
+			const status = String(row.status || '').trim().toLowerCase();
+			const amount = Math.max(0, Number(row.amount || 0));
+
+			if (row.type === 'affiliate_credit') {
+				creditByStatus[status] = (creditByStatus[status] || 0) + amount;
+				const metadata =
+					row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+						? (row.metadata as Record<string, unknown>)
+						: null;
+				const orderId =
+					metadata && typeof metadata.orderId === 'string' ? metadata.orderId.trim() : '';
+				if (orderId) {
+					creditByOrder.set(orderId, (creditByOrder.get(orderId) || 0) + amount);
 				}
-			},
-			orderBy: {
-				createdAt: 'desc'
+			} else if (row.type === 'affiliate_payout') {
+				payoutByStatus[status] = (payoutByStatus[status] || 0) + amount;
 			}
-		});
+		}
 
-		// Get payout history
-		const payouts = await prisma.commissionPayout.findMany({
-			where: { affiliateProgramId: affiliateProgram.id },
-			orderBy: { payoutDate: 'desc' }
-		});
+		const payouts = ledgerRows
+			.filter((row) => row.type === 'affiliate_payout')
+			.map((row) => ({
+				id: row.id,
+				amount: Number(row.amount || 0),
+				status: row.status,
+				reference: row.reference,
+				description: row.description,
+				createdAt: row.createdAt,
+				updatedAt: row.updatedAt
+			}));
 
-		// Calculate monthly breakdown
 		const monthlyStats = orders.reduce(
 			(acc, order) => {
 				const month = new Date(order.createdAt).toLocaleDateString('en-US', {
 					year: 'numeric',
 					month: 'short'
 				});
-
 				if (!acc[month]) {
 					acc[month] = {
 						month,
 						orders: 0,
 						sales: 0,
-						commission: 0
+						storeCredit: 0
 					};
 				}
 
-				const orderTotal = Number(order.totalAmount);
-				const commission = (orderTotal * Number(affiliateProgram.commissionRate)) / 100;
-
+				const orderTotal = Number(order.totalAmount || 0);
+				const storeCredit = Number(creditByOrder.get(order.id) || 0);
 				acc[month].orders += 1;
 				acc[month].sales += orderTotal;
-				acc[month].commission += commission;
-
+				acc[month].storeCredit += storeCredit;
 				return acc;
 			},
-			{} as Record<string, { month: string; orders: number; sales: number; commission: number }>
+			{} as Record<string, { month: string; orders: number; sales: number; storeCredit: number }>
 		);
-
 		const monthlyBreakdown = Object.values(monthlyStats).reverse();
 
-		// Calculate recent performance (last 30 days)
 		const thirtyDaysAgo = new Date();
 		thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
 		const recentOrders = orders.filter((order) => new Date(order.createdAt) >= thirtyDaysAgo);
 		const recentSales = recentOrders.reduce((sum, order) => sum + Number(order.totalAmount), 0);
-		const recentCommission = (recentSales * Number(affiliateProgram.commissionRate)) / 100;
+		const recentStoreCredit = recentOrders.reduce(
+			(sum, order) => sum + Number(creditByOrder.get(order.id) || 0),
+			0
+		);
+
+		const ledgerSummary = {
+			availableStoreCredit: Math.max(
+				0,
+				Number(creditByStatus.available || 0) -
+					Number(payoutByStatus.requested || 0) -
+					Number(payoutByStatus.paid || 0)
+			),
+			pendingStoreCredit: Number(creditByStatus.pending || 0),
+			underReviewStoreCredit: Number(creditByStatus.under_review || 0),
+			requestedStoreCredit: Number(payoutByStatus.requested || 0),
+			paidStoreCredit: Number(payoutByStatus.paid || 0),
+			reversedStoreCredit:
+				Number(creditByStatus.reversed || 0) + Number(payoutByStatus.reversed || 0),
+			totalStoreCreditEarned:
+				Number(creditByStatus.available || 0) +
+				Number(creditByStatus.pending || 0) +
+				Number(creditByStatus.under_review || 0) +
+				Number(creditByStatus.requested || 0) +
+				Number(creditByStatus.paid || 0)
+		};
 
 		return {
 			affiliate: {
@@ -113,24 +188,14 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			program: {
 				id: affiliateProgram.id,
 				affiliateCode: affiliateProgram.affiliateCode,
-				commissionRate: Number(affiliateProgram.commissionRate),
 				totalReferrals: affiliateProgram.totalReferrals,
-				totalSales: Number(affiliateProgram.totalSales),
-				totalCommission: Number(affiliateProgram.totalCommission),
-				totalPaid: Number(affiliateProgram.totalPaid || 0),
+				totalSales: orders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0),
+				successfulOrders: orders.length,
 				status: affiliateProgram.status,
 				createdAt: affiliateProgram.createdAt
 			},
-			payouts: payouts.map((p) => ({
-				id: p.id,
-				amount: Number(p.amount),
-				payoutMethod: p.payoutMethod,
-				payoutReference: p.payoutReference,
-				payoutDate: p.payoutDate,
-				notes: p.notes,
-				processedBy: p.processedBy,
-				createdAt: p.createdAt
-			})),
+			ledgerSummary,
+			payouts,
 			orders: orders.map((order) => ({
 				id: order.id,
 				orderNumber: order.orderNumber,
@@ -138,15 +203,25 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				customerName: order.user?.fullName || 'Guest',
 				totalAmount: Number(order.totalAmount),
 				status: order.status,
+				paymentStatus: order.paymentStatus,
 				createdAt: order.createdAt,
 				itemCount: order.orderItems.length,
-				commission: (Number(order.totalAmount) * Number(affiliateProgram.commissionRate)) / 100
+				storeCredit: Number(creditByOrder.get(order.id) || 0)
 			})),
 			monthlyBreakdown,
+			recentLedger: ledgerRows.slice(0, 20).map((row) => ({
+				id: row.id,
+				type: row.type,
+				status: row.status,
+				amount: Number(row.amount || 0),
+				description: row.description,
+				reference: row.reference,
+				createdAt: row.createdAt
+			})),
 			recentStats: {
 				orders: recentOrders.length,
 				sales: recentSales,
-				commission: recentCommission
+				storeCredit: recentStoreCredit
 			}
 		};
 	} catch (err) {

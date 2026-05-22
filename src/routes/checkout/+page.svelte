@@ -121,7 +121,14 @@
 				body: JSON.stringify({
 					code: promoCodeInput.trim(),
 					subtotal: cartTotal,
-					categoryIds: cartItems.map((item) => item.tierId)
+					categoryIds: cartItems.map((item) => item.tierId),
+					items: cartItems.map((item) => ({
+						categoryId: item.tierId,
+						quantity: item.quantity,
+						unitPrice: item.tier.price,
+						totalPrice: item.quantity * item.tier.price,
+						productName: item.tier.name
+					}))
 				})
 			});
 			const result = await response.json();

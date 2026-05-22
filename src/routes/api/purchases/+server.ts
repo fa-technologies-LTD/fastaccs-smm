@@ -16,22 +16,28 @@ export const GET: RequestHandler = async ({ locals }) => {
 		const orders = await prisma.order.findMany({
 			where: {
 				userId: userId,
-				status: { in: ['paid', 'completed'] },
-				OR: [
+				AND: [
 					{
-						orderItems: {
-							some: {
-								accounts: {
-									some: {
-										status: { in: purchasedAccountStatuses }
-									}
-								}
-							}
-						}
+						OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
 					},
 					{
-						deliveryMethod: 'whatsapp',
-						paymentStatus: 'paid'
+						OR: [
+							{
+								orderItems: {
+									some: {
+										accounts: {
+											some: {
+												status: { in: purchasedAccountStatuses }
+											}
+										}
+									}
+								}
+							},
+							{
+								deliveryMethod: 'whatsapp',
+								paymentStatus: 'paid'
+							}
+						]
 					}
 				]
 			},

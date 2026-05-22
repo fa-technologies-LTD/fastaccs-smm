@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
+import { enableAffiliateMode } from '$lib/services/affiliate';
 
 export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 	// Verify admin authentication
@@ -25,25 +26,41 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 			);
 		}
 
-		const updatedUser = await prisma.$transaction(async (tx) => {
-			const nextProgramStatus = isAffiliateEnabled ? 'active' : 'inactive';
+		if (isAffiliateEnabled) {
+			const enabled = await enableAffiliateMode(userId, { force: true });
+			if (!enabled.success) {
+				return json(
+					{ success: false, error: enabled.error || 'Failed to enable affiliate user.' },
+					{ status: 400 }
+				);
+			}
+		} else {
+			await prisma.$transaction(async (tx) => {
+				await tx.affiliateProgram.updateMany({
+					where: { userId },
+					data: { status: 'inactive' }
+				});
 
-			await tx.affiliateProgram.updateMany({
-				where: { userId },
-				data: { status: nextProgramStatus }
+				await tx.user.update({
+					where: { id: userId },
+					data: { isAffiliateEnabled: false }
+				});
 			});
+		}
 
-			return tx.user.update({
-				where: { id: userId },
-				data: { isAffiliateEnabled },
-				select: {
-					id: true,
-					email: true,
-					fullName: true,
-					isAffiliateEnabled: true
-				}
-			});
+		const updatedUser = await prisma.user.findUnique({
+			where: { id: userId },
+			select: {
+				id: true,
+				email: true,
+				fullName: true,
+				isAffiliateEnabled: true
+			}
 		});
+
+		if (!updatedUser) {
+			return json({ success: false, error: 'User not found after update.' }, { status: 404 });
+		}
 
 		return json({
 			success: true,

@@ -37,6 +37,6 @@ export function redactOrderStatsRevenue<T extends object>(stats: T): T {
 	if ('totalRevenue' in next) next.totalRevenue = 0;
 	if ('revenueChange' in next) next.revenueChange = 0;
 	if ('affiliateSales' in next) next.affiliateSales = 0;
-	if ('totalCommissions' in next) next.totalCommissions = 0;
+	if ('totalStoreCreditEarned' in next) next.totalStoreCreditEarned = 0;
 	return next as T;
 }

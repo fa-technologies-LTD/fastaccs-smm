@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
-import { ORDER_STATUS_GROUPS } from '$lib/helpers/order-status';
 import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
+import { isRevenueOrder } from '$lib/helpers/order-revenue';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	try {
@@ -13,6 +13,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				orders: {
 					select: {
 						status: true,
+						paymentStatus: true,
 						totalAmount: true
 					}
 				},
@@ -22,8 +23,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 				createdAt: 'desc'
 			}
 		});
-
-		const revenueStatuses = new Set<string>(ORDER_STATUS_GROUPS.revenue);
 
 		// Convert Decimal types to numbers and aggregate stats
 		const users = usersRaw.map((user) => ({
@@ -41,7 +40,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 			orderCount: user.orders.length,
 			totalSpent: revenueVisible
 				? user.orders
-						.filter((order) => revenueStatuses.has(order.status))
+						.filter((order) =>
+							isRevenueOrder({
+								status: order.status,
+								paymentStatus: order.paymentStatus
+							})
+						)
 						.reduce((sum, order) => sum + Number(order.totalAmount), 0)
 				: 0,
 			storeCreditBalance: user.wallet ? Number(user.wallet.balance) : 0,

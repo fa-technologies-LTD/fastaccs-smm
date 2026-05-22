@@ -23,6 +23,7 @@
 		'all'
 	);
 	let togglingStatus = $state(false);
+	let togglingAffiliate = $state(false);
 
 	const filteredOrders = $derived.by(() => {
 		let rows = orders as Array<any>;
@@ -92,6 +93,40 @@
 		}
 	}
 
+	async function toggleAffiliateAccess() {
+		if (togglingAffiliate) return;
+		togglingAffiliate = true;
+		try {
+			const response = await fetch(`/api/admin/affiliates/${user.id}/toggle`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ isAffiliateEnabled: !user.isAffiliateEnabled })
+			});
+			const result = await response.json();
+
+			if (!response.ok || !result.success) {
+				throw new Error(result.error || 'Failed to update affiliate access');
+			}
+
+			user = { ...user, isAffiliateEnabled: Boolean(result.user?.isAffiliateEnabled) };
+			addToast({
+				type: 'success',
+				title: user.isAffiliateEnabled
+					? 'Affiliate access enabled (admin override)'
+					: 'Affiliate access disabled',
+				duration: 3000
+			});
+		} catch (err) {
+			addToast({
+				type: 'error',
+				title: err instanceof Error ? err.message : 'Failed to update affiliate access',
+				duration: 3600
+			});
+		} finally {
+			togglingAffiliate = false;
+		}
+	}
+
 	function getTimelineDotColor(type: string): string {
 		if (type === 'payment') return 'var(--status-success)';
 		if (type === 'admin') return 'var(--status-warning)';
@@ -138,6 +173,17 @@
 				<ShieldCheck class="h-4 w-4" />
 				Unblock User
 			{/if}
+		</button>
+
+		<button
+			onclick={toggleAffiliateAccess}
+			disabled={togglingAffiliate}
+			class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition hover:opacity-90 disabled:opacity-60"
+			style={user.isAffiliateEnabled
+				? 'background: rgba(226,75,74,0.1); color: var(--status-danger); border: 1px solid rgba(226,75,74,0.32);'
+				: 'background: rgba(5,212,113,0.1); color: var(--status-success); border: 1px solid rgba(5,212,113,0.32);'}
+		>
+			{user.isAffiliateEnabled ? 'Disable Affiliate' : 'Enable Affiliate'}
 		</button>
 	</div>
 

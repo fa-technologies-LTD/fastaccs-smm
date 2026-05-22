@@ -1,8 +1,25 @@
 <script lang="ts">
+	import { invalidateAll } from '$app/navigation';
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
 	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
+	import type { PageData } from './$types';
 
-	let { data } = $props();
+	type InventoryRow = {
+		id?: string;
+		tier_name?: string | null;
+		platform_name?: string | null;
+		lifetime_total_accounts?: number | null;
+		total_accounts?: number | null;
+		available_accounts?: number | null;
+		delivered_accounts?: number | null;
+		sold_accounts?: number | null;
+		allocated_accounts?: number | null;
+		assigned_accounts?: number | null;
+		tier_price?: number | null;
+		created_at?: string | Date | null;
+	};
+
+	let { data }: { data: PageData } = $props();
 
 	let searchTerm = $state('');
 	let showConfirmModal = $state(false);
@@ -12,33 +29,35 @@
 		Math.max(1, Number(data.lowStockThreshold || data?.stats?.low_stock_threshold || 10))
 	);
 	const lowStockPolicy = $derived.by(() => data.lowStockPolicy || null);
+	const inventoryRows = $derived.by(() => (data.inventory || []) as InventoryRow[]);
 
-	const filteredInventory = $derived.by(() => {
-		if (!searchTerm) return data.inventory || [];
-		return (data.inventory || []).filter(
-			(item: any) =>
-				item.platform_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				item.tier_name?.toLowerCase().includes(searchTerm.toLowerCase())
+	const filteredInventory = $derived.by((): InventoryRow[] => {
+		const query = searchTerm.trim().toLowerCase();
+		if (!query) return inventoryRows;
+		return inventoryRows.filter(
+			(item) =>
+				item.platform_name?.toLowerCase().includes(query) ||
+				item.tier_name?.toLowerCase().includes(query)
 		);
 	});
 
 	const summaryStats = $derived.by(() => {
-			return {
-				total_accounts: filteredInventory.reduce(
-					(sum: number, item: any) =>
-						sum + (item.lifetime_total_accounts || item.total_accounts || 0),
-					0
-				),
-				available_accounts: filteredInventory.reduce(
-					(sum: number, item: any) => sum + (item.available_accounts || 0),
-					0
-				),
-				delivered_accounts: filteredInventory.reduce(
-					(sum: number, item: any) =>
-						sum + (item.delivered_accounts || item.sold_accounts || item.allocated_accounts || 0),
-					0
+		return {
+			total_accounts: filteredInventory.reduce(
+				(sum, item) =>
+					sum + (item.lifetime_total_accounts || item.total_accounts || 0),
+				0
 			),
-			platforms: new Set(filteredInventory.map((item: any) => item.platform_name)).size
+			available_accounts: filteredInventory.reduce(
+				(sum, item) => sum + (item.available_accounts || 0),
+				0
+			),
+			delivered_accounts: filteredInventory.reduce(
+				(sum, item) =>
+					sum + (item.delivered_accounts || item.sold_accounts || item.allocated_accounts || 0),
+				0
+			),
+			platforms: new Set(filteredInventory.map((item) => item.platform_name)).size
 		};
 	});
 
@@ -51,11 +70,11 @@
 			const result = await response.json();
 			if (response.ok) {
 				cleanupMessage = result.message;
-				location.reload();
+				await invalidateAll();
 			} else {
 				cleanupMessage = `Error: ${result.error}`;
 			}
-		} catch (error) {
+		} catch {
 			cleanupMessage = 'Failed to cleanup accounts';
 		} finally {
 			cleanupLoading = false;
@@ -82,6 +101,10 @@
 		const parsed = new Date(value);
 		if (Number.isNaN(parsed.getTime())) return 'N/A';
 		return parsed.toLocaleString();
+	}
+
+	function getInventoryKey(item: InventoryRow): string {
+		return item.id || `${item.platform_name || 'platform'}:${item.tier_name || 'tier'}`;
 	}
 </script>
 
@@ -272,8 +295,8 @@
 					</tr>
 				</thead>
 				<tbody class="divide-y" style="border-color: var(--border); background: var(--bg-elev-1);">
-					{#each filteredInventory as item}
-						<tr
+					{#each filteredInventory as item (getInventoryKey(item))}
+							<tr
 							class="transition-colors"
 							style="--hover-bg: var(--bg-elev-2);"
 							onmouseenter={(e) => (e.currentTarget.style.background = 'var(--bg-elev-2)')}

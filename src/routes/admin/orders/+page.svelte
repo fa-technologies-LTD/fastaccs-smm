@@ -5,6 +5,7 @@
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
 	import { ORDER_STATUS_GROUPS, getOrderStatusLabel } from '$lib/helpers/order-status';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
+	import { isRevenueOrder } from '$lib/helpers/order-revenue';
 
 	// Props from page data
 	let { data } = $props<{
@@ -49,7 +50,6 @@
 		const pendingStatuses = new Set(ORDER_STATUS_GROUPS.pending);
 		const processingStatuses = new Set(ORDER_STATUS_GROUPS.processing);
 		const completedStatuses = new Set(ORDER_STATUS_GROUPS.completed);
-		const revenueStatuses = new Set(ORDER_STATUS_GROUPS.revenue);
 
 		const totalOrders = filteredOrders.length;
 		const pendingOrders = filteredOrders.filter((o: any) => pendingStatuses.has(o.status)).length;
@@ -60,7 +60,12 @@
 			completedStatuses.has(o.status)
 		).length;
 		const totalRevenue = filteredOrders
-			.filter((o: any) => revenueStatuses.has(o.status))
+			.filter((o: any) =>
+				isRevenueOrder({
+					status: o.status,
+					paymentStatus: o.paymentStatus
+				})
+			)
 			.reduce((sum: number, o: any) => sum + Number(o.totalAmount || 0), 0);
 
 		return {

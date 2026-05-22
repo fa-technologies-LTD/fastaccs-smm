@@ -773,15 +773,9 @@
 								</div>
 							{/if}
 							<div class="flex items-center justify-between rounded-lg bg-green-50 p-3">
-								<span class="text-sm font-medium text-gray-700">Commission Earned</span>
+								<span class="text-sm font-medium text-gray-700">Store Credit Award</span>
 								<span class="text-sm font-bold text-green-600">
-									{#if order.total_amount && order.metadata?.commissionRate}
-										{formatAdminAmount(
-											(Number(order.total_amount) * Number(order.metadata.commissionRate)) / 100
-										)}
-									{:else}
-										Pending calculation
-									{/if}
+									Tracked in affiliate ledger
 								</span>
 							</div>
 						</div>

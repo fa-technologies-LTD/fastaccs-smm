@@ -46,6 +46,11 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		discountAmount: preview.discountAmount,
 		orderIndex: preview.orderIndex,
 		stage: preview.stage,
+		stageLabel: preview.stageLabel,
+		ruleMode: preview.ruleMode,
+		remainingRewardedOrders: preview.remainingRewardedOrders,
+		expiresAfterOrder: preview.expiresAfterOrder,
+		maxRewardedOrders: preview.maxRewardedOrders,
 		lockedCode: locked?.affiliateCode || null
 	});
 };

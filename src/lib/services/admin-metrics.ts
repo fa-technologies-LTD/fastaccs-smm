@@ -6,18 +6,10 @@ import {
 } from '$lib/services/admin-settings';
 import { ORDER_STATUS_GROUPS } from '$lib/helpers/order-status';
 import { getStartOfBusinessDayUtc } from '$lib/helpers/business-timezone';
-
-function buildSettledRevenueWindowWhere(gte: Date, lte?: Date) {
-	const paidAtWindow = lte ? { gte, lte } : { gte };
-	const createdAtWindow = lte ? { gte, lte } : { gte };
-	return {
-		status: { in: [...ORDER_STATUS_GROUPS.revenue] },
-		OR: [
-			{ paidAt: paidAtWindow },
-			{ paidAt: null, createdAt: createdAtWindow } // Legacy fallback for older paid rows
-		]
-	};
-}
+import {
+	buildRevenueOrderWhere,
+	buildRevenueOrderWindowWhere
+} from '$lib/helpers/order-revenue.server';
 
 export interface AdminOrderStatsSnapshot {
 	total_orders: number;
@@ -64,11 +56,11 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 		prisma.order.count({ where: { createdAt: { gte: today } } }),
 			prisma.order.aggregate({
 				_sum: { totalAmount: true },
-				where: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } }
+				where: buildRevenueOrderWhere()
 			}),
 			prisma.order.aggregate({
 				_sum: { totalAmount: true },
-				where: buildSettledRevenueWindowWhere(today)
+				where: buildRevenueOrderWindowWhere(today)
 			})
 		]);
 

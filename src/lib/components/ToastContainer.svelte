@@ -24,13 +24,18 @@
 		{#if toast.link}
 			<a
 				href={toast.link}
-				transition:fly={{ x: 400, duration: 300 }}
+				transition:fly={{ x: 240, duration: 220 }}
 				class="toast toast-{toast.type} toast-link"
 			>
 				<Icon class="toast-icon" />
 
 				<div class="toast-content">
-					<p class="toast-title">{toast.title}</p>
+					<div class="toast-title-row">
+						<p class="toast-title">{toast.title}</p>
+						{#if (toast.count || 1) > 1}
+							<span class="toast-count">x{toast.count}</span>
+						{/if}
+					</div>
 					{#if toast.message}
 						<p class="toast-message">{toast.message}</p>
 					{/if}
@@ -48,11 +53,16 @@
 				</button>
 			</a>
 		{:else}
-			<div transition:fly={{ x: 400, duration: 300 }} class="toast toast-{toast.type}">
+			<div transition:fly={{ x: 240, duration: 220 }} class="toast toast-{toast.type}">
 				<Icon class="toast-icon" />
 
 				<div class="toast-content">
-					<p class="toast-title">{toast.title}</p>
+					<div class="toast-title-row">
+						<p class="toast-title">{toast.title}</p>
+						{#if (toast.count || 1) > 1}
+							<span class="toast-count">x{toast.count}</span>
+						{/if}
+					</div>
 					{#if toast.message}
 						<p class="toast-message">{toast.message}</p>
 					{/if}
@@ -90,6 +100,7 @@
 		box-shadow:
 			0 10px 15px -3px rgb(0 0 0 / 0.1),
 			0 4px 6px -4px rgb(0 0 0 / 0.1);
+		will-change: transform, opacity;
 	}
 
 	.toast-link {
@@ -148,9 +159,29 @@
 		flex: 1;
 	}
 
+	.toast-title-row {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+	}
+
 	.toast-title {
 		font-size: 0.875rem;
 		font-weight: 500;
+	}
+
+	.toast-count {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 1.35rem;
+		height: 1.15rem;
+		padding: 0 0.38rem;
+		border-radius: 999px;
+		font-size: 0.68rem;
+		font-weight: 700;
+		border: 1px solid currentColor;
+		opacity: 0.82;
 	}
 
 	.toast-message {
@@ -190,7 +221,8 @@
 		}
 
 		.toast {
-			padding: 0.875rem;
+			padding: 0.8rem;
+			backdrop-filter: none;
 		}
 	}
 </style>

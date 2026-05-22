@@ -634,10 +634,10 @@
 							>
 								Share Your Code
 							</h3>
-							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Share your affiliate code or referral link with friends, social media followers, or
-								customers. They get checkout discounts, you earn Cashable Store Credit.
-							</p>
+								<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
+									Share your affiliate code or referral link with friends, social media followers, or
+									customers. They get checkout discounts, you earn Store Credit Cash.
+								</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
@@ -793,7 +793,7 @@
 							class="mb-2 text-lg font-semibold"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
-							Cashable Store Credit
+								Store Credit Cash
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
 							Earn from eligible successful referred orders
@@ -911,12 +911,12 @@
 						How do affiliate earnings work?
 						<span class="ml-4" style="color: var(--text-dim);">+</span>
 					</summary>
-					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						When you become an affiliate, you get a unique code and referral link. When someone uses
-						your code at checkout, they get referral discounts and you earn Cashable Store Credit on
-						eligible successful referred orders. Earnings are tracked automatically in your dashboard.
-					</p>
-				</details>
+						<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
+							When you become an affiliate, you get a unique code and referral link. When someone uses
+							your code at checkout, they get referral discounts and you earn Store Credit Cash on
+							eligible successful referred orders. Earnings are tracked automatically in your dashboard.
+						</p>
+					</details>
 
 				<details
 					class="group rounded-lg p-6 shadow"

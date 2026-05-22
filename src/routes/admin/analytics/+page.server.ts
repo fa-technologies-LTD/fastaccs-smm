@@ -1,5 +1,4 @@
 import type { PageServerLoad } from './$types';
-import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { getInventoryStatsSnapshot, getOrderStatsSnapshot } from '$lib/services/admin-metrics';
 import { ORDER_STATUS_GROUPS } from '$lib/helpers/order-status';
@@ -14,6 +13,10 @@ import {
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
 import { getFeatureFlagSnapshot } from '$lib/services/feature-flags';
+import {
+	buildRevenueOrderWhere,
+	buildRevenueOrderWindowWhere
+} from '$lib/helpers/order-revenue.server';
 
 type IntegrityCheckResult = {
 	key: string;
@@ -106,22 +109,6 @@ function mapBuckets(map: Map<string, { revenue: number; orderIds: Set<string> }>
 		}));
 }
 
-function buildSettledRevenueOrderWhere(bounds?: { gte: Date; lte?: Date }): Prisma.OrderWhereInput {
-	const base: Prisma.OrderWhereInput = { status: { in: [...ORDER_STATUS_GROUPS.revenue] } };
-	if (!bounds) return base;
-
-	const paidAtWindow = bounds.lte ? { gte: bounds.gte, lte: bounds.lte } : { gte: bounds.gte };
-	const createdAtWindow = bounds.lte ? { gte: bounds.gte, lte: bounds.lte } : { gte: bounds.gte };
-
-	return {
-		...base,
-		OR: [
-			{ paidAt: paidAtWindow },
-			{ paidAt: null, createdAt: createdAtWindow } // Legacy fallback for older paid rows
-		]
-	};
-}
-
 export const load: PageServerLoad = async ({ locals }) => {
 	try {
 		if (!locals.user || locals.user.userType !== 'ADMIN') {
@@ -171,7 +158,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 			accountsSoldAggregate,
 			lastMonthAccountsAggregate,
 			thisMonthAccountsAggregate,
-			affiliateStats,
+			affiliateProgramStats,
+			affiliateSalesAggregate,
+			affiliateCreditAggregate,
 			totalAccounts,
 			soldAccounts,
 			pendingAccounts,
@@ -187,14 +176,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 			cancelledFailedOrderCount
 		] = await Promise.all([
 				prisma.order.aggregate({
-					where: buildSettledRevenueOrderWhere({
-						gte: startOfLastMonth,
-						lte: endOfLastMonth
-					}),
+					where: buildRevenueOrderWindowWhere(startOfLastMonth, endOfLastMonth),
 					_sum: { totalAmount: true }
 				}),
 				prisma.order.aggregate({
-					where: buildSettledRevenueOrderWhere({ gte: startOfMonth }),
+					where: buildRevenueOrderWindowWhere(startOfMonth),
 					_sum: { totalAmount: true }
 				}),
 			prisma.order.count({
@@ -220,30 +206,40 @@ export const load: PageServerLoad = async ({ locals }) => {
 			}),
 			prisma.orderItem.aggregate({
 				where: {
-					order: {
-						status: { in: [...ORDER_STATUS_GROUPS.revenue] }
-					}
+					order: buildRevenueOrderWhere()
 				},
 				_sum: { quantity: true }
 			}),
 				prisma.orderItem.aggregate({
 					where: {
-						order: buildSettledRevenueOrderWhere({
-							gte: startOfLastMonth,
-							lte: endOfLastMonth
-						})
+						order: buildRevenueOrderWindowWhere(startOfLastMonth, endOfLastMonth)
 					},
 					_sum: { quantity: true }
 				}),
 				prisma.orderItem.aggregate({
 					where: {
-						order: buildSettledRevenueOrderWhere({ gte: startOfMonth })
+						order: buildRevenueOrderWindowWhere(startOfMonth)
 					},
 					_sum: { quantity: true }
 				}),
 			prisma.affiliateProgram.aggregate({
-				_sum: { totalReferrals: true, totalSales: true, totalCommission: true },
+				_sum: { totalReferrals: true },
 				_count: { id: true }
+			}),
+			prisma.order.aggregate({
+				where: {
+					AND: [buildRevenueOrderWhere(), { affiliateUserId: { not: null } }]
+				},
+				_sum: { totalAmount: true }
+			}),
+			prisma.walletTransaction.aggregate({
+				where: {
+					type: 'affiliate_credit',
+					status: {
+						in: ['available', 'pending', 'under_review', 'requested', 'paid']
+					}
+				},
+				_sum: { amount: true }
 			}),
 			prisma.account.count(),
 				prisma.account.count({
@@ -254,24 +250,24 @@ export const load: PageServerLoad = async ({ locals }) => {
 				}),
 			prisma.order.count(),
 				prisma.order.aggregate({
-					where: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } },
+					where: buildRevenueOrderWhere(),
 					_sum: { totalAmount: true }
 				}),
 				prisma.order.aggregate({
-					where: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } },
+					where: buildRevenueOrderWhere(),
 					_sum: { discountAmount: true }
 				}),
 				prisma.order.aggregate({
-					where: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } },
+					where: buildRevenueOrderWhere(),
 					_sum: { taxAmount: true }
 				}),
 				prisma.orderItem.aggregate({
-					where: { order: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } } },
+					where: { order: buildRevenueOrderWhere() },
 					_sum: { totalPrice: true }
 				}),
 				featureFlags.adminAdvancedAnalytics
 					? prisma.order.findMany({
-							where: buildSettledRevenueOrderWhere({ gte: advancedWindowStart }),
+							where: buildRevenueOrderWindowWhere(advancedWindowStart),
 							select: {
 								id: true,
 								createdAt: true,
@@ -331,12 +327,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 					? prisma.orderItem.groupBy({
 							by: ['categoryId'],
 							where: {
-								order: buildSettledRevenueOrderWhere({ gte: last30DaysStart })
+								order: buildRevenueOrderWindowWhere(last30DaysStart)
 							},
 							_sum: { quantity: true }
 						})
 				: Promise.resolve([]),
-			prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.revenue] } } }),
+			prisma.order.count({ where: buildRevenueOrderWhere() }),
 			prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.failed] } } })
 		]);
 
@@ -594,10 +590,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 				((thisMonthCustomers - lastMonthCustomers) / (lastMonthCustomers || 1)) * 100,
 			accountsSold,
 			accountsChange: ((thisMonthAccounts - lastMonthAccounts) / (lastMonthAccounts || 1)) * 100,
-			activeAffiliates: affiliateStats._count.id || 0,
-			totalReferrals: affiliateStats._sum.totalReferrals || 0,
-			affiliateSales: revenueVisible ? Number(affiliateStats._sum.totalSales || 0) : 0,
-			totalCommissions: revenueVisible ? Number(affiliateStats._sum.totalCommission || 0) : 0,
+			activeAffiliates: affiliateProgramStats._count.id || 0,
+			totalReferrals: affiliateProgramStats._sum.totalReferrals || 0,
+			affiliateSales: revenueVisible ? Number(affiliateSalesAggregate._sum.totalAmount || 0) : 0,
+			totalStoreCreditEarned: revenueVisible
+				? Number(affiliateCreditAggregate._sum.amount || 0)
+				: 0,
 			totalAccounts,
 			availableAccounts: inventorySnapshot.total_available,
 			soldAccounts,

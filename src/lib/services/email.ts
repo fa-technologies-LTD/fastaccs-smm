@@ -104,7 +104,7 @@ const INBOX_REMINDER_LINE =
 
 function resolveEmailLogoUrl(baseUrl: string): string {
 	const configured = (env.EMAIL_LOGO_URL || '').trim();
-	if (!configured) return `${baseUrl}/fa-logo-name.png`;
+	if (!configured) return `${baseUrl}/fa-email-logo.png`;
 	if (/^https?:\/\//i.test(configured)) return configured;
 	if (configured.startsWith('/')) return `${baseUrl}${configured}`;
 	return `${baseUrl}/${configured.replace(/^\/+/, '')}`;
@@ -147,10 +147,8 @@ function renderEmailTemplate(params: {
         <td align="center">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#141414;border-radius:8px;border:1px solid #232323;overflow:hidden;">
             <tr>
-              <td style="padding:20px 24px;border-bottom:1px solid #232323;">
-                <div style="display:inline-flex;align-items:center;border:1px solid #2A2A2A;border-radius:12px;padding:8px 10px;background:#0B0B0B;">
-                  <img src="${escapeHtml(logoUrl)}" alt="Fast Accounts" width="180" style="display:block;height:auto;max-width:100%;" />
-                </div>
+              <td align="left" style="padding:18px 24px;border-bottom:1px solid #232323;background:#101010;">
+                <img src="${escapeHtml(logoUrl)}" alt="Fast Accounts" width="190" style="display:block;width:190px;max-width:72%;height:auto;border:0;outline:none;text-decoration:none;" />
               </td>
             </tr>
             <tr>

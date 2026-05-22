@@ -6,6 +6,15 @@ import {
 	getLockedReferralForUser,
 	validateAffiliateCode
 } from '$lib/services/affiliate';
+import { prisma } from '$lib/prisma';
+
+interface PromoValidationItemInput {
+	categoryId: string;
+	quantity: number;
+	unitPrice: number;
+	totalPrice?: number;
+	productName?: string;
+}
 
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
@@ -18,6 +27,20 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	const subtotal = Number(payload?.subtotal || 0);
 	const categoryIds = Array.isArray(payload?.categoryIds)
 		? payload.categoryIds.filter((value: unknown): value is string => typeof value === 'string')
+		: [];
+	const inputItems: PromoValidationItemInput[] = Array.isArray(payload?.items)
+		? payload.items
+				.filter((value: unknown): value is Record<string, unknown> => {
+					return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+				})
+				.map((item: Record<string, unknown>) => ({
+					categoryId: String(item.categoryId || '').trim(),
+					quantity: Math.max(1, Number(item.quantity || 1)),
+					unitPrice: Number(item.unitPrice || 0),
+					totalPrice: Number(item.totalPrice || 0),
+					productName: String(item.productName || '').trim()
+				}))
+				.filter((item: PromoValidationItemInput) => Boolean(item.categoryId))
 		: [];
 
 	if (!normalizedCode) {
@@ -40,10 +63,42 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 
 	if (affiliateCandidate.valid) {
+		const itemCategoryIds: string[] = [...new Set(inputItems.map((item) => item.categoryId))];
+		const categories = itemCategoryIds.length
+			? await prisma.category.findMany({
+					where: { id: { in: itemCategoryIds } },
+					select: {
+						id: true,
+						name: true,
+						metadata: true
+					}
+				})
+			: [];
+		const categoryById = new Map(categories.map((category) => [category.id, category]));
+		const orderItems = inputItems.map((item) => {
+			const categoryId = item.categoryId;
+			const category = categoryById.get(categoryId);
+			const quantity = Math.max(1, Number(item.quantity || 1));
+			const unitPrice = Number(item.unitPrice || 0);
+			const totalPrice =
+				Number.isFinite(Number(item.totalPrice)) && Number(item.totalPrice || 0) > 0
+					? Number(item.totalPrice || 0)
+					: Math.max(0, unitPrice * quantity);
+			const productName = String(item.productName || category?.name || '').trim();
+
+			return {
+				quantity,
+				totalPrice,
+				productName,
+				categoryMetadata: category?.metadata ?? {}
+			};
+		});
+
 		const preview = await getAffiliateDiscountPreviewForCode({
 			buyerUserId: locals.user.id,
 			affiliateCode: normalizedCode,
-			subtotalAmount: subtotal
+			subtotalAmount: subtotal,
+			orderItems
 		});
 
 		if (!preview.valid) {
@@ -70,6 +125,11 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 				meta: {
 					orderIndex: preview.orderIndex,
 					stage: preview.stage,
+					stageLabel: preview.stageLabel,
+					ruleMode: preview.ruleMode,
+					remainingRewardedOrders: preview.remainingRewardedOrders,
+					expiresAfterOrder: preview.expiresAfterOrder,
+					maxRewardedOrders: preview.maxRewardedOrders,
 					lockedCode: preview.lockedCode || null
 				}
 			}

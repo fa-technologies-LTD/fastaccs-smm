@@ -17,17 +17,60 @@
 	let { data }: { data: PageData } = $props();
 
 	let searchQuery = $state('');
-	let currentPage = $state(1);
-	let itemsPerPage = 10;
+	let allAffiliates = $state<any[]>([...(data.affiliates || [])]);
+	let busyAffiliateIds = $state<string[]>([]);
 
-	let stats = $derived({
-		totalAffiliates: data.stats?.totalAffiliates || 0,
-		activeAffiliates: data.stats?.activeAffiliates || 0,
-		totalCommissions: data.stats?.totalCommissions || 0,
-		totalReferrals: data.stats?.totalReferrals || 0
+	let stats = $derived.by(() => {
+		const totals = allAffiliates.reduce(
+			(acc, affiliate) => {
+				acc.totalStoreCreditEarned += Number(affiliate.totalStoreCreditEarned || 0);
+				acc.totalAvailableStoreCredit += Number(affiliate.availableStoreCredit || 0);
+				acc.totalSuccessfulOrders += Number(affiliate.successfulOrders || 0);
+				acc.totalPayoutRequested += Number(affiliate.requestedStoreCredit || 0);
+				if (affiliate.isAffiliateEnabled && affiliate.programStatus === 'active') {
+					acc.activeAffiliates += 1;
+				}
+				return acc;
+			},
+			{
+				totalStoreCreditEarned: 0,
+				totalAvailableStoreCredit: 0,
+				totalSuccessfulOrders: 0,
+				totalPayoutRequested: 0,
+				activeAffiliates: 0
+			}
+		);
+		return {
+			totalAffiliates: allAffiliates.length,
+			activeAffiliates: totals.activeAffiliates,
+			totalStoreCreditEarned: totals.totalStoreCreditEarned,
+			totalAvailableStoreCredit: totals.totalAvailableStoreCredit,
+			totalSuccessfulOrders: totals.totalSuccessfulOrders,
+			totalPayoutRequested: totals.totalPayoutRequested
+		};
 	});
 
-	let affiliates = $derived(data.affiliates || []);
+	let affiliates = $derived(
+		allAffiliates.filter((affiliate: any) => {
+			const q = searchQuery.trim().toLowerCase();
+			if (!q) return true;
+			return (
+				String(affiliate.fullName || '')
+					.toLowerCase()
+					.includes(q) ||
+				String(affiliate.email || '')
+					.toLowerCase()
+					.includes(q) ||
+				String(affiliate.affiliateCode || '')
+					.toLowerCase()
+					.includes(q)
+			);
+		})
+	);
+
+	function isBusy(userId: string): boolean {
+		return busyAffiliateIds.includes(userId);
+	}
 
 	function exportData() {
 		// Generate CSV data
@@ -36,8 +79,11 @@
 			'Email',
 			'Affiliate Code',
 			'Referrals',
+			'Successful Orders',
 			'Total Sales',
-			'Total Commission',
+			'Available Store Credit',
+			'Store Credit Earned',
+			'Requested Payouts',
 			'Status',
 			'Joined Date'
 		];
@@ -45,12 +91,15 @@
 		const rows = affiliates.map((affiliate: any) => [
 			affiliate.fullName || 'N/A',
 			affiliate.email || 'N/A',
-			affiliate.affiliatePrograms[0]?.affiliateCode || 'N/A',
-			affiliate.affiliatePrograms[0]?.totalReferrals || 0,
-			Number(affiliate.affiliatePrograms[0]?.totalSales || 0).toFixed(2),
-			Number(affiliate.affiliatePrograms[0]?.totalCommission || 0).toFixed(2),
-			affiliate.isAffiliateEnabled ? 'Active' : 'Inactive',
-			formatDate(affiliate.affiliatePrograms[0]?.createdAt || affiliate.createdAt)
+			affiliate.affiliateCode || 'N/A',
+			Number(affiliate.totalReferrals || 0),
+			Number(affiliate.successfulOrders || 0),
+			Number(affiliate.totalSales || 0).toFixed(2),
+			Number(affiliate.availableStoreCredit || 0).toFixed(2),
+			Number(affiliate.totalStoreCreditEarned || 0).toFixed(2),
+			Number(affiliate.requestedStoreCredit || 0).toFixed(2),
+			affiliate.isAffiliateEnabled && affiliate.programStatus === 'active' ? 'Active' : 'Inactive',
+			formatDate(affiliate.joinedAt || affiliate.createdAt)
 		]);
 
 		// Convert to CSV string
@@ -86,11 +135,24 @@
 	}
 
 	async function toggleAffiliateStatus(userId: string, currentStatus: boolean) {
+		if (isBusy(userId)) return;
+		busyAffiliateIds = [...busyAffiliateIds, userId];
+		const nextStatus = !currentStatus;
+		const previous = [...allAffiliates];
+		allAffiliates = allAffiliates.map((row) =>
+			row.id === userId
+				? {
+						...row,
+						isAffiliateEnabled: nextStatus,
+						programStatus: nextStatus ? 'active' : 'inactive'
+					}
+				: row
+		);
 		try {
 			const response = await fetch(`/api/admin/affiliates/${userId}/toggle`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ isAffiliateEnabled: !currentStatus })
+				body: JSON.stringify({ isAffiliateEnabled: nextStatus })
 			});
 
 			if (response.ok) {
@@ -99,8 +161,8 @@
 					title: 'Affiliate status updated successfully',
 					duration: 3000
 				});
-				window.location.reload();
 			} else {
+				allAffiliates = previous;
 				addToast({
 					type: 'error',
 					title: 'Failed to update affiliate status',
@@ -108,11 +170,14 @@
 				});
 			}
 		} catch (error) {
+			allAffiliates = previous;
 			addToast({
 				type: 'error',
 				title: 'Error updating affiliate status',
 				duration: 3000
 			});
+		} finally {
+			busyAffiliateIds = busyAffiliateIds.filter((id) => id !== userId);
 		}
 	}
 </script>
@@ -126,8 +191,7 @@
 		</div>
 		<button
 			onclick={exportData}
-			class="flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-white transition-all hover:scale-95 active:scale-90"
-			style="background: var(--btn-primary-gradient)"
+			class="btn-fa btn-fa--primary cursor-pointer"
 		>
 			<Download class="h-4 w-4" />
 			Export Data
@@ -174,9 +238,11 @@
 		>
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium" style="color: var(--text-muted);">Total Commissions</p>
+					<p class="text-sm font-medium" style="color: var(--text-muted);">
+						Store Credit Earned
+					</p>
 					<p class="mt-2 text-3xl font-bold" style="color: #a855f7;">
-						{formatPrice(stats.totalCommissions)}
+						{formatPrice(stats.totalStoreCreditEarned)}
 					</p>
 				</div>
 				<div class="rounded-full p-3" style="background: rgba(168,85,247,0.12);">
@@ -191,8 +257,12 @@
 		>
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium" style="color: var(--text-muted);">Total Referrals</p>
-					<p class="mt-2 text-3xl font-bold" style="color: #f97316;">{stats.totalReferrals}</p>
+					<p class="text-sm font-medium" style="color: var(--text-muted);">
+						Available Store Credit
+					</p>
+					<p class="mt-2 text-3xl font-bold" style="color: #f97316;">
+						{formatPrice(stats.totalAvailableStoreCredit)}
+					</p>
 				</div>
 				<div class="rounded-full p-3" style="background: rgba(249,115,22,0.12);">
 					<TrendingUp class="h-6 w-6" style="color: #f97316;" />
@@ -252,13 +322,31 @@
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
+							Orders
+						</th>
+						<th
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
+						>
 							Total Sales
 						</th>
 						<th
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
-							Commission
+							Available
+						</th>
+						<th
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
+						>
+							Earned
+						</th>
+						<th
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
+						>
+							Requested
 						</th>
 						<th
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
@@ -283,7 +371,7 @@
 				<tbody class="divide-y" style="border-color: var(--border); background: var(--bg-elev-1);">
 					{#if affiliates.length === 0}
 						<tr>
-							<td colspan="8" class="px-6 py-12 text-center" style="color: var(--text-muted);">
+							<td colspan="11" class="px-6 py-12 text-center" style="color: var(--text-muted);">
 								No affiliates found
 							</td>
 						</tr>
@@ -305,26 +393,41 @@
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<div class="font-mono text-sm font-semibold" style="color: var(--link);">
-										{affiliate.affiliatePrograms[0]?.affiliateCode || 'N/A'}
+										{affiliate.affiliateCode || 'N/A'}
 									</div>
 								</td>
 								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
-									{affiliate.affiliatePrograms[0]?.totalReferrals || 0}
+									{affiliate.totalReferrals || 0}
 								</td>
 								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
-									{formatPrice(Number(affiliate.affiliatePrograms[0]?.totalSales || 0))}
+									{affiliate.successfulOrders || 0}
+								</td>
+								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
+									{formatPrice(Number(affiliate.totalSales || 0))}
 								</td>
 								<td
 									class="px-6 py-4 text-sm font-medium whitespace-nowrap"
 									style="color: var(--status-success);"
 								>
-									{formatPrice(Number(affiliate.affiliatePrograms[0]?.totalCommission || 0))}
+									{formatPrice(Number(affiliate.availableStoreCredit || 0))}
+								</td>
+								<td
+									class="px-6 py-4 text-sm font-medium whitespace-nowrap"
+									style="color: #a855f7;"
+								>
+									{formatPrice(Number(affiliate.totalStoreCreditEarned || 0))}
+								</td>
+								<td
+									class="px-6 py-4 text-sm font-medium whitespace-nowrap"
+									style="color: #f97316;"
+								>
+									{formatPrice(Number(affiliate.requestedStoreCredit || 0))}
 								</td>
 								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text-muted);">
-									{formatDate(affiliate.affiliatePrograms[0]?.createdAt || affiliate.createdAt)}
+									{formatDate(affiliate.joinedAt || affiliate.createdAt)}
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
-									{#if affiliate.isAffiliateEnabled}
+									{#if affiliate.isAffiliateEnabled && affiliate.programStatus === 'active'}
 										<span
 											class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-800"
 										>
@@ -352,6 +455,7 @@
 										<button
 											onclick={() =>
 												toggleAffiliateStatus(affiliate.id, affiliate.isAffiliateEnabled)}
+											disabled={isBusy(affiliate.id)}
 											class="group cursor-pointer text-gray-600 hover:text-gray-900"
 											title={affiliate.isAffiliateEnabled ? 'Disable' : 'Enable'}
 										>

@@ -20,6 +20,7 @@ import { recordPromotionRedemption } from '$lib/services/promotions';
 import { isAutoDeliveryPausedSetting } from '$lib/services/admin-settings';
 import { isManualHandoverOrder } from '$lib/services/order-delivery-mode';
 import { notifyManualHandoverOrderPaid } from '$lib/services/manual-handover';
+import { isPendingPaymentExpired } from '$lib/helpers/payment-expiry.server';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -89,6 +90,46 @@ function isPaymentAmountValid(orderTotal: number, paidAmount: number): boolean {
 function isPaymentCurrencyValid(orderCurrency: string | null | undefined, paidCurrency: string): boolean {
 	const expectedCurrency = String(orderCurrency || 'NGN').toUpperCase();
 	return expectedCurrency === String(paidCurrency || 'NGN').toUpperCase();
+}
+
+interface PendingOrderForExpiry {
+	id: string;
+	status: string;
+	paymentStatus: string;
+	createdAt: Date;
+}
+
+async function buildExpiredPendingOrderResponse(
+	order: PendingOrderForExpiry,
+	gatewayStatus: string
+): Promise<Response | null> {
+	if (order.status === 'paid' || order.status === 'completed') return null;
+	if (!isPendingPaymentExpired(order.createdAt, gatewayStatus)) return null;
+
+	await prisma.order.update({
+		where: { id: order.id },
+		data: {
+			status: 'cancelled',
+			paymentStatus: 'cancelled'
+		}
+	});
+	invalidateAdminStatsCache();
+
+	logOrderStatusTransition({
+		orderId: order.id,
+		source: 'verify',
+		fromStatus: order.status,
+		toStatus: 'cancelled',
+		fromPaymentStatus: order.paymentStatus,
+		toPaymentStatus: 'cancelled'
+	});
+
+	return buildFailureResponse(
+		'cancelled',
+		'EXPIRED',
+		'Payment window expired before confirmation. Please place a fresh order if you still need these accounts.',
+		order.id
+	);
 }
 
 async function recoverPaidOrderIfNeeded(orderId: string) {
@@ -264,6 +305,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					toPaymentStatus: callbackFailureKind === 'cancelled' ? 'cancelled' : 'failed'
 				});
 			} else if (orderById && orderById.status !== 'completed' && orderById.status !== 'paid') {
+				const expiredResponse = await buildExpiredPendingOrderResponse(orderById, callbackStatus);
+				if (expiredResponse) return expiredResponse;
+
 				const nextPaymentStatus = getPendingPaymentPhase(callbackStatus);
 				await prisma.order.update({
 					where: { id: orderById.id },
@@ -620,6 +664,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		if (isPendingPaymentStatus(resolvedStatus)) {
 			if (orderById && orderById.status !== 'completed' && orderById.status !== 'paid') {
+				const expiredResponse = await buildExpiredPendingOrderResponse(orderById, resolvedStatus);
+				if (expiredResponse) return expiredResponse;
+
 				const nextPaymentStatus = getPendingPaymentPhase(resolvedStatus);
 				await prisma.order.update({
 					where: { id: orderById.id },
@@ -644,6 +691,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				'Waiting for payment confirmation from Monnify.',
 				resolvedStatus || 'PENDING'
 			);
+		}
+
+		if (orderById && orderById.status !== 'completed' && orderById.status !== 'paid') {
+			const expiredResponse = await buildExpiredPendingOrderResponse(orderById, resolvedStatus);
+			if (expiredResponse) return expiredResponse;
 		}
 
 		return buildPendingResponse(

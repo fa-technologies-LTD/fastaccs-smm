@@ -208,6 +208,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			quantity: number;
 			unitPrice: number;
 			categoryName: string;
+			categoryMetadata: Record<string, unknown>;
 			deliveryMode: TierDeliveryMode;
 		}> = [];
 		const deliveryModes = new Set<TierDeliveryMode>();
@@ -234,6 +235,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				quantity: item.quantity,
 				unitPrice,
 				categoryName: `${category.parent?.name || 'Unknown Platform'} ${category.name}`,
+				categoryMetadata:
+					(category.metadata as Record<string, unknown> | null | undefined) || {},
 				deliveryMode: normalizeTierDeliveryMode(
 					(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
 				)
@@ -342,7 +345,13 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			const affiliateDiscount = await getAffiliateDiscountForOrder({
 				buyerUserId: locals.user.id,
 				affiliateUserId: attribution.affiliateUserId,
-				subtotalAmount
+				subtotalAmount,
+				orderItems: itemsWithNames.map((item) => ({
+					quantity: item.quantity,
+					totalPrice: item.unitPrice * item.quantity,
+					productName: item.categoryName,
+					categoryMetadata: item.categoryMetadata
+				}))
 			});
 			discountAmount = affiliateDiscount.discountAmount;
 			finalOrderTotal = Math.max(0, Math.round((subtotalAmount - discountAmount) * 100) / 100);

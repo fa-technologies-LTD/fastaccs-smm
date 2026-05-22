@@ -184,6 +184,7 @@
 	}
 
 	async function handleCreate() {
+		if (loading) return;
 		if (!platform) return;
 
 		loading = true;
@@ -234,6 +235,7 @@
 	}
 
 	async function handleUpdate() {
+		if (loading) return;
 		if (!selectedTier) return;
 
 		loading = true;
@@ -280,6 +282,7 @@
 	}
 
 	async function handleDelete(tier: CategoryMetadata) {
+		if (loading) return;
 		if (
 			!confirm(
 				`Are you sure you want to delete ${tier.name}? This will also delete all associated accounts.`
@@ -396,7 +399,8 @@
 			</div>
 			<button
 				onclick={openCreateModal}
-				class="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-all hover:bg-blue-700 active:scale-95"
+				disabled={loading}
+				class="btn-fa btn-fa--primary flex items-center gap-2 rounded-lg px-4 py-2 disabled:opacity-60"
 			>
 				<Plus size={18} />
 				Add Tier
@@ -420,11 +424,7 @@
 	</div>
 
 	<!-- Tiers List -->
-	{#if loading}
-		<div class="flex h-64 items-center justify-center">
-			<div class="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
-		</div>
-	{:else if tiers.length === 0}
+	{#if tiers.length === 0}
 		<div class="py-12 text-center">
 			<Package class="mx-auto mb-4 h-12 w-12 text-gray-400" />
 			<h3 class="mb-2 text-lg font-medium text-gray-900">No tiers found</h3>
@@ -453,6 +453,7 @@
 						<div class="flex items-center gap-1">
 							<button
 								onclick={() => openEditModal(tier)}
+								disabled={loading}
 								class="rounded p-1 text-gray-400 hover:text-blue-600"
 								title="Edit Tier"
 							>
@@ -460,6 +461,7 @@
 							</button>
 							<button
 								onclick={() => handleDelete(tier)}
+								disabled={loading}
 								class="rounded p-1 text-gray-400 hover:text-red-600"
 								title="Delete Tier"
 							>
@@ -779,7 +781,8 @@
 						</button>
 						<button
 							type="button"
-							onclick={() => (showCreateModal = false)}
+							onclick={() => !loading && (showCreateModal = false)}
+							disabled={loading}
 							class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-gray-300 ring-inset hover:bg-gray-50 sm:mt-0 sm:w-auto"
 						>
 							Cancel
@@ -996,7 +999,8 @@
 						</button>
 						<button
 							type="button"
-							onclick={() => (showEditModal = false)}
+							onclick={() => !loading && (showEditModal = false)}
+							disabled={loading}
 							class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-gray-300 ring-inset hover:bg-gray-50 sm:mt-0 sm:w-auto"
 						>
 							Cancel

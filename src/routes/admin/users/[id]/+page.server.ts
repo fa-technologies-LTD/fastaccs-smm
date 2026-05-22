@@ -3,6 +3,7 @@ import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
 import { ORDER_STATUS_GROUPS, getOrderStatusLabel } from '$lib/helpers/order-status';
 import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
+import { isRevenueOrder } from '$lib/helpers/order-revenue';
 
 interface TimelineEntry {
 	id: string;
@@ -28,7 +29,6 @@ interface OrderSummary {
 }
 
 const FAILED_ORDER_STATUS_SET = new Set<string>(ORDER_STATUS_GROUPS.failed);
-const REVENUE_ORDER_STATUS_SET = new Set<string>(ORDER_STATUS_GROUPS.revenue);
 
 function buildTimeline(input: {
 	user: {
@@ -286,11 +286,19 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	const totals = {
 		orderCount: orderSummaries.length,
 		paidOrderCount: orderSummaries.filter((order: OrderSummary) =>
-			REVENUE_ORDER_STATUS_SET.has(order.status)
+			isRevenueOrder({
+				status: order.status,
+				paymentStatus: order.paymentStatus
+			})
 		).length,
 		totalSpent: revenueVisible
-			? orderSummaries
-					.filter((order: OrderSummary) => REVENUE_ORDER_STATUS_SET.has(order.status))
+				? orderSummaries
+					.filter((order: OrderSummary) =>
+						isRevenueOrder({
+							status: order.status,
+							paymentStatus: order.paymentStatus
+						})
+					)
 					.reduce((sum: number, order: OrderSummary) => sum + order.totalAmount, 0)
 			: 0
 	};

@@ -263,7 +263,7 @@
 						Affiliate Program
 					</h2>
 					<p class="text-sm" style="color: var(--text-muted);">
-						Share your code. Earn cashable Store Credit from referrals.
+						Share your code. Earn Store Credit Cash from referrals.
 					</p>
 				</div>
 			</div>
@@ -355,6 +355,11 @@
 				<p class="mt-1 text-sm" style="color: var(--text-muted);">
 					<strong style="color: var(--text);">Share your code.</strong> Referred buyers get checkout
 					discounts on eligible orders and you earn Store Credit from successful purchases.
+				</p>
+				<p class="mt-2 text-xs" style="color: var(--text-muted);">
+					Discount stage now: <strong style="color: var(--text);">Stage 1</strong> for first 2
+					successful referred orders, then <strong style="color: var(--text);">Stage 2</strong> up to
+					order 10.
 				</p>
 			</div>
 
@@ -549,7 +554,7 @@
 					style="color: {affiliateData?.payoutEligible ? 'var(--primary)' : 'var(--text-muted)'};"
 				>
 					{affiliateData?.payoutEligible
-						? 'Payout is available. Submit bank details, then request payout.'
+						? 'Payout is available. Apply here, then request payout.'
 						: 'Keep earning from referrals to unlock withdrawals.'}
 				</p>
 				<div class="mt-3 flex flex-wrap gap-2">
@@ -560,7 +565,7 @@
 						class="rounded-full px-4 py-2 text-sm font-semibold transition-all hover:-translate-y-0.5"
 						style="background: rgba(105,109,250,0.18); border: 1px solid rgba(105,109,250,0.35); color: var(--text);"
 					>
-						Submit bank details
+						Apply here
 					</a>
 					{#if affiliateData?.payoutEligible && toNumber(affiliateData?.availableStoreCredit) > 0}
 						<button

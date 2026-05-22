@@ -32,6 +32,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 					totalAmount: true,
 					status: true,
 					paymentStatus: true,
+					paymentReference: true,
 					deliveryStatus: true,
 					createdAt: true,
 					orderItems: {
@@ -83,22 +84,28 @@ export const GET: RequestHandler = async ({ locals }) => {
 			prisma.order.findMany({
 				where: {
 					userId: user.id,
-					status: { in: ['paid', 'completed'] },
-					OR: [
+					AND: [
 						{
-							orderItems: {
-								some: {
-							accounts: {
-								some: {
-									status: { in: purchasedAccountStatuses }
-								}
-							}
-								}
-							}
+							OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
 						},
 						{
-							deliveryMethod: 'whatsapp',
-							paymentStatus: 'paid'
+							OR: [
+								{
+									orderItems: {
+										some: {
+											accounts: {
+												some: {
+													status: { in: purchasedAccountStatuses }
+												}
+											}
+										}
+									}
+								},
+								{
+									deliveryMethod: 'whatsapp',
+									paymentStatus: 'paid'
+								}
+							]
 						}
 					]
 				},

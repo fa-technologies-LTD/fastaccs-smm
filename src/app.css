@@ -111,8 +111,8 @@
 	--gradient-linkedin: linear-gradient(135deg, #0077b5 0%, #005885 100%);
 
 	/* ===== BUTTON GRADIENTS ===== */
-	--btn-primary-gradient: linear-gradient(180deg, rgba(5, 212, 113, 0.95), rgba(13, 145, 82, 0.95));
-	--btn-primary-gradient-hover: linear-gradient(180deg, rgba(5, 212, 113, 1), rgba(13, 145, 82, 1));
+	--btn-primary-gradient: linear-gradient(180deg, rgba(37, 181, 112, 0.98), rgba(13, 145, 82, 0.98));
+	--btn-primary-gradient-hover: linear-gradient(180deg, rgba(52, 204, 132, 1), rgba(13, 145, 82, 1));
 	--btn-secondary-gradient: linear-gradient(
 		180deg,
 		rgba(105, 109, 250, 0.18),
@@ -309,6 +309,97 @@ h3 {
 }
 .platform-linkedin {
 	background: var(--gradient-linkedin);
+}
+
+/* ===== BUTTON SYSTEM ===== */
+.btn-fa {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	min-height: 42px;
+	padding: 0.625rem 1rem;
+	border-radius: var(--r-full);
+	border: 1px solid transparent;
+	font-family: var(--font-head);
+	font-size: 0.92rem;
+	font-weight: 600;
+	line-height: 1;
+	text-decoration: none;
+}
+
+.btn-fa--primary {
+	background: var(--btn-primary-gradient);
+	color: #04150d;
+	border-color: rgba(5, 212, 113, 0.45);
+	box-shadow: 0 8px 22px rgba(5, 212, 113, 0.16);
+}
+
+.btn-fa--secondary {
+	background: var(--btn-secondary-gradient);
+	color: var(--link);
+	border-color: rgba(170, 173, 255, 0.26);
+}
+
+.btn-fa--ghost {
+	background: var(--surface);
+	color: var(--text);
+	border-color: var(--border);
+}
+
+.btn-fa--danger {
+	background: var(--status-error-bg);
+	color: var(--status-danger);
+	border-color: var(--status-error-border);
+}
+
+button,
+a[role='button'] {
+	-webkit-tap-highlight-color: transparent;
+}
+
+button:not(.no-fa-motion),
+a[role='button']:not(.no-fa-motion) {
+	transition:
+		transform 140ms ease,
+		filter 180ms ease,
+		box-shadow 200ms ease,
+		background-color 200ms ease,
+		border-color 200ms ease,
+		color 200ms ease,
+		opacity 200ms ease;
+}
+
+button:not(:disabled):not(.no-fa-motion):hover,
+a[role='button']:not(.no-fa-motion):hover {
+	filter: brightness(1.04);
+}
+
+button:not(:disabled):not(.no-fa-motion):active,
+a[role='button']:not(.no-fa-motion):active {
+	transform: translateY(1px) scale(0.985);
+}
+
+button:disabled,
+a[role='button'][aria-disabled='true'] {
+	cursor: not-allowed;
+	opacity: 0.62;
+	filter: none;
+}
+
+button:focus-visible,
+a[role='button']:focus-visible {
+	outline: none;
+	box-shadow:
+		0 0 0 2px rgba(7, 9, 12, 0.92),
+		0 0 0 4px var(--focus);
+}
+
+@media (max-width: 640px) {
+	.btn-fa {
+		min-height: 44px;
+		padding: 0.7rem 1rem;
+	}
 }
 
 /* ===== TAG CHIP SYSTEM ===== */

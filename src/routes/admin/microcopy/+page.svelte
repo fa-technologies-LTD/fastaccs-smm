@@ -16,11 +16,13 @@
 
 	let { data }: { data: PageData } = $props();
 
-	let microcopy = $derived(data.microcopy || []);
+	let microcopyItems = $state<any[]>([...(data.microcopy || [])]);
 	let searchQuery = $state('');
 	let filterCategory = $state('all');
 	let showCreateModal = $state(false);
 	let editingItem: any = $state(null);
+	let isCreating = $state(false);
+	let busyMicrocopyIds = $state<Record<string, boolean>>({});
 
 	let newItem = $state({
 		key: '',
@@ -30,6 +32,37 @@
 	});
 
 	let categories = ['general', 'hero', 'checkout', 'dashboard', 'footer', 'navigation', 'auth'];
+	let microcopy = $derived.by(() => {
+		let rows = microcopyItems;
+		if (filterCategory !== 'all') rows = rows.filter((item) => item.category === filterCategory);
+
+		const query = searchQuery.trim().toLowerCase();
+		if (!query) return rows;
+
+		return rows.filter(
+			(item) =>
+				String(item.key || '')
+					.toLowerCase()
+					.includes(query) ||
+				String(item.value || '')
+					.toLowerCase()
+					.includes(query) ||
+				String(item.description || '')
+					.toLowerCase()
+					.includes(query)
+		);
+	});
+
+	function isBusy(id: string): boolean {
+		return Boolean(busyMicrocopyIds[id]);
+	}
+
+	function setBusy(id: string, busy: boolean) {
+		const next = { ...busyMicrocopyIds };
+		if (busy) next[id] = true;
+		else delete next[id];
+		busyMicrocopyIds = next;
+	}
 
 	function openCreateModal() {
 		newItem = {
@@ -55,24 +88,28 @@
 	}
 
 	async function createMicrocopy() {
+		if (isCreating || !newItem.key || !newItem.value) return;
+		isCreating = true;
 		try {
 			const response = await fetch('/api/admin/microcopy', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(newItem)
 			});
+			const result = await response.json();
 
 			if (response.ok) {
+				microcopyItems = [result.microcopy, ...microcopyItems].filter(Boolean);
+				closeCreateModal();
 				addToast({
 					type: 'success',
 					title: 'Microcopy created successfully',
 					duration: 3000
 				});
-				window.location.reload();
 			} else {
 				addToast({
 					type: 'error',
-					title: 'Failed to create microcopy',
+					title: result.error || 'Failed to create microcopy',
 					duration: 3000
 				});
 			}
@@ -82,14 +119,20 @@
 				title: 'Error creating microcopy',
 				duration: 3000
 			});
+		} finally {
+			isCreating = false;
 		}
 	}
 
 	async function updateMicrocopy() {
 		if (!editingItem) return;
+		const targetId = editingItem.id;
+		if (isBusy(targetId)) return;
+		const previous = [...microcopyItems];
+		setBusy(targetId, true);
 
 		try {
-			const response = await fetch(`/api/admin/microcopy/${editingItem.id}`, {
+			const response = await fetch(`/api/admin/microcopy/${targetId}`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
@@ -98,37 +141,47 @@
 					category: editingItem.category
 				})
 			});
+			const result = await response.json();
 
 			if (response.ok) {
+				microcopyItems = microcopyItems.map((item) => (item.id === targetId ? result.microcopy : item));
+				editingItem = null;
 				addToast({
 					type: 'success',
 					title: 'Microcopy updated successfully',
 					duration: 3000
 				});
-				window.location.reload();
 			} else {
 				addToast({
 					type: 'error',
-					title: 'Failed to update microcopy',
+					title: result.error || 'Failed to update microcopy',
 					duration: 3000
 				});
 			}
 		} catch (error) {
+			microcopyItems = previous;
 			addToast({
 				type: 'error',
 				title: 'Error updating microcopy',
 				duration: 3000
 			});
+		} finally {
+			setBusy(targetId, false);
 		}
 	}
 
 	async function deleteMicrocopy(id: string) {
 		if (!confirm('Are you sure you want to delete this microcopy?')) return;
+		if (isBusy(id)) return;
+		const previous = [...microcopyItems];
+		setBusy(id, true);
+		microcopyItems = microcopyItems.filter((item) => item.id !== id);
 
 		try {
 			const response = await fetch(`/api/admin/microcopy/${id}`, {
 				method: 'DELETE'
 			});
+			const result = await response.json();
 
 			if (response.ok) {
 				addToast({
@@ -136,51 +189,66 @@
 					title: 'Microcopy deleted successfully',
 					duration: 3000
 				});
-				window.location.reload();
 			} else {
+				microcopyItems = previous;
 				addToast({
 					type: 'error',
-					title: 'Failed to delete microcopy',
+					title: result.error || 'Failed to delete microcopy',
 					duration: 3000
 				});
 			}
 		} catch (error) {
+			microcopyItems = previous;
 			addToast({
 				type: 'error',
 				title: 'Error deleting microcopy',
 				duration: 3000
 			});
+		} finally {
+			setBusy(id, false);
 		}
 	}
 
 	async function toggleStatus(id: string, currentStatus: boolean) {
+		if (isBusy(id)) return;
+		const previous = [...microcopyItems];
+		setBusy(id, true);
+		microcopyItems = microcopyItems.map((item) =>
+			item.id === id ? { ...item, isActive: !currentStatus } : item
+		);
+
 		try {
 			const response = await fetch(`/api/admin/microcopy/${id}/toggle`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ isActive: !currentStatus })
 			});
+			const result = await response.json();
 
 			if (response.ok) {
+				microcopyItems = microcopyItems.map((item) => (item.id === id ? result.microcopy : item));
 				addToast({
 					type: 'success',
 					title: 'Status toggled successfully',
 					duration: 3000
 				});
-				window.location.reload();
 			} else {
+				microcopyItems = previous;
 				addToast({
 					type: 'error',
-					title: 'Failed to toggle status',
+					title: result.error || 'Failed to toggle status',
 					duration: 3000
 				});
 			}
 		} catch (error) {
+			microcopyItems = previous;
 			addToast({
 				type: 'error',
 				title: 'Error toggling status',
 				duration: 3000
 			});
+		} finally {
+			setBusy(id, false);
 		}
 	}
 </script>
@@ -350,7 +418,11 @@
 									{/if}
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
-									<button onclick={() => toggleStatus(item.id, item.isActive)}>
+										<button
+											onclick={() => toggleStatus(item.id, item.isActive)}
+											disabled={isBusy(item.id)}
+											class="disabled:cursor-wait disabled:opacity-60"
+										>
 										{#if item.isActive}
 											<span
 												class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-800"
@@ -372,36 +444,40 @@
 								<td class="px-6 py-4 whitespace-nowrap">
 									{#if editingItem && editingItem.id === item.id}
 										<div class="flex gap-2">
-											<button
-												onclick={updateMicrocopy}
-												class="text-green-600 hover:text-green-900"
-												title="Save"
-											>
+												<button
+													onclick={updateMicrocopy}
+													disabled={isBusy(item.id)}
+													class="text-green-600 hover:text-green-900"
+													title="Save"
+												>
 												<Save class="h-5 w-5" />
 											</button>
-											<button
-												onclick={cancelEdit}
-												class="text-gray-600 hover:text-gray-900"
-												title="Cancel"
-											>
+												<button
+													onclick={cancelEdit}
+													disabled={isBusy(item.id)}
+													class="text-gray-600 hover:text-gray-900"
+													title="Cancel"
+												>
 												<X class="h-5 w-5" />
 											</button>
 										</div>
 									{:else}
 										<div class="flex gap-2">
-											<button
-												onclick={() => startEdit(item)}
-												class="transition-opacity hover:opacity-80"
-												style="color: var(--link);"
-												title="Edit"
+												<button
+													onclick={() => startEdit(item)}
+													disabled={isBusy(item.id)}
+													class="transition-opacity hover:opacity-80"
+													style="color: var(--link);"
+													title="Edit"
 											>
 												<Edit class="h-5 w-5" />
 											</button>
-											<button
-												onclick={() => deleteMicrocopy(item.id)}
-												class="transition-opacity hover:opacity-80"
-												style="color: var(--status-error);"
-												title="Delete"
+												<button
+													onclick={() => deleteMicrocopy(item.id)}
+													disabled={isBusy(item.id)}
+													class="transition-opacity hover:opacity-80"
+													style="color: var(--status-error);"
+													title="Delete"
 											>
 												<Trash2 class="h-5 w-5" />
 											</button>
@@ -473,13 +549,13 @@
 						Cancel
 					</button>
 					<button
-						onclick={createMicrocopy}
-						disabled={!newItem.key || !newItem.value}
-						class="rounded-full px-4 py-2 text-white transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
-						style="background: var(--link);"
-					>
-						Create
-					</button>
+							onclick={createMicrocopy}
+							disabled={!newItem.key || !newItem.value || isCreating}
+							class="rounded-full px-4 py-2 text-white transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+							style="background: var(--link);"
+						>
+							{isCreating ? 'Creating...' : 'Create'}
+						</button>
 				</div>
 			</div>
 		</div>

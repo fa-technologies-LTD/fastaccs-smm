@@ -2,177 +2,93 @@
 	import { goto } from '$app/navigation';
 	import {
 		ArrowLeft,
-		User,
 		Copy,
 		CheckCircle,
 		TrendingUp,
 		DollarSign,
-		Calendar,
-		BarChart3,
-		Settings,
 		ExternalLink,
 		Wallet
 	} from '$lib/icons';
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import { formatPrice, formatDate } from '$lib/helpers/utils';
-	import CommissionModal from '$lib/components/modals/CommissionModal.svelte';
-	import PayoutModal from '$lib/components/modals/PayoutModal.svelte';
 
 	let { data }: { data: PageData } = $props();
 
 	let copySuccess = $state('');
-	let showCommissionModal = $state(false);
-	let newCommissionRate = $state(data.program.commissionRate);
-	let isUpdatingRate = $state(false);
-	let commissionError = $state('');
-	let showPayoutModal = $state(false);
-	let payoutAmount = $state(0);
-	let payoutMethod = $state('bank_transfer');
-	let payoutReference = $state('');
-	let payoutDate = $state(new Date().toISOString().split('T')[0]);
-	let payoutNotes = $state('');
-	let isProcessingPayout = $state(false);
-	let payoutError = $state('');
+	let payoutRows = $state<any[]>([...(data.payouts || [])]);
+	let payoutActionById = $state<Record<string, boolean>>({});
+
 	const referralBaseUrl = 'https://smm.fastaccs.com';
 
-	// Calculate unpaid commission
-	const unpaidCommission = $derived(data.program.totalCommission - (data.program.totalPaid || 0));
+	const payoutRequests = $derived(
+		payoutRows.filter((row) => ['requested', 'under_review'].includes(String(row.status || '')))
+	);
 
-	async function updateCommissionRate() {
-		if (newCommissionRate < 0 || newCommissionRate > 100) {
-			commissionError = 'Commission rate must be between 0 and 100';
-			return;
-		}
-
-		isUpdatingRate = true;
-		commissionError = '';
-
-		try {
-			const response = await fetch(`/api/admin/affiliates/${data.affiliate.id}/commission-rate`, {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ commissionRate: newCommissionRate })
-			});
-
-			const result = await response.json();
-			if (result.success) {
-				data.program.commissionRate = newCommissionRate;
-				showCommissionModal = false;
-				addToast({
-					type: 'success',
-					title: 'Commission rate updated successfully!',
-					duration: 3000
-				});
-			} else {
-				commissionError = result.error || 'Failed to update commission rate';
-			}
-		} catch (error) {
-			commissionError = 'An error occurred while updating commission rate';
-		} finally {
-			isUpdatingRate = false;
-		}
-	}
-
-	async function recordPayout() {
-		if (payoutAmount <= 0) {
-			payoutError = 'Payout amount must be greater than 0';
-			return;
-		}
-
-		if (payoutAmount > unpaidCommission) {
-			payoutError = `Payout amount cannot exceed unpaid commission (${formatPrice(unpaidCommission)})`;
-			return;
-		}
-
-		if (!payoutMethod) {
-			payoutError = 'Please select a payout method';
-			return;
-		}
-
-		isProcessingPayout = true;
-		payoutError = '';
-
-		try {
-			const response = await fetch(`/api/admin/affiliates/${data.program.id}/payouts`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					amount: payoutAmount,
-					payoutMethod,
-					payoutReference: payoutReference || null,
-					payoutDate,
-					notes: payoutNotes || null
-				})
-			});
-
-			const result = await response.json();
-
-			if (result.success) {
-				// Update local state
-				data.program.totalPaid = result.newTotalPaid;
-				data.payouts = [
-					{
-						id: result.payout.id,
-						amount: result.payout.amount,
-						payoutMethod: result.payout.payoutMethod,
-						payoutDate: result.payout.payoutDate,
-						payoutReference: payoutReference || null,
-						notes: payoutNotes || null,
-						processedBy: null,
-						createdAt: new Date()
-					},
-					...data.payouts
-				];
-
-				// Reset form
-				showPayoutModal = false;
-				payoutAmount = 0;
-				payoutMethod = 'bank_transfer';
-				payoutReference = '';
-				payoutDate = new Date().toISOString().split('T')[0];
-				payoutNotes = '';
-
-				addToast({
-					type: 'success',
-					title: 'Payout recorded successfully!',
-					message: `Paid ${formatPrice(result.payout.amount)} via ${result.payout.payoutMethod}`,
-					duration: 3000
-				});
-			} else {
-				payoutError = result.error || 'Failed to record payout';
-			}
-		} catch (error) {
-			payoutError = 'An error occurred while recording payout';
-		} finally {
-			isProcessingPayout = false;
-		}
+	function isUpdatingPayout(id: string): boolean {
+		return Boolean(payoutActionById[id]);
 	}
 
 	function copyToClipboard(text: string, label: string) {
 		navigator.clipboard.writeText(text);
 		copySuccess = label;
-		setTimeout(() => (copySuccess = ''), 2000);
+		setTimeout(() => (copySuccess = ''), 1800);
 	}
 
-	function getStatusColor(status: string): string {
-		switch (status) {
-			case 'completed':
-				return 'bg-green-100 text-green-800';
-			case 'processing':
-				return 'bg-blue-100 text-blue-800';
-			case 'pending':
-				return 'bg-yellow-100 text-yellow-800';
-			case 'failed':
-				return 'bg-red-100 text-red-800';
+	function statusBadgeStyle(status: string): string {
+		switch (String(status || '').toLowerCase()) {
+			case 'requested':
+				return 'background: rgba(105,109,250,0.14); border: 1px solid rgba(105,109,250,0.32); color: #b9beff;';
+			case 'under_review':
+				return 'background: rgba(249,115,22,0.12); border: 1px solid rgba(249,115,22,0.32); color: #fdba74;';
+			case 'paid':
+				return 'background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.28); color: var(--status-success);';
+			case 'reversed':
+				return 'background: rgba(226,75,74,0.12); border: 1px solid rgba(226,75,74,0.28); color: var(--status-danger);';
 			default:
-				return 'bg-gray-100 text-gray-800';
+				return 'background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14); color: var(--text-muted);';
+		}
+	}
+
+	async function updatePayoutStatus(transactionId: string, action: 'mark_paid' | 'mark_under_review' | 'mark_reversed') {
+		if (isUpdatingPayout(transactionId)) return;
+		const previous = [...payoutRows];
+		const nextStatus = action === 'mark_paid' ? 'paid' : action === 'mark_under_review' ? 'under_review' : 'reversed';
+		payoutActionById = { ...payoutActionById, [transactionId]: true };
+		payoutRows = payoutRows.map((row) =>
+			row.id === transactionId ? { ...row, status: nextStatus } : row
+		);
+		try {
+			const response = await fetch(`/api/admin/affiliates/${data.affiliate.id}/payouts`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ transactionId, action })
+			});
+			const result = await response.json();
+			if (!response.ok || !result.success) {
+				throw new Error(result.error || 'Failed to update payout');
+			}
+			addToast({
+				type: 'success',
+				title: 'Payout status updated',
+				duration: 2800
+			});
+		} catch (error) {
+			payoutRows = previous;
+			addToast({
+				type: 'error',
+				title: error instanceof Error ? error.message : 'Failed to update payout status',
+				duration: 3600
+			});
+		} finally {
+			const nextMap = { ...payoutActionById };
+			delete nextMap[transactionId];
+			payoutActionById = nextMap;
 		}
 	}
 </script>
 
 <div class="min-h-screen bg-gray-50 p-3 sm:p-6">
-	<!-- Header -->
 	<div class="mb-6">
 		<button
 			onclick={() => goto('/admin/affiliates')}
@@ -182,38 +98,23 @@
 			Back to Affiliates
 		</button>
 
-		<div class="flex items-start justify-between">
+		<div class="flex items-start justify-between gap-3">
 			<div>
-				<h1 class="text-2xl font-bold text-gray-900">
-					{data.affiliate.fullName || 'Affiliate Details'}
-				</h1>
+				<h1 class="text-2xl font-bold text-gray-900">{data.affiliate.fullName || 'Affiliate details'}</h1>
 				<p class="mt-1 text-gray-600">{data.affiliate.email}</p>
-			</div>
-
-			<div class="flex gap-2">
-				<button
-					onclick={() => {
-						showCommissionModal = true;
-					}}
-					class="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 transition-colors hover:bg-gray-50"
-				>
-					<Settings class="h-4 w-4" />
-					Adjust Commission
-				</button>
 			</div>
 		</div>
 	</div>
 
-	<!-- Stats Overview -->
 	<div class="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
 		<div class="group rounded-lg border border-gray-200 bg-white p-6">
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium text-gray-600">Total Referrals</p>
-					<p class="mt-2 text-3xl font-bold text-gray-900">{data.program.totalReferrals}</p>
+					<p class="text-sm font-medium text-gray-600">Successful Orders</p>
+					<p class="mt-2 text-3xl font-bold text-gray-900">{data.program.successfulOrders}</p>
 				</div>
 				<div class="rounded-full bg-blue-100 p-3">
-					<User class="size-5 text-blue-600 group-hover:scale-80 group-hover:-rotate-20" />
+					<CheckCircle class="size-5 text-blue-600 group-hover:scale-90" />
 				</div>
 			</div>
 		</div>
@@ -222,12 +123,10 @@
 			<div class="flex items-center justify-between">
 				<div>
 					<p class="text-sm font-medium text-gray-600">Total Sales</p>
-					<p class="mt-2 text-3xl font-bold text-green-600">
-						{formatPrice(data.program.totalSales)}
-					</p>
+					<p class="mt-2 text-3xl font-bold text-green-600">{formatPrice(data.program.totalSales)}</p>
 				</div>
 				<div class="rounded-full bg-green-100 p-3">
-					<TrendingUp class="size-5 text-green-600 group-hover:scale-80 group-hover:-rotate-20" />
+					<TrendingUp class="size-5 text-green-600 group-hover:scale-90" />
 				</div>
 			</div>
 		</div>
@@ -235,13 +134,13 @@
 		<div class="group rounded-lg border border-gray-200 bg-white p-6">
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium text-gray-600">Total Commission</p>
+					<p class="text-sm font-medium text-gray-600">Store Credit Earned</p>
 					<p class="mt-2 text-3xl font-bold text-purple-600">
-						{formatPrice(data.program.totalCommission)}
+						{formatPrice(data.ledgerSummary.totalStoreCreditEarned)}
 					</p>
 				</div>
 				<div class="rounded-full bg-purple-100 p-3">
-					<DollarSign class="size-5 text-purple-600 group-hover:scale-80 group-hover:-rotate-20" />
+					<DollarSign class="size-5 text-purple-600 group-hover:scale-90" />
 				</div>
 			</div>
 		</div>
@@ -249,26 +148,24 @@
 		<div class="group rounded-lg border border-gray-200 bg-white p-6">
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium text-gray-600">Commission Rate</p>
-					<p class="mt-2 text-3xl font-bold text-orange-600">{data.program.commissionRate}%</p>
+					<p class="text-sm font-medium text-gray-600">Available Store Credit</p>
+					<p class="mt-2 text-3xl font-bold text-orange-600">
+						{formatPrice(data.ledgerSummary.availableStoreCredit)}
+					</p>
 				</div>
 				<div class="rounded-full bg-orange-100 p-3">
-					<BarChart3 class="size-5 text-orange-600 group-hover:scale-80 group-hover:-rotate-20" />
+					<Wallet class="size-5 text-orange-600 group-hover:scale-90" />
 				</div>
 			</div>
 		</div>
 	</div>
 
-	<!-- Affiliate Info & Recent Performance -->
 	<div class="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-		<!-- Affiliate Information -->
 		<div class="rounded-lg border border-gray-200 bg-white p-6">
 			<h2 class="mb-4 text-lg font-semibold text-gray-900">Affiliate Information</h2>
 			<div class="space-y-4">
 				<div>
-					<label for="affiliate code" class="mb-1 block text-sm font-medium text-gray-700"
-						>Affiliate Code</label
-					>
+					<label class="mb-1 block text-sm font-medium text-gray-700">Affiliate Code</label>
 					<div class="flex gap-2">
 						<input
 							type="text"
@@ -278,7 +175,7 @@
 						/>
 						<button
 							onclick={() => copyToClipboard(data.program.affiliateCode, 'Code')}
-							class="cursor-copy rounded-lg bg-blue-600 px-3 py-2 text-white transition-colors hover:bg-blue-700 active:scale-90"
+							class="cursor-pointer rounded-lg bg-blue-600 px-3 py-2 text-white transition-colors hover:bg-blue-700"
 						>
 							<Copy class="h-4 w-4" />
 						</button>
@@ -289,9 +186,7 @@
 				</div>
 
 				<div>
-					<label for="referral link" class="mb-1 block text-sm font-medium text-gray-700"
-						>Referral Link</label
-					>
+					<label class="mb-1 block text-sm font-medium text-gray-700">Referral Link</label>
 					<div class="flex gap-2">
 						<input
 							type="text"
@@ -302,7 +197,7 @@
 						<button
 							onclick={() =>
 								copyToClipboard(`${referralBaseUrl}/ref/${data.program.affiliateCode}`, 'Link')}
-							class="cursor-copy rounded-lg bg-blue-600 px-3 py-2 text-white transition-colors hover:bg-blue-700 active:scale-90"
+							class="cursor-pointer rounded-lg bg-blue-600 px-3 py-2 text-white transition-colors hover:bg-blue-700"
 						>
 							<Copy class="h-4 w-4" />
 						</button>
@@ -314,59 +209,117 @@
 
 				<div class="flex items-center justify-between rounded-lg bg-gray-50 p-3">
 					<span class="text-sm text-gray-700">Status</span>
-					<span
-						class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-800"
-					>
-						<CheckCircle class="h-3 w-3" />
+					<span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold" style={statusBadgeStyle(data.program.status)}>
 						{data.program.status}
 					</span>
 				</div>
 
 				<div class="flex items-center justify-between rounded-lg bg-gray-50 p-3">
 					<span class="text-sm text-gray-700">Joined Date</span>
-					<span class="text-sm font-medium text-gray-900">
-						{formatDate(data.program.createdAt)}
-					</span>
+					<span class="text-sm font-medium text-gray-900">{formatDate(data.program.createdAt)}</span>
 				</div>
 			</div>
 		</div>
 
-		<!-- Recent Performance (Last 30 Days) -->
 		<div class="rounded-lg border border-gray-200 bg-white p-6">
-			<h2 class="mb-4 text-lg font-semibold text-gray-900">Recent Performance (Last 30 Days)</h2>
-			<div class="space-y-4">
-				<div class="flex items-center justify-between rounded-lg bg-blue-50 p-4">
-					<div class="flex items-center gap-3">
-						<Calendar class="h-5 w-5 text-blue-600" />
-						<span class="text-sm font-medium text-gray-700">Orders</span>
-					</div>
-					<span class="text-xl font-bold text-blue-600">{data.recentStats.orders}</span>
+			<h2 class="mb-4 text-lg font-semibold text-gray-900">Store Credit Ledger Buckets</h2>
+			<div class="grid grid-cols-2 gap-3 text-sm">
+				<div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+					<p class="text-gray-500">Available</p>
+					<p class="font-semibold text-green-700">{formatPrice(data.ledgerSummary.availableStoreCredit)}</p>
 				</div>
-
-				<div class="flex items-center justify-between rounded-lg bg-green-50 p-4">
-					<div class="flex items-center gap-3">
-						<DollarSign class="h-5 w-5 text-green-600" />
-						<span class="text-sm font-medium text-gray-700">Sales</span>
-					</div>
-					<span class="text-xl font-bold text-green-600">
-						{formatPrice(data.recentStats.sales)}
-					</span>
+				<div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+					<p class="text-gray-500">Pending</p>
+					<p class="font-semibold text-gray-900">{formatPrice(data.ledgerSummary.pendingStoreCredit)}</p>
 				</div>
-
-				<div class="flex items-center justify-between rounded-lg bg-purple-50 p-4">
-					<div class="flex items-center gap-3">
-						<TrendingUp class="h-5 w-5 text-purple-600" />
-						<span class="text-sm font-medium text-gray-700">Commission</span>
-					</div>
-					<span class="text-xl font-bold text-purple-600">
-						{formatPrice(data.recentStats.commission)}
-					</span>
+				<div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+					<p class="text-gray-500">Under review</p>
+					<p class="font-semibold text-orange-600">{formatPrice(data.ledgerSummary.underReviewStoreCredit)}</p>
+				</div>
+				<div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+					<p class="text-gray-500">Requested payout</p>
+					<p class="font-semibold text-blue-700">{formatPrice(data.ledgerSummary.requestedStoreCredit)}</p>
+				</div>
+				<div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+					<p class="text-gray-500">Paid payout</p>
+					<p class="font-semibold text-green-700">{formatPrice(data.ledgerSummary.paidStoreCredit)}</p>
+				</div>
+				<div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+					<p class="text-gray-500">Reversed</p>
+					<p class="font-semibold text-red-600">{formatPrice(data.ledgerSummary.reversedStoreCredit)}</p>
 				</div>
 			</div>
 		</div>
 	</div>
 
-	<!-- Monthly Breakdown -->
+	<div class="mb-6 rounded-lg border border-gray-200 bg-white p-6">
+		<div class="mb-4 flex items-center justify-between">
+			<h2 class="text-lg font-semibold text-gray-900">Payout Requests</h2>
+			<span class="text-sm text-gray-500">Open: {payoutRequests.length}</span>
+		</div>
+
+		{#if payoutRows.length === 0}
+			<p class="text-sm text-gray-500">No payout records yet.</p>
+		{:else}
+			<div class="overflow-x-auto">
+				<table class="w-full">
+					<thead class="bg-gray-50">
+						<tr>
+							<th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Date</th>
+							<th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Amount</th>
+							<th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Status</th>
+							<th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Reference</th>
+							<th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Actions</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-gray-200">
+						{#each payoutRows as payout}
+							<tr class="hover:bg-gray-50">
+								<td class="px-4 py-3 text-sm text-gray-900">{formatDate(payout.createdAt)}</td>
+								<td class="px-4 py-3 text-sm font-semibold text-gray-900">{formatPrice(payout.amount)}</td>
+								<td class="px-4 py-3">
+									<span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold" style={statusBadgeStyle(payout.status)}>
+										{payout.status}
+									</span>
+								</td>
+								<td class="px-4 py-3 text-xs text-gray-500">{payout.reference || '-'}</td>
+								<td class="px-4 py-3 text-xs">
+									{#if ['requested', 'under_review'].includes(String(payout.status || '').toLowerCase())}
+										<div class="flex gap-2">
+											<button
+												onclick={() => updatePayoutStatus(payout.id, 'mark_paid')}
+												disabled={isUpdatingPayout(payout.id)}
+												class="rounded bg-green-600 px-2 py-1 text-white hover:bg-green-700 disabled:opacity-60"
+											>
+												Mark paid
+											</button>
+											<button
+												onclick={() => updatePayoutStatus(payout.id, 'mark_under_review')}
+												disabled={isUpdatingPayout(payout.id)}
+												class="rounded bg-orange-500 px-2 py-1 text-white hover:bg-orange-600 disabled:opacity-60"
+											>
+												Review
+											</button>
+											<button
+												onclick={() => updatePayoutStatus(payout.id, 'mark_reversed')}
+												disabled={isUpdatingPayout(payout.id)}
+												class="rounded bg-red-600 px-2 py-1 text-white hover:bg-red-700 disabled:opacity-60"
+											>
+												Reverse
+											</button>
+										</div>
+									{:else}
+										-
+									{/if}
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+	</div>
+
 	{#if data.monthlyBreakdown.length > 0}
 		<div class="mb-6 rounded-lg border border-gray-200 bg-white p-6">
 			<h2 class="mb-4 text-lg font-semibold text-gray-900">Monthly Performance</h2>
@@ -374,43 +327,19 @@
 				<table class="w-full">
 					<thead class="bg-gray-50">
 						<tr>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-							>
-								Month
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-							>
-								Orders
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-							>
-								Sales
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-							>
-								Commission
-							</th>
+							<th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Month</th>
+							<th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Orders</th>
+							<th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Sales</th>
+							<th class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Store Credit</th>
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-gray-200">
 						{#each data.monthlyBreakdown as month}
-							<tr class="hover:bg-gray-50">
-								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap text-gray-900">
-									{month.month}
-								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-900">
-									{month.orders}
-								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-900">
-									{formatPrice(month.sales)}
-								</td>
-								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap text-green-600">
-									{formatPrice(month.commission)}
-								</td>
+							<tr>
+								<td class="px-4 py-3 text-sm font-medium text-gray-900">{month.month}</td>
+								<td class="px-4 py-3 text-sm text-gray-900">{month.orders}</td>
+								<td class="px-4 py-3 text-sm text-gray-900">{formatPrice(month.sales)}</td>
+								<td class="px-4 py-3 text-sm font-semibold text-green-700">{formatPrice(month.storeCredit)}</td>
 							</tr>
 						{/each}
 					</tbody>
@@ -419,178 +348,28 @@
 		</div>
 	{/if}
 
-	<!-- Commission Payouts -->
-	<div class="mb-6 rounded-lg border border-gray-200 bg-white p-6">
-		<div class="mb-4 flex items-center justify-between">
-			<h2 class="text-lg font-semibold text-gray-900">Commission Payouts</h2>
-			<button
-				onclick={() => (showPayoutModal = true)}
-				disabled={unpaidCommission <= 0}
-				class="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-			>
-				<DollarSign class="h-4 w-4" />
-				Record Payout
-			</button>
-		</div>
-
-		<!-- Payout Summary Cards -->
-		<div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-			<div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
-				<div class="flex items-center gap-2 text-sm font-medium text-gray-600">
-					<TrendingUp class="h-4 w-4" />
-					Total Earned
-				</div>
-				<div class="mt-2 text-2xl font-bold text-gray-900">
-					{formatPrice(data.program.totalCommission)}
-				</div>
-			</div>
-
-			<div class="rounded-lg border border-gray-200 bg-green-50 p-4">
-				<div class="flex items-center gap-2 text-sm font-medium text-green-600">
-					<DollarSign class="h-4 w-4" />
-					Total Paid
-				</div>
-				<div class="mt-2 text-2xl font-bold text-green-600">
-					{formatPrice(data.program.totalPaid)}
-				</div>
-			</div>
-
-			<div class="rounded-lg border border-gray-200 bg-blue-50 p-4">
-				<div class="flex items-center gap-2 text-sm font-medium text-blue-600">
-					<Wallet class="h-4 w-4" />
-					Unpaid Balance
-				</div>
-				<div class="mt-2 text-2xl font-bold text-blue-600">
-					{formatPrice(unpaidCommission)}
-				</div>
-			</div>
-		</div>
-
-		<!-- Payout History -->
-		{#if data.payouts.length > 0}
-			<div class="overflow-x-auto">
-				<h3 class="mb-3 text-sm font-semibold text-gray-900">Payout History</h3>
-				<table class="w-full">
-					<thead class="bg-gray-50">
-						<tr>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-							>
-								Date
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-							>
-								Amount
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-							>
-								Method
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-							>
-								Reference
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-							>
-								Notes
-							</th>
-						</tr>
-					</thead>
-					<tbody class="divide-y divide-gray-200">
-						{#each data.payouts as payout}
-							<tr class="hover:bg-gray-50">
-								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-900">
-									{formatDate(payout.payoutDate)}
-								</td>
-								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap text-green-600">
-									{formatPrice(payout.amount)}
-								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-900">
-									{payout.payoutMethod}
-								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-900">
-									{payout.payoutReference || '-'}
-								</td>
-								<td class="px-6 py-4 text-sm text-gray-900">
-									{payout.notes || '-'}
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{:else}
-			<div class="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center">
-				<Wallet class="mx-auto mb-2 h-8 w-8 text-gray-400" />
-				<p class="text-sm font-medium text-gray-600">No payout history</p>
-				<p class="mt-1 text-xs text-gray-500">Payouts will appear here once you record them</p>
-			</div>
-		{/if}
-	</div>
-
-	<!-- Orders List -->
 	<div class="rounded-lg border border-gray-200 bg-white">
 		<div class="border-b border-gray-200 p-6">
-			<h2 class="text-lg font-semibold text-gray-900">
-				Referred Orders ({data.orders.length})
-			</h2>
+			<h2 class="text-lg font-semibold text-gray-900">Referred Orders ({data.orders.length})</h2>
 		</div>
 		<div class="overflow-x-auto">
 			<table class="w-full">
 				<thead class="bg-gray-50">
 					<tr>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-						>
-							Order
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-						>
-							Customer
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-						>
-							Items
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-						>
-							Total
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-						>
-							Commission
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-						>
-							Status
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-						>
-							Date
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-						>
-							Actions
-						</th>
+						<th class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Order</th>
+						<th class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Customer</th>
+						<th class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Items</th>
+						<th class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Total</th>
+						<th class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Store Credit</th>
+						<th class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Status</th>
+						<th class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Date</th>
+						<th class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">Actions</th>
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-gray-200">
 					{#if data.orders.length === 0}
 						<tr>
-							<td colspan="8" class="px-6 py-12 text-center text-gray-500">
-								No orders yet using this affiliate code
-							</td>
+							<td colspan="8" class="px-6 py-12 text-center text-gray-500">No referred orders yet</td>
 						</tr>
 					{:else}
 						{#each data.orders as order}
@@ -603,32 +382,21 @@
 									<div class="text-sm font-medium text-gray-900">{order.customerName}</div>
 									<div class="text-xs text-gray-500">{order.customerEmail}</div>
 								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-900">
-									{order.itemCount}
-								</td>
+								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-900">{order.itemCount}</td>
 								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap text-gray-900">
 									{formatPrice(order.totalAmount)}
 								</td>
-								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap text-green-600">
-									{formatPrice(order.commission)}
+								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap text-green-700">
+									{formatPrice(order.storeCredit)}
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
-									<span
-										class="inline-flex rounded-full px-2 py-1 text-xs font-semibold {getStatusColor(
-											order.status
-										)}"
-									>
+									<span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold" style={statusBadgeStyle(order.status)}>
 										{order.status}
 									</span>
 								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-500">
-									{formatDate(order.createdAt)}
-								</td>
+								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-500">{formatDate(order.createdAt)}</td>
 								<td class="px-6 py-4 text-sm whitespace-nowrap">
-									<a
-										href="/admin/orders/{order.id}"
-										class="flex items-center gap-1 text-blue-600 transition-colors hover:text-blue-900"
-									>
+									<a href="/admin/orders/{order.id}" class="flex items-center gap-1 text-blue-600 hover:text-blue-900">
 										View
 										<ExternalLink class="h-3 w-3" />
 									</a>
@@ -641,36 +409,3 @@
 		</div>
 	</div>
 </div>
-
-<!-- Commission Rate Adjustment Modal -->
-{#if showCommissionModal}
-	<CommissionModal
-		bind:newCommissionRate
-		{commissionError}
-		{updateCommissionRate}
-		{isUpdatingRate}
-		onclick={() => {
-			showCommissionModal = false;
-			commissionError = '';
-		}}
-	/>
-{/if}
-
-<!-- Record Payout Modal -->
-{#if showPayoutModal}
-	<PayoutModal
-		{isProcessingPayout}
-		{recordPayout}
-		{payoutError}
-		bind:payoutAmount
-		bind:payoutMethod
-		bind:payoutReference
-		bind:payoutDate
-		bind:payoutNotes
-		{unpaidCommission}
-		onclick={() => {
-			showPayoutModal = false;
-			payoutError = '';
-		}}
-	/>
-{/if}

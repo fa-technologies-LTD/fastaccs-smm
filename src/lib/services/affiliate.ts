@@ -90,6 +90,11 @@ export interface AffiliateDiscountResult {
 	discountAmount: number;
 	orderIndex: number;
 	stage: 'stage_1' | 'stage_2' | 'none';
+	stageLabel: 'Stage 1' | 'Stage 2' | 'Expired';
+	remainingRewardedOrders: number;
+	expiresAfterOrder: number;
+	maxRewardedOrders: number;
+	ruleMode: 'percent_cap' | 'tier_flat' | 'none';
 }
 
 export interface AffiliateRecentReferralActivity {
@@ -234,6 +239,25 @@ function toBoolean(value: unknown): boolean {
 		);
 	}
 	return false;
+}
+
+function parseMetadataObject(value: unknown): Record<string, unknown> {
+	if (value && typeof value === 'object' && !Array.isArray(value)) {
+		return value as Record<string, unknown>;
+	}
+	return {};
+}
+
+function isAffiliateLineExcluded(
+	productName: string,
+	metadata: Record<string, unknown>,
+	config: AffiliateConfig
+): boolean {
+	const loweredName = String(productName || '').toLowerCase();
+	const keywordBlocked = config.excludedTierKeywords.some((keyword) => loweredName.includes(keyword));
+	const explicitlyExcluded =
+		toBoolean(metadata.affiliate_excluded) || toBoolean(metadata.affiliate_discount_excluded);
+	return keywordBlocked || explicitlyExcluded;
 }
 
 function parseLockedReferral(value: string | null | undefined): LockedReferralAttribution | null {
@@ -669,8 +693,12 @@ export async function getAffiliateQualificationStatus(
  * Enable affiliate mode for a user.
  */
 export async function enableAffiliateMode(
-	userId: string
+	userId: string,
+	options?: {
+		force?: boolean;
+	}
 ): Promise<{ success: boolean; affiliateCode?: string; error?: string }> {
+	const forceEnable = Boolean(options?.force);
 	try {
 		const [user, qualification] = await Promise.all([
 			prisma.user.findUnique({
@@ -690,7 +718,20 @@ export async function enableAffiliateMode(
 			return { success: true, affiliateCode: user.affiliatePrograms[0].affiliateCode };
 		}
 
-		if (!qualification.eligible) {
+		const existingProgram = user.affiliatePrograms[0] || null;
+		if (
+			!forceEnable &&
+			existingProgram &&
+			existingProgram.status === 'inactive' &&
+			!user.isAffiliateEnabled
+		) {
+			return {
+				success: false,
+				error: 'Affiliate access is currently disabled. Contact support for review.'
+			};
+		}
+
+		if (!qualification.eligible && !forceEnable) {
 			const remaining = Math.max(0, qualification.threshold - qualification.lifetimeCompletedSpend);
 			return {
 				success: false,
@@ -698,19 +739,17 @@ export async function enableAffiliateMode(
 			};
 		}
 
-		const existingProgram = user.affiliatePrograms[0] || null;
 		const affiliateCode = existingProgram?.affiliateCode || (await generateAffiliateCode(userId));
 
-		await prisma.$transaction(async (tx) => {
-			if (!existingProgram) {
-				await tx.affiliateProgram.create({
-					data: {
-						userId,
-						affiliateCode,
-						commissionRate: 0,
-						status: 'active'
-					}
-				});
+			await prisma.$transaction(async (tx) => {
+				if (!existingProgram) {
+					await tx.affiliateProgram.create({
+						data: {
+							userId,
+							affiliateCode,
+							status: 'active'
+						}
+					});
 			} else if (existingProgram.status !== 'active') {
 				await tx.affiliateProgram.update({
 					where: { id: existingProgram.id },
@@ -741,7 +780,6 @@ export async function validateAffiliateCode(code: string): Promise<{
 	valid: boolean;
 	userId?: string;
 	affiliateProgramId?: string;
-	commissionRate?: number;
 	affiliateCode?: string;
 	error?: string;
 }> {
@@ -756,14 +794,13 @@ export async function validateAffiliateCode(code: string): Promise<{
 				affiliateCode: normalizedCode,
 				status: 'active'
 			},
-			select: {
-				id: true,
-				userId: true,
-				affiliateCode: true,
-				commissionRate: true,
-				user: {
-					select: {
-						isActive: true,
+				select: {
+					id: true,
+					userId: true,
+					affiliateCode: true,
+					user: {
+						select: {
+							isActive: true,
 						isAffiliateEnabled: true
 					}
 				}
@@ -782,7 +819,6 @@ export async function validateAffiliateCode(code: string): Promise<{
 			valid: true,
 			userId: affiliateProgram.userId,
 			affiliateProgramId: affiliateProgram.id,
-			commissionRate: Number(affiliateProgram.commissionRate || 0),
 			affiliateCode: affiliateProgram.affiliateCode
 		};
 	} catch (error) {
@@ -1112,6 +1148,13 @@ export async function getAffiliateDiscountForOrder(params: {
 	buyerUserId: string;
 	affiliateUserId: string;
 	subtotalAmount: number;
+	orderItems?: Array<{
+		quantity: number;
+		totalPrice: unknown;
+		productName: string;
+		category?: { metadata: unknown } | null;
+		categoryMetadata?: unknown;
+	}>;
 }): Promise<AffiliateDiscountResult> {
 	const [config, successfulOrdersBefore] = await Promise.all([
 		getAffiliateConfig(),
@@ -1123,31 +1166,86 @@ export async function getAffiliateDiscountForOrder(params: {
 		return {
 			discountAmount: 0,
 			orderIndex,
-			stage: 'none'
+			stage: 'none',
+			stageLabel: 'Expired',
+			remainingRewardedOrders: 0,
+			expiresAfterOrder: 0,
+			maxRewardedOrders: config.maxRewardedOrdersPerBuyer,
+			ruleMode: 'none'
 		};
 	}
 
 	let percent = 0;
 	let cap = 0;
 	let stage: AffiliateDiscountResult['stage'] = 'none';
+	let stageLabel: AffiliateDiscountResult['stageLabel'] = 'Expired';
 
 	if (orderIndex <= 2) {
 		percent = config.discountStage1Percent;
 		cap = config.discountStage1Cap;
 		stage = 'stage_1';
+		stageLabel = 'Stage 1';
 	} else {
 		percent = config.discountStage2Percent;
 		cap = config.discountStage2Cap;
 		stage = 'stage_2';
+		stageLabel = 'Stage 2';
 	}
 
+	const itemRows = Array.isArray(params.orderItems) ? params.orderItems : [];
+	let explicitTierFlatDiscount = 0;
+
+	for (const item of itemRows) {
+		const metadata = parseMetadataObject(item.categoryMetadata ?? item.category?.metadata);
+		if (isAffiliateLineExcluded(item.productName, metadata, config)) {
+			continue;
+		}
+
+		const quantity = Math.max(1, Number(item.quantity || 1));
+		const stageFlat =
+			stage === 'stage_1'
+				? toPositiveNumber(metadata.affiliate_discount_stage1_flat)
+				: stage === 'stage_2'
+					? toPositiveNumber(metadata.affiliate_discount_stage2_flat)
+					: null;
+		const stagePerAccount =
+			stage === 'stage_1'
+				? toPositiveNumber(metadata.affiliate_discount_stage1_per_account)
+				: stage === 'stage_2'
+					? toPositiveNumber(metadata.affiliate_discount_stage2_per_account)
+					: null;
+
+		const anyStageFlat = stageFlat ?? toPositiveNumber(metadata.affiliate_discount_flat);
+		const anyStagePerAccount =
+			stagePerAccount ?? toPositiveNumber(metadata.affiliate_discount_per_account);
+
+		if (anyStageFlat) {
+			explicitTierFlatDiscount += toRoundedNaira(anyStageFlat);
+			continue;
+		}
+
+		if (anyStagePerAccount) {
+			explicitTierFlatDiscount += toRoundedNaira(anyStagePerAccount * quantity);
+		}
+	}
+
+	const hasTierFlatRule = explicitTierFlatDiscount > 0;
 	const rawDiscount = (Math.max(0, params.subtotalAmount) * percent) / 100;
-	const discountAmount = toRoundedNaira(Math.min(cap, rawDiscount));
+	const discountAmount = hasTierFlatRule
+		? toRoundedNaira(explicitTierFlatDiscount)
+		: toRoundedNaira(Math.min(cap, rawDiscount));
+	const remainingRewardedOrders = Math.max(0, config.maxRewardedOrdersPerBuyer - orderIndex);
+	const expiresAfterOrder = remainingRewardedOrders + 1;
 
 	return {
 		discountAmount,
 		orderIndex,
-		stage
+		stage,
+		stageLabel,
+		remainingRewardedOrders,
+		expiresAfterOrder,
+		maxRewardedOrders: config.maxRewardedOrdersPerBuyer,
+		ruleMode: hasTierFlatRule ? 'tier_flat' : 'percent_cap'
 	};
 }
 
@@ -1160,21 +1258,8 @@ function buildOrderItemCredit(
 	},
 	config: AffiliateConfig
 ): number {
-	const metadata =
-		item.category &&
-		typeof item.category.metadata === 'object' &&
-		item.category.metadata !== null &&
-		!Array.isArray(item.category.metadata)
-			? (item.category.metadata as Record<string, unknown>)
-			: {};
-
-	const productName = String(item.productName || '').toLowerCase();
-	const keywordBlocked = config.excludedTierKeywords.some((keyword) =>
-		productName.includes(keyword)
-	);
-	const explicitlyExcluded =
-		toBoolean(metadata.affiliate_excluded) || toBoolean(metadata.affiliate_discount_excluded);
-	if (keywordBlocked || explicitlyExcluded) return 0;
+	const metadata = parseMetadataObject(item.category?.metadata);
+	if (isAffiliateLineExcluded(item.productName, metadata, config)) return 0;
 
 	const perOrderFlat = toPositiveNumber(metadata.affiliate_store_credit_flat);
 	const perAccountCredit = toPositiveNumber(metadata.affiliate_store_credit_per_account);
@@ -1320,18 +1405,17 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 				}
 			});
 
-			await tx.affiliateProgram.updateMany({
-				where: {
-					userId: order.affiliateUserId as string,
-					affiliateCode: order.affiliateCode as string,
-					status: 'active'
-				},
-				data: {
-					totalReferrals: { increment: 1 },
-					totalSales: { increment: Number(order.totalAmount || 0) },
-					totalCommission: { increment: creditAmount }
-				}
-			});
+				await tx.affiliateProgram.updateMany({
+					where: {
+						userId: order.affiliateUserId as string,
+						affiliateCode: order.affiliateCode as string,
+						status: 'active'
+					},
+					data: {
+						totalReferrals: { increment: 1 },
+						totalSales: { increment: Number(order.totalAmount || 0) }
+					}
+				});
 
 			await tx.notification.create({
 				data: {
@@ -1393,7 +1477,7 @@ export async function maybeSendAffiliateUnlockInvite(userId: string): Promise<vo
 		const sendResult = await sendEmail({
 			to: user.email,
 			subject: "You've unlocked Affiliate Access on FastAccs",
-			body: `Hi ${firstName},\n\nYou just unlocked a new way to earn from FastAccs.\n\nActivate your affiliate access, share your code, and start earning **Cashable Store Credit** from successful referred orders.\n\nWhat happens next:\n- Activate your affiliate profile\n- Get your unique code and referral link\n- Share with buyers\n- Earn Store Credit on successful referred purchases\n\nYour Store Credit can be used on orders and can become cash once payout requirements are met.`,
+			body: `Hi ${firstName},\n\nYou just unlocked a new way to earn from FastAccs.\n\nActivate your affiliate access, share your code, and start earning **Store Credit Cash** from successful referred orders.\n\nWhat happens next:\n- Activate your affiliate profile\n- Get your unique code and referral link\n- Share with buyers\n- Earn Store Credit on successful referred purchases\n\nYour Store Credit can be used on orders and can become cash once payout requirements are met.`,
 			ctaText: 'Activate Affiliate Access',
 			ctaUrl: supportLink,
 			notificationType: 'affiliate_unlock',
@@ -1421,7 +1505,7 @@ export async function maybeSendAffiliateUnlockInvite(userId: string): Promise<vo
 					type: 'affiliate_unlock',
 					title: "You've unlocked Affiliate Access",
 					message:
-						'Share your code, bring buyers, and earn Cashable Store Credit from successful referrals.'
+						'Share your code, bring buyers, and earn Store Credit Cash from successful referrals.'
 				}
 			})
 		]);
@@ -1452,9 +1536,10 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 		getAffiliateLedgerSummary(userId)
 	]);
 
-	const isActive = Boolean(program && user?.isAffiliateEnabled);
-	const unlocked = qualification.eligible || isActive;
-	const canActivate = qualification.eligible && !isActive;
+	const isActive = Boolean(program && user?.isAffiliateEnabled && program.status === 'active');
+	const hardDisabled = Boolean(program && !user?.isAffiliateEnabled && program.status === 'inactive');
+	const unlocked = hardDisabled ? false : qualification.eligible || isActive;
+	const canActivate = !hardDisabled && qualification.eligible && !isActive;
 
 	const startOfMonth = new Date();
 	startOfMonth.setDate(1);
@@ -1681,7 +1766,7 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 		accountAgeDays >= config.payoutMinAccountAgeDays;
 
 	return {
-		eligible: qualification.eligible,
+		eligible: hardDisabled ? false : qualification.eligible,
 		unlocked,
 		canActivate,
 		isActive,
@@ -1843,92 +1928,28 @@ export async function requestAffiliatePayout(userId: string): Promise<{
 	}
 }
 
-/**
- * Legacy method retained for compatibility with existing API consumers.
- */
-export async function getAffiliateStats(userId: string): Promise<{
-	success: boolean;
-	data?: {
-		affiliateCode: string;
-		commissionRate: number;
-		totalReferrals: number;
-		totalSales: number;
-		totalCommission: number;
-		status: string;
-		dashboard: AffiliateDashboardState;
-	};
-	error?: string;
-}> {
-	try {
-		const [affiliateProgram, dashboard] = await Promise.all([
-			prisma.affiliateProgram.findFirst({
-				where: { userId },
-				select: {
-					affiliateCode: true,
-					commissionRate: true,
-					totalReferrals: true,
-					totalSales: true,
-					totalCommission: true,
-					status: true
-				}
-			}),
-			getAffiliateDashboardState(userId)
-		]);
-
-		if (!affiliateProgram) {
-			return { success: false, error: 'No affiliate program found' };
-		}
-
-		return {
-			success: true,
-			data: {
-				affiliateCode: affiliateProgram.affiliateCode,
-				commissionRate: Number(affiliateProgram.commissionRate || 0),
-				totalReferrals: affiliateProgram.totalReferrals,
-				totalSales: Number(affiliateProgram.totalSales || 0),
-				totalCommission: Number(affiliateProgram.totalCommission || 0),
-				status: affiliateProgram.status,
-				dashboard
-			}
-		};
-	} catch (error) {
-		console.error('Error fetching affiliate stats:', error);
-		return { success: false, error: 'Failed to fetch affiliate stats' };
-	}
-}
-
-/**
- * Legacy compatibility shim. Commission is now represented as Store Credit.
- */
-export async function recordCommission(
-	orderId: string,
-	_affiliateCode: string,
-	_orderTotal: number
-): Promise<{ success: boolean; commission?: number; error?: string }> {
-	void _affiliateCode;
-	void _orderTotal;
-
-	const result = await recordAffiliateStoreCreditForOrder(orderId);
-	if (!result.success) {
-		return { success: false, error: result.error || 'Failed to record store credit.' };
-	}
-
-	return {
-		success: true,
-		commission: result.storeCreditAwarded || 0
-	};
-}
-
 export async function getAffiliateDiscountPreviewForCode(params: {
 	buyerUserId: string;
 	affiliateCode: string;
 	subtotalAmount: number;
+	orderItems?: Array<{
+		quantity: number;
+		totalPrice: unknown;
+		productName: string;
+		category?: { metadata: unknown } | null;
+		categoryMetadata?: unknown;
+	}>;
 }): Promise<{
 	valid: boolean;
 	error?: string;
 	discountAmount: number;
 	orderIndex?: number;
 	stage?: AffiliateDiscountResult['stage'];
+	stageLabel?: AffiliateDiscountResult['stageLabel'];
+	ruleMode?: AffiliateDiscountResult['ruleMode'];
+	remainingRewardedOrders?: number;
+	expiresAfterOrder?: number;
+	maxRewardedOrders?: number;
 	lockedCode?: string | null;
 }> {
 	const requestedCode = normalizeAffiliateCode(params.affiliateCode);
@@ -1972,7 +1993,8 @@ export async function getAffiliateDiscountPreviewForCode(params: {
 	const discount = await getAffiliateDiscountForOrder({
 		buyerUserId: params.buyerUserId,
 		affiliateUserId: validation.userId,
-		subtotalAmount: params.subtotalAmount
+		subtotalAmount: params.subtotalAmount,
+		orderItems: params.orderItems
 	});
 
 	return {
@@ -1980,6 +2002,11 @@ export async function getAffiliateDiscountPreviewForCode(params: {
 		discountAmount: discount.discountAmount,
 		orderIndex: discount.orderIndex,
 		stage: discount.stage,
+		stageLabel: discount.stageLabel,
+		ruleMode: discount.ruleMode,
+		remainingRewardedOrders: discount.remainingRewardedOrders,
+		expiresAfterOrder: discount.expiresAfterOrder,
+		maxRewardedOrders: discount.maxRewardedOrders,
 		lockedCode: locked?.affiliateCode || requestedCode
 	};
 }

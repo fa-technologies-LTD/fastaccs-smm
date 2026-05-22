@@ -13,7 +13,7 @@
 	<title>FastAccs Affiliate Program</title>
 	<meta
 		name="description"
-		content="Unlock affiliate access, share your FastAccs code, and earn Cashable Store Credit from successful referred orders."
+		content="Unlock affiliate access, share your FastAccs code, and earn Store Credit Cash from successful referred orders."
 	/>
 </svelte:head>
 
@@ -29,13 +29,13 @@
 			style="background: rgba(5,212,113,0.16); border: 1px solid rgba(5,212,113,0.35); color: var(--primary);"
 		>
 			<Share2 size={14} />
-			Cashable Store Credit
+			Store Credit Cash
 		</p>
 		<h1
 			class="mb-3 text-2xl font-semibold sm:text-3xl"
 			style="color: var(--text); font-family: var(--font-head);"
 		>
-			Turn FastAccs referrals into cashable earnings
+			Turn FastAccs referrals into cash earnings
 		</h1>
 		<p class="max-w-3xl text-sm sm:text-base" style="color: var(--text-muted);">
 			Qualified buyers can unlock affiliate access, activate a unique code, share it, and earn Store
@@ -129,7 +129,7 @@
 				class="rounded-full px-5 py-2 text-sm font-semibold"
 				style="background: rgba(105,109,250,0.16); border: 1px solid rgba(105,109,250,0.35); color: var(--text);"
 			>
-				Submit bank details
+				Apply here
 			</a>
 		</div>
 	</section>

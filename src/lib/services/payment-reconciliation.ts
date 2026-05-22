@@ -18,6 +18,11 @@ import { recordPromotionRedemption } from '$lib/services/promotions';
 import { isAutoDeliveryPausedSetting } from '$lib/services/admin-settings';
 import { isManualHandoverOrder } from '$lib/services/order-delivery-mode';
 import { notifyManualHandoverOrderPaid } from '$lib/services/manual-handover';
+import {
+	getPendingPaymentExpireMinutes,
+	getPendingPaymentExpiryThreshold,
+	isPendingPaymentExpired
+} from '$lib/helpers/payment-expiry.server';
 
 interface ReconcileOptions {
 	limit?: number;
@@ -39,7 +44,7 @@ interface ReconcileSummary {
 
 const DEFAULT_LIMIT = 100;
 const DEFAULT_STALE_MINUTES = 10;
-const DEFAULT_EXPIRE_MINUTES = 120;
+const DEFAULT_EXPIRE_MINUTES = getPendingPaymentExpireMinutes();
 
 function hasMonnifyConfig(): boolean {
 	return Boolean(env.MONNIFY_API_KEY && env.MONNIFY_SECRET_KEY && env.MONNIFY_BASE_URL);
@@ -121,7 +126,7 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 
 	const now = Date.now();
 	const staleThreshold = now - staleMinutes * 60 * 1000;
-	const expiryThreshold = now - expireMinutes * 60 * 1000;
+	const expiryThreshold = getPendingPaymentExpiryThreshold(expireMinutes);
 
 	const candidates = await prisma.order.findMany({
 		where: {
@@ -342,7 +347,7 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 			continue;
 		}
 
-		const isOldPending = order.createdAt.getTime() <= expiryThreshold;
+		const isOldPending = isPendingPaymentExpired(order.createdAt, gatewayStatus, expireMinutes);
 		if (isOldPending) {
 			if (!dryRun) {
 				await prisma.order.update({

@@ -4,6 +4,7 @@
 	import OrderTab from './OrderTab.svelte';
 	import PurchaseTab from './PurchaseTab.svelte';
 	import AffiliateTab from './AffiliateTab.svelte';
+	import { isRevenueOrder } from '$lib/helpers/order-revenue';
 
 	type DashboardTab = 'orders' | 'purchases' | 'affiliate';
 
@@ -15,6 +16,8 @@
 	interface DashboardOrder {
 		id: string;
 		status?: string | null;
+		paymentStatus?: string | null;
+		paymentReference?: string | null;
 		totalAmount?: number | string | null;
 	}
 
@@ -115,7 +118,16 @@
 			['delivered', 'completed', 'paid'].includes(String(order.status || ''))
 		).length
 	);
-	let totalSpent = $derived(orders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0));
+	let totalSpent = $derived(
+		orders
+			.filter((order) =>
+				isRevenueOrder({
+					status: order.status,
+					paymentStatus: order.paymentStatus
+				})
+			)
+			.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0)
+	);
 	let accountsOwned = $derived(
 		initialPurchases.reduce((sum, purchase) => sum + Number(purchase.quantity || 0), 0)
 	);
