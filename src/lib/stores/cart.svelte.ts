@@ -125,7 +125,14 @@ class CartStore {
 					item.tierId.trim().length > 0 &&
 					typeof item.quantity === 'number' &&
 					item.quantity > 0 &&
-					typeof item.addedAt === 'number'
+					typeof item.addedAt === 'number' &&
+					(!item.exactAccount ||
+						(typeof item.exactAccount.accountId === 'string' &&
+							typeof item.exactAccount.displayLabel === 'string' &&
+							typeof item.exactAccount.profileUrl === 'string' &&
+							typeof item.exactAccount.reservedUntil === 'string' &&
+							(item.exactAccount.screenshotUrl == null ||
+								typeof item.exactAccount.screenshotUrl === 'string')))
 			);
 
 			this.state.items = validItems;
@@ -157,6 +164,11 @@ class CartStore {
 		const existingIndex = this.state.items.findIndex((item) => item.tierId === tierId);
 
 		if (existingIndex >= 0) {
+			if (this.state.items[existingIndex].exactAccount) {
+				this.state.items[existingIndex].quantity = 1;
+				this.saveToStorage();
+				return;
+			}
 			this.state.items[existingIndex].quantity += quantity;
 		} else {
 			this.state.items.push({
@@ -165,6 +177,33 @@ class CartStore {
 				addedAt: Date.now()
 			});
 		}
+
+		this.state.error = null;
+		this.saveToStorage();
+	}
+
+	addExactTier(
+		tierId: string,
+		exactAccount: {
+			accountId: string;
+			displayLabel: string;
+			profileUrl: string;
+			screenshotUrl?: string | null;
+			reservedUntil: string;
+		}
+	): void {
+		if (!tierId || !exactAccount.accountId) return;
+
+		// Exact-selection orders are intentionally one account at a time for V1.
+		this.state.items = this.state.items.filter(
+			(item) => item.tierId !== tierId && !item.exactAccount
+		);
+		this.state.items.push({
+			tierId,
+			quantity: 1,
+			addedAt: Date.now(),
+			exactAccount
+		});
 
 		this.state.error = null;
 		this.saveToStorage();
@@ -183,6 +222,11 @@ class CartStore {
 
 		const item = this.state.items.find((item) => item.tierId === tierId);
 		if (item) {
+			if (item.exactAccount) {
+				item.quantity = 1;
+				this.saveToStorage();
+				return;
+			}
 			item.quantity = quantity;
 			this.saveToStorage();
 		}
@@ -303,7 +347,8 @@ class CartStore {
 					mergedItems.set(item.tierId, {
 						tierId: item.tierId,
 						quantity: item.quantity,
-						addedAt: item.addedAt
+						addedAt: item.addedAt,
+						exactAccount: item.exactAccount
 					});
 				}
 

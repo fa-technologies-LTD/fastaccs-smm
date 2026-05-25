@@ -4,6 +4,7 @@ import { sendOrderConfirmationEmailIfNeeded } from './email';
 import { invalidateAdminStatsCache } from './admin-metrics';
 import { sendLowStockAdminAlertIfNeeded } from './admin-alerts';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
+import { allocateReservedExactPreviewAccountsForItem } from '$lib/services/exact-preview';
 
 // Type definitions
 interface AllocationResult {
@@ -96,6 +97,25 @@ async function allocateAccounts(orderId: string) {
 			const allocationResults: AllocationResult[] = [];
 
 			for (const item of order.orderItems) {
+				const exactPreviewAllocation = await allocateReservedExactPreviewAccountsForItem({
+					client: tx,
+					orderId,
+					orderItemId: item.id,
+					quantity: item.quantity,
+					categoryName: item.productName
+				});
+
+				if (exactPreviewAllocation) {
+					allocationResults.push({
+						orderItemId: item.id,
+						categoryName: item.productName,
+						requestedQuantity: item.quantity,
+						allocatedQuantity: exactPreviewAllocation.accountIds.length,
+						accountIds: exactPreviewAllocation.accountIds
+					});
+					continue;
+				}
+
 				const allocatedRows = await tx.$queryRaw<Array<{ id: string }>>`
 					WITH candidate AS (
 						SELECT id
@@ -190,6 +210,14 @@ async function allocateAccounts(orderId: string) {
 				return {
 					success: false,
 					error: `Insufficient accounts available for ${productName}. Requested: ${requested}, Available: ${available}`
+				};
+			}
+
+			if (error.message.startsWith('EXACT_PREVIEW_RESERVATION_INCOMPLETE:')) {
+				const [, productName, requested, available] = error.message.split(':');
+				return {
+					success: false,
+					error: `Selected exact account reservation is incomplete for ${productName}. Requested: ${requested}, Reserved: ${available}`
 				};
 			}
 		}

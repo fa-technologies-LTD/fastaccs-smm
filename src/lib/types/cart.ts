@@ -2,6 +2,13 @@ export interface CartItem {
 	tierId: string;
 	quantity: number;
 	addedAt: number;
+	exactAccount?: {
+		accountId: string;
+		displayLabel: string;
+		profileUrl: string;
+		screenshotUrl?: string | null;
+		reservedUntil: string;
+	};
 }
 
 export interface CartItemWithTier extends CartItem {

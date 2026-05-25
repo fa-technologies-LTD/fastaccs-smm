@@ -22,11 +22,17 @@ import {
 	normalizeTierDeliveryMode,
 	type TierDeliveryMode
 } from '$lib/helpers/tier-delivery-config';
+import {
+	attachExactPreviewSelectionsToOrder,
+	releaseExactPreviewReservationsForOrder
+} from '$lib/services/exact-preview';
 
 interface CreateOrderItemInput {
 	categoryId: string;
 	quantity: number;
 	price?: number;
+	exactAccountId?: string;
+	exactAccountLabel?: string;
 }
 
 interface CreateOrderInput {
@@ -67,6 +73,9 @@ function extractTierUnitPrice(metadata: unknown): number {
 }
 
 const cleanupOrderCreation = async (orderId: string) => {
+	await releaseExactPreviewReservationsForOrder(orderId).catch((error) => {
+		console.error('Failed to release exact preview reservation during cleanup:', error);
+	});
 	await prisma.$transaction([
 		prisma.orderItem.deleteMany({
 			where: { orderId }
@@ -154,6 +163,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			);
 		}
 
+		const checkoutUserId = locals.user.id;
 		const orderData = (await request.json()) as CreateOrderInput;
 		const items = Array.isArray(orderData.items) ? orderData.items : [];
 
@@ -163,7 +173,15 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 		const normalizedItems = items.map((item) => ({
 			categoryId: String(item.categoryId || '').trim(),
-			quantity: Number(item.quantity)
+			quantity: Number(item.quantity),
+			exactAccountId:
+				typeof item.exactAccountId === 'string' && item.exactAccountId.trim().length > 0
+					? item.exactAccountId.trim()
+					: null,
+			exactAccountLabel:
+				typeof item.exactAccountLabel === 'string' && item.exactAccountLabel.trim().length > 0
+					? item.exactAccountLabel.trim().slice(0, 40)
+					: null
 		}));
 
 		const invalidItem = normalizedItems.find(
@@ -175,6 +193,20 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 		if (invalidItem) {
 			return json({ success: false, error: 'Invalid order item payload' }, { status: 400 });
+		}
+
+		const exactSelectionItems = normalizedItems.filter((item) => item.exactAccountId);
+		if (exactSelectionItems.length > 0) {
+			const invalidExactSelection = exactSelectionItems.find((item) => item.quantity !== 1);
+			if (invalidExactSelection) {
+				return json(
+					{
+						success: false,
+						error: 'Exact account selections must be checked out one account at a time.'
+					},
+					{ status: 400 }
+				);
+			}
 		}
 
 		const paymentMethod =
@@ -288,7 +320,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		}
 
 		const attribution = await resolveOrderAffiliateAttribution({
-			buyerUserId: locals.user.id,
+			buyerUserId: checkoutUserId,
 			explicitAffiliateCode: affiliateCodeInput
 		});
 
@@ -325,7 +357,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		if (promotionCode) {
 			const promotionResult = await validatePromotionCode({
 				code: promotionCode,
-				userId: locals.user.id,
+				userId: checkoutUserId,
 				subtotal: subtotalAmount,
 				categoryIds: itemsWithNames.map((item) => item.categoryId)
 			});
@@ -343,7 +375,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			finalOrderTotal = promotionResult.finalTotal;
 		} else if (hasAffiliateAttribution && attribution.affiliateUserId) {
 			const affiliateDiscount = await getAffiliateDiscountForOrder({
-				buyerUserId: locals.user.id,
+				buyerUserId: checkoutUserId,
 				affiliateUserId: attribution.affiliateUserId,
 				subtotalAmount,
 				orderItems: itemsWithNames.map((item) => ({
@@ -370,7 +402,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		// Create order with proper structure for account allocation
 		const data = await prisma.order.create({
 			data: {
-				userId: locals.user.id,
+				userId: checkoutUserId,
 				orderNumber: `ORD-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`,
 				guestEmail: customerEmail,
 				guestPhone: customerPhone || null,
@@ -407,6 +439,47 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			}
 		}); // Automatically fulfill order (allocate + deliver accounts)
 
+		if (exactSelectionItems.length > 0) {
+			try {
+				await prisma.$transaction(async (tx) => {
+					const orderItemsByCategory = new Map(
+						data.orderItems.map((item) => [item.categoryId, item.id])
+					);
+					await attachExactPreviewSelectionsToOrder({
+						orderId: data.id,
+						userId: checkoutUserId,
+						client: tx,
+						selections: exactSelectionItems.map((item) => {
+							const orderItemId = orderItemsByCategory.get(item.categoryId);
+							if (!orderItemId) {
+								throw new Error('Could not match exact account to order item.');
+							}
+							return {
+								categoryId: item.categoryId,
+								accountId: item.exactAccountId as string,
+								displayLabel: item.exactAccountLabel || undefined,
+								orderItemId
+							};
+						})
+					});
+				});
+			} catch (error) {
+				await cleanupOrderCreation(data.id).catch((cleanupError) => {
+					console.error('Failed to cleanup exact preview order after attach failure:', cleanupError);
+				});
+				return json(
+					{
+						success: false,
+						error:
+							error instanceof Error
+								? error.message
+								: 'Selected exact account is no longer available.'
+					},
+					{ status: 400 }
+				);
+			}
+		}
+
 		// Invalidate admin stats cache after order creation
 		invalidateAdminStatsCache();
 
@@ -422,7 +495,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				paymentReference,
 				paymentDescription: `Payment for order ${shortOrderId}`,
 				redirectUrl,
-				metaData: { orderId: data.id, userId: locals.user.id }
+				metaData: { orderId: data.id, userId: checkoutUserId }
 			});
 
 			if (!initResult.success || !initResult.checkoutUrl) {
@@ -501,7 +574,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				}
 			}
 
-			void maybeSendAffiliateUnlockInvite(locals.user.id).catch((inviteError) => {
+			void maybeSendAffiliateUnlockInvite(checkoutUserId).catch((inviteError) => {
 				console.error('Failed to evaluate affiliate unlock after manual handover order:', inviteError);
 			});
 

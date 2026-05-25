@@ -20,6 +20,8 @@ export interface CreateOrderData {
 		categoryId: string;
 		quantity: number;
 		price?: number;
+		exactAccountId?: string;
+		exactAccountLabel?: string;
 	}[];
 	totalAmount: number;
 	currency: string;

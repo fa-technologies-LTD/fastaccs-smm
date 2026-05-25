@@ -23,6 +23,7 @@ import {
 	getPendingPaymentExpiryThreshold,
 	isPendingPaymentExpired
 } from '$lib/helpers/payment-expiry.server';
+import { releaseExactPreviewReservationsForOrder } from '$lib/services/exact-preview';
 
 interface ReconcileOptions {
 	limit?: number;
@@ -213,6 +214,7 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 						paymentStatus: 'cancelled'
 					}
 				});
+				await releaseExactPreviewReservationsForOrder(order.id);
 				didMutate = true;
 
 				logOrderStatusTransition({
@@ -245,6 +247,7 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 							paymentStatus: 'failed'
 						}
 					});
+					await releaseExactPreviewReservationsForOrder(order.id);
 					didMutate = true;
 
 					logOrderStatusTransition({
@@ -327,6 +330,7 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 						paymentStatus: failureKind === 'cancelled' ? 'cancelled' : 'failed'
 					}
 				});
+				await releaseExactPreviewReservationsForOrder(order.id);
 				didMutate = true;
 
 				logOrderStatusTransition({
@@ -357,6 +361,7 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 						paymentStatus: 'cancelled'
 					}
 				});
+				await releaseExactPreviewReservationsForOrder(order.id);
 				didMutate = true;
 
 				logOrderStatusTransition({

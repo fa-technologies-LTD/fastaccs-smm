@@ -21,6 +21,7 @@ import { isAutoDeliveryPausedSetting } from '$lib/services/admin-settings';
 import { isManualHandoverOrder } from '$lib/services/order-delivery-mode';
 import { notifyManualHandoverOrderPaid } from '$lib/services/manual-handover';
 import { isPendingPaymentExpired } from '$lib/helpers/payment-expiry.server';
+import { releaseExactPreviewReservationsForOrder } from '$lib/services/exact-preview';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -113,6 +114,7 @@ async function buildExpiredPendingOrderResponse(
 			paymentStatus: 'cancelled'
 		}
 	});
+	await releaseExactPreviewReservationsForOrder(order.id);
 	invalidateAdminStatsCache();
 
 	logOrderStatusTransition({
@@ -294,6 +296,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						paymentStatus: callbackFailureKind === 'cancelled' ? 'cancelled' : 'failed'
 					}
 				});
+				await releaseExactPreviewReservationsForOrder(orderById.id);
 				invalidateAdminStatsCache();
 
 				logOrderStatusTransition({
@@ -446,6 +449,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						paymentStatus: 'failed'
 					}
 				});
+				await releaseExactPreviewReservationsForOrder(order.id);
 				invalidateAdminStatsCache();
 
 				logOrderStatusTransition({
@@ -642,6 +646,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						paymentStatus: failureKind === 'cancelled' ? 'cancelled' : 'failed'
 					}
 				});
+				await releaseExactPreviewReservationsForOrder(failedOrder.id);
 				invalidateAdminStatsCache();
 
 				logOrderStatusTransition({
