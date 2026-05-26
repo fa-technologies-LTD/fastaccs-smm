@@ -36,6 +36,7 @@
 		getTierDeliveryConfig,
 		type TierDeliveryMode
 	} from '$lib/helpers/tier-delivery-config';
+	import { trackSnapEvent } from '$lib/services/snap-pixel';
 
 	interface Props {
 		data: PageData;
@@ -157,6 +158,17 @@
 		const scoreDiff = getTierPopularityScore(b) - getTierPopularityScore(a);
 		if (scoreDiff !== 0) return scoreDiff;
 		return compareTierByPriceAsc(a, b);
+	}
+
+	function getSnapTierPayload(tier: TierCard, quantity: number) {
+		return {
+			item_ids: [tier.category_id],
+			item_category: data.platform?.name || 'FastAccs SMM',
+			description: tier.tier_name || 'FastAccs tier',
+			price: Number(tier.price || 0) * quantity,
+			currency: 'NGN',
+			number_items: quantity
+		};
 	}
 
 	function isTierCardActionTarget(target: EventTarget | null): boolean {
@@ -638,6 +650,7 @@
 			}
 
 			cart.addTier(tier.category_id, quickAddQuantity);
+			trackSnapEvent('ADD_CART', getSnapTierPayload(tier, quickAddQuantity));
 			showSuccess(
 				'Added to cart!',
 				`${quickAddQuantity} ${tier.tier_name} ${quickAddQuantity === 1 ? 'account' : 'accounts'} added successfully. Click to view cart.`,

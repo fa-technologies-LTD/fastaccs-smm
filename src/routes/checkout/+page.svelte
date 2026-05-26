@@ -12,6 +12,7 @@
 	import type { CartItemWithTier } from '$lib/types/cart';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
+	import { trackSnapEvent } from '$lib/services/snap-pixel';
 
 	let { data }: { data: PageData } = $props();
 
@@ -187,6 +188,18 @@
 		};
 	}
 
+	function getCheckoutSnapPayload(orderId?: string) {
+		return {
+			item_ids: cartItems.map((item) => item.tierId),
+			item_category: 'FastAccs SMM',
+			description: cartItems.map((item) => item.tier.name).join(', '),
+			price: checkoutTotal,
+			currency: 'NGN',
+			number_items: cartItems.reduce((sum, item) => sum + item.quantity, 0),
+			transaction_id: orderId
+		};
+	}
+
 	// ARCHIVED: wallet checkout (processCheckout) removed — wallet payments disabled.
 	// See src/lib/services/_archive/korapay.ts and git history for the original implementation.
 
@@ -258,6 +271,7 @@
 				throw new Error(orderResult.error || 'Failed to initialize payment');
 			}
 
+			trackSnapEvent('START_CHECKOUT', getCheckoutSnapPayload(orderResult.orderId));
 			sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, orderResult.orderId);
 			window.location.href = orderResult.checkoutUrl;
 		} catch (error) {

@@ -1,13 +1,14 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import '../app.css';
-	import { onNavigate } from '$app/navigation';
+	import { afterNavigate, onNavigate } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { env as publicEnv } from '$env/dynamic/public';
 
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import PageLoadingBar from '$lib/components/PageLoadingBar.svelte';
 	import CookieConsentBar from '$lib/components/CookieConsentBar.svelte';
+	import { trackSnapPageView } from '$lib/services/snap-pixel';
 	import type { LayoutData } from './$types';
 
 	interface Props {
@@ -19,6 +20,7 @@
 	let bannerDismissed = $state(false);
 	let lastBannerCookieName = $state<string | null>(null);
 	let tawkLoadRequested = false;
+	let lastSnapPageKey = '';
 	const announcementBanner = $derived(data.announcementBanner || null);
 	const defaultShareTitle = 'FastAccs - Premium Social Media Accounts & Growth Services';
 	const defaultShareDescription =
@@ -80,6 +82,22 @@
 		loadTawkWidget();
 	}
 
+	function trackCurrentSnapPageView(force = false): void {
+		if (typeof window === 'undefined') return;
+
+		const currentUrl = new URL(window.location.href);
+		const pageKey = `${currentUrl.pathname}${currentUrl.search}`;
+		if (!force && pageKey === lastSnapPageKey) return;
+
+		if (trackSnapPageView(currentUrl)) {
+			lastSnapPageKey = pageKey;
+		}
+	}
+
+	afterNavigate(() => {
+		trackCurrentSnapPageView();
+	});
+
 	onMount(() => {
 		const tawkEmbedUrl = String(publicEnv.PUBLIC_TAWK_EMBED_URL || '').trim();
 		if (!tawkEmbedUrl || typeof window === 'undefined') return;
@@ -117,6 +135,10 @@
 			detachIntentListeners();
 			window.clearTimeout(fallbackTimer);
 		};
+	});
+
+	onMount(() => {
+		trackCurrentSnapPageView();
 	});
 
 	onNavigate((navigation) => {

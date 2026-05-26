@@ -32,6 +32,7 @@
 		getTierDeliveryModeLabel,
 		type TierDeliveryMode
 	} from '$lib/helpers/tier-delivery-config';
+	import { trackSnapEvent } from '$lib/services/snap-pixel';
 
 	interface Props {
 		data: PageData;
@@ -158,6 +159,17 @@
 		return 'Featured';
 	}
 
+	function getSnapTierPayload(quantity = selectedQuantity) {
+		return {
+			item_ids: data.tierCategory?.id ? [data.tierCategory.id] : [],
+			item_category: data.platform?.name || 'FastAccs SMM',
+			description: data.tier?.tier_name || 'FastAccs tier',
+			price: (data.tier?.price || 0) * quantity,
+			currency: 'NGN',
+			number_items: quantity
+		};
+	}
+
 	// Add to cart functionality
 	async function addToCart() {
 		if (!data.tierCategory || !data.tier || addingToCart) return;
@@ -217,6 +229,7 @@
 
 			// Add to cart using new system
 			cart.addTier(data.tierCategory.id, selectedQuantity);
+			trackSnapEvent('ADD_CART', getSnapTierPayload(selectedQuantity));
 
 			// Success - show proper notification
 			showSuccess(
@@ -304,6 +317,10 @@
 	}
 
 	onMount(() => {
+		if (data.tier && data.tierCategory) {
+			trackSnapEvent('VIEW_CONTENT', getSnapTierPayload(1));
+		}
+
 		const updateViewportMode = () => {
 			isCompactViewport = window.innerWidth < 520;
 		};

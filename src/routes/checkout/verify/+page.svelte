@@ -10,6 +10,7 @@
 		isPendingPaymentStatus,
 		normalizePaymentStatus
 	} from '$lib/helpers/payment-status';
+	import { trackSnapEvent } from '$lib/services/snap-pixel';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 
 	const MAX_CONFIRMATION_WAIT_MS = 10_000;
@@ -166,6 +167,12 @@
 
 					if (result.success) {
 						const resolvedOrderId = result.orderId || orderIdParam;
+						trackSnapEvent('PURCHASE', {
+							transaction_id: resolvedOrderId,
+							price: Number(result.amount || 0) || undefined,
+							currency: result.currency || 'NGN',
+							description: 'FastAccs order'
+						});
 						success = true;
 						pending = false;
 						verifying = false;

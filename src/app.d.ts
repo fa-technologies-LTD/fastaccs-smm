@@ -15,6 +15,10 @@ declare global {
 
 	interface Window {
 		gtag: (...args: any[]) => void;
+		snaptr?: ((command: 'init' | 'track', ...args: unknown[]) => void) & {
+			queue: unknown[];
+			handleRequest?: (...args: unknown[]) => void;
+		};
 		Tawk_API?: {
 			maximize?: () => void;
 			minimize?: () => void;
