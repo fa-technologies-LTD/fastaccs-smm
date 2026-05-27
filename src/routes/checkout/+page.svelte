@@ -2,7 +2,18 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { ShoppingBag, CreditCard, Check, Lock, Tag, Shield, X, Minus, Plus } from '$lib/icons';
+	import {
+		ShoppingBag,
+		CreditCard,
+		Check,
+		Lock,
+		Tag,
+		Shield,
+		X,
+		Minus,
+		Plus,
+		ExternalLink
+	} from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { cart } from '$lib/stores/cart.svelte';
@@ -223,6 +234,10 @@
 
 			// Stock check
 			for (const item of cartItems) {
+				if (item.exactAccount) {
+					continue;
+				}
+
 				const stockResponse = await fetch(`/api/categories/${item.tierId}/stock`);
 				const stockData = await stockResponse.json();
 				if (stockData.available < item.quantity) {
@@ -242,7 +257,9 @@
 				items: cartItems.map((item) => ({
 					categoryId: item.tierId,
 					quantity: item.quantity,
-					price: item.tier.price
+					price: item.tier.price,
+					exactAccountId: item.exactAccount?.accountId,
+					exactAccountLabel: item.exactAccount?.displayLabel
 				})),
 				totalAmount: finalTotal,
 				currency: 'NGN',
@@ -536,6 +553,18 @@
 												>
 													{item.tier.platformName}
 												</p>
+												{#if item.exactAccount}
+													<a
+														href={item.exactAccount.profileUrl}
+														target="_blank"
+														rel="noopener noreferrer"
+														class="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+														style="background: rgba(5, 212, 113, 0.1); border: 1px solid rgba(5, 212, 113, 0.24); color: var(--primary);"
+													>
+														Exact: {item.exactAccount.displayLabel}
+														<ExternalLink size={12} />
+													</a>
+												{/if}
 											</div>
 											<button
 												onclick={async () => {
@@ -552,40 +581,49 @@
 
 										<!-- Quantity Controls -->
 										<div class="mt-2 flex items-center gap-2">
-											<div
-												class="flex items-center gap-1 rounded-md"
-												style="border: 1px solid var(--border);"
-											>
-												<button
-													onclick={async () => {
-														if (item.quantity > 1) {
-															cart.updateQuantity(item.tier.id, item.quantity - 1);
-															await loadCartData();
-														}
-													}}
-													disabled={item.quantity <= 1}
-													style="color: var(--text-muted); background: transparent;"
-													class="px-2 py-1 hover:bg-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-50"
-												>
-													<Minus size={14} />
-												</button>
+											{#if item.exactAccount}
 												<span
-													class="min-w-[2rem] text-center text-sm font-medium"
-													style="color: var(--text); font-family: var(--font-body);"
+													class="rounded-md px-2 py-1 text-xs font-semibold"
+													style="border: 1px solid var(--border); color: var(--text-muted); background: var(--bg-elev-2);"
 												>
-													{item.quantity}
+													Qty 1 locked
 												</span>
-												<button
-													onclick={async () => {
-														cart.updateQuantity(item.tier.id, item.quantity + 1);
-														await loadCartData();
-													}}
-													style="color: var(--text-muted); background: transparent;"
-													class="px-2 py-1 hover:bg-[var(--surface)]"
+											{:else}
+												<div
+													class="flex items-center gap-1 rounded-md"
+													style="border: 1px solid var(--border);"
 												>
-													<Plus size={14} />
-												</button>
-											</div>
+													<button
+														onclick={async () => {
+															if (item.quantity > 1) {
+																cart.updateQuantity(item.tier.id, item.quantity - 1);
+																await loadCartData();
+															}
+														}}
+														disabled={item.quantity <= 1}
+														style="color: var(--text-muted); background: transparent;"
+														class="px-2 py-1 hover:bg-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-50"
+													>
+														<Minus size={14} />
+													</button>
+													<span
+														class="min-w-[2rem] text-center text-sm font-medium"
+														style="color: var(--text); font-family: var(--font-body);"
+													>
+														{item.quantity}
+													</span>
+													<button
+														onclick={async () => {
+															cart.updateQuantity(item.tier.id, item.quantity + 1);
+															await loadCartData();
+														}}
+														style="color: var(--text-muted); background: transparent;"
+														class="px-2 py-1 hover:bg-[var(--surface)]"
+													>
+														<Plus size={14} />
+													</button>
+												</div>
+											{/if}
 											<p
 												class="text-sm font-semibold"
 												style="color: var(--primary); font-family: var(--font-body);"

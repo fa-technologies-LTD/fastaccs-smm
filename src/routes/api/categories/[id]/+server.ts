@@ -4,6 +4,7 @@ import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { applyTierSampleScreenshotSanitization } from '$lib/helpers/tierSampleScreenshots';
 import { applyTierMerchandisingSanitization } from '$lib/helpers/tier-merchandising';
 import { applyTierDeliveryConfigSanitization } from '$lib/helpers/tier-delivery-config';
+import { applyTierExactPreviewSanitization } from '$lib/helpers/tier-exact-preview';
 
 // GET /api/categories/[id] - Get single category
 export async function GET({ params }) {
@@ -62,9 +63,11 @@ export async function PUT({ params, request, locals }) {
 					metadata && typeof metadata === 'object' && !Array.isArray(metadata)
 						? (metadata as Record<string, unknown>)
 						: {};
-				nextMetadata = applyTierMerchandisingSanitization(
-					applyTierSampleScreenshotSanitization(
-						applyTierDeliveryConfigSanitization(metadataObject)
+				nextMetadata = applyTierExactPreviewSanitization(
+					applyTierMerchandisingSanitization(
+						applyTierSampleScreenshotSanitization(
+							applyTierDeliveryConfigSanitization(metadataObject)
+						)
 					)
 				);
 			}

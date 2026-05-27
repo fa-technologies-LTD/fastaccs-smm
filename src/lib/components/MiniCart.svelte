@@ -228,10 +228,23 @@
 										>
 											{item.tier.platformName}
 										</p>
+										{#if item.exactAccount}
+											<a
+												href={item.exactAccount.profileUrl}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="mt-1 inline-flex max-w-full rounded-full px-2 py-0.5 text-[11px] font-semibold"
+												style="background: rgba(5, 212, 113, 0.1); border: 1px solid rgba(5, 212, 113, 0.24); color: var(--primary);"
+											>
+												Exact: {item.exactAccount.displayLabel}
+											</a>
+										{/if}
 										<p
 											style="font-size: 0.875rem; color: var(--text-muted); font-family: var(--font-body);"
 										>
-											Qty: {item.quantity} × {formatPrice(item.tier.price)}
+											{item.exactAccount ? 'Qty: 1 locked' : `Qty: ${item.quantity}`} × {formatPrice(
+												item.tier.price
+											)}
 										</p>
 									</div>
 

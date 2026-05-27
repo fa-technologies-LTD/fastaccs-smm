@@ -34,6 +34,7 @@
 				manual_handover_promise: string;
 				login_guide_url: string;
 				login_guide_label: string;
+				exact_preview_enabled: boolean;
 			};
 		};
 		loading?: boolean;
@@ -127,6 +128,28 @@
 							</div>
 
 							<TierSampleScreenshotFields bind:urls={tierForm.metadata.sample_screenshot_urls} />
+
+							<div
+								class="md:col-span-2 rounded-lg p-3"
+								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+							>
+								<div class="flex items-start justify-between gap-4">
+									<div>
+										<p class="text-sm font-semibold" style="color: var(--text);">
+											Exact Account Preview
+										</p>
+										<p class="mt-1 text-xs leading-relaxed" style="color: var(--text-muted);">
+											Let logged-in buyers open real profile links and choose friendly profile
+											labels before checkout. Keep this off for normal sample-only tiers.
+										</p>
+									</div>
+									<input
+										type="checkbox"
+										bind:checked={tierForm.metadata.exact_preview_enabled}
+										aria-label="Enable exact account preview"
+									/>
+								</div>
+							</div>
 
 							<div
 								class="md:col-span-2 rounded-lg p-3"

@@ -3,14 +3,16 @@
 		Plus,
 		Edit,
 		Trash2,
+		Archive,
+		Download,
 		Users,
 		DollarSign,
 		Package,
 		AlertCircle,
 		Target
 	} from '$lib/icons';
-	import { createCategory, updateCategory, deleteCategory } from '$lib/services/categories';
-	import { showSuccess, showError } from '$lib/stores/toasts';
+	import { createCategory, updateCategory, deleteCategory, retireCategory } from '$lib/services/categories';
+	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import type { CategoryMetadata, CategoryInsert, CategoryUpdate } from '$lib/services/categories';
 	import {
 		applyTierSampleScreenshotSanitization,
@@ -27,6 +29,10 @@
 		getTierDeliveryConfig,
 		getTierDeliveryModeLabel
 	} from '$lib/helpers/tier-delivery-config';
+	import {
+		applyTierExactPreviewSanitization,
+		getTierExactPreviewConfig
+	} from '$lib/helpers/tier-exact-preview';
 	import type { PageData } from './$types';
 	import { fade, fly } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
@@ -47,6 +53,7 @@
 	let showDeleteModal = $state(false);
 	let selectedTier = $state<CategoryMetadata | null>(null);
 	let tierToDelete = $state<CategoryMetadata | null>(null);
+	let busyTierAction = $state<string | null>(null);
 
 	// Form state for creating/editing tiers
 	let tierForm = $state({
@@ -77,7 +84,8 @@
 			delivery_mode: 'instant_auto' as 'instant_auto' | 'manual_handover',
 			manual_handover_promise: DEFAULT_MANUAL_HANDOVER_PROMISE,
 			login_guide_url: '',
-			login_guide_label: DEFAULT_LOGIN_GUIDE_LABEL
+			login_guide_label: DEFAULT_LOGIN_GUIDE_LABEL,
+			exact_preview_enabled: false
 		}
 	});
 
@@ -111,6 +119,7 @@
 		const metadata = tier.metadata as any;
 		const merchandising = getTierMerchandisingState(metadata);
 		const deliveryConfig = getTierDeliveryConfig(metadata);
+		const exactPreviewConfig = getTierExactPreviewConfig(metadata);
 		tierForm = {
 			name: tier.name as string,
 			slug: tier.slug as string,
@@ -140,7 +149,8 @@
 				manual_handover_promise:
 					deliveryConfig.manualHandoverPromise || DEFAULT_MANUAL_HANDOVER_PROMISE,
 				login_guide_url: deliveryConfig.loginGuideUrl || '',
-				login_guide_label: deliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL
+				login_guide_label: deliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL,
+				exact_preview_enabled: exactPreviewConfig.enabled
 			}
 		};
 		showEditModal = true;
@@ -175,7 +185,8 @@
 				delivery_mode: 'instant_auto',
 				manual_handover_promise: DEFAULT_MANUAL_HANDOVER_PROMISE,
 				login_guide_url: '',
-				login_guide_label: DEFAULT_LOGIN_GUIDE_LABEL
+				login_guide_label: DEFAULT_LOGIN_GUIDE_LABEL,
+				exact_preview_enabled: false
 			}
 		};
 	}
@@ -183,11 +194,13 @@
 	async function handleCreate() {
 		try {
 			// Clean up empty features
-			const cleanedMetadata = applyTierMerchandisingSanitization(
-				applyTierSampleScreenshotSanitization({
-					...applyTierDeliveryConfigSanitization(tierForm.metadata),
-					features: tierForm.metadata.features.filter((feature) => feature.trim() !== '')
-				})
+			const cleanedMetadata = applyTierExactPreviewSanitization(
+				applyTierMerchandisingSanitization(
+					applyTierSampleScreenshotSanitization({
+						...applyTierDeliveryConfigSanitization(tierForm.metadata),
+						features: tierForm.metadata.features.filter((feature) => feature.trim() !== '')
+					})
+				)
 			);
 
 			const newTier: CategoryInsert = {
@@ -226,11 +239,13 @@
 		loading = true;
 		try {
 			// Clean up empty features
-			const cleanedMetadata = applyTierMerchandisingSanitization(
-				applyTierSampleScreenshotSanitization({
-					...applyTierDeliveryConfigSanitization(tierForm.metadata),
-					features: tierForm.metadata.features.filter((feature) => feature.trim() !== '')
-				})
+			const cleanedMetadata = applyTierExactPreviewSanitization(
+				applyTierMerchandisingSanitization(
+					applyTierSampleScreenshotSanitization({
+						...applyTierDeliveryConfigSanitization(tierForm.metadata),
+						features: tierForm.metadata.features.filter((feature) => feature.trim() !== '')
+					})
+				)
 			);
 
 			const updates: CategoryUpdate = {
@@ -282,6 +297,140 @@
 		} catch (error) {
 			console.error('Failed to delete tier:', error);
 			showError('Failed to delete tier', 'An unexpected error occurred');
+		}
+	}
+
+	function getTierId(tier: CategoryMetadata): string {
+		return String(tier.id || '');
+	}
+
+	function isTierActive(tier: CategoryMetadata): boolean {
+		return tier.isActive !== false;
+	}
+
+	function getFilenameFromDisposition(disposition: string | null, fallback: string): string {
+		if (!disposition) return fallback;
+		const match = disposition.match(/filename="?([^"]+)"?/i);
+		return match?.[1] || fallback;
+	}
+
+	function triggerTextDownload(blob: Blob, filename: string): void {
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		link.href = url;
+		link.download = filename;
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		URL.revokeObjectURL(url);
+	}
+
+	async function offloadTier(tier: CategoryMetadata): Promise<boolean> {
+		const tierId = getTierId(tier);
+		if (!tierId) return false;
+
+		busyTierAction = `offload:${tierId}`;
+		try {
+			const response = await fetch(`/api/categories/${encodeURIComponent(tierId)}/offload`);
+			if (!response.ok) {
+				const result = await response.json().catch(() => null);
+				throw new Error(result?.error || 'Failed to prepare offload file.');
+			}
+
+			const blob = await response.blob();
+			const filename = getFilenameFromDisposition(
+				response.headers.get('Content-Disposition'),
+				`fastaccs-offload-${String(tier.name || 'tier').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.txt`
+			);
+			triggerTextDownload(blob, filename);
+			showSuccess('Offload ready', `${tier.name} logs were downloaded as a text file.`);
+			return true;
+		} catch (error) {
+			console.error('Failed to offload tier logs:', error);
+			showError(
+				'Offload failed',
+				error instanceof Error ? error.message : 'Could not download logs right now.'
+			);
+			return false;
+		} finally {
+			busyTierAction = null;
+		}
+	}
+
+	async function offloadAndDeleteTierLogs(tier: CategoryMetadata): Promise<void> {
+		const tierId = getTierId(tier);
+		if (!tierId) return;
+
+		const downloaded = await offloadTier(tier);
+		if (!downloaded) return;
+
+		const confirmed = window.confirm(
+			`Confirm the offload file for "${tier.name}" has downloaded successfully.\n\nThis will delete only available/unsold logs from this tier. Delivered, allocated, and reserved records will not be deleted.`
+		);
+		if (!confirmed) {
+			showWarning('Delete cancelled', 'No logs were deleted.');
+			return;
+		}
+
+		busyTierAction = `delete:${tierId}`;
+		try {
+			const response = await fetch(`/api/categories/${encodeURIComponent(tierId)}/offload`, {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ confirmDownloaded: true })
+			});
+			const result = await response.json();
+			if (!response.ok || result.error) {
+				throw new Error(result.error || 'Failed to delete offloaded logs.');
+			}
+
+			showSuccess(
+				'Offloaded logs deleted',
+				`${result.data?.deletedAccounts ?? 0} available log${result.data?.deletedAccounts === 1 ? '' : 's'} deleted from ${tier.name}.`
+			);
+		} catch (error) {
+			console.error('Failed to delete offloaded tier logs:', error);
+			showError(
+				'Delete failed',
+				error instanceof Error ? error.message : 'Could not delete offloaded logs.'
+			);
+		} finally {
+			busyTierAction = null;
+		}
+	}
+
+	async function archiveTier(tier: CategoryMetadata): Promise<void> {
+		const tierId = getTierId(tier);
+		if (!tierId || !isTierActive(tier)) return;
+
+		const confirmed = window.confirm(
+			`Archive "${tier.name}"?\n\nIf this tier still has available logs, use Offload or Offload & Delete first. Archive will hide the tier from customer storefront listings and preserve historical records.`
+		);
+		if (!confirmed) return;
+
+		busyTierAction = `archive:${tierId}`;
+		try {
+			const result = await retireCategory(tierId, {
+				moveAvailableInventory: false
+			});
+			if (result.error) {
+				throw new Error(result.error);
+			}
+
+			tiers = tiers.map((item) =>
+				item.id === tier.id
+					? {
+							...item,
+							isActive: false
+						}
+					: item
+			);
+			showSuccess('Tier archived', `${tier.name} has been removed from storefront listings.`);
+		} catch (error) {
+			console.error('Failed to archive tier:', error);
+			showError('Archive failed', error instanceof Error ? error.message : 'Could not archive tier.');
+		} finally {
+			busyTierAction = null;
 		}
 	}
 </script>
@@ -395,7 +544,18 @@
 						</div>
 						<div class="flex items-center gap-1">
 							<button
+								onclick={() => offloadTier(tier)}
+								disabled={busyTierAction !== null}
+								class="group rounded p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+								style="color: var(--text-dim);"
+								title="Offload logs"
+								aria-label="Offload logs"
+							>
+								<Download size={16} class="transition-transform group-hover:scale-90" />
+							</button>
+							<button
 								onclick={() => openEditModal(tier)}
+								disabled={busyTierAction !== null}
 								class="group rounded p-1 transition-colors"
 								style="color: var(--text-dim);"
 								title="Edit Tier"
@@ -403,14 +563,38 @@
 								<Edit size={16} class="transition-transform group-hover:scale-90" />
 							</button>
 							<button
-								onclick={() => openDeleteModal(tier)}
-								class="group rounded p-1 transition-colors"
-								style="color: var(--text-dim);"
-								title="Delete Tier"
+								onclick={() => archiveTier(tier)}
+								disabled={!isTierActive(tier) || busyTierAction !== null}
+								class="group rounded p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+								style="color: var(--status-warning);"
+								title={isTierActive(tier) ? 'Archive Tier' : 'Tier already archived'}
+								aria-label={isTierActive(tier) ? 'Archive Tier' : 'Tier already archived'}
 							>
-								<Trash2 size={16} class="transition-transform group-hover:scale-90" />
+								<Archive size={16} class="transition-transform group-hover:scale-90" />
 							</button>
 						</div>
+					</div>
+
+					<div class="mb-4 flex flex-wrap items-center gap-2">
+						<span
+							class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+							style={isTierActive(tier)
+								? 'background: rgba(5,212,113,0.12); color: var(--status-success); border: 1px solid rgba(5,212,113,0.24);'
+								: 'background: rgba(148,163,184,0.12); color: var(--text-muted); border: 1px solid var(--border);'}
+						>
+							{isTierActive(tier) ? 'Active' : 'Archived'}
+						</span>
+						<button
+							type="button"
+							onclick={() => offloadAndDeleteTierLogs(tier)}
+							disabled={busyTierAction !== null}
+							class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+							style="background: rgba(239, 68, 68, 0.1); color: rgb(248, 113, 113); border: 1px solid rgba(239, 68, 68, 0.24);"
+							title="Download logs, then confirm deletion of available/unsold logs"
+						>
+							<Trash2 size={12} />
+							Offload & Delete
+						</button>
 					</div>
 
 					<!-- Tier Description -->

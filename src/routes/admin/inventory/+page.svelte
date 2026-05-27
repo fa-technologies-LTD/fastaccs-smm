@@ -16,6 +16,10 @@
 		allocated_accounts?: number | null;
 		assigned_accounts?: number | null;
 		tier_price?: number | null;
+		exact_preview_enabled?: boolean | null;
+		previewable_accounts?: number | null;
+		missing_profile_link_accounts?: number | null;
+		exact_preview_screenshot_accounts?: number | null;
 		created_at?: string | Date | null;
 	};
 
@@ -272,6 +276,12 @@
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
+							Exact Preview
+						</th>
+						<th
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
+						>
 							Delivered
 						</th>
 						<th
@@ -321,6 +331,38 @@
 								</div>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
+								<div class="flex flex-col gap-1.5">
+									<span
+										class="inline-flex w-fit items-center rounded-full px-2.5 py-0.5 text-xs font-semibold"
+										style={item.exact_preview_enabled
+											? 'background: rgba(5, 212, 113, 0.1); color: var(--status-success); border: 1px solid rgba(5, 212, 113, 0.24);'
+											: 'background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid var(--border);'}
+									>
+										{item.exact_preview_enabled ? 'Enabled' : 'Off'}
+									</span>
+									<div class="text-xs leading-relaxed" style="color: var(--text-muted);">
+										<span class="font-semibold" style="color: var(--text);"
+											>{item.previewable_accounts ?? 0}</span
+										>
+										previewable
+										<span class="mx-1">•</span>
+										<span
+											class="font-semibold"
+											style={(item.missing_profile_link_accounts ?? 0) > 0
+												? 'color: var(--status-warning);'
+												: 'color: var(--status-success);'}
+											>{item.missing_profile_link_accounts ?? 0}</span
+										>
+										missing links
+									</div>
+									{#if (item.exact_preview_screenshot_accounts ?? 0) > 0}
+										<div class="text-xs" style="color: var(--text-dim);">
+											{item.exact_preview_screenshot_accounts} screenshot-ready
+										</div>
+									{/if}
+								</div>
+							</td>
+							<td class="px-6 py-4 whitespace-nowrap">
 								<div class="text-sm" style="color: var(--link);">
 									{(
 										item.delivered_accounts ??
@@ -352,7 +394,7 @@
 						</tr>
 					{:else}
 						<tr>
-							<td colspan="7" class="px-6 py-8 text-center" style="color: var(--text-muted);">
+							<td colspan="8" class="px-6 py-8 text-center" style="color: var(--text-muted);">
 								No inventory found
 							</td>
 						</tr>

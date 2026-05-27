@@ -4,6 +4,11 @@ import { getCacheHeaders } from '$lib/helpers/cache';
 import { getInventoryStatsSnapshot } from '$lib/services/admin-metrics';
 import { getLowStockPolicyState, getLowStockThresholdSetting } from '$lib/services/admin-settings';
 import { getAllocatedLikeAccountStatuses, normalizeAccountStatus } from '$lib/helpers/account-status';
+import { getTierExactPreviewConfig } from '$lib/helpers/tier-exact-preview';
+import {
+	getExactPreviewProfileUrl,
+	getExactPreviewScreenshotUrl
+} from '$lib/services/exact-preview';
 
 interface TierMetadataShape {
 	pricing?: {
@@ -23,6 +28,35 @@ function extractTierPrice(metadata: unknown): number {
 function isSoldAccountStatus(status: unknown): boolean {
 	const normalized = normalizeAccountStatus(status);
 	return normalized === 'delivered' || normalized === 'allocated';
+}
+
+function getExactPreviewInventoryMetrics(tier: {
+	metadata: unknown;
+	accounts: Array<{
+		status: string;
+		linkUrl: string | null;
+		credentialExtras: unknown;
+	}>;
+}) {
+	const previewCandidates = tier.accounts.filter(
+		(account) => account.status === 'available' || account.status === 'reserved'
+	);
+	const previewableAccounts = previewCandidates.filter((account) =>
+		getExactPreviewProfileUrl(account)
+	);
+	const screenshotReadyAccounts = previewableAccounts.filter((account) =>
+		getExactPreviewScreenshotUrl(account)
+	);
+
+	return {
+		exact_preview_enabled: getTierExactPreviewConfig(tier.metadata).enabled,
+		previewable_accounts: previewableAccounts.length,
+		missing_profile_link_accounts: Math.max(
+			0,
+			previewCandidates.length - previewableAccounts.length
+		),
+		exact_preview_screenshot_accounts: screenshotReadyAccounts.length
+	};
 }
 
 // GET /api/inventory - Get inventory stats and data
@@ -76,7 +110,9 @@ export async function GET({ url, locals }) {
 						select: {
 							id: true,
 							status: true,
-							platform: true
+							platform: true,
+							linkUrl: true,
+							credentialExtras: true
 						}
 					}
 				}
@@ -88,6 +124,7 @@ export async function GET({ url, locals }) {
 					const reservedCount = accounts.filter((a) => a.status === 'reserved').length;
 					const soldCount = accounts.filter((a) => isSoldAccountStatus(a.status)).length;
 					const tierPrice = extractTierPrice(tier.metadata);
+					const exactPreviewMetrics = getExactPreviewInventoryMetrics(tier);
 
 					return {
 						id: tier.id,
@@ -106,6 +143,7 @@ export async function GET({ url, locals }) {
 						delivered_accounts: soldCount,
 						sold_accounts: soldCount,
 						tier_price: tierPrice,
+						...exactPreviewMetrics,
 						visible_available: availableCount, // UI expects this field name
 						created_at: tier.createdAt,
 						updated_at: tier.updatedAt,
@@ -153,7 +191,9 @@ export async function GET({ url, locals }) {
 						select: {
 							id: true,
 							status: true,
-							platform: true
+							platform: true,
+							linkUrl: true,
+							credentialExtras: true
 						}
 					}
 				},
@@ -218,6 +258,7 @@ export async function GET({ url, locals }) {
 				const reservedCount = accounts.filter((a) => a.status === 'reserved').length;
 				const soldCount = accounts.filter((a) => isSoldAccountStatus(a.status)).length;
 				const tierPrice = extractTierPrice(tier.metadata);
+				const exactPreviewMetrics = getExactPreviewInventoryMetrics(tier);
 
 				return {
 				id: tier.id,
@@ -236,6 +277,7 @@ export async function GET({ url, locals }) {
 					delivered_accounts: soldCount,
 					sold_accounts: soldCount,
 					tier_price: tierPrice,
+					...exactPreviewMetrics,
 				visible_available: availableCount, // UI expects this field name
 				created_at: tier.createdAt,
 				updated_at: tier.updatedAt,

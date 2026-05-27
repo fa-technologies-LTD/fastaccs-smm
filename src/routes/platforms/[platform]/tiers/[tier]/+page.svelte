@@ -12,7 +12,8 @@
 		CheckCircle,
 		ChevronRight,
 		BellRing,
-		AlertTriangle
+		AlertTriangle,
+		ExternalLink
 	} from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -33,6 +34,7 @@
 		type TierDeliveryMode
 	} from '$lib/helpers/tier-delivery-config';
 	import { trackSnapEvent } from '$lib/services/snap-pixel';
+	import { getTierExactPreviewConfig } from '$lib/helpers/tier-exact-preview';
 
 	interface Props {
 		data: PageData;
@@ -49,6 +51,29 @@
 	let samplePreviewOpen = $state(false);
 	let samplePreviewIndex = $state(0);
 	let isCompactViewport = $state(false);
+	let exactPreviewLoading = $state(false);
+	let exactPreviewReserving = $state<string | null>(null);
+	let exactPreviewError = $state<string | null>(null);
+	let exactPreviewAccounts = $state<
+		Array<{
+			accountId: string;
+			displayLabel: string;
+			profileUrl: string;
+			screenshotUrl: string | null;
+			tags: string[];
+			reservedUntil: string | null;
+			isReservedByCurrentUser: boolean;
+		}>
+	>([]);
+	let activeExactReservation = $state<{
+		accountId: string;
+		displayLabel: string;
+		profileUrl: string;
+		screenshotUrl: string | null;
+		tags: string[];
+		reservedUntil: string | null;
+		isReservedByCurrentUser: boolean;
+	} | null>(null);
 	const currentUser = $derived((page.data as { user?: { id: string } | null }).user || null);
 	const tierSampleScreenshots = $derived(getTierSampleScreenshotUrls(data.tier?.metadata));
 	const tierSampleScreenshotsGallery = $derived(
@@ -58,6 +83,7 @@
 		tierSampleScreenshots.map((url) => buildCloudinaryOptimizedImageUrl(url, { width: 1280 }))
 	);
 	const tierDeliveryConfig = $derived(getTierDeliveryConfig(data.tier?.metadata));
+	const exactPreviewConfig = $derived(getTierExactPreviewConfig(data.tier?.metadata));
 	const tierLoginGuideUrl = $derived(tierDeliveryConfig.loginGuideUrl || DEFAULT_LOGIN_GUIDE_URL);
 	const tierLoginGuideLabel = $derived(
 		tierDeliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL
@@ -207,6 +233,13 @@
 
 			// Check existing quantity in cart for this tier
 			const existingCartItem = cart.items.find((item) => item.tierId === data.tierCategory.id);
+			if (existingCartItem?.exactAccount) {
+				showWarning(
+					'Exact account already selected',
+					`${existingCartItem.exactAccount.displayLabel} is already reserved in your cart. Continue to checkout or remove it before adding this tier normally.`
+				);
+				return;
+			}
 			const currentCartQuantity = existingCartItem ? existingCartItem.quantity : 0;
 			const totalQuantityAfterAdd = currentCartQuantity + selectedQuantity;
 
@@ -316,6 +349,112 @@
 		samplePreviewOpen = true;
 	}
 
+	async function loadExactPreviewAccounts(): Promise<void> {
+		if (!exactPreviewConfig.enabled || !currentUser || !data.tierCategory) return;
+		exactPreviewLoading = true;
+		exactPreviewError = null;
+		try {
+			const response = await fetch(
+				`/api/exact-preview/tiers/${encodeURIComponent(data.tierCategory.id)}`
+			);
+			const result = await response.json();
+			if (!response.ok || !result.success) {
+				throw new Error(result.error || 'Could not load exact accounts.');
+			}
+
+			exactPreviewAccounts = Array.isArray(result.data?.accounts) ? result.data.accounts : [];
+			activeExactReservation = result.data?.activeReservation || null;
+		} catch (error) {
+			console.error('Failed to load exact preview accounts:', error);
+			exactPreviewError =
+				error instanceof Error ? error.message : 'Could not load exact accounts right now.';
+		} finally {
+			exactPreviewLoading = false;
+		}
+	}
+
+	async function chooseExactAccount(account: {
+		accountId: string;
+		displayLabel: string;
+		profileUrl: string;
+		screenshotUrl?: string | null;
+		tags?: string[];
+	}): Promise<void> {
+		if (!data.tierCategory || exactPreviewReserving) return;
+		if (!currentUser) {
+			const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
+			goto(`/auth/login?returnUrl=${returnUrl}`);
+			return;
+		}
+
+		exactPreviewReserving = account.accountId;
+		try {
+			const compatibility = await cart.ensureDeliveryModeCompatibility(
+				data.tierCategory.id,
+				tierDeliveryConfig.mode
+			);
+			if (!compatibility.compatible) {
+				const incomingLabel = getTierDeliveryModeLabel(tierDeliveryConfig.mode);
+				const existingLabel = compatibility.existingMode
+					? getTierDeliveryModeLabel(compatibility.existingMode)
+					: getTierDeliveryModeLabel('instant_auto');
+				const shouldReplace = window.confirm(
+					`You already have ${existingLabel} item(s) in your cart.\n\n${incomingLabel} items must be checked out separately.\n\nPress OK to clear your cart and reserve this exact account, or Cancel to keep your current cart.`
+				);
+				if (!shouldReplace) return;
+				cart.clear();
+				showWarning('Cart cleared', `Previous ${existingLabel} items were removed.`);
+			}
+
+			const response = await fetch('/api/exact-preview/reserve', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					tierId: data.tierCategory.id,
+					accountId: account.accountId
+				})
+			});
+			const result = await response.json();
+			if (!response.ok || !result.success) {
+				throw new Error(result.error || 'Could not reserve this account.');
+			}
+
+			cart.addExactTier(data.tierCategory.id, {
+				accountId: result.data.accountId,
+				displayLabel: result.data.displayLabel,
+				profileUrl: result.data.profileUrl,
+				screenshotUrl: result.data.screenshotUrl || null,
+				reservedUntil: result.data.reservedUntil
+			});
+
+			activeExactReservation = {
+				accountId: result.data.accountId,
+				displayLabel: result.data.displayLabel,
+				profileUrl: result.data.profileUrl,
+				screenshotUrl: result.data.screenshotUrl || null,
+				tags: Array.isArray(result.data.tags) ? result.data.tags : [],
+				reservedUntil: result.data.reservedUntil,
+				isReservedByCurrentUser: true
+			};
+			selectedQuantity = 1;
+			showSuccess(
+				`${result.data.displayLabel} reserved`,
+				'This exact account is in your cart for checkout.',
+				6000,
+				'/checkout'
+			);
+			await loadExactPreviewAccounts();
+		} catch (error) {
+			console.error('Failed to reserve exact account:', error);
+			showError(
+				'Could not reserve account',
+				error instanceof Error ? error.message : 'Please choose another account.'
+			);
+		} finally {
+			exactPreviewReserving = null;
+		}
+	}
+
 	onMount(() => {
 		if (data.tier && data.tierCategory) {
 			trackSnapEvent('VIEW_CONTENT', getSnapTierPayload(1));
@@ -330,6 +469,7 @@
 
 		void (async () => {
 			await loadNotifySubscriptionStatus();
+			await loadExactPreviewAccounts();
 
 			const shouldAutoSubscribe =
 				Boolean(currentUser) &&
@@ -513,6 +653,153 @@
 										</button>
 									{/each}
 								</div>
+							</div>
+						{/if}
+
+						{#if exactPreviewConfig.enabled}
+							<div class="rounded-xl bg-[var(--color-card)] p-4 shadow sm:p-5">
+								<div class="mb-3 flex items-start justify-between gap-3">
+									<div>
+										<h2 class="text-lg font-bold text-[var(--color-text-primary)] sm:text-xl">
+											Exact Accounts Available
+										</h2>
+										<p class="mt-1 text-sm text-[var(--color-text-muted)]">
+											Open a live profile link, then choose the exact account you want.
+										</p>
+									</div>
+									<span
+										class="rounded-full border px-2.5 py-1 text-[11px] font-semibold"
+										style="border-color: rgba(5, 212, 113, 0.24); background: rgba(5, 212, 113, 0.1); color: var(--color-accent);"
+									>
+										Logged-in only
+									</span>
+								</div>
+
+								{#if !currentUser}
+									<div
+										class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
+									>
+										<p class="text-sm text-[var(--color-text-secondary)]">
+											Log in to view exact available profile links for this tier.
+										</p>
+										<button
+											type="button"
+											class="mt-3 rounded-full px-4 py-2 text-sm font-semibold transition-all active:scale-95"
+											style="background: var(--btn-primary-gradient); color: #04140C;"
+											onclick={() => {
+												const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
+												goto(`/auth/login?returnUrl=${returnUrl}`);
+											}}
+										>
+											Log in to view accounts
+										</button>
+									</div>
+								{:else if exactPreviewLoading}
+									<div
+										class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm text-[var(--color-text-muted)]"
+									>
+										Loading exact accounts...
+									</div>
+								{:else if exactPreviewError}
+									<div
+										class="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200"
+									>
+										{exactPreviewError}
+									</div>
+								{:else if exactPreviewAccounts.length === 0}
+									<div
+										class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm text-[var(--color-text-muted)]"
+									>
+										No exact preview links are available right now. You can still use the sample
+										previews or check back later.
+									</div>
+								{:else}
+									<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+										{#each exactPreviewAccounts as account (account.accountId)}
+											<div
+												class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
+											>
+												{#if account.screenshotUrl}
+													<a
+														href={account.profileUrl}
+														target="_blank"
+														rel="noopener noreferrer"
+														class="mb-3 block overflow-hidden rounded-lg border border-[var(--color-border)] bg-black/20"
+													>
+														<img
+															src={account.screenshotUrl}
+															alt={`${account.displayLabel} public preview`}
+															class="aspect-[16/10] w-full object-cover"
+															loading="lazy"
+															decoding="async"
+														/>
+													</a>
+												{/if}
+												<div class="mb-3 flex items-center justify-between gap-2">
+													<div>
+														<p class="font-semibold text-[var(--color-text-primary)]">
+															{account.displayLabel}
+														</p>
+														{#if account.isReservedByCurrentUser || activeExactReservation?.accountId === account.accountId}
+															<p class="text-xs text-[var(--color-accent)]">Reserved for you</p>
+														{:else}
+															<p class="text-xs text-[var(--color-text-muted)]">Available</p>
+														{/if}
+													</div>
+													{#if account.reservedUntil}
+														<span class="text-[11px] text-[var(--color-text-muted)]">
+															Held briefly
+														</span>
+													{/if}
+												</div>
+												{#if account.tags?.length}
+													<div class="mb-3 flex flex-wrap gap-1.5">
+														{#each account.tags as tag (tag)}
+															<span
+																class="rounded-full border px-2 py-0.5 text-[11px] font-semibold text-[var(--color-text-secondary)]"
+																style="border-color: rgba(255,255,255,0.1); background: rgba(255,255,255,0.045);"
+															>
+																{tag}
+															</span>
+														{/each}
+													</div>
+												{/if}
+
+												<div class="flex flex-col gap-2 sm:flex-row">
+													<a
+														href={account.profileUrl}
+														target="_blank"
+														rel="noopener noreferrer"
+														class="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-[var(--color-border)] px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)] transition-all hover:bg-[var(--color-surface-hover)] active:scale-95"
+													>
+														<ExternalLink class="h-4 w-4" />
+														View live profile
+													</a>
+													<button
+														type="button"
+														onclick={() => chooseExactAccount(account)}
+														disabled={exactPreviewReserving === account.accountId ||
+															account.isReservedByCurrentUser}
+														class="inline-flex flex-1 items-center justify-center rounded-full px-3 py-2 text-sm font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+														style="background: var(--btn-primary-gradient); color: #04140C;"
+													>
+														{#if exactPreviewReserving === account.accountId}
+															Reserving...
+														{:else if account.isReservedByCurrentUser}
+															Chosen
+														{:else}
+															Choose this
+														{/if}
+													</button>
+												</div>
+											</div>
+										{/each}
+									</div>
+									<p class="mt-3 text-xs leading-relaxed text-[var(--color-text-muted)]">
+										Only the public profile link is shown before payment. Login details are delivered
+										after successful checkout.
+									</p>
+								{/if}
 							</div>
 						{/if}
 

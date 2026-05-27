@@ -4,6 +4,7 @@ import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { applyTierSampleScreenshotSanitization } from '$lib/helpers/tierSampleScreenshots';
 import { applyTierMerchandisingSanitization } from '$lib/helpers/tier-merchandising';
 import { applyTierDeliveryConfigSanitization } from '$lib/helpers/tier-delivery-config';
+import { applyTierExactPreviewSanitization } from '$lib/helpers/tier-exact-preview';
 
 // GET /api/categories - Get categories with optional filtering
 export async function GET({ url, locals }) {
@@ -56,9 +57,11 @@ export async function POST({ request, locals }) {
 		const rawMetadata = JSON.parse(JSON.stringify(rest.metadata || {}));
 		const metadata =
 			rest.categoryType === 'tier'
-				? applyTierMerchandisingSanitization(
-						applyTierSampleScreenshotSanitization(
-							applyTierDeliveryConfigSanitization(rawMetadata as Record<string, unknown>)
+				? applyTierExactPreviewSanitization(
+						applyTierMerchandisingSanitization(
+							applyTierSampleScreenshotSanitization(
+								applyTierDeliveryConfigSanitization(rawMetadata as Record<string, unknown>)
+							)
 						)
 					)
 				: rawMetadata;
