@@ -11,10 +11,10 @@
 
 
 <svelte:head>
-	<title>FastAccs - Premium Social Media Accounts & Growth Services</title>
+	<title>Buy Social Media Accounts & Growth Services | FastAccs</title>
 	<meta
 		name="description"
-		content="Nigeria's marketplace for social media accounts and growth services with secure checkout and fast order processing."
+		content="Get Instagram, TikTok, X, Facebook accounts and growth services with secure checkout, instant delivery, and buyer support."
 	/>
 </svelte:head>
 

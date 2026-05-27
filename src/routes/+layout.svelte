@@ -22,9 +22,9 @@
 	let tawkLoadRequested = false;
 	let lastSnapPageKey = '';
 	const announcementBanner = $derived(data.announcementBanner || null);
-	const defaultShareTitle = 'FastAccs - Premium Social Media Accounts & Growth Services';
+	const defaultShareTitle = 'Buy Social Media Accounts & Growth Services | FastAccs';
 	const defaultShareDescription =
-		"Nigeria's marketplace for social media accounts and growth services with secure checkout and fast order processing.";
+		'Get Instagram, TikTok, X, Facebook accounts and growth services with secure checkout, instant delivery, and buyer support.';
 
 	function normalizeBaseUrl(value: string | undefined): string {
 		const fallback = 'https://smm.fastaccs.com';
