@@ -326,6 +326,10 @@ h3 {
 	font-weight: 600;
 	line-height: 1;
 	text-decoration: none;
+	cursor: pointer;
+	touch-action: manipulation;
+	user-select: none;
+	-webkit-user-select: none;
 }
 
 .btn-fa--primary {
@@ -353,9 +357,38 @@ h3 {
 	border-color: var(--status-error-border);
 }
 
+.btn-fa--primary:not(:disabled):hover {
+	background: var(--btn-primary-gradient-hover);
+	border-color: rgba(5, 212, 113, 0.68);
+	box-shadow:
+		0 10px 26px rgba(5, 212, 113, 0.2),
+		0 0 0 1px rgba(5, 212, 113, 0.18);
+}
+
+.btn-fa--secondary:not(:disabled):hover,
+.btn-fa--ghost:not(:disabled):hover {
+	border-color: rgba(170, 173, 255, 0.38);
+	background: var(--btn-secondary-gradient-hover);
+}
+
+.btn-fa--primary:not(:disabled):active {
+	box-shadow:
+		0 0 0 3px rgba(5, 212, 113, 0.22),
+		inset 0 1px 6px rgba(4, 21, 13, 0.18);
+}
+
+.btn-fa[aria-busy='true'],
+.btn-fa.is-loading {
+	pointer-events: none;
+	filter: saturate(0.92) brightness(0.95);
+}
+
 button,
 a[role='button'] {
 	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+	user-select: none;
+	-webkit-user-select: none;
 }
 
 button:not(.no-fa-motion),
