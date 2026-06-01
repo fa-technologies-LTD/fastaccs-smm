@@ -199,6 +199,10 @@
 		};
 	}
 
+	function getCartLineKey(item: CartItemWithTier): string {
+		return item.cartItemId || (item.exactAccount ? `exact:${item.exactAccount.accountId}` : `tier:${item.tierId}`);
+	}
+
 	function getCheckoutSnapPayload(orderId?: string) {
 		return {
 			item_ids: cartItems.map((item) => item.tierId),
@@ -506,7 +510,7 @@
 
 						<!-- Cart Items -->
 						<div class="space-y-4 sm:space-y-5">
-							{#each cartItems as item (item.tierId)}
+								{#each cartItems as item (getCartLineKey(item))}
 								{@const PlatformIcon = getPlatformIcon(item.tier.platformSlug)}
 								{@const renderPlatformImage = shouldRenderCheckoutPlatformImage(item)}
 								<div class="flex gap-3">
@@ -518,7 +522,8 @@
 												? 'from-black to-gray-800'
 												: item.tier.platformSlug === 'facebook' && !renderPlatformImage
 													? 'from-blue-600 to-blue-700'
-													: item.tier.platformSlug === 'twitter' && !renderPlatformImage
+													: (item.tier.platformSlug === 'twitter' || item.tier.platformSlug === 'x') &&
+														  !renderPlatformImage
 														? 'from-blue-400 to-blue-500'
 														: !renderPlatformImage
 															? 'from-gray-500 to-gray-600'
@@ -566,11 +571,11 @@
 													</a>
 												{/if}
 											</div>
-											<button
-												onclick={async () => {
-													cart.removeTier(item.tier.id);
-													await loadCartData();
-												}}
+												<button
+													onclick={async () => {
+														cart.removeItem(getCartLineKey(item));
+														await loadCartData();
+													}}
 												style="color: var(--text-dim);"
 												class="hover:text-red-600"
 												title="Remove item"

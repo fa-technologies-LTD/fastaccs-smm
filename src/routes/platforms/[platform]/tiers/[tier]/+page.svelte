@@ -22,7 +22,11 @@
 	import { cart } from '$lib/stores/cart.svelte';
 	import { showError, showWarning, showSuccess } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
-	import { getPlatformColor, getPlatformIcon } from '$lib/helpers/platformColors';
+	import {
+		getPlatformColor,
+		getPlatformIcon,
+		isPlatformImageUrl
+	} from '$lib/helpers/platformColors';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { getTierSampleScreenshotUrls } from '$lib/helpers/tierSampleScreenshots';
 	import { buildCloudinaryOptimizedImageUrl } from '$lib/helpers/cloudinary';
@@ -54,6 +58,9 @@
 	let exactPreviewLoading = $state(false);
 	let exactPreviewReserving = $state<string | null>(null);
 	let exactPreviewError = $state<string | null>(null);
+	let exactPreviewPrimaryImageFailedByAccount = $state<Record<string, boolean>>({});
+	let exactPreviewGeneratedImageFailedByAccount = $state<Record<string, boolean>>({});
+	let platformIconFailed = $state(false);
 	let exactPreviewAccounts = $state<
 		Array<{
 			accountId: string;
@@ -114,8 +121,24 @@
 			.trim()
 			.replace(/(\d)\s+F\b/g, '$1F');
 
-		if (!normalized) return 'Tier';
+		if (!normalized) return 'Account Type';
 		return normalized.length > 20 ? `${normalized.slice(0, 19)}…` : normalized;
+	}
+
+	function getPlatformImageValue(metadata: unknown): string | null {
+		if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+		const record = metadata as Record<string, unknown>;
+		const candidates = [
+			record.icon,
+			record.iconUrl,
+			record.icon_url,
+			record.logo,
+			record.logo_url,
+			record.image,
+			record.image_url
+		];
+		const match = candidates.find((value) => isPlatformImageUrl(value));
+		return typeof match === 'string' ? match : null;
 	}
 
 	// Navigation functions
@@ -137,8 +160,10 @@
 	function increaseQuantity() {
 		if (!data.tierCategory || !data.tier) return;
 
-		// Check existing quantity in cart for this tier
-		const existingCartItem = cart.items.find((item) => item.tierId === data.tierCategory.id);
+		// Check existing normal quantity in cart for this account type.
+			const existingCartItem = cart.items.find(
+				(item) => item.tierId === data.tierCategory.id && !item.exactAccount
+			);
 		const currentCartQuantity = existingCartItem ? existingCartItem.quantity : 0;
 		const maxAllowedSelection = data.tier.visible_available - currentCartQuantity;
 
@@ -231,15 +256,10 @@
 				showWarning('Cart cleared', `Previous ${existingLabel} items were removed.`);
 			}
 
-			// Check existing quantity in cart for this tier
-			const existingCartItem = cart.items.find((item) => item.tierId === data.tierCategory.id);
-			if (existingCartItem?.exactAccount) {
-				showWarning(
-					'Exact account already selected',
-					`${existingCartItem.exactAccount.displayLabel} is already reserved in your cart. Continue to checkout or remove it before adding this tier normally.`
-				);
-				return;
-			}
+			// Check existing normal quantity in cart for this account type.
+			const existingCartItem = cart.items.find(
+				(item) => item.tierId === data.tierCategory.id && !item.exactAccount
+			);
 			const currentCartQuantity = existingCartItem ? existingCartItem.quantity : 0;
 			const totalQuantityAfterAdd = currentCartQuantity + selectedQuantity;
 
@@ -249,12 +269,12 @@
 				if (remainingStock <= 0) {
 					showWarning(
 						'Maximum quantity reached',
-						`You already have the maximum available quantity (${data.tier.visible_available}) for this tier in your cart.`
+						`You already have the maximum available quantity (${data.tier.visible_available}) for this account type in your cart.`
 					);
 				} else {
 					showWarning(
 						'Quantity limit exceeded',
-						`Only ${remainingStock} more accounts can be added to your cart for this tier. You already have ${currentCartQuantity} in your cart.`
+						`Only ${remainingStock} more accounts can be added to your cart for this account type. You already have ${currentCartQuantity} in your cart.`
 					);
 				}
 				return;
@@ -325,7 +345,7 @@
 			}
 
 			notifySubscribed = true;
-			showSuccess('Subscribed', result.message || "You'll be notified when this tier is back.");
+			showSuccess('Subscribed', result.message || "You'll be notified when this account type is back.");
 		} catch (error) {
 			console.error('Failed to subscribe for restock:', error);
 			showError('Subscription failed', 'Unable to subscribe right now. Please try again.');
@@ -347,6 +367,56 @@
 	function openSamplePreview(index: number): void {
 		samplePreviewIndex = index;
 		samplePreviewOpen = true;
+	}
+
+	function getProfileDomain(profileUrl: string): string {
+		try {
+			return new URL(profileUrl).hostname.replace(/^www\./, '');
+		} catch {
+			return 'Public profile';
+		}
+	}
+
+	function getExactProfileGeneratedPreviewUrl(profileUrl: string): string {
+		return `https://s.wordpress.com/mshots/v1/${encodeURIComponent(profileUrl)}?w=960`;
+	}
+
+	function getExactAccountPreviewImage(account: {
+		accountId: string;
+		profileUrl: string;
+		screenshotUrl: string | null;
+	}): string | null {
+		if (account.screenshotUrl && !exactPreviewPrimaryImageFailedByAccount[account.accountId]) {
+			return account.screenshotUrl;
+		}
+
+		if (!exactPreviewGeneratedImageFailedByAccount[account.accountId]) {
+			return getExactProfileGeneratedPreviewUrl(account.profileUrl);
+		}
+
+		return null;
+	}
+
+	function markExactAccountPreviewImageFailed(
+		accountId: string,
+		source: 'primary' | 'generated'
+	): void {
+		if (source === 'primary') {
+			exactPreviewPrimaryImageFailedByAccount = {
+				...exactPreviewPrimaryImageFailedByAccount,
+				[accountId]: true
+			};
+			return;
+		}
+
+		exactPreviewGeneratedImageFailedByAccount = {
+			...exactPreviewGeneratedImageFailedByAccount,
+			[accountId]: true
+		};
+	}
+
+	function isExactAccountInCart(accountId: string): boolean {
+		return cart.items.some((item) => item.exactAccount?.accountId === accountId);
 	}
 
 	async function loadExactPreviewAccounts(): Promise<void> {
@@ -379,15 +449,29 @@
 		profileUrl: string;
 		screenshotUrl?: string | null;
 		tags?: string[];
+		reservedUntil?: string | null;
+		isReservedByCurrentUser?: boolean;
 	}): Promise<void> {
 		if (!data.tierCategory || exactPreviewReserving) return;
 		if (!currentUser) {
 			const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
 			goto(`/auth/login?returnUrl=${returnUrl}`);
 			return;
-		}
+			}
 
-		exactPreviewReserving = account.accountId;
+			if (account.isReservedByCurrentUser && account.reservedUntil) {
+				cart.addExactTier(data.tierCategory.id, {
+					accountId: account.accountId,
+					displayLabel: account.displayLabel,
+					profileUrl: account.profileUrl,
+					screenshotUrl: account.screenshotUrl || null,
+					reservedUntil: account.reservedUntil
+				});
+				showSuccess(`${account.displayLabel} added`, 'This exact account is back in your cart.', 6000, '/checkout');
+				return;
+			}
+
+			exactPreviewReserving = account.accountId;
 		try {
 			const compatibility = await cart.ensureDeliveryModeCompatibility(
 				data.tierCategory.id,
@@ -437,12 +521,7 @@
 				isReservedByCurrentUser: true
 			};
 			selectedQuantity = 1;
-			showSuccess(
-				`${result.data.displayLabel} reserved`,
-				'This exact account is in your cart for checkout.',
-				6000,
-				'/checkout'
-			);
+				showSuccess(`${result.data.displayLabel} added`, 'This exact account is in your cart.', 6000, '/checkout');
 			await loadExactPreviewAccounts();
 		} catch (error) {
 			console.error('Failed to reserve exact account:', error);
@@ -514,9 +593,11 @@
 		<section class="py-16">
 			<div class="mx-auto max-w-4xl px-4 text-center">
 				<Package class="mx-auto mb-4 h-16 w-16 text-[var(--color-text-muted)]" />
-				<h1 class="mb-4 text-3xl font-bold text-[var(--color-text-primary)]">Tier Not Found</h1>
+				<h1 class="mb-4 text-3xl font-bold text-[var(--color-text-primary)]">
+					Account Type Not Found
+				</h1>
 				<p class="mb-8 text-lg text-[var(--color-text-secondary)]">
-					The tier you're looking for doesn't exist or isn't available right now.
+					The account type you're looking for doesn't exist or isn't available right now.
 				</p>
 				<div class="flex justify-center gap-4">
 					<button
@@ -530,6 +611,7 @@
 		</section>
 	{:else}
 		{@const PlatformIcon = getPlatformIcon(data.platform.slug)}
+		{@const platformImageUrl = getPlatformImageValue(data.platform.metadata)}
 		{@const tierStatus = getTierStatus(data.tier.visible_available)}
 
 		<section class="bg-[var(--color-card)] py-2 shadow-sm sm:py-3">
@@ -550,8 +632,17 @@
 			<div class="mx-auto max-w-6xl px-4">
 				<div class="rounded-xl border border-white/15 bg-black/15 p-4 sm:p-5">
 					<div class="flex items-start gap-3">
-						<div class="rounded-full bg-white/20 p-2.5">
-							<PlatformIcon class="h-7 w-7 sm:h-9 sm:w-9" />
+						<div class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/20 p-2.5 sm:h-14 sm:w-14">
+							{#if platformImageUrl && !platformIconFailed}
+								<img
+									src={platformImageUrl}
+									alt={data.platform.name}
+									class="h-full w-full object-contain"
+									onerror={() => (platformIconFailed = true)}
+								/>
+							{:else}
+								<PlatformIcon class="h-7 w-7 sm:h-9 sm:w-9" />
+							{/if}
 						</div>
 						<div class="min-w-0 flex-1">
 							<h1 class="text-xl leading-tight font-bold sm:text-2xl">{data.tier.tier_name}</h1>
@@ -591,7 +682,7 @@
 								<span
 									class="rounded-full border border-white/20 bg-black/20 px-2.5 py-1 font-semibold"
 								>
-									{formatPrice(data.tier.price)} / account
+										{formatPrice(data.tier.price)}
 								</span>
 								<span>{data.tier.visible_available} available</span>
 								<span
@@ -667,12 +758,6 @@
 											Open a live profile link, then choose the exact account you want.
 										</p>
 									</div>
-									<span
-										class="rounded-full border px-2.5 py-1 text-[11px] font-semibold"
-										style="border-color: rgba(5, 212, 113, 0.24); background: rgba(5, 212, 113, 0.1); color: var(--color-accent);"
-									>
-										Logged-in only
-									</span>
 								</div>
 
 								{#if !currentUser}
@@ -680,7 +765,7 @@
 										class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
 									>
 										<p class="text-sm text-[var(--color-text-secondary)]">
-											Log in to view exact available profile links for this tier.
+											Log in to view exact available profile links for this account type.
 										</p>
 										<button
 											type="button"
@@ -715,36 +800,70 @@
 									</div>
 								{:else}
 									<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-										{#each exactPreviewAccounts as account (account.accountId)}
-											<div
-												class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
-											>
-												{#if account.screenshotUrl}
-													<a
+											{#each exactPreviewAccounts as account (account.accountId)}
+												{@const accountInCart = isExactAccountInCart(account.accountId)}
+												{@const previewImage = getExactAccountPreviewImage(account)}
+												<div
+													class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
+												>
+													{#if previewImage}
+														<a
+															href={account.profileUrl}
+															target="_blank"
+															rel="noopener noreferrer"
+															class="mb-3 block overflow-hidden rounded-lg border border-[var(--color-border)] bg-black/20"
+														>
+															<img
+																src={previewImage}
+																alt={`${account.displayLabel} public preview`}
+																class="aspect-[16/10] w-full object-cover"
+																loading="lazy"
+																decoding="async"
+																onerror={() =>
+																	markExactAccountPreviewImageFailed(
+																		account.accountId,
+																		account.screenshotUrl &&
+																			!exactPreviewPrimaryImageFailedByAccount[account.accountId]
+																			? 'primary'
+																			: 'generated'
+																	)}
+															/>
+														</a>
+													{:else}
+														<a
 														href={account.profileUrl}
 														target="_blank"
 														rel="noopener noreferrer"
-														class="mb-3 block overflow-hidden rounded-lg border border-[var(--color-border)] bg-black/20"
+														class="mb-3 flex min-h-[94px] items-center gap-3 rounded-lg border border-[var(--color-border)] bg-black/20 p-3 transition-all hover:border-[var(--color-accent)]"
 													>
-														<img
-															src={account.screenshotUrl}
-															alt={`${account.displayLabel} public preview`}
-															class="aspect-[16/10] w-full object-cover"
-															loading="lazy"
-															decoding="async"
-														/>
-													</a>
-												{/if}
-												<div class="mb-3 flex items-center justify-between gap-2">
+														<div
+															class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
+															style="background: rgba(5,212,113,0.10); color: var(--color-accent);"
+														>
+															<ExternalLink class="h-5 w-5" />
+														</div>
+														<div class="min-w-0">
+															<p class="text-sm font-semibold text-[var(--color-text-primary)]">
+																Live profile preview
+															</p>
+															<p class="truncate text-xs text-[var(--color-text-muted)]">
+																{getProfileDomain(account.profileUrl)}
+															</p>
+														</div>
+														</a>
+													{/if}
+													<div class="mb-3 flex items-center justify-between gap-2">
 													<div>
 														<p class="font-semibold text-[var(--color-text-primary)]">
 															{account.displayLabel}
 														</p>
-														{#if account.isReservedByCurrentUser || activeExactReservation?.accountId === account.accountId}
-															<p class="text-xs text-[var(--color-accent)]">Reserved for you</p>
-														{:else}
-															<p class="text-xs text-[var(--color-text-muted)]">Available</p>
-														{/if}
+															{#if accountInCart}
+																<p class="text-xs text-[var(--color-accent)]">In cart</p>
+															{:else if account.isReservedByCurrentUser || activeExactReservation?.accountId === account.accountId}
+																<p class="text-xs text-[var(--color-accent)]">Held for you</p>
+															{:else}
+																<p class="text-xs text-[var(--color-text-muted)]">Available</p>
+															{/if}
 													</div>
 													{#if account.reservedUntil}
 														<span class="text-[11px] text-[var(--color-text-muted)]">
@@ -776,21 +895,21 @@
 														View live profile
 													</a>
 													<button
-														type="button"
-														onclick={() => chooseExactAccount(account)}
-														disabled={exactPreviewReserving === account.accountId ||
-															account.isReservedByCurrentUser}
-														class="inline-flex flex-1 items-center justify-center rounded-full px-3 py-2 text-sm font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
-														style="background: var(--btn-primary-gradient); color: #04140C;"
-													>
-														{#if exactPreviewReserving === account.accountId}
-															Reserving...
-														{:else if account.isReservedByCurrentUser}
-															Chosen
-														{:else}
-															Choose this
-														{/if}
-													</button>
+															type="button"
+															onclick={() => chooseExactAccount(account)}
+															disabled={exactPreviewReserving === account.accountId ||
+																accountInCart}
+															class="inline-flex flex-1 items-center justify-center rounded-full px-3 py-2 text-sm font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-80"
+															style="background: var(--btn-primary-gradient); color: #04140C;"
+														>
+															{#if exactPreviewReserving === account.accountId}
+																Reserving...
+															{:else if accountInCart}
+																In Cart
+															{:else}
+																Add this profile
+															{/if}
+														</button>
 												</div>
 											</div>
 										{/each}
@@ -827,8 +946,8 @@
 									{/if}
 								</div>
 							{:else}
-								<p class="text-sm text-[var(--color-text-muted)]">
-									No additional feature tags available for this tier yet.
+									<p class="text-sm text-[var(--color-text-muted)]">
+										No additional feature tags available for this account type yet.
 								</p>
 							{/if}
 						</div>
@@ -836,8 +955,8 @@
 
 					<div class="order-2 lg:col-span-1">
 						<div class="rounded-xl bg-[var(--color-card)] p-4 shadow sm:p-5 lg:sticky lg:top-24">
-							<h3 class="text-lg font-bold text-[var(--color-text-primary)] sm:text-xl">
-								Buy This Tier
+								<h3 class="text-lg font-bold text-[var(--color-text-primary)] sm:text-xl">
+									Buy This Type
 							</h3>
 							<p class="mt-1 text-sm text-[var(--color-text-muted)]">
 								How many accounts do you need?
@@ -899,13 +1018,14 @@
 								</div>
 							</div>
 
-							{#if data.tier.visible_available === 0}
-								<button
-									onclick={subscribeForRestock}
-									disabled={notifyLoading || notifySubscribed}
-									class="mt-4 hidden w-full rounded-full py-3.5 text-sm font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100 lg:block"
-									style="background: var(--btn-primary-gradient);"
-								>
+								{#if data.tier.visible_available === 0}
+									<button
+										onclick={subscribeForRestock}
+										disabled={notifyLoading}
+										aria-disabled={notifySubscribed}
+										class="mt-4 hidden w-full rounded-full py-3.5 text-sm font-semibold text-white transition-all active:scale-95 disabled:cursor-wait disabled:active:scale-100 lg:block"
+										style="background: var(--btn-primary-gradient);"
+									>
 									{#if notifyLoading}
 										Saving...
 									{:else if notifySubscribed}
@@ -949,8 +1069,8 @@
 									Need help after purchase?
 								</summary>
 								<div class="mt-2">
-									<p class="mb-2 text-xs text-[var(--color-text-muted)]">
-										Quick setup steps for this tier are available here.
+										<p class="mb-2 text-xs text-[var(--color-text-muted)]">
+											Quick setup steps for this account type are available here.
 									</p>
 									<a
 										href={tierLoginGuideUrl}
@@ -973,20 +1093,49 @@
 			class="fixed right-0 bottom-0 left-0 z-40 border-t border-[var(--color-border)] bg-[var(--color-card)]/95 px-4 py-3 backdrop-blur lg:hidden"
 			style="padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));"
 		>
-			<div class="mx-auto flex max-w-6xl items-center gap-3">
-				<div class="min-w-0 flex-1">
-					<div class="text-xs text-[var(--color-text-muted)]">Total</div>
-					<div class="truncate text-base font-semibold text-[var(--color-text-primary)]">
-						{formatPrice(totalPrice)}
+				<div class="mx-auto flex max-w-6xl items-center gap-3">
+					<div class="min-w-0 flex-1">
+						<div class="text-xs text-[var(--color-text-muted)]">Total</div>
+						<div class="truncate text-base font-semibold text-[var(--color-text-primary)]">
+							{formatPrice(totalPrice)}
+						</div>
 					</div>
-				</div>
-				{#if data.tier.visible_available === 0}
-					<button
-						onclick={subscribeForRestock}
-						disabled={notifyLoading || notifySubscribed}
-						class="rounded-full px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
-						style="background: var(--btn-primary-gradient);"
-					>
+					{#if data.tier.visible_available > 0}
+						<div
+							class="flex shrink-0 items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 py-1"
+							aria-label="Quantity selector"
+						>
+							<button
+								type="button"
+								onclick={decreaseQuantity}
+								disabled={selectedQuantity <= 1}
+								class="flex h-8 w-8 items-center justify-center rounded-full text-[var(--color-text-primary)] transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+								aria-label="Decrease quantity"
+							>
+								<Minus class="h-4 w-4" />
+							</button>
+							<span class="min-w-5 text-center text-sm font-semibold text-[var(--color-text-primary)]">
+								{selectedQuantity}
+							</span>
+							<button
+								type="button"
+								onclick={increaseQuantity}
+								disabled={selectedQuantity >= data.tier.visible_available}
+								class="flex h-8 w-8 items-center justify-center rounded-full text-[var(--color-text-primary)] transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+								aria-label="Increase quantity"
+							>
+								<Plus class="h-4 w-4" />
+							</button>
+						</div>
+					{/if}
+					{#if data.tier.visible_available === 0}
+						<button
+							onclick={subscribeForRestock}
+							disabled={notifyLoading}
+							aria-disabled={notifySubscribed}
+							class="rounded-full px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-95 disabled:cursor-wait disabled:active:scale-100"
+							style="background: var(--btn-primary-gradient);"
+						>
 						{#if notifyLoading}
 							Saving...
 						{:else if notifySubscribed}

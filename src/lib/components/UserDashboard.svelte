@@ -131,18 +131,6 @@
 	let accountsOwned = $derived(
 		initialPurchases.reduce((sum, purchase) => sum + Number(purchase.quantity || 0), 0)
 	);
-	let activePlatforms = $derived(
-		new Set(
-			initialPurchases
-				.map((purchase) =>
-					String(purchase.platform || '')
-						.trim()
-						.toLowerCase()
-				)
-				.filter(Boolean)
-		).size
-	);
-	let openIssues = $state(0);
 	let isSecured = $derived(Boolean(user?.emailVerified));
 </script>
 
@@ -227,11 +215,11 @@
 
 	<div class="mb-5 grid grid-cols-2 gap-3">
 		<div
-			class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
+			class="rounded-[var(--r-sm)] border border-[var(--border)] px-3 py-3"
 			style="background: var(--surface-2);"
 		>
 			<div
-				class="text-2xl leading-none font-semibold"
+				class="text-xl leading-none font-semibold sm:text-2xl"
 				style="color: var(--text); font-family: var(--font-head);"
 			>
 				{accountsOwned}
@@ -239,40 +227,16 @@
 			<div class="mt-1 text-xs" style="color: var(--text-muted);">Accounts owned</div>
 		</div>
 		<div
-			class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
+			class="rounded-[var(--r-sm)] border border-[var(--border)] px-3 py-3"
 			style="background: var(--surface-2);"
 		>
 			<div
-				class="text-2xl leading-none font-semibold"
+				class="text-xl leading-none font-semibold sm:text-2xl"
 				style="color: var(--text); font-family: var(--font-head);"
 			>
 				₦{totalSpent.toLocaleString()}
 			</div>
 			<div class="mt-1 text-xs" style="color: var(--text-muted);">Total spent</div>
-		</div>
-		<div
-			class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
-			style="background: var(--surface-2);"
-		>
-			<div
-				class="text-2xl leading-none font-semibold"
-				style="color: var(--text); font-family: var(--font-head);"
-			>
-				{activePlatforms}
-			</div>
-			<div class="mt-1 text-xs" style="color: var(--text-muted);">Active platforms</div>
-		</div>
-		<div
-			class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
-			style="background: var(--surface-2);"
-		>
-			<div
-				class="text-2xl leading-none font-semibold"
-				style="color: var(--text); font-family: var(--font-head);"
-			>
-				{openIssues}
-			</div>
-			<div class="mt-1 text-xs" style="color: var(--text-muted);">Open issues</div>
 		</div>
 	</div>
 

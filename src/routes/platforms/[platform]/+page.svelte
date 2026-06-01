@@ -36,6 +36,7 @@
 		getTierDeliveryConfig,
 		type TierDeliveryMode
 	} from '$lib/helpers/tier-delivery-config';
+	import { getTierExactPreviewConfig } from '$lib/helpers/tier-exact-preview';
 	import { trackSnapEvent } from '$lib/services/snap-pixel';
 
 	interface Props {
@@ -70,6 +71,7 @@
 	let quickAddSubmitting = $state(false);
 	let restockLoadingByTier = $state<Record<string, boolean>>({});
 	let restockSubscribedByTier = $state<Record<string, boolean>>({});
+	let exactQuickAddLoadingByTier = $state<Record<string, boolean>>({});
 	let autoNotifyHandled = $state(false);
 	const lowStockThreshold = $derived(Math.max(1, Number(data.lowStockThreshold || 10)));
 	const currentUser = $derived((page.data as { user?: { id: string } | null }).user || null);
@@ -97,6 +99,10 @@
 
 	function getTierRoute(tierSlug: string): string {
 		return `/platforms/${data.platform?.slug}/tiers/${tierSlug}`;
+	}
+
+	function isExactPreviewTier(tier: TierCard): boolean {
+		return getTierExactPreviewConfig(tier.metadata).enabled;
 	}
 
 	function isOrganicTier(tier: TierCard): boolean {
@@ -225,6 +231,10 @@
 		return null;
 	}
 
+	function getTypeLabel(count: number): string {
+		return count === 1 ? 'Type' : 'Types';
+	}
+
 	// Format feature names (e.g., "viral_ready" -> "Viral Ready")
 	function formatFeatureName(feature: string): string {
 		return feature
@@ -317,14 +327,6 @@
 				: 'featured';
 
 		return { label, tone };
-	}
-
-	function getTopTierFeatures(tierFeatures: string[]): string[] {
-		return tierFeatures.slice(0, 3);
-	}
-
-	function getAdditionalTierFeatures(tierFeatures: string[]): string[] {
-		return tierFeatures.slice(3);
 	}
 
 	function isTierDetailsExpanded(tierId: string): boolean {
@@ -507,7 +509,9 @@
 	}
 
 	function getCurrentCartQuantity(tier: TierCard): number {
-		const existingCartItem = cart.items.find((item) => item.tierId === tier.category_id);
+		const existingCartItem = cart.items.find(
+			(item) => item.tierId === tier.category_id && !item.exactAccount
+		);
 		return existingCartItem ? existingCartItem.quantity : 0;
 	}
 
@@ -527,6 +531,10 @@
 
 	async function openQuickAddModal(tier: TierCard): Promise<void> {
 		if (tier.visible_available <= 0) return;
+		if (isExactPreviewTier(tier)) {
+			void goto(getTierRoute(tier.tier_slug));
+			return;
+		}
 		if (!(await ensureAddModeCompatibility(tier))) return;
 
 		const currentCartQuantity = getCurrentCartQuantity(tier);
@@ -534,7 +542,7 @@
 		if (remainingStock <= 0) {
 			showWarning(
 				'Maximum quantity reached',
-				`You already have the maximum available quantity (${tier.visible_available}) for this tier in your cart.`
+				`You already have the maximum available quantity (${tier.visible_available}) for this account type in your cart.`
 			);
 			return;
 		}
@@ -551,6 +559,106 @@
 
 		await tick();
 		quickAddCloseButton?.focus();
+	}
+
+	async function addFirstExactProfileToCart(tier: TierCard): Promise<void> {
+		if (tier.visible_available <= 0) return;
+		if (!currentUser) {
+			const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
+			void goto(`/auth/login?returnUrl=${returnUrl}`);
+			return;
+		}
+
+		const tierId = String(tier.category_id || '').trim();
+		if (!tierId) {
+			void goto(getTierRoute(tier.tier_slug));
+			return;
+		}
+
+		if (exactQuickAddLoadingByTier[tierId]) return;
+		exactQuickAddLoadingByTier = { ...exactQuickAddLoadingByTier, [tierId]: true };
+
+		try {
+			if (!(await ensureAddModeCompatibility(tier))) return;
+
+			const listResponse = await fetch(`/api/exact-preview/tiers/${encodeURIComponent(tierId)}`);
+			const listResult = await listResponse.json();
+			if (!listResponse.ok || !listResult.success) {
+				throw new Error(listResult.error || 'Could not load exact profiles.');
+			}
+
+			const accounts: Array<{
+				accountId: string;
+				displayLabel: string;
+				profileUrl: string;
+				screenshotUrl?: string | null;
+				tags?: string[];
+				reservedUntil?: string | null;
+				isReservedByCurrentUser?: boolean;
+			}> = Array.isArray(listResult.data?.accounts) ? listResult.data.accounts : [];
+			if (accounts.length === 0) {
+				showWarning('No exact profiles available', 'Choose from the full profile page instead.');
+				void goto(getTierRoute(tier.tier_slug));
+				return;
+			}
+
+			const firstAccount =
+				accounts.find(
+					(account) =>
+						!cart.items.some((item) => item.exactAccount?.accountId === account.accountId)
+				) || accounts[0];
+
+			if (firstAccount.isReservedByCurrentUser && firstAccount.reservedUntil) {
+				cart.addExactTier(tierId, {
+					accountId: firstAccount.accountId,
+					displayLabel: firstAccount.displayLabel,
+					profileUrl: firstAccount.profileUrl,
+					screenshotUrl: firstAccount.screenshotUrl || null,
+					reservedUntil: firstAccount.reservedUntil
+				});
+				showSuccess(`${firstAccount.displayLabel} added`, 'Added to cart.', 5000, '/checkout');
+				return;
+			}
+
+			const reserveResponse = await fetch('/api/exact-preview/reserve', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					tierId,
+					accountId: firstAccount.accountId
+				})
+			});
+			const reserveResult = await reserveResponse.json();
+			if (!reserveResponse.ok || !reserveResult.success) {
+				throw new Error(reserveResult.error || 'Could not reserve an exact profile.');
+			}
+
+			cart.addExactTier(tierId, {
+				accountId: reserveResult.data.accountId,
+				displayLabel: reserveResult.data.displayLabel,
+				profileUrl: reserveResult.data.profileUrl,
+				screenshotUrl: reserveResult.data.screenshotUrl || null,
+				reservedUntil: reserveResult.data.reservedUntil
+			});
+
+			showSuccess(`${reserveResult.data.displayLabel} added`, 'Added to cart.', 5000, '/checkout');
+		} catch (error) {
+			console.error('Failed to add first exact profile to cart:', error);
+			showError(
+				'Could not add profile',
+				error instanceof Error ? error.message : 'Please try again.'
+			);
+		} finally {
+			exactQuickAddLoadingByTier = { ...exactQuickAddLoadingByTier, [tierId]: false };
+		}
+	}
+
+	async function handlePrimaryTierCta(tier: TierCard): Promise<void> {
+		if (isExactPreviewTier(tier)) {
+			await addFirstExactProfileToCart(tier);
+			return;
+		}
+		await openQuickAddModal(tier);
 	}
 
 	function closeQuickAddModal(): void {
@@ -625,11 +733,18 @@
 	async function addQuickAddToCart(): Promise<void> {
 		const tier = quickAddTier;
 		if (!tier || quickAddSubmitting) return;
+		if (isExactPreviewTier(tier)) {
+			closeQuickAddModal();
+			void goto(getTierRoute(tier.tier_slug));
+			return;
+		}
 		if (!(await ensureAddModeCompatibility(tier))) return;
 
 		quickAddSubmitting = true;
 		try {
-			const existingCartItem = cart.items.find((item) => item.tierId === tier.category_id);
+			const existingCartItem = cart.items.find(
+				(item) => item.tierId === tier.category_id && !item.exactAccount
+			);
 			const currentCartQuantity = existingCartItem ? existingCartItem.quantity : 0;
 			const totalQuantityAfterAdd = currentCartQuantity + quickAddQuantity;
 
@@ -638,12 +753,12 @@
 				if (remainingStock <= 0) {
 					showWarning(
 						'Maximum quantity reached',
-						`You already have the maximum available quantity (${tier.visible_available}) for this tier in your cart.`
+						`You already have the maximum available quantity (${tier.visible_available}) for this account type in your cart.`
 					);
 				} else {
 					showWarning(
 						'Quantity limit exceeded',
-						`Only ${remainingStock} more accounts can be added to your cart for this tier. You already have ${currentCartQuantity} in your cart.`
+						`Only ${remainingStock} more accounts can be added to your cart for this account type. You already have ${currentCartQuantity} in your cart.`
 					);
 				}
 				return;
@@ -739,7 +854,7 @@
 			}
 
 			setTierRestockSubscribed(tier.category_id, true);
-			showSuccess('Subscribed', result.message || "You'll be notified when this tier is back.");
+			showSuccess('Subscribed', result.message || "You'll be notified when this account type is back.");
 		} catch (error) {
 			console.error('Failed to subscribe for restock:', error);
 			showError('Subscription failed', 'Unable to subscribe right now. Please try again.');
@@ -787,7 +902,7 @@
 	<meta
 		name="description"
 		content="Browse available {data.platform
-			?.name} account tiers and complete checkout securely on FastAccs."
+			?.name} account types and complete checkout securely on FastAccs."
 	/>
 </svelte:head>
 
@@ -852,7 +967,9 @@
 							style="border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.06);"
 						>
 							<div class="text-[1.55rem] leading-none font-bold">{data.tiers.length}</div>
-							<div class="mt-1 text-[0.68rem] tracking-wide uppercase opacity-85">tiers</div>
+							<div class="mt-1 text-[0.68rem] tracking-wide uppercase opacity-85">
+								{getTypeLabel(data.tiers.length)}
+							</div>
 						</div>
 					</div>
 				</div>
@@ -871,10 +988,12 @@
 								<PlatformIcon class="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12" />
 							{/if}
 						</div>
-						<div class="text-center">
-							<div class="text-2xl font-bold sm:text-3xl">{data.tiers.length}</div>
-							<div class="text-xs opacity-75 sm:text-sm">Available Tiers</div>
-						</div>
+							<div class="text-center">
+								<div class="text-2xl font-bold sm:text-3xl">{data.tiers.length}</div>
+								<div class="text-xs opacity-75 sm:text-sm">
+									{getTypeLabel(data.tiers.length)}
+								</div>
+							</div>
 					</div>
 					<div class="flex-1">
 						<h1 class="mb-1 text-2xl font-bold sm:text-3xl md:text-4xl">
@@ -890,12 +1009,12 @@
 		<section class="py-5 sm:py-16">
 			<div class="mx-auto max-w-6xl px-4">
 				<div class="mb-5 text-left sm:mb-8 sm:text-center">
-					<h2 class="mb-2 text-xl font-bold sm:mb-4 sm:text-3xl" style="color: var(--text);">
-						Available Tiers
-					</h2>
-					<p class="text-sm sm:text-lg" style="color: var(--text-muted);">
-						Select the tier that matches your needs. Each tier shows current stock and pricing.
-					</p>
+						<h2 class="mb-2 text-xl font-bold sm:mb-4 sm:text-3xl" style="color: var(--text);">
+							Available {getTypeLabel(data.tiers.length)}
+						</h2>
+						<p class="text-sm sm:text-lg" style="color: var(--text-muted);">
+							Choose the account type that fits what you need.
+						</p>
 				</div>
 
 				{#if showMobileTierControls}
@@ -960,9 +1079,9 @@
 				{#if data.tiers.length === 0}
 					<div class="rounded-lg p-8 text-center" style="background: var(--bg-elev-2);">
 						<Package class="mx-auto mb-4 h-12 w-12" style="color: var(--text-muted);" />
-						<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">
-							No Tiers Available
-						</h3>
+							<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">
+								No Account Types Available
+							</h3>
 						<p style="color: var(--text-muted);">
 							We're currently restocking {data.platform.name} accounts. Please check back soon!
 						</p>
@@ -980,8 +1099,8 @@
 						style="background: var(--bg-elev-2); border-color: var(--border);"
 					>
 						<h3 class="text-base font-semibold sm:text-lg" style="color: var(--text);">
-							No tiers match this filter
-						</h3>
+								No account types match this filter
+							</h3>
 						<p class="mt-2 text-sm" style="color: var(--text-muted);">
 							Try another view to see all available options.
 						</p>
@@ -1000,19 +1119,18 @@
 							{@const tierStatus = getTierStatus(tier.visible_available)}
 							{@const tierFeatures = getTierFeatures(tier.metadata)}
 							{@const primaryBadge = getPrimaryTierBadge(tier)}
-							{@const topFeatures = getTopTierFeatures(tierFeatures)}
-							{@const additionalFeatures = getAdditionalTierFeatures(tierFeatures)}
-							{@const hasExpandableDetails = Boolean(
-								additionalFeatures.length > 0 ||
-									tier.description ||
-									tier.metadata?.age_hint ||
+								{@const hasExpandableDetails = Boolean(
+									tierFeatures.length > 0 ||
+										tier.description ||
+										tier.metadata?.age_hint ||
 									getTierManualHandoverPromise(tier)
 							)}
+							{@const exactQuickAddLoading = exactQuickAddLoadingByTier[tier.category_id] || false}
 							{@const isExpanded = isTierDetailsExpanded(tier.category_id)}
 							<div
 								class={`tier-card group relative flex cursor-pointer flex-col overflow-visible rounded-xl shadow transition-all duration-300 ${
 									primaryBadge ? 'tier-card--with-badge' : ''
-								} ${tier.visible_available > 0 ? 'hover:-translate-y-1 hover:shadow-md' : 'opacity-75'}`}
+								} ${tier.visible_available > 0 ? 'hover:-translate-y-1 hover:shadow-md' : ''}`}
 								style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 								role="link"
 								tabindex="0"
@@ -1036,113 +1154,66 @@
 									</div>
 								{/if}
 
-								<div
-									class={`tier-card-body flex flex-1 flex-col p-4 sm:p-6 ${
-										primaryBadge ? 'pt-10 sm:pt-11' : ''
-									}`}
-								>
-									<div
-										class="mb-3 flex flex-col gap-2 sm:mb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
-									>
-										<div class="min-w-0">
-											<h3 class="text-lg font-bold sm:text-xl" style="color: var(--text);">
-												{tier.tier_name}
-											</h3>
-											<p
-												class="mt-1 text-sm leading-snug sm:leading-relaxed"
-												style="color: var(--text-muted);"
-											>
-												{getTierAudienceLabel(tier.metadata)}
-											</p>
-										</div>
-										<div class="mobile-price-block text-left sm:text-right">
+										<div
+											class={`tier-card-body flex flex-1 flex-col p-4 sm:p-5 ${
+												primaryBadge ? 'pt-9 sm:pt-10' : ''
+											}`}
+										>
 											<div
-												class="text-[2.18rem] leading-none font-bold sm:text-2xl"
-												style="background: var(--btn-primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"
+												class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
 											>
-												{formatPrice(tier.price)}
+												<div class="min-w-0">
+													<h3 class="text-base font-bold sm:text-lg" style="color: var(--text);">
+														{tier.tier_name}
+													</h3>
+												</div>
+												<div class="mobile-price-block text-left sm:text-right">
+													<div
+														class="text-[1.85rem] leading-none font-bold sm:text-2xl"
+														style="background: var(--btn-primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"
+													>
+														{formatPrice(tier.price)}
+													</div>
+												</div>
 											</div>
-											<div class="text-xs sm:text-sm" style="color: var(--text-muted);">
-												per account
-											</div>
-										</div>
-									</div>
 
 									<div
 										class="mb-3 flex flex-wrap items-center gap-2 text-sm"
 										style="color: var(--text-muted);"
 									>
-										<span>
-											<span class="font-medium">{tier.visible_available}</span> accounts available
-										</span>
-										<span aria-hidden="true" class="opacity-60">•</span>
-										<span>{getTierDeliveryModeLabel(tier)}</span>
+											<span><span class="font-medium">{tier.visible_available}</span> available</span>
 										{#if tierStatus}
 											<span class="tier-status-chip tier-status-chip--warning">
 												{tierStatus.status}
 											</span>
 										{/if}
-										{#if tier.reservations_active > 0}
-											<span class="tier-status-chip tier-status-chip--soft">
-												{tier.reservations_active} reserved
-											</span>
-										{/if}
 									</div>
 
-									{#if tierFeatures.length > 0}
-										<div class="mb-3 sm:hidden">
-											<div class="flex flex-wrap gap-2">
-												{#each topFeatures as feature, featureIndex (featureIndex)}
-													<span class="mobile-feature-pill">
-														<Star class="h-3.5 w-3.5" />
-														{feature}
-													</span>
-												{/each}
-											</div>
-										</div>
-										<div class="mb-6 hidden sm:block">
-											<h4 class="mb-3 text-sm font-semibold" style="color: var(--text);">
-												Tier Features:
-											</h4>
-											<div class="space-y-2">
-												{#each tierFeatures as feature, featureIndex (featureIndex)}
-													<div
-														class="flex items-start gap-2 text-sm"
-														style="color: var(--text-muted);"
-													>
-														<Star class="mt-0.5 h-3 w-3 flex-shrink-0 text-green-500" />
-														<span>{feature}</span>
-													</div>
-												{/each}
-											</div>
-										</div>
-									{/if}
-
-									{#if hasExpandableDetails}
-										<button
-											type="button"
-											data-card-action
-											onclick={() => toggleTierDetails(tier.category_id)}
-											class="mb-4 inline-flex items-center gap-1 text-xs font-semibold sm:hidden"
-											style="color: var(--link);"
-										>
-											{isExpanded ? 'Less details' : 'More details'}
-											<ChevronRight
-												class={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-											/>
+										{#if hasExpandableDetails}
+											<button
+												type="button"
+												data-card-action
+												onclick={() => toggleTierDetails(tier.category_id)}
+												class="mb-3 inline-flex items-center gap-1 text-xs font-semibold"
+												style="color: var(--link);"
+											>
+												{isExpanded ? 'Hide features' : 'Features'}
+												<ChevronRight
+													class={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+												/>
 										</button>
 									{/if}
 
-									{#if isExpanded}
-										<div
-											class="mb-4 space-y-2 rounded-lg p-3 sm:hidden"
-											style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-										>
-											{#if additionalFeatures.length > 0}
-												<div class="space-y-1.5">
-													{#each additionalFeatures as feature, featureIndex (featureIndex)}
-														<div
-															class="flex items-start gap-2 text-sm"
+										{#if isExpanded}
+											<div
+												class="mb-4 space-y-2 rounded-lg p-3"
+												style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+											>
+												{#if tierFeatures.length > 0}
+													<div class="space-y-1.5">
+														{#each tierFeatures as feature, featureIndex (featureIndex)}
+															<div
+																class="flex items-start gap-2 text-sm"
 															style="color: var(--text-muted);"
 														>
 															<Star class="mt-0.5 h-3 w-3 flex-shrink-0 text-green-500" />
@@ -1174,41 +1245,20 @@
 										</div>
 									{/if}
 
-									{#if tier.metadata?.age_hint}
-										<div
-											class="mb-4 hidden rounded-lg p-3 sm:block"
-											style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-										>
-											<div
-												class="flex items-center gap-2 text-sm"
-												style="color: var(--text-muted);"
-											>
-												<Users class="h-4 w-4" />
-												<span class="font-medium">Account Age:</span>
-												<span>{tier.metadata.age_hint}</span>
-											</div>
-										</div>
-									{/if}
+									</div>
 
-									{#if getTierManualHandoverPromise(tier)}
-										<p class="mt-1 mb-4 hidden text-xs sm:block" style="color: var(--text-muted);">
-											{getTierManualHandoverPromise(tier)}
-										</p>
-									{/if}
-								</div>
-
-								<div class="mx-4 mt-1 mb-4 space-y-2 sm:mx-6 sm:mt-6 sm:mb-6">
+									<div class="mx-4 mt-auto mb-4 space-y-2 sm:mx-5 sm:mb-5">
 									{#if tier.visible_available === 0}
-										<button
-											type="button"
-											onclick={() => subscribeToRestock(tier)}
-											disabled={isTierRestockLoading(tier.category_id) ||
-												isTierRestockSubscribed(tier.category_id)}
-											data-card-action
-											aria-label={`Notify me for ${tier.tier_name}`}
-											class="flex w-full items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:active:scale-100"
-											style="background: var(--btn-primary-gradient); color: #04140C;"
-										>
+											<button
+												type="button"
+												onclick={() => subscribeToRestock(tier)}
+												disabled={isTierRestockLoading(tier.category_id)}
+												data-card-action
+												aria-disabled={isTierRestockSubscribed(tier.category_id)}
+												aria-label={`Notify me for ${tier.tier_name}`}
+												class="flex w-full items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-wait disabled:active:scale-100"
+												style="background: var(--btn-primary-gradient); color: #04140C;"
+											>
 											{#if isTierRestockLoading(tier.category_id)}
 												<span>Saving...</span>
 											{:else if isTierRestockSubscribed(tier.category_id)}
@@ -1222,14 +1272,22 @@
 									{:else}
 										<button
 											type="button"
-											onclick={() => openQuickAddModal(tier)}
+											onclick={() => handlePrimaryTierCta(tier)}
 											data-card-action
 											aria-label={`Quick add ${tier.tier_name}`}
-											class="flex w-full items-center justify-center gap-2 rounded-lg border border-transparent py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-[#7CFFC0] focus-visible:ring-offset-2 focus-visible:outline-none active:scale-[0.99] active:border-[#7CFFC0] active:shadow-[0_0_0_2px_rgba(52,211,153,0.45)]"
+											disabled={exactQuickAddLoading}
+											class="flex w-full items-center justify-center gap-2 rounded-lg border border-transparent py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-[#7CFFC0] focus-visible:ring-offset-2 focus-visible:outline-none active:scale-[0.99] active:border-[#7CFFC0] active:shadow-[0_0_0_2px_rgba(52,211,153,0.45)] disabled:cursor-wait disabled:opacity-85 disabled:active:scale-100"
 											style="background: var(--btn-primary-gradient); color: #04140C;"
 										>
-											<ShoppingCart class="h-4 w-4" />
-											<span>Add to Cart</span>
+											{#if exactQuickAddLoading}
+												<span>Adding...</span>
+											{:else if isExactPreviewTier(tier)}
+												<ShoppingCart class="h-4 w-4" />
+												<span>Add to Cart</span>
+											{:else}
+												<ShoppingCart class="h-4 w-4" />
+												<span>Add to Cart</span>
+											{/if}
 										</button>
 									{/if}
 
@@ -1238,9 +1296,11 @@
 										data-card-action
 										class="hidden w-full items-center justify-center gap-1 rounded-lg py-3 text-center text-sm font-semibold transition-colors hover:opacity-90 sm:inline-flex"
 										style="border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text);"
-										aria-label={`View samples for ${tier.tier_name}`}
+										aria-label={isExactPreviewTier(tier)
+											? `Choose exact profile for ${tier.tier_name}`
+											: `View samples for ${tier.tier_name}`}
 									>
-										View Samples
+										{isExactPreviewTier(tier) ? 'Choose your exact profile' : 'View Samples'}
 										<ChevronRight class="h-4 w-4" />
 									</a>
 									<a
@@ -1248,9 +1308,11 @@
 										data-card-action
 										class="inline-flex w-full items-center justify-center gap-1 py-1 text-center text-sm font-semibold sm:hidden"
 										style="color: var(--text-muted);"
-										aria-label={`View samples for ${tier.tier_name}`}
+										aria-label={isExactPreviewTier(tier)
+											? `Choose exact profile for ${tier.tier_name}`
+											: `View samples for ${tier.tier_name}`}
 									>
-										View Samples
+										{isExactPreviewTier(tier) ? 'Choose your exact profile' : 'View Samples'}
 										<ChevronRight class="h-4 w-4" />
 									</a>
 								</div>
@@ -1430,17 +1492,9 @@
 								</div>
 							{/if}
 						</button>
-						<a
-							href={getTierRoute(quickAddTier.tier_slug)}
-							class="inline-flex w-full items-center justify-center gap-1 text-sm underline-offset-2 transition-colors hover:underline"
-							style="color: var(--link);"
-						>
-							View full details
-							<ChevronRight class="h-4 w-4" />
-						</a>
+						</div>
 					</div>
 				</div>
-			</div>
 		{/if}
 	{/if}
 </main>

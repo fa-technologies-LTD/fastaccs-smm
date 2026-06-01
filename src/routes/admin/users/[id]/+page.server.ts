@@ -283,26 +283,20 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		})
 	);
 
+	const paidOrderSummaries = orderSummaries.filter((order: OrderSummary) =>
+		isRevenueOrder({
+			status: order.status,
+			paymentStatus: order.paymentStatus
+		})
+	);
+
 	const totals = {
-		orderCount: orderSummaries.length,
-		paidOrderCount: orderSummaries.filter((order: OrderSummary) =>
-			isRevenueOrder({
-				status: order.status,
-				paymentStatus: order.paymentStatus
-			})
-		).length,
+		orderCount: paidOrderSummaries.length,
+		paidOrderCount: paidOrderSummaries.length,
 		totalSpent: revenueVisible
-				? orderSummaries
-					.filter((order: OrderSummary) =>
-						isRevenueOrder({
-							status: order.status,
-							paymentStatus: order.paymentStatus
-						})
-					)
-					.reduce((sum: number, order: OrderSummary) => sum + order.totalAmount, 0)
+			? paidOrderSummaries.reduce((sum: number, order: OrderSummary) => sum + order.totalAmount, 0)
 			: 0
 	};
-
 	const timeline = buildTimeline({
 		user: {
 			id: user.id,

@@ -6,13 +6,17 @@ export const load: PageLoad = async ({ fetch }) => {
 		const orderStatsResponse = await fetch('/api/orders/stats');
 		let orderStats = {
 			total_orders: 0,
+			paid_orders: 0,
 			pending_orders: 0,
 			processing_orders: 0,
 			completed_orders: 0,
+			cancelled_orders: 0,
 			failed_orders: 0,
 			todays_orders: 0,
 			total_revenue: 0,
-			todays_revenue: 0
+			todays_revenue: 0,
+			units_sold: 0,
+			total_users: 0
 		};
 
 		if (orderStatsResponse.ok) {
@@ -26,9 +30,14 @@ export const load: PageLoad = async ({ fetch }) => {
 			total_tiers: 0,
 			total_available: 0,
 			total_reserved: 0,
+			total_sold: 0,
+			lifetime_sold_stock: 0,
 			out_of_stock: 0,
 			low_stock: 0,
-			platforms: 0
+			platforms: 0,
+			product_types: 0,
+			accountsInOutOfStockTiers: 0,
+			outOfStockTiersCount: 0
 		};
 
 		if (inventoryStatsResponse.ok) {
@@ -46,21 +55,30 @@ export const load: PageLoad = async ({ fetch }) => {
 		return {
 			orderStats: {
 				total_orders: 0,
+				paid_orders: 0,
 				pending_orders: 0,
 				processing_orders: 0,
 				completed_orders: 0,
+				cancelled_orders: 0,
 				failed_orders: 0,
 				todays_orders: 0,
 				total_revenue: 0,
-				todays_revenue: 0
+				todays_revenue: 0,
+				units_sold: 0,
+				total_users: 0
 			},
 			inventoryStats: {
 				total_tiers: 0,
 				total_available: 0,
 				total_reserved: 0,
+				total_sold: 0,
+				lifetime_sold_stock: 0,
 				out_of_stock: 0,
 				low_stock: 0,
-				platforms: 0
+				platforms: 0,
+				product_types: 0,
+				accountsInOutOfStockTiers: 0,
+				outOfStockTiersCount: 0
 			},
 			error: 'Failed to load dashboard data'
 		};

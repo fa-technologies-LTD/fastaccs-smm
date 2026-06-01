@@ -8,6 +8,7 @@ export interface Platform {
 	metadata?: Record<string, any>;
 	tier_count?: number;
 	total_accounts?: number;
+	min_price?: number | null;
 	sample_tiers?: Array<{
 		name: string;
 		slug: string;
@@ -64,6 +65,11 @@ export const load: PageLoad = async ({ fetch }): Promise<PageData> => {
 
 						// Calculate total accounts across all tiers for this platform
 						const totalAccounts = tiers.reduce((sum, tier) => sum + (tier.accountCount || 0), 0);
+						const positiveTierPrices = tiers
+							.map((tier) => Number(tier.price || 0))
+							.filter((price) => Number.isFinite(price) && price > 0);
+						const minPrice =
+							positiveTierPrices.length > 0 ? Math.min(...positiveTierPrices) : null;
 
 						return {
 							id: platform.id,
@@ -73,6 +79,7 @@ export const load: PageLoad = async ({ fetch }): Promise<PageData> => {
 							metadata: platform.metadata || {},
 							tier_count: tiers.length,
 							total_accounts: totalAccounts,
+							min_price: minPrice,
 							sample_tiers: tiers.slice(0, 6).map((tier) => ({
 								name: tier.name,
 								slug: tier.slug,
@@ -89,6 +96,7 @@ export const load: PageLoad = async ({ fetch }): Promise<PageData> => {
 							metadata: platform.metadata || {},
 							tier_count: 0,
 							total_accounts: 0,
+							min_price: null,
 							sample_tiers: []
 						};
 					}

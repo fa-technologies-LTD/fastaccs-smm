@@ -39,8 +39,12 @@
 		cart.close();
 	}
 
-	function removeItem(tierId: string) {
-		cart.removeTier(tierId);
+	function getCartLineKey(item: CartItemWithTier): string {
+		return item.cartItemId || (item.exactAccount ? `exact:${item.exactAccount.accountId}` : `tier:${item.tierId}`);
+	}
+
+	function removeItem(item: CartItemWithTier) {
+		cart.removeItem(getCartLineKey(item));
 		loadCartItems(); // Refresh items
 	}
 
@@ -179,7 +183,7 @@
 					{:else}
 						<!-- Cart Items -->
 						<div style="border-top: 1px solid var(--border);">
-							{#each cartItems as item (item.tierId)}
+								{#each cartItems as item (getCartLineKey(item))}
 								{@const PlatformIcon = getPlatformIcon(item.tier.platformSlug)}
 								{@const renderPlatformImage = shouldRenderPlatformImage(item)}
 								<div
@@ -195,7 +199,8 @@
 												? 'from-black to-gray-800'
 												: item.tier.platformSlug === 'facebook' && !renderPlatformImage
 													? 'from-blue-600 to-blue-700'
-													: item.tier.platformSlug === 'twitter' && !renderPlatformImage
+													: (item.tier.platformSlug === 'twitter' || item.tier.platformSlug === 'x') &&
+														  !renderPlatformImage
 														? 'from-blue-400 to-blue-500'
 														: !renderPlatformImage
 															? 'from-gray-500 to-gray-600'
@@ -256,7 +261,7 @@
 											{formatPrice(item.tier.price * item.quantity)}
 										</span>
 										<button
-											onclick={() => removeItem(item.tierId)}
+												onclick={() => removeItem(item)}
 											style="border-radius: var(--r-xs); padding: 4px; color: var(--text-dim); transition: all 0.2s;"
 											class="hover:bg-red-500/10"
 											aria-label="Remove item"

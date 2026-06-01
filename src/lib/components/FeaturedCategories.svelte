@@ -3,7 +3,6 @@
 	import { ArrowRight, MessageCircle } from '$lib/icons';
 	import { onDestroy } from 'svelte';
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
-	import { formatPrice } from '$lib/helpers/utils';
 
 	interface PlatformData {
 		id: string;
@@ -56,14 +55,6 @@
 		return 'var(--link)';
 	}
 
-	function getPriceLabel(platform: PlatformData): string {
-		if (!platform.minPrice || platform.minPrice <= 0) {
-			return 'Pricing updates soon';
-		}
-
-		return `From ${formatPrice(platform.minPrice)}`;
-	}
-
 	let featuredPlatforms = $derived.by(() =>
 		[...platforms]
 			.filter((platform) => platform?.slug && platform?.name)
@@ -114,7 +105,7 @@
 						Social Media Accounts
 					</h3>
 					<p style="font-size: 0.9rem; opacity: 0.8; font-family: var(--font-body);">
-						Curated social media accounts across multiple platforms and audience tiers
+						Curated social media accounts across multiple platforms and account types
 					</p>
 				</div>
 
@@ -162,11 +153,6 @@
 											>
 												{getPlatformSubLabel(platform)}
 											</div>
-											<div
-												style="font-size: 1.1rem; font-weight: 700; color: var(--primary); font-family: var(--font-head); margin-top: 8px;"
-											>
-												{getPriceLabel(platform)}
-											</div>
 										</div>
 										{#if platform.totalAccounts > 0}
 											<span class="hover-arrow">
@@ -183,7 +169,7 @@
 							onclick={() => goto('/platforms')}
 							class="btn-primary-cta block w-full cursor-pointer text-center"
 						>
-							Browse All Accounts
+							View available accounts
 						</button>
 					</div>
 				</div>

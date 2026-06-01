@@ -37,7 +37,15 @@ function getPlatformIconFromMetadata(metadata: unknown): string | null {
 	}
 
 	const record = metadata as Record<string, unknown>;
-	const candidates = [record.icon, record.iconUrl, record.icon_url, record.image, record.logo];
+	const candidates = [
+		record.icon,
+		record.iconUrl,
+		record.icon_url,
+		record.image,
+		record.image_url,
+		record.logo,
+		record.logo_url
+	];
 
 	for (const candidate of candidates) {
 		if (typeof candidate === 'string' && candidate.trim().length > 0) {
@@ -50,6 +58,10 @@ function getPlatformIconFromMetadata(metadata: unknown): string | null {
 
 const STORAGE_KEY = 'fastaccs_cart';
 const STORAGE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
+
+function getCartItemId(item: Pick<CartItem, 'tierId' | 'exactAccount'>): string {
+	return item.exactAccount ? `exact:${item.exactAccount.accountId}` : `tier:${item.tierId}`;
+}
 
 class CartStore {
 	private state = $state<CartState>({
@@ -119,21 +131,27 @@ class CartStore {
 			}
 
 			// Validate and filter items
-			const validItems = data.items.filter(
-				(item) =>
-					typeof item.tierId === 'string' &&
-					item.tierId.trim().length > 0 &&
-					typeof item.quantity === 'number' &&
-					item.quantity > 0 &&
-					typeof item.addedAt === 'number' &&
-					(!item.exactAccount ||
-						(typeof item.exactAccount.accountId === 'string' &&
-							typeof item.exactAccount.displayLabel === 'string' &&
-							typeof item.exactAccount.profileUrl === 'string' &&
-							typeof item.exactAccount.reservedUntil === 'string' &&
-							(item.exactAccount.screenshotUrl == null ||
-								typeof item.exactAccount.screenshotUrl === 'string')))
-			);
+				const validItems = data.items
+					.filter(
+						(item) =>
+							typeof item.tierId === 'string' &&
+							item.tierId.trim().length > 0 &&
+							typeof item.quantity === 'number' &&
+							item.quantity > 0 &&
+							typeof item.addedAt === 'number' &&
+							(!item.exactAccount ||
+								(typeof item.exactAccount.accountId === 'string' &&
+									typeof item.exactAccount.displayLabel === 'string' &&
+									typeof item.exactAccount.profileUrl === 'string' &&
+									typeof item.exactAccount.reservedUntil === 'string' &&
+									(item.exactAccount.screenshotUrl == null ||
+										typeof item.exactAccount.screenshotUrl === 'string')))
+					)
+					.map((item) => ({
+						...item,
+						cartItemId: item.cartItemId || getCartItemId(item),
+						quantity: item.exactAccount ? 1 : item.quantity
+					}));
 
 			this.state.items = validItems;
 		} catch (error) {
@@ -161,20 +179,18 @@ class CartStore {
 	addTier(tierId: string, quantity: number = 1): void {
 		if (!tierId || quantity <= 0) return;
 
-		const existingIndex = this.state.items.findIndex((item) => item.tierId === tierId);
+			const existingIndex = this.state.items.findIndex(
+				(item) => item.tierId === tierId && !item.exactAccount
+			);
 
-		if (existingIndex >= 0) {
-			if (this.state.items[existingIndex].exactAccount) {
-				this.state.items[existingIndex].quantity = 1;
-				this.saveToStorage();
-				return;
-			}
-			this.state.items[existingIndex].quantity += quantity;
-		} else {
-			this.state.items.push({
-				tierId,
-				quantity,
-				addedAt: Date.now()
+			if (existingIndex >= 0) {
+				this.state.items[existingIndex].quantity += quantity;
+			} else {
+				this.state.items.push({
+					cartItemId: `tier:${tierId}`,
+					tierId,
+					quantity,
+					addedAt: Date.now()
 			});
 		}
 
@@ -192,27 +208,39 @@ class CartStore {
 			reservedUntil: string;
 		}
 	): void {
-		if (!tierId || !exactAccount.accountId) return;
+			if (!tierId || !exactAccount.accountId) return;
 
-		// Exact-selection orders are intentionally one account at a time for V1.
-		this.state.items = this.state.items.filter(
-			(item) => item.tierId !== tierId && !item.exactAccount
-		);
-		this.state.items.push({
-			tierId,
-			quantity: 1,
-			addedAt: Date.now(),
-			exactAccount
-		});
+			const cartItemId = `exact:${exactAccount.accountId}`;
+			const existingIndex = this.state.items.findIndex((item) => item.cartItemId === cartItemId);
+			const nextItem: CartItem = {
+				cartItemId,
+				tierId,
+				quantity: 1,
+				addedAt: Date.now(),
+				exactAccount
+			};
 
-		this.state.error = null;
-		this.saveToStorage();
-	}
+			if (existingIndex >= 0) {
+				this.state.items[existingIndex] = nextItem;
+			} else {
+				this.state.items.push(nextItem);
+			}
 
-	removeTier(tierId: string): void {
-		this.state.items = this.state.items.filter((item) => item.tierId !== tierId);
-		this.saveToStorage();
-	}
+			this.state.error = null;
+			this.saveToStorage();
+		}
+
+		removeTier(tierId: string): void {
+			this.state.items = this.state.items.filter((item) => item.tierId !== tierId);
+			this.saveToStorage();
+		}
+
+		removeItem(cartItemId: string): void {
+			this.state.items = this.state.items.filter(
+				(item) => (item.cartItemId || getCartItemId(item)) !== cartItemId
+			);
+			this.saveToStorage();
+		}
 
 	updateQuantity(tierId: string, quantity: number): void {
 		if (quantity <= 0) {
@@ -220,7 +248,7 @@ class CartStore {
 			return;
 		}
 
-		const item = this.state.items.find((item) => item.tierId === tierId);
+			const item = this.state.items.find((item) => item.tierId === tierId && !item.exactAccount);
 		if (item) {
 			if (item.exactAccount) {
 				item.quantity = 1;
@@ -312,9 +340,10 @@ class CartStore {
 						didNormalizeIds = true;
 					}
 
-					itemsWithTiers.push({
-						...item,
-						tierId: tier.id,
+						itemsWithTiers.push({
+							...item,
+							cartItemId: item.cartItemId || getCartItemId({ ...item, tierId: tier.id }),
+							tierId: tier.id,
 						tier: {
 							id: tier.id,
 							name: tier.name,
@@ -333,23 +362,25 @@ class CartStore {
 				}
 			}
 
-			// Remove unavailable tiers and normalize legacy slug-based entries to canonical tier IDs.
-			if (itemsWithTiers.length !== this.state.items.length || didNormalizeIds) {
-				const mergedItems = new Map<string, CartItem>();
-				for (const item of itemsWithTiers) {
-					const existing = mergedItems.get(item.tierId);
-					if (existing) {
-						existing.quantity += item.quantity;
-						existing.addedAt = Math.min(existing.addedAt, item.addedAt);
-						continue;
-					}
+				// Remove unavailable tiers and normalize legacy slug-based entries to canonical tier IDs.
+				if (itemsWithTiers.length !== this.state.items.length || didNormalizeIds) {
+					const mergedItems = new Map<string, CartItem>();
+					for (const item of itemsWithTiers) {
+						const key = item.exactAccount ? getCartItemId(item) : `tier:${item.tierId}`;
+						const existing = mergedItems.get(key);
+						if (existing && !item.exactAccount) {
+							existing.quantity += item.quantity;
+							existing.addedAt = Math.min(existing.addedAt, item.addedAt);
+							continue;
+						}
 
-					mergedItems.set(item.tierId, {
-						tierId: item.tierId,
-						quantity: item.quantity,
-						addedAt: item.addedAt,
-						exactAccount: item.exactAccount
-					});
+						mergedItems.set(key, {
+							cartItemId: key,
+							tierId: item.tierId,
+							quantity: item.exactAccount ? 1 : item.quantity,
+							addedAt: item.addedAt,
+							exactAccount: item.exactAccount
+						});
 				}
 
 				this.state.items = Array.from(mergedItems.values());

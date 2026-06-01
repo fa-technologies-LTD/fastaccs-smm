@@ -9,10 +9,13 @@ export interface InventoryStats {
 	total_tiers: number;
 	total_available: number;
 	total_reserved: number;
+	total_sold: number;
+	lifetime_sold_stock: number;
 	out_of_stock: number;
 	low_stock: number;
 	accountsInOutOfStockTiers: number;
 	outOfStockTiersCount: number;
+	product_types: number;
 }
 
 /**

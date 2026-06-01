@@ -54,6 +54,35 @@
 	let selectedTier = $state<CategoryMetadata | null>(null);
 	let tierToDelete = $state<CategoryMetadata | null>(null);
 	let busyTierAction = $state<string | null>(null);
+	let tierStatusFilter = $state<'active' | 'archived' | 'all'>('active');
+	let tierViewMode = $state<'compact' | 'cards'>('compact');
+
+	const activeTierCount = $derived(tiers.filter((tier) => isTierActive(tier)).length);
+	const archivedTierCount = $derived(tiers.filter((tier) => !isTierActive(tier)).length);
+	const visibleTiers = $derived.by(() => {
+		if (tierStatusFilter === 'archived') return tiers.filter((tier) => !isTierActive(tier));
+		if (tierStatusFilter === 'all') return tiers;
+		return tiers.filter((tier) => isTierActive(tier));
+	});
+	const sortedVisibleTiers = $derived.by(() =>
+		[...visibleTiers].sort((a, b) => {
+			const platformCompare = getTierPlatformName(a).localeCompare(getTierPlatformName(b));
+			if (platformCompare !== 0) return platformCompare;
+			return String(a.name || '').localeCompare(String(b.name || ''));
+		})
+	);
+	const groupedVisibleTiers = $derived.by(() => {
+		const groups = new Map<string, { platformId: string; platformName: string; tiers: CategoryMetadata[] }>();
+		for (const tier of sortedVisibleTiers) {
+			const platform = getTierPlatform(tier);
+			const platformId = String(platform?.id || tier.parentId || 'all-platforms');
+			const platformName = platform?.name ? String(platform.name) : 'All Platforms';
+			const existing = groups.get(platformId) || { platformId, platformName, tiers: [] };
+			existing.tiers.push(tier);
+			groups.set(platformId, existing);
+		}
+		return Array.from(groups.values());
+	});
 
 	// Form state for creating/editing tiers
 	let tierForm = $state({
@@ -308,6 +337,29 @@
 		return tier.isActive !== false;
 	}
 
+	function getTierPlatform(tier: CategoryMetadata): CategoryMetadata | null {
+		return platforms.find((platform) => platform.id === tier.parentId) || null;
+	}
+
+	function getTierPlatformName(tier: CategoryMetadata): string {
+		return String(getTierPlatform(tier)?.name || 'All Platforms');
+	}
+
+	function getTierBasePrice(tier: CategoryMetadata): number {
+		const metadata = (tier.metadata || {}) as Record<string, any>;
+		return Number(metadata?.pricing?.base_price || metadata?.price || 0);
+	}
+
+	function getTierFollowerDisplay(tier: CategoryMetadata): string {
+		const metadata = (tier.metadata || {}) as Record<string, any>;
+		return String(metadata?.follower_range?.display || metadata?.follower_count || 'N/A');
+	}
+
+	function getTierFeatureCount(tier: CategoryMetadata): number {
+		const metadata = (tier.metadata || {}) as Record<string, any>;
+		return Array.isArray(metadata?.features) ? metadata.features.length : 0;
+	}
+
 	function getFilenameFromDisposition(disposition: string | null, fallback: string): string {
 		if (!disposition) return fallback;
 		const match = disposition.match(/filename="?([^"]+)"?/i);
@@ -480,6 +532,61 @@
 				</div>
 			</div>
 		</div>
+
+		<div class="mt-3 flex flex-wrap items-center gap-2">
+			<button
+				type="button"
+				onclick={() => (tierStatusFilter = 'active')}
+				class="rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
+				style={tierStatusFilter === 'active'
+					? 'background: rgba(5,212,113,0.12); color: var(--status-success); border: 1px solid rgba(5,212,113,0.28);'
+					: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
+			>
+				Active ({activeTierCount})
+			</button>
+			<button
+				type="button"
+				onclick={() => (tierStatusFilter = 'archived')}
+				class="rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
+				style={tierStatusFilter === 'archived'
+					? 'background: rgba(202,219,46,0.12); color: var(--fa-lime-700); border: 1px solid rgba(202,219,46,0.30);'
+					: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
+			>
+				Archived ({archivedTierCount})
+			</button>
+			<button
+				type="button"
+				onclick={() => (tierStatusFilter = 'all')}
+				class="rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
+				style={tierStatusFilter === 'all'
+					? 'background: rgba(105,109,250,0.14); color: var(--link); border: 1px solid rgba(105,109,250,0.32);'
+					: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
+			>
+				All ({tiers.length})
+			</button>
+			<div class="ml-auto flex rounded-full p-1" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
+				<button
+					type="button"
+					onclick={() => (tierViewMode = 'compact')}
+					class="rounded-full px-3 py-1 text-xs font-semibold transition-all active:scale-95"
+					style={tierViewMode === 'compact'
+						? 'background: rgba(5,212,113,0.14); color: var(--status-success);'
+						: 'background: transparent; color: var(--text-muted);'}
+				>
+					Compact
+				</button>
+				<button
+					type="button"
+					onclick={() => (tierViewMode = 'cards')}
+					class="rounded-full px-3 py-1 text-xs font-semibold transition-all active:scale-95"
+					style={tierViewMode === 'cards'
+						? 'background: rgba(105,109,250,0.14); color: var(--link);'
+						: 'background: transparent; color: var(--text-muted);'}
+				>
+					Cards
+				</button>
+			</div>
+		</div>
 	</div>
 
 	<!-- Tiers List -->
@@ -503,9 +610,141 @@
 				Add Tier
 			</button>
 		</div>
+	{:else if visibleTiers.length === 0}
+		<div class="py-12 text-center">
+			<Archive class="mx-auto mb-4 h-12 w-12" style="color: var(--text-dim);" />
+			<h3 class="mb-2 text-lg font-medium" style="color: var(--text)">
+				No {tierStatusFilter} tiers found
+			</h3>
+			<p class="mb-4" style="color: var(--text-muted)">
+				Switch filters above to view the other tier states.
+			</p>
+		</div>
 	{:else}
-		<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-			{#each tiers as tier (tier.id)}
+		{#if tierViewMode === 'compact'}
+			<div class="space-y-4">
+				{#each groupedVisibleTiers as group (group.platformId)}
+					<section
+						class="overflow-hidden rounded-xl"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+					>
+						<div
+							class="flex items-center justify-between gap-3 px-4 py-3"
+							style="background: var(--bg-elev-2); border-bottom: 1px solid var(--border);"
+						>
+							<div>
+								<h2 class="text-sm font-semibold" style="color: var(--text);">
+									{group.platformName}
+								</h2>
+								<p class="text-xs" style="color: var(--text-muted);">
+									{group.tiers.length} {group.tiers.length === 1 ? 'tier' : 'tiers'}
+								</p>
+							</div>
+							<span
+								class="rounded-full px-2.5 py-1 text-xs font-semibold"
+								style="background: rgba(105,109,250,0.12); color: var(--link); border: 1px solid rgba(105,109,250,0.24);"
+							>
+								Grouped
+							</span>
+						</div>
+
+						<div class="divide-y" style="border-color: var(--border);">
+							{#each group.tiers as tier (getTierId(tier))}
+								{@const metadata = tier.metadata as any}
+								{@const merchandising = getTierMerchandisingState(metadata)}
+								<div class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+									<div class="min-w-0">
+										<div class="flex flex-wrap items-center gap-2">
+											<h3 class="font-semibold" style="color: var(--text);">{tier.name}</h3>
+											<span
+												class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+												style={isTierActive(tier)
+													? 'background: rgba(5,212,113,0.12); color: var(--status-success); border: 1px solid rgba(5,212,113,0.24);'
+													: 'background: rgba(148,163,184,0.12); color: var(--text-muted); border: 1px solid var(--border);'}
+											>
+												{isTierActive(tier) ? 'Active' : 'Archived'}
+											</span>
+											{#if merchandising.isPinned}
+												<span
+													class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+													style="background: rgba(251,191,36,0.14); color: rgb(251,191,36); border: 1px solid rgba(251,191,36,0.28);"
+												>
+													Pinned {merchandising.pinPriority ? `#${merchandising.pinPriority}` : ''}
+												</span>
+											{/if}
+											{#if merchandising.isFeatured}
+												<span
+													class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+													style="background: rgba(34,197,94,0.12); color: rgb(134,239,172); border: 1px solid rgba(34,197,94,0.24);"
+												>
+													{merchandising.featuredBadge || 'Featured'}
+												</span>
+											{/if}
+										</div>
+										<p class="mt-1 text-xs" style="color: var(--text-muted);">
+											{getTierFollowerDisplay(tier)} • ₦{getTierBasePrice(tier).toLocaleString()} •
+											{getTierDeliveryModeLabel(getTierDeliveryConfig(metadata).mode)}
+											{#if getTierFeatureCount(tier) > 0}
+												• {getTierFeatureCount(tier)} feature{getTierFeatureCount(tier) === 1 ? '' : 's'}
+											{/if}
+										</p>
+										{#if metadata?.login_guide_url}
+											<p class="mt-1 text-[11px]" style="color: var(--link);">
+												Login guide attached for buyers
+											</p>
+										{/if}
+									</div>
+
+									<div class="flex flex-wrap items-center gap-1.5">
+										<button
+											onclick={() => offloadTier(tier)}
+											disabled={busyTierAction !== null}
+											class="rounded-full px-2.5 py-1 text-xs font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+											style="background: rgba(255,255,255,0.04); color: var(--text-muted); border: 1px solid var(--border);"
+											title="Offload logs"
+										>
+											Offload
+										</button>
+										<button
+											type="button"
+											onclick={() => offloadAndDeleteTierLogs(tier)}
+											disabled={busyTierAction !== null}
+											class="rounded-full px-2.5 py-1 text-xs font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+											style="background: rgba(255,255,255,0.025); color: var(--text-dim); border: 1px solid var(--border);"
+											title="Download logs, then confirm deletion of available/unsold logs"
+										>
+											Delete logs
+										</button>
+										<button
+											onclick={() => openEditModal(tier)}
+											disabled={busyTierAction !== null}
+											class="rounded-full p-2 transition-colors disabled:opacity-50"
+											style="color: var(--text-muted); border: 1px solid var(--border);"
+											title="Edit Tier"
+											aria-label="Edit Tier"
+										>
+											<Edit size={15} />
+										</button>
+										<button
+											onclick={() => archiveTier(tier)}
+											disabled={!isTierActive(tier) || busyTierAction !== null}
+											class="rounded-full p-2 transition-colors disabled:cursor-not-allowed disabled:opacity-35"
+											style="color: var(--status-warning); border: 1px solid var(--border);"
+											title={isTierActive(tier) ? 'Archive Tier' : 'Tier already archived'}
+											aria-label={isTierActive(tier) ? 'Archive Tier' : 'Tier already archived'}
+										>
+											<Archive size={15} />
+										</button>
+									</div>
+								</div>
+							{/each}
+						</div>
+					</section>
+				{/each}
+			</div>
+			{:else}
+				<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+					{#each sortedVisibleTiers as tier (tier.id)}
 				{@const metadata = tier.metadata as any}
 				{@const merchandising = getTierMerchandisingState(metadata)}
 				<div
@@ -518,9 +757,11 @@
 						<div>
 							<h3 class="flex items-center gap-2 font-semibold" style="color: var(--text);">
 								<Target class="h-4 w-4" style="color: #a855f7;" />
-								{tier.name}
-							</h3>
-							<p class="mt-1 text-sm" style="color: var(--text-muted)">Tier • All Platforms</p>
+									{tier.name}
+								</h3>
+								<p class="mt-1 text-sm" style="color: var(--text-muted)">
+									Tier • {getTierPlatformName(tier)}
+								</p>
 							{#if merchandising.isPinned || merchandising.isFeatured}
 								<div class="mt-2 flex flex-wrap gap-1.5">
 									{#if merchandising.isPinned}
@@ -589,11 +830,11 @@
 							onclick={() => offloadAndDeleteTierLogs(tier)}
 							disabled={busyTierAction !== null}
 							class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-							style="background: rgba(239, 68, 68, 0.1); color: rgb(248, 113, 113); border: 1px solid rgba(239, 68, 68, 0.24);"
+							style="background: rgba(255, 255, 255, 0.035); color: var(--text-dim); border: 1px solid var(--border);"
 							title="Download logs, then confirm deletion of available/unsold logs"
 						>
 							<Trash2 size={12} />
-							Offload & Delete
+							Delete logs
 						</button>
 					</div>
 
@@ -664,7 +905,7 @@
 									{getTierDeliveryModeLabel(getTierDeliveryConfig(metadata).mode)}
 								</span>
 							</div>
-					</div>
+						</div>
 
 					<!-- Features -->
 					{#if metadata?.features && metadata.features.length > 0}
@@ -694,8 +935,9 @@
 						</div>
 					{/if}
 				</div>
-			{/each}
-		</div>
+					{/each}
+				</div>
+			{/if}
 	{/if}
 </div>
 

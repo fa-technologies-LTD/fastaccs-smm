@@ -9,6 +9,7 @@ import {
 } from '$lib/helpers/tier-delivery-config';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { getAffiliateDashboardState } from '$lib/services/affiliate';
+import { reconcilePendingPayments } from '$lib/services/payment-reconciliation';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	try {
@@ -18,6 +19,12 @@ export const GET: RequestHandler = async ({ locals }) => {
 		if (!user) {
 			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
+
+		await reconcilePendingPayments({ limit: 25, staleMinutes: 20, expireMinutes: 20 }).catch(
+			(error) => {
+				console.warn('[dashboard] pending payment reconciliation skipped:', error);
+			}
+		);
 
 		// Fetch all dashboard data in parallel with optimized queries
 		const [orders, affiliateData, wallet, walletTransactions, purchases] = await Promise.all([

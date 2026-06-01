@@ -344,13 +344,6 @@
 	class="rounded-[var(--r-md)] border border-[var(--border)]"
 	style="background: linear-gradient(180deg, var(--surface-2), var(--surface));"
 >
-	<div class="border-b border-[var(--border)] p-6">
-		<h2 class="text-base font-semibold" style="color: var(--text); font-family: var(--font-head);">
-			Order History
-		</h2>
-		<p style="color: var(--text-muted);">Track your orders and open details quickly</p>
-	</div>
-
 	{#if orders.length === 0}
 		<div class="p-10 text-center">
 			<Clock class="mx-auto mb-3 h-10 w-10" style="color: var(--text-dim);" />
@@ -420,23 +413,23 @@
 						<div class="text-xs sm:text-sm" style="color: var(--text-dim);">
 							Fulfillment: {getFulfillmentState(order)}
 						</div>
-						<div class="flex flex-col gap-2 text-sm sm:flex-row sm:text-base">
+						<div class="grid grid-cols-2 gap-2 text-sm sm:flex sm:flex-row sm:text-base">
 							{#if isPaymentRecheckable(order)}
 								<button
 									type="button"
 									onclick={() => checkPaymentStatus(order)}
 									disabled={checkingPaymentByOrderId[order.id]}
-									class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
+									class="col-span-2 cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-1 sm:px-4 sm:text-sm"
 									style="background: rgba(202,219,46,0.12); border: 1px solid rgba(202,219,46,0.32); color: var(--text);"
 								>
-									{checkingPaymentByOrderId[order.id] ? 'Checking...' : 'Check Payment'}
+									{checkingPaymentByOrderId[order.id] ? 'Checking...' : 'Refresh payment'}
 								</button>
 							{/if}
 							<button
 								onclick={() => reorderItems(order)}
 								data-sveltekit-preload-data="hover"
 								class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 sm:px-4 sm:text-sm"
-								style="background: linear-gradient(180deg, rgba(5,212,113,0.95), rgba(13,145,82,0.95)); border: 1px solid rgba(5,212,113,0.40); color: #04140C;"
+								style="background: var(--btn-primary-gradient); border: 1px solid var(--btn-primary-border); color: var(--btn-primary-text);"
 							>
 								Order Again
 							</button>

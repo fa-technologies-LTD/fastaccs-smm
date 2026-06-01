@@ -272,15 +272,15 @@ function buildDisplayLabel(account: AccountPreviewRow, index: number): string {
 	const niche = sanitizePublicText(account.niche, 16);
 	const age = formatAgeBadge(account.ageMonths);
 
-	if (followers && niche) return `${followers}F ${toTitleCase(niche)} ${sequence}`;
-	if (followers) return `${followers}F Profile ${sequence}`;
-	if (niche) return `${toTitleCase(niche)} Profile ${sequence}`;
-	if (age) return `${age} Profile ${sequence}`;
+	if (followers && niche) return `${followers} ${toTitleCase(niche)} Pick ${sequence}`;
+	if (followers) return `${followers} Pick ${sequence}`;
+	if (niche) return `${toTitleCase(niche)} Pick ${sequence}`;
+	if (age) return `${age} Pick ${sequence}`;
 	if (typeof account.qualityScore === 'number' && account.qualityScore >= 4) {
-		return `Premium Profile ${sequence}`;
+		return `Premium Pick ${sequence}`;
 	}
 
-	return `Profile ${sequence}`;
+	return `Available Pick ${sequence}`;
 }
 
 function getReservationExpiry(minutes = EXACT_PREVIEW_RESERVATION_MINUTES): Date {
@@ -467,7 +467,6 @@ export async function reserveExactPreviewAccount(input: {
 
 	await prisma.$transaction(async (tx) => {
 		await releaseExpiredExactPreviewReservations(tx, input.tierId);
-		await releaseUserExactPreviewReservations(input.userId, input.tierId, tx);
 		const currentAccount = await tx.account.findUnique({
 			where: { id: input.accountId },
 			select: { credentialExtras: true }

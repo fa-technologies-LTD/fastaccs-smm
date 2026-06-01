@@ -47,15 +47,15 @@
 	--text-dim: rgba(255, 255, 255, 0.55);
 
 	/* Primary Actions */
-	--primary: var(--fa-green-500);
-	--primary-strong: var(--fa-green-600);
+	--primary: var(--fa-green-600);
+	--primary-strong: var(--fa-green-800);
 	--link: var(--fa-blue-300);
-	--focus: rgba(5, 212, 113, 0.35);
+	--focus: rgba(37, 181, 112, 0.32);
 
 	/* ===== SHADOWS & EFFECTS ===== */
 	--shadow-1: 0 8px 24px rgba(0, 0, 0, 0.35);
 	--shadow-2: 0 14px 40px rgba(0, 0, 0, 0.5);
-	--glow-primary: 0 0 0 1px rgba(5, 212, 113, 0.22), 0 10px 40px rgba(5, 212, 113, 0.1);
+	--glow-primary: 0 0 0 1px rgba(37, 181, 112, 0.2), 0 10px 34px rgba(13, 145, 82, 0.12);
 
 	/* ===== BORDER RADIUS ===== */
 	--r-xs: 10px;
@@ -111,8 +111,8 @@
 	--gradient-linkedin: linear-gradient(135deg, #0077b5 0%, #005885 100%);
 
 	/* ===== BUTTON GRADIENTS ===== */
-	--btn-primary-gradient: linear-gradient(180deg, rgba(37, 181, 112, 0.98), rgba(13, 145, 82, 0.98));
-	--btn-primary-gradient-hover: linear-gradient(180deg, rgba(52, 204, 132, 1), rgba(13, 145, 82, 1));
+	--btn-primary-gradient: linear-gradient(180deg, rgba(40, 166, 105, 0.98), rgba(10, 114, 68, 0.98));
+	--btn-primary-gradient-hover: linear-gradient(180deg, rgba(50, 184, 119, 1), rgba(13, 130, 78, 1));
 	--btn-secondary-gradient: linear-gradient(
 		180deg,
 		rgba(105, 109, 250, 0.18),

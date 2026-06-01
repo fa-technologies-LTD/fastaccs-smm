@@ -26,6 +26,7 @@ import {
 	attachExactPreviewSelectionsToOrder,
 	releaseExactPreviewReservationsForOrder
 } from '$lib/services/exact-preview';
+import { reconcilePendingPayments } from '$lib/services/payment-reconciliation';
 
 interface CreateOrderItemInput {
 	categoryId: string;
@@ -92,6 +93,12 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		if (!locals.user) {
 			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
 		}
+
+		await reconcilePendingPayments({ limit: 25, staleMinutes: 20, expireMinutes: 20 }).catch(
+			(error) => {
+				console.warn('[orders.list] pending payment cleanup skipped:', error);
+			}
+		);
 
 		const status = url.searchParams.get('status');
 		const customerEmail = url.searchParams.get('customerEmail');
@@ -202,7 +209,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				return json(
 					{
 						success: false,
-						error: 'Exact account selections must be checked out one account at a time.'
+						error: 'Each exact account selection must use quantity 1.'
 					},
 					{ status: 400 }
 				);
@@ -235,14 +242,16 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		});
 		const categoryById = new Map(categories.map((category) => [category.id, category]));
 
-		const itemsWithNames: Array<{
-			categoryId: string;
-			quantity: number;
-			unitPrice: number;
-			categoryName: string;
-			categoryMetadata: Record<string, unknown>;
-			deliveryMode: TierDeliveryMode;
-		}> = [];
+			const itemsWithNames: Array<{
+				categoryId: string;
+				quantity: number;
+				unitPrice: number;
+				categoryName: string;
+				categoryMetadata: Record<string, unknown>;
+				deliveryMode: TierDeliveryMode;
+				exactAccountId: string | null;
+				exactAccountLabel: string | null;
+			}> = [];
 		const deliveryModes = new Set<TierDeliveryMode>();
 
 		for (const item of normalizedItems) {
@@ -267,12 +276,14 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				quantity: item.quantity,
 				unitPrice,
 				categoryName: `${category.parent?.name || 'Unknown Platform'} ${category.name}`,
-				categoryMetadata:
-					(category.metadata as Record<string, unknown> | null | undefined) || {},
-				deliveryMode: normalizeTierDeliveryMode(
-					(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
-				)
-			});
+					categoryMetadata:
+						(category.metadata as Record<string, unknown> | null | undefined) || {},
+					deliveryMode: normalizeTierDeliveryMode(
+						(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
+					),
+					exactAccountId: item.exactAccountId,
+					exactAccountLabel: item.exactAccountLabel
+				});
 			deliveryModes.add(
 				normalizeTierDeliveryMode(
 					(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
@@ -281,15 +292,15 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		}
 
 		if (deliveryModes.size > 1) {
-			return json(
-				{
+				return json(
+					{
 						success: false,
 						error:
 							'Manual Handover (WhatsApp) items must be checked out separately from Instant Delivery items.'
 					},
-				{ status: 400 }
-			);
-		}
+					{ status: 400 }
+				);
+			}
 
 		const orderDeliveryMode = deliveryModes.has('manual_handover')
 			? 'manual_handover'
@@ -417,8 +428,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				status: 'pending',
 				affiliateCode: attribution.affiliateCode || null,
 				affiliateUserId: attribution.affiliateUserId || null,
-				promotionId,
-				promotionCode: appliedPromotionCode,
+					promotionId,
+					promotionCode: appliedPromotionCode,
 					orderItems: {
 						create: itemsWithNames.map((item) => ({
 							categoryId: item.categoryId,
@@ -429,40 +440,41 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 							productCategory: 'tier'
 						}))
 					}
-			},
-			include: {
-				orderItems: {
-					include: {
-						accounts: true
+				},
+				include: {
+					orderItems: {
+						include: {
+							accounts: true
+						},
+						orderBy: { createdAt: 'asc' }
 					}
 				}
-			}
-		}); // Automatically fulfill order (allocate + deliver accounts)
+			}); // Automatically fulfill order (allocate + deliver accounts)
 
 		if (exactSelectionItems.length > 0) {
-			try {
-				await prisma.$transaction(async (tx) => {
-					const orderItemsByCategory = new Map(
-						data.orderItems.map((item) => [item.categoryId, item.id])
-					);
-					await attachExactPreviewSelectionsToOrder({
-						orderId: data.id,
-						userId: checkoutUserId,
-						client: tx,
-						selections: exactSelectionItems.map((item) => {
-							const orderItemId = orderItemsByCategory.get(item.categoryId);
-							if (!orderItemId) {
-								throw new Error('Could not match exact account to order item.');
-							}
-							return {
-								categoryId: item.categoryId,
-								accountId: item.exactAccountId as string,
-								displayLabel: item.exactAccountLabel || undefined,
-								orderItemId
-							};
-						})
+				try {
+					await prisma.$transaction(async (tx) => {
+						await attachExactPreviewSelectionsToOrder({
+							orderId: data.id,
+							userId: checkoutUserId,
+							client: tx,
+							selections: itemsWithNames
+								.map((item, index) => {
+									if (!item.exactAccountId) return null;
+									const orderItemId = data.orderItems[index]?.id;
+									if (!orderItemId) {
+										throw new Error('Could not match exact account to order item.');
+									}
+									return {
+										categoryId: item.categoryId,
+										accountId: item.exactAccountId,
+										displayLabel: item.exactAccountLabel || undefined,
+										orderItemId
+									};
+								})
+								.filter((selection): selection is NonNullable<typeof selection> => Boolean(selection))
+						});
 					});
-				});
 			} catch (error) {
 				await cleanupOrderCreation(data.id).catch((cleanupError) => {
 					console.error('Failed to cleanup exact preview order after attach failure:', cleanupError);

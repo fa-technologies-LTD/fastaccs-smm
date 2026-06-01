@@ -14,15 +14,15 @@
 				class="mb-4 text-2xl leading-tight font-bold sm:text-3xl md:text-4xl"
 				style="font-family: var(--font-head); color: var(--text); letter-spacing: -0.03em;"
 			>
-				Get Premium Social Media Accounts
-				<span style="color: var(--fa-lime-400);">Instantly</span>
+				Get Quality Social Media Accounts
+				<span style="color: var(--fa-lime-400);">& Boosting Services</span>
 			</h1>
 			<p
 				class="mx-auto mb-6 max-w-3xl text-base sm:mb-8 sm:text-lg md:text-xl lg:text-2xl"
 				style="font-family: var(--font-body); color: rgba(255,255,255,0.85);"
 			>
-				Shop social media accounts and growth services with secure checkout and quick delivery
-				after payment confirmation.
+				Buy social media accounts and boosting services like followers, likes, and views with
+				secure checkout and fast delivery after payment confirmation.
 			</p>
 		</div>
 
@@ -33,13 +33,13 @@
 				onclick={() => goto('/platforms')}
 				data-sveltekit-preload-data="hover"
 			>
-				Browse Accounts
+				See available socials
 			</button>
 			<button
 				class="btn-cta-secondary w-full cursor-pointer rounded-full border-2 px-6 py-3 text-base font-semibold sm:w-auto sm:px-8"
 				onclick={() => addToast({ type: 'info', title: 'Coming Soon!' })}
 			>
-				View Growth Services
+				View Boosting services
 			</button>
 		</div>
 

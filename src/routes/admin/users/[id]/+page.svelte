@@ -231,17 +231,17 @@
 				class="rounded-lg p-3"
 				style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 			>
-				<p class="text-xs uppercase" style="color: var(--text-dim);">Orders</p>
-				<p class="mt-1 text-lg font-bold" style="color: var(--text);">{stats.orderCount}</p>
+				<p class="text-xs uppercase" style="color: var(--text-dim);">Paid Orders</p>
+				<p class="mt-1 text-lg font-bold" style="color: var(--status-success);">
+					{stats.paidOrderCount}
+				</p>
 			</div>
 			<div
 				class="rounded-lg p-3"
 				style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 			>
-				<p class="text-xs uppercase" style="color: var(--text-dim);">Paid Orders</p>
-				<p class="mt-1 text-lg font-bold" style="color: var(--status-success);">
-					{stats.paidOrderCount}
-				</p>
+				<p class="text-xs uppercase" style="color: var(--text-dim);">Order Attempts</p>
+				<p class="mt-1 text-lg font-bold" style="color: var(--text-muted);">{orders.length}</p>
 			</div>
 			<div
 				class="rounded-lg p-3"

@@ -1,4 +1,4 @@
-import { Instagram, Music, Facebook, X as XIcon, Package } from '$lib/icons';
+import { Instagram, Tiktok, Facebook, X as XIcon, Package } from '$lib/icons';
 
 /**
  * Platform Icon Management:
@@ -54,7 +54,7 @@ type PlatformIconComponent = typeof Package;
 // Hardcoded icon mapping for major platforms (Tabler icons)
 const platformIcons: Record<string, PlatformIconComponent> = {
 	instagram: Instagram,
-	tiktok: Music,
+	tiktok: Tiktok,
 	facebook: Facebook,
 	x: XIcon
 };

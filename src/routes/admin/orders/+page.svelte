@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { getOrders, getOrderStats } from '$lib/services/orders';
+	import { getOrders } from '$lib/services/orders';
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
-	import { ORDER_STATUS_GROUPS, getOrderStatusLabel } from '$lib/helpers/order-status';
+	import { getOrderStatusLabel } from '$lib/helpers/order-status';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
 	import { isRevenueOrder } from '$lib/helpers/order-revenue';
 
@@ -22,13 +22,6 @@
 	let searchTerm = $state('');
 	let loading = $state(false);
 	let orders = $state(data.orders || []);
-	let stats = $state({
-		total_orders: 0,
-		pending_orders: 0,
-		processing_orders: 0,
-		completed_orders: 0,
-		total_revenue: 0
-	});
 
 	// Filter orders based on search
 	const filteredOrders = $derived.by(() => {
@@ -45,35 +38,46 @@
 		);
 	});
 
+	function isCancelledOrder(order: any): boolean {
+		return (
+			String(order.status || '').toLowerCase() === 'cancelled' ||
+			String(order.paymentStatus || '').toLowerCase() === 'cancelled'
+		);
+	}
+
+	function getOrderItems(order: any): any[] {
+		if (Array.isArray(order.orderItems)) return order.orderItems;
+		if (Array.isArray(order.items)) return order.items;
+		return [];
+	}
+
+	function getOrderUnits(order: any): number {
+		return getOrderItems(order).reduce((sum: number, item: any) => {
+			const quantity = Number(item.quantity || 0);
+			return sum + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
+		}, 0);
+	}
+
 	// Calculate summary stats from filtered orders
 	const summaryStats = $derived.by(() => {
-		const pendingStatuses = new Set(ORDER_STATUS_GROUPS.pending);
-		const processingStatuses = new Set(ORDER_STATUS_GROUPS.processing);
-		const completedStatuses = new Set(ORDER_STATUS_GROUPS.completed);
-
 		const totalOrders = filteredOrders.length;
-		const pendingOrders = filteredOrders.filter((o: any) => pendingStatuses.has(o.status)).length;
-		const processingOrders = filteredOrders.filter((o: any) =>
-			processingStatuses.has(o.status)
-		).length;
-		const completedOrders = filteredOrders.filter((o: any) =>
-			completedStatuses.has(o.status)
-		).length;
-		const totalRevenue = filteredOrders
-			.filter((o: any) =>
-				isRevenueOrder({
-					status: o.status,
-					paymentStatus: o.paymentStatus
-				})
-			)
+		const paidOrders = filteredOrders.filter((o: any) =>
+			isRevenueOrder({
+				status: o.status,
+				paymentStatus: o.paymentStatus
+			})
+		);
+		const cancelledOrders = filteredOrders.filter(isCancelledOrder).length;
+		const totalRevenue = paidOrders
 			.reduce((sum: number, o: any) => sum + Number(o.totalAmount || 0), 0);
+		const unitsSold = paidOrders.reduce((sum: number, order: any) => sum + getOrderUnits(order), 0);
 
 		return {
 			total_orders: totalOrders,
-			pending_orders: pendingOrders,
-			processing_orders: processingOrders,
-			completed_orders: completedOrders,
-			total_revenue: totalRevenue
+			paid_orders: paidOrders.length,
+			cancelled_orders: cancelledOrders,
+			total_revenue: totalRevenue,
+			units_sold: unitsSold
 		};
 	});
 
@@ -81,13 +85,10 @@
 	async function loadOrders() {
 		loading = true;
 		try {
-			const [ordersResult, statsResult] = await Promise.all([getOrders(), getOrderStats()]);
+			const ordersResult = await getOrders();
 
 			if (ordersResult.data) {
 				orders = ordersResult.data;
-			}
-			if (statsResult.data) {
-				stats = statsResult.data;
 			}
 		} catch (error) {
 			console.error('Failed to load orders:', error);
@@ -175,52 +176,45 @@
 	{/if}
 
 	<!-- Stats Cards -->
-	<div class="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
+	<div class="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
 		<div
 			class="rounded-lg p-3 sm:p-4"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 		>
 			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
-				Total Orders
+				Total Paid Orders
 			</div>
-			<div class="text-lg font-bold sm:text-2xl" style="color: var(--text)">
-				{summaryStats.total_orders}
-			</div>
-		</div>
-		<div
-			class="rounded-lg p-3 sm:p-4"
-			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
-		>
-			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Pending</div>
-			<div class="text-lg font-bold sm:text-2xl" style="color: var(--status-warning);">
-				{summaryStats.pending_orders}
-			</div>
-		</div>
-		<div
-			class="rounded-lg p-3 sm:p-4"
-			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
-		>
-			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Processing</div>
-			<div class="text-lg font-bold sm:text-2xl" style="color: var(--link);">
-				{summaryStats.processing_orders}
-			</div>
-		</div>
-		<div
-			class="rounded-lg p-3 sm:p-4"
-			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
-		>
-			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Completed</div>
 			<div class="text-lg font-bold sm:text-2xl" style="color: var(--status-success);">
-				{summaryStats.completed_orders}
+				{summaryStats.paid_orders}
 			</div>
 		</div>
 		<div
-			class="col-span-2 rounded-lg p-3 sm:col-span-1 sm:p-4"
+			class="rounded-lg p-3 sm:p-4"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
+			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Cancelled</div>
+			<div class="text-lg font-bold sm:text-2xl" style="color: rgb(248, 113, 113);">
+				{summaryStats.cancelled_orders}
+			</div>
+		</div>
+		<div
+			class="rounded-lg p-3 sm:p-4"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 		>
 			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Revenue</div>
 			<div class="text-lg font-bold sm:text-2xl" style="color: var(--primary);">
 				{formatAdminAmount(summaryStats.total_revenue)}
+			</div>
+		</div>
+		<div
+			class="rounded-lg p-3 sm:p-4"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
+			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+				Account Units Sold
+			</div>
+			<div class="text-lg font-bold sm:text-2xl" style="color: var(--text)">
+				{summaryStats.units_sold}
 			</div>
 		</div>
 	</div>

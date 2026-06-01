@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import { ArrowRight, Check, Zap, Search, SearchX, Package } from '$lib/icons';
+	import { ArrowRight, Check, Zap, Search, SearchX, Package, ShieldCheck } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
+	import { formatPrice } from '$lib/helpers/utils';
 	import {
 		getPlatformColor,
 		getPlatformIcon,
@@ -17,6 +18,12 @@
 
 	interface PlatformMetadata {
 		icon?: unknown;
+		icon_url?: unknown;
+		iconUrl?: unknown;
+		logo?: unknown;
+		logo_url?: unknown;
+		image?: unknown;
+		image_url?: unknown;
 		color?: unknown;
 	}
 
@@ -60,7 +67,21 @@
 	}
 
 	function shouldRenderCustomIcon(platformId: string, metadata: PlatformMetadata): boolean {
-		return isPlatformImageUrl(metadata.icon) && !failedPlatformIcons[platformId];
+		return isPlatformImageUrl(getPlatformImageValue(metadata)) && !failedPlatformIcons[platformId];
+	}
+
+	function getPlatformImageValue(metadata: PlatformMetadata): string | null {
+		const candidates = [
+			metadata.icon,
+			metadata.iconUrl,
+			metadata.icon_url,
+			metadata.logo,
+			metadata.logo_url,
+			metadata.image,
+			metadata.image_url
+		];
+		const match = candidates.find((value) => isPlatformImageUrl(value));
+		return typeof match === 'string' ? match : null;
 	}
 
 	function markPlatformIconFailed(platformId: string) {
@@ -81,10 +102,6 @@
 		return platform.description?.trim() || `${platform.name} accounts`;
 	}
 
-	function formatNumber(num: number): string {
-		return new Intl.NumberFormat().format(num || 0);
-	}
-
 	function getSearchableText(platform: PageData['platforms'][number]): string {
 		return [
 			platform.name,
@@ -94,6 +111,15 @@
 		]
 			.join(' ')
 			.toLowerCase();
+	}
+
+	function getTypeLabel(count: number): string {
+		return count === 1 ? 'Account Type' : 'Account Types';
+	}
+
+	function getStartingPriceLabel(platform: PageData['platforms'][number]): string {
+		const minPrice = Number(platform.min_price || 0);
+		return minPrice > 0 ? `From ${formatPrice(minPrice)}` : 'Price updates soon';
 	}
 
 	function isHighEngagementPlatform(platform: PageData['platforms'][number]): boolean {
@@ -164,7 +190,7 @@
 	<title>Browse Accounts - FastAccs</title>
 	<meta
 		name="description"
-		content="Browse available social media platforms and account tiers with current stock and pricing."
+		content="Browse available social media platforms and account types with current stock and pricing."
 	/>
 </svelte:head>
 
@@ -197,9 +223,9 @@
 		</div>
 
 		<div class="trust-strip">
-			<span><Check size={12} class="trust-icon" /> Multiple tiers</span>
+			<span><Check size={12} class="trust-icon" /> Account types</span>
 			<span><Zap size={12} class="trust-icon" /> Instant delivery</span>
-			<span><span class="support-dot"></span> 24/7 support</span>
+			<span><ShieldCheck size={12} class="trust-icon" /> Support ready</span>
 		</div>
 	</section>
 
@@ -228,7 +254,6 @@
 				{#each filteredPlatforms as platform, index (platform.id)}
 					{@const PlatformIcon = getPlatformIcon(platform.slug)}
 					{@const platformMeta = getPlatformMetadata(platform.metadata)}
-					{@const previewTiers = platform.sample_tiers?.slice(0, 4) || []}
 					<button
 						type="button"
 						class={`platform-card group ${(platform.total_accounts || 0) <= 0 ? 'sold-out' : ''}`}
@@ -245,7 +270,7 @@
 									<div class="icon-shell">
 										{#if shouldRenderCustomIcon(platform.id, platformMeta)}
 											<img
-												src={platformMeta.icon as string}
+												src={getPlatformImageValue(platformMeta) as string}
 												alt={platform.name}
 												class="h-8 w-8"
 												onerror={() => markPlatformIconFailed(platform.id)}
@@ -267,33 +292,14 @@
 
 						<div class="platform-body">
 							<div class="stats-grid">
-								<div class="text-center">
+								<div class="stat-group">
 									<div class="stat-value">{platform.tier_count || 0}</div>
-									<div class="stat-label">Available Tiers</div>
+									<div class="stat-label">{getTypeLabel(platform.tier_count || 0)}</div>
 								</div>
-								<div class="text-center">
-									<div class="stat-value">{formatNumber(platform.total_accounts || 0)}</div>
-									<div class="stat-label">Total Accounts</div>
+								<div class="stat-group stat-group--price">
+									<div class="stat-price-label">Starting price</div>
+									<div class="stat-price">{getStartingPriceLabel(platform)}</div>
 								</div>
-							</div>
-
-							{#if previewTiers.length > 0}
-								<div class="tiers-wrap">
-									<h4 class="tiers-label">Available Tiers:</h4>
-									<div class="flex flex-wrap gap-2">
-										{#each previewTiers as tier}
-											<span class="tier-pill">{tier.name}</span>
-										{/each}
-										{#if (platform.sample_tiers?.length || 0) > 4}
-											<span class="tier-pill dim">+{(platform.sample_tiers?.length || 0) - 4} more</span>
-										{/if}
-									</div>
-								</div>
-							{/if}
-
-							<div class="browse-row">
-								<span>Browse {platform.name} Accounts</span>
-								<ArrowRight class="h-4 w-4" />
 							</div>
 						</div>
 					</button>
@@ -383,7 +389,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: 16px;
+		gap: 8px;
 		padding: 4px 0 10px;
 		flex-wrap: wrap;
 	}
@@ -391,23 +397,19 @@
 	.trust-strip span {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
-		font-size: 10px;
-		color: #777;
+		gap: 5px;
+		border-radius: 999px;
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		background: rgba(255, 255, 255, 0.035);
+		padding: 5px 9px;
+		font-size: 10.5px;
+		color: rgba(255, 255, 255, 0.58);
 		font-family: var(--font-body);
 		white-space: nowrap;
 	}
 
 	.trust-icon {
 		color: #22c55e;
-	}
-
-	.support-dot {
-		display: inline-block;
-		width: 7px;
-		height: 7px;
-		border-radius: 999px;
-		background: #facc15;
 	}
 
 	.platform-grid {
@@ -448,7 +450,7 @@
 	}
 
 	.platform-header {
-		padding: 1rem;
+		padding: 0.85rem;
 		color: #fff;
 	}
 
@@ -456,12 +458,12 @@
 		border-radius: 999px;
 		background: rgba(255, 255, 255, 0.2);
 		border: 1px solid rgba(255, 255, 255, 0.3);
-		padding: 0.6rem;
+		padding: 0.5rem;
 		flex-shrink: 0;
 	}
 
 	.platform-title {
-		font-size: 1.2rem;
+		font-size: 1.06rem;
 		font-weight: 700;
 		font-family: var(--font-head);
 		line-height: 1.15;
@@ -471,25 +473,32 @@
 	}
 
 	.platform-subtitle {
-		font-size: 0.85rem;
+		font-size: 0.78rem;
 		opacity: 0.92;
 		font-family: var(--font-body);
 		margin-top: 0.2rem;
 	}
 
 	.platform-body {
-		padding: 1rem;
+		padding: 0.9rem;
 	}
 
 	.stats-grid {
-		margin-bottom: 1rem;
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 0.75rem;
+		gap: 0.85rem;
+	}
+
+	.stat-group {
+		min-width: 0;
+	}
+
+	.stat-group--price {
+		text-align: right;
 	}
 
 	.stat-value {
-		font-size: 1.45rem;
+		font-size: 1.25rem;
 		font-weight: 700;
 		color: var(--text);
 		font-family: var(--font-body);
@@ -501,46 +510,25 @@
 		font-family: var(--font-body);
 	}
 
-	.tiers-wrap {
-		margin-bottom: 1rem;
+	.stat-price {
+		font-size: 0.93rem;
+		font-weight: 700;
+		color: var(--primary);
+		font-family: var(--font-body);
+		line-height: 1.2;
 	}
 
-	.tiers-label {
-		margin-bottom: 0.5rem;
-		font-size: 0.84rem;
-		font-weight: 600;
-		color: var(--text-muted);
-		font-family: var(--font-head);
-	}
-
-	.tier-pill {
-		border-radius: var(--r-xs);
-		background: var(--bg-elev-2);
-		border: 1px solid var(--border);
-		padding: 4px 12px;
-		font-size: 0.75rem;
-		font-weight: 500;
+	.stat-price-label {
+		font-size: 0.66rem;
 		color: var(--text-muted);
 		font-family: var(--font-body);
-	}
-
-	.tier-pill.dim {
-		color: var(--text-dim);
-	}
-
-	.browse-row {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.5rem;
-		font-size: 0.9rem;
-		font-weight: 500;
-		color: var(--text-muted);
-		font-family: var(--font-body);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		margin-bottom: 0.1rem;
 	}
 
 	.platform-skeleton {
-		height: 270px;
+		height: 210px;
 		border-radius: var(--r-md);
 		border: 1px solid var(--border);
 		background: linear-gradient(
@@ -643,20 +631,20 @@
 			margin-right: auto;
 		}
 
-		.platform-header {
-			padding: 1.25rem;
-		}
+			.platform-header {
+				padding: 1rem;
+			}
 
-		.platform-body {
-			padding: 1.25rem;
-		}
+			.platform-body {
+				padding: 0.9rem 1rem;
+			}
 
-		.platform-title {
-			font-size: 1.38rem;
-		}
+			.platform-title {
+				font-size: 1.16rem;
+			}
 
-		.platform-subtitle {
-			font-size: 0.95rem;
-		}
+			.platform-subtitle {
+				font-size: 0.84rem;
+			}
 	}
 </style>

@@ -13,6 +13,7 @@ import {
 	IconBolt,
 	IconBrandFacebook,
 	IconBrandInstagram,
+	IconBrandTiktok,
 	IconBrandYoutube,
 	IconBriefcase,
 	IconCalendar,
@@ -124,6 +125,7 @@ export const Home = IconHome;
 export const ImagePlus = IconPhotoPlus;
 export const Info = IconInfoCircle;
 export const Instagram = IconBrandInstagram;
+export const Tiktok = IconBrandTiktok;
 export const Youtube = IconBrandYoutube;
 export const Layers = IconLayersIntersect;
 export const LifeBuoy = IconLifebuoy;

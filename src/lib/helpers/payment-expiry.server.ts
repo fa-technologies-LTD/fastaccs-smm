@@ -1,6 +1,6 @@
 import { env } from '$env/dynamic/private';
 
-const DEFAULT_PENDING_PAYMENT_EXPIRE_MINUTES = 120;
+const DEFAULT_PENDING_PAYMENT_EXPIRE_MINUTES = 20;
 const NON_EXPIRING_PENDING_STATUSES = new Set(['ERROR']);
 
 function parseExpireMinutes(): number {

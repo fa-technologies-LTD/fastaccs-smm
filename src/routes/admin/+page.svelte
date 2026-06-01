@@ -4,7 +4,6 @@
 		Package,
 		ShoppingCart,
 		Users,
-		TrendingUp,
 		DollarSign,
 		Eye,
 		EyeOff,
@@ -24,21 +23,28 @@
 		data: {
 			orderStats: {
 				total_orders: number;
+				paid_orders: number;
 				pending_orders: number;
 				processing_orders: number;
 				completed_orders: number;
+				cancelled_orders: number;
 				failed_orders: number;
 				todays_orders: number;
 				total_revenue: number;
 				todays_revenue: number;
+				units_sold: number;
+				total_users: number;
 			};
 			inventoryStats: {
 				total_tiers: number;
 				total_available: number;
 				total_reserved: number;
+				total_sold: number;
+				lifetime_sold_stock: number;
 				out_of_stock: number;
 				low_stock: number;
 				platforms: number;
+				product_types: number;
 				accountsInOutOfStockTiers: number;
 				outOfStockTiersCount: number;
 			};
@@ -266,8 +272,8 @@
 		{/if}
 
 		<!-- Main Statistics Grid -->
-		<div class="mb-4 grid grid-cols-2 gap-2.5 sm:mb-6 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-			<!-- Total Orders -->
+		<div class="mb-4 grid grid-cols-2 gap-2.5 sm:mb-6 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+			<!-- Completed Orders -->
 			<div
 				class="group rounded-lg p-3 sm:p-4"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
@@ -281,24 +287,47 @@
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
-							Total Orders
+							Completed Orders
 						</p>
 						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
-							{orderStats.total_orders}
+							{orderStats.completed_orders}
 						</p>
 						<div class="mt-1 flex items-center">
 							<span class="text-xs sm:text-sm" style="color: var(--text-muted)"
-								>Today: {orderStats.todays_orders}</span
+								>Paid-confirmed: {orderStats.paid_orders}</span
 							>
 						</div>
 					</div>
 				</div>
 			</div>
-			<!-- <AdminDashStatsCard title="Total Orders" status={orderStats.total_orders} subtitle={`Today: ${orderStats.todays_orders}`}>
-				<ShoppingCart
-							class="size-5 text-blue-600 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+
+			<!-- Cancelled Orders -->
+			<div
+				class="group rounded-lg p-3 sm:p-4"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+			>
+				<div class="flex items-center">
+					<div class="rounded-lg p-2 sm:p-3" style="background: rgba(239,68,68,0.12);">
+						<AlertCircle
+							class="size-5 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+							style="color: rgb(248, 113, 113);"
 						/>
-			</AdminDashStatsCard> -->
+					</div>
+					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
+						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+							Cancelled Orders
+						</p>
+						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
+							{orderStats.cancelled_orders}
+						</p>
+						<div class="mt-1 flex items-center">
+							<span class="text-xs sm:text-sm" style="color: var(--text-muted)">
+								Failed total: {orderStats.failed_orders}
+							</span>
+						</div>
+					</div>
+				</div>
+			</div>
 
 			<!-- Total Revenue -->
 			<div
@@ -314,7 +343,7 @@
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
-							Total Revenue
+							Paid Revenue
 						</p>
 						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
 							{formatMonetaryAmount(orderStats.total_revenue)}
@@ -329,7 +358,7 @@
 				</div>
 			</div>
 
-			<!-- Inventory Items -->
+			<!-- Lifetime Sold Stock -->
 			<div
 				class="group rounded-lg p-3 sm:p-4"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
@@ -343,15 +372,43 @@
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
-							Total Inventory
+							Lifetime Sold Stock
 						</p>
 						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
-							{inventoryStats.total_available}
+							{inventoryStats.lifetime_sold_stock || inventoryStats.total_sold || 0}
 						</p>
 						<div class="mt-1 flex items-center">
 							<span class="text-xs sm:text-sm" style="color: var(--text-muted)"
-								>Reserved: {inventoryStats.total_reserved}</span
+								>SKU units sold: {orderStats.units_sold || 0}</span
 							>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Total Users -->
+			<div
+				class="group rounded-lg p-3 sm:p-4"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+			>
+				<div class="flex items-center">
+					<div class="rounded-lg p-2 sm:p-3" style="background: rgba(99,102,241,0.12);">
+						<Users
+							class="size-5 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+							style="color: #818cf8;"
+						/>
+					</div>
+					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
+						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+							Total Users
+						</p>
+						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
+							{orderStats.total_users || 0}
+						</p>
+						<div class="mt-1 flex items-center">
+							<span class="text-xs sm:text-sm" style="color: var(--text-muted)">
+								All accounts
+							</span>
 						</div>
 					</div>
 				</div>
@@ -391,80 +448,59 @@
 					</div>
 				</div>
 			</div>
-		</div>
 
-		<!-- System Overview -->
-		<div class="mb-4 grid grid-cols-2 gap-2.5 sm:mb-6 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-			<!-- Platform Coverage -->
+			<!-- Product Types -->
 			<div
-				class="group rounded-lg p-4"
+				class="group rounded-lg p-3 sm:p-4"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 			>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="text-sm font-medium" style="color: var(--text-muted)">Platforms</p>
-						<p class="text-2xl font-bold" style="color: var(--text)">{inventoryStats.platforms}</p>
-						<div class="mt-1 flex items-center">
-							<span class="text-sm" style="color: var(--text-muted)">Active platforms</span>
-						</div>
-					</div>
-					<div class="rounded-lg p-3" style="background: rgba(99,102,241,0.12);">
-						<BarChart3
-							class="size-6 transition-all group-hover:scale-80 group-hover:-rotate-20"
-							style="color: #6366f1;"
-						/>
-					</div>
-				</div>
-			</div>
-
-			<!-- Total Tiers -->
-			<div
-				class="group rounded-lg p-4"
-				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
-			>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="text-sm font-medium" style="color: var(--text-muted)">Product Tiers</p>
-						<p class="text-2xl font-bold" style="color: var(--text)">
-							{inventoryStats.total_tiers}
-						</p>
-						<div class="mt-1 flex items-center">
-							<span class="text-sm" style="color: var(--text-muted)">Across all platforms</span>
-						</div>
-					</div>
-					<div class="rounded-lg p-3" style="background: rgba(168,85,247,0.12);">
+				<div class="flex items-center">
+					<div class="rounded-lg p-2 sm:p-3" style="background: rgba(168,85,247,0.12);">
 						<Package
-							class="size-6 transition-all group-hover:scale-80 group-hover:-rotate-20"
+							class="size-5 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
 							style="color: #a855f7;"
 						/>
 					</div>
+					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
+						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+							Account Types
+						</p>
+						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
+							{inventoryStats.product_types || inventoryStats.total_tiers}
+						</p>
+						<div class="mt-1 flex items-center">
+							<span class="text-xs sm:text-sm" style="color: var(--text-muted)"
+								>{inventoryStats.platforms} active platforms</span
+							>
+						</div>
+					</div>
 				</div>
 			</div>
 
-			<!-- Success Rate -->
+			<!-- Reserved Stock -->
 			<div
-				class="group rounded-lg p-4"
+				class="group rounded-lg p-3 sm:p-4"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 			>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="text-sm font-medium" style="color: var(--text-muted)">Success Rate</p>
-						<p class="text-2xl font-bold" style="color: var(--text)">
-							{orderStats.total_orders > 0
-								? ((orderStats.completed_orders / orderStats.total_orders) * 100).toFixed(1)
-								: 0}%
+				<div class="flex items-center">
+					<div class="rounded-lg p-2 sm:p-3" style="background: rgba(202,219,46,0.12);">
+						<BarChart3
+							class="size-5 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+							style="color: var(--fa-lime-700);"
+						/>
+					</div>
+					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
+						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+							Reserved Stock
+						</p>
+						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
+							{inventoryStats.total_reserved || 0}
 						</p>
 						<div class="mt-1 flex items-center">
-							<span class="text-sm" style="color: var(--text-muted);">
-								{orderStats.completed_orders}/{orderStats.total_orders} completed
+							<span class="text-xs sm:text-sm" style="color: var(--text-muted);">
+								Available: {inventoryStats.total_available}
 							</span>
 						</div>
-					</div>
-					<div class="rounded-lg p-3" style="background: rgba(5,212,113,0.12);">
-						<TrendingUp
-							class="size-6 transition-all group-hover:scale-80 group-hover:-rotate-20"
-							style="color: var(--primary);"
-						/>
 					</div>
 				</div>
 			</div>

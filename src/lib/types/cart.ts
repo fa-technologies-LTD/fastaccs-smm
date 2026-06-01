@@ -1,4 +1,5 @@
 export interface CartItem {
+	cartItemId?: string;
 	tierId: string;
 	quantity: number;
 	addedAt: number;

@@ -8,27 +8,36 @@ import { ORDER_STATUS_GROUPS } from '$lib/helpers/order-status';
 import { getStartOfBusinessDayUtc } from '$lib/helpers/business-timezone';
 import {
 	buildRevenueOrderWhere,
+	buildRevenueOrderItemWhere,
 	buildRevenueOrderWindowWhere
 } from '$lib/helpers/order-revenue.server';
+import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 
 export interface AdminOrderStatsSnapshot {
 	total_orders: number;
+	paid_orders: number;
 	pending_orders: number;
 	processing_orders: number;
 	completed_orders: number;
+	cancelled_orders: number;
 	failed_orders: number;
 	todays_orders: number;
 	total_revenue: number;
 	todays_revenue: number;
+	units_sold: number;
+	total_users: number;
 }
 
 export interface AdminInventoryStatsSnapshot {
 	total_tiers: number;
 	total_available: number;
 	total_reserved: number;
+	total_sold: number;
+	lifetime_sold_stock: number;
 	out_of_stock: number;
 	low_stock: number;
 	platforms: number;
+	product_types: number;
 	accountsInOutOfStockTiers: number;
 	outOfStockTiersCount: number;
 	lowStockThreshold: number;
@@ -40,39 +49,58 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 
 	const [
 		totalOrders,
+		paidOrders,
 		pendingOrders,
 		processingOrders,
 		completedOrders,
+		cancelledOrders,
 		failedOrders,
 		todaysOrders,
 		totalRevenue,
-		todaysRevenue
+		todaysRevenue,
+		unitsSold,
+		totalUsers
 	] = await Promise.all([
 		prisma.order.count(),
+		prisma.order.count({ where: buildRevenueOrderWhere() }),
 		prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.pending] } } }),
 		prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.processing] } } }),
 		prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.completed] } } }),
+		prisma.order.count({
+			where: {
+				OR: [{ status: 'cancelled' }, { paymentStatus: 'cancelled' }]
+			}
+		}),
 		prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.failed] } } }),
 		prisma.order.count({ where: { createdAt: { gte: today } } }),
-			prisma.order.aggregate({
-				_sum: { totalAmount: true },
-				where: buildRevenueOrderWhere()
-			}),
-			prisma.order.aggregate({
-				_sum: { totalAmount: true },
-				where: buildRevenueOrderWindowWhere(today)
-			})
+		prisma.order.aggregate({
+			_sum: { totalAmount: true },
+			where: buildRevenueOrderWhere()
+		}),
+		prisma.order.aggregate({
+			_sum: { totalAmount: true },
+			where: buildRevenueOrderWindowWhere(today)
+		}),
+		prisma.orderItem.aggregate({
+			_sum: { quantity: true },
+			where: buildRevenueOrderItemWhere()
+		}),
+		prisma.user.count()
 		]);
 
 	return {
 		total_orders: totalOrders,
+		paid_orders: paidOrders,
 		pending_orders: pendingOrders,
 		processing_orders: processingOrders,
 		completed_orders: completedOrders,
+		cancelled_orders: cancelledOrders,
 		failed_orders: failedOrders,
 		todays_orders: todaysOrders,
 		total_revenue: Number(totalRevenue._sum.totalAmount || 0),
-		todays_revenue: Number(todaysRevenue._sum.totalAmount || 0)
+		todays_revenue: Number(todaysRevenue._sum.totalAmount || 0),
+		units_sold: Number(unitsSold._sum.quantity || 0),
+		total_users: totalUsers
 	};
 }
 
@@ -82,7 +110,8 @@ export async function getInventoryStatsSnapshot(
 	const lowStockThreshold =
 		overrides.lowStockThreshold ?? (await getLowStockThresholdSetting().catch(() => 10));
 
-	const [totalTiers, totalPlatforms, totalAvailable, totalReserved, tiers] = await Promise.all([
+	const soldStatuses = [...new Set([...getAllocatedLikeAccountStatuses(), 'delivered'])];
+	const [totalTiers, totalPlatforms, totalAvailable, totalReserved, totalSold, tiers] = await Promise.all([
 		prisma.category.count({
 			where: {
 				categoryType: 'tier',
@@ -98,6 +127,7 @@ export async function getInventoryStatsSnapshot(
 		}),
 		prisma.account.count({ where: { status: 'available' } }),
 		prisma.account.count({ where: { status: 'reserved' } }),
+		prisma.account.count({ where: { status: { in: soldStatuses } } }),
 		prisma.category.findMany({
 			where: {
 				categoryType: 'tier',
@@ -140,9 +170,12 @@ export async function getInventoryStatsSnapshot(
 		total_tiers: totalTiers,
 		total_available: totalAvailable,
 		total_reserved: totalReserved,
+		total_sold: totalSold,
+		lifetime_sold_stock: totalSold,
 		out_of_stock: outOfStockTierIds.length,
 		low_stock: lowStockTiersCount,
 		platforms: totalPlatforms,
+		product_types: totalTiers,
 		accountsInOutOfStockTiers,
 		outOfStockTiersCount: outOfStockTierIds.length,
 		lowStockThreshold
