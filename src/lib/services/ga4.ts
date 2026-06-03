@@ -3,6 +3,7 @@ import { env as publicEnv } from '$env/dynamic/public';
 import { hasAnalyticsConsent, PRIVACY_CONSENT_CHANGED_EVENT } from '$lib/helpers/privacyConsent';
 
 const GA4_SCRIPT_BASE = 'https://www.googletagmanager.com/gtag/js';
+const DEFAULT_GA4_MEASUREMENT_ID = 'G-YQE09MPX5H';
 const CHECKOUT_SNAPSHOT_KEY = 'fastaccs_ga4_pending_checkout_v1';
 const TRACKED_PURCHASES_KEY = 'fastaccs_ga4_tracked_purchases_v1';
 
@@ -53,7 +54,7 @@ let scriptRequested = false;
 let consentListenerAttached = false;
 
 function getMeasurementId(): string {
-	const measurementId = String(publicEnv.PUBLIC_GA4_MEASUREMENT_ID || '').trim();
+	const measurementId = String(publicEnv.PUBLIC_GA4_MEASUREMENT_ID || DEFAULT_GA4_MEASUREMENT_ID).trim();
 	return /^G-[A-Z0-9]+$/i.test(measurementId) ? measurementId.toUpperCase() : '';
 }
 

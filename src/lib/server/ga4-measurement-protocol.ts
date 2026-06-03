@@ -3,6 +3,7 @@ import { env as publicEnv } from '$env/dynamic/public';
 
 const GA4_COLLECT_ENDPOINT = 'https://www.google-analytics.com/mp/collect';
 const GA4_DEBUG_ENDPOINT = 'https://www.google-analytics.com/debug/mp/collect';
+const DEFAULT_GA4_MEASUREMENT_ID = 'G-YQE09MPX5H';
 
 export interface Ga4MeasurementProtocolEvent {
 	name: string;
@@ -25,7 +26,7 @@ export interface SendGa4MeasurementProtocolResult {
 }
 
 function getMeasurementId(): string {
-	const measurementId = String(publicEnv.PUBLIC_GA4_MEASUREMENT_ID || '').trim();
+	const measurementId = String(publicEnv.PUBLIC_GA4_MEASUREMENT_ID || DEFAULT_GA4_MEASUREMENT_ID).trim();
 	return /^G-[A-Z0-9]+$/i.test(measurementId) ? measurementId.toUpperCase() : '';
 }
 
