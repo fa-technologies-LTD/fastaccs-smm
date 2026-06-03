@@ -1,31 +1,11 @@
 {
 	"crons": [
 		{
-			"path": "/api/internal/cron/payments-reconcile",
-			"schedule": "5 0 * * *"
-		},
-		{
-			"path": "/api/internal/cron/low-stock-alerts",
-			"schedule": "5 1 * * *"
-		},
-		{
-			"path": "/api/internal/cron/abandoned-orders",
-			"schedule": "10 1 * * *"
-		},
-		{
-			"path": "/api/internal/cron/onboarding",
+			"path": "/api/internal/cron/scheduler/daily",
 			"schedule": "15 1 * * *"
 		},
 		{
-			"path": "/api/internal/cron/winback",
-			"schedule": "15 0 * * *"
-		},
-		{
-			"path": "/api/internal/cron/exact-preview-thumbnails",
-			"schedule": "15 * * * *"
-		},
-		{
-			"path": "/api/internal/cron/weekly-business-digest",
+			"path": "/api/internal/cron/scheduler/weekly",
 			"schedule": "0 8 * * 0"
 		}
 	]
