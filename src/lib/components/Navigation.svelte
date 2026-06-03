@@ -6,7 +6,6 @@
 	import { page } from '$app/state';
 	import logo from '$lib/assets/logo.png';
 	import MiniCart from '$lib/components/MiniCart.svelte';
-	import { addToast } from '$lib/stores/toasts';
 
 	let mobileMenuOpen = $state(false);
 
@@ -31,6 +30,7 @@
 
 	// Cart item count using the new cart structure
 	const cartItemCount = $derived(cart.itemCount);
+	const showStorefrontCart = $derived(!page.url.pathname.startsWith('/admin'));
 
 	// Generate initials from user's name
 	function getInitials(fullName: string | null | undefined): string {
@@ -263,12 +263,9 @@
 					<a href="/platforms" data-sveltekit-preload-data="hover" class="nav-link font-medium">
 						Accounts
 					</a>
-					<button
-						onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
-						class="nav-link cursor-pointer border-none bg-transparent font-medium"
-					>
-						Growth Services
-					</button>
+					<a href="/services" data-sveltekit-preload-data="hover" class="nav-link font-medium">
+						Boosting Services
+					</a>
 					<a href="/how-it-works" data-sveltekit-preload-data="hover" class="nav-link font-medium">
 						How It Works
 					</a>
@@ -285,8 +282,8 @@
 
 			<!-- Desktop Actions -->
 			<div class="hidden items-center space-x-4 md:flex">
-				<!-- Cart (hidden for admin users) -->
-				{#if !user || user.userType !== 'ADMIN'}
+				<!-- Storefront cart stays available to admins for user-flow testing. -->
+				{#if showStorefrontCart}
 					<button
 						onclick={() => {
 							cart.toggle();
@@ -439,8 +436,8 @@
 
 			<!-- Mobile menu button -->
 			<div class="flex items-center gap-2 md:hidden">
-				<!-- Mobile Cart (hidden for admin users) -->
-				{#if !user || user.userType !== 'ADMIN'}
+				<!-- Mobile storefront cart -->
+				{#if showStorefrontCart}
 					<button
 						onclick={() => {
 							cart.toggle();
@@ -587,12 +584,13 @@
 						>
 							Accounts
 						</a>
-						<button
-							onclick={() => addToast({ title: 'Coming soon', type: 'info' })}
-							class="nav-link block w-full cursor-pointer border-none bg-transparent py-3 text-left text-sm font-medium"
+						<a
+							href="/services"
+							data-sveltekit-preload-data="hover"
+							class="nav-link block py-3 text-sm font-medium"
 						>
-							Growth Services
-						</button>
+							Boosting Services
+						</a>
 						<a
 							href="/how-it-works"
 							data-sveltekit-preload-data="hover"
@@ -669,8 +667,8 @@
 	{/if}
 </nav>
 
-<!-- Mini Cart Component (hidden for admin users) -->
-{#if !user || user.userType !== 'ADMIN'}
+<!-- Mini cart is storefront-only, including when an admin is testing buyer flows. -->
+{#if showStorefrontCart}
 	<MiniCart />
 {/if}
 

@@ -4,7 +4,7 @@ import { getTierExactPreviewConfig } from '$lib/helpers/tier-exact-preview';
 
 export const EXACT_PREVIEW_RESERVATION_KEY = 'exact_preview_reservation';
 export const EXACT_PREVIEW_SOURCE = 'exact_preview';
-export const EXACT_PREVIEW_RESERVATION_MINUTES = 15;
+export const EXACT_PREVIEW_RESERVATION_MINUTES = 10;
 
 const MAX_EXACT_PREVIEW_ACCOUNTS = 20;
 
@@ -122,10 +122,7 @@ function normalizeExtraKey(key: string): string {
 		.replace(/[^a-z0-9]/g, '');
 }
 
-function getCredentialExtraValue(
-	extras: unknown,
-	keys: string[]
-): unknown {
+function getCredentialExtraValue(extras: unknown, keys: string[]): unknown {
 	if (!isObject(extras)) return null;
 
 	const normalizedCandidates = new Set(keys.map(normalizeExtraKey));
@@ -232,7 +229,9 @@ function formatAgeBadge(ageMonths: number | null | undefined): string | null {
 	return `${ageMonths}mo aged`;
 }
 
-function buildPreviewTags(account: Pick<AccountPreviewRow, 'followers' | 'ageMonths' | 'niche' | 'qualityScore'>): string[] {
+function buildPreviewTags(
+	account: Pick<AccountPreviewRow, 'followers' | 'ageMonths' | 'niche' | 'qualityScore'>
+): string[] {
 	const tags: string[] = [];
 	const followers = formatFollowerBadge(account.followers);
 	if (followers) tags.push(`${followers} followers`);
@@ -280,7 +279,7 @@ function buildDisplayLabel(account: AccountPreviewRow, index: number): string {
 		return `Premium Pick ${sequence}`;
 	}
 
-	return `Available Pick ${sequence}`;
+	return `Profile No ${String(index + 1).padStart(2, '0')}`;
 }
 
 function getReservationExpiry(minutes = EXACT_PREVIEW_RESERVATION_MINUTES): Date {
@@ -513,7 +512,7 @@ export async function attachExactPreviewSelectionsToOrder(input: {
 	selections: AttachSelectionInput[];
 	client: Prisma.TransactionClient;
 }): Promise<void> {
-	const expiresAt = getReservationExpiry(EXACT_PREVIEW_RESERVATION_MINUTES * 8);
+	const expiresAt = getReservationExpiry(EXACT_PREVIEW_RESERVATION_MINUTES);
 
 	for (const selection of input.selections) {
 		const account = await input.client.account.findUnique({

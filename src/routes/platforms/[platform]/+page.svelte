@@ -38,6 +38,7 @@
 	} from '$lib/helpers/tier-delivery-config';
 	import { getTierExactPreviewConfig } from '$lib/helpers/tier-exact-preview';
 	import { trackSnapEvent } from '$lib/services/snap-pixel';
+	import { trackGa4AddToCart, type Ga4EventParams, type Ga4Item } from '$lib/services/ga4';
 
 	interface Props {
 		data: PageData;
@@ -173,6 +174,33 @@
 			description: tier.tier_name || 'FastAccs tier',
 			price: Number(tier.price || 0) * quantity,
 			currency: 'NGN',
+			number_items: quantity
+		};
+	}
+
+	function getGa4TierItem(tier: TierCard, quantity: number, variant = 'standard_pool'): Ga4Item {
+		return {
+			item_id: tier.category_id,
+			item_name: tier.tier_name || 'FastAccs tier',
+			item_brand: 'FastAccs',
+			item_category: 'SMM accounts',
+			item_category2: data.platform?.name || undefined,
+			item_variant: variant,
+			price: Number(tier.price || 0),
+			quantity
+		};
+	}
+
+	function getGa4TierPayload(
+		tier: TierCard,
+		quantity: number,
+		variant = 'standard_pool'
+	): Ga4EventParams {
+		return {
+			currency: 'NGN',
+			value: Number(tier.price || 0) * quantity,
+			items: [getGa4TierItem(tier, quantity, variant)],
+			item_list_name: 'Platform tiers',
 			number_items: quantity
 		};
 	}
@@ -616,6 +644,7 @@
 					screenshotUrl: firstAccount.screenshotUrl || null,
 					reservedUntil: firstAccount.reservedUntil
 				});
+				trackGa4AddToCart(getGa4TierPayload(tier, 1, 'exact_profile'));
 				showSuccess(`${firstAccount.displayLabel} added`, 'Added to cart.', 5000, '/checkout');
 				return;
 			}
@@ -641,6 +670,7 @@
 				reservedUntil: reserveResult.data.reservedUntil
 			});
 
+			trackGa4AddToCart(getGa4TierPayload(tier, 1, 'exact_profile'));
 			showSuccess(`${reserveResult.data.displayLabel} added`, 'Added to cart.', 5000, '/checkout');
 		} catch (error) {
 			console.error('Failed to add first exact profile to cart:', error);
@@ -766,6 +796,7 @@
 
 			cart.addTier(tier.category_id, quickAddQuantity);
 			trackSnapEvent('ADD_CART', getSnapTierPayload(tier, quickAddQuantity));
+			trackGa4AddToCart(getGa4TierPayload(tier, quickAddQuantity, 'standard_pool'));
 			showSuccess(
 				'Added to cart!',
 				`${quickAddQuantity} ${tier.tier_name} ${quickAddQuantity === 1 ? 'account' : 'accounts'} added successfully. Click to view cart.`,
@@ -854,7 +885,10 @@
 			}
 
 			setTierRestockSubscribed(tier.category_id, true);
-			showSuccess('Subscribed', result.message || "You'll be notified when this account type is back.");
+			showSuccess(
+				'Subscribed',
+				result.message || "You'll be notified when this account type is back."
+			);
 		} catch (error) {
 			console.error('Failed to subscribe for restock:', error);
 			showError('Subscription failed', 'Unable to subscribe right now. Please try again.');
@@ -933,7 +967,7 @@
 
 		<!-- Platform Header -->
 		<section
-			class={`py-4 text-white sm:py-12 ${platformMeta?.color ? '' : `bg-gradient-to-r ${getPlatformColor(data.platform.slug)}`}`}
+			class={`py-4 text-white sm:py-8 ${platformMeta?.color ? '' : `bg-gradient-to-r ${getPlatformColor(data.platform.slug)}`}`}
 			style={getPlatformHeaderStyle(platformMeta)}
 		>
 			<div class="mx-auto max-w-6xl px-4">
@@ -988,12 +1022,12 @@
 								<PlatformIcon class="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12" />
 							{/if}
 						</div>
-							<div class="text-center">
-								<div class="text-2xl font-bold sm:text-3xl">{data.tiers.length}</div>
-								<div class="text-xs opacity-75 sm:text-sm">
-									{getTypeLabel(data.tiers.length)}
-								</div>
+						<div class="text-center">
+							<div class="text-2xl font-bold sm:text-3xl">{data.tiers.length}</div>
+							<div class="text-xs opacity-75 sm:text-sm">
+								{getTypeLabel(data.tiers.length)}
 							</div>
+						</div>
 					</div>
 					<div class="flex-1">
 						<h1 class="mb-1 text-2xl font-bold sm:text-3xl md:text-4xl">
@@ -1006,15 +1040,15 @@
 		</section>
 
 		<!-- Tier Selection -->
-		<section class="py-5 sm:py-16">
+		<section class="py-5 sm:py-10">
 			<div class="mx-auto max-w-6xl px-4">
 				<div class="mb-5 text-left sm:mb-8 sm:text-center">
-						<h2 class="mb-2 text-xl font-bold sm:mb-4 sm:text-3xl" style="color: var(--text);">
-							Available {getTypeLabel(data.tiers.length)}
-						</h2>
-						<p class="text-sm sm:text-lg" style="color: var(--text-muted);">
-							Choose the account type that fits what you need.
-						</p>
+					<h2 class="mb-2 text-xl font-bold sm:mb-4 sm:text-3xl" style="color: var(--text);">
+						Available {getTypeLabel(data.tiers.length)}
+					</h2>
+					<p class="text-sm sm:text-lg" style="color: var(--text-muted);">
+						Choose the account type that fits what you need.
+					</p>
 				</div>
 
 				{#if showMobileTierControls}
@@ -1079,9 +1113,9 @@
 				{#if data.tiers.length === 0}
 					<div class="rounded-lg p-8 text-center" style="background: var(--bg-elev-2);">
 						<Package class="mx-auto mb-4 h-12 w-12" style="color: var(--text-muted);" />
-							<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">
-								No Account Types Available
-							</h3>
+						<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">
+							No Account Types Available
+						</h3>
 						<p style="color: var(--text-muted);">
 							We're currently restocking {data.platform.name} accounts. Please check back soon!
 						</p>
@@ -1099,8 +1133,8 @@
 						style="background: var(--bg-elev-2); border-color: var(--border);"
 					>
 						<h3 class="text-base font-semibold sm:text-lg" style="color: var(--text);">
-								No account types match this filter
-							</h3>
+							No account types match this filter
+						</h3>
 						<p class="mt-2 text-sm" style="color: var(--text-muted);">
 							Try another view to see all available options.
 						</p>
@@ -1114,15 +1148,15 @@
 						</button>
 					</div>
 				{:else}
-					<div class="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-8 lg:grid-cols-3">
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 lg:grid-cols-3">
 						{#each displayedTiers as tier (tier.category_id)}
 							{@const tierStatus = getTierStatus(tier.visible_available)}
 							{@const tierFeatures = getTierFeatures(tier.metadata)}
 							{@const primaryBadge = getPrimaryTierBadge(tier)}
-								{@const hasExpandableDetails = Boolean(
-									tierFeatures.length > 0 ||
-										tier.description ||
-										tier.metadata?.age_hint ||
+							{@const hasExpandableDetails = Boolean(
+								tierFeatures.length > 0 ||
+									tier.description ||
+									tier.metadata?.age_hint ||
 									getTierManualHandoverPromise(tier)
 							)}
 							{@const exactQuickAddLoading = exactQuickAddLoadingByTier[tier.category_id] || false}
@@ -1154,34 +1188,34 @@
 									</div>
 								{/if}
 
-										<div
-											class={`tier-card-body flex flex-1 flex-col p-4 sm:p-5 ${
-												primaryBadge ? 'pt-9 sm:pt-10' : ''
-											}`}
-										>
+								<div
+									class={`tier-card-body flex flex-1 flex-col p-4 sm:p-5 ${
+										primaryBadge ? 'pt-9 sm:pt-10' : ''
+									}`}
+								>
+									<div
+										class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
+									>
+										<div class="min-w-0">
+											<h3 class="text-base font-bold sm:text-lg" style="color: var(--text);">
+												{tier.tier_name}
+											</h3>
+										</div>
+										<div class="mobile-price-block text-left sm:text-right">
 											<div
-												class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
+												class="text-[1.85rem] leading-none font-bold sm:text-2xl"
+												style="background: var(--btn-primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"
 											>
-												<div class="min-w-0">
-													<h3 class="text-base font-bold sm:text-lg" style="color: var(--text);">
-														{tier.tier_name}
-													</h3>
-												</div>
-												<div class="mobile-price-block text-left sm:text-right">
-													<div
-														class="text-[1.85rem] leading-none font-bold sm:text-2xl"
-														style="background: var(--btn-primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"
-													>
-														{formatPrice(tier.price)}
-													</div>
-												</div>
+												{formatPrice(tier.price)}
 											</div>
+										</div>
+									</div>
 
 									<div
 										class="mb-3 flex flex-wrap items-center gap-2 text-sm"
 										style="color: var(--text-muted);"
 									>
-											<span><span class="font-medium">{tier.visible_available}</span> available</span>
+										<span><span class="font-medium">{tier.visible_available}</span> available</span>
 										{#if tierStatus}
 											<span class="tier-status-chip tier-status-chip--warning">
 												{tierStatus.status}
@@ -1189,31 +1223,31 @@
 										{/if}
 									</div>
 
-										{#if hasExpandableDetails}
-											<button
-												type="button"
-												data-card-action
-												onclick={() => toggleTierDetails(tier.category_id)}
-												class="mb-3 inline-flex items-center gap-1 text-xs font-semibold"
-												style="color: var(--link);"
-											>
-												{isExpanded ? 'Hide features' : 'Features'}
-												<ChevronRight
-													class={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-												/>
+									{#if hasExpandableDetails}
+										<button
+											type="button"
+											data-card-action
+											onclick={() => toggleTierDetails(tier.category_id)}
+											class="mb-3 inline-flex items-center gap-1 text-xs font-semibold"
+											style="color: var(--link);"
+										>
+											{isExpanded ? 'Hide features' : 'Features'}
+											<ChevronRight
+												class={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+											/>
 										</button>
 									{/if}
 
-										{#if isExpanded}
-											<div
-												class="mb-4 space-y-2 rounded-lg p-3"
-												style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-											>
-												{#if tierFeatures.length > 0}
-													<div class="space-y-1.5">
-														{#each tierFeatures as feature, featureIndex (featureIndex)}
-															<div
-																class="flex items-start gap-2 text-sm"
+									{#if isExpanded}
+										<div
+											class="mb-4 space-y-2 rounded-lg p-3"
+											style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+										>
+											{#if tierFeatures.length > 0}
+												<div class="space-y-1.5">
+													{#each tierFeatures as feature, featureIndex (featureIndex)}
+														<div
+															class="flex items-start gap-2 text-sm"
 															style="color: var(--text-muted);"
 														>
 															<Star class="mt-0.5 h-3 w-3 flex-shrink-0 text-green-500" />
@@ -1244,21 +1278,20 @@
 											{/if}
 										</div>
 									{/if}
+								</div>
 
-									</div>
-
-									<div class="mx-4 mt-auto mb-4 space-y-2 sm:mx-5 sm:mb-5">
+								<div class="mx-4 mt-auto mb-4 space-y-2 sm:mx-5 sm:mb-5">
 									{#if tier.visible_available === 0}
-											<button
-												type="button"
-												onclick={() => subscribeToRestock(tier)}
-												disabled={isTierRestockLoading(tier.category_id)}
-												data-card-action
-												aria-disabled={isTierRestockSubscribed(tier.category_id)}
-												aria-label={`Notify me for ${tier.tier_name}`}
-												class="flex w-full items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-wait disabled:active:scale-100"
-												style="background: var(--btn-primary-gradient); color: #04140C;"
-											>
+										<button
+											type="button"
+											onclick={() => subscribeToRestock(tier)}
+											disabled={isTierRestockLoading(tier.category_id)}
+											data-card-action
+											aria-disabled={isTierRestockSubscribed(tier.category_id)}
+											aria-label={`Notify me for ${tier.tier_name}`}
+											class="flex w-full items-center justify-center gap-2 rounded-lg py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-wait disabled:active:scale-100"
+											style="background: var(--btn-primary-gradient); color: #04140C;"
+										>
 											{#if isTierRestockLoading(tier.category_id)}
 												<span>Saving...</span>
 											{:else if isTierRestockSubscribed(tier.category_id)}
@@ -1492,9 +1525,9 @@
 								</div>
 							{/if}
 						</button>
-						</div>
 					</div>
 				</div>
+			</div>
 		{/if}
 	{/if}
 </main>

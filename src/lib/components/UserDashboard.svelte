@@ -30,6 +30,8 @@
 		unlocked?: boolean;
 		isActive?: boolean;
 		eligible?: boolean;
+		lifetimeCompletedSpend?: number;
+		unlockThreshold?: number;
 	}
 
 	let {
@@ -51,24 +53,30 @@
 			? (initialAffiliateData as AffiliateStateFlags)
 			: null
 	);
-	const AFFILIATE_ENABLED = $derived(
-		Boolean(
-			affiliateState &&
-				(Boolean(affiliateState.unlocked) ||
-					Boolean(affiliateState.isActive) ||
-					Boolean(affiliateState.eligible))
-		)
+	const affiliateAccessUnlocked = $derived(
+		Boolean(affiliateState?.unlocked || affiliateState?.isActive || affiliateState?.eligible)
+	);
+	const affiliateLifetimeSpend = $derived(Number(affiliateState?.lifetimeCompletedSpend || 0));
+	const affiliateUnlockThreshold = $derived(Number(affiliateState?.unlockThreshold || 50000));
+	const affiliateRemainingSpend = $derived(
+		Math.max(0, affiliateUnlockThreshold - affiliateLifetimeSpend)
+	);
+	const shouldShowAffiliateNudge = $derived(
+		!affiliateAccessUnlocked && affiliateLifetimeSpend >= 20000 && affiliateRemainingSpend > 0
 	);
 	let activeTab = $state<DashboardTab>('orders');
 	let selectedOrderId = $state<string | null>(null);
 	let showPaymentPendingBanner = $state(false);
+	let showAffiliateAccessNudge = $state(false);
+
+	function formatMoney(value: number): string {
+		return `₦${Math.max(0, Math.round(value)).toLocaleString()}`;
+	}
 
 	function applyRouteContext(url: URL): void {
 		const tabParam = String(url.searchParams.get('tab') || '').toLowerCase();
 		if (tabParam === 'orders' || tabParam === 'purchases' || tabParam === 'affiliate') {
-			if (tabParam !== 'affiliate' || AFFILIATE_ENABLED) {
-				activeTab = tabParam as DashboardTab;
-			}
+			activeTab = tabParam as DashboardTab;
 		}
 
 		const orderIdParam = String(url.searchParams.get('orderId') || '').trim();
@@ -89,8 +97,17 @@
 		window.history.replaceState({}, '', pathWithQuery);
 	}
 
+	function dismissAffiliateAccessNudge(): void {
+		showAffiliateAccessNudge = false;
+		if (typeof window === 'undefined') return;
+		window.sessionStorage.setItem('fastaccs_affiliate_access_nudge_dismissed', '1');
+	}
+
 	onMount(() => {
 		applyRouteContext(new URL(window.location.href));
+		const dismissed =
+			window.sessionStorage.getItem('fastaccs_affiliate_access_nudge_dismissed') === '1';
+		showAffiliateAccessNudge = shouldShowAffiliateNudge && !dismissed;
 
 		const handlePopState = () => {
 			applyRouteContext(new URL(window.location.href));
@@ -213,6 +230,57 @@
 		</div>
 	{/if}
 
+	{#if showAffiliateAccessNudge}
+		<div
+			class="mb-5 flex items-start justify-between gap-3 rounded-[var(--r-sm)] border px-4 py-3"
+			style="background: rgba(5,212,113,0.10); border-color: rgba(5,212,113,0.28);"
+		>
+			<div class="flex items-start gap-2">
+				<BriefcaseBusiness size={17} class="mt-0.5" style="color: var(--primary);" />
+				<div>
+					<p
+						class="text-sm font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
+					>
+						You are close to affiliate access
+					</p>
+					<p class="text-xs sm:text-sm" style="color: var(--text-muted);">
+						Spend about {formatMoney(affiliateRemainingSpend)} more to unlock referral earning.
+					</p>
+					<div class="mt-2 flex flex-wrap gap-2">
+						<button
+							type="button"
+							onclick={() => {
+								activeTab = 'affiliate';
+								showAffiliateAccessNudge = false;
+							}}
+							class="rounded-full px-3 py-1.5 text-xs font-semibold"
+							style="background: rgba(5,212,113,0.16); border: 1px solid rgba(5,212,113,0.35); color: var(--primary);"
+						>
+							View progress
+						</button>
+						<a
+							href="/affiliate"
+							class="rounded-full px-3 py-1.5 text-xs font-semibold"
+							style="background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text);"
+						>
+							Learn more
+						</a>
+					</div>
+				</div>
+			</div>
+			<button
+				type="button"
+				onclick={dismissAffiliateAccessNudge}
+				aria-label="Dismiss affiliate access reminder"
+				class="rounded-full p-1.5 transition hover:opacity-80"
+				style="border: 1px solid var(--border); color: var(--text-muted);"
+			>
+				<X size={14} />
+			</button>
+		</div>
+	{/if}
+
 	<div class="mb-5 grid grid-cols-2 gap-3">
 		<div
 			class="rounded-[var(--r-sm)] border border-[var(--border)] px-3 py-3"
@@ -265,17 +333,16 @@
 				Purchases
 			</button>
 			<button
-				onclick={() => AFFILIATE_ENABLED && (activeTab = 'affiliate')}
-				disabled={!AFFILIATE_ENABLED}
-				class="border-b-2 px-1 py-2 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-60"
-				style="border-color: {activeTab === 'affiliate' && AFFILIATE_ENABLED
+				onclick={() => (activeTab = 'affiliate')}
+				class="border-b-2 px-1 py-2 text-sm font-semibold transition-all"
+				style="border-color: {activeTab === 'affiliate'
 					? 'var(--primary)'
-					: 'transparent'}; color: {activeTab === 'affiliate' && AFFILIATE_ENABLED
+					: 'transparent'}; color: {activeTab === 'affiliate'
 					? 'var(--primary)'
 					: 'var(--text-dim)'}; font-family: var(--font-head);"
-				title={AFFILIATE_ENABLED ? 'Affiliate dashboard' : 'Affiliate coming soon'}
+				title="Affiliate access"
 			>
-				{AFFILIATE_ENABLED ? 'Affiliate' : 'Affiliate · Coming Soon'}
+				Affiliate
 			</button>
 		</nav>
 	</div>
@@ -306,23 +373,23 @@
 			<span class="mt-1 text-xs font-semibold">Support</span>
 		</a>
 		<a
-			href="/affiliate"
+			href="/dashboard?tab=affiliate"
 			class="quick-action-card flex min-h-[88px] flex-col items-center justify-center rounded-[var(--r-sm)] border border-[var(--border)] p-3 transition-all hover:-translate-y-0.5"
 			style="background: var(--surface-2); color: var(--text);"
 		>
 			<BriefcaseBusiness
 				size={20}
 				stroke={2.25}
-				style="color: {AFFILIATE_ENABLED ? 'var(--primary)' : 'var(--text-dim)'};"
+				style="color: {affiliateAccessUnlocked ? 'var(--primary)' : 'var(--text-dim)'};"
 			/>
 			<span
 				class="mt-1 text-xs font-semibold"
-				style="color: {AFFILIATE_ENABLED ? 'var(--text)' : 'var(--text-dim)'};"
+				style="color: {affiliateAccessUnlocked ? 'var(--text)' : 'var(--text-dim)'};"
 			>
 				Affiliate
 			</span>
 			<span class="text-[10px] font-medium" style="color: var(--text-dim);">
-				{AFFILIATE_ENABLED ? 'Unlocked' : 'Coming Soon'}
+				{affiliateAccessUnlocked ? 'Unlocked' : 'View progress'}
 			</span>
 		</a>
 	</div>

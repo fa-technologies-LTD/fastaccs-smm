@@ -21,7 +21,7 @@
 					FAST ACCOUNTS
 				</p>
 				<p class="mb-3 text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-					Secure marketplace for social media accounts and growth services.
+					Secure marketplace for social media accounts and boosting services.
 				</p>
 				<div class="flex space-x-4">
 					<a href="https://web.facebook.com/profile.php?id=100089537246012" class="footer-social">
@@ -50,11 +50,11 @@
 							>Browse Accounts</a
 						>
 					</li>
-						<li>
-							<a href="/services" data-sveltekit-preload-data="hover" class="footer-link"
-								>Growth Services</a
-							>
-						</li>
+					<li>
+						<a href="/services" data-sveltekit-preload-data="hover" class="footer-link"
+							>Boosting Services</a
+						>
+					</li>
 					<li>
 						<a href="/how-it-works" data-sveltekit-preload-data="hover" class="footer-link"
 							>How It Works</a

@@ -12,6 +12,7 @@ import {
 	buildRevenueOrderWindowWhere
 } from '$lib/helpers/order-revenue.server';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
+import { releaseExpiredExactPreviewReservations } from '$lib/services/exact-preview';
 
 export interface AdminOrderStatsSnapshot {
 	total_orders: number;
@@ -86,7 +87,7 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 			where: buildRevenueOrderItemWhere()
 		}),
 		prisma.user.count()
-		]);
+	]);
 
 	return {
 		total_orders: totalOrders,
@@ -107,47 +108,52 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 export async function getInventoryStatsSnapshot(
 	overrides: { lowStockThreshold?: number } = {}
 ): Promise<AdminInventoryStatsSnapshot> {
+	await releaseExpiredExactPreviewReservations().catch((error) => {
+		console.warn('[admin-metrics] expired exact reservation cleanup skipped:', error);
+	});
+
 	const lowStockThreshold =
 		overrides.lowStockThreshold ?? (await getLowStockThresholdSetting().catch(() => 10));
 
 	const soldStatuses = [...new Set([...getAllocatedLikeAccountStatuses(), 'delivered'])];
-	const [totalTiers, totalPlatforms, totalAvailable, totalReserved, totalSold, tiers] = await Promise.all([
-		prisma.category.count({
-			where: {
-				categoryType: 'tier',
-				isActive: true,
-				parentId: { not: null }
-			}
-		}),
-		prisma.category.count({
-			where: {
-				categoryType: 'platform',
-				isActive: true
-			}
-		}),
-		prisma.account.count({ where: { status: 'available' } }),
-		prisma.account.count({ where: { status: 'reserved' } }),
-		prisma.account.count({ where: { status: { in: soldStatuses } } }),
-		prisma.category.findMany({
-			where: {
-				categoryType: 'tier',
-				isActive: true,
-				parentId: { not: null }
-			},
-			select: {
-				id: true,
-				_count: {
-					select: {
-						accounts: {
-							where: {
-								status: 'available'
+	const [totalTiers, totalPlatforms, totalAvailable, totalReserved, totalSold, tiers] =
+		await Promise.all([
+			prisma.category.count({
+				where: {
+					categoryType: 'tier',
+					isActive: true,
+					parentId: { not: null }
+				}
+			}),
+			prisma.category.count({
+				where: {
+					categoryType: 'platform',
+					isActive: true
+				}
+			}),
+			prisma.account.count({ where: { status: 'available' } }),
+			prisma.account.count({ where: { status: 'reserved' } }),
+			prisma.account.count({ where: { status: { in: soldStatuses } } }),
+			prisma.category.findMany({
+				where: {
+					categoryType: 'tier',
+					isActive: true,
+					parentId: { not: null }
+				},
+				select: {
+					id: true,
+					_count: {
+						select: {
+							accounts: {
+								where: {
+									status: 'available'
+								}
 							}
 						}
 					}
 				}
-			}
-		})
-	]);
+			})
+		]);
 
 	const outOfStockTierIds = tiers
 		.filter((tier) => tier._count.accounts === 0)

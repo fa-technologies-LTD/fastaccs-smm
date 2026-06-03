@@ -320,7 +320,9 @@ export function normalizeCredentialExtras(value: unknown): CredentialExtras {
 	for (const [rawKey, rawValue] of Object.entries(value as Record<string, unknown>)) {
 		const key = normalizeText(rawKey);
 		if (!key) continue;
-		const normalizedValue = normalizeText(typeof rawValue === 'string' ? rawValue : String(rawValue ?? ''));
+		const normalizedValue = normalizeText(
+			typeof rawValue === 'string' ? rawValue : String(rawValue ?? '')
+		);
 		if (!normalizedValue) continue;
 		extras[key] = normalizedValue;
 	}
@@ -334,13 +336,20 @@ export interface CredentialExtraEntry {
 	value: string;
 }
 
+export function isInternalCredentialExtraKey(rawKey: string): boolean {
+	const normalized = normalizeCredentialHeader(rawKey);
+	return normalized === 'exact_preview_reservation' || normalized.startsWith('exact_preview_');
+}
+
 export function getCredentialExtraEntries(value: unknown): CredentialExtraEntry[] {
 	const extras = normalizeCredentialExtras(value);
-	return Object.entries(extras).map(([key, entryValue]) => ({
-		key,
-		label: getCredentialDisplayLabel(key),
-		value: entryValue
-	}));
+	return Object.entries(extras)
+		.filter(([key]) => !isInternalCredentialExtraKey(key))
+		.map(([key, entryValue]) => ({
+			key,
+			label: getCredentialDisplayLabel(key),
+			value: entryValue
+		}));
 }
 
 const ACCOUNT_FIELD_ALIASES: Record<string, string> = {

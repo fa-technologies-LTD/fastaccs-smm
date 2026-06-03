@@ -8,7 +8,10 @@
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import PageLoadingBar from '$lib/components/PageLoadingBar.svelte';
 	import CookieConsentBar from '$lib/components/CookieConsentBar.svelte';
+	import AffiliateAccessNudge from '$lib/components/AffiliateAccessNudge.svelte';
 	import { trackSnapPageView } from '$lib/services/snap-pixel';
+	import { syncGa4Consent, trackGa4PageView } from '$lib/services/ga4';
+	import { PRIVACY_CONSENT_CHANGED_EVENT } from '$lib/helpers/privacyConsent';
 	import type { LayoutData } from './$types';
 
 	interface Props {
@@ -21,10 +24,11 @@
 	let lastBannerCookieName = $state<string | null>(null);
 	let tawkLoadRequested = false;
 	let lastSnapPageKey = '';
+	let lastGa4PageKey = '';
 	const announcementBanner = $derived(data.announcementBanner || null);
-	const defaultShareTitle = 'Buy Social Media Accounts & Growth Services | FastAccs';
+	const defaultShareTitle = 'Buy Social Media Accounts & Boosting Services | FastAccs';
 	const defaultShareDescription =
-		'Get Instagram, TikTok, X, Facebook accounts and growth services with secure checkout, instant delivery, and buyer support.';
+		'Get Instagram, TikTok, X, Facebook accounts and boosting services with secure checkout, instant delivery, and buyer support.';
 
 	function normalizeBaseUrl(value: string | undefined): string {
 		const fallback = 'https://smm.fastaccs.com';
@@ -94,15 +98,37 @@
 		}
 	}
 
+	function trackCurrentGa4PageView(force = false): void {
+		if (typeof window === 'undefined') return;
+
+		const currentUrl = new URL(window.location.href);
+		const pageKey = `${currentUrl.pathname}${currentUrl.search}`;
+		if (!force && pageKey === lastGa4PageKey) return;
+
+		if (
+			trackGa4PageView(currentUrl, document.title || defaultShareTitle, {
+				route_id: page.route.id || 'unknown'
+			})
+		) {
+			lastGa4PageKey = pageKey;
+		}
+	}
+
 	afterNavigate(() => {
 		trackCurrentSnapPageView();
+		trackCurrentGa4PageView();
 	});
 
 	onMount(() => {
 		const tawkEmbedUrl = String(publicEnv.PUBLIC_TAWK_EMBED_URL || '').trim();
 		if (!tawkEmbedUrl || typeof window === 'undefined') return;
 
-		const intentEvents: Array<keyof WindowEventMap> = ['pointerdown', 'touchstart', 'keydown', 'scroll'];
+		const intentEvents: Array<keyof WindowEventMap> = [
+			'pointerdown',
+			'touchstart',
+			'keydown',
+			'scroll'
+		];
 		const supportsPassive = { passive: true } as AddEventListenerOptions;
 		let fallbackTimer = 0;
 		let listenersAttached = false;
@@ -139,6 +165,19 @@
 
 	onMount(() => {
 		trackCurrentSnapPageView();
+		syncGa4Consent();
+		trackCurrentGa4PageView();
+
+		const handleConsentChanged = () => {
+			syncGa4Consent();
+			trackCurrentGa4PageView(true);
+		};
+
+		window.addEventListener(PRIVACY_CONSENT_CHANGED_EVENT, handleConsentChanged);
+
+		return () => {
+			window.removeEventListener(PRIVACY_CONSENT_CHANGED_EVENT, handleConsentChanged);
+		};
 	});
 
 	onNavigate((navigation) => {
@@ -169,7 +208,8 @@
 	});
 
 	function dismissAnnouncementBanner(): void {
-		if (!announcementBanner || !announcementBanner.dismissible || typeof document === 'undefined') return;
+		if (!announcementBanner || !announcementBanner.dismissible || typeof document === 'undefined')
+			return;
 
 		bannerDismissed = true;
 		const maxAgeSeconds = 60 * 60 * 24 * 365;
@@ -203,9 +243,13 @@
 			class="border-b px-4 py-2 text-sm"
 			style="border-color: rgba(59, 130, 246, 0.35); background: linear-gradient(90deg, rgba(30, 64, 175, 0.28) 0%, rgba(15, 23, 42, 0.8) 100%); color: #dbeafe;"
 		>
-			<div class="mx-auto flex max-w-6xl flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+			<div
+				class="mx-auto flex max-w-6xl flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between"
+			>
 				<div class="min-w-0">
-					<span class="font-semibold tracking-wide uppercase" style="color: #93c5fd;">Announcement</span>
+					<span class="font-semibold tracking-wide uppercase" style="color: #93c5fd;"
+						>Announcement</span
+					>
 					<span class="ml-2 break-words">{announcementBanner.text}</span>
 					{#if announcementBanner.link}
 						<a
@@ -234,6 +278,7 @@
 
 	{@render children?.()}
 
+	<AffiliateAccessNudge user={data.user} currentPath={data.currentPath} />
 	<CookieConsentBar />
 	<ToastContainer />
 </div>

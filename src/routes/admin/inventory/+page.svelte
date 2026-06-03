@@ -17,14 +17,21 @@
 		assigned_accounts?: number | null;
 		tier_price?: number | null;
 		created_at?: string | Date | null;
+		exact_preview_enabled?: boolean | null;
+		previewable_accounts?: number | null;
+		missing_profile_link_accounts?: number | null;
+		exact_preview_screenshot_accounts?: number | null;
 	};
 
 	let { data }: { data: PageData } = $props();
 
 	let searchTerm = $state('');
+	let sortMode = $state<'attention' | 'platform' | 'stock_asc' | 'stock_desc'>('attention');
 	let showConfirmModal = $state(false);
 	let cleanupLoading = $state(false);
 	let cleanupMessage = $state<string | null>(null);
+	let thumbnailLoading = $state(false);
+	let thumbnailMessage = $state<string | null>(null);
 	const lowStockThreshold = $derived.by(() =>
 		Math.max(1, Number(data.lowStockThreshold || data?.stats?.low_stock_threshold || 10))
 	);
@@ -33,19 +40,53 @@
 
 	const filteredInventory = $derived.by((): InventoryRow[] => {
 		const query = searchTerm.trim().toLowerCase();
-		if (!query) return inventoryRows;
-		return inventoryRows.filter(
-			(item) =>
-				item.platform_name?.toLowerCase().includes(query) ||
-				item.tier_name?.toLowerCase().includes(query)
-		);
+		const matches = query
+			? inventoryRows.filter(
+					(item) =>
+						item.platform_name?.toLowerCase().includes(query) ||
+						item.tier_name?.toLowerCase().includes(query)
+				)
+			: inventoryRows;
+
+		return [...matches].sort((a, b) => {
+			const aAvailable = a.available_accounts || 0;
+			const bAvailable = b.available_accounts || 0;
+			const alphabetical = `${a.platform_name || ''}:${a.tier_name || ''}`.localeCompare(
+				`${b.platform_name || ''}:${b.tier_name || ''}`
+			);
+
+			if (sortMode === 'platform') return alphabetical;
+			if (sortMode === 'stock_desc') return bAvailable - aAvailable || alphabetical;
+			if (sortMode === 'stock_asc') return aAvailable - bAvailable || alphabetical;
+
+			const aAttention = aAvailable === 0 ? 0 : aAvailable <= lowStockThreshold ? 1 : 2;
+			const bAttention = bAvailable === 0 ? 0 : bAvailable <= lowStockThreshold ? 1 : 2;
+			return aAttention - bAttention || aAvailable - bAvailable || alphabetical;
+		});
 	});
+
+	const attentionRows = $derived.by(() =>
+		inventoryRows
+			.filter((item) => (item.available_accounts || 0) <= lowStockThreshold)
+			.sort((a, b) => (a.available_accounts || 0) - (b.available_accounts || 0))
+	);
+
+	const exactPreviewStats = $derived.by(() => ({
+		previewable: inventoryRows.reduce((sum, item) => sum + (item.previewable_accounts || 0), 0),
+		thumbnails: inventoryRows.reduce(
+			(sum, item) => sum + (item.exact_preview_screenshot_accounts || 0),
+			0
+		),
+		missingLinks: inventoryRows.reduce(
+			(sum, item) => sum + (item.missing_profile_link_accounts || 0),
+			0
+		)
+	}));
 
 	const summaryStats = $derived.by(() => {
 		return {
 			total_accounts: filteredInventory.reduce(
-				(sum, item) =>
-					sum + (item.lifetime_total_accounts || item.total_accounts || 0),
+				(sum, item) => sum + (item.lifetime_total_accounts || item.total_accounts || 0),
 				0
 			),
 			available_accounts: filteredInventory.reduce(
@@ -79,6 +120,36 @@
 		} finally {
 			cleanupLoading = false;
 			setTimeout(() => (cleanupMessage = null), 5000);
+		}
+	}
+
+	async function generateMissingThumbnails() {
+		thumbnailLoading = true;
+		thumbnailMessage = null;
+		try {
+			const response = await fetch('/api/admin/exact-preview/thumbnails', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ limit: 6 })
+			});
+			const result = await response.json();
+			if (!response.ok || !result.success) {
+				thumbnailMessage = `Error: ${result.error || 'Thumbnail worker failed'}`;
+				return;
+			}
+
+			if (result.data?.reason === 'cloudinary_not_configured') {
+				thumbnailMessage = 'Error: Cloudinary is not configured for exact-profile thumbnails.';
+				return;
+			}
+
+			thumbnailMessage = `Thumbnail run complete: ${result.data?.generated || 0} generated, ${result.data?.failed || 0} failed, ${result.data?.skipped || 0} skipped.`;
+			await invalidateAll();
+		} catch {
+			thumbnailMessage = 'Error: Failed to run thumbnail worker.';
+		} finally {
+			thumbnailLoading = false;
+			setTimeout(() => (thumbnailMessage = null), 8000);
 		}
 	}
 
@@ -131,6 +202,14 @@
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			<button
+				onclick={generateMissingThumbnails}
+				disabled={thumbnailLoading}
+				class="cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold transition-all hover:scale-[.98] active:scale-95 disabled:opacity-50 disabled:active:scale-100 sm:text-sm"
+				style="background: var(--btn-primary-gradient); color: #04140c;"
+			>
+				{thumbnailLoading ? 'Generating...' : 'Generate Missing Thumbnails'}
+			</button>
+			<button
 				onclick={() => (showConfirmModal = true)}
 				disabled={cleanupLoading}
 				class="cursor-pointer rounded-full px-3 py-1.5 text-xs text-white transition-all hover:scale-[.98] active:scale-95 disabled:opacity-50 disabled:active:scale-100 sm:text-sm"
@@ -164,6 +243,17 @@
 		</div>
 	{/if}
 
+	{#if thumbnailMessage}
+		<div
+			class="mb-6 rounded-lg p-4"
+			style={thumbnailMessage.startsWith('Error')
+				? 'border: 1px solid var(--status-error-border); background: var(--status-error-bg); color: var(--status-error)'
+				: 'border: 1px solid var(--status-success-border); background: var(--status-success-bg); color: var(--status-success)'}
+		>
+			<p class="font-medium">{thumbnailMessage}</p>
+		</div>
+	{/if}
+
 	<div
 		class="mb-4 rounded-lg p-3 sm:p-4"
 		style="background: var(--bg-elev-1); border: 1px solid var(--border);"
@@ -188,6 +278,34 @@
 			Last alert: {formatPolicyTimestamp(lowStockPolicy?.last_alert_at)} • Last digest:
 			{formatPolicyTimestamp(lowStockPolicy?.last_digest_at)}
 		</p>
+		{#if attentionRows.length > 0}
+			<div class="mt-3 border-t pt-3" style="border-color: var(--border);">
+				<p class="text-xs font-semibold tracking-wide uppercase" style="color: var(--text-muted);">
+					Stock attention needed
+				</p>
+				<div class="mt-2 flex flex-wrap gap-2">
+					{#each attentionRows as item (getInventoryKey(item))}
+						<span
+							class="rounded-full px-2.5 py-1 text-xs font-semibold"
+							style={getStatusStyle(item.available_accounts || 0, lowStockThreshold)}
+						>
+							{item.platform_name || 'Unknown'} · {item.tier_name || 'Unknown'}:
+							{item.available_accounts || 0}
+						</span>
+					{/each}
+				</div>
+			</div>
+		{/if}
+		<div
+			class="mt-3 border-t pt-3 text-xs"
+			style="border-color: var(--border); color: var(--text-dim);"
+		>
+			Exact-profile thumbnails: {exactPreviewStats.thumbnails.toLocaleString()} of
+			{exactPreviewStats.previewable.toLocaleString()} prepared
+			{#if exactPreviewStats.missingLinks > 0}
+				• {exactPreviewStats.missingLinks.toLocaleString()} missing live-profile links
+			{/if}
+		</div>
 	</div>
 
 	<!-- Stats Cards -->
@@ -231,14 +349,25 @@
 	</div>
 
 	<!-- Search -->
-	<div class="mb-4">
+	<div class="mb-4 flex flex-col gap-2 sm:flex-row">
 		<input
 			type="text"
 			placeholder="Search platforms or tiers..."
 			bind:value={searchTerm}
-			class="w-full rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:outline-none"
+			class="min-w-0 flex-1 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:outline-none"
 			style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
 		/>
+		<select
+			bind:value={sortMode}
+			class="rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:outline-none"
+			style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
+			aria-label="Sort inventory"
+		>
+			<option value="attention">Needs attention first</option>
+			<option value="platform">Platform and tier</option>
+			<option value="stock_asc">Lowest stock first</option>
+			<option value="stock_desc">Highest stock first</option>
+		</select>
 	</div>
 
 	<!-- Inventory Table -->
@@ -296,7 +425,7 @@
 				</thead>
 				<tbody class="divide-y" style="border-color: var(--border); background: var(--bg-elev-1);">
 					{#each filteredInventory as item (getInventoryKey(item))}
-							<tr
+						<tr
 							class="transition-colors"
 							style="--hover-bg: var(--bg-elev-2);"
 							onmouseenter={(e) => (e.currentTarget.style.background = 'var(--bg-elev-2)')}
@@ -350,12 +479,12 @@
 								</div>
 							</td>
 						</tr>
-						{:else}
-							<tr>
-								<td colspan="7" class="px-6 py-8 text-center" style="color: var(--text-muted);">
-									No inventory found
-								</td>
-							</tr>
+					{:else}
+						<tr>
+							<td colspan="7" class="px-6 py-8 text-center" style="color: var(--text-muted);">
+								No inventory found
+							</td>
+						</tr>
 					{/each}
 				</tbody>
 			</table>

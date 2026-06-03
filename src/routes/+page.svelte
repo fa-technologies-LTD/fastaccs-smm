@@ -6,15 +6,14 @@
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
 
-	let { data }: { data: PageData } = $props();
+	let { data }: { data?: PageData } = $props();
 </script>
 
-
 <svelte:head>
-	<title>Buy Social Media Accounts & Growth Services | FastAccs</title>
+	<title>Buy Social Media Accounts & Boosting Services | FastAccs</title>
 	<meta
 		name="description"
-		content="Get Instagram, TikTok, X, Facebook accounts and growth services with secure checkout, instant delivery, and buyer support."
+		content="Get Instagram, TikTok, X, Facebook accounts and boosting services with secure checkout, instant delivery, and buyer support."
 	/>
 </svelte:head>
 
@@ -22,7 +21,7 @@
 
 <main>
 	<HeroBanner />
-	<FeaturedCategories platforms={data.platforms} />
+	<FeaturedCategories platforms={data?.platforms ?? []} />
 	<SocialProof />
 </main>
 <Footer />

@@ -19,6 +19,7 @@ import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { invalidateSession } from '$lib/auth/session';
 import { prisma } from '$lib/prisma';
 import { sendEmail } from '$lib/services/email';
+import { getAffiliateConfig, saveAffiliateConfig } from '$lib/services/affiliate';
 
 function maskSecret(value: string): string {
 	const trimmed = value.trim();
@@ -28,44 +29,46 @@ function maskSecret(value: string): string {
 }
 
 export const load: PageServerLoad = async ({ locals }) => {
-	const [settings, featureFlags, admins, sessions, announcementBannerConfig] = await Promise.all([
-		getAdminSettingsSnapshot(),
-		getFeatureFlagSnapshot(),
-		prisma.user.findMany({
-			where: { userType: 'ADMIN' },
-			select: {
-				id: true,
-				email: true,
-				fullName: true,
-				adminRoleAssignment: {
-					select: {
-						role: true
+	const [settings, featureFlags, admins, sessions, announcementBannerConfig, affiliateConfig] =
+		await Promise.all([
+			getAdminSettingsSnapshot(),
+			getFeatureFlagSnapshot(),
+			prisma.user.findMany({
+				where: { userType: 'ADMIN' },
+				select: {
+					id: true,
+					email: true,
+					fullName: true,
+					adminRoleAssignment: {
+						select: {
+							role: true
+						}
 					}
-				}
-			},
-			orderBy: { createdAt: 'asc' }
-		}),
-		prisma.session.findMany({
-			select: {
-				id: true,
-				userId: true,
-				createdAt: true,
-				lastRefreshedAt: true,
-				expiresAt: true,
-				user: {
-					select: {
-						email: true,
-						fullName: true,
-						userType: true,
-						isActive: true
+				},
+				orderBy: { createdAt: 'asc' }
+			}),
+			prisma.session.findMany({
+				select: {
+					id: true,
+					userId: true,
+					createdAt: true,
+					lastRefreshedAt: true,
+					expiresAt: true,
+					user: {
+						select: {
+							email: true,
+							fullName: true,
+							userType: true,
+							isActive: true
+						}
 					}
-				}
-			},
-			orderBy: { createdAt: 'desc' },
-			take: 40
-		}),
-		getAnnouncementBannerConfig()
-	]);
+				},
+				orderBy: { createdAt: 'desc' },
+				take: 40
+			}),
+			getAnnouncementBannerConfig(),
+			getAffiliateConfig()
+		]);
 	const canManageSettings = Boolean(
 		locals.adminContext && hasAdminPermission(locals.adminContext, 'admin:settings:manage')
 	);
@@ -81,6 +84,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			announcementBannerConfig,
 			settings.business.businessTimezone || 'Africa/Lagos'
 		),
+		affiliateConfig,
 		featureFlags,
 		smtpHealth: getSmtpHealthSnapshot(),
 		sessions: sessions.map((session) => ({
@@ -96,12 +100,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 				isActive: session.user.isActive
 			}
 		})),
-			admins: admins.map((admin) => ({
-				id: admin.id,
-				email: admin.email,
-				fullName: admin.fullName,
-				role: admin.adminRoleAssignment?.role || 'UNASSIGNED'
-			})),
+		admins: admins.map((admin) => ({
+			id: admin.id,
+			email: admin.email,
+			fullName: admin.fullName,
+			role: admin.adminRoleAssignment?.role || 'UNASSIGNED'
+		})),
 		canManageSettings,
 		canManageRoles,
 		envConfig: {
@@ -223,6 +227,35 @@ export const actions: Actions = {
 		};
 	},
 
+	saveAffiliateConfig: async ({ request, locals }) => {
+		if (!locals.adminContext || !hasAdminPermission(locals.adminContext, 'admin:settings:manage')) {
+			return fail(403, { success: false, error: 'Forbidden' });
+		}
+
+		const formData = await request.formData();
+
+		await saveAffiliateConfig({
+			unlockThreshold: String(formData.get('unlockThreshold') || ''),
+			discountStage1Percent: String(formData.get('discountStage1Percent') || ''),
+			discountStage1Cap: String(formData.get('discountStage1Cap') || ''),
+			discountStage2Percent: String(formData.get('discountStage2Percent') || ''),
+			discountStage2Cap: String(formData.get('discountStage2Cap') || ''),
+			maxRewardedOrdersPerBuyer: String(formData.get('maxRewardedOrdersPerBuyer') || ''),
+			storeCreditMin: String(formData.get('storeCreditMin') || ''),
+			storeCreditMax: String(formData.get('storeCreditMax') || ''),
+			storeCreditFallbackPercent: String(formData.get('storeCreditFallbackPercent') || ''),
+			excludedTierKeywords: String(formData.get('excludedTierKeywords') || ''),
+			payoutMinimum: String(formData.get('payoutMinimum') || ''),
+			payoutMinAccountAgeDays: String(formData.get('payoutMinAccountAgeDays') || '')
+		});
+
+		return {
+			success: true,
+			section: 'affiliate',
+			message: 'Affiliate controls updated.'
+		};
+	},
+
 	saveFeatureFlags: async ({ request, locals }) => {
 		if (!locals.adminContext || !hasAdminPermission(locals.adminContext, 'admin:settings:manage')) {
 			return fail(403, { success: false, error: 'Forbidden' });
@@ -268,7 +301,8 @@ export const actions: Actions = {
 			return fail(400, {
 				success: false,
 				section: 'announcement',
-				error: error instanceof Error ? error.message : 'Failed to save announcement banner settings.'
+				error:
+					error instanceof Error ? error.message : 'Failed to save announcement banner settings.'
 			});
 		}
 

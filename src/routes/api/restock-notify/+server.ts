@@ -184,7 +184,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					key,
 					value: JSON.stringify(list),
 					category: 'notifications',
-					description: 'Growth services launch notification subscribers'
+					description: 'Boosting Services launch notification subscribers'
 				}
 			});
 
@@ -192,8 +192,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				success: true,
 				alreadyExists,
 				message: alreadyExists
-					? 'You are already on the growth-services notify list.'
-					: 'You have been added to the growth-services notify list.'
+					? 'You are already on the Boosting Services notify list.'
+					: 'You have been added to the Boosting Services notify list.'
 			});
 		}
 

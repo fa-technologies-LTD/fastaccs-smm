@@ -11,6 +11,7 @@
 	const itemCount = $derived(cart.itemCount);
 	const loading = $derived(cart.loading);
 	const error = $derived(cart.error);
+	const notice = $derived(cart.notice);
 
 	let cartItems = $state<CartItemWithTier[]>([]);
 	let total = $state<number>(0);
@@ -40,7 +41,10 @@
 	}
 
 	function getCartLineKey(item: CartItemWithTier): string {
-		return item.cartItemId || (item.exactAccount ? `exact:${item.exactAccount.accountId}` : `tier:${item.tierId}`);
+		return (
+			item.cartItemId ||
+			(item.exactAccount ? `exact:${item.exactAccount.accountId}` : `tier:${item.tierId}`)
+		);
 	}
 
 	function removeItem(item: CartItemWithTier) {
@@ -182,8 +186,16 @@
 						</div>
 					{:else}
 						<!-- Cart Items -->
+						{#if notice}
+							<div
+								class="mx-4 mt-4 rounded-lg px-3 py-2 text-xs leading-relaxed"
+								style="background: rgba(202,219,46,0.10); border: 1px solid rgba(202,219,46,0.28); color: var(--text-muted);"
+							>
+								{notice}
+							</div>
+						{/if}
 						<div style="border-top: 1px solid var(--border);">
-								{#each cartItems as item (getCartLineKey(item))}
+							{#each cartItems as item (getCartLineKey(item))}
 								{@const PlatformIcon = getPlatformIcon(item.tier.platformSlug)}
 								{@const renderPlatformImage = shouldRenderPlatformImage(item)}
 								<div
@@ -199,7 +211,8 @@
 												? 'from-black to-gray-800'
 												: item.tier.platformSlug === 'facebook' && !renderPlatformImage
 													? 'from-blue-600 to-blue-700'
-													: (item.tier.platformSlug === 'twitter' || item.tier.platformSlug === 'x') &&
+													: (item.tier.platformSlug === 'twitter' ||
+																item.tier.platformSlug === 'x') &&
 														  !renderPlatformImage
 														? 'from-blue-400 to-blue-500'
 														: !renderPlatformImage
@@ -261,7 +274,7 @@
 											{formatPrice(item.tier.price * item.quantity)}
 										</span>
 										<button
-												onclick={() => removeItem(item)}
+											onclick={() => removeItem(item)}
 											style="border-radius: var(--r-xs); padding: 4px; color: var(--text-dim); transition: all 0.2s;"
 											class="hover:bg-red-500/10"
 											aria-label="Remove item"

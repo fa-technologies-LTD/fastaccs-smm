@@ -38,7 +38,8 @@ export async function createUserFromGoogle(googleUser: GoogleUserData): Promise<
 			emailVerified: false,
 			emailVerifiedAt: null,
 			registeredAt: new Date(),
-			lastLogin: new Date()
+			lastLogin: new Date(),
+			lastSeenAt: new Date()
 		}
 	});
 }
@@ -47,7 +48,7 @@ export async function createUserFromGoogle(googleUser: GoogleUserData): Promise<
 export async function updateUserLastLogin(userId: string): Promise<void> {
 	await prisma.user.update({
 		where: { id: userId },
-		data: { lastLogin: new Date() }
+		data: { lastLogin: new Date(), lastSeenAt: new Date() }
 	});
 }
 
@@ -64,7 +65,8 @@ export async function updateUserFromGoogle(
 			fullName: googleUser.name,
 			avatarUrl: googleUser.picture,
 			...(userType === 'ADMIN' ? { userType } : {}),
-			lastLogin: new Date()
+			lastLogin: new Date(),
+			lastSeenAt: new Date()
 		}
 	});
 }

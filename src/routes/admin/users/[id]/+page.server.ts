@@ -37,6 +37,7 @@ function buildTimeline(input: {
 		createdAt: Date;
 		emailVerifiedAt: Date | null;
 		lastLogin: Date | null;
+		lastSeenAt: Date | null;
 	};
 	orders: Array<{
 		id: string;
@@ -94,6 +95,16 @@ function buildTimeline(input: {
 			title: 'Latest login',
 			description: 'Most recent successful login.',
 			at: input.user.lastLogin.toISOString()
+		});
+	}
+
+	if (input.user.lastSeenAt) {
+		events.push({
+			id: `${input.user.id}-last-seen`,
+			type: 'login',
+			title: 'Latest return visit',
+			description: 'Most recent storefront or dashboard visit.',
+			at: input.user.lastSeenAt.toISOString()
 		});
 	}
 
@@ -190,6 +201,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 				emailVerifiedAt: true,
 				registeredAt: true,
 				lastLogin: true,
+				lastSeenAt: true,
 				createdAt: true,
 				updatedAt: true,
 				wallet: {
@@ -267,21 +279,20 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	}
 
 	const orderSummaries: OrderSummary[] = user.orders.map((order) => ({
-			id: order.id,
-			orderNumber: order.orderNumber,
-			status: order.status,
-			paymentStatus: order.paymentStatus,
-			totalAmount: revenueVisible ? Number(order.totalAmount || 0) : 0,
-			currency: order.currency,
-			createdAt: order.createdAt,
-			updatedAt: order.updatedAt,
-			paidAt: order.paidAt,
-			itemCount: order.orderItems.reduce(
-				(sum: number, item: { quantity: number }) => sum + Number(item.quantity || 0),
-				0
-			)
-		})
-	);
+		id: order.id,
+		orderNumber: order.orderNumber,
+		status: order.status,
+		paymentStatus: order.paymentStatus,
+		totalAmount: revenueVisible ? Number(order.totalAmount || 0) : 0,
+		currency: order.currency,
+		createdAt: order.createdAt,
+		updatedAt: order.updatedAt,
+		paidAt: order.paidAt,
+		itemCount: order.orderItems.reduce(
+			(sum: number, item: { quantity: number }) => sum + Number(item.quantity || 0),
+			0
+		)
+	}));
 
 	const paidOrderSummaries = orderSummaries.filter((order: OrderSummary) =>
 		isRevenueOrder({
@@ -303,7 +314,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			registeredAt: user.registeredAt,
 			createdAt: user.createdAt,
 			emailVerifiedAt: user.emailVerifiedAt,
-			lastLogin: user.lastLogin
+			lastLogin: user.lastLogin,
+			lastSeenAt: user.lastSeenAt
 		},
 		orders: orderSummaries,
 		sessionLogins: user.sessions.map((session: { createdAt: Date }) => session.createdAt),
@@ -325,6 +337,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			emailVerifiedAt: user.emailVerifiedAt,
 			registeredAt: user.registeredAt,
 			lastLogin: user.lastLogin,
+			lastSeenAt: user.lastSeenAt || user.lastLogin || user.registeredAt,
+			isInactive:
+				(user.lastSeenAt || user.lastLogin || user.registeredAt).getTime() <
+				Date.now() - 60 * 24 * 60 * 60 * 1000,
 			createdAt: user.createdAt,
 			updatedAt: user.updatedAt,
 			storeCreditBalance: Number(user.wallet?.balance || 0)

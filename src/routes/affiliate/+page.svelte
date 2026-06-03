@@ -7,6 +7,9 @@
 	const resellerFormUrl =
 		'https://docs.google.com/forms/d/e/1FAIpQLSfCmv6ADTG51ooEjm9-UBz2GzsxFDqxxSep6Lo_Gb-OMQv8UA/viewform?usp=dialog';
 	const isLoggedIn = $derived(Boolean(page.data.user));
+	const isActiveAffiliate = $derived(
+		Boolean((page.data.user as { isAffiliateEnabled?: boolean } | null)?.isAffiliateEnabled)
+	);
 </script>
 
 <svelte:head>
@@ -38,9 +41,9 @@
 			Turn FastAccs referrals into cash earnings
 		</h1>
 		<p class="max-w-3xl text-sm sm:text-base" style="color: var(--text-muted);">
-			Qualified buyers can unlock affiliate access, activate a unique code, share it, and earn Store
-			Credit from successful referred orders. Store Credit can be used on FastAccs and can become
-			cash once payout requirements are met.
+			The referral rewards system is active. Qualified buyers can unlock affiliate access, activate
+			a unique code, share it, and earn Store Credit Cash from successful referred orders. This is
+			real withdrawable cash once payout requirements are met.
 		</p>
 	</section>
 
@@ -78,7 +81,8 @@
 				<span class="text-xs font-semibold uppercase">Earn</span>
 			</div>
 			<p class="text-sm" style="color: var(--text-muted);">
-				Earn Store Credit on successful referred orders and track it from your dashboard.
+				Earn withdrawable Store Credit Cash on successful referred orders and track it from your
+				dashboard.
 			</p>
 		</div>
 	</section>
@@ -117,9 +121,11 @@
 				<a
 					href="/dashboard?tab=affiliate"
 					class="rounded-full px-5 py-2 text-sm font-semibold"
-					style="background: linear-gradient(180deg, rgba(5,212,113,0.95), rgba(13,145,82,0.95)); border: 1px solid rgba(5,212,113,0.40); color: #04140C;"
+					style={isActiveAffiliate
+						? 'background: linear-gradient(180deg, rgba(5,212,113,0.95), rgba(13,145,82,0.95)); border: 1px solid rgba(5,212,113,0.40); color: #04140C;'
+						: 'background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text-muted);'}
 				>
-					Open Affiliate Dashboard
+					{isActiveAffiliate ? 'Open Affiliate Dashboard' : 'View Affiliate Progress'}
 				</a>
 			{/if}
 			<a

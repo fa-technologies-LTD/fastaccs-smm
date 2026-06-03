@@ -11,6 +11,11 @@
 		normalizePaymentStatus
 	} from '$lib/helpers/payment-status';
 	import { trackSnapEvent } from '$lib/services/snap-pixel';
+	import {
+		clearGa4CheckoutSnapshot,
+		readGa4CheckoutSnapshot,
+		trackGa4Purchase
+	} from '$lib/services/ga4';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 
 	const MAX_CONFIRMATION_WAIT_MS = 10_000;
@@ -65,6 +70,7 @@
 
 	function clearPendingOrderStorage(): void {
 		sessionStorage.removeItem(PENDING_ORDER_STORAGE_KEY);
+		clearGa4CheckoutSnapshot();
 	}
 
 	function getOrdersDashboardPath(targetOrderId: string | null, showPendingBanner = false): string {
@@ -167,12 +173,23 @@
 
 					if (result.success) {
 						const resolvedOrderId = result.orderId || orderIdParam;
+						const checkoutSnapshot = readGa4CheckoutSnapshot(resolvedOrderId);
 						trackSnapEvent('PURCHASE', {
 							transaction_id: resolvedOrderId,
 							price: Number(result.amount || 0) || undefined,
 							currency: result.currency || 'NGN',
 							description: 'FastAccs order'
 						});
+						if (resolvedOrderId) {
+							trackGa4Purchase({
+								transaction_id: resolvedOrderId,
+								value: Number(result.amount || checkoutSnapshot?.value || 0),
+								currency: result.currency || checkoutSnapshot?.currency || 'NGN',
+								affiliation: checkoutSnapshot?.affiliation || 'FastAccs SMM',
+								coupon: checkoutSnapshot?.coupon,
+								items: checkoutSnapshot?.items || []
+							});
+						}
 						success = true;
 						pending = false;
 						verifying = false;
@@ -181,7 +198,10 @@
 						orderId = resolvedOrderId;
 						clearPendingOrderStorage();
 						cart.clear();
-						if (result.manualHandover === true || String(result.status || '').toUpperCase() === 'PAID') {
+						if (
+							result.manualHandover === true ||
+							String(result.status || '').toUpperCase() === 'PAID'
+						) {
 							showSuccess(
 								'Payment confirmed!',
 								'Manual handover is now in progress. Continue on WhatsApp from your order details.'

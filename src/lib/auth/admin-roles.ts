@@ -202,6 +202,11 @@ const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
 		writePermission: 'admin:catalog:manage'
 	},
 	{
+		prefix: '/api/admin/exact-preview',
+		readPermission: 'admin:access',
+		writePermission: 'admin:inventory:manage'
+	},
+	{
 		prefix: '/api/admin/cleanup',
 		readPermission: 'admin:access',
 		writePermission: 'admin:inventory:manage'

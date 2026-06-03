@@ -211,6 +211,14 @@
 				</span>
 				<span
 					class="rounded-full px-2.5 py-1 font-semibold"
+					style={user.isInactive
+						? 'background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border);'
+						: 'background: var(--bg-elev-2); color: var(--text-muted); border: 1px solid var(--border);'}
+				>
+					{user.isInactive ? 'Inactive 60+ days' : 'Recently active'}
+				</span>
+				<span
+					class="rounded-full px-2.5 py-1 font-semibold"
 					style="background: var(--bg-elev-2); color: var(--text-muted); border: 1px solid var(--border);"
 				>
 					{user.userType}

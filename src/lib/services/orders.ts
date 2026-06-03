@@ -28,6 +28,9 @@ export interface CreateOrderData {
 	paymentMethod: string;
 	affiliateCode?: string;
 	promotionCode?: string;
+	analytics?: {
+		ga4ClientId?: string | null;
+	};
 }
 
 export interface OrderSummary {
@@ -43,7 +46,14 @@ export interface OrderSummary {
 // Helper function to handle API responses
 async function handleApiCall(response: Response) {
 	if (!response.ok) {
-		const errorText = await response.text();
+		const raw = await response.text();
+		let errorText = raw;
+		try {
+			const parsed = JSON.parse(raw) as { error?: unknown; message?: unknown };
+			errorText = String(parsed.error || parsed.message || raw);
+		} catch {
+			errorText = raw;
+		}
 		return { data: null, error: `HTTP ${response.status}: ${errorText}` };
 	}
 	return await response.json();

@@ -34,7 +34,10 @@
 		registeredUsers: data.stats?.registeredUsers || 0,
 		guestUsers: data.stats?.guestUsers || 0,
 		affiliates: data.stats?.affiliates || 0,
+		payingCustomers: data.stats?.payingCustomers || 0,
 		activeUsers: data.stats?.activeUsers || 0,
+		inactiveUsers: data.stats?.inactiveUsers || 0,
+		suspendedUsers: data.stats?.suspendedUsers || 0,
 		totalRevenue: data.stats?.totalRevenue || 0
 	});
 
@@ -47,7 +50,7 @@
 			filtered = filtered.filter((user: any) => {
 				switch (filterType) {
 					case 'paying':
-						return Number(user.orderCount || 0) > 0;
+						return user.isPayingCustomer;
 					case 'registered':
 						return user.userType === 'REGISTERED';
 					case 'guest':
@@ -55,8 +58,10 @@
 					case 'affiliate':
 						return user.isAffiliateEnabled;
 					case 'active':
-						return user.isActive;
+						return !user.isInactive;
 					case 'inactive':
+						return user.isInactive;
+					case 'suspended':
 						return !user.isActive;
 					default:
 						return true;
@@ -78,8 +83,8 @@
 		filtered = [...filtered].sort((a: any, b: any) => {
 			const aCreatedAt = new Date(a.createdAt || a.registeredAt || 0).getTime() || 0;
 			const bCreatedAt = new Date(b.createdAt || b.registeredAt || 0).getTime() || 0;
-			const aLastLogin = a.lastLogin ? new Date(a.lastLogin).getTime() || 0 : 0;
-			const bLastLogin = b.lastLogin ? new Date(b.lastLogin).getTime() || 0 : 0;
+			const aLastSeen = a.lastSeenAt ? new Date(a.lastSeenAt).getTime() || 0 : 0;
+			const bLastSeen = b.lastSeenAt ? new Date(b.lastSeenAt).getTime() || 0 : 0;
 			const aSpent = Number(a.totalSpent || 0);
 			const bSpent = Number(b.totalSpent || 0);
 			const aOrders = Number(a.orderCount || 0);
@@ -94,8 +99,8 @@
 					return bOrders - aOrders || bSpent - aSpent || bCreatedAt - aCreatedAt;
 				case 'oldest':
 					return aCreatedAt - bCreatedAt;
-				case 'recent_login':
-					return bLastLogin - aLastLogin || bCreatedAt - aCreatedAt;
+				case 'recent_visit':
+					return bLastSeen - aLastSeen || bCreatedAt - aCreatedAt;
 				case 'name_az':
 					return aName.localeCompare(bName) || bCreatedAt - aCreatedAt;
 				case 'newest':
@@ -122,13 +127,17 @@
 			Email: user.email || 'N/A',
 			Phone: user.phone || 'N/A',
 			Type: user.userType,
-			'Is Active': user.isActive ? 'Yes' : 'No',
+			'Paying Customer': user.isPayingCustomer ? 'Yes' : 'No',
+			'Access Status': user.isActive ? 'Allowed' : 'Suspended',
+			'Activity Status': user.isInactive ? 'Inactive (60+ days)' : 'Active',
 			'Is Affiliate': user.isAffiliateEnabled ? 'Yes' : 'No',
 			'Email Verified': user.emailVerified ? 'Yes' : 'No',
-			'Total Orders': user.orderCount,
+			'Successful Paid Orders': user.successfulOrderCount,
+			'Order Attempts': user.orderCount,
 			'Total Spent': canViewRevenue ? user.totalSpent : 'RESTRICTED',
 			'Store Credit': user.storeCreditBalance || 0,
 			'Registered At': formatDate(user.registeredAt),
+			'Last Return Visit': user.lastSeenAt ? formatDate(user.lastSeenAt) : 'Never',
 			'Last Login': user.lastLogin ? formatDate(user.lastLogin) : 'Never'
 		}));
 
@@ -155,10 +164,16 @@
 			: 'background: var(--bg-elev-2); color: var(--text-muted); border: 1px solid var(--border)';
 	}
 
-	function getStatusStyle(isActive: boolean) {
+	function getAccessStyle(isActive: boolean) {
 		return isActive
 			? 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border)'
 			: 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border)';
+	}
+
+	function getActivityStyle(isInactive: boolean) {
+		return isInactive
+			? 'background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border)'
+			: 'background: var(--bg-elev-2); color: var(--text-muted); border: 1px solid var(--border)';
 	}
 
 	async function toggleUserAccess(userId: string, isCurrentlyActive: boolean, label: string) {
@@ -247,9 +262,9 @@
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted)">
-						Registered
+						Paying Customers
 					</p>
-					<p class="mt-1 text-xl font-bold" style="color: var(--text)">{stats.registeredUsers}</p>
+					<p class="mt-1 text-xl font-bold" style="color: var(--text)">{stats.payingCustomers}</p>
 				</div>
 				<div class="rounded-full bg-green-100 p-2">
 					<UserCheck class="h-5 w-5 text-green-600" />
@@ -264,7 +279,7 @@
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted)">
-						Active
+						Active Visits
 					</p>
 					<p class="mt-1 text-xl font-bold" style="color: var(--status-success);">
 						{stats.activeUsers}
@@ -283,12 +298,33 @@
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted)">
-						Guests
+						Inactive 60+ Days
 					</p>
-					<p class="mt-1 text-xl font-bold" style="color: var(--text);">{stats.guestUsers}</p>
+					<p class="mt-1 text-xl font-bold" style="color: var(--status-warning);">
+						{stats.inactiveUsers}
+					</p>
 				</div>
 				<div class="rounded-full p-2" style="background: var(--bg-elev-2);">
 					<Users class="h-5 w-5" style="color: var(--text-muted);" />
+				</div>
+			</div>
+		</div>
+
+		<div
+			class="rounded-lg p-4"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
+			<div class="flex items-center justify-between">
+				<div class="flex-1">
+					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted)">
+						Suspended Access
+					</p>
+					<p class="mt-1 text-xl font-bold" style="color: var(--status-error);">
+						{stats.suspendedUsers}
+					</p>
+				</div>
+				<div class="rounded-full p-2" style="background: var(--status-error-bg);">
+					<ShieldOff class="h-5 w-5" style="color: var(--status-error);" />
 				</div>
 			</div>
 		</div>
@@ -359,8 +395,9 @@
 					<option value="registered">Registered</option>
 					<option value="guest">Guest</option>
 					<option value="affiliate">Affiliates</option>
-					<option value="active">Active</option>
-					<option value="inactive">Inactive</option>
+					<option value="active">Active Visits</option>
+					<option value="inactive">Inactive 60+ Days</option>
+					<option value="suspended">Suspended Access</option>
 				</select>
 				<select
 					bind:value={sortType}
@@ -371,7 +408,7 @@
 					<option value="oldest">Oldest</option>
 					<option value="most_orders">Most Orders</option>
 					<option value="top_spender">Top Spender</option>
-					<option value="recent_login">Recent Login</option>
+					<option value="recent_visit">Recent Visit</option>
 					<option value="name_az">Name (A-Z)</option>
 				</select>
 			</div>
@@ -506,17 +543,27 @@
 									{/if}
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
-									<span
-										class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
-										style={getStatusStyle(user.isActive)}
-									>
-										{user.isActive ? 'Active' : 'Inactive'}
-									</span>
+									<div class="flex flex-col items-start gap-1">
+										<span
+											class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
+											style={getAccessStyle(user.isActive)}
+										>
+											{user.isActive ? 'Access allowed' : 'Suspended'}
+										</span>
+										<span
+											class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
+											style={getActivityStyle(user.isInactive)}
+										>
+											{user.isInactive ? 'Inactive 60+ days' : 'Recently active'}
+										</span>
+									</div>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<div class="flex items-center gap-1">
 										<ShoppingBag class="h-4 w-4" style="color: var(--text-dim);" />
-										<span class="text-sm" style="color: var(--text);">{user.orderCount}</span>
+										<span class="text-sm" style="color: var(--text);"
+											>{user.successfulOrderCount} paid / {user.orderCount} attempts</span
+										>
 									</div>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
@@ -540,6 +587,9 @@
 									<div class="flex items-center gap-1">
 										<Calendar class="h-4 w-4" style="color: var(--text-dim);" />
 										<span>{formatDate(user.registeredAt)}</span>
+									</div>
+									<div class="mt-1 text-xs" style="color: var(--text-dim);">
+										Last visit: {user.lastSeenAt ? formatDate(user.lastSeenAt) : 'Never'}
 									</div>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">

@@ -19,6 +19,14 @@
 		{
 			"path": "/api/internal/cron/winback",
 			"schedule": "15 0 * * *"
+		},
+		{
+			"path": "/api/internal/cron/exact-preview-thumbnails",
+			"schedule": "15 * * * *"
+		},
+		{
+			"path": "/api/internal/cron/weekly-business-digest",
+			"schedule": "0 8 * * 0"
 		}
 	]
 }

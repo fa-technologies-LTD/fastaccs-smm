@@ -14,7 +14,8 @@ declare global {
 	}
 
 	interface Window {
-		gtag: (...args: any[]) => void;
+		dataLayer?: unknown[][];
+		gtag?: (...args: unknown[]) => void;
 		snaptr?: ((command: 'init' | 'track', ...args: unknown[]) => void) & {
 			queue: unknown[];
 			handleRequest?: (...args: unknown[]) => void;

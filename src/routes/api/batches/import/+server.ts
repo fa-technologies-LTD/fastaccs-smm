@@ -13,6 +13,7 @@ import {
 import { normalizeAccountDataForPersistence } from '$lib/helpers/account-credentials';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { sendLowStockAdminAlertIfNeeded } from '$lib/services/admin-alerts';
+import { generateMissingExactPreviewThumbnails } from '$lib/services/exact-preview-thumbnails';
 
 function asText(value: FormDataEntryValue | null): string {
 	return typeof value === 'string' ? value.trim() : '';
@@ -85,7 +86,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		if (parsedCsv.headers.length === 0) {
-			return json({ data: null, error: 'CSV file is empty or missing header row' }, { status: 400 });
+			return json(
+				{ data: null, error: 'CSV file is empty or missing header row' },
+				{ status: 400 }
+			);
 		}
 
 		if (parsedCsv.rows.length === 0) {
@@ -201,9 +205,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					? (batch.descriptors as Record<string, unknown>)
 					: {};
 			const fingerprint =
-				typeof descriptors.import_fingerprint === 'string'
-					? descriptors.import_fingerprint
-					: '';
+				typeof descriptors.import_fingerprint === 'string' ? descriptors.import_fingerprint : '';
 			return fingerprint === importFingerprint;
 		});
 
@@ -290,6 +292,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		invalidateAdminStatsCache();
 		void sendLowStockAdminAlertIfNeeded('batch_import').catch((error) => {
 			console.error('Failed to evaluate low-stock alert after batch import:', error);
+		});
+		void generateMissingExactPreviewThumbnails({ tierId, limit: 3 }).catch((error) => {
+			console.error('Failed to warm exact-preview thumbnails after batch import:', error);
 		});
 
 		return json({

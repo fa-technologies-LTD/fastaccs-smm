@@ -1,8 +1,6 @@
 <script lang="ts">
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import { onMount } from 'svelte';
-	import { hasAnalyticsConsent } from '$lib/helpers/privacyConsent';
 
 	const policyLinks = [
 		{
@@ -36,17 +34,14 @@
 			description: 'Affiliate program rules and Store Credit safeguards.'
 		}
 	];
-
-	onMount(() => {
-		if (hasAnalyticsConsent()) {
-			window.gtag?.('event', 'page_view', { page_path: '/smm/policies' });
-		}
-	});
 </script>
 
 <svelte:head>
 	<title>Policy Center - FastAccs</title>
-	<meta name="description" content="Policy center for FastAccs terms, refunds, privacy, and usage rules." />
+	<meta
+		name="description"
+		content="Policy center for FastAccs terms, refunds, privacy, and usage rules."
+	/>
 </svelte:head>
 
 <Navigation />
@@ -61,8 +56,8 @@
 				Policy Center
 			</h1>
 			<p style="color: var(--text-muted);" class="max-w-3xl">
-				This page helps you find all FastAccs legal and policy documents in one place. By using
-				the site and making purchases, you agree to the policies linked below.
+				This page helps you find all FastAccs legal and policy documents in one place. By using the
+				site and making purchases, you agree to the policies linked below.
 			</p>
 		</div>
 
@@ -73,7 +68,10 @@
 					class="rounded-xl p-5 transition-all hover:shadow-lg"
 					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 				>
-					<h2 class="mb-2 text-lg font-semibold" style="color: var(--text); font-family: var(--font-head);">
+					<h2
+						class="mb-2 text-lg font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
+					>
 						{policy.title}
 					</h2>
 					<p class="text-sm" style="color: var(--text-muted);">{policy.description}</p>

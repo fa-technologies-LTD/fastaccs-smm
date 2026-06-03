@@ -1,12 +1,13 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
+import { releaseExpiredExactPreviewReservations } from '$lib/services/exact-preview';
 
 // GET /api/categories/[id]/stock - Get available account count for a tier
 export async function GET({ params }) {
 	try {
 		const categoryId = params.id;
+		await releaseExpiredExactPreviewReservations(prisma, categoryId);
 
-		// ✅ FIXED: Real-time stock validation API to prevent overselling
 		const availableCount = await prisma.account.count({
 			where: {
 				categoryId: categoryId,

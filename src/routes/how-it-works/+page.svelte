@@ -180,33 +180,33 @@
 									></div>
 									<span>Dashboard ready</span>
 								</div>
-									<div class="flex items-center gap-2">
-										<div
-											class="h-2 w-2 rounded-full"
-											style="background: var(--status-success);"
-										></div>
-										<span>Profile initialized</span>
-									</div>
+								<div class="flex items-center gap-2">
+									<div
+										class="h-2 w-2 rounded-full"
+										style="background: var(--status-success);"
+									></div>
+									<span>Profile initialized</span>
 								</div>
 							</div>
 						</div>
+					</div>
 
 					<div class="flex justify-center">
 						<div class="h-12 w-0.5 bg-gradient-to-b from-blue-600 to-purple-600"></div>
 					</div>
 
-						<!-- Step 2: Secure Checkout -->
+					<!-- Step 2: Secure Checkout -->
 					<div
 						class="flex flex-col items-center gap-8 md:flex-row-reverse {animatedSteps.includes(2)
 							? 'translate-y-0 opacity-100'
 							: 'translate-y-4 opacity-0'} transition-all duration-500"
 					>
 						<div class="flex-shrink-0">
-								<div
-									class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-teal-600 text-white shadow-lg"
-								>
-									<CreditCard class="h-12 w-12" />
-								</div>
+							<div
+								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-teal-600 text-white shadow-lg"
+							>
+								<CreditCard class="h-12 w-12" />
+							</div>
 						</div>
 						<div class="flex-1 text-center md:text-right">
 							<div class="mb-2 flex items-center justify-center gap-2 md:justify-end">
@@ -215,29 +215,29 @@
 									>Secure Payment</span
 								>
 							</div>
-								<h3
-									class="mb-3 text-2xl font-bold"
-									style="color: var(--text); font-family: var(--font-head);"
-								>
-									Complete Secure Checkout
-								</h3>
-								<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-									Pay securely through Monnify using card, bank transfer, or USSD. You are redirected
-									to Monnify checkout and returned automatically for verification.
-								</p>
+							<h3
+								class="mb-3 text-2xl font-bold"
+								style="color: var(--text); font-family: var(--font-head);"
+							>
+								Complete Secure Checkout
+							</h3>
+							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
+								Pay securely through Monnify using card, bank transfer, or USSD. You are redirected
+								to Monnify checkout and returned automatically for verification.
+							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Multiple payment methods</span>
 								</li>
-									<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
-										<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-										<span>Hosted Monnify checkout flow</span>
-									</li>
-									<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
-										<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-										<span>Server-side payment verification before fulfillment</span>
-									</li>
+								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
+									<span>Hosted Monnify checkout flow</span>
+								</li>
+								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
+									<span>Server-side payment verification before fulfillment</span>
+								</li>
 							</ul>
 						</div>
 						<div
@@ -304,16 +304,16 @@
 									>Wide Selection</span
 								>
 							</div>
-								<h3
-									class="mb-3 text-2xl font-bold"
-									style="color: var(--text); font-family: var(--font-head);"
-								>
-									Browse & Buy Accounts
-								</h3>
-									<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-										Browse currently active platforms and available account tiers. Filter by category,
-										price, and features, then complete checkout securely.
-									</p>
+							<h3
+								class="mb-3 text-2xl font-bold"
+								style="color: var(--text); font-family: var(--font-head);"
+							>
+								Browse & Buy Accounts
+							</h3>
+							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
+								Browse currently active platforms and available account tiers. Filter by category,
+								price, and features, then complete checkout securely.
+							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
@@ -323,10 +323,10 @@
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
 									<span>Apply affiliate discount codes</span>
 								</li>
-									<li class="flex items-start gap-2" style="color: var(--text);">
-										<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-										<span>Order auto-completion after confirmed payment</span>
-									</li>
+								<li class="flex items-start gap-2" style="color: var(--text);">
+									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
+									<span>Order auto-completion after confirmed payment</span>
+								</li>
 							</ul>
 						</div>
 						<div
@@ -519,17 +519,17 @@
 						>
 							<TrendingUp class="h-8 w-8 text-purple-600" />
 						</div>
-							<h3
-								class="mb-2 text-xl font-semibold"
-								style="color: var(--text); font-family: var(--font-head);"
-							>
-								Premium Quality
-							</h3>
-							<p style="color: var(--text-muted); font-family: var(--font-body);">
-								Account listings are organized by tier details so you can choose what best matches
-								your goals.
-							</p>
-						</div>
+						<h3
+							class="mb-2 text-xl font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							Premium Quality
+						</h3>
+						<p style="color: var(--text-muted); font-family: var(--font-body);">
+							Account listings are organized by tier details so you can choose what best matches
+							your goals.
+						</p>
+					</div>
 				</div>
 			</div>
 		</section>
@@ -563,16 +563,16 @@
 								class="mb-3 text-2xl font-bold"
 								style="color: var(--text); font-family: var(--font-head);"
 							>
-								Enable Affiliate Mode
+								Unlock Affiliate Access
 							</h3>
 							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Go to your dashboard and click "Become an Affiliate". System automatically generates
-								your unique code using your initials + running number (e.g., "JD001").
+								Reach the lifetime completed-spend threshold shown in your dashboard, then activate
+								affiliate access. The system automatically generates your unique referral code.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Free to join, no fees</span>
+									<span>Unlock progress tracked in your dashboard</span>
 								</li>
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
@@ -601,7 +601,9 @@
 							<div class="space-y-2 text-sm" style="color: var(--text-muted);">
 								<div class="flex items-center justify-between">
 									<span>Earnings Model:</span>
-									<span class="font-bold" style="color: var(--status-success);">Store Credit</span>
+									<span class="font-bold" style="color: var(--status-success);"
+										>Store Credit Cash</span
+									>
 								</div>
 								<div class="flex items-center justify-between">
 									<span>Status:</span>
@@ -634,10 +636,10 @@
 							>
 								Share Your Code
 							</h3>
-								<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-									Share your affiliate code or referral link with friends, social media followers, or
-									customers. They get checkout discounts, you earn Store Credit Cash.
-								</p>
+							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
+								Share your affiliate code or referral link with friends, social media followers, or
+								customers. They get checkout discounts, you earn Store Credit Cash.
+							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
@@ -718,13 +720,13 @@
 								Track Your Earnings
 							</h3>
 							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Track referred users, successful referred orders, and Store Credit activity in your
-								affiliate dashboard.
+								Track referred users, successful referred orders, and withdrawable Store Credit Cash
+								activity in your affiliate dashboard.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Earn Store Credit from eligible successful referred orders</span>
+									<span>Earn withdrawable Store Credit Cash from eligible referred orders</span>
 								</li>
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
@@ -732,7 +734,7 @@
 								</li>
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Monthly performance reports</span>
+									<span>Withdrawal progress and payout status</span>
 								</li>
 							</ul>
 						</div>
@@ -763,10 +765,10 @@
 				<!-- Affiliate CTA -->
 				<div class="mt-16 text-center">
 					<button
-						onclick={() => goto('/dashboard')}
+						onclick={() => goto('/dashboard?tab=affiliate')}
 						class="rounded-full bg-gradient-to-r from-purple-600 to-pink-600 px-8 py-4 text-lg font-semibold text-white shadow-lg transition-transform hover:scale-105"
 					>
-						Become an Affiliate
+						Open Affiliate Dashboard
 					</button>
 				</div>
 			</div>
@@ -793,7 +795,7 @@
 							class="mb-2 text-lg font-semibold"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
-								Store Credit Cash
+							Store Credit Cash
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
 							Earn from eligible successful referred orders
@@ -865,10 +867,10 @@
 				Frequently Asked Questions
 			</h2>
 			<div class="space-y-6">
-					<details
-						class="group rounded-lg p-6 shadow"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
+				<details
+					class="group rounded-lg p-6 shadow"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
 					<summary
 						class="flex cursor-pointer items-center justify-between font-semibold"
 						style="color: var(--text); font-family: var(--font-head);"
@@ -894,11 +896,11 @@
 						What payment methods do you accept?
 						<span class="ml-4" style="color: var(--text-dim);">+</span>
 					</summary>
-						<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-							We use Monnify for secure payments. Supported channels can include card, bank transfer,
-							and USSD based on your current Monnify configuration.
-						</p>
-					</details>
+					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
+						We use Monnify for secure payments. Supported channels can include card, bank transfer,
+						and USSD based on your current Monnify configuration.
+					</p>
+				</details>
 
 				<details
 					class="group rounded-lg p-6 shadow"
@@ -911,12 +913,13 @@
 						How do affiliate earnings work?
 						<span class="ml-4" style="color: var(--text-dim);">+</span>
 					</summary>
-						<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-							When you become an affiliate, you get a unique code and referral link. When someone uses
-							your code at checkout, they get referral discounts and you earn Store Credit Cash on
-							eligible successful referred orders. Earnings are tracked automatically in your dashboard.
-						</p>
-					</details>
+					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
+						When you become an affiliate, you get a unique code and referral link. When someone uses
+						your code at checkout, they get referral discounts and you earn Store Credit Cash on
+						eligible successful referred orders. Earnings are tracked automatically in your
+						dashboard.
+					</p>
+				</details>
 
 				<details
 					class="group rounded-lg p-6 shadow"
@@ -930,8 +933,8 @@
 						<span class="ml-4" style="color: var(--text-dim);">+</span>
 					</summary>
 					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						If an order does not match its listing details or has issues, contact support for
-						review and resolution.
+						If an order does not match its listing details or has issues, contact support for review
+						and resolution.
 					</p>
 				</details>
 
@@ -948,8 +951,8 @@
 					</summary>
 					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
 						Test login as soon as possible, keep early activity natural, and make security/profile
-						changes gradually. If anything looks off, contact support quickly for help (ideally within
-						2 hours). For the full quick-care guide, visit <a
+						changes gradually. If anything looks off, contact support quickly for help (ideally
+						within 2 hours). For the full quick-care guide, visit <a
 							href="/support#faq"
 							style="color: var(--link);"
 							class="hover:underline">Support FAQ</a
@@ -961,18 +964,18 @@
 					class="group rounded-lg p-6 shadow"
 					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 				>
-						<summary
-							class="flex cursor-pointer items-center justify-between font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							What happens if payment is cancelled?
-							<span class="ml-4" style="color: var(--text-dim);">+</span>
-						</summary>
-						<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-							If you cancel at checkout, your order is marked as cancelled and no account is delivered.
-							You can safely return to checkout and try again.
-						</p>
-					</details>
+					<summary
+						class="flex cursor-pointer items-center justify-between font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
+					>
+						What happens if payment is cancelled?
+						<span class="ml-4" style="color: var(--text-dim);">+</span>
+					</summary>
+					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
+						If you cancel at checkout, your order is marked as cancelled and no account is
+						delivered. You can safely return to checkout and try again.
+					</p>
+				</details>
 			</div>
 		</div>
 	</section>

@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import type { Prisma } from '@prisma/client';
 import { verifyPayment } from '$lib/services/payment';
 import { prisma } from '$lib/prisma';
 import { allocateAccountsForOrder } from '$lib/services/fulfillment';
@@ -22,6 +23,10 @@ import { isManualHandoverOrder } from '$lib/services/order-delivery-mode';
 import { notifyManualHandoverOrderPaid } from '$lib/services/manual-handover';
 import { isPendingPaymentExpired } from '$lib/helpers/payment-expiry.server';
 import { releaseExactPreviewReservationsForOrder } from '$lib/services/exact-preview';
+import {
+	isGa4MeasurementProtocolConfigured,
+	sendGa4MeasurementProtocolEvents
+} from '$lib/server/ga4-measurement-protocol';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -88,9 +93,97 @@ function isPaymentAmountValid(orderTotal: number, paidAmount: number): boolean {
 	return paidAmount + 0.01 >= orderTotal;
 }
 
-function isPaymentCurrencyValid(orderCurrency: string | null | undefined, paidCurrency: string): boolean {
+function isPaymentCurrencyValid(
+	orderCurrency: string | null | undefined,
+	paidCurrency: string
+): boolean {
 	const expectedCurrency = String(orderCurrency || 'NGN').toUpperCase();
 	return expectedCurrency === String(paidCurrency || 'NGN').toUpperCase();
+}
+
+function readAnalyticsMetadata(value: unknown): Record<string, unknown> {
+	return value && typeof value === 'object' && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: {};
+}
+
+function normalizeGa4ClientId(value: unknown): string | null {
+	if (typeof value !== 'string') return null;
+	const trimmed = value.trim();
+	return /^\d+\.\d+$/.test(trimmed) ? trimmed : null;
+}
+
+function toJsonObject(value: Record<string, unknown>): Prisma.InputJsonObject {
+	return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonObject;
+}
+
+async function sendServerPurchaseVerifiedEvent(orderId: string, status: 'PAID' | 'COMPLETED') {
+	if (!isGa4MeasurementProtocolConfigured()) return;
+
+	const order = await prisma.order.findUnique({
+		where: { id: orderId },
+		include: {
+			orderItems: {
+				orderBy: { createdAt: 'asc' }
+			}
+		}
+	});
+	if (!order) return;
+
+	const metadata = readAnalyticsMetadata(order.analyticsMetadata);
+	const clientId = normalizeGa4ClientId(metadata.ga4ClientId);
+	if (!clientId || typeof metadata.ga4ServerPurchaseVerifiedSentAt === 'string') return;
+
+	const itemCount = order.orderItems.reduce((sum, item) => sum + item.quantity, 0);
+	const result = await sendGa4MeasurementProtocolEvents({
+		clientId,
+		userId: order.userId,
+		events: [
+			{
+				name: 'purchase_verified_server',
+				params: {
+					transaction_id: order.id,
+					order_number: order.orderNumber,
+					order_status: status,
+					payment_status: order.paymentStatus,
+					delivery_method: order.deliveryMethod,
+					delivery_status: order.deliveryStatus,
+					currency: order.currency,
+					value: Number(order.totalAmount),
+					item_count: itemCount,
+					affiliation: order.affiliateCode ? 'affiliate_referral' : 'FastAccs SMM',
+					coupon: order.promotionCode || undefined,
+					items: order.orderItems.map((item, index) => ({
+						item_id: item.categoryId,
+						item_name: item.productName,
+						item_category: 'SMM accounts',
+						item_variant: 'server_verified',
+						price: Number(item.unitPrice),
+						quantity: item.quantity,
+						index
+					}))
+				}
+			}
+		]
+	});
+
+	if (!result.success) {
+		console.warn('[ga4.measurement_protocol] purchase_verified_server skipped:', {
+			orderId,
+			error: result.error || null
+		});
+		return;
+	}
+
+	await prisma.order.update({
+		where: { id: order.id },
+		data: {
+			analyticsMetadata: toJsonObject({
+				...metadata,
+				ga4ServerPurchaseVerifiedSentAt: new Date().toISOString()
+			})
+		}
+	});
 }
 
 interface PendingOrderForExpiry {
@@ -246,6 +339,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		if (orderById?.status === 'completed') {
+			void sendServerPurchaseVerifiedEvent(orderById.id, 'COMPLETED').catch((error) => {
+				console.warn('[ga4.measurement_protocol] completed order event failed:', error);
+			});
 			return json({
 				success: true,
 				state: 'SUCCESS',
@@ -258,6 +354,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (orderById?.status === 'paid') {
 			const recovered = await recoverPaidOrderIfNeeded(orderById.id);
 			if (recovered.fulfilled) {
+				void sendServerPurchaseVerifiedEvent(orderById.id, 'COMPLETED').catch((error) => {
+					console.warn('[ga4.measurement_protocol] recovered completed event failed:', error);
+				});
 				return json({
 					success: true,
 					state: 'SUCCESS',
@@ -267,6 +366,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				});
 			}
 
+			void sendServerPurchaseVerifiedEvent(orderById.id, 'PAID').catch((error) => {
+				console.warn('[ga4.measurement_protocol] paid order event failed:', error);
+			});
 			return json({
 				success: true,
 				state: 'SUCCESS',
@@ -402,6 +504,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 
 			if (order.status === 'completed') {
+				void sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED').catch((error) => {
+					console.warn('[ga4.measurement_protocol] completed order event failed:', error);
+				});
 				return json({
 					success: true,
 					state: 'SUCCESS',
@@ -414,6 +519,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (order.status === 'paid') {
 				const recovered = await recoverPaidOrderIfNeeded(order.id);
 				if (recovered.fulfilled) {
+					void sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED').catch((error) => {
+						console.warn('[ga4.measurement_protocol] recovered completed event failed:', error);
+					});
 					return json({
 						success: true,
 						state: 'SUCCESS',
@@ -423,6 +531,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					});
 				}
 
+				void sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) => {
+					console.warn('[ga4.measurement_protocol] paid order event failed:', error);
+				});
 				return json({
 					success: true,
 					state: 'SUCCESS',
@@ -519,6 +630,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				});
 
 				if (latestOrder?.status === 'completed') {
+					void sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED').catch((error) => {
+						console.warn('[ga4.measurement_protocol] already completed event failed:', error);
+					});
 					return json({
 						success: true,
 						state: 'SUCCESS',
@@ -531,6 +645,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				if (latestOrder?.status === 'paid') {
 					const recovered = await recoverPaidOrderIfNeeded(order.id);
 					if (recovered.fulfilled) {
+						void sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED').catch((error) => {
+							console.warn('[ga4.measurement_protocol] recovered completed event failed:', error);
+						});
 						return json({
 							success: true,
 							state: 'SUCCESS',
@@ -540,6 +657,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						});
 					}
 
+					void sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) => {
+						console.warn('[ga4.measurement_protocol] paid recovery event failed:', error);
+					});
 					return json({
 						success: true,
 						state: 'SUCCESS',
@@ -562,6 +682,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				invalidateAdminStatsCache();
 				await notifyManualHandoverOrderPaid(order.id, 'payments.verify.manual-handover');
 
+				void sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) => {
+					console.warn('[ga4.measurement_protocol] manual handover event failed:', error);
+				});
 				return json({
 					success: true,
 					state: 'SUCCESS',
@@ -574,6 +697,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 			const autoDeliveryPaused = await isAutoDeliveryPausedSetting().catch(() => false);
 			if (autoDeliveryPaused) {
+				void sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) => {
+					console.warn('[ga4.measurement_protocol] auto-delivery paused event failed:', error);
+				});
 				return json({
 					success: true,
 					state: 'SUCCESS',
@@ -590,6 +716,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					error: allocationResult.error || null
 				});
 
+				void sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) => {
+					console.warn('[ga4.measurement_protocol] allocation pending event failed:', error);
+				});
 				return json({
 					success: true,
 					state: 'SUCCESS',
@@ -599,6 +728,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				});
 			}
 
+			void sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED').catch((error) => {
+				console.warn('[ga4.measurement_protocol] completed payment event failed:', error);
+			});
 			return json({
 				success: true,
 				state: 'SUCCESS',

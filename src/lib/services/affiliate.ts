@@ -254,7 +254,9 @@ function isAffiliateLineExcluded(
 	config: AffiliateConfig
 ): boolean {
 	const loweredName = String(productName || '').toLowerCase();
-	const keywordBlocked = config.excludedTierKeywords.some((keyword) => loweredName.includes(keyword));
+	const keywordBlocked = config.excludedTierKeywords.some((keyword) =>
+		loweredName.includes(keyword)
+	);
 	const explicitlyExcluded =
 		toBoolean(metadata.affiliate_excluded) || toBoolean(metadata.affiliate_discount_excluded);
 	return keywordBlocked || explicitlyExcluded;
@@ -566,6 +568,181 @@ export async function getAffiliateConfig(): Promise<AffiliateConfig> {
 	return parseAffiliateConfig();
 }
 
+export async function saveAffiliateConfig(input: {
+	unlockThreshold: string;
+	discountStage1Percent: string;
+	discountStage1Cap: string;
+	discountStage2Percent: string;
+	discountStage2Cap: string;
+	maxRewardedOrdersPerBuyer: string;
+	storeCreditMin: string;
+	storeCreditMax: string;
+	storeCreditFallbackPercent: string;
+	excludedTierKeywords: string;
+	payoutMinimum: string;
+	payoutMinAccountAgeDays: string;
+}): Promise<AffiliateConfig> {
+	const nextConfig: AffiliateConfig = {
+		unlockThreshold: parseNumberSetting(
+			input.unlockThreshold,
+			DEFAULT_AFFILIATE_CONFIG.unlockThreshold,
+			5_000,
+			10_000_000
+		),
+		discountStage1Percent: parseNumberSetting(
+			input.discountStage1Percent,
+			DEFAULT_AFFILIATE_CONFIG.discountStage1Percent,
+			0,
+			50
+		),
+		discountStage1Cap: parseNumberSetting(
+			input.discountStage1Cap,
+			DEFAULT_AFFILIATE_CONFIG.discountStage1Cap,
+			0,
+			1_000_000
+		),
+		discountStage2Percent: parseNumberSetting(
+			input.discountStage2Percent,
+			DEFAULT_AFFILIATE_CONFIG.discountStage2Percent,
+			0,
+			50
+		),
+		discountStage2Cap: parseNumberSetting(
+			input.discountStage2Cap,
+			DEFAULT_AFFILIATE_CONFIG.discountStage2Cap,
+			0,
+			1_000_000
+		),
+		maxRewardedOrdersPerBuyer: parseNumberSetting(
+			input.maxRewardedOrdersPerBuyer,
+			DEFAULT_AFFILIATE_CONFIG.maxRewardedOrdersPerBuyer,
+			1,
+			100
+		),
+		storeCreditMin: parseNumberSetting(
+			input.storeCreditMin,
+			DEFAULT_AFFILIATE_CONFIG.storeCreditMin,
+			0,
+			100_000
+		),
+		storeCreditMax: parseNumberSetting(
+			input.storeCreditMax,
+			DEFAULT_AFFILIATE_CONFIG.storeCreditMax,
+			0,
+			1_000_000
+		),
+		storeCreditFallbackPercent: parseNumberSetting(
+			input.storeCreditFallbackPercent,
+			DEFAULT_AFFILIATE_CONFIG.storeCreditFallbackPercent,
+			0,
+			50
+		),
+		excludedTierKeywords: parseKeywordsSetting(
+			input.excludedTierKeywords,
+			DEFAULT_AFFILIATE_CONFIG.excludedTierKeywords
+		),
+		payoutMinimum: parseNumberSetting(
+			input.payoutMinimum,
+			DEFAULT_AFFILIATE_CONFIG.payoutMinimum,
+			1_000,
+			10_000_000
+		),
+		payoutMinAccountAgeDays: parseNumberSetting(
+			input.payoutMinAccountAgeDays,
+			DEFAULT_AFFILIATE_CONFIG.payoutMinAccountAgeDays,
+			0,
+			365
+		)
+	};
+
+	const entries: Array<[string, string, string]> = [
+		[
+			AFFILIATE_CONFIG_KEYS.unlockThreshold,
+			String(nextConfig.unlockThreshold),
+			'Affiliate unlock lifetime spend threshold'
+		],
+		[
+			AFFILIATE_CONFIG_KEYS.discountStage1Percent,
+			String(nextConfig.discountStage1Percent),
+			'Affiliate buyer discount percent for stage 1'
+		],
+		[
+			AFFILIATE_CONFIG_KEYS.discountStage1Cap,
+			String(nextConfig.discountStage1Cap),
+			'Affiliate buyer discount cap for stage 1'
+		],
+		[
+			AFFILIATE_CONFIG_KEYS.discountStage2Percent,
+			String(nextConfig.discountStage2Percent),
+			'Affiliate buyer discount percent for stage 2'
+		],
+		[
+			AFFILIATE_CONFIG_KEYS.discountStage2Cap,
+			String(nextConfig.discountStage2Cap),
+			'Affiliate buyer discount cap for stage 2'
+		],
+		[
+			AFFILIATE_CONFIG_KEYS.maxRewardedOrdersPerBuyer,
+			String(nextConfig.maxRewardedOrdersPerBuyer),
+			'Maximum rewarded referred orders per buyer'
+		],
+		[
+			AFFILIATE_CONFIG_KEYS.storeCreditMin,
+			String(nextConfig.storeCreditMin),
+			'Minimum affiliate Store Credit reward'
+		],
+		[
+			AFFILIATE_CONFIG_KEYS.storeCreditMax,
+			String(nextConfig.storeCreditMax),
+			'Maximum affiliate Store Credit reward'
+		],
+		[
+			AFFILIATE_CONFIG_KEYS.storeCreditFallbackPercent,
+			String(nextConfig.storeCreditFallbackPercent),
+			'Fallback Store Credit percent'
+		],
+		[
+			AFFILIATE_CONFIG_KEYS.excludedTierKeywords,
+			nextConfig.excludedTierKeywords.join(', '),
+			'Tier keywords excluded from affiliate rewards'
+		],
+		[
+			AFFILIATE_CONFIG_KEYS.payoutMinimum,
+			String(nextConfig.payoutMinimum),
+			'Minimum Store Credit required before payout'
+		],
+		[
+			AFFILIATE_CONFIG_KEYS.payoutMinAccountAgeDays,
+			String(nextConfig.payoutMinAccountAgeDays),
+			'Minimum affiliate account age before payout'
+		]
+	];
+
+	await prisma.$transaction(
+		entries.map(([key, value, description]) =>
+			prisma.microcopy.upsert({
+				where: { key },
+				create: {
+					key,
+					value,
+					description,
+					category: 'affiliate',
+					isActive: true
+				},
+				update: {
+					value,
+					description,
+					category: 'affiliate',
+					isActive: true,
+					updatedAt: new Date()
+				}
+			})
+		)
+	);
+
+	return nextConfig;
+}
+
 /**
  * Extract initials from a full name
  * Examples: "John Doe" -> "JD", "Alice" -> "A", "Mary Jane Watson" -> "MJW"
@@ -741,15 +918,15 @@ export async function enableAffiliateMode(
 
 		const affiliateCode = existingProgram?.affiliateCode || (await generateAffiliateCode(userId));
 
-			await prisma.$transaction(async (tx) => {
-				if (!existingProgram) {
-					await tx.affiliateProgram.create({
-						data: {
-							userId,
-							affiliateCode,
-							status: 'active'
-						}
-					});
+		await prisma.$transaction(async (tx) => {
+			if (!existingProgram) {
+				await tx.affiliateProgram.create({
+					data: {
+						userId,
+						affiliateCode,
+						status: 'active'
+					}
+				});
 			} else if (existingProgram.status !== 'active') {
 				await tx.affiliateProgram.update({
 					where: { id: existingProgram.id },
@@ -794,13 +971,13 @@ export async function validateAffiliateCode(code: string): Promise<{
 				affiliateCode: normalizedCode,
 				status: 'active'
 			},
-				select: {
-					id: true,
-					userId: true,
-					affiliateCode: true,
-					user: {
-						select: {
-							isActive: true,
+			select: {
+				id: true,
+				userId: true,
+				affiliateCode: true,
+				user: {
+					select: {
+						isActive: true,
 						isAffiliateEnabled: true
 					}
 				}
@@ -1405,17 +1582,17 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 				}
 			});
 
-				await tx.affiliateProgram.updateMany({
-					where: {
-						userId: order.affiliateUserId as string,
-						affiliateCode: order.affiliateCode as string,
-						status: 'active'
-					},
-					data: {
-						totalReferrals: { increment: 1 },
-						totalSales: { increment: Number(order.totalAmount || 0) }
-					}
-				});
+			await tx.affiliateProgram.updateMany({
+				where: {
+					userId: order.affiliateUserId as string,
+					affiliateCode: order.affiliateCode as string,
+					status: 'active'
+				},
+				data: {
+					totalReferrals: { increment: 1 },
+					totalSales: { increment: Number(order.totalAmount || 0) }
+				}
+			});
 
 			await tx.notification.create({
 				data: {
@@ -1537,7 +1714,9 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 	]);
 
 	const isActive = Boolean(program && user?.isAffiliateEnabled && program.status === 'active');
-	const hardDisabled = Boolean(program && !user?.isAffiliateEnabled && program.status === 'inactive');
+	const hardDisabled = Boolean(
+		program && !user?.isAffiliateEnabled && program.status === 'inactive'
+	);
 	const unlocked = hardDisabled ? false : qualification.eligible || isActive;
 	const canActivate = !hardDisabled && qualification.eligible && !isActive;
 

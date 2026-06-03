@@ -13,6 +13,7 @@ import {
 	createAdminAuditLog,
 	shouldLogAdminMutation
 } from '$lib/services/admin-audit';
+import { recordUserPresenceIfStale, shouldRecordUserPresence } from '$lib/services/user-presence';
 import type { Handle, RequestEvent } from '@sveltejs/kit';
 
 const GENERIC_API_ERROR_MESSAGE = 'Internal server error';
@@ -179,6 +180,18 @@ export const handle: Handle = async ({ event, resolve }) => {
 			});
 			event.locals.user = null;
 			event.locals.session = null;
+		}
+	}
+
+	if (event.locals.user && shouldRecordUserPresence(event.url.pathname, event.request.method)) {
+		try {
+			await recordUserPresenceIfStale(event.locals.user);
+		} catch (error) {
+			console.error('[user.presence.failed]', {
+				userId: event.locals.user.id,
+				path: event.url.pathname,
+				error
+			});
 		}
 	}
 

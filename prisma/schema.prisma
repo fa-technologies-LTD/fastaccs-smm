@@ -24,6 +24,7 @@ model User {
   emailVerifiedAt         DateTime?           @map("email_verified_at")
   registeredAt            DateTime            @default(now()) @map("registered_at")
   lastLogin               DateTime?           @map("last_login")
+  lastSeenAt              DateTime?           @map("last_seen_at")
   createdAt               DateTime            @default(now()) @map("created_at")
   updatedAt               DateTime            @default(now()) @map("updated_at")
   userType                UserType            @default(REGISTERED) @map("user_type")
@@ -46,6 +47,7 @@ model User {
   adminAuditTargets       AdminAuditLog[]     @relation("AdminAuditTarget")
   promotionRedemptions    PromotionRedemption[]
 
+  @@index([lastSeenAt])
   @@map("users")
 }
 
@@ -171,6 +173,7 @@ model Order {
   paymentChannel     String?        @map("payment_channel")
   promotionId        String?        @map("promotion_id") @db.Uuid
   promotionCode      String?        @map("promotion_code")
+  analyticsMetadata  Json           @default("{}") @map("analytics_metadata")
   notifications      Notification[]
   orderItems         OrderItem[]
   affiliateUser      User?          @relation("AffiliateOrders", fields: [affiliateUserId], references: [id])

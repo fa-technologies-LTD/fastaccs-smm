@@ -8,15 +8,27 @@
 	const announcementBanner = data.announcementBanner;
 	const envConfig = data.envConfig;
 	const featureFlags = data.featureFlags;
+	const affiliateConfig = data.affiliateConfig;
 	const smtpHealth = data.smtpHealth;
 	const sessions = data.sessions || [];
-	let admins = $state(data.admins || []);
+	type AdminRow = NonNullable<PageData['admins']>[number];
+	let admins = $state<AdminRow[]>(data.admins || []);
 	const canManageSettings = data.canManageSettings;
 	const canManageRoles = data.canManageRoles;
 	const roleManagementEnabled = Boolean(featureFlags.adminRoleManagement);
 	const storeControlsEnabled = Boolean(featureFlags.adminStoreControls);
 	const announcementBannerEnabled = Boolean(featureFlags.adminAnnouncementBanner);
-	const testEmailDefault = ((data as any).user?.email || '') as string;
+	const testEmailDefault = data.user?.email || '';
+	const sectionLinks = [
+		['#business', 'Business'],
+		['#payments', 'Payments'],
+		['#email', 'Email'],
+		['#store', 'Store'],
+		['#affiliate', 'Affiliate'],
+		['#notifications', 'Alerts'],
+		['#security', 'Security'],
+		['#access', 'Access']
+	] as const;
 
 	const recipientsInput = settings.notifications.adminRecipients.join('\n');
 
@@ -39,7 +51,7 @@
 			return;
 		}
 
-		admins = admins.map((admin: any) =>
+		admins = admins.map((admin) =>
 			admin.id === userId ? { ...admin, role: result.data.role } : admin
 		);
 		addToast({
@@ -58,6 +70,22 @@
 			notifications.
 		</p>
 	</div>
+
+	<nav
+		class="sticky top-16 z-20 -mx-1 flex gap-2 overflow-x-auto px-1 py-2"
+		style="background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px);"
+		aria-label="Settings sections"
+	>
+		{#each sectionLinks as item (item[0])}
+			<a
+				href={item[0]}
+				class="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold"
+				style="border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text-muted);"
+			>
+				{item[1]}
+			</a>
+		{/each}
+	</nav>
 
 	{#if form?.error}
 		<div
@@ -79,6 +107,7 @@
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 		<section
+			id="business"
 			class="rounded-lg p-6"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
@@ -160,6 +189,7 @@
 		</section>
 
 		<section
+			id="announcement"
 			class="rounded-lg p-6"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
@@ -196,7 +226,8 @@
 						class="mt-1 w-full rounded-lg px-3 py-2"
 						style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
 						placeholder="Planned maintenance on Friday 8PM WAT. Checkout remains open."
-						disabled={!canManageSettings || !announcementBannerEnabled}>{announcementBanner.text}</textarea
+						disabled={!canManageSettings || !announcementBannerEnabled}
+						>{announcementBanner.text}</textarea
 					>
 				</label>
 
@@ -266,13 +297,16 @@
 					</label>
 				</div>
 
-				<div class="rounded-lg p-3 text-sm" style="border: 1px dashed var(--border); background: var(--bg);">
+				<div
+					class="rounded-lg p-3 text-sm"
+					style="border: 1px dashed var(--border); background: var(--bg);"
+				>
 					<p class="font-semibold" style="color: var(--text);">Preview</p>
 					<p class="mt-1" style="color: var(--text-muted);">
 						{announcementBanner.text || 'No banner text set yet.'}
 					</p>
 					{#if announcementBanner.link}
-						<p class="mt-1 break-all text-xs" style="color: var(--text-dim);">
+						<p class="mt-1 text-xs break-all" style="color: var(--text-dim);">
 							Link: {announcementBanner.link}
 						</p>
 					{/if}
@@ -290,6 +324,7 @@
 		</section>
 
 		<section
+			id="payments"
 			class="rounded-lg p-6"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
@@ -370,6 +405,7 @@
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 		<section
+			id="email"
 			class="rounded-lg p-6"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
@@ -433,6 +469,7 @@
 		</section>
 
 		<section
+			id="security"
 			class="rounded-lg p-6"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
@@ -445,7 +482,7 @@
 				<p class="mt-3 text-sm" style="color: var(--text-muted);">No sessions found.</p>
 			{:else}
 				<div class="mt-3 max-h-64 space-y-2 overflow-auto pr-1">
-					{#each sessions as session}
+					{#each sessions as session (session.id)}
 						<div
 							class="rounded-lg p-3"
 							style="background: var(--bg); border: 1px solid var(--border);"
@@ -485,6 +522,7 @@
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 		<section
+			id="store"
 			class="rounded-lg p-6"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
@@ -543,6 +581,200 @@
 		</section>
 
 		<section
+			id="affiliate"
+			class="rounded-lg p-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+		>
+			<h2 class="text-lg font-semibold" style="color: var(--text)">Affiliate Controls</h2>
+			<p class="mt-1 text-sm" style="color: var(--text-muted);">
+				Qualification, buyer-discount stages, Store Credit rules, payout requirements, and excluded
+				account types.
+			</p>
+			<form method="POST" action="?/saveAffiliateConfig" class="mt-4 space-y-4">
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<label class="block text-sm" style="color: var(--text-muted);">
+						Unlock threshold (₦)
+						<input
+							type="number"
+							name="unlockThreshold"
+							value={affiliateConfig.unlockThreshold}
+							min="5000"
+							step="1000"
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+							disabled={!canManageSettings}
+						/>
+					</label>
+					<label class="block text-sm" style="color: var(--text-muted);">
+						Max rewarded orders / buyer
+						<input
+							type="number"
+							name="maxRewardedOrdersPerBuyer"
+							value={affiliateConfig.maxRewardedOrdersPerBuyer}
+							min="1"
+							max="100"
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+							disabled={!canManageSettings}
+						/>
+					</label>
+				</div>
+
+				<div class="rounded-lg p-3" style="border: 1px solid var(--border); background: var(--bg);">
+					<p class="text-sm font-semibold" style="color: var(--text);">Buyer discount stages</p>
+					<div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<label class="block text-sm" style="color: var(--text-muted);">
+							Stage 1 percent
+							<input
+								type="number"
+								name="discountStage1Percent"
+								value={affiliateConfig.discountStage1Percent}
+								min="0"
+								max="50"
+								step="0.1"
+								class="mt-1 w-full rounded-lg px-3 py-2"
+								style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
+								disabled={!canManageSettings}
+							/>
+						</label>
+						<label class="block text-sm" style="color: var(--text-muted);">
+							Stage 1 cap (₦)
+							<input
+								type="number"
+								name="discountStage1Cap"
+								value={affiliateConfig.discountStage1Cap}
+								min="0"
+								step="100"
+								class="mt-1 w-full rounded-lg px-3 py-2"
+								style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
+								disabled={!canManageSettings}
+							/>
+						</label>
+						<label class="block text-sm" style="color: var(--text-muted);">
+							Stage 2 percent
+							<input
+								type="number"
+								name="discountStage2Percent"
+								value={affiliateConfig.discountStage2Percent}
+								min="0"
+								max="50"
+								step="0.1"
+								class="mt-1 w-full rounded-lg px-3 py-2"
+								style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
+								disabled={!canManageSettings}
+							/>
+						</label>
+						<label class="block text-sm" style="color: var(--text-muted);">
+							Stage 2 cap (₦)
+							<input
+								type="number"
+								name="discountStage2Cap"
+								value={affiliateConfig.discountStage2Cap}
+								min="0"
+								step="100"
+								class="mt-1 w-full rounded-lg px-3 py-2"
+								style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
+								disabled={!canManageSettings}
+							/>
+						</label>
+					</div>
+				</div>
+
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<label class="block text-sm" style="color: var(--text-muted);">
+						Store Credit minimum (₦)
+						<input
+							type="number"
+							name="storeCreditMin"
+							value={affiliateConfig.storeCreditMin}
+							min="0"
+							step="50"
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+							disabled={!canManageSettings}
+						/>
+					</label>
+					<label class="block text-sm" style="color: var(--text-muted);">
+						Store Credit maximum (₦)
+						<input
+							type="number"
+							name="storeCreditMax"
+							value={affiliateConfig.storeCreditMax}
+							min="0"
+							step="100"
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+							disabled={!canManageSettings}
+						/>
+					</label>
+					<label class="block text-sm" style="color: var(--text-muted);">
+						Fallback Store Credit %
+						<input
+							type="number"
+							name="storeCreditFallbackPercent"
+							value={affiliateConfig.storeCreditFallbackPercent}
+							min="0"
+							max="50"
+							step="0.1"
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+							disabled={!canManageSettings}
+						/>
+					</label>
+					<label class="block text-sm" style="color: var(--text-muted);">
+						Payout minimum (₦)
+						<input
+							type="number"
+							name="payoutMinimum"
+							value={affiliateConfig.payoutMinimum}
+							min="1000"
+							step="1000"
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+							disabled={!canManageSettings}
+						/>
+					</label>
+					<label class="block text-sm" style="color: var(--text-muted);">
+						Payout account age (days)
+						<input
+							type="number"
+							name="payoutMinAccountAgeDays"
+							value={affiliateConfig.payoutMinAccountAgeDays}
+							min="0"
+							max="365"
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+							disabled={!canManageSettings}
+						/>
+					</label>
+				</div>
+
+				<label class="block text-sm" style="color: var(--text-muted);">
+					Excluded tier keywords
+					<textarea
+						name="excludedTierKeywords"
+						rows="3"
+						class="mt-1 w-full rounded-lg px-3 py-2"
+						style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+						placeholder="0f, empty-f, empty f"
+						disabled={!canManageSettings}
+						>{affiliateConfig.excludedTierKeywords.join(', ')}</textarea
+					>
+				</label>
+
+				<button
+					type="submit"
+					class="rounded-full px-4 py-2 text-sm font-semibold text-white transition-opacity disabled:opacity-50"
+					style="background: var(--btn-primary-gradient)"
+					disabled={!canManageSettings}
+				>
+					Save affiliate controls
+				</button>
+			</form>
+		</section>
+
+		<section
+			id="notifications"
 			class="rounded-lg p-6"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
@@ -632,6 +864,7 @@
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 		<section
+			id="access"
 			class="rounded-lg p-6"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
@@ -645,7 +878,7 @@
 				</p>
 			{:else}
 				<div class="mt-4 space-y-2">
-					{#each admins as admin}
+					{#each admins as admin (admin.id)}
 						<div
 							class="flex flex-wrap items-center justify-between gap-2 rounded-lg p-3"
 							style="border: 1px solid var(--border); background: var(--bg);"
@@ -704,6 +937,7 @@
 		</section>
 
 		<section
+			id="flags"
 			class="rounded-lg p-6"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>

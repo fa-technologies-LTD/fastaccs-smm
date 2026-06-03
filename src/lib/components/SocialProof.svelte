@@ -21,7 +21,7 @@
 		<p
 			style="margin-bottom: var(--space-3xl); text-align: center; font-size: 1rem; color: var(--text-muted); font-family: var(--font-body);"
 		>
-			A reliable platform for social media accounts and growth services
+			A reliable platform for social media accounts and boosting services
 		</p>
 
 		<div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-4">

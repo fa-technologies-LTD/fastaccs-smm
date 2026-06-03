@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { fulfillOrder } from '$lib/services/fulfillment';
 import { initializeTransaction } from '$lib/services/monnify';
@@ -24,6 +25,7 @@ import {
 } from '$lib/helpers/tier-delivery-config';
 import {
 	attachExactPreviewSelectionsToOrder,
+	releaseExpiredExactPreviewReservations,
 	releaseExactPreviewReservationsForOrder
 } from '$lib/services/exact-preview';
 import { reconcilePendingPayments } from '$lib/services/payment-reconciliation';
@@ -45,6 +47,30 @@ interface CreateOrderInput {
 	paymentMethod?: string;
 	affiliateCode?: string;
 	promotionCode?: string;
+	analytics?: {
+		ga4ClientId?: string | null;
+	};
+}
+
+function normalizeGa4ClientId(value: unknown): string | null {
+	if (typeof value !== 'string') return null;
+	const trimmed = value.trim();
+	return /^\d+\.\d+$/.test(trimmed) ? trimmed : null;
+}
+
+function buildOrderAnalyticsMetadata(
+	analytics: CreateOrderInput['analytics']
+): Prisma.InputJsonObject {
+	const metadata: Record<string, string> = {};
+	const ga4ClientId = normalizeGa4ClientId(analytics?.ga4ClientId);
+
+	if (ga4ClientId) {
+		metadata.ga4ClientId = ga4ClientId;
+		metadata.capturedAt = new Date().toISOString();
+		metadata.source = 'checkout';
+	}
+
+	return metadata as Prisma.InputJsonObject;
 }
 
 function isAdminUser(user: { userType?: string } | null | undefined): boolean {
@@ -192,10 +218,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		}));
 
 		const invalidItem = normalizedItems.find(
-			(item) =>
-				!item.categoryId ||
-				!Number.isFinite(item.quantity) ||
-				item.quantity <= 0
+			(item) => !item.categoryId || !Number.isFinite(item.quantity) || item.quantity <= 0
 		);
 
 		if (invalidItem) {
@@ -242,16 +265,16 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		});
 		const categoryById = new Map(categories.map((category) => [category.id, category]));
 
-			const itemsWithNames: Array<{
-				categoryId: string;
-				quantity: number;
-				unitPrice: number;
-				categoryName: string;
-				categoryMetadata: Record<string, unknown>;
-				deliveryMode: TierDeliveryMode;
-				exactAccountId: string | null;
-				exactAccountLabel: string | null;
-			}> = [];
+		const itemsWithNames: Array<{
+			categoryId: string;
+			quantity: number;
+			unitPrice: number;
+			categoryName: string;
+			categoryMetadata: Record<string, unknown>;
+			deliveryMode: TierDeliveryMode;
+			exactAccountId: string | null;
+			exactAccountLabel: string | null;
+		}> = [];
 		const deliveryModes = new Set<TierDeliveryMode>();
 
 		for (const item of normalizedItems) {
@@ -276,14 +299,13 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				quantity: item.quantity,
 				unitPrice,
 				categoryName: `${category.parent?.name || 'Unknown Platform'} ${category.name}`,
-					categoryMetadata:
-						(category.metadata as Record<string, unknown> | null | undefined) || {},
-					deliveryMode: normalizeTierDeliveryMode(
-						(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
-					),
-					exactAccountId: item.exactAccountId,
-					exactAccountLabel: item.exactAccountLabel
-				});
+				categoryMetadata: (category.metadata as Record<string, unknown> | null | undefined) || {},
+				deliveryMode: normalizeTierDeliveryMode(
+					(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
+				),
+				exactAccountId: item.exactAccountId,
+				exactAccountLabel: item.exactAccountLabel
+			});
 			deliveryModes.add(
 				normalizeTierDeliveryMode(
 					(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
@@ -292,15 +314,38 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		}
 
 		if (deliveryModes.size > 1) {
+			return json(
+				{
+					success: false,
+					error:
+						'Manual Handover (WhatsApp) items must be checked out separately from Instant Delivery items.'
+				},
+				{ status: 400 }
+			);
+		}
+
+		await releaseExpiredExactPreviewReservations();
+		for (const item of itemsWithNames) {
+			if (item.exactAccountId) continue;
+			const availableCount = await prisma.account.count({
+				where: {
+					categoryId: item.categoryId,
+					status: 'available'
+				}
+			});
+			if (availableCount < item.quantity) {
 				return json(
 					{
 						success: false,
 						error:
-							'Manual Handover (WhatsApp) items must be checked out separately from Instant Delivery items.'
+							availableCount > 0
+								? `Only ${availableCount} ${item.categoryName} ${availableCount === 1 ? 'account is' : 'accounts are'} available. Please refresh your cart.`
+								: `${item.categoryName} is out of stock. Please refresh your cart.`
 					},
-					{ status: 400 }
+					{ status: 409 }
 				);
 			}
+		}
 
 		const orderDeliveryMode = deliveryModes.has('manual_handover')
 			? 'manual_handover'
@@ -339,7 +384,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			return json({ success: false, error: attribution.error }, { status: 400 });
 		}
 
-		const hasAffiliateAttribution = Boolean(attribution.affiliateCode && attribution.affiliateUserId);
+		const hasAffiliateAttribution = Boolean(
+			attribution.affiliateCode && attribution.affiliateUserId
+		);
 
 		let promotionCode = requestedPromotionCode;
 		if (
@@ -428,56 +475,60 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				status: 'pending',
 				affiliateCode: attribution.affiliateCode || null,
 				affiliateUserId: attribution.affiliateUserId || null,
-					promotionId,
-					promotionCode: appliedPromotionCode,
-					orderItems: {
-						create: itemsWithNames.map((item) => ({
-							categoryId: item.categoryId,
-							quantity: item.quantity,
-							unitPrice: item.unitPrice,
-							totalPrice: item.unitPrice * item.quantity,
-							productName: item.categoryName,
-							productCategory: 'tier'
-						}))
-					}
-				},
-				include: {
-					orderItems: {
-						include: {
-							accounts: true
-						},
-						orderBy: { createdAt: 'asc' }
-					}
+				promotionId,
+				promotionCode: appliedPromotionCode,
+				analyticsMetadata: buildOrderAnalyticsMetadata(orderData.analytics),
+				orderItems: {
+					create: itemsWithNames.map((item) => ({
+						categoryId: item.categoryId,
+						quantity: item.quantity,
+						unitPrice: item.unitPrice,
+						totalPrice: item.unitPrice * item.quantity,
+						productName: item.categoryName,
+						productCategory: 'tier'
+					}))
 				}
-			}); // Automatically fulfill order (allocate + deliver accounts)
+			},
+			include: {
+				orderItems: {
+					include: {
+						accounts: true
+					},
+					orderBy: { createdAt: 'asc' }
+				}
+			}
+		}); // Automatically fulfill order (allocate + deliver accounts)
 
 		if (exactSelectionItems.length > 0) {
-				try {
-					await prisma.$transaction(async (tx) => {
-						await attachExactPreviewSelectionsToOrder({
-							orderId: data.id,
-							userId: checkoutUserId,
-							client: tx,
-							selections: itemsWithNames
-								.map((item, index) => {
-									if (!item.exactAccountId) return null;
-									const orderItemId = data.orderItems[index]?.id;
-									if (!orderItemId) {
-										throw new Error('Could not match exact account to order item.');
-									}
-									return {
-										categoryId: item.categoryId,
-										accountId: item.exactAccountId,
-										displayLabel: item.exactAccountLabel || undefined,
-										orderItemId
-									};
-								})
-								.filter((selection): selection is NonNullable<typeof selection> => Boolean(selection))
-						});
+			try {
+				await prisma.$transaction(async (tx) => {
+					await attachExactPreviewSelectionsToOrder({
+						orderId: data.id,
+						userId: checkoutUserId,
+						client: tx,
+						selections: itemsWithNames
+							.map((item, index) => {
+								if (!item.exactAccountId) return null;
+								const orderItemId = data.orderItems[index]?.id;
+								if (!orderItemId) {
+									throw new Error('Could not match exact account to order item.');
+								}
+								return {
+									categoryId: item.categoryId,
+									accountId: item.exactAccountId,
+									displayLabel: item.exactAccountLabel || undefined,
+									orderItemId
+								};
+							})
+							.filter((selection): selection is NonNullable<typeof selection> => Boolean(selection))
 					});
+				});
 			} catch (error) {
 				await cleanupOrderCreation(data.id).catch((cleanupError) => {
-					console.error('Failed to cleanup exact preview order after attach failure:', cleanupError);
+					console.error(
+						'Failed to cleanup exact preview order after attach failure:',
+						cleanupError
+					);
 				});
 				return json(
 					{
@@ -587,7 +638,10 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			}
 
 			void maybeSendAffiliateUnlockInvite(checkoutUserId).catch((inviteError) => {
-				console.error('Failed to evaluate affiliate unlock after manual handover order:', inviteError);
+				console.error(
+					'Failed to evaluate affiliate unlock after manual handover order:',
+					inviteError
+				);
 			});
 
 			return json({

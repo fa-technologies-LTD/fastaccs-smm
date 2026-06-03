@@ -414,7 +414,7 @@
 				</div>
 			</div>
 
-			<!-- Stock Issues -->
+			<!-- Out of Stock -->
 			<div
 				class="group rounded-lg p-3 sm:p-4"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
@@ -428,16 +428,18 @@
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
-							Stock Issues
+							Out of Stock
 						</p>
 						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
-							{inventoryStats.accountsInOutOfStockTiers || 0}
+							{inventoryStats.outOfStockTiersCount || inventoryStats.out_of_stock || 0}
 						</p>
 						<div class="mt-1 flex items-center">
-							{#if (inventoryStats.outOfStockTiersCount || 0) > 0}
+							{#if (inventoryStats.outOfStockTiersCount || inventoryStats.out_of_stock || 0) > 0}
 								<span class="text-xs sm:text-sm" style="color: #f97316;">
-									{inventoryStats.accountsInOutOfStockTiers || 0} accounts in {inventoryStats.outOfStockTiersCount}
-									tiers
+									{inventoryStats.outOfStockTiersCount || inventoryStats.out_of_stock || 0} account
+									{(inventoryStats.outOfStockTiersCount || inventoryStats.out_of_stock || 0) === 1
+										? ' type is'
+										: ' types are'} out of stock
 								</span>
 							{:else}
 								<span class="text-xs sm:text-sm" style="color: var(--status-success);"

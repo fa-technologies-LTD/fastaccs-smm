@@ -112,8 +112,14 @@ function resolveEmailLogoUrl(baseUrl: string): string {
 
 function isOperationalAdminAlert(params: SendEmailParams): boolean {
 	if (params.notificationType !== 'admin_broadcast') return false;
-	const referenceId = String(params.referenceId || '').trim().toLowerCase();
-	return referenceId.startsWith('critical:') || referenceId.startsWith('low_stock_alert:');
+	const referenceId = String(params.referenceId || '')
+		.trim()
+		.toLowerCase();
+	return (
+		referenceId.startsWith('critical:') ||
+		referenceId.startsWith('low_stock_alert:') ||
+		referenceId.startsWith('weekly_business_digest:')
+	);
 }
 
 function shouldShowInboxReminder(params: SendEmailParams): boolean {
@@ -141,18 +147,18 @@ function renderEmailTemplate(params: {
 
 	return `<!doctype html>
 <html>
-  <body style="margin:0;padding:0;background:#0a0a0a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 12px;">
+  <body style="margin:0;padding:0;background:#080A0B;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 12px;background:#080A0B;">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#141414;border-radius:8px;border:1px solid #232323;overflow:hidden;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#141414;border-radius:14px;border:1px solid #2B2F33;overflow:hidden;">
             <tr>
-              <td align="left" style="padding:18px 24px;border-bottom:1px solid #232323;background:#101010;">
-                <img src="${escapeHtml(logoUrl)}" alt="Fast Accounts" width="190" style="display:block;width:190px;max-width:72%;height:auto;border:0;outline:none;text-decoration:none;" />
+              <td align="left" style="padding:24px 28px;border-bottom:1px solid #2B2F33;background:#0D1011;line-height:0;">
+                <img src="${escapeHtml(logoUrl)}" alt="Fast Accounts" width="178" style="display:block;width:178px;max-width:78%;height:auto;border:0;outline:none;text-decoration:none;" />
               </td>
             </tr>
             <tr>
-              <td style="padding:24px;">
+              <td style="padding:28px;">
                 ${params.firstName ? `<p style="margin:0 0 14px 0;color:#CCCCCC;">Hi ${escapeHtml(params.firstName)},</p>` : ''}
                 ${params.body}
                 ${
@@ -165,7 +171,7 @@ function renderEmailTemplate(params: {
               </td>
             </tr>
             <tr>
-              <td style="padding:18px 24px;border-top:1px solid #232323;color:#9A9A9A;font-size:12px;line-height:1.6;">
+              <td style="padding:20px 28px;border-top:1px solid #2B2F33;color:#9A9A9A;font-size:12px;line-height:1.6;background:#101213;">
                 <div style="color:#E4E4E4;font-weight:600;">Fast Accounts</div>
                 <div style="margin-top:6px;">
                   <a href="https://wa.link/fast_accounts" style="color:#9A9A9A;text-decoration:underline;">WhatsApp Support</a>
@@ -544,7 +550,8 @@ export async function sendOrderConfirmationEmailIfNeeded(orderId: string): Promi
 	const { order, targetEmail, notificationId } = reservation;
 
 	const itemLines = order.orderItems.map(
-		(item) => `- ${item.productName} x${item.quantity} (${Number(item.totalPrice).toLocaleString('en-US')})`
+		(item) =>
+			`- ${item.productName} x${item.quantity} (${Number(item.totalPrice).toLocaleString('en-US')})`
 	);
 	const normalizedOrderSuffix = order.orderNumber.replace(/^ORD-?/i, '');
 	const humanOrderNumber = `FA-${normalizedOrderSuffix}`;

@@ -35,4 +35,5 @@ export interface CartState {
 	isOpen: boolean;
 	loading: boolean;
 	error: string | null;
+	notice: string | null;
 }

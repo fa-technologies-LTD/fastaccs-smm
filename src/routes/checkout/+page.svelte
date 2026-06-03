@@ -24,6 +24,15 @@
 	import { formatPrice } from '$lib/helpers/utils';
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
 	import { trackSnapEvent } from '$lib/services/snap-pixel';
+	import {
+		getGa4ClientId,
+		saveGa4CheckoutSnapshot,
+		trackGa4AddPaymentInfo,
+		trackGa4BeginCheckout,
+		trackGa4ViewCart,
+		type Ga4EventParams,
+		type Ga4Item
+	} from '$lib/services/ga4';
 
 	let { data }: { data: PageData } = $props();
 
@@ -35,6 +44,8 @@
 	let promoDiscountAmount = $state(0);
 	let promoValidationLoading = $state(false);
 	let loadingCartData = $state(true);
+	let lastCartNotice = $state('');
+	let lastGa4CartKey = $state('');
 	const PENDING_ORDER_STORAGE_KEY = 'fastaccs_pending_order_id';
 
 	// Use user data directly from page data
@@ -80,6 +91,10 @@
 		try {
 			cartItems = await cart.getItemsWithTiers();
 			cartTotal = await cart.getTotal();
+			if (cart.notice && cart.notice !== lastCartNotice) {
+				lastCartNotice = cart.notice;
+				showWarning('Cart updated', cart.notice);
+			}
 			if (cartItems.length === 0 && cart.itemCount === 0) {
 				if (cart.error) {
 					showWarning('Cart refreshed', cart.error);
@@ -91,6 +106,9 @@
 			if (promoAppliedCode) {
 				promoAppliedCode = null;
 				promoDiscountAmount = 0;
+			}
+			if (cartItems.length > 0) {
+				trackCheckoutCartView();
 			}
 		} catch (error) {
 			console.error('Failed to load cart data:', error);
@@ -200,7 +218,10 @@
 	}
 
 	function getCartLineKey(item: CartItemWithTier): string {
-		return item.cartItemId || (item.exactAccount ? `exact:${item.exactAccount.accountId}` : `tier:${item.tierId}`);
+		return (
+			item.cartItemId ||
+			(item.exactAccount ? `exact:${item.exactAccount.accountId}` : `tier:${item.tierId}`)
+		);
 	}
 
 	function getCheckoutSnapPayload(orderId?: string) {
@@ -213,6 +234,56 @@
 			number_items: cartItems.reduce((sum, item) => sum + item.quantity, 0),
 			transaction_id: orderId
 		};
+	}
+
+	function getCheckoutGa4Items(): Ga4Item[] {
+		return cartItems.map((item, index) => ({
+			item_id: item.tierId,
+			item_name: item.tier.name,
+			item_brand: 'FastAccs',
+			item_category: 'SMM accounts',
+			item_category2: item.tier.platformName,
+			item_variant: item.exactAccount ? 'exact_profile' : 'standard_pool',
+			price: Number(item.tier.price || 0),
+			quantity: item.quantity,
+			index
+		}));
+	}
+
+	function getCheckoutGa4Payload(orderId?: string): Ga4EventParams {
+		const payload: Ga4EventParams = {
+			currency: 'NGN',
+			value: checkoutTotal,
+			items: getCheckoutGa4Items(),
+			affiliation: affiliateCode ? 'affiliate_referral' : 'FastAccs SMM',
+			coupon: promoAppliedCode || undefined,
+			number_items: cartItems.reduce((sum, item) => sum + item.quantity, 0)
+		};
+
+		if (orderId) {
+			payload.transaction_id = orderId;
+		}
+
+		return payload;
+	}
+
+	function trackCheckoutCartView(): void {
+		const items = getCheckoutGa4Items();
+		const cartKey = `${checkoutTotal}|${items
+			.map((item) => `${item.item_id}:${item.quantity}:${item.item_variant}`)
+			.join('|')}`;
+
+		if (!cartKey || cartKey === lastGa4CartKey) return;
+
+		if (
+			trackGa4ViewCart({
+				currency: 'NGN',
+				value: checkoutTotal,
+				items
+			})
+		) {
+			lastGa4CartKey = cartKey;
+		}
 	}
 
 	// ARCHIVED: wallet checkout (processCheckout) removed — wallet payments disabled.
@@ -269,7 +340,10 @@
 				currency: 'NGN',
 				paymentMethod: 'monnify',
 				affiliateCode: affiliateCode || undefined,
-				promotionCode: promoAppliedCode || undefined
+				promotionCode: promoAppliedCode || undefined,
+				analytics: {
+					ga4ClientId: getGa4ClientId()
+				}
 			});
 
 			if (!orderResult.success) {
@@ -285,6 +359,13 @@
 					goto(`/verify-email?next=${encodeURIComponent(nextPath)}`);
 					return;
 				}
+				if (
+					String(orderResult.error || '')
+						.toLowerCase()
+						.includes('refresh your cart')
+				) {
+					await loadCartData();
+				}
 				throw new Error(orderResult.error || 'Failed to create order');
 			}
 
@@ -292,8 +373,27 @@
 				throw new Error(orderResult.error || 'Failed to initialize payment');
 			}
 
-			trackSnapEvent('START_CHECKOUT', getCheckoutSnapPayload(orderResult.orderId));
-			sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, orderResult.orderId);
+			const resolvedOrderId = String(orderResult.orderId || '');
+			const ga4CheckoutPayload = getCheckoutGa4Payload(resolvedOrderId);
+
+			trackSnapEvent('START_CHECKOUT', getCheckoutSnapPayload(resolvedOrderId));
+			trackGa4BeginCheckout(ga4CheckoutPayload);
+			trackGa4AddPaymentInfo({
+				...ga4CheckoutPayload,
+				payment_type: 'Monnify'
+			});
+			if (resolvedOrderId) {
+				saveGa4CheckoutSnapshot({
+					orderId: resolvedOrderId,
+					value: checkoutTotal,
+					currency: 'NGN',
+					items: getCheckoutGa4Items(),
+					coupon: promoAppliedCode || undefined,
+					affiliation: affiliateCode ? 'affiliate_referral' : 'FastAccs SMM',
+					createdAt: Date.now()
+				});
+			}
+			sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, resolvedOrderId);
 			window.location.href = orderResult.checkoutUrl;
 		} catch (error) {
 			console.error('Payment initialization error:', error);
@@ -510,7 +610,7 @@
 
 						<!-- Cart Items -->
 						<div class="space-y-4 sm:space-y-5">
-								{#each cartItems as item (getCartLineKey(item))}
+							{#each cartItems as item (getCartLineKey(item))}
 								{@const PlatformIcon = getPlatformIcon(item.tier.platformSlug)}
 								{@const renderPlatformImage = shouldRenderCheckoutPlatformImage(item)}
 								<div class="flex gap-3">
@@ -522,7 +622,8 @@
 												? 'from-black to-gray-800'
 												: item.tier.platformSlug === 'facebook' && !renderPlatformImage
 													? 'from-blue-600 to-blue-700'
-													: (item.tier.platformSlug === 'twitter' || item.tier.platformSlug === 'x') &&
+													: (item.tier.platformSlug === 'twitter' ||
+																item.tier.platformSlug === 'x') &&
 														  !renderPlatformImage
 														? 'from-blue-400 to-blue-500'
 														: !renderPlatformImage
@@ -571,11 +672,11 @@
 													</a>
 												{/if}
 											</div>
-												<button
-													onclick={async () => {
-														cart.removeItem(getCartLineKey(item));
-														await loadCartData();
-													}}
+											<button
+												onclick={async () => {
+													cart.removeItem(getCartLineKey(item));
+													await loadCartData();
+												}}
 												style="color: var(--text-dim);"
 												class="hover:text-red-600"
 												title="Remove item"

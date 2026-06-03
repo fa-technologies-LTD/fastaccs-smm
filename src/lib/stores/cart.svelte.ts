@@ -5,55 +5,13 @@ import {
 	type TierDeliveryMode
 } from '$lib/helpers/tier-delivery-config';
 
-interface TierData {
-	id: string;
-	name: string;
-	slug: string;
-	metadata: { price?: number | string; pricing?: { base_price?: number | string } } | null;
-	isActive: boolean;
-	parent?: {
-		name: string;
-		slug: string;
-		metadata?: unknown;
-	} | null;
-}
-
 interface TierDeliveryLookup {
 	id: string;
 	metadata: { delivery_mode?: string | null } | null;
 }
 
-function isUuid(value: string): boolean {
-	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
 function normalizeLookupValue(value: string): string {
 	return value.trim();
-}
-
-function getPlatformIconFromMetadata(metadata: unknown): string | null {
-	if (!metadata || typeof metadata !== 'object') {
-		return null;
-	}
-
-	const record = metadata as Record<string, unknown>;
-	const candidates = [
-		record.icon,
-		record.iconUrl,
-		record.icon_url,
-		record.image,
-		record.image_url,
-		record.logo,
-		record.logo_url
-	];
-
-	for (const candidate of candidates) {
-		if (typeof candidate === 'string' && candidate.trim().length > 0) {
-			return candidate.trim();
-		}
-	}
-
-	return null;
 }
 
 const STORAGE_KEY = 'fastaccs_cart';
@@ -68,7 +26,8 @@ class CartStore {
 		items: [],
 		isOpen: false,
 		loading: false,
-		error: null
+		error: null,
+		notice: null
 	});
 
 	constructor() {
@@ -95,6 +54,10 @@ class CartStore {
 		return this.state.error;
 	}
 
+	get notice(): string | null {
+		return this.state.notice;
+	}
+
 	get itemCount(): number {
 		return this.state.items.reduce((sum, item) => sum + item.quantity, 0);
 	}
@@ -112,6 +75,7 @@ class CartStore {
 		} catch (error) {
 			console.error('Failed to save cart to storage:', error);
 			this.state.error = 'Failed to save cart';
+			this.state.notice = null;
 		}
 	}
 
@@ -131,27 +95,27 @@ class CartStore {
 			}
 
 			// Validate and filter items
-				const validItems = data.items
-					.filter(
-						(item) =>
-							typeof item.tierId === 'string' &&
-							item.tierId.trim().length > 0 &&
-							typeof item.quantity === 'number' &&
-							item.quantity > 0 &&
-							typeof item.addedAt === 'number' &&
-							(!item.exactAccount ||
-								(typeof item.exactAccount.accountId === 'string' &&
-									typeof item.exactAccount.displayLabel === 'string' &&
-									typeof item.exactAccount.profileUrl === 'string' &&
-									typeof item.exactAccount.reservedUntil === 'string' &&
-									(item.exactAccount.screenshotUrl == null ||
-										typeof item.exactAccount.screenshotUrl === 'string')))
-					)
-					.map((item) => ({
-						...item,
-						cartItemId: item.cartItemId || getCartItemId(item),
-						quantity: item.exactAccount ? 1 : item.quantity
-					}));
+			const validItems = data.items
+				.filter(
+					(item) =>
+						typeof item.tierId === 'string' &&
+						item.tierId.trim().length > 0 &&
+						typeof item.quantity === 'number' &&
+						item.quantity > 0 &&
+						typeof item.addedAt === 'number' &&
+						(!item.exactAccount ||
+							(typeof item.exactAccount.accountId === 'string' &&
+								typeof item.exactAccount.displayLabel === 'string' &&
+								typeof item.exactAccount.profileUrl === 'string' &&
+								typeof item.exactAccount.reservedUntil === 'string' &&
+								(item.exactAccount.screenshotUrl == null ||
+									typeof item.exactAccount.screenshotUrl === 'string')))
+				)
+				.map((item) => ({
+					...item,
+					cartItemId: item.cartItemId || getCartItemId(item),
+					quantity: item.exactAccount ? 1 : item.quantity
+				}));
 
 			this.state.items = validItems;
 		} catch (error) {
@@ -179,22 +143,23 @@ class CartStore {
 	addTier(tierId: string, quantity: number = 1): void {
 		if (!tierId || quantity <= 0) return;
 
-			const existingIndex = this.state.items.findIndex(
-				(item) => item.tierId === tierId && !item.exactAccount
-			);
+		const existingIndex = this.state.items.findIndex(
+			(item) => item.tierId === tierId && !item.exactAccount
+		);
 
-			if (existingIndex >= 0) {
-				this.state.items[existingIndex].quantity += quantity;
-			} else {
-				this.state.items.push({
-					cartItemId: `tier:${tierId}`,
-					tierId,
-					quantity,
-					addedAt: Date.now()
+		if (existingIndex >= 0) {
+			this.state.items[existingIndex].quantity += quantity;
+		} else {
+			this.state.items.push({
+				cartItemId: `tier:${tierId}`,
+				tierId,
+				quantity,
+				addedAt: Date.now()
 			});
 		}
 
 		this.state.error = null;
+		this.state.notice = null;
 		this.saveToStorage();
 	}
 
@@ -208,39 +173,40 @@ class CartStore {
 			reservedUntil: string;
 		}
 	): void {
-			if (!tierId || !exactAccount.accountId) return;
+		if (!tierId || !exactAccount.accountId) return;
 
-			const cartItemId = `exact:${exactAccount.accountId}`;
-			const existingIndex = this.state.items.findIndex((item) => item.cartItemId === cartItemId);
-			const nextItem: CartItem = {
-				cartItemId,
-				tierId,
-				quantity: 1,
-				addedAt: Date.now(),
-				exactAccount
-			};
+		const cartItemId = `exact:${exactAccount.accountId}`;
+		const existingIndex = this.state.items.findIndex((item) => item.cartItemId === cartItemId);
+		const nextItem: CartItem = {
+			cartItemId,
+			tierId,
+			quantity: 1,
+			addedAt: Date.now(),
+			exactAccount
+		};
 
-			if (existingIndex >= 0) {
-				this.state.items[existingIndex] = nextItem;
-			} else {
-				this.state.items.push(nextItem);
-			}
-
-			this.state.error = null;
-			this.saveToStorage();
+		if (existingIndex >= 0) {
+			this.state.items[existingIndex] = nextItem;
+		} else {
+			this.state.items.push(nextItem);
 		}
 
-		removeTier(tierId: string): void {
-			this.state.items = this.state.items.filter((item) => item.tierId !== tierId);
-			this.saveToStorage();
-		}
+		this.state.error = null;
+		this.state.notice = null;
+		this.saveToStorage();
+	}
 
-		removeItem(cartItemId: string): void {
-			this.state.items = this.state.items.filter(
-				(item) => (item.cartItemId || getCartItemId(item)) !== cartItemId
-			);
-			this.saveToStorage();
-		}
+	removeTier(tierId: string): void {
+		this.state.items = this.state.items.filter((item) => item.tierId !== tierId);
+		this.saveToStorage();
+	}
+
+	removeItem(cartItemId: string): void {
+		this.state.items = this.state.items.filter(
+			(item) => (item.cartItemId || getCartItemId(item)) !== cartItemId
+		);
+		this.saveToStorage();
+	}
 
 	updateQuantity(tierId: string, quantity: number): void {
 		if (quantity <= 0) {
@@ -248,7 +214,7 @@ class CartStore {
 			return;
 		}
 
-			const item = this.state.items.find((item) => item.tierId === tierId && !item.exactAccount);
+		const item = this.state.items.find((item) => item.tierId === tierId && !item.exactAccount);
 		if (item) {
 			if (item.exactAccount) {
 				item.quantity = 1;
@@ -263,6 +229,7 @@ class CartStore {
 	clear(): void {
 		this.state.items = [];
 		this.state.error = null;
+		this.state.notice = null;
 		this.clearStorage();
 	}
 
@@ -285,112 +252,50 @@ class CartStore {
 
 		this.state.loading = true;
 		this.state.error = null;
+		this.state.notice = null;
 
 		try {
-			const tierIds = Array.from(
-				new Set(
-					this.state.items
-						.map((item) => normalizeLookupValue(item.tierId))
-						.filter((value) => value.length > 0)
-				)
-			);
-
-			if (tierIds.length === 0) {
-				this.state.items = [];
-				this.saveToStorage();
-				return [];
-			}
-
-			const response = await fetch('/api/categories/tiers/batch', {
+			const response = await fetch('/api/cart/refresh', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ ids: tierIds })
+				body: JSON.stringify({ items: this.state.items })
 			});
 
 			if (!response.ok) {
-				if (response.status === 400) {
-					this.state.items = [];
-					this.saveToStorage();
-					this.state.error = 'Your cart was refreshed. Please add items again.';
-					return [];
-				}
-				throw new Error('Failed to fetch tier data');
+				throw new Error('Failed to refresh cart');
 			}
 
-			const { data: tiers }: { data: TierData[] } = await response.json();
-			const tiersById = new Map<string, TierData>();
-			const tiersBySlug = new Map<string, TierData>();
+			const result = (await response.json()) as {
+				success?: boolean;
+				data?: {
+					items?: CartItemWithTier[];
+					messages?: string[];
+				};
+				error?: string;
+			};
 
-			for (const tier of tiers) {
-				tiersById.set(tier.id, tier);
-				tiersBySlug.set(tier.slug.toLowerCase(), tier);
+			if (!result.success) {
+				throw new Error(result.error || 'Failed to refresh cart');
 			}
 
-			// Match items with tier data
-			const itemsWithTiers: CartItemWithTier[] = [];
-			let didNormalizeIds = false;
+			const itemsWithTiers = Array.isArray(result.data?.items) ? result.data.items : [];
+			this.state.items = itemsWithTiers.map((item) => ({
+				cartItemId: item.cartItemId || getCartItemId(item),
+				tierId: item.tierId,
+				quantity: item.exactAccount ? 1 : item.quantity,
+				addedAt: item.addedAt,
+				exactAccount: item.exactAccount
+			}));
+			this.saveToStorage();
 
-			for (const item of this.state.items) {
-				const lookupValue = normalizeLookupValue(item.tierId);
-				const tier = isUuid(lookupValue)
-					? tiersById.get(lookupValue)
-					: tiersBySlug.get(lookupValue.toLowerCase()) || tiersById.get(lookupValue);
-				if (tier) {
-					if (item.tierId !== tier.id) {
-						didNormalizeIds = true;
-					}
-
-						itemsWithTiers.push({
-							...item,
-							cartItemId: item.cartItemId || getCartItemId({ ...item, tierId: tier.id }),
-							tierId: tier.id,
-						tier: {
-							id: tier.id,
-							name: tier.name,
-							price: tier.metadata
-								? Number(
-										(tier.metadata as any).pricing?.base_price || (tier.metadata as any).price || 0
-									)
-								: 0,
-							slug: tier.slug,
-							platformName: tier.parent?.name || 'Unknown',
-							platformSlug: tier.parent?.slug || '',
-							platformIcon: getPlatformIconFromMetadata(tier.parent?.metadata),
-							isActive: tier.isActive
-						}
-					});
-				}
-			}
-
-				// Remove unavailable tiers and normalize legacy slug-based entries to canonical tier IDs.
-				if (itemsWithTiers.length !== this.state.items.length || didNormalizeIds) {
-					const mergedItems = new Map<string, CartItem>();
-					for (const item of itemsWithTiers) {
-						const key = item.exactAccount ? getCartItemId(item) : `tier:${item.tierId}`;
-						const existing = mergedItems.get(key);
-						if (existing && !item.exactAccount) {
-							existing.quantity += item.quantity;
-							existing.addedAt = Math.min(existing.addedAt, item.addedAt);
-							continue;
-						}
-
-						mergedItems.set(key, {
-							cartItemId: key,
-							tierId: item.tierId,
-							quantity: item.exactAccount ? 1 : item.quantity,
-							addedAt: item.addedAt,
-							exactAccount: item.exactAccount
-						});
-				}
-
-				this.state.items = Array.from(mergedItems.values());
-				this.saveToStorage();
-			}
+			const messages = Array.isArray(result.data?.messages) ? result.data.messages : [];
+			this.state.notice = messages.length ? messages.join(' ') : null;
 
 			return itemsWithTiers;
 		} catch (error) {
-			console.error('Failed to fetch tier data:', error);
+			console.error('Failed to refresh cart:', error);
 			this.state.error = 'Failed to load cart items';
+			this.state.notice = null;
 			return [];
 		} finally {
 			this.state.loading = false;
@@ -418,13 +323,9 @@ class CartStore {
 
 		const payload = (await response.json()) as { data?: TierDeliveryLookup[] };
 		const rows = Array.isArray(payload.data) ? payload.data : [];
-		const modeMap = new Map<string, TierDeliveryMode>();
-
-		for (const row of rows) {
-			modeMap.set(row.id, normalizeTierDeliveryMode(row.metadata?.delivery_mode));
-		}
-
-		return modeMap;
+		return new Map(
+			rows.map((row) => [row.id, normalizeTierDeliveryMode(row.metadata?.delivery_mode)])
+		);
 	}
 
 	async ensureDeliveryModeCompatibility(

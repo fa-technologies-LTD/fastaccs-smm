@@ -47,6 +47,7 @@
 		{ key: 'in-stock', label: 'In Stock' },
 		{ key: 'high-engagement', label: 'High Engagement' }
 	];
+	const skeletonIndexes = [0, 1, 2, 3];
 
 	const HIGH_ENGAGEMENT_PATTERN =
 		/(engage|engagement|follower|followers|likes|views|subscriber|subscribers|reach|boost)/i;
@@ -126,10 +127,7 @@
 		return HIGH_ENGAGEMENT_PATTERN.test(getSearchableText(platform));
 	}
 
-	function baseSort(
-		a: PageData['platforms'][number],
-		b: PageData['platforms'][number]
-	): number {
+	function baseSort(a: PageData['platforms'][number], b: PageData['platforms'][number]): number {
 		const inStockA = (a.total_accounts || 0) > 0 ? 1 : 0;
 		const inStockB = (b.total_accounts || 0) > 0 ? 1 : 0;
 		if (inStockA !== inStockB) return inStockB - inStockA;
@@ -197,9 +195,9 @@
 <Navigation />
 
 <main class="min-h-screen" style="background: var(--bg);">
-	<section class="mx-auto w-full max-w-6xl px-4 pb-3 pt-4 sm:pt-5">
+	<section class="mx-auto w-full max-w-6xl px-4 pt-4 pb-3 sm:pt-5">
 		<div class="filter-row">
-			{#each filters as filter}
+			{#each filters as filter (filter.key)}
 				<button
 					type="button"
 					class={`filter-chip ${activeFilter === filter.key ? 'active' : ''}`}
@@ -223,7 +221,7 @@
 		</div>
 
 		<div class="trust-strip">
-			<span><Check size={12} class="trust-icon" /> Account types</span>
+			<span><Check size={12} class="trust-icon" /> Secure logs</span>
 			<span><Zap size={12} class="trust-icon" /> Instant delivery</span>
 			<span><ShieldCheck size={12} class="trust-icon" /> Support ready</span>
 		</div>
@@ -232,7 +230,7 @@
 	<section class="mx-auto w-full max-w-6xl px-4 pb-16">
 		{#if showInitialSkeleton}
 			<div class="platform-grid">
-				{#each Array.from({ length: 4 }) as _, index}
+				{#each skeletonIndexes as index (index)}
 					<div class="platform-skeleton" style={`animation-delay: ${index * 70}ms;`}></div>
 				{/each}
 			</div>
@@ -357,7 +355,9 @@
 		border-radius: 8px;
 		background: rgba(255, 255, 255, 0.04);
 		border: 1px solid rgba(255, 255, 255, 0.08);
-		transition: border-color 150ms ease, box-shadow 150ms ease;
+		transition:
+			border-color 150ms ease,
+			box-shadow 150ms ease;
 	}
 
 	.search-control:focus-within {
@@ -426,7 +426,11 @@
 		border: 1px solid var(--border);
 		background: var(--bg-elev-1);
 		box-shadow: var(--shadow-1);
-		transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+		transition:
+			transform 0.2s ease,
+			box-shadow 0.2s ease,
+			border-color 0.2s ease,
+			opacity 0.2s ease;
 		animation: card-enter 300ms ease-out both;
 	}
 
@@ -538,7 +542,9 @@
 			rgba(255, 255, 255, 0.05) 100%
 		);
 		background-size: 220% 100%;
-		animation: shimmer 1.2s infinite linear, card-enter 300ms ease-out both;
+		animation:
+			shimmer 1.2s infinite linear,
+			card-enter 300ms ease-out both;
 	}
 
 	.empty-state {
@@ -631,20 +637,20 @@
 			margin-right: auto;
 		}
 
-			.platform-header {
-				padding: 1rem;
-			}
+		.platform-header {
+			padding: 1rem;
+		}
 
-			.platform-body {
-				padding: 0.9rem 1rem;
-			}
+		.platform-body {
+			padding: 0.9rem 1rem;
+		}
 
-			.platform-title {
-				font-size: 1.16rem;
-			}
+		.platform-title {
+			font-size: 1.16rem;
+		}
 
-			.platform-subtitle {
-				font-size: 0.84rem;
-			}
+		.platform-subtitle {
+			font-size: 0.84rem;
+		}
 	}
 </style>

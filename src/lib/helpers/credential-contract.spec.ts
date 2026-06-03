@@ -43,4 +43,28 @@ describe('credential-contract helper', () => {
 		expect(text).toContain('Password: P@ssw0rd!');
 		expect(text).toContain('Status: delivered');
 	});
+
+	it('hides internal exact-preview reservation metadata from rendered and copied credentials', () => {
+		const record = {
+			username: 'buyer_profile',
+			credentialExtras: {
+				exact_preview_reservation: {
+					source: 'exact_preview',
+					userId: 'user-id',
+					displayLabel: 'Profile No 01'
+				},
+				exact_preview_screenshot: 'https://cdn.example.com/profile.webp',
+				Recovery_Email: 'backup@example.com'
+			}
+		};
+
+		const entries = getCanonicalCredentialEntries(record);
+		const text = buildCredentialPlainText(record);
+
+		expect(entries.map((entry) => entry.key)).toEqual(['username', 'Recovery_Email']);
+		expect(text).toContain('Username: buyer_profile');
+		expect(text).toContain('Recovery Email: backup@example.com');
+		expect(text).not.toContain('Exact Preview');
+		expect(text).not.toContain('[object Object]');
+	});
 });

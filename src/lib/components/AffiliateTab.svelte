@@ -133,6 +133,7 @@
 	const spendProgressPercent = $derived(
 		unlockThreshold > 0 ? Math.min(100, Math.round((lifetimeSpend / unlockThreshold) * 100)) : 0
 	);
+	const remainingSpend = $derived(Math.max(0, unlockThreshold - lifetimeSpend));
 	const isUnlocked = $derived(Boolean(affiliateData?.unlocked || affiliateData?.isActive));
 	const isActiveAffiliate = $derived(Boolean(affiliateData?.isActive));
 
@@ -263,7 +264,7 @@
 						Affiliate Program
 					</h2>
 					<p class="text-sm" style="color: var(--text-muted);">
-						Share your code. Earn Store Credit Cash from referrals.
+						Share your code. Earn real withdrawable Store Credit Cash.
 					</p>
 				</div>
 			</div>
@@ -299,24 +300,53 @@
 				<div class="mb-3 flex items-center gap-2" style="color: var(--text);">
 					<Lock size={17} />
 					<h3 class="text-base font-semibold" style="font-family: var(--font-head);">
-						Affiliate Locked
+						Affiliate Access Locked
 					</h3>
 				</div>
 				<p class="mb-3 text-sm" style="color: var(--text-muted);">
-					Unlock target:
-					<strong style="color: var(--text);">₦{unlockThreshold.toLocaleString()}</strong>
-					lifetime completed spend.
+					You are building toward referral access. Once unlocked, you can share your code and earn
+					withdrawable Store Credit Cash from successful referred orders.
 				</p>
-				<p class="mb-3 text-sm" style="color: var(--text-muted);">
-					Current progress:
-					<strong style="color: var(--text);">₦{lifetimeSpend.toLocaleString()}</strong>
-					({spendProgressPercent}%)
-				</p>
+				<div class="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+					<div
+						class="rounded-lg border px-3 py-2"
+						style="border-color: var(--border); background: rgba(255,255,255,0.035);"
+					>
+						<p class="text-[11px] uppercase" style="color: var(--text-muted);">Current spend</p>
+						<p class="text-sm font-semibold" style="color: var(--text);">
+							₦{lifetimeSpend.toLocaleString()}
+						</p>
+					</div>
+					<div
+						class="rounded-lg border px-3 py-2"
+						style="border-color: var(--border); background: rgba(5,212,113,0.06);"
+					>
+						<p class="text-[11px] uppercase" style="color: var(--text-muted);">Target</p>
+						<p class="text-sm font-semibold" style="color: var(--text);">
+							₦{unlockThreshold.toLocaleString()}
+						</p>
+					</div>
+					<div
+						class="rounded-lg border px-3 py-2"
+						style="border-color: var(--border); background: rgba(202,219,46,0.07);"
+					>
+						<p class="text-[11px] uppercase" style="color: var(--text-muted);">Remaining</p>
+						<p class="text-sm font-semibold" style="color: var(--text);">
+							₦{remainingSpend.toLocaleString()}
+						</p>
+					</div>
+				</div>
 				<div class="h-2 overflow-hidden rounded-full" style="background: rgba(255,255,255,0.08);">
 					<div
 						class="h-full rounded-full"
 						style="width: {spendProgressPercent}%; background: linear-gradient(90deg, rgba(5,212,113,0.9), rgba(13,145,82,0.9));"
 					></div>
+				</div>
+				<div class="mt-3 flex items-center justify-between gap-3 text-xs">
+					<span style="color: var(--text-muted);">{spendProgressPercent}% complete</span>
+					<a href="/platforms" class="font-semibold" style="color: var(--primary);">
+						Buy more to unlock affiliate access
+					</a>
 				</div>
 			</div>
 		{:else if isUnlocked && !isActiveAffiliate}
@@ -332,8 +362,8 @@
 					Affiliate Access Unlocked
 				</h3>
 				<p class="mx-auto mb-5 max-w-md text-sm" style="color: var(--text-muted);">
-					Activate your profile, get your code, and start earning Store Credit from successful
-					referred orders.
+					Activate your profile, get your code, and start earning withdrawable Store Credit Cash
+					from successful referred orders.
 				</p>
 				<button
 					onclick={enableAffiliate}
@@ -353,8 +383,9 @@
 					How it works
 				</p>
 				<p class="mt-1 text-sm" style="color: var(--text-muted);">
-					<strong style="color: var(--text);">Share your code.</strong> Referred buyers get checkout
-					discounts on eligible orders and you earn Store Credit from successful purchases.
+					<strong style="color: var(--text);">This rewards system is active.</strong> Share your code:
+					referred buyers get checkout discounts on eligible orders and you earn Store Credit Cash from
+					successful purchases. It is withdrawable once payout requirements are met.
 				</p>
 				<p class="mt-2 text-xs" style="color: var(--text-muted);">
 					Discount stage now: <strong style="color: var(--text);">Stage 1</strong> for first 2

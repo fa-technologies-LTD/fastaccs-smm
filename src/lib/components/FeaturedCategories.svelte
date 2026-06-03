@@ -118,51 +118,51 @@
 							>
 								No active platforms available yet.
 							</div>
-							{:else}
-								{#each featuredPlatforms as platform (platform.id)}
-									{@const PlatformIcon = getPlatformIcon(platform.slug)}
-									{@const platformMeta = getPlatformMetadata(platform)}
-									<button
-										onclick={() => goto(`/platforms/${platform.slug}`)}
-										class={`platform-btn platform-entry flex w-full cursor-pointer items-start ${
-											platform.totalAccounts > 0 ? 'clickable' : ''
-										}`}
-									>
-										{#if shouldRenderCustomIcon(platform, platformMeta)}
-											<img
-												src={platformMeta.icon as string}
-												alt={platform.name}
-												class="mr-3 mt-0.5 h-6 w-6 rounded sm:h-8 sm:w-8"
-												onerror={() => markPlatformIconFailed(platform.id)}
-											/>
-										{:else}
-											<PlatformIcon
-												class="mr-3 mt-0.5 h-6 w-6 sm:h-8 sm:w-8"
-												style={`color: ${getPlatformIconColor(platform)};`}
-											/>
-										{/if}
+						{:else}
+							{#each featuredPlatforms as platform (platform.id)}
+								{@const PlatformIcon = getPlatformIcon(platform.slug)}
+								{@const platformMeta = getPlatformMetadata(platform)}
+								<button
+									onclick={() => goto(`/platforms/${platform.slug}`)}
+									class={`platform-btn platform-entry flex w-full cursor-pointer items-start ${
+										platform.totalAccounts > 0 ? 'clickable' : ''
+									}`}
+								>
+									{#if shouldRenderCustomIcon(platform, platformMeta)}
+										<img
+											src={platformMeta.icon as string}
+											alt={platform.name}
+											class="mt-0.5 mr-3 h-6 w-6 rounded sm:h-8 sm:w-8"
+											onerror={() => markPlatformIconFailed(platform.id)}
+										/>
+									{:else}
+										<PlatformIcon
+											class="mt-0.5 mr-3 h-6 w-6 sm:h-8 sm:w-8"
+											style={`color: ${getPlatformIconColor(platform)};`}
+										/>
+									{/if}
 
-										<div class="min-w-0 flex-1 text-left">
-											<div
-												style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
-											>
-												{platform.name}
+									<div class="min-w-0 flex-1 text-left">
+										<div
+											style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
+										>
+											{platform.name}
 										</div>
 										<div
-												style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
-											>
-												{getPlatformSubLabel(platform)}
-											</div>
+											style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
+										>
+											{getPlatformSubLabel(platform)}
 										</div>
-										{#if platform.totalAccounts > 0}
-											<span class="hover-arrow">
-												<ArrowRight size={16} />
-											</span>
-										{/if}
-									</button>
-								{/each}
-							{/if}
-						</div>
+									</div>
+									{#if platform.totalAccounts > 0}
+										<span class="hover-arrow">
+											<ArrowRight size={16} />
+										</span>
+									{/if}
+								</button>
+							{/each}
+						{/if}
+					</div>
 
 					<div class="mt-auto">
 						<button
@@ -175,7 +175,7 @@
 				</div>
 			</div>
 
-			<!-- Growth Services -->
+			<!-- Boosting Services -->
 			<div class="category-card flex flex-col overflow-hidden">
 				<div
 					style="background: var(--btn-secondary-gradient); padding: var(--space-lg); color: var(--text);"
@@ -183,55 +183,72 @@
 					<h3
 						style="margin-bottom: var(--space-xs); font-size: 1.25rem; font-weight: 700; font-family: var(--font-head);"
 					>
-						Growth Services
+						Boosting Services
 					</h3>
 					<p style="font-size: 0.9rem; color: var(--text-muted); font-family: var(--font-body);">
-						Grow your existing accounts with tailored engagement packages
+						Boost your existing accounts with tailored engagement packages
 					</p>
 				</div>
 
-					<div class="flex flex-1 flex-col" style="padding: var(--space-lg);">
-						<div class="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 sm:gap-4">
-							<div class="growth-preview-list">
-								<button class="platform-btn growth-service-btn" type="button" onclick={triggerLaunchCardAttention}>
-									Instagram Followers
-								</button>
-								<button class="platform-btn growth-service-btn" type="button" onclick={triggerLaunchCardAttention}>
-									TikTok Views
-								</button>
-								<button class="platform-btn growth-service-btn" type="button" onclick={triggerLaunchCardAttention}>
-									YouTube Subscribers
-								</button>
-								<button class="platform-btn growth-service-btn" type="button" onclick={triggerLaunchCardAttention}>
-									Facebook Likes
-								</button>
-							</div>
-							<div class={`growth-callout ${launchCardShake ? 'shake-attention' : ''}`}>
-								<p
-									class="text-sm font-semibold uppercase"
-									style="letter-spacing: 0.06em; color: var(--primary); font-family: var(--font-head);"
-								>
-									Launching soon
-								</p>
-								<p
-									class="mt-2"
-									style="font-size: 0.95rem; font-weight: 500; color: var(--text); line-height: 1.45; font-family: var(--font-body);"
-								>
-									This section is under construction. Need a custom growth service package right now?
-								</p>
-								<a
-									href="https://wa.link/fast_accounts"
-									target="_blank"
-									rel="noopener noreferrer"
-									class="chat-btn mt-4"
-								>
-									<MessageCircle size={16} />
-									<span>Chat now on WhatsApp</span>
-								</a>
-							</div>
+				<div class="flex flex-1 flex-col" style="padding: var(--space-lg);">
+					<div class="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 sm:gap-4">
+						<div class="growth-preview-list">
+							<button
+								class="platform-btn growth-service-btn"
+								type="button"
+								onclick={triggerLaunchCardAttention}
+							>
+								Instagram Followers
+							</button>
+							<button
+								class="platform-btn growth-service-btn"
+								type="button"
+								onclick={triggerLaunchCardAttention}
+							>
+								TikTok Views
+							</button>
+							<button
+								class="platform-btn growth-service-btn"
+								type="button"
+								onclick={triggerLaunchCardAttention}
+							>
+								YouTube Subscribers
+							</button>
+							<button
+								class="platform-btn growth-service-btn"
+								type="button"
+								onclick={triggerLaunchCardAttention}
+							>
+								Facebook Likes
+							</button>
+						</div>
+						<div class={`growth-callout ${launchCardShake ? 'shake-attention' : ''}`}>
+							<p
+								class="text-sm font-semibold uppercase"
+								style="letter-spacing: 0.06em; color: var(--primary); font-family: var(--font-head);"
+							>
+								Launching soon
+							</p>
+							<p
+								class="mt-2"
+								style="font-size: 0.95rem; font-weight: 500; color: var(--text); line-height: 1.45; font-family: var(--font-body);"
+							>
+								This section is under construction. Need a custom boosting service package right
+								now?
+							</p>
+							<a
+								href="https://wa.link/fast_accounts"
+								target="_blank"
+								rel="noopener noreferrer"
+								class="chat-btn mt-4"
+							>
+								<MessageCircle size={16} />
+								<span>Chat now on WhatsApp</span>
+							</a>
 						</div>
 					</div>
 				</div>
+			</div>
 		</div>
 	</div>
 </section>
@@ -250,13 +267,13 @@
 		border-color: var(--primary);
 	}
 
-		.platform-btn {
-			background: var(--bg-elev-2);
-			border: 1px solid var(--border);
-			border-radius: var(--r-sm);
-			transition: all 0.2s ease;
-			padding: var(--space-md);
-		}
+	.platform-btn {
+		background: var(--bg-elev-2);
+		border: 1px solid var(--border);
+		border-radius: var(--r-sm);
+		transition: all 0.2s ease;
+		padding: var(--space-md);
+	}
 
 	.platform-btn:hover {
 		background: var(--surface);
@@ -264,30 +281,30 @@
 		transform: scale(1.02);
 	}
 
-		.platform-btn:active {
-			transform: scale(0.98);
-		}
+	.platform-btn:active {
+		transform: scale(0.98);
+	}
 
-		.platform-entry {
-			position: relative;
-		}
+	.platform-entry {
+		position: relative;
+	}
 
-		.platform-entry.clickable:hover {
-			border-color: var(--primary);
-		}
+	.platform-entry.clickable:hover {
+		border-color: var(--primary);
+	}
 
-		.hover-arrow {
-			position: absolute;
-			right: 12px;
-			bottom: 12px;
-			opacity: 0;
-			color: var(--text-dim);
-			transition: opacity 180ms ease;
-		}
+	.hover-arrow {
+		position: absolute;
+		right: 12px;
+		bottom: 12px;
+		opacity: 0;
+		color: var(--text-dim);
+		transition: opacity 180ms ease;
+	}
 
-		.platform-entry.clickable:hover .hover-arrow {
-			opacity: 1;
-		}
+	.platform-entry.clickable:hover .hover-arrow {
+		opacity: 1;
+	}
 
 	.btn-primary-cta {
 		background: var(--btn-primary-gradient);
@@ -310,96 +327,98 @@
 		transform: scale(0.98);
 	}
 
-		.growth-preview-list {
-			display: flex;
-			flex-direction: column;
-			gap: var(--space-md);
-		}
+	.growth-preview-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-md);
+	}
 
-		.growth-service-btn {
-			width: 100%;
-			text-align: left;
-			color: var(--text);
-			font-family: var(--font-body);
-			font-size: 1.05rem;
-			font-weight: 600;
-			cursor: pointer;
-		}
+	.growth-service-btn {
+		width: 100%;
+		text-align: left;
+		color: var(--text);
+		font-family: var(--font-body);
+		font-size: 1.05rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
 
-		.growth-callout {
-			display: flex;
-			flex-direction: column;
-			align-self: start;
-			min-width: 0;
-			width: 100%;
-			border-radius: var(--r-sm);
-			border: 1px solid rgba(5, 212, 113, 0.35);
-			background: rgba(7, 9, 12, 0.55);
-			padding: var(--space-md);
-		}
+	.growth-callout {
+		display: flex;
+		flex-direction: column;
+		align-self: start;
+		min-width: 0;
+		width: 100%;
+		border-radius: var(--r-sm);
+		border: 1px solid rgba(5, 212, 113, 0.35);
+		background: rgba(7, 9, 12, 0.55);
+		padding: var(--space-md);
+	}
 
+	.shake-attention {
+		animation: launch-shake 520ms ease-in-out;
+	}
+
+	.chat-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		width: 100%;
+		border-radius: var(--r-sm);
+		padding: 0.65rem 1rem;
+		border: 1px solid rgba(5, 212, 113, 0.35);
+		background: rgba(5, 212, 113, 0.12);
+		color: var(--primary);
+		font-family: var(--font-body);
+		font-size: 0.88rem;
+		font-weight: 600;
+		text-decoration: none;
+		text-align: center;
+		line-height: 1.25;
+		transition:
+			transform 0.2s ease,
+			opacity 0.2s ease,
+			border-color 0.2s ease;
+		flex-wrap: wrap;
+		max-width: 100%;
+		min-width: 0;
+		word-break: break-word;
+	}
+
+	.chat-btn:hover {
+		border-color: rgba(5, 212, 113, 0.5);
+		transform: translateY(-1px);
+	}
+
+	.chat-btn:active {
+		transform: scale(0.98);
+	}
+
+	@keyframes launch-shake {
+		0% {
+			transform: translateX(0);
+		}
+		20% {
+			transform: translateX(-5px);
+		}
+		40% {
+			transform: translateX(4px);
+		}
+		60% {
+			transform: translateX(-3px);
+		}
+		80% {
+			transform: translateX(2px);
+		}
+		100% {
+			transform: translateX(0);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
 		.shake-attention {
-			animation: launch-shake 520ms ease-in-out;
+			animation: none;
 		}
-
-		.chat-btn {
-			display: inline-flex;
-			align-items: center;
-			justify-content: center;
-			gap: 0.5rem;
-			width: 100%;
-			border-radius: var(--r-sm);
-			padding: 0.65rem 1rem;
-			border: 1px solid rgba(5, 212, 113, 0.35);
-			background: rgba(5, 212, 113, 0.12);
-			color: var(--primary);
-			font-family: var(--font-body);
-			font-size: 0.88rem;
-			font-weight: 600;
-			text-decoration: none;
-			text-align: center;
-			line-height: 1.25;
-			transition: transform 0.2s ease, opacity 0.2s ease, border-color 0.2s ease;
-			flex-wrap: wrap;
-			max-width: 100%;
-			min-width: 0;
-			word-break: break-word;
-		}
-
-		.chat-btn:hover {
-			border-color: rgba(5, 212, 113, 0.5);
-			transform: translateY(-1px);
-		}
-
-		.chat-btn:active {
-			transform: scale(0.98);
-		}
-
-		@keyframes launch-shake {
-			0% {
-				transform: translateX(0);
-			}
-			20% {
-				transform: translateX(-5px);
-			}
-			40% {
-				transform: translateX(4px);
-			}
-			60% {
-				transform: translateX(-3px);
-			}
-			80% {
-				transform: translateX(2px);
-			}
-			100% {
-				transform: translateX(0);
-			}
-		}
-
-		@media (prefers-reduced-motion: reduce) {
-			.shake-attention {
-				animation: none;
-			}
-		}
-
-	</style>
+	}
+</style>

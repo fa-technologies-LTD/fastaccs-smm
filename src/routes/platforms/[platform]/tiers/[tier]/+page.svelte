@@ -3,15 +3,11 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import {
-		ShoppingCart,
 		Users,
 		Package,
 		Plus,
 		Minus,
-		Shield,
 		CheckCircle,
-		ChevronRight,
-		BellRing,
 		AlertTriangle,
 		ExternalLink
 	} from '$lib/icons';
@@ -38,6 +34,12 @@
 		type TierDeliveryMode
 	} from '$lib/helpers/tier-delivery-config';
 	import { trackSnapEvent } from '$lib/services/snap-pixel';
+	import {
+		trackGa4AddToCart,
+		trackGa4ViewItem,
+		type Ga4EventParams,
+		type Ga4Item
+	} from '$lib/services/ga4';
 	import { getTierExactPreviewConfig } from '$lib/helpers/tier-exact-preview';
 
 	interface Props {
@@ -59,7 +61,6 @@
 	let exactPreviewReserving = $state<string | null>(null);
 	let exactPreviewError = $state<string | null>(null);
 	let exactPreviewPrimaryImageFailedByAccount = $state<Record<string, boolean>>({});
-	let exactPreviewGeneratedImageFailedByAccount = $state<Record<string, boolean>>({});
 	let platformIconFailed = $state(false);
 	let exactPreviewAccounts = $state<
 		Array<{
@@ -105,9 +106,11 @@
 	// Format follower count
 	function formatFollowers(count: number): string {
 		if (count >= 1000000) {
-			return `${(count / 1000000).toFixed(1)}M`;
+			const value = count / 1000000;
+			return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}M`;
 		} else if (count >= 1000) {
-			return `${(count / 1000).toFixed(1)}K`;
+			const value = count / 1000;
+			return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}K`;
 		}
 		return count.toString();
 	}
@@ -141,11 +144,6 @@
 		return typeof match === 'string' ? match : null;
 	}
 
-	// Navigation functions
-	function goBackToPlatform() {
-		goto(`/platforms/${data.platform?.slug}`);
-	}
-
 	function goBackToPlatforms() {
 		goto('/platforms');
 	}
@@ -161,9 +159,9 @@
 		if (!data.tierCategory || !data.tier) return;
 
 		// Check existing normal quantity in cart for this account type.
-			const existingCartItem = cart.items.find(
-				(item) => item.tierId === data.tierCategory.id && !item.exactAccount
-			);
+		const existingCartItem = cart.items.find(
+			(item) => item.tierId === data.tierCategory.id && !item.exactAccount
+		);
 		const currentCartQuantity = existingCartItem ? existingCartItem.quantity : 0;
 		const maxAllowedSelection = data.tier.visible_available - currentCartQuantity;
 
@@ -184,18 +182,27 @@
 	}
 
 	// Get tier features based on metadata
-	function getTierFeatures(metadata: any): string[] {
+	function getTierFeatures(metadata: unknown): string[] {
+		if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return [];
+		const record = metadata as Record<string, unknown>;
+
 		// First check for admin-defined features
-		if (metadata?.features && Array.isArray(metadata.features)) {
-			return metadata.features
-				.filter((feature: string) => feature && feature.trim() !== '')
+		if (Array.isArray(record.features)) {
+			return record.features
+				.filter(
+					(feature): feature is string => typeof feature === 'string' && feature.trim() !== ''
+				)
 				.map(formatFeatureName);
 		}
 
 		// Fallback to legacy features
 		const features: string[] = [];
-		if (metadata?.typical_features) {
-			features.push(...metadata.typical_features.map(formatFeatureName));
+		if (Array.isArray(record.typical_features)) {
+			features.push(
+				...record.typical_features
+					.filter((feature): feature is string => typeof feature === 'string')
+					.map(formatFeatureName)
+			);
 		}
 		return features;
 	}
@@ -217,6 +224,32 @@
 			description: data.tier?.tier_name || 'FastAccs tier',
 			price: (data.tier?.price || 0) * quantity,
 			currency: 'NGN',
+			number_items: quantity
+		};
+	}
+
+	function getGa4TierItem(quantity = selectedQuantity, variant = 'standard_pool'): Ga4Item {
+		return {
+			item_id: data.tierCategory?.id || data.tier?.category_id || undefined,
+			item_name: data.tier?.tier_name || 'FastAccs tier',
+			item_brand: 'FastAccs',
+			item_category: 'SMM accounts',
+			item_category2: data.platform?.name || undefined,
+			item_variant: variant,
+			price: Number(data.tier?.price || 0),
+			quantity
+		};
+	}
+
+	function getGa4TierPayload(
+		quantity = selectedQuantity,
+		variant = 'standard_pool'
+	): Ga4EventParams {
+		return {
+			currency: 'NGN',
+			value: Number(data.tier?.price || 0) * quantity,
+			items: [getGa4TierItem(quantity, variant)],
+			item_list_name: 'Tier detail',
 			number_items: quantity
 		};
 	}
@@ -283,6 +316,7 @@
 			// Add to cart using new system
 			cart.addTier(data.tierCategory.id, selectedQuantity);
 			trackSnapEvent('ADD_CART', getSnapTierPayload(selectedQuantity));
+			trackGa4AddToCart(getGa4TierPayload(selectedQuantity, 'standard_pool'));
 
 			// Success - show proper notification
 			showSuccess(
@@ -345,7 +379,10 @@
 			}
 
 			notifySubscribed = true;
-			showSuccess('Subscribed', result.message || "You'll be notified when this account type is back.");
+			showSuccess(
+				'Subscribed',
+				result.message || "You'll be notified when this account type is back."
+			);
 		} catch (error) {
 			console.error('Failed to subscribe for restock:', error);
 			showError('Subscription failed', 'Unable to subscribe right now. Please try again.');
@@ -377,40 +414,20 @@
 		}
 	}
 
-	function getExactProfileGeneratedPreviewUrl(profileUrl: string): string {
-		return `https://s.wordpress.com/mshots/v1/${encodeURIComponent(profileUrl)}?w=960`;
-	}
-
 	function getExactAccountPreviewImage(account: {
 		accountId: string;
-		profileUrl: string;
 		screenshotUrl: string | null;
 	}): string | null {
 		if (account.screenshotUrl && !exactPreviewPrimaryImageFailedByAccount[account.accountId]) {
-			return account.screenshotUrl;
-		}
-
-		if (!exactPreviewGeneratedImageFailedByAccount[account.accountId]) {
-			return getExactProfileGeneratedPreviewUrl(account.profileUrl);
+			return buildCloudinaryOptimizedImageUrl(account.screenshotUrl, { width: 720 });
 		}
 
 		return null;
 	}
 
-	function markExactAccountPreviewImageFailed(
-		accountId: string,
-		source: 'primary' | 'generated'
-	): void {
-		if (source === 'primary') {
-			exactPreviewPrimaryImageFailedByAccount = {
-				...exactPreviewPrimaryImageFailedByAccount,
-				[accountId]: true
-			};
-			return;
-		}
-
-		exactPreviewGeneratedImageFailedByAccount = {
-			...exactPreviewGeneratedImageFailedByAccount,
+	function markExactAccountPreviewImageFailed(accountId: string): void {
+		exactPreviewPrimaryImageFailedByAccount = {
+			...exactPreviewPrimaryImageFailedByAccount,
 			[accountId]: true
 		};
 	}
@@ -457,21 +474,27 @@
 			const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
 			goto(`/auth/login?returnUrl=${returnUrl}`);
 			return;
-			}
+		}
 
-			if (account.isReservedByCurrentUser && account.reservedUntil) {
-				cart.addExactTier(data.tierCategory.id, {
-					accountId: account.accountId,
-					displayLabel: account.displayLabel,
-					profileUrl: account.profileUrl,
-					screenshotUrl: account.screenshotUrl || null,
-					reservedUntil: account.reservedUntil
-				});
-				showSuccess(`${account.displayLabel} added`, 'This exact account is back in your cart.', 6000, '/checkout');
-				return;
-			}
+		if (account.isReservedByCurrentUser && account.reservedUntil) {
+			cart.addExactTier(data.tierCategory.id, {
+				accountId: account.accountId,
+				displayLabel: account.displayLabel,
+				profileUrl: account.profileUrl,
+				screenshotUrl: account.screenshotUrl || null,
+				reservedUntil: account.reservedUntil
+			});
+			trackGa4AddToCart(getGa4TierPayload(1, 'exact_profile'));
+			showSuccess(
+				`${account.displayLabel} added`,
+				'This exact account is back in your cart.',
+				6000,
+				'/checkout'
+			);
+			return;
+		}
 
-			exactPreviewReserving = account.accountId;
+		exactPreviewReserving = account.accountId;
 		try {
 			const compatibility = await cart.ensureDeliveryModeCompatibility(
 				data.tierCategory.id,
@@ -521,7 +544,13 @@
 				isReservedByCurrentUser: true
 			};
 			selectedQuantity = 1;
-				showSuccess(`${result.data.displayLabel} added`, 'This exact account is in your cart.', 6000, '/checkout');
+			trackGa4AddToCart(getGa4TierPayload(1, 'exact_profile'));
+			showSuccess(
+				`${result.data.displayLabel} added`,
+				'This exact account is in your cart.',
+				6000,
+				'/checkout'
+			);
 			await loadExactPreviewAccounts();
 		} catch (error) {
 			console.error('Failed to reserve exact account:', error);
@@ -537,6 +566,9 @@
 	onMount(() => {
 		if (data.tier && data.tierCategory) {
 			trackSnapEvent('VIEW_CONTENT', getSnapTierPayload(1));
+			trackGa4ViewItem(
+				getGa4TierPayload(1, exactPreviewConfig.enabled ? 'exact_enabled' : 'standard_pool')
+			);
 		}
 
 		const updateViewportMode = () => {
@@ -614,9 +646,10 @@
 		{@const platformImageUrl = getPlatformImageValue(data.platform.metadata)}
 		{@const tierStatus = getTierStatus(data.tier.visible_available)}
 
-		<section class="bg-[var(--color-card)] py-2 shadow-sm sm:py-3">
+		<section class="sticky top-16 z-30 bg-[var(--color-card)] py-1.5 shadow-sm">
 			<div class="mx-auto max-w-6xl px-4">
 				<Breadcrumb
+					compact
 					items={[
 						{ label: 'Platforms', href: '/platforms' },
 						{ label: data.platform.name, href: `/platforms/${data.platform.slug}` },
@@ -632,7 +665,9 @@
 			<div class="mx-auto max-w-6xl px-4">
 				<div class="rounded-xl border border-white/15 bg-black/15 p-4 sm:p-5">
 					<div class="flex items-start gap-3">
-						<div class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/20 p-2.5 sm:h-14 sm:w-14">
+						<div
+							class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/20 p-2.5 sm:h-14 sm:w-14"
+						>
 							{#if platformImageUrl && !platformIconFailed}
 								<img
 									src={platformImageUrl}
@@ -682,7 +717,7 @@
 								<span
 									class="rounded-full border border-white/20 bg-black/20 px-2.5 py-1 font-semibold"
 								>
-										{formatPrice(data.tier.price)}
+									{formatPrice(data.tier.price)}
 								</span>
 								<span>{data.tier.visible_available} available</span>
 								<span
@@ -707,10 +742,10 @@
 			</div>
 		</section>
 
-		<section class="pt-4 pb-28 sm:pt-6 lg:pb-12">
+		<section class="pt-4 pb-28 sm:pt-5 lg:pb-10">
 			<div class="mx-auto max-w-6xl px-4">
-				<div class="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:gap-7">
-					<div class="order-1 space-y-5 lg:col-span-2">
+				<div class="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
+					<div class="order-1 space-y-4 lg:col-span-2">
 						{#if tierSampleScreenshots.length > 0}
 							<div class="rounded-xl bg-[var(--color-card)] p-4 shadow sm:p-5">
 								<div class="mb-2 flex items-center justify-between gap-2">
@@ -800,37 +835,30 @@
 									</div>
 								{:else}
 									<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-											{#each exactPreviewAccounts as account (account.accountId)}
-												{@const accountInCart = isExactAccountInCart(account.accountId)}
-												{@const previewImage = getExactAccountPreviewImage(account)}
-												<div
-													class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
-												>
-													{#if previewImage}
-														<a
-															href={account.profileUrl}
-															target="_blank"
-															rel="noopener noreferrer"
-															class="mb-3 block overflow-hidden rounded-lg border border-[var(--color-border)] bg-black/20"
-														>
-															<img
-																src={previewImage}
-																alt={`${account.displayLabel} public preview`}
-																class="aspect-[16/10] w-full object-cover"
-																loading="lazy"
-																decoding="async"
-																onerror={() =>
-																	markExactAccountPreviewImageFailed(
-																		account.accountId,
-																		account.screenshotUrl &&
-																			!exactPreviewPrimaryImageFailedByAccount[account.accountId]
-																			? 'primary'
-																			: 'generated'
-																	)}
-															/>
-														</a>
-													{:else}
-														<a
+										{#each exactPreviewAccounts as account (account.accountId)}
+											{@const accountInCart = isExactAccountInCart(account.accountId)}
+											{@const previewImage = getExactAccountPreviewImage(account)}
+											<div
+												class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
+											>
+												{#if previewImage}
+													<a
+														href={account.profileUrl}
+														target="_blank"
+														rel="noopener noreferrer"
+														class="mb-3 block overflow-hidden rounded-lg border border-[var(--color-border)] bg-black/20"
+													>
+														<img
+															src={previewImage}
+															alt={`${account.displayLabel} public preview`}
+															class="aspect-[16/10] w-full object-cover"
+															loading="lazy"
+															decoding="async"
+															onerror={() => markExactAccountPreviewImageFailed(account.accountId)}
+														/>
+													</a>
+												{:else}
+													<a
 														href={account.profileUrl}
 														target="_blank"
 														rel="noopener noreferrer"
@@ -850,20 +878,20 @@
 																{getProfileDomain(account.profileUrl)}
 															</p>
 														</div>
-														</a>
-													{/if}
-													<div class="mb-3 flex items-center justify-between gap-2">
+													</a>
+												{/if}
+												<div class="mb-3 flex items-center justify-between gap-2">
 													<div>
 														<p class="font-semibold text-[var(--color-text-primary)]">
 															{account.displayLabel}
 														</p>
-															{#if accountInCart}
-																<p class="text-xs text-[var(--color-accent)]">In cart</p>
-															{:else if account.isReservedByCurrentUser || activeExactReservation?.accountId === account.accountId}
-																<p class="text-xs text-[var(--color-accent)]">Held for you</p>
-															{:else}
-																<p class="text-xs text-[var(--color-text-muted)]">Available</p>
-															{/if}
+														{#if accountInCart}
+															<p class="text-xs text-[var(--color-accent)]">In cart</p>
+														{:else if account.isReservedByCurrentUser || activeExactReservation?.accountId === account.accountId}
+															<p class="text-xs text-[var(--color-accent)]">Held for you</p>
+														{:else}
+															<p class="text-xs text-[var(--color-text-muted)]">Available</p>
+														{/if}
 													</div>
 													{#if account.reservedUntil}
 														<span class="text-[11px] text-[var(--color-text-muted)]">
@@ -895,28 +923,27 @@
 														View live profile
 													</a>
 													<button
-															type="button"
-															onclick={() => chooseExactAccount(account)}
-															disabled={exactPreviewReserving === account.accountId ||
-																accountInCart}
-															class="inline-flex flex-1 items-center justify-center rounded-full px-3 py-2 text-sm font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-80"
-															style="background: var(--btn-primary-gradient); color: #04140C;"
-														>
-															{#if exactPreviewReserving === account.accountId}
-																Reserving...
-															{:else if accountInCart}
-																In Cart
-															{:else}
-																Add this profile
-															{/if}
-														</button>
+														type="button"
+														onclick={() => chooseExactAccount(account)}
+														disabled={exactPreviewReserving === account.accountId || accountInCart}
+														class="inline-flex flex-1 items-center justify-center rounded-full px-3 py-2 text-sm font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-80"
+														style="background: var(--btn-primary-gradient); color: #04140C;"
+													>
+														{#if exactPreviewReserving === account.accountId}
+															Reserving...
+														{:else if accountInCart}
+															In Cart
+														{:else}
+															Add this profile
+														{/if}
+													</button>
 												</div>
 											</div>
 										{/each}
 									</div>
 									<p class="mt-3 text-xs leading-relaxed text-[var(--color-text-muted)]">
-										Only the public profile link is shown before payment. Login details are delivered
-										after successful checkout.
+										Only the public profile link is shown before payment. Login details are
+										delivered after successful checkout.
 									</p>
 								{/if}
 							</div>
@@ -928,7 +955,7 @@
 							</h2>
 							{#if getTierFeatures(data.tier.metadata).length > 0 || data.tier.metadata?.age_hint}
 								<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-									{#each getTierFeatures(data.tier.metadata) as feature}
+									{#each getTierFeatures(data.tier.metadata) as feature, index (`${feature}-${index}`)}
 										<div
 											class="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text-secondary)]"
 										>
@@ -946,8 +973,8 @@
 									{/if}
 								</div>
 							{:else}
-									<p class="text-sm text-[var(--color-text-muted)]">
-										No additional feature tags available for this account type yet.
+								<p class="text-sm text-[var(--color-text-muted)]">
+									No additional feature tags available for this account type yet.
 								</p>
 							{/if}
 						</div>
@@ -955,8 +982,8 @@
 
 					<div class="order-2 lg:col-span-1">
 						<div class="rounded-xl bg-[var(--color-card)] p-4 shadow sm:p-5 lg:sticky lg:top-24">
-								<h3 class="text-lg font-bold text-[var(--color-text-primary)] sm:text-xl">
-									Buy This Type
+							<h3 class="text-lg font-bold text-[var(--color-text-primary)] sm:text-xl">
+								Buy This Type
 							</h3>
 							<p class="mt-1 text-sm text-[var(--color-text-muted)]">
 								How many accounts do you need?
@@ -1018,14 +1045,14 @@
 								</div>
 							</div>
 
-								{#if data.tier.visible_available === 0}
-									<button
-										onclick={subscribeForRestock}
-										disabled={notifyLoading}
-										aria-disabled={notifySubscribed}
-										class="mt-4 hidden w-full rounded-full py-3.5 text-sm font-semibold text-white transition-all active:scale-95 disabled:cursor-wait disabled:active:scale-100 lg:block"
-										style="background: var(--btn-primary-gradient);"
-									>
+							{#if data.tier.visible_available === 0}
+								<button
+									onclick={subscribeForRestock}
+									disabled={notifyLoading}
+									aria-disabled={notifySubscribed}
+									class="mt-4 hidden w-full rounded-full py-3.5 text-sm font-semibold text-white transition-all active:scale-95 disabled:cursor-wait disabled:active:scale-100 lg:block"
+									style="background: var(--btn-primary-gradient);"
+								>
 									{#if notifyLoading}
 										Saving...
 									{:else if notifySubscribed}
@@ -1069,8 +1096,8 @@
 									Need help after purchase?
 								</summary>
 								<div class="mt-2">
-										<p class="mb-2 text-xs text-[var(--color-text-muted)]">
-											Quick setup steps for this account type are available here.
+									<p class="mb-2 text-xs text-[var(--color-text-muted)]">
+										Quick setup steps for this account type are available here.
 									</p>
 									<a
 										href={tierLoginGuideUrl}
@@ -1093,49 +1120,51 @@
 			class="fixed right-0 bottom-0 left-0 z-40 border-t border-[var(--color-border)] bg-[var(--color-card)]/95 px-4 py-3 backdrop-blur lg:hidden"
 			style="padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));"
 		>
-				<div class="mx-auto flex max-w-6xl items-center gap-3">
-					<div class="min-w-0 flex-1">
-						<div class="text-xs text-[var(--color-text-muted)]">Total</div>
-						<div class="truncate text-base font-semibold text-[var(--color-text-primary)]">
-							{formatPrice(totalPrice)}
-						</div>
+			<div class="mx-auto flex max-w-6xl items-center gap-3">
+				<div class="min-w-0 flex-1">
+					<div class="text-xs text-[var(--color-text-muted)]">Total</div>
+					<div class="truncate text-base font-semibold text-[var(--color-text-primary)]">
+						{formatPrice(totalPrice)}
 					</div>
-					{#if data.tier.visible_available > 0}
-						<div
-							class="flex shrink-0 items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 py-1"
-							aria-label="Quantity selector"
-						>
-							<button
-								type="button"
-								onclick={decreaseQuantity}
-								disabled={selectedQuantity <= 1}
-								class="flex h-8 w-8 items-center justify-center rounded-full text-[var(--color-text-primary)] transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-								aria-label="Decrease quantity"
-							>
-								<Minus class="h-4 w-4" />
-							</button>
-							<span class="min-w-5 text-center text-sm font-semibold text-[var(--color-text-primary)]">
-								{selectedQuantity}
-							</span>
-							<button
-								type="button"
-								onclick={increaseQuantity}
-								disabled={selectedQuantity >= data.tier.visible_available}
-								class="flex h-8 w-8 items-center justify-center rounded-full text-[var(--color-text-primary)] transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-								aria-label="Increase quantity"
-							>
-								<Plus class="h-4 w-4" />
-							</button>
-						</div>
-					{/if}
-					{#if data.tier.visible_available === 0}
+				</div>
+				{#if data.tier.visible_available > 0}
+					<div
+						class="flex shrink-0 items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 py-1"
+						aria-label="Quantity selector"
+					>
 						<button
-							onclick={subscribeForRestock}
-							disabled={notifyLoading}
-							aria-disabled={notifySubscribed}
-							class="rounded-full px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-95 disabled:cursor-wait disabled:active:scale-100"
-							style="background: var(--btn-primary-gradient);"
+							type="button"
+							onclick={decreaseQuantity}
+							disabled={selectedQuantity <= 1}
+							class="flex h-8 w-8 items-center justify-center rounded-full text-[var(--color-text-primary)] transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+							aria-label="Decrease quantity"
 						>
+							<Minus class="h-4 w-4" />
+						</button>
+						<span
+							class="min-w-5 text-center text-sm font-semibold text-[var(--color-text-primary)]"
+						>
+							{selectedQuantity}
+						</span>
+						<button
+							type="button"
+							onclick={increaseQuantity}
+							disabled={selectedQuantity >= data.tier.visible_available}
+							class="flex h-8 w-8 items-center justify-center rounded-full text-[var(--color-text-primary)] transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+							aria-label="Increase quantity"
+						>
+							<Plus class="h-4 w-4" />
+						</button>
+					</div>
+				{/if}
+				{#if data.tier.visible_available === 0}
+					<button
+						onclick={subscribeForRestock}
+						disabled={notifyLoading}
+						aria-disabled={notifySubscribed}
+						class="rounded-full px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-95 disabled:cursor-wait disabled:active:scale-100"
+						style="background: var(--btn-primary-gradient);"
+					>
 						{#if notifyLoading}
 							Saving...
 						{:else if notifySubscribed}
