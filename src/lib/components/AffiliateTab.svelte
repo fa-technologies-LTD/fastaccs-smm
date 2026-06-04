@@ -124,7 +124,7 @@
 	);
 	const shareMessage = $derived(
 		referralLink && affiliateCode
-			? `Use this link to get discounts when you buy from FastAccs: ${referralLink}. You can also apply my code ${affiliateCode} at checkout.`
+			? `Use this referral promo code to save on your fastaccounts order.\n\n${referralLink}`
 			: ''
 	);
 
