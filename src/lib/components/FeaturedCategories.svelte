@@ -169,7 +169,7 @@
 							onclick={() => goto('/platforms')}
 							class="btn-primary-cta block w-full cursor-pointer text-center"
 						>
-							View available accounts
+							See available accounts
 						</button>
 					</div>
 				</div>
@@ -237,13 +237,11 @@
 								now?
 							</p>
 							<a
-								href="https://wa.link/fast_accounts"
-								target="_blank"
-								rel="noopener noreferrer"
+								href="/services"
 								class="chat-btn mt-4"
 							>
 								<MessageCircle size={16} />
-								<span>Chat now on WhatsApp</span>
+								<span>View boosting services</span>
 							</a>
 						</div>
 					</div>

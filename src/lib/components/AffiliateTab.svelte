@@ -585,7 +585,7 @@
 					style="color: {affiliateData?.payoutEligible ? 'var(--primary)' : 'var(--text-muted)'};"
 				>
 					{affiliateData?.payoutEligible
-						? 'Payout is available. Apply here, then request payout.'
+						? 'Payout is available. Confirm your status, then request payout.'
 						: 'Keep earning from referrals to unlock withdrawals.'}
 				</p>
 				<div class="mt-3 flex flex-wrap gap-2">
@@ -596,7 +596,7 @@
 						class="rounded-full px-4 py-2 text-sm font-semibold transition-all hover:-translate-y-0.5"
 						style="background: rgba(105,109,250,0.18); border: 1px solid rgba(105,109,250,0.35); color: var(--text);"
 					>
-						Apply here
+						Confirm status here
 					</a>
 					{#if affiliateData?.payoutEligible && toNumber(affiliateData?.availableStoreCredit) > 0}
 						<button

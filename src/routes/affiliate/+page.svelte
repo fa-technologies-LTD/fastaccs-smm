@@ -16,7 +16,7 @@
 	<title>FastAccs Affiliate Program</title>
 	<meta
 		name="description"
-		content="Unlock affiliate access, share your FastAccs code, and earn Store Credit Cash from successful referred orders."
+		content="Unlock affiliate access, share your FastAccs code, and earn real withdrawable naira from successful referrals."
 	/>
 </svelte:head>
 
@@ -38,12 +38,12 @@
 			class="mb-3 text-2xl font-semibold sm:text-3xl"
 			style="color: var(--text); font-family: var(--font-head);"
 		>
-			Turn FastAccs referrals into cash earnings
+			Earn real cash with FastAccs referrals
 		</h1>
 		<p class="max-w-3xl text-sm sm:text-base" style="color: var(--text-muted);">
-			The referral rewards system is active. Qualified buyers can unlock affiliate access, activate
-			a unique code, share it, and earn Store Credit Cash from successful referred orders. This is
-			real withdrawable cash once payout requirements are met.
+			Earn real cash with FastAccs on every successful referral. Real. Withdrawable. Naira.
+			Qualified buyers can unlock affiliate access, activate a unique code, and track earnings from
+			their dashboard.
 		</p>
 	</section>
 
@@ -81,8 +81,7 @@
 				<span class="text-xs font-semibold uppercase">Earn</span>
 			</div>
 			<p class="text-sm" style="color: var(--text-muted);">
-				Earn withdrawable Store Credit Cash on successful referred orders and track it from your
-				dashboard.
+				Earn real, withdrawable naira on successful referred orders and track it from your dashboard.
 			</p>
 		</div>
 	</section>
@@ -135,7 +134,21 @@
 				class="rounded-full px-5 py-2 text-sm font-semibold"
 				style="background: rgba(105,109,250,0.16); border: 1px solid rgba(105,109,250,0.35); color: var(--text);"
 			>
-				Apply here
+				Confirm status here
+			</a>
+			<a
+				href="/platforms"
+				class="rounded-full px-5 py-2 text-sm font-semibold"
+				style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.35); color: var(--primary);"
+			>
+				See available accounts
+			</a>
+			<a
+				href="/services"
+				class="rounded-full px-5 py-2 text-sm font-semibold"
+				style="background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text-muted);"
+			>
+				View boosting services
 			</a>
 		</div>
 	</section>
