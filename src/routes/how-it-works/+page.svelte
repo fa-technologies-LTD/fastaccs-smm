@@ -602,7 +602,7 @@
 								<div class="flex items-center justify-between">
 									<span>Earnings Model:</span>
 									<span class="font-bold" style="color: var(--status-success);"
-										>Store Credit Cash</span
+										>Store Credit</span
 									>
 								</div>
 								<div class="flex items-center justify-between">
@@ -638,7 +638,7 @@
 							</h3>
 							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
 								Share your affiliate code or referral link with friends, social media followers, or
-								customers. They get checkout discounts, you earn Store Credit Cash.
+								customers. They get checkout discounts, you earn Store Credit.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
@@ -720,13 +720,13 @@
 								Track Your Earnings
 							</h3>
 							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Track referred users, successful referred orders, and withdrawable Store Credit Cash
+								Track referred users, successful referred orders, and withdrawable Store Credit
 								activity in your affiliate dashboard.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Earn withdrawable Store Credit Cash from eligible referred orders</span>
+									<span>Earn withdrawable Store Credit from eligible referred orders</span>
 								</li>
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
@@ -795,7 +795,7 @@
 							class="mb-2 text-lg font-semibold"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
-							Store Credit Cash
+							Store Credit
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
 							Earn from eligible successful referred orders
@@ -915,7 +915,7 @@
 					</summary>
 					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
 						When you become an affiliate, you get a unique code and referral link. When someone uses
-						your code at checkout, they get referral discounts and you earn Store Credit Cash on
+						your code at checkout, they get referral discounts and you earn Store Credit on
 						eligible successful referred orders. Earnings are tracked automatically in your
 						dashboard.
 					</p>

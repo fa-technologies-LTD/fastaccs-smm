@@ -264,7 +264,7 @@
 						Affiliate Program
 					</h2>
 					<p class="text-sm" style="color: var(--text-muted);">
-						Share your code. Earn real withdrawable Store Credit Cash.
+						Share your code. Earn real withdrawable Store Credit.
 					</p>
 				</div>
 			</div>
@@ -305,7 +305,7 @@
 				</div>
 				<p class="mb-3 text-sm" style="color: var(--text-muted);">
 					You are building toward referral access. Once unlocked, you can share your code and earn
-					withdrawable Store Credit Cash from successful referred orders.
+					withdrawable Store Credit from successful referred orders.
 				</p>
 				<div class="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
 					<div
@@ -362,7 +362,7 @@
 					Affiliate Access Unlocked
 				</h3>
 				<p class="mx-auto mb-5 max-w-md text-sm" style="color: var(--text-muted);">
-					Activate your profile, get your code, and start earning withdrawable Store Credit Cash
+					Activate your profile, get your code, and start earning withdrawable Store Credit
 					from successful referred orders.
 				</p>
 				<button
@@ -384,7 +384,7 @@
 				</p>
 				<p class="mt-1 text-sm" style="color: var(--text-muted);">
 					<strong style="color: var(--text);">This rewards system is active.</strong> Share your code:
-					referred buyers get checkout discounts on eligible orders and you earn Store Credit Cash from
+					referred buyers get checkout discounts on eligible orders and you earn Store Credit from
 					successful purchases. It is withdrawable once payout requirements are met.
 				</p>
 				<p class="mt-2 text-xs" style="color: var(--text-muted);">

@@ -32,7 +32,7 @@
 			style="background: rgba(5,212,113,0.16); border: 1px solid rgba(5,212,113,0.35); color: var(--primary);"
 		>
 			<Share2 size={14} />
-			Store Credit Cash
+			Store Credit
 		</p>
 		<h1
 			class="mb-3 text-2xl font-semibold sm:text-3xl"

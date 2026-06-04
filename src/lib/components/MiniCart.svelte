@@ -2,7 +2,7 @@
 	import { cart } from '$lib/stores/cart.svelte';
 	import { ShoppingCart, X, Trash2, ArrowRight, ShoppingBag, Loader } from '$lib/icons';
 	import { goto } from '$app/navigation';
-	import type { CartItemWithTier } from '$lib/types/cart';
+	import type { CartItem, CartItemWithTier } from '$lib/types/cart';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
 
@@ -16,23 +16,59 @@
 	let cartItems = $state<CartItemWithTier[]>([]);
 	let total = $state<number>(0);
 	let failedCustomIcons = $state<Record<string, boolean>>({});
+	let isLoadingCartItems = $state(false);
+	let lastLoadedCartKey = $state('');
+
+	function getCartItemKey(item: Pick<CartItem, 'cartItemId' | 'tierId' | 'exactAccount'>): string {
+		return (
+			item.cartItemId ||
+			(item.exactAccount ? `exact:${item.exactAccount.accountId}` : `tier:${item.tierId}`)
+		);
+	}
+
+	function getCartSnapshotKey(items: CartItem[]): string {
+		return items
+			.map((item) =>
+				[
+					getCartItemKey(item),
+					item.tierId,
+					item.quantity,
+					item.exactAccount?.reservedUntil || ''
+				].join(':')
+			)
+			.join('|');
+	}
+
+	const cartSnapshotKey = $derived(getCartSnapshotKey(cart.items));
 
 	// Load cart items when cart opens or items change
 	$effect(() => {
-		if (isOpen && itemCount > 0) {
-			loadCartItems();
-		} else if (itemCount === 0) {
+		if (!isOpen) return;
+
+		if (itemCount === 0) {
 			cartItems = [];
 			total = 0;
+			lastLoadedCartKey = '';
+			return;
 		}
+
+		if (isLoadingCartItems || cartSnapshotKey === lastLoadedCartKey) return;
+		loadCartItems();
 	});
 
 	async function loadCartItems() {
+		if (isLoadingCartItems) return;
+		isLoadingCartItems = true;
+
 		try {
-			cartItems = await cart.getItemsWithTiers();
-			total = await cart.getTotal();
+			const refreshedItems = await cart.getItemsWithTiers();
+			cartItems = refreshedItems;
+			total = refreshedItems.reduce((sum, item) => sum + item.tier.price * item.quantity, 0);
+			lastLoadedCartKey = getCartSnapshotKey(cart.items);
 		} catch (error) {
 			console.error('Failed to load cart items:', error);
+		} finally {
+			isLoadingCartItems = false;
 		}
 	}
 
@@ -41,15 +77,11 @@
 	}
 
 	function getCartLineKey(item: CartItemWithTier): string {
-		return (
-			item.cartItemId ||
-			(item.exactAccount ? `exact:${item.exactAccount.accountId}` : `tier:${item.tierId}`)
-		);
+		return getCartItemKey(item);
 	}
 
 	function removeItem(item: CartItemWithTier) {
 		cart.removeItem(getCartLineKey(item));
-		loadCartItems(); // Refresh items
 	}
 
 	function goToCheckout() {

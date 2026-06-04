@@ -1654,7 +1654,7 @@ export async function maybeSendAffiliateUnlockInvite(userId: string): Promise<vo
 		const sendResult = await sendEmail({
 			to: user.email,
 			subject: "You've unlocked Affiliate Access on FastAccs",
-			body: `Hi ${firstName},\n\nYou just unlocked a new way to earn from FastAccs.\n\nActivate your affiliate access, share your code, and start earning **Store Credit Cash** from successful referred orders.\n\nWhat happens next:\n- Activate your affiliate profile\n- Get your unique code and referral link\n- Share with buyers\n- Earn Store Credit on successful referred purchases\n\nYour Store Credit can be used on orders and can become cash once payout requirements are met.`,
+			body: `Hi ${firstName},\n\nYou just unlocked a new way to earn from FastAccs.\n\nActivate your affiliate access, share your code, and start earning **Store Credit** from successful referred orders.\n\nWhat happens next:\n- Activate your affiliate profile\n- Get your unique code and referral link\n- Share with buyers\n- Earn Store Credit on successful referred purchases\n\nYour Store Credit can be used on orders and can become cash once payout requirements are met.`,
 			ctaText: 'Activate Affiliate Access',
 			ctaUrl: supportLink,
 			notificationType: 'affiliate_unlock',
@@ -1682,7 +1682,7 @@ export async function maybeSendAffiliateUnlockInvite(userId: string): Promise<vo
 					type: 'affiliate_unlock',
 					title: "You've unlocked Affiliate Access",
 					message:
-						'Share your code, bring buyers, and earn Store Credit Cash from successful referrals.'
+						'Share your code, bring buyers, and earn Store Credit from successful referrals.'
 				}
 			})
 		]);
