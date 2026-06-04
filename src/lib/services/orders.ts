@@ -26,6 +26,7 @@ export interface CreateOrderData {
 	totalAmount: number;
 	currency: string;
 	paymentMethod: string;
+	checkoutKey?: string;
 	affiliateCode?: string;
 	promotionCode?: string;
 	analytics?: {

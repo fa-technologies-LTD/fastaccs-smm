@@ -3,6 +3,14 @@ import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { initializeTransaction } from '$lib/services/monnify';
 import { isCheckoutEnabledSetting } from '$lib/services/admin-settings';
+import {
+	getPaymentReservationExpiresAt,
+	getPendingPaymentExpiresAt
+} from '$lib/helpers/payment-expiry.server';
+import {
+	extendOrderReservations,
+	releaseOrderReservations
+} from '$lib/services/order-reservations';
 
 export const POST: RequestHandler = async ({ request, locals, url }) => {
 	try {
@@ -42,12 +50,51 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			return json({ success: false, error: 'Forbidden' }, { status: 403 });
 		}
 
-		if (order.status === 'paid' || order.status === 'completed') {
+		if (order.status === 'paid' || order.status === 'completed' || order.paymentStatus === 'paid') {
 			return json({ success: false, error: 'Order has already been paid' }, { status: 400 });
+		}
+
+		if (!['pending', 'pending_payment'].includes(order.status)) {
+			return json(
+				{ success: false, error: 'This order can no longer accept payment.' },
+				{ status: 409 }
+			);
+		}
+
+		if (
+			order.paymentCheckoutUrl &&
+			order.paymentExpiresAt &&
+			order.paymentExpiresAt.getTime() > Date.now() &&
+			['pending', 'pending_payment'].includes(order.status)
+		) {
+			return json({
+				success: true,
+				resumed: true,
+				checkoutUrl: order.paymentCheckoutUrl,
+				orderId,
+				paymentReference: order.paymentReference
+			});
+		}
+
+		if (
+			order.paymentExpiresAt &&
+			order.paymentExpiresAt.getTime() <= Date.now() &&
+			['pending', 'pending_payment'].includes(order.status)
+		) {
+			await prisma.order.update({
+				where: { id: orderId },
+				data: { status: 'cancelled', paymentStatus: 'cancelled' }
+			});
+			await releaseOrderReservations(orderId);
+			return json(
+				{ success: false, error: 'Payment window expired. Please start a fresh checkout.' },
+				{ status: 409 }
+			);
 		}
 
 		const shortOrderId = orderId.substring(0, 8);
 		const paymentReference = `ORD_${shortOrderId}_${Date.now()}`;
+		const paymentExpiresAt = getPendingPaymentExpiresAt();
 		const redirectUrl = `${url.origin}/checkout/verify?orderId=${encodeURIComponent(orderId)}`;
 
 		console.info('[payments.initialize] starting', {
@@ -78,10 +125,13 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			where: { id: orderId },
 			data: {
 				paymentReference,
+				paymentCheckoutUrl: result.checkoutUrl,
+				paymentExpiresAt,
 				status: 'pending_payment',
 				paymentStatus: 'pending'
 			}
 		});
+		await extendOrderReservations(orderId, getPaymentReservationExpiresAt(paymentExpiresAt));
 
 		console.info('[payments.initialize] pending_payment', {
 			orderId,

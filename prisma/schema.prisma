@@ -159,6 +159,8 @@ model Order {
   currency           String         @default("NGN")
   paymentMethod      String?        @map("payment_method")
   paymentReference   String?        @map("payment_reference")
+  paymentCheckoutUrl String?        @map("payment_checkout_url")
+  paymentExpiresAt   DateTime?      @map("payment_expires_at")
   paymentStatus      String         @default("pending") @map("payment_status")
   paidAt             DateTime?      @map("paid_at")
   deliveryMethod     String         @map("delivery_method")
@@ -173,6 +175,7 @@ model Order {
   paymentChannel     String?        @map("payment_channel")
   promotionId        String?        @map("promotion_id") @db.Uuid
   promotionCode      String?        @map("promotion_code")
+  checkoutKey        String?        @unique @map("checkout_key")
   analyticsMetadata  Json           @default("{}") @map("analytics_metadata")
   notifications      Notification[]
   orderItems         OrderItem[]
@@ -184,6 +187,7 @@ model Order {
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@index([paymentStatus])
+  @@index([paymentExpiresAt])
   @@index([affiliateUserId])
   @@index([affiliateCode])
   @@index([createdAt])

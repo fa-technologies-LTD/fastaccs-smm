@@ -171,13 +171,22 @@
 						>
 							{error}
 						</p>
-						<button
-							onclick={() => cart.clear()}
-							style="background: var(--status-error); border: none; border-radius: var(--r-sm); padding: var(--space-sm) var(--space-md); font-size: 0.875rem; font-weight: 500; color: white; transition: opacity 0.2s;"
-							class="hover:opacity-90 active:scale-95"
-						>
-							Clear Cart
-						</button>
+						<div class="flex flex-col items-center gap-2">
+							<button
+								onclick={() => loadCartItems()}
+								style="background: var(--btn-primary-gradient); border: none; border-radius: var(--r-sm); padding: var(--space-sm) var(--space-md); font-size: 0.875rem; font-weight: 600; color: #04140c; transition: opacity 0.2s;"
+								class="hover:opacity-90 active:scale-95"
+							>
+								Retry cart
+							</button>
+							<button
+								onclick={() => cart.clear()}
+								style="background: transparent; border: none; padding: var(--space-xs) var(--space-sm); font-size: 0.75rem; font-weight: 500; color: var(--text-dim);"
+								class="hover:underline"
+							>
+								Remove all saved items
+							</button>
+						</div>
 					</div>
 				{:else if itemCount === 0}
 					<!-- Empty Cart -->

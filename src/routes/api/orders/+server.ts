@@ -25,10 +25,17 @@ import {
 } from '$lib/helpers/tier-delivery-config';
 import {
 	attachExactPreviewSelectionsToOrder,
-	releaseExpiredExactPreviewReservations,
-	releaseExactPreviewReservationsForOrder
+	releaseExpiredExactPreviewReservations
 } from '$lib/services/exact-preview';
-import { reconcilePendingPayments } from '$lib/services/payment-reconciliation';
+import {
+	releaseExpiredOrderReservations,
+	releaseOrderReservations,
+	reserveStandardAccountsForOrder
+} from '$lib/services/order-reservations';
+import {
+	getPaymentReservationExpiresAt,
+	getPendingPaymentExpiresAt
+} from '$lib/helpers/payment-expiry.server';
 
 interface CreateOrderItemInput {
 	categoryId: string;
@@ -45,6 +52,7 @@ interface CreateOrderInput {
 	totalAmount?: number;
 	currency?: string;
 	paymentMethod?: string;
+	checkoutKey?: string;
 	affiliateCode?: string;
 	promotionCode?: string;
 	analytics?: {
@@ -52,10 +60,33 @@ interface CreateOrderInput {
 	};
 }
 
+const CHECKOUT_INITIALIZATION_GRACE_MS = 2 * 60 * 1000;
+
 function normalizeGa4ClientId(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
 	const trimmed = value.trim();
 	return /^\d+\.\d+$/.test(trimmed) ? trimmed : null;
+}
+
+function normalizeCheckoutKey(value: unknown): string {
+	if (typeof value !== 'string') return randomUUID();
+	const trimmed = value.trim();
+	if (!/^[a-zA-Z0-9_-]{16,100}$/.test(trimmed)) return randomUUID();
+	return trimmed;
+}
+
+function isActiveCheckoutOrder(order: {
+	status: string;
+	paymentStatus: string;
+	paymentCheckoutUrl: string | null;
+	paymentExpiresAt: Date | null;
+}): boolean {
+	return (
+		['pending', 'pending_payment'].includes(order.status) &&
+		order.paymentStatus !== 'paid' &&
+		Boolean(order.paymentCheckoutUrl) &&
+		Boolean(order.paymentExpiresAt && order.paymentExpiresAt.getTime() > Date.now())
+	);
 }
 
 function buildOrderAnalyticsMetadata(
@@ -99,32 +130,12 @@ function extractTierUnitPrice(metadata: unknown): number {
 	return Number.isFinite(parsedPrice) ? parsedPrice : 0;
 }
 
-const cleanupOrderCreation = async (orderId: string) => {
-	await releaseExactPreviewReservationsForOrder(orderId).catch((error) => {
-		console.error('Failed to release exact preview reservation during cleanup:', error);
-	});
-	await prisma.$transaction([
-		prisma.orderItem.deleteMany({
-			where: { orderId }
-		}),
-		prisma.order.delete({
-			where: { id: orderId }
-		})
-	]);
-};
-
 // GET /api/orders - Get all orders with optional filters
 export const GET: RequestHandler = async ({ url, locals }) => {
 	try {
 		if (!locals.user) {
 			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
 		}
-
-		await reconcilePendingPayments({ limit: 25, staleMinutes: 20, expireMinutes: 20 }).catch(
-			(error) => {
-				console.warn('[orders.list] pending payment cleanup skipped:', error);
-			}
-		);
 
 		const status = url.searchParams.get('status');
 		const customerEmail = url.searchParams.get('customerEmail');
@@ -198,10 +209,75 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 		const checkoutUserId = locals.user.id;
 		const orderData = (await request.json()) as CreateOrderInput;
+		const checkoutKey = normalizeCheckoutKey(orderData.checkoutKey);
 		const items = Array.isArray(orderData.items) ? orderData.items : [];
 
 		if (items.length === 0) {
 			return json({ success: false, error: 'Order items are required' }, { status: 400 });
+		}
+
+		const existingCheckout = await prisma.order.findUnique({
+			where: { checkoutKey }
+		});
+		if (existingCheckout) {
+			if (existingCheckout.userId !== checkoutUserId) {
+				return json({ success: false, error: 'Checkout session conflict.' }, { status: 409 });
+			}
+
+			if (isActiveCheckoutOrder(existingCheckout)) {
+				return json({
+					data: existingCheckout,
+					success: true,
+					resumed: true,
+					orderId: existingCheckout.id,
+					checkoutUrl: existingCheckout.paymentCheckoutUrl,
+					paymentReference: existingCheckout.paymentReference,
+					deliveryMode:
+						existingCheckout.deliveryMethod === 'whatsapp' ? 'manual_handover' : 'instant_auto',
+					error: null
+				});
+			}
+
+			if (
+				['pending', 'pending_payment'].includes(existingCheckout.status) &&
+				existingCheckout.paymentExpiresAt &&
+				existingCheckout.paymentExpiresAt.getTime() > Date.now() &&
+				existingCheckout.updatedAt.getTime() > Date.now() - CHECKOUT_INITIALIZATION_GRACE_MS
+			) {
+				return json(
+					{
+						success: false,
+						orderId: existingCheckout.id,
+						error: 'Checkout is still initializing. Please try again in a moment.'
+					},
+					{ status: 409 }
+				);
+			}
+
+			if (
+				['paid', 'completed'].includes(existingCheckout.status) ||
+				existingCheckout.paymentStatus === 'paid'
+			) {
+				return json(
+					{
+						success: false,
+						orderId: existingCheckout.id,
+						error: 'This checkout has already been paid.'
+					},
+					{ status: 409 }
+				);
+			}
+
+			await releaseOrderReservations(existingCheckout.id);
+			await prisma.order.update({
+				where: { id: existingCheckout.id },
+				data: {
+					checkoutKey: null,
+					...(['pending', 'pending_payment'].includes(existingCheckout.status)
+						? { status: 'cancelled', paymentStatus: 'cancelled' }
+						: {})
+				}
+			});
 		}
 
 		const normalizedItems = items.map((item) => ({
@@ -324,6 +400,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			);
 		}
 
+		await releaseExpiredOrderReservations();
 		await releaseExpiredExactPreviewReservations();
 		for (const item of itemsWithNames) {
 			if (item.exactAccountId) continue;
@@ -457,90 +534,104 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			);
 		}
 
-		// Create order with proper structure for account allocation
-		const data = await prisma.order.create({
-			data: {
-				userId: checkoutUserId,
-				orderNumber: `ORD-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`,
-				guestEmail: customerEmail,
-				guestPhone: customerPhone || null,
-				subtotal: subtotalAmount,
-				discountAmount,
-				totalAmount: finalOrderTotal,
-				currency: orderData.currency || 'NGN',
-				paymentMethod: paymentMethod,
-				deliveryMethod: isManualHandoverOrder ? 'whatsapp' : 'email',
-				deliveryContact: customerEmail,
-				deliveryStatus: isManualHandoverOrder ? 'processing' : 'pending',
-				status: 'pending',
-				affiliateCode: attribution.affiliateCode || null,
-				affiliateUserId: attribution.affiliateUserId || null,
-				promotionId,
-				promotionCode: appliedPromotionCode,
-				analyticsMetadata: buildOrderAnalyticsMetadata(orderData.analytics),
-				orderItems: {
-					create: itemsWithNames.map((item) => ({
-						categoryId: item.categoryId,
-						quantity: item.quantity,
-						unitPrice: item.unitPrice,
-						totalPrice: item.unitPrice * item.quantity,
-						productName: item.categoryName,
-						productCategory: 'tier'
-					}))
-				}
-			},
-			include: {
-				orderItems: {
-					include: {
-						accounts: true
+		const paymentExpiresAt = getPendingPaymentExpiresAt();
+		const reservationExpiresAt = getPaymentReservationExpiresAt(paymentExpiresAt);
+		const reservationItems = itemsWithNames.map((item) => ({
+			...item,
+			orderItemId: randomUUID()
+		}));
+		let data;
+		try {
+			data = await prisma.$transaction(async (tx) => {
+				const createdOrder = await tx.order.create({
+					data: {
+						userId: checkoutUserId,
+						orderNumber: `ORD-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`,
+						checkoutKey,
+						guestEmail: customerEmail,
+						guestPhone: customerPhone || null,
+						subtotal: subtotalAmount,
+						discountAmount,
+						totalAmount: finalOrderTotal,
+						currency: orderData.currency || 'NGN',
+						paymentMethod: paymentMethod,
+						paymentExpiresAt: paymentMethod === 'monnify' ? paymentExpiresAt : null,
+						deliveryMethod: isManualHandoverOrder ? 'whatsapp' : 'email',
+						deliveryContact: customerEmail,
+						deliveryStatus: isManualHandoverOrder ? 'processing' : 'pending',
+						status: 'pending',
+						affiliateCode: attribution.affiliateCode || null,
+						affiliateUserId: attribution.affiliateUserId || null,
+						promotionId,
+						promotionCode: appliedPromotionCode,
+						analyticsMetadata: buildOrderAnalyticsMetadata(orderData.analytics),
+						orderItems: {
+							create: reservationItems.map((item) => ({
+								id: item.orderItemId,
+								categoryId: item.categoryId,
+								quantity: item.quantity,
+								unitPrice: item.unitPrice,
+								totalPrice: item.unitPrice * item.quantity,
+								productName: item.categoryName,
+								productCategory: 'tier'
+							}))
+						}
 					},
-					orderBy: { createdAt: 'asc' }
-				}
-			}
-		}); // Automatically fulfill order (allocate + deliver accounts)
+					include: {
+						orderItems: {
+							include: {
+								accounts: true
+							},
+							orderBy: { createdAt: 'asc' }
+						}
+					}
+				});
 
-		if (exactSelectionItems.length > 0) {
-			try {
-				await prisma.$transaction(async (tx) => {
+				await reserveStandardAccountsForOrder({
+					client: tx,
+					reservedUntil: reservationExpiresAt,
+					items: reservationItems
+				});
+
+				if (exactSelectionItems.length > 0) {
 					await attachExactPreviewSelectionsToOrder({
-						orderId: data.id,
+						orderId: createdOrder.id,
 						userId: checkoutUserId,
 						client: tx,
-						selections: itemsWithNames
-							.map((item, index) => {
-								if (!item.exactAccountId) return null;
-								const orderItemId = data.orderItems[index]?.id;
-								if (!orderItemId) {
-									throw new Error('Could not match exact account to order item.');
-								}
-								return {
-									categoryId: item.categoryId,
-									accountId: item.exactAccountId,
-									displayLabel: item.exactAccountLabel || undefined,
-									orderItemId
-								};
-							})
-							.filter((selection): selection is NonNullable<typeof selection> => Boolean(selection))
+						expiresAt: reservationExpiresAt,
+						selections: reservationItems
+							.filter((item) => Boolean(item.exactAccountId))
+							.map((item) => ({
+								categoryId: item.categoryId,
+								accountId: item.exactAccountId as string,
+								displayLabel: item.exactAccountLabel || undefined,
+								orderItemId: item.orderItemId
+							}))
 					});
-				});
-			} catch (error) {
-				await cleanupOrderCreation(data.id).catch((cleanupError) => {
-					console.error(
-						'Failed to cleanup exact preview order after attach failure:',
-						cleanupError
-					);
-				});
+				}
+
+				return createdOrder;
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Could not reserve order stock.';
+			if (message.startsWith('STOCK_HOLD_INCOMPLETE:')) {
+				const [, productName, requested, available] = message.split(':');
 				return json(
 					{
 						success: false,
-						error:
-							error instanceof Error
-								? error.message
-								: 'Selected exact account is no longer available.'
+						error: `Only ${available} of ${requested} ${productName} accounts remain. Please refresh your cart.`
 					},
-					{ status: 400 }
+					{ status: 409 }
 				);
 			}
+
+			return json(
+				{
+					success: false,
+					error: message
+				},
+				{ status: message.includes('exact account') ? 400 : 409 }
+			);
 		}
 
 		// Invalidate admin stats cache after order creation
@@ -563,25 +654,19 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 			if (!initResult.success || !initResult.checkoutUrl) {
 				try {
-					await cleanupOrderCreation(data.id);
+					await releaseOrderReservations(data.id);
+					await prisma.order.update({
+						where: { id: data.id },
+						data: {
+							status: 'failed',
+							paymentStatus: 'failed',
+							checkoutKey: null,
+							paymentCheckoutUrl: null
+						}
+					});
 					invalidateAdminStatsCache();
-				} catch (cleanupError) {
-					console.error('Failed to cleanup order after Monnify init failure:', cleanupError);
-					try {
-						await prisma.order.update({
-							where: { id: data.id },
-							data: {
-								status: 'failed',
-								paymentStatus: 'failed'
-							}
-						});
-						invalidateAdminStatsCache();
-					} catch (markFailedError) {
-						console.error(
-							'Failed to mark order failed after Monnify init failure:',
-							markFailedError
-						);
-					}
+				} catch (markFailedError) {
+					console.error('Failed to mark order failed after Monnify init failure:', markFailedError);
 				}
 
 				return json(
@@ -597,6 +682,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				where: { id: data.id },
 				data: {
 					paymentReference,
+					paymentCheckoutUrl: initResult.checkoutUrl,
+					paymentExpiresAt,
 					status: 'pending_payment',
 					paymentStatus: 'pending'
 				}

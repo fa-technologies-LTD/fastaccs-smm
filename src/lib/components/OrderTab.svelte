@@ -43,6 +43,7 @@
 	}: { initialOrders?: OrderRecord[]; focusOrderId?: string | null } = $props();
 	let orders = $state<OrderRecord[]>(initialOrders);
 	let checkingPaymentByOrderId = $state<Record<string, boolean>>({});
+	let resumingPaymentByOrderId = $state<Record<string, boolean>>({});
 
 	$effect(() => {
 		if (!focusOrderId) return;
@@ -194,7 +195,11 @@
 				return;
 			}
 
-			if (result.cancelled === true || normalizedStatus === 'CANCELLED' || normalizedStatus === 'EXPIRED') {
+			if (
+				result.cancelled === true ||
+				normalizedStatus === 'CANCELLED' ||
+				normalizedStatus === 'EXPIRED'
+			) {
 				patchOrder(order.id, {
 					status: 'cancelled',
 					paymentStatus: 'cancelled'
@@ -236,6 +241,30 @@
 				...checkingPaymentByOrderId,
 				[order.id]: false
 			};
+		}
+	}
+
+	async function resumePayment(order: OrderRecord): Promise<void> {
+		if (resumingPaymentByOrderId[order.id]) return;
+		resumingPaymentByOrderId = { ...resumingPaymentByOrderId, [order.id]: true };
+
+		try {
+			const response = await fetch('/api/payments/initialize', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ orderId: order.id })
+			});
+			const result = await response.json().catch(() => ({}));
+			if (!response.ok || !result.checkoutUrl) {
+				throw new Error(result.error || 'Could not resume payment.');
+			}
+			window.location.href = result.checkoutUrl;
+		} catch (error) {
+			showError(
+				'Could not resume payment',
+				error instanceof Error ? error.message : 'Please try again.'
+			);
+			resumingPaymentByOrderId = { ...resumingPaymentByOrderId, [order.id]: false };
 		}
 	}
 
@@ -417,9 +446,18 @@
 							{#if isPaymentRecheckable(order)}
 								<button
 									type="button"
+									onclick={() => resumePayment(order)}
+									disabled={resumingPaymentByOrderId[order.id]}
+									class="col-span-2 cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-1 sm:px-4 sm:text-sm"
+									style="background: var(--btn-primary-gradient); border: 1px solid var(--btn-primary-border); color: var(--btn-primary-text);"
+								>
+									{resumingPaymentByOrderId[order.id] ? 'Opening...' : 'Resume payment'}
+								</button>
+								<button
+									type="button"
 									onclick={() => checkPaymentStatus(order)}
 									disabled={checkingPaymentByOrderId[order.id]}
-									class="col-span-2 cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-1 sm:px-4 sm:text-sm"
+									class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
 									style="background: rgba(202,219,46,0.12); border: 1px solid rgba(202,219,46,0.32); color: var(--text);"
 								>
 									{checkingPaymentByOrderId[order.id] ? 'Checking...' : 'Refresh payment'}

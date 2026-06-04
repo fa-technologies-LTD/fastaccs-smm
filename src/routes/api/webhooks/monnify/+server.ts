@@ -2,22 +2,13 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { verifyWebhookSignature, verifyPayment } from '$lib/services/payment';
 import { prisma } from '$lib/prisma';
-import { allocateAccountsForOrder } from '$lib/services/fulfillment';
 import {
 	getFailureKind,
-	getFailureOrderStatus,
 	isSuccessPaymentStatus,
 	normalizePaymentStatus
 } from '$lib/helpers/payment-status';
-import type { FailureKind } from '$lib/helpers/payment-status';
-import { logOrderStatusTransition } from '$lib/services/order-audit';
-import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
-import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
-import { recordPromotionRedemption } from '$lib/services/promotions';
-import { isAutoDeliveryPausedSetting } from '$lib/services/admin-settings';
-import { isManualHandoverOrder } from '$lib/services/order-delivery-mode';
-import { notifyManualHandoverOrderPaid } from '$lib/services/manual-handover';
+import { settleFailedPayment, settleSuccessfulPayment } from '$lib/services/payment-settlement';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -25,230 +16,10 @@ function pickString(value: unknown): string | null {
 	return trimmed || null;
 }
 
-function isPaymentAmountValid(orderTotal: number, paidAmount: number): boolean {
-	if (!Number.isFinite(orderTotal) || !Number.isFinite(paidAmount)) return false;
-	return paidAmount + 0.01 >= orderTotal;
-}
-
-function isPaymentCurrencyValid(orderCurrency: string | null | undefined, paidCurrency: string): boolean {
-	const expectedCurrency = String(orderCurrency || 'NGN').toUpperCase();
-	return expectedCurrency === String(paidCurrency || 'NGN').toUpperCase();
-}
-
 async function findOrderByPaymentReference(paymentReference: string | null) {
 	if (!paymentReference) return null;
 	return prisma.order.findFirst({
 		where: { paymentReference }
-	});
-}
-
-async function markOrderPaidAndAllocate(params: {
-	orderId: string;
-	paymentReference: string | null;
-	channel: string | undefined;
-	paidAt: Date | undefined;
-	statusLabel: string | null;
-	amountPaid: number;
-	currency: string;
-}) {
-	const order = await prisma.order.findUnique({
-		where: { id: params.orderId },
-		select: {
-			id: true,
-			status: true,
-			paymentStatus: true,
-			totalAmount: true,
-			currency: true
-		}
-	});
-
-	if (!order) return;
-
-	if (order.status === 'completed') {
-		console.info('[payments.webhook] already_processed', {
-			orderId: params.orderId,
-			status: order.status
-		});
-		return;
-	}
-
-	const amountIsValid = isPaymentAmountValid(Number(order.totalAmount), Number(params.amountPaid || 0));
-	const currencyIsValid = isPaymentCurrencyValid(order.currency, params.currency);
-
-	if (!amountIsValid || !currencyIsValid) {
-		const previousStatus = order.status;
-		const previousPaymentStatus = order.paymentStatus;
-		await prisma.order.update({
-			where: { id: order.id },
-			data: {
-				status: 'failed',
-				paymentStatus: 'failed'
-			}
-		});
-		invalidateAdminStatsCache();
-
-		logOrderStatusTransition({
-			orderId: order.id,
-			source: 'webhook',
-			fromStatus: previousStatus,
-			toStatus: 'failed',
-			fromPaymentStatus: previousPaymentStatus,
-			toPaymentStatus: 'failed'
-		});
-
-		console.warn('[payments.webhook] amount_or_currency_mismatch', {
-			orderId: order.id,
-			expectedAmount: Number(order.totalAmount),
-			receivedAmount: Number(params.amountPaid || 0),
-			expectedCurrency: order.currency,
-			receivedCurrency: params.currency
-		});
-		return;
-	}
-
-	const paidTransition = await prisma.order.updateMany({
-		where: {
-			id: params.orderId,
-			status: { notIn: ['paid', 'completed'] }
-		},
-		data: {
-			status: 'paid',
-			paymentReference: params.paymentReference || undefined,
-			paymentStatus: 'paid',
-			paymentChannel: params.channel,
-			paidAt: params.paidAt || new Date()
-		}
-	});
-
-	if (paidTransition.count > 0) {
-		invalidateAdminStatsCache();
-		logOrderStatusTransition({
-			orderId: order.id,
-			source: 'webhook',
-			fromStatus: order.status,
-			toStatus: 'paid',
-			fromPaymentStatus: order.paymentStatus,
-			toPaymentStatus: 'paid'
-		});
-
-		await recordPromotionRedemption(order.id).catch((error) => {
-			console.warn('Failed to record promotion redemption from webhook:', error);
-		});
-	}
-
-	if (paidTransition.count === 0 && order.status === 'paid') {
-		await recordPromotionRedemption(order.id).catch((error) => {
-			console.warn('Failed to record promotion redemption for already-paid webhook order:', error);
-		});
-
-		console.info('[payments.webhook] already_paid_before_webhook', {
-			orderId: params.orderId
-		});
-	}
-
-	console.info('[payments.webhook] marked_paid', {
-		orderId: params.orderId,
-		paymentReference: params.paymentReference,
-		status: params.statusLabel
-	});
-
-	try {
-		await sendOrderConfirmationEmailIfNeeded(params.orderId);
-	} catch (emailError) {
-		console.error('Failed to send webhook order confirmation email:', emailError);
-	}
-
-	const manualHandoverOrder = await isManualHandoverOrder(params.orderId);
-	if (manualHandoverOrder) {
-		await prisma.order.update({
-			where: { id: params.orderId },
-			data: {
-				deliveryStatus: 'processing',
-				deliveryMethod: 'whatsapp'
-			}
-		});
-		invalidateAdminStatsCache();
-		await notifyManualHandoverOrderPaid(params.orderId, 'payments.webhook.manual-handover');
-
-		console.info('[payments.webhook] manual_handover_order_paid', {
-			orderId: params.orderId
-		});
-		return;
-	}
-
-	const autoDeliveryPaused = await isAutoDeliveryPausedSetting().catch(() => false);
-	if (autoDeliveryPaused) {
-		console.info('[payments.webhook] auto_delivery_paused', { orderId: params.orderId });
-		return;
-	}
-
-	const allocationResult = await allocateAccountsForOrder(params.orderId);
-	if (!allocationResult.success) {
-		const latestOrder = await prisma.order.findUnique({
-			where: { id: params.orderId },
-			select: { status: true }
-		});
-
-		if (latestOrder?.status === 'completed') {
-			return;
-		}
-
-		console.warn('[payments.webhook] allocation_pending_manual', {
-			orderId: params.orderId,
-			error: allocationResult.error || null
-		});
-		return;
-	}
-
-	console.info('[payments.webhook] completed_after_allocation', {
-		orderId: params.orderId
-	});
-}
-
-async function markOrderFailed(params: {
-	orderId: string;
-	failureKind: FailureKind;
-	paymentReference: string | null;
-	transactionReference: string | null;
-}) {
-	const order = await prisma.order.findUnique({
-		where: { id: params.orderId }
-	});
-
-	if (!order) return;
-
-	if (order.status === 'completed' || order.status === 'paid') {
-		console.info('[payments.webhook] ignored_failure_already_paid', {
-			orderId: order.id,
-			status: order.status
-		});
-		return;
-	}
-
-	const nextStatus = getFailureOrderStatus(params.failureKind);
-	await prisma.order.update({
-		where: { id: order.id },
-		data: {
-			status: nextStatus,
-			paymentStatus: params.failureKind === 'cancelled' ? 'cancelled' : 'failed'
-		}
-	});
-	invalidateAdminStatsCache();
-
-	logOrderStatusTransition({
-		orderId: order.id,
-		source: 'webhook',
-		fromStatus: order.status,
-		toStatus: nextStatus,
-		fromPaymentStatus: order.paymentStatus,
-		toPaymentStatus: params.failureKind === 'cancelled' ? 'cancelled' : 'failed'
-	});
-
-	console.info('[payments.webhook] marked_failure', {
-		orderId: order.id,
-		failureKind: params.failureKind,
-		paymentReference: params.paymentReference,
-		transactionReference: params.transactionReference
 	});
 }
 
@@ -319,12 +90,12 @@ export const POST: RequestHandler = async ({ request }) => {
 				return json({ success: false });
 			}
 
-			await markOrderPaidAndAllocate({
+			await settleSuccessfulPayment({
 				orderId,
+				source: 'webhook',
 				paymentReference: verificationResult.paymentReference || paymentReference,
 				channel: verificationResult.channel,
 				paidAt: verificationResult.paidAt,
-				statusLabel: gatewayStatus || verificationResult.status || null,
 				amountPaid: verificationResult.amountPaid || verificationResult.amount,
 				currency: verificationResult.currency
 			});
@@ -352,12 +123,12 @@ export const POST: RequestHandler = async ({ request }) => {
 					const successfulOrderId = metadataOrderId || fallbackOrder?.id || null;
 
 					if (successfulOrderId) {
-						await markOrderPaidAndAllocate({
+						await settleSuccessfulPayment({
 							orderId: successfulOrderId,
+							source: 'webhook',
 							paymentReference: verificationResult.paymentReference || paymentReference,
 							channel: verificationResult.channel,
 							paidAt: verificationResult.paidAt,
-							statusLabel: gatewayStatus || verificationResult.status || null,
 							amountPaid: verificationResult.amountPaid || verificationResult.amount,
 							currency: verificationResult.currency
 						});
@@ -381,11 +152,10 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 
 			if (resolvedOrderId) {
-				await markOrderFailed({
+				await settleFailedPayment({
 					orderId: resolvedOrderId,
 					failureKind: resolvedFailureKind,
-					paymentReference: resolvedPaymentReference,
-					transactionReference
+					source: 'webhook'
 				});
 			}
 
@@ -396,11 +166,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (derivedFailureKind) {
 			const orderByPaymentReference = await findOrderByPaymentReference(paymentReference);
 			if (orderByPaymentReference?.id) {
-				await markOrderFailed({
+				await settleFailedPayment({
 					orderId: orderByPaymentReference.id,
 					failureKind: derivedFailureKind,
-					paymentReference,
-					transactionReference
+					source: 'webhook'
 				});
 			}
 			return json({ success: true });

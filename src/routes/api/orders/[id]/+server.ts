@@ -5,6 +5,7 @@ import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { canViewRevenue, redactOrderFinancials } from '$lib/services/admin-revenue-visibility';
 import type { Prisma } from '@prisma/client';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
+import { releaseOrderReservations } from '$lib/services/order-reservations';
 
 const ALLOWED_PATCH_FIELDS = new Set([
 	'status',
@@ -29,14 +30,14 @@ const ALLOWED_ORDER_STATUSES = new Set([
 	'failed',
 	'cancelled'
 ]);
-const ALLOWED_PAYMENT_STATUSES = new Set([
+const ALLOWED_PAYMENT_STATUSES = new Set(['pending', 'processing', 'paid', 'failed', 'cancelled']);
+const ALLOWED_DELIVERY_STATUSES = new Set([
 	'pending',
 	'processing',
-	'paid',
+	'delivered',
 	'failed',
 	'cancelled'
 ]);
-const ALLOWED_DELIVERY_STATUSES = new Set(['pending', 'processing', 'delivered', 'failed', 'cancelled']);
 const ALLOWED_DELIVERY_METHODS = new Set(['email', 'whatsapp', 'telegram', 'dashboard']);
 
 function normalizeOptionalString(value: unknown): string | null {
@@ -206,14 +207,12 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 						noteRecord.metadata && typeof noteRecord.metadata === 'object'
 							? (noteRecord.metadata as Record<string, unknown>)
 							: {};
-					const noteText =
-						typeof metadata.note === 'string' ? metadata.note.trim() : '';
+					const noteText = typeof metadata.note === 'string' ? metadata.note.trim() : '';
 					if (!noteText) return null;
 					return {
 						note: noteText,
 						created_at: noteRecord.createdAt.toISOString(),
-						author:
-							noteRecord.actorUser?.fullName || noteRecord.actorUser?.email || 'Admin'
+						author: noteRecord.actorUser?.fullName || noteRecord.actorUser?.email || 'Admin'
 					};
 				})
 				.filter(Boolean);
@@ -268,6 +267,9 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 				user: true
 			}
 		});
+		if (data.status === 'cancelled' || data.status === 'failed') {
+			await releaseOrderReservations(data.id);
+		}
 
 		invalidateAdminStatsCache();
 
@@ -288,14 +290,16 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
 		}
 
+		await releaseOrderReservations(params.id);
+
 		// First, release any allocated accounts back to available
-			await prisma.account.updateMany({
-				where: {
-					orderItem: { orderId: params.id },
-					status: { in: getAllocatedLikeAccountStatuses() } // Only reset allocated-like accounts, not delivered ones
-				},
-				data: {
-					status: 'available',
+		await prisma.account.updateMany({
+			where: {
+				orderItem: { orderId: params.id },
+				status: { in: getAllocatedLikeAccountStatuses() } // Only reset allocated-like accounts, not delivered ones
+			},
+			data: {
+				status: 'available',
 				orderItemId: null
 			}
 		});

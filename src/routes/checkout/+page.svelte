@@ -44,9 +44,12 @@
 	let promoDiscountAmount = $state(0);
 	let promoValidationLoading = $state(false);
 	let loadingCartData = $state(true);
+	let cartLoadError = $state<string | null>(null);
 	let lastCartNotice = $state('');
 	let lastGa4CartKey = $state('');
+	let cartLoadPromise: Promise<void> | null = null;
 	const PENDING_ORDER_STORAGE_KEY = 'fastaccs_pending_order_id';
+	const CHECKOUT_SESSION_STORAGE_KEY = 'fastaccs_checkout_session';
 
 	// Use user data directly from page data
 	const user = $derived(data.user);
@@ -57,18 +60,14 @@
 	let failedCheckoutIcons = $state<Record<string, boolean>>({});
 	const checkoutTotal = $derived(Math.max(0, cartTotal - promoDiscountAmount));
 
-	// Load cart data and redirect if empty
-	$effect(() => {
-		loadCartData();
-		// Extract affiliate code from URL
-		const refCode = page.url.searchParams.get('ref');
-		if (refCode && !affiliateCode) {
-			validateAffiliateCode(refCode);
-		}
-	});
-
 	onMount(() => {
 		loading = false;
+		void loadCartData();
+
+		const refCode = page.url.searchParams.get('ref');
+		if (refCode && !affiliateCode) {
+			void validateAffiliateCode(refCode);
+		}
 
 		const resetLoadingState = () => {
 			loading = false;
@@ -81,25 +80,35 @@
 		};
 	});
 
-	async function loadCartData() {
+	function loadCartData(): Promise<void> {
+		if (cartLoadPromise) return cartLoadPromise;
+		cartLoadPromise = performCartLoad().finally(() => {
+			cartLoadPromise = null;
+		});
+		return cartLoadPromise;
+	}
+
+	async function performCartLoad() {
 		loadingCartData = true;
+		cartLoadError = null;
 		if (cart.itemCount === 0) {
-			goto('/platforms');
+			await goto('/platforms');
+			loadingCartData = false;
 			return;
 		}
 
 		try {
 			cartItems = await cart.getItemsWithTiers();
-			cartTotal = await cart.getTotal();
+			cartTotal = cart.getTotal(cartItems);
+			if (cart.error) {
+				cartLoadError = cart.error;
+			}
 			if (cart.notice && cart.notice !== lastCartNotice) {
 				lastCartNotice = cart.notice;
 				showWarning('Cart updated', cart.notice);
 			}
-			if (cartItems.length === 0 && cart.itemCount === 0) {
-				if (cart.error) {
-					showWarning('Cart refreshed', cart.error);
-				}
-				goto('/platforms');
+			if (cartItems.length === 0 && cart.itemCount === 0 && !cart.error) {
+				await goto('/platforms');
 				return;
 			}
 			// Cart mutation invalidates promo context. Re-apply manually for deterministic totals.
@@ -112,6 +121,7 @@
 			}
 		} catch (error) {
 			console.error('Failed to load cart data:', error);
+			cartLoadError = 'We could not refresh your cart. Your saved items are still safe.';
 		} finally {
 			loadingCartData = false;
 		}
@@ -267,6 +277,39 @@
 		return payload;
 	}
 
+	function getCheckoutFingerprint(): string {
+		return JSON.stringify({
+			items: cartItems.map((item) => ({
+				id: getCartLineKey(item),
+				tierId: item.tierId,
+				quantity: item.quantity,
+				exactAccountId: item.exactAccount?.accountId || null
+			})),
+			affiliateCode,
+			promoAppliedCode,
+			total: checkoutTotal
+		});
+	}
+
+	function getOrCreateCheckoutKey(): string {
+		const fingerprint = getCheckoutFingerprint();
+		try {
+			const stored = JSON.parse(localStorage.getItem(CHECKOUT_SESSION_STORAGE_KEY) || 'null') as {
+				fingerprint?: string;
+				key?: string;
+			} | null;
+			if (stored?.fingerprint === fingerprint && stored.key) {
+				return stored.key;
+			}
+		} catch {
+			localStorage.removeItem(CHECKOUT_SESSION_STORAGE_KEY);
+		}
+
+		const key = crypto.randomUUID();
+		localStorage.setItem(CHECKOUT_SESSION_STORAGE_KEY, JSON.stringify({ fingerprint, key }));
+		return key;
+	}
+
 	function trackCheckoutCartView(): void {
 		const items = getCheckoutGa4Items();
 		const cartKey = `${checkoutTotal}|${items
@@ -290,6 +333,8 @@
 	// See src/lib/services/_archive/korapay.ts and git history for the original implementation.
 
 	async function payWithMonnify() {
+		if (loading) return;
+
 		if (!user) {
 			redirectToLoginWithReturnUrl();
 			return;
@@ -305,25 +350,14 @@
 
 		loading = true;
 		try {
-			const finalTotal = checkoutTotal;
-
-			// Stock check
-			for (const item of cartItems) {
-				if (item.exactAccount) {
-					continue;
-				}
-
-				const stockResponse = await fetch(`/api/categories/${item.tierId}/stock`);
-				const stockData = await stockResponse.json();
-				if (stockData.available < item.quantity) {
-					showError(
-						'Insufficient stock',
-						`Sorry, only ${stockData.available} ${item.tier.name} accounts are available.`
-					);
-					loading = false;
-					return;
+			if (cartLoadError) {
+				await loadCartData();
+				if (cartLoadError) {
+					throw new Error('Your cart could not be refreshed. Please retry before paying.');
 				}
 			}
+
+			const finalTotal = checkoutTotal;
 
 			// Create the order first
 			const orderResult = await createOrder({
@@ -339,6 +373,7 @@
 				totalAmount: finalTotal,
 				currency: 'NGN',
 				paymentMethod: 'monnify',
+				checkoutKey: getOrCreateCheckoutKey(),
 				affiliateCode: affiliateCode || undefined,
 				promotionCode: promoAppliedCode || undefined,
 				analytics: {
@@ -484,6 +519,36 @@
 				>
 					Please wait while we prepare your checkout
 				</p>
+			</div>
+		{:else if cartLoadError && cartItems.length === 0}
+			<div
+				class="rounded-lg p-8 text-center shadow-sm sm:p-12"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
+				<ShoppingBag
+					size={48}
+					class="mx-auto mb-4 sm:h-16 sm:w-16"
+					style="color: var(--text-dim);"
+				/>
+				<h2
+					class="mb-2 text-lg font-semibold sm:text-xl"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
+					Your cart is still here
+				</h2>
+				<p
+					class="mx-auto mb-6 max-w-md text-sm sm:text-base"
+					style="color: var(--text-muted); font-family: var(--font-body);"
+				>
+					{cartLoadError}
+				</p>
+				<button
+					onclick={() => loadCartData()}
+					class="rounded-full px-6 py-2.5 text-sm font-semibold transition-all sm:px-8 sm:py-3 sm:text-base"
+					style="background: var(--btn-primary-gradient); color: #04140c;"
+				>
+					Retry cart
+				</button>
 			</div>
 		{:else if cartItems.length === 0}
 			<div

@@ -9,6 +9,7 @@ import {
 	getExactPreviewScreenshotUrl,
 	releaseExpiredExactPreviewReservations
 } from '$lib/services/exact-preview';
+import { releaseExpiredOrderReservations } from '$lib/services/order-reservations';
 
 interface CartRefreshItemInput {
 	cartItemId?: string;
@@ -60,6 +61,12 @@ function normalizeText(value: unknown): string {
 	return String(value || '').trim();
 }
 
+function normalizeCheckoutKey(value: unknown): string | null {
+	if (typeof value !== 'string') return null;
+	const trimmed = value.trim();
+	return /^[a-zA-Z0-9_-]{16,100}$/.test(trimmed) ? trimmed : null;
+}
+
 function getTierPrice(metadata: unknown): number {
 	if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return 0;
 	const record = metadata as Record<string, unknown>;
@@ -92,14 +99,19 @@ function buildLineKey(input: { tierId: string; exactAccountId?: string | null })
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
-		const payload = (await request.json().catch(() => ({}))) as { items?: unknown };
+		const payload = (await request.json().catch(() => ({}))) as {
+			items?: unknown;
+			checkoutKey?: unknown;
+		};
 		const rawItems: unknown[] = Array.isArray(payload.items) ? payload.items : [];
 		const inputItems = rawItems.slice(0, MAX_CART_REFRESH_ITEMS).filter(isCartRefreshItemInput);
+		const checkoutKey = normalizeCheckoutKey(payload.checkoutKey);
 
 		if (inputItems.length === 0) {
 			return json({ success: true, data: { items: [], messages: [] } });
 		}
 
+		await releaseExpiredOrderReservations();
 		await releaseExpiredExactPreviewReservations();
 
 		const tierInputs: string[] = Array.from(
@@ -167,6 +179,47 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const availableByTierId = new Map(
 			stockRows.map((row) => [row.categoryId, Number(row._count._all || 0)])
 		);
+		const activeCheckout =
+			checkoutKey && locals.user?.id
+				? await prisma.order.findUnique({
+						where: { checkoutKey },
+						select: {
+							userId: true,
+							status: true,
+							orderItems: {
+								select: {
+									categoryId: true,
+									accounts: {
+										where: {
+											status: 'reserved',
+											reservedUntil: { gt: new Date() }
+										},
+										select: {
+											id: true,
+											credentialExtras: true
+										}
+									}
+								}
+							}
+						}
+					})
+				: null;
+		const heldByTierId = new Map<string, number>();
+		if (
+			activeCheckout &&
+			activeCheckout.userId === locals.user?.id &&
+			['pending', 'pending_payment'].includes(activeCheckout.status)
+		) {
+			for (const item of activeCheckout.orderItems) {
+				const standardHeldCount = item.accounts.filter(
+					(account) => !getReservationMetadata(account.credentialExtras)
+				).length;
+				heldByTierId.set(
+					item.categoryId,
+					(heldByTierId.get(item.categoryId) || 0) + standardHeldCount
+				);
+			}
+		}
 
 		const exactAccountIds = inputItems
 			.map((item) => normalizeText(item.exactAccount?.accountId))
@@ -260,7 +313,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 
 			const requestedQuantity = Math.max(1, Math.floor(Number(input.quantity || 1)));
-			const available = availableByTierId.get(tier.id) || 0;
+			const available = (availableByTierId.get(tier.id) || 0) + (heldByTierId.get(tier.id) || 0);
 			if (available <= 0) {
 				messages.push(`${tier.name} is out of stock, so it was removed from your cart.`);
 				continue;

@@ -1,32 +1,23 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import type { Prisma } from '@prisma/client';
 import { verifyPayment } from '$lib/services/payment';
 import { prisma } from '$lib/prisma';
-import { allocateAccountsForOrder } from '$lib/services/fulfillment';
 import {
 	getFailureKind,
-	getFailureOrderStatus,
-	getPendingPaymentPhase,
 	isPendingPaymentStatus,
 	isSuccessPaymentStatus,
 	normalizePaymentStatus
 } from '$lib/helpers/payment-status';
 import type { FailureKind } from '$lib/helpers/payment-status';
-import { logOrderStatusTransition } from '$lib/services/order-audit';
-import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
-import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
+import { isVerifiedPaymentBoundToOrder } from '$lib/helpers/payment-binding';
 import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
-import { recordPromotionRedemption } from '$lib/services/promotions';
-import { isAutoDeliveryPausedSetting } from '$lib/services/admin-settings';
-import { isManualHandoverOrder } from '$lib/services/order-delivery-mode';
-import { notifyManualHandoverOrderPaid } from '$lib/services/manual-handover';
 import { isPendingPaymentExpired } from '$lib/helpers/payment-expiry.server';
-import { releaseExactPreviewReservationsForOrder } from '$lib/services/exact-preview';
 import {
-	isGa4MeasurementProtocolConfigured,
-	sendGa4MeasurementProtocolEvents
-} from '$lib/server/ga4-measurement-protocol';
+	markPaymentPending,
+	recoverPaidOrder,
+	settleFailedPayment,
+	settleSuccessfulPayment
+} from '$lib/services/payment-settlement';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -88,135 +79,30 @@ function buildFailureResponse(
 	);
 }
 
-function isPaymentAmountValid(orderTotal: number, paidAmount: number): boolean {
-	if (!Number.isFinite(orderTotal) || !Number.isFinite(paidAmount)) return false;
-	return paidAmount + 0.01 >= orderTotal;
-}
-
-function isPaymentCurrencyValid(
-	orderCurrency: string | null | undefined,
-	paidCurrency: string
-): boolean {
-	const expectedCurrency = String(orderCurrency || 'NGN').toUpperCase();
-	return expectedCurrency === String(paidCurrency || 'NGN').toUpperCase();
-}
-
-function readAnalyticsMetadata(value: unknown): Record<string, unknown> {
-	return value && typeof value === 'object' && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
-}
-
-function normalizeGa4ClientId(value: unknown): string | null {
-	if (typeof value !== 'string') return null;
-	const trimmed = value.trim();
-	return /^\d+\.\d+$/.test(trimmed) ? trimmed : null;
-}
-
-function toJsonObject(value: Record<string, unknown>): Prisma.InputJsonObject {
-	return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonObject;
-}
-
-async function sendServerPurchaseVerifiedEvent(orderId: string, status: 'PAID' | 'COMPLETED') {
-	if (!isGa4MeasurementProtocolConfigured()) return;
-
-	const order = await prisma.order.findUnique({
-		where: { id: orderId },
-		include: {
-			orderItems: {
-				orderBy: { createdAt: 'asc' }
-			}
-		}
-	});
-	if (!order) return;
-
-	const metadata = readAnalyticsMetadata(order.analyticsMetadata);
-	const clientId = normalizeGa4ClientId(metadata.ga4ClientId);
-	if (!clientId || typeof metadata.ga4ServerPurchaseVerifiedSentAt === 'string') return;
-
-	const itemCount = order.orderItems.reduce((sum, item) => sum + item.quantity, 0);
-	const result = await sendGa4MeasurementProtocolEvents({
-		clientId,
-		userId: order.userId,
-		events: [
-			{
-				name: 'purchase_verified_server',
-				params: {
-					transaction_id: order.id,
-					order_number: order.orderNumber,
-					order_status: status,
-					payment_status: order.paymentStatus,
-					delivery_method: order.deliveryMethod,
-					delivery_status: order.deliveryStatus,
-					currency: order.currency,
-					value: Number(order.totalAmount),
-					item_count: itemCount,
-					affiliation: order.affiliateCode ? 'affiliate_referral' : 'FastAccs SMM',
-					coupon: order.promotionCode || undefined,
-					items: order.orderItems.map((item, index) => ({
-						item_id: item.categoryId,
-						item_name: item.productName,
-						item_category: 'SMM accounts',
-						item_variant: 'server_verified',
-						price: Number(item.unitPrice),
-						quantity: item.quantity,
-						index
-					}))
-				}
-			}
-		]
-	});
-
-	if (!result.success) {
-		console.warn('[ga4.measurement_protocol] purchase_verified_server skipped:', {
-			orderId,
-			error: result.error || null
-		});
-		return;
-	}
-
-	await prisma.order.update({
-		where: { id: order.id },
-		data: {
-			analyticsMetadata: toJsonObject({
-				...metadata,
-				ga4ServerPurchaseVerifiedSentAt: new Date().toISOString()
-			})
-		}
-	});
-}
-
 interface PendingOrderForExpiry {
 	id: string;
 	status: string;
 	paymentStatus: string;
 	createdAt: Date;
+	paymentExpiresAt?: Date | null;
 }
 
 async function buildExpiredPendingOrderResponse(
 	order: PendingOrderForExpiry,
 	gatewayStatus: string
 ): Promise<Response | null> {
-	if (order.status === 'paid' || order.status === 'completed') return null;
-	if (!isPendingPaymentExpired(order.createdAt, gatewayStatus)) return null;
+	if (order.status === 'paid' || order.status === 'completed' || order.paymentStatus === 'paid') {
+		return null;
+	}
+	const expired = order.paymentExpiresAt
+		? order.paymentExpiresAt.getTime() <= Date.now()
+		: isPendingPaymentExpired(order.createdAt, gatewayStatus);
+	if (!expired) return null;
 
-	await prisma.order.update({
-		where: { id: order.id },
-		data: {
-			status: 'cancelled',
-			paymentStatus: 'cancelled'
-		}
-	});
-	await releaseExactPreviewReservationsForOrder(order.id);
-	invalidateAdminStatsCache();
-
-	logOrderStatusTransition({
+	await settleFailedPayment({
 		orderId: order.id,
-		source: 'verify',
-		fromStatus: order.status,
-		toStatus: 'cancelled',
-		fromPaymentStatus: order.paymentStatus,
-		toPaymentStatus: 'cancelled'
+		failureKind: 'cancelled',
+		source: 'verify'
 	});
 
 	return buildFailureResponse(
@@ -228,62 +114,10 @@ async function buildExpiredPendingOrderResponse(
 }
 
 async function recoverPaidOrderIfNeeded(orderId: string) {
-	await recordPromotionRedemption(orderId).catch((error) => {
-		console.warn('Failed to record promotion redemption during paid recovery:', error);
-	});
-
-	const manualHandoverOrder = await isManualHandoverOrder(orderId);
-	if (manualHandoverOrder) {
-		await prisma.order.update({
-			where: { id: orderId },
-			data: {
-				status: 'paid',
-				paymentStatus: 'paid',
-				deliveryStatus: 'processing',
-				deliveryMethod: 'whatsapp'
-			}
-		});
-		invalidateAdminStatsCache();
-
-		await notifyManualHandoverOrderPaid(orderId, 'payments.verify.manual-handover');
-
-		return {
-			fulfilled: false,
-			warning: 'Payment confirmed. Manual handover is in progress on WhatsApp.'
-		};
-	}
-
-	const autoDeliveryPaused = await isAutoDeliveryPausedSetting().catch(() => false);
-	if (autoDeliveryPaused) {
-		return {
-			fulfilled: false,
-			warning: 'Payment successful. Auto-delivery is currently paused by admin.'
-		};
-	}
-
-	try {
-		await sendOrderConfirmationEmailIfNeeded(orderId);
-	} catch (emailError) {
-		console.error('Failed to send order confirmation email for paid order recovery:', emailError);
-	}
-
-	const allocationResult = await allocateAccountsForOrder(orderId);
-	if (allocationResult.success) {
-		return { fulfilled: true, warning: null };
-	}
-
-	const latest = await prisma.order.findUnique({
-		where: { id: orderId },
-		select: { status: true }
-	});
-
-	if (latest?.status === 'completed') {
-		return { fulfilled: true, warning: null };
-	}
-
+	const result = await recoverPaidOrder(orderId, 'verify');
 	return {
-		fulfilled: false,
-		warning: 'Payment successful but account allocation pending. Contact support.'
+		fulfilled: result.status === 'COMPLETED',
+		warning: result.warning || result.error || null
 	};
 }
 
@@ -339,9 +173,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		if (orderById?.status === 'completed') {
-			void sendServerPurchaseVerifiedEvent(orderById.id, 'COMPLETED').catch((error) => {
-				console.warn('[ga4.measurement_protocol] completed order event failed:', error);
-			});
+			await recoverPaidOrder(orderById.id, 'verify');
 			return json({
 				success: true,
 				state: 'SUCCESS',
@@ -351,12 +183,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			});
 		}
 
-		if (orderById?.status === 'paid') {
+		if (orderById?.status === 'paid' || orderById?.paymentStatus === 'paid') {
 			const recovered = await recoverPaidOrderIfNeeded(orderById.id);
 			if (recovered.fulfilled) {
-				void sendServerPurchaseVerifiedEvent(orderById.id, 'COMPLETED').catch((error) => {
-					console.warn('[ga4.measurement_protocol] recovered completed event failed:', error);
-				});
 				return json({
 					success: true,
 					state: 'SUCCESS',
@@ -366,9 +195,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				});
 			}
 
-			void sendServerPurchaseVerifiedEvent(orderById.id, 'PAID').catch((error) => {
-				console.warn('[ga4.measurement_protocol] paid order event failed:', error);
-			});
 			return json({
 				success: true,
 				state: 'SUCCESS',
@@ -390,46 +216,19 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				orderById.status !== 'completed' &&
 				orderById.status !== 'paid'
 			) {
-				const nextStatus = getFailureOrderStatus(callbackFailureKind);
-				await prisma.order.update({
-					where: { id: orderById.id },
-					data: {
-						status: nextStatus,
-						paymentStatus: callbackFailureKind === 'cancelled' ? 'cancelled' : 'failed'
-					}
-				});
-				await releaseExactPreviewReservationsForOrder(orderById.id);
-				invalidateAdminStatsCache();
-
-				logOrderStatusTransition({
+				await settleFailedPayment({
 					orderId: orderById.id,
-					source: 'verify',
-					fromStatus: orderById.status,
-					toStatus: nextStatus,
-					fromPaymentStatus: orderById.paymentStatus,
-					toPaymentStatus: callbackFailureKind === 'cancelled' ? 'cancelled' : 'failed'
+					failureKind: callbackFailureKind,
+					source: 'verify'
 				});
 			} else if (orderById && orderById.status !== 'completed' && orderById.status !== 'paid') {
 				const expiredResponse = await buildExpiredPendingOrderResponse(orderById, callbackStatus);
 				if (expiredResponse) return expiredResponse;
 
-				const nextPaymentStatus = getPendingPaymentPhase(callbackStatus);
-				await prisma.order.update({
-					where: { id: orderById.id },
-					data: {
-						status: 'pending_payment',
-						paymentStatus: nextPaymentStatus
-					}
-				});
-				invalidateAdminStatsCache();
-
-				logOrderStatusTransition({
+				await markPaymentPending({
 					orderId: orderById.id,
-					source: 'verify',
-					fromStatus: orderById.status,
-					toStatus: 'pending_payment',
-					fromPaymentStatus: orderById.paymentStatus,
-					toPaymentStatus: nextPaymentStatus
+					gatewayStatus: callbackStatus,
+					source: 'verify'
 				});
 			}
 
@@ -490,10 +289,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				);
 			}
 
-			const order =
+			const order = (
 				orderById && orderById.id === orderId
 					? orderById
-					: await prisma.order.findUnique({ where: { id: orderId } });
+					: await prisma.order.findUnique({ where: { id: orderId } })
+			)!;
 
 			if (!order) {
 				return json({ success: false, error: 'Order not found' }, { status: 404 });
@@ -503,240 +303,69 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Unauthorized access to order' }, { status: 403 });
 			}
 
-			if (order.status === 'completed') {
-				void sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED').catch((error) => {
-					console.warn('[ga4.measurement_protocol] completed order event failed:', error);
-				});
-				return json({
-					success: true,
-					state: 'SUCCESS',
-					status: 'COMPLETED',
+			const storedPaymentReference = pickString(order.paymentReference);
+			const verifiedPaymentReference = pickString(verificationResult.paymentReference);
+
+			if (
+				!isVerifiedPaymentBoundToOrder({
 					orderId: order.id,
-					message: 'Order already processed'
+					metadataOrderId: validMetadataOrderId,
+					storedPaymentReference,
+					verifiedPaymentReference
+				})
+			) {
+				console.warn('[payments.verify] payment_order_binding_mismatch', {
+					orderId: order.id,
+					storedPaymentReference,
+					verifiedPaymentReference,
+					metadataOrderId: validMetadataOrderId
 				});
+				return json(
+					{
+						success: false,
+						error: 'Verified payment does not belong to this order.'
+					},
+					{ status: 409 }
+				);
 			}
 
-			if (order.status === 'paid') {
-				const recovered = await recoverPaidOrderIfNeeded(order.id);
-				if (recovered.fulfilled) {
-					void sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED').catch((error) => {
-						console.warn('[ga4.measurement_protocol] recovered completed event failed:', error);
-					});
-					return json({
-						success: true,
-						state: 'SUCCESS',
-						status: 'COMPLETED',
-						orderId: order.id,
-						message: 'Order already processed'
-					});
-				}
+			const settlement = await settleSuccessfulPayment({
+				orderId: order.id,
+				source: 'verify',
+				paymentReference:
+					verificationResult.paymentReference || order.paymentReference || referenceToVerify,
+				channel: verificationResult.channel,
+				paidAt: verificationResult.paidAt,
+				amountPaid: Number(verificationResult.amountPaid || verificationResult.amount || 0),
+				currency: verificationResult.currency
+			});
 
-				void sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) => {
-					console.warn('[ga4.measurement_protocol] paid order event failed:', error);
-				});
-				return json({
-					success: true,
-					state: 'SUCCESS',
-					warning: recovered.warning,
-					orderId: order.id,
-					status: 'PAID'
-				});
-			}
-
-			const settledAmount = Number(verificationResult.amountPaid || verificationResult.amount || 0);
-			const expectedAmount = Number(order.totalAmount);
-			const currencyIsValid = isPaymentCurrencyValid(order.currency, verificationResult.currency);
-			const amountIsValid = isPaymentAmountValid(expectedAmount, settledAmount);
-
-			if (!currencyIsValid || !amountIsValid) {
-				const mismatchMessage = !currencyIsValid
-					? `Payment currency mismatch. Expected ${order.currency}, got ${verificationResult.currency}.`
-					: `Payment amount mismatch. Expected ₦${expectedAmount.toLocaleString()}, got ₦${settledAmount.toLocaleString()}.`;
-
-				await prisma.order.update({
-					where: { id: order.id },
-					data: {
-						status: 'failed',
-						paymentStatus: 'failed'
-					}
-				});
-				await releaseExactPreviewReservationsForOrder(order.id);
-				invalidateAdminStatsCache();
-
-				logOrderStatusTransition({
-					orderId: order.id,
-					source: 'verify',
-					fromStatus: order.status,
-					toStatus: 'failed',
-					fromPaymentStatus: order.paymentStatus,
-					toPaymentStatus: 'failed'
-				});
-
+			if (!settlement.success) {
 				return json(
 					{
 						success: false,
 						failed: true,
 						state: 'FAILED',
-						status: 'FAILED',
+						status: settlement.status,
 						orderId: order.id,
-						error: mismatchMessage,
-						message: mismatchMessage
+						error: settlement.error || 'Payment settlement failed.',
+						message: settlement.error || 'Payment settlement failed.'
 					},
 					{ status: 400 }
 				);
 			}
 
-			const paidTransition = await prisma.order.updateMany({
-				where: {
-					id: order.id,
-					status: { notIn: ['paid', 'completed'] }
-				},
-				data: {
-					status: 'paid',
-					paymentReference:
-						verificationResult.paymentReference || order.paymentReference || referenceToVerify,
-					paymentStatus: 'paid',
-					paymentChannel: verificationResult.channel,
-					paidAt: verificationResult.paidAt || new Date()
-				}
-			});
-
-			try {
-				await sendOrderConfirmationEmailIfNeeded(order.id);
-			} catch (emailError) {
-				console.error('Failed to send payment verification confirmation email:', emailError);
-			}
-
-			if (paidTransition.count > 0) {
-				invalidateAdminStatsCache();
-				logOrderStatusTransition({
-					orderId: order.id,
-					source: 'verify',
-					fromStatus: order.status,
-					toStatus: 'paid',
-					fromPaymentStatus: order.paymentStatus,
-					toPaymentStatus: 'paid'
-				});
-
-				await recordPromotionRedemption(order.id).catch((error) => {
-					console.warn('Failed to record promotion redemption after verification:', error);
-				});
-			}
-
-			if (paidTransition.count === 0) {
-				const latestOrder = await prisma.order.findUnique({
-					where: { id: order.id },
-					select: { status: true }
-				});
-
-				if (latestOrder?.status === 'completed') {
-					void sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED').catch((error) => {
-						console.warn('[ga4.measurement_protocol] already completed event failed:', error);
-					});
-					return json({
-						success: true,
-						state: 'SUCCESS',
-						status: 'COMPLETED',
-						orderId: order.id,
-						message: 'Order already processed'
-					});
-				}
-
-				if (latestOrder?.status === 'paid') {
-					const recovered = await recoverPaidOrderIfNeeded(order.id);
-					if (recovered.fulfilled) {
-						void sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED').catch((error) => {
-							console.warn('[ga4.measurement_protocol] recovered completed event failed:', error);
-						});
-						return json({
-							success: true,
-							state: 'SUCCESS',
-							status: 'COMPLETED',
-							orderId: order.id,
-							message: 'Order already processed'
-						});
-					}
-
-					void sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) => {
-						console.warn('[ga4.measurement_protocol] paid recovery event failed:', error);
-					});
-					return json({
-						success: true,
-						state: 'SUCCESS',
-						warning: recovered.warning,
-						orderId: order.id,
-						status: 'PAID'
-					});
-				}
-			}
-
-			const manualHandoverOrder = await isManualHandoverOrder(order.id);
-			if (manualHandoverOrder) {
-				await prisma.order.update({
-					where: { id: order.id },
-					data: {
-						deliveryStatus: 'processing',
-						deliveryMethod: 'whatsapp'
-					}
-				});
-				invalidateAdminStatsCache();
-				await notifyManualHandoverOrderPaid(order.id, 'payments.verify.manual-handover');
-
-				void sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) => {
-					console.warn('[ga4.measurement_protocol] manual handover event failed:', error);
-				});
-				return json({
-					success: true,
-					state: 'SUCCESS',
-					warning: 'Payment confirmed. Manual handover is in progress on WhatsApp.',
-					orderId: order.id,
-					status: 'PAID',
-					manualHandover: true
-				});
-			}
-
-			const autoDeliveryPaused = await isAutoDeliveryPausedSetting().catch(() => false);
-			if (autoDeliveryPaused) {
-				void sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) => {
-					console.warn('[ga4.measurement_protocol] auto-delivery paused event failed:', error);
-				});
-				return json({
-					success: true,
-					state: 'SUCCESS',
-					warning: 'Payment successful. Auto-delivery is currently paused by admin.',
-					orderId: order.id,
-					status: 'PAID'
-				});
-			}
-
-			const allocationResult = await allocateAccountsForOrder(order.id);
-			if (!allocationResult.success) {
-				console.warn('[payments.verify] allocation_pending_manual', {
-					orderId: order.id,
-					error: allocationResult.error || null
-				});
-
-				void sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) => {
-					console.warn('[ga4.measurement_protocol] allocation pending event failed:', error);
-				});
-				return json({
-					success: true,
-					state: 'SUCCESS',
-					warning: 'Payment successful but account allocation pending. Contact support.',
-					orderId: order.id,
-					status: 'PAID'
-				});
-			}
-
-			void sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED').catch((error) => {
-				console.warn('[ga4.measurement_protocol] completed payment event failed:', error);
-			});
 			return json({
 				success: true,
 				state: 'SUCCESS',
-				message: 'Payment verified and order completed',
-				orderId: order.id,
-				status: 'COMPLETED',
+				status: settlement.status,
+				orderId: settlement.orderId,
+				manualHandover: settlement.manualHandover === true,
+				warning: settlement.warning || undefined,
+				message:
+					settlement.status === 'COMPLETED'
+						? 'Payment verified and order completed'
+						: 'Payment verified and fulfillment is in progress',
 				amount: verificationResult.amountPaid,
 				currency: verificationResult.currency
 			});
@@ -770,24 +399,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				failedOrder.status !== 'completed' &&
 				failedOrder.status !== 'paid'
 			) {
-				const nextStatus = getFailureOrderStatus(failureKind);
-				await prisma.order.update({
-					where: { id: failedOrder.id },
-					data: {
-						status: nextStatus,
-						paymentStatus: failureKind === 'cancelled' ? 'cancelled' : 'failed'
-					}
-				});
-				await releaseExactPreviewReservationsForOrder(failedOrder.id);
-				invalidateAdminStatsCache();
-
-				logOrderStatusTransition({
+				await settleFailedPayment({
 					orderId: failedOrder.id,
-					source: 'verify',
-					fromStatus: failedOrder.status,
-					toStatus: nextStatus,
-					fromPaymentStatus: failedOrder.paymentStatus,
-					toPaymentStatus: failureKind === 'cancelled' ? 'cancelled' : 'failed'
+					failureKind,
+					source: 'verify'
 				});
 			}
 
@@ -804,23 +419,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				const expiredResponse = await buildExpiredPendingOrderResponse(orderById, resolvedStatus);
 				if (expiredResponse) return expiredResponse;
 
-				const nextPaymentStatus = getPendingPaymentPhase(resolvedStatus);
-				await prisma.order.update({
-					where: { id: orderById.id },
-					data: {
-						status: 'pending_payment',
-						paymentStatus: nextPaymentStatus
-					}
-				});
-				invalidateAdminStatsCache();
-
-				logOrderStatusTransition({
+				await markPaymentPending({
 					orderId: orderById.id,
-					source: 'verify',
-					fromStatus: orderById.status,
-					toStatus: 'pending_payment',
-					fromPaymentStatus: orderById.paymentStatus,
-					toPaymentStatus: nextPaymentStatus
+					gatewayStatus: resolvedStatus,
+					source: 'verify'
 				});
 			}
 

@@ -1,29 +1,25 @@
 import { env } from '$env/dynamic/private';
 import { prisma } from '$lib/prisma';
 import { verifyPayment } from '$lib/services/payment';
-import { allocateAccountsForOrder } from '$lib/services/fulfillment';
-import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
 import {
 	getFailureKind,
-	getFailureOrderStatus,
-	getPendingPaymentPhase,
 	isPendingPaymentStatus,
 	isSuccessPaymentStatus,
 	normalizePaymentStatus
 } from '$lib/helpers/payment-status';
-import { logOrderStatusTransition } from '$lib/services/order-audit';
-import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
-import { recordPromotionRedemption } from '$lib/services/promotions';
-import { isAutoDeliveryPausedSetting } from '$lib/services/admin-settings';
-import { isManualHandoverOrder } from '$lib/services/order-delivery-mode';
-import { notifyManualHandoverOrderPaid } from '$lib/services/manual-handover';
 import {
 	getPendingPaymentExpireMinutes,
 	getPendingPaymentExpiryThreshold,
 	isPendingPaymentExpired
 } from '$lib/helpers/payment-expiry.server';
-import { releaseExactPreviewReservationsForOrder } from '$lib/services/exact-preview';
+import {
+	markPaymentPending,
+	recoverPaidOrder,
+	settleFailedPayment,
+	settleSuccessfulPayment
+} from '$lib/services/payment-settlement';
+import { releaseExpiredOrderReservations } from '$lib/services/order-reservations';
 
 interface ReconcileOptions {
 	limit?: number;
@@ -78,17 +74,9 @@ function isMissingPromotionColumnError(error: unknown): boolean {
 	);
 }
 
-function isPaymentAmountValid(orderTotal: number, paidAmount: number): boolean {
-	if (!Number.isFinite(orderTotal) || !Number.isFinite(paidAmount)) return false;
-	return paidAmount + 0.01 >= orderTotal;
-}
-
-function isPaymentCurrencyValid(orderCurrency: string | null | undefined, paidCurrency: string): boolean {
-	const expectedCurrency = String(orderCurrency || 'NGN').toUpperCase();
-	return expectedCurrency === String(paidCurrency || 'NGN').toUpperCase();
-}
-
-export async function reconcilePendingPayments(options: ReconcileOptions = {}): Promise<ReconcileSummary> {
+export async function reconcilePendingPayments(
+	options: ReconcileOptions = {}
+): Promise<ReconcileSummary> {
 	const dryRun = options.dryRun === true;
 	const limit = Math.min(Math.max(Number(options.limit || DEFAULT_LIMIT), 1), 500);
 	const staleMinutesInput =
@@ -116,9 +104,6 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 		skipped: 0,
 		dryRun
 	};
-	let didMutate = false;
-	const autoDeliveryPaused = await isAutoDeliveryPausedSetting().catch(() => false);
-
 	if (!hasMonnifyConfig()) {
 		summary.skipped = limit;
 		console.warn('[payments.reconcile] skipped: Monnify config missing');
@@ -128,11 +113,19 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 	const now = Date.now();
 	const staleThreshold = now - staleMinutes * 60 * 1000;
 	const expiryThreshold = getPendingPaymentExpiryThreshold(expireMinutes);
+	if (!dryRun) {
+		await releaseExpiredOrderReservations();
+	}
 
 	const candidates = await prisma.order.findMany({
 		where: {
 			paymentMethod: 'monnify',
-			OR: [{ status: 'pending_payment' }, { status: 'pending' }, { status: 'paid' }]
+			OR: [
+				{ status: 'pending_payment' },
+				{ status: 'pending' },
+				{ status: 'paid' },
+				{ paymentStatus: 'paid', status: { not: 'completed' } }
+			]
 		},
 		orderBy: { updatedAt: 'asc' },
 		take: limit
@@ -147,85 +140,32 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 			continue;
 		}
 
-		if (order.status === 'completed') {
-			summary.skipped += 1;
-			continue;
-		}
-
-		if (order.status === 'paid') {
-			await recordPromotionRedemption(order.id).catch((error) => {
-				console.warn('[payments.reconcile] failed to record promo redemption for paid order:', error);
-			});
-
-			try {
-				await sendOrderConfirmationEmailIfNeeded(order.id);
-			} catch (emailError) {
-				console.error('[payments.reconcile] failed to send order confirmation email:', emailError);
-			}
-
-			const manualHandoverOrder = await isManualHandoverOrder(order.id);
-			if (!dryRun && manualHandoverOrder) {
-				await prisma.order.update({
-					where: { id: order.id },
-					data: {
-						deliveryStatus: 'processing',
-						deliveryMethod: 'whatsapp'
-					}
-				});
-				didMutate = true;
-				await notifyManualHandoverOrderPaid(order.id, 'payments.reconcile.manual-handover');
+		if (order.status === 'paid' || order.paymentStatus === 'paid') {
+			if (dryRun) {
 				summary.paid += 1;
-				continue;
-			}
-
-			if (!autoDeliveryPaused) {
-				const allocationResult = await allocateAccountsForOrder(order.id);
-				if (allocationResult.success) {
-					summary.completed += 1;
-				} else {
-					const latestOrder = await prisma.order.findUnique({
-						where: { id: order.id },
-						select: { status: true }
-					});
-					if (latestOrder?.status === 'completed') {
-						summary.completed += 1;
-					} else {
-						summary.paid += 1;
-					}
-				}
 			} else {
-				summary.paid += 1;
+				const result = await recoverPaidOrder(order.id, 'reconcile');
+				if (result.status === 'COMPLETED') summary.completed += 1;
+				else summary.paid += 1;
 			}
 			continue;
 		}
 
 		if (!order.paymentReference) {
-			const shouldExpire = order.createdAt.getTime() <= expiryThreshold;
+			const shouldExpire = order.paymentExpiresAt
+				? order.paymentExpiresAt.getTime() <= now
+				: order.createdAt.getTime() <= expiryThreshold;
 			if (!shouldExpire) {
 				summary.keptPending += 1;
 				continue;
 			}
 
-			if (!dryRun) {
-				await prisma.order.update({
-					where: { id: order.id },
-					data: {
-						status: 'cancelled',
-						paymentStatus: 'cancelled'
-					}
-				});
-				await releaseExactPreviewReservationsForOrder(order.id);
-				didMutate = true;
-
-				logOrderStatusTransition({
+			if (!dryRun)
+				await settleFailedPayment({
 					orderId: order.id,
-					source: 'reconcile',
-					fromStatus: order.status,
-					toStatus: 'cancelled',
-					fromPaymentStatus: order.paymentStatus,
-					toPaymentStatus: 'cancelled'
+					failureKind: 'cancelled',
+					source: 'reconcile'
 				});
-			}
 			summary.cancelled += 1;
 			continue;
 		}
@@ -234,114 +174,29 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 		const gatewayStatus = normalizePaymentStatus(verificationResult.status);
 
 		if (verificationResult.success || isSuccessPaymentStatus(gatewayStatus)) {
-			const paidAmount = Number(verificationResult.amountPaid || verificationResult.amount || 0);
-			const amountValid = isPaymentAmountValid(Number(order.totalAmount), paidAmount);
-			const currencyValid = isPaymentCurrencyValid(order.currency, verificationResult.currency);
-
-			if (!amountValid || !currencyValid) {
-				if (!dryRun) {
-					await prisma.order.update({
-						where: { id: order.id },
-						data: {
-							status: 'failed',
-							paymentStatus: 'failed'
-						}
-					});
-					await releaseExactPreviewReservationsForOrder(order.id);
-					didMutate = true;
-
-					logOrderStatusTransition({
-						orderId: order.id,
-						source: 'reconcile',
-						fromStatus: order.status,
-						toStatus: 'failed',
-						fromPaymentStatus: order.paymentStatus,
-						toPaymentStatus: 'failed'
-					});
-				}
-				summary.failed += 1;
-				continue;
-			}
-
-			if (!dryRun) {
-				await prisma.order.update({
-					where: { id: order.id },
-					data: {
-						status: 'paid',
-						paymentStatus: 'paid',
-						paidAt: verificationResult.paidAt || order.paidAt || new Date(),
-						paymentChannel: verificationResult.channel || order.paymentChannel || null
-					}
-				});
-				didMutate = true;
-
-				logOrderStatusTransition({
+			if (dryRun) {
+				summary.paid += 1;
+			} else {
+				const result = await settleSuccessfulPayment({
 					orderId: order.id,
 					source: 'reconcile',
-					fromStatus: order.status,
-					toStatus: 'paid',
-					fromPaymentStatus: order.paymentStatus,
-					toPaymentStatus: 'paid'
+					paymentReference: verificationResult.paymentReference || order.paymentReference,
+					channel: verificationResult.channel,
+					paidAt: verificationResult.paidAt,
+					amountPaid: Number(verificationResult.amountPaid || verificationResult.amount || 0),
+					currency: verificationResult.currency
 				});
-
-				try {
-					await sendOrderConfirmationEmailIfNeeded(order.id);
-				} catch (emailError) {
-					console.error('[payments.reconcile] failed to send order confirmation email:', emailError);
-				}
-
-				await recordPromotionRedemption(order.id).catch((error) => {
-					console.warn('[payments.reconcile] failed to record promo redemption after paid transition:', error);
-				});
-			}
-			summary.paid += 1;
-
-			const manualHandoverOrder = await isManualHandoverOrder(order.id);
-			if (!dryRun && manualHandoverOrder) {
-				await prisma.order.update({
-					where: { id: order.id },
-					data: {
-						deliveryStatus: 'processing',
-						deliveryMethod: 'whatsapp'
-					}
-				});
-				didMutate = true;
-				await notifyManualHandoverOrderPaid(order.id, 'payments.reconcile.manual-handover');
-				continue;
-			}
-
-			if (!dryRun && !autoDeliveryPaused) {
-				const allocationResult = await allocateAccountsForOrder(order.id);
-				if (allocationResult.success) {
-					summary.completed += 1;
-				}
+				if (!result.success || result.status === 'FAILED') summary.failed += 1;
+				else if (result.status === 'COMPLETED') summary.completed += 1;
+				else summary.paid += 1;
 			}
 			continue;
 		}
 
 		const failureKind = getFailureKind(gatewayStatus);
 		if (failureKind) {
-			const nextStatus = getFailureOrderStatus(failureKind);
-			if (!dryRun) {
-				await prisma.order.update({
-					where: { id: order.id },
-					data: {
-						status: nextStatus,
-						paymentStatus: failureKind === 'cancelled' ? 'cancelled' : 'failed'
-					}
-				});
-				await releaseExactPreviewReservationsForOrder(order.id);
-				didMutate = true;
-
-				logOrderStatusTransition({
-					orderId: order.id,
-					source: 'reconcile',
-					fromStatus: order.status,
-					toStatus: nextStatus,
-					fromPaymentStatus: order.paymentStatus,
-					toPaymentStatus: failureKind === 'cancelled' ? 'cancelled' : 'failed'
-				});
-			}
+			if (!dryRun)
+				await settleFailedPayment({ orderId: order.id, failureKind, source: 'reconcile' });
 
 			if (failureKind === 'cancelled') {
 				summary.cancelled += 1;
@@ -351,58 +206,25 @@ export async function reconcilePendingPayments(options: ReconcileOptions = {}): 
 			continue;
 		}
 
-		const isOldPending = isPendingPaymentExpired(order.createdAt, gatewayStatus, expireMinutes);
+		const isOldPending = order.paymentExpiresAt
+			? order.paymentExpiresAt.getTime() <= now
+			: isPendingPaymentExpired(order.createdAt, gatewayStatus, expireMinutes);
 		if (isOldPending) {
-			if (!dryRun) {
-				await prisma.order.update({
-					where: { id: order.id },
-					data: {
-						status: 'cancelled',
-						paymentStatus: 'cancelled'
-					}
-				});
-				await releaseExactPreviewReservationsForOrder(order.id);
-				didMutate = true;
-
-				logOrderStatusTransition({
+			if (!dryRun)
+				await settleFailedPayment({
 					orderId: order.id,
-					source: 'reconcile',
-					fromStatus: order.status,
-					toStatus: 'cancelled',
-					fromPaymentStatus: order.paymentStatus,
-					toPaymentStatus: 'cancelled'
+					failureKind: 'cancelled',
+					source: 'reconcile'
 				});
-			}
 			summary.cancelled += 1;
 			continue;
 		}
 
 		if (!dryRun && isPendingPaymentStatus(gatewayStatus)) {
-			const pendingPhase = getPendingPaymentPhase(gatewayStatus);
-			await prisma.order.update({
-				where: { id: order.id },
-				data: {
-					status: 'pending_payment',
-					paymentStatus: pendingPhase
-				}
-			});
-			didMutate = true;
-
-			logOrderStatusTransition({
-				orderId: order.id,
-				source: 'reconcile',
-				fromStatus: order.status,
-				toStatus: 'pending_payment',
-				fromPaymentStatus: order.paymentStatus,
-				toPaymentStatus: pendingPhase
-			});
+			await markPaymentPending({ orderId: order.id, gatewayStatus, source: 'reconcile' });
 		}
 
 		summary.keptPending += 1;
-	}
-
-	if (!dryRun && didMutate) {
-		invalidateAdminStatsCache();
 	}
 
 	return summary;

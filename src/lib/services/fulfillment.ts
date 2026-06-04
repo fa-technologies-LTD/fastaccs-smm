@@ -97,6 +97,30 @@ async function allocateAccounts(orderId: string) {
 			const allocationResults: AllocationResult[] = [];
 
 			for (const item of order.orderItems) {
+				const previouslyAllocated = await tx.account.findMany({
+					where: {
+						orderItemId: item.id,
+						status: 'allocated'
+					},
+					select: { id: true }
+				});
+
+				if (previouslyAllocated.length === item.quantity) {
+					allocationResults.push({
+						orderItemId: item.id,
+						categoryName: item.productName,
+						requestedQuantity: item.quantity,
+						allocatedQuantity: previouslyAllocated.length,
+						accountIds: previouslyAllocated.map((account) => account.id)
+					});
+					continue;
+				}
+				if (previouslyAllocated.length > item.quantity) {
+					throw new Error(
+						`ALLOCATION_OVERFLOW:${item.productName}:${item.quantity}:${previouslyAllocated.length}`
+					);
+				}
+
 				const exactPreviewAllocation = await allocateReservedExactPreviewAccountsForItem({
 					client: tx,
 					orderId,
@@ -116,14 +140,31 @@ async function allocateAccounts(orderId: string) {
 					continue;
 				}
 
-				const allocatedRows = await tx.$queryRaw<Array<{ id: string }>>`
+				const reservedRows = await tx.$queryRaw<Array<{ id: string }>>`
+					UPDATE accounts
+					SET
+						status = 'allocated',
+						reserved_until = NULL,
+						updated_at = NOW()
+					WHERE order_item_id = ${item.id}::uuid
+						AND status = 'reserved'
+					RETURNING id;
+				`;
+
+				const remainingQuantity = Math.max(
+					0,
+					item.quantity - previouslyAllocated.length - reservedRows.length
+				);
+				const fallbackRows =
+					remainingQuantity > 0
+						? await tx.$queryRaw<Array<{ id: string }>>`
 					WITH candidate AS (
 						SELECT id
 						FROM accounts
 						WHERE category_id = ${item.categoryId}::uuid
 							AND status = 'available'
 						ORDER BY created_at ASC
-						LIMIT ${item.quantity}
+						LIMIT ${remainingQuantity}
 						FOR UPDATE SKIP LOCKED
 					)
 					UPDATE accounts AS a
@@ -134,7 +175,13 @@ async function allocateAccounts(orderId: string) {
 					FROM candidate
 					WHERE a.id = candidate.id
 					RETURNING a.id;
-				`;
+				`
+						: [];
+				const allocatedRows = [
+					...previouslyAllocated.map((account) => ({ id: account.id })),
+					...reservedRows,
+					...fallbackRows
+				];
 
 				if (allocatedRows.length < item.quantity) {
 					throw new Error(
@@ -241,12 +288,12 @@ async function deliverAccounts(orderId: string) {
 			include: {
 				orderItems: {
 					include: {
-							accounts: {
-								where: {
-									status: { in: getAllocatedLikeAccountStatuses() }
-								}
+						accounts: {
+							where: {
+								status: { in: getAllocatedLikeAccountStatuses() }
 							}
 						}
+					}
 				},
 				user: {
 					select: { email: true }

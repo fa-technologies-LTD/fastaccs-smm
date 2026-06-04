@@ -18,9 +18,10 @@
 	} from '$lib/services/ga4';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 
-	const MAX_CONFIRMATION_WAIT_MS = 10_000;
+	const MAX_CONFIRMATION_WAIT_MS = 60_000;
 	const RETRY_INTERVAL_MS = 5_000;
 	const PENDING_ORDER_STORAGE_KEY = 'fastaccs_pending_order_id';
+	const CHECKOUT_SESSION_STORAGE_KEY = 'fastaccs_checkout_session';
 
 	let verifying = $state(true);
 	let pending = $state(false);
@@ -70,6 +71,11 @@
 
 	function clearPendingOrderStorage(): void {
 		sessionStorage.removeItem(PENDING_ORDER_STORAGE_KEY);
+		localStorage.removeItem(CHECKOUT_SESSION_STORAGE_KEY);
+		clearGa4CheckoutSnapshot();
+	}
+
+	function preservePendingOrderStorage(): void {
 		clearGa4CheckoutSnapshot();
 	}
 
@@ -91,7 +97,11 @@
 	}
 
 	function goToOrdersDashboard(showPendingBanner = false): void {
-		clearPendingOrderStorage();
+		if (showPendingBanner) {
+			preservePendingOrderStorage();
+		} else {
+			clearPendingOrderStorage();
+		}
 		goto(getOrdersDashboardPath(orderId, showPendingBanner));
 	}
 

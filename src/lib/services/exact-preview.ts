@@ -307,6 +307,19 @@ export async function releaseExpiredExactPreviewReservations(
 			AND reserved_until IS NOT NULL
 			AND reserved_until <= NOW()
 			AND credential_extras->${EXACT_PREVIEW_RESERVATION_KEY}->>'source' = ${EXACT_PREVIEW_SOURCE}
+			AND (
+				order_item_id IS NULL
+				OR NOT EXISTS (
+					SELECT 1
+					FROM order_items AS oi
+					JOIN orders AS o ON o.id = oi.order_id
+					WHERE oi.id = accounts.order_item_id
+						AND (
+							o.status IN ('paid', 'completed')
+							OR o.payment_status = 'paid'
+						)
+				)
+			)
 			${tierFilter};
 	`;
 	return Number(affected || 0);
@@ -511,8 +524,9 @@ export async function attachExactPreviewSelectionsToOrder(input: {
 	userId: string;
 	selections: AttachSelectionInput[];
 	client: Prisma.TransactionClient;
+	expiresAt?: Date;
 }): Promise<void> {
-	const expiresAt = getReservationExpiry(EXACT_PREVIEW_RESERVATION_MINUTES);
+	const expiresAt = input.expiresAt || getReservationExpiry(EXACT_PREVIEW_RESERVATION_MINUTES);
 
 	for (const selection of input.selections) {
 		const account = await input.client.account.findUnique({

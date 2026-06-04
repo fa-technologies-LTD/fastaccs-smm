@@ -15,6 +15,7 @@ function normalizeLookupValue(value: string): string {
 }
 
 const STORAGE_KEY = 'fastaccs_cart';
+const CHECKOUT_SESSION_STORAGE_KEY = 'fastaccs_checkout_session';
 const STORAGE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 
 function getCartItemId(item: Pick<CartItem, 'tierId' | 'exactAccount'>): string {
@@ -29,6 +30,10 @@ class CartStore {
 		error: null,
 		notice: null
 	});
+	private revision = 0;
+	private refreshRevision = -1;
+	private refreshPromise: Promise<CartItemWithTier[]> | null = null;
+	private lastItemsWithTiers: CartItemWithTier[] = [];
 
 	constructor() {
 		if (browser) {
@@ -118,6 +123,7 @@ class CartStore {
 				}));
 
 			this.state.items = validItems;
+			this.revision += 1;
 		} catch (error) {
 			console.error('Failed to load cart from storage:', error);
 			this.clearStorage();
@@ -140,6 +146,12 @@ class CartStore {
 	}
 
 	// Cart actions
+	private markCartChanged(): void {
+		this.revision += 1;
+		this.state.error = null;
+		this.state.notice = null;
+	}
+
 	addTier(tierId: string, quantity: number = 1): void {
 		if (!tierId || quantity <= 0) return;
 
@@ -158,8 +170,7 @@ class CartStore {
 			});
 		}
 
-		this.state.error = null;
-		this.state.notice = null;
+		this.markCartChanged();
 		this.saveToStorage();
 	}
 
@@ -191,13 +202,13 @@ class CartStore {
 			this.state.items.push(nextItem);
 		}
 
-		this.state.error = null;
-		this.state.notice = null;
+		this.markCartChanged();
 		this.saveToStorage();
 	}
 
 	removeTier(tierId: string): void {
 		this.state.items = this.state.items.filter((item) => item.tierId !== tierId);
+		this.markCartChanged();
 		this.saveToStorage();
 	}
 
@@ -205,6 +216,7 @@ class CartStore {
 		this.state.items = this.state.items.filter(
 			(item) => (item.cartItemId || getCartItemId(item)) !== cartItemId
 		);
+		this.markCartChanged();
 		this.saveToStorage();
 	}
 
@@ -222,12 +234,15 @@ class CartStore {
 				return;
 			}
 			item.quantity = quantity;
+			this.markCartChanged();
 			this.saveToStorage();
 		}
 	}
 
 	clear(): void {
 		this.state.items = [];
+		this.lastItemsWithTiers = [];
+		this.revision += 1;
 		this.state.error = null;
 		this.state.notice = null;
 		this.clearStorage();
@@ -246,19 +261,77 @@ class CartStore {
 		this.state.isOpen = !this.state.isOpen;
 	}
 
+	private getCachedItemsForCurrentCart(): CartItemWithTier[] {
+		const cachedById = new Map(
+			this.lastItemsWithTiers.map((item) => [item.cartItemId || getCartItemId(item), item])
+		);
+
+		return this.state.items.flatMap((item) => {
+			const cached = cachedById.get(item.cartItemId || getCartItemId(item));
+			if (!cached) return [];
+			return [
+				{
+					...cached,
+					...item,
+					quantity: item.exactAccount ? 1 : item.quantity
+				}
+			];
+		});
+	}
+
+	private getCheckoutKey(): string | null {
+		if (!browser) return null;
+		try {
+			const stored = JSON.parse(localStorage.getItem(CHECKOUT_SESSION_STORAGE_KEY) || 'null') as {
+				key?: unknown;
+			} | null;
+			return typeof stored?.key === 'string' && /^[a-zA-Z0-9_-]{16,100}$/.test(stored.key)
+				? stored.key
+				: null;
+		} catch {
+			return null;
+		}
+	}
+
 	// Get items with tier data
 	async getItemsWithTiers(): Promise<CartItemWithTier[]> {
-		if (this.state.items.length === 0) return [];
+		if (this.state.items.length === 0) {
+			this.lastItemsWithTiers = [];
+			return [];
+		}
+
+		if (this.refreshPromise) {
+			const activePromise = this.refreshPromise;
+			const activeRevision = this.refreshRevision;
+			const items = await activePromise;
+			if (this.refreshPromise === activePromise) {
+				this.refreshPromise = null;
+				this.state.loading = false;
+			}
+			if (!this.state.error && activeRevision !== this.revision) {
+				return this.getItemsWithTiers();
+			}
+			return items;
+		}
 
 		this.state.loading = true;
 		this.state.error = null;
 		this.state.notice = null;
+		this.refreshRevision = this.revision;
+		const requestRevision = this.refreshRevision;
+		const requestItems = this.state.items.map((item) => ({
+			...item,
+			exactAccount: item.exactAccount ? { ...item.exactAccount } : undefined
+		}));
 
-		try {
+		this.refreshPromise = (async () => {
 			const response = await fetch('/api/cart/refresh', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ items: this.state.items })
+				body: JSON.stringify({
+					items: requestItems,
+					checkoutKey: this.getCheckoutKey()
+				})
 			});
 
 			if (!response.ok) {
@@ -279,6 +352,10 @@ class CartStore {
 			}
 
 			const itemsWithTiers = Array.isArray(result.data?.items) ? result.data.items : [];
+			if (requestRevision !== this.revision) {
+				return itemsWithTiers;
+			}
+
 			this.state.items = itemsWithTiers.map((item) => ({
 				cartItemId: item.cartItemId || getCartItemId(item),
 				tierId: item.tierId,
@@ -286,25 +363,34 @@ class CartStore {
 				addedAt: item.addedAt,
 				exactAccount: item.exactAccount
 			}));
+			this.lastItemsWithTiers = itemsWithTiers;
 			this.saveToStorage();
 
 			const messages = Array.isArray(result.data?.messages) ? result.data.messages : [];
 			this.state.notice = messages.length ? messages.join(' ') : null;
 
 			return itemsWithTiers;
-		} catch (error) {
+		})().catch((error) => {
 			console.error('Failed to refresh cart:', error);
-			this.state.error = 'Failed to load cart items';
+			this.state.error = 'We could not refresh your cart. Your saved items are still safe.';
 			this.state.notice = null;
-			return [];
-		} finally {
+			return this.getCachedItemsForCurrentCart();
+		});
+
+		const activePromise = this.refreshPromise as Promise<CartItemWithTier[]>;
+		const items = await activePromise;
+		if (this.refreshPromise === activePromise) {
+			this.refreshPromise = null;
 			this.state.loading = false;
 		}
+		if (!this.state.error && requestRevision !== this.revision) {
+			return this.getItemsWithTiers();
+		}
+		return items;
 	}
 
 	// Calculate total
-	async getTotal(): Promise<number> {
-		const items = await this.getItemsWithTiers();
+	getTotal(items: CartItemWithTier[] = this.getCachedItemsForCurrentCart()): number {
 		return items.reduce((sum, item) => sum + item.tier.price * item.quantity, 0);
 	}
 
