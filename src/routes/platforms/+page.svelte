@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { onMount } from 'svelte';
 	import { ArrowRight, Check, Zap, Search, SearchX, Package, ShieldCheck } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -39,7 +38,6 @@
 	let searchQuery = $state('');
 	let activeFilter = $state<FilterKey>('all');
 	let failedPlatformIcons = $state<Record<string, boolean>>({});
-	let showInitialSkeleton = $state(true);
 
 	const filters: FilterConfig[] = [
 		{ key: 'all', label: 'All' },
@@ -47,17 +45,9 @@
 		{ key: 'in-stock', label: 'In Stock' },
 		{ key: 'high-engagement', label: 'High Engagement' }
 	];
-	const skeletonIndexes = [0, 1, 2, 3];
 
 	const HIGH_ENGAGEMENT_PATTERN =
 		/(engage|engagement|follower|followers|likes|views|subscriber|subscribers|reach|boost)/i;
-
-	onMount(() => {
-		const timer = setTimeout(() => {
-			showInitialSkeleton = false;
-		}, 180);
-		return () => clearTimeout(timer);
-	});
 
 	function navigateToPlatform(platformSlug: string) {
 		goto(`/platforms/${platformSlug}`);
@@ -228,13 +218,7 @@
 	</section>
 
 	<section class="mx-auto w-full max-w-6xl px-4 pb-16">
-		{#if showInitialSkeleton}
-			<div class="platform-grid">
-				{#each skeletonIndexes as index (index)}
-					<div class="platform-skeleton" style={`animation-delay: ${index * 70}ms;`}></div>
-				{/each}
-			</div>
-		{:else if !hasAnyPlatforms}
+		{#if !hasAnyPlatforms}
 			<div class="empty-state">
 				<Package size={46} />
 				<p class="empty-title">No platforms available right now</p>
@@ -531,22 +515,6 @@
 		margin-bottom: 0.1rem;
 	}
 
-	.platform-skeleton {
-		height: 210px;
-		border-radius: var(--r-md);
-		border: 1px solid var(--border);
-		background: linear-gradient(
-			90deg,
-			rgba(255, 255, 255, 0.05) 0%,
-			rgba(255, 255, 255, 0.11) 50%,
-			rgba(255, 255, 255, 0.05) 100%
-		);
-		background-size: 220% 100%;
-		animation:
-			shimmer 1.2s infinite linear,
-			card-enter 300ms ease-out both;
-	}
-
 	.empty-state {
 		min-height: 220px;
 		border-radius: var(--r-md);
@@ -584,15 +552,6 @@
 		padding: 6px 12px;
 		font-family: var(--font-body);
 		cursor: pointer;
-	}
-
-	@keyframes shimmer {
-		0% {
-			background-position: 220% 0;
-		}
-		100% {
-			background-position: -220% 0;
-		}
 	}
 
 	@keyframes card-enter {
