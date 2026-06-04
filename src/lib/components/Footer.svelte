@@ -1,7 +1,7 @@
 <script>
 	import { Mail, MessageCircle, Facebook, Instagram, Music2 } from '$lib/icons';
 	import { addToast } from '$lib/stores/toasts';
-	import footerLogo from '$lib/assets/footer-logo.png';
+	import footerLogo from '$lib/assets/logo.png';
 </script>
 
 <footer
@@ -14,12 +14,6 @@
 				<div class="mb-2">
 					<img src={footerLogo} alt="FastAccs Logo" class="h-8 w-auto" />
 				</div>
-				<p
-					class="mb-2 text-sm font-semibold"
-					style="color: var(--text); font-family: var(--font-head);"
-				>
-					FAST ACCOUNTS
-				</p>
 				<p class="mb-3 text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
 					Secure marketplace for social media accounts and boosting services.
 				</p>
