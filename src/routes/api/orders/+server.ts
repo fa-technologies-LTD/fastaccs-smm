@@ -319,6 +319,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			String(orderData.paymentMethod || '')
 				.trim()
 				.toLowerCase() || 'monnify';
+		if (paymentMethod !== 'monnify') {
+			return json({ success: false, error: 'Unsupported payment method.' }, { status: 400 });
+		}
 		const customerEmail = String(orderData.email || locals.user.email || '').trim();
 		const customerPhone = String(orderData.phone || locals.user.phone || '').trim();
 		const minimumOrderValue = await getMinimumOrderValueSetting().catch(() => 0);

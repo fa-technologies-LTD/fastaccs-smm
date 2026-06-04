@@ -2,6 +2,7 @@ import { prisma } from '$lib/prisma';
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { getAdminSettingsSnapshot } from '$lib/services/admin-settings';
+import { sanitizeBuyerOrderAccounts } from '$lib/helpers/buyer-order-visibility';
 
 export const load: PageServerLoad = async ({ params, locals, url }) => {
 	if (!locals.user) {
@@ -42,6 +43,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		? fromTabParam
 		: 'orders';
 	const settings = await getAdminSettingsSnapshot().catch(() => null);
+	const buyerOrder = sanitizeBuyerOrderAccounts(order);
 
 	// Convert Decimal fields to numbers for serialization
 	return {
@@ -51,17 +53,16 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			loginGuideFallbackUrl: 'https://smm.fastaccs.com/support#after-purchase-guide'
 		},
 		order: {
-			...order,
-			subtotal: Number(order.subtotal),
-			taxAmount: Number(order.taxAmount),
-			discountAmount: Number(order.discountAmount),
-			totalAmount: Number(order.totalAmount),
-			orderItems: order.orderItems.map((item) => ({
+			...buyerOrder,
+			subtotal: Number(buyerOrder.subtotal),
+			taxAmount: Number(buyerOrder.taxAmount),
+			discountAmount: Number(buyerOrder.discountAmount),
+			totalAmount: Number(buyerOrder.totalAmount),
+			orderItems: buyerOrder.orderItems.map((item) => ({
 				...item,
 				unitPrice: Number(item.unitPrice),
 				totalPrice: Number(item.totalPrice),
-				// Use actual account count if allocatedCount is 0
-				allocatedCount: item.allocatedCount || item.accounts.length
+				allocatedCount: item.accounts.length
 			}))
 		}
 	};

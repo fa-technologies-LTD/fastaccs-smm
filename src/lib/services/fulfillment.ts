@@ -5,6 +5,7 @@ import { invalidateAdminStatsCache } from './admin-metrics';
 import { sendLowStockAdminAlertIfNeeded } from './admin-alerts';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { allocateReservedExactPreviewAccountsForItem } from '$lib/services/exact-preview';
+import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 
 // Type definitions
 interface AllocationResult {
@@ -88,6 +89,10 @@ async function allocateAccounts(orderId: string) {
 
 			if (!order) {
 				throw new Error('ORDER_NOT_FOUND');
+			}
+
+			if (!isOrderPaymentConfirmed(order)) {
+				throw new Error('PAYMENT_NOT_CONFIRMED');
 			}
 
 			if (order.status === 'completed') {
@@ -252,6 +257,10 @@ async function allocateAccounts(orderId: string) {
 				return { success: false, error: 'Order already processed' };
 			}
 
+			if (error.message === 'PAYMENT_NOT_CONFIRMED') {
+				return { success: false, error: 'Payment must be confirmed before account allocation' };
+			}
+
 			if (error.message.startsWith('INSUFFICIENT_ACCOUNTS:')) {
 				const [, productName, requested, available] = error.message.split(':');
 				return {
@@ -303,6 +312,10 @@ async function deliverAccounts(orderId: string) {
 
 		if (!order) {
 			return { success: false, error: 'Order not found' };
+		}
+
+		if (!isOrderPaymentConfirmed(order)) {
+			return { success: false, error: 'Payment must be confirmed before account delivery' };
 		}
 
 		if (order.status !== 'completed') {

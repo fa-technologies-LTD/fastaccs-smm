@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { CheckCircle, Clock, XCircle, Mail, MessageSquare, Copy, ExternalLink, CircleHelp } from '$lib/icons';
+	import { CheckCircle, Clock, XCircle, Copy, ExternalLink, CircleHelp } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { addToast } from '$lib/stores/toasts';
@@ -13,6 +13,7 @@
 		getTierDeliveryConfig
 	} from '$lib/helpers/tier-delivery-config';
 	import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
+	import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 
 	let { data }: { data: PageData } = $props();
 
@@ -32,7 +33,7 @@
 		const orderStatus = normalizeLower(status);
 		const payment = normalizeLower(paymentStatus);
 
-		if (['paid', 'completed'].includes(orderStatus) || ['paid', 'success'].includes(payment)) {
+		if (isOrderPaymentConfirmed({ status: orderStatus, paymentStatus: payment })) {
 			return { label: 'Payment Confirmed', tone: 'success' };
 		}
 
@@ -91,6 +92,10 @@
 		return getTierDeliveryConfig(item.category?.metadata).mode === 'manual_handover';
 	}
 
+	function isManualHandoverOrder(): boolean {
+		return data.order.orderItems.some(isManualHandoverItem);
+	}
+
 	function getItemLoginGuide(item: (typeof data.order.orderItems)[number]): {
 		url: string;
 		label: string;
@@ -103,12 +108,10 @@
 	}
 
 	function getManualHandoverLink(): string | null {
-		const paymentState = getPaymentState(data.order.status, data.order.paymentStatus);
-		if (paymentState.tone !== 'success') return null;
-		if (data.order.deliveryMethod !== 'whatsapp') return null;
+		if (!isManualHandoverOrder()) return null;
 
 		const orderLabel = data.order.orderNumber || `ORD-${data.order.id.slice(0, 8).toUpperCase()}`;
-		const message = `Hi, I just paid for order ${orderLabel}. Manual handover in progress.`;
+		const message = `Hi, I'm sending my payment receipt for order ${orderLabel}.`;
 		return buildWhatsAppSupportLink(data.support?.whatsappNumber, message);
 	}
 
@@ -179,7 +182,7 @@
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.deliveryMethod === 'whatsapp' && data.order.deliveryStatus === 'processing'}
 									Payment confirmed. Manual handover is in progress on WhatsApp.
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'pending'}
-									Payment not confirmed yet. No account allocation has started.
+									Payment not confirmed yet. Credentials are locked.
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'failure'}
 									Payment did not complete for this order. No account allocation was made.
 								{:else}
@@ -203,43 +206,32 @@
 					</div>
 				</div>
 
-				<div
-					class="mb-6 rounded-lg p-4"
-					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-				>
-					<p class="text-sm" style="color: var(--text-muted);">
-						For smooth access, test your login soon after delivery and report issues quickly. For
-						the fastest support response, message us within 2 hours of purchase. See the <a
-							href="/support#faq"
-							class="font-medium hover:underline"
-							style="color: var(--link);">Support FAQ</a
-						> for account-care tips.
-					</p>
-				</div>
-
-				{#if getManualHandoverLink()}
+				{#if !isManualHandoverOrder()}
 					<div
 						class="mb-6 rounded-lg p-4"
-						style="background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(147, 197, 253, 0.3);"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 					>
-						<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-							<div>
-								<p class="text-sm font-semibold" style="color: #bfdbfe;">Manual handover in progress</p>
-								<p class="text-xs" style="color: #dbeafe;">
-									Secure WhatsApp handover by our team, usually within 15–60 minutes.
-								</p>
-							</div>
-							<a
-								href={getManualHandoverLink()}
-								target="_blank"
-								rel="noopener noreferrer"
-								class="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold"
-								style="background: rgba(16, 185, 129, 0.18); border: 1px solid rgba(16, 185, 129, 0.35); color: rgb(52, 211, 153);"
-							>
-								Continue on WhatsApp
-							</a>
-						</div>
+						<p class="text-sm" style="color: var(--text-muted);">
+							For smooth access, test your login soon after delivery and report issues quickly. For
+							the fastest support response, message us within 2 hours of purchase. See the <a
+								href="/support#faq"
+								class="font-medium hover:underline"
+								style="color: var(--link);">Support FAQ</a
+							> for account-care tips.
+						</p>
 					</div>
+				{/if}
+
+				{#if getManualHandoverLink()}
+					<a
+						href={getManualHandoverLink()}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="mb-6 inline-flex w-full items-center justify-center rounded-xl px-5 py-3 text-sm font-bold transition-all hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98]"
+						style="background: linear-gradient(180deg, rgba(5, 212, 113, 0.98), rgba(13, 145, 82, 0.98)); border: 1px solid rgba(5, 212, 113, 0.5); color: #04140c;"
+					>
+						Send receipt on WhatsApp
+					</a>
 				{/if}
 
 				<!-- Order Items -->
@@ -258,9 +250,7 @@
 											Quantity: {item.quantity} • {formatPrice(item.unitPrice)} each
 										</p>
 										<div class="mt-2">
-											{#if isManualHandoverItem(item)}
-												<span class="status-badge status-info">Manual handover via WhatsApp</span>
-											{:else}
+											{#if !isManualHandoverItem(item)}
 												<span
 													class={`status-badge ${
 														item.allocationStatus === 'allocated'
@@ -276,36 +266,38 @@
 												</span>
 											{/if}
 										</div>
-										<div
-											class="mt-3 rounded-lg border p-3"
-											style="border-color: rgba(170, 173, 255, 0.25); background: rgba(170, 173, 255, 0.08);"
-										>
-											<p class="mb-2 text-xs font-medium" style="color: var(--text);">
-												Login & Support Guide
-											</p>
-											<div class="flex flex-wrap items-center gap-2">
-												<a
-													href={getItemLoginGuide(item).url}
-													target="_blank"
-													rel="noopener noreferrer"
-													class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all hover:-translate-y-0.5"
-													style="background: rgba(5, 212, 113, 0.18); border: 1px solid rgba(5, 212, 113, 0.35); color: var(--text);"
-												>
-													{getItemLoginGuide(item).label}
-													<ExternalLink class="h-3.5 w-3.5" />
-												</a>
-												<a
-													href={getSupportGuideUrl()}
-													target="_blank"
-													rel="noopener noreferrer"
-													class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all hover:-translate-y-0.5"
-													style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);"
-												>
-													<CircleHelp class="h-3.5 w-3.5" />
-													Support guide
-												</a>
+										{#if !isManualHandoverItem(item)}
+											<div
+												class="mt-3 rounded-lg border p-3"
+												style="border-color: rgba(170, 173, 255, 0.25); background: rgba(170, 173, 255, 0.08);"
+											>
+												<p class="mb-2 text-xs font-medium" style="color: var(--text);">
+													Login & Support Guide
+												</p>
+												<div class="flex flex-wrap items-center gap-2">
+													<a
+														href={getItemLoginGuide(item).url}
+														target="_blank"
+														rel="noopener noreferrer"
+														class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all hover:-translate-y-0.5"
+														style="background: rgba(5, 212, 113, 0.18); border: 1px solid rgba(5, 212, 113, 0.35); color: var(--text);"
+													>
+														{getItemLoginGuide(item).label}
+														<ExternalLink class="h-3.5 w-3.5" />
+													</a>
+													<a
+														href={getSupportGuideUrl()}
+														target="_blank"
+														rel="noopener noreferrer"
+														class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all hover:-translate-y-0.5"
+														style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);"
+													>
+														<CircleHelp class="h-3.5 w-3.5" />
+														Support guide
+													</a>
+												</div>
 											</div>
-										</div>
+										{/if}
 									</div>
 									<div class="text-right">
 										<p class="font-semibold">{formatPrice(item.totalPrice)}</p>
@@ -313,7 +305,7 @@
 								</div>
 
 								<!-- Account Details -->
-								{#if item.accounts && item.accounts.length > 0}
+								{#if isOrderPaymentConfirmed(data.order) && !isManualHandoverItem(item) && item.accounts && item.accounts.length > 0}
 									<div class="mt-4">
 										<div class="mb-2 flex items-center justify-between">
 											<h5 class="text-sm font-medium" style="color: var(--text);">
@@ -333,73 +325,63 @@
 												Copy All
 											</button>
 										</div>
-												<div class="space-y-2">
-													{#each item.accounts as account}
-														{@const credentialEntries = getCanonicalCredentialEntries(
-															account as any
-														)}
-														<div
-															class="rounded-lg p-3"
-															style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-													>
-														<div class="space-y-3">
-															{#if credentialEntries.length === 0}
-																<p class="text-xs" style="color: var(--text-muted);">
-																	No credentials available for this account.
-																</p>
-															{:else}
-																{#each credentialEntries as entry}
-																	<div class="flex items-start justify-between gap-3">
-																		<div class="flex-1">
-																			<span
-																				class="text-xs font-medium uppercase"
-																				style="color: var(--text-dim);">{entry.label}</span
-																			>
-																			{#if entry.isUrl && entry.href}
-																				<a
-																					href={entry.href}
-																					target="_blank"
-																					rel="noopener noreferrer"
-																					class="credential-value font-mono text-sm break-all hover:underline"
-																					style="color: var(--link);"
-																				>
-																					{entry.value}
-																				</a>
-																			{:else}
-																				<div
-																					class="credential-value font-mono text-sm break-all"
-																					style="color: var(--text);"
-																				>
-																					{entry.value}
-																				</div>
-																			{/if}
-																		</div>
-																		<button
-																			onclick={() =>
-																				copyToClipboard(entry.value, {
-																					label: entry.label,
-																					showToast: (toast: any) => addToast(toast as any)
-																				})}
-																			style="color: var(--text-dim);"
-																			class="ml-2 rounded p-2 hover:brightness-125"
+										<div class="space-y-2">
+											{#each item.accounts as account}
+												{@const credentialEntries = getCanonicalCredentialEntries(account as any)}
+												<div
+													class="rounded-lg p-3"
+													style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+												>
+													<div class="space-y-3">
+														{#if credentialEntries.length === 0}
+															<p class="text-xs" style="color: var(--text-muted);">
+																No credentials available for this account.
+															</p>
+														{:else}
+															{#each credentialEntries as entry}
+																<div class="flex items-start justify-between gap-3">
+																	<div class="flex-1">
+																		<span
+																			class="text-xs font-medium uppercase"
+																			style="color: var(--text-dim);">{entry.label}</span
 																		>
-																			<Copy class="h-4 w-4" />
-																		</button>
+																		{#if entry.isUrl && entry.href}
+																			<a
+																				href={entry.href}
+																				target="_blank"
+																				rel="noopener noreferrer"
+																				class="credential-value font-mono text-sm break-all hover:underline"
+																				style="color: var(--link);"
+																			>
+																				{entry.value}
+																			</a>
+																		{:else}
+																			<div
+																				class="credential-value font-mono text-sm break-all"
+																				style="color: var(--text);"
+																			>
+																				{entry.value}
+																			</div>
+																		{/if}
 																	</div>
-																{/each}
-															{/if}
-														</div>
+																	<button
+																		onclick={() =>
+																			copyToClipboard(entry.value, {
+																				label: entry.label,
+																				showToast: (toast: any) => addToast(toast as any)
+																			})}
+																		style="color: var(--text-dim);"
+																		class="ml-2 rounded p-2 hover:brightness-125"
+																	>
+																		<Copy class="h-4 w-4" />
+																	</button>
+																</div>
+															{/each}
+														{/if}
 													</div>
-												{/each}
+												</div>
+											{/each}
 										</div>
-									</div>
-								{:else if isManualHandoverItem(item)}
-									<div
-										class="mt-4 rounded-lg p-3 text-sm"
-										style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(147, 197, 253, 0.25); color: #dbeafe;"
-									>
-										Payment is confirmed. Our team will hand over this listing manually on WhatsApp.
-										Use the button above to continue the handover chat.
 									</div>
 								{/if}
 							</div>
@@ -448,43 +430,6 @@
 									getPaymentState(data.order.status, data.order.paymentStatus).tone
 								)}</span
 							>
-						</div>
-					</div>
-				</div>
-
-				<!-- Delivery Info -->
-				<div
-					class="rounded-lg p-6"
-					style="background: var(--surface); border: 1px solid var(--border);"
-				>
-					<h3 class="mb-4 text-lg font-semibold" style="color: var(--text);">
-						Delivery Information
-					</h3>
-					<div class="flex items-center gap-3">
-						{#if data.order.deliveryMethod === 'email'}
-							<Mail class="h-5 w-5" style="color: var(--fa-blue-300);" />
-						{:else if data.order.deliveryMethod === 'whatsapp'}
-							<MessageSquare class="h-5 w-5" style="color: var(--fa-blue-300);" />
-						{:else if data.order.deliveryMethod === 'telegram'}
-							<MessageSquare class="h-5 w-5" style="color: var(--fa-blue-300);" />
-						{:else}
-							<Mail class="h-5 w-5" style="color: var(--fa-blue-300);" />
-						{/if}
-						<div>
-							<p class="font-medium capitalize" style="color: var(--text);">
-								{data.order.deliveryMethod}
-							</p>
-							<p class="text-sm" style="color: var(--text-muted);">
-								{#if data.order.deliveryMethod === 'email'}
-									{data.order.guestEmail || data.order.deliveryContact}
-								{:else if data.order.deliveryMethod === 'whatsapp'}
-									{data.order.deliveryContact}
-								{:else if data.order.deliveryMethod === 'telegram'}
-									{data.order.deliveryContact}
-								{:else}
-									<!-- fallback info -->
-								{/if}
-							</p>
 						</div>
 					</div>
 				</div>

@@ -1,11 +1,21 @@
 <script lang="ts">
-	import { Package, CheckCircle, Copy, Clock, Shield, Lock, ExternalLink, CircleHelp } from '$lib/icons';
+	import {
+		Package,
+		CheckCircle,
+		Copy,
+		Clock,
+		Shield,
+		Lock,
+		ExternalLink,
+		CircleHelp
+	} from '$lib/icons';
 	import { addToast } from '$lib/stores/toasts';
 	import { copyToClipboard } from '$lib/helpers/utils';
 	import {
 		buildCredentialPlainText,
 		getCanonicalCredentialEntries
 	} from '$lib/helpers/credential-contract';
+	import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
 
 	let { initialPurchases } = $props();
 	let purchases = $state<any[]>(initialPurchases);
@@ -45,6 +55,20 @@
 			minute: '2-digit',
 			hour12: true
 		});
+	}
+
+	function getManualHandoverLink(purchase: any): string | null {
+		if (purchase.deliveryMode !== 'manual_handover') return null;
+		const orderLabel = String(purchase.orderNumber || purchase.orderId || '').trim();
+		return buildWhatsAppSupportLink(
+			null,
+			`Hi, I'm sending my payment receipt for order ${orderLabel}.`
+		);
+	}
+
+	function getPurchaseStatusLabel(purchase: any): string {
+		if (purchase.deliveryMode === 'manual_handover') return 'Manual handover';
+		return purchase.accounts?.length > 0 ? 'Delivered' : 'Processing';
 	}
 </script>
 
@@ -114,7 +138,9 @@
 									</span>
 								</div>
 								<span class="text-[color:var(--text-dim)]">•</span>
-								<span class="font-medium" style="color: var(--primary);">Delivered</span>
+								<span class="font-medium" style="color: var(--primary);"
+									>{getPurchaseStatusLabel(purchase)}</span
+								>
 							</div>
 						</div>
 						<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
@@ -141,7 +167,7 @@
 						</div>
 					</div>
 
-					{#if purchase.loginGuideUrl}
+					{#if purchase.deliveryMode !== 'manual_handover' && purchase.loginGuideUrl}
 						<div
 							class="mb-4 rounded-[var(--r-sm)] border p-3 text-sm"
 							style="border-color: rgba(5, 212, 113, 0.3); background: rgba(5, 212, 113, 0.08);"
@@ -173,17 +199,17 @@
 						</div>
 					{/if}
 
-								{#if purchase.accounts && purchase.accounts.length > 0}
-									<div class="space-y-3">
-										{#each purchase.accounts as account, index}
-											{@const credentialEntries = getCanonicalCredentialEntries(account as any, {
-												knownKeys: ['linkUrl', 'username', 'password', 'email', 'emailPassword', 'twoFa'],
-												includeExtras: true
-											})}
-											<div
-												class="rounded-[var(--r-sm)] border-2 border-[var(--border-2)] p-4"
-												style="background: var(--surface);"
-										>
+					{#if purchase.accounts && purchase.accounts.length > 0}
+						<div class="space-y-3">
+							{#each purchase.accounts as account, index}
+								{@const credentialEntries = getCanonicalCredentialEntries(account as any, {
+									knownKeys: ['linkUrl', 'username', 'password', 'email', 'emailPassword', 'twoFa'],
+									includeExtras: true
+								})}
+								<div
+									class="rounded-[var(--r-sm)] border-2 border-[var(--border-2)] p-4"
+									style="background: var(--surface);"
+								>
 									<div
 										class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
 									>
@@ -209,39 +235,39 @@
 										</button>
 									</div>
 
-											<div
-												class="space-y-2 rounded-[var(--r-sm)] p-3 font-mono text-sm sm:p-4"
-												style="background: rgba(0,0,0,0.3);"
-											>
-												{#if credentialEntries.length === 0}
-													<p class="text-xs" style="color: var(--text-muted);">
-														No credentials available for this account.
-													</p>
-											{:else}
-												{#each credentialEntries as entry}
-													<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
-														<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
-															>{entry.label}:</span
+									<div
+										class="space-y-2 rounded-[var(--r-sm)] p-3 font-mono text-sm sm:p-4"
+										style="background: rgba(0,0,0,0.3);"
+									>
+										{#if credentialEntries.length === 0}
+											<p class="text-xs" style="color: var(--text-muted);">
+												No credentials available for this account.
+											</p>
+										{:else}
+											{#each credentialEntries as entry}
+												<div class="flex flex-col gap-1 sm:flex-row sm:items-center">
+													<span class="w-24 font-semibold sm:w-32" style="color: var(--text-muted);"
+														>{entry.label}:</span
+													>
+													{#if entry.isUrl && entry.href}
+														<a
+															href={entry.href}
+															target="_blank"
+															rel="noopener noreferrer"
+															class="credential-value flex-1 hover:underline"
+															style="color: var(--link);"
 														>
-														{#if entry.isUrl && entry.href}
-															<a
-																href={entry.href}
-																target="_blank"
-																rel="noopener noreferrer"
-																class="credential-value flex-1 hover:underline"
-																style="color: var(--link);"
-															>
-																{entry.value}
-															</a>
-														{:else}
-															<span class="credential-value flex-1" style="color: var(--text);"
-																>{entry.value}</span
-															>
-														{/if}
-													</div>
-												{/each}
-											{/if}
-											</div>
+															{entry.value}
+														</a>
+													{:else}
+														<span class="credential-value flex-1" style="color: var(--text);"
+															>{entry.value}</span
+														>
+													{/if}
+												</div>
+											{/each}
+										{/if}
+									</div>
 
 									<!-- Account Stats (if available) -->
 									{#if account.followers || account.following || account.postsCount}
@@ -290,26 +316,22 @@
 								</div>
 							{/each}
 						</div>
+					{:else if purchase.deliveryMode === 'manual_handover' && getManualHandoverLink(purchase)}
+						<a
+							href={getManualHandoverLink(purchase)}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="inline-flex w-full items-center justify-center rounded-xl px-5 py-3 text-sm font-bold transition-all hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98]"
+							style="background: linear-gradient(180deg, rgba(5, 212, 113, 0.98), rgba(13, 145, 82, 0.98)); border: 1px solid rgba(5, 212, 113, 0.5); color: #04140c;"
+						>
+							Send receipt on WhatsApp
+						</a>
 					{:else}
 						<div
 							class="rounded-[var(--r-sm)] border p-4 text-sm"
-							style="border-color: rgba(147, 197, 253, 0.3); background: rgba(59, 130, 246, 0.1); color: #dbeafe;"
+							style="border-color: var(--border); background: var(--surface); color: var(--text-muted);"
 						>
-							Payment is confirmed. This purchase is handled via manual handover on WhatsApp.
-							Open your order details from the Orders tab to continue handover.
-							{#if purchase.loginGuideUrl}
-								<div class="mt-2">
-									<a
-										href={purchase.loginGuideUrl}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="text-xs font-semibold underline"
-										style="color: #bfdbfe;"
-									>
-										{purchase.loginGuideLabel || 'Open login guide'}
-									</a>
-								</div>
-							{/if}
+							Payment confirmed. Your credentials are being prepared.
 						</div>
 					{/if}
 				</div>

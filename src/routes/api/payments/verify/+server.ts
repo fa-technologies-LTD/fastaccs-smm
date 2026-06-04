@@ -18,6 +18,7 @@ import {
 	settleFailedPayment,
 	settleSuccessfulPayment
 } from '$lib/services/payment-settlement';
+import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -91,7 +92,7 @@ async function buildExpiredPendingOrderResponse(
 	order: PendingOrderForExpiry,
 	gatewayStatus: string
 ): Promise<Response | null> {
-	if (order.status === 'paid' || order.status === 'completed' || order.paymentStatus === 'paid') {
+	if (isOrderPaymentConfirmed(order)) {
 		return null;
 	}
 	const expired = order.paymentExpiresAt
@@ -172,7 +173,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ success: false, error: 'Unauthorized access to order' }, { status: 403 });
 		}
 
-		if (orderById?.status === 'completed') {
+		if (orderById && isOrderPaymentConfirmed(orderById) && orderById.status === 'completed') {
 			await recoverPaidOrder(orderById.id, 'verify');
 			return json({
 				success: true,
@@ -183,7 +184,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			});
 		}
 
-		if (orderById?.status === 'paid' || orderById?.paymentStatus === 'paid') {
+		if (orderById && isOrderPaymentConfirmed(orderById)) {
 			const recovered = await recoverPaidOrderIfNeeded(orderById.id);
 			if (recovered.fulfilled) {
 				return json({

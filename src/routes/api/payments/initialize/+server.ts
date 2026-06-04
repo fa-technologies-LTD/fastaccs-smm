@@ -11,6 +11,7 @@ import {
 	extendOrderReservations,
 	releaseOrderReservations
 } from '$lib/services/order-reservations';
+import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 
 export const POST: RequestHandler = async ({ request, locals, url }) => {
 	try {
@@ -50,7 +51,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			return json({ success: false, error: 'Forbidden' }, { status: 403 });
 		}
 
-		if (order.status === 'paid' || order.status === 'completed' || order.paymentStatus === 'paid') {
+		if (isOrderPaymentConfirmed(order)) {
 			return json({ success: false, error: 'Order has already been paid' }, { status: 400 });
 		}
 

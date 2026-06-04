@@ -20,6 +20,7 @@ import {
 	settleSuccessfulPayment
 } from '$lib/services/payment-settlement';
 import { releaseExpiredOrderReservations } from '$lib/services/order-reservations';
+import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 
 interface ReconcileOptions {
 	limit?: number;
@@ -140,7 +141,7 @@ export async function reconcilePendingPayments(
 			continue;
 		}
 
-		if (order.status === 'paid' || order.paymentStatus === 'paid') {
+		if (isOrderPaymentConfirmed(order)) {
 			if (dryRun) {
 				summary.paid += 1;
 			} else {

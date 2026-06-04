@@ -10,6 +10,10 @@ import {
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { getAffiliateDashboardState } from '$lib/services/affiliate';
 import { reconcilePendingPayments } from '$lib/services/payment-reconciliation';
+import {
+	CONFIRMED_PAYMENT_STATUSES,
+	getBuyerVisibleAccounts
+} from '$lib/helpers/buyer-order-visibility';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	try {
@@ -93,7 +97,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 					userId: user.id,
 					AND: [
 						{
-							OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
+							status: { in: ['paid', 'processing', 'completed'] },
+							paymentStatus: { in: [...CONFIRMED_PAYMENT_STATUSES] }
 						},
 						{
 							OR: [
@@ -109,8 +114,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 									}
 								},
 								{
-									deliveryMethod: 'whatsapp',
-									paymentStatus: 'paid'
+									deliveryMethod: 'whatsapp'
 								}
 							]
 						}
@@ -119,6 +123,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 				select: {
 					id: true,
 					orderNumber: true,
+					status: true,
+					paymentStatus: true,
 					createdAt: true,
 					deliveredAt: true,
 					orderItems: {
@@ -139,6 +145,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 								},
 								select: {
 									id: true,
+									status: true,
 									platform: true,
 									linkUrl: true,
 									username: true,
@@ -172,7 +179,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 					categoryName: item.category.name,
 					platform: item.productCategory || item.category.name,
 					quantity: item.quantity,
-					accounts: item.accounts,
+					accounts: getBuyerVisibleAccounts(order, item),
 					deliveryMode: deliveryConfig.mode,
 					loginGuideUrl: deliveryConfig.loginGuideUrl || DEFAULT_LOGIN_GUIDE_URL,
 					loginGuideLabel: deliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL

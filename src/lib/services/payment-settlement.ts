@@ -20,6 +20,10 @@ import {
 	isGa4MeasurementProtocolConfigured,
 	sendGa4MeasurementProtocolEvents
 } from '$lib/server/ga4-measurement-protocol';
+import {
+	CONFIRMED_PAYMENT_STATUSES,
+	isOrderPaymentConfirmed
+} from '$lib/helpers/buyer-order-visibility';
 
 export type PaymentSettlementSource = 'verify' | 'webhook' | 'reconcile';
 
@@ -140,7 +144,7 @@ export async function settleFailedPayment(input: {
 		};
 	}
 
-	if (order.status === 'paid' || order.status === 'completed' || order.paymentStatus === 'paid') {
+	if (isOrderPaymentConfirmed(order)) {
 		return {
 			success: true,
 			orderId: order.id,
@@ -153,8 +157,10 @@ export async function settleFailedPayment(input: {
 	const transitioned = await prisma.order.updateMany({
 		where: {
 			id: order.id,
-			status: { notIn: ['paid', 'completed'] },
-			paymentStatus: { not: 'paid' }
+			NOT: {
+				status: { in: ['paid', 'processing', 'completed'] },
+				paymentStatus: { in: [...CONFIRMED_PAYMENT_STATUSES] }
+			}
 		},
 		data: {
 			status: nextStatus,
@@ -165,10 +171,10 @@ export async function settleFailedPayment(input: {
 	if (transitioned.count === 0) {
 		const latest = await prisma.order.findUnique({
 			where: { id: order.id },
-			select: { status: true }
+			select: { status: true, paymentStatus: true }
 		});
 		return {
-			success: latest?.status === 'paid' || latest?.status === 'completed',
+			success: Boolean(latest && isOrderPaymentConfirmed(latest)),
 			orderId: order.id,
 			status:
 				latest?.status === 'completed'
@@ -206,12 +212,7 @@ export async function markPaymentPending(input: {
 	source: PaymentSettlementSource;
 }): Promise<void> {
 	const order = await prisma.order.findUnique({ where: { id: input.orderId } });
-	if (
-		!order ||
-		order.status === 'paid' ||
-		order.status === 'completed' ||
-		order.paymentStatus === 'paid'
-	) {
+	if (!order || isOrderPaymentConfirmed(order)) {
 		return;
 	}
 
@@ -220,7 +221,7 @@ export async function markPaymentPending(input: {
 		where: {
 			id: order.id,
 			status: { in: ['pending', 'pending_payment'] },
-			paymentStatus: { not: 'paid' }
+			paymentStatus: { notIn: [...CONFIRMED_PAYMENT_STATUSES] }
 		},
 		data: { status: 'pending_payment', paymentStatus: nextPaymentStatus }
 	});
@@ -243,6 +244,15 @@ export async function recoverPaidOrder(
 	const order = await prisma.order.findUnique({ where: { id: orderId } });
 	if (!order) {
 		return { success: false, orderId, status: 'FAILED', error: 'Order not found' };
+	}
+
+	if (!isOrderPaymentConfirmed(order)) {
+		return {
+			success: false,
+			orderId: order.id,
+			status: 'PENDING',
+			error: 'Payment has not been confirmed.'
+		};
 	}
 
 	if (order.status === 'completed') {
@@ -332,7 +342,7 @@ export async function settleSuccessfulPayment(input: {
 		return { success: false, orderId: input.orderId, status: 'FAILED', error: 'Order not found' };
 	}
 
-	if (order.status === 'paid' || order.status === 'completed' || order.paymentStatus === 'paid') {
+	if (isOrderPaymentConfirmed(order)) {
 		return recoverPaidOrder(order.id, input.source);
 	}
 
@@ -372,9 +382,12 @@ export async function settleSuccessfulPayment(input: {
 	}
 
 	const transitioned = await prisma.order.updateMany({
-		where: { id: order.id, status: { notIn: ['paid', 'completed'] } },
+		where: {
+			id: order.id,
+			OR: [{ status: { notIn: ['paid', 'completed'] } }, { paymentStatus: { not: 'paid' } }]
+		},
 		data: {
-			status: 'paid',
+			status: order.status === 'completed' ? 'completed' : 'paid',
 			paymentStatus: 'paid',
 			paymentReference: input.paymentReference || order.paymentReference,
 			paymentChannel: input.channel || order.paymentChannel,

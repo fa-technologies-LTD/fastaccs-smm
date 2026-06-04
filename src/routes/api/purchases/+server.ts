@@ -2,6 +2,11 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
+import {
+	CONFIRMED_PAYMENT_STATUSES,
+	getBuyerVisibleAccounts
+} from '$lib/helpers/buyer-order-visibility';
+import { getTierDeliveryConfig } from '$lib/helpers/tier-delivery-config';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	try {
@@ -18,7 +23,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 				userId: userId,
 				AND: [
 					{
-						OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
+						status: { in: ['paid', 'processing', 'completed'] },
+						paymentStatus: { in: [...CONFIRMED_PAYMENT_STATUSES] }
 					},
 					{
 						OR: [
@@ -34,8 +40,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 								}
 							},
 							{
-								deliveryMethod: 'whatsapp',
-								paymentStatus: 'paid'
+								deliveryMethod: 'whatsapp'
 							}
 						]
 					}
@@ -45,11 +50,11 @@ export const GET: RequestHandler = async ({ locals }) => {
 				orderItems: {
 					include: {
 						category: true,
-							accounts: {
-								where: {
-									status: { in: purchasedAccountStatuses }
-								}
+						accounts: {
+							where: {
+								status: { in: purchasedAccountStatuses }
 							}
+						}
 					}
 				}
 			},
@@ -60,15 +65,17 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 		// Transform the data for easier consumption
 		const purchases = orders.flatMap((order) =>
-			order.orderItems.map((item) => ({
-				orderId: order.id,
-				orderNumber: order.orderNumber,
-				orderDate: order.createdAt,
-				deliveredAt: order.deliveredAt,
-				categoryName: item.category.name,
-				platform: item.productCategory || item.category.name,
-				quantity: item.quantity,
-					accounts: item.accounts.map((account) => ({
+			order.orderItems.map((item) => {
+				const deliveryConfig = getTierDeliveryConfig(item.category.metadata);
+				return {
+					orderId: order.id,
+					orderNumber: order.orderNumber,
+					orderDate: order.createdAt,
+					deliveredAt: order.deliveredAt,
+					categoryName: item.category.name,
+					platform: item.productCategory || item.category.name,
+					quantity: item.quantity,
+					accounts: getBuyerVisibleAccounts(order, item).map((account) => ({
 						id: account.id,
 						platform: account.platform,
 						linkUrl: account.linkUrl,
@@ -83,13 +90,15 @@ export const GET: RequestHandler = async ({ locals }) => {
 								: {},
 						twoFactorEnabled: account.twoFactorEnabled,
 						easyLoginEnabled: account.easyLoginEnabled,
-					followers: account.followers,
-					following: account.following,
-					postsCount: account.postsCount,
-					deliveredAt: account.deliveredAt,
-					deliveryNotes: account.deliveryNotes
-				}))
-			}))
+						followers: account.followers,
+						following: account.following,
+						postsCount: account.postsCount,
+						deliveredAt: account.deliveredAt,
+						deliveryNotes: account.deliveryNotes
+					})),
+					deliveryMode: deliveryConfig.mode
+				};
+			})
 		);
 
 		return json({ purchases });

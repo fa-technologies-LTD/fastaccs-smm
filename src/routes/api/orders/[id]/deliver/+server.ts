@@ -7,6 +7,7 @@ import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import type { Decimal } from '@prisma/client/runtime/library';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { getCanonicalCredentialEntries } from '$lib/helpers/credential-contract';
+import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 
 // Type definitions for email generation
 interface OrderForEmail {
@@ -57,7 +58,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const orderId = params.id;
 		const payload = (await request.json().catch(() => ({}))) as DeliveryPayload;
 		const requestedDeliveryMethod =
-			typeof payload.deliveryMethod === 'string' ? payload.deliveryMethod.trim().toLowerCase() : 'email';
+			typeof payload.deliveryMethod === 'string'
+				? payload.deliveryMethod.trim().toLowerCase()
+				: 'email';
 		if (!SUPPORTED_DELIVERY_METHODS.has(requestedDeliveryMethod)) {
 			return json({ error: 'Unsupported delivery method' }, { status: 400 });
 		}
@@ -69,18 +72,22 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			include: {
 				orderItems: {
 					include: {
-							accounts: {
-								where: {
-									status: { in: getAllocatedLikeAccountStatuses() }
-								}
+						accounts: {
+							where: {
+								status: { in: getAllocatedLikeAccountStatuses() }
 							}
 						}
+					}
 				}
 			}
 		});
 
 		if (!order) {
 			return json({ error: 'Order not found' }, { status: 404 });
+		}
+
+		if (!isOrderPaymentConfirmed(order)) {
+			return json({ error: 'Payment must be confirmed before delivery' }, { status: 400 });
 		}
 
 		if (order.status !== 'completed') {
@@ -119,14 +126,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		}
 
 		// Update order delivery status
-			await prisma.order.update({
-				where: { id: orderId },
-				data: {
-					deliveryMethod: requestedDeliveryMethod,
-					deliveryStatus: 'delivered',
-					deliveredAt: new Date()
-				}
-			});
+		await prisma.order.update({
+			where: { id: orderId },
+			data: {
+				deliveryMethod: requestedDeliveryMethod,
+				deliveryStatus: 'delivered',
+				deliveredAt: new Date()
+			}
+		});
 
 		// Update account status to delivered
 		const accountIds = order.orderItems.flatMap((item) => item.accounts.map((acc) => acc.id));
@@ -140,14 +147,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 		invalidateAdminStatsCache();
 
-			return json({
-				success: true,
-				message: 'Accounts successfully delivered to customer',
-				messageId: emailResult.messageId,
-				accountsDelivered: totalAllocated,
-				deliveryMethod: requestedDeliveryMethod,
-				deliveryFallback: fallbackToEmail ? 'email' : null
-			});
+		return json({
+			success: true,
+			message: 'Accounts successfully delivered to customer',
+			messageId: emailResult.messageId,
+			accountsDelivered: totalAllocated,
+			deliveryMethod: requestedDeliveryMethod,
+			deliveryFallback: fallbackToEmail ? 'email' : null
+		});
 	} catch (error) {
 		console.error('Database error:', error);
 		return json(
@@ -179,27 +186,27 @@ Thank you for your order with FastAccs! Your accounts are ready.
 		if (item.accounts.length > 0) {
 			content += `**${item.productName}** (${item.accounts.length} account${item.accounts.length > 1 ? 's' : ''})\n`;
 
-				item.accounts.forEach((account: AccountForEmail, accIndex: number) => {
-					content += `\nAccount ${accIndex + 1}:\n`;
-					const entryRecord = {
-						username: account.username,
-						password: account.password,
-						email: account.email,
-						emailPassword: account.emailPassword,
-						twoFa: account.twoFa,
-						linkUrl: account.linkUrl,
-						followers: account.followers,
-						ageMonths: account.ageMonths,
-						credentialExtras: account.credentialExtras
-					};
-					const entries = getCanonicalCredentialEntries(entryRecord).filter(
-						(entry) => entry.key !== 'password'
-					);
-					for (const entry of entries) {
-						content += `- ${entry.label}: ${entry.value}\n`;
-					}
-					content += `- Password: Available in your dashboard\n`;
-				});
+			item.accounts.forEach((account: AccountForEmail, accIndex: number) => {
+				content += `\nAccount ${accIndex + 1}:\n`;
+				const entryRecord = {
+					username: account.username,
+					password: account.password,
+					email: account.email,
+					emailPassword: account.emailPassword,
+					twoFa: account.twoFa,
+					linkUrl: account.linkUrl,
+					followers: account.followers,
+					ageMonths: account.ageMonths,
+					credentialExtras: account.credentialExtras
+				};
+				const entries = getCanonicalCredentialEntries(entryRecord).filter(
+					(entry) => entry.key !== 'password'
+				);
+				for (const entry of entries) {
+					content += `- ${entry.label}: ${entry.value}\n`;
+				}
+				content += `- Password: Available in your dashboard\n`;
+			});
 
 			content += `\n`;
 		}

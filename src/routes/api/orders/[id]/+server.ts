@@ -6,6 +6,7 @@ import { canViewRevenue, redactOrderFinancials } from '$lib/services/admin-reven
 import type { Prisma } from '@prisma/client';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { releaseOrderReservations } from '$lib/services/order-reservations';
+import { sanitizeBuyerOrderAccounts } from '$lib/helpers/buyer-order-visibility';
 
 const ALLOWED_PATCH_FIELDS = new Set([
 	'status',
@@ -177,7 +178,10 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 		let responseData: Record<string, unknown> =
 			isAdmin && !canViewRevenue(locals)
 				? (redactOrderFinancials(data) as Record<string, unknown>)
-				: (data as unknown as Record<string, unknown>);
+				: ((isAdmin ? data : sanitizeBuyerOrderAccounts(data)) as unknown as Record<
+						string,
+						unknown
+					>);
 
 		if (isAdmin) {
 			const notes = await prisma.adminAuditLog.findMany({
