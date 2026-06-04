@@ -279,6 +279,7 @@
 
 	function getCheckoutFingerprint(): string {
 		return JSON.stringify({
+			userId: user?.id || null,
 			items: cartItems.map((item) => ({
 				id: getCartLineKey(item),
 				tierId: item.tierId,
@@ -308,6 +309,16 @@
 		const key = crypto.randomUUID();
 		localStorage.setItem(CHECKOUT_SESSION_STORAGE_KEY, JSON.stringify({ fingerprint, key }));
 		return key;
+	}
+
+	function resetCheckoutSession(): void {
+		localStorage.removeItem(CHECKOUT_SESSION_STORAGE_KEY);
+	}
+
+	function isCheckoutSessionConflict(errorText: unknown): boolean {
+		return (
+			typeof errorText === 'string' && errorText.toLowerCase().includes('checkout session conflict')
+		);
 	}
 
 	function trackCheckoutCartView(): void {
@@ -359,27 +370,34 @@
 
 			const finalTotal = checkoutTotal;
 
-			// Create the order first
-			const orderResult = await createOrder({
-				email: user.email || '',
-				phone: user.phone || '',
-				items: cartItems.map((item) => ({
-					categoryId: item.tierId,
-					quantity: item.quantity,
-					price: item.tier.price,
-					exactAccountId: item.exactAccount?.accountId,
-					exactAccountLabel: item.exactAccount?.displayLabel
-				})),
-				totalAmount: finalTotal,
-				currency: 'NGN',
-				paymentMethod: 'monnify',
-				checkoutKey: getOrCreateCheckoutKey(),
-				affiliateCode: affiliateCode || undefined,
-				promotionCode: promoAppliedCode || undefined,
-				analytics: {
-					ga4ClientId: getGa4ClientId()
-				}
-			});
+			const createCheckoutOrder = () =>
+				createOrder({
+					email: user.email || '',
+					phone: user.phone || '',
+					items: cartItems.map((item) => ({
+						categoryId: item.tierId,
+						quantity: item.quantity,
+						price: item.tier.price,
+						exactAccountId: item.exactAccount?.accountId,
+						exactAccountLabel: item.exactAccount?.displayLabel
+					})),
+					totalAmount: finalTotal,
+					currency: 'NGN',
+					paymentMethod: 'monnify',
+					checkoutKey: getOrCreateCheckoutKey(),
+					affiliateCode: affiliateCode || undefined,
+					promotionCode: promoAppliedCode || undefined,
+					analytics: {
+						ga4ClientId: getGa4ClientId()
+					}
+				});
+
+			// A shared browser can retain another account's checkout key. Rotate it once and retry.
+			let orderResult = await createCheckoutOrder();
+			if (!orderResult.success && isCheckoutSessionConflict(orderResult.error)) {
+				resetCheckoutSession();
+				orderResult = await createCheckoutOrder();
+			}
 
 			if (!orderResult.success) {
 				if (isUnauthorizedApiError(orderResult.error)) {
