@@ -965,19 +965,24 @@
 		{@const PlatformIcon = getPlatformIcon(data.platform.slug)}
 		{@const platformMeta = getPlatformMetadata(data.platform.metadata)}
 
+		<section class="sticky top-16 z-30 bg-[var(--color-card)] py-1.5 shadow-sm">
+			<div class="mx-auto max-w-6xl px-4">
+				<Breadcrumb
+					compact
+					items={[
+						{ label: 'Platforms', href: '/platforms' },
+						{ label: data.platform.name, active: true }
+					]}
+				/>
+			</div>
+		</section>
+
 		<!-- Platform Header -->
 		<section
 			class={`py-4 text-white sm:py-8 ${platformMeta?.color ? '' : `bg-gradient-to-r ${getPlatformColor(data.platform.slug)}`}`}
 			style={getPlatformHeaderStyle(platformMeta)}
 		>
 			<div class="mx-auto max-w-6xl px-4">
-				<Breadcrumb
-					items={[
-						{ label: 'Platforms', href: '/platforms' },
-						{ label: data.platform.name, active: true }
-					]}
-				/>
-
 				<div class="mt-3 sm:hidden">
 					<div class="flex items-center gap-3">
 						<div class="rounded-full bg-white/18 p-2.5">
