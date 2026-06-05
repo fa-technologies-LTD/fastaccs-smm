@@ -5,6 +5,7 @@ const MONNIFY_API_KEY = env.MONNIFY_API_KEY || '';
 const MONNIFY_SECRET_KEY = env.MONNIFY_SECRET_KEY || '';
 const MONNIFY_BASE_URL = env.MONNIFY_BASE_URL || '';
 const MONNIFY_CONTRACT_CODE = env.MONNIFY_CONTRACT_CODE || '';
+const MONNIFY_CHECKOUT_PAYMENT_METHODS = ['CARD', 'ACCOUNT_TRANSFER'];
 
 // Token cache — re-used until 5 minutes before expiry
 let cachedToken: { value: string; expiresAt: number } | null = null;
@@ -334,6 +335,7 @@ export async function initializeTransaction(
 					currencyCode: 'NGN',
 					contractCode: MONNIFY_CONTRACT_CODE,
 					redirectUrl: params.redirectUrl,
+					paymentMethods: MONNIFY_CHECKOUT_PAYMENT_METHODS,
 					metaData: params.metaData
 				})
 			}
