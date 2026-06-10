@@ -1,6 +1,6 @@
 import { env } from '$env/dynamic/private';
 import { prisma } from '$lib/prisma';
-import { sendEmail } from '$lib/services/email';
+import { sendEmail, sendMarketingEmail, sendWelcomeEmailIfNeeded } from '$lib/services/email';
 
 const ONBOARDING_STEP_A_DELAY_HOURS = 24;
 const ONBOARDING_STEP_B_DELAY_HOURS = 48;
@@ -15,7 +15,7 @@ function getBaseUrl(): string {
 	if (candidate) {
 		return candidate.replace(/\/+$/, '');
 	}
-	return 'http://localhost:5173';
+	return 'https://smm.fastaccs.com';
 }
 
 function getFirstName(fullName: string | null | undefined, fallbackEmail: string): string {
@@ -26,7 +26,9 @@ function getFirstName(fullName: string | null | undefined, fallbackEmail: string
 }
 
 function normalizeEmail(input: string | null | undefined): string {
-	return String(input || '').trim().toLowerCase();
+	return String(input || '')
+		.trim()
+		.toLowerCase();
 }
 
 function getUserAfterCursorWhere(cursor: { registeredAt: Date; id: string } | null) {
@@ -66,46 +68,25 @@ function toOrderLabel(orderNumber: string): string {
 	return `FA-${normalizedOrderSuffix}`;
 }
 
-function getOnboardingStepAContent(baseUrl: string): { subject: string; body: string } {
+function getOnboardingStepAContent(): { subject: string; body: string } {
 	return {
-		subject: 'Welcome to FastAccs: Start your first order',
-		body: `Welcome to FastAccs.
+		subject: 'Ready for your first Fast Accounts order?',
+		body: `Your Fast Accounts account is ready whenever you are.
 
-What you can do here:
-- Buy social media accounts on demand for all your needs
-- Complete secure checkout, transactions are safe
-- Track orders from your dashboard
+Browse available accounts, choose what fits your needs, and complete checkout in a few simple steps.
 
-Quick first-order flow:
-- Open Platforms: ${baseUrl}/platforms
-- Pick a tier and quantity
-- Checkout and complete payment
-- View delivery/status from your order page
-
-Beginner-safe way to start:
-- Start with lower-cost tiers first
-- Place small test quantities before scaling
-- Use each tier's login guide before purchase
-
-**Important:** If this email lands in Spam or Promotions, mark it as Not Spam and move it to Primary.`
+Your purchases and delivery status will always be available from your dashboard.`
 	};
 }
 
-function getOnboardingStepBContent(baseUrl: string): { subject: string; body: string } {
+function getOnboardingStepBContent(): { subject: string; body: string } {
 	return {
-		subject: 'Need help? FastAccs guides and support',
-		body: `Need help getting results faster? We have you covered.
+		subject: 'Need help choosing the right account?',
+		body: `Not sure which account is right for you?
 
-Useful links:
-- Support and FAQ: ${baseUrl}/support
-- How it works: ${baseUrl}/how-it-works
-- Tier catalog (includes guide/video links where available): ${baseUrl}/platforms
+Our platform and account pages show what is available, how delivery works, and the important details to check before buying.
 
-If you ever get stuck, reach support directly:
-- WhatsApp: https://wa.link/fast_accounts
-- Email: support@fastaccs.com
-
-**Important:** If this email lands in Spam or Promotions, mark it as Not Spam and move it to Primary.`
+If you still need help, message us and we will point you in the right direction.`
 	};
 }
 
@@ -129,6 +110,76 @@ interface OnboardingUserRow {
 	email: string | null;
 	fullName: string | null;
 	registeredAt: Date;
+}
+
+export async function runWelcomeRecovery(params?: {
+	limit?: number;
+}): Promise<LifecycleEmailRunSummary> {
+	const limit = Math.min(Math.max(Number(params?.limit || DEFAULT_BATCH_LIMIT), 1), 1000);
+	const users = await prisma.user.findMany({
+		where: {
+			isActive: true,
+			emailVerified: true,
+			email: { not: null },
+			userType: { not: 'ADMIN' },
+			emailNotifications: {
+				none: {
+					notificationType: 'welcome',
+					status: 'sent'
+				}
+			}
+		},
+		select: {
+			id: true,
+			email: true,
+			fullName: true
+		},
+		orderBy: { registeredAt: 'asc' },
+		take: limit
+	});
+
+	let queued = 0;
+	let sent = 0;
+	let skipped = 0;
+	let failed = 0;
+	for (const user of users) {
+		const email = normalizeEmail(user.email);
+		if (!email) {
+			skipped += 1;
+			continue;
+		}
+
+		queued += 1;
+		try {
+			const didSend = await sendWelcomeEmailIfNeeded({
+				userId: user.id,
+				email,
+				firstName: getFirstName(user.fullName, email)
+			});
+			if (didSend) sent += 1;
+			else skipped += 1;
+		} catch {
+			failed += 1;
+		}
+	}
+
+	return { queued, sent, skipped, failed };
+}
+
+export async function runOnboardingAutomation(params?: { limit?: number }): Promise<{
+	processed: number;
+	failed: number;
+	welcome: LifecycleEmailRunSummary;
+	onboarding: LifecycleEmailRunSummary;
+}> {
+	const welcome = await runWelcomeRecovery(params);
+	const onboarding = await runOnboardingSequence(params);
+	return {
+		processed: welcome.queued + onboarding.queued,
+		failed: welcome.failed + onboarding.failed,
+		welcome,
+		onboarding
+	};
 }
 
 interface AbandonedOrderDispatchCandidate {
@@ -162,10 +213,13 @@ export async function runOnboardingSequence(params?: {
 	const batchLimit = Math.min(Math.max(Number(params?.limit || DEFAULT_BATCH_LIMIT), 1), 1000);
 	const stepAReadyAt = new Date(now.getTime() - ONBOARDING_STEP_A_DELAY_HOURS * 60 * 60 * 1000);
 	const stepBReadyAt = new Date(now.getTime() - ONBOARDING_STEP_B_DELAY_HOURS * 60 * 60 * 1000);
+	const recentWelcomeThreshold = new Date(
+		now.getTime() - ONBOARDING_STEP_A_DELAY_HOURS * 60 * 60 * 1000
+	);
 
 	const baseUrl = getBaseUrl();
-	const stepA = getOnboardingStepAContent(baseUrl);
-	const stepB = getOnboardingStepBContent(baseUrl);
+	const stepA = getOnboardingStepAContent();
+	const stepB = getOnboardingStepBContent();
 	const scanChunk = Math.min(1000, Math.max(batchLimit * SCAN_CHUNK_MULTIPLIER, batchLimit));
 	const maxScanRows = Math.max(scanChunk, batchLimit * MAX_SCAN_FACTOR);
 
@@ -185,6 +239,13 @@ export async function runOnboardingSequence(params?: {
 				email: { not: null },
 				userType: { not: 'ADMIN' },
 				registeredAt: { lte: stepAReadyAt },
+				emailNotifications: {
+					none: {
+						notificationType: 'welcome',
+						status: 'sent',
+						sentAt: { gte: recentWelcomeThreshold }
+					}
+				},
 				...getUserAfterCursorWhere(userCursor)
 			},
 			select: {
@@ -231,10 +292,25 @@ export async function runOnboardingSequence(params?: {
 			if (row.referenceId) set.add(row.referenceId);
 			sentByUser.set(row.userId, set);
 		}
+		const paidOrders = await prisma.order.findMany({
+			where: {
+				userId: { in: userIds },
+				OR: [{ status: 'paid' }, { status: 'completed' }, { paymentStatus: 'paid' }]
+			},
+			select: { userId: true },
+			distinct: ['userId']
+		});
+		const paidUserIds = new Set(
+			paidOrders.map((order) => order.userId).filter((userId): userId is string => Boolean(userId))
+		);
 
 		for (const user of users) {
 			const email = normalizeEmail(user.email);
 			if (!email) {
+				skipped += 1;
+				continue;
+			}
+			if (paidUserIds.has(user.id)) {
 				skipped += 1;
 				continue;
 			}
@@ -274,21 +350,24 @@ export async function runOnboardingSequence(params?: {
 	for (const candidate of dispatchQueue) {
 		const message = candidate.sendingStepA ? stepA : stepB;
 		queued += 1;
-		const result = await sendEmail({
+		const result = await sendMarketingEmail({
 			to: candidate.email,
 			subject: message.subject,
 			body: `Hi ${candidate.firstName},
 
 ${message.body}`,
-			ctaText: candidate.sendingStepA ? 'Browse Platforms' : 'Open Support Center',
+			ctaText: candidate.sendingStepA ? 'See available accounts' : 'Get help',
 			ctaUrl: candidate.sendingStepA ? `${baseUrl}/platforms` : `${baseUrl}/support`,
 			userId: candidate.userId,
 			notificationType: 'onboarding_step',
-			referenceId: candidate.referenceId
+			referenceId: candidate.referenceId,
+			campaignKey: candidate.referenceId
 		});
 
 		if (result.success) {
 			sent += 1;
+		} else if (result.suppressed) {
+			skipped += 1;
 		} else {
 			failed += 1;
 		}
@@ -369,7 +448,8 @@ export async function runAbandonedOrderReminder(params?: {
 			existingReminderSends
 				.map((row) => row.referenceId)
 				.filter(
-					(referenceId): referenceId is string => typeof referenceId === 'string' && Boolean(referenceId)
+					(referenceId): referenceId is string =>
+						typeof referenceId === 'string' && Boolean(referenceId)
 				)
 		);
 

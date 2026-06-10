@@ -1,5 +1,5 @@
 import { prisma } from '$lib/prisma';
-import { sendEmail } from './email';
+import { sendMarketingEmail } from './email';
 import { env } from '$env/dynamic/private';
 
 interface RestockTierInfo {
@@ -34,7 +34,10 @@ async function getTierInfo(tierId: string): Promise<RestockTierInfo | null> {
 
 	if (!tier) return null;
 
-	const metadata = (tier.metadata || {}) as { pricing?: { base_price?: number | string }; price?: number | string };
+	const metadata = (tier.metadata || {}) as {
+		pricing?: { base_price?: number | string };
+		price?: number | string;
+	};
 	const price = Number(metadata.pricing?.base_price || metadata.price || 0);
 
 	return {
@@ -61,7 +64,11 @@ export async function triggerRestockNotificationsForTier(tierId: string): Promis
 
 	if (subscribers.length === 0) return;
 
-	const baseUrl = (env.PUBLIC_BASE_URL || process.env.PUBLIC_BASE_URL || 'http://localhost:5173').replace(/\/+$/, '');
+	const baseUrl = (
+		env.PUBLIC_BASE_URL ||
+		process.env.PUBLIC_BASE_URL ||
+		'https://smm.fastaccs.com'
+	).replace(/\/+$/, '');
 	const tierUrl = `${baseUrl}/platforms/${tierInfo.platformSlug}/tiers/${tierInfo.slug}`;
 	const urgencyNote =
 		tierInfo.availableCount <= 5
@@ -69,20 +76,18 @@ export async function triggerRestockNotificationsForTier(tierId: string): Promis
 			: `${tierInfo.availableCount} accounts are currently available.`;
 
 	for (const subscriber of subscribers) {
-		const emailResult = await sendEmail({
+		const emailResult = await sendMarketingEmail({
 			to: subscriber.email,
-			subject: `${tierInfo.name} accounts are back in stock!`,
-			body: `${tierInfo.platformName} - ${tierInfo.name} is back in stock.
-
-Available now: ${tierInfo.availableCount}
-Price per account: ₦${tierInfo.price.toLocaleString('en-US')}
+			subject: `${tierInfo.name} is back in stock`,
+			body: `${tierInfo.name} on ${tierInfo.platformName} is available again.
 
 ${urgencyNote}`,
-			ctaText: 'Get yours before they sell out',
+			ctaText: 'See available accounts',
 			ctaUrl: tierUrl,
 			userId: subscriber.userId,
 			notificationType: 'restock_alert',
-			referenceId: tierInfo.id
+			referenceId: tierInfo.id,
+			campaignKey: `restock:${subscriber.id}`
 		});
 
 		if (emailResult.success) {

@@ -1,11 +1,35 @@
 {
 	"crons": [
 		{
-			"path": "/api/internal/cron/scheduler/daily",
-			"schedule": "15 1 * * *"
+			"path": "/api/internal/cron/payments-reconcile",
+			"schedule": "*/5 * * * *"
 		},
 		{
-			"path": "/api/internal/cron/scheduler/weekly",
+			"path": "/api/internal/cron/exact-preview-thumbnails",
+			"schedule": "7 * * * *"
+		},
+		{
+			"path": "/api/internal/cron/low-stock-alerts",
+			"schedule": "17 * * * *"
+		},
+		{
+			"path": "/api/internal/cron/automation-health",
+			"schedule": "27 * * * *"
+		},
+		{
+			"path": "/api/internal/cron/onboarding",
+			"schedule": "35 */4 * * *"
+		},
+		{
+			"path": "/api/internal/cron/affiliate-lifecycle",
+			"schedule": "50 */4 * * *"
+		},
+		{
+			"path": "/api/internal/cron/winback",
+			"schedule": "20 9 * * *"
+		},
+		{
+			"path": "/api/internal/cron/weekly-business-digest",
 			"schedule": "0 8 * * 0"
 		}
 	]

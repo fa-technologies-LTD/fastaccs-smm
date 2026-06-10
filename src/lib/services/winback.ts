@@ -1,16 +1,21 @@
 import { env } from '$env/dynamic/private';
 import { prisma } from '$lib/prisma';
-import { sendEmail } from './email';
+import { sendMarketingEmail } from './email';
 
-const WINBACK_DAYS = Math.max(Number(env.WINBACK_DAYS_THRESHOLD || 30), 1);
-const WINBACK_COOLDOWN_DAYS = 30;
+const WINBACK_DAYS = Math.max(Number(env.WINBACK_DAYS_THRESHOLD || 60), 1);
+const WINBACK_COOLDOWN_DAYS = 60;
 
 function getBaseUrl(): string {
 	const candidate = (env.PUBLIC_BASE_URL || process.env.PUBLIC_BASE_URL || '').trim();
-	return candidate ? candidate.replace(/\/+$/, '') : 'http://localhost:5173';
+	return candidate ? candidate.replace(/\/+$/, '') : 'https://smm.fastaccs.com';
 }
 
-function getWATDateParts(date = new Date()): { year: number; month: number; day: number; hour: number } {
+function getWATDateParts(date = new Date()): {
+	year: number;
+	month: number;
+	day: number;
+	hour: number;
+} {
 	const formatter = new Intl.DateTimeFormat('en-GB', {
 		timeZone: 'Africa/Lagos',
 		year: 'numeric',
@@ -71,26 +76,38 @@ async function getAvailablePlatformNames(limit = 3): Promise<string[]> {
 	return Array.from(names);
 }
 
-export async function runWinBackCampaign(): Promise<{ queued: number; sent: number; skipped: number }> {
+export async function runWinBackCampaign(): Promise<{
+	queued: number;
+	sent: number;
+	skipped: number;
+}> {
+	const inactiveThreshold = new Date(Date.now() - WINBACK_DAYS * 24 * 60 * 60 * 1000);
 	const users = await prisma.user.findMany({
 		where: {
 			emailVerified: true,
 			email: { not: null },
-			isActive: true
+			isActive: true,
+			OR: [
+				{ lastSeenAt: { lte: inactiveThreshold } },
+				{ lastSeenAt: null, lastLogin: { lte: inactiveThreshold } },
+				{ lastSeenAt: null, lastLogin: null, registeredAt: { lte: inactiveThreshold } }
+			]
 		},
 		select: {
 			id: true,
 			email: true,
 			fullName: true
 		},
+		orderBy: [{ lastSeenAt: 'asc' }, { registeredAt: 'asc' }],
 		take: 1000
 	});
 
-	const inactiveThreshold = new Date(Date.now() - WINBACK_DAYS * 24 * 60 * 60 * 1000);
 	const recentWinbackThreshold = new Date(Date.now() - WINBACK_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
 	const platforms = await getAvailablePlatformNames();
 	const platformLine =
-		platforms.length > 0 ? `Currently in stock: ${platforms.join(', ')}.` : 'Fresh inventory is available now.';
+		platforms.length > 0
+			? `Currently in stock: ${platforms.join(', ')}.`
+			: 'Fresh inventory is available now.';
 
 	let queued = 0;
 	let sent = 0;
@@ -98,17 +115,6 @@ export async function runWinBackCampaign(): Promise<{ queued: number; sent: numb
 
 	for (const user of users) {
 		if (!user.email) {
-			skipped += 1;
-			continue;
-		}
-
-		const lastOrder = await prisma.order.findFirst({
-			where: { userId: user.id },
-			orderBy: { createdAt: 'desc' },
-			select: { createdAt: true }
-		});
-
-		if (!lastOrder || lastOrder.createdAt > inactiveThreshold) {
 			skipped += 1;
 			continue;
 		}
@@ -130,24 +136,28 @@ export async function runWinBackCampaign(): Promise<{ queued: number; sent: numb
 
 		queued += 1;
 		const firstName = getFirstName(user.fullName, user.email);
-		const result = await sendEmail({
+		const result = await sendMarketingEmail({
 			to: user.email,
-			subject: "We've got fresh stock waiting for you",
+			subject: 'See what is new on Fast Accounts',
 			body: `Hi ${firstName},
 
-We've added fresh inventory since your last order.
+It has been a while since your last Fast Accounts visit.
 
-${platformLine}
+We have added fresh stock, account options, and boosting services since then.
 
-Take a quick look and grab what fits your goals.`,
-			ctaText: "See what's new",
+${platformLine}`,
+			ctaText: 'See what is available',
 			ctaUrl: `${getBaseUrl()}/platforms`,
 			userId: user.id,
-			notificationType: 'win_back'
+			notificationType: 'win_back',
+			referenceId: `winback:${user.id}`,
+			campaignKey: `winback:${user.id}:${Math.floor(Date.now() / (WINBACK_COOLDOWN_DAYS * 24 * 60 * 60 * 1000))}`
 		});
 
 		if (result.success) {
 			sent += 1;
+		} else {
+			skipped += 1;
 		}
 	}
 

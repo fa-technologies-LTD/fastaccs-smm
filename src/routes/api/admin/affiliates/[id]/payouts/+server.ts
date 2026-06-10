@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import type { Prisma } from '@prisma/client';
+import { sendAffiliatePayoutStatusEmailIfNeeded } from '$lib/services/affiliate-payout-email';
 
 export const POST: RequestHandler = async ({ locals, params, request }) => {
 	if (!locals.user || locals.user.userType !== 'ADMIN') {
@@ -16,7 +17,9 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 
 	try {
 		const body = await request.json();
-		const action = String(body?.action || '').trim().toLowerCase();
+		const action = String(body?.action || '')
+			.trim()
+			.toLowerCase();
 		const transactionId = String(body?.transactionId || '').trim();
 		const notes = String(body?.notes || '').trim();
 
@@ -88,6 +91,12 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 				amount: true,
 				updatedAt: true
 			}
+		});
+		await sendAffiliatePayoutStatusEmailIfNeeded({
+			payoutTransactionId: updated.id,
+			expectedStatus: updated.status
+		}).catch((emailError) => {
+			console.error('Failed to send affiliate payout status email:', emailError);
 		});
 
 		return json({

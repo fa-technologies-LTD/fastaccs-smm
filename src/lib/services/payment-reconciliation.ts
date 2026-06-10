@@ -40,6 +40,10 @@ interface ReconcileSummary {
 	dryRun: boolean;
 }
 
+interface ReconcileBacklogSummary extends ReconcileSummary {
+	rounds: number;
+}
+
 const DEFAULT_LIMIT = 100;
 const DEFAULT_STALE_MINUTES = 10;
 const DEFAULT_EXPIRE_MINUTES = getPendingPaymentExpireMinutes();
@@ -226,6 +230,45 @@ export async function reconcilePendingPayments(
 		}
 
 		summary.keptPending += 1;
+	}
+
+	return summary;
+}
+
+export async function reconcilePendingPaymentBacklog(
+	options: ReconcileOptions & { maxRounds?: number } = {}
+): Promise<ReconcileBacklogSummary> {
+	const batchSize = Math.min(Math.max(Number(options.limit || 50), 1), 500);
+	const maxRounds = Math.min(Math.max(Number(options.maxRounds || 3), 1), 10);
+	const summary: ReconcileBacklogSummary = {
+		checked: 0,
+		paid: 0,
+		completed: 0,
+		failed: 0,
+		cancelled: 0,
+		keptPending: 0,
+		skipped: 0,
+		dryRun: options.dryRun === true,
+		rounds: 0
+	};
+
+	for (let round = 0; round < maxRounds; round += 1) {
+		const result = await reconcilePendingPayments({
+			...options,
+			limit: batchSize
+		});
+		summary.rounds += 1;
+		summary.checked += result.checked;
+		summary.paid += result.paid;
+		summary.completed += result.completed;
+		summary.failed += result.failed;
+		summary.cancelled += result.cancelled;
+		summary.keptPending += result.keptPending;
+		summary.skipped += result.skipped;
+
+		if (result.checked < batchSize || result.checked === 0 || result.skipped === result.checked) {
+			break;
+		}
 	}
 
 	return summary;

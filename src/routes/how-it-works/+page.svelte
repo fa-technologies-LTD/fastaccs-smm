@@ -601,9 +601,7 @@
 							<div class="space-y-2 text-sm" style="color: var(--text-muted);">
 								<div class="flex items-center justify-between">
 									<span>Earnings Model:</span>
-									<span class="font-bold" style="color: var(--status-success);"
-										>Store Credit</span
-									>
+									<span class="font-bold" style="color: var(--status-success);">Store Credit</span>
 								</div>
 								<div class="flex items-center justify-between">
 									<span>Status:</span>
@@ -722,6 +720,13 @@
 							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
 								Track referred users, successful referred orders, and withdrawable Store Credit
 								activity in your affiliate dashboard.
+							</p>
+							<p
+								class="mb-4 text-sm"
+								style="color: var(--text-muted); font-family: var(--font-body);"
+							>
+								Store Credit is real, withdrawable cash once payout requirements are met. The
+								affiliate program is currently available only to customers in Nigeria.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2" style="color: var(--text);">
@@ -915,9 +920,8 @@
 					</summary>
 					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
 						When you become an affiliate, you get a unique code and referral link. When someone uses
-						your code at checkout, they get referral discounts and you earn Store Credit on
-						eligible successful referred orders. Earnings are tracked automatically in your
-						dashboard.
+						your code at checkout, they get referral discounts and you earn Store Credit on eligible
+						successful referred orders. Earnings are tracked automatically in your dashboard.
 					</p>
 				</details>
 

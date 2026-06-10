@@ -1,6 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Mail, Send, Users, Eye, Loader2, RefreshCcw, CheckCircle2, AlertTriangle } from '$lib/icons';
+	import {
+		Mail,
+		Send,
+		Users,
+		Eye,
+		Loader2,
+		RefreshCcw,
+		CheckCircle2,
+		AlertTriangle
+	} from '$lib/icons';
 	import { showError, showSuccess, showWarning } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 
@@ -43,6 +52,7 @@
 		total: number;
 		sent: number;
 		failed: number;
+		suppressed: number;
 		pending: number;
 		status: 'in_progress' | 'completed' | 'failed';
 		recipients: Array<{
@@ -159,7 +169,7 @@
 	let previewOpen = $state(false);
 	let sending = $state(false);
 	let activeBroadcastId = $state<string | null>(null);
-	let sendProgress = $state({ total: 0, sent: 0, failed: 0, pending: 0 });
+	let sendProgress = $state({ total: 0, sent: 0, failed: 0, suppressed: 0, pending: 0 });
 
 	let historyLoading = $state(false);
 	let history = $state<BroadcastHistoryItem[]>(data.history || []);
@@ -263,7 +273,10 @@
 			countLoading = false;
 			return;
 		}
-		if (currentAudience === 'platform_tier_buyers' && (currentPlatformIds.length === 0 || currentTierIds.length === 0)) {
+		if (
+			currentAudience === 'platform_tier_buyers' &&
+			(currentPlatformIds.length === 0 || currentTierIds.length === 0)
+		) {
 			recipientCount = 0;
 			countLoading = false;
 			return;
@@ -322,7 +335,9 @@
 	async function loadBroadcastDetails(broadcastId: string): Promise<void> {
 		detailsLoading = true;
 		try {
-			const response = await fetch(`/api/admin/broadcast/${encodeURIComponent(broadcastId)}?limit=250`);
+			const response = await fetch(
+				`/api/admin/broadcast/${encodeURIComponent(broadcastId)}?limit=250`
+			);
 			const result = await response.json();
 			if (!response.ok || !result.success) {
 				showError('Broadcast details', result.error || 'Failed to load broadcast details.');
@@ -350,9 +365,12 @@
 	): Promise<void> {
 		let done = false;
 		while (!done && sending) {
-			const response = await fetch(`/api/admin/broadcast/${encodeURIComponent(broadcastId)}/process`, {
-				method: 'POST'
-			});
+			const response = await fetch(
+				`/api/admin/broadcast/${encodeURIComponent(broadcastId)}/process`,
+				{
+					method: 'POST'
+				}
+			);
 			const result = await response.json();
 			if (!response.ok || !result.success) {
 				throw new Error(result.error || 'Failed while sending broadcast');
@@ -363,6 +381,7 @@
 				total: Number(progress?.total || sendProgress.total),
 				sent: Number(progress?.sent || 0),
 				failed: Number(progress?.failed || 0),
+				suppressed: Number(progress?.suppressed || 0),
 				pending: Number(progress?.pending || 0)
 			};
 
@@ -394,7 +413,10 @@
 			showWarning('Select platforms', 'Choose at least one platform for this audience.');
 			return;
 		}
-		if (audience === 'platform_tier_buyers' && (selectedPlatformIds.length === 0 || selectedTierIds.length === 0)) {
+		if (
+			audience === 'platform_tier_buyers' &&
+			(selectedPlatformIds.length === 0 || selectedTierIds.length === 0)
+		) {
 			showWarning('Select filters', 'Choose at least one platform and one tier for this audience.');
 			return;
 		}
@@ -437,6 +459,7 @@
 				total: Number(result.data?.total || recipientCount),
 				sent: 0,
 				failed: 0,
+				suppressed: 0,
 				pending: Number(result.data?.total || recipientCount)
 			};
 
@@ -472,6 +495,7 @@
 			total: item.total,
 			sent: item.sent,
 			failed: item.failed,
+			suppressed: item.suppressed,
 			pending: item.pending
 		};
 
@@ -521,16 +545,16 @@
 		</button>
 	</div>
 
-	<div
-		class="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr,0.8fr]"
-	>
+	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr,0.8fr]">
 		<section
 			class="space-y-5 rounded-2xl p-5"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
 			<div>
-				<label for="broadcast-subject" class="mb-2 block text-sm font-semibold" style="color: var(--text);"
-					>Subject</label
+				<label
+					for="broadcast-subject"
+					class="mb-2 block text-sm font-semibold"
+					style="color: var(--text);">Subject</label
 				>
 				<input
 					id="broadcast-subject"
@@ -543,8 +567,10 @@
 			</div>
 
 			<div>
-				<label for="broadcast-body" class="mb-2 block text-sm font-semibold" style="color: var(--text);"
-					>Message Body</label
+				<label
+					for="broadcast-body"
+					class="mb-2 block text-sm font-semibold"
+					style="color: var(--text);">Message Body</label
 				>
 				<textarea
 					id="broadcast-body"
@@ -561,8 +587,15 @@
 
 			<div>
 				<h2 class="mb-2 text-sm font-semibold" style="color: var(--text);">Audience</h2>
-				<div class="space-y-2 rounded-lg p-3" style="border: 1px solid var(--border); background: var(--bg);">
-					<label for="broadcast-audience" class="block text-xs font-semibold uppercase tracking-wide" style="color: var(--text-dim);">
+				<div
+					class="space-y-2 rounded-lg p-3"
+					style="border: 1px solid var(--border); background: var(--bg);"
+				>
+					<label
+						for="broadcast-audience"
+						class="block text-xs font-semibold tracking-wide uppercase"
+						style="color: var(--text-dim);"
+					>
 						Select audience
 					</label>
 					<select
@@ -592,12 +625,18 @@
 			{#if audience === 'specific_platform_buyers' || audience === 'platform_tier_buyers'}
 				<div>
 					<h3 class="mb-2 text-sm font-semibold" style="color: var(--text);">Select platforms</h3>
-					<div class="max-h-44 space-y-2 overflow-auto rounded-lg p-3" style="background: var(--bg); border: 1px solid var(--border);">
+					<div
+						class="max-h-44 space-y-2 overflow-auto rounded-lg p-3"
+						style="background: var(--bg); border: 1px solid var(--border);"
+					>
 						{#if data.platforms.length === 0}
 							<p class="text-sm" style="color: var(--text-muted);">No active platforms found.</p>
 						{:else}
 							{#each data.platforms as platform}
-								<label class="flex cursor-pointer items-center gap-2 text-sm" style="color: var(--text);">
+								<label
+									class="flex cursor-pointer items-center gap-2 text-sm"
+									style="color: var(--text);"
+								>
 									<input
 										type="checkbox"
 										checked={isPlatformSelected(platform.id)}
@@ -614,14 +653,20 @@
 			{#if audience === 'platform_tier_buyers'}
 				<div>
 					<h3 class="mb-2 text-sm font-semibold" style="color: var(--text);">Select tiers</h3>
-					<div class="max-h-44 space-y-2 overflow-auto rounded-lg p-3" style="background: var(--bg); border: 1px solid var(--border);">
+					<div
+						class="max-h-44 space-y-2 overflow-auto rounded-lg p-3"
+						style="background: var(--bg); border: 1px solid var(--border);"
+					>
 						{#if getVisibleTiers().length === 0}
 							<p class="text-sm" style="color: var(--text-muted);">
 								No active tiers found for the selected platform(s).
 							</p>
 						{:else}
 							{#each getVisibleTiers() as tier}
-								<label class="flex cursor-pointer items-center gap-2 text-sm" style="color: var(--text);">
+								<label
+									class="flex cursor-pointer items-center gap-2 text-sm"
+									style="color: var(--text);"
+								>
 									<input
 										type="checkbox"
 										checked={isTierSelected(tier.id)}
@@ -635,7 +680,10 @@
 				</div>
 			{/if}
 
-			<div class="rounded-lg px-4 py-3" style="background: var(--bg); border: 1px solid var(--border);">
+			<div
+				class="rounded-lg px-4 py-3"
+				style="background: var(--bg); border: 1px solid var(--border);"
+			>
 				<div class="flex items-center justify-between gap-3">
 					<div class="inline-flex items-center gap-2 text-sm" style="color: var(--text-muted);">
 						<Users class="h-4 w-4" />
@@ -680,20 +728,31 @@
 			</div>
 
 			{#if sending && sendProgress.total > 0}
-				<div class="space-y-2 rounded-lg p-3" style="background: var(--bg); border: 1px solid var(--border);">
+				<div
+					class="space-y-2 rounded-lg p-3"
+					style="background: var(--bg); border: 1px solid var(--border);"
+				>
 					<div class="flex items-center justify-between text-sm" style="color: var(--text-muted);">
 						<span>Sending progress</span>
-						<span>{sendProgress.sent + sendProgress.failed}/{sendProgress.total}</span>
+						<span
+							>{sendProgress.sent +
+								sendProgress.failed +
+								sendProgress.suppressed}/{sendProgress.total}</span
+						>
 					</div>
-					<div class="h-2 w-full overflow-hidden rounded-full" style="background: var(--bg-elev-2);">
+					<div
+						class="h-2 w-full overflow-hidden rounded-full"
+						style="background: var(--bg-elev-2);"
+					>
 						<div
 							class="h-full"
-							style={`width: ${Math.min(((sendProgress.sent + sendProgress.failed) / sendProgress.total) * 100, 100)}%; background: var(--btn-primary-gradient);`}
+							style={`width: ${Math.min(((sendProgress.sent + sendProgress.failed + sendProgress.suppressed) / sendProgress.total) * 100, 100)}%; background: var(--btn-primary-gradient);`}
 						></div>
 					</div>
 					<div class="flex items-center gap-4 text-xs" style="color: var(--text-dim);">
 						<span>Sent: {sendProgress.sent}</span>
 						<span>Failed: {sendProgress.failed}</span>
+						<span>Suppressed: {sendProgress.suppressed}</span>
 						<span>Pending: {sendProgress.pending}</span>
 					</div>
 				</div>
@@ -702,15 +761,23 @@
 
 		<section class="space-y-5">
 			{#if previewOpen}
-				<div class="rounded-2xl p-5" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
-					<div class="mb-3 inline-flex items-center gap-2 text-sm font-semibold" style="color: var(--text);">
+				<div
+					class="rounded-2xl p-5"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
+					<div
+						class="mb-3 inline-flex items-center gap-2 text-sm font-semibold"
+						style="color: var(--text);"
+					>
 						<Mail class="h-4 w-4" />
 						Template Preview
 					</div>
 					<div class="rounded-xl p-4" style="background: #141414; border: 1px solid #232323;">
 						<p class="text-sm font-bold" style="color: #ffffff;">FAST ACCOUNTS</p>
 						<div class="my-3 h-px" style="background: #232323;"></div>
-						<h3 class="text-sm font-semibold" style="color: #ffffff;">{subject || '(No subject yet)'}</h3>
+						<h3 class="text-sm font-semibold" style="color: #ffffff;">
+							{subject || '(No subject yet)'}
+						</h3>
 						<div class="mt-2 space-y-3 text-sm" style="color: #cccccc;">
 							{#if messageBody.trim()}
 								{#each renderPreviewParagraphs(messageBody) as paragraph}
@@ -724,7 +791,10 @@
 				</div>
 			{/if}
 
-			<div class="rounded-2xl p-5" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
+			<div
+				class="rounded-2xl p-5"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
 				<div class="mb-3 flex items-center justify-between gap-3">
 					<h2 class="text-base font-semibold" style="color: var(--text);">Broadcast History</h2>
 					{#if historyLoading}
@@ -737,19 +807,30 @@
 						<p class="text-sm" style="color: var(--text-muted);">No broadcast history yet.</p>
 					{:else}
 						{#each history as item}
-							<div class="rounded-lg p-3" style="border: 1px solid var(--border); background: var(--bg);">
+							<div
+								class="rounded-lg p-3"
+								style="border: 1px solid var(--border); background: var(--bg);"
+							>
 								<div class="flex items-start justify-between gap-3">
 									<div>
 										<p class="text-sm font-semibold" style="color: var(--text);">{item.subject}</p>
-										<p class="mt-0.5 text-xs" style="color: var(--text-muted);">{item.audienceLabel}</p>
-										<p class="mt-1 text-xs" style="color: var(--text-dim);">{formatDate(item.createdAt)}</p>
+										<p class="mt-0.5 text-xs" style="color: var(--text-muted);">
+											{item.audienceLabel}
+										</p>
+										<p class="mt-1 text-xs" style="color: var(--text-dim);">
+											{formatDate(item.createdAt)}
+										</p>
 									</div>
-									<span class="rounded-full px-2 py-1 text-[11px] font-semibold" style={getHistoryStatusStyle(item)}>
+									<span
+										class="rounded-full px-2 py-1 text-[11px] font-semibold"
+										style={getHistoryStatusStyle(item)}
+									>
 										{getHistoryStatusLabel(item)}
 									</span>
 								</div>
 								<div class="mt-2 text-xs" style="color: var(--text-muted);">
-									Sent: {item.sent}/{item.total} · Failed: {item.failed} · Pending: {item.pending}
+									Sent: {item.sent}/{item.total} · Suppressed: {item.suppressed} · Failed: {item.failed}
+									· Pending: {item.pending}
 								</div>
 								<div class="mt-3 flex flex-wrap gap-2">
 									<button
@@ -780,7 +861,10 @@
 		</section>
 	</div>
 
-	<section class="rounded-2xl p-5" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
+	<section
+		class="rounded-2xl p-5"
+		style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+	>
 		<div class="mb-3 flex items-center gap-2" style="color: var(--text);">
 			<CheckCircle2 class="h-4 w-4" />
 			<h2 class="text-base font-semibold">Broadcast Details</h2>
@@ -795,32 +879,65 @@
 			<div class="space-y-4">
 				<div class="rounded-lg p-3" style="background: var(--bg); border: 1px solid var(--border);">
 					<p class="text-sm font-semibold" style="color: var(--text);">{selectedDetails.subject}</p>
-					<p class="mt-1 text-xs" style="color: var(--text-muted);">{selectedDetails.audienceLabel}</p>
-					<p class="mt-1 text-xs" style="color: var(--text-dim);">{formatDate(selectedDetails.createdAt)}</p>
+					<p class="mt-1 text-xs" style="color: var(--text-muted);">
+						{selectedDetails.audienceLabel}
+					</p>
+					<p class="mt-1 text-xs" style="color: var(--text-dim);">
+						{formatDate(selectedDetails.createdAt)}
+					</p>
 				</div>
 
-				<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
-					<div class="rounded-lg p-3" style="background: var(--bg); border: 1px solid var(--border);">
+				<div class="grid grid-cols-2 gap-3 md:grid-cols-5">
+					<div
+						class="rounded-lg p-3"
+						style="background: var(--bg); border: 1px solid var(--border);"
+					>
 						<p class="text-xs" style="color: var(--text-muted);">Total</p>
 						<p class="text-lg font-bold" style="color: var(--text);">{selectedDetails.total}</p>
 					</div>
-					<div class="rounded-lg p-3" style="background: var(--bg); border: 1px solid var(--border);">
+					<div
+						class="rounded-lg p-3"
+						style="background: var(--bg); border: 1px solid var(--border);"
+					>
 						<p class="text-xs" style="color: var(--text-muted);">Sent</p>
-						<p class="text-lg font-bold" style="color: var(--status-success);">{selectedDetails.sent}</p>
+						<p class="text-lg font-bold" style="color: var(--status-success);">
+							{selectedDetails.sent}
+						</p>
 					</div>
-					<div class="rounded-lg p-3" style="background: var(--bg); border: 1px solid var(--border);">
+					<div
+						class="rounded-lg p-3"
+						style="background: var(--bg); border: 1px solid var(--border);"
+					>
 						<p class="text-xs" style="color: var(--text-muted);">Failed</p>
-						<p class="text-lg font-bold" style="color: var(--status-error);">{selectedDetails.failed}</p>
+						<p class="text-lg font-bold" style="color: var(--status-error);">
+							{selectedDetails.failed}
+						</p>
 					</div>
-					<div class="rounded-lg p-3" style="background: var(--bg); border: 1px solid var(--border);">
+					<div
+						class="rounded-lg p-3"
+						style="background: var(--bg); border: 1px solid var(--border);"
+					>
+						<p class="text-xs" style="color: var(--text-muted);">Suppressed</p>
+						<p class="text-lg font-bold" style="color: var(--text-muted);">
+							{selectedDetails.suppressed}
+						</p>
+					</div>
+					<div
+						class="rounded-lg p-3"
+						style="background: var(--bg); border: 1px solid var(--border);"
+					>
 						<p class="text-xs" style="color: var(--text-muted);">Pending</p>
-						<p class="text-lg font-bold" style="color: var(--status-warning);">{selectedDetails.pending}</p>
+						<p class="text-lg font-bold" style="color: var(--status-warning);">
+							{selectedDetails.pending}
+						</p>
 					</div>
 				</div>
 
 				<div class="rounded-lg p-3" style="background: var(--bg); border: 1px solid var(--border);">
 					<p class="mb-2 text-sm font-semibold" style="color: var(--text);">Message</p>
-					<p class="text-sm whitespace-pre-wrap" style="color: var(--text-muted);">{selectedDetails.body}</p>
+					<p class="text-sm whitespace-pre-wrap" style="color: var(--text-muted);">
+						{selectedDetails.body}
+					</p>
 				</div>
 
 				<div class="rounded-lg p-3" style="background: var(--bg); border: 1px solid var(--border);">
@@ -830,10 +947,15 @@
 							<p class="text-sm" style="color: var(--text-muted);">No recipients loaded.</p>
 						{:else}
 							{#each selectedDetails.recipients as recipient}
-								<div class="rounded-lg px-3 py-2 text-xs" style="background: var(--bg-elev-2); border: 1px solid var(--border);">
+								<div
+									class="rounded-lg px-3 py-2 text-xs"
+									style="background: var(--bg-elev-2); border: 1px solid var(--border);"
+								>
 									<div class="flex items-center justify-between gap-2">
 										<span style="color: var(--text);">{recipient.email}</span>
-										<span style={`color: ${recipient.status === 'sent' ? 'var(--status-success)' : recipient.status === 'failed' ? 'var(--status-error)' : 'var(--status-warning)'};`}>
+										<span
+											style={`color: ${recipient.status === 'sent' ? 'var(--status-success)' : recipient.status === 'failed' ? 'var(--status-error)' : 'var(--status-warning)'};`}
+										>
 											{recipient.status}
 										</span>
 									</div>
@@ -858,7 +980,9 @@
 				</div>
 			</div>
 		{:else}
-			<p class="text-sm" style="color: var(--text-muted);">Select a broadcast from history to view details.</p>
+			<p class="text-sm" style="color: var(--text-muted);">
+				Select a broadcast from history to view details.
+			</p>
 		{/if}
 	</section>
 </div>

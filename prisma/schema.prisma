@@ -25,6 +25,11 @@ model User {
   registeredAt            DateTime            @default(now()) @map("registered_at")
   lastLogin               DateTime?           @map("last_login")
   lastSeenAt              DateTime?           @map("last_seen_at")
+  marketingEmailEnabled   Boolean             @default(true) @map("marketing_email_enabled")
+  marketingUnsubscribedAt DateTime?           @map("marketing_unsubscribed_at")
+  marketingSuppressedAt   DateTime?           @map("marketing_suppressed_at")
+  marketingSuppressReason String?             @map("marketing_suppress_reason")
+  marketingPreferenceToken String             @unique @default(dbgenerated("gen_random_uuid()")) @map("marketing_preference_token") @db.Uuid
   createdAt               DateTime            @default(now()) @map("created_at")
   updatedAt               DateTime            @default(now()) @map("updated_at")
   userType                UserType            @default(REGISTERED) @map("user_type")
@@ -385,24 +390,60 @@ model EmailNotification {
   userId           String?   @map("user_id") @db.Uuid
   email            String
   notificationType String    @map("notification_type")
+  classification   String    @default("transactional")
+  campaignKey      String?   @map("campaign_key")
   referenceId      String?   @map("reference_id")
   subject          String?
   body             String?
   status           String    @default("pending")
+  processingAt     DateTime? @map("processing_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   sentAt           DateTime? @map("sent_at")
   failedAt         DateTime? @map("failed_at")
   errorMessage     String?   @map("error_message")
+  suppressionReason String?  @map("suppression_reason")
   broadcastId      String?   @map("broadcast_id") @db.Uuid
   user             User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([notificationType])
+  @@index([classification, status, sentAt])
+  @@index([campaignKey])
   @@index([status])
   @@index([userId])
   @@index([broadcastId])
   @@index([referenceId])
   @@index([createdAt])
   @@map("email_notifications")
+}
+
+model AutomationJobRun {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobName        String    @map("job_name")
+  executionId    String    @unique @map("execution_id")
+  scheduledAt    DateTime? @map("scheduled_at")
+  startedAt      DateTime  @default(now()) @map("started_at")
+  finishedAt     DateTime? @map("finished_at")
+  status         String    @default("running")
+  processedCount Int       @default(0) @map("processed_count")
+  failureCount   Int       @default(0) @map("failure_count")
+  result         Json      @default("{}")
+  errorSummary   String?   @map("error_summary")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@index([jobName, startedAt])
+  @@index([status, startedAt])
+  @@map("automation_job_runs")
+}
+
+model AutomationJobLock {
+  jobName     String   @id @map("job_name")
+  executionId String   @map("execution_id")
+  lockedAt    DateTime @default(now()) @map("locked_at")
+  expiresAt   DateTime @map("expires_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([expiresAt])
+  @@map("automation_job_locks")
 }
 
 model RestockSubscription {

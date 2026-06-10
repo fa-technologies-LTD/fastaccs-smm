@@ -1,6 +1,11 @@
 import { env } from '$env/dynamic/private';
 import type { Cookies } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
+import {
+	sendAffiliateUnlockEmailIfNeeded,
+	sendFirstStoreCreditEmailIfNeeded
+} from '$lib/services/affiliate-notification-email';
+import { sendAffiliatePayoutStatusEmailIfNeeded } from '$lib/services/affiliate-payout-email';
 import { sendEmail } from '$lib/services/email';
 import { getOperationalAlertRecipients } from '$lib/services/admin-settings';
 
@@ -1604,6 +1609,13 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 			});
 		});
 
+		void sendFirstStoreCreditEmailIfNeeded({
+			userId: order.affiliateUserId,
+			creditAmount
+		}).catch((error) => {
+			console.error('Failed to send first Store Credit email:', error);
+		});
+
 		return {
 			success: true,
 			storeCreditAwarded: creditAmount
@@ -1648,21 +1660,7 @@ export async function maybeSendAffiliateUnlockInvite(userId: string): Promise<vo
 		});
 		if (marker) return;
 
-		const supportLink = `${getBaseUrl()}/affiliate`;
-		const firstName = sanitizeEmailName(user.fullName);
-
-		const sendResult = await sendEmail({
-			to: user.email,
-			subject: "You've unlocked Affiliate Access on FastAccs",
-			body: `Hi ${firstName},\n\nYou just unlocked a new way to earn from FastAccs.\n\nActivate your affiliate access, share your code, and start earning **Store Credit** from successful referred orders.\n\nWhat happens next:\n- Activate your affiliate profile\n- Get your unique code and referral link\n- Share with buyers\n- Earn Store Credit on successful referred purchases\n\nYour Store Credit can be used on orders and can become cash once payout requirements are met.`,
-			ctaText: 'Activate Affiliate Access',
-			ctaUrl: supportLink,
-			notificationType: 'affiliate_unlock',
-			userId: user.id,
-			referenceId: `affiliate_unlock:${user.id}`
-		});
-
-		if (!sendResult.success) {
+		if (!(await sendAffiliateUnlockEmailIfNeeded(user.id))) {
 			return;
 		}
 
@@ -1681,8 +1679,7 @@ export async function maybeSendAffiliateUnlockInvite(userId: string): Promise<vo
 					userId: user.id,
 					type: 'affiliate_unlock',
 					title: "You've unlocked Affiliate Access",
-					message:
-						'Share your code, bring buyers, and earn Store Credit from successful referrals.'
+					message: 'Share your code, bring buyers, and earn Store Credit from successful referrals.'
 				}
 			})
 		]);
@@ -2046,8 +2043,8 @@ export async function requestAffiliatePayout(userId: string): Promise<{
 		const reference = `affiliate:payout:request:${userId}:${Date.now()}`;
 		const balance = Number(wallet.balance || 0);
 
-		await prisma.$transaction(async (tx) => {
-			await tx.walletTransaction.create({
+		const payoutTransactionId = await prisma.$transaction(async (tx) => {
+			const payoutTransaction = await tx.walletTransaction.create({
 				data: {
 					walletId: wallet.id,
 					userId,
@@ -2075,6 +2072,7 @@ export async function requestAffiliatePayout(userId: string): Promise<{
 						'Your payout request was received and will be reviewed for the next payout cycle.'
 				}
 			});
+			return payoutTransaction.id;
 		});
 
 		const recipients = await getOperationalAlertRecipients().catch(() => []);
@@ -2096,6 +2094,12 @@ export async function requestAffiliatePayout(userId: string): Promise<{
 				})
 			)
 		);
+		await sendAffiliatePayoutStatusEmailIfNeeded({
+			payoutTransactionId,
+			expectedStatus: AFFILIATE_LEDGER_STATUS.requested
+		}).catch((error) => {
+			console.error('Failed to send affiliate payout request email:', error);
+		});
 
 		return {
 			success: true,

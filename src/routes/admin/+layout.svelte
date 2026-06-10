@@ -18,7 +18,8 @@
 		UserCheck,
 		Type,
 		Mail,
-		Tag
+		Tag,
+		Activity
 	} from '$lib/icons';
 
 	import logo from '$lib/assets/logo.png';
@@ -96,6 +97,11 @@
 				label: 'Broadcast',
 				icon: Mail,
 				permission: 'admin:broadcast:manage'
+			},
+			{
+				href: '/admin/automation',
+				label: 'Automation',
+				icon: Activity
 			},
 			{
 				href: '/admin/settings',
@@ -244,8 +250,9 @@
 					<!-- Admin status -->
 					<div class="flex min-w-0 items-center gap-1.5 sm:gap-2">
 						<div class="h-2 w-2 rounded-full" style="background: var(--status-success);"></div>
-						<span class="max-w-[36vw] truncate text-xs sm:max-w-[42vw] sm:text-sm" style="color: var(--text-muted);"
-							>{data?.user?.email || 'admin@fastaccs.com'}</span
+						<span
+							class="max-w-[36vw] truncate text-xs sm:max-w-[42vw] sm:text-sm"
+							style="color: var(--text-muted);">{data?.user?.email || 'admin@fastaccs.com'}</span
 						>
 						<span
 							class="hidden rounded-full px-2 py-0.5 text-[10px] font-semibold sm:inline-flex"

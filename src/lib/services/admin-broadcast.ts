@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { env } from '$env/dynamic/private';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
-import { sendEmail } from './email';
+import { QUEUED_MARKETING_STALE_MS, sendQueuedMarketingEmail } from './email';
 
 export type BroadcastAudience =
 	| 'all_verified'
@@ -44,6 +44,7 @@ export interface BroadcastProgress {
 	total: number;
 	sent: number;
 	failed: number;
+	suppressed: number;
 	pending: number;
 	status: 'in_progress' | 'completed' | 'failed';
 }
@@ -68,7 +69,10 @@ const SUCCESSFUL_ORDER_FILTER: Prisma.OrderWhereInput = {
 	OR: [{ paymentStatus: 'paid' }, { status: { in: ['paid', 'completed'] } }]
 };
 const FAILED_ORDER_FILTER: Prisma.OrderWhereInput = {
-	OR: [{ paymentStatus: { in: ['failed', 'cancelled'] } }, { status: { in: ['failed', 'cancelled'] } }]
+	OR: [
+		{ paymentStatus: { in: ['failed', 'cancelled'] } },
+		{ status: { in: ['failed', 'cancelled'] } }
+	]
 };
 const HIGH_SPENDER_MIN_TOTAL = Math.max(Number(env.BROADCAST_HIGH_SPENDER_MIN_TOTAL || 100000), 1);
 const RECENT_ABANDONED_LOOKBACK_DAYS = clamp(
@@ -181,7 +185,10 @@ interface BroadcastAudienceFilters {
 	tierIds: string[];
 }
 
-function getAudienceReference(audience: BroadcastAudience, filters: BroadcastAudienceFilters): string {
+function getAudienceReference(
+	audience: BroadcastAudience,
+	filters: BroadcastAudienceFilters
+): string {
 	const sortedPlatformIds = [...filters.platformIds].sort();
 	const sortedTierIds = [...filters.tierIds].sort();
 	return `audience=${audience};platformIds=${sortedPlatformIds.join(',')};tierIds=${sortedTierIds.join(',')}`;
@@ -389,7 +396,11 @@ async function getAudienceWhereClause(
 		};
 	}
 
-	if (audience === 'first_time_buyers' || audience === 'repeat_buyers' || audience === 'high_spenders') {
+	if (
+		audience === 'first_time_buyers' ||
+		audience === 'repeat_buyers' ||
+		audience === 'high_spenders'
+	) {
 		const stats = await getSuccessfulOrderStatsByUser();
 		const filteredIds = stats
 			.filter((row) => {
@@ -421,7 +432,10 @@ export async function getBroadcastAudienceCount(
 	if (audience === 'specific_platform_buyers' && filters.platformIds.length === 0) {
 		return 0;
 	}
-	if (audience === 'platform_tier_buyers' && (filters.platformIds.length === 0 || filters.tierIds.length === 0)) {
+	if (
+		audience === 'platform_tier_buyers' &&
+		(filters.platformIds.length === 0 || filters.tierIds.length === 0)
+	) {
 		return 0;
 	}
 
@@ -439,7 +453,10 @@ export async function getBroadcastRecipients(
 	if (audience === 'specific_platform_buyers' && filters.platformIds.length === 0) {
 		return [];
 	}
-	if (audience === 'platform_tier_buyers' && (filters.platformIds.length === 0 || filters.tierIds.length === 0)) {
+	if (
+		audience === 'platform_tier_buyers' &&
+		(filters.platformIds.length === 0 || filters.tierIds.length === 0)
+	) {
 		return [];
 	}
 
@@ -454,7 +471,9 @@ export async function getBroadcastRecipients(
 	});
 
 	return users
-		.filter((user): user is { id: string; email: string; fullName: string | null } => Boolean(user.email))
+		.filter((user): user is { id: string; email: string; fullName: string | null } =>
+			Boolean(user.email)
+		)
 		.map((user) => ({
 			id: user.id,
 			email: user.email,
@@ -470,16 +489,18 @@ function chunkArray<T>(items: T[], size: number): T[][] {
 	return chunks;
 }
 
-export async function createBroadcast(
-	params: {
-		subject: string;
-		body: string;
-		audience: BroadcastAudience;
-		platformIds: string[];
-		tierIds: string[];
-	}
-): Promise<{ broadcastId: string; total: number }> {
-	const recipients = await getBroadcastRecipients(params.audience, params.platformIds, params.tierIds);
+export async function createBroadcast(params: {
+	subject: string;
+	body: string;
+	audience: BroadcastAudience;
+	platformIds: string[];
+	tierIds: string[];
+}): Promise<{ broadcastId: string; total: number }> {
+	const recipients = await getBroadcastRecipients(
+		params.audience,
+		params.platformIds,
+		params.tierIds
+	);
 	if (recipients.length === 0) {
 		return {
 			broadcastId: randomUUID(),
@@ -506,6 +527,8 @@ export async function createBroadcast(
 				subject,
 				body,
 				status: 'pending',
+				classification: 'marketing',
+				campaignKey: `admin-broadcast:${broadcastId}:${recipient.id}`,
 				broadcastId
 			}))
 		});
@@ -518,7 +541,7 @@ export async function createBroadcast(
 }
 
 async function computeBroadcastProgress(broadcastId: string): Promise<BroadcastProgress | null> {
-	const [total, sent, failed, pending, firstRecord] = await Promise.all([
+	const [total, sent, failed, suppressed, pending, firstRecord] = await Promise.all([
 		prisma.emailNotification.count({
 			where: {
 				broadcastId,
@@ -543,7 +566,14 @@ async function computeBroadcastProgress(broadcastId: string): Promise<BroadcastP
 			where: {
 				broadcastId,
 				notificationType: BROADCAST_TYPE,
-				status: 'pending'
+				status: 'suppressed'
+			}
+		}),
+		prisma.emailNotification.count({
+			where: {
+				broadcastId,
+				notificationType: BROADCAST_TYPE,
+				status: { in: ['pending', 'processing'] }
 			}
 		}),
 		prisma.emailNotification.findFirst({
@@ -576,6 +606,7 @@ async function computeBroadcastProgress(broadcastId: string): Promise<BroadcastP
 		total,
 		sent,
 		failed,
+		suppressed,
 		pending,
 		status
 	};
@@ -589,7 +620,13 @@ export async function processBroadcastBatch(
 		where: {
 			broadcastId,
 			notificationType: BROADCAST_TYPE,
-			status: 'pending'
+			OR: [
+				{ status: 'pending' },
+				{
+					status: 'processing',
+					processingAt: { lt: new Date(Date.now() - QUEUED_MARKETING_STALE_MS) }
+				}
+			]
 		},
 		orderBy: { createdAt: 'asc' },
 		take: clamp(batchSize, 1, 200)
@@ -603,31 +640,7 @@ export async function processBroadcastBatch(
 	}
 
 	for (const notification of pendingNotifications) {
-		const subject = (notification.subject || '').trim();
-		const body = (notification.body || '').trim();
-		if (!subject || !body) {
-			await prisma.emailNotification.update({
-				where: { id: notification.id },
-				data: {
-					status: 'failed',
-					failedAt: new Date(),
-					errorMessage: 'Missing subject or body for broadcast message.'
-				}
-			});
-			continue;
-		}
-
-		await sendEmail({
-			to: notification.email,
-			subject,
-			body,
-			showCta: false,
-			userId: notification.userId,
-			notificationType: 'admin_broadcast',
-			referenceId: notification.referenceId,
-			broadcastId,
-			notificationId: notification.id
-		});
+		await sendQueuedMarketingEmail(notification.id);
 	}
 
 	return {

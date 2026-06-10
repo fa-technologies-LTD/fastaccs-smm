@@ -29,7 +29,6 @@ supabase-schema.sql
 nisc
 /../generated/prisma
 archive
-david's todo.txt
 
-note.txt
-declutter.txt
+NOTES.md
+docs/

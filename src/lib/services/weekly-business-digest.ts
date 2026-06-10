@@ -32,6 +32,25 @@ function formatWindowDate(value: Date, timezone: string): string {
 	}).format(value);
 }
 
+function getRunMetric(result: unknown, key: string): number {
+	if (!result || typeof result !== 'object' || Array.isArray(result)) return 0;
+	const value = Number((result as Record<string, unknown>)[key] || 0);
+	return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function sumRunMetric(runs: Array<{ result: unknown }>, key: string): number {
+	return runs.reduce((total, run) => total + getRunMetric(run.result, key), 0);
+}
+
+function formatAge(value: Date | null, now: Date): string {
+	if (!value) return 'none';
+	const minutes = Math.max(0, Math.floor((now.getTime() - value.getTime()) / 60000));
+	if (minutes < 60) return `${minutes} minute(s)`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 48) return `${hours} hour(s)`;
+	return `${Math.floor(hours / 24)} day(s)`;
+}
+
 function getBuyerIdentity(order: {
 	userId: string | null;
 	guestEmail: string | null;
@@ -175,7 +194,19 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 		payoutRequests,
 		newRestockInterest,
 		notifiedRestockInterest,
-		tiers
+		tiers,
+		failedOrCancelledAttempts,
+		currentPendingPayments,
+		oldestPendingPayment,
+		abandonedRemindersSent,
+		allEmailsSent,
+		emailFailures,
+		marketingEmailsSent,
+		marketingEmailsSuppressed,
+		marketingUnsubscribes,
+		paymentAutomationRuns,
+		previewAutomationRuns,
+		failedAutomationRuns
 	] = await Promise.all([
 		getRevenueOrders(start, end),
 		getRevenueOrders(previousStart, start),
@@ -224,6 +255,95 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 					}
 				}
 			}
+		}),
+		prisma.order.count({
+			where: {
+				createdAt: { gte: start, lt: end },
+				OR: [
+					{ status: { in: ['failed', 'cancelled'] } },
+					{ paymentStatus: { in: ['failed', 'cancelled'] } }
+				]
+			}
+		}),
+		prisma.order.count({
+			where: {
+				paymentMethod: 'monnify',
+				status: { in: ['pending', 'pending_payment'] },
+				paymentStatus: { notIn: ['paid', 'success', 'overpaid', 'failed', 'cancelled'] }
+			}
+		}),
+		prisma.order.findFirst({
+			where: {
+				paymentMethod: 'monnify',
+				status: { in: ['pending', 'pending_payment'] },
+				paymentStatus: { notIn: ['paid', 'success', 'overpaid', 'failed', 'cancelled'] }
+			},
+			orderBy: { createdAt: 'asc' },
+			select: { createdAt: true }
+		}),
+		prisma.emailNotification.count({
+			where: {
+				notificationType: 'abandoned_order',
+				status: 'sent',
+				sentAt: { gte: start, lt: end }
+			}
+		}),
+		prisma.emailNotification.count({
+			where: {
+				status: 'sent',
+				sentAt: { gte: start, lt: end }
+			}
+		}),
+		prisma.emailNotification.count({
+			where: {
+				status: 'failed',
+				failedAt: { gte: start, lt: end }
+			}
+		}),
+		prisma.emailNotification.count({
+			where: {
+				classification: 'marketing',
+				status: 'sent',
+				sentAt: { gte: start, lt: end }
+			}
+		}),
+		prisma.emailNotification.count({
+			where: {
+				classification: 'marketing',
+				status: 'suppressed',
+				createdAt: { gte: start, lt: end }
+			}
+		}),
+		prisma.user.count({
+			where: {
+				marketingUnsubscribedAt: { gte: start, lt: end }
+			}
+		}),
+		prisma.automationJobRun.findMany({
+			where: {
+				jobName: 'payments-reconcile',
+				startedAt: { gte: start, lt: end }
+			},
+			select: {
+				status: true,
+				result: true
+			}
+		}),
+		prisma.automationJobRun.findMany({
+			where: {
+				jobName: 'exact-preview-thumbnails',
+				startedAt: { gte: start, lt: end }
+			},
+			select: {
+				status: true,
+				result: true
+			}
+		}),
+		prisma.automationJobRun.count({
+			where: {
+				status: 'failed',
+				startedAt: { gte: start, lt: end }
+			}
 		})
 	]);
 
@@ -258,9 +378,26 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 	const availableAccounts = stockRows.reduce((sum, row) => sum + row.available, 0);
 	const averageOrderValue = currentOrders.length > 0 ? currentRevenue / currentOrders.length : 0;
 	const reportingEnd = new Date(end.getTime() - 1);
+	const successfulAttemptRate =
+		currentAttempts > 0 ? Math.round((currentOrders.length / currentAttempts) * 1000) / 10 : 0;
+	const paymentRecovered =
+		sumRunMetric(paymentAutomationRuns, 'paid') + sumRunMetric(paymentAutomationRuns, 'completed');
+	const paymentRunFailures = paymentAutomationRuns.filter((run) => run.status === 'failed').length;
+	const previewsGenerated = sumRunMetric(previewAutomationRuns, 'generated');
+	const previewFailures = sumRunMetric(previewAutomationRuns, 'failed');
 	const urgentStockRows = [...zeroStockRows, ...lowStockRows]
 		.slice(0, TOP_ROW_LIMIT)
 		.map((row) => `- ${row.label}: ${row.available} available`);
+	const recommendedActions = [
+		currentPendingPayments > 0
+			? `- Review ${currentPendingPayments} unresolved pending payment(s); oldest is ${formatAge(oldestPendingPayment?.createdAt || null, now)}.`
+			: null,
+		failedAutomationRuns > 0
+			? `- Review ${failedAutomationRuns} failed automation run(s) from this week.`
+			: null,
+		emailFailures > 0 ? `- Review ${emailFailures} failed email delivery attempt(s).` : null,
+		zeroStockRows.length > 0 ? `- Restock ${zeroStockRows.length} zero-stock tier(s).` : null
+	].filter((line): line is string => Boolean(line));
 
 	const body = [
 		'**FastAccs weekly business digest**',
@@ -273,6 +410,16 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 		`- Units sold: ${catalog.units}`,
 		`- Average successful order value: ${formatAmount(averageOrderValue)}`,
 		`- Manual WhatsApp handovers: ${manualHandoverOrders}`,
+		'',
+		'**Payment and checkout health**',
+		`- Successful-order conversion from attempts: ${successfulAttemptRate}%`,
+		`- Failed or cancelled attempts this week: ${failedOrCancelledAttempts}`,
+		`- Current unresolved pending Monnify orders: ${currentPendingPayments}`,
+		`- Oldest unresolved pending order age: ${formatAge(oldestPendingPayment?.createdAt || null, now)}`,
+		`- Payment reconciliation runs: ${paymentAutomationRuns.length}`,
+		`- Orders recovered by scheduled reconciliation: ${paymentRecovered}`,
+		`- Failed payment reconciliation runs: ${paymentRunFailures}`,
+		`- Abandoned-checkout reminders sent: ${abandonedRemindersSent}`,
 		'',
 		'**Customer and growth signals**',
 		`- Unique buyers this week: ${buyerStats.unique}`,
@@ -305,6 +452,24 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 		`- Affiliate Store Credit earned this week: ${formatAmount(Number(affiliateCredits._sum.amount || 0))}`,
 		`- New payout requests: ${payoutRequests}`,
 		'',
+		'**Email performance**',
+		`- Emails sent: ${allEmailsSent}`,
+		`- Email delivery failures: ${emailFailures}`,
+		`- Optional marketing emails sent: ${marketingEmailsSent}`,
+		`- Optional marketing sends suppressed by policy: ${marketingEmailsSuppressed}`,
+		`- Marketing unsubscribes: ${marketingUnsubscribes}`,
+		'',
+		'**Automation and exact-preview health**',
+		`- Failed automation runs: ${failedAutomationRuns}`,
+		`- Exact-preview automation runs: ${previewAutomationRuns.length}`,
+		`- Exact previews generated: ${previewsGenerated}`,
+		`- Exact-preview generation failures: ${previewFailures}`,
+		'',
+		'**Recommended operator actions**',
+		...(recommendedActions.length > 0
+			? recommendedActions
+			: ['- No urgent operator action detected from this weekly summary.']),
+		'',
 		'Open the full admin views:',
 		'- Analytics: /admin/analytics',
 		'- Inventory: /admin/inventory',
@@ -318,6 +483,7 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 			subject: `[FastAccs Ops] Weekly business digest (${getBusinessDateKey(start, timezone)})`,
 			body,
 			notificationType: 'admin_broadcast',
+			classification: 'operational',
 			referenceId,
 			showCta: false
 		});

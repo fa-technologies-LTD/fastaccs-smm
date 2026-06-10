@@ -208,6 +208,7 @@ export async function sendLowStockAdminAlertIfNeeded(
 			subject,
 			body: bodyLines.join('\n'),
 			notificationType: 'admin_broadcast',
+			classification: 'operational',
 			referenceId: alertEventReferenceId,
 			showCta: false
 		});
@@ -297,6 +298,7 @@ export async function sendCriticalAdminAlert(params: {
 			subject: `[FastAccs Ops] ${params.title}`,
 			body: `${params.message}\n\nSource: ${params.source}`,
 			notificationType: 'admin_broadcast',
+			classification: 'operational',
 			referenceId,
 			showCta: false
 		});

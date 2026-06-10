@@ -16,7 +16,7 @@
 	<title>FastAccs Affiliate Program</title>
 	<meta
 		name="description"
-		content="Unlock affiliate access, share your FastAccs code, and earn real withdrawable naira from successful referrals."
+		content="Unlock affiliate access, share your Fast Accounts code, and earn withdrawable Store Credit from successful referrals."
 	/>
 </svelte:head>
 
@@ -81,7 +81,7 @@
 				<span class="text-xs font-semibold uppercase">Earn</span>
 			</div>
 			<p class="text-sm" style="color: var(--text-muted);">
-				Earn real, withdrawable naira on successful referred orders and track it from your dashboard.
+				Earn Store Credit on successful referred orders and track it from your dashboard.
 			</p>
 		</div>
 	</section>
@@ -112,6 +112,10 @@
 			</p>
 			<p>
 				Store Credit can be withdrawn once payout requirements are met in your affiliate dashboard.
+			</p>
+			<p>
+				Store Credit is real, withdrawable cash. The affiliate program is currently available only
+				to customers in Nigeria.
 			</p>
 		</div>
 

@@ -198,8 +198,8 @@ export async function generateMissingExactPreviewThumbnails(
 				}
 			}
 		},
-		orderBy: { createdAt: 'desc' },
-		take: limit * 8
+		orderBy: [{ updatedAt: 'asc' }, { createdAt: 'asc' }],
+		take: Math.min(Math.max(limit * 50, 200), 1000)
 	});
 
 	const summary: ExactPreviewThumbnailSummary = {
