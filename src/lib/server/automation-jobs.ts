@@ -22,11 +22,10 @@ export const AUTOMATION_JOBS = {
 	'abandoned-orders': {
 		name: 'abandoned-orders',
 		path: '/api/internal/cron/abandoned-orders',
-		schedule: 'every 30 minutes',
+		schedule: 'every 10 minutes',
 		risk: 'operational',
-		lockTimeoutMinutes: 20,
-		expectedIntervalMinutes: 30,
-		enabled: false
+		lockTimeoutMinutes: 10,
+		expectedIntervalMinutes: 10
 	},
 	'exact-preview-thumbnails': {
 		name: 'exact-preview-thumbnails',

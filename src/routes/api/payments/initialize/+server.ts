@@ -1,16 +1,19 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
-import { initializeTransaction } from '$lib/services/monnify';
+import { initializeTransaction, verifyTransaction } from '$lib/services/monnify';
 import { isCheckoutEnabledSetting } from '$lib/services/admin-settings';
 import {
 	getPaymentReservationExpiresAt,
 	getPendingPaymentExpiresAt
 } from '$lib/helpers/payment-expiry.server';
 import {
-	extendOrderReservations,
-	releaseOrderReservations
-} from '$lib/services/order-reservations';
+	getFailureKind,
+	isSuccessPaymentStatus,
+	normalizePaymentStatus
+} from '$lib/helpers/payment-status';
+import { settleFailedPayment, settleSuccessfulPayment } from '$lib/services/payment-settlement';
+import { extendOrderReservations } from '$lib/services/order-reservations';
 import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 
 export const POST: RequestHandler = async ({ request, locals, url }) => {
@@ -82,11 +85,58 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			order.paymentExpiresAt.getTime() <= Date.now() &&
 			['pending', 'pending_payment'].includes(order.status)
 		) {
-			await prisma.order.update({
-				where: { id: orderId },
-				data: { status: 'cancelled', paymentStatus: 'cancelled' }
-			});
-			await releaseOrderReservations(orderId);
+			if (order.paymentReference) {
+				const verification = await verifyTransaction(order.paymentReference);
+				const gatewayStatus = normalizePaymentStatus(verification.paymentStatus);
+
+				if (verification.success || isSuccessPaymentStatus(gatewayStatus)) {
+					await settleSuccessfulPayment({
+						orderId,
+						source: 'verify',
+						paymentReference: verification.paymentReference || order.paymentReference,
+						channel: verification.paymentMethod,
+						paidAt: verification.paidOn,
+						amountPaid: Number(verification.amountPaid || verification.amount || 0),
+						currency: verification.currency
+					});
+					return json({ success: true, alreadyPaid: true, orderId });
+				}
+
+				const failureKind = getFailureKind(gatewayStatus);
+				if (!failureKind && order.paymentCheckoutUrl) {
+					const reservationExpiresAt = getPaymentReservationExpiresAt(order.paymentExpiresAt);
+					if (reservationExpiresAt.getTime() > Date.now()) {
+						// Monnify still has this transaction open and our reservation
+						// buffer hasn't lapsed — let the customer keep paying on the
+						// same checkout link instead of cancelling and releasing stock.
+						const refreshedExpiresAt = getPendingPaymentExpiresAt();
+						await prisma.order.update({
+							where: { id: orderId },
+							data: { paymentExpiresAt: refreshedExpiresAt }
+						});
+						await extendOrderReservations(
+							orderId,
+							getPaymentReservationExpiresAt(refreshedExpiresAt)
+						);
+						return json({
+							success: true,
+							resumed: true,
+							checkoutUrl: order.paymentCheckoutUrl,
+							orderId,
+							paymentReference: order.paymentReference
+						});
+					}
+				}
+
+				await settleFailedPayment({
+					orderId,
+					failureKind: failureKind || 'cancelled',
+					source: 'verify'
+				});
+			} else {
+				await settleFailedPayment({ orderId, failureKind: 'cancelled', source: 'verify' });
+			}
+
 			return json(
 				{ success: false, error: 'Payment window expired. Please start a fresh checkout.' },
 				{ status: 409 }

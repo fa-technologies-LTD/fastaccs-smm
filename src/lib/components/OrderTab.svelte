@@ -255,7 +255,14 @@
 				body: JSON.stringify({ orderId: order.id })
 			});
 			const result = await response.json().catch(() => ({}));
-			if (!response.ok || !result.checkoutUrl) {
+			if (!response.ok) {
+				throw new Error(result.error || 'Could not resume payment.');
+			}
+			if (result.alreadyPaid) {
+				window.location.reload();
+				return;
+			}
+			if (!result.checkoutUrl) {
 				throw new Error(result.error || 'Could not resume payment.');
 			}
 			window.location.href = result.checkoutUrl;

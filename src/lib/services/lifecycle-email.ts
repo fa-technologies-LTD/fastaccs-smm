@@ -4,7 +4,7 @@ import { sendEmail, sendMarketingEmail, sendWelcomeEmailIfNeeded } from '$lib/se
 
 const ONBOARDING_STEP_A_DELAY_HOURS = 24;
 const ONBOARDING_STEP_B_DELAY_HOURS = 48;
-const ABANDONED_ORDER_DELAY_HOURS = 2;
+const ABANDONED_ORDER_DELAY_MINUTES = 15;
 
 const DEFAULT_BATCH_LIMIT = 300;
 const SCAN_CHUNK_MULTIPLIER = 3;
@@ -381,7 +381,7 @@ export async function runAbandonedOrderReminder(params?: {
 }): Promise<LifecycleEmailRunSummary> {
 	const now = new Date();
 	const batchLimit = Math.min(Math.max(Number(params?.limit || DEFAULT_BATCH_LIMIT), 1), 1000);
-	const cutoff = new Date(now.getTime() - ABANDONED_ORDER_DELAY_HOURS * 60 * 60 * 1000);
+	const cutoff = new Date(now.getTime() - ABANDONED_ORDER_DELAY_MINUTES * 60 * 1000);
 	const scanChunk = Math.min(1000, Math.max(batchLimit * SCAN_CHUNK_MULTIPLIER, batchLimit));
 	const maxScanRows = Math.max(scanChunk, batchLimit * MAX_SCAN_FACTOR);
 
@@ -498,9 +498,8 @@ export async function runAbandonedOrderReminder(params?: {
 			continue;
 		}
 		if (
-			refreshed.status === 'paid' ||
-			refreshed.status === 'completed' ||
-			refreshed.paymentStatus === 'paid'
+			!['pending', 'pending_payment'].includes(refreshed.status) ||
+			['paid', 'failed', 'cancelled'].includes(refreshed.paymentStatus)
 		) {
 			skipped += 1;
 			continue;
@@ -517,19 +516,19 @@ export async function runAbandonedOrderReminder(params?: {
 			subject: `Complete your FastAccs order (${orderLabel})`,
 			body: `Hi ${firstName},
 
-You started an order about 2 hours ago, but payment is still incomplete.
+You started an order a few minutes ago, but payment hasn't gone through yet.
 
 Order: ${orderLabel}
 Amount: ${candidate.currency} ${amountText}
 
-Your order is still open. Complete payment to continue delivery.
+Your items are still being held for you, but not for much longer. Tap the button below to finish your payment now.
 
 If you need help, contact support:
 - WhatsApp: https://wa.link/fast_accounts
 - Email: support@fastaccs.com
 
 **Important:** If this email lands in Spam or Promotions, mark it as Not Spam and move it to Primary.`,
-			ctaText: 'Complete this order',
+			ctaText: 'Resume payment',
 			ctaUrl: orderUrl,
 			userId: candidate.userId,
 			notificationType: 'abandoned_order',

@@ -9,6 +9,7 @@ import {
 	normalizePaymentStatus
 } from '$lib/helpers/payment-status';
 import {
+	getPaymentReservationExpiresAt,
 	getPendingPaymentExpireMinutes,
 	getPendingPaymentExpiryThreshold,
 	isPendingPaymentExpired
@@ -212,7 +213,7 @@ export async function reconcilePendingPayments(
 		}
 
 		const isOldPending = order.paymentExpiresAt
-			? order.paymentExpiresAt.getTime() <= now
+			? getPaymentReservationExpiresAt(order.paymentExpiresAt).getTime() <= now
 			: isPendingPaymentExpired(order.createdAt, gatewayStatus, expireMinutes);
 		if (isOldPending) {
 			if (!dryRun)

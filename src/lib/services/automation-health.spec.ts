@@ -109,7 +109,7 @@ describe('automation health', () => {
 		);
 		expect(abandonedJob).toEqual(
 			expect.objectContaining({
-				status: 'disabled',
+				status: 'unobserved',
 				manualRunAllowed: false
 			})
 		);
