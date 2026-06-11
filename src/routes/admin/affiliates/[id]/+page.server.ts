@@ -19,6 +19,11 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				avatarUrl: true,
 				isAffiliateEnabled: true,
 				createdAt: true,
+				affiliateWelcomePopupSeenAt: true,
+				affiliateProgress50PopupSeenAt: true,
+				affiliateProgress80PopupSeenAt: true,
+				affiliateProgress95PopupSeenAt: true,
+				affiliateUnlockedPopupSeenAt: true,
 				affiliatePrograms: {
 					select: {
 						id: true,
@@ -183,7 +188,14 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				email: affiliate.email,
 				avatarUrl: affiliate.avatarUrl,
 				isAffiliateEnabled: affiliate.isAffiliateEnabled,
-				createdAt: affiliate.createdAt
+				createdAt: affiliate.createdAt,
+				popupsSeen: {
+					welcome: affiliate.affiliateWelcomePopupSeenAt,
+					progress50: affiliate.affiliateProgress50PopupSeenAt,
+					progress80: affiliate.affiliateProgress80PopupSeenAt,
+					progress95: affiliate.affiliateProgress95PopupSeenAt,
+					unlocked: affiliate.affiliateUnlockedPopupSeenAt
+				}
 			},
 			program: {
 				id: affiliateProgram.id,

@@ -21,6 +21,14 @@
 
 	const referralBaseUrl = 'https://smm.fastaccs.com';
 
+	const popupEngagement = [
+		{ label: 'Welcome', seenAt: data.affiliate.popupsSeen.welcome },
+		{ label: 'Progress 50%', seenAt: data.affiliate.popupsSeen.progress50 },
+		{ label: 'Progress 80%', seenAt: data.affiliate.popupsSeen.progress80 },
+		{ label: 'Progress 95%', seenAt: data.affiliate.popupsSeen.progress95 },
+		{ label: 'Unlocked', seenAt: data.affiliate.popupsSeen.unlocked }
+	];
+
 	const payoutRequests = $derived(
 		payoutRows.filter((row) => ['requested', 'under_review'].includes(String(row.status || '')))
 	);
@@ -267,6 +275,20 @@
 					<p class="font-semibold text-red-600">{formatPrice(data.ledgerSummary.reversedStoreCredit)}</p>
 				</div>
 			</div>
+		</div>
+	</div>
+
+	<div class="mb-6 rounded-lg border border-gray-200 bg-white p-6">
+		<h2 class="mb-4 text-lg font-semibold text-gray-900">Dashboard Pop-ups</h2>
+		<div class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+			{#each popupEngagement as item}
+				<div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+					<p class="text-gray-500">{item.label}</p>
+					<p class="font-semibold {item.seenAt ? 'text-green-700' : 'text-gray-400'}">
+						{item.seenAt ? `Seen ${formatDate(item.seenAt)}` : 'Not yet seen'}
+					</p>
+				</div>
+			{/each}
 		</div>
 	</div>
 

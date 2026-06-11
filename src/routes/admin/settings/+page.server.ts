@@ -246,7 +246,8 @@ export const actions: Actions = {
 			storeCreditFallbackPercent: String(formData.get('storeCreditFallbackPercent') || ''),
 			excludedTierKeywords: String(formData.get('excludedTierKeywords') || ''),
 			payoutMinimum: String(formData.get('payoutMinimum') || ''),
-			payoutMinAccountAgeDays: String(formData.get('payoutMinAccountAgeDays') || '')
+			payoutMinAccountAgeDays: String(formData.get('payoutMinAccountAgeDays') || ''),
+			dashboardPopupsEnabled: formData.get('dashboardPopupsEnabled') === 'on' ? 'true' : 'false'
 		});
 
 		return {

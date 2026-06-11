@@ -27,7 +27,8 @@ const AFFILIATE_CONFIG_KEYS = {
 	storeCreditFallbackPercent: 'config.affiliate.store_credit_fallback_percent',
 	excludedTierKeywords: 'config.affiliate.excluded_tier_keywords',
 	payoutMinimum: 'config.affiliate.payout_minimum',
-	payoutMinAccountAgeDays: 'config.affiliate.payout_min_account_age_days'
+	payoutMinAccountAgeDays: 'config.affiliate.payout_min_account_age_days',
+	dashboardPopupsEnabled: 'config.affiliate.dashboard_popups_enabled'
 } as const;
 
 const DEFAULT_AFFILIATE_CONFIG = {
@@ -42,7 +43,8 @@ const DEFAULT_AFFILIATE_CONFIG = {
 	storeCreditFallbackPercent: 3,
 	excludedTierKeywords: ['0f', 'empty-f', 'empty f'],
 	payoutMinimum: 10_000,
-	payoutMinAccountAgeDays: 30
+	payoutMinAccountAgeDays: 30,
+	dashboardPopupsEnabled: true
 } as const;
 
 const AFFILIATE_LEDGER_STATUS = {
@@ -60,6 +62,23 @@ const AFFILIATE_LEDGER_CREDIT_TYPE = 'affiliate_credit';
 const AFFILIATE_LEDGER_PAYOUT_TYPE = 'affiliate_payout';
 const AFFILIATE_REFERRAL_BASE_URL = 'https://smm.fastaccs.com';
 
+export const PROGRESS_MILESTONES = [95, 80, 50] as const;
+
+export type AffiliatePopupType =
+	| 'welcome'
+	| 'progress_50'
+	| 'progress_80'
+	| 'progress_95'
+	| 'unlocked';
+
+const AFFILIATE_POPUP_SEEN_FIELDS = {
+	welcome: 'affiliateWelcomePopupSeenAt',
+	progress_50: 'affiliateProgress50PopupSeenAt',
+	progress_80: 'affiliateProgress80PopupSeenAt',
+	progress_95: 'affiliateProgress95PopupSeenAt',
+	unlocked: 'affiliateUnlockedPopupSeenAt'
+} as const;
+
 export interface AffiliateConfig {
 	unlockThreshold: number;
 	discountStage1Percent: number;
@@ -73,6 +92,7 @@ export interface AffiliateConfig {
 	excludedTierKeywords: string[];
 	payoutMinimum: number;
 	payoutMinAccountAgeDays: number;
+	dashboardPopupsEnabled: boolean;
 }
 
 export interface LockedReferralAttribution {
@@ -146,6 +166,7 @@ export interface AffiliateDashboardState {
 	programStatus: string | null;
 	recentReferralActivity: AffiliateRecentReferralActivity[];
 	recentStoreCreditActivity: AffiliateRecentStoreCreditActivity[];
+	pendingPopup: AffiliatePopupType | null;
 }
 
 interface AffiliateLedgerSummary {
@@ -175,6 +196,13 @@ function parseNumberSetting(
 	const parsed = Number(value);
 	if (!Number.isFinite(parsed)) return fallback;
 	return Math.max(min, Math.min(max, parsed));
+}
+
+function parseBooleanSetting(value: string | null | undefined, fallback: boolean): boolean {
+	if (!value) return fallback;
+	const normalized = value.trim().toLowerCase();
+	if (!normalized) return fallback;
+	return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
 }
 
 function parseKeywordsSetting(
@@ -214,6 +242,37 @@ function getBaseUrl(): string {
 
 export function getAffiliateReferralBaseUrl(): string {
 	return AFFILIATE_REFERRAL_BASE_URL;
+}
+
+export function getPendingAffiliatePopup(input: {
+	unlocked: boolean;
+	spendProgressPercent: number;
+	popupsEnabled: boolean;
+	seenAt: {
+		welcome: Date | null;
+		progress50: Date | null;
+		progress80: Date | null;
+		progress95: Date | null;
+		unlocked: Date | null;
+	};
+}): AffiliatePopupType | null {
+	if (!input.popupsEnabled) return null;
+
+	if (input.unlocked && !input.seenAt.unlocked) return 'unlocked';
+
+	const milestoneSeenAt: Record<(typeof PROGRESS_MILESTONES)[number], Date | null> = {
+		95: input.seenAt.progress95,
+		80: input.seenAt.progress80,
+		50: input.seenAt.progress50
+	};
+	const milestone = PROGRESS_MILESTONES.find(
+		(candidate) => input.spendProgressPercent >= candidate && !milestoneSeenAt[candidate]
+	);
+	if (milestone) return `progress_${milestone}` as AffiliatePopupType;
+
+	if (!input.seenAt.welcome) return 'welcome';
+
+	return null;
 }
 
 function normalizeAffiliateCode(value: string | null | undefined): string | null {
@@ -565,6 +624,10 @@ async function parseAffiliateConfig(): Promise<AffiliateConfig> {
 			DEFAULT_AFFILIATE_CONFIG.payoutMinAccountAgeDays,
 			0,
 			365
+		),
+		dashboardPopupsEnabled: parseBooleanSetting(
+			byKey.get(AFFILIATE_CONFIG_KEYS.dashboardPopupsEnabled),
+			DEFAULT_AFFILIATE_CONFIG.dashboardPopupsEnabled
 		)
 	};
 }
@@ -586,6 +649,7 @@ export async function saveAffiliateConfig(input: {
 	excludedTierKeywords: string;
 	payoutMinimum: string;
 	payoutMinAccountAgeDays: string;
+	dashboardPopupsEnabled: string;
 }): Promise<AffiliateConfig> {
 	const nextConfig: AffiliateConfig = {
 		unlockThreshold: parseNumberSetting(
@@ -657,6 +721,10 @@ export async function saveAffiliateConfig(input: {
 			DEFAULT_AFFILIATE_CONFIG.payoutMinAccountAgeDays,
 			0,
 			365
+		),
+		dashboardPopupsEnabled: parseBooleanSetting(
+			input.dashboardPopupsEnabled,
+			DEFAULT_AFFILIATE_CONFIG.dashboardPopupsEnabled
 		)
 	};
 
@@ -720,6 +788,11 @@ export async function saveAffiliateConfig(input: {
 			AFFILIATE_CONFIG_KEYS.payoutMinAccountAgeDays,
 			String(nextConfig.payoutMinAccountAgeDays),
 			'Minimum affiliate account age before payout'
+		],
+		[
+			AFFILIATE_CONFIG_KEYS.dashboardPopupsEnabled,
+			String(nextConfig.dashboardPopupsEnabled),
+			'Show affiliate dashboard pop-ups (welcome, progress, unlock)'
 		]
 	];
 
@@ -1712,7 +1785,12 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 			where: { id: userId },
 			select: {
 				createdAt: true,
-				isAffiliateEnabled: true
+				isAffiliateEnabled: true,
+				affiliateWelcomePopupSeenAt: true,
+				affiliateProgress50PopupSeenAt: true,
+				affiliateProgress80PopupSeenAt: true,
+				affiliateProgress95PopupSeenAt: true,
+				affiliateUnlockedPopupSeenAt: true
 			}
 		}),
 		getAffiliateLedgerSummary(userId)
@@ -1949,6 +2027,26 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 		availableStoreCredit >= config.payoutMinimum &&
 		accountAgeDays >= config.payoutMinAccountAgeDays;
 
+	const spendProgressPercentForPopup =
+		qualification.threshold > 0
+			? Math.min(
+					100,
+					Math.floor((qualification.lifetimeCompletedSpend / qualification.threshold) * 100)
+				)
+			: 100;
+	const pendingPopup = getPendingAffiliatePopup({
+		unlocked,
+		spendProgressPercent: spendProgressPercentForPopup,
+		popupsEnabled: config.dashboardPopupsEnabled,
+		seenAt: {
+			welcome: user?.affiliateWelcomePopupSeenAt ?? null,
+			progress50: user?.affiliateProgress50PopupSeenAt ?? null,
+			progress80: user?.affiliateProgress80PopupSeenAt ?? null,
+			progress95: user?.affiliateProgress95PopupSeenAt ?? null,
+			unlocked: user?.affiliateUnlockedPopupSeenAt ?? null
+		}
+	});
+
 	return {
 		eligible: hardDisabled ? false : qualification.eligible,
 		unlocked,
@@ -1976,8 +2074,20 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 			: null,
 		programStatus: program?.status || null,
 		recentReferralActivity,
-		recentStoreCreditActivity
+		recentStoreCreditActivity,
+		pendingPopup
 	};
+}
+
+export async function markAffiliatePopupSeen(
+	userId: string,
+	popup: AffiliatePopupType
+): Promise<void> {
+	const field = AFFILIATE_POPUP_SEEN_FIELDS[popup];
+	await prisma.user.update({
+		where: { id: userId },
+		data: { [field]: new Date() }
+	});
 }
 
 export async function requestAffiliatePayout(userId: string): Promise<{

@@ -20,6 +20,7 @@ vi.mock('$lib/services/email', () => ({
 }));
 
 vi.mock('$lib/services/affiliate', () => ({
+	PROGRESS_MILESTONES: [95, 80, 50],
 	getAffiliateConfig: getAffiliateConfigMock,
 	maybeSendAffiliateUnlockInvite: maybeSendAffiliateUnlockInviteMock
 }));

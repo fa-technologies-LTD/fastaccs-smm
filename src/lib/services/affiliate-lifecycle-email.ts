@@ -1,10 +1,12 @@
 import { prisma } from '$lib/prisma';
 import { sendMarketingEmail } from '$lib/services/email';
-import { getAffiliateConfig, maybeSendAffiliateUnlockInvite } from '$lib/services/affiliate';
+import {
+	PROGRESS_MILESTONES,
+	getAffiliateConfig,
+	maybeSendAffiliateUnlockInvite
+} from '$lib/services/affiliate';
 import { recoverFirstStoreCreditEmails } from '$lib/services/affiliate-notification-email';
 import { recoverAffiliatePayoutStatusEmails } from '$lib/services/affiliate-payout-email';
-
-const PROGRESS_MILESTONES = [95, 80, 50] as const;
 
 function getBaseUrl(): string {
 	return (process.env.PUBLIC_BASE_URL || 'https://smm.fastaccs.com').replace(/\/+$/, '');

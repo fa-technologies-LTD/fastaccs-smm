@@ -35,6 +35,11 @@ model User {
   userType                UserType            @default(REGISTERED) @map("user_type")
   preferredDeliveryMethod DeliveryMethod      @default(EMAIL) @map("preferred_delivery_method")
   isAffiliateEnabled      Boolean             @default(false) @map("is_affiliate_enabled")
+  affiliateWelcomePopupSeenAt    DateTime?     @map("affiliate_welcome_popup_seen_at")
+  affiliateProgress50PopupSeenAt DateTime?     @map("affiliate_progress_50_popup_seen_at")
+  affiliateProgress80PopupSeenAt DateTime?     @map("affiliate_progress_80_popup_seen_at")
+  affiliateProgress95PopupSeenAt DateTime?     @map("affiliate_progress_95_popup_seen_at")
+  affiliateUnlockedPopupSeenAt   DateTime?     @map("affiliate_unlocked_popup_seen_at")
   affiliatePrograms       AffiliateProgram[]
   cartItems               CartItem[]
   notifications           Notification[]

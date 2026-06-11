@@ -762,6 +762,19 @@
 					>
 				</label>
 
+				<label
+					class="flex items-center justify-between rounded-lg p-3 text-sm"
+					style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
+				>
+					<span>Show dashboard pop-ups to affiliates</span>
+					<input
+						type="checkbox"
+						name="dashboardPopupsEnabled"
+						checked={affiliateConfig.dashboardPopupsEnabled}
+						disabled={!canManageSettings}
+					/>
+				</label>
+
 				<button
 					type="submit"
 					class="rounded-full px-4 py-2 text-sm font-semibold text-white transition-opacity disabled:opacity-50"

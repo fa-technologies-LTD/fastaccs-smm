@@ -15,6 +15,9 @@
 	} from '$lib/icons';
 	import { addToast } from '$lib/stores/toasts';
 	import { copyToClipboard } from '$lib/helpers/utils';
+	import AffiliatePopupModal from '$lib/components/AffiliatePopupModal.svelte';
+	import { AFFILIATE_POPUP_CONTENT } from '$lib/helpers/affiliate-popup-content';
+	import type { AffiliatePopupType } from '$lib/services/affiliate';
 
 	interface AffiliateRecentReferralActivity {
 		userId: string;
@@ -60,6 +63,7 @@
 		programStatus?: string | null;
 		recentReferralActivity?: AffiliateRecentReferralActivity[];
 		recentStoreCreditActivity?: AffiliateRecentStoreCreditActivity[];
+		pendingPopup?: AffiliatePopupType | null;
 	}
 
 	let { initialAffiliateData } = $props();
@@ -111,6 +115,20 @@
 	}
 
 	let affiliateData = $state<AffiliateData | null>(normalizeAffiliateData(initialAffiliateData));
+	let activePopup = $state<AffiliatePopupType | null>(affiliateData?.pendingPopup ?? null);
+
+	function dismissPopup() {
+		const popup = activePopup;
+		if (!popup) return;
+		activePopup = null;
+		fetch('/api/affiliate/popup-seen', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ popup })
+		}).catch((error) => {
+			console.error('Failed to mark affiliate popup as seen:', error);
+		});
+	}
 
 	const affiliateCode = $derived(
 		String(affiliateData?.affiliateCode || '')
@@ -777,3 +795,7 @@
 		{/if}
 	</div>
 </div>
+
+{#if activePopup}
+	<AffiliatePopupModal isOpen={true} onClose={dismissPopup} {...AFFILIATE_POPUP_CONTENT[activePopup]} />
+{/if}
