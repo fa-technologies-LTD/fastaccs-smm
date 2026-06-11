@@ -87,9 +87,7 @@ You just earned your first Store Credit from a successful Fast Accounts referral
 Store Credit earned: ₦${params.creditAmount.toLocaleString('en-US')}
 Available Store Credit: ₦${reservation.availableCredit.toLocaleString('en-US')}
 
-Your first referral reward is in. Keep sharing to grow your withdrawable Store Credit.
-
-Store Credit is real, withdrawable cash once payout requirements are met.`,
+Nice — your first Store Credit just landed! Keep sharing your link to earn more on every successful referral. It's real, withdrawable cash.`,
 		ctaText: 'View affiliate dashboard',
 		ctaUrl: `${getBaseUrl()}/dashboard?tab=affiliate`,
 		userId: params.userId,
@@ -165,9 +163,9 @@ export async function sendAffiliateUnlockEmailIfNeeded(userId: string): Promise<
 
 You have unlocked affiliate access on Fast Accounts.
 
-Activate your profile to get your unique referral code and link. Referred buyers can save on eligible orders, and you earn Store Credit from successful referred purchases.
+Activate your profile to get your unique referral code and link. Referred buyers save at checkout, and you earn Store Credit from successful referred purchases.
 
-Store Credit is real, withdrawable cash once payout requirements are met. The affiliate program is currently available only to customers in Nigeria.`,
+Store Credit is real, withdrawable cash once payout requirements are met.`,
 		ctaText: 'Activate affiliate access',
 		ctaUrl: `${getBaseUrl()}/dashboard?tab=affiliate`,
 		notificationType: 'affiliate_unlock',

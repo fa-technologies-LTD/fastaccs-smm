@@ -74,7 +74,7 @@ describe('first Store Credit email', () => {
 			expect.objectContaining({
 				notificationType: 'affiliate_store_credit',
 				referenceId: 'affiliate_first_credit:11111111-1111-1111-1111-111111111111',
-				body: expect.stringContaining('Your first referral reward is in.')
+				body: expect.stringContaining('your first Store Credit just landed')
 			})
 		);
 	});

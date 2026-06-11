@@ -57,7 +57,7 @@
 				<span class="text-xs font-semibold uppercase">Unlock</span>
 			</div>
 			<p class="text-sm" style="color: var(--text-muted);">
-				Reach the lifetime completed-spend threshold in your account.
+				Reach the spending threshold shown in your dashboard.
 			</p>
 		</div>
 		<div
@@ -69,7 +69,7 @@
 				<span class="text-xs font-semibold uppercase">Share</span>
 			</div>
 			<p class="text-sm" style="color: var(--text-muted);">
-				Share your referral link/code so buyers can use it on eligible orders.
+				Share your referral link or code so buyers can save at checkout.
 			</p>
 		</div>
 		<div
@@ -103,8 +103,7 @@
 				per buyer.
 			</p>
 			<p>
-				Affiliate earnings are credited as Store Credit from successful referred orders using safe
-				SKU-level logic.
+				Affiliate earnings are credited as Store Credit from successful referred orders.
 			</p>
 			<p>
 				No stacking: affiliate referral pricing and separate promo codes cannot be combined on the
@@ -138,7 +137,7 @@
 				class="rounded-full px-5 py-2 text-sm font-semibold"
 				style="background: rgba(105,109,250,0.16); border: 1px solid rgba(105,109,250,0.35); color: var(--text);"
 			>
-				Confirm status here
+				Add bank details
 			</a>
 			<a
 				href="/platforms"

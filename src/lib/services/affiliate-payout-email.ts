@@ -18,6 +18,7 @@ function getPayoutEmailContent(params: {
 	firstName: string;
 	amount: number;
 	reference: string;
+	adminNotes?: string;
 }): {
 	subject: string;
 	body: string;
@@ -63,7 +64,7 @@ Your Store Credit payout request could not be approved.
 
 Requested amount: ${amount}
 Request reference: ${params.reference}
-Reason: The request did not pass review.
+Reason: ${params.adminNotes || 'The request did not pass review.'}
 
 Your affiliate dashboard shows the latest status. Contact support if you need help.`,
 		ctaText: 'View payout status'
@@ -92,6 +93,7 @@ export async function sendAffiliatePayoutStatusEmailIfNeeded(params: {
 				amount: true,
 				reference: true,
 				userId: true,
+				metadata: true,
 				user: {
 					select: {
 						email: true,
@@ -108,6 +110,14 @@ export async function sendAffiliatePayoutStatusEmailIfNeeded(params: {
 		if (!payout.user?.email || !payout.user.isActive) return null;
 
 		const typedStatus = status as PayoutEmailStatus;
+		const metadata =
+			payout.metadata && typeof payout.metadata === 'object' && !Array.isArray(payout.metadata)
+				? (payout.metadata as Record<string, unknown>)
+				: {};
+		const adminNotes =
+			typeof metadata.adminNotes === 'string' && metadata.adminNotes.trim()
+				? metadata.adminNotes.trim()
+				: undefined;
 		const referenceId = `affiliate_payout:${payout.id}:${typedStatus}`;
 		const existing = await tx.emailNotification.findFirst({
 			where: {
@@ -146,7 +156,8 @@ export async function sendAffiliatePayoutStatusEmailIfNeeded(params: {
 			amount: Number(payout.amount || 0),
 			reference: payout.reference || payout.id,
 			status: typedStatus,
-			referenceId
+			referenceId,
+			adminNotes
 		};
 	});
 

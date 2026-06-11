@@ -95,9 +95,9 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 
 You can earn Store Credit by referring buyers to Fast Accounts.
 
-Once you unlock affiliate access, you will receive a unique referral code and link. Referred buyers can save on eligible orders, and you earn Store Credit from successful referred purchases.
+Once you unlock affiliate access, you will receive a unique referral code and link. Referred buyers save at checkout, and you earn Store Credit from successful referred purchases.
 
-Store Credit is real, withdrawable cash once payout requirements are met. The affiliate program is currently available only to customers in Nigeria.
+Store Credit is real, withdrawable cash once payout requirements are met.
 
 Spend ₦${remaining.toLocaleString('en-US')} more to unlock affiliate access.`,
 				ctaText: 'See how affiliate access works',
@@ -129,7 +129,7 @@ You are now ${progressPercent}% of the way to affiliate access.
 
 Spend ₦${remaining.toLocaleString('en-US')} more on successful Fast Accounts orders to unlock your referral code and start earning Store Credit.
 
-Store Credit is real, withdrawable cash once payout requirements are met. The affiliate program is currently available only to customers in Nigeria.`,
+Store Credit is real, withdrawable cash once payout requirements are met.`,
 			ctaText: 'View your progress',
 			ctaUrl: `${baseUrl}/dashboard?tab=affiliate`,
 			notificationType: 'affiliate_progress',

@@ -136,7 +136,7 @@
 				affiliateCode = code.toUpperCase();
 				showSuccess(
 					'Referral detected',
-					`${affiliateCode} captured for referral pricing on eligible orders.`
+					`${affiliateCode} captured for referral pricing.`
 				);
 			} else {
 				showWarning('Invalid affiliate code', 'The code you entered is not valid');

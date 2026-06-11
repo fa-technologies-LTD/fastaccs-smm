@@ -384,12 +384,12 @@
 				</p>
 				<p class="mt-1 text-sm" style="color: var(--text-muted);">
 					<strong style="color: var(--text);">This rewards system is active.</strong> Share your code:
-					referred buyers get checkout discounts on eligible orders and you earn Store Credit from
+					referred buyers get checkout discounts and you earn Store Credit from
 					successful purchases. It is withdrawable once payout requirements are met.
 				</p>
 				<p class="mt-2 text-xs" style="color: var(--text-muted);">
-					Discount stage now: <strong style="color: var(--text);">Stage 1</strong> for first 2
-					successful referred orders, then <strong style="color: var(--text);">Stage 2</strong> up to
+					Discount stage now: <strong style="color: var(--text);">Welcome discount</strong> for first 2
+					successful referred orders, then <strong style="color: var(--text);">Ongoing discount</strong> up to
 					order 10.
 				</p>
 			</div>
@@ -585,7 +585,7 @@
 					style="color: {affiliateData?.payoutEligible ? 'var(--primary)' : 'var(--text-muted)'};"
 				>
 					{affiliateData?.payoutEligible
-						? 'Payout is available. Confirm your status, then request payout.'
+						? 'Payout is available. Add your bank details, then request payout.'
 						: 'Keep earning from referrals to unlock withdrawals.'}
 				</p>
 				<div class="mt-3 flex flex-wrap gap-2">
@@ -596,7 +596,7 @@
 						class="rounded-full px-4 py-2 text-sm font-semibold transition-all hover:-translate-y-0.5"
 						style="background: rgba(105,109,250,0.18); border: 1px solid rgba(105,109,250,0.35); color: var(--text);"
 					>
-						Confirm status here
+						Add bank details
 					</a>
 					{#if affiliateData?.payoutEligible && toNumber(affiliateData?.availableStoreCredit) > 0}
 						<button
@@ -650,7 +650,6 @@
 						>
 							Recent Referral Activity
 						</h4>
-						<span class="text-xs font-semibold" style="color: var(--primary);">View all</span>
 					</div>
 					{#if recentReferralActivity.length === 0}
 						<p class="text-sm" style="color: var(--text-muted);">No referral activity yet.</p>
@@ -691,7 +690,6 @@
 						>
 							Recent Store Credit Activity
 						</h4>
-						<span class="text-xs font-semibold" style="color: var(--primary);">View all</span>
 					</div>
 					{#if recentStoreCreditActivity.length === 0}
 						<p class="text-sm" style="color: var(--text-muted);">No Store Credit activity yet.</p>

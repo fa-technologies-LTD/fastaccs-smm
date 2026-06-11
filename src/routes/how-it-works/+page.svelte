@@ -566,7 +566,7 @@
 								Unlock Affiliate Access
 							</h3>
 							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Reach the lifetime completed-spend threshold shown in your dashboard, then activate
+								Reach the spending threshold shown in your dashboard, then activate
 								affiliate access. The system automatically generates your unique referral code.
 							</p>
 							<ul class="space-y-2">
@@ -725,13 +725,12 @@
 								class="mb-4 text-sm"
 								style="color: var(--text-muted); font-family: var(--font-body);"
 							>
-								Store Credit is real, withdrawable cash once payout requirements are met. The
-								affiliate program is currently available only to customers in Nigeria.
+								Store Credit is real, withdrawable cash once payout requirements are met.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Earn withdrawable Store Credit from eligible referred orders</span>
+									<span>Earn withdrawable Store Credit from successful referred orders</span>
 								</li>
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />

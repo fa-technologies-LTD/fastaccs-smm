@@ -50,19 +50,37 @@
 		}
 	}
 
-	async function updatePayoutStatus(transactionId: string, action: 'mark_paid' | 'mark_under_review' | 'mark_reversed') {
+	function payoutAdminNote(payout: any): string {
+		const meta = payout?.metadata;
+		if (meta && typeof meta === 'object' && typeof meta.adminNotes === 'string') {
+			return meta.adminNotes.trim();
+		}
+		return '';
+	}
+
+	async function updatePayoutStatus(
+		transactionId: string,
+		action: 'mark_paid' | 'mark_under_review' | 'mark_reversed',
+		notes?: string
+	) {
 		if (isUpdatingPayout(transactionId)) return;
 		const previous = [...payoutRows];
 		const nextStatus = action === 'mark_paid' ? 'paid' : action === 'mark_under_review' ? 'under_review' : 'reversed';
 		payoutActionById = { ...payoutActionById, [transactionId]: true };
 		payoutRows = payoutRows.map((row) =>
-			row.id === transactionId ? { ...row, status: nextStatus } : row
+			row.id === transactionId
+				? {
+						...row,
+						status: nextStatus,
+						metadata: notes ? { ...(row.metadata || {}), adminNotes: notes } : row.metadata
+					}
+				: row
 		);
 		try {
 			const response = await fetch(`/api/admin/affiliates/${data.affiliate.id}/payouts`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ transactionId, action })
+				body: JSON.stringify({ transactionId, action, ...(notes ? { notes } : {}) })
 			});
 			const result = await response.json();
 			if (!response.ok || !result.success) {
@@ -281,6 +299,9 @@
 									<span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold" style={statusBadgeStyle(payout.status)}>
 										{payout.status}
 									</span>
+									{#if payoutAdminNote(payout)}
+										<p class="mt-1 max-w-[200px] text-[11px] text-gray-500">{payoutAdminNote(payout)}</p>
+									{/if}
 								</td>
 								<td class="px-4 py-3 text-xs text-gray-500">{payout.reference || '-'}</td>
 								<td class="px-4 py-3 text-xs">
@@ -301,7 +322,13 @@
 												Review
 											</button>
 											<button
-												onclick={() => updatePayoutStatus(payout.id, 'mark_reversed')}
+												onclick={() => {
+													const reason = window.prompt(
+														'Reason for rejecting this payout (sent to the user by email):'
+													);
+													if (reason === null) return;
+													updatePayoutStatus(payout.id, 'mark_reversed', reason.trim());
+												}}
 												disabled={isUpdatingPayout(payout.id)}
 												class="rounded bg-red-600 px-2 py-1 text-white hover:bg-red-700 disabled:opacity-60"
 											>

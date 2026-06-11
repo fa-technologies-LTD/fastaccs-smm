@@ -917,7 +917,7 @@ export async function enableAffiliateMode(
 			const remaining = Math.max(0, qualification.threshold - qualification.lifetimeCompletedSpend);
 			return {
 				success: false,
-				error: `Affiliate unlock requires ₦${qualification.threshold.toLocaleString()} lifetime completed spend. Remaining: ₦${remaining.toLocaleString()}.`
+				error: `Affiliate unlock requires ₦${qualification.threshold.toLocaleString()} total spend. Remaining: ₦${remaining.toLocaleString()}.`
 			};
 		}
 
@@ -1525,6 +1525,14 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 			countSuccessfulOrdersForAffiliatePair(order.userId, order.affiliateUserId)
 		]);
 
+		// successfulOrderCountForPair already includes this order: the guard above
+		// confirms order.status/paymentStatus is paid/completed, and
+		// countSuccessfulOrdersForAffiliatePair does a fresh COUNT with no
+		// exclusion — so this is already the order's 1-indexed position, the
+		// post-payment equivalent of `orderIndex` in getAffiliateDiscountForOrder
+		// (which excludes the current order, then adds 1, pre-payment). Both
+		// `> maxRewardedOrdersPerBuyer` checks are therefore equivalent and
+		// correct; do not change this to `>=`.
 		if (successfulOrderCountForPair > config.maxRewardedOrdersPerBuyer) {
 			return { success: true, storeCreditAwarded: 0 };
 		}
