@@ -56,7 +56,7 @@
 					'Redirecting to secure payment gateway. Your wallet will be credited instantly after payment.',
 					4000
 				);
-				// Redirect to Korapay payment (external URL)
+				// Redirect to payment gateway (external URL)
 				setTimeout(() => {
 					window.location.href = data.authorizationUrl;
 				}, 1000);
@@ -112,7 +112,7 @@
 			<div class="flex items-center gap-2">
 				<Shield class="h-5 w-5" style="color: var(--primary);" />
 				<span class="text-sm font-medium" style="color: var(--text);"
-					>Payments secured by Korapay</span
+					>Payments are processed securely</span
 				>
 			</div>
 			<a href="/support" class="text-xs font-medium hover:underline" style="color: var(--link);">
@@ -207,7 +207,7 @@
 					<Lock class="mt-0.5 h-3.5 w-3.5 flex-shrink-0" style="color: var(--text-dim);" />
 					<p class="text-xs" style="color: var(--text-dim);">
 						<span class="font-semibold" style="color: var(--text-muted);"
-							>Secure payment by Korapay.</span
+							>Payments are processed securely.</span
 						> Supports cards, bank transfer, and mobile money. Maximum: ₦850,000 per transaction.
 					</p>
 				</div>

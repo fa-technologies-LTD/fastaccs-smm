@@ -51,7 +51,7 @@ export async function fundWallet(
 	userId: string,
 	amount: number,
 	reference: string,
-	paymentMethod: string = 'korapay'
+	paymentMethod: string = 'monnify'
 ): Promise<{ success: boolean; transaction?: WalletTransaction; error?: string }> {
 	try {
 		const wallet = await getOrCreateWallet(userId);

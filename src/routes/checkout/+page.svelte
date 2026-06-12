@@ -341,7 +341,7 @@
 	}
 
 	// ARCHIVED: wallet checkout (processCheckout) removed — wallet payments disabled.
-	// See src/lib/services/_archive/korapay.ts and git history for the original implementation.
+	// See git history for the original implementation.
 
 	async function payWithMonnify() {
 		if (loading) return;
