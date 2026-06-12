@@ -27,6 +27,7 @@
 	orders={data.orders}
 	affiliateData={data.affiliateData}
 	purchases={data.purchases}
+	sitePopup={data.sitePopup}
 />
 
 <Footer />

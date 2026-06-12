@@ -18,6 +18,7 @@ const SETTINGS_KEYS = {
 	adminRecipients: 'config.notifications.admin_recipients',
 	lowStockThreshold: 'config.notifications.low_stock_threshold',
 	highSpenderMinTotal: 'config.notifications.high_spender_min_total',
+	sitePopupsEnabled: 'config.dashboard.milestone_popups_enabled',
 	winbackDaysThreshold: 'config.notifications.winback_days_threshold',
 	broadcastBatchSize: 'config.notifications.broadcast_batch_size',
 	broadcastBatchDelayMs: 'config.notifications.broadcast_batch_delay_ms',
@@ -39,6 +40,7 @@ const DEFAULTS = {
 	storeAutoDeliveryPaused: false,
 	lowStockThreshold: 10,
 	highSpenderMinTotal: Math.max(1, Number(env.BROADCAST_HIGH_SPENDER_MIN_TOTAL || 100000)),
+	sitePopupsEnabled: true,
 	winbackDaysThreshold: Math.max(1, Number(env.WINBACK_DAYS_THRESHOLD || 30)),
 	broadcastBatchSize: Math.max(1, Number(env.BROADCAST_BATCH_SIZE || 10)),
 	broadcastBatchDelayMs: Math.max(100, Number(env.BROADCAST_BATCH_DELAY_MS || 1000))
@@ -67,6 +69,7 @@ export interface NotificationSettings {
 	adminRecipients: string[];
 	lowStockThreshold: number;
 	highSpenderMinTotal: number;
+	sitePopupsEnabled: boolean;
 	winbackDaysThreshold: number;
 	broadcastBatchSize: number;
 	broadcastBatchDelayMs: number;
@@ -326,6 +329,10 @@ export async function getAdminSettingsSnapshot(): Promise<AdminSettingsSnapshot>
 				DEFAULTS.highSpenderMinTotal,
 				{ min: 1, max: 100_000_000 }
 			),
+			sitePopupsEnabled: parseBooleanSetting(
+				values.get(SETTINGS_KEYS.sitePopupsEnabled) || null,
+				DEFAULTS.sitePopupsEnabled
+			),
 			winbackDaysThreshold: parseNumberSetting(
 				values.get(SETTINGS_KEYS.winbackDaysThreshold) || null,
 				DEFAULTS.winbackDaysThreshold,
@@ -460,6 +467,7 @@ export async function saveNotificationSettings(input: {
 	adminRecipients?: string;
 	lowStockThreshold?: string | number;
 	highSpenderMinTotal?: string | number;
+	sitePopupsEnabled?: string | boolean;
 	winbackDaysThreshold?: string | number;
 	broadcastBatchSize?: string | number;
 	broadcastBatchDelayMs?: string | number;
@@ -475,6 +483,10 @@ export async function saveNotificationSettings(input: {
 		DEFAULTS.highSpenderMinTotal,
 		{ min: 1, max: 100_000_000 }
 	);
+	const sitePopupsEnabled =
+		typeof input.sitePopupsEnabled === 'boolean'
+			? input.sitePopupsEnabled
+			: parseBooleanSetting(String(input.sitePopupsEnabled || ''), DEFAULTS.sitePopupsEnabled);
 	const winbackDaysThreshold = parseNumberSetting(
 		String(input.winbackDaysThreshold ?? ''),
 		DEFAULTS.winbackDaysThreshold,
@@ -508,6 +520,11 @@ export async function saveNotificationSettings(input: {
 			'Minimum lifetime completed spend for the "high spenders" broadcast audience.'
 		),
 		upsertSetting(
+			SETTINGS_KEYS.sitePopupsEnabled,
+			sitePopupsEnabled ? 'true' : 'false',
+			'Show dashboard milestone pop-ups (first purchase, catalog updates) to buyers.'
+		),
+		upsertSetting(
 			SETTINGS_KEYS.winbackDaysThreshold,
 			String(winbackDaysThreshold),
 			'Win-back campaign inactivity threshold in days.'
@@ -538,6 +555,11 @@ export async function getLowStockThresholdSetting(): Promise<number> {
 export async function getHighSpenderMinTotalSetting(): Promise<number> {
 	const snapshot = await getAdminSettingsSnapshot();
 	return snapshot.notifications.highSpenderMinTotal;
+}
+
+export async function getSitePopupsEnabledSetting(): Promise<boolean> {
+	const values = await getSettingsMap([SETTINGS_KEYS.sitePopupsEnabled]);
+	return parseBooleanSetting(values.get(SETTINGS_KEYS.sitePopupsEnabled) || null, DEFAULTS.sitePopupsEnabled);
 }
 
 export async function countHighSpenders(minTotal: number): Promise<number> {

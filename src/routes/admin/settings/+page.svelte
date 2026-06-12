@@ -806,6 +806,19 @@
 					>
 				</label>
 
+				<label
+					class="flex items-center justify-between rounded-lg p-3 text-sm"
+					style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
+				>
+					<span>Dashboard milestone pop-ups (first purchase, catalog updates)</span>
+					<input
+						type="checkbox"
+						name="sitePopupsEnabled"
+						checked={settings.notifications.sitePopupsEnabled}
+						disabled={!canManageSettings}
+					/>
+				</label>
+
 				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<label class="block text-sm" style="color: var(--text-muted);">
 						Low-stock threshold

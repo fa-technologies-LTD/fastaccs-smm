@@ -28,6 +28,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 			// walletBalance: result.data.walletBalance || 0,
 			// walletTransactions: result.data.walletTransactions || [],
 			purchases: result.data.purchases || [],
+			sitePopup: result.data.sitePopup || null,
 			messages: [], // TODO: Implement messages/notifications system
 			error: null
 		};
@@ -40,6 +41,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 			// walletBalance: 0,
 			// walletTransactions: [],
 			purchases: [],
+			sitePopup: null,
 			messages: [],
 			error: error instanceof Error ? error.message : 'Failed to load dashboard data'
 		};

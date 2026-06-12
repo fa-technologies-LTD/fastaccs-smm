@@ -9,6 +9,7 @@ import {
 } from '$lib/helpers/tier-delivery-config';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { getAffiliateDashboardState } from '$lib/services/affiliate';
+import { getPendingSitePopup } from '$lib/services/site-popups';
 import { reconcilePendingPayments } from '$lib/services/payment-reconciliation';
 import {
 	CONFIRMED_PAYMENT_STATUSES,
@@ -187,6 +188,11 @@ export const GET: RequestHandler = async ({ locals }) => {
 			})
 		);
 
+		const sitePopup = await getPendingSitePopup({
+			userId: user.id,
+			hasCompletedPurchase: purchasesFormatted.length > 0
+		});
+
 		return json({
 			success: true,
 			data: {
@@ -195,7 +201,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 				walletBalance: wallet?.balance || 0,
 				walletCurrency: wallet?.currency || 'NGN',
 				walletTransactions,
-				purchases: purchasesFormatted
+				purchases: purchasesFormatted,
+				sitePopup
 			}
 		});
 	} catch (error) {

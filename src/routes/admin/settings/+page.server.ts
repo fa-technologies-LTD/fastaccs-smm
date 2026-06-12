@@ -180,6 +180,7 @@ export const actions: Actions = {
 			adminRecipients: String(formData.get('adminRecipients') || ''),
 			lowStockThreshold: String(formData.get('lowStockThreshold') || ''),
 			highSpenderMinTotal: String(formData.get('highSpenderMinTotal') || ''),
+			sitePopupsEnabled: formData.get('sitePopupsEnabled') === 'on' ? 'true' : 'false',
 			winbackDaysThreshold: String(formData.get('winbackDaysThreshold') || ''),
 			broadcastBatchSize: String(formData.get('broadcastBatchSize') || ''),
 			broadcastBatchDelayMs: String(formData.get('broadcastBatchDelayMs') || '')
