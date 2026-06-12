@@ -36,6 +36,17 @@ import {
 	getPaymentReservationExpiresAt,
 	getPendingPaymentExpiresAt
 } from '$lib/helpers/payment-expiry.server';
+import {
+	CHECKOUT_DISABLED_CODE,
+	CHECKOUT_DISABLED_MESSAGE,
+	isNewCheckoutInitializationDisabled
+} from '$lib/helpers/checkout-control.server';
+import { createPaymentTraceId, logPaymentEvent } from '$lib/server/payment-observability';
+import {
+	getMonnifyInitializationErrorMessage,
+	getMonnifyInitializationIssue,
+	MONNIFY_CURRENCY
+} from '$lib/helpers/monnify-initialization.server';
 
 interface CreateOrderItemInput {
 	categoryId: string;
@@ -186,6 +197,8 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 
 // POST /api/orders - Create new order
 export const POST: RequestHandler = async ({ request, locals, url }) => {
+	const traceId = createPaymentTraceId(request);
+
 	try {
 		if (!locals.user) {
 			return json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -225,6 +238,15 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			}
 
 			if (isActiveCheckoutOrder(existingCheckout)) {
+				logPaymentEvent('info', 'checkout.resumed', {
+					traceId,
+					orderId: existingCheckout.id,
+					userId: checkoutUserId,
+					paymentReference: existingCheckout.paymentReference,
+					resumed: true,
+					amount: Number(existingCheckout.totalAmount),
+					currency: existingCheckout.currency
+				});
 				return json({
 					data: existingCheckout,
 					success: true,
@@ -234,6 +256,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					paymentReference: existingCheckout.paymentReference,
 					deliveryMode:
 						existingCheckout.deliveryMethod === 'whatsapp' ? 'manual_handover' : 'instant_auto',
+					traceId,
 					error: null
 				});
 			}
@@ -268,6 +291,26 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				);
 			}
 
+			if (isNewCheckoutInitializationDisabled()) {
+				logPaymentEvent('warn', 'checkout.blocked', {
+					traceId,
+					orderId: existingCheckout.id,
+					userId: checkoutUserId,
+					source: 'emergency_switch',
+					amount: Number(existingCheckout.totalAmount),
+					currency: existingCheckout.currency
+				});
+				return json(
+					{
+						success: false,
+						error: CHECKOUT_DISABLED_MESSAGE,
+						code: CHECKOUT_DISABLED_CODE,
+						traceId
+					},
+					{ status: 503 }
+				);
+			}
+
 			await releaseOrderReservations(existingCheckout.id);
 			await prisma.order.update({
 				where: { id: existingCheckout.id },
@@ -278,6 +321,23 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						: {})
 				}
 			});
+		}
+
+		if (isNewCheckoutInitializationDisabled()) {
+			logPaymentEvent('warn', 'checkout.blocked', {
+				traceId,
+				userId: checkoutUserId,
+				source: 'emergency_switch'
+			});
+			return json(
+				{
+					success: false,
+					error: CHECKOUT_DISABLED_MESSAGE,
+					code: CHECKOUT_DISABLED_CODE,
+					traceId
+				},
+				{ status: 503 }
+			);
 		}
 
 		const normalizedItems = items.map((item) => ({
@@ -321,6 +381,25 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				.toLowerCase() || 'monnify';
 		if (paymentMethod !== 'monnify') {
 			return json({ success: false, error: 'Unsupported payment method.' }, { status: 400 });
+		}
+		const orderCurrency = String(orderData.currency || MONNIFY_CURRENCY)
+			.trim()
+			.toUpperCase();
+		if (orderCurrency !== MONNIFY_CURRENCY) {
+			logPaymentEvent('warn', 'checkout.initialize.rejected', {
+				traceId,
+				userId: checkoutUserId,
+				currency: orderCurrency,
+				errorCode: 'unsupported_currency'
+			});
+			return json(
+				{
+					success: false,
+					error: getMonnifyInitializationErrorMessage('unsupported_currency'),
+					traceId
+				},
+				{ status: 400 }
+			);
 		}
 		const customerEmail = String(orderData.email || locals.user.email || '').trim();
 		const customerPhone = String(orderData.phone || locals.user.phone || '').trim();
@@ -527,6 +606,28 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			finalOrderTotal = Math.max(0, Math.round((subtotalAmount - discountAmount) * 100) / 100);
 		}
 
+		const initializationIssue = getMonnifyInitializationIssue({
+			amount: finalOrderTotal,
+			currency: orderCurrency
+		});
+		if (initializationIssue) {
+			logPaymentEvent('warn', 'checkout.initialize.rejected', {
+				traceId,
+				userId: checkoutUserId,
+				amount: finalOrderTotal,
+				currency: orderCurrency,
+				errorCode: initializationIssue
+			});
+			return json(
+				{
+					success: false,
+					error: getMonnifyInitializationErrorMessage(initializationIssue),
+					traceId
+				},
+				{ status: 400 }
+			);
+		}
+
 		if (finalOrderTotal < minimumOrderValue) {
 			return json(
 				{
@@ -556,7 +657,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						subtotal: subtotalAmount,
 						discountAmount,
 						totalAmount: finalOrderTotal,
-						currency: orderData.currency || 'NGN',
+						currency: orderCurrency,
 						paymentMethod: paymentMethod,
 						paymentExpiresAt: paymentMethod === 'monnify' ? paymentExpiresAt : null,
 						deliveryMethod: isManualHandoverOrder ? 'whatsapp' : 'email',
@@ -645,17 +746,39 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			const paymentReference = `ORD_${shortOrderId}_${Date.now()}`;
 			const redirectUrl = `${url.origin}/checkout/verify?orderId=${encodeURIComponent(data.id)}`;
 
+			logPaymentEvent('info', 'checkout.initialize.started', {
+				traceId,
+				orderId: data.id,
+				userId: checkoutUserId,
+				paymentReference,
+				amount: Number(data.totalAmount),
+				currency: data.currency
+			});
+
 			const initResult = await initializeTransaction({
 				amount: Number(data.totalAmount),
+				currency: data.currency,
 				customerName: locals.user.fullName || customerEmail || 'Customer',
 				customerEmail,
 				paymentReference,
 				paymentDescription: `Payment for order ${shortOrderId}`,
 				redirectUrl,
-				metaData: { orderId: data.id, userId: checkoutUserId }
+				metaData: { orderId: data.id, userId: checkoutUserId },
+				traceId,
+				orderId: data.id
 			});
 
 			if (!initResult.success || !initResult.checkoutUrl) {
+				logPaymentEvent('error', 'checkout.initialize.failed', {
+					traceId,
+					orderId: data.id,
+					userId: checkoutUserId,
+					paymentReference,
+					amount: Number(data.totalAmount),
+					currency: data.currency,
+					errorCode: initResult.errorCode,
+					errorMessage: initResult.error || 'Failed to initialize payment'
+				});
 				try {
 					await releaseOrderReservations(data.id);
 					await prisma.order.update({
@@ -675,7 +798,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				return json(
 					{
 						success: false,
-						error: initResult.error || 'Failed to initialize payment'
+						error: initResult.error || 'Failed to initialize payment',
+						traceId
 					},
 					{ status: 502 }
 				);
@@ -693,6 +817,17 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			});
 			invalidateAdminStatsCache();
 
+			logPaymentEvent('info', 'checkout.initialize.completed', {
+				traceId,
+				orderId: data.id,
+				userId: checkoutUserId,
+				paymentReference,
+				transactionReference: initResult.transactionReference,
+				amount: Number(data.totalAmount),
+				currency: data.currency,
+				success: true
+			});
+
 			return json({
 				data,
 				success: true,
@@ -700,6 +835,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				checkoutUrl: initResult.checkoutUrl,
 				paymentReference,
 				deliveryMode: orderDeliveryMode,
+				traceId,
 				error: null
 			});
 		}

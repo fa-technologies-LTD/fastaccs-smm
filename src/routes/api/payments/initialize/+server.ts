@@ -15,8 +15,20 @@ import {
 import { settleFailedPayment, settleSuccessfulPayment } from '$lib/services/payment-settlement';
 import { extendOrderReservations } from '$lib/services/order-reservations';
 import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
+import {
+	CHECKOUT_DISABLED_CODE,
+	CHECKOUT_DISABLED_MESSAGE,
+	isNewCheckoutInitializationDisabled
+} from '$lib/helpers/checkout-control.server';
+import { createPaymentTraceId, logPaymentEvent } from '$lib/server/payment-observability';
+import {
+	getMonnifyInitializationErrorMessage,
+	getMonnifyInitializationIssue
+} from '$lib/helpers/monnify-initialization.server';
 
 export const POST: RequestHandler = async ({ request, locals, url }) => {
+	const traceId = createPaymentTraceId(request);
+
 	try {
 		if (!locals.user) {
 			return json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -71,6 +83,15 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			order.paymentExpiresAt.getTime() > Date.now() &&
 			['pending', 'pending_payment'].includes(order.status)
 		) {
+			logPaymentEvent('info', 'initialize.resumed', {
+				traceId,
+				orderId,
+				userId: locals.user.id,
+				paymentReference: order.paymentReference,
+				resumed: true,
+				amount: Number(order.totalAmount),
+				currency: order.currency
+			});
 			return json({
 				success: true,
 				resumed: true,
@@ -143,31 +164,94 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			);
 		}
 
+		if (isNewCheckoutInitializationDisabled()) {
+			logPaymentEvent('warn', 'initialize.blocked', {
+				traceId,
+				orderId,
+				userId: locals.user.id,
+				source: 'emergency_switch',
+				amount: Number(order.totalAmount),
+				currency: order.currency
+			});
+			return json(
+				{
+					success: false,
+					error: CHECKOUT_DISABLED_MESSAGE,
+					code: CHECKOUT_DISABLED_CODE,
+					traceId
+				},
+				{ status: 503 }
+			);
+		}
+
+		const amount = Number(order.totalAmount);
+		const currency = String(order.currency || '')
+			.trim()
+			.toUpperCase();
+		const initializationIssue = getMonnifyInitializationIssue({ amount, currency });
+		if (initializationIssue) {
+			logPaymentEvent('warn', 'initialize.rejected', {
+				traceId,
+				orderId,
+				userId: locals.user.id,
+				amount,
+				currency,
+				errorCode: initializationIssue
+			});
+			return json(
+				{
+					success: false,
+					error: getMonnifyInitializationErrorMessage(initializationIssue),
+					traceId
+				},
+				{ status: 409 }
+			);
+		}
+
 		const shortOrderId = orderId.substring(0, 8);
 		const paymentReference = `ORD_${shortOrderId}_${Date.now()}`;
 		const paymentExpiresAt = getPendingPaymentExpiresAt();
 		const redirectUrl = `${url.origin}/checkout/verify?orderId=${encodeURIComponent(orderId)}`;
 
-		console.info('[payments.initialize] starting', {
+		logPaymentEvent('info', 'initialize.started', {
+			traceId,
 			orderId,
 			userId: locals.user.id,
 			paymentReference,
-			amount: Number(order.totalAmount)
+			amount,
+			currency
 		});
 
 		const result = await initializeTransaction({
-			amount: Number(order.totalAmount),
+			amount,
+			currency,
 			customerName: locals.user.fullName || locals.user.email || 'Customer',
 			customerEmail: locals.user.email || '',
 			paymentReference,
 			paymentDescription: `Payment for order ${shortOrderId}`,
 			redirectUrl,
-			metaData: { orderId, userId: locals.user.id }
+			metaData: { orderId, userId: locals.user.id },
+			traceId,
+			orderId
 		});
 
 		if (!result.success || !result.checkoutUrl) {
+			logPaymentEvent('error', 'initialize.failed', {
+				traceId,
+				orderId,
+				userId: locals.user.id,
+				paymentReference,
+				amount,
+				currency,
+				errorCode: result.errorCode,
+				errorMessage: result.error || 'Failed to initialize payment'
+			});
 			return json(
-				{ success: false, error: result.error || 'Failed to initialize payment' },
+				{
+					success: false,
+					error: result.error || 'Failed to initialize payment',
+					traceId
+				},
 				{ status: 500 }
 			);
 		}
@@ -184,23 +268,35 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		});
 		await extendOrderReservations(orderId, getPaymentReservationExpiresAt(paymentExpiresAt));
 
-		console.info('[payments.initialize] pending_payment', {
+		logPaymentEvent('info', 'initialize.pending_payment', {
+			traceId,
 			orderId,
-			paymentReference
+			userId: locals.user.id,
+			paymentReference,
+			transactionReference: result.transactionReference,
+			amount,
+			currency,
+			success: true
 		});
 
 		return json({
 			success: true,
 			checkoutUrl: result.checkoutUrl,
 			orderId,
-			paymentReference
+			paymentReference,
+			traceId
 		});
 	} catch (error) {
-		console.error('Payment initialization error:', error);
+		logPaymentEvent('error', 'initialize.exception', {
+			traceId,
+			userId: locals.user?.id,
+			errorMessage: error instanceof Error ? error.message : 'Failed to initialize payment'
+		});
 		return json(
 			{
 				success: false,
-				error: error instanceof Error ? error.message : 'Failed to initialize payment'
+				error: error instanceof Error ? error.message : 'Failed to initialize payment',
+				traceId
 			},
 			{ status: 500 }
 		);

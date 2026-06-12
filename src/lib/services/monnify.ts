@@ -1,11 +1,18 @@
 import { env } from '$env/dynamic/private';
 import { createHmac } from 'crypto';
+import { logPaymentEvent } from '$lib/server/payment-observability';
+import {
+	getMonnifyInitializationErrorMessage,
+	getMonnifyInitializationIssue,
+	MONNIFY_CURRENCY,
+	type MonnifyInitializationIssue
+} from '$lib/helpers/monnify-initialization.server';
 
 const MONNIFY_API_KEY = env.MONNIFY_API_KEY || '';
 const MONNIFY_SECRET_KEY = env.MONNIFY_SECRET_KEY || '';
 const MONNIFY_BASE_URL = env.MONNIFY_BASE_URL || '';
 const MONNIFY_CONTRACT_CODE = env.MONNIFY_CONTRACT_CODE || '';
-const MONNIFY_CHECKOUT_PAYMENT_METHODS = ['CARD', 'ACCOUNT_TRANSFER'];
+const PAYMENT_SETUP_ERROR = 'Payment setup could not be completed. Please try again.';
 
 // Token cache — re-used until 5 minutes before expiry
 let cachedToken: { value: string; expiresAt: number } | null = null;
@@ -155,9 +162,7 @@ function mapVerificationResult(
 		paidOn: paidOn && !Number.isNaN(paidOn.getTime()) ? paidOn : undefined,
 		paymentMethod: String(transaction.paymentMethod || ''),
 		metaData:
-			transaction.metaData && typeof transaction.metaData === 'object'
-				? transaction.metaData
-				: {}
+			transaction.metaData && typeof transaction.metaData === 'object' ? transaction.metaData : {}
 	};
 }
 
@@ -293,12 +298,15 @@ export function verifyWebhookSignature(signature: string, rawBody: string): bool
 
 export interface InitTransactionParams {
 	amount: number;
+	currency?: string;
 	customerName: string;
 	customerEmail: string;
 	paymentReference: string;
 	paymentDescription: string;
 	redirectUrl: string;
 	metaData?: Record<string, unknown>;
+	traceId?: string;
+	orderId?: string;
 }
 
 export interface InitTransactionResult {
@@ -306,6 +314,102 @@ export interface InitTransactionResult {
 	checkoutUrl?: string;
 	transactionReference?: string;
 	error?: string;
+	errorCode?: MonnifyInitializationIssue | ProviderInitializationErrorCode;
+}
+
+type ProviderInitializationErrorCode =
+	| 'provider_initialization_failed'
+	| 'provider_payment_reference_missing'
+	| 'provider_payment_reference_mismatch'
+	| 'provider_transaction_reference_missing'
+	| 'provider_checkout_url_invalid'
+	| 'provider_checkout_url_mismatch'
+	| 'provider_amount_mismatch'
+	| 'provider_currency_mismatch';
+
+interface MonnifyInitializationResponseBody {
+	checkoutUrl?: unknown;
+	transactionReference?: unknown;
+	paymentReference?: unknown;
+	amount?: unknown;
+	currencyCode?: unknown;
+	currency?: unknown;
+}
+
+function hasOwn(object: object, property: string): boolean {
+	return Object.prototype.hasOwnProperty.call(object, property);
+}
+
+function normalizeProviderString(value: unknown): string {
+	return typeof value === 'string' ? value.trim() : '';
+}
+
+function amountsMatch(expected: number, actual: number): boolean {
+	return Math.round(expected * 100) === Math.round(actual * 100);
+}
+
+function validateCheckoutUrl(
+	checkoutUrl: string,
+	transactionReference: string
+): ProviderInitializationErrorCode | null {
+	try {
+		const parsedUrl = new URL(checkoutUrl);
+		const hostname = parsedUrl.hostname.toLowerCase();
+		if (
+			parsedUrl.protocol !== 'https:' ||
+			(hostname !== 'monnify.com' && !hostname.endsWith('.monnify.com'))
+		) {
+			return 'provider_checkout_url_invalid';
+		}
+
+		let decodedPathname = parsedUrl.pathname;
+		try {
+			decodedPathname = decodeURIComponent(parsedUrl.pathname);
+		} catch {
+			return 'provider_checkout_url_invalid';
+		}
+
+		return decodedPathname.split('/').includes(transactionReference)
+			? null
+			: 'provider_checkout_url_mismatch';
+	} catch {
+		return 'provider_checkout_url_invalid';
+	}
+}
+
+function validateInitializationResponse(
+	responseBody: MonnifyInitializationResponseBody,
+	params: InitTransactionParams,
+	currency: string
+): ProviderInitializationErrorCode | null {
+	const providerPaymentReference = normalizeProviderString(responseBody.paymentReference);
+	if (!providerPaymentReference) return 'provider_payment_reference_missing';
+	if (providerPaymentReference !== params.paymentReference) {
+		return 'provider_payment_reference_mismatch';
+	}
+
+	const transactionReference = normalizeProviderString(responseBody.transactionReference);
+	if (!transactionReference) return 'provider_transaction_reference_missing';
+
+	const checkoutUrl = normalizeProviderString(responseBody.checkoutUrl);
+	const checkoutUrlIssue = validateCheckoutUrl(checkoutUrl, transactionReference);
+	if (checkoutUrlIssue) return checkoutUrlIssue;
+
+	if (hasOwn(responseBody, 'amount')) {
+		const providerAmount = Number(responseBody.amount);
+		if (!Number.isFinite(providerAmount) || !amountsMatch(params.amount, providerAmount)) {
+			return 'provider_amount_mismatch';
+		}
+	}
+
+	if (hasOwn(responseBody, 'currencyCode') || hasOwn(responseBody, 'currency')) {
+		const providerCurrency = normalizeProviderString(
+			responseBody.currencyCode || responseBody.currency
+		).toUpperCase();
+		if (providerCurrency !== currency) return 'provider_currency_mismatch';
+	}
+
+	return null;
 }
 
 /**
@@ -315,7 +419,35 @@ export interface InitTransactionResult {
 export async function initializeTransaction(
 	params: InitTransactionParams
 ): Promise<InitTransactionResult> {
+	const currency = String(params.currency || MONNIFY_CURRENCY)
+		.trim()
+		.toUpperCase();
+	const inputIssue = getMonnifyInitializationIssue({ amount: params.amount, currency });
+	if (inputIssue) {
+		logPaymentEvent('warn', 'provider.initialize.rejected', {
+			traceId: params.traceId,
+			orderId: params.orderId,
+			paymentReference: params.paymentReference,
+			amount: params.amount,
+			currency,
+			errorCode: inputIssue
+		});
+		return {
+			success: false,
+			error: getMonnifyInitializationErrorMessage(inputIssue),
+			errorCode: inputIssue
+		};
+	}
+
 	try {
+		logPaymentEvent('info', 'provider.initialize.requested', {
+			traceId: params.traceId,
+			orderId: params.orderId,
+			paymentReference: params.paymentReference,
+			amount: params.amount,
+			currency
+		});
+
 		const token = await getAccessToken();
 
 		const response = await fetch(
@@ -332,33 +464,75 @@ export async function initializeTransaction(
 					customerEmail: params.customerEmail,
 					paymentReference: params.paymentReference,
 					paymentDescription: params.paymentDescription,
-					currencyCode: 'NGN',
+					currencyCode: currency,
 					contractCode: MONNIFY_CONTRACT_CODE,
 					redirectUrl: params.redirectUrl,
-					paymentMethods: MONNIFY_CHECKOUT_PAYMENT_METHODS,
 					metaData: params.metaData
 				})
 			}
 		);
 
 		const data = await response.json();
+		const responseBody =
+			data?.responseBody && typeof data.responseBody === 'object'
+				? (data.responseBody as MonnifyInitializationResponseBody)
+				: {};
+		const providerPaymentReference = normalizeProviderString(responseBody.paymentReference);
+		const transactionReference = normalizeProviderString(responseBody.transactionReference);
+		const checkoutUrl = normalizeProviderString(responseBody.checkoutUrl);
+		const responseIssue =
+			response.ok && data.requestSuccessful
+				? validateInitializationResponse(responseBody, params, currency)
+				: 'provider_initialization_failed';
 
-		if (!data.requestSuccessful || !data.responseBody?.checkoutUrl) {
+		logPaymentEvent(
+			data.requestSuccessful && !responseIssue ? 'info' : 'warn',
+			'provider.initialize.responded',
+			{
+				traceId: params.traceId,
+				orderId: params.orderId,
+				paymentReference: params.paymentReference,
+				providerPaymentReference: providerPaymentReference || null,
+				transactionReference: transactionReference || null,
+				providerAmount:
+					hasOwn(responseBody, 'amount') && Number.isFinite(Number(responseBody.amount))
+						? Number(responseBody.amount)
+						: null,
+				providerCurrency: String(responseBody.currencyCode || responseBody.currency || '') || null,
+				httpStatus: response.status,
+				responseCode: String(data.responseCode || '') || null,
+				success: Boolean(data.requestSuccessful && !responseIssue),
+				errorCode: responseIssue,
+				errorMessage: data.requestSuccessful ? null : String(data.responseMessage || '')
+			}
+		);
+
+		if (responseIssue) {
 			return {
 				success: false,
-				error: data.responseMessage || 'Failed to initialize transaction'
+				error: PAYMENT_SETUP_ERROR,
+				errorCode: responseIssue
 			};
 		}
 
 		return {
 			success: true,
-			checkoutUrl: data.responseBody.checkoutUrl,
-			transactionReference: data.responseBody.transactionReference
+			checkoutUrl,
+			transactionReference
 		};
 	} catch (error) {
+		logPaymentEvent('error', 'provider.initialize.failed', {
+			traceId: params.traceId,
+			orderId: params.orderId,
+			paymentReference: params.paymentReference,
+			amount: params.amount,
+			currency,
+			errorMessage: error instanceof Error ? error.message : 'Unknown error'
+		});
 		return {
 			success: false,
-			error: error instanceof Error ? error.message : 'Unknown error'
+			error: PAYMENT_SETUP_ERROR,
+			errorCode: 'provider_initialization_failed'
 		};
 	}
 }

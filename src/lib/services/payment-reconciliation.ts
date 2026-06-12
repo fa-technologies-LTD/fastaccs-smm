@@ -22,6 +22,7 @@ import {
 } from '$lib/services/payment-settlement';
 import { releaseExpiredOrderReservations } from '$lib/services/order-reservations';
 import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
+import { createPaymentTraceId, logPaymentEvent } from '$lib/server/payment-observability';
 
 interface ReconcileOptions {
 	limit?: number;
@@ -83,6 +84,7 @@ function isMissingPromotionColumnError(error: unknown): boolean {
 export async function reconcilePendingPayments(
 	options: ReconcileOptions = {}
 ): Promise<ReconcileSummary> {
+	const traceId = createPaymentTraceId();
 	const dryRun = options.dryRun === true;
 	const limit = Math.min(Math.max(Number(options.limit || DEFAULT_LIMIT), 1), 500);
 	const staleMinutesInput =
@@ -110,9 +112,18 @@ export async function reconcilePendingPayments(
 		skipped: 0,
 		dryRun
 	};
+	logPaymentEvent('info', 'reconcile.started', {
+		traceId,
+		source: dryRun ? 'dry_run' : 'scheduled_or_manual',
+		status: 'STARTED'
+	});
 	if (!hasMonnifyConfig()) {
 		summary.skipped = limit;
-		console.warn('[payments.reconcile] skipped: Monnify config missing');
+		logPaymentEvent('warn', 'reconcile.skipped', {
+			traceId,
+			source: 'missing_monnify_config',
+			status: 'SKIPPED'
+		});
 		return summary;
 	}
 
@@ -178,6 +189,17 @@ export async function reconcilePendingPayments(
 
 		const verificationResult = await verifyPayment(order.paymentReference);
 		const gatewayStatus = normalizePaymentStatus(verificationResult.status);
+		logPaymentEvent('info', 'reconcile.verification_result', {
+			traceId,
+			orderId: order.id,
+			paymentReference: verificationResult.paymentReference || order.paymentReference,
+			transactionReference: verificationResult.transactionReference,
+			status: gatewayStatus || null,
+			success: verificationResult.success,
+			amount: verificationResult.amount,
+			amountPaid: verificationResult.amountPaid,
+			currency: verificationResult.currency
+		});
 
 		if (verificationResult.success || isSuccessPaymentStatus(gatewayStatus)) {
 			if (dryRun) {
@@ -191,6 +213,17 @@ export async function reconcilePendingPayments(
 					paidAt: verificationResult.paidAt,
 					amountPaid: Number(verificationResult.amountPaid || verificationResult.amount || 0),
 					currency: verificationResult.currency
+				});
+				logPaymentEvent(result.success ? 'info' : 'error', 'reconcile.settlement_result', {
+					traceId,
+					orderId: order.id,
+					paymentReference: verificationResult.paymentReference || order.paymentReference,
+					transactionReference: verificationResult.transactionReference,
+					status: result.status,
+					success: result.success,
+					amountPaid: Number(verificationResult.amountPaid || verificationResult.amount || 0),
+					currency: verificationResult.currency,
+					errorMessage: result.error || result.warning || null
 				});
 				if (!result.success || result.status === 'FAILED') summary.failed += 1;
 				else if (result.status === 'COMPLETED') summary.completed += 1;
@@ -233,6 +266,12 @@ export async function reconcilePendingPayments(
 		summary.keptPending += 1;
 	}
 
+	logPaymentEvent('info', 'reconcile.completed', {
+		traceId,
+		source: dryRun ? 'dry_run' : 'scheduled_or_manual',
+		status: 'COMPLETED',
+		success: true
+	});
 	return summary;
 }
 

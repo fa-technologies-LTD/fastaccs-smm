@@ -9,6 +9,7 @@ import {
 } from '$lib/helpers/payment-status';
 import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
 import { settleFailedPayment, settleSuccessfulPayment } from '$lib/services/payment-settlement';
+import { createPaymentTraceId, logPaymentEvent } from '$lib/server/payment-observability';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -24,17 +25,25 @@ async function findOrderByPaymentReference(paymentReference: string | null) {
 }
 
 export const POST: RequestHandler = async ({ request }) => {
+	const traceId = createPaymentTraceId(request);
+
 	try {
 		const rawBody = await request.text();
 		const signature = request.headers.get('monnify-signature');
 
 		if (!signature) {
-			console.error('Monnify webhook: missing signature header');
+			logPaymentEvent('error', 'webhook.signature_missing', {
+				traceId,
+				errorCode: 'MISSING_SIGNATURE'
+			});
 			return json({ success: false, error: 'No signature provided' }, { status: 400 });
 		}
 
 		if (!verifyWebhookSignature(signature, rawBody)) {
-			console.error('Monnify webhook: invalid signature');
+			logPaymentEvent('error', 'webhook.signature_invalid', {
+				traceId,
+				errorCode: 'INVALID_SIGNATURE'
+			});
 			return json({ success: false, error: 'Invalid signature' }, { status: 401 });
 		}
 
@@ -45,11 +54,12 @@ export const POST: RequestHandler = async ({ request }) => {
 		const paymentReference = pickString(eventData?.paymentReference);
 		const eventPaymentStatus = normalizePaymentStatus(eventData?.paymentStatus);
 
-		console.info('[payments.webhook] event_received', {
-			eventType,
+		logPaymentEvent('info', 'webhook.event_received', {
+			traceId,
+			phase: eventType,
 			transactionReference: transactionReference ?? null,
 			paymentReference: paymentReference ?? null,
-			paymentStatus: eventPaymentStatus || null
+			status: eventPaymentStatus || null
 		});
 
 		if (eventType === 'SUCCESSFUL_TRANSACTION') {
@@ -62,11 +72,16 @@ export const POST: RequestHandler = async ({ request }) => {
 			const verificationResult = await verifyPayment(referenceForVerification);
 			const gatewayStatus = normalizePaymentStatus(verificationResult.status);
 
-			console.info('[payments.webhook] successful_transaction_verify_result', {
-				referenceForVerification,
+			logPaymentEvent('info', 'webhook.verification_result', {
+				traceId,
+				referenceUsed: referenceForVerification,
 				success: verificationResult.success,
 				status: gatewayStatus || null,
-				paymentReference: verificationResult.paymentReference || null
+				paymentReference: verificationResult.paymentReference || null,
+				transactionReference: verificationResult.transactionReference || transactionReference,
+				amount: verificationResult.amount,
+				amountPaid: verificationResult.amountPaid,
+				currency: verificationResult.currency
 			});
 
 			if (!verificationResult.success && !isSuccessPaymentStatus(gatewayStatus)) {
@@ -90,7 +105,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				return json({ success: false });
 			}
 
-			await settleSuccessfulPayment({
+			const settlement = await settleSuccessfulPayment({
 				orderId,
 				source: 'webhook',
 				paymentReference: verificationResult.paymentReference || paymentReference,
@@ -98,6 +113,18 @@ export const POST: RequestHandler = async ({ request }) => {
 				paidAt: verificationResult.paidAt,
 				amountPaid: verificationResult.amountPaid || verificationResult.amount,
 				currency: verificationResult.currency
+			});
+
+			logPaymentEvent(settlement.success ? 'info' : 'error', 'webhook.settlement_result', {
+				traceId,
+				orderId,
+				paymentReference: verificationResult.paymentReference || paymentReference,
+				transactionReference: verificationResult.transactionReference || transactionReference,
+				status: settlement.status,
+				success: settlement.success,
+				amountPaid: verificationResult.amountPaid || verificationResult.amount,
+				currency: verificationResult.currency,
+				errorMessage: settlement.error || settlement.warning || null
 			});
 
 			return json({ success: true });
@@ -175,10 +202,19 @@ export const POST: RequestHandler = async ({ request }) => {
 			return json({ success: true });
 		}
 
-		console.log('Monnify webhook: unhandled event type', eventType);
+		logPaymentEvent('info', 'webhook.event_unhandled', {
+			traceId,
+			phase: eventType,
+			paymentReference,
+			transactionReference,
+			status: eventPaymentStatus || null
+		});
 		return json({ success: true });
 	} catch (error) {
-		console.error('Monnify webhook processing error:', error);
+		logPaymentEvent('error', 'webhook.exception', {
+			traceId,
+			errorMessage: error instanceof Error ? error.message : 'Webhook processing failed'
+		});
 		void sendCriticalAdminAlert({
 			title: 'Monnify webhook processing error',
 			message: error instanceof Error ? error.message : 'Unknown webhook processing failure.',
@@ -190,7 +226,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json(
 			{
 				success: false,
-				error: error instanceof Error ? error.message : 'Webhook processing failed'
+				error: error instanceof Error ? error.message : 'Webhook processing failed',
+				traceId
 			},
 			{ status: 500 }
 		);

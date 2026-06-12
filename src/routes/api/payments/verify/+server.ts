@@ -19,6 +19,7 @@ import {
 	settleSuccessfulPayment
 } from '$lib/services/payment-settlement';
 import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
+import { createPaymentTraceId, logPaymentEvent } from '$lib/server/payment-observability';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -123,6 +124,8 @@ async function recoverPaidOrderIfNeeded(orderId: string) {
 }
 
 export const POST: RequestHandler = async ({ request, locals }) => {
+	const traceId = createPaymentTraceId(request);
+
 	try {
 		if (!locals.user) {
 			return json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -152,13 +155,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const validRequestedOrderId =
 			safeRequestedOrderId && isUuid(safeRequestedOrderId) ? safeRequestedOrderId : null;
 
-		console.info('[payments.verify] request_received', {
+		logPaymentEvent('info', 'verify.request_received', {
+			traceId,
 			userId: locals.user.id,
 			orderId: validRequestedOrderId,
 			paymentReference: paymentReference ?? null,
 			transactionReference: transactionReference ?? null,
-			callbackStatus: callbackStatus || null,
-			callbackQueryKeys
+			status: callbackStatus || null,
+			source: callbackQueryKeys.length > 0 ? 'provider_redirect' : 'buyer_recheck'
 		});
 
 		const orderById = validRequestedOrderId
@@ -251,14 +255,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const verificationResult = await verifyPayment(referenceToVerify);
 		const gatewayStatus = normalizePaymentStatus(verificationResult.status);
 
-		console.info('[payments.verify] gateway_verification_result', {
+		logPaymentEvent('info', 'verify.gateway_result', {
+			traceId,
 			userId: locals.user.id,
 			orderId: validRequestedOrderId,
 			success: verificationResult.success,
 			status: gatewayStatus || null,
 			paymentReference: verificationResult.paymentReference || paymentReference || null,
 			transactionReference: verificationResult.transactionReference || transactionReference || null,
-			referenceUsed: referenceToVerify
+			referenceUsed: referenceToVerify,
+			amount: verificationResult.amount,
+			amountPaid: verificationResult.amountPaid,
+			currency: verificationResult.currency
 		});
 
 		const resolvedStatus = gatewayStatus || callbackStatus;
@@ -315,11 +323,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					verifiedPaymentReference
 				})
 			) {
-				console.warn('[payments.verify] payment_order_binding_mismatch', {
+				logPaymentEvent('warn', 'verify.payment_order_binding_mismatch', {
+					traceId,
 					orderId: order.id,
-					storedPaymentReference,
-					verifiedPaymentReference,
-					metadataOrderId: validMetadataOrderId
+					userId: locals.user.id,
+					paymentReference: verifiedPaymentReference,
+					referenceUsed: storedPaymentReference,
+					transactionReference: verificationResult.transactionReference,
+					errorCode: 'PAYMENT_ORDER_BINDING_MISMATCH'
 				});
 				return json(
 					{
@@ -339,6 +350,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				paidAt: verificationResult.paidAt,
 				amountPaid: Number(verificationResult.amountPaid || verificationResult.amount || 0),
 				currency: verificationResult.currency
+			});
+
+			logPaymentEvent(settlement.success ? 'info' : 'error', 'verify.settlement_result', {
+				traceId,
+				orderId: order.id,
+				userId: locals.user.id,
+				paymentReference:
+					verificationResult.paymentReference || order.paymentReference || referenceToVerify,
+				transactionReference: verificationResult.transactionReference,
+				status: settlement.status,
+				success: settlement.success,
+				amountPaid: Number(verificationResult.amountPaid || verificationResult.amount || 0),
+				currency: verificationResult.currency,
+				errorMessage: settlement.error || settlement.warning || null
 			});
 
 			if (!settlement.success) {
@@ -443,7 +468,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			resolvedStatus || 'PENDING'
 		);
 	} catch (error) {
-		console.error('Payment verification error:', error);
+		logPaymentEvent('error', 'verify.exception', {
+			traceId,
+			userId: locals.user?.id,
+			errorMessage: error instanceof Error ? error.message : 'Payment verification failed'
+		});
 		void sendCriticalAdminAlert({
 			title: 'Payment verification endpoint error',
 			message: error instanceof Error ? error.message : 'Unknown payment verification failure.',
@@ -455,7 +484,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		return json(
 			{
 				success: false,
-				error: error instanceof Error ? error.message : 'Failed to verify payment'
+				error: error instanceof Error ? error.message : 'Failed to verify payment',
+				traceId
 			},
 			{ status: 500 }
 		);

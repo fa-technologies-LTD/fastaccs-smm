@@ -49,13 +49,16 @@ async function handleApiCall(response: Response) {
 	if (!response.ok) {
 		const raw = await response.text();
 		let errorText = raw;
+		let traceId = '';
 		try {
-			const parsed = JSON.parse(raw) as { error?: unknown; message?: unknown };
+			const parsed = JSON.parse(raw) as { error?: unknown; message?: unknown; traceId?: unknown };
 			errorText = String(parsed.error || parsed.message || raw);
+			traceId = typeof parsed.traceId === 'string' ? parsed.traceId.trim().slice(0, 100) : '';
 		} catch {
 			errorText = raw;
 		}
-		return { data: null, error: `HTTP ${response.status}: ${errorText}` };
+		const reference = traceId ? ` Reference: ${traceId}` : '';
+		return { data: null, error: `HTTP ${response.status}: ${errorText}${reference}` };
 	}
 	return await response.json();
 }
