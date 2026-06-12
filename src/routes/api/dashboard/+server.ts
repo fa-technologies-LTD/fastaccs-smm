@@ -32,7 +32,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		);
 
 		// Fetch all dashboard data in parallel with optimized queries
-		const [orders, affiliateData, wallet, walletTransactions, purchases] = await Promise.all([
+		const [orders, affiliateData, purchases] = await Promise.all([
 			// Orders - only fetch necessary fields
 			prisma.order.findMany({
 				where: {
@@ -65,32 +65,6 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 			// Affiliate dashboard state
 			getAffiliateDashboardState(user.id),
-
-			// Wallet balance
-			prisma.wallet.findUnique({
-				where: { userId: user.id },
-				select: {
-					balance: true,
-					currency: true,
-					isActive: true
-				}
-			}),
-
-			// Wallet transactions
-			prisma.walletTransaction.findMany({
-				where: { userId: user.id },
-				select: {
-					id: true,
-					type: true,
-					amount: true,
-					balanceAfter: true,
-					description: true,
-					status: true,
-					createdAt: true
-				},
-				orderBy: { createdAt: 'desc' },
-				take: 20
-			}),
 
 			// Purchases (orders with allocated or delivered accounts)
 			prisma.order.findMany({
@@ -198,9 +172,6 @@ export const GET: RequestHandler = async ({ locals }) => {
 			data: {
 				orders,
 				affiliateData,
-				walletBalance: wallet?.balance || 0,
-				walletCurrency: wallet?.currency || 'NGN',
-				walletTransactions,
 				purchases: purchasesFormatted,
 				sitePopup
 			}

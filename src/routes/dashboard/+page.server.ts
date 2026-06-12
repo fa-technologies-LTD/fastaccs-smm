@@ -25,8 +25,6 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 			user: locals.user,
 			orders: result.data.orders || [],
 			affiliateData: result.data.affiliateData || null,
-			// walletBalance: result.data.walletBalance || 0,
-			// walletTransactions: result.data.walletTransactions || [],
 			purchases: result.data.purchases || [],
 			sitePopup: result.data.sitePopup || null,
 			messages: [], // TODO: Implement messages/notifications system
@@ -38,8 +36,6 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 			user: locals.user,
 			orders: [],
 			affiliateData: null,
-			// walletBalance: 0,
-			// walletTransactions: [],
 			purchases: [],
 			sitePopup: null,
 			messages: [],
