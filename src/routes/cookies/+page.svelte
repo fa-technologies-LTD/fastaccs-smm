@@ -1,11 +1,6 @@
 <script lang="ts">
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-
-	function openPrivacySettings() {
-		if (typeof window === 'undefined') return;
-		window.dispatchEvent(new CustomEvent('fa:privacy-open'));
-	}
 </script>
 
 <svelte:head>
@@ -24,7 +19,7 @@
 			>
 				Cookie Policy
 			</h1>
-			<p style="color: var(--text-muted);">Effective date: April 8, 2026</p>
+			<p style="color: var(--text-muted);">Effective date: June 12, 2026</p>
 		</div>
 
 		<div class="space-y-7" style="color: var(--text-muted);">
@@ -62,17 +57,11 @@
 					Your Choice
 				</h2>
 				<p>
-					You can choose "Necessary Only" or allow analytics. You can update this choice anytime
-					using Privacy Settings.
+					By continuing to browse FastAccs, you agree to our use of cookies as described in this
+					policy. If you'd rather not be tracked, you can block or delete cookies at any time
+					through your browser's settings — necessary cookies will still be used to keep you logged
+					in and your cart working.
 				</p>
-				<button
-					type="button"
-					onclick={openPrivacySettings}
-					class="mt-3 rounded-full px-4 py-2 text-sm font-semibold"
-					style="background: var(--btn-primary-gradient); color: #04140C;"
-				>
-					Open Privacy Settings
-				</button>
 			</section>
 
 			<section>

@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { getOrders } from '$lib/services/orders';
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
-	import { getOrderStatusLabel } from '$lib/helpers/order-status';
+	import { getOrderStatusLabel, isOrderStatusInGroup } from '$lib/helpers/order-status';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
 	import { isRevenueOrder } from '$lib/helpers/order-revenue';
 
@@ -20,11 +20,14 @@
 	const canViewRevenue = Boolean(data.canViewRevenue);
 	let hideMonetaryAmounts = $state(false);
 	let searchTerm = $state('');
+	let statusFilter = $state<'all' | 'pending' | 'processing' | 'completed' | 'cancelled'>('all');
+	let currentPage = $state(1);
+	const itemsPerPage = 20;
 	let loading = $state(false);
 	let orders = $state(data.orders || []);
 
 	// Filter orders based on search
-	const filteredOrders = $derived.by(() => {
+	const searchFilteredOrders = $derived.by(() => {
 		if (!orders || !Array.isArray(orders)) return [];
 
 		if (!searchTerm) return orders;
@@ -37,6 +40,43 @@
 				order.affiliateCode?.toLowerCase().includes(searchTerm.toLowerCase())
 		);
 	});
+
+	function matchesStatusFilter(order: any, filter: typeof statusFilter): boolean {
+		if (filter === 'all') return true;
+		if (filter === 'cancelled') return isOrderStatusInGroup(order.status, 'failed');
+		return isOrderStatusInGroup(order.status, filter);
+	}
+
+	// Further filter by status tab
+	const filteredOrders = $derived.by(() => {
+		if (statusFilter === 'all') return searchFilteredOrders;
+		return searchFilteredOrders.filter((order: any) => matchesStatusFilter(order, statusFilter));
+	});
+
+	// Counts for each status tab, scoped to the current search
+	const statusCounts = $derived.by(() => {
+		const counts = {
+			all: searchFilteredOrders.length,
+			pending: 0,
+			processing: 0,
+			completed: 0,
+			cancelled: 0
+		};
+		for (const order of searchFilteredOrders) {
+			if (isOrderStatusInGroup(order.status, 'pending')) counts.pending++;
+			if (isOrderStatusInGroup(order.status, 'processing')) counts.processing++;
+			if (isOrderStatusInGroup(order.status, 'completed')) counts.completed++;
+			if (isOrderStatusInGroup(order.status, 'failed')) counts.cancelled++;
+		}
+		return counts;
+	});
+
+	const paginatedOrders = $derived.by(() => {
+		const startIndex = (currentPage - 1) * itemsPerPage;
+		return filteredOrders.slice(startIndex, startIndex + itemsPerPage);
+	});
+
+	const totalPages = $derived(Math.ceil(filteredOrders.length / itemsPerPage));
 
 	function isCancelledOrder(order: any): boolean {
 		return (
@@ -68,8 +108,10 @@
 			})
 		);
 		const cancelledOrders = filteredOrders.filter(isCancelledOrder).length;
-		const totalRevenue = paidOrders
-			.reduce((sum: number, o: any) => sum + Number(o.totalAmount || 0), 0);
+		const totalRevenue = paidOrders.reduce(
+			(sum: number, o: any) => sum + Number(o.totalAmount || 0),
+			0
+		);
 		const unitsSold = paidOrders.reduce((sum: number, order: any) => sum + getOrderUnits(order), 0);
 
 		return {
@@ -103,6 +145,12 @@
 		if (!data.orders || data.orders.length === 0) {
 			loadOrders();
 		}
+	});
+
+	$effect(() => {
+		searchTerm;
+		statusFilter;
+		currentPage = 1;
 	});
 
 	function formatAdminAmount(amount: number): string {
@@ -219,6 +267,60 @@
 		</div>
 	</div>
 
+	<!-- Status Filter -->
+	<div class="mb-3 flex flex-wrap items-center gap-2">
+		<button
+			type="button"
+			onclick={() => (statusFilter = 'pending')}
+			class="rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
+			style={statusFilter === 'pending'
+				? 'background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border);'
+				: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
+		>
+			Pending ({statusCounts.pending})
+		</button>
+		<button
+			type="button"
+			onclick={() => (statusFilter = 'processing')}
+			class="rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
+			style={statusFilter === 'processing'
+				? 'background: rgba(105,109,250,0.12); color: var(--link); border: 1px solid var(--link);'
+				: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
+		>
+			Processing ({statusCounts.processing})
+		</button>
+		<button
+			type="button"
+			onclick={() => (statusFilter = 'completed')}
+			class="rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
+			style={statusFilter === 'completed'
+				? 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border);'
+				: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
+		>
+			Completed ({statusCounts.completed})
+		</button>
+		<button
+			type="button"
+			onclick={() => (statusFilter = 'cancelled')}
+			class="rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
+			style={statusFilter === 'cancelled'
+				? 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border);'
+				: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
+		>
+			Cancelled ({statusCounts.cancelled})
+		</button>
+		<button
+			type="button"
+			onclick={() => (statusFilter = 'all')}
+			class="rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
+			style={statusFilter === 'all'
+				? 'background: rgba(105,109,250,0.14); color: var(--link); border: 1px solid rgba(105,109,250,0.32);'
+				: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
+		>
+			All ({statusCounts.all})
+		</button>
+	</div>
+
 	<!-- Search -->
 	<div class="mb-4">
 		<input
@@ -232,7 +334,7 @@
 
 	<!-- Orders Table -->
 	<div class="space-y-3 lg:hidden">
-		{#each filteredOrders as order}
+		{#each paginatedOrders as order}
 			<article
 				class="rounded-lg p-3"
 				style="border: 1px solid var(--border); background: var(--bg-elev-1);"
@@ -340,7 +442,7 @@
 					</tr>
 				</thead>
 				<tbody class="divide-y" style="border-color: var(--border); background: var(--bg-elev-1);">
-					{#each filteredOrders as order}
+					{#each paginatedOrders as order}
 						<tr
 							class="transition-colors"
 							style="--hover-bg: var(--bg-elev-2);"
@@ -406,7 +508,50 @@
 		</div>
 	</div>
 
-	{#if filteredOrders.length > 0}
+	{#if totalPages > 1}
+		<div class="mt-4 flex items-center justify-between gap-2">
+			<div class="text-sm" style="color: var(--text-muted);">
+				Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(
+					currentPage * itemsPerPage,
+					filteredOrders.length
+				)} of {filteredOrders.length} orders
+			</div>
+			<div class="flex gap-2">
+				<button
+					onclick={() => (currentPage = Math.max(1, currentPage - 1))}
+					disabled={currentPage === 1}
+					class="rounded-full px-3 py-1 text-sm font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+					style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+				>
+					Previous
+				</button>
+				<div class="flex gap-1">
+					{#each Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+						const pageNum = Math.max(1, Math.min(currentPage - 2, totalPages - 4)) + i;
+						return pageNum;
+					}) as pageNum}
+						<button
+							onclick={() => (currentPage = pageNum)}
+							class="rounded-full px-3 py-1 text-sm font-medium transition-opacity hover:opacity-80"
+							style={currentPage === pageNum
+								? 'background: rgba(105,109,250,0.12); color: var(--link); border: 1px solid var(--link)'
+								: 'background: var(--bg); color: var(--text); border: 1px solid var(--border)'}
+						>
+							{pageNum}
+						</button>
+					{/each}
+				</div>
+				<button
+					onclick={() => (currentPage = Math.min(totalPages, currentPage + 1))}
+					disabled={currentPage === totalPages}
+					class="rounded-full px-3 py-1 text-sm font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+					style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+				>
+					Next
+				</button>
+			</div>
+		</div>
+	{:else if filteredOrders.length > 0}
 		<div class="mt-4 text-sm" style="color: var(--text-muted);">
 			Showing {filteredOrders.length} of {orders.length} orders
 		</div>

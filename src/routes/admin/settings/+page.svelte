@@ -27,7 +27,8 @@
 		['#affiliate', 'Affiliate'],
 		['#notifications', 'Alerts'],
 		['#security', 'Security'],
-		['#access', 'Access']
+		['#access', 'Access'],
+		['#flags', 'Flags']
 	] as const;
 
 	const recipientsInput = settings.notifications.adminRecipients.join('\n');
@@ -61,6 +62,14 @@
 			duration: 2200
 		});
 	}
+
+	$effect(() => {
+		if (form?.success && form?.message) {
+			addToast({ type: 'success', title: form.message, duration: 3000 });
+		} else if (form?.error) {
+			addToast({ type: 'error', title: form.error, duration: 4000 });
+		}
+	});
 </script>
 
 <div class="space-y-6">
@@ -87,24 +96,6 @@
 			</a>
 		{/each}
 	</nav>
-
-	{#if form?.error}
-		<div
-			class="rounded-lg p-4"
-			style="border: 1px solid var(--status-error-border); background: var(--status-error-bg); color: var(--status-error);"
-		>
-			{form.error}
-		</div>
-	{/if}
-
-	{#if form?.success && form?.message}
-		<div
-			class="rounded-lg p-4"
-			style="border: 1px solid var(--status-success-border); background: var(--status-success-bg); color: var(--status-success);"
-		>
-			{form.message}
-		</div>
-	{/if}
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 		<section
@@ -955,29 +946,12 @@
 					class="mt-4 rounded-lg p-3"
 					style="border: 1px dashed var(--border); background: var(--bg);"
 				>
-					<p class="text-sm font-semibold" style="color: var(--text)">Admin Invite (Placeholder)</p>
+					<p class="text-sm font-semibold" style="color: var(--text)">Granting Admin Access</p>
 					<p class="mt-1 text-xs" style="color: var(--text-muted);">
-						Invite workflow is staged for a later phase. Role defaults will apply after invite
-						acceptance.
+						To grant a new admin access, add their email to the <code>ADMIN_EMAILS</code>
+						environment variable in Vercel. They'll get FULL_ADMIN access automatically on their next
+						login — adjust their role above afterward if needed.
 					</p>
-					<div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-						<input
-							type="email"
-							placeholder="new-admin@company.com"
-							class="rounded-lg px-3 py-2 text-sm"
-							style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text-dim);"
-							disabled
-						/>
-						<select
-							class="rounded-lg px-3 py-2 text-sm"
-							style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text-dim);"
-							disabled
-						>
-							<option>FULL_ADMIN</option>
-							<option>ORDER_MANAGER</option>
-							<option>READ_ONLY</option>
-						</select>
-					</div>
 				</div>
 			{/if}
 		</section>

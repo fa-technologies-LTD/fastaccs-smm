@@ -1,7 +1,6 @@
 export type CookieConsentLevel = 'necessary' | 'analytics';
 
 export const COOKIE_CONSENT_KEY = 'fa_cookie_consent_v1';
-export const PRIVACY_OPEN_EVENT = 'fa:privacy-open';
 export const PRIVACY_CONSENT_CHANGED_EVENT = 'fa:privacy-consent-changed';
 
 const CONSENT_VERSION = 1;

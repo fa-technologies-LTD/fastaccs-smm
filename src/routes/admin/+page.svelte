@@ -90,6 +90,8 @@
 	const recentActivity = $derived(data.recentActivity ?? []);
 	const dashboardIssues = $derived(data.dashboardIssues ?? { failedEmails: [], unhealthyJobs: [] });
 	let issuesExpanded = $state(false);
+	let managementExpanded = $state(true);
+	let activityExpanded = $state(true);
 	const outOfStockCount = $derived(
 		inventoryStats.outOfStockTiersCount || inventoryStats.out_of_stock || 0
 	);
@@ -541,87 +543,126 @@
 		</div>
 
 		<!-- Management Center -->
-		<div class="mb-4 rounded-lg sm:mb-6" style="background: var(--bg-elev-1); border: 1px solid var(--border)">
-			<div class="p-4" style="border-bottom: 1px solid var(--border)">
-				<h3 class="text-lg font-semibold" style="color: var(--text)">Management Center</h3>
-				<p class="mt-1 text-sm" style="color: var(--text-muted)">
-					Access key administrative functions
-				</p>
-			</div>
-			<div class="p-4">
-				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-					{#each visibleSections as section (section.href)}
-						{@const SectionIcon = section.icon}
-						<a
-							href={section.href}
-							data-sveltekit-preload-data="hover"
-							class="group flex items-center justify-between rounded-lg p-3 transition-all hover:scale-[.99]"
-							style="border: 1px solid var(--border)"
-						>
-							<div class="flex items-center">
-								<SectionIcon class="mr-3 h-5 w-5 flex-shrink-0" style="color: var(--text-dim);" />
-								<div>
-									<p class="font-medium" style="color: var(--text)">{section.label}</p>
-									<p class="text-sm" style="color: var(--text-muted)">{section.description}</p>
-								</div>
-							</div>
-							<ArrowUpRight class="h-4 w-4 flex-shrink-0 transition-all" style="color: var(--text-dim);" />
-						</a>
-					{/each}
+		<div
+			class="mb-4 rounded-lg sm:mb-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
+			<button
+				onclick={() => (managementExpanded = !managementExpanded)}
+				class="flex w-full cursor-pointer items-center justify-between p-4 text-left"
+				style={managementExpanded ? 'border-bottom: 1px solid var(--border)' : ''}
+			>
+				<div>
+					<h3 class="text-lg font-semibold" style="color: var(--text)">Management Center</h3>
+					<p class="mt-1 text-sm" style="color: var(--text-muted)">
+						Access key administrative functions
+					</p>
 				</div>
-			</div>
+				{#if managementExpanded}
+					<ChevronUp class="h-5 w-5 flex-shrink-0" style="color: var(--text-dim);" />
+				{:else}
+					<ChevronDown class="h-5 w-5 flex-shrink-0" style="color: var(--text-dim);" />
+				{/if}
+			</button>
+			{#if managementExpanded}
+				<div class="p-4">
+					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+						{#each visibleSections as section (section.href)}
+							{@const SectionIcon = section.icon}
+							<a
+								href={section.href}
+								data-sveltekit-preload-data="hover"
+								class="group flex items-center justify-between rounded-lg p-3 transition-all hover:scale-[.99]"
+								style="border: 1px solid var(--border)"
+							>
+								<div class="flex items-center">
+									<SectionIcon class="mr-3 h-5 w-5 flex-shrink-0" style="color: var(--text-dim);" />
+									<div>
+										<p class="font-medium" style="color: var(--text)">{section.label}</p>
+										<p class="text-sm" style="color: var(--text-muted)">{section.description}</p>
+									</div>
+								</div>
+								<ArrowUpRight
+									class="h-4 w-4 flex-shrink-0 transition-all"
+									style="color: var(--text-dim);"
+								/>
+							</a>
+						{/each}
+					</div>
+				</div>
+			{/if}
 		</div>
 
 		<!-- Recent Activity -->
-		<div class="mb-4 rounded-lg sm:mb-6" style="background: var(--bg-elev-1); border: 1px solid var(--border)">
-			<div class="p-4" style="border-bottom: 1px solid var(--border)">
-				<h3 class="text-lg font-semibold" style="color: var(--text)">Recent Activity</h3>
-				<p class="mt-1 text-sm" style="color: var(--text-muted)">What's happened recently</p>
-			</div>
-			<div class="p-4">
-				{#if recentActivity.length > 0}
-					<div class="space-y-2">
-						{#each recentActivity as activity (activity.id)}
-							{@const ActivityIcon =
-								activity.type === 'order'
-									? ShoppingCart
-									: activity.type === 'signup'
-										? Users
-										: Activity}
-							{#if activity.href}
-								<a
-									href={activity.href}
-									class="flex items-center justify-between gap-3 rounded-lg p-2 transition-all hover:scale-[.99]"
-									style="border: 1px solid var(--border)"
-								>
-									<div class="flex min-w-0 items-center gap-3">
-										<ActivityIcon class="h-4 w-4 flex-shrink-0" style="color: var(--text-dim);" />
-										<span class="truncate text-sm" style="color: var(--text)">{activity.label}</span>
-									</div>
-									<span class="flex-shrink-0 text-xs" style="color: var(--text-muted)">
-										{formatRelativeTime(activity.timestamp)}
-									</span>
-								</a>
-							{:else}
-								<div
-									class="flex items-center justify-between gap-3 rounded-lg p-2"
-									style="border: 1px solid var(--border)"
-								>
-									<div class="flex min-w-0 items-center gap-3">
-										<ActivityIcon class="h-4 w-4 flex-shrink-0" style="color: var(--text-dim);" />
-										<span class="truncate text-sm" style="color: var(--text)">{activity.label}</span>
-									</div>
-									<span class="flex-shrink-0 text-xs" style="color: var(--text-muted)">
-										{formatRelativeTime(activity.timestamp)}
-									</span>
-								</div>
-							{/if}
-						{/each}
-					</div>
+		<div
+			class="mb-4 rounded-lg sm:mb-6"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+		>
+			<button
+				onclick={() => (activityExpanded = !activityExpanded)}
+				class="flex w-full cursor-pointer items-center justify-between p-4 text-left"
+				style={activityExpanded ? 'border-bottom: 1px solid var(--border)' : ''}
+			>
+				<div>
+					<h3 class="text-lg font-semibold" style="color: var(--text)">Recent Activity</h3>
+					<p class="mt-1 text-sm" style="color: var(--text-muted)">What's happened recently</p>
+				</div>
+				{#if activityExpanded}
+					<ChevronUp class="h-5 w-5 flex-shrink-0" style="color: var(--text-dim);" />
 				{:else}
-					<p class="text-sm" style="color: var(--text-muted)">No recent activity.</p>
+					<ChevronDown class="h-5 w-5 flex-shrink-0" style="color: var(--text-dim);" />
 				{/if}
-			</div>
+			</button>
+			{#if activityExpanded}
+				<div class="p-4">
+					{#if recentActivity.length > 0}
+						<div class="space-y-2">
+							{#each recentActivity as activity (activity.id)}
+								{@const ActivityIcon =
+									activity.type === 'order'
+										? ShoppingCart
+										: activity.type === 'signup'
+											? Users
+											: Activity}
+								{#if activity.href}
+									<a
+										href={activity.href}
+										class="flex items-center justify-between gap-3 rounded-lg p-2 transition-all hover:scale-[.99]"
+										style="border: 1px solid var(--border)"
+									>
+										<div class="flex min-w-0 items-center gap-3">
+											<ActivityIcon class="h-4 w-4 flex-shrink-0" style="color: var(--text-dim);" />
+											<span class="truncate text-sm" style="color: var(--text)"
+												>{activity.label}</span
+											>
+										</div>
+										<span class="flex-shrink-0 text-xs" style="color: var(--text-muted)">
+											{formatRelativeTime(activity.timestamp)}
+										</span>
+									</a>
+								{:else}
+									<div
+										class="flex items-center justify-between gap-3 rounded-lg p-2"
+										style="border: 1px solid var(--border)"
+									>
+										<div class="flex min-w-0 items-center gap-3">
+											<ActivityIcon class="h-4 w-4 flex-shrink-0" style="color: var(--text-dim);" />
+											<span class="truncate text-sm" style="color: var(--text)"
+												>{activity.label}</span
+											>
+										</div>
+										<span class="flex-shrink-0 text-xs" style="color: var(--text-muted)">
+											{formatRelativeTime(activity.timestamp)}
+										</span>
+									</div>
+								{/if}
+							{/each}
+						</div>
+					{:else}
+						<p class="text-sm" style="color: var(--text-muted)">No recent activity.</p>
+					{/if}
+				</div>
+			{/if}
 		</div>
 
 		<!-- Issues & Alerts -->
@@ -690,7 +731,11 @@
 							</div>
 						{/each}
 						{#if dashboardIssues.failedEmails.length > 0}
-							<a href="/admin/broadcast" class="inline-block text-xs underline" style="color: var(--link)">
+							<a
+								href="/admin/broadcast"
+								class="inline-block text-xs underline"
+								style="color: var(--link)"
+							>
 								View email activity
 							</a>
 						{/if}
@@ -699,7 +744,10 @@
 							<div class="rounded-lg p-2" style="border: 1px solid var(--border)">
 								<div class="flex items-center justify-between gap-3">
 									<div class="flex min-w-0 items-center gap-3">
-										<AlertTriangle class="h-4 w-4 flex-shrink-0" style="color: var(--status-warning);" />
+										<AlertTriangle
+											class="h-4 w-4 flex-shrink-0"
+											style="color: var(--status-warning);"
+										/>
 										<span class="truncate text-sm" style="color: var(--text)">
 											{job.jobName} — {job.status}
 										</span>
@@ -716,7 +764,11 @@
 							</div>
 						{/each}
 						{#if dashboardIssues.unhealthyJobs.length > 0}
-							<a href="/admin/automation" class="inline-block text-xs underline" style="color: var(--link)">
+							<a
+								href="/admin/automation"
+								class="inline-block text-xs underline"
+								style="color: var(--link)"
+							>
 								View automation
 							</a>
 						{/if}

@@ -18,8 +18,6 @@
 
 	let searchQuery = $state('');
 	let filterType = $state('all'); // all, deposit, debit, refund
-	// let currentPage = $state(1);
-	// let itemsPerPage = 10;
 
 	let stats = $derived({
 		totalWallets: data.stats?.totalWallets || 0,
@@ -30,6 +28,36 @@
 
 	let wallets = $derived(data.wallets || []);
 	let transactions = $derived(data.transactions || []);
+
+	let filteredWallets = $derived.by(() => {
+		if (!searchQuery.trim()) return wallets;
+		const query = searchQuery.toLowerCase();
+		return wallets.filter(
+			(wallet: any) =>
+				wallet.user?.fullName?.toLowerCase().includes(query) ||
+				wallet.user?.email?.toLowerCase().includes(query)
+		);
+	});
+
+	let filteredTransactions = $derived.by(() => {
+		let filtered = transactions;
+
+		if (filterType !== 'all') {
+			filtered = filtered.filter((txn: any) => txn.type === filterType);
+		}
+
+		if (searchQuery.trim()) {
+			const query = searchQuery.toLowerCase();
+			filtered = filtered.filter(
+				(txn: any) =>
+					txn.user?.fullName?.toLowerCase().includes(query) ||
+					txn.user?.email?.toLowerCase().includes(query) ||
+					txn.reference?.toLowerCase().includes(query)
+			);
+		}
+
+		return filtered;
+	});
 
 	function getTypeIcon(type: string) {
 		switch (type) {
@@ -244,6 +272,65 @@
 		</div>
 	</div>
 
+	<!-- Affiliate Wallet Balances -->
+	<div class="rounded-lg" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
+		<div class="p-4" style="border-bottom: 1px solid var(--border);">
+			<h2 class="text-base font-semibold" style="color: var(--text);">Affiliate Wallet Balances</h2>
+		</div>
+		<div class="overflow-x-auto">
+			<table class="w-full">
+				<thead style="background: var(--bg-elev-2);">
+					<tr>
+						<th
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
+						>
+							Affiliate
+						</th>
+						<th
+							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
+						>
+							Balance
+						</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y" style="border-color: var(--border); background: var(--bg-elev-1);">
+					{#if filteredWallets.length === 0}
+						<tr>
+							<td colspan="2" class="px-6 py-12 text-center" style="color: var(--text-muted);">
+								{searchQuery ? 'No affiliates match your search' : 'No affiliate wallets found'}
+							</td>
+						</tr>
+					{:else}
+						{#each filteredWallets as wallet}
+							<tr
+								class="transition-colors"
+								onmouseenter={(e) => (e.currentTarget.style.background = 'var(--bg-elev-2)')}
+								onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
+							>
+								<td class="px-6 py-4 whitespace-nowrap">
+									<div class="text-sm font-medium" style="color: var(--text);">
+										{wallet.user?.fullName || wallet.user?.email}
+									</div>
+									<div class="text-sm" style="color: var(--text-muted);">
+										{wallet.user?.email}
+									</div>
+								</td>
+								<td
+									class="px-6 py-4 text-sm font-medium whitespace-nowrap"
+									style="color: var(--status-success);"
+								>
+									{formatPrice(wallet.balance)}
+								</td>
+							</tr>
+						{/each}
+					{/if}
+				</tbody>
+			</table>
+		</div>
+	</div>
+
 	<!-- Recent Transactions -->
 	<div class="rounded-lg" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
 		<div class="p-4" style="border-bottom: 1px solid var(--border);">
@@ -298,14 +385,16 @@
 					</tr>
 				</thead>
 				<tbody class="divide-y" style="border-color: var(--border); background: var(--bg-elev-1);">
-					{#if transactions.length === 0}
+					{#if filteredTransactions.length === 0}
 						<tr>
 							<td colspan="7" class="px-6 py-12 text-center" style="color: var(--text-muted);">
-								No transactions found
+								{searchQuery || filterType !== 'all'
+									? 'No transactions match your filters'
+									: 'No transactions found'}
 							</td>
 						</tr>
 					{:else}
-						{#each transactions as transaction}
+						{#each filteredTransactions as transaction}
 							{@const TypeIcon = getTypeIcon(transaction.type)}
 							<tr
 								class="transition-colors"
