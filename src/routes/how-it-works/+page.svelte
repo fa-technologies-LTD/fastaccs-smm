@@ -18,9 +18,12 @@
 		DollarSign
 	} from '$lib/icons';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 
-	let selectedTab = $state<'buyer' | 'affiliate'>('buyer');
+	let selectedTab = $state<'buyer' | 'affiliate'>(
+		page.url.searchParams.get('tab') === 'affiliate' ? 'affiliate' : 'buyer'
+	);
 	let animatedSteps = $state<number[]>([]);
 
 	onMount(() => {
@@ -541,7 +544,7 @@
 					class="mb-12 text-center text-3xl font-bold"
 					style="color: var(--text); font-family: var(--font-head);"
 				>
-					Earn Commissions as an Affiliate
+					Turn Your Referrals Into Real Cash
 				</h2>
 
 				<!-- Affiliate Steps -->
@@ -590,7 +593,7 @@
 						>
 							<div class="mb-4 text-center">
 								<div class="mb-2 text-sm" style="color: var(--text-muted);">
-									Your Affiliate Code
+									Your Affiliate Promo Code
 								</div>
 								<div
 									class="rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4 text-3xl font-bold text-white"
@@ -635,8 +638,8 @@
 								Share Your Code
 							</h3>
 							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Share your affiliate code or referral link with friends, social media followers, or
-								customers. They get checkout discounts, you earn Store Credit.
+								Share your affiliate promo code or referral link with friends, social media
+								followers, or customers. They get checkout discounts, you earn Store Credit.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
@@ -799,10 +802,10 @@
 							class="mb-2 text-lg font-semibold"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
-							Store Credit
+							Real Cash Rewards
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Earn from eligible successful referred orders
+							Earn withdrawable Store Credit every time someone you refer makes a successful order
 						</p>
 					</div>
 					<div class="text-center">
@@ -819,7 +822,7 @@
 							Instant Tracking
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Real-time updates on referrals and Store Credit
+							Watch referrals and earnings update live on your dashboard, no waiting around
 						</p>
 					</div>
 					<div class="text-center">
@@ -836,7 +839,7 @@
 							No Limits
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Unlimited earning potential, refer as many as you can
+							No cap on referrals or earnings, the more people you bring, the more you earn
 						</p>
 					</div>
 					<div class="text-center">
@@ -853,7 +856,89 @@
 							Free to Join
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							No sign-up fees or hidden charges
+							No sign-up fees, no hidden charges, just shop your way in and start earning
+						</p>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Affiliate Glossary -->
+		<section class="px-4 py-16">
+			<div class="mx-auto max-w-6xl">
+				<h2
+					class="mb-4 text-center text-3xl font-bold"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
+					Key Terms, Explained
+				</h2>
+				<p
+					class="mx-auto mb-12 max-w-2xl text-center"
+					style="color: var(--text-muted); font-family: var(--font-body);"
+				>
+					A quick glossary so you always know what's happening with your earnings.
+				</p>
+				<div class="grid gap-6 md:grid-cols-2">
+					<div
+						class="rounded-xl p-6"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+					>
+						<h3
+							class="mb-2 text-lg font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							Affiliate Promo Code
+						</h3>
+						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
+							Your unique code, shown on your dashboard. It doubles as a discount code, anyone who
+							uses it at checkout gets a referral discount, and you earn Store Credit on their
+							order.
+						</p>
+					</div>
+					<div
+						class="rounded-xl p-6"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+					>
+						<h3
+							class="mb-2 text-lg font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							Store Credit
+						</h3>
+						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
+							Real, withdrawable cash you earn from successful referred orders. It builds up in
+							your dashboard and can be paid out once you meet the payout requirements below.
+						</p>
+					</div>
+					<div
+						class="rounded-xl p-6"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+					>
+						<h3
+							class="mb-2 text-lg font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							Discount Stages
+						</h3>
+						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
+							Buyers you refer get a bigger discount on their first couple of orders, then a
+							smaller ongoing discount for several more. Your dashboard shows the current stage
+							for each referral.
+						</p>
+					</div>
+					<div
+						class="rounded-xl p-6"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+					>
+						<h3
+							class="mb-2 text-lg font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							Payout
+						</h3>
+						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
+							Once your available Store Credit and account age both clear the minimums shown on
+							your dashboard, you can request a withdrawal and we'll take it from there.
 						</p>
 					</div>
 				</div>
@@ -921,6 +1006,60 @@
 						When you become an affiliate, you get a unique code and referral link. When someone uses
 						your code at checkout, they get referral discounts and you earn Store Credit on eligible
 						successful referred orders. Earnings are tracked automatically in your dashboard.
+					</p>
+				</details>
+
+				<details
+					class="group rounded-lg p-6 shadow"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
+					<summary
+						class="flex cursor-pointer items-center justify-between font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
+					>
+						What is an Affiliate Promo Code?
+						<span class="ml-4" style="color: var(--text-dim);">+</span>
+					</summary>
+					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
+						It's the unique code on your affiliate dashboard. Share it (or your referral link) with
+						friends and followers, anyone who uses it gets a discount at checkout, and you earn
+						Store Credit on their order.
+					</p>
+				</details>
+
+				<details
+					class="group rounded-lg p-6 shadow"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
+					<summary
+						class="flex cursor-pointer items-center justify-between font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
+					>
+						How do referral discounts work?
+						<span class="ml-4" style="color: var(--text-dim);">+</span>
+					</summary>
+					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
+						Buyers you refer get a bigger discount on their first couple of orders, then a smaller
+						ongoing discount for several more after that. Your dashboard shows the current stage
+						for each referral.
+					</p>
+				</details>
+
+				<details
+					class="group rounded-lg p-6 shadow"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
+					<summary
+						class="flex cursor-pointer items-center justify-between font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
+					>
+						How do I withdraw my Store Credit?
+						<span class="ml-4" style="color: var(--text-dim);">+</span>
+					</summary>
+					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
+						Once your available Store Credit and account age both clear the minimums shown on your
+						dashboard, you can request a payout from your affiliate dashboard and we'll process it
+						from there.
 					</p>
 				</details>
 

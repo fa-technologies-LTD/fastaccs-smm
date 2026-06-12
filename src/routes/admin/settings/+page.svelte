@@ -31,6 +31,7 @@
 	] as const;
 
 	const recipientsInput = settings.notifications.adminRecipients.join('\n');
+	const highSpenderQualifyingCount = data.highSpenderQualifyingCount;
 
 	async function updateAdminRole(userId: string, role: string) {
 		if (!canManageRoles) return;
@@ -831,6 +832,25 @@
 							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
 							disabled={!canManageSettings}
 						/>
+					</label>
+				</div>
+
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<label class="block text-sm" style="color: var(--text-muted);">
+						High-spender threshold (₦)
+						<input
+							type="number"
+							name="highSpenderMinTotal"
+							value={settings.notifications.highSpenderMinTotal}
+							min="1"
+							max="100000000"
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+							disabled={!canManageSettings}
+						/>
+						<span class="mt-1 block text-xs" style="color: var(--text-muted);">
+							{highSpenderQualifyingCount} users currently qualify
+						</span>
 					</label>
 				</div>
 

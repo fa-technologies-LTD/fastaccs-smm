@@ -1,6 +1,7 @@
 import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
 import {
+	countHighSpenders,
 	getAdminSettingsSnapshot,
 	getSmtpHealthSnapshot,
 	saveBusinessSettings,
@@ -69,6 +70,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			getAnnouncementBannerConfig(),
 			getAffiliateConfig()
 		]);
+	const highSpenderQualifyingCount = await countHighSpenders(settings.notifications.highSpenderMinTotal);
 	const canManageSettings = Boolean(
 		locals.adminContext && hasAdminPermission(locals.adminContext, 'admin:settings:manage')
 	);
@@ -80,6 +82,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 	return {
 		settings,
+		highSpenderQualifyingCount,
 		announcementBanner: getAnnouncementBannerFormState(
 			announcementBannerConfig,
 			settings.business.businessTimezone || 'Africa/Lagos'
@@ -176,6 +179,7 @@ export const actions: Actions = {
 		await saveNotificationSettings({
 			adminRecipients: String(formData.get('adminRecipients') || ''),
 			lowStockThreshold: String(formData.get('lowStockThreshold') || ''),
+			highSpenderMinTotal: String(formData.get('highSpenderMinTotal') || ''),
 			winbackDaysThreshold: String(formData.get('winbackDaysThreshold') || ''),
 			broadcastBatchSize: String(formData.get('broadcastBatchSize') || ''),
 			broadcastBatchDelayMs: String(formData.get('broadcastBatchDelayMs') || '')

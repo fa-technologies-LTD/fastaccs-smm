@@ -17,6 +17,7 @@ const SETTINGS_KEYS = {
 	storeAutoDeliveryPaused: 'config.store.auto_delivery_paused',
 	adminRecipients: 'config.notifications.admin_recipients',
 	lowStockThreshold: 'config.notifications.low_stock_threshold',
+	highSpenderMinTotal: 'config.notifications.high_spender_min_total',
 	winbackDaysThreshold: 'config.notifications.winback_days_threshold',
 	broadcastBatchSize: 'config.notifications.broadcast_batch_size',
 	broadcastBatchDelayMs: 'config.notifications.broadcast_batch_delay_ms',
@@ -37,6 +38,7 @@ const DEFAULTS = {
 	storeCheckoutEnabled: true,
 	storeAutoDeliveryPaused: false,
 	lowStockThreshold: 10,
+	highSpenderMinTotal: Math.max(1, Number(env.BROADCAST_HIGH_SPENDER_MIN_TOTAL || 100000)),
 	winbackDaysThreshold: Math.max(1, Number(env.WINBACK_DAYS_THRESHOLD || 30)),
 	broadcastBatchSize: Math.max(1, Number(env.BROADCAST_BATCH_SIZE || 10)),
 	broadcastBatchDelayMs: Math.max(100, Number(env.BROADCAST_BATCH_DELAY_MS || 1000))
@@ -64,6 +66,7 @@ export interface StoreControlSettings {
 export interface NotificationSettings {
 	adminRecipients: string[];
 	lowStockThreshold: number;
+	highSpenderMinTotal: number;
 	winbackDaysThreshold: number;
 	broadcastBatchSize: number;
 	broadcastBatchDelayMs: number;
@@ -318,6 +321,11 @@ export async function getAdminSettingsSnapshot(): Promise<AdminSettingsSnapshot>
 				DEFAULTS.lowStockThreshold,
 				{ min: 1, max: 999 }
 			),
+			highSpenderMinTotal: parseNumberSetting(
+				values.get(SETTINGS_KEYS.highSpenderMinTotal) || null,
+				DEFAULTS.highSpenderMinTotal,
+				{ min: 1, max: 100_000_000 }
+			),
 			winbackDaysThreshold: parseNumberSetting(
 				values.get(SETTINGS_KEYS.winbackDaysThreshold) || null,
 				DEFAULTS.winbackDaysThreshold,
@@ -451,6 +459,7 @@ export async function saveStoreControlSettings(input: {
 export async function saveNotificationSettings(input: {
 	adminRecipients?: string;
 	lowStockThreshold?: string | number;
+	highSpenderMinTotal?: string | number;
 	winbackDaysThreshold?: string | number;
 	broadcastBatchSize?: string | number;
 	broadcastBatchDelayMs?: string | number;
@@ -460,6 +469,11 @@ export async function saveNotificationSettings(input: {
 		String(input.lowStockThreshold ?? ''),
 		DEFAULTS.lowStockThreshold,
 		{ min: 1, max: 999 }
+	);
+	const highSpenderMinTotal = parseNumberSetting(
+		String(input.highSpenderMinTotal ?? ''),
+		DEFAULTS.highSpenderMinTotal,
+		{ min: 1, max: 100_000_000 }
 	);
 	const winbackDaysThreshold = parseNumberSetting(
 		String(input.winbackDaysThreshold ?? ''),
@@ -489,6 +503,11 @@ export async function saveNotificationSettings(input: {
 			'Default low-stock threshold for operational alerts.'
 		),
 		upsertSetting(
+			SETTINGS_KEYS.highSpenderMinTotal,
+			String(highSpenderMinTotal),
+			'Minimum lifetime completed spend for the "high spenders" broadcast audience.'
+		),
+		upsertSetting(
 			SETTINGS_KEYS.winbackDaysThreshold,
 			String(winbackDaysThreshold),
 			'Win-back campaign inactivity threshold in days.'
@@ -514,6 +533,24 @@ export async function getOperationalAlertRecipients(): Promise<string[]> {
 export async function getLowStockThresholdSetting(): Promise<number> {
 	const snapshot = await getAdminSettingsSnapshot();
 	return snapshot.notifications.lowStockThreshold;
+}
+
+export async function getHighSpenderMinTotalSetting(): Promise<number> {
+	const snapshot = await getAdminSettingsSnapshot();
+	return snapshot.notifications.highSpenderMinTotal;
+}
+
+export async function countHighSpenders(minTotal: number): Promise<number> {
+	const rows = await prisma.order.groupBy({
+		by: ['userId'],
+		where: {
+			userId: { not: null },
+			OR: [{ paymentStatus: 'paid' }, { status: { in: ['paid', 'completed'] } }]
+		},
+		_sum: { totalAmount: true }
+	});
+
+	return rows.filter((row) => Number(row._sum.totalAmount || 0) >= minTotal).length;
 }
 
 export async function getBusinessTimezoneSetting(): Promise<string> {

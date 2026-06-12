@@ -322,8 +322,8 @@
 					</h3>
 				</div>
 				<p class="mb-3 text-sm" style="color: var(--text-muted);">
-					You are building toward referral access. Once unlocked, you can share your code and earn
-					withdrawable Store Credit from successful referred orders.
+					Refer friends and earn real, withdrawable cash on every order they make. Keep shopping to
+					unlock your referral code.
 				</p>
 				<div class="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
 					<div
@@ -364,6 +364,15 @@
 					<span style="color: var(--text-muted);">{spendProgressPercent}% complete</span>
 					<a href="/platforms" class="font-semibold" style="color: var(--primary);">
 						Buy more to unlock affiliate access
+					</a>
+				</div>
+				<div class="mt-2 text-right text-xs">
+					<a
+						href="/how-it-works?tab=affiliate"
+						class="font-medium underline-offset-2 hover:underline"
+						style="color: var(--text-muted);"
+					>
+						See how it works
 					</a>
 				</div>
 			</div>
@@ -410,6 +419,34 @@
 					successful referred orders, then <strong style="color: var(--text);">Ongoing discount</strong> up to
 					order 10.
 				</p>
+
+				<details class="mt-3">
+					<summary class="cursor-pointer text-xs font-semibold" style="color: var(--primary);">
+						Show full explainer
+					</summary>
+					<div class="mt-2 space-y-2 text-xs" style="color: var(--text-muted);">
+						<p>
+							<strong style="color: var(--text);">Affiliate Promo Code</strong> — your unique code
+							above. Anyone who uses it at checkout gets a referral discount, and you earn Store
+							Credit on their order.
+						</p>
+						<p>
+							<strong style="color: var(--text);">Store Credit</strong> — real, withdrawable cash
+							earned from successful referred orders, tracked as Available and Pending above.
+						</p>
+						<p>
+							<strong style="color: var(--text);">Payout</strong> — once your available Store
+							Credit and account age both clear the minimums, you can request a withdrawal.
+						</p>
+						<a
+							href="/how-it-works?tab=affiliate"
+							class="inline-block font-semibold underline-offset-2 hover:underline"
+							style="color: var(--primary);"
+						>
+							Full details
+						</a>
+					</div>
+				</details>
 			</div>
 
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -496,7 +533,7 @@
 						<label
 							for="affiliate-code"
 							class="mb-1 block text-xs font-semibold uppercase"
-							style="color: var(--text-muted);">Affiliate Code</label
+							style="color: var(--text-muted);">Affiliate Promo Code</label
 						>
 						<div class="flex gap-2">
 							<input
@@ -511,7 +548,7 @@
 								type="button"
 								onclick={() =>
 									copyToClipboard(affiliateCode, {
-										label: 'Affiliate code',
+										label: 'Affiliate promo code',
 										showToast: addToast
 									})}
 								class="rounded-full px-3 py-2 transition-all hover:-translate-y-0.5"

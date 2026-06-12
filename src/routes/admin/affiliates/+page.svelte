@@ -77,7 +77,7 @@
 		const headers = [
 			'Name',
 			'Email',
-			'Affiliate Code',
+			'Affiliate Promo Code',
 			'Referrals',
 			'Successful Orders',
 			'Total Sales',
@@ -284,7 +284,7 @@
 			<input
 				type="text"
 				bind:value={searchQuery}
-				placeholder="Search by name, email, or affiliate code..."
+				placeholder="Search by name, email, or affiliate promo code..."
 				class="w-full rounded-lg py-2 pr-4 pl-10 focus:ring-1 focus:outline-none"
 				style="border: 1px solid var(--border); color: var(--text); background: var(--bg);"
 			/>

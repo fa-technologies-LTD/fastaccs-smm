@@ -3,6 +3,7 @@ import { env } from '$env/dynamic/private';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { QUEUED_MARKETING_STALE_MS, sendQueuedMarketingEmail } from './email';
+import { getHighSpenderMinTotalSetting } from './admin-settings';
 
 export type BroadcastAudience =
 	| 'all_verified'
@@ -74,7 +75,6 @@ const FAILED_ORDER_FILTER: Prisma.OrderWhereInput = {
 		{ status: { in: ['failed', 'cancelled'] } }
 	]
 };
-const HIGH_SPENDER_MIN_TOTAL = Math.max(Number(env.BROADCAST_HIGH_SPENDER_MIN_TOTAL || 100000), 1);
 const RECENT_ABANDONED_LOOKBACK_DAYS = clamp(
 	Number(env.BROADCAST_ABANDONED_LOOKBACK_DAYS || 14),
 	1,
@@ -402,11 +402,13 @@ async function getAudienceWhereClause(
 		audience === 'high_spenders'
 	) {
 		const stats = await getSuccessfulOrderStatsByUser();
+		const highSpenderMinTotal =
+			audience === 'high_spenders' ? await getHighSpenderMinTotalSetting() : 0;
 		const filteredIds = stats
 			.filter((row) => {
 				if (audience === 'first_time_buyers') return row.count === 1;
 				if (audience === 'repeat_buyers') return row.count >= 2;
-				return row.totalAmount >= HIGH_SPENDER_MIN_TOTAL;
+				return row.totalAmount >= highSpenderMinTotal;
 			})
 			.map((row) => row.userId);
 

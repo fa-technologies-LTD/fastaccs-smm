@@ -753,7 +753,7 @@
 						<h3 class="mb-4 text-lg font-semibold text-gray-900">Affiliate Information</h3>
 						<div class="space-y-4">
 							<div class="flex items-center justify-between rounded-lg bg-blue-50 p-3">
-								<span class="text-sm font-medium text-gray-700">Affiliate Code</span>
+								<span class="text-sm font-medium text-gray-700">Affiliate Promo Code</span>
 								<a
 									href="/admin/affiliates?code={order.affiliateCode}"
 									class="font-mono text-sm font-semibold text-blue-600 transition-colors hover:text-blue-900"
