@@ -1,6 +1,6 @@
 import type { PageLoad } from './$types';
 
-export const load: PageLoad = async ({ fetch }) => {
+export const load: PageLoad = async ({ fetch, data }) => {
 	try {
 		// Load order stats
 		const orderStatsResponse = await fetch('/api/orders/stats');
@@ -46,6 +46,7 @@ export const load: PageLoad = async ({ fetch }) => {
 		}
 
 		return {
+			...data,
 			orderStats,
 			inventoryStats,
 			error: null
@@ -53,6 +54,7 @@ export const load: PageLoad = async ({ fetch }) => {
 	} catch (err) {
 		console.error('Error loading admin dashboard:', err);
 		return {
+			...data,
 			orderStats: {
 				total_orders: 0,
 				paid_orders: 0,

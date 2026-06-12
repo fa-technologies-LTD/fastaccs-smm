@@ -19,8 +19,10 @@ import {
 	IconCalendar,
 	IconChartBar,
 	IconCheck,
+	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
+	IconChevronUp,
 	IconCircleCheck,
 	IconCircleX,
 	IconClock,
@@ -102,8 +104,10 @@ export const Calendar = IconCalendar;
 export const Check = IconCheck;
 export const CheckCircle = IconCircleCheck;
 export const CheckCircle2 = IconCircleCheck;
+export const ChevronDown = IconChevronDown;
 export const ChevronLeft = IconChevronLeft;
 export const ChevronRight = IconChevronRight;
+export const ChevronUp = IconChevronUp;
 export const CircleHelp = IconHelpCircle;
 export const Clock = IconClock;
 export const Clock3 = IconClockHour3;

@@ -8,15 +8,23 @@
 		Eye,
 		EyeOff,
 		AlertCircle,
+		AlertTriangle,
 		Activity,
 		RefreshCw,
 		BarChart3,
-		ArrowUpRight
+		ArrowUpRight,
+		ChevronDown,
+		ChevronUp,
+		Mail
 	} from '$lib/icons';
 	import { getOrderStats } from '$lib/services/orders';
 	import { getInventoryStats } from '$lib/services/inventory';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
+	import { ADMIN_DASHBOARD_SECTIONS } from '$lib/admin/dashboard-sections';
+	import type { AdminPermission } from '$lib/auth/admin-roles';
+	import type { RecentActivityItem, DashboardIssues } from '$lib/services/admin-dashboard';
+	import type { FeatureFlagSnapshot } from '$lib/services/feature-flags';
 
 	// Props from load function
 	interface Props {
@@ -50,6 +58,10 @@
 			};
 			error: string | null;
 			canViewRevenue?: boolean;
+			recentActivity?: RecentActivityItem[];
+			dashboardIssues?: DashboardIssues;
+			adminPermissions?: AdminPermission[];
+			featureFlags?: FeatureFlagSnapshot;
 		};
 	}
 
@@ -64,6 +76,26 @@
 	let lastUpdated = $state<Date>(new Date());
 	const canViewRevenue = Boolean(data.canViewRevenue);
 	let hideMonetaryAmounts = $state(false);
+
+	const adminPermissionSet = $derived(new Set(data.adminPermissions ?? []));
+	const featureFlags = $derived(data.featureFlags);
+	const visibleSections = $derived(
+		ADMIN_DASHBOARD_SECTIONS.filter((section) => {
+			if (section.permission && !adminPermissionSet.has(section.permission)) return false;
+			if (section.featureFlag && !featureFlags?.[section.featureFlag]) return false;
+			return true;
+		})
+	);
+
+	const recentActivity = $derived(data.recentActivity ?? []);
+	const dashboardIssues = $derived(data.dashboardIssues ?? { failedEmails: [], unhealthyJobs: [] });
+	let issuesExpanded = $state(false);
+	const outOfStockCount = $derived(
+		inventoryStats.outOfStockTiersCount || inventoryStats.out_of_stock || 0
+	);
+	const totalIssueCount = $derived(
+		outOfStockCount + dashboardIssues.failedEmails.length + dashboardIssues.unhealthyJobs.length
+	);
 
 	async function refreshData() {
 		loading = true;
@@ -508,150 +540,189 @@
 			</div>
 		</div>
 
-		<!-- Quick Actions & Navigation -->
-		<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-			<!-- Management Actions -->
-			<div class="rounded-lg" style="background: var(--bg-elev-1); border: 1px solid var(--border)">
-				<div class="p-4" style="border-bottom: 1px solid var(--border)">
-					<h3 class="text-lg font-semibold" style="color: var(--text)">Management Center</h3>
-					<p class="mt-1 text-sm" style="color: var(--text-muted)">
-						Access key administrative functions
-					</p>
-				</div>
-				<div class="p-4">
-					<div class="grid grid-cols-1 gap-3">
+		<!-- Management Center -->
+		<div class="mb-4 rounded-lg sm:mb-6" style="background: var(--bg-elev-1); border: 1px solid var(--border)">
+			<div class="p-4" style="border-bottom: 1px solid var(--border)">
+				<h3 class="text-lg font-semibold" style="color: var(--text)">Management Center</h3>
+				<p class="mt-1 text-sm" style="color: var(--text-muted)">
+					Access key administrative functions
+				</p>
+			</div>
+			<div class="p-4">
+				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+					{#each visibleSections as section (section.href)}
+						{@const SectionIcon = section.icon}
 						<a
-							href="/admin/orders"
+							href={section.href}
 							data-sveltekit-preload-data="hover"
 							class="group flex items-center justify-between rounded-lg p-3 transition-all hover:scale-[.99]"
 							style="border: 1px solid var(--border)"
 						>
 							<div class="flex items-center">
-								<ShoppingCart class="mr-3 h-5 w-5" style="color: var(--text-dim);" />
+								<SectionIcon class="mr-3 h-5 w-5 flex-shrink-0" style="color: var(--text-dim);" />
 								<div>
-									<p class="font-medium" style="color: var(--text)">Order Management</p>
-									<p class="text-sm" style="color: var(--text-muted)">Process and track orders</p>
+									<p class="font-medium" style="color: var(--text)">{section.label}</p>
+									<p class="text-sm" style="color: var(--text-muted)">{section.description}</p>
 								</div>
 							</div>
-							<ArrowUpRight class="h-4 w-4 transition-all" style="color: var(--text-dim);" />
+							<ArrowUpRight class="h-4 w-4 flex-shrink-0 transition-all" style="color: var(--text-dim);" />
 						</a>
-
-						<a
-							href="/admin/inventory"
-							data-sveltekit-preload-data="hover"
-							class="group flex items-center justify-between rounded-lg p-3 transition-all hover:scale-[.99]"
-							style="border: 1px solid var(--border)"
-						>
-							<div class="flex items-center">
-								<Package class="mr-3 h-5 w-5" style="color: var(--text-dim);" />
-								<div>
-									<p class="font-medium" style="color: var(--text)">Inventory Dashboard</p>
-									<p class="text-sm" style="color: var(--text-muted)">Monitor stock levels</p>
-								</div>
-							</div>
-							<ArrowUpRight class="h-4 w-4 transition-all" style="color: var(--text-dim);" />
-						</a>
-
-						<a
-							href="/admin/platforms"
-							data-sveltekit-preload-data="hover"
-							class="group flex items-center justify-between rounded-lg p-3 transition-all hover:scale-[.99]"
-							style="border: 1px solid var(--border)"
-						>
-							<div class="flex items-center">
-								<Users class="mr-3 h-5 w-5" style="color: var(--text-dim);" />
-								<div>
-									<p class="font-medium" style="color: var(--text)">Platform Management</p>
-									<p class="text-sm" style="color: var(--text-muted)">Manage platforms & tiers</p>
-								</div>
-							</div>
-							<ArrowUpRight class="h-4 w-4 transition-all" style="color: var(--text-dim);" />
-						</a>
-
-						<a
-							href="/admin/batches"
-							data-sveltekit-preload-data="hover"
-							class="group flex items-center justify-between rounded-lg p-3 transition-all hover:scale-[.99]"
-							style="border: 1px solid var(--border)"
-						>
-							<div class="flex items-center">
-								<Activity class="mr-3 h-5 w-5" style="color: var(--text-dim);" />
-								<div>
-									<p class="font-medium" style="color: var(--text)">Batch Operations</p>
-									<p class="text-sm" style="color: var(--text-muted)">Bulk import accounts</p>
-								</div>
-							</div>
-							<ArrowUpRight class="h-4 w-4 transition-all" style="color: var(--text-dim);" />
-						</a>
-					</div>
+					{/each}
 				</div>
 			</div>
+		</div>
 
-			<!-- System Status -->
-			<div class="rounded-lg" style="background: var(--bg-elev-1); border: 1px solid var(--border)">
-				<div class="p-4" style="border-bottom: 1px solid var(--border)">
-					<h3 class="text-lg font-semibold" style="color: var(--text)">System Status</h3>
+		<!-- Recent Activity -->
+		<div class="mb-4 rounded-lg sm:mb-6" style="background: var(--bg-elev-1); border: 1px solid var(--border)">
+			<div class="p-4" style="border-bottom: 1px solid var(--border)">
+				<h3 class="text-lg font-semibold" style="color: var(--text)">Recent Activity</h3>
+				<p class="mt-1 text-sm" style="color: var(--text-muted)">What's happened recently</p>
+			</div>
+			<div class="p-4">
+				{#if recentActivity.length > 0}
+					<div class="space-y-2">
+						{#each recentActivity as activity (activity.id)}
+							{@const ActivityIcon =
+								activity.type === 'order'
+									? ShoppingCart
+									: activity.type === 'signup'
+										? Users
+										: Activity}
+							{#if activity.href}
+								<a
+									href={activity.href}
+									class="flex items-center justify-between gap-3 rounded-lg p-2 transition-all hover:scale-[.99]"
+									style="border: 1px solid var(--border)"
+								>
+									<div class="flex min-w-0 items-center gap-3">
+										<ActivityIcon class="h-4 w-4 flex-shrink-0" style="color: var(--text-dim);" />
+										<span class="truncate text-sm" style="color: var(--text)">{activity.label}</span>
+									</div>
+									<span class="flex-shrink-0 text-xs" style="color: var(--text-muted)">
+										{formatRelativeTime(activity.timestamp)}
+									</span>
+								</a>
+							{:else}
+								<div
+									class="flex items-center justify-between gap-3 rounded-lg p-2"
+									style="border: 1px solid var(--border)"
+								>
+									<div class="flex min-w-0 items-center gap-3">
+										<ActivityIcon class="h-4 w-4 flex-shrink-0" style="color: var(--text-dim);" />
+										<span class="truncate text-sm" style="color: var(--text)">{activity.label}</span>
+									</div>
+									<span class="flex-shrink-0 text-xs" style="color: var(--text-muted)">
+										{formatRelativeTime(activity.timestamp)}
+									</span>
+								</div>
+							{/if}
+						{/each}
+					</div>
+				{:else}
+					<p class="text-sm" style="color: var(--text-muted)">No recent activity.</p>
+				{/if}
+			</div>
+		</div>
+
+		<!-- Issues & Alerts -->
+		<div class="rounded-lg" style="background: var(--bg-elev-1); border: 1px solid var(--border)">
+			<button
+				onclick={() => (issuesExpanded = !issuesExpanded)}
+				class="flex w-full cursor-pointer items-center justify-between p-4 text-left"
+			>
+				<div>
+					<h3 class="text-lg font-semibold" style="color: var(--text)">Issues & Alerts</h3>
 					<p class="mt-1 text-sm" style="color: var(--text-muted)">
-						Current system health overview
+						{totalIssueCount > 0
+							? `${totalIssueCount} item${totalIssueCount === 1 ? '' : 's'} need attention`
+							: 'All clear'}
 					</p>
 				</div>
-				<div class="space-y-3 p-4">
-					<!-- Order Processing Status -->
-					<div class="flex items-center justify-between">
-						<div class="flex items-center">
-							<div
-								class="mr-3 h-3 w-3 rounded-full"
-								style="background: var(--status-success);"
-							></div>
-							<span class="text-sm font-medium" style="color: var(--text)">Order Processing</span>
-						</div>
-						<span class="text-sm" style="color: var(--status-success);">Operational</span>
-					</div>
+				{#if issuesExpanded}
+					<ChevronUp class="h-5 w-5 flex-shrink-0" style="color: var(--text-dim);" />
+				{:else}
+					<ChevronDown class="h-5 w-5 flex-shrink-0" style="color: var(--text-dim);" />
+				{/if}
+			</button>
+			{#if issuesExpanded}
+				<div class="space-y-3 p-4" style="border-top: 1px solid var(--border)">
+					{#if totalIssueCount === 0}
+						<p class="text-sm" style="color: var(--status-success);">
+							No failed emails, automation issues, or low-stock alerts.
+						</p>
+					{:else}
+						{#if outOfStockCount > 0}
+							<a
+								href="/admin/inventory"
+								class="flex items-center justify-between gap-3 rounded-lg p-2 transition-all hover:scale-[.99]"
+								style="border: 1px solid var(--border)"
+							>
+								<div class="flex items-center gap-3">
+									<AlertCircle class="h-4 w-4 flex-shrink-0" style="color: #f97316;" />
+									<span class="text-sm" style="color: var(--text)">
+										{outOfStockCount} account {outOfStockCount === 1 ? 'type' : 'types'} out of stock
+									</span>
+								</div>
+								<ArrowUpRight class="h-4 w-4 flex-shrink-0" style="color: var(--text-dim);" />
+							</a>
+						{/if}
 
-					<!-- Inventory System -->
-					<div class="flex items-center justify-between">
-						<div class="flex items-center">
-							<div
-								class="mr-3 h-3 w-3 rounded-full"
-								style="background: {inventoryStats.low_stock + inventoryStats.out_of_stock > 0
-									? 'var(--status-warning)'
-									: 'var(--status-success)'};"
-							></div>
-							<span class="text-sm font-medium" style="color: var(--text)">Inventory System</span>
-						</div>
-						<span
-							class="text-sm"
-							style="color: {inventoryStats.low_stock + inventoryStats.out_of_stock > 0
-								? 'var(--status-warning)'
-								: 'var(--status-success)'};"
-						>
-							{inventoryStats.low_stock + inventoryStats.out_of_stock > 0
-								? `${inventoryStats.low_stock + inventoryStats.out_of_stock} Issues`
-								: 'Healthy'}
-						</span>
-					</div>
+						{#each dashboardIssues.failedEmails as item (item.id)}
+							<div class="rounded-lg p-2" style="border: 1px solid var(--border)">
+								<div class="flex items-center justify-between gap-3">
+									<div class="flex min-w-0 items-center gap-3">
+										<Mail class="h-4 w-4 flex-shrink-0" style="color: var(--status-error);" />
+										<span class="truncate text-sm" style="color: var(--text)">
+											{item.email} — {item.notificationType}
+										</span>
+									</div>
+									{#if item.failedAt}
+										<span class="flex-shrink-0 text-xs" style="color: var(--text-muted)">
+											{formatRelativeTime(item.failedAt)}
+										</span>
+									{/if}
+								</div>
+								{#if item.errorMessage}
+									<p class="mt-1 truncate text-xs" style="color: var(--text-muted)">
+										{item.errorMessage}
+									</p>
+								{/if}
+							</div>
+						{/each}
+						{#if dashboardIssues.failedEmails.length > 0}
+							<a href="/admin/broadcast" class="inline-block text-xs underline" style="color: var(--link)">
+								View email activity
+							</a>
+						{/if}
 
-					<!-- Database Status -->
-					<div class="flex items-center justify-between">
-						<div class="flex items-center">
-							<div
-								class="mr-3 h-3 w-3 rounded-full"
-								style="background: var(--status-success);"
-							></div>
-							<span class="text-sm font-medium" style="color: var(--text)">Database</span>
-						</div>
-						<span class="text-sm" style="color: var(--status-success);">Connected</span>
-					</div>
-
-					<!-- Last Update -->
-					<div style="border-top: 1px solid var(--border)" class="pt-4">
-						<div class="flex items-center justify-between text-sm">
-							<span style="color: var(--text-muted)">Last system update:</span>
-							<span style="color: var(--text)">{formatRelativeTime(lastUpdated)}</span>
-						</div>
-					</div>
+						{#each dashboardIssues.unhealthyJobs as job (job.id)}
+							<div class="rounded-lg p-2" style="border: 1px solid var(--border)">
+								<div class="flex items-center justify-between gap-3">
+									<div class="flex min-w-0 items-center gap-3">
+										<AlertTriangle class="h-4 w-4 flex-shrink-0" style="color: var(--status-warning);" />
+										<span class="truncate text-sm" style="color: var(--text)">
+											{job.jobName} — {job.status}
+										</span>
+									</div>
+									<span class="flex-shrink-0 text-xs" style="color: var(--text-muted)">
+										{formatRelativeTime(job.startedAt)}
+									</span>
+								</div>
+								{#if job.errorSummary}
+									<p class="mt-1 truncate text-xs" style="color: var(--text-muted)">
+										{job.errorSummary}
+									</p>
+								{/if}
+							</div>
+						{/each}
+						{#if dashboardIssues.unhealthyJobs.length > 0}
+							<a href="/admin/automation" class="inline-block text-xs underline" style="color: var(--link)">
+								View automation
+							</a>
+						{/if}
+					{/if}
 				</div>
-			</div>
+			{/if}
 		</div>
 	</div>
 </div>
