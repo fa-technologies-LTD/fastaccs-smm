@@ -11,6 +11,7 @@
 		normalizePaymentStatus
 	} from '$lib/helpers/payment-status';
 	import { trackSnapEvent } from '$lib/services/snap-pixel';
+	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import {
 		clearGa4CheckoutSnapshot,
 		readGa4CheckoutSnapshot,
@@ -190,6 +191,7 @@
 							currency: result.currency || 'NGN',
 							description: 'FastAccs order'
 						});
+						recordAnalyticsEvent('purchase', `${$page.url.pathname}${$page.url.search}`);
 						if (resolvedOrderId) {
 							trackGa4Purchase({
 								transaction_id: resolvedOrderId,

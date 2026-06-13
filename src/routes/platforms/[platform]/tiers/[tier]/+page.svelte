@@ -34,6 +34,7 @@
 		type TierDeliveryMode
 	} from '$lib/helpers/tier-delivery-config';
 	import { trackSnapEvent } from '$lib/services/snap-pixel';
+	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import {
 		trackGa4AddToCart,
 		trackGa4ViewItem,
@@ -316,6 +317,7 @@
 			// Add to cart using new system
 			cart.addTier(data.tierCategory.id, selectedQuantity);
 			trackSnapEvent('ADD_CART', getSnapTierPayload(selectedQuantity));
+			recordAnalyticsEvent('add_cart', `${page.url.pathname}${page.url.search}`);
 			trackGa4AddToCart(getGa4TierPayload(selectedQuantity, 'standard_pool'));
 
 			// Success - show proper notification
@@ -566,6 +568,7 @@
 	onMount(() => {
 		if (data.tier && data.tierCategory) {
 			trackSnapEvent('VIEW_CONTENT', getSnapTierPayload(1));
+			recordAnalyticsEvent('view_content', `${page.url.pathname}${page.url.search}`);
 			trackGa4ViewItem(
 				getGa4TierPayload(1, exactPreviewConfig.enabled ? 'exact_enabled' : 'standard_pool')
 			);

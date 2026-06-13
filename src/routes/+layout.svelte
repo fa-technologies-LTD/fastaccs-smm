@@ -9,7 +9,8 @@
 	import PageLoadingBar from '$lib/components/PageLoadingBar.svelte';
 	import CookieConsentBar from '$lib/components/CookieConsentBar.svelte';
 	import AffiliateAccessNudge from '$lib/components/AffiliateAccessNudge.svelte';
-	import { trackSnapPageView } from '$lib/services/snap-pixel';
+	import { trackSnapPageView, trackSnapConfirmedVisit } from '$lib/services/snap-pixel';
+	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { syncGa4Consent, trackGa4PageView } from '$lib/services/ga4';
 	import { PRIVACY_CONSENT_CHANGED_EVENT } from '$lib/helpers/privacyConsent';
 	import type { LayoutData } from './$types';
@@ -23,8 +24,12 @@
 	let bannerDismissed = $state(false);
 	let lastBannerCookieName = $state<string | null>(null);
 	let tawkLoadRequested = false;
-	let lastSnapPageKey = '';
+	// Seed with the page key src/app.html's inline snippet already tracked
+	// (if any), so the post-hydration pass below doesn't double-count it.
+	let lastSnapPageKey = typeof window !== 'undefined' ? window.__snapPixelInitialPageKey || '' : '';
+	let lastSnapConfirmedKey = '';
 	let lastGa4PageKey = '';
+	let hydrated = false;
 	const announcementBanner = $derived(data.announcementBanner || null);
 	const defaultShareTitle = 'Buy Social Media Accounts & Boosting Services | FastAccs';
 	const defaultShareDescription =
@@ -95,6 +100,20 @@
 
 		if (trackSnapPageView(currentUrl)) {
 			lastSnapPageKey = pageKey;
+			recordAnalyticsEvent('page_view', pageKey);
+		}
+	}
+
+	function trackCurrentSnapConfirmedVisit(force = false): void {
+		if (typeof window === 'undefined' || !hydrated) return;
+
+		const currentUrl = new URL(window.location.href);
+		const pageKey = `${currentUrl.pathname}${currentUrl.search}`;
+		if (!force && pageKey === lastSnapConfirmedKey) return;
+
+		if (trackSnapConfirmedVisit(currentUrl)) {
+			lastSnapConfirmedKey = pageKey;
+			recordAnalyticsEvent('confirmed_visit', pageKey);
 		}
 	}
 
@@ -116,6 +135,7 @@
 
 	afterNavigate(() => {
 		trackCurrentSnapPageView();
+		trackCurrentSnapConfirmedVisit();
 		trackCurrentGa4PageView();
 	});
 
@@ -164,7 +184,9 @@
 	});
 
 	onMount(() => {
+		hydrated = true;
 		trackCurrentSnapPageView();
+		trackCurrentSnapConfirmedVisit();
 		syncGa4Consent();
 		trackCurrentGa4PageView();
 

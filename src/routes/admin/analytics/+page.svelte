@@ -378,5 +378,70 @@
 				{/if}
 			</section>
 		</div>
+
+		<div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+			<section
+				class="rounded-lg p-3"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
+				<h2 class="text-base font-semibold" style="color: var(--text)">
+					Traffic & Funnel (Last 30 Days)
+				</h2>
+				{#if stats.trafficFunnel?.funnel?.length}
+					<div class="mt-3 space-y-2">
+						{#each stats.trafficFunnel.funnel as step}
+							<div
+								class="flex items-center justify-between rounded-lg p-3"
+								style="background: var(--bg); border: 1px solid var(--border);"
+							>
+								<div>
+									<p class="text-sm font-semibold" style="color: var(--text)">{step.label}</p>
+									{#if step.conversionRate !== null}
+										<p class="text-xs" style="color: var(--text-muted);">
+											{formatPct(step.conversionRate)} of previous step
+										</p>
+									{/if}
+								</div>
+								<p class="text-lg font-bold" style="color: var(--text)">
+									{step.count.toLocaleString()}
+								</p>
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<p class="mt-3 text-sm" style="color: var(--text-muted);">
+						No traffic data recorded yet.
+					</p>
+				{/if}
+			</section>
+
+			<section
+				class="rounded-lg p-3"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
+				<h2 class="text-base font-semibold" style="color: var(--text)">
+					Top Pages (Last 30 Days)
+				</h2>
+				{#if stats.trafficFunnel?.topPages?.length}
+					<div class="mt-3 space-y-2">
+						{#each stats.trafficFunnel.topPages as row}
+							<div
+								class="flex items-center justify-between rounded-lg p-3"
+								style="background: var(--bg); border: 1px solid var(--border);"
+							>
+								<span class="truncate text-sm" style="color: var(--text)">{row.path}</span>
+								<span class="text-sm font-semibold" style="color: var(--text)"
+									>{row.views.toLocaleString()}</span
+								>
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<p class="mt-3 text-sm" style="color: var(--text-muted);">
+						No page view data recorded yet.
+					</p>
+				{/if}
+			</section>
+		</div>
 	{/if}
 </div>

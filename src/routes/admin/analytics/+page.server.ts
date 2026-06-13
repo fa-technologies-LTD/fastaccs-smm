@@ -17,6 +17,7 @@ import {
 	buildRevenueOrderWhere,
 	buildRevenueOrderWindowWhere
 } from '$lib/helpers/order-revenue.server';
+import { ANALYTICS_FUNNEL_STEPS } from '$lib/services/analytics-events';
 
 type IntegrityCheckResult = {
 	key: string;
@@ -173,7 +174,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 			tierCatalog,
 			recentSoldByTier,
 			paidOrderCount,
-			cancelledFailedOrderCount
+			cancelledFailedOrderCount,
+			funnelEventCounts,
+			topPageRows
 		] = await Promise.all([
 				prisma.order.aggregate({
 					where: buildRevenueOrderWindowWhere(startOfLastMonth, endOfLastMonth),
@@ -333,7 +336,23 @@ export const load: PageServerLoad = async ({ locals }) => {
 						})
 				: Promise.resolve([]),
 			prisma.order.count({ where: buildRevenueOrderWhere() }),
-			prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.failed] } } })
+			prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.failed] } } }),
+			featureFlags.adminAdvancedAnalytics
+				? prisma.analyticsEvent.groupBy({
+						by: ['type'],
+						where: { createdAt: { gte: last30DaysStart } },
+						_count: { _all: true }
+					})
+				: Promise.resolve([]),
+			featureFlags.adminAdvancedAnalytics
+				? prisma.analyticsEvent.groupBy({
+						by: ['path'],
+						where: { type: 'page_view', createdAt: { gte: last30DaysStart } },
+						_count: { path: true },
+						orderBy: { _count: { path: 'desc' } },
+						take: 10
+					})
+				: Promise.resolve([])
 		]);
 
 		const accountsSold = Number(accountsSoldAggregate._sum.quantity || 0);
@@ -560,6 +579,24 @@ export const load: PageServerLoad = async ({ locals }) => {
 				? Math.round((paidOrderCount / paidVsFailedDenominator) * 1000) / 10
 				: 0;
 
+		const funnelCountsByType = new Map<string, number>(
+			funnelEventCounts.map((row) => [row.type, row._count._all])
+		);
+		const funnel = ANALYTICS_FUNNEL_STEPS.map((step, index) => {
+			const count = funnelCountsByType.get(step.type) || 0;
+			if (index === 0) {
+				return { type: step.type, label: step.label, count, conversionRate: null as number | null };
+			}
+			const previousCount = funnelCountsByType.get(ANALYTICS_FUNNEL_STEPS[index - 1].type) || 0;
+			return {
+				type: step.type,
+				label: step.label,
+				count,
+				conversionRate: previousCount > 0 ? Math.round((count / previousCount) * 1000) / 10 : 0
+			};
+		});
+		const topPages = topPageRows.map((row) => ({ path: row.path, views: row._count.path }));
+
 		const topCategories = revenueByTier.slice(0, 5).map((row) => ({
 			name: `${row.platformName} / ${row.name}`,
 			revenue: row.revenue,
@@ -630,7 +667,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 						stagnantTiers: [],
 						averageSellThroughRate: 0,
 						averageDaysToSellOut: null
-					}
+					},
+			trafficFunnel: {
+				windowDays: 30,
+				funnel: featureFlags.adminAdvancedAnalytics ? funnel : [],
+				topPages: featureFlags.adminAdvancedAnalytics ? topPages : []
+			}
 		};
 
 		return {

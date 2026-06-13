@@ -24,6 +24,7 @@
 	import { formatPrice } from '$lib/helpers/utils';
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
 	import { trackSnapEvent } from '$lib/services/snap-pixel';
+	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import {
 		getGa4ClientId,
 		saveGa4CheckoutSnapshot,
@@ -430,6 +431,7 @@
 			const ga4CheckoutPayload = getCheckoutGa4Payload(resolvedOrderId);
 
 			trackSnapEvent('START_CHECKOUT', getCheckoutSnapPayload(resolvedOrderId));
+			recordAnalyticsEvent('start_checkout', `${page.url.pathname}${page.url.search}`);
 			trackGa4BeginCheckout(ga4CheckoutPayload);
 			trackGa4AddPaymentInfo({
 				...ga4CheckoutPayload,

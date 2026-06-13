@@ -20,6 +20,10 @@ declare global {
 			queue: unknown[];
 			handleRequest?: (...args: unknown[]) => void;
 		};
+		// Set by the inline Snap Pixel snippet in src/app.html when it fires
+		// the initial PAGE_VIEW before hydration.
+		__snapPixelBootstrapped?: boolean;
+		__snapPixelInitialPageKey?: string;
 		Tawk_API?: {
 			maximize?: () => void;
 			minimize?: () => void;

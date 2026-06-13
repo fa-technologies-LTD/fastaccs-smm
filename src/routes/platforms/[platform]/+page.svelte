@@ -38,6 +38,7 @@
 	} from '$lib/helpers/tier-delivery-config';
 	import { getTierExactPreviewConfig } from '$lib/helpers/tier-exact-preview';
 	import { trackSnapEvent } from '$lib/services/snap-pixel';
+	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { trackGa4AddToCart, type Ga4EventParams, type Ga4Item } from '$lib/services/ga4';
 
 	interface Props {
@@ -796,6 +797,7 @@
 
 			cart.addTier(tier.category_id, quickAddQuantity);
 			trackSnapEvent('ADD_CART', getSnapTierPayload(tier, quickAddQuantity));
+			recordAnalyticsEvent('add_cart', `${page.url.pathname}${page.url.search}`);
 			trackGa4AddToCart(getGa4TierPayload(tier, quickAddQuantity, 'standard_pool'));
 			showSuccess(
 				'Added to cart!',

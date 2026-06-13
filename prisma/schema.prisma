@@ -547,6 +547,16 @@ model PromotionRedemption {
   @@map("promotion_redemptions")
 }
 
+model AnalyticsEvent {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type      String
+  path      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([type, createdAt])
+  @@map("analytics_events")
+}
+
 model VerificationCode {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId     String   @unique @map("user_id") @db.Uuid

@@ -8,7 +8,8 @@ export type SnapPixelEvent =
 	| 'VIEW_CONTENT'
 	| 'ADD_CART'
 	| 'START_CHECKOUT'
-	| 'PURCHASE';
+	| 'PURCHASE'
+	| 'CUSTOM_EVENT_1';
 
 type SnapTrackFunction = ((command: 'init' | 'track', ...args: unknown[]) => void) & {
 	queue: unknown[];
@@ -23,13 +24,15 @@ export type SnapPixelPayload = Record<
 let initialized = false;
 let scriptRequested = false;
 
-function isProductionTrackingHost(): boolean {
+export function isProductionTrackingHost(): boolean {
 	if (!browser || dev) return false;
 	const hostname = window.location.hostname.toLowerCase();
 	return !['localhost', '127.0.0.1', '0.0.0.0'].includes(hostname);
 }
 
-function cleanPayload(payload: SnapPixelPayload): Record<string, string | number | boolean | Array<string | number>> {
+function cleanPayload(
+	payload: SnapPixelPayload
+): Record<string, string | number | boolean | Array<string | number>> {
 	const cleaned: Record<string, string | number | boolean | Array<string | number>> = {};
 
 	for (const [key, value] of Object.entries(payload)) {
@@ -90,7 +93,11 @@ export function initializeSnapPixel(): boolean {
 	requestSnapScript();
 
 	if (!initialized) {
-		window.snaptr?.('init', SNAP_PIXEL_ID, {});
+		// src/app.html's inline snippet already called 'init' synchronously
+		// before hydration on production hosts - don't call it twice.
+		if (!window.__snapPixelBootstrapped) {
+			window.snaptr?.('init', SNAP_PIXEL_ID, {});
+		}
 		initialized = true;
 	}
 
@@ -107,6 +114,17 @@ export function trackSnapEvent(event: SnapPixelEvent, payload: SnapPixelPayload 
 export function trackSnapPageView(url: URL): boolean {
 	return trackSnapEvent('PAGE_VIEW', {
 		page_url: url.href,
+		page_path: `${url.pathname}${url.search}`
+	});
+}
+
+// Fired once the SvelteKit app has hydrated, as a separate signal from the
+// PAGE_VIEW fired by src/app.html's pre-hydration snippet. Bots/crawlers that
+// load the raw HTML rarely run far enough to trigger this, so comparing this
+// count against PAGE_VIEW gives a rough "real visitor" ratio.
+export function trackSnapConfirmedVisit(url: URL): boolean {
+	return trackSnapEvent('CUSTOM_EVENT_1', {
+		description: 'confirmed_visit',
 		page_path: `${url.pathname}${url.search}`
 	});
 }
