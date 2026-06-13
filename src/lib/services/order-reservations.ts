@@ -113,7 +113,11 @@ export async function releaseOrderReservations(
 		FROM order_items AS oi
 		WHERE a.order_item_id = oi.id
 			AND oi.order_id = ${orderId}::uuid
-			AND a.status = 'reserved';
+			AND a.status = 'reserved'
+			AND NOT (
+				a.credential_extras ? ${EXACT_PREVIEW_RESERVATION_KEY}
+				AND a.reserved_until > NOW()
+			);
 	`;
 	return Number(affected || 0);
 }
