@@ -80,24 +80,26 @@
 
 				{#if !skipSignature}
 					<div class="mb-4">
-						<label class="mb-2 block text-sm font-medium"
+						<label for="webhook-signature" class="mb-2 block text-sm font-medium"
 							>Webhook Signature (monnify-signature)</label
 						>
 						<input
+							id="webhook-signature"
 							type="text"
 							bind:value={signature}
 							placeholder="Enter signature from Monnify webhook"
 							class="w-full rounded-lg border px-4 py-2"
 						/>
 					</div>
-				{/if}``
+				{/if}
 
 			<div class="mb-4">
-				<label class="mb-2 block text-sm font-medium">Webhook Payload</label>
+				<label for="webhook-payload" class="mb-2 block text-sm font-medium">Webhook Payload</label>
 				<textarea
+					id="webhook-payload"
 					bind:value={webhookData}
 					rows="15"
-					class="w-full rounded-lg border px-4 py-2 font-mo`n`o text-sm"
+					class="w-full rounded-lg border px-4 py-2 font-mono text-sm"
 				></textarea>
 			</div>
 

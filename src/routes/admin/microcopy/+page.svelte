@@ -502,8 +502,9 @@
 				<h2 class="mb-4 text-xl font-semibold">Add New Microcopy</h2>
 				<div class="space-y-4">
 					<div>
-						<label class="block text-sm font-medium text-gray-700">Key *</label>
+						<label for="microcopy-key" class="block text-sm font-medium text-gray-700">Key *</label>
 						<input
+							id="microcopy-key"
 							type="text"
 							bind:value={newItem.key}
 							placeholder="e.g., hero.title"
@@ -511,8 +512,9 @@
 						/>
 					</div>
 					<div>
-						<label class="block text-sm font-medium text-gray-700">Value *</label>
+						<label for="microcopy-value" class="block text-sm font-medium text-gray-700">Value *</label>
 						<textarea
+							id="microcopy-value"
 							bind:value={newItem.value}
 							rows="3"
 							placeholder="The text content"
@@ -520,8 +522,11 @@
 						></textarea>
 					</div>
 					<div>
-						<label class="block text-sm font-medium text-gray-700">Category</label>
+						<label for="microcopy-category" class="block text-sm font-medium text-gray-700"
+							>Category</label
+						>
 						<select
+							id="microcopy-category"
 							bind:value={newItem.category}
 							class="mt-1 w-full rounded-lg border border-gray-300 p-2 focus:border-blue-500 focus:outline-none"
 						>
@@ -531,8 +536,11 @@
 						</select>
 					</div>
 					<div>
-						<label class="block text-sm font-medium text-gray-700">Description</label>
+						<label for="microcopy-description" class="block text-sm font-medium text-gray-700"
+							>Description</label
+						>
 						<input
+							id="microcopy-description"
 							type="text"
 							bind:value={newItem.description}
 							placeholder="Optional description"

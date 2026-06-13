@@ -196,7 +196,7 @@
 	ondrop={(event) => void handleDrop(event)}
 >
 	<div class="mb-2 flex items-center justify-between">
-		<label class="block text-sm font-medium" style="color: var(--text);">Sample Screenshots</label>
+		<span class="block text-sm font-medium" style="color: var(--text);">Sample Screenshots</span>
 		<span class="text-xs" style="color: var(--text-muted);"
 			>Up to {MAX_TIER_SAMPLE_SCREENSHOTS}</span
 		>

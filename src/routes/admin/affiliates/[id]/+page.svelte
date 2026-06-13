@@ -191,9 +191,12 @@
 			<h2 class="mb-4 text-lg font-semibold text-gray-900">Affiliate Information</h2>
 			<div class="space-y-4">
 				<div>
-					<label class="mb-1 block text-sm font-medium text-gray-700">Affiliate Promo Code</label>
+					<label for="affiliate-promo-code" class="mb-1 block text-sm font-medium text-gray-700"
+						>Affiliate Promo Code</label
+					>
 					<div class="flex gap-2">
 						<input
+							id="affiliate-promo-code"
 							type="text"
 							value={data.program.affiliateCode}
 							readonly
@@ -212,9 +215,12 @@
 				</div>
 
 				<div>
-					<label class="mb-1 block text-sm font-medium text-gray-700">Referral Link</label>
+					<label for="affiliate-referral-link" class="mb-1 block text-sm font-medium text-gray-700"
+						>Referral Link</label
+					>
 					<div class="flex gap-2">
 						<input
+							id="affiliate-referral-link"
 							type="text"
 							value={`${referralBaseUrl}/ref/${data.program.affiliateCode}`}
 							readonly

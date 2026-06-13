@@ -347,8 +347,8 @@
 
 							<!-- Features -->
 							<div class="md:col-span-2">
-								<label class="mb-2 block text-sm font-medium" style="color: var(--text);"
-									>Features</label
+								<span class="mb-2 block text-sm font-medium" style="color: var(--text);"
+									>Features</span
 								>
 								<div class="space-y-2">
 									{#each tierForm.metadata.features as feature, index}
@@ -390,10 +390,11 @@
 
 							<!-- Follower Range -->
 							<div>
-								<label class="block text-sm font-medium" style="color: var(--text);"
+								<label for="tier-edit-min-followers" class="block text-sm font-medium" style="color: var(--text);"
 									>Min Followers</label
 								>
 								<input
+									id="tier-edit-min-followers"
 									type="number"
 									min="0"
 									bind:value={tierForm.metadata.follower_range.min}
@@ -403,10 +404,11 @@
 							</div>
 
 							<div>
-								<label class="block text-sm font-medium" style="color: var(--text);"
+								<label for="tier-edit-max-followers" class="block text-sm font-medium" style="color: var(--text);"
 									>Max Followers</label
 								>
 								<input
+									id="tier-edit-max-followers"
 									type="number"
 									min="0"
 									bind:value={tierForm.metadata.follower_range.max}
@@ -416,10 +418,11 @@
 							</div>
 
 							<div>
-								<label class="block text-sm font-medium" style="color: var(--text);"
+								<label for="tier-edit-display-text" class="block text-sm font-medium" style="color: var(--text);"
 									>Display Text</label
 								>
 								<input
+									id="tier-edit-display-text"
 									type="text"
 									bind:value={tierForm.metadata.follower_range.display}
 									class="mt-1 block w-full rounded-md px-4 py-2"
@@ -429,10 +432,11 @@
 
 							<!-- Pricing -->
 							<div>
-								<label class="block text-sm font-medium" style="color: var(--text);"
+								<label for="tier-edit-base-price" class="block text-sm font-medium" style="color: var(--text);"
 									>Base Price (₦)</label
 								>
 								<input
+									id="tier-edit-base-price"
 									type="number"
 									step="0.01"
 									min="0"
@@ -443,10 +447,11 @@
 							</div>
 
 							<div>
-								<label class="block text-sm font-medium" style="color: var(--text);"
+								<label for="tier-edit-quality-score" class="block text-sm font-medium" style="color: var(--text);"
 									>Quality Score (1-5)</label
 								>
 								<input
+									id="tier-edit-quality-score"
 									type="number"
 									min="1"
 									max="5"
@@ -457,10 +462,11 @@
 							</div>
 
 							<div class="md:col-span-2">
-								<label class="block text-sm font-medium" style="color: var(--text);"
+								<label for="tier-edit-delivery-time" class="block text-sm font-medium" style="color: var(--text);"
 									>Delivery Time</label
 								>
 								<input
+									id="tier-edit-delivery-time"
 									type="text"
 									bind:value={tierForm.metadata.delivery_time}
 									class="mt-1 block w-full rounded-md px-4 py-2"
