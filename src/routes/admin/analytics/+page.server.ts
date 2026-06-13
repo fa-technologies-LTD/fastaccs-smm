@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
 import { getInventoryStatsSnapshot, getOrderStatsSnapshot } from '$lib/services/admin-metrics';
-import { ORDER_STATUS_GROUPS } from '$lib/helpers/order-status';
+import { ORDER_STATUS_GROUPS, getOrderStatusLabel } from '$lib/helpers/order-status';
 import { getBusinessTimezoneSetting } from '$lib/services/admin-settings';
 import {
 	getBusinessDateKey,
@@ -176,7 +176,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 			paidOrderCount,
 			cancelledFailedOrderCount,
 			funnelEventCounts,
-			topPageRows
+			topPageRows,
+			orderStatusGroups,
+			paymentChannelGroups,
+			repeatBuyerGroups,
+			guestPaidOrderCount
 		] = await Promise.all([
 				prisma.order.aggregate({
 					where: buildRevenueOrderWindowWhere(startOfLastMonth, endOfLastMonth),
@@ -352,7 +356,29 @@ export const load: PageServerLoad = async ({ locals }) => {
 						orderBy: { _count: { path: 'desc' } },
 						take: 10
 					})
-				: Promise.resolve([])
+				: Promise.resolve([]),
+			featureFlags.adminAdvancedAnalytics
+				? prisma.order.groupBy({ by: ['status'], _count: { _all: true } })
+				: Promise.resolve([]),
+			featureFlags.adminAdvancedAnalytics
+				? prisma.order.groupBy({
+						by: ['paymentChannel'],
+						where: buildRevenueOrderWhere(),
+						_count: { _all: true }
+					})
+				: Promise.resolve([]),
+			featureFlags.adminAdvancedAnalytics
+				? prisma.order.groupBy({
+						by: ['userId'],
+						where: { AND: [buildRevenueOrderWhere(), { userId: { not: null } }] },
+						_count: { _all: true }
+					})
+				: Promise.resolve([]),
+			featureFlags.adminAdvancedAnalytics
+				? prisma.order.count({
+						where: { AND: [buildRevenueOrderWhere(), { userId: null }] }
+					})
+				: Promise.resolve(0)
 		]);
 
 		const accountsSold = Number(accountsSoldAggregate._sum.quantity || 0);
@@ -604,6 +630,62 @@ export const load: PageServerLoad = async ({ locals }) => {
 			orderCount: row.orderCount
 		}));
 
+		const totalOrdersForAov = orderStatsSnapshot.total_orders || 0;
+		const aov =
+			totalOrdersForAov > 0
+				? toAmount(Number(orderStatsSnapshot.total_revenue || 0) / totalOrdersForAov)
+				: 0;
+		const thisMonthAov =
+			thisMonthOrders > 0
+				? toAmount(Number(thisMonthRevenue._sum.totalAmount || 0) / thisMonthOrders)
+				: 0;
+		const lastMonthAov =
+			lastMonthOrders > 0
+				? toAmount(Number(lastMonthRevenue._sum.totalAmount || 0) / lastMonthOrders)
+				: 0;
+		const aovChange =
+			lastMonthAov > 0 ? ((thisMonthAov - lastMonthAov) / lastMonthAov) * 100 : 0;
+
+		const STATUS_DONUT_LABELS: Record<string, string> = {
+			pending: 'Pending',
+			pending_payment: 'Pending Payment',
+			processing: 'Processing',
+			paid: 'Paid',
+			completed: 'Completed',
+			cancelled: 'Cancelled',
+			failed: 'Failed'
+		};
+		const orderStatusBreakdown = orderStatusGroups
+			.map((row) => ({
+				status: row.status,
+				label: STATUS_DONUT_LABELS[row.status] || getOrderStatusLabel(row.status),
+				count: row._count._all
+			}))
+			.sort((a, b) => b.count - a.count);
+
+		const paymentChannelBreakdown = paymentChannelGroups
+			.map((row) => ({
+				channel: row.paymentChannel || 'Unknown',
+				count: row._count._all
+			}))
+			.sort((a, b) => b.count - a.count);
+
+		const affiliateRevenueAmount = revenueVisible
+			? Number(affiliateSalesAggregate._sum.totalAmount || 0)
+			: 0;
+		const nonAffiliateRevenueAmount = revenueVisible
+			? Math.max(
+					0,
+					toAmount(Number(orderStatsSnapshot.total_revenue || 0) - affiliateRevenueAmount)
+				)
+			: 0;
+
+		const repeatCustomerCount = repeatBuyerGroups.filter((row) => row._count._all >= 2).length;
+		const firstTimeRegisteredCount = repeatBuyerGroups.filter(
+			(row) => row._count._all === 1
+		).length;
+		const firstTimeBuyerCount = firstTimeRegisteredCount + guestPaidOrderCount;
+
 			const stats = {
 				timezone: businessTimezone,
 				metricDefinitions: {
@@ -620,6 +702,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 						Number(lastMonthRevenue._sum.totalAmount || 1)) *
 					100
 				: 0,
+			aov: revenueVisible ? aov : 0,
+			aovChange: revenueVisible ? aovChange : 0,
 			totalOrders: orderStatsSnapshot.total_orders,
 			ordersChange: ((thisMonthOrders - lastMonthOrders) / (lastMonthOrders || 1)) * 100,
 			totalCustomers,
@@ -672,7 +756,26 @@ export const load: PageServerLoad = async ({ locals }) => {
 				windowDays: 30,
 				funnel: featureFlags.adminAdvancedAnalytics ? funnel : [],
 				topPages: featureFlags.adminAdvancedAnalytics ? topPages : []
-			}
+			},
+			insights: featureFlags.adminAdvancedAnalytics
+				? {
+						orderStatusBreakdown,
+						paymentChannelBreakdown,
+						affiliateRevenueSplit: {
+							affiliate: affiliateRevenueAmount,
+							nonAffiliate: nonAffiliateRevenueAmount
+						},
+						buyerComposition: {
+							repeatCustomers: repeatCustomerCount,
+							firstTimeBuyers: firstTimeBuyerCount
+						}
+					}
+				: {
+						orderStatusBreakdown: [],
+						paymentChannelBreakdown: [],
+						affiliateRevenueSplit: { affiliate: 0, nonAffiliate: 0 },
+						buyerComposition: { repeatCustomers: 0, firstTimeBuyers: 0 }
+					}
 		};
 
 		return {

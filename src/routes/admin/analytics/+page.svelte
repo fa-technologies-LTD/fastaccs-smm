@@ -3,6 +3,11 @@
 	import type { PageData } from './$types';
 	import { ArrowDown, ArrowUp } from '$lib/icons';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
+	import AreaLineChart from '$lib/components/charts/AreaLineChart.svelte';
+	import BarChart from '$lib/components/charts/BarChart.svelte';
+	import DonutChart from '$lib/components/charts/DonutChart.svelte';
+	import Sparkline from '$lib/components/charts/Sparkline.svelte';
+	import { STATUS_COLOR_MAP } from '$lib/components/charts/chart-theme';
 
 	let { data }: { data: PageData } = $props();
 
@@ -40,6 +45,14 @@
 	function formatPct(value: number): string {
 		return `${Number(value || 0).toFixed(1)}%`;
 	}
+
+	let granularity = $state<'day' | 'week' | 'month'>('day');
+	const granularityData = $derived.by(() => {
+		const key =
+			granularity === 'day' ? 'byDay' : granularity === 'week' ? 'byWeek' : 'byMonth';
+		const rows = (stats.revenueBreakdown?.[key] || []) as Array<{ key: string; revenue: number }>;
+		return rows.slice(-12).map((row) => ({ label: row.key, value: row.revenue }));
+	});
 </script>
 
 <div class="space-y-4">
@@ -85,7 +98,7 @@
 		{/if}
 	</div>
 
-	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
 		<div
 			class="rounded-lg p-3"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
@@ -102,6 +115,13 @@
 				{/if}
 				<span>{formatPct(stats.revenueChange || 0)} vs last month</span>
 			</div>
+			<div class="mt-2">
+				<Sparkline
+					data={(stats.revenueBreakdown?.lineTrend || []).map(
+						(p: { revenue: number }) => p.revenue
+					)}
+				/>
+			</div>
 		</div>
 		<div
 			class="rounded-lg p-3"
@@ -112,6 +132,14 @@
 			<p class="mt-1 text-xs" style="color: var(--text-muted)">
 				{formatPct(stats.ordersChange || 0)} vs last month
 			</p>
+			<div class="mt-2">
+				<Sparkline
+					data={(stats.revenueBreakdown?.lineTrend || []).map(
+						(p: { orderCount: number }) => p.orderCount
+					)}
+					color="var(--status-info)"
+				/>
+			</div>
 		</div>
 		<div
 			class="rounded-lg p-3"
@@ -133,6 +161,23 @@
 				{formatPct(stats.accountsChange || 0)} vs last month
 			</p>
 		</div>
+		<div
+			class="rounded-lg p-3"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+		>
+			<p class="text-sm" style="color: var(--text-muted)">Average Order Value</p>
+			<p class="mt-1 text-2xl font-bold" style="color: var(--text)">
+				{formatMoney(stats.aov || 0)}
+			</p>
+			<div class="mt-1 flex items-center gap-1 text-xs" style="color: var(--text-muted);">
+				{#if Number(stats.aovChange || 0) >= 0}
+					<ArrowUp class="h-3.5 w-3.5 text-green-600" />
+				{:else}
+					<ArrowDown class="h-3.5 w-3.5 text-red-600" />
+				{/if}
+				<span>{formatPct(stats.aovChange || 0)} vs last month</span>
+			</div>
+		</div>
 	</div>
 
 	{#if stats.advancedAnalyticsEnabled}
@@ -144,28 +189,19 @@
 				<h2 class="text-base font-semibold" style="color: var(--text)">
 					Revenue Breakdown by Platform
 				</h2>
-				{#if stats.revenueBreakdown?.byPlatform?.length}
-					<div class="mt-3 space-y-2">
-						{#each stats.revenueBreakdown.byPlatform.slice(0, 8) as row}
-							<div
-								class="flex items-center justify-between rounded-lg p-3"
-								style="background: var(--bg); border: 1px solid var(--border);"
-							>
-								<div>
-									<p class="text-sm font-semibold" style="color: var(--text)">{row.name}</p>
-									<p class="text-xs" style="color: var(--text-muted);">
-										{row.orderCount} orders • {row.unitsSold} sold
-									</p>
-								</div>
-								<p class="text-sm font-semibold" style="color: var(--text)">
-									{formatMoney(row.revenue)}
-								</p>
-							</div>
-						{/each}
-					</div>
-				{:else}
-					<p class="mt-3 text-sm" style="color: var(--text-muted);">No revenue data available.</p>
-				{/if}
+				<div class="mt-3">
+					<BarChart
+						orientation="horizontal"
+						data={(stats.revenueBreakdown?.byPlatform || [])
+							.slice(0, 8)
+							.map((row: { name: string; revenue: number }) => ({
+								label: row.name,
+								value: row.revenue
+							}))}
+						formatValue={formatMoney}
+						emptyMessage="No revenue data available."
+					/>
+				</div>
 			</section>
 
 			<section
@@ -173,32 +209,19 @@
 				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 			>
 				<h2 class="text-base font-semibold" style="color: var(--text)">Top Tier Revenue</h2>
-				{#if stats.revenueBreakdown?.byTier?.length}
-					<div class="mt-3 space-y-2">
-						{#each stats.revenueBreakdown.byTier.slice(0, 8) as row}
-							<div
-								class="flex items-center justify-between rounded-lg p-3"
-								style="background: var(--bg); border: 1px solid var(--border);"
-							>
-								<div>
-									<p class="text-sm font-semibold" style="color: var(--text)">
-										{row.platformName} / {row.name}
-									</p>
-									<p class="text-xs" style="color: var(--text-muted);">
-										{row.orderCount} orders • {row.unitsSold} sold
-									</p>
-								</div>
-								<p class="text-sm font-semibold" style="color: var(--text)">
-									{formatMoney(row.revenue)}
-								</p>
-							</div>
-						{/each}
-					</div>
-				{:else}
-					<p class="mt-3 text-sm" style="color: var(--text-muted);">
-						No tier revenue data available.
-					</p>
-				{/if}
+				<div class="mt-3">
+					<BarChart
+						orientation="horizontal"
+						data={(stats.revenueBreakdown?.byTier || [])
+							.slice(0, 8)
+							.map((row: { platformName: string; name: string; revenue: number }) => ({
+								label: `${row.platformName} / ${row.name}`,
+								value: row.revenue
+							}))}
+						formatValue={formatMoney}
+						emptyMessage="No tier revenue data available."
+					/>
+				</div>
 			</section>
 		</div>
 
@@ -209,76 +232,142 @@
 			<h2 class="text-base font-semibold" style="color: var(--text)">
 				Revenue Trend (Last 30 Days)
 			</h2>
-			{#if stats.revenueBreakdown?.lineTrend?.length}
-				<div class="mt-3 grid grid-cols-2 gap-2 md:grid-cols-5 xl:grid-cols-10">
-					{#each stats.revenueBreakdown.lineTrend.slice(-20) as point}
-						<div
-							class="rounded-lg p-2"
-							style="background: var(--bg); border: 1px solid var(--border);"
-						>
-							<p class="text-[10px]" style="color: var(--text-dim);">{point.key.slice(5)}</p>
-							<p class="mt-1 text-xs font-semibold" style="color: var(--text);">
-								{formatMoney(point.revenue)}
-							</p>
-							<p class="text-[10px]" style="color: var(--text-muted);">{point.orderCount} orders</p>
-						</div>
-					{/each}
-				</div>
-			{/if}
+			<div class="mt-3">
+				<AreaLineChart
+					data={(stats.revenueBreakdown?.lineTrend || []).map(
+						(point: { key: string; revenue: number }) => ({
+							key: point.key,
+							value: point.revenue
+						})
+					)}
+					formatLabel={(key) => key.slice(5)}
+					emptyMessage="No revenue data available."
+				/>
+			</div>
 		</section>
 
 		<section
 			class="rounded-lg p-3"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
-			<h2 class="text-base font-semibold" style="color: var(--text)">
-				Revenue by Day / Week / Month
-			</h2>
-			<div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-				<div class="space-y-2">
-					<p class="text-xs font-semibold uppercase" style="color: var(--text-dim);">Day</p>
-					{#each (stats.revenueBreakdown?.byDay || []).slice(-5) as row}
-						<div
-							class="flex items-center justify-between rounded-lg p-2"
-							style="background: var(--bg); border: 1px solid var(--border);"
+			<div class="flex flex-wrap items-center justify-between gap-2">
+				<h2 class="text-base font-semibold" style="color: var(--text)">Revenue by Period</h2>
+				<div class="flex gap-1">
+					{#each [['day', 'Day'], ['week', 'Week'], ['month', 'Month']] as [value, label]}
+						<button
+							type="button"
+							class="rounded-full px-3 py-1 text-xs font-semibold transition-colors"
+							style={granularity === value
+								? 'background: var(--primary); color: var(--bg);'
+								: 'background: var(--bg-elev-2); color: var(--text-muted); border: 1px solid var(--border);'}
+							onclick={() => (granularity = value as 'day' | 'week' | 'month')}
 						>
-							<span class="text-xs" style="color: var(--text-muted);">{row.key}</span>
-							<span class="text-xs font-semibold" style="color: var(--text);"
-								>{formatMoney(row.revenue)}</span
-							>
-						</div>
-					{/each}
-				</div>
-				<div class="space-y-2">
-					<p class="text-xs font-semibold uppercase" style="color: var(--text-dim);">Week</p>
-					{#each (stats.revenueBreakdown?.byWeek || []).slice(-5) as row}
-						<div
-							class="flex items-center justify-between rounded-lg p-2"
-							style="background: var(--bg); border: 1px solid var(--border);"
-						>
-							<span class="text-xs" style="color: var(--text-muted);">{row.key}</span>
-							<span class="text-xs font-semibold" style="color: var(--text);"
-								>{formatMoney(row.revenue)}</span
-							>
-						</div>
-					{/each}
-				</div>
-				<div class="space-y-2">
-					<p class="text-xs font-semibold uppercase" style="color: var(--text-dim);">Month</p>
-					{#each (stats.revenueBreakdown?.byMonth || []).slice(-5) as row}
-						<div
-							class="flex items-center justify-between rounded-lg p-2"
-							style="background: var(--bg); border: 1px solid var(--border);"
-						>
-							<span class="text-xs" style="color: var(--text-muted);">{row.key}</span>
-							<span class="text-xs font-semibold" style="color: var(--text);"
-								>{formatMoney(row.revenue)}</span
-							>
-						</div>
+							{label}
+						</button>
 					{/each}
 				</div>
 			</div>
+			<div class="mt-3">
+				<BarChart
+					orientation="vertical"
+					data={granularityData}
+					formatValue={formatMoney}
+					emptyMessage="No revenue data available."
+				/>
+			</div>
 		</section>
+
+		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+			<section
+				class="rounded-lg p-3"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
+				<h2 class="text-base font-semibold" style="color: var(--text)">Order Status</h2>
+				<div class="mt-3">
+					<DonutChart
+						data={(stats.insights?.orderStatusBreakdown || []).map(
+							(row: { status: string; label: string; count: number }) => ({
+								label: row.label,
+								value: row.count,
+								color: STATUS_COLOR_MAP[row.status]
+							})
+						)}
+						emptyMessage="No order data available."
+					/>
+				</div>
+			</section>
+
+			<section
+				class="rounded-lg p-3"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
+				<h2 class="text-base font-semibold" style="color: var(--text)">Payment Channel</h2>
+				<div class="mt-3">
+					<DonutChart
+						data={(stats.insights?.paymentChannelBreakdown || []).map(
+							(row: { channel: string; count: number }) => ({
+								label: row.channel,
+								value: row.count
+							})
+						)}
+						emptyMessage="No payment data available."
+					/>
+				</div>
+			</section>
+
+			<section
+				class="rounded-lg p-3"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
+				<h2 class="text-base font-semibold" style="color: var(--text)">
+					Affiliate vs Direct Revenue
+				</h2>
+				<div class="mt-3">
+					<DonutChart
+						data={[
+							{
+								label: 'Affiliate',
+								value: stats.insights?.affiliateRevenueSplit?.affiliate || 0,
+								color: 'var(--status-info)'
+							},
+							{
+								label: 'Direct',
+								value: stats.insights?.affiliateRevenueSplit?.nonAffiliate || 0,
+								color: 'var(--primary)'
+							}
+						]}
+						formatValue={formatMoney}
+						emptyMessage="No revenue data available."
+					/>
+				</div>
+			</section>
+
+			<section
+				class="rounded-lg p-3"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
+				<h2 class="text-base font-semibold" style="color: var(--text)">
+					Repeat vs First-Time Buyers
+				</h2>
+				<div class="mt-3">
+					<DonutChart
+						data={[
+							{
+								label: 'Repeat',
+								value: stats.insights?.buyerComposition?.repeatCustomers || 0,
+								color: 'var(--primary)'
+							},
+							{
+								label: 'First-time',
+								value: stats.insights?.buyerComposition?.firstTimeBuyers || 0,
+								color: 'var(--status-info)'
+							}
+						]}
+						emptyMessage="No buyer data available."
+					/>
+				</div>
+			</section>
+		</div>
 
 		<div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
 			<section
@@ -342,27 +431,19 @@
 						</p>
 					</div>
 				</div>
-				{#if stats.stockVelocity?.tiers?.length}
-					<div class="mt-3 space-y-2">
-						{#each stats.stockVelocity.tiers.slice(0, 8) as tier}
-							<div
-								class="rounded-lg p-3 text-sm"
-								style="background: var(--bg); border: 1px solid var(--border);"
-							>
-								<p class="font-semibold" style="color: var(--text);">
-									{tier.platformName} / {tier.tierName}
-								</p>
-								<p class="text-xs" style="color: var(--text-muted);">
-									Sold (30d): {tier.soldLast30Days} • Available: {tier.available}
-								</p>
-								<p class="text-xs" style="color: var(--text-muted);">
-									Sell-through: {formatPct(tier.rollingSellThroughRate)} • Days to sell out: {tier.daysToSellOut ??
-										'N/A'}
-								</p>
-							</div>
-						{/each}
-					</div>
-				{/if}
+				<div class="mt-3">
+					<BarChart
+						orientation="horizontal"
+						data={(stats.stockVelocity?.tiers || [])
+							.slice(0, 8)
+							.map((tier: { platformName: string; tierName: string; rollingSellThroughRate: number }) => ({
+								label: `${tier.platformName} / ${tier.tierName}`,
+								value: tier.rollingSellThroughRate
+							}))}
+						formatValue={formatPct}
+						emptyMessage="No stock velocity data available."
+					/>
+				</div>
 				{#if stats.stockVelocity?.stagnantTiers?.length}
 					<div class="mt-3 space-y-2">
 						{#each stats.stockVelocity.stagnantTiers.slice(0, 6) as tier}
