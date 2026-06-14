@@ -30,8 +30,16 @@ interface RateLimitResult {
 	retryAfterSeconds: number;
 }
 
-const AUTH_NOTIFICATION_TYPE = 'auth_rate_limit';
-const RESTOCK_NOTIFY_NOTIFICATION_TYPE = 'restock_notify_rate_limit';
+export const AUTH_NOTIFICATION_TYPE = 'auth_rate_limit';
+export const RESTOCK_NOTIFY_NOTIFICATION_TYPE = 'restock_notify_rate_limit';
+
+// These notificationTypes mark rate-limit bookkeeping rows that reuse the
+// email_notifications table (status: 'failed', no email actually sent/attempted).
+// Email-health metrics and admin "failed email" views must exclude them.
+export const RATE_LIMIT_NOTIFICATION_TYPES = [
+	AUTH_NOTIFICATION_TYPE,
+	RESTOCK_NOTIFY_NOTIFICATION_TYPE
+] as const;
 
 function hashKey(raw: string): string {
 	return createHash('sha256').update(raw).digest('hex');

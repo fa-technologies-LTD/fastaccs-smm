@@ -1,4 +1,5 @@
 import { prisma } from '$lib/prisma';
+import { RATE_LIMIT_NOTIFICATION_TYPES } from '$lib/auth/rate-limit';
 
 export type RecentActivityItem = {
 	id: string;
@@ -81,7 +82,7 @@ export async function getRecentActivityFeed(limit = 10): Promise<RecentActivityI
 export async function getDashboardIssues(): Promise<DashboardIssues> {
 	const [failedEmails, unhealthyJobs] = await Promise.all([
 		prisma.emailNotification.findMany({
-			where: { status: 'failed' },
+			where: { status: 'failed', notificationType: { notIn: [...RATE_LIMIT_NOTIFICATION_TYPES] } },
 			orderBy: { failedAt: 'desc' },
 			take: 5,
 			select: {

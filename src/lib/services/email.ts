@@ -70,7 +70,7 @@ let transporterCache: Transporter | null = null;
 const CANONICAL_PUBLIC_BASE_URL = 'https://smm.fastaccs.com';
 const EMAIL_HEADER_CID = 'fastaccounts-email-header';
 const EMAIL_HEADER_CONTENT = Buffer.from(emailHeaderDataUrl.split(',')[1] || '', 'base64');
-const MARKETING_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+const MARKETING_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 export const QUEUED_MARKETING_STALE_MS = 15 * 60 * 1000;
 
 function normalizePublicBaseUrl(candidate: string): string | null {
@@ -669,28 +669,15 @@ export async function sendQueuedMarketingEmail(notificationId: string): Promise<
 			select: { id: true }
 		});
 
+		// Admin broadcasts are a deliberate, infrequent send the admin controls directly,
+		// so they skip the rolling marketing cooldown that throttles automated campaigns
+		// (winback/onboarding/etc.) against each other.
 		let suppressionReason: string | null = null;
 		if (duplicate) suppressionReason = 'duplicate_campaign';
 		else if (!user.isActive) suppressionReason = 'inactive_user';
 		else if (!user.emailVerified) suppressionReason = 'unverified_email';
 		else if (!user.marketingEmailEnabled) suppressionReason = 'unsubscribed';
 		else if (user.marketingSuppressedAt) suppressionReason = 'suppressed_address';
-
-		if (!suppressionReason) {
-			const recentMarketing = await tx.emailNotification.findFirst({
-				where: {
-					id: { not: notification.id },
-					userId: notification.userId,
-					classification: 'marketing',
-					status: 'sent',
-					sentAt: {
-						gte: new Date(Date.now() - MARKETING_COOLDOWN_MS)
-					}
-				},
-				select: { id: true }
-			});
-			if (recentMarketing) suppressionReason = 'seven_day_marketing_limit';
-		}
 
 		if (suppressionReason) {
 			await tx.emailNotification.update({

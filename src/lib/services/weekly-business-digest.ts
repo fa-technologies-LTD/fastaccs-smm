@@ -7,6 +7,7 @@ import {
 	getOperationalAlertRecipients
 } from '$lib/services/admin-settings';
 import { sendEmail } from '$lib/services/email';
+import { RATE_LIMIT_NOTIFICATION_TYPES } from '$lib/auth/rate-limit';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TOP_ROW_LIMIT = 5;
@@ -297,7 +298,8 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 		prisma.emailNotification.count({
 			where: {
 				status: 'failed',
-				failedAt: { gte: start, lt: end }
+				failedAt: { gte: start, lt: end },
+				notificationType: { notIn: [...RATE_LIMIT_NOTIFICATION_TYPES] }
 			}
 		}),
 		prisma.emailNotification.count({
