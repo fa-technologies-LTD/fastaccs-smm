@@ -47,6 +47,8 @@ import {
 	getMonnifyInitializationIssue,
 	MONNIFY_CURRENCY
 } from '$lib/helpers/monnify-initialization.server';
+import { hasAdminPermission } from '$lib/auth/admin-roles';
+import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
 
 interface CreateOrderItemInput {
 	categoryId: string;
@@ -115,10 +117,6 @@ function buildOrderAnalyticsMetadata(
 	return metadata as Prisma.InputJsonObject;
 }
 
-function isAdminUser(user: { userType?: string } | null | undefined): boolean {
-	return user?.userType === 'ADMIN';
-}
-
 function sanitizeLimit(value: string | null): number | undefined {
 	if (!value) return undefined;
 	const parsed = Number.parseInt(value, 10);
@@ -153,7 +151,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		const userId = url.searchParams.get('userId');
 		const limit = sanitizeLimit(url.searchParams.get('limit'));
 
-		const admin = isAdminUser(locals.user);
+		const admin = hasAdminPermission(locals.adminContext, 'admin:access');
 		const where: { status?: string; guestEmail?: string; userId?: string } = {};
 
 		if (status) where.status = status;
@@ -174,7 +172,9 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 								accounts: true
 							}
 						},
-						user: true
+						user: {
+							select: ORDER_CUSTOMER_USER_SELECT
+						}
 					}
 				: {
 						orderItems: true

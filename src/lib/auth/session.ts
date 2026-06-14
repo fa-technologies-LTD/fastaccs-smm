@@ -27,6 +27,10 @@ function clearUserSessionsFromCache(userId: string, keepSessionId?: string): voi
 	}
 }
 
+export function invalidateUserSessionCache(userId: string): void {
+	clearUserSessionsFromCache(userId);
+}
+
 // Clean up expired cache entries periodically
 if (typeof setInterval !== 'undefined') {
 	setInterval(() => {
@@ -77,18 +81,27 @@ export async function validateSessionToken(token: string): Promise<SessionValida
 	// Check cache first
 	const cached = sessionCache.get(sessionId);
 	if (cached && Date.now() - cached.cachedAt < CACHE_TTL) {
-		if (!cached.user.isActive) {
-			await prisma.session.deleteMany({ where: { id: sessionId } });
+		if (Date.now() >= cached.session.expiresAt.getTime()) {
 			sessionCache.delete(sessionId);
-			return { session: null, user: null };
-		}
-
-		// Check if cached session is still valid
-		if (Date.now() < cached.session.expiresAt.getTime()) {
-			return { session: cached.session, user: cached.user };
 		} else {
-			// Cached session expired, remove from cache
-			sessionCache.delete(sessionId);
+			// User state can change on another server instance, so never trust the cached copy.
+			const freshUser = await prisma.user.findUnique({
+				where: { id: cached.user.id }
+			});
+
+			if (!freshUser?.isActive) {
+				await prisma.session.deleteMany({ where: { id: sessionId } });
+				sessionCache.delete(sessionId);
+				return { session: null, user: null };
+			}
+
+			sessionCache.set(sessionId, {
+				session: cached.session,
+				user: freshUser,
+				cachedAt: cached.cachedAt
+			});
+
+			return { session: cached.session, user: freshUser };
 		}
 	}
 
@@ -119,7 +132,7 @@ export async function validateSessionToken(token: string): Promise<SessionValida
 
 	// Only refresh if session expires in 15 days AND hasn't been refreshed in the last hour
 	const REFRESH_INTERVAL = 60 * 60 * 1000; // 1 hour
-	const shouldRefresh = 
+	const shouldRefresh =
 		Date.now() >= session.expiresAt.getTime() - 1000 * 60 * 60 * 24 * 15 &&
 		Date.now() - session.lastRefreshedAt.getTime() > REFRESH_INTERVAL;
 
@@ -129,7 +142,7 @@ export async function validateSessionToken(token: string): Promise<SessionValida
 		session.lastRefreshedAt = new Date();
 		await prisma.session.update({
 			where: { id: session.id },
-			data: { 
+			data: {
 				expiresAt: session.expiresAt,
 				lastRefreshedAt: session.lastRefreshedAt
 			}

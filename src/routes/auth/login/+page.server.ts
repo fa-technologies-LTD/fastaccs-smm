@@ -1,4 +1,5 @@
 import { sanitizeInternalRedirectPath } from '$lib/auth/redirect';
+import { toBrowserUser } from '$lib/auth/browser-session';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
@@ -6,7 +7,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const returnUrl = sanitizeInternalRedirectPath(url.searchParams.get('returnUrl'));
 
 	return {
-		user: locals.user,
+		user: toBrowserUser(locals.user),
 		returnUrl
 	};
 };

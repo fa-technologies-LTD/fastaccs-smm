@@ -7,6 +7,8 @@ import type { Prisma } from '@prisma/client';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { releaseOrderReservations } from '$lib/services/order-reservations';
 import { sanitizeBuyerOrderAccounts } from '$lib/helpers/buyer-order-visibility';
+import { hasAdminPermission } from '$lib/auth/admin-roles';
+import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
 
 const ALLOWED_PATCH_FIELDS = new Set([
 	'status',
@@ -162,7 +164,9 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 						}
 					}
 				},
-				user: true
+				user: {
+					select: ORDER_CUSTOMER_USER_SELECT
+				}
 			}
 		});
 
@@ -170,7 +174,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 			return json({ data: null, error: 'Order not found' }, { status: 404 });
 		}
 
-		const isAdmin = locals.user.userType === 'ADMIN';
+		const isAdmin = hasAdminPermission(locals.adminContext, 'admin:access');
 		if (!isAdmin && data.userId !== locals.user.id) {
 			return json({ data: null, error: 'Forbidden' }, { status: 403 });
 		}
@@ -268,7 +272,9 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 			},
 			include: {
 				orderItems: true,
-				user: true
+				user: {
+					select: ORDER_CUSTOMER_USER_SELECT
+				}
 			}
 		});
 		if (data.status === 'cancelled' || data.status === 'failed') {

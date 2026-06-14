@@ -1,6 +1,7 @@
 import type { LayoutServerLoad } from './$types';
 import { getActiveAnnouncementBanner } from '$lib/services/announcement-banner';
 import { getFeatureFlagSnapshot } from '$lib/services/feature-flags';
+import { toBrowserSession, toBrowserUser } from '$lib/auth/browser-session';
 
 export const load: LayoutServerLoad = async ({ locals, url, cookies }) => {
 	const isStorefrontPath = !url.pathname.startsWith('/admin') && !url.pathname.startsWith('/auth');
@@ -12,7 +13,8 @@ export const load: LayoutServerLoad = async ({ locals, url, cookies }) => {
 			if (flags.adminAnnouncementBanner) {
 				const candidate = await getActiveAnnouncementBanner();
 				if (candidate) {
-					const dismissed = candidate.dismissible && cookies.get(candidate.dismissCookieName) === '1';
+					const dismissed =
+						candidate.dismissible && cookies.get(candidate.dismissCookieName) === '1';
 					if (!dismissed) {
 						announcementBanner = candidate;
 					}
@@ -23,10 +25,10 @@ export const load: LayoutServerLoad = async ({ locals, url, cookies }) => {
 		}
 	}
 
-	// Pass user, session, path, and storefront banner data to all pages
+	// Only expose the browser-safe subset of authenticated account data.
 	return {
-		user: locals.user,
-		session: locals.session,
+		user: toBrowserUser(locals.user),
+		session: toBrowserSession(locals.session),
 		currentPath: url.pathname,
 		announcementBanner
 	};

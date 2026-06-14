@@ -3,11 +3,12 @@ import type { RequestHandler } from './$types';
 import { getCacheHeaders } from '$lib/helpers/cache';
 import { getOrderStatsSnapshot } from '$lib/services/admin-metrics';
 import { canViewRevenue, redactOrderStatsRevenue } from '$lib/services/admin-revenue-visibility';
+import { hasAdminPermission } from '$lib/auth/admin-roles';
 
 // GET /api/orders/stats - Get order statistics for admin dashboard
 export const GET: RequestHandler = async ({ locals }) => {
 	try {
-		if (!locals.user || locals.user.userType !== 'ADMIN') {
+		if (!locals.user || !hasAdminPermission(locals.adminContext, 'admin:access')) {
 			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
 		}
 

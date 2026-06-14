@@ -1,5 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { toBrowserUser } from '$lib/auth/browser-session';
 
 export const load: PageServerLoad = async ({ locals, fetch }) => {
 	// Check if user is authenticated
@@ -22,7 +23,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 		}
 
 		return {
-			user: locals.user,
+			user: toBrowserUser(locals.user),
 			orders: result.data.orders || [],
 			affiliateData: result.data.affiliateData || null,
 			purchases: result.data.purchases || [],
@@ -33,7 +34,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 	} catch (error) {
 		console.error('Dashboard load error:', error);
 		return {
-			user: locals.user,
+			user: toBrowserUser(locals.user),
 			orders: [],
 			affiliateData: null,
 			purchases: [],

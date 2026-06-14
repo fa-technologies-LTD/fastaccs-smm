@@ -3,6 +3,8 @@ import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { getAdminSettingsSnapshot } from '$lib/services/admin-settings';
 import { sanitizeBuyerOrderAccounts } from '$lib/helpers/buyer-order-visibility';
+import { hasAdminPermission } from '$lib/auth/admin-roles';
+import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
 
 export const load: PageServerLoad = async ({ params, locals, url }) => {
 	if (!locals.user) {
@@ -24,7 +26,9 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 					category: true
 				}
 			},
-			user: true
+			user: {
+				select: ORDER_CUSTOMER_USER_SELECT
+			}
 		}
 	});
 
@@ -33,7 +37,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 	}
 
 	const isOwner = order.userId === locals.user.id;
-	const isAdmin = locals.user.userType === 'ADMIN';
+	const isAdmin = hasAdminPermission(locals.adminContext, 'admin:access');
 	if (!isOwner && !isAdmin) {
 		throw error(403, 'Unauthorized access to order');
 	}

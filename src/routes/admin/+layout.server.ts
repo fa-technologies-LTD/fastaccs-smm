@@ -1,6 +1,7 @@
 import { redirect, error } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { getFeatureFlagSnapshot } from '$lib/services/feature-flags';
+import { toBrowserSession, toBrowserUser } from '$lib/auth/browser-session';
 
 export const load: LayoutServerLoad = async ({ locals, url }) => {
 	// Check if user is authenticated
@@ -24,8 +25,8 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 	}));
 
 	return {
-		user: locals.user,
-		session: locals.session,
+		user: toBrowserUser(locals.user),
+		session: toBrowserSession(locals.session),
 		isAdmin: true,
 		adminRole: locals.adminContext.role,
 		adminPermissions: locals.adminContext.permissions,

@@ -7,6 +7,7 @@ import {
 	sendEmail,
 	sendWelcomeEmailIfNeeded
 } from './email';
+import { invalidateUserSessionCache } from '$lib/auth/session';
 
 const MAX_VERIFICATION_REQUESTS_PER_HOUR = 3;
 const MAX_VERIFICATION_ATTEMPTS_PER_CODE = 5;
@@ -117,7 +118,9 @@ export async function ensureVerificationCode(
 		where: { userId: user.id }
 	});
 	const now = new Date();
-	const activeCodeExists = Boolean(existingCode && existingCode.expiresAt.getTime() > now.getTime());
+	const activeCodeExists = Boolean(
+		existingCode && existingCode.expiresAt.getTime() > now.getTime()
+	);
 
 	if (activeCodeExists && !options.forceResend) {
 		return {
@@ -289,6 +292,7 @@ export async function verifyEmailCode(
 			where: { userId: user.id }
 		})
 	]);
+	invalidateUserSessionCache(user.id);
 
 	await logEmailNotification({
 		userId: user.id,

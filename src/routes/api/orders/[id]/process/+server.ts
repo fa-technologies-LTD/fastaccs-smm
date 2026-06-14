@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { allocateAccountsForOrder } from '$lib/services/fulfillment';
+import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
 
 // POST /api/orders/[id]/process - Process order (allocate accounts)
 export const POST: RequestHandler = async ({ params, locals }) => {
@@ -31,7 +32,9 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 						accounts: true
 					}
 				},
-				user: true
+				user: {
+					select: ORDER_CUSTOMER_USER_SELECT
+				}
 			}
 		});
 		if (!updatedOrder) {

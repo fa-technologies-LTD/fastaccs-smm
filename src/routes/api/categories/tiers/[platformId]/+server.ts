@@ -54,9 +54,13 @@ export async function GET({ params }) {
 				isActive: true
 			},
 			include: {
-				accounts: {
-					where: {
-						status: 'available' // Only available accounts
+				_count: {
+					select: {
+						accounts: {
+							where: {
+								status: 'available'
+							}
+						}
 					}
 				}
 			}
@@ -83,7 +87,7 @@ export async function GET({ params }) {
 				isActive: tier.isActive,
 				metadata: tier.metadata,
 				sortOrder: tier.sortOrder,
-				accountCount: tier.accounts.length,
+				accountCount: tier._count.accounts,
 				price,
 				productId: tier.id,
 				productStatus: tier.isActive ? 'active' : 'inactive',
