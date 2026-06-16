@@ -55,6 +55,9 @@
 						>
 					</li>
 					<li>
+						<a href="/blog" data-sveltekit-preload-data="hover" class="footer-link">Blog</a>
+					</li>
+					<li>
 						<a href="/affiliate" data-sveltekit-preload-data="hover" class="footer-link"
 							>Affiliate Program</a
 						>

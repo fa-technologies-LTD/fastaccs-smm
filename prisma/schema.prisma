@@ -596,3 +596,12 @@ enum PromotionType {
   PERCENT
   FIXED
 }
+
+model BlogPostLike {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([slug])
+  @@map("blog_post_likes")
+}

@@ -269,6 +269,9 @@
 					<a href="/how-it-works" data-sveltekit-preload-data="hover" class="nav-link font-medium">
 						How It Works
 					</a>
+					<a href="/blog" data-sveltekit-preload-data="hover" class="nav-link font-medium">
+						Blog
+					</a>
 					<a
 						href="https://wa.link/fast_accounts"
 						target="_blank"
@@ -597,6 +600,13 @@
 							class="nav-link block py-3 text-sm font-medium"
 						>
 							How It Works
+						</a>
+						<a
+							href="/blog"
+							data-sveltekit-preload-data="hover"
+							class="nav-link block py-3 text-sm font-medium"
+						>
+							Blog
 						</a>
 						<a
 							href="https://wa.link/fast_accounts"

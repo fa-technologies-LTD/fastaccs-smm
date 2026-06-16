@@ -1,3 +1,10 @@
-# allow crawling everything by default
+# allow crawling everything except private/account-specific areas
 User-agent: *
-Disallow:
+Disallow: /admin/
+Disallow: /auth/
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /checkout
+Disallow: /order/
+
+Sitemap: https://smm.fastaccs.com/sitemap.xml

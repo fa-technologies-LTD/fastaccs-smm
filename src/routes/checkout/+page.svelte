@@ -478,6 +478,7 @@
 <svelte:head>
 	<title>Checkout - FastAccs</title>
 	<meta name="description" content="Complete your purchase securely on FastAccs" />
+	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
 <Navigation />

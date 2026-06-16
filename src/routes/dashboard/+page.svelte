@@ -17,6 +17,7 @@
 		name="description"
 		content="Manage your orders, view purchase history, and track deliveries from your personal dashboard."
 	/>
+	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
 <Navigation />

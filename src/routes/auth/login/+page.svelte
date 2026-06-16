@@ -85,6 +85,7 @@
 		name="description"
 		content="Sign in to your FastAccs account to access premium social media accounts"
 	/>
+	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
 <Navigation />
