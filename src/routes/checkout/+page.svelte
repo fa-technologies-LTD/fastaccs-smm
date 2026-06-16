@@ -39,7 +39,7 @@
 
 	// Reactive state
 	let loading = $state(false);
-	let affiliateCode = $state<string | null>(null);
+	let affiliateCode = $state<string | null>(data.affiliateRef ?? null);
 	let promoCodeInput = $state('');
 	let promoAppliedCode = $state<string | null>(null);
 	let promoDiscountAmount = $state(0);

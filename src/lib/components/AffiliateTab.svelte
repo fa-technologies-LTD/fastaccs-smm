@@ -115,12 +115,35 @@
 	}
 
 	let affiliateData = $state<AffiliateData | null>(normalizeAffiliateData(initialAffiliateData));
-	let activePopup = $state<AffiliatePopupType | null>(affiliateData?.pendingPopup ?? null);
+
+	const DISMISSED_POPUPS_KEY = 'fa_dismissed_affiliate_popups';
+	function isPopupDismissedInSession(type: string): boolean {
+		if (typeof sessionStorage === 'undefined') return false;
+		try {
+			return (JSON.parse(sessionStorage.getItem(DISMISSED_POPUPS_KEY) || '[]') as string[]).includes(type);
+		} catch { return false; }
+	}
+	function markPopupDismissedInSession(type: string): void {
+		if (typeof sessionStorage === 'undefined') return;
+		try {
+			const list = JSON.parse(sessionStorage.getItem(DISMISSED_POPUPS_KEY) || '[]') as string[];
+			if (!list.includes(type)) {
+				list.push(type);
+				sessionStorage.setItem(DISMISSED_POPUPS_KEY, JSON.stringify(list));
+			}
+		} catch { /* noop */ }
+	}
+
+	const pendingPopupType = affiliateData?.pendingPopup ?? null;
+	let activePopup = $state<AffiliatePopupType | null>(
+		pendingPopupType && !isPopupDismissedInSession(pendingPopupType) ? pendingPopupType : null
+	);
 
 	function dismissPopup() {
 		const popup = activePopup;
 		if (!popup) return;
 		activePopup = null;
+		markPopupDismissedInSession(popup);
 		fetch('/api/affiliate/popup-seen', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -142,7 +165,7 @@
 	);
 	const shareMessage = $derived(
 		referralLink && affiliateCode
-			? `Use this referral promo code to save on your fastaccounts order.\n\n${referralLink}`
+			? `Use code *${affiliateCode}* at checkout to save on your *FastAccs* order 🛒\n\nOr register with my link and get discounts on your first orders:\n${referralLink}`
 			: ''
 	);
 
@@ -298,7 +321,7 @@
 					<RefreshCw size={16} />
 				</button>
 				<a
-					href="/affiliate"
+					href="/how-it-works?tab=affiliate"
 					class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all hover:-translate-y-0.5"
 					style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.35); color: var(--primary);"
 				>
@@ -402,53 +425,6 @@
 				</button>
 			</div>
 		{:else}
-			<div
-				class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
-				style="background: linear-gradient(180deg, rgba(5,212,113,0.08), rgba(105,109,250,0.08));"
-			>
-				<p class="text-sm font-semibold" style="color: var(--text); font-family: var(--font-head);">
-					How it works
-				</p>
-				<p class="mt-1 text-sm" style="color: var(--text-muted);">
-					<strong style="color: var(--text);">This rewards system is active.</strong> Share your code:
-					referred buyers get checkout discounts and you earn Store Credit from
-					successful purchases. It is withdrawable once payout requirements are met.
-				</p>
-				<p class="mt-2 text-xs" style="color: var(--text-muted);">
-					Discount stage now: <strong style="color: var(--text);">Welcome discount</strong> for first 2
-					successful referred orders, then <strong style="color: var(--text);">Ongoing discount</strong> up to
-					order 10.
-				</p>
-
-				<details class="mt-3">
-					<summary class="cursor-pointer text-xs font-semibold" style="color: var(--primary);">
-						Show full explainer
-					</summary>
-					<div class="mt-2 space-y-2 text-xs" style="color: var(--text-muted);">
-						<p>
-							<strong style="color: var(--text);">Affiliate Promo Code</strong> — your unique code
-							above. Anyone who uses it at checkout gets a referral discount, and you earn Store
-							Credit on their order.
-						</p>
-						<p>
-							<strong style="color: var(--text);">Store Credit</strong> — real, withdrawable cash
-							earned from successful referred orders, tracked as Available and Pending above.
-						</p>
-						<p>
-							<strong style="color: var(--text);">Payout</strong> — once your available Store
-							Credit and account age both clear the minimums, you can request a withdrawal.
-						</p>
-						<a
-							href="/how-it-works?tab=affiliate"
-							class="inline-block font-semibold underline-offset-2 hover:underline"
-							style="color: var(--primary);"
-						>
-							Full details
-						</a>
-					</div>
-				</details>
-			</div>
-
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				<div
 					class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"

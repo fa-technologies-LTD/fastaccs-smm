@@ -612,11 +612,16 @@
 	<title>{data.platform?.name} {data.tier?.tier_name} - FastAccs</title>
 	<meta
 		name="description"
-		content="Buy {data.platform?.name} accounts with {data.tier?.metadata?.follower_range
-			?.display ||
-			`${formatFollowers(data.tier?.metadata?.follower_range?.min || 0)} - ${formatFollowers(data.tier?.metadata?.follower_range?.max || 0)}` ||
-			data.tier?.metadata?.follower_count ||
-			0} followers. Premium quality accounts with instant delivery and full access."
+		content={(() => {
+			const fr = data.tier?.metadata?.follower_range;
+			const fc = Number(data.tier?.metadata?.follower_count || 0);
+			const display = String(fr?.display || '').trim();
+			const hasRange = fr && ((fr.min || 0) !== 0 || (fr.max || 0) !== 0);
+			if (display) return `Buy ${data.platform?.name} accounts with ${display}. Premium quality accounts with instant delivery and full access.`;
+			if (hasRange) return `Buy ${data.platform?.name} accounts with ${formatFollowers(fr.min || 0)} - ${formatFollowers(fr.max || 0)} followers. Premium quality accounts with instant delivery and full access.`;
+			if (fc > 0) return `Buy ${data.platform?.name} accounts with ${formatFollowers(fc)} followers. Premium quality accounts with instant delivery and full access.`;
+			return `Buy premium ${data.platform?.name} accounts. Instant delivery and full access.`;
+		})()}
 	/>
 </svelte:head>
 
@@ -707,13 +712,15 @@
 							<p class="mt-2 text-sm leading-relaxed opacity-90 sm:text-base">
 								{#if data.tier.metadata?.follower_range}
 									{@const range = data.tier.metadata.follower_range}
-									{data.platform.name} accounts with {range.display ||
-										`${formatFollowers(range.min || 0)} - ${formatFollowers(range.max || 0)}`} followers
-								{:else}
+									{@const hasDisplay = String(range.display || '').trim()}
+									{@const hasRange = (range.min || 0) !== 0 || (range.max || 0) !== 0}
+									{data.platform.name} accounts{#if hasDisplay} with {hasDisplay}{:else if hasRange} with {formatFollowers(range.min || 0)} - {formatFollowers(range.max || 0)} followers{/if}
+								{:else if (data.tier.metadata?.follower_count as number) > 0}
 									{data.platform.name} accounts with {formatFollowers(
-										(data.tier.metadata?.follower_count as number) || 0
-									)}
-									followers
+										(data.tier.metadata?.follower_count as number)
+									)} followers
+								{:else}
+									{data.platform.name} accounts
 								{/if}
 							</p>
 							<div class="mt-3 flex flex-wrap items-center gap-2 text-xs sm:text-sm">

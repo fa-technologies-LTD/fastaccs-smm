@@ -27,6 +27,8 @@ export async function getUserFromEmail(email: string): Promise<User | null> {
 // Create new user from Google OAuth data
 export async function createUserFromGoogle(googleUser: GoogleUserData): Promise<User> {
 	const userType = getUserTypeFromEmail(googleUser.email);
+	// Google already verified the email; trust it
+	const now = new Date();
 
 	return await prisma.user.create({
 		data: {
@@ -35,11 +37,11 @@ export async function createUserFromGoogle(googleUser: GoogleUserData): Promise<
 			fullName: googleUser.name,
 			avatarUrl: googleUser.picture,
 			userType,
-			emailVerified: false,
-			emailVerifiedAt: null,
-			registeredAt: new Date(),
-			lastLogin: new Date(),
-			lastSeenAt: new Date()
+			emailVerified: true,
+			emailVerifiedAt: now,
+			registeredAt: now,
+			lastLogin: now,
+			lastSeenAt: now
 		}
 	});
 }

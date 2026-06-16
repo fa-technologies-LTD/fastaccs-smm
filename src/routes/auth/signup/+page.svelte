@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { UserPlus, ArrowLeft } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
@@ -61,7 +61,6 @@
 					return;
 				}
 
-				await invalidateAll();
 				await goto(result.redirectTo || `/verify-email?next=${encodeURIComponent(redirectTo)}`);
 			} catch (signupError) {
 			console.error('Signup failed:', signupError);

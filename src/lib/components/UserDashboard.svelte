@@ -391,7 +391,7 @@
 			<span class="mt-1 text-xs font-semibold">Support</span>
 		</a>
 		<a
-			href="/dashboard?tab=affiliate"
+			href="/affiliate"
 			class="quick-action-card flex min-h-[88px] flex-col items-center justify-center rounded-[var(--r-sm)] border border-[var(--border)] p-3 transition-all hover:-translate-y-0.5"
 			style="background: var(--surface-2); color: var(--text);"
 		>

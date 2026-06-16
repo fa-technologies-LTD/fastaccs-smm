@@ -338,8 +338,6 @@
 			body="FastAccs offers aged accounts on Instagram, X, TikTok, Facebook, and VPN services. Every account comes with full credential handover so you can start your warm-up from a secure baseline."
 			primaryHref="/platforms"
 			primaryLabel="Browse all accounts"
-			secondaryHref="/affiliate"
-			secondaryLabel="Earn as an affiliate too"
 		/>
 
 		<!-- FAQ -->

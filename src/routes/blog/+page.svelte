@@ -41,10 +41,6 @@
 				Practical Guides for<br class="sm-br" /> Social Media Account Buyers
 			</h1>
 
-			<p class="hero-sub">
-				Written by the team that sells them. Honest, detailed, and free to read.
-			</p>
-
 			<p class="hero-count">{blogPosts.length} articles published</p>
 		</div>
 
@@ -145,14 +141,6 @@
 		.sm-br {
 			display: block;
 		}
-	}
-
-	.hero-sub {
-		font-size: 1rem;
-		color: rgba(255, 255, 255, 0.48);
-		line-height: 1.65;
-		margin-bottom: 1rem;
-		max-width: 400px;
 	}
 
 	.hero-count {

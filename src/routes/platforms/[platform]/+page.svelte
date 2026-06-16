@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { goto, beforeNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import {
 		ShoppingCart,
@@ -704,6 +704,14 @@
 			previousActiveElement = null;
 		}
 	}
+
+	// Restore scroll if user navigates away while modal is open
+	beforeNavigate(() => {
+		if (quickAddOpen) {
+			document.body.style.overflow = previousBodyOverflow;
+			quickAddOpen = false;
+		}
+	});
 
 	function decreaseQuickAddQuantity(): void {
 		if (quickAddQuantity > 1) {

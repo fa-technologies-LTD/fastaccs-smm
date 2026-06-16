@@ -85,5 +85,16 @@ export const blogPosts: BlogPost[] = [
 		publishedAt: '2026-06-16',
 		updatedAt: '2026-06-16',
 		tags: ['Social Media', 'Account Management', 'VPN']
+	},
+	{
+		slug: '10-ways-to-make-money-online',
+		title: '10 Proven Ways to Make Money Online in 2026',
+		description:
+			'Honest breakdown of 10 real ways people earn income online in 2026 — from freelancing and content creation to affiliate marketing. What each one actually takes, and who it suits.',
+		excerpt:
+			"Most 'make money online' lists are padded with fluff. This one isn't. Here are 10 methods that actually work in 2026, with realistic time-to-income estimates and the honest downsides most articles skip.",
+		publishedAt: '2026-06-16',
+		updatedAt: '2026-06-16',
+		tags: ['Make Money Online', 'Affiliate Marketing', 'Side Hustle']
 	}
 ];
