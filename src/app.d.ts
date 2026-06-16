@@ -8,7 +8,13 @@ declare global {
 			session: import('@prisma/client').Session | null;
 			adminContext: import('$lib/auth/admin-roles').AdminContext | null;
 		}
-		// interface PageData {}
+		interface PageData {
+			seo?: {
+				title?: string;
+				description?: string;
+				type?: string;
+			};
+		}
 		// interface PageState {}
 		// interface Platform {}
 	}

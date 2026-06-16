@@ -21,6 +21,7 @@
 
 <svelte:head>
 	<title>Authenticating - FastAccs</title>
+	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
 <main
