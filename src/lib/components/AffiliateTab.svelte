@@ -305,7 +305,7 @@
 						Affiliate Program
 					</h2>
 					<p class="text-sm" style="color: var(--text-muted);">
-						Share your code. Earn real withdrawable Store Credit.
+						Share your code. Earn real Cash.
 					</p>
 				</div>
 			</div>
@@ -412,8 +412,8 @@
 					Affiliate Access Unlocked
 				</h3>
 				<p class="mx-auto mb-5 max-w-md text-sm" style="color: var(--text-muted);">
-					Activate your profile, get your code, and start earning withdrawable Store Credit
-					from successful referred orders.
+					Activate your profile, get your code, and start earning real Cash from successful
+					referred orders.
 				</p>
 				<button
 					onclick={enableAffiliate}

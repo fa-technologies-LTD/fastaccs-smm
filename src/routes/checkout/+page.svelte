@@ -60,6 +60,9 @@
 	let cartTotal = $state(0);
 	let failedCheckoutIcons = $state<Record<string, boolean>>({});
 	const checkoutTotal = $derived(Math.max(0, cartTotal - promoDiscountAmount));
+	const hasManualHandover = $derived(
+		cartItems.some((item) => item.tier.deliveryMode === 'manual_handover')
+	);
 
 	onMount(() => {
 		loading = false;
@@ -932,7 +935,11 @@
 							</a>
 						</div>
 						<p class="mb-2 text-center text-xs leading-relaxed" style="color: var(--text-dim);">
-							Account details are delivered to your email within minutes of payment confirmation.
+							{#if hasManualHandover}
+								Login details are delivered on WhatsApp. Your order page will show you the link.
+							{:else}
+								Account details will be available on your dashboard once payment is confirmed.
+							{/if}
 						</p>
 						<!-- Pay with Monnify -->
 						<button
@@ -972,19 +979,7 @@
 						</p>
 
 						<!-- Security Notice -->
-						<div class="mt-6 space-y-2">
-							<div
-								class="rounded-lg p-3"
-								style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.3);"
-							>
-								<div class="flex items-start gap-2">
-									<Shield size={14} class="mt-0.5" style="color: var(--primary);" />
-									<div class="text-xs" style="color: var(--text); font-family: var(--font-body);">
-										<p class="font-medium">Secure Payment & Instant Delivery</p>
-										<p>Your purchase is protected.</p>
-									</div>
-								</div>
-							</div>
+						<div class="mt-6">
 							<div
 								class="flex items-center justify-center gap-2 text-xs"
 								style="color: var(--text-dim); font-family: var(--font-body);"
