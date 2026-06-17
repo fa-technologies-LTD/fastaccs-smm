@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Navigation from '$lib/components/Navigation.svelte';
 	import HeroBanner from '$lib/components/HeroBanner.svelte';
+	import HowItWorksStrip from '$lib/components/HowItWorksStrip.svelte';
 	import FeaturedCategories from '$lib/components/FeaturedCategories.svelte';
 	import SocialProof from '$lib/components/SocialProof.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -21,6 +22,7 @@
 
 <main>
 	<HeroBanner />
+	<HowItWorksStrip />
 	<FeaturedCategories platforms={data?.platforms ?? []} />
 	<SocialProof />
 </main>
