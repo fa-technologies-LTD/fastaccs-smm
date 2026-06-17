@@ -1086,6 +1086,16 @@
 								</button>
 							{/if}
 
+							<p class="mt-3 text-center text-xs leading-relaxed" style="color: var(--text-dim);">
+								Full Details handover included. Questions?
+								<a
+									href="https://wa.link/fast_accounts"
+									target="_blank"
+									rel="noopener noreferrer"
+									style="color: var(--primary); text-decoration: underline; text-underline-offset: 2px;"
+								>Chat us on WhatsApp.</a>
+							</p>
+
 							{#if data.tier.visible_available <= lowStockThreshold && data.tier.visible_available > 0}
 								<div
 									class="mt-3 rounded-lg border border-yellow-500/30 bg-[var(--color-surface)] p-2.5"

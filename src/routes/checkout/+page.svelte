@@ -835,7 +835,7 @@
 							style="border: 1px solid var(--border); background: var(--bg);"
 						>
 							<p class="mb-2 text-xs font-semibold uppercase" style="color: var(--text-muted);">
-								Promo Code
+								Promo or affiliate code (optional)
 							</p>
 							<div class="flex items-center gap-2">
 								<input
@@ -931,6 +931,9 @@
 								Payment FAQ
 							</a>
 						</div>
+						<p class="mb-2 text-center text-xs leading-relaxed" style="color: var(--text-dim);">
+							Account details are delivered to your email within minutes of payment confirmation.
+						</p>
 						<!-- Pay with Monnify -->
 						<button
 							onclick={payWithMonnify}
