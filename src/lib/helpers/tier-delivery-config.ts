@@ -9,8 +9,9 @@ export const DEFAULT_LOGIN_GUIDE_URL = 'https://smm.fastaccs.com/support#after-p
 export const DEFAULT_LOGIN_GUIDE_LABEL = 'How to login this account';
 export const INSTANT_DELIVERY_LABEL = 'Instant Delivery';
 export const MANUAL_HANDOVER_WHATSAPP_LABEL = 'Manual Handover (WhatsApp)';
+export const BOOSTING_MANUAL_LABEL = 'Boosting Order';
 
-export type TierDeliveryMode = 'instant_auto' | 'manual_handover';
+export type TierDeliveryMode = 'instant_auto' | 'manual_handover' | 'boosting_manual';
 
 export interface TierDeliveryConfig {
 	mode: TierDeliveryMode;
@@ -20,7 +21,9 @@ export interface TierDeliveryConfig {
 }
 
 export function getTierDeliveryModeLabel(mode: TierDeliveryMode): string {
-	return mode === 'manual_handover' ? MANUAL_HANDOVER_WHATSAPP_LABEL : INSTANT_DELIVERY_LABEL;
+	if (mode === 'manual_handover') return MANUAL_HANDOVER_WHATSAPP_LABEL;
+	if (mode === 'boosting_manual') return BOOSTING_MANUAL_LABEL;
+	return INSTANT_DELIVERY_LABEL;
 }
 
 function sanitizeText(value: unknown, maxLength: number): string | null {
@@ -51,7 +54,9 @@ function sanitizeGuideUrl(value: unknown): string | null {
 export function normalizeTierDeliveryMode(value: unknown): TierDeliveryMode {
 	if (typeof value !== 'string') return 'instant_auto';
 	const normalized = value.trim().toLowerCase();
-	return normalized === 'manual_handover' ? 'manual_handover' : 'instant_auto';
+	if (normalized === 'manual_handover') return 'manual_handover';
+	if (normalized === 'boosting_manual') return 'boosting_manual';
+	return 'instant_auto';
 }
 
 export function getTierDeliveryConfig(metadata: unknown): TierDeliveryConfig {

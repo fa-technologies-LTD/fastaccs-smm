@@ -24,6 +24,12 @@ import {
 	type TierDeliveryMode
 } from '$lib/helpers/tier-delivery-config';
 import {
+	getBoostingServiceConfig,
+	isValidBoostingQuantity,
+	computeBoostingPrice
+} from '$lib/helpers/boosting-service-config';
+import { validateLinkForAction } from '$lib/helpers/social-link-validator';
+import {
 	attachExactPreviewSelectionsToOrder,
 	releaseExpiredExactPreviewReservations
 } from '$lib/services/exact-preview';
@@ -56,6 +62,8 @@ interface CreateOrderItemInput {
 	price?: number;
 	exactAccountId?: string;
 	exactAccountLabel?: string;
+	boostTargetUrl?: string;
+	boostQuantity?: number;
 }
 
 interface CreateOrderInput {
@@ -350,6 +358,14 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			exactAccountLabel:
 				typeof item.exactAccountLabel === 'string' && item.exactAccountLabel.trim().length > 0
 					? item.exactAccountLabel.trim().slice(0, 40)
+					: null,
+			boostTargetUrl:
+				typeof item.boostTargetUrl === 'string' && item.boostTargetUrl.trim().length > 0
+					? item.boostTargetUrl.trim()
+					: null,
+			boostQuantity:
+				typeof item.boostQuantity === 'number' && Number.isFinite(item.boostQuantity)
+					? Math.floor(item.boostQuantity)
 					: null
 		}));
 
@@ -414,7 +430,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		const categories = await prisma.category.findMany({
 			where: {
 				id: { in: uniqueCategoryIds },
-				categoryType: 'tier',
+				categoryType: { in: ['tier', 'boosting_service'] },
 				isActive: true
 			},
 			include: {
@@ -432,6 +448,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			deliveryMode: TierDeliveryMode;
 			exactAccountId: string | null;
 			exactAccountLabel: string | null;
+			boostTargetUrl: string | null;
+			boostQuantity: number | null;
 		}> = [];
 		const deliveryModes = new Set<TierDeliveryMode>();
 
@@ -442,6 +460,62 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					{ success: false, error: `Tier unavailable: ${item.categoryId}` },
 					{ status: 400 }
 				);
+			}
+
+			if (category.categoryType === 'boosting_service') {
+				const config = getBoostingServiceConfig(category.metadata);
+
+				if (!item.boostTargetUrl || !item.boostQuantity) {
+					return json(
+						{ success: false, error: `${category.name}: a link and quantity are required.` },
+						{ status: 400 }
+					);
+				}
+
+				if (!isValidBoostingQuantity(config, item.boostQuantity)) {
+					return json(
+						{
+							success: false,
+							error: `${category.name}: quantity must be at least ${config.minQuantity.toLocaleString()} in steps of ${config.stepQuantity.toLocaleString()}.`
+						},
+						{ status: 400 }
+					);
+				}
+
+				const linkCheck = validateLinkForAction(
+					config.platform,
+					config.actionType,
+					item.boostTargetUrl
+				);
+				if (!linkCheck.valid) {
+					return json(
+						{ success: false, error: `${category.name}: ${linkCheck.reason || 'invalid link'}` },
+						{ status: 400 }
+					);
+				}
+
+				const unitPrice = computeBoostingPrice(config, item.boostQuantity);
+				if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+					return json(
+						{ success: false, error: `${category.name} has an invalid price configuration.` },
+						{ status: 400 }
+					);
+				}
+
+				itemsWithNames.push({
+					categoryId: item.categoryId,
+					quantity: 1,
+					unitPrice,
+					categoryName: category.name,
+					categoryMetadata: (category.metadata as Record<string, unknown> | null | undefined) || {},
+					deliveryMode: 'boosting_manual',
+					exactAccountId: null,
+					exactAccountLabel: null,
+					boostTargetUrl: item.boostTargetUrl,
+					boostQuantity: item.boostQuantity
+				});
+				deliveryModes.add('boosting_manual');
+				continue;
 			}
 
 			const unitPrice = extractTierUnitPrice(category.metadata);
@@ -462,7 +536,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
 				),
 				exactAccountId: item.exactAccountId,
-				exactAccountLabel: item.exactAccountLabel
+				exactAccountLabel: item.exactAccountLabel,
+				boostTargetUrl: null,
+				boostQuantity: null
 			});
 			deliveryModes.add(
 				normalizeTierDeliveryMode(
@@ -476,7 +552,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				{
 					success: false,
 					error:
-						'Manual Handover (WhatsApp) items must be checked out separately from Instant Delivery items.'
+						'Boosting services, manual handover items, and instant delivery items must be checked out separately.'
 				},
 				{ status: 400 }
 			);
@@ -485,7 +561,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		await releaseExpiredOrderReservations();
 		await releaseExpiredExactPreviewReservations();
 		for (const item of itemsWithNames) {
-			if (item.exactAccountId) continue;
+			if (item.exactAccountId || item.boostTargetUrl) continue;
 			const availableCount = await prisma.account.count({
 				where: {
 					categoryId: item.categoryId,
@@ -506,9 +582,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			}
 		}
 
-		const orderDeliveryMode = deliveryModes.has('manual_handover')
-			? 'manual_handover'
-			: 'instant_auto';
+		const orderDeliveryMode = Array.from(deliveryModes)[0] ?? 'instant_auto';
 		const isManualHandoverOrder = orderDeliveryMode === 'manual_handover';
 
 		const subtotalAmount = itemsWithNames.reduce(
@@ -677,7 +751,10 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 								unitPrice: item.unitPrice,
 								totalPrice: item.unitPrice * item.quantity,
 								productName: item.categoryName,
-								productCategory: 'tier'
+								productCategory: item.boostTargetUrl ? 'boosting_service' : 'tier',
+								boostTargetUrl: item.boostTargetUrl,
+								boostQuantity: item.boostQuantity,
+								boostFulfillmentStatus: item.boostTargetUrl ? 'pending' : null
 							}))
 						}
 					},
@@ -694,7 +771,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				await reserveStandardAccountsForOrder({
 					client: tx,
 					reservedUntil: reservationExpiresAt,
-					items: reservationItems
+					items: reservationItems.filter((item) => !item.boostTargetUrl)
 				});
 
 				if (exactSelectionItems.length > 0) {

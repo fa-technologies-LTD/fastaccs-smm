@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { CartItemWithTier } from '$lib/types/cart';
 import { prisma } from '$lib/prisma';
-import { normalizeTierDeliveryMode } from '$lib/helpers/tier-delivery-config';
+import { normalizeTierDeliveryMode, type TierDeliveryMode } from '$lib/helpers/tier-delivery-config';
 import {
 	EXACT_PREVIEW_RESERVATION_KEY,
 	EXACT_PREVIEW_SOURCE,
@@ -11,6 +11,12 @@ import {
 	releaseExpiredExactPreviewReservations
 } from '$lib/services/exact-preview';
 import { releaseExpiredOrderReservations } from '$lib/services/order-reservations';
+import {
+	getBoostingServiceConfig,
+	isValidBoostingQuantity,
+	BOOSTING_PLATFORM_LABELS
+} from '$lib/helpers/boosting-service-config';
+import { validateLinkForAction } from '$lib/helpers/social-link-validator';
 
 interface CartRefreshItemInput {
 	cartItemId?: string;
@@ -23,6 +29,10 @@ interface CartRefreshItemInput {
 		profileUrl?: string;
 		screenshotUrl?: string | null;
 		reservedUntil?: string;
+	};
+	boosting?: {
+		targetUrl?: string;
+		boostQuantity?: number;
 	};
 }
 
@@ -42,7 +52,12 @@ type CartRefreshTier = {
 	platformSlug: string;
 	platformIcon: string | null;
 	isActive: boolean;
-	deliveryMode: 'instant_auto' | 'manual_handover';
+	deliveryMode: TierDeliveryMode;
+	boostingConfig?: {
+		minQuantity: number;
+		stepQuantity: number;
+		pricePerStep: number;
+	};
 };
 
 const MAX_CART_REFRESH_ITEMS = 80;
@@ -138,7 +153,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		const tiers = await prisma.category.findMany({
 			where: {
-				categoryType: 'tier',
+				categoryType: { in: ['tier', 'boosting_service'] },
 				isActive: true,
 				OR: [
 					...(uuidTierIds.length ? [{ id: { in: uuidTierIds } }] : []),
@@ -151,6 +166,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				slug: true,
 				metadata: true,
 				isActive: true,
+				categoryType: true,
 				parent: {
 					select: {
 						name: true,
@@ -254,6 +270,58 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const tier = tierByInput.get(isUuid(rawTierId) ? rawTierId : rawTierId.toLowerCase());
 			if (!tier) {
 				messages.push('An unavailable account type was removed from your cart.');
+				continue;
+			}
+
+			if (tier.categoryType === 'boosting_service') {
+				const config = getBoostingServiceConfig(tier.metadata);
+				const targetUrl = normalizeText(input.boosting?.targetUrl);
+				const boostQuantity = Math.floor(Number(input.boosting?.boostQuantity || 0));
+
+				if (!targetUrl || !boostQuantity) {
+					messages.push(`${tier.name} was removed because no link or quantity was provided.`);
+					continue;
+				}
+
+				if (!isValidBoostingQuantity(config, boostQuantity)) {
+					messages.push(
+						`${tier.name} quantity must be at least ${config.minQuantity.toLocaleString()} in steps of ${config.stepQuantity.toLocaleString()}, so it was removed from your cart.`
+					);
+					continue;
+				}
+
+				const linkCheck = validateLinkForAction(config.platform, config.actionType, targetUrl);
+				if (!linkCheck.valid) {
+					messages.push(`${tier.name}: ${linkCheck.reason || 'invalid link'}`);
+					continue;
+				}
+
+				const boostingTierPayload: CartRefreshTier = {
+					id: tier.id,
+					name: tier.name,
+					price: 0,
+					slug: tier.slug,
+					platformName: BOOSTING_PLATFORM_LABELS[config.platform],
+					platformSlug: config.platform,
+					platformIcon: null,
+					isActive: tier.isActive,
+					deliveryMode: 'boosting_manual',
+					boostingConfig: {
+						minQuantity: config.minQuantity,
+						stepQuantity: config.stepQuantity,
+						pricePerStep: config.pricePerStep
+					}
+				};
+
+				const key = normalizeText(input.cartItemId) || buildLineKey({ tierId: tier.id });
+				mergedItems.set(key, {
+					cartItemId: key,
+					tierId: tier.id,
+					quantity: 1,
+					addedAt: Number(input.addedAt || Date.now()),
+					boosting: { targetUrl, boostQuantity },
+					tier: boostingTierPayload
+				});
 				continue;
 			}
 

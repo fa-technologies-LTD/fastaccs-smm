@@ -27,7 +27,8 @@
 		DEFAULT_LOGIN_GUIDE_LABEL,
 		DEFAULT_MANUAL_HANDOVER_PROMISE,
 		getTierDeliveryConfig,
-		getTierDeliveryModeLabel
+		getTierDeliveryModeLabel,
+		type TierDeliveryMode
 	} from '$lib/helpers/tier-delivery-config';
 	import {
 		applyTierExactPreviewSanitization,
@@ -110,7 +111,7 @@
 			pin_priority: 100,
 			is_featured: false,
 			featured_badge: 'Featured',
-			delivery_mode: 'instant_auto' as 'instant_auto' | 'manual_handover',
+			delivery_mode: 'instant_auto' as TierDeliveryMode,
 			manual_handover_promise: DEFAULT_MANUAL_HANDOVER_PROMISE,
 			login_guide_url: '',
 			login_guide_label: DEFAULT_LOGIN_GUIDE_LABEL,

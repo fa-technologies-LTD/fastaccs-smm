@@ -96,6 +96,21 @@
 		return data.order.orderItems.some(isManualHandoverItem);
 	}
 
+	function isBoostingItem(item: (typeof data.order.orderItems)[number]): boolean {
+		return Boolean(item.boostTargetUrl);
+	}
+
+	function isBoostingOrder(): boolean {
+		return data.order.orderItems.some(isBoostingItem);
+	}
+
+	function getBoostingStatusLabel(item: (typeof data.order.orderItems)[number]): string {
+		const status = item.boostFulfillmentStatus || 'pending';
+		if (status === 'completed') return 'Completed';
+		if (status === 'in_progress') return 'In Progress';
+		return 'Pending';
+	}
+
 	function getItemLoginGuide(item: (typeof data.order.orderItems)[number]): {
 		url: string;
 		label: string;
@@ -178,7 +193,11 @@
 								{getPaymentState(data.order.status, data.order.paymentStatus).label}
 							</h2>
 							<p style="color: var(--text-muted);">
-								{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.status === 'completed'}
+								{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && isBoostingOrder()}
+									{data.order.orderItems.every((item) => item.boostFulfillmentStatus === 'completed')
+										? 'Your boost has been completed.'
+										: 'Payment confirmed. Your boost is being processed.'}
+								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.status === 'completed'}
 									Your accounts have been successfully allocated and delivered.
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.deliveryMethod === 'whatsapp' && data.order.deliveryStatus === 'processing'}
 									Payment confirmed. Manual handover is in progress on WhatsApp.
@@ -207,7 +226,7 @@
 					</div>
 				</div>
 
-				{#if !isManualHandoverOrder()}
+				{#if !isManualHandoverOrder() && !isBoostingOrder()}
 					<div
 						class="mb-6 rounded-lg p-4"
 						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
@@ -251,7 +270,19 @@
 											Quantity: {item.quantity} • {formatPrice(item.unitPrice)} each
 										</p>
 										<div class="mt-2">
-											{#if !isManualHandoverItem(item)}
+											{#if isBoostingItem(item)}
+												<span
+													class={`status-badge ${
+														item.boostFulfillmentStatus === 'completed'
+															? 'status-success'
+															: item.boostFulfillmentStatus === 'in_progress'
+																? 'status-warning'
+																: 'status-inactive'
+													}`}
+												>
+													{getBoostingStatusLabel(item)}
+												</span>
+											{:else if !isManualHandoverItem(item)}
 												<span
 													class={`status-badge ${
 														item.allocationStatus === 'allocated'
@@ -267,7 +298,28 @@
 												</span>
 											{/if}
 										</div>
-										{#if !isManualHandoverItem(item)}
+										{#if isBoostingItem(item)}
+											<div
+												class="mt-3 rounded-lg border p-3"
+												style="border-color: rgba(170, 173, 255, 0.25); background: rgba(170, 173, 255, 0.08);"
+											>
+												<p class="mb-2 text-xs font-medium" style="color: var(--text);">
+													Boost details
+												</p>
+												<p class="text-xs" style="color: var(--text-muted);">
+													{item.boostQuantity?.toLocaleString() ?? '?'} {item.category.name} for:
+												</p>
+												<a
+													href={item.boostTargetUrl}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="mt-1 inline-block break-all text-xs underline"
+													style="color: var(--link);"
+												>
+													{item.boostTargetUrl}
+												</a>
+											</div>
+										{:else if !isManualHandoverItem(item)}
 											<div
 												class="mt-3 rounded-lg border p-3"
 												style="border-color: rgba(170, 173, 255, 0.25); background: rgba(170, 173, 255, 0.08);"

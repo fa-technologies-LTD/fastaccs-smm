@@ -11,9 +11,9 @@ import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
 import { isAutoDeliveryPausedSetting } from '$lib/services/admin-settings';
 import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
-import { notifyManualHandoverOrderPaid } from '$lib/services/manual-handover';
+import { notifyManualHandoverOrderPaid, notifyBoostingOrderPaid } from '$lib/services/manual-handover';
 import { logOrderStatusTransition } from '$lib/services/order-audit';
-import { isManualHandoverOrder } from '$lib/services/order-delivery-mode';
+import { isManualHandoverOrder, isBoostingOrder } from '$lib/services/order-delivery-mode';
 import { releaseOrderReservations } from '$lib/services/order-reservations';
 import { recordPromotionRedemption } from '$lib/services/promotions';
 import {
@@ -32,6 +32,7 @@ export interface PaymentSettlementResult {
 	orderId: string;
 	status: 'PAID' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'PENDING';
 	manualHandover?: boolean;
+	boosting?: boolean;
 	warning?: string | null;
 	error?: string;
 }
@@ -266,6 +267,33 @@ export async function recoverPaidOrder(
 	await sendOrderConfirmationEmailIfNeeded(order.id).catch((error) => {
 		console.error(`[payments.${source}] failed to send order confirmation:`, error);
 	});
+
+	if (await isBoostingOrder(order.id)) {
+		await prisma.order.update({
+			where: { id: order.id },
+			data: {
+				status: 'paid',
+				paymentStatus: 'paid',
+				deliveryStatus: 'processing'
+			}
+		});
+		await notifyBoostingOrderPaid(order.id, `payments.${source}.boosting`);
+		await recordAffiliateStoreCreditForOrder(order.id).catch((error) => {
+			console.error(`[payments.${source}] failed to record affiliate store credit:`, error);
+		});
+		if (order.userId) {
+			void maybeSendAffiliateUnlockInvite(order.userId);
+		}
+		void sendServerPurchaseVerifiedEvent(order.id, 'PAID');
+		invalidateAdminStatsCache();
+		return {
+			success: true,
+			orderId: order.id,
+			status: 'PAID',
+			boosting: true,
+			warning: 'Payment confirmed. Your boost is now being processed.'
+		};
+	}
 
 	if (await isManualHandoverOrder(order.id)) {
 		await prisma.order.update({

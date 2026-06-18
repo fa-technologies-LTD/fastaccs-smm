@@ -79,7 +79,7 @@ export interface Database {
 					name: string;
 					slug: string;
 					description: string | null;
-					category_type: 'platform' | 'tier' | 'service_group';
+					category_type: 'platform' | 'tier' | 'service_group' | 'boosting_service';
 					metadata: Record<string, unknown>;
 					sort_order: number;
 					is_active: boolean;
@@ -92,7 +92,7 @@ export interface Database {
 					name: string;
 					slug: string;
 					description?: string | null;
-					category_type: 'platform' | 'tier' | 'service_group';
+					category_type: 'platform' | 'tier' | 'service_group' | 'boosting_service';
 					metadata?: Record<string, unknown>;
 					sort_order?: number;
 					is_active?: boolean;
@@ -105,7 +105,7 @@ export interface Database {
 					name?: string;
 					slug?: string;
 					description?: string | null;
-					category_type?: 'platform' | 'tier' | 'service_group';
+					category_type?: 'platform' | 'tier' | 'service_group' | 'boosting_service';
 					metadata?: Record<string, unknown>;
 					sort_order?: number;
 					is_active?: boolean;
@@ -741,7 +741,7 @@ export interface Database {
 		};
 		Enums: {
 			user_type: 'registered' | 'guest' | 'converted' | 'affiliate' | 'admin';
-			category_type: 'platform' | 'tier' | 'service_group';
+			category_type: 'platform' | 'tier' | 'service_group' | 'boosting_service';
 			delivery_method: 'whatsapp' | 'telegram' | 'email' | 'dashboard';
 			order_status:
 				| 'pending'

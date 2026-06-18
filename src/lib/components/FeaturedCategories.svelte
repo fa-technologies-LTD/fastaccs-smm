@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { ArrowRight, MessageCircle } from '$lib/icons';
-	import { onDestroy } from 'svelte';
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
 
 	interface PlatformData {
@@ -22,8 +21,6 @@
 
 	let { platforms = [] }: { platforms?: PlatformData[] } = $props();
 	let failedPlatformIcons = $state<Record<string, boolean>>({});
-	let launchCardShake = $state(false);
-	let launchCardShakeTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function getPlatformSubLabel(platform: PlatformData): string {
 		const text = platform.description?.trim();
@@ -62,27 +59,6 @@
 			.slice(0, 4)
 	);
 
-	function triggerLaunchCardAttention() {
-		launchCardShake = false;
-		if (launchCardShakeTimer) {
-			clearTimeout(launchCardShakeTimer);
-			launchCardShakeTimer = null;
-		}
-
-		requestAnimationFrame(() => {
-			launchCardShake = true;
-			launchCardShakeTimer = setTimeout(() => {
-				launchCardShake = false;
-				launchCardShakeTimer = null;
-			}, 520);
-		});
-	}
-
-	onDestroy(() => {
-		if (launchCardShakeTimer) {
-			clearTimeout(launchCardShakeTimer);
-		}
-	});
 </script>
 
 <section style="background: var(--bg); padding: var(--space-4xl) var(--space-md);">
@@ -202,55 +178,27 @@
 				<div class="flex flex-1 flex-col" style="padding: var(--space-lg);">
 					<div class="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 sm:gap-4">
 						<div class="growth-preview-list">
-							<button
-								class="platform-btn growth-service-btn"
-								type="button"
-								onclick={triggerLaunchCardAttention}
-							>
-								Instagram Followers
-							</button>
-							<button
-								class="platform-btn growth-service-btn"
-								type="button"
-								onclick={triggerLaunchCardAttention}
-							>
-								TikTok Views
-							</button>
-							<button
-								class="platform-btn growth-service-btn"
-								type="button"
-								onclick={triggerLaunchCardAttention}
-							>
-								YouTube Subscribers
-							</button>
-							<button
-								class="platform-btn growth-service-btn"
-								type="button"
-								onclick={triggerLaunchCardAttention}
-							>
-								Facebook Likes
-							</button>
+							<a class="platform-btn growth-service-btn" href="/services">Instagram Followers</a>
+							<a class="platform-btn growth-service-btn" href="/services">TikTok Views</a>
+							<a class="platform-btn growth-service-btn" href="/services">YouTube Subscribers</a>
+							<a class="platform-btn growth-service-btn" href="/services">Facebook Likes</a>
 						</div>
-						<div class={`growth-callout ${launchCardShake ? 'shake-attention' : ''}`}>
+						<div class="growth-callout">
 							<p
 								class="text-sm font-semibold uppercase"
 								style="letter-spacing: 0.06em; color: var(--primary); font-family: var(--font-head);"
 							>
-								Launching soon
+								Boost any link
 							</p>
 							<p
 								class="mt-2"
 								style="font-size: 0.95rem; font-weight: 500; color: var(--text); line-height: 1.45; font-family: var(--font-body);"
 							>
-								This section is under construction. Need a custom boosting service package right
-								now?
+								Pick a service, paste your link, and pay securely. We handle delivery from there.
 							</p>
-							<a
-								href="/services"
-								class="chat-btn mt-4"
-							>
+							<a href="/services" class="chat-btn mt-4">
 								<MessageCircle size={16} />
-								<span>View boosting services</span>
+								<span>Browse boosting services</span>
 							</a>
 						</div>
 					</div>
@@ -341,12 +289,14 @@
 	}
 
 	.growth-service-btn {
+		display: block;
 		width: 100%;
 		text-align: left;
 		color: var(--text);
 		font-family: var(--font-body);
 		font-size: 1.05rem;
 		font-weight: 600;
+		text-decoration: none;
 		cursor: pointer;
 	}
 
@@ -360,10 +310,6 @@
 		border: 1px solid rgba(5, 212, 113, 0.35);
 		background: rgba(7, 9, 12, 0.55);
 		padding: var(--space-md);
-	}
-
-	.shake-attention {
-		animation: launch-shake 520ms ease-in-out;
 	}
 
 	.chat-btn {
@@ -402,30 +348,4 @@
 		transform: scale(0.98);
 	}
 
-	@keyframes launch-shake {
-		0% {
-			transform: translateX(0);
-		}
-		20% {
-			transform: translateX(-5px);
-		}
-		40% {
-			transform: translateX(4px);
-		}
-		60% {
-			transform: translateX(-3px);
-		}
-		80% {
-			transform: translateX(2px);
-		}
-		100% {
-			transform: translateX(0);
-		}
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.shake-attention {
-			animation: none;
-		}
-	}
 </style>
