@@ -91,7 +91,7 @@ if (typeof setInterval !== 'undefined') {
  */
 export function getCacheHeaders(
 	strategy: 'static' | 'dynamic' | 'private' | 'no-cache' | 'admin-live'
-) {
+): Record<string, string> {
 	switch (strategy) {
 		case 'static':
 			// For data that rarely changes (platforms, categories)
