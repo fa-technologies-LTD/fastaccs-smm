@@ -17,7 +17,8 @@
 	} from '$lib/helpers/credential-contract';
 	import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
 
-	let { initialPurchases } = $props();
+	let { initialPurchases, whatsappNumber = '' }: { initialPurchases: any[]; whatsappNumber?: string } =
+		$props();
 	let purchases = $state<any[]>(initialPurchases);
 
 	function copyAccount(account: any, index: number) {
@@ -70,7 +71,7 @@
 			itemLine ? `Item: ${itemLine}` : null,
 			`Please complete my manual handover. Thank you.`
 		].filter(Boolean).join('\n');
-		return buildWhatsAppSupportLink(null, msg);
+		return buildWhatsAppSupportLink(whatsappNumber, msg);
 	}
 
 	function getPurchaseStatusLabel(purchase: any): string {

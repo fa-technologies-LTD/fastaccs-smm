@@ -11,6 +11,7 @@ import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { getAffiliateDashboardState } from '$lib/services/affiliate';
 import { getPendingSitePopup } from '$lib/services/site-popups';
 import { reconcilePendingPayments } from '$lib/services/payment-reconciliation';
+import { getAdminSettingsSnapshot } from '$lib/services/admin-settings';
 import {
 	CONFIRMED_PAYMENT_STATUSES,
 	getBuyerVisibleAccounts
@@ -32,7 +33,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		);
 
 		// Fetch all dashboard data in parallel with optimized queries
-		const [orders, affiliateData, purchases] = await Promise.all([
+		const [orders, affiliateData, purchases, settings] = await Promise.all([
 			// Orders - only fetch necessary fields
 			prisma.order.findMany({
 				where: {
@@ -139,7 +140,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 					}
 				},
 				orderBy: { createdAt: 'desc' }
-			})
+			}),
+			getAdminSettingsSnapshot().catch(() => null)
 		]);
 
 		// Transform purchases data
@@ -173,7 +175,10 @@ export const GET: RequestHandler = async ({ locals }) => {
 				orders,
 				affiliateData,
 				purchases: purchasesFormatted,
-				sitePopup
+				sitePopup,
+				support: {
+					whatsappNumber: settings?.business.whatsappNumber || ''
+				}
 			}
 		});
 	} catch (error) {

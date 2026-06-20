@@ -28,6 +28,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 			affiliateData: result.data.affiliateData || null,
 			purchases: result.data.purchases || [],
 			sitePopup: result.data.sitePopup || null,
+			support: result.data.support || { whatsappNumber: '' },
 			messages: [], // TODO: Implement messages/notifications system
 			error: null
 		};
@@ -39,6 +40,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 			affiliateData: null,
 			purchases: [],
 			sitePopup: null,
+			support: { whatsappNumber: '' },
 			messages: [],
 			error: error instanceof Error ? error.message : 'Failed to load dashboard data'
 		};
