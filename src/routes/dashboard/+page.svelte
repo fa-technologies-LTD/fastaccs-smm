@@ -29,6 +29,7 @@
 	affiliateData={data.affiliateData}
 	purchases={data.purchases}
 	sitePopup={data.sitePopup}
+	whatsappNumber={data.support?.whatsappNumber || ''}
 />
 
 <Footer />

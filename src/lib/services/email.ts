@@ -4,6 +4,7 @@ import { env as publicEnv } from '$env/dynamic/public';
 import { prisma } from '$lib/prisma';
 import { normalizeTierDeliveryMode } from '$lib/helpers/tier-delivery-config';
 import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
+import { getAdminSettingsSnapshot } from '$lib/services/admin-settings';
 import emailHeaderDataUrl from '$lib/assets/fa-email-header.png?inline';
 import { randomInt } from 'crypto';
 
@@ -1016,7 +1017,10 @@ Items:
 ${itemLines.join('\n')}`;
 
 	const waMessage = `Hi, I'm sending my payment receipt for order ${humanOrderNumber}.`;
-	const waLink = buildWhatsAppSupportLink(null, waMessage) || 'https://wa.link/fast_accounts';
+	const settings = isManualHandover ? await getAdminSettingsSnapshot().catch(() => null) : null;
+	const waLink =
+		buildWhatsAppSupportLink(settings?.business.whatsappNumber, waMessage) ||
+		'https://wa.link/fast_accounts';
 
 	const body = isManualHandover
 		? `${orderSummary}

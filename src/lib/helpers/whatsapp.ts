@@ -19,9 +19,16 @@ export function buildWhatsAppSupportLink(
 	rawPhone: string | null | undefined,
 	message: string
 ): string | null {
-	void rawPhone;
-	const baseLink = 'https://wa.link/fast_accounts';
 	const normalizedMessage = String(message || '').trim();
-	if (!normalizedMessage) return baseLink;
-	return `${baseLink}?text=${encodeURIComponent(normalizedMessage)}`;
+	const phone = normalizeWhatsAppNumber(rawPhone);
+
+	if (phone) {
+		const base = `https://wa.me/${phone}`;
+		return normalizedMessage ? `${base}?text=${encodeURIComponent(normalizedMessage)}` : base;
+	}
+
+	// No valid phone number configured. wa.link is a third-party shortlink that does not
+	// reliably forward a `text` query param to the WhatsApp chat it redirects to, so we
+	// can only fall back to it as a plain (unprefilled) link, never with a pre-filled message.
+	return 'https://wa.link/fast_accounts';
 }
