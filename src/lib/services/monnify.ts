@@ -416,6 +416,19 @@ function validateInitializationResponse(
  * Initialize a Monnify transaction server-side.
  * Returns a hosted checkoutUrl — no keys are ever sent to the browser.
  */
+function sanitizeCustomerName(value: string): string {
+	// Payment APIs (incl. Monnify) reject names containing emoji or chars above
+	// the Basic Multilingual Plane (U+10000+). Strip supplementary-plane chars
+	// (covers most emoji including 👽), variation selectors U+FE00-FE0F,
+	// and zero-width joiners, then collapse whitespace.
+	const cleaned = value
+		.replace(/[\u{10000}-\u{10FFFF}]/gu, '')
+		.replace(/[\uFE00-\uFE0F\u200C-\u200D]/g, '')
+		.replace(/\s+/g, ' ')
+		.trim();
+	return cleaned || 'Customer';
+}
+
 export async function initializeTransaction(
 	params: InitTransactionParams
 ): Promise<InitTransactionResult> {
@@ -460,7 +473,7 @@ export async function initializeTransaction(
 				},
 				body: JSON.stringify({
 					amount: params.amount,
-					customerName: params.customerName,
+					customerName: sanitizeCustomerName(params.customerName),
 					customerEmail: params.customerEmail,
 					paymentReference: params.paymentReference,
 					paymentDescription: params.paymentDescription,

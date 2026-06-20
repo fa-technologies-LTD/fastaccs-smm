@@ -142,6 +142,7 @@
 
 <svelte:head>
 	<title>Admin Panel - FastAccs</title>
+	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
 <div class="admin-shell min-h-screen" style="background: var(--bg);">

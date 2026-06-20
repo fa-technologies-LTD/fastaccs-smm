@@ -106,8 +106,14 @@ export const GET: RequestHandler = async (event) => {
 		// Determine redirect destination
 		let finalRedirectTo = redirectTo;
 
+		// Don't send users back to policy/auth pages after login — redirect to dashboard instead
+		const NON_PRODUCTIVE_PREFIXES = ['/privacy', '/terms', '/refund-policy', '/acceptable-use', '/affiliate-terms', '/auth/'];
+		if (NON_PRODUCTIVE_PREFIXES.some((p) => finalRedirectTo.startsWith(p))) {
+			finalRedirectTo = '/dashboard';
+		}
+
 		// If no specific redirect was requested and user is admin, redirect to admin panel
-		if (redirectTo === '/dashboard' && isAdminEmail(email)) {
+		if (finalRedirectTo === '/dashboard' && isAdminEmail(email)) {
 			finalRedirectTo = '/admin';
 		}
 

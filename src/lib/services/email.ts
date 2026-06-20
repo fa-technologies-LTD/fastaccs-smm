@@ -2,6 +2,9 @@ import nodemailer, { type Transporter } from 'nodemailer';
 import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
 import { prisma } from '$lib/prisma';
+import { normalizeTierDeliveryMode } from '$lib/helpers/tier-delivery-config';
+import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
+import { getAdminSettingsSnapshot } from '$lib/services/admin-settings';
 import emailHeaderDataUrl from '$lib/assets/fa-email-header.png?inline';
 import { randomInt } from 'crypto';
 
@@ -874,6 +877,7 @@ interface ReservedOrderConfirmation {
 			productName: string;
 			quantity: number;
 			totalPrice: unknown;
+			category: { metadata: unknown } | null;
 		}>;
 		user: {
 			email: string | null;
@@ -920,7 +924,13 @@ async function reserveOrderConfirmationNotification(
 		const order = await tx.order.findUnique({
 			where: { id: orderId },
 			include: {
-				orderItems: true,
+				orderItems: {
+					include: {
+						category: {
+							select: { metadata: true }
+						}
+					}
+				},
 				user: true
 			}
 		});
@@ -991,15 +1001,37 @@ export async function sendOrderConfirmationEmailIfNeeded(orderId: string): Promi
 	const normalizedOrderSuffix = order.orderNumber.replace(/^ORD-?/i, '');
 	const humanOrderNumber = `FA-${normalizedOrderSuffix}`;
 
-	const body = `Your payment was successful and your order has been confirmed.
+	const isManualHandover = order.orderItems.some(
+		(item) =>
+			normalizeTierDeliveryMode(
+				(item.category?.metadata as Record<string, unknown> | null)?.delivery_mode
+			) === 'manual_handover'
+	);
+
+	const orderSummary = `Your payment was successful and your order has been confirmed.
 
 Order: ${humanOrderNumber}
 Amount paid: ₦${Number(order.totalAmount).toLocaleString('en-US')}
 
 Items:
-${itemLines.join('\n')}
+${itemLines.join('\n')}`;
 
-Your account credentials are available on your dashboard. For security, we never send login details via email.`;
+	const waMessage = `Hi, I'm sending my payment receipt for order ${humanOrderNumber}.`;
+	const settings = isManualHandover ? await getAdminSettingsSnapshot().catch(() => null) : null;
+	const waLink =
+		buildWhatsAppSupportLink(settings?.business.whatsappNumber, waMessage) ||
+		'https://wa.link/fast_accounts';
+
+	const body = isManualHandover
+		? `${orderSummary}
+
+This is a manual handover order. To receive your full account login details, send your payment receipt to our team on WhatsApp. Tap the button below — your order number is pre-filled.`
+		: `${orderSummary}
+
+Your account details are ready on your dashboard. Log in to view your full credentials.`;
+
+	const ctaText = isManualHandover ? 'Send receipt on WhatsApp' : 'View account details';
+	const ctaUrl = isManualHandover ? waLink : `${getBaseUrl()}/dashboard?tab=purchases`;
 
 	await prisma.emailNotification.update({
 		where: { id: notificationId },
@@ -1013,8 +1045,8 @@ Your account credentials are available on your dashboard. For security, we never
 		to: targetEmail,
 		subject: `Order confirmed — ${humanOrderNumber}`,
 		body,
-		ctaText: 'View your account details',
-		ctaUrl: `${getBaseUrl()}/dashboard?tab=purchases`,
+		ctaText,
+		ctaUrl,
 		userId: order.userId || null,
 		notificationType: 'order_confirmation',
 		referenceId: order.id,

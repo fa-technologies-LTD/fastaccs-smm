@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { CartItemWithTier } from '$lib/types/cart';
 import { prisma } from '$lib/prisma';
+import { normalizeTierDeliveryMode } from '$lib/helpers/tier-delivery-config';
 import {
 	EXACT_PREVIEW_RESERVATION_KEY,
 	EXACT_PREVIEW_SOURCE,
@@ -41,6 +42,7 @@ type CartRefreshTier = {
 	platformSlug: string;
 	platformIcon: string | null;
 	isActive: boolean;
+	deliveryMode: 'instant_auto' | 'manual_handover';
 };
 
 const MAX_CART_REFRESH_ITEMS = 80;
@@ -263,7 +265,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				platformName: tier.parent?.name || 'Unknown',
 				platformSlug: tier.parent?.slug || '',
 				platformIcon: getPlatformIcon(tier.parent?.metadata),
-				isActive: tier.isActive
+				isActive: tier.isActive,
+				deliveryMode: normalizeTierDeliveryMode(
+					(tier.metadata as Record<string, unknown> | null)?.delivery_mode
+				)
 			};
 
 			const exactAccountId = normalizeText(input.exactAccount?.accountId);

@@ -1,7 +1,11 @@
 import { prisma } from '$lib/prisma';
 import { getTierMerchandisingState } from '$lib/helpers/tier-merchandising';
 import { releaseExpiredExactPreviewReservations } from '$lib/services/exact-preview';
+import { serverCache } from '$lib/helpers/cache';
 import type { PageServerLoad } from './$types';
+
+const CATALOG_CACHE_KEY = 'catalog:platforms';
+const CATALOG_CACHE_TTL_MS = 2 * 60 * 1000;
 
 export interface Platform {
 	id: string;
@@ -73,9 +77,15 @@ function compareTiers(
 
 export const load: PageServerLoad = async (): Promise<PageData> => {
 	try {
+		// Maintenance side-effect — keep running every request regardless of cache state.
 		await releaseExpiredExactPreviewReservations().catch((error) => {
 			console.error('Failed to release expired exact-preview reservations before catalog load:', error);
 		});
+
+		const cached = serverCache.get<PageData>(CATALOG_CACHE_KEY, CATALOG_CACHE_TTL_MS);
+		if (cached) {
+			return cached;
+		}
 
 		const platforms = await prisma.category.findMany({
 			where: {
@@ -115,7 +125,7 @@ export const load: PageServerLoad = async (): Promise<PageData> => {
 			}
 		});
 
-		return {
+		const result: PageData = {
 			platforms: platforms.map((platform) => {
 				const tiers = [...platform.children].sort(compareTiers);
 				const tierPrices = tiers.map((tier) => getTierPrice(tier.metadata));
@@ -139,6 +149,9 @@ export const load: PageServerLoad = async (): Promise<PageData> => {
 				};
 			})
 		};
+
+		serverCache.set(CATALOG_CACHE_KEY, result);
+		return result;
 	} catch (error) {
 		console.error('Error loading platforms catalog:', error);
 		return {

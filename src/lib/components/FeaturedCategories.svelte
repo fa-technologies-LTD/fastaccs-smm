@@ -143,10 +143,19 @@
 									{/if}
 
 									<div class="min-w-0 flex-1 text-left">
-										<div
-											style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
-										>
-											{platform.name}
+										<div class="flex items-center gap-2">
+											<span
+												style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
+											>
+												{platform.name}
+											</span>
+											{#if platform.totalAccounts > 0}
+												<span
+													style="font-size: 0.7rem; font-weight: 600; font-family: var(--font-head); color: var(--primary); background: rgba(5,212,113,0.1); border: 1px solid rgba(5,212,113,0.25); border-radius: var(--r-full); padding: 1px 7px; white-space: nowrap;"
+												>
+													{platform.totalAccounts} in stock
+												</span>
+											{/if}
 										</div>
 										<div
 											style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
@@ -167,7 +176,7 @@
 					<div class="mt-auto">
 						<button
 							onclick={() => goto('/platforms')}
-							class="btn-primary-cta block w-full cursor-pointer text-center"
+							class="btn-fa btn-fa--primary w-full"
 						>
 							See available accounts
 						</button>

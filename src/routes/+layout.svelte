@@ -13,6 +13,7 @@
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { syncGa4Consent, trackGa4PageView } from '$lib/services/ga4';
 	import { PRIVACY_CONSENT_CHANGED_EVENT } from '$lib/helpers/privacyConsent';
+	import { getSiteBaseUrl } from '$lib/helpers/site-url';
 	import type { LayoutData } from './$types';
 
 	interface Props {
@@ -35,25 +36,17 @@
 	const defaultShareDescription =
 		'Get Instagram, TikTok, X, Facebook accounts and boosting services with secure checkout, instant delivery, and buyer support.';
 
-	function normalizeBaseUrl(value: string | undefined): string {
-		const fallback = 'https://smm.fastaccs.com';
-		const trimmed = String(value || '').trim();
-		if (!trimmed) return fallback;
-
-		try {
-			const parsed = new URL(trimmed);
-			return parsed.origin.replace(/\/+$/, '');
-		} catch {
-			return fallback;
-		}
-	}
-
-	const publicBaseUrl = $derived(normalizeBaseUrl(publicEnv.PUBLIC_BASE_URL));
+	const publicBaseUrl = $derived(getSiteBaseUrl());
 	const shareImagePath = '/og-share-1200x630.png?v=20260428a';
 	const shareImageUrl = $derived(`${publicBaseUrl}${shareImagePath}`);
 	const currentPageUrl = $derived(
 		`${publicBaseUrl}${page.url?.pathname || '/'}${page.url?.search || ''}`
 	);
+	// Pages can override the social-share title/description/type by returning
+	// a `seo` object from their load function (see src/routes/blog/+layout.server.ts).
+	const seoTitle = $derived(page.data?.seo?.title ?? defaultShareTitle);
+	const seoDescription = $derived(page.data?.seo?.description ?? defaultShareDescription);
+	const seoType = $derived(page.data?.seo?.type ?? 'website');
 
 	$effect(() => {
 		const nextCookieName = announcementBanner?.dismissCookieName || null;
@@ -241,10 +234,11 @@
 </script>
 
 <svelte:head>
+	<link rel="canonical" href={currentPageUrl} />
 	<meta property="og:site_name" content="FastAccs" />
-	<meta property="og:type" content="website" />
-	<meta property="og:title" content={defaultShareTitle} />
-	<meta property="og:description" content={defaultShareDescription} />
+	<meta property="og:type" content={seoType} />
+	<meta property="og:title" content={seoTitle} />
+	<meta property="og:description" content={seoDescription} />
 	<meta property="og:url" content={currentPageUrl} />
 	<meta property="og:image" content={shareImageUrl} />
 	<meta property="og:image:secure_url" content={shareImageUrl} />
@@ -252,8 +246,8 @@
 	<meta property="og:image:width" content="1200" />
 	<meta property="og:image:height" content="630" />
 	<meta name="twitter:card" content="summary_large_image" />
-	<meta name="twitter:title" content={defaultShareTitle} />
-	<meta name="twitter:description" content={defaultShareDescription} />
+	<meta name="twitter:title" content={seoTitle} />
+	<meta name="twitter:description" content={seoDescription} />
 	<meta name="twitter:image" content={shareImageUrl} />
 </svelte:head>
 

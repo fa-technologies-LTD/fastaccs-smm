@@ -123,6 +123,7 @@
 <svelte:head>
 	<title>Order #{data.order.id.slice(-8)} - FastAccs</title>
 	<meta name="description" content="View your order status and account details" />
+	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
 <Navigation />

@@ -46,29 +46,16 @@
 	// Generate a consistent color based on user's name
 	function getAvatarColor(fullName: string | null | undefined): string {
 		const colors = [
-			'bg-red-500',
-			'bg-blue-500',
-			'bg-green-500',
-			'bg-yellow-500',
-			'bg-purple-500',
-			'bg-pink-500',
-			'bg-indigo-500',
-			'bg-teal-500',
-			'bg-orange-500',
-			'bg-emerald-500',
-			'bg-cyan-500',
-			'bg-violet-500'
+			'#ef4444', '#3b82f6', '#22c55e', '#eab308',
+			'#a855f7', '#ec4899', '#6366f1', '#14b8a6',
+			'#f97316', '#10b981', '#06b6d4', '#8b5cf6'
 		];
-
 		if (!fullName) return colors[0];
-
-		// Use the name to generate a consistent color index
 		let hash = 0;
 		for (let i = 0; i < fullName.length; i++) {
 			hash = fullName.charCodeAt(i) + ((hash << 5) - hash);
 		}
-		const index = Math.abs(hash) % colors.length;
-		return colors[index];
+		return colors[Math.abs(hash) % colors.length];
 	}
 
 	// Capitalize the display name
@@ -269,6 +256,9 @@
 					<a href="/how-it-works" data-sveltekit-preload-data="hover" class="nav-link font-medium">
 						How It Works
 					</a>
+					<a href="/blog" data-sveltekit-preload-data="hover" class="nav-link font-medium">
+						Blog
+					</a>
 					<a
 						href="https://wa.link/fast_accounts"
 						target="_blank"
@@ -399,9 +389,8 @@
 									<img src={user.avatarUrl} alt="Profile" class="h-6 w-6 rounded-full" />
 								{:else}
 									<div
-										class="flex h-6 w-6 items-center justify-center rounded-full {getAvatarColor(
-											user.fullName
-										)} text-xs font-medium text-white"
+										class="flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium text-white"
+										style="background: {getAvatarColor(user.fullName)};"
 									>
 										{getInitials(user.fullName)}
 									</div>
@@ -599,6 +588,13 @@
 							How It Works
 						</a>
 						<a
+							href="/blog"
+							data-sveltekit-preload-data="hover"
+							class="nav-link block py-3 text-sm font-medium"
+						>
+							Blog
+						</a>
+						<a
 							href="https://wa.link/fast_accounts"
 							target="_blank"
 							rel="noopener noreferrer"
@@ -621,9 +617,8 @@
 								<img src={user.avatarUrl} alt="Profile" class="mr-3 h-5 w-5 rounded-full" />
 							{:else}
 								<div
-									class="mr-3 flex h-5 w-5 items-center justify-center rounded-full {getAvatarColor(
-										user.fullName
-									)} text-xs font-medium text-white"
+									class="mr-3 flex h-5 w-5 items-center justify-center rounded-full text-xs font-medium text-white"
+									style="background: {getAvatarColor(user.fullName)};"
 								>
 									{getInitials(user.fullName)}
 								</div>

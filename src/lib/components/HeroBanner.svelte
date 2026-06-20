@@ -10,80 +10,80 @@
 		<!-- Main Hero Content -->
 		<div class="mb-6 sm:mb-8">
 			<h1
-				class="mb-4 text-2xl leading-tight font-bold sm:text-3xl md:text-4xl"
-				style="font-family: var(--font-head); color: var(--text); letter-spacing: -0.03em;"
+				class="mb-4 text-3xl leading-tight font-bold sm:text-4xl md:text-5xl"
+				style="font-family: var(--font-head); color: #ffffff; letter-spacing: -0.03em;"
 			>
-				Get Quality Social Media Accounts
-				<span style="color: var(--fa-lime-400);">& Boosting Services</span>
+				Real social media accounts.
+				<span style="color: var(--fa-lime-400);">Delivered fast.</span>
 			</h1>
 			<p
-				class="mx-auto mb-6 max-w-3xl text-base sm:mb-8 sm:text-lg md:text-xl lg:text-2xl"
-				style="font-family: var(--font-body); color: rgba(255,255,255,0.85);"
+				class="mx-auto mb-6 max-w-2xl text-base sm:mb-8 sm:text-lg"
+				style="font-family: var(--font-body); color: rgba(255,255,255,0.82);"
 			>
-				Buy social media accounts and boosting services like followers, likes, and views with secure
-				checkout and instant delivery after payment confirmation.
+				Buy aged Instagram, TikTok, X, and Facebook accounts — full login access, instant delivery,
+				and support included.
 			</p>
 		</div>
 
 		<!-- CTA Buttons -->
-		<div class="mb-8 flex flex-col items-center justify-center gap-3 sm:mb-12 sm:flex-row sm:gap-4">
+		<div class="mb-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
 			<button
-				class="btn-cta-primary w-full cursor-pointer rounded-full px-6 py-3 text-base font-semibold shadow-lg sm:w-auto sm:px-8"
+				class="btn-hero-primary w-full cursor-pointer sm:w-auto"
 				onclick={() => goto('/platforms')}
 				data-sveltekit-preload-data="hover"
 			>
-				See available socials
+				Browse Accounts
 			</button>
 			<button
-				class="btn-cta-secondary w-full cursor-pointer rounded-full border-2 px-6 py-3 text-base font-semibold sm:w-auto sm:px-8"
+				class="btn-hero-secondary w-full cursor-pointer sm:w-auto"
 				onclick={() => goto('/services')}
 			>
-				View Boosting Services
+				Boosting Services
 			</button>
 		</div>
 
-		<!-- Trust Indicators -->
-		<div class="grid grid-cols-1 gap-6 text-center md:grid-cols-3">
+		<!-- Trust Bullets -->
+		<div class="grid grid-cols-1 gap-4 text-center sm:grid-cols-3">
 			<div
-				class="rounded-lg p-6 backdrop-blur-sm"
-				style="background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06)); border: 1px solid rgba(255,255,255,0.18); border-radius: var(--r-md);"
+				class="rounded-xl p-5 backdrop-blur-sm"
+				style="background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.16); border-radius: var(--r-md);"
 			>
 				<div
-					class="mb-2 text-3xl font-bold"
+					class="mb-1 text-2xl font-bold"
 					style="color: var(--fa-lime-400); font-family: var(--font-head);"
 				>
-					Premium
+					Full Details
 				</div>
-				<div style="color: rgba(255,255,255,0.85); font-family: var(--font-body);">
-					Quality Accounts
+				<div style="color: rgba(255,255,255,0.82); font-size: 0.9rem; font-family: var(--font-body);">
+					Complete login handover on every account
 				</div>
 			</div>
 			<div
-				class="rounded-lg p-6 backdrop-blur-sm"
-				style="background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06)); border: 1px solid rgba(255,255,255,0.18); border-radius: var(--r-md);"
+				class="rounded-xl p-5 backdrop-blur-sm"
+				style="background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.16); border-radius: var(--r-md);"
 			>
 				<div
-					class="mb-2 text-3xl font-bold"
+					class="mb-1 text-2xl font-bold"
 					style="color: var(--fa-lime-400); font-family: var(--font-head);"
 				>
-					24/7
+					Verified Listings
 				</div>
-				<div style="color: rgba(255,255,255,0.85); font-family: var(--font-body);">
-					Instant Delivery
+				<div style="color: rgba(255,255,255,0.82); font-size: 0.9rem; font-family: var(--font-body);">
+					Accounts reviewed before going live
 				</div>
 			</div>
 			<div
-				class="rounded-lg p-6 backdrop-blur-sm"
-				style="background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06)); border: 1px solid rgba(255,255,255,0.18); border-radius: var(--r-md);"
+				class="rounded-xl p-5 backdrop-blur-sm"
+				style="background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.16); border-radius: var(--r-md);"
 			>
 				<div
-					class="mb-2 text-3xl font-bold"
+					class="mb-1 text-2xl font-bold"
 					style="color: var(--fa-lime-400); font-family: var(--font-head);"
 				>
-					Secure
+					WhatsApp Support
 				</div>
-				<div style="color: rgba(255,255,255,0.85); font-family: var(--font-body);">
-					Safe Transactions
+				<div style="color: rgba(255,255,255,0.82); font-size: 0.9rem; font-family: var(--font-body);">
+					Real support if anything goes wrong
 				</div>
 			</div>
 		</div>
@@ -91,33 +91,54 @@
 </section>
 
 <style>
-	.btn-cta-primary {
+	.btn-hero-primary {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 48px;
+		padding: 0.75rem 2rem;
+		border-radius: var(--r-full);
+		border: 1px solid rgba(202, 219, 46, 0.5);
 		background: var(--fa-lime-700);
-		border: 1px solid rgba(202, 219, 46, 0.4);
 		color: #04140c;
-		font-family: var(--font-body);
-		transition: all 180ms ease;
+		font-family: var(--font-head);
+		font-size: 1rem;
+		font-weight: 700;
+		text-decoration: none;
+		cursor: pointer;
+		transition: background 180ms ease, transform 140ms ease;
 	}
-	.btn-cta-primary:hover {
+	.btn-hero-primary:hover {
 		background: var(--fa-lime-400);
-		transform: scale(1.05);
+		transform: translateY(-1px);
 	}
-	.btn-cta-primary:active {
-		transform: scale(1);
+	.btn-hero-primary:active {
+		transform: scale(0.985);
 	}
-	.btn-cta-secondary {
-		border-color: rgba(255, 255, 255, 0.8);
+
+	.btn-hero-secondary {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 48px;
+		padding: 0.75rem 2rem;
+		border-radius: var(--r-full);
+		border: 1.5px solid rgba(255, 255, 255, 0.55);
 		background: transparent;
-		color: var(--text);
-		font-family: var(--font-body);
-		transition: all 180ms ease;
+		color: #ffffff;
+		font-family: var(--font-head);
+		font-size: 1rem;
+		font-weight: 600;
+		text-decoration: none;
+		cursor: pointer;
+		transition: background 180ms ease, border-color 180ms ease, transform 140ms ease;
 	}
-	.btn-cta-secondary:hover {
-		background: rgba(255, 255, 255, 0.15);
-		border-color: rgba(255, 255, 255, 1);
-		transform: scale(1.05);
+	.btn-hero-secondary:hover {
+		background: rgba(255, 255, 255, 0.12);
+		border-color: rgba(255, 255, 255, 0.85);
+		transform: translateY(-1px);
 	}
-	.btn-cta-secondary:active {
-		transform: scale(1);
+	.btn-hero-secondary:active {
+		transform: scale(0.985);
 	}
 </style>

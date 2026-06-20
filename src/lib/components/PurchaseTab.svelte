@@ -17,7 +17,8 @@
 	} from '$lib/helpers/credential-contract';
 	import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
 
-	let { initialPurchases } = $props();
+	let { initialPurchases, whatsappNumber = '' }: { initialPurchases: any[]; whatsappNumber?: string } =
+		$props();
 	let purchases = $state<any[]>(initialPurchases);
 
 	function copyAccount(account: any, index: number) {
@@ -60,10 +61,17 @@
 	function getManualHandoverLink(purchase: any): string | null {
 		if (purchase.deliveryMode !== 'manual_handover') return null;
 		const orderLabel = String(purchase.orderNumber || purchase.orderId || '').trim();
-		return buildWhatsAppSupportLink(
-			null,
-			`Hi, I'm sending my payment receipt for order ${orderLabel}.`
-		);
+		const itemLine = [
+			purchase.categoryName,
+			purchase.quantity > 1 ? `x${purchase.quantity}` : null,
+			purchase.platform && purchase.platform !== purchase.categoryName ? `(${purchase.platform})` : null
+		].filter(Boolean).join(' ');
+		const msg = [
+			`Hi FastAccs, I'm sending my payment receipt for order #${orderLabel}.`,
+			itemLine ? `Item: ${itemLine}` : null,
+			`Please complete my manual handover. Thank you.`
+		].filter(Boolean).join('\n');
+		return buildWhatsAppSupportLink(whatsappNumber, msg);
 	}
 
 	function getPurchaseStatusLabel(purchase: any): string {

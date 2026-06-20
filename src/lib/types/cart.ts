@@ -22,6 +22,7 @@ export interface CartItemWithTier extends CartItem {
 		platformSlug: string;
 		platformIcon?: string | null;
 		isActive: boolean;
+		deliveryMode?: 'instant_auto' | 'manual_handover';
 	};
 }
 

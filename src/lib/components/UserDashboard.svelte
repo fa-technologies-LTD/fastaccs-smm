@@ -42,7 +42,8 @@
 		orders = [],
 		affiliateData: initialAffiliateData = null,
 		purchases: initialPurchases = [],
-		sitePopup = null
+		sitePopup = null,
+		whatsappNumber = ''
 	}: {
 		user?: DashboardUser | null;
 		name?: string | null;
@@ -50,6 +51,7 @@
 		affiliateData?: unknown;
 		purchases?: DashboardPurchase[];
 		sitePopup?: PendingSitePopup | null;
+		whatsappNumber?: string;
 	} = $props();
 
 	const affiliateState = $derived(
@@ -368,7 +370,7 @@
 	{#if activeTab === 'orders'}
 		<OrderTab initialOrders={orders} focusOrderId={selectedOrderId} />
 	{:else if activeTab === 'purchases'}
-		<PurchaseTab {initialPurchases} />
+		<PurchaseTab {initialPurchases} {whatsappNumber} />
 	{:else}
 		<AffiliateTab {initialAffiliateData} />
 	{/if}
@@ -391,7 +393,7 @@
 			<span class="mt-1 text-xs font-semibold">Support</span>
 		</a>
 		<a
-			href="/dashboard?tab=affiliate"
+			href="/affiliate"
 			class="quick-action-card flex min-h-[88px] flex-col items-center justify-center rounded-[var(--r-sm)] border border-[var(--border)] p-3 transition-all hover:-translate-y-0.5"
 			style="background: var(--surface-2); color: var(--text);"
 		>

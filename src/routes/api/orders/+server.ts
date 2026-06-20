@@ -484,14 +484,31 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 		await releaseExpiredOrderReservations();
 		await releaseExpiredExactPreviewReservations();
+
+		const stockCheckCategoryIds = [
+			...new Set(
+				itemsWithNames.filter((item) => !item.exactAccountId).map((item) => item.categoryId)
+			)
+		];
+		const availabilityByCategory =
+			stockCheckCategoryIds.length > 0
+				? new Map(
+						(
+							await prisma.account.groupBy({
+								by: ['categoryId'],
+								where: {
+									categoryId: { in: stockCheckCategoryIds },
+									status: 'available'
+								},
+								_count: { _all: true }
+							})
+						).map((row) => [row.categoryId, row._count._all])
+					)
+				: new Map<string, number>();
+
 		for (const item of itemsWithNames) {
 			if (item.exactAccountId) continue;
-			const availableCount = await prisma.account.count({
-				where: {
-					categoryId: item.categoryId,
-					status: 'available'
-				}
-			});
+			const availableCount = availabilityByCategory.get(item.categoryId) || 0;
 			if (availableCount < item.quantity) {
 				return json(
 					{
