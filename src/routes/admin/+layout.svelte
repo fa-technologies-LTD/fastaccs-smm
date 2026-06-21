@@ -19,7 +19,8 @@
 		Type,
 		Mail,
 		Tag,
-		Activity
+		Activity,
+		Zap
 	} from '$lib/icons';
 
 	import logo from '$lib/assets/logo.png';
@@ -59,6 +60,12 @@
 			},
 			{ href: '/admin/tiers', label: 'Tiers', icon: Target, permission: 'admin:catalog:manage' },
 			{
+				href: '/admin/boosting-services',
+				label: 'Boosting Services',
+				icon: Zap,
+				permission: 'admin:catalog:manage'
+			},
+			{
 				href: '/admin/inventory',
 				label: 'Inventory',
 				icon: Package,
@@ -71,6 +78,7 @@
 				permission: 'admin:inventory:manage'
 			},
 			{ href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
+			{ href: '/admin/boosting-orders', label: 'Boosting Orders', icon: Zap },
 			{
 				href: '/admin/affiliates',
 				label: 'Affiliates',

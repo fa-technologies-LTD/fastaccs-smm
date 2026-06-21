@@ -22,6 +22,8 @@ export interface CreateOrderData {
 		price?: number;
 		exactAccountId?: string;
 		exactAccountLabel?: string;
+		boostTargetUrl?: string;
+		boostQuantity?: number;
 	}[];
 	totalAmount: number;
 	currency: string;

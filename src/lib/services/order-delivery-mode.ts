@@ -40,3 +40,11 @@ export async function isManualHandoverOrder(orderId: string): Promise<boolean> {
 	const mode = await getOrderTierDeliveryMode(orderId);
 	return mode === 'manual_handover';
 }
+
+export async function isBoostingOrder(orderId: string): Promise<boolean> {
+	const boostingItem = await prisma.orderItem.findFirst({
+		where: { orderId, boostTargetUrl: { not: null } },
+		select: { id: true }
+	});
+	return Boolean(boostingItem);
+}

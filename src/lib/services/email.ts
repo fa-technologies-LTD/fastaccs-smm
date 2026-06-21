@@ -878,6 +878,7 @@ interface ReservedOrderConfirmation {
 			quantity: number;
 			totalPrice: unknown;
 			category: { metadata: unknown } | null;
+			boostTargetUrl: string | null;
 		}>;
 		user: {
 			email: string | null;
@@ -1001,12 +1002,15 @@ export async function sendOrderConfirmationEmailIfNeeded(orderId: string): Promi
 	const normalizedOrderSuffix = order.orderNumber.replace(/^ORD-?/i, '');
 	const humanOrderNumber = `FA-${normalizedOrderSuffix}`;
 
-	const isManualHandover = order.orderItems.some(
-		(item) =>
-			normalizeTierDeliveryMode(
-				(item.category?.metadata as Record<string, unknown> | null)?.delivery_mode
-			) === 'manual_handover'
-	);
+	const isBoosting = order.orderItems.some((item) => Boolean(item.boostTargetUrl));
+	const isManualHandover =
+		!isBoosting &&
+		order.orderItems.some(
+			(item) =>
+				normalizeTierDeliveryMode(
+					(item.category?.metadata as Record<string, unknown> | null)?.delivery_mode
+				) === 'manual_handover'
+		);
 
 	const orderSummary = `Your payment was successful and your order has been confirmed.
 
@@ -1022,16 +1026,28 @@ ${itemLines.join('\n')}`;
 		buildWhatsAppSupportLink(settings?.business.whatsappNumber, waMessage) ||
 		'https://wa.link/fast_accounts';
 
-	const body = isManualHandover
+	const body = isBoosting
 		? `${orderSummary}
 
+Your boost is now queued and will begin processing shortly. Track its status anytime from your order page.`
+		: isManualHandover
+			? `${orderSummary}
+
 This is a manual handover order. To receive your full account login details, send your payment receipt to our team on WhatsApp. Tap the button below — your order number is pre-filled.`
-		: `${orderSummary}
+			: `${orderSummary}
 
 Your account details are ready on your dashboard. Log in to view your full credentials.`;
 
-	const ctaText = isManualHandover ? 'Send receipt on WhatsApp' : 'View account details';
-	const ctaUrl = isManualHandover ? waLink : `${getBaseUrl()}/dashboard?tab=purchases`;
+	const ctaText = isBoosting
+		? 'View order status'
+		: isManualHandover
+			? 'Send receipt on WhatsApp'
+			: 'View account details';
+	const ctaUrl = isBoosting
+		? `${getBaseUrl()}/order/${order.id}`
+		: isManualHandover
+			? waLink
+			: `${getBaseUrl()}/dashboard?tab=purchases`;
 
 	await prisma.emailNotification.update({
 		where: { id: notificationId },

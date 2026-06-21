@@ -220,6 +220,11 @@ model OrderItem {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @default(now()) @map("updated_at")
   categoryId       String    @map("category_id") @db.Uuid
+  boostTargetUrl         String?   @map("boost_target_url")
+  boostQuantity          Int?      @map("boost_quantity")
+  boostFulfillmentStatus String?   @map("boost_fulfillment_status")
+  boostProviderReference String?   @map("boost_provider_reference")
+  boostCompletedAt       DateTime? @map("boost_completed_at")
   accounts         Account[]
   category         Category  @relation(fields: [categoryId], references: [id])
   order            Order     @relation(fields: [orderId], references: [id])
@@ -228,6 +233,7 @@ model OrderItem {
   @@index([orderId])
   @@index([categoryId])
   @@index([allocationStatus])
+  @@index([boostFulfillmentStatus])
   @@map("order_items")
 }
 
