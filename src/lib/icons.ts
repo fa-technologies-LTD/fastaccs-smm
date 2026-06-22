@@ -39,6 +39,7 @@ import {
 	IconEyeOff,
 	IconFileText,
 	IconFilter,
+	IconHeart,
 	IconHeartHandshake,
 	IconHelpCircle,
 	IconHome,
@@ -123,6 +124,7 @@ export const EyeOff = IconEyeOff;
 export const Facebook = IconBrandFacebook;
 export const FileText = IconFileText;
 export const Filter = IconFilter;
+export const Heart = IconHeart;
 export const HeartHandshake = IconHeartHandshake;
 export const HelpCircle = IconHelpCircle;
 export const Home = IconHome;
