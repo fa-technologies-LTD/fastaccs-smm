@@ -100,4 +100,12 @@ describe('social link validator', () => {
 		expect(result.valid).toBe(false);
 		expect(result.reason).toContain('enter a link');
 	});
+
+	it('treats reposts like other content-link actions (requires a post link, not a profile link)', () => {
+		expect(getRequiredLinkType('reposts')).toBe('content');
+		expect(validateLinkForAction('x', 'reposts', 'https://x.com/fastaccs/status/1234567890').valid).toBe(
+			true
+		);
+		expect(validateLinkForAction('x', 'reposts', 'https://x.com/fastaccs').valid).toBe(false);
+	});
 });

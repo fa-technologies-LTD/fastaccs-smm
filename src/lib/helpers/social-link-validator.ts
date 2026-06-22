@@ -1,5 +1,11 @@
 export type BoostingPlatform = 'instagram' | 'tiktok' | 'youtube' | 'facebook' | 'x';
-export type BoostingActionType = 'followers' | 'subscribers' | 'likes' | 'views' | 'comments';
+export type BoostingActionType =
+	| 'followers'
+	| 'subscribers'
+	| 'likes'
+	| 'views'
+	| 'comments'
+	| 'reposts';
 export type RequiredLinkType = 'profile' | 'content';
 
 export interface LinkValidationResult {

@@ -63,6 +63,7 @@ import {
 	IconPhotoPlus,
 	IconPlus,
 	IconRefresh,
+	IconRepeat,
 	IconSearch,
 	IconSearchOff,
 	IconSend,
@@ -152,6 +153,7 @@ export const Phone = IconPhone;
 export const Plus = IconPlus;
 export const RefreshCcw = IconRefresh;
 export const RefreshCw = IconRefresh;
+export const Repeat = IconRepeat;
 export const Save = IconDeviceFloppy;
 export const Search = IconSearch;
 export const SearchX = IconSearchOff;

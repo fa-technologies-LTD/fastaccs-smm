@@ -84,6 +84,97 @@ const SERVICES = [
 		minQuantity: 1000,
 		stepQuantity: 1000,
 		pricePerStep: 1500
+	},
+	// Coming soon — created with pricePerStep: 0 until real pricing is set in admin.
+	{
+		name: 'TikTok Followers',
+		description: 'Grow your TikTok profile with real-looking followers.',
+		platform: 'tiktok',
+		actionType: 'followers',
+		minQuantity: 500,
+		stepQuantity: 500,
+		pricePerStep: 0
+	},
+	{
+		name: 'YouTube Subscribers',
+		description: 'Grow your YouTube channel with real-looking subscribers.',
+		platform: 'youtube',
+		actionType: 'subscribers',
+		minQuantity: 100,
+		stepQuantity: 100,
+		pricePerStep: 0
+	},
+	{
+		name: 'YouTube Views',
+		description: 'Increase view counts on your YouTube videos.',
+		platform: 'youtube',
+		actionType: 'views',
+		minQuantity: 1000,
+		stepQuantity: 1000,
+		pricePerStep: 0
+	},
+	{
+		name: 'YouTube Likes',
+		description: 'Boost engagement on any YouTube video.',
+		platform: 'youtube',
+		actionType: 'likes',
+		minQuantity: 1000,
+		stepQuantity: 1000,
+		pricePerStep: 0
+	},
+	{
+		name: 'YouTube Comments',
+		description: 'Add comments to any YouTube video.',
+		platform: 'youtube',
+		actionType: 'comments',
+		minQuantity: 100,
+		stepQuantity: 100,
+		pricePerStep: 0
+	},
+	{
+		name: 'Instagram Comments',
+		description: 'Add comments to any Instagram post or Reel.',
+		platform: 'instagram',
+		actionType: 'comments',
+		minQuantity: 100,
+		stepQuantity: 100,
+		pricePerStep: 0
+	},
+	{
+		name: 'TikTok Comments',
+		description: 'Add comments to any TikTok video.',
+		platform: 'tiktok',
+		actionType: 'comments',
+		minQuantity: 100,
+		stepQuantity: 100,
+		pricePerStep: 0
+	},
+	{
+		name: 'Facebook Comments',
+		description: 'Add comments to any Facebook post.',
+		platform: 'facebook',
+		actionType: 'comments',
+		minQuantity: 100,
+		stepQuantity: 100,
+		pricePerStep: 0
+	},
+	{
+		name: 'X Comments',
+		description: 'Add comments to any X (Twitter) post.',
+		platform: 'x',
+		actionType: 'comments',
+		minQuantity: 100,
+		stepQuantity: 100,
+		pricePerStep: 0
+	},
+	{
+		name: 'X Reposts',
+		description: 'Get reposts (retweets) on any X (Twitter) post.',
+		platform: 'x',
+		actionType: 'reposts',
+		minQuantity: 500,
+		stepQuantity: 500,
+		pricePerStep: 0
 	}
 ];
 

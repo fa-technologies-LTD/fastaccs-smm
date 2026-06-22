@@ -43,8 +43,12 @@
 			<p class="text-xs font-semibold tracking-[0.18em] uppercase" style="color: var(--primary);">
 				Boosting Services
 			</p>
+			<p class="mx-auto mt-3 max-w-md text-sm" style="color: var(--text-muted);">
+				Buy followers, likes, views, and more for accounts you already own. Paste your link, we
+				deliver — no passwords needed.
+			</p>
 			<h1
-				class="mx-auto mt-3 text-2xl font-bold sm:text-3xl"
+				class="mx-auto mt-4 text-2xl font-bold sm:text-3xl"
 				style="color: var(--text); font-family: var(--font-head);"
 			>
 				Pick a platform to get started

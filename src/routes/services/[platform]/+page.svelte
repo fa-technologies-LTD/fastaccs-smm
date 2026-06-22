@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import { ArrowLeft, Eye, Heart, Minus, MessageCircle, Plus, UserPlus } from '$lib/icons';
+	import { ArrowLeft, Eye, Heart, Minus, MessageCircle, Plus, Repeat, UserPlus } from '$lib/icons';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { showError, showSuccess, showWarning } from '$lib/stores/toasts';
 	import { formatPrice } from '$lib/helpers/utils';
@@ -46,8 +46,13 @@
 		subscribers: UserPlus,
 		likes: Heart,
 		views: Eye,
-		comments: MessageCircle
+		comments: MessageCircle,
+		reposts: Repeat
 	};
+
+	function getProfileLinkLabel(platform: BoostingPlatform): string {
+		return platform === 'youtube' ? 'channel link' : 'profile link';
+	}
 
 	let expandedServiceId = $state<string | null>(null);
 	let quantityByServiceId = $state<Record<string, number>>({});
@@ -213,7 +218,8 @@
 		<div class="space-y-3">
 			{#each services as service (service.id)}
 				{@const ActionIcon = ACTION_ICONS[service.config.actionType]}
-				{@const isExpanded = expandedServiceId === service.id}
+				{@const isComingSoon = service.config.pricePerStep <= 0}
+				{@const isExpanded = !isComingSoon && expandedServiceId === service.id}
 				{@const quantity = getQuantity(service.id, service.config.minQuantity)}
 				{@const price = computeBoostingPrice(service.config, quantity)}
 				{@const requiredLinkType = getRequiredLinkType(service.config.actionType)}
@@ -224,8 +230,9 @@
 				>
 					<button
 						type="button"
-						onclick={() => toggleExpanded(service.id)}
-						class="flex w-full items-center gap-3 p-4 text-left"
+						onclick={() => !isComingSoon && toggleExpanded(service.id)}
+						disabled={isComingSoon}
+						class="flex w-full items-center gap-3 p-4 text-left disabled:cursor-default"
 					>
 						<div
 							class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full"
@@ -235,14 +242,20 @@
 						</div>
 						<div class="flex-1">
 							<p class="font-semibold" style="color: var(--text);">{service.name}</p>
-							<p class="text-xs" style="color: var(--text-dim);">
-								From {formatPrice(startingPrice)}
-								{#if service.config.refillAvailable}
-									· {service.config.refillDays}-day refill
-								{/if}
-							</p>
+							{#if isComingSoon}
+								<p class="text-xs font-medium" style="color: var(--status-pending);">Coming soon</p>
+							{:else}
+								<p class="text-xs" style="color: var(--text-dim);">
+									From {formatPrice(startingPrice)}
+									{#if service.config.refillAvailable}
+										· {service.config.refillDays}-day refill
+									{/if}
+								</p>
+							{/if}
 						</div>
-						<span class="text-lg" style="color: var(--text-dim);">{isExpanded ? '−' : '+'}</span>
+						{#if !isComingSoon}
+							<span class="text-lg" style="color: var(--text-dim);">{isExpanded ? '−' : '+'}</span>
+						{/if}
 					</button>
 
 					{#if isExpanded}
@@ -256,7 +269,9 @@
 								class="mb-1 block text-xs font-medium"
 								style="color: var(--text);"
 							>
-								Your {requiredLinkType === 'profile' ? 'profile/channel' : 'post/video'} link
+								Your {requiredLinkType === 'profile'
+									? getProfileLinkLabel(service.config.platform)
+									: 'post/video link'}
 							</label>
 							<input
 								id={`link-${service.id}`}

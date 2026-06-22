@@ -21,7 +21,8 @@ export const BOOSTING_ACTION_TYPES: BoostingActionType[] = [
 	'subscribers',
 	'likes',
 	'views',
-	'comments'
+	'comments',
+	'reposts'
 ];
 
 export const BOOSTING_PLATFORM_LABELS: Record<BoostingPlatform, string> = {
@@ -37,7 +38,8 @@ export const BOOSTING_ACTION_LABELS: Record<BoostingActionType, string> = {
 	subscribers: 'Subscribers',
 	likes: 'Likes',
 	views: 'Views',
-	comments: 'Comments'
+	comments: 'Comments',
+	reposts: 'Reposts'
 };
 
 export interface BoostingServiceConfig {
