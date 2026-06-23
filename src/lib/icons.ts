@@ -39,6 +39,7 @@ import {
 	IconEyeOff,
 	IconFileText,
 	IconFilter,
+	IconHeart,
 	IconHeartHandshake,
 	IconHelpCircle,
 	IconHome,
@@ -62,6 +63,7 @@ import {
 	IconPhotoPlus,
 	IconPlus,
 	IconRefresh,
+	IconRepeat,
 	IconSearch,
 	IconSearchOff,
 	IconSend,
@@ -123,6 +125,7 @@ export const EyeOff = IconEyeOff;
 export const Facebook = IconBrandFacebook;
 export const FileText = IconFileText;
 export const Filter = IconFilter;
+export const Heart = IconHeart;
 export const HeartHandshake = IconHeartHandshake;
 export const HelpCircle = IconHelpCircle;
 export const Home = IconHome;
@@ -150,6 +153,7 @@ export const Phone = IconPhone;
 export const Plus = IconPlus;
 export const RefreshCcw = IconRefresh;
 export const RefreshCw = IconRefresh;
+export const Repeat = IconRepeat;
 export const Save = IconDeviceFloppy;
 export const Search = IconSearch;
 export const SearchX = IconSearchOff;

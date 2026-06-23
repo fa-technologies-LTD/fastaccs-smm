@@ -210,7 +210,10 @@
 						orderId = resolvedOrderId;
 						clearPendingOrderStorage();
 						cart.clear();
-						if (
+						if (result.boosting === true) {
+							showSuccess('Payment confirmed!', 'Your boost is now being processed.');
+							goto(getOrdersDashboardPath(resolvedOrderId));
+						} else if (
 							result.manualHandover === true ||
 							String(result.status || '').toUpperCase() === 'PAID'
 						) {

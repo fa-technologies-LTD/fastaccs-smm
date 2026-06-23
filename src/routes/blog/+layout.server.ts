@@ -1,7 +1,13 @@
 import { blogPosts } from '$lib/blog/posts';
+import { getCacheHeaders } from '$lib/helpers/cache';
 import type { LayoutServerLoad } from './$types';
 
-export const load: LayoutServerLoad = ({ url }) => {
+export const load: LayoutServerLoad = ({ url, setHeaders }) => {
+	// 'private' (browser-only), not 'static'/public: every page renders the
+	// logged-in user's name/avatar/admin status via the root layout's Navigation,
+	// so the HTML response is not safe to cache on a shared/CDN cache.
+	setHeaders(getCacheHeaders('private'));
+
 	const segments = url.pathname.split('/').filter(Boolean);
 
 	if (segments.length <= 1) {

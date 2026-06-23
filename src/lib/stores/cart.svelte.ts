@@ -18,8 +18,10 @@ const STORAGE_KEY = 'fastaccs_cart';
 const CHECKOUT_SESSION_STORAGE_KEY = 'fastaccs_checkout_session';
 const STORAGE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 
-function getCartItemId(item: Pick<CartItem, 'tierId' | 'exactAccount'>): string {
-	return item.exactAccount ? `exact:${item.exactAccount.accountId}` : `tier:${item.tierId}`;
+function getCartItemId(item: Pick<CartItem, 'tierId' | 'exactAccount' | 'boosting'>): string {
+	if (item.exactAccount) return `exact:${item.exactAccount.accountId}`;
+	if (item.boosting) return `boosting:${item.tierId}:${Math.random().toString(36).slice(2)}`;
+	return `tier:${item.tierId}`;
 }
 
 class CartStore {
@@ -114,12 +116,17 @@ class CartStore {
 								typeof item.exactAccount.profileUrl === 'string' &&
 								typeof item.exactAccount.reservedUntil === 'string' &&
 								(item.exactAccount.screenshotUrl == null ||
-									typeof item.exactAccount.screenshotUrl === 'string')))
+									typeof item.exactAccount.screenshotUrl === 'string'))) &&
+						(!item.boosting ||
+							(typeof item.boosting.targetUrl === 'string' &&
+								item.boosting.targetUrl.trim().length > 0 &&
+								typeof item.boosting.boostQuantity === 'number' &&
+								item.boosting.boostQuantity > 0))
 				)
 				.map((item) => ({
 					...item,
 					cartItemId: item.cartItemId || getCartItemId(item),
-					quantity: item.exactAccount ? 1 : item.quantity
+					quantity: item.exactAccount || item.boosting ? 1 : item.quantity
 				}));
 
 			this.state.items = validItems;
@@ -206,6 +213,21 @@ class CartStore {
 		this.saveToStorage();
 	}
 
+	addBoostingService(serviceId: string, targetUrl: string, boostQuantity: number): void {
+		if (!serviceId || !targetUrl.trim() || boostQuantity <= 0) return;
+
+		this.state.items.push({
+			cartItemId: getCartItemId({ tierId: serviceId, boosting: { targetUrl, boostQuantity } }),
+			tierId: serviceId,
+			quantity: 1,
+			addedAt: Date.now(),
+			boosting: { targetUrl: targetUrl.trim(), boostQuantity }
+		});
+
+		this.markCartChanged();
+		this.saveToStorage();
+	}
+
 	removeTier(tierId: string): void {
 		this.state.items = this.state.items.filter((item) => item.tierId !== tierId);
 		this.markCartChanged();
@@ -273,7 +295,7 @@ class CartStore {
 				{
 					...cached,
 					...item,
-					quantity: item.exactAccount ? 1 : item.quantity
+					quantity: item.exactAccount || item.boosting ? 1 : item.quantity
 				}
 			];
 		});
@@ -321,7 +343,8 @@ class CartStore {
 		const requestRevision = this.refreshRevision;
 		const requestItems = this.state.items.map((item) => ({
 			...item,
-			exactAccount: item.exactAccount ? { ...item.exactAccount } : undefined
+			exactAccount: item.exactAccount ? { ...item.exactAccount } : undefined,
+			boosting: item.boosting ? { ...item.boosting } : undefined
 		}));
 
 		this.refreshPromise = (async () => {
@@ -359,9 +382,10 @@ class CartStore {
 			this.state.items = itemsWithTiers.map((item) => ({
 				cartItemId: item.cartItemId || getCartItemId(item),
 				tierId: item.tierId,
-				quantity: item.exactAccount ? 1 : item.quantity,
+				quantity: item.exactAccount || item.boosting ? 1 : item.quantity,
 				addedAt: item.addedAt,
-				exactAccount: item.exactAccount
+				exactAccount: item.exactAccount,
+				boosting: item.boosting
 			}));
 			this.lastItemsWithTiers = itemsWithTiers;
 			this.saveToStorage();
@@ -389,9 +413,21 @@ class CartStore {
 		return items;
 	}
 
+	// Calculate the price of a single cart line
+	getItemLinePrice(item: CartItemWithTier): number {
+		if (item.boosting && item.tier.boostingConfig) {
+			const { stepQuantity, pricePerStep } = item.tier.boostingConfig;
+			if (stepQuantity > 0) {
+				return Math.round((item.boosting.boostQuantity / stepQuantity) * pricePerStep * 100) / 100;
+			}
+			return 0;
+		}
+		return item.tier.price * item.quantity;
+	}
+
 	// Calculate total
 	getTotal(items: CartItemWithTier[] = this.getCachedItemsForCurrentCart()): number {
-		return items.reduce((sum, item) => sum + item.tier.price * item.quantity, 0);
+		return items.reduce((sum, item) => sum + this.getItemLinePrice(item), 0);
 	}
 
 	private async fetchTierDeliveryModesById(ids: string[]): Promise<Map<string, TierDeliveryMode>> {
@@ -442,9 +478,10 @@ class CartStore {
 			return { compatible: true, existingMode: null };
 		}
 
-		const existingMode = existingModes.has('manual_handover') ? 'manual_handover' : 'instant_auto';
+		const existingModesList = Array.from(existingModes);
+		const existingMode = existingModesList[0] ?? null;
 		return {
-			compatible: existingMode === targetMode,
+			compatible: existingModesList.every((mode) => mode === targetMode),
 			existingMode
 		};
 	}

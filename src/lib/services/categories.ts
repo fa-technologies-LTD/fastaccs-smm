@@ -24,7 +24,7 @@ export interface Category {
 	name: string;
 	slug: string;
 	description: string | null;
-	categoryType: 'platform' | 'tier' | 'service_group';
+	categoryType: 'platform' | 'tier' | 'service_group' | 'boosting_service';
 	metadata: CategoryMetadata;
 	sortOrder: number;
 	isActive: boolean;
@@ -38,7 +38,7 @@ export interface CategoryInsert {
 	name: string;
 	slug: string;
 	description?: string | null;
-	categoryType: 'platform' | 'tier' | 'service_group';
+	categoryType: 'platform' | 'tier' | 'service_group' | 'boosting_service';
 	metadata?: CategoryMetadata;
 	sortOrder?: number;
 	isActive?: boolean;
@@ -49,7 +49,7 @@ export interface CategoryUpdate {
 	name?: string;
 	slug?: string;
 	description?: string | null;
-	categoryType?: 'platform' | 'tier' | 'service_group';
+	categoryType?: 'platform' | 'tier' | 'service_group' | 'boosting_service';
 	metadata?: CategoryMetadata;
 	sortOrder?: number;
 	isActive?: boolean;

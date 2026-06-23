@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
 	findOrder: vi.fn(),
 	findCategories: vi.fn(),
-	countAccounts: vi.fn(),
+	groupAccounts: vi.fn(),
 	createTransaction: vi.fn(),
 	initializeTransaction: vi.fn(),
 	releaseOrderReservations: vi.fn(),
@@ -22,7 +22,7 @@ vi.mock('$lib/prisma', () => ({
 			findMany: mocks.findCategories
 		},
 		account: {
-			count: mocks.countAccounts
+			groupBy: mocks.groupAccounts
 		},
 		$transaction: mocks.createTransaction
 	}
@@ -192,7 +192,7 @@ describe('approved invariant: emergency checkout order control', () => {
 				metadata: { pricing: { base_price: 2500 }, delivery_mode: 'instant_auto' }
 			}
 		]);
-		mocks.countAccounts.mockResolvedValue(1);
+		mocks.groupAccounts.mockResolvedValue([{ categoryId: 'tier-123', _count: { _all: 1 } }]);
 		mocks.validateAffiliateCode.mockResolvedValue({ valid: false });
 		mocks.resolveOrderAffiliateAttribution.mockResolvedValue({
 			affiliateCode: null,

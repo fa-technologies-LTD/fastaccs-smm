@@ -12,6 +12,7 @@
 		"prisma:deploy": "prisma migrate deploy",
 		"credentials:normalize": "node ./scripts/normalize-credential-links.mjs",
 		"credentials:normalize:dry": "node ./scripts/normalize-credential-links.mjs --dry-run",
+		"seed:boosting-services": "node ./scripts/seed-boosting-services.mjs",
 		"dev": "npm run verify:runtime && npm run prisma:generate && vite dev",
 		"build": "npm run verify:runtime && npm run prisma:generate && vite build",
 		"preview": "vite preview",
@@ -64,7 +65,6 @@
 		"d3-array": "^3.2.4",
 		"d3-scale": "^4.0.2",
 		"d3-shape": "^3.2.0",
-		"gsap": "^3.14.2",
 		"nodemailer": "^7.0.7",
 		"prisma": "^6.16.3"
 	}

@@ -1,3 +1,5 @@
+import type { TierDeliveryMode } from '$lib/helpers/tier-delivery-config';
+
 export interface CartItem {
 	cartItemId?: string;
 	tierId: string;
@@ -9,6 +11,10 @@ export interface CartItem {
 		profileUrl: string;
 		screenshotUrl?: string | null;
 		reservedUntil: string;
+	};
+	boosting?: {
+		targetUrl: string;
+		boostQuantity: number;
 	};
 }
 
@@ -22,7 +28,12 @@ export interface CartItemWithTier extends CartItem {
 		platformSlug: string;
 		platformIcon?: string | null;
 		isActive: boolean;
-		deliveryMode?: 'instant_auto' | 'manual_handover';
+		deliveryMode?: TierDeliveryMode;
+		boostingConfig?: {
+			minQuantity: number;
+			stepQuantity: number;
+			pricePerStep: number;
+		};
 	};
 }
 

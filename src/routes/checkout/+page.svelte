@@ -63,6 +63,7 @@
 	const hasManualHandover = $derived(
 		cartItems.some((item) => item.tier.deliveryMode === 'manual_handover')
 	);
+	const hasBoostingOrder = $derived(cartItems.some((item) => Boolean(item.boosting)));
 
 	onMount(() => {
 		loading = false;
@@ -169,8 +170,8 @@
 					items: cartItems.map((item) => ({
 						categoryId: item.tierId,
 						quantity: item.quantity,
-						unitPrice: item.tier.price,
-						totalPrice: item.quantity * item.tier.price,
+						unitPrice: cart.getItemLinePrice(item),
+						totalPrice: cart.getItemLinePrice(item),
 						productName: item.tier.name
 					}))
 				})
@@ -255,10 +256,10 @@
 			item_id: item.tierId,
 			item_name: item.tier.name,
 			item_brand: 'FastAccs',
-			item_category: 'SMM accounts',
+			item_category: item.boosting ? 'Boosting Services' : 'SMM accounts',
 			item_category2: item.tier.platformName,
-			item_variant: item.exactAccount ? 'exact_profile' : 'standard_pool',
-			price: Number(item.tier.price || 0),
+			item_variant: item.boosting ? 'boosting_service' : item.exactAccount ? 'exact_profile' : 'standard_pool',
+			price: cart.getItemLinePrice(item),
 			quantity: item.quantity,
 			index
 		}));
@@ -381,9 +382,11 @@
 					items: cartItems.map((item) => ({
 						categoryId: item.tierId,
 						quantity: item.quantity,
-						price: item.tier.price,
+						price: cart.getItemLinePrice(item),
 						exactAccountId: item.exactAccount?.accountId,
-						exactAccountLabel: item.exactAccount?.displayLabel
+						exactAccountLabel: item.exactAccount?.displayLabel,
+						boostTargetUrl: item.boosting?.targetUrl,
+						boostQuantity: item.boosting?.boostQuantity
 					})),
 					totalAmount: finalTotal,
 					currency: 'NGN',
@@ -760,6 +763,18 @@
 														<ExternalLink size={12} />
 													</a>
 												{/if}
+												{#if item.boosting}
+													<a
+														href={item.boosting.targetUrl}
+														target="_blank"
+														rel="noopener noreferrer"
+														class="mt-1 inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-[11px] font-semibold"
+														style="background: rgba(5, 212, 113, 0.1); border: 1px solid rgba(5, 212, 113, 0.24); color: var(--primary);"
+													>
+														{item.boosting.targetUrl}
+														<ExternalLink size={12} />
+													</a>
+												{/if}
 											</div>
 											<button
 												onclick={async () => {
@@ -776,7 +791,14 @@
 
 										<!-- Quantity Controls -->
 										<div class="mt-2 flex items-center gap-2">
-											{#if item.exactAccount}
+											{#if item.boosting}
+												<span
+													class="rounded-md px-2 py-1 text-xs font-semibold"
+													style="border: 1px solid var(--border); color: var(--text-muted); background: var(--bg-elev-2);"
+												>
+													{item.boosting.boostQuantity.toLocaleString()} qty
+												</span>
+											{:else if item.exactAccount}
 												<span
 													class="rounded-md px-2 py-1 text-xs font-semibold"
 													style="border: 1px solid var(--border); color: var(--text-muted); background: var(--bg-elev-2);"
@@ -823,7 +845,7 @@
 												class="text-sm font-semibold"
 												style="color: var(--primary); font-family: var(--font-body);"
 											>
-												{formatPrice(item.tier.price * item.quantity)}
+												{formatPrice(cart.getItemLinePrice(item))}
 											</p>
 										</div>
 									</div>
@@ -935,7 +957,9 @@
 							</a>
 						</div>
 						<p class="mb-2 text-center text-xs leading-relaxed" style="color: var(--text-dim);">
-							{#if hasManualHandover}
+							{#if hasBoostingOrder}
+								Your boost starts after payment is confirmed. Track its status on your order page.
+							{:else if hasManualHandover}
 								Login details are delivered on WhatsApp. Your order page will show you the link.
 							{:else}
 								Account details will be available on your dashboard once payment is confirmed.

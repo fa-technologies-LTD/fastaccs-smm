@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { Plus, Trash2, Target } from '$lib/icons';
+	import type { TierDeliveryMode } from '$lib/helpers/tier-delivery-config';
 	import TierSampleScreenshotFields from '$lib/components/modals/TierSampleScreenshotFields.svelte';
 
 	interface Props {
@@ -30,7 +31,7 @@
 				pin_priority: number;
 				is_featured: boolean;
 				featured_badge: string;
-				delivery_mode: 'instant_auto' | 'manual_handover';
+				delivery_mode: TierDeliveryMode;
 				manual_handover_promise: string;
 				login_guide_url: string;
 				login_guide_label: string;
