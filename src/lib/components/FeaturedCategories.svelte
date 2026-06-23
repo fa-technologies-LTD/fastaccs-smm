@@ -178,10 +178,10 @@
 				<div class="flex flex-1 flex-col" style="padding: var(--space-lg);">
 					<div class="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 sm:gap-4">
 						<div class="growth-preview-list">
-							<a class="platform-btn growth-service-btn" href="/services">Instagram Followers</a>
-							<a class="platform-btn growth-service-btn" href="/services">TikTok Views</a>
-							<a class="platform-btn growth-service-btn" href="/services">YouTube Subscribers</a>
-							<a class="platform-btn growth-service-btn" href="/services">Facebook Likes</a>
+							<a class="platform-btn growth-service-btn" href="/services/instagram">Instagram Followers</a>
+							<a class="platform-btn growth-service-btn" href="/services/tiktok">TikTok Views</a>
+							<a class="platform-btn growth-service-btn" href="/services/youtube">YouTube Subscribers</a>
+							<a class="platform-btn growth-service-btn" href="/services/facebook">Facebook Likes</a>
 						</div>
 						<div class="growth-callout">
 							<p

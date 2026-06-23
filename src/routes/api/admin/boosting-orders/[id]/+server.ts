@@ -26,7 +26,7 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 
 	const existing = await prisma.orderItem.findUnique({
 		where: { id: orderItemId },
-		select: { id: true, boostTargetUrl: true }
+		select: { id: true, orderId: true, boostTargetUrl: true }
 	});
 	if (!existing || !existing.boostTargetUrl) {
 		return json({ success: false, data: null, error: 'Boosting order item not found' }, { status: 404 });
@@ -64,6 +64,21 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 		where: { id: orderItemId },
 		data
 	});
+
+	if (data.boostFulfillmentStatus !== undefined) {
+		const siblingItems = await prisma.orderItem.findMany({
+			where: { orderId: existing.orderId, boostTargetUrl: { not: null } },
+			select: { boostFulfillmentStatus: true }
+		});
+		const allCompleted = siblingItems.every((item) => item.boostFulfillmentStatus === 'completed');
+
+		await prisma.order.update({
+			where: { id: existing.orderId },
+			data: allCompleted
+				? { status: 'completed', deliveryStatus: 'delivered' }
+				: { status: 'paid', deliveryStatus: 'processing' }
+		});
+	}
 
 	return json({ success: true, data: updated, error: null });
 };

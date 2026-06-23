@@ -612,6 +612,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			return json({ success: false, error: 'Invalid order subtotal' }, { status: 400 });
 		}
 
+		const isBoostingCheckout = orderDeliveryMode === 'boosting_manual';
 		const requestedPromotionCode = String(orderData.promotionCode || '')
 			.trim()
 			.toUpperCase();
@@ -619,84 +620,108 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			.trim()
 			.toUpperCase();
 
-		let affiliateCodeInput = requestedAffiliateCode || null;
-		if (!affiliateCodeInput && requestedPromotionCode) {
-			const affiliateFromPromotionCode = await validateAffiliateCode(requestedPromotionCode);
-			if (affiliateFromPromotionCode.valid) {
-				affiliateCodeInput = requestedPromotionCode;
-			}
-		}
-
-		const attribution = await resolveOrderAffiliateAttribution({
-			buyerUserId: checkoutUserId,
-			explicitAffiliateCode: affiliateCodeInput
-		});
-
-		if (attribution.error && affiliateCodeInput) {
-			return json({ success: false, error: attribution.error }, { status: 400 });
-		}
-
-		const hasAffiliateAttribution = Boolean(
-			attribution.affiliateCode && attribution.affiliateUserId
-		);
-
-		let promotionCode = requestedPromotionCode;
-		if (
-			hasAffiliateAttribution &&
-			promotionCode &&
-			promotionCode === String(attribution.affiliateCode || '').toUpperCase()
-		) {
-			promotionCode = '';
-		}
-
-		if (hasAffiliateAttribution && promotionCode) {
+		if (isBoostingCheckout && (requestedPromotionCode || requestedAffiliateCode)) {
 			return json(
 				{
 					success: false,
-					error: 'Promo codes cannot be combined with affiliate referral pricing on the same order.'
+					error: 'Promo codes and affiliate pricing do not apply to boosting services.'
 				},
 				{ status: 400 }
 			);
 		}
 
+		let attribution: {
+			affiliateCode: string | null;
+			affiliateUserId: string | null;
+			affiliateProgramId: string | null;
+			source: 'locked' | 'manual' | 'none';
+			error?: string;
+		} = {
+			affiliateCode: null,
+			affiliateUserId: null,
+			affiliateProgramId: null,
+			source: 'none'
+		};
 		let promotionId: string | null = null;
 		let appliedPromotionCode: string | null = null;
 		let discountAmount = 0;
 		let finalOrderTotal = Math.round(subtotalAmount * 100) / 100;
 
-		if (promotionCode) {
-			const promotionResult = await validatePromotionCode({
-				code: promotionCode,
-				userId: checkoutUserId,
-				subtotal: subtotalAmount,
-				categoryIds: itemsWithNames.map((item) => item.categoryId)
+		if (!isBoostingCheckout) {
+			let affiliateCodeInput = requestedAffiliateCode || null;
+			if (!affiliateCodeInput && requestedPromotionCode) {
+				const affiliateFromPromotionCode = await validateAffiliateCode(requestedPromotionCode);
+				if (affiliateFromPromotionCode.valid) {
+					affiliateCodeInput = requestedPromotionCode;
+				}
+			}
+
+			attribution = await resolveOrderAffiliateAttribution({
+				buyerUserId: checkoutUserId,
+				explicitAffiliateCode: affiliateCodeInput
 			});
 
-			if (!promotionResult.valid || !promotionResult.promotion) {
+			if (attribution.error && affiliateCodeInput) {
+				return json({ success: false, error: attribution.error }, { status: 400 });
+			}
+
+			const hasAffiliateAttribution = Boolean(
+				attribution.affiliateCode && attribution.affiliateUserId
+			);
+
+			let promotionCode = requestedPromotionCode;
+			if (
+				hasAffiliateAttribution &&
+				promotionCode &&
+				promotionCode === String(attribution.affiliateCode || '').toUpperCase()
+			) {
+				promotionCode = '';
+			}
+
+			if (hasAffiliateAttribution && promotionCode) {
 				return json(
-					{ success: false, error: promotionResult.error || 'Promo code is invalid.' },
+					{
+						success: false,
+						error: 'Promo codes cannot be combined with affiliate referral pricing on the same order.'
+					},
 					{ status: 400 }
 				);
 			}
 
-			promotionId = promotionResult.promotion.id;
-			appliedPromotionCode = promotionResult.promotion.code;
-			discountAmount = promotionResult.discountAmount;
-			finalOrderTotal = promotionResult.finalTotal;
-		} else if (hasAffiliateAttribution && attribution.affiliateUserId) {
-			const affiliateDiscount = await getAffiliateDiscountForOrder({
-				buyerUserId: checkoutUserId,
-				affiliateUserId: attribution.affiliateUserId,
-				subtotalAmount,
-				orderItems: itemsWithNames.map((item) => ({
-					quantity: item.quantity,
-					totalPrice: item.unitPrice * item.quantity,
-					productName: item.categoryName,
-					categoryMetadata: item.categoryMetadata
-				}))
-			});
-			discountAmount = affiliateDiscount.discountAmount;
-			finalOrderTotal = Math.max(0, Math.round((subtotalAmount - discountAmount) * 100) / 100);
+			if (promotionCode) {
+				const promotionResult = await validatePromotionCode({
+					code: promotionCode,
+					userId: checkoutUserId,
+					subtotal: subtotalAmount,
+					categoryIds: itemsWithNames.map((item) => item.categoryId)
+				});
+
+				if (!promotionResult.valid || !promotionResult.promotion) {
+					return json(
+						{ success: false, error: promotionResult.error || 'Promo code is invalid.' },
+						{ status: 400 }
+					);
+				}
+
+				promotionId = promotionResult.promotion.id;
+				appliedPromotionCode = promotionResult.promotion.code;
+				discountAmount = promotionResult.discountAmount;
+				finalOrderTotal = promotionResult.finalTotal;
+			} else if (hasAffiliateAttribution && attribution.affiliateUserId) {
+				const affiliateDiscount = await getAffiliateDiscountForOrder({
+					buyerUserId: checkoutUserId,
+					affiliateUserId: attribution.affiliateUserId,
+					subtotalAmount,
+					orderItems: itemsWithNames.map((item) => ({
+						quantity: item.quantity,
+						totalPrice: item.unitPrice * item.quantity,
+						productName: item.categoryName,
+						categoryMetadata: item.categoryMetadata
+					}))
+				});
+				discountAmount = affiliateDiscount.discountAmount;
+				finalOrderTotal = Math.max(0, Math.round((subtotalAmount - discountAmount) * 100) / 100);
+			}
 		}
 
 		const initializationIssue = getMonnifyInitializationIssue({

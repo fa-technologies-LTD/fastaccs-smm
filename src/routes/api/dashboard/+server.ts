@@ -56,7 +56,10 @@ export const GET: RequestHandler = async ({ locals }) => {
 							quantity: true,
 							unitPrice: true,
 							totalPrice: true,
-							allocationStatus: true
+							allocationStatus: true,
+							boostTargetUrl: true,
+							boostQuantity: true,
+							boostFulfillmentStatus: true
 						}
 					}
 				},
@@ -144,24 +147,27 @@ export const GET: RequestHandler = async ({ locals }) => {
 			getAdminSettingsSnapshot().catch(() => null)
 		]);
 
-		// Transform purchases data
+		// Transform purchases data — boosting orders never have allocated accounts; they
+		// surface in the Orders tab instead, so exclude them here.
 		const purchasesFormatted = purchases.flatMap((order) =>
-			order.orderItems.map((item) => {
-				const deliveryConfig = getTierDeliveryConfig(item.category.metadata);
-				return {
-					orderId: order.id,
-					orderNumber: order.orderNumber,
-					orderDate: order.createdAt,
-					deliveredAt: order.deliveredAt,
-					categoryName: item.category.name,
-					platform: item.productCategory || item.category.name,
-					quantity: item.quantity,
-					accounts: getBuyerVisibleAccounts(order, item),
-					deliveryMode: deliveryConfig.mode,
-					loginGuideUrl: deliveryConfig.loginGuideUrl || DEFAULT_LOGIN_GUIDE_URL,
-					loginGuideLabel: deliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL
-				};
-			})
+			order.orderItems
+				.filter((item) => item.productCategory !== 'boosting_service')
+				.map((item) => {
+					const deliveryConfig = getTierDeliveryConfig(item.category.metadata);
+					return {
+						orderId: order.id,
+						orderNumber: order.orderNumber,
+						orderDate: order.createdAt,
+						deliveredAt: order.deliveredAt,
+						categoryName: item.category.name,
+						platform: item.productCategory || item.category.name,
+						quantity: item.quantity,
+						accounts: getBuyerVisibleAccounts(order, item),
+						deliveryMode: deliveryConfig.mode,
+						loginGuideUrl: deliveryConfig.loginGuideUrl || DEFAULT_LOGIN_GUIDE_URL,
+						loginGuideLabel: deliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL
+					};
+				})
 		);
 
 		const sitePopup = await getPendingSitePopup({

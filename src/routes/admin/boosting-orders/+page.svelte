@@ -30,12 +30,21 @@
 
 	let items = $state<BoostingOrderItem[]>(data.items);
 	let statusFilter = $state<'pending' | 'in_progress' | 'completed' | 'all'>('pending');
-	let providerRefDrafts = $state<Record<string, string>>({});
 	let busyItemId = $state<string | null>(null);
 
 	const visibleItems = $derived.by(() => {
 		if (statusFilter === 'all') return items;
 		return items.filter((item) => (item.boostFulfillmentStatus || 'pending') === statusFilter);
+	});
+
+	const groupedByService = $derived.by(() => {
+		const groups = new Map<string, BoostingOrderItem[]>();
+		for (const item of visibleItems) {
+			const existing = groups.get(item.productName) || [];
+			existing.push(item);
+			groups.set(item.productName, existing);
+		}
+		return Array.from(groups.entries());
 	});
 
 	const pendingCount = $derived(
@@ -52,27 +61,25 @@
 		return item.order.user?.fullName || item.order.user?.email || item.order.guestEmail || 'Unknown';
 	}
 
-	function getProviderRefDraft(item: BoostingOrderItem): string {
-		return providerRefDrafts[item.id] ?? item.boostProviderReference ?? '';
-	}
-
-	function copyToClipboard(text: string) {
+	function copyToClipboard(text: string, message = 'Copied to clipboard!') {
 		navigator.clipboard
 			.writeText(text)
-			.then(() => showSuccess('Copied to clipboard!', ''))
+			.then(() => showSuccess(message, ''))
 			.catch(() => showError('Copy failed', 'Could not copy to clipboard'));
 	}
 
-	async function updateItem(
-		itemId: string,
-		payload: { status?: string; providerReference?: string }
-	) {
+	function copyAllLinks(serviceItems: BoostingOrderItem[]) {
+		const links = serviceItems.map((item) => item.boostTargetUrl).join('\n');
+		copyToClipboard(links, `${serviceItems.length} link${serviceItems.length === 1 ? '' : 's'} copied!`);
+	}
+
+	async function updateItem(itemId: string, status: string) {
 		busyItemId = itemId;
 		try {
 			const response = await fetch(`/api/admin/boosting-orders/${encodeURIComponent(itemId)}`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(payload)
+				body: JSON.stringify({ status })
 			});
 			const result = await response.json();
 			if (!response.ok || result.error) {
@@ -83,7 +90,6 @@
 					? {
 							...item,
 							boostFulfillmentStatus: result.data.boostFulfillmentStatus,
-							boostProviderReference: result.data.boostProviderReference,
 							boostCompletedAt: result.data.boostCompletedAt
 						}
 					: item
@@ -95,11 +101,6 @@
 		} finally {
 			busyItemId = null;
 		}
-	}
-
-	function saveProviderReference(item: BoostingOrderItem) {
-		const value = getProviderRefDraft(item);
-		void updateItem(item.id, { providerReference: value });
 	}
 </script>
 
@@ -114,7 +115,8 @@
 			Boosting Orders
 		</h1>
 		<p class="mt-1 text-sm" style="color: var(--text-muted);">
-			Copy the link, place it with your supplier, then mark the order in progress and completed.
+			Copy all links for a service at once, place them with your supplier, then mark each order
+			in progress and completed.
 		</p>
 	</div>
 
@@ -132,122 +134,122 @@
 		{/each}
 	</div>
 
-	<div class="space-y-3">
-		{#each visibleItems as item (item.id)}
-			{@const config = getBoostingServiceConfig(item.category?.metadata)}
-			{@const status = item.boostFulfillmentStatus || 'pending'}
-			<div
-				class="rounded-[var(--r-md)] border p-4"
-				style="border-color: var(--border); background: var(--bg-elev-1);"
-			>
-				<div class="flex flex-wrap items-start justify-between gap-3">
-					<div class="min-w-0 flex-1">
-						<div class="flex items-center gap-2">
-							<span class="font-semibold" style="color: var(--text);">{item.productName}</span>
-							<span
-								class="rounded-full px-2 py-0.5 text-xs font-medium"
-								style={status === 'completed'
-									? 'background: rgba(5,212,113,0.15); color: var(--primary);'
-									: status === 'in_progress'
-										? 'background: rgba(234,179,8,0.15); color: #eab308;'
-										: 'background: var(--surface); color: var(--text-muted);'}
-							>
-								{status === 'in_progress' ? 'In Progress' : status === 'completed' ? 'Completed' : 'Pending'}
-							</span>
-							{#if config.refillAvailable}
-								<span class="text-xs" style="color: var(--text-dim);">{config.refillDays}-day refill</span>
-							{/if}
-						</div>
-						<p class="mt-1 text-xs" style="color: var(--text-muted);">
-							{item.boostQuantity?.toLocaleString() ?? '?'} qty · Order {item.order.orderNumber} ·
-							{getCustomerLabel(item)}
-						</p>
-						<div class="mt-2 flex items-center gap-2">
-							<a
-								href={item.boostTargetUrl}
-								target="_blank"
-								rel="noopener noreferrer"
-								class="truncate text-sm underline"
-								style="color: var(--link); max-width: 28rem;"
-							>
-								{item.boostTargetUrl}
-							</a>
-							<button
-								onclick={() => copyToClipboard(item.boostTargetUrl)}
-								class="flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium"
-								style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
-								title="Copy link"
-							>
-								<Copy size={12} />
-								Copy
-							</button>
-							<a
-								href={item.boostTargetUrl}
-								target="_blank"
-								rel="noopener noreferrer"
-								style="color: var(--text-dim);"
-								title="Open link"
-							>
-								<ExternalLink size={14} />
-							</a>
-						</div>
+	<div class="space-y-6">
+		{#each groupedByService as [serviceName, serviceItems] (serviceName)}
+			<div class="rounded-[var(--r-md)] border" style="border-color: var(--border); background: var(--bg-elev-1);">
+				<div
+					class="flex flex-wrap items-center justify-between gap-3 border-b p-4"
+					style="border-color: var(--border);"
+				>
+					<div>
+						<span class="font-semibold" style="color: var(--text);">{serviceName}</span>
+						<span class="ml-2 text-xs" style="color: var(--text-muted);"
+							>{serviceItems.length} order{serviceItems.length === 1 ? '' : 's'}</span
+						>
 					</div>
+					<button
+						onclick={() => copyAllLinks(serviceItems)}
+						class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
+						style="background: var(--primary); color: #000;"
+					>
+						<Copy size={14} />
+						Copy All Links
+					</button>
+				</div>
 
-					<div class="flex flex-col items-end gap-2">
-						<div class="flex gap-2">
-							{#if status === 'pending'}
-								<button
-									onclick={() => updateItem(item.id, { status: 'in_progress' })}
-									disabled={busyItemId === item.id}
-									class="rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-									style="background: var(--primary); color: #000;"
-								>
-									Start
-								</button>
-							{:else if status === 'in_progress'}
-								<button
-									onclick={() => updateItem(item.id, { status: 'completed' })}
-									disabled={busyItemId === item.id}
-									class="rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-									style="background: var(--primary); color: #000;"
-								>
-									Mark Complete
-								</button>
-							{:else}
-								<button
-									onclick={() => updateItem(item.id, { status: 'in_progress' })}
-									disabled={busyItemId === item.id}
-									class="rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-									style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
-								>
-									Reopen
-								</button>
-							{/if}
+				<div class="divide-y" style="border-color: var(--border);">
+					{#each serviceItems as item (item.id)}
+						{@const config = getBoostingServiceConfig(item.category?.metadata)}
+						{@const status = item.boostFulfillmentStatus || 'pending'}
+						<div class="flex flex-wrap items-start justify-between gap-3 p-4">
+							<div class="min-w-0 flex-1">
+								<div class="flex items-center gap-2">
+									<span
+										class="rounded-full px-2 py-0.5 text-xs font-medium"
+										style={status === 'completed'
+											? 'background: rgba(5,212,113,0.15); color: var(--primary);'
+											: status === 'in_progress'
+												? 'background: rgba(234,179,8,0.15); color: #eab308;'
+												: 'background: var(--surface); color: var(--text-muted);'}
+									>
+										{status === 'in_progress' ? 'In Progress' : status === 'completed' ? 'Completed' : 'Pending'}
+									</span>
+									{#if config.refillAvailable}
+										<span class="text-xs" style="color: var(--text-dim);">{config.refillDays}-day refill</span>
+									{/if}
+								</div>
+								<p class="mt-1 text-xs" style="color: var(--text-muted);">
+									{item.boostQuantity?.toLocaleString() ?? '?'} qty · Order {item.order.orderNumber} ·
+									{getCustomerLabel(item)}
+								</p>
+								<div class="mt-2 flex items-center gap-2">
+									<a
+										href={item.boostTargetUrl}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="truncate text-sm underline"
+										style="color: var(--link); max-width: 28rem;"
+									>
+										{item.boostTargetUrl}
+									</a>
+									<button
+										onclick={() => copyToClipboard(item.boostTargetUrl)}
+										class="flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium"
+										style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
+										title="Copy link"
+									>
+										<Copy size={12} />
+										Copy
+									</button>
+									<a
+										href={item.boostTargetUrl}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="color: var(--text-dim);"
+										title="Open link"
+									>
+										<ExternalLink size={14} />
+									</a>
+								</div>
+							</div>
+
+							<div class="flex gap-2">
+								{#if status === 'pending'}
+									<button
+										onclick={() => updateItem(item.id, 'in_progress')}
+										disabled={busyItemId === item.id}
+										class="rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+										style="background: var(--primary); color: #000;"
+									>
+										Start
+									</button>
+								{:else if status === 'in_progress'}
+									<button
+										onclick={() => updateItem(item.id, 'completed')}
+										disabled={busyItemId === item.id}
+										class="rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+										style="background: var(--primary); color: #000;"
+									>
+										Mark Complete
+									</button>
+								{:else}
+									<button
+										onclick={() => updateItem(item.id, 'in_progress')}
+										disabled={busyItemId === item.id}
+										class="rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+										style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
+									>
+										Reopen
+									</button>
+								{/if}
+							</div>
 						</div>
-						<div class="flex items-center gap-1">
-							<input
-								type="text"
-								value={getProviderRefDraft(item)}
-								oninput={(e) => (providerRefDrafts[item.id] = (e.target as HTMLInputElement).value)}
-								placeholder="Supplier order ref"
-								class="w-36 rounded-md px-2 py-1 text-xs"
-								style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
-							/>
-							<button
-								onclick={() => saveProviderReference(item)}
-								disabled={busyItemId === item.id}
-								class="rounded-md px-2 py-1 text-xs font-medium disabled:opacity-50"
-								style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
-							>
-								Save
-							</button>
-						</div>
-					</div>
+					{/each}
 				</div>
 			</div>
 		{/each}
 
-		{#if visibleItems.length === 0}
+		{#if groupedByService.length === 0}
 			<div
 				class="rounded-[var(--r-md)] border p-8 text-center"
 				style="border-color: var(--border); background: var(--bg-elev-1);"

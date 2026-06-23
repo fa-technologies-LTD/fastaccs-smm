@@ -48,6 +48,12 @@
 
 	let order = $state(data.order);
 	let items = $state<OrderItemWithDetails[]>(data.items);
+	const isBoostingOrder = $derived(
+		Array.isArray((order as unknown as { orderItems?: Array<{ boostTargetUrl?: string | null }> }).orderItems) &&
+			(
+				order as unknown as { orderItems: Array<{ boostTargetUrl?: string | null }> }
+			).orderItems.some((item) => Boolean(item.boostTargetUrl))
+	);
 	let isProcessing = $state(false);
 	let showCredentials = $state(false);
 	let newNote = $state('');
@@ -422,7 +428,7 @@
 								<span class="text-sm font-medium text-gray-500">Items</span>
 							</div>
 							<p class="text-2xl font-bold text-gray-900">{order.item_count}</p>
-							<p class="text-sm text-gray-500">accounts ordered</p>
+							<p class="text-sm text-gray-500">{isBoostingOrder ? 'boost quantity' : 'accounts ordered'}</p>
 						</div>
 						<div>
 							<div class="mb-2 flex items-center">
@@ -482,7 +488,22 @@
 						</div>
 					</div>
 
-						{#if items.length === 0}
+						{#if isBoostingOrder}
+							<div class="p-12 text-center">
+								<Package class="mx-auto mb-4 h-12 w-12 text-gray-300" />
+								<h3 class="mb-2 text-lg font-medium text-gray-900">This is a boosting order</h3>
+								<p class="mb-4 text-gray-500">
+									No accounts to allocate — manage the link and fulfillment status from the
+									Boosting Orders queue.
+								</p>
+								<a
+									href="/admin/boosting-orders"
+									class="inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+								>
+									Go to Boosting Orders
+								</a>
+							</div>
+						{:else if items.length === 0}
 							<div class="p-12 text-center">
 								<Package class="mx-auto mb-4 h-12 w-12 text-gray-300" />
 								<h3 class="mb-2 text-lg font-medium text-gray-900">No accounts allocated</h3>

@@ -278,12 +278,6 @@ export async function recoverPaidOrder(
 			}
 		});
 		await notifyBoostingOrderPaid(order.id, `payments.${source}.boosting`);
-		await recordAffiliateStoreCreditForOrder(order.id).catch((error) => {
-			console.error(`[payments.${source}] failed to record affiliate store credit:`, error);
-		});
-		if (order.userId) {
-			void maybeSendAffiliateUnlockInvite(order.userId);
-		}
 		void sendServerPurchaseVerifiedEvent(order.id, 'PAID');
 		invalidateAdminStatsCache();
 		return {

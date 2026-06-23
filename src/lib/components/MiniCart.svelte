@@ -63,7 +63,7 @@
 		try {
 			const refreshedItems = await cart.getItemsWithTiers();
 			cartItems = refreshedItems;
-			total = refreshedItems.reduce((sum, item) => sum + item.tier.price * item.quantity, 0);
+			total = refreshedItems.reduce((sum, item) => sum + getItemPrice(item), 0);
 			lastLoadedCartKey = getCartSnapshotKey(cart.items);
 		} catch (error) {
 			console.error('Failed to load cart items:', error);
@@ -78,6 +78,20 @@
 
 	function getCartLineKey(item: CartItemWithTier): string {
 		return getCartItemKey(item);
+	}
+
+	function getItemPrice(item: CartItemWithTier): number {
+		if (item.boosting && item.tier.boostingConfig) {
+			const { stepQuantity, pricePerStep } = item.tier.boostingConfig;
+			if (!stepQuantity) return 0;
+			return Math.round((item.boosting.boostQuantity / stepQuantity) * pricePerStep * 100) / 100;
+		}
+		return item.tier.price * item.quantity;
+	}
+
+	function getItemQuantityLabel(item: CartItemWithTier): string {
+		if (item.boosting) return `Qty: ${item.boosting.boostQuantity.toLocaleString()}`;
+		return item.exactAccount ? 'Qty: 1 locked' : `Qty: ${item.quantity}`;
 	}
 
 	function removeItem(item: CartItemWithTier) {
@@ -301,9 +315,7 @@
 										<p
 											style="font-size: 0.875rem; color: var(--text-muted); font-family: var(--font-body);"
 										>
-											{item.exactAccount ? 'Qty: 1 locked' : `Qty: ${item.quantity}`} × {formatPrice(
-												item.tier.price
-											)}
+											{getItemQuantityLabel(item)}
 										</p>
 									</div>
 
@@ -312,7 +324,7 @@
 										<span
 											style="font-size: 0.875rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
 										>
-											{formatPrice(item.tier.price * item.quantity)}
+											{formatPrice(getItemPrice(item))}
 										</span>
 										<button
 											onclick={() => removeItem(item)}

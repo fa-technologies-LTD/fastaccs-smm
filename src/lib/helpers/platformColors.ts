@@ -1,4 +1,4 @@
-import { Instagram, Tiktok, Facebook, X as XIcon, Package } from '$lib/icons';
+import { Instagram, Tiktok, Facebook, X as XIcon, Youtube, Package } from '$lib/icons';
 
 /**
  * Platform Icon Management:
@@ -24,7 +24,9 @@ const platformAliases: Record<string, string> = {
 	x: 'x',
 	twitter: 'x',
 	twitterx: 'x',
-	formerlytwitter: 'x'
+	formerlytwitter: 'x',
+	youtube: 'youtube',
+	yt: 'youtube'
 };
 
 function normalizePlatformValue(platform: string): string {
@@ -56,7 +58,8 @@ const platformIcons: Record<string, PlatformIconComponent> = {
 	instagram: Instagram,
 	tiktok: Tiktok,
 	facebook: Facebook,
-	x: XIcon
+	x: XIcon,
+	youtube: Youtube
 };
 
 // Platform gradient colors
@@ -64,7 +67,8 @@ const platformColors: Record<string, string> = {
 	instagram: 'from-pink-500 to-purple-600',
 	tiktok: 'from-black to-gray-800',
 	facebook: 'from-blue-600 to-blue-700',
-	x: 'from-zinc-800 to-black'
+	x: 'from-zinc-800 to-black',
+	youtube: 'from-red-600 to-red-700'
 };
 
 /**

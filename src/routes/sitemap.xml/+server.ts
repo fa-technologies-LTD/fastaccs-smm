@@ -80,6 +80,29 @@ export const GET: RequestHandler = async () => {
 		console.error('Error loading platform/tier slugs for sitemap:', error);
 	}
 
+	try {
+		const boostingServices = await prisma.category.findMany({
+			where: { categoryType: 'boosting_service', isActive: true },
+			select: { metadata: true, updatedAt: true }
+		});
+
+		const latestByPlatform = new Map<string, Date>();
+		for (const service of boostingServices) {
+			const platform = (service.metadata as Record<string, unknown> | null)?.boosting_platform;
+			if (typeof platform !== 'string' || !platform) continue;
+			const existing = latestByPlatform.get(platform);
+			if (!existing || service.updatedAt > existing) {
+				latestByPlatform.set(platform, service.updatedAt);
+			}
+		}
+
+		for (const [platform, updatedAt] of latestByPlatform) {
+			urls.push({ path: `/services/${platform}`, lastmod: updatedAt.toISOString() });
+		}
+	} catch (error) {
+		console.error('Error loading boosting service platforms for sitemap:', error);
+	}
+
 	const body = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls

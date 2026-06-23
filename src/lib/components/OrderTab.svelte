@@ -9,6 +9,9 @@
 		normalizeTierDeliveryMode,
 		type TierDeliveryMode
 	} from '$lib/helpers/tier-delivery-config';
+	import BoostingReorderModal, {
+		type ReorderBoostingItem
+	} from '$lib/components/modals/BoostingReorderModal.svelte';
 
 	interface OrderItem {
 		id?: string;
@@ -18,6 +21,9 @@
 		quantity?: number;
 		type?: string;
 		details?: string;
+		boostTargetUrl?: string | null;
+		boostQuantity?: number | null;
+		boostFulfillmentStatus?: string | null;
 	}
 
 	interface OrderRecord {
@@ -44,6 +50,8 @@
 	let orders = $state<OrderRecord[]>(initialOrders);
 	let checkingPaymentByOrderId = $state<Record<string, boolean>>({});
 	let resumingPaymentByOrderId = $state<Record<string, boolean>>({});
+	let showReorderModal = $state(false);
+	let reorderModalItems = $state<ReorderBoostingItem[]>([]);
 
 	$effect(() => {
 		if (!focusOrderId) return;
@@ -119,10 +127,29 @@
 		return { label: 'Awaiting Payment', tone: 'pending' };
 	}
 
+	function getBoostingItems(order: OrderRecord): OrderItem[] {
+		return getOrderItems(order).filter((item) => Boolean(item.boostTargetUrl));
+	}
+
+	function isBoostingOrder(order: OrderRecord): boolean {
+		return getBoostingItems(order).length > 0;
+	}
+
 	function getFulfillmentState(order: OrderRecord): string {
 		const payment = getPaymentState(order);
 		if (payment.tone !== 'success') {
 			return 'Not Started';
+		}
+
+		if (isBoostingOrder(order)) {
+			const boostingItems = getBoostingItems(order);
+			if (boostingItems.every((item) => item.boostFulfillmentStatus === 'completed')) {
+				return 'Boost Completed';
+			}
+			if (boostingItems.some((item) => item.boostFulfillmentStatus === 'in_progress')) {
+				return 'Boost In Progress';
+			}
+			return 'Boost Pending';
 		}
 
 		const orderStatus = normalizeLower(order.status);
@@ -311,6 +338,30 @@
 		return firstMode === 'manual_handover' ? 'manual_handover' : 'instant_auto';
 	}
 
+	function reorderBoostingOrder(order: OrderRecord) {
+		const boostingItems = getBoostingItems(order);
+		if (boostingItems.length === 0) {
+			showError('No boosting items found in this order');
+			return;
+		}
+
+		reorderModalItems = boostingItems
+			.filter((item) => typeof item.categoryId === 'string' && item.categoryId.trim().length > 0)
+			.map((item) => ({
+				categoryId: item.categoryId as string,
+				productName: item.productName || 'Boosting service',
+				boostQuantity: Number(item.boostQuantity || 0),
+				targetUrl: item.boostTargetUrl || ''
+			}));
+
+		if (reorderModalItems.length === 0) {
+			showError('This order cannot be reordered yet');
+			return;
+		}
+
+		showReorderModal = true;
+	}
+
 	async function reorderItems(order: OrderRecord) {
 		const items = getOrderItems(order);
 		if (items.length === 0) {
@@ -471,7 +522,8 @@
 								</button>
 							{/if}
 							<button
-								onclick={() => reorderItems(order)}
+								onclick={() =>
+									isBoostingOrder(order) ? reorderBoostingOrder(order) : reorderItems(order)}
 								data-sveltekit-preload-data="hover"
 								class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 sm:px-4 sm:text-sm"
 								style="background: var(--btn-primary-gradient); border: 1px solid var(--btn-primary-border); color: var(--btn-primary-text);"
@@ -493,3 +545,9 @@
 		</div>
 	{/if}
 </div>
+
+<BoostingReorderModal
+	open={showReorderModal}
+	items={reorderModalItems}
+	onClose={() => (showReorderModal = false)}
+/>

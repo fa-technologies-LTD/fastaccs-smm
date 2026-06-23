@@ -392,8 +392,8 @@
 					currency: 'NGN',
 					paymentMethod: 'monnify',
 					checkoutKey: getOrCreateCheckoutKey(),
-					affiliateCode: affiliateCode || undefined,
-					promotionCode: promoAppliedCode || undefined,
+					affiliateCode: hasBoostingOrder ? undefined : affiliateCode || undefined,
+					promotionCode: hasBoostingOrder ? undefined : promoAppliedCode || undefined,
 					analytics: {
 						ga4ClientId: getGa4ClientId()
 					}
@@ -736,9 +736,9 @@
 											{/if}
 										</div>
 									</div>
-									<div class="flex-1">
+									<div class="min-w-0 flex-1">
 										<div class="flex items-start justify-between">
-											<div class="flex-1">
+											<div class="min-w-0 flex-1">
 												<h4
 													class="line-clamp-2 text-xs font-medium sm:text-sm"
 													style="color: var(--text); font-family: var(--font-head);"
@@ -768,11 +768,11 @@
 														href={item.boosting.targetUrl}
 														target="_blank"
 														rel="noopener noreferrer"
-														class="mt-1 inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-[11px] font-semibold"
+														class="mt-1 flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
 														style="background: rgba(5, 212, 113, 0.1); border: 1px solid rgba(5, 212, 113, 0.24); color: var(--primary);"
 													>
-														{item.boosting.targetUrl}
-														<ExternalLink size={12} />
+														<span class="min-w-0 truncate">{item.boosting.targetUrl}</span>
+														<ExternalLink size={12} class="flex-shrink-0" />
 													</a>
 												{/if}
 											</div>
@@ -855,48 +855,50 @@
 
 						<hr class="my-8" style="border-color: var(--border);" />
 
-						<div
-							class="mb-4 rounded-lg p-3"
-							style="border: 1px solid var(--border); background: var(--bg);"
-						>
-							<p class="mb-2 text-xs font-semibold uppercase" style="color: var(--text-muted);">
-								Promo or affiliate code (optional)
-							</p>
-							<div class="flex items-center gap-2">
-								<input
-									type="text"
-									bind:value={promoCodeInput}
-									placeholder="Enter promo code"
-									class="w-full rounded-lg px-3 py-2 text-sm"
-									style="border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text);"
-								/>
-								<button
-									type="button"
-									onclick={applyPromoCode}
-									disabled={promoValidationLoading || !promoCodeInput.trim()}
-									class="rounded-full px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-									style="background: var(--btn-primary-gradient);"
-								>
-									{promoValidationLoading ? 'Checking...' : 'Apply'}
-								</button>
-							</div>
-							{#if promoAppliedCode}
-								<div
-									class="mt-2 flex items-center justify-between rounded-lg p-2 text-xs"
-									style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.3); color: var(--primary);"
-								>
-									<span>Applied: <strong>{promoAppliedCode}</strong></span>
+						{#if !hasBoostingOrder}
+							<div
+								class="mb-4 rounded-lg p-3"
+								style="border: 1px solid var(--border); background: var(--bg);"
+							>
+								<p class="mb-2 text-xs font-semibold uppercase" style="color: var(--text-muted);">
+									Promo or affiliate code (optional)
+								</p>
+								<div class="flex items-center gap-2">
+									<input
+										type="text"
+										bind:value={promoCodeInput}
+										placeholder="Enter promo code"
+										class="w-full rounded-lg px-3 py-2 text-sm"
+										style="border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text);"
+									/>
 									<button
 										type="button"
-										onclick={clearPromoCode}
-										class="rounded-full px-2 py-1 font-semibold"
-										style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
+										onclick={applyPromoCode}
+										disabled={promoValidationLoading || !promoCodeInput.trim()}
+										class="rounded-full px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+										style="background: var(--btn-primary-gradient);"
 									>
-										Remove
+										{promoValidationLoading ? 'Checking...' : 'Apply'}
 									</button>
 								</div>
-							{/if}
-						</div>
+								{#if promoAppliedCode}
+									<div
+										class="mt-2 flex items-center justify-between rounded-lg p-2 text-xs"
+										style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.3); color: var(--primary);"
+									>
+										<span>Applied: <strong>{promoAppliedCode}</strong></span>
+										<button
+											type="button"
+											onclick={clearPromoCode}
+											class="rounded-full px-2 py-1 font-semibold"
+											style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
+										>
+											Remove
+										</button>
+									</div>
+								{/if}
+							</div>
+						{/if}
 
 						<!-- Total -->
 						<div class="space-y-3">
