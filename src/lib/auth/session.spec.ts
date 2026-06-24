@@ -62,7 +62,8 @@ function buildUser(emailVerified: boolean): User {
 		affiliateUnlockedPopupSeenAt: null,
 		firstPurchasePopupSeenAt: null,
 		catalogUpdatesLastSeenAt: null,
-		boostingLaunchPopupSeenAt: null
+		boostingLaunchPopupSeenAt: null,
+		bankDetailsPopupSeenAt: null
 	};
 }
 

@@ -18,6 +18,8 @@
 	let copySuccess = $state('');
 	let payoutRows = $state<any[]>([...(data.payouts || [])]);
 	let payoutActionById = $state<Record<string, boolean>>({});
+	let bankDetails = $state<any>(data.bankDetails || null);
+	let bankDetailsActionLoading = $state(false);
 
 	const referralBaseUrl = 'https://smm.fastaccs.com';
 
@@ -110,6 +112,36 @@
 			const nextMap = { ...payoutActionById };
 			delete nextMap[transactionId];
 			payoutActionById = nextMap;
+		}
+	}
+
+	async function updateBankDetailsStatus(action: 'approve' | 'reject', reason?: string) {
+		if (bankDetailsActionLoading) return;
+		bankDetailsActionLoading = true;
+		try {
+			const response = await fetch(`/api/admin/affiliates/${data.affiliate.id}/bank-details`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action, ...(reason ? { reason } : {}) })
+			});
+			const result = await response.json();
+			if (!response.ok || !result.success) {
+				throw new Error(result.error || 'Failed to update bank details submission');
+			}
+			bankDetails = result.submission;
+			addToast({
+				type: 'success',
+				title: action === 'approve' ? 'Bank details approved' : 'Bank details rejected',
+				duration: 2800
+			});
+		} catch (error) {
+			addToast({
+				type: 'error',
+				title: error instanceof Error ? error.message : 'Failed to update bank details submission',
+				duration: 3600
+			});
+		} finally {
+			bankDetailsActionLoading = false;
 		}
 	}
 </script>
@@ -372,6 +404,75 @@
 					</tbody>
 				</table>
 			</div>
+		{/if}
+	</div>
+
+	<div class="mb-6 rounded-lg border border-gray-200 bg-white p-6">
+		<div class="mb-4 flex items-center justify-between">
+			<h2 class="text-lg font-semibold text-gray-900">Bank Details Review</h2>
+			{#if bankDetails}
+				<span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold" style={statusBadgeStyle(bankDetails.status)}>
+					{bankDetails.status}
+				</span>
+			{/if}
+		</div>
+
+		{#if !bankDetails}
+			<p class="text-sm text-gray-500">No bank details submitted yet.</p>
+		{:else}
+			<div class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+				<div>
+					<p class="text-gray-500">Bank name</p>
+					<p class="font-medium text-gray-900">{bankDetails.bankName}</p>
+				</div>
+				<div>
+					<p class="text-gray-500">Account number</p>
+					<p class="font-medium text-gray-900">{bankDetails.accountNumber}</p>
+				</div>
+				<div>
+					<p class="text-gray-500">Account name</p>
+					<p class="font-medium text-gray-900">{bankDetails.accountName}</p>
+				</div>
+				<div>
+					<p class="text-gray-500">Phone</p>
+					<p class="font-medium text-gray-900">{bankDetails.phone}</p>
+				</div>
+				{#if bankDetails.feedback}
+					<div class="sm:col-span-2">
+						<p class="text-gray-500">Customer feedback</p>
+						<p class="font-medium text-gray-900">{bankDetails.feedback}</p>
+					</div>
+				{/if}
+				{#if bankDetails.rejectionReason}
+					<div class="sm:col-span-2">
+						<p class="text-gray-500">Last rejection reason</p>
+						<p class="font-medium text-gray-900">{bankDetails.rejectionReason}</p>
+					</div>
+				{/if}
+			</div>
+
+			{#if bankDetails.status === 'pending'}
+				<div class="mt-4 flex gap-2">
+					<button
+						onclick={() => updateBankDetailsStatus('approve')}
+						disabled={bankDetailsActionLoading}
+						class="rounded bg-green-600 px-3 py-1.5 text-sm text-white hover:bg-green-700 disabled:opacity-60"
+					>
+						Approve
+					</button>
+					<button
+						onclick={() => {
+							const reason = window.prompt('Reason for rejecting these bank details (sent to the user):');
+							if (reason === null || !reason.trim()) return;
+							updateBankDetailsStatus('reject', reason.trim());
+						}}
+						disabled={bankDetailsActionLoading}
+						class="rounded bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-700 disabled:opacity-60"
+					>
+						Reject
+					</button>
+				</div>
+			{/if}
 		{/if}
 	</div>
 

@@ -2,7 +2,11 @@ import { prisma } from '$lib/prisma';
 import { getSitePopupsEnabledSetting } from './admin-settings';
 import { CONFIRMED_PAYMENT_STATUSES } from '$lib/helpers/buyer-order-visibility';
 
-export type SitePopupType = 'first_purchase' | 'catalog_updates' | 'boosting_launch';
+export type SitePopupType =
+	| 'first_purchase'
+	| 'catalog_updates'
+	| 'boosting_launch'
+	| 'bank_details_outcome';
 
 export interface PendingSitePopup {
 	type: SitePopupType;
@@ -31,6 +35,35 @@ const BOOSTING_LAUNCH_POPUP: PendingSitePopup = {
 	secondaryHref: '/services',
 	secondaryText: 'Browse Boosting Services'
 };
+
+function getBankDetailsOutcomePopup(submission: {
+	status: string;
+	rejectionReason: string | null;
+}): PendingSitePopup {
+	if (submission.status === 'approved') {
+		return {
+			type: 'bank_details_outcome',
+			icon: '✅',
+			title: 'Bank details approved',
+			body: 'Your bank details have been approved. You can now request payouts.',
+			ctaText: 'Got it',
+			secondaryHref: '/affiliate/bank-details',
+			secondaryText: 'View details'
+		};
+	}
+
+	return {
+		type: 'bank_details_outcome',
+		icon: '⚠️',
+		title: 'Bank details need attention',
+		body: submission.rejectionReason
+			? `Your bank details were not approved: ${submission.rejectionReason}`
+			: 'Your bank details were not approved. Please update and resubmit.',
+		ctaText: 'Got it',
+		secondaryHref: '/affiliate/bank-details',
+		secondaryText: 'Update details'
+	};
+}
 
 function joinNames(names: string[]): string {
 	if (names.length <= 1) return names[0] || '';
@@ -104,7 +137,8 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 		select: {
 			firstPurchasePopupSeenAt: true,
 			catalogUpdatesLastSeenAt: true,
-			boostingLaunchPopupSeenAt: true
+			boostingLaunchPopupSeenAt: true,
+			bankDetailsPopupSeenAt: true
 		}
 	});
 
@@ -119,6 +153,20 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 		return BOOSTING_LAUNCH_POPUP;
 	}
 
+	{
+		const submission = await prisma.affiliatePayoutDetails.findUnique({
+			where: { userId },
+			select: { status: true, rejectionReason: true, reviewedAt: true }
+		});
+		const hasUnseenOutcome =
+			submission?.reviewedAt &&
+			(submission.status === 'approved' || submission.status === 'rejected') &&
+			(!user.bankDetailsPopupSeenAt || submission.reviewedAt > user.bankDetailsPopupSeenAt);
+		if (hasUnseenOutcome) {
+			return getBankDetailsOutcomePopup(submission!);
+		}
+	}
+
 	if (!user.catalogUpdatesLastSeenAt) {
 		await prisma.user.update({
 			where: { id: userId },
@@ -131,12 +179,18 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 }
 
 export async function markSitePopupSeen(userId: string, type: SitePopupType): Promise<void> {
-	const field: 'firstPurchasePopupSeenAt' | 'catalogUpdatesLastSeenAt' | 'boostingLaunchPopupSeenAt' =
+	const field:
+		| 'firstPurchasePopupSeenAt'
+		| 'catalogUpdatesLastSeenAt'
+		| 'boostingLaunchPopupSeenAt'
+		| 'bankDetailsPopupSeenAt' =
 		type === 'first_purchase'
 			? 'firstPurchasePopupSeenAt'
 			: type === 'boosting_launch'
 				? 'boostingLaunchPopupSeenAt'
-				: 'catalogUpdatesLastSeenAt';
+				: type === 'bank_details_outcome'
+					? 'bankDetailsPopupSeenAt'
+					: 'catalogUpdatesLastSeenAt';
 
 	await prisma.user.update({
 		where: { id: userId },

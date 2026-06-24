@@ -43,6 +43,7 @@ model User {
   firstPurchasePopupSeenAt DateTime?           @map("first_purchase_popup_seen_at")
   catalogUpdatesLastSeenAt DateTime?           @map("catalog_updates_last_seen_at")
   boostingLaunchPopupSeenAt DateTime?          @map("boosting_launch_popup_seen_at")
+  bankDetailsPopupSeenAt  DateTime?           @map("bank_details_popup_seen_at")
   affiliatePrograms       AffiliateProgram[]
   cartItems               CartItem[]
   notifications           Notification[]
@@ -51,6 +52,7 @@ model User {
   reviews                 Review[]
   restockSubscriptions    RestockSubscription[]
   boostingServiceWaitlistEntries BoostingServiceWaitlist[]
+  affiliatePayoutDetails  AffiliatePayoutDetails?
   sessions                Session[]
   verificationCodes       VerificationCode[]
   walletTransactions      WalletTransaction[]
@@ -491,6 +493,26 @@ model BoostingServiceWaitlist {
   @@index([serviceId, notifiedAt])
   @@index([email])
   @@map("boosting_service_waitlist")
+}
+
+model AffiliatePayoutDetails {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String    @unique @map("user_id") @db.Uuid
+  bankName        String    @map("bank_name")
+  accountNumber   String    @map("account_number")
+  accountName     String    @map("account_name")
+  phone           String
+  feedback        String?
+  status          String    @default("pending")
+  rejectionReason String?   @map("rejection_reason")
+  reviewedAt      DateTime? @map("reviewed_at")
+  reviewedBy      String?   @map("reviewed_by") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("affiliate_payout_details")
 }
 
 model AdminRoleAssignment {

@@ -71,8 +71,6 @@
 	let isLoadingAffiliate = $state(false);
 	let isRefreshing = $state(false);
 	let isRequestingPayout = $state(false);
-	const BANK_DETAILS_FORM_URL =
-		'https://docs.google.com/forms/d/e/1FAIpQLSfCmv6ADTG51ooEjm9-UBz2GzsxFDqxxSep6Lo_Gb-OMQv8UA/viewform?usp=dialog';
 	const REFERRAL_BASE_URL = 'https://smm.fastaccs.com';
 
 	function toNumber(value: unknown): number {
@@ -621,9 +619,7 @@
 				</p>
 				<div class="mt-3 flex flex-wrap gap-2">
 					<a
-						href={BANK_DETAILS_FORM_URL}
-						target="_blank"
-						rel="noopener noreferrer"
+						href="/affiliate/bank-details"
 						class="rounded-full px-4 py-2 text-sm font-semibold transition-all hover:-translate-y-0.5"
 						style="background: rgba(105,109,250,0.18); border: 1px solid rgba(105,109,250,0.35); color: var(--text);"
 					>

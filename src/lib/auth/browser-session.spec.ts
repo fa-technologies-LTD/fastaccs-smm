@@ -40,6 +40,7 @@ function buildUser(overrides: Partial<User> = {}): User {
 		firstPurchasePopupSeenAt: null,
 		catalogUpdatesLastSeenAt: null,
 		boostingLaunchPopupSeenAt: null,
+		bankDetailsPopupSeenAt: null,
 		...overrides
 	};
 }

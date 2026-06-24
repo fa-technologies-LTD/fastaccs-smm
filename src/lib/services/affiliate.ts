@@ -429,9 +429,9 @@ function mapStoreCreditTitle(type: string, status: string): string {
 
 	if (normalizedStatus === AFFILIATE_LEDGER_STATUS.pending) return 'Referral order paid';
 	if (normalizedStatus === AFFILIATE_LEDGER_STATUS.available) return 'Referral order completed';
-	if (normalizedStatus === AFFILIATE_LEDGER_STATUS.underReview) return 'Store Credit under review';
-	if (normalizedStatus === AFFILIATE_LEDGER_STATUS.reversed) return 'Store Credit reversed';
-	return 'Store Credit update';
+	if (normalizedStatus === AFFILIATE_LEDGER_STATUS.underReview) return 'Cash under review';
+	if (normalizedStatus === AFFILIATE_LEDGER_STATUS.reversed) return 'Cash reversed';
+	return 'Cash update';
 }
 
 function isKnownAffiliateLedgerStatus(value: string): value is AffiliateLedgerStatus {
@@ -1258,7 +1258,7 @@ export async function lockReferralAttributionForUser(params: {
 				type: 'affiliate_referral_signup',
 				title: 'New referral joined',
 				message:
-					'A new user signed up through your affiliate code. Keep sharing to grow your Store Credit.'
+					'A new user signed up through your affiliate code. Keep sharing to grow your Cash.'
 			}
 		})
 		.catch((error) => {
@@ -1684,7 +1684,7 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 				data: {
 					userId: order.affiliateUserId as string,
 					type: 'affiliate_store_credit',
-					title: 'Store Credit approved',
+					title: 'Cash approved',
 					message: `₦${creditAmount.toLocaleString()} was added from referred order ${order.orderNumber}.`
 				}
 			});
@@ -1760,7 +1760,7 @@ export async function maybeSendAffiliateUnlockInvite(userId: string): Promise<vo
 					userId: user.id,
 					type: 'affiliate_unlock',
 					title: "You've unlocked Affiliate Access",
-					message: 'Share your code, bring buyers, and earn Store Credit from successful referrals.'
+					message: 'Share your code, bring buyers, and earn Cash from successful referrals.'
 				}
 			})
 		]);
@@ -2123,7 +2123,7 @@ export async function requestAffiliatePayout(userId: string): Promise<{
 
 		const amount = toRoundedNaira(dashboard.availableStoreCredit);
 		if (amount <= 0) {
-			return { success: false, error: 'No available Store Credit to request.' };
+			return { success: false, error: 'No available Cash to request.' };
 		}
 
 		const existingOpenRequest = await prisma.walletTransaction.findFirst({
