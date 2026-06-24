@@ -425,74 +425,74 @@
 				</button>
 			</div>
 		{:else}
-			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+			<div class="grid grid-cols-2 gap-2 sm:gap-3">
 				<div
-					class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
+					class="rounded-[var(--r-sm)] border border-[var(--border)] p-3 sm:p-4"
 					style="background: linear-gradient(180deg, rgba(5,212,113,0.12), rgba(13,145,82,0.08));"
 				>
 					<div
-						class="mb-1 flex items-center gap-2 text-xs font-semibold uppercase"
+						class="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase sm:text-xs"
 						style="color: var(--primary);"
 					>
-						<Wallet size={15} />
-						Available Store Credit
+						<Wallet size={14} />
+						Available Cash
 					</div>
 					<div
-						class="text-2xl font-semibold"
+						class="text-lg font-semibold sm:text-2xl"
 						style="color: var(--text); font-family: var(--font-head);"
 					>
 						₦{toNumber(affiliateData?.availableStoreCredit).toLocaleString()}
 					</div>
 				</div>
 				<div
-					class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
+					class="rounded-[var(--r-sm)] border border-[var(--border)] p-3 sm:p-4"
 					style="background: linear-gradient(180deg, rgba(105,109,250,0.12), rgba(170,173,255,0.08));"
 				>
 					<div
-						class="mb-1 flex items-center gap-2 text-xs font-semibold uppercase"
+						class="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase sm:text-xs"
 						style="color: var(--link);"
 					>
-						<Clock size={15} />
-						Pending Store Credit
+						<Clock size={14} />
+						Pending Cash
 					</div>
 					<div
-						class="text-2xl font-semibold"
+						class="text-lg font-semibold sm:text-2xl"
 						style="color: var(--text); font-family: var(--font-head);"
 					>
 						₦{toNumber(affiliateData?.pendingStoreCredit).toLocaleString()}
 					</div>
 				</div>
 				<div
-					class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
+					class="rounded-[var(--r-sm)] border border-[var(--border)] p-3 sm:p-4"
 					style="background: linear-gradient(180deg, rgba(105,109,250,0.12), rgba(170,173,255,0.08));"
 				>
 					<div
-						class="mb-1 flex items-center gap-2 text-xs font-semibold uppercase"
+						class="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase sm:text-xs"
 						style="color: var(--link);"
 					>
-						<Users size={15} />
+						<Users size={14} />
 						Referred Users
 					</div>
 					<div
-						class="text-2xl font-semibold"
+						class="text-lg font-semibold sm:text-2xl"
 						style="color: var(--text); font-family: var(--font-head);"
 					>
 						{toNumber(affiliateData?.totalReferredUsers)}
 					</div>
 				</div>
 				<div
-					class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
+					class="rounded-[var(--r-sm)] border border-[var(--border)] p-3 sm:p-4"
 					style="background: linear-gradient(180deg, rgba(5,212,113,0.12), rgba(13,145,82,0.08));"
 				>
 					<div
-						class="mb-1 flex items-center gap-2 text-xs font-semibold uppercase"
+						class="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase sm:text-xs"
 						style="color: var(--primary-strong);"
 					>
-						<CheckCircle size={15} />
+						<CheckCircle size={14} />
 						Successful Orders
 					</div>
 					<div
-						class="text-2xl font-semibold"
+						class="text-lg font-semibold sm:text-2xl"
 						style="color: var(--text); font-family: var(--font-head);"
 					>
 						{toNumber(affiliateData?.successfulReferredOrders)}
@@ -595,7 +595,7 @@
 			>
 				<p class="text-sm" style="color: var(--text-muted);">
 					<DollarSign class="mr-1 inline h-4 w-4" style="color: var(--primary);" />
-					Store Credit earned:
+					Cash earned:
 					<strong style="color: var(--text);">
 						₦{toNumber(affiliateData?.totalStoreCreditEarned).toLocaleString()}
 					</strong>
@@ -605,7 +605,7 @@
 					<strong style="color: var(--text);"
 						>₦{toNumber(affiliateData?.payoutMinimum).toLocaleString()}</strong
 					>
-					approved Store Credit and
+					approved Cash and
 					<strong style="color: var(--text);"
 						>{toNumber(affiliateData?.payoutMinAccountAgeDays)} days</strong
 					>
@@ -670,18 +670,19 @@
 			</div>
 
 			<div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
-				<div
+				<details
 					class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
 					style="background: var(--surface);"
 				>
-					<div class="mb-3 flex items-center justify-between gap-2">
+					<summary class="flex cursor-pointer items-center justify-between gap-2">
 						<h4
 							class="text-sm font-semibold"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
 							Recent Referral Activity
 						</h4>
-					</div>
+					</summary>
+					<div class="mt-3">
 					{#if recentReferralActivity.length === 0}
 						<p class="text-sm" style="color: var(--text-muted);">No referral activity yet.</p>
 					{:else}
@@ -708,22 +709,24 @@
 							{/each}
 						</div>
 					{/if}
-				</div>
+					</div>
+				</details>
 
-				<div
+				<details
 					class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
 					style="background: var(--surface);"
 				>
-					<div class="mb-3 flex items-center justify-between gap-2">
+					<summary class="flex cursor-pointer items-center justify-between gap-2">
 						<h4
 							class="text-sm font-semibold"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
-							Recent Store Credit Activity
+							Recent Cash Activity
 						</h4>
-					</div>
+					</summary>
+					<div class="mt-3">
 					{#if recentStoreCreditActivity.length === 0}
-						<p class="text-sm" style="color: var(--text-muted);">No Store Credit activity yet.</p>
+						<p class="text-sm" style="color: var(--text-muted);">No Cash activity yet.</p>
 					{:else}
 						<div class="space-y-2">
 							{#each recentStoreCreditActivity as item (item.id)}
@@ -751,53 +754,54 @@
 						</div>
 					{/if}
 				</div>
+			</details>
 			</div>
 
 			<div
 				class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
 				style="background: var(--surface);"
 			>
-				<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-					<div class="rounded-[10px] border border-[var(--border)] p-3">
+				<div class="grid grid-cols-3 gap-1.5 sm:gap-2">
+					<div class="rounded-[10px] border border-[var(--border)] p-2 sm:p-3">
 						<div
-							class="mb-1 inline-flex items-center gap-2 text-xs font-semibold uppercase"
+							class="mb-1 flex items-center gap-1 text-[9px] font-semibold uppercase sm:text-xs"
 							style="color: var(--primary);"
 						>
-							<TrendingUp size={14} />
-							Code Uses This Month
+							<TrendingUp size={12} />
+							<span class="truncate">Code Uses</span>
 						</div>
 						<p
-							class="text-2xl font-semibold"
+							class="text-base font-semibold sm:text-2xl"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
 							{toNumber(affiliateData?.codeUsesThisMonth)}
 						</p>
 					</div>
-					<div class="rounded-[10px] border border-[var(--border)] p-3">
+					<div class="rounded-[10px] border border-[var(--border)] p-2 sm:p-3">
 						<div
-							class="mb-1 inline-flex items-center gap-2 text-xs font-semibold uppercase"
+							class="mb-1 flex items-center gap-1 text-[9px] font-semibold uppercase sm:text-xs"
 							style="color: var(--link);"
 						>
-							<Users size={14} />
-							Paid Referred Users
+							<Users size={12} />
+							<span class="truncate">Paid Referrals</span>
 						</div>
 						<p
-							class="text-2xl font-semibold"
+							class="text-base font-semibold sm:text-2xl"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
 							{toNumber(affiliateData?.paidReferredUsers)}
 						</p>
 					</div>
-					<div class="rounded-[10px] border border-[var(--border)] p-3">
+					<div class="rounded-[10px] border border-[var(--border)] p-2 sm:p-3">
 						<div
-							class="mb-1 inline-flex items-center gap-2 text-xs font-semibold uppercase"
+							class="mb-1 flex items-center gap-1 text-[9px] font-semibold uppercase sm:text-xs"
 							style="color: var(--primary-strong);"
 						>
-							<Wallet size={14} />
-							Store Credit Earned
+							<Wallet size={12} />
+							<span class="truncate">Cash Earned</span>
 						</div>
 						<p
-							class="text-2xl font-semibold"
+							class="text-base font-semibold sm:text-2xl"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
 							₦{toNumber(affiliateData?.totalStoreCreditEarned).toLocaleString()}
