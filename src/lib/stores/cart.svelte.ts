@@ -228,6 +228,20 @@ class CartStore {
 		this.saveToStorage();
 	}
 
+	updateBoostingLink(cartItemId: string, targetUrl: string): void {
+		const trimmed = targetUrl.trim();
+		if (!trimmed) return;
+
+		const item = this.state.items.find(
+			(item) => (item.cartItemId || getCartItemId(item)) === cartItemId
+		);
+		if (!item || !item.boosting) return;
+
+		item.boosting = { ...item.boosting, targetUrl: trimmed };
+		this.markCartChanged();
+		this.saveToStorage();
+	}
+
 	removeTier(tierId: string): void {
 		this.state.items = this.state.items.filter((item) => item.tierId !== tierId);
 		this.markCartChanged();

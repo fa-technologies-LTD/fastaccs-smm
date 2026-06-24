@@ -12,7 +12,8 @@
 		X,
 		Minus,
 		Plus,
-		ExternalLink
+		ExternalLink,
+		Edit
 	} from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -23,6 +24,9 @@
 	import type { CartItemWithTier } from '$lib/types/cart';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
+	import { validateLinkForAction } from '$lib/helpers/social-link-validator';
+	import { BOOSTING_TURNAROUND_MESSAGE } from '$lib/helpers/boosting-service-config';
+	import type { BoostingPlatform, BoostingActionType } from '$lib/helpers/social-link-validator';
 	import { trackSnapEvent } from '$lib/services/snap-pixel';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import {
@@ -237,6 +241,48 @@
 			item.cartItemId ||
 			(item.exactAccount ? `exact:${item.exactAccount.accountId}` : `tier:${item.tierId}`)
 		);
+	}
+
+	let editingBoostingLineKey = $state<string | null>(null);
+	let editLinkDraft = $state('');
+	let editLinkError = $state<string | null>(null);
+
+	function startEditingBoostingLink(item: CartItemWithTier) {
+		editingBoostingLineKey = getCartLineKey(item);
+		editLinkDraft = item.boosting?.targetUrl || '';
+		editLinkError = null;
+	}
+
+	function cancelEditingBoostingLink() {
+		editingBoostingLineKey = null;
+		editLinkError = null;
+	}
+
+	async function saveEditedBoostingLink(item: CartItemWithTier) {
+		const value = editLinkDraft.trim();
+		if (!value) {
+			editLinkError = 'Please enter a link.';
+			return;
+		}
+
+		const config = item.tier.boostingConfig;
+		if (config) {
+			const result = validateLinkForAction(
+				config.platform as BoostingPlatform,
+				config.actionType as BoostingActionType,
+				value
+			);
+			if (!result.valid) {
+				editLinkError = result.reason || 'Invalid link';
+				return;
+			}
+		}
+
+		cart.updateBoostingLink(getCartLineKey(item), value);
+		editingBoostingLineKey = null;
+		editLinkError = null;
+		await loadCartData();
+		showSuccess('Link updated', '');
 	}
 
 	function getCheckoutSnapPayload(orderId?: string) {
@@ -764,16 +810,58 @@
 													</a>
 												{/if}
 												{#if item.boosting}
-													<a
-														href={item.boosting.targetUrl}
-														target="_blank"
-														rel="noopener noreferrer"
-														class="mt-1 flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
-														style="background: rgba(5, 212, 113, 0.1); border: 1px solid rgba(5, 212, 113, 0.24); color: var(--primary);"
-													>
-														<span class="min-w-0 truncate">{item.boosting.targetUrl}</span>
-														<ExternalLink size={12} class="flex-shrink-0" />
-													</a>
+													{#if editingBoostingLineKey === getCartLineKey(item)}
+														<div class="mt-1 flex items-center gap-1.5">
+															<input
+																type="url"
+																bind:value={editLinkDraft}
+																class="min-w-0 flex-1 rounded-md px-2 py-1 text-xs"
+																style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
+															/>
+															<button
+																type="button"
+																onclick={() => saveEditedBoostingLink(item)}
+																class="rounded-full px-2 py-1 text-xs font-semibold"
+																style="background: var(--primary); color: #000;"
+															>
+																Save
+															</button>
+															<button
+																type="button"
+																onclick={cancelEditingBoostingLink}
+																class="rounded-full px-2 py-1 text-xs font-medium"
+																style="background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);"
+															>
+																Cancel
+															</button>
+														</div>
+														{#if editLinkError}
+															<p class="mt-1 text-xs text-red-500">{editLinkError}</p>
+														{/if}
+													{:else}
+														<div class="mt-1 flex max-w-full items-center gap-1">
+															<a
+																href={item.boosting.targetUrl}
+																target="_blank"
+																rel="noopener noreferrer"
+																class="flex min-w-0 flex-1 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+																style="background: rgba(5, 212, 113, 0.1); border: 1px solid rgba(5, 212, 113, 0.24); color: var(--primary);"
+															>
+																<span class="min-w-0 truncate">{item.boosting.targetUrl}</span>
+																<ExternalLink size={12} class="flex-shrink-0" />
+															</a>
+															<button
+																type="button"
+																onclick={() => startEditingBoostingLink(item)}
+																class="flex-shrink-0 rounded-full p-1"
+																style="background: var(--surface); color: var(--text-dim); border: 1px solid var(--border);"
+																title="Edit link"
+																aria-label="Edit link"
+															>
+																<Edit size={12} />
+															</button>
+														</div>
+													{/if}
 												{/if}
 											</div>
 											<button
@@ -960,7 +1048,8 @@
 						</div>
 						<p class="mb-2 text-center text-xs leading-relaxed" style="color: var(--text-dim);">
 							{#if hasBoostingOrder}
-								Your boost starts after payment is confirmed. Track its status on your order page.
+								Your boost starts after payment is confirmed. {BOOSTING_TURNAROUND_MESSAGE} Track
+								its status on your order page.
 							{:else if hasManualHandover}
 								Login details are delivered on WhatsApp. Your order page will show you the link.
 							{:else}

@@ -10,7 +10,9 @@
 		getBoostingServiceConfig,
 		computeBoostingPrice,
 		isValidBoostingQuantity,
-		BOOSTING_ACTION_LABELS
+		getQuantityChips,
+		BOOSTING_ACTION_LABELS,
+		BOOSTING_TURNAROUND_MESSAGE
 	} from '$lib/helpers/boosting-service-config';
 	import { validateLinkForAction, getRequiredLinkType } from '$lib/helpers/social-link-validator';
 	import type { BoostingPlatform, BoostingActionType } from '$lib/helpers/social-link-validator';
@@ -206,6 +208,8 @@
 			</h1>
 		</div>
 
+		<p class="mb-6 text-xs" style="color: var(--text-dim);">{BOOSTING_TURNAROUND_MESSAGE}</p>
+
 		{#if services.length === 0}
 			<div
 				class="rounded-[var(--r-md)] border p-10 text-center"
@@ -248,7 +252,7 @@
 								<p class="text-xs" style="color: var(--text-dim);">
 									From {formatPrice(startingPrice)}
 									{#if service.config.refillAvailable}
-										· {service.config.refillDays}-day refill
+										· {service.config.refillDays}-day guarantee
 									{/if}
 								</p>
 							{/if}
@@ -290,11 +294,31 @@
 								class="mb-1 block w-full rounded-md px-3 py-2 text-sm"
 								style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 							/>
+							<p class="mb-1 text-xs" style="color: var(--text-dim);">
+								{requiredLinkType === 'profile'
+									? 'Copy this from your browser’s address bar while on your profile.'
+									: 'Copy this from your browser’s address bar or the Share button on the post.'}
+							</p>
 							{#if linkErrorByServiceId[service.id]}
 								<p class="mb-2 text-xs text-red-500">{linkErrorByServiceId[service.id]}</p>
 							{:else}
 								<div class="mb-2"></div>
 							{/if}
+
+							<div class="mb-3 flex flex-wrap gap-1.5">
+								{#each getQuantityChips(service.config) as chip}
+									<button
+										type="button"
+										onclick={() => (quantityByServiceId[service.id] = chip)}
+										class="rounded-full px-2.5 py-1 text-xs font-semibold"
+										style={quantity === chip
+											? 'background: var(--primary); color: #000;'
+											: 'background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);'}
+									>
+										{chip.toLocaleString()}
+									</button>
+								{/each}
+							</div>
 
 							<div class="mb-4 flex items-center justify-between">
 								<span class="text-xs font-medium" style="color: var(--text);">

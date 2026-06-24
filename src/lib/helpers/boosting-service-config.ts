@@ -8,6 +8,8 @@ export const BOOSTING_PRICE_PER_STEP_KEY = 'boosting_price_per_step';
 export const BOOSTING_REFILL_AVAILABLE_KEY = 'boosting_refill_available';
 export const BOOSTING_REFILL_DAYS_KEY = 'boosting_refill_days';
 
+export const BOOSTING_TURNAROUND_MESSAGE = 'Most orders start within a few hours.';
+
 export const BOOSTING_PLATFORMS: BoostingPlatform[] = [
 	'instagram',
 	'tiktok',
@@ -137,4 +139,15 @@ export function computeBoostingPrice(config: BoostingServiceConfig, quantity: nu
 	if (!isValidBoostingQuantity(config, quantity)) return NaN;
 	const steps = quantity / config.stepQuantity;
 	return Math.round(steps * config.pricePerStep * 100) / 100;
+}
+
+const QUANTITY_CHIP_MULTIPLIERS = [1, 2, 5, 10];
+
+export function getQuantityChips(config: BoostingServiceConfig): number[] {
+	const chips = QUANTITY_CHIP_MULTIPLIERS.map((multiplier) => {
+		const raw = config.minQuantity * multiplier;
+		const steps = Math.max(1, Math.round(raw / config.stepQuantity));
+		return Math.max(config.minQuantity, steps * config.stepQuantity);
+	});
+	return Array.from(new Set(chips));
 }

@@ -3,6 +3,7 @@ import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
 import { prisma } from '$lib/prisma';
 import { normalizeTierDeliveryMode } from '$lib/helpers/tier-delivery-config';
+import { BOOSTING_TURNAROUND_MESSAGE } from '$lib/helpers/boosting-service-config';
 import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
 import { getAdminSettingsSnapshot } from '$lib/services/admin-settings';
 import emailHeaderDataUrl from '$lib/assets/fa-email-header.png?inline';
@@ -1029,7 +1030,7 @@ ${itemLines.join('\n')}`;
 	const body = isBoosting
 		? `${orderSummary}
 
-Your boost is now queued and will begin processing shortly. Track its status anytime from your order page.`
+Your boost is now queued and will begin processing shortly. ${BOOSTING_TURNAROUND_MESSAGE} Track its status anytime from your order page.`
 		: isManualHandover
 			? `${orderSummary}
 

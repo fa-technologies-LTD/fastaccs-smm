@@ -8,7 +8,8 @@
 	import {
 		getBoostingServiceConfig,
 		computeBoostingPrice,
-		isValidBoostingQuantity
+		isValidBoostingQuantity,
+		getQuantityChips
 	} from '$lib/helpers/boosting-service-config';
 	import { validateLinkForAction, getRequiredLinkType } from '$lib/helpers/social-link-validator';
 	import { getTierDeliveryModeLabel, type TierDeliveryMode } from '$lib/helpers/tier-delivery-config';
@@ -212,6 +213,20 @@
 									</p>
 
 									{#if config}
+										<div class="mb-2 flex flex-wrap gap-1.5">
+											{#each getQuantityChips(config) as chip}
+												<button
+													type="button"
+													onclick={() => (quantityDrafts[item.categoryId] = chip)}
+													class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+													style={quantity === chip
+														? 'background: var(--primary); color: #000;'
+														: 'background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);'}
+												>
+													{chip.toLocaleString()}
+												</button>
+											{/each}
+										</div>
 										<div class="mb-2 flex items-center justify-between">
 											<span class="text-xs font-medium" style="color: var(--text);">Quantity</span>
 											<div class="flex items-center gap-2">
@@ -263,6 +278,13 @@
 										class="block w-full rounded-md px-3 py-2 text-sm"
 										style="border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text);"
 									/>
+									{#if config}
+										<p class="mt-1 text-xs" style="color: var(--text-dim);">
+											{getRequiredLinkType(config.actionType) === 'profile'
+												? 'Copy this from your browser’s address bar while on your profile.'
+												: 'Copy this from your browser’s address bar or the Share button on the post.'}
+										</p>
+									{/if}
 									{#if linkErrors[item.categoryId]}
 										<p class="mt-1 text-xs text-red-500">{linkErrors[item.categoryId]}</p>
 									{:else if !config}

@@ -311,7 +311,18 @@
 						<td class="px-4 py-3" style="color: var(--text);">
 							{config.minQuantity.toLocaleString()} / {config.stepQuantity.toLocaleString()}
 						</td>
-						<td class="px-4 py-3" style="color: var(--text);">₦{config.pricePerStep.toLocaleString()}</td>
+						<td class="px-4 py-3" style="color: var(--text);">
+							{#if config.pricePerStep <= 0}
+								<span
+									class="rounded-full px-2 py-0.5 text-xs font-medium"
+									style="background: rgba(234,179,8,0.15); color: #eab308;"
+								>
+									Coming soon
+								</span>
+							{:else}
+								₦{config.pricePerStep.toLocaleString()}
+							{/if}
+						</td>
 						<td class="px-4 py-3" style="color: var(--text);">
 							{config.refillAvailable ? `${config.refillDays}d` : '—'}
 						</td>

@@ -33,6 +33,8 @@ export interface CartItemWithTier extends CartItem {
 			minQuantity: number;
 			stepQuantity: number;
 			pricePerStep: number;
+			platform: string;
+			actionType: string;
 		};
 	};
 }

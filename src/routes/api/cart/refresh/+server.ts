@@ -57,6 +57,8 @@ type CartRefreshTier = {
 		minQuantity: number;
 		stepQuantity: number;
 		pricePerStep: number;
+		platform: string;
+		actionType: string;
 	};
 };
 
@@ -309,7 +311,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					boostingConfig: {
 						minQuantity: config.minQuantity,
 						stepQuantity: config.stepQuantity,
-						pricePerStep: config.pricePerStep
+						pricePerStep: config.pricePerStep,
+						platform: config.platform,
+						actionType: config.actionType
 					}
 				};
 

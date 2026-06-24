@@ -69,11 +69,20 @@
 					<button
 						type="button"
 						onclick={() => goto(`/services/${tile.platform}`)}
-						class="platform-tile flex flex-col items-center gap-3 rounded-[var(--r-md)] p-5 transition-transform active:scale-95"
+						class="platform-tile relative flex flex-col items-center gap-3 rounded-[var(--r-md)] p-5 transition-transform active:scale-95"
+						style={tile.allComingSoon ? 'opacity: 0.7;' : ''}
 					>
+						{#if tile.allComingSoon}
+							<span
+								class="absolute top-2 right-2 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+								style="background: rgba(234,179,8,0.15); color: #eab308;"
+							>
+								Coming soon
+							</span>
+						{/if}
 						<div
 							class="flex h-16 w-16 items-center justify-center rounded-full sm:h-20 sm:w-20"
-							style={`background: ${platformGradients[tile.platform]};`}
+							style={`background: ${platformGradients[tile.platform]}; ${tile.allComingSoon ? 'filter: grayscale(0.6);' : ''}`}
 						>
 							{#if tile.iconUrl && !failedIcons[tile.platform]}
 								<img

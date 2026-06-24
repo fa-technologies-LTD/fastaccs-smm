@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	computeBoostingPrice,
 	getBoostingServiceConfig,
+	getQuantityChips,
 	isValidBoostingQuantity
 } from './boosting-service-config';
 
@@ -50,5 +51,22 @@ describe('boosting service config', () => {
 		const withoutRefill = getBoostingServiceConfig({ boosting_refill_days: 14 });
 		expect(withoutRefill.refillAvailable).toBe(false);
 		expect(withoutRefill.refillDays).toBeNull();
+	});
+
+	it('builds quantity quick-select chips as valid, ascending multiples of the step', () => {
+		const chips = getQuantityChips(baseConfig);
+		expect(chips).toEqual([500, 1000, 2500, 5000]);
+		for (const chip of chips) {
+			expect(isValidBoostingQuantity(baseConfig, chip)).toBe(true);
+		}
+	});
+
+	it('dedupes quantity chips for small min/step ratios', () => {
+		const tightConfig = getBoostingServiceConfig({
+			boosting_min_quantity: 1000,
+			boosting_step_quantity: 1000
+		});
+		const chips = getQuantityChips(tightConfig);
+		expect(new Set(chips).size).toBe(chips.length);
 	});
 });

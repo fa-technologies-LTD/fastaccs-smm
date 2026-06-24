@@ -8,6 +8,7 @@ export interface ServicesPlatformTile {
 	label: string;
 	iconUrl: string | null;
 	serviceCount: number;
+	allComingSoon: boolean;
 }
 
 export const load: PageLoad = async ({ fetch }) => {
@@ -42,9 +43,13 @@ export const load: PageLoad = async ({ fetch }) => {
 		}
 
 		const countByPlatform = new Map<BoostingPlatform, number>();
+		const liveCountByPlatform = new Map<BoostingPlatform, number>();
 		for (const service of boostingServices) {
 			const config = getBoostingServiceConfig(service.metadata);
 			countByPlatform.set(config.platform, (countByPlatform.get(config.platform) || 0) + 1);
+			if (config.pricePerStep > 0) {
+				liveCountByPlatform.set(config.platform, (liveCountByPlatform.get(config.platform) || 0) + 1);
+			}
 		}
 
 		const platformTiles: ServicesPlatformTile[] = Array.from(countByPlatform.entries()).map(
@@ -52,7 +57,8 @@ export const load: PageLoad = async ({ fetch }) => {
 				platform,
 				label: BOOSTING_PLATFORM_LABELS[platform],
 				iconUrl: iconByPlatformKey.get(canonicalizePlatformKey(platform)) || null,
-				serviceCount
+				serviceCount,
+				allComingSoon: (liveCountByPlatform.get(platform) || 0) === 0
 			})
 		);
 

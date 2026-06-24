@@ -14,6 +14,7 @@
 	} from '$lib/helpers/tier-delivery-config';
 	import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
 	import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
+	import { BOOSTING_TURNAROUND_MESSAGE } from '$lib/helpers/boosting-service-config';
 
 	let { data }: { data: PageData } = $props();
 
@@ -196,7 +197,7 @@
 								{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && isBoostingOrder()}
 									{data.order.orderItems.every((item) => item.boostFulfillmentStatus === 'completed')
 										? 'Your boost has been completed.'
-										: 'Payment confirmed. Your boost is being processed.'}
+										: `Payment confirmed. Your boost is being processed. ${BOOSTING_TURNAROUND_MESSAGE}`}
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.status === 'completed'}
 									Your accounts have been successfully allocated and delivered.
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.deliveryMethod === 'whatsapp' && data.order.deliveryStatus === 'processing'}
