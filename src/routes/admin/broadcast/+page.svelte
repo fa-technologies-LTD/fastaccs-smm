@@ -20,6 +20,7 @@
 	type AudienceOption = {
 		value:
 			| 'all_verified'
+			| 'all_users'
 			| 'purchased_30'
 			| 'purchased_60'
 			| 'purchased_90'
@@ -74,6 +75,11 @@
 			value: 'all_verified',
 			label: 'All verified users',
 			description: 'Everyone with a verified email.'
+		},
+		{
+			value: 'all_users',
+			label: 'All users',
+			description: 'Every active user, including unverified emails.'
 		},
 		{
 			value: 'purchased_30',
@@ -165,6 +171,18 @@
 	let recipientCount = $state<number>(data.initialAudienceCount || 0);
 	let countLoading = $state(false);
 	let audienceCountSeq = 0;
+	let specificEmailsInput = $state('');
+
+	const specificEmailsList = $derived(
+		Array.from(
+			new Set(
+				specificEmailsInput
+					.split(/[\n,]+/)
+					.map((email) => email.trim().toLowerCase())
+					.filter(Boolean)
+			)
+		)
+	);
 
 	let previewOpen = $state(false);
 	let sending = $state(false);
@@ -420,13 +438,13 @@
 			showWarning('Select filters', 'Choose at least one platform and one tier for this audience.');
 			return;
 		}
-		if (recipientCount <= 0) {
+		if (recipientCount <= 0 && specificEmailsList.length === 0) {
 			showWarning('No recipients', 'No users currently match this audience.');
 			return;
 		}
 
 		const confirmed = window.confirm(
-			`You're about to email ${recipientCount} users. This cannot be undone. Continue?`
+			`You're about to email roughly ${recipientCount} users (plus ${specificEmailsList.length} added individually, duplicates removed automatically). This cannot be undone. Continue?`
 		);
 		if (!confirmed) return;
 
@@ -440,7 +458,8 @@
 					body: trimmedBody,
 					audience,
 					platformIds: selectedPlatformIds,
-					tierIds: selectedTierIds
+					tierIds: selectedTierIds,
+					specificEmails: specificEmailsList
 				})
 			});
 			const result = await response.json();
@@ -697,6 +716,31 @@
 						{/if}
 					</div>
 				</div>
+				{#if specificEmailsList.length > 0}
+					<p class="mt-2 text-xs" style="color: var(--text-muted);">
+						+ {specificEmailsList.length} added individually below (duplicates removed automatically)
+					</p>
+				{/if}
+			</div>
+
+			<div
+				class="rounded-lg px-4 py-3"
+				style="background: var(--bg); border: 1px solid var(--border);"
+			>
+				<label class="mb-2 block text-sm" style="color: var(--text-muted);">
+					Add specific users by email (optional)
+				</label>
+				<textarea
+					bind:value={specificEmailsInput}
+					rows="2"
+					placeholder="user1@example.com, user2@example.com"
+					class="w-full rounded-md px-3 py-2 text-sm"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
+				></textarea>
+				<p class="mt-1 text-xs" style="color: var(--text-dim);">
+					Comma or newline separated. Only matches existing registered users; added on top of
+					whichever audience is selected above.
+				</p>
 			</div>
 
 			<div class="flex flex-wrap gap-3">

@@ -5,6 +5,7 @@ import {
 	getBroadcastBatchConfig,
 	parseBroadcastAudience,
 	sanitizePlatformIds,
+	sanitizeSpecificEmails,
 	sanitizeTierIds
 } from '$lib/services/admin-broadcast';
 
@@ -14,6 +15,7 @@ interface BroadcastSendPayload {
 	audience?: unknown;
 	platformIds?: unknown;
 	tierIds?: unknown;
+	specificEmails?: unknown;
 }
 
 export const POST: RequestHandler = async ({ locals, request }) => {
@@ -27,6 +29,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	const audience = parseBroadcastAudience(payload.audience);
 	const platformIds = sanitizePlatformIds(payload.platformIds);
 	const tierIds = sanitizeTierIds(payload.tierIds);
+	const specificEmails = sanitizeSpecificEmails(payload.specificEmails);
 
 	if (!subject) {
 		return json({ success: false, error: 'Subject is required.' }, { status: 400 });
@@ -55,7 +58,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		body,
 		audience,
 		platformIds,
-		tierIds
+		tierIds,
+		specificEmails
 	});
 
 	if (total === 0) {
