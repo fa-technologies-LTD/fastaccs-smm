@@ -665,14 +665,14 @@
 				</div>
 			</div>
 
-			<div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+			<div class="grid grid-cols-2 gap-2 sm:gap-3">
 				<details
-					class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
+					class="rounded-[var(--r-sm)] border border-[var(--border)] p-3 sm:p-4"
 					style="background: var(--surface);"
 				>
 					<summary class="flex cursor-pointer items-center justify-between gap-2">
 						<h4
-							class="text-sm font-semibold"
+							class="truncate text-xs font-semibold sm:text-sm"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
 							Recent Referral Activity
@@ -709,12 +709,12 @@
 				</details>
 
 				<details
-					class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
+					class="rounded-[var(--r-sm)] border border-[var(--border)] p-3 sm:p-4"
 					style="background: var(--surface);"
 				>
 					<summary class="flex cursor-pointer items-center justify-between gap-2">
 						<h4
-							class="text-sm font-semibold"
+							class="truncate text-xs font-semibold sm:text-sm"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
 							Recent Cash Activity
