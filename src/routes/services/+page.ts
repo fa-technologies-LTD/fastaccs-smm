@@ -62,7 +62,16 @@ export const load: PageLoad = async ({ fetch }) => {
 			})
 		);
 
-		return { platformTiles, error: null };
+		return {
+			platformTiles,
+			error: null,
+			seo: {
+				title: 'Boosting Services — Followers, Likes & Views | FastAccs',
+				description:
+					'Buy followers, likes, views, and more for Instagram, TikTok, X, and Facebook. Paste your link, we deliver — no passwords needed.',
+				type: 'website'
+			}
+		};
 	} catch (error) {
 		console.error('Failed to load boosting services platforms:', error);
 		return {

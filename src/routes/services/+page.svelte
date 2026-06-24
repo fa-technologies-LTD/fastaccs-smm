@@ -44,8 +44,7 @@
 				Boosting Services
 			</p>
 			<p class="mx-auto mt-3 max-w-md text-sm" style="color: var(--text-muted);">
-				Buy followers, likes, views, and more for accounts you already own. Paste your link, we
-				deliver — no passwords needed.
+				Buy followers, likes, views, and more. Paste your link, we deliver — no passwords needed.
 			</p>
 			<h1
 				class="mx-auto mt-4 text-2xl font-bold sm:text-3xl"

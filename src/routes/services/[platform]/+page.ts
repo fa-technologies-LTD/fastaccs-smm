@@ -78,6 +78,11 @@ export const load: PageLoad = async ({ fetch, params }) => {
 		label: BOOSTING_PLATFORM_LABELS[platform],
 		iconUrl,
 		services,
-		error
+		error,
+		seo: {
+			title: `Buy ${BOOSTING_PLATFORM_LABELS[platform]} Followers, Likes & Views | FastAccs`,
+			description: `Grow your ${BOOSTING_PLATFORM_LABELS[platform]} account with real followers, likes, and views. Paste your link, pay, we deliver — no passwords needed.`,
+			type: 'website'
+		}
 	};
 };
