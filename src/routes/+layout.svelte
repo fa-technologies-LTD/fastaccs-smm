@@ -9,6 +9,7 @@
 	import PageLoadingBar from '$lib/components/PageLoadingBar.svelte';
 	import CookieConsentBar from '$lib/components/CookieConsentBar.svelte';
 	import AffiliateAccessNudge from '$lib/components/AffiliateAccessNudge.svelte';
+	import SitePopupHost from '$lib/components/SitePopupHost.svelte';
 	import { trackSnapPageView, trackSnapConfirmedVisit } from '$lib/services/snap-pixel';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { syncGa4Consent, trackGa4PageView } from '$lib/services/ga4';
@@ -295,6 +296,7 @@
 	{@render children?.()}
 
 	<AffiliateAccessNudge user={data.user} currentPath={data.currentPath} />
+	<SitePopupHost isLoggedIn={Boolean(data.user)} />
 	<CookieConsentBar />
 	<ToastContainer />
 </div>

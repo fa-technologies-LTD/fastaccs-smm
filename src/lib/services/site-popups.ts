@@ -1,5 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { getSitePopupsEnabledSetting } from './admin-settings';
+import { CONFIRMED_PAYMENT_STATUSES } from '$lib/helpers/buyer-order-visibility';
 
 export type SitePopupType = 'first_purchase' | 'catalog_updates';
 
@@ -71,15 +72,23 @@ async function getCatalogUpdatesPopup(since: Date): Promise<PendingSitePopup | n
 	};
 }
 
-export async function getPendingSitePopup(input: {
-	userId: string;
-	hasCompletedPurchase: boolean;
-}): Promise<PendingSitePopup | null> {
+async function hasUserCompletedAnyPurchase(userId: string): Promise<boolean> {
+	const count = await prisma.order.count({
+		where: {
+			userId,
+			status: { in: ['paid', 'processing', 'completed'] },
+			paymentStatus: { in: [...CONFIRMED_PAYMENT_STATUSES] }
+		}
+	});
+	return count > 0;
+}
+
+export async function getPendingSitePopup(userId: string): Promise<PendingSitePopup | null> {
 	const popupsEnabled = await getSitePopupsEnabledSetting();
 	if (!popupsEnabled) return null;
 
 	const user = await prisma.user.findUnique({
-		where: { id: input.userId },
+		where: { id: userId },
 		select: {
 			firstPurchasePopupSeenAt: true,
 			catalogUpdatesLastSeenAt: true
@@ -88,13 +97,14 @@ export async function getPendingSitePopup(input: {
 
 	if (!user) return null;
 
-	if (input.hasCompletedPurchase && !user.firstPurchasePopupSeenAt) {
-		return FIRST_PURCHASE_POPUP;
+	if (!user.firstPurchasePopupSeenAt) {
+		const hasCompletedPurchase = await hasUserCompletedAnyPurchase(userId);
+		if (hasCompletedPurchase) return FIRST_PURCHASE_POPUP;
 	}
 
 	if (!user.catalogUpdatesLastSeenAt) {
 		await prisma.user.update({
-			where: { id: input.userId },
+			where: { id: userId },
 			data: { catalogUpdatesLastSeenAt: new Date() }
 		});
 		return null;
