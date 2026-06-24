@@ -50,6 +50,7 @@ model User {
   orders                  Order[]
   reviews                 Review[]
   restockSubscriptions    RestockSubscription[]
+  boostingServiceWaitlistEntries BoostingServiceWaitlist[]
   sessions                Session[]
   verificationCodes       VerificationCode[]
   walletTransactions      WalletTransaction[]
@@ -475,6 +476,21 @@ model RestockSubscription {
   @@index([tierId, notifiedAt])
   @@index([email])
   @@map("restock_subscriptions")
+}
+
+model BoostingServiceWaitlist {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  email      String
+  serviceId  String    @map("service_id") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at")
+  notifiedAt DateTime? @map("notified_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, serviceId])
+  @@index([serviceId, notifiedAt])
+  @@index([email])
+  @@map("boosting_service_waitlist")
 }
 
 model AdminRoleAssignment {

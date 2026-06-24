@@ -17,6 +17,7 @@ export type EmailNotificationType =
 	| 'order_confirmation'
 	| 'order_delivery'
 	| 'restock_alert'
+	| 'boosting_service_live'
 	| 'win_back'
 	| 'affiliate_unlock'
 	| 'affiliate_introduction'

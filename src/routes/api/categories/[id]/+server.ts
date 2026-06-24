@@ -5,6 +5,8 @@ import { applyTierSampleScreenshotSanitization } from '$lib/helpers/tierSampleSc
 import { applyTierMerchandisingSanitization } from '$lib/helpers/tier-merchandising';
 import { applyTierDeliveryConfigSanitization } from '$lib/helpers/tier-delivery-config';
 import { applyTierExactPreviewSanitization } from '$lib/helpers/tier-exact-preview';
+import { getBoostingServiceConfig } from '$lib/helpers/boosting-service-config';
+import { triggerBoostingWaitlistNotifications } from '$lib/services/boosting-service-notifications';
 
 // GET /api/categories/[id] - Get single category
 export async function GET({ params }) {
@@ -44,11 +46,13 @@ export async function PUT({ params, request, locals }) {
 		const updates = await request.json();
 		const { parentId, metadata, ...rest } = updates;
 		let nextMetadata = metadata;
+		let previousPricePerStep: number | null = null;
+		let isBoostingService = false;
 
 		if (metadata !== undefined) {
 			const existingCategory = await prisma.category.findUnique({
 				where: { id },
-				select: { categoryType: true }
+				select: { categoryType: true, metadata: true }
 			});
 
 			if (!existingCategory) {
@@ -57,6 +61,11 @@ export async function PUT({ params, request, locals }) {
 
 			const targetCategoryType =
 				typeof rest.categoryType === 'string' ? rest.categoryType : existingCategory.categoryType;
+
+			if (targetCategoryType === 'boosting_service') {
+				isBoostingService = true;
+				previousPricePerStep = getBoostingServiceConfig(existingCategory.metadata).pricePerStep;
+			}
 
 			if (targetCategoryType === 'tier') {
 				const metadataObject =
@@ -91,6 +100,15 @@ export async function PUT({ params, request, locals }) {
 		});
 
 		invalidateAdminStatsCache();
+
+		if (isBoostingService && previousPricePerStep !== null && previousPricePerStep <= 0) {
+			const newPricePerStep = getBoostingServiceConfig(data.metadata).pricePerStep;
+			if (newPricePerStep > 0) {
+				void triggerBoostingWaitlistNotifications(id, data.name).catch((error) => {
+					console.error('Failed to notify boosting service waitlist:', error);
+				});
+			}
+		}
 
 		return json({ data, error: null });
 	} catch (error) {
