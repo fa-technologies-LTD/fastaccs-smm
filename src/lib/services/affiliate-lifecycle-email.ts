@@ -16,6 +16,9 @@ function getFirstName(fullName: string | null, email: string): string {
 	return fullName?.trim().split(/\s+/)[0] || email.split('@')[0] || 'there';
 }
 
+const ACTIVATION_NUDGE_MIN_PROGRAM_AGE_DAYS = 3;
+const ACTIVATION_NUDGE_COOLDOWN_DAYS = 14;
+
 export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 	processed: number;
 	sent: number;
@@ -43,7 +46,13 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 			fullName: true,
 			isAffiliateEnabled: true,
 			affiliatePrograms: {
-				select: { id: true },
+				select: {
+					id: true,
+					affiliateCode: true,
+					totalReferrals: true,
+					status: true,
+					createdAt: true
+				},
 				take: 1
 			},
 			orders: {
@@ -83,7 +92,58 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 			continue;
 		}
 		if (alreadyActive) {
-			skipped += 1;
+			const program = user.affiliatePrograms[0];
+			const isInactiveSharer =
+				program &&
+				program.status === 'active' &&
+				program.totalReferrals === 0 &&
+				program.affiliateCode &&
+				Date.now() - program.createdAt.getTime() >=
+					ACTIVATION_NUDGE_MIN_PROGRAM_AGE_DAYS * 24 * 60 * 60 * 1000;
+
+			if (!isInactiveSharer) {
+				skipped += 1;
+				continue;
+			}
+
+			const cooldownThreshold = new Date(
+				Date.now() - ACTIVATION_NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000
+			);
+			const recentlyNudged = await prisma.emailNotification.findFirst({
+				where: {
+					userId: user.id,
+					notificationType: 'affiliate_activation_nudge',
+					status: 'sent',
+					createdAt: { gte: cooldownThreshold }
+				},
+				select: { id: true }
+			});
+			if (recentlyNudged) {
+				skipped += 1;
+				continue;
+			}
+
+			const referralLink = `${baseUrl}/ref/${program!.affiliateCode}`;
+			const activation = await sendMarketingEmail({
+				to: user.email,
+				userId: user.id,
+				subject: 'Your affiliate code is ready — start earning',
+				body: `Hi ${firstName},
+
+You have an affiliate code, but you haven't shared it yet.
+
+Share code ${program!.affiliateCode} with friends and followers. They get a discount at checkout, and you earn real, withdrawable cash on their order.
+
+Your referral link: ${referralLink}`,
+				ctaText: 'Share your code',
+				ctaUrl: `${baseUrl}/dashboard?tab=affiliate`,
+				notificationType: 'affiliate_activation_nudge',
+				referenceId: `affiliate_activation_nudge:${user.id}`,
+				campaignKey: `affiliate_activation_nudge:${user.id}:${Math.floor(Date.now() / (ACTIVATION_NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000))}`
+			});
+			if (activation.success) sent += 1;
+			else if (activation.suppressed) skipped += 1;
+			else failed += 1;
 			continue;
 		}
 
@@ -92,14 +152,12 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 			const introduction = await sendMarketingEmail({
 				to: user.email,
 				userId: user.id,
-				subject: 'Earn Store Credit with Fast Accounts referrals',
+				subject: 'Earn Cash with Fast Accounts referrals',
 				body: `Hi ${firstName},
 
-You can earn Store Credit by referring buyers to Fast Accounts.
+You can earn Cash by referring buyers to Fast Accounts.
 
-Once you unlock affiliate access, you will receive a unique referral code and link. Referred buyers save at checkout, and you earn Store Credit from successful referred purchases.
-
-Store Credit is real, withdrawable cash once payout requirements are met.
+Once you unlock affiliate access, you will receive a unique referral code and link. Referred buyers save at checkout, and you earn real, withdrawable Cash from successful referred purchases.
 
 Spend ₦${remaining.toLocaleString('en-US')} more to unlock affiliate access.`,
 				ctaText: 'See how affiliate access works',
@@ -129,9 +187,7 @@ Spend ₦${remaining.toLocaleString('en-US')} more to unlock affiliate access.`,
 
 You are now ${progressPercent}% of the way to affiliate access.
 
-Spend ₦${remaining.toLocaleString('en-US')} more on successful Fast Accounts orders to unlock your referral code and start earning Store Credit.
-
-Store Credit is real, withdrawable cash once payout requirements are met.`,
+Spend ₦${remaining.toLocaleString('en-US')} more on successful Fast Accounts orders to unlock your referral code and start earning real, withdrawable Cash.`,
 			ctaText: 'View your progress',
 			ctaUrl: `${baseUrl}/dashboard?tab=affiliate`,
 			notificationType: 'affiliate_progress',

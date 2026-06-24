@@ -21,6 +21,7 @@ export type EmailNotificationType =
 	| 'win_back'
 	| 'affiliate_unlock'
 	| 'affiliate_introduction'
+	| 'affiliate_activation_nudge'
 	| 'affiliate_progress'
 	| 'affiliate_store_credit'
 	| 'affiliate_payout'
