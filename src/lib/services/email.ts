@@ -848,6 +848,7 @@ Welcome to Fast Accounts. Your account is ready.
 
 You can now:
 - See available accounts
+- Buy followers, likes, and views for accounts you already own
 - Complete secure checkout
 - View orders and purchases from your dashboard
 - Get help quickly whenever you need it

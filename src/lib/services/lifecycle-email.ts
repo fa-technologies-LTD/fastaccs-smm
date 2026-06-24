@@ -73,7 +73,7 @@ function getOnboardingStepAContent(): { subject: string; body: string } {
 		subject: 'Ready for your first Fast Accounts order?',
 		body: `Your Fast Accounts account is ready whenever you are.
 
-Browse available accounts, choose what fits your needs, and complete checkout in a few simple steps.
+Browse available accounts, or boost an account you already own with followers, likes, and views — choose what fits your needs and complete checkout in a few simple steps.
 
 Your purchases and delivery status will always be available from your dashboard.`
 	};
@@ -82,9 +82,9 @@ Your purchases and delivery status will always be available from your dashboard.
 function getOnboardingStepBContent(): { subject: string; body: string } {
 	return {
 		subject: 'Need help choosing the right account?',
-		body: `Not sure which account is right for you?
+		body: `Not sure which account is right for you — or want to boost one you already have?
 
-Our platform and account pages show what is available, how delivery works, and the important details to check before buying.
+Our platform and account pages show what is available, how delivery works, and the important details to check before buying. Our boosting services page covers followers, likes, and views if you'd rather grow an existing account.
 
 If you still need help, message us and we will point you in the right direction.`
 	};

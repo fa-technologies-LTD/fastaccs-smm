@@ -21,8 +21,12 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 
-	let selectedTab = $state<'buyer' | 'affiliate'>(
-		page.url.searchParams.get('tab') === 'affiliate' ? 'affiliate' : 'buyer'
+	let selectedTab = $state<'buyer' | 'boosting' | 'affiliate'>(
+		page.url.searchParams.get('tab') === 'affiliate'
+			? 'affiliate'
+			: page.url.searchParams.get('tab') === 'boosting'
+				? 'boosting'
+				: 'buyer'
 	);
 	let animatedSteps = $state<number[]>([]);
 
@@ -76,6 +80,18 @@
 				>
 					<ShoppingBag class="mr-2 inline h-5 w-5" />
 					Buying Accounts
+				</button>
+				<button
+					onclick={() => (selectedTab = 'boosting')}
+					class="px-4 py-4 text-sm font-semibold transition-colors md:text-base"
+					style="border-bottom: 2px solid {selectedTab === 'boosting'
+						? 'var(--brand-blue)'
+						: 'transparent'}; color: {selectedTab === 'boosting'
+						? 'var(--brand-blue)'
+						: 'var(--text-muted)'}; font-family: var(--font-head);"
+				>
+					<Zap class="mr-2 inline h-5 w-5" />
+					Boosting Services
 				</button>
 				<button
 					onclick={() => (selectedTab = 'affiliate')}
@@ -536,6 +552,146 @@
 				</div>
 			</div>
 		</section>
+	{:else if selectedTab === 'boosting'}
+		<!-- Boosting Flow Section -->
+		<section class="px-4 py-16">
+			<div class="mx-auto max-w-6xl">
+				<h2
+					class="mb-12 text-center text-3xl font-bold"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
+					Grow Existing Accounts in 4 Steps
+				</h2>
+
+				<div class="space-y-12">
+					<!-- Step 1: Pick a Platform -->
+					<div class="flex flex-col items-center gap-8 md:flex-row">
+						<div class="flex-shrink-0">
+							<div
+								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white shadow-lg"
+							>
+								<ShoppingBag class="h-12 w-12" />
+							</div>
+						</div>
+						<div class="flex-1 text-center md:text-left">
+							<div class="mb-2 flex items-center justify-center gap-2 md:justify-start">
+								<span class="text-2xl font-bold text-blue-600">Step 1</span>
+							</div>
+							<h3
+								class="mb-3 text-2xl font-bold"
+								style="color: var(--text); font-family: var(--font-head);"
+							>
+								Pick a Platform
+							</h3>
+							<p style="color: var(--text-muted); font-family: var(--font-body);">
+								Head to Boosting Services and choose Instagram, TikTok, X, or Facebook —
+								whichever platform your existing account is on.
+							</p>
+						</div>
+					</div>
+
+					<div class="flex justify-center">
+						<div class="h-12 w-0.5 bg-gradient-to-b from-blue-600 to-green-600"></div>
+					</div>
+
+					<!-- Step 2: Pick a Service -->
+					<div class="flex flex-col items-center gap-8 md:flex-row-reverse">
+						<div class="flex-shrink-0">
+							<div
+								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-teal-600 text-white shadow-lg"
+							>
+								<Zap class="h-12 w-12" />
+							</div>
+						</div>
+						<div class="flex-1 text-center md:text-right">
+							<div class="mb-2 flex items-center justify-center gap-2 md:justify-end">
+								<span class="text-2xl font-bold text-green-600">Step 2</span>
+							</div>
+							<h3
+								class="mb-3 text-2xl font-bold"
+								style="color: var(--text); font-family: var(--font-head);"
+							>
+								Pick a Service & Quantity
+							</h3>
+							<p style="color: var(--text-muted); font-family: var(--font-body);">
+								Choose followers, likes, views, comments, or reposts and select how many you
+								want. Pricing updates live as you adjust the quantity.
+							</p>
+						</div>
+					</div>
+
+					<div class="flex justify-center">
+						<div class="h-12 w-0.5 bg-gradient-to-b from-green-600 to-purple-600"></div>
+					</div>
+
+					<!-- Step 3: Paste Your Link -->
+					<div class="flex flex-col items-center gap-8 md:flex-row">
+						<div class="flex-shrink-0">
+							<div
+								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-600 text-white shadow-lg"
+							>
+								<Copy class="h-12 w-12" />
+							</div>
+						</div>
+						<div class="flex-1 text-center md:text-left">
+							<div class="mb-2 flex items-center justify-center gap-2 md:justify-start">
+								<span class="text-2xl font-bold text-purple-600">Step 3</span>
+							</div>
+							<h3
+								class="mb-3 text-2xl font-bold"
+								style="color: var(--text); font-family: var(--font-head);"
+							>
+								Paste Your Link & Pay
+							</h3>
+							<p style="color: var(--text-muted); font-family: var(--font-body);">
+								Paste the public profile or post link you want boosted, then pay securely through
+								Monnify. No password or login access is ever needed.
+							</p>
+						</div>
+					</div>
+
+					<div class="flex justify-center">
+						<div class="h-12 w-0.5 bg-gradient-to-b from-purple-600 to-orange-600"></div>
+					</div>
+
+					<!-- Step 4: Track Progress -->
+					<div class="flex flex-col items-center gap-8 md:flex-row-reverse">
+						<div class="flex-shrink-0">
+							<div
+								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-red-600 text-white shadow-lg"
+							>
+								<Eye class="h-12 w-12" />
+							</div>
+						</div>
+						<div class="flex-1 text-center md:text-right">
+							<div class="mb-2 flex items-center justify-center gap-2 md:justify-end">
+								<span class="text-2xl font-bold text-orange-600">Step 4</span>
+							</div>
+							<h3
+								class="mb-3 text-2xl font-bold"
+								style="color: var(--text); font-family: var(--font-head);"
+							>
+								Delivered & Tracked
+							</h3>
+							<p style="color: var(--text-muted); font-family: var(--font-body);">
+								Most orders start within a few hours of payment. Track status anytime from your
+								order page until it's complete.
+							</p>
+						</div>
+					</div>
+				</div>
+
+				<div class="mt-12 text-center">
+					<button
+						onclick={() => goto('/services')}
+						class="rounded-lg px-8 py-4 font-semibold text-white shadow-lg transition-transform hover:scale-105"
+						style="background: var(--btn-primary-gradient);"
+					>
+						Browse Boosting Services
+					</button>
+				</div>
+			</div>
+		</section>
 	{:else}
 		<!-- Affiliate Flow Section -->
 		<section class="px-4 py-16">
@@ -604,7 +760,7 @@
 							<div class="space-y-2 text-sm" style="color: var(--text-muted);">
 								<div class="flex items-center justify-between">
 									<span>Earnings Model:</span>
-									<span class="font-bold" style="color: var(--status-success);">Store Credit</span>
+									<span class="font-bold" style="color: var(--status-success);">Cash</span>
 								</div>
 								<div class="flex items-center justify-between">
 									<span>Status:</span>
@@ -639,7 +795,7 @@
 							</h3>
 							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
 								Share your affiliate promo code or referral link with friends, social media
-								followers, or customers. They get checkout discounts, you earn Store Credit.
+								followers, or customers. They get checkout discounts, you earn Cash.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
@@ -721,23 +877,23 @@
 								Track Your Earnings
 							</h3>
 							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Track referred users, successful referred orders, and withdrawable Store Credit
+								Track referred users, successful referred orders, and withdrawable Cash
 								activity in your affiliate dashboard.
 							</p>
 							<p
 								class="mb-4 text-sm"
 								style="color: var(--text-muted); font-family: var(--font-body);"
 							>
-								Store Credit is real, withdrawable cash once payout requirements are met.
+								Cash is real and withdrawable once payout requirements are met.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Earn withdrawable Store Credit from successful referred orders</span>
+									<span>Earn withdrawable Cash from successful referred orders</span>
 								</li>
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Real-time Store Credit tracking</span>
+									<span>Real-time Cash tracking</span>
 								</li>
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
@@ -805,7 +961,7 @@
 							Real Cash Rewards
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Earn withdrawable Store Credit every time someone you refer makes a successful order
+							Earn withdrawable Cash every time someone you refer makes a successful order
 						</p>
 					</div>
 					<div class="text-center">
@@ -891,7 +1047,7 @@
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
 							Your unique code, shown on your dashboard. It doubles as a discount code, anyone who
-							uses it at checkout gets a referral discount, and you earn Store Credit on their
+							uses it at checkout gets a referral discount, and you earn Cash on their
 							order.
 						</p>
 					</div>
@@ -903,7 +1059,7 @@
 							class="mb-2 text-lg font-semibold"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
-							Store Credit
+							Cash
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
 							Real, withdrawable cash you earn from successful referred orders. It builds up in
@@ -937,7 +1093,7 @@
 							Payout
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Once your available Store Credit and account age both clear the minimums shown on
+							Once your available Cash and account age both clear the minimums shown on
 							your dashboard, you can request a withdrawal and we'll take it from there.
 						</p>
 					</div>
@@ -1004,7 +1160,7 @@
 					</summary>
 					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
 						When you become an affiliate, you get a unique code and referral link. When someone uses
-						your code at checkout, they get referral discounts and you earn Store Credit on eligible
+						your code at checkout, they get referral discounts and you earn Cash on eligible
 						successful referred orders. Earnings are tracked automatically in your dashboard.
 					</p>
 				</details>
@@ -1023,7 +1179,7 @@
 					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
 						It's the unique code on your affiliate dashboard. Share it (or your referral link) with
 						friends and followers, anyone who uses it gets a discount at checkout, and you earn
-						Store Credit on their order.
+						Cash on their order.
 					</p>
 				</details>
 
@@ -1053,11 +1209,11 @@
 						class="flex cursor-pointer items-center justify-between font-semibold"
 						style="color: var(--text); font-family: var(--font-head);"
 					>
-						How do I withdraw my Store Credit?
+						How do I withdraw my Cash?
 						<span class="ml-4" style="color: var(--text-dim);">+</span>
 					</summary>
 					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						Once your available Store Credit and account age both clear the minimums shown on your
+						Once your available Cash and account age both clear the minimums shown on your
 						dashboard, you can request a payout from your affiliate dashboard and we'll process it
 						from there.
 					</p>

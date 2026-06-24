@@ -2,7 +2,7 @@ import { prisma } from '$lib/prisma';
 import { getSitePopupsEnabledSetting } from './admin-settings';
 import { CONFIRMED_PAYMENT_STATUSES } from '$lib/helpers/buyer-order-visibility';
 
-export type SitePopupType = 'first_purchase' | 'catalog_updates';
+export type SitePopupType = 'first_purchase' | 'catalog_updates' | 'boosting_launch';
 
 export interface PendingSitePopup {
 	type: SitePopupType;
@@ -10,6 +10,8 @@ export interface PendingSitePopup {
 	title: string;
 	body: string;
 	ctaText: string;
+	secondaryHref?: string;
+	secondaryText?: string;
 }
 
 const FIRST_PURCHASE_POPUP: PendingSitePopup = {
@@ -18,6 +20,16 @@ const FIRST_PURCHASE_POPUP: PendingSitePopup = {
 	title: 'Welcome to FastAccs',
 	body: 'Your first order has been completed successfully.',
 	ctaText: 'Got it'
+};
+
+const BOOSTING_LAUNCH_POPUP: PendingSitePopup = {
+	type: 'boosting_launch',
+	icon: '🚀',
+	title: 'Boosting services are now live',
+	body: 'Paste your link, pay, we deliver.',
+	ctaText: 'Got it',
+	secondaryHref: '/services',
+	secondaryText: 'Browse Boosting Services'
 };
 
 function joinNames(names: string[]): string {
@@ -91,7 +103,8 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 		where: { id: userId },
 		select: {
 			firstPurchasePopupSeenAt: true,
-			catalogUpdatesLastSeenAt: true
+			catalogUpdatesLastSeenAt: true,
+			boostingLaunchPopupSeenAt: true
 		}
 	});
 
@@ -100,6 +113,10 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 	if (!user.firstPurchasePopupSeenAt) {
 		const hasCompletedPurchase = await hasUserCompletedAnyPurchase(userId);
 		if (hasCompletedPurchase) return FIRST_PURCHASE_POPUP;
+	}
+
+	if (!user.boostingLaunchPopupSeenAt) {
+		return BOOSTING_LAUNCH_POPUP;
 	}
 
 	if (!user.catalogUpdatesLastSeenAt) {
@@ -114,8 +131,12 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 }
 
 export async function markSitePopupSeen(userId: string, type: SitePopupType): Promise<void> {
-	const field: 'firstPurchasePopupSeenAt' | 'catalogUpdatesLastSeenAt' =
-		type === 'first_purchase' ? 'firstPurchasePopupSeenAt' : 'catalogUpdatesLastSeenAt';
+	const field: 'firstPurchasePopupSeenAt' | 'catalogUpdatesLastSeenAt' | 'boostingLaunchPopupSeenAt' =
+		type === 'first_purchase'
+			? 'firstPurchasePopupSeenAt'
+			: type === 'boosting_launch'
+				? 'boostingLaunchPopupSeenAt'
+				: 'catalogUpdatesLastSeenAt';
 
 	await prisma.user.update({
 		where: { id: userId },

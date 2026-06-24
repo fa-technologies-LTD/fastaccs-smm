@@ -53,5 +53,7 @@
 		title={activePopup.title}
 		body={activePopup.body}
 		ctaText={activePopup.ctaText}
+		secondaryHref={activePopup.secondaryHref}
+		secondaryText={activePopup.secondaryText}
 	/>
 {/if}

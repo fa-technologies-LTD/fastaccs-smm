@@ -4,7 +4,8 @@ import { markSitePopupSeen, type SitePopupType } from '$lib/services/site-popups
 
 const SITE_POPUP_TYPES = [
 	'first_purchase',
-	'catalog_updates'
+	'catalog_updates',
+	'boosting_launch'
 ] as const satisfies readonly SitePopupType[];
 
 export const POST: RequestHandler = async ({ locals, request }) => {
