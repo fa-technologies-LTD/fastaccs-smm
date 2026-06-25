@@ -28,7 +28,8 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 			headers: {
 				'Content-Type': 'text/plain; charset=utf-8',
 				'Content-Disposition': `attachment; filename="${offload.filename}"`,
-				'Cache-Control': 'no-store'
+				'Cache-Control': 'no-store',
+				'X-Account-Count': String(offload.accountCount)
 			}
 		});
 	} catch (error) {

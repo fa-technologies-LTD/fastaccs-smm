@@ -378,9 +378,11 @@
 		URL.revokeObjectURL(url);
 	}
 
-	async function offloadTier(tier: CategoryMetadata): Promise<boolean> {
+	async function offloadTier(
+		tier: CategoryMetadata
+	): Promise<{ success: boolean; accountCount: number }> {
 		const tierId = getTierId(tier);
-		if (!tierId) return false;
+		if (!tierId) return { success: false, accountCount: 0 };
 
 		busyTierAction = `offload:${tierId}`;
 		try {
@@ -390,6 +392,7 @@
 				throw new Error(result?.error || 'Failed to prepare offload file.');
 			}
 
+			const accountCount = Number(response.headers.get('X-Account-Count') || 0);
 			const blob = await response.blob();
 			const filename = getFilenameFromDisposition(
 				response.headers.get('Content-Disposition'),
@@ -397,14 +400,14 @@
 			);
 			triggerTextDownload(blob, filename);
 			showSuccess('Offload ready', `${tier.name} logs were downloaded as a text file.`);
-			return true;
+			return { success: true, accountCount };
 		} catch (error) {
 			console.error('Failed to offload tier logs:', error);
 			showError(
 				'Offload failed',
 				error instanceof Error ? error.message : 'Could not download logs right now.'
 			);
-			return false;
+			return { success: false, accountCount: 0 };
 		} finally {
 			busyTierAction = null;
 		}
@@ -414,11 +417,19 @@
 		const tierId = getTierId(tier);
 		if (!tierId) return;
 
-		const downloaded = await offloadTier(tier);
-		if (!downloaded) return;
+		const { success, accountCount } = await offloadTier(tier);
+		if (!success) return;
+
+		if (accountCount === 0) {
+			showWarning(
+				'No logs to delete',
+				`${tier.name} has no available/unsold logs right now — all stock here is already sold, allocated, or reserved.`
+			);
+			return;
+		}
 
 		const confirmed = window.confirm(
-			`Confirm the offload file for "${tier.name}" has downloaded successfully.\n\nThis will delete only available/unsold logs from this tier. Delivered, allocated, and reserved records will not be deleted.`
+			`Confirm the offload file for "${tier.name}" has downloaded successfully.\n\nThis will delete ${accountCount} available/unsold log${accountCount === 1 ? '' : 's'} from this tier. Delivered, allocated, and reserved records will not be deleted.`
 		);
 		if (!confirmed) {
 			showWarning('Delete cancelled', 'No logs were deleted.');
