@@ -23,30 +23,38 @@ export async function triggerBoostingWaitlistNotifications(
 	).replace(/\/+$/, '');
 	const servicesUrl = `${baseUrl}/services`;
 
-	for (const subscriber of subscribers) {
-		const emailResult = await sendMarketingEmail({
-			to: subscriber.email,
-			subject: `${serviceName} is now live`,
-			body: `${serviceName} is now available. Paste your link, pay, we deliver.`,
-			ctaText: 'Browse Boosting Services',
-			ctaUrl: servicesUrl,
-			userId: subscriber.userId,
-			notificationType: 'boosting_service_live',
-			referenceId: serviceId,
-			campaignKey: `boosting-waitlist:${subscriber.id}`
+	const notifiedSubscriptionIds = (
+		await Promise.all(
+			subscribers.map(async (subscriber) => {
+				const emailResult = await sendMarketingEmail({
+					to: subscriber.email,
+					subject: `${serviceName} is now live`,
+					body: `${serviceName} is now available. Paste your link, pay, we deliver.`,
+					ctaText: 'Browse Boosting Services',
+					ctaUrl: servicesUrl,
+					userId: subscriber.userId,
+					notificationType: 'boosting_service_live',
+					referenceId: serviceId,
+					campaignKey: `boosting-waitlist:${subscriber.id}`
+				});
+
+				if (!emailResult.success) return null;
+
+				await sendPushToUser(subscriber.userId, {
+					title: `${serviceName} is now live`,
+					body: 'Paste your link, pay, we deliver.',
+					url: servicesUrl
+				}).catch(() => {});
+
+				return subscriber.id;
+			})
+		)
+	).filter((id): id is string => id !== null);
+
+	if (notifiedSubscriptionIds.length > 0) {
+		await prisma.boostingServiceWaitlist.updateMany({
+			where: { id: { in: notifiedSubscriptionIds } },
+			data: { notifiedAt: new Date() }
 		});
-
-		if (emailResult.success) {
-			await prisma.boostingServiceWaitlist.update({
-				where: { id: subscriber.id },
-				data: { notifiedAt: new Date() }
-			});
-
-			await sendPushToUser(subscriber.userId, {
-				title: `${serviceName} is now live`,
-				body: 'Paste your link, pay, we deliver.',
-				url: servicesUrl
-			}).catch(() => {});
-		}
 	}
 }

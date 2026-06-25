@@ -76,32 +76,40 @@ export async function triggerRestockNotificationsForTier(tierId: string): Promis
 			? `Only ${tierInfo.availableCount} left — these go fast.`
 			: `${tierInfo.availableCount} accounts are currently available.`;
 
-	for (const subscriber of subscribers) {
-		const emailResult = await sendMarketingEmail({
-			to: subscriber.email,
-			subject: `${tierInfo.name} is back in stock`,
-			body: `${tierInfo.name} on ${tierInfo.platformName} is available again.
+	const notifiedSubscriptionIds = (
+		await Promise.all(
+			subscribers.map(async (subscriber) => {
+				const emailResult = await sendMarketingEmail({
+					to: subscriber.email,
+					subject: `${tierInfo.name} is back in stock`,
+					body: `${tierInfo.name} on ${tierInfo.platformName} is available again.
 
 ${urgencyNote}`,
-			ctaText: 'See available accounts',
-			ctaUrl: tierUrl,
-			userId: subscriber.userId,
-			notificationType: 'restock_alert',
-			referenceId: tierInfo.id,
-			campaignKey: `restock:${subscriber.id}`
+					ctaText: 'See available accounts',
+					ctaUrl: tierUrl,
+					userId: subscriber.userId,
+					notificationType: 'restock_alert',
+					referenceId: tierInfo.id,
+					campaignKey: `restock:${subscriber.id}`
+				});
+
+				if (!emailResult.success) return null;
+
+				await sendPushToUser(subscriber.userId, {
+					title: `${tierInfo.name} is back in stock`,
+					body: urgencyNote,
+					url: tierUrl
+				}).catch(() => {});
+
+				return subscriber.id;
+			})
+		)
+	).filter((id): id is string => id !== null);
+
+	if (notifiedSubscriptionIds.length > 0) {
+		await prisma.restockSubscription.updateMany({
+			where: { id: { in: notifiedSubscriptionIds } },
+			data: { notifiedAt: new Date() }
 		});
-
-		if (emailResult.success) {
-			await prisma.restockSubscription.update({
-				where: { id: subscriber.id },
-				data: { notifiedAt: new Date() }
-			});
-
-			await sendPushToUser(subscriber.userId, {
-				title: `${tierInfo.name} is back in stock`,
-				body: urgencyNote,
-				url: tierUrl
-			}).catch(() => {});
-		}
 	}
 }

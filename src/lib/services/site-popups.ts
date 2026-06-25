@@ -138,7 +138,10 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 			firstPurchasePopupSeenAt: true,
 			catalogUpdatesLastSeenAt: true,
 			boostingLaunchPopupSeenAt: true,
-			bankDetailsPopupSeenAt: true
+			bankDetailsPopupSeenAt: true,
+			affiliatePayoutDetails: {
+				select: { status: true, rejectionReason: true, reviewedAt: true }
+			}
 		}
 	});
 
@@ -149,15 +152,8 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 		if (hasCompletedPurchase) return FIRST_PURCHASE_POPUP;
 	}
 
-	if (!user.boostingLaunchPopupSeenAt) {
-		return BOOSTING_LAUNCH_POPUP;
-	}
-
 	{
-		const submission = await prisma.affiliatePayoutDetails.findUnique({
-			where: { userId },
-			select: { status: true, rejectionReason: true, reviewedAt: true }
-		});
+		const submission = user.affiliatePayoutDetails;
 		const hasUnseenOutcome =
 			submission?.reviewedAt &&
 			(submission.status === 'approved' || submission.status === 'rejected') &&
@@ -165,6 +161,10 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 		if (hasUnseenOutcome) {
 			return getBankDetailsOutcomePopup(submission!);
 		}
+	}
+
+	if (!user.boostingLaunchPopupSeenAt) {
+		return BOOSTING_LAUNCH_POPUP;
 	}
 
 	if (!user.catalogUpdatesLastSeenAt) {

@@ -173,7 +173,9 @@
 	let audienceCountSeq = 0;
 	let specificEmailsInput = $state('');
 
-	const specificEmailsList = $derived(
+	const SPECIFIC_EMAILS_MAX = 100;
+
+	const specificEmailsUnique = $derived(
 		Array.from(
 			new Set(
 				specificEmailsInput
@@ -183,6 +185,8 @@
 			)
 		)
 	);
+	const specificEmailsList = $derived(specificEmailsUnique.slice(0, SPECIFIC_EMAILS_MAX));
+	const specificEmailsTruncated = $derived(specificEmailsUnique.length > SPECIFIC_EMAILS_MAX);
 
 	let previewOpen = $state(false);
 	let sending = $state(false);
@@ -739,8 +743,14 @@
 				></textarea>
 				<p class="mt-1 text-xs" style="color: var(--text-dim);">
 					Comma or newline separated. Only matches existing registered users; added on top of
-					whichever audience is selected above.
+					whichever audience is selected above. Capped at {SPECIFIC_EMAILS_MAX} per send.
 				</p>
+				{#if specificEmailsTruncated}
+					<p class="mt-1 text-xs font-semibold" style="color: var(--status-warning);">
+						Only the first {SPECIFIC_EMAILS_MAX} of {specificEmailsUnique.length} emails will be
+						used — trim the list to send to the rest in a second broadcast.
+					</p>
+				{/if}
 			</div>
 
 			<div class="flex flex-wrap gap-3">

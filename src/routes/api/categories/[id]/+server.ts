@@ -104,7 +104,10 @@ export async function PUT({ params, request, locals }) {
 		if (isBoostingService && previousPricePerStep !== null && previousPricePerStep <= 0) {
 			const newPricePerStep = getBoostingServiceConfig(data.metadata).pricePerStep;
 			if (newPricePerStep > 0) {
-				void triggerBoostingWaitlistNotifications(id, data.name).catch((error) => {
+				// Awaited (not fire-and-forget): Vercel serverless functions can be torn
+				// down right after the response is sent, so a detached promise here
+				// risks the waitlist never actually being notified.
+				await triggerBoostingWaitlistNotifications(id, data.name).catch((error) => {
 					console.error('Failed to notify boosting service waitlist:', error);
 				});
 			}

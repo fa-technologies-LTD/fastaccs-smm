@@ -31,6 +31,7 @@
 		isPlatformImageUrl
 	} from '$lib/helpers/platformColors';
 	import { formatPrice } from '$lib/helpers/utils';
+	import { lockScroll, unlockScroll } from '$lib/helpers/scroll-lock';
 	import {
 		getTierDeliveryModeLabel as getDeliveryModeLabel,
 		getTierDeliveryConfig,
@@ -80,7 +81,6 @@
 
 	let quickAddDialog = $state<HTMLDivElement | null>(null);
 	let quickAddCloseButton = $state<HTMLButtonElement | null>(null);
-	let previousBodyOverflow = '';
 	let previousActiveElement: HTMLElement | null = null;
 	let mobileQuickFilter = $state<MobileQuickFilter | null>('popular');
 	let mobileSortKey = $state<MobileSortKey>('default');
@@ -583,8 +583,7 @@
 
 		previousActiveElement =
 			document.activeElement instanceof HTMLElement ? document.activeElement : null;
-		previousBodyOverflow = document.body.style.overflow;
-		document.body.style.overflow = 'hidden';
+		lockScroll();
 
 		await tick();
 		quickAddCloseButton?.focus();
@@ -697,7 +696,7 @@
 		quickAddSubmitting = false;
 		quickAddQuantity = 1;
 		quickAddTier = null;
-		document.body.style.overflow = previousBodyOverflow;
+		unlockScroll();
 
 		if (previousActiveElement) {
 			previousActiveElement.focus();
@@ -708,7 +707,7 @@
 	// Restore scroll if user navigates away while modal is open
 	beforeNavigate(() => {
 		if (quickAddOpen) {
-			document.body.style.overflow = previousBodyOverflow;
+			unlockScroll();
 			quickAddOpen = false;
 		}
 	});
@@ -934,7 +933,9 @@
 
 		return () => {
 			window.removeEventListener('resize', syncViewportFlag);
-			document.body.style.overflow = previousBodyOverflow;
+			if (quickAddOpen) {
+				unlockScroll();
+			}
 		};
 	});
 </script>
