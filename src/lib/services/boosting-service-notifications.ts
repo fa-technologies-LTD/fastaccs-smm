@@ -1,5 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { sendMarketingEmail } from './email';
+import { sendPushToUser } from './push-notifications';
 import { env } from '$env/dynamic/private';
 
 export async function triggerBoostingWaitlistNotifications(
@@ -40,6 +41,12 @@ export async function triggerBoostingWaitlistNotifications(
 				where: { id: subscriber.id },
 				data: { notifiedAt: new Date() }
 			});
+
+			await sendPushToUser(subscriber.userId, {
+				title: `${serviceName} is now live`,
+				body: 'Paste your link, pay, we deliver.',
+				url: servicesUrl
+			}).catch(() => {});
 		}
 	}
 }

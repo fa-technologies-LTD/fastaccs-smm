@@ -1,5 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { sendMarketingEmail } from './email';
+import { sendPushToUser } from './push-notifications';
 import { env } from '$env/dynamic/private';
 
 interface RestockTierInfo {
@@ -95,6 +96,12 @@ ${urgencyNote}`,
 				where: { id: subscriber.id },
 				data: { notifiedAt: new Date() }
 			});
+
+			await sendPushToUser(subscriber.userId, {
+				title: `${tierInfo.name} is back in stock`,
+				body: urgencyNote,
+				url: tierUrl
+			}).catch(() => {});
 		}
 	}
 }
