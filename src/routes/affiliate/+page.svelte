@@ -4,8 +4,6 @@
 	import { page } from '$app/state';
 	import { Share2, DollarSign, CheckCircle, Wallet, Users } from '$lib/icons';
 
-	const resellerFormUrl =
-		'https://docs.google.com/forms/d/e/1FAIpQLSfCmv6ADTG51ooEjm9-UBz2GzsxFDqxxSep6Lo_Gb-OMQv8UA/viewform?usp=dialog';
 	const isLoggedIn = $derived(Boolean(page.data.user));
 	const isActiveAffiliate = $derived(
 		Boolean((page.data.user as { isAffiliateEnabled?: boolean } | null)?.isAffiliateEnabled)
@@ -130,15 +128,15 @@
 					{isActiveAffiliate ? 'Open Affiliate Dashboard' : 'View Affiliate Progress'}
 				</a>
 			{/if}
-			<a
-				href={resellerFormUrl}
-				target="_blank"
-				rel="noopener noreferrer"
-				class="rounded-full px-5 py-2 text-sm font-semibold"
-				style="background: rgba(105,109,250,0.16); border: 1px solid rgba(105,109,250,0.35); color: var(--text);"
-			>
-				Add bank details
-			</a>
+			{#if isLoggedIn}
+				<a
+					href="/affiliate/bank-details"
+					class="rounded-full px-5 py-2 text-sm font-semibold"
+					style="background: rgba(105,109,250,0.16); border: 1px solid rgba(105,109,250,0.35); color: var(--text);"
+				>
+					Add bank details
+				</a>
+			{/if}
 			<a
 				href="/platforms"
 				class="rounded-full px-5 py-2 text-sm font-semibold"

@@ -30,6 +30,9 @@
 				if (affiliate.isAffiliateEnabled && affiliate.programStatus === 'active') {
 					acc.activeAffiliates += 1;
 				}
+				if (affiliate.hasPendingBankDetails) {
+					acc.pendingBankDetailsReviews += 1;
+				}
 				return acc;
 			},
 			{
@@ -37,7 +40,8 @@
 				totalAvailableStoreCredit: 0,
 				totalSuccessfulOrders: 0,
 				totalPayoutRequested: 0,
-				activeAffiliates: 0
+				activeAffiliates: 0,
+				pendingBankDetailsReviews: 0
 			}
 		);
 		return {
@@ -46,7 +50,8 @@
 			totalStoreCreditEarned: totals.totalStoreCreditEarned,
 			totalAvailableStoreCredit: totals.totalAvailableStoreCredit,
 			totalSuccessfulOrders: totals.totalSuccessfulOrders,
-			totalPayoutRequested: totals.totalPayoutRequested
+			totalPayoutRequested: totals.totalPayoutRequested,
+			pendingBankDetailsReviews: totals.pendingBankDetailsReviews
 		};
 	});
 
@@ -197,6 +202,20 @@
 			Export Data
 		</button>
 	</div>
+
+	{#if stats.pendingBankDetailsReviews > 0}
+		<div
+			class="flex items-center justify-between gap-3 rounded-lg p-4"
+			style="border: 1px solid var(--status-warning-border); background: var(--status-warning-bg);"
+		>
+			<p class="text-sm font-medium" style="color: var(--status-warning);">
+				{stats.pendingBankDetailsReviews} bank-details submission{stats.pendingBankDetailsReviews ===
+				1
+					? ''
+					: 's'} waiting on your review.
+			</p>
+		</div>
+	{/if}
 
 	<!-- Stats Cards -->
 	<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -385,8 +404,16 @@
 							>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<div>
-										<div class="text-sm font-medium" style="color: var(--text);">
+										<div class="flex items-center gap-2 text-sm font-medium" style="color: var(--text);">
 											{affiliate.fullName || 'N/A'}
+											{#if affiliate.hasPendingBankDetails}
+												<span
+													class="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+													style="background: var(--status-warning-bg); border: 1px solid var(--status-warning-border); color: var(--status-warning);"
+												>
+													Bank details pending
+												</span>
+											{/if}
 										</div>
 										<div class="text-sm" style="color: var(--text-muted);">{affiliate.email}</div>
 									</div>

@@ -969,7 +969,11 @@ export async function enableAffiliateMode(
 			return { success: false, error: 'User not found' };
 		}
 
-		if (user.isAffiliateEnabled && user.affiliatePrograms.length > 0) {
+		if (
+			user.isAffiliateEnabled &&
+			user.affiliatePrograms.length > 0 &&
+			user.affiliatePrograms[0].status === 'active'
+		) {
 			return { success: true, affiliateCode: user.affiliatePrograms[0].affiliateCode };
 		}
 

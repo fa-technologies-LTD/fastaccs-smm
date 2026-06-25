@@ -171,7 +171,8 @@
 						Boosting Services
 					</h3>
 					<p style="font-size: 0.9rem; color: var(--text-muted); font-family: var(--font-body);">
-						Boost your existing accounts with tailored engagement packages
+						Get affordable engagements, followers, likes, views and more. Available for all major
+						platforms.
 					</p>
 				</div>
 
@@ -183,10 +184,10 @@
 							<a class="platform-btn growth-service-btn" href="/services/youtube">YouTube Subscribers</a>
 							<a class="platform-btn growth-service-btn" href="/services/facebook">Facebook Likes</a>
 						</div>
-						<div class="growth-callout">
+						<div class="growth-callout growth-callout--secondary">
 							<p
 								class="text-sm font-semibold uppercase"
-								style="letter-spacing: 0.06em; color: var(--primary); font-family: var(--font-head);"
+								style="letter-spacing: 0.06em; color: var(--fa-blue-300); font-family: var(--font-head);"
 							>
 								Boost any link
 							</p>
@@ -196,7 +197,7 @@
 							>
 								Pick a service, paste your link, and pay securely. We handle delivery from there.
 							</p>
-							<a href="/services" class="chat-btn mt-4">
+							<a href="/services" class="chat-btn chat-btn--secondary mt-4">
 								<MessageCircle size={16} />
 								<span>Browse boosting services</span>
 							</a>
@@ -300,6 +301,10 @@
 		cursor: pointer;
 	}
 
+	.growth-service-btn:hover {
+		border-color: var(--fa-blue-500);
+	}
+
 	.growth-callout {
 		display: flex;
 		flex-direction: column;
@@ -310,6 +315,10 @@
 		border: 1px solid rgba(5, 212, 113, 0.35);
 		background: rgba(7, 9, 12, 0.55);
 		padding: var(--space-md);
+	}
+
+	.growth-callout--secondary {
+		border-color: rgba(105, 109, 250, 0.4);
 	}
 
 	.chat-btn {
@@ -348,4 +357,13 @@
 		transform: scale(0.98);
 	}
 
+	.chat-btn--secondary {
+		border-color: rgba(105, 109, 250, 0.4);
+		background: rgba(105, 109, 250, 0.14);
+		color: var(--fa-blue-300);
+	}
+
+	.chat-btn--secondary:hover {
+		border-color: rgba(105, 109, 250, 0.55);
+	}
 </style>
