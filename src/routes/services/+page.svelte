@@ -40,7 +40,7 @@
 <main class="min-h-screen" style="background-color: var(--bg);">
 	<section class="mx-auto max-w-4xl px-4 py-12 sm:py-16">
 		<div class="mb-10 text-center">
-			<p class="text-xs font-semibold tracking-[0.18em] uppercase" style="color: var(--primary);">
+			<p class="text-xs font-semibold tracking-[0.18em] uppercase" style="color: var(--fa-blue-300);">
 				Boosting Services
 			</p>
 			<p class="mx-auto mt-3 max-w-md text-sm" style="color: var(--text-muted);">
@@ -114,7 +114,7 @@
 	}
 
 	.platform-tile:hover {
-		border-color: var(--primary);
+		border-color: var(--fa-blue-500);
 		transform: translateY(-2px);
 	}
 </style>

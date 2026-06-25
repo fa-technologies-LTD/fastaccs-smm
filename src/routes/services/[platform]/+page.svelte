@@ -315,9 +315,9 @@
 					>
 						<div
 							class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full"
-							style="background: rgba(5,212,113,0.12);"
+							style="background: rgba(105,109,250,0.14);"
 						>
-							<ActionIcon size={18} style="color: var(--primary);" />
+							<ActionIcon size={18} style="color: var(--fa-blue-300);" />
 						</div>
 						<div class="flex-1">
 							<p class="font-semibold" style="color: var(--text);">{service.name}</p>
@@ -346,7 +346,7 @@
 								class="flex w-full items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-70"
 								style={isServiceWaitlisted(service.id)
 									? 'background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);'
-									: 'background: var(--btn-primary-gradient); color: #04140C;'}
+									: 'background: var(--btn-secondary-gradient); color: var(--link); border: 1px solid rgba(170,173,255,0.26);'}
 							>
 								{isServiceWaitlisted(service.id)
 									? "You'll be notified"
@@ -407,7 +407,7 @@
 										onclick={() => (quantityByServiceId[service.id] = chip)}
 										class="rounded-full px-2.5 py-1 text-xs font-semibold"
 										style={quantity === chip
-											? 'background: var(--primary); color: #000;'
+											? 'background: var(--fa-blue-500); color: #ffffff;'
 											: 'background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);'}
 									>
 										{chip.toLocaleString()}
@@ -452,7 +452,7 @@
 								onclick={() => addServiceToCart(service)}
 								disabled={addingServiceId === service.id || Number.isNaN(price)}
 								class="flex w-full items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
-								style="background: var(--btn-primary-gradient); color: #04140C;"
+								style="background: var(--fa-blue-500); color: #ffffff;"
 							>
 								{addingServiceId === service.id
 									? 'Adding...'

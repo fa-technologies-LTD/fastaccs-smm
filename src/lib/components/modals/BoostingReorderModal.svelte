@@ -220,7 +220,7 @@
 													onclick={() => (quantityDrafts[item.categoryId] = chip)}
 													class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
 													style={quantity === chip
-														? 'background: var(--primary); color: #000;'
+														? 'background: var(--fa-blue-500); color: #ffffff;'
 														: 'background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);'}
 												>
 													{chip.toLocaleString()}
@@ -305,7 +305,7 @@
 						onclick={handleConfirm}
 						disabled={loading || submitting}
 						class="inline-flex w-full justify-center rounded-full px-3 py-2 text-sm font-semibold shadow-sm disabled:opacity-50 sm:ml-3 sm:w-auto"
-						style="background: var(--primary); color: #000;"
+						style="background: var(--fa-blue-500); color: #ffffff;"
 					>
 						{submitting ? 'Adding...' : 'Continue to Checkout'}
 					</button>

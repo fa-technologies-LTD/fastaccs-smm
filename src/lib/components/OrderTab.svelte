@@ -526,7 +526,9 @@
 									isBoostingOrder(order) ? reorderBoostingOrder(order) : reorderItems(order)}
 								data-sveltekit-preload-data="hover"
 								class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 sm:px-4 sm:text-sm"
-								style="background: var(--btn-primary-gradient); border: 1px solid var(--btn-primary-border); color: var(--btn-primary-text);"
+								style={isBoostingOrder(order)
+									? 'background: var(--fa-blue-500); border: 1px solid rgba(105,109,250,0.5); color: #ffffff;'
+									: 'background: var(--btn-primary-gradient); border: 1px solid var(--btn-primary-border); color: var(--btn-primary-text);'}
 							>
 								Order Again
 							</button>
