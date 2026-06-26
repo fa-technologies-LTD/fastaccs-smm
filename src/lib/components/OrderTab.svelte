@@ -48,6 +48,7 @@
 		focusOrderId = null
 	}: { initialOrders?: OrderRecord[]; focusOrderId?: string | null } = $props();
 	let orders = $state<OrderRecord[]>(initialOrders);
+	let orderTypeFilter = $state<'all' | 'account' | 'boosting'>('all');
 	let checkingPaymentByOrderId = $state<Record<string, boolean>>({});
 	let resumingPaymentByOrderId = $state<Record<string, boolean>>({});
 	let showReorderModal = $state(false);
@@ -134,6 +135,15 @@
 	function isBoostingOrder(order: OrderRecord): boolean {
 		return getBoostingItems(order).length > 0;
 	}
+
+	const filteredOrders = $derived(
+		orderTypeFilter === 'all'
+			? orders
+			: orders.filter((order) =>
+					orderTypeFilter === 'boosting' ? isBoostingOrder(order) : !isBoostingOrder(order)
+				)
+	);
+	const hasBoostingOrders = $derived(orders.some(isBoostingOrder));
 
 	function getFulfillmentState(order: OrderRecord): string {
 		const payment = getPaymentState(order);
@@ -442,8 +452,31 @@
 			</p>
 		</div>
 	{:else}
+		{#if hasBoostingOrders}
+			<div class="flex flex-wrap gap-2 border-b border-[var(--border)] p-3 sm:p-4">
+				{#each [{ value: 'all', label: 'All' }, { value: 'account', label: 'Accounts' }, { value: 'boosting', label: 'Boosting' }] as option}
+					<button
+						type="button"
+						onclick={() => (orderTypeFilter = option.value as typeof orderTypeFilter)}
+						class="rounded-full px-3 py-1.5 text-xs font-semibold transition-all"
+						style={orderTypeFilter === option.value
+							? option.value === 'boosting'
+								? 'background: rgba(105,109,250,0.18); border: 1px solid rgba(105,109,250,0.4); color: var(--fa-blue-300);'
+								: 'background: var(--btn-primary-gradient); border: 1px solid var(--btn-primary-border); color: var(--btn-primary-text);'
+							: 'background: var(--surface); border: 1px solid var(--border); color: var(--text-muted);'}
+					>
+						{option.label}
+					</button>
+				{/each}
+			</div>
+		{/if}
+		{#if filteredOrders.length === 0}
+			<div class="p-10 text-center">
+				<p class="text-sm" style="color: var(--text-muted);">No orders match this filter.</p>
+			</div>
+		{:else}
 		<div class="divide-y divide-[var(--border)]">
-			{#each orders as order (order.id)}
+			{#each filteredOrders as order (order.id)}
 				<div
 					id={`order-${order.id}`}
 					class="p-4 sm:p-6 {focusOrderId === order.id ? 'rounded-[var(--r-sm)]' : ''}"
@@ -545,6 +578,7 @@
 				</div>
 			{/each}
 		</div>
+		{/if}
 	{/if}
 </div>
 

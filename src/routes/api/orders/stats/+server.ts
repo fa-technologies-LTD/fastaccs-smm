@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getCacheHeaders } from '$lib/helpers/cache';
-import { getOrderStatsSnapshot } from '$lib/services/admin-metrics';
+import { getOrderStatsSnapshot, getBoostingOrderStatsSnapshot } from '$lib/services/admin-metrics';
 import { canViewRevenue, redactOrderStatsRevenue } from '$lib/services/admin-revenue-visibility';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 
@@ -12,15 +12,22 @@ export const GET: RequestHandler = async ({ locals }) => {
 			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
 		}
 
-		const stats = await getOrderStatsSnapshot();
-		const responseStats = canViewRevenue(locals) ? stats : redactOrderStatsRevenue(stats);
+		const [stats, boostingStats] = await Promise.all([
+			getOrderStatsSnapshot(),
+			getBoostingOrderStatsSnapshot()
+		]);
+		const revenueVisible = canViewRevenue(locals);
+		const responseStats = revenueVisible ? stats : redactOrderStatsRevenue(stats);
+		const responseBoostingStats = revenueVisible
+			? boostingStats
+			: redactOrderStatsRevenue(boostingStats);
 		const headers = getCacheHeaders('admin-live');
 		const cleanHeaders = Object.fromEntries(
 			Object.entries(headers).filter(([, v]) => v !== undefined)
 		);
 
 		return json(
-			{ data: responseStats, error: null },
+			{ data: responseStats, boostingData: responseBoostingStats, error: null },
 			{
 				headers: cleanHeaders
 			}

@@ -15,7 +15,8 @@
 		ArrowUpRight,
 		ChevronDown,
 		ChevronUp,
-		Mail
+		Mail,
+		Zap
 	} from '$lib/icons';
 	import { getOrderStats } from '$lib/services/orders';
 	import { getInventoryStats } from '$lib/services/inventory';
@@ -56,6 +57,15 @@
 				accountsInOutOfStockTiers: number;
 				outOfStockTiersCount: number;
 			};
+			boostingStats: {
+				total_orders: number;
+				pending_fulfillment: number;
+				in_progress_fulfillment: number;
+				completed_fulfillment: number;
+				total_revenue: number;
+				todays_revenue: number;
+				this_month_revenue: number;
+			};
 			error: string | null;
 			canViewRevenue?: boolean;
 			recentActivity?: RecentActivityItem[];
@@ -69,6 +79,7 @@
 
 	let orderStats = $state(data.orderStats);
 	let inventoryStats = $state(data.inventoryStats);
+	let boostingStats = $state(data.boostingStats);
 	let loading = $state(false);
 	let error = $state(data.error);
 	let autoRefresh = $state(false);
@@ -121,6 +132,9 @@
 			// Update what we can
 			if (orderStatsResult.data) {
 				orderStats = orderStatsResult.data;
+			}
+			if (orderStatsResult.boostingData) {
+				boostingStats = orderStatsResult.boostingData;
 			}
 			if (inventoryStatsResult.data) {
 				inventoryStats = inventoryStatsResult.data;
@@ -536,6 +550,100 @@
 							<span class="text-xs sm:text-sm" style="color: var(--text-muted);">
 								Available: {inventoryStats.total_available}
 							</span>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Boosting Services -->
+		<div class="mb-4 sm:mb-6">
+			<p
+				class="mb-2 text-xs font-semibold tracking-[0.1em] uppercase sm:mb-3"
+				style="color: var(--fa-blue-300);"
+			>
+				Boosting Services
+			</p>
+			<div class="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3">
+				<div
+					class="group rounded-lg p-3 sm:p-4"
+					style="background: var(--bg-elev-1); border: 1px solid rgba(105,109,250,0.3)"
+				>
+					<div class="flex items-center">
+						<div class="rounded-lg p-2 sm:p-3" style="background: rgba(105,109,250,0.14);">
+							<Zap
+								class="size-5 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+								style="color: var(--fa-blue-300);"
+							/>
+						</div>
+						<div class="ml-3 min-w-0 flex-1 sm:ml-4">
+							<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+								Boosting Orders
+							</p>
+							<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
+								{boostingStats.total_orders}
+							</p>
+							<div class="mt-1 flex items-center">
+								<span class="text-xs sm:text-sm" style="color: var(--text-muted);">
+									{boostingStats.pending_fulfillment + boostingStats.in_progress_fulfillment} awaiting
+									fulfillment
+								</span>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div
+					class="group rounded-lg p-3 sm:p-4"
+					style="background: var(--bg-elev-1); border: 1px solid rgba(105,109,250,0.3)"
+				>
+					<div class="flex items-center">
+						<div class="rounded-lg p-2 sm:p-3" style="background: rgba(105,109,250,0.14);">
+							<DollarSign
+								class="size-5 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+								style="color: var(--fa-blue-300);"
+							/>
+						</div>
+						<div class="ml-3 min-w-0 flex-1 sm:ml-4">
+							<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+								Boosting Revenue
+							</p>
+							<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
+								{formatMonetaryAmount(boostingStats.total_revenue)}
+							</p>
+							<div class="mt-1 flex items-center">
+								<span class="text-xs sm:text-sm" style="color: var(--text-muted)">
+									This month: {formatMonetaryAmount(boostingStats.this_month_revenue)}
+								</span>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div
+					class="group rounded-lg p-3 sm:p-4"
+					style="background: var(--bg-elev-1); border: 1px solid rgba(105,109,250,0.3)"
+				>
+					<div class="flex items-center">
+						<div class="rounded-lg p-2 sm:p-3" style="background: rgba(105,109,250,0.14);">
+							<Activity
+								class="size-5 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+								style="color: var(--fa-blue-300);"
+							/>
+						</div>
+						<div class="ml-3 min-w-0 flex-1 sm:ml-4">
+							<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+								Fulfillment Status
+							</p>
+							<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
+								{boostingStats.completed_fulfillment} done
+							</p>
+							<div class="mt-1 flex items-center">
+								<span class="text-xs sm:text-sm" style="color: var(--text-muted);">
+									{boostingStats.pending_fulfillment} pending · {boostingStats.in_progress_fulfillment}
+									in progress
+								</span>
+							</div>
 						</div>
 					</div>
 				</div>

@@ -1,7 +1,7 @@
 import { getOrders } from '$lib/services/orders';
 
 export const load = async ({ fetch }) => {
-	const result = await getOrders({}, fetch);
+	const result = await getOrders({ type: 'account' }, fetch);
 	const error =
 		typeof result.error === 'string'
 			? result.error

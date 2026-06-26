@@ -127,7 +127,7 @@
 	async function loadOrders() {
 		loading = true;
 		try {
-			const ordersResult = await getOrders();
+			const ordersResult = await getOrders({ type: 'account' });
 
 			if (ordersResult.data) {
 				orders = ordersResult.data;
@@ -198,7 +198,8 @@
 		<div class="min-w-0 flex-1">
 			<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">Order Management</h1>
 			<p class="mt-1 text-sm sm:text-base" style="color: var(--text-muted)">
-				Manage customer orders and processing status
+				Manage customer orders and processing status. Account orders only —
+				<a href="/admin/boosting-orders" style="color: var(--fa-blue-300);">boosting orders live here</a>.
 			</p>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">

@@ -185,6 +185,7 @@ model Order {
   deliveryStatus     String         @default("pending") @map("delivery_status")
   deliveredAt        DateTime?      @map("delivered_at")
   status             String         @default("pending")
+  orderType          String         @default("account") @map("order_type")
   affiliateCode      String?        @map("affiliate_code")
   affiliateUserId    String?        @map("affiliate_user_id") @db.Uuid
   createdAt          DateTime       @default(now()) @map("created_at")
@@ -203,6 +204,7 @@ model Order {
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
+  @@index([orderType, createdAt])
   @@index([paymentStatus])
   @@index([paymentExpiresAt])
   @@index([affiliateUserId])
