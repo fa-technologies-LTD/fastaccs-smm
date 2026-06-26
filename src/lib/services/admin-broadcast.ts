@@ -7,6 +7,7 @@ import { getHighSpenderMinTotalSetting } from './admin-settings';
 
 export type BroadcastAudience =
 	| 'all_verified'
+	| 'all_users'
 	| 'purchased_30'
 	| 'purchased_60'
 	| 'purchased_90'
@@ -85,6 +86,7 @@ const ABANDONED_ORDER_EXCLUDED_PAYMENT_STATUSES = ['paid', 'failed', 'cancelled'
 
 const AUDIENCE_LABELS: Record<BroadcastAudience, string> = {
 	all_verified: 'All verified users',
+	all_users: 'All users (including unverified email)',
 	purchased_30: 'Purchased in last 30 days',
 	purchased_60: 'Purchased in last 60 days',
 	purchased_90: 'Purchased in last 90 days',
@@ -125,6 +127,7 @@ export function parseBroadcastAudience(value: unknown): BroadcastAudience | null
 
 	if (
 		normalized === 'all_verified' ||
+		normalized === 'all_users' ||
 		normalized === 'purchased_30' ||
 		normalized === 'purchased_60' ||
 		normalized === 'purchased_90' ||
@@ -264,6 +267,13 @@ async function getAudienceWhereClause(
 
 	if (audience === 'all_verified') {
 		return baseWhere;
+	}
+
+	if (audience === 'all_users') {
+		return {
+			isActive: true,
+			email: { not: null }
+		};
 	}
 
 	if (audience === 'never_purchased') {
@@ -445,31 +455,28 @@ export async function getBroadcastAudienceCount(
 	return prisma.user.count({ where });
 }
 
-export async function getBroadcastRecipients(
-	audience: BroadcastAudience,
-	platformIds: string[],
-	tierIds: string[]
-): Promise<BroadcastRecipient[]> {
-	const filters: BroadcastAudienceFilters = { platformIds, tierIds };
+export function sanitizeSpecificEmails(value: unknown): string[] {
+	if (!Array.isArray(value)) return [];
+	const normalized = value
+		.filter((item): item is string => typeof item === 'string')
+		.map((email) => email.trim().toLowerCase())
+		.filter(Boolean);
+	return Array.from(new Set(normalized)).slice(0, 100);
+}
 
-	if (audience === 'specific_platform_buyers' && filters.platformIds.length === 0) {
-		return [];
-	}
-	if (
-		audience === 'platform_tier_buyers' &&
-		(filters.platformIds.length === 0 || filters.tierIds.length === 0)
-	) {
-		return [];
-	}
+async function findUsersByEmails(emails: string[]): Promise<BroadcastRecipient[]> {
+	if (emails.length === 0) return [];
 
 	const users = await prisma.user.findMany({
-		where: await getAudienceWhereClause(audience, filters),
+		where: {
+			email: { in: emails },
+			isActive: true
+		},
 		select: {
 			id: true,
 			email: true,
 			fullName: true
-		},
-		orderBy: { createdAt: 'desc' }
+		}
 	});
 
 	return users
@@ -481,6 +488,51 @@ export async function getBroadcastRecipients(
 			email: user.email,
 			fullName: user.fullName
 		}));
+}
+
+export async function getBroadcastRecipients(
+	audience: BroadcastAudience,
+	platformIds: string[],
+	tierIds: string[],
+	specificEmails: string[] = []
+): Promise<BroadcastRecipient[]> {
+	const filters: BroadcastAudienceFilters = { platformIds, tierIds };
+
+	const segmentRecipients =
+		audience === 'specific_platform_buyers' && filters.platformIds.length === 0
+			? []
+			: audience === 'platform_tier_buyers' &&
+				  (filters.platformIds.length === 0 || filters.tierIds.length === 0)
+				? []
+				: await (async () => {
+						const users = await prisma.user.findMany({
+							where: await getAudienceWhereClause(audience, filters),
+							select: {
+								id: true,
+								email: true,
+								fullName: true
+							},
+							orderBy: { createdAt: 'desc' }
+						});
+
+						return users
+							.filter((user): user is { id: string; email: string; fullName: string | null } =>
+								Boolean(user.email)
+							)
+							.map((user) => ({
+								id: user.id,
+								email: user.email,
+								fullName: user.fullName
+							}));
+					})();
+
+	const extraRecipients = await findUsersByEmails(sanitizeSpecificEmails(specificEmails));
+	const byId = new Map<string, BroadcastRecipient>();
+	for (const recipient of [...segmentRecipients, ...extraRecipients]) {
+		byId.set(recipient.id, recipient);
+	}
+
+	return Array.from(byId.values());
 }
 
 function chunkArray<T>(items: T[], size: number): T[][] {
@@ -497,11 +549,13 @@ export async function createBroadcast(params: {
 	audience: BroadcastAudience;
 	platformIds: string[];
 	tierIds: string[];
+	specificEmails?: string[];
 }): Promise<{ broadcastId: string; total: number }> {
 	const recipients = await getBroadcastRecipients(
 		params.audience,
 		params.platformIds,
-		params.tierIds
+		params.tierIds,
+		params.specificEmails || []
 	);
 	if (recipients.length === 0) {
 		return {

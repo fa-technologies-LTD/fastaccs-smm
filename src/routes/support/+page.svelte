@@ -60,6 +60,26 @@
 			question: 'Can I get a refund?',
 			answer:
 				'Refund eligibility depends on order state and policy terms. If you run into an issue, contact support quickly so we can review and assist.'
+		},
+		{
+			question: 'How long do boosting services (followers, likes, views) take?',
+			answer:
+				'Most orders start within a few hours of payment confirmation. You can track progress anytime from your order page.'
+		},
+		{
+			question: 'What does "in progress" mean for a boosting order?',
+			answer:
+				'It means we have started delivering to your link and the count is being topped up gradually. This is normal and helps keep delivery looking natural.'
+		},
+		{
+			question: 'Do boosting services come with a refill or guarantee?',
+			answer:
+				'Some services include a refill guarantee window, shown on the service card before you pay. If you experience drop-off within that window, contact support and we will review a refill.'
+		},
+		{
+			question: 'What link should I submit for a boosting order?',
+			answer:
+				'Submit the public profile or post link for the account you want boosted (e.g. your profile URL or a specific post). No password or login access is ever needed.'
 		}
 	];
 

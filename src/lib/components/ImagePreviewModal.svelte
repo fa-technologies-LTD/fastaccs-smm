@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { X, ChevronLeft, ChevronRight } from '$lib/icons';
-	import { onMount } from 'svelte';
+	import { lockScroll, unlockScroll } from '$lib/helpers/scroll-lock';
 
 	interface Props {
 		images: string[];
@@ -45,24 +45,11 @@
 		}
 	}
 
-	onMount(() => {
-		if (isOpen) {
-			document.body.style.overflow = 'hidden';
-		}
-
-		return () => {
-			document.body.style.overflow = 'auto';
-		};
-	});
-
-	// Update body overflow when modal state changes
 	$effect(() => {
-		if (isOpen) {
-			document.body.style.overflow = 'hidden';
-			currentIndex = initialIndex;
-		} else {
-			document.body.style.overflow = 'auto';
-		}
+		if (!isOpen) return;
+		currentIndex = initialIndex;
+		lockScroll();
+		return () => unlockScroll();
 	});
 </script>
 

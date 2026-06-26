@@ -4,9 +4,7 @@
 	import OrderTab from './OrderTab.svelte';
 	import PurchaseTab from './PurchaseTab.svelte';
 	import AffiliateTab from './AffiliateTab.svelte';
-	import AffiliatePopupModal from './AffiliatePopupModal.svelte';
 	import { isRevenueOrder } from '$lib/helpers/order-revenue';
-	import type { PendingSitePopup } from '$lib/services/site-popups';
 
 	type DashboardTab = 'orders' | 'purchases' | 'affiliate';
 
@@ -42,7 +40,6 @@
 		orders = [],
 		affiliateData: initialAffiliateData = null,
 		purchases: initialPurchases = [],
-		sitePopup = null,
 		whatsappNumber = ''
 	}: {
 		user?: DashboardUser | null;
@@ -50,7 +47,6 @@
 		orders?: DashboardOrder[];
 		affiliateData?: unknown;
 		purchases?: DashboardPurchase[];
-		sitePopup?: PendingSitePopup | null;
 		whatsappNumber?: string;
 	} = $props();
 
@@ -74,7 +70,6 @@
 	let selectedOrderId = $state<string | null>(null);
 	let showPaymentPendingBanner = $state(false);
 	let showAffiliateAccessNudge = $state(false);
-	let activeSitePopup = $state<PendingSitePopup | null>(sitePopup);
 
 	function formatMoney(value: number): string {
 		return `₦${Math.max(0, Math.round(value)).toLocaleString()}`;
@@ -108,19 +103,6 @@
 		showAffiliateAccessNudge = false;
 		if (typeof window === 'undefined') return;
 		window.sessionStorage.setItem('fastaccs_affiliate_access_nudge_dismissed', '1');
-	}
-
-	function dismissSitePopup(): void {
-		const popup = activeSitePopup;
-		if (!popup) return;
-		activeSitePopup = null;
-		fetch('/api/dashboard/popup-seen', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ type: popup.type })
-		}).catch((error) => {
-			console.error('Failed to mark dashboard popup as seen:', error);
-		});
 	}
 
 	onMount(() => {
@@ -414,17 +396,6 @@
 		</a>
 	</div>
 </div>
-
-{#if activeSitePopup}
-	<AffiliatePopupModal
-		isOpen={true}
-		onClose={dismissSitePopup}
-		icon={activeSitePopup.icon}
-		title={activeSitePopup.title}
-		body={activeSitePopup.body}
-		ctaText={activeSitePopup.ctaText}
-	/>
-{/if}
 
 <style>
 	.quick-action-card {

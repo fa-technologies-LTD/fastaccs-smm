@@ -19,9 +19,20 @@ export const load: PageLoad = async ({ fetch, data }) => {
 			total_users: 0
 		};
 
+		let boostingStats = {
+			total_orders: 0,
+			pending_fulfillment: 0,
+			in_progress_fulfillment: 0,
+			completed_fulfillment: 0,
+			total_revenue: 0,
+			todays_revenue: 0,
+			this_month_revenue: 0
+		};
+
 		if (orderStatsResponse.ok) {
 			const orderResult = await orderStatsResponse.json();
 			orderStats = orderResult.data || orderStats;
+			boostingStats = orderResult.boostingData || boostingStats;
 		}
 
 		// Load inventory stats
@@ -48,6 +59,7 @@ export const load: PageLoad = async ({ fetch, data }) => {
 		return {
 			...data,
 			orderStats,
+			boostingStats,
 			inventoryStats,
 			error: null
 		};
@@ -68,6 +80,15 @@ export const load: PageLoad = async ({ fetch, data }) => {
 				todays_revenue: 0,
 				units_sold: 0,
 				total_users: 0
+			},
+			boostingStats: {
+				total_orders: 0,
+				pending_fulfillment: 0,
+				in_progress_fulfillment: 0,
+				completed_fulfillment: 0,
+				total_revenue: 0,
+				todays_revenue: 0,
+				this_month_revenue: 0
 			},
 			inventoryStats: {
 				total_tiers: 0,

@@ -48,7 +48,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 
 		const affiliateProgram = affiliate.affiliatePrograms[0];
 
-		const [orders, ledgerRows] = await Promise.all([
+		const [orders, ledgerRows, bankDetails] = await Promise.all([
 			prisma.order.findMany({
 				where: {
 					affiliateUserId: affiliate.id,
@@ -86,6 +86,9 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 					updatedAt: true
 				},
 				orderBy: { createdAt: 'desc' }
+			}),
+			prisma.affiliatePayoutDetails.findUnique({
+				where: { userId: affiliate.id }
 			})
 		]);
 
@@ -208,6 +211,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			},
 			ledgerSummary,
 			payouts,
+			bankDetails,
 			orders: orders.map((order) => ({
 				id: order.id,
 				orderNumber: order.orderNumber,

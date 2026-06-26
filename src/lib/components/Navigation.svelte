@@ -252,6 +252,13 @@
 					>
 						Boosting Services
 					</a>
+					<a
+						href="/blog"
+						data-sveltekit-preload-data="hover"
+						class="nav-link-active font-medium"
+					>
+						Blog
+					</a>
 				{:else}
 					<!-- Guest Navigation -->
 					<a href="/platforms" data-sveltekit-preload-data="hover" class="nav-link font-medium">
@@ -577,6 +584,13 @@
 							class="nav-link-active block py-3 text-sm font-medium"
 						>
 							Boosting Services
+						</a>
+						<a
+							href="/blog"
+							data-sveltekit-preload-data="hover"
+							class="nav-link-active block py-3 text-sm font-medium"
+						>
+							Blog
 						</a>
 					{:else}
 						<!-- Guest Mobile Navigation -->

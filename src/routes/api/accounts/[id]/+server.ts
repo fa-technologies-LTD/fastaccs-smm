@@ -56,7 +56,10 @@ export async function PUT({ params, request, locals }) {
 			});
 
 		if (targetCategoryId && targetStatus === 'available' && availableBefore === 0) {
-			void triggerRestockNotificationsForTier(targetCategoryId).catch((error) => {
+			// Awaited (not fire-and-forget): Vercel serverless functions can be torn
+			// down right after the response is sent, so a detached promise here
+			// risks subscribers never actually being notified.
+			await triggerRestockNotificationsForTier(targetCategoryId).catch((error) => {
 				console.error('Failed to trigger restock notifications:', error);
 			});
 		}

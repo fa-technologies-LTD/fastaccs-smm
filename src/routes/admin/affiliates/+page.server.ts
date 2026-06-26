@@ -12,7 +12,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 					totalStoreCreditEarned: 0,
 					totalAvailableStoreCredit: 0,
 					totalSuccessfulOrders: 0,
-					totalPayoutRequested: 0
+					totalPayoutRequested: 0,
+					pendingBankDetailsReviews: 0
 				}
 			};
 		}
@@ -44,7 +45,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 		const userIds = affiliatesRaw.map((row) => row.id);
 
-		const [successfulOrdersAgg, ledgerGrouped] = await Promise.all([
+		const [successfulOrdersAgg, ledgerGrouped, pendingBankDetailsRows] = await Promise.all([
 			userIds.length
 				? prisma.order.groupBy({
 						by: ['affiliateUserId'],
@@ -65,8 +66,16 @@ export const load: PageServerLoad = async ({ locals }) => {
 						},
 						_sum: { amount: true }
 					})
+				: Promise.resolve([]),
+			userIds.length
+				? prisma.affiliatePayoutDetails.findMany({
+						where: { userId: { in: userIds }, status: 'pending' },
+						select: { userId: true }
+					})
 				: Promise.resolve([])
 		]);
+
+		const pendingBankDetailsUserIds = new Set(pendingBankDetailsRows.map((row) => row.userId));
 
 		const successfulOrdersByUser = new Map(
 			successfulOrdersAgg.map((row) => [
@@ -145,7 +154,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 				paidStoreCredit,
 				reversedStoreCredit,
 				totalStoreCreditEarned,
-				joinedAt: program?.createdAt || row.createdAt
+				joinedAt: program?.createdAt || row.createdAt,
+				hasPendingBankDetails: pendingBankDetailsUserIds.has(row.id)
 			};
 		});
 
@@ -157,7 +167,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 			totalStoreCreditEarned: affiliates.reduce((sum, row) => sum + row.totalStoreCreditEarned, 0),
 			totalAvailableStoreCredit: affiliates.reduce((sum, row) => sum + row.availableStoreCredit, 0),
 			totalSuccessfulOrders: affiliates.reduce((sum, row) => sum + row.successfulOrders, 0),
-			totalPayoutRequested: affiliates.reduce((sum, row) => sum + row.requestedStoreCredit, 0)
+			totalPayoutRequested: affiliates.reduce((sum, row) => sum + row.requestedStoreCredit, 0),
+			pendingBankDetailsReviews: pendingBankDetailsUserIds.size
 		};
 
 		return {
@@ -174,7 +185,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 				totalStoreCreditEarned: 0,
 				totalAvailableStoreCredit: 0,
 				totalSuccessfulOrders: 0,
-				totalPayoutRequested: 0
+				totalPayoutRequested: 0,
+				pendingBankDetailsReviews: 0
 			}
 		};
 	}

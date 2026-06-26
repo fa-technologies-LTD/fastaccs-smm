@@ -29,6 +29,16 @@ export interface AdminOrderStatsSnapshot {
 	total_users: number;
 }
 
+export interface AdminBoostingOrderStatsSnapshot {
+	total_orders: number;
+	pending_fulfillment: number;
+	in_progress_fulfillment: number;
+	completed_fulfillment: number;
+	total_revenue: number;
+	todays_revenue: number;
+	this_month_revenue: number;
+}
+
 export interface AdminInventoryStatsSnapshot {
 	total_tiers: number;
 	total_available: number;
@@ -48,6 +58,8 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 	const businessTimezone = await getBusinessTimezoneSetting().catch(() => 'Africa/Lagos');
 	const today = getStartOfBusinessDayUtc(new Date(), businessTimezone);
 
+	const ACCOUNT_ORDER_FILTER = { orderType: 'account' } as const;
+
 	const [
 		totalOrders,
 		paidOrders,
@@ -62,18 +74,28 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 		unitsSold,
 		totalUsers
 	] = await Promise.all([
-		prisma.order.count(),
-		prisma.order.count({ where: buildRevenueOrderWhere() }),
-		prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.pending] } } }),
-		prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.processing] } } }),
-		prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.completed] } } }),
+		prisma.order.count({ where: ACCOUNT_ORDER_FILTER }),
+		prisma.order.count({ where: { ...ACCOUNT_ORDER_FILTER, ...buildRevenueOrderWhere() } }),
+		prisma.order.count({
+			where: { ...ACCOUNT_ORDER_FILTER, status: { in: [...ORDER_STATUS_GROUPS.pending] } }
+		}),
+		prisma.order.count({
+			where: { ...ACCOUNT_ORDER_FILTER, status: { in: [...ORDER_STATUS_GROUPS.processing] } }
+		}),
+		prisma.order.count({
+			where: { ...ACCOUNT_ORDER_FILTER, status: { in: [...ORDER_STATUS_GROUPS.completed] } }
+		}),
 		prisma.order.count({
 			where: {
+				...ACCOUNT_ORDER_FILTER,
 				OR: [{ status: 'cancelled' }, { paymentStatus: 'cancelled' }]
 			}
 		}),
-		prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.failed] } } }),
-		prisma.order.count({ where: { createdAt: { gte: today } } }),
+		prisma.order.count({
+			where: { ...ACCOUNT_ORDER_FILTER, status: { in: [...ORDER_STATUS_GROUPS.failed] } }
+		}),
+		prisma.order.count({ where: { ...ACCOUNT_ORDER_FILTER, createdAt: { gte: today } } }),
+		// Revenue ("Sales") stays combined across account + boosting by design.
 		prisma.order.aggregate({
 			_sum: { totalAmount: true },
 			where: buildRevenueOrderWhere()
@@ -82,9 +104,10 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 			_sum: { totalAmount: true },
 			where: buildRevenueOrderWindowWhere(today)
 		}),
+		// Units sold tracks real account/stock inventory only — boosting never touches it.
 		prisma.orderItem.aggregate({
 			_sum: { quantity: true },
-			where: buildRevenueOrderItemWhere()
+			where: { order: { ...buildRevenueOrderWhere(), ...ACCOUNT_ORDER_FILTER } }
 		}),
 		prisma.user.count()
 	]);
@@ -102,6 +125,59 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 		todays_revenue: Number(todaysRevenue._sum.totalAmount || 0),
 		units_sold: Number(unitsSold._sum.quantity || 0),
 		total_users: totalUsers
+	};
+}
+
+export async function getBoostingOrderStatsSnapshot(): Promise<AdminBoostingOrderStatsSnapshot> {
+	const businessTimezone = await getBusinessTimezoneSetting().catch(() => 'Africa/Lagos');
+	const today = getStartOfBusinessDayUtc(new Date(), businessTimezone);
+	const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+	const BOOSTING_ORDER_FILTER = { orderType: 'boosting' } as const;
+
+	const [totalOrders, totalRevenue, todaysRevenue, thisMonthRevenue, fulfillmentGrouped] =
+		await Promise.all([
+			prisma.order.count({
+				where: { ...BOOSTING_ORDER_FILTER, ...buildRevenueOrderWhere() }
+			}),
+			prisma.order.aggregate({
+				_sum: { totalAmount: true },
+				where: { ...BOOSTING_ORDER_FILTER, ...buildRevenueOrderWhere() }
+			}),
+			prisma.order.aggregate({
+				_sum: { totalAmount: true },
+				where: { ...BOOSTING_ORDER_FILTER, ...buildRevenueOrderWindowWhere(today) }
+			}),
+			prisma.order.aggregate({
+				_sum: { totalAmount: true },
+				where: { ...BOOSTING_ORDER_FILTER, ...buildRevenueOrderWindowWhere(startOfMonth) }
+			}),
+			prisma.orderItem.groupBy({
+				by: ['boostFulfillmentStatus'],
+				where: {
+					boostTargetUrl: { not: null },
+					order: { paymentStatus: 'paid' }
+				},
+				_count: { _all: true }
+			})
+		]);
+
+	const fulfillmentCounts = { pending: 0, in_progress: 0, completed: 0 };
+	for (const row of fulfillmentGrouped) {
+		const status = row.boostFulfillmentStatus || 'pending';
+		if (status === 'in_progress') fulfillmentCounts.in_progress += row._count._all;
+		else if (status === 'completed') fulfillmentCounts.completed += row._count._all;
+		else fulfillmentCounts.pending += row._count._all;
+	}
+
+	return {
+		total_orders: totalOrders,
+		pending_fulfillment: fulfillmentCounts.pending,
+		in_progress_fulfillment: fulfillmentCounts.in_progress,
+		completed_fulfillment: fulfillmentCounts.completed,
+		total_revenue: Number(totalRevenue._sum.totalAmount || 0),
+		todays_revenue: Number(todaysRevenue._sum.totalAmount || 0),
+		this_month_revenue: Number(thisMonthRevenue._sum.totalAmount || 0)
 	};
 }
 

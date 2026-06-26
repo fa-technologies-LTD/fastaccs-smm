@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { Copy, Zap, ExternalLink } from '$lib/icons';
+	import { Copy, Zap, ExternalLink, DollarSign, ShoppingCart } from '$lib/icons';
 	import { showError, showSuccess } from '$lib/stores/toasts';
 	import { getBoostingServiceConfig } from '$lib/helpers/boosting-service-config';
+	import { formatPrice } from '$lib/helpers/utils';
 	import type { PageData } from './$types';
 
 	interface BoostingOrderItem {
@@ -29,6 +30,7 @@
 	}
 
 	let items = $state<BoostingOrderItem[]>(data.items);
+	let stats = $state(data.stats);
 	let statusFilter = $state<'pending' | 'in_progress' | 'completed' | 'all'>('pending');
 	let busyItemId = $state<string | null>(null);
 
@@ -118,6 +120,45 @@
 			Copy all links for a service at once, place them with your supplier, then mark each order
 			in progress and completed.
 		</p>
+	</div>
+
+	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+		<div
+			class="rounded-[var(--r-md)] border p-4"
+			style="border-color: rgba(105,109,250,0.3); background: var(--bg-elev-1);"
+		>
+			<div class="flex items-center gap-2">
+				<DollarSign size={16} style="color: var(--fa-blue-300);" />
+				<span class="text-xs font-medium" style="color: var(--text-muted);">Lifetime Revenue</span>
+			</div>
+			<p class="mt-1 text-xl font-bold" style="color: var(--text);">
+				{formatPrice(stats.total_revenue)}
+			</p>
+		</div>
+		<div
+			class="rounded-[var(--r-md)] border p-4"
+			style="border-color: rgba(105,109,250,0.3); background: var(--bg-elev-1);"
+		>
+			<div class="flex items-center gap-2">
+				<DollarSign size={16} style="color: var(--fa-blue-300);" />
+				<span class="text-xs font-medium" style="color: var(--text-muted);">This Month</span>
+			</div>
+			<p class="mt-1 text-xl font-bold" style="color: var(--text);">
+				{formatPrice(stats.this_month_revenue)}
+			</p>
+		</div>
+		<div
+			class="rounded-[var(--r-md)] border p-4"
+			style="border-color: rgba(105,109,250,0.3); background: var(--bg-elev-1);"
+		>
+			<div class="flex items-center gap-2">
+				<ShoppingCart size={16} style="color: var(--fa-blue-300);" />
+				<span class="text-xs font-medium" style="color: var(--text-muted);">Orders</span>
+			</div>
+			<p class="mt-1 text-xl font-bold" style="color: var(--text);">
+				{stats.total_orders}
+			</p>
+		</div>
 	</div>
 
 	<div class="flex gap-2">

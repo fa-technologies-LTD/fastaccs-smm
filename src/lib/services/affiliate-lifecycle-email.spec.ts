@@ -8,6 +8,9 @@ const recoverAffiliatePayoutStatusEmailsMock = vi.hoisted(() => vi.fn());
 const prismaMock = vi.hoisted(() => ({
 	user: {
 		findMany: vi.fn()
+	},
+	emailNotification: {
+		findFirst: vi.fn()
 	}
 }));
 
@@ -51,6 +54,7 @@ describe('affiliate lifecycle email recovery', () => {
 		});
 		sendMarketingEmailMock.mockResolvedValue({ success: true });
 		maybeSendAffiliateUnlockInviteMock.mockResolvedValue(undefined);
+		prismaMock.emailNotification.findFirst.mockResolvedValue(null);
 	});
 
 	it('introduces the program on the second successful purchase and records a progress milestone', async () => {
@@ -117,6 +121,62 @@ describe('affiliate lifecycle email recovery', () => {
 		await runAffiliateLifecycleEmailRecovery();
 
 		expect(maybeSendAffiliateUnlockInviteMock).toHaveBeenCalledWith('user-1');
+		expect(sendMarketingEmailMock).not.toHaveBeenCalled();
+	});
+
+	it('nudges an already-active affiliate with zero referrals to share their code', async () => {
+		prismaMock.user.findMany.mockResolvedValue([
+			{
+				id: 'user-1',
+				email: 'affiliate@example.com',
+				fullName: 'Affiliate One',
+				isAffiliateEnabled: true,
+				affiliatePrograms: [
+					{
+						id: 'program-1',
+						affiliateCode: 'AFF001',
+						totalReferrals: 0,
+						status: 'active',
+						createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)
+					}
+				],
+				orders: []
+			}
+		]);
+
+		const result = await runAffiliateLifecycleEmailRecovery();
+
+		expect(sendMarketingEmailMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				notificationType: 'affiliate_activation_nudge',
+				referenceId: 'affiliate_activation_nudge:user-1'
+			})
+		);
+		expect(result.sent).toBe(1);
+	});
+
+	it('does not nudge an affiliate who already has referrals or was nudged recently', async () => {
+		prismaMock.user.findMany.mockResolvedValue([
+			{
+				id: 'user-1',
+				email: 'affiliate@example.com',
+				fullName: 'Affiliate One',
+				isAffiliateEnabled: true,
+				affiliatePrograms: [
+					{
+						id: 'program-1',
+						affiliateCode: 'AFF001',
+						totalReferrals: 3,
+						status: 'active',
+						createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)
+					}
+				],
+				orders: []
+			}
+		]);
+
+		await runAffiliateLifecycleEmailRecovery();
+
 		expect(sendMarketingEmailMock).not.toHaveBeenCalled();
 	});
 });

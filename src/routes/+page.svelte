@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Navigation from '$lib/components/Navigation.svelte';
+	import ActivityTicker from '$lib/components/ActivityTicker.svelte';
 	import HeroBanner from '$lib/components/HeroBanner.svelte';
 	import HowItWorksStrip from '$lib/components/HowItWorksStrip.svelte';
 	import FeaturedCategories from '$lib/components/FeaturedCategories.svelte';
@@ -19,6 +20,7 @@
 </svelte:head>
 
 <Navigation />
+<ActivityTicker />
 
 <main>
 	<HeroBanner />

@@ -35,6 +35,7 @@ export interface PageData {
 	platform: Platform | null;
 	tiers: TierInventory[];
 	lowStockThreshold: number;
+	seo?: { title: string; description: string; type: string };
 }
 
 export const load: PageLoad = async ({ params, fetch }): Promise<PageData> => {
@@ -123,7 +124,12 @@ export const load: PageLoad = async ({ params, fetch }): Promise<PageData> => {
 				metadata: platform.metadata || {}
 			},
 			tiers,
-			lowStockThreshold
+			lowStockThreshold,
+			seo: {
+				title: `Buy Real ${platform.name} Accounts | FastAccs`,
+				description: `Browse verified, aged ${platform.name} accounts ready to use. Instant delivery, secure checkout, no passwords shared.`,
+				type: 'website'
+			}
 		};
 	} catch (err) {
 		console.error('Error in platform page load:', err);

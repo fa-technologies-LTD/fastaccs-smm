@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { ArrowLeft, Eye, Heart, Minus, MessageCircle, Plus, Repeat, UserPlus } from '$lib/icons';
@@ -62,6 +64,10 @@
 	let linkErrorByServiceId = $state<Record<string, string | null>>({});
 	let addingServiceId = $state<string | null>(null);
 	let platformIconFailed = $state(false);
+	let waitlistLoadingByServiceId = $state<Record<string, boolean>>({});
+	let waitlistSubscribedByServiceId = $state<Record<string, boolean>>({});
+
+	const currentUser = $derived((page.data as { user?: { id: string } | null }).user || null);
 
 	function toggleExpanded(serviceId: string) {
 		expandedServiceId = expandedServiceId === serviceId ? null : serviceId;
@@ -154,6 +160,75 @@
 			addingServiceId = null;
 		}
 	}
+
+	function isServiceWaitlisted(serviceId: string): boolean {
+		return Boolean(waitlistSubscribedByServiceId[serviceId]);
+	}
+
+	function isServiceWaitlistLoading(serviceId: string): boolean {
+		return Boolean(waitlistLoadingByServiceId[serviceId]);
+	}
+
+	async function loadWaitlistStatusForComingSoonServices(): Promise<void> {
+		if (!currentUser) return;
+		const comingSoonServices = services.filter((service) => service.config.pricePerStep <= 0);
+		if (comingSoonServices.length === 0) return;
+
+		await Promise.all(
+			comingSoonServices.map(async (service) => {
+				try {
+					const response = await fetch(
+						`/api/boosting-service-waitlist?serviceId=${encodeURIComponent(service.id)}`
+					);
+					if (!response.ok) return;
+					const result = await response.json();
+					waitlistSubscribedByServiceId = {
+						...waitlistSubscribedByServiceId,
+						[service.id]: Boolean(result?.data?.subscribed)
+					};
+				} catch (error) {
+					console.error('Failed to load waitlist status:', error);
+				}
+			})
+		);
+	}
+
+	async function subscribeToWaitlist(service: (typeof services)[number]): Promise<void> {
+		if (isServiceWaitlistLoading(service.id) || isServiceWaitlisted(service.id)) return;
+
+		if (!currentUser) {
+			const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
+			goto(`/auth/login?returnUrl=${returnUrl}`);
+			return;
+		}
+
+		waitlistLoadingByServiceId = { ...waitlistLoadingByServiceId, [service.id]: true };
+		try {
+			const response = await fetch('/api/boosting-service-waitlist', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ serviceId: service.id })
+			});
+			const result = await response.json();
+
+			if (!response.ok || !result.success) {
+				showError('Subscription failed', result.error || 'Unable to subscribe right now.');
+				return;
+			}
+
+			waitlistSubscribedByServiceId = { ...waitlistSubscribedByServiceId, [service.id]: true };
+			showSuccess('Subscribed', result.message || "You'll be notified when this service is live.");
+		} catch (error) {
+			console.error('Failed to subscribe to waitlist:', error);
+			showError('Subscription failed', 'Unable to subscribe right now. Please try again.');
+		} finally {
+			waitlistLoadingByServiceId = { ...waitlistLoadingByServiceId, [service.id]: false };
+		}
+	}
+
+	onMount(() => {
+		void loadWaitlistStatusForComingSoonServices();
+	});
 </script>
 
 <svelte:head>
@@ -240,9 +315,9 @@
 					>
 						<div
 							class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full"
-							style="background: rgba(5,212,113,0.12);"
+							style="background: rgba(105,109,250,0.14);"
 						>
-							<ActionIcon size={18} style="color: var(--primary);" />
+							<ActionIcon size={18} style="color: var(--fa-blue-300);" />
 						</div>
 						<div class="flex-1">
 							<p class="font-semibold" style="color: var(--text);">{service.name}</p>
@@ -261,6 +336,26 @@
 							<span class="text-lg" style="color: var(--text-dim);">{isExpanded ? '−' : '+'}</span>
 						{/if}
 					</button>
+
+					{#if isComingSoon}
+						<div class="border-t px-4 pb-4 pt-3" style="border-color: var(--border);">
+							<button
+								type="button"
+								onclick={() => subscribeToWaitlist(service)}
+								disabled={isServiceWaitlistLoading(service.id) || isServiceWaitlisted(service.id)}
+								class="flex w-full items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-70"
+								style={isServiceWaitlisted(service.id)
+									? 'background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);'
+									: 'background: var(--btn-secondary-gradient); color: var(--link); border: 1px solid rgba(170,173,255,0.26);'}
+							>
+								{isServiceWaitlisted(service.id)
+									? "You'll be notified"
+									: isServiceWaitlistLoading(service.id)
+										? 'Subscribing...'
+										: 'Notify me'}
+							</button>
+						</div>
+					{/if}
 
 					{#if isExpanded}
 						<div class="border-t px-4 pb-4 pt-4" style="border-color: var(--border);">
@@ -312,7 +407,7 @@
 										onclick={() => (quantityByServiceId[service.id] = chip)}
 										class="rounded-full px-2.5 py-1 text-xs font-semibold"
 										style={quantity === chip
-											? 'background: var(--primary); color: #000;'
+											? 'background: var(--fa-blue-500); color: #ffffff;'
 											: 'background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);'}
 									>
 										{chip.toLocaleString()}
@@ -357,7 +452,7 @@
 								onclick={() => addServiceToCart(service)}
 								disabled={addingServiceId === service.id || Number.isNaN(price)}
 								class="flex w-full items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
-								style="background: var(--btn-primary-gradient); color: #04140C;"
+								style="background: var(--fa-blue-500); color: #ffffff;"
 							>
 								{addingServiceId === service.id
 									? 'Adding...'

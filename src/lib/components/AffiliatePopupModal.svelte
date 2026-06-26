@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { X } from '$lib/icons';
+	import { lockScroll, unlockScroll } from '$lib/helpers/scroll-lock';
 
 	interface Props {
 		isOpen: boolean;
@@ -30,11 +31,9 @@
 	}
 
 	$effect(() => {
-		if (isOpen) {
-			document.body.style.overflow = 'hidden';
-		} else {
-			document.body.style.overflow = 'auto';
-		}
+		if (!isOpen) return;
+		lockScroll();
+		return () => unlockScroll();
 	});
 </script>
 

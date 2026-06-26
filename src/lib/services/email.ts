@@ -17,9 +17,11 @@ export type EmailNotificationType =
 	| 'order_confirmation'
 	| 'order_delivery'
 	| 'restock_alert'
+	| 'boosting_service_live'
 	| 'win_back'
 	| 'affiliate_unlock'
 	| 'affiliate_introduction'
+	| 'affiliate_activation_nudge'
 	| 'affiliate_progress'
 	| 'affiliate_store_credit'
 	| 'affiliate_payout'
@@ -848,6 +850,7 @@ Welcome to Fast Accounts. Your account is ready.
 
 You can now:
 - See available accounts
+- Buy followers, likes, and views for accounts you already own
 - Complete secure checkout
 - View orders and purchases from your dashboard
 - Get help quickly whenever you need it

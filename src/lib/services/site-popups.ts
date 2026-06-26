@@ -1,7 +1,12 @@
 import { prisma } from '$lib/prisma';
 import { getSitePopupsEnabledSetting } from './admin-settings';
+import { CONFIRMED_PAYMENT_STATUSES } from '$lib/helpers/buyer-order-visibility';
 
-export type SitePopupType = 'first_purchase' | 'catalog_updates';
+export type SitePopupType =
+	| 'first_purchase'
+	| 'catalog_updates'
+	| 'boosting_launch'
+	| 'bank_details_outcome';
 
 export interface PendingSitePopup {
 	type: SitePopupType;
@@ -9,6 +14,8 @@ export interface PendingSitePopup {
 	title: string;
 	body: string;
 	ctaText: string;
+	secondaryHref?: string;
+	secondaryText?: string;
 }
 
 const FIRST_PURCHASE_POPUP: PendingSitePopup = {
@@ -18,6 +25,45 @@ const FIRST_PURCHASE_POPUP: PendingSitePopup = {
 	body: 'Your first order has been completed successfully.',
 	ctaText: 'Got it'
 };
+
+const BOOSTING_LAUNCH_POPUP: PendingSitePopup = {
+	type: 'boosting_launch',
+	icon: '🚀',
+	title: 'Boosting services are now live',
+	body: 'Paste your link, pay, we deliver.',
+	ctaText: 'Got it',
+	secondaryHref: '/services',
+	secondaryText: 'Browse Boosting Services'
+};
+
+function getBankDetailsOutcomePopup(submission: {
+	status: string;
+	rejectionReason: string | null;
+}): PendingSitePopup {
+	if (submission.status === 'approved') {
+		return {
+			type: 'bank_details_outcome',
+			icon: '✅',
+			title: 'Bank details approved',
+			body: 'Your bank details have been approved. You can now request payouts.',
+			ctaText: 'Got it',
+			secondaryHref: '/affiliate/bank-details',
+			secondaryText: 'View details'
+		};
+	}
+
+	return {
+		type: 'bank_details_outcome',
+		icon: '⚠️',
+		title: 'Bank details need attention',
+		body: submission.rejectionReason
+			? `Your bank details were not approved: ${submission.rejectionReason}`
+			: 'Your bank details were not approved. Please update and resubmit.',
+		ctaText: 'Got it',
+		secondaryHref: '/affiliate/bank-details',
+		secondaryText: 'Update details'
+	};
+}
 
 function joinNames(names: string[]): string {
 	if (names.length <= 1) return names[0] || '';
@@ -71,30 +117,59 @@ async function getCatalogUpdatesPopup(since: Date): Promise<PendingSitePopup | n
 	};
 }
 
-export async function getPendingSitePopup(input: {
-	userId: string;
-	hasCompletedPurchase: boolean;
-}): Promise<PendingSitePopup | null> {
+async function hasUserCompletedAnyPurchase(userId: string): Promise<boolean> {
+	const count = await prisma.order.count({
+		where: {
+			userId,
+			status: { in: ['paid', 'processing', 'completed'] },
+			paymentStatus: { in: [...CONFIRMED_PAYMENT_STATUSES] }
+		}
+	});
+	return count > 0;
+}
+
+export async function getPendingSitePopup(userId: string): Promise<PendingSitePopup | null> {
 	const popupsEnabled = await getSitePopupsEnabledSetting();
 	if (!popupsEnabled) return null;
 
 	const user = await prisma.user.findUnique({
-		where: { id: input.userId },
+		where: { id: userId },
 		select: {
 			firstPurchasePopupSeenAt: true,
-			catalogUpdatesLastSeenAt: true
+			catalogUpdatesLastSeenAt: true,
+			boostingLaunchPopupSeenAt: true,
+			bankDetailsPopupSeenAt: true,
+			affiliatePayoutDetails: {
+				select: { status: true, rejectionReason: true, reviewedAt: true }
+			}
 		}
 	});
 
 	if (!user) return null;
 
-	if (input.hasCompletedPurchase && !user.firstPurchasePopupSeenAt) {
-		return FIRST_PURCHASE_POPUP;
+	if (!user.firstPurchasePopupSeenAt) {
+		const hasCompletedPurchase = await hasUserCompletedAnyPurchase(userId);
+		if (hasCompletedPurchase) return FIRST_PURCHASE_POPUP;
+	}
+
+	{
+		const submission = user.affiliatePayoutDetails;
+		const hasUnseenOutcome =
+			submission?.reviewedAt &&
+			(submission.status === 'approved' || submission.status === 'rejected') &&
+			(!user.bankDetailsPopupSeenAt || submission.reviewedAt > user.bankDetailsPopupSeenAt);
+		if (hasUnseenOutcome) {
+			return getBankDetailsOutcomePopup(submission!);
+		}
+	}
+
+	if (!user.boostingLaunchPopupSeenAt) {
+		return BOOSTING_LAUNCH_POPUP;
 	}
 
 	if (!user.catalogUpdatesLastSeenAt) {
 		await prisma.user.update({
-			where: { id: input.userId },
+			where: { id: userId },
 			data: { catalogUpdatesLastSeenAt: new Date() }
 		});
 		return null;
@@ -104,8 +179,18 @@ export async function getPendingSitePopup(input: {
 }
 
 export async function markSitePopupSeen(userId: string, type: SitePopupType): Promise<void> {
-	const field: 'firstPurchasePopupSeenAt' | 'catalogUpdatesLastSeenAt' =
-		type === 'first_purchase' ? 'firstPurchasePopupSeenAt' : 'catalogUpdatesLastSeenAt';
+	const field:
+		| 'firstPurchasePopupSeenAt'
+		| 'catalogUpdatesLastSeenAt'
+		| 'boostingLaunchPopupSeenAt'
+		| 'bankDetailsPopupSeenAt' =
+		type === 'first_purchase'
+			? 'firstPurchasePopupSeenAt'
+			: type === 'boosting_launch'
+				? 'boostingLaunchPopupSeenAt'
+				: type === 'bank_details_outcome'
+					? 'bankDetailsPopupSeenAt'
+					: 'catalogUpdatesLastSeenAt';
 
 	await prisma.user.update({
 		where: { id: userId },

@@ -22,7 +22,7 @@ vi.mock('./email', () => ({
 	sendQueuedMarketingEmail: sendQueuedMarketingEmailMock
 }));
 
-import { createBroadcast, processBroadcastBatch } from './admin-broadcast';
+import { createBroadcast, getBroadcastRecipients, processBroadcastBatch } from './admin-broadcast';
 
 describe('admin customer broadcasts', () => {
 	beforeEach(() => {
@@ -93,5 +93,39 @@ describe('admin customer broadcasts', () => {
 				status: 'completed'
 			})
 		);
+	});
+
+	it('merges specific emails with the segment, deduping by user id', async () => {
+		prismaMock.user.findMany
+			.mockResolvedValueOnce([
+				{
+					id: '11111111-1111-4111-8111-111111111111',
+					email: 'buyer@example.com',
+					fullName: 'Buyer'
+				}
+			])
+			.mockResolvedValueOnce([
+				{
+					id: '11111111-1111-4111-8111-111111111111',
+					email: 'buyer@example.com',
+					fullName: 'Buyer'
+				},
+				{
+					id: '44444444-4444-4444-8444-444444444444',
+					email: 'extra@example.com',
+					fullName: 'Extra'
+				}
+			]);
+
+		const recipients = await getBroadcastRecipients('all_verified', [], [], [
+			'buyer@example.com',
+			'extra@example.com'
+		]);
+
+		expect(recipients).toHaveLength(2);
+		expect(recipients.map((r) => r.email).sort()).toEqual([
+			'buyer@example.com',
+			'extra@example.com'
+		]);
 	});
 });

@@ -1,6 +1,10 @@
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
-import { getInventoryStatsSnapshot, getOrderStatsSnapshot } from '$lib/services/admin-metrics';
+import {
+	getInventoryStatsSnapshot,
+	getOrderStatsSnapshot,
+	getBoostingOrderStatsSnapshot
+} from '$lib/services/admin-metrics';
 import { ORDER_STATUS_GROUPS, getOrderStatusLabel } from '$lib/helpers/order-status';
 import { getBusinessTimezoneSetting } from '$lib/services/admin-settings';
 import {
@@ -116,9 +120,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 			return { stats: {} };
 		}
 
-		const [orderStatsSnapshot, inventorySnapshot, businessTimezone, featureFlags] =
+		const [orderStatsSnapshot, boostingStatsSnapshot, inventorySnapshot, businessTimezone, featureFlags] =
 			await Promise.all([
 				getOrderStatsSnapshot(),
+				getBoostingOrderStatsSnapshot(),
 				getInventoryStatsSnapshot(),
 				getBusinessTimezoneSetting().catch(() => 'Africa/Lagos'),
 				getFeatureFlagSnapshot().catch(() => ({
@@ -255,7 +260,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				prisma.account.count({
 					where: { status: { in: getAllocatedLikeAccountStatuses() } }
 				}),
-			prisma.order.count(),
+			prisma.order.count({ where: { orderType: 'account' } }),
 				prisma.order.aggregate({
 					where: buildRevenueOrderWhere(),
 					_sum: { totalAmount: true }
@@ -280,6 +285,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 								createdAt: true,
 								paidAt: true,
 								totalAmount: true,
+								orderType: true,
 								orderItems: {
 								select: {
 									categoryId: true,
@@ -403,6 +409,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 		const byDayMap = createBucketMap();
 		const byWeekMap = createBucketMap();
 		const byMonthMap = createBucketMap();
+		const boostingByDayMap = createBucketMap();
+		const boostingByWeekMap = createBucketMap();
+		const boostingByMonthMap = createBucketMap();
 
 		for (const order of advancedRevenueOrders) {
 			const orderTotal = toAmount(order.totalAmount);
@@ -410,6 +419,17 @@ export const load: PageServerLoad = async ({ locals }) => {
 			const dayKey = getBusinessDateKey(settlementDate, businessTimezone);
 			const weekKey = getBusinessWeekKey(settlementDate, businessTimezone);
 			const monthKey = getBusinessMonthKey(settlementDate, businessTimezone);
+
+			// Boosting orders get their own trend buckets and are excluded from the
+			// account platform/tier breakdown below — boosting services aren't
+			// nested under a platform category, so mixing them in would otherwise
+			// show up as a confusing "Unknown platform" bucket.
+			if (order.orderType === 'boosting') {
+				pushBucket(boostingByDayMap, dayKey, order.id, orderTotal);
+				pushBucket(boostingByWeekMap, weekKey, order.id, orderTotal);
+				pushBucket(boostingByMonthMap, monthKey, order.id, orderTotal);
+				continue;
+			}
 
 			pushBucket(byDayMap, dayKey, order.id, orderTotal);
 			pushBucket(byWeekMap, weekKey, order.id, orderTotal);
@@ -482,10 +502,21 @@ export const load: PageServerLoad = async ({ locals }) => {
 		const byDay = mapBuckets(byDayMap);
 		const byWeek = mapBuckets(byWeekMap);
 		const byMonth = mapBuckets(byMonthMap);
+		const boostingByDay = mapBuckets(boostingByDayMap);
+		const boostingByWeek = mapBuckets(boostingByWeekMap);
+		const boostingByMonth = mapBuckets(boostingByMonthMap);
 
 		const dailyTrendKeys = getRollingBusinessDateKeys(30, now, businessTimezone);
 		const lineTrend = dailyTrendKeys.map((key) => {
 			const bucket = byDayMap.get(key);
+			return {
+				key,
+				revenue: toAmount(bucket?.revenue || 0),
+				orderCount: bucket?.orderIds.size || 0
+			};
+		});
+		const boostingLineTrend = dailyTrendKeys.map((key) => {
+			const bucket = boostingByDayMap.get(key);
 			return {
 				key,
 				revenue: toAmount(bucket?.revenue || 0),
@@ -731,6 +762,22 @@ export const load: PageServerLoad = async ({ locals }) => {
 				byWeek: revenueVisible ? byWeek : [],
 				byMonth: revenueVisible ? byMonth : [],
 				lineTrend: revenueVisible ? lineTrend : lineTrend.map((point) => ({ ...point, revenue: 0 }))
+			},
+			boosting: {
+				totalOrders: boostingStatsSnapshot.total_orders,
+				totalRevenue: revenueVisible ? boostingStatsSnapshot.total_revenue : 0,
+				thisMonthRevenue: revenueVisible ? boostingStatsSnapshot.this_month_revenue : 0,
+				pendingFulfillment: boostingStatsSnapshot.pending_fulfillment,
+				inProgressFulfillment: boostingStatsSnapshot.in_progress_fulfillment,
+				completedFulfillment: boostingStatsSnapshot.completed_fulfillment,
+				revenueBreakdown: {
+					byDay: revenueVisible ? boostingByDay : [],
+					byWeek: revenueVisible ? boostingByWeek : [],
+					byMonth: revenueVisible ? boostingByMonth : [],
+					lineTrend: revenueVisible
+						? boostingLineTrend
+						: boostingLineTrend.map((point) => ({ ...point, revenue: 0 }))
+				}
 			},
 			salesPerformance: {
 				topTiers: revenueVisible ? revenueByTier.slice(0, 5) : [],

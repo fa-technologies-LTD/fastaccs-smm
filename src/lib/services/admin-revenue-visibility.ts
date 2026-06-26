@@ -34,6 +34,7 @@ export function redactOrderStatsRevenue<T extends object>(stats: T): T {
 	const next = { ...stats } as Record<string, unknown>;
 	if ('total_revenue' in next) next.total_revenue = 0;
 	if ('todays_revenue' in next) next.todays_revenue = 0;
+	if ('this_month_revenue' in next) next.this_month_revenue = 0;
 	if ('totalRevenue' in next) next.totalRevenue = 0;
 	if ('revenueChange' in next) next.revenueChange = 0;
 	if ('affiliateSales' in next) next.affiliateSales = 0;

@@ -157,12 +157,15 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		const status = url.searchParams.get('status');
 		const customerEmail = url.searchParams.get('customerEmail');
 		const userId = url.searchParams.get('userId');
+		const orderType = url.searchParams.get('type');
 		const limit = sanitizeLimit(url.searchParams.get('limit'));
 
 		const admin = hasAdminPermission(locals.adminContext, 'admin:access');
-		const where: { status?: string; guestEmail?: string; userId?: string } = {};
+		const where: { status?: string; guestEmail?: string; userId?: string; orderType?: string } =
+			{};
 
 		if (status) where.status = status;
+		if (orderType === 'account' || orderType === 'boosting') where.orderType = orderType;
 
 		if (admin) {
 			if (customerEmail) where.guestEmail = customerEmail;
@@ -782,6 +785,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						deliveryContact: customerEmail,
 						deliveryStatus: isManualHandoverOrder ? 'processing' : 'pending',
 						status: 'pending',
+						orderType: isBoostingCheckout ? 'boosting' : 'account',
 						affiliateCode: attribution.affiliateCode || null,
 						affiliateUserId: attribution.affiliateUserId || null,
 						promotionId,

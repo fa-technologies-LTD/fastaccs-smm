@@ -248,6 +248,45 @@
 
 		<section
 			class="rounded-lg p-3"
+			style="border: 1px solid rgba(105,109,250,0.3); background: var(--bg-elev-1);"
+		>
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<h2 class="text-base font-semibold" style="color: var(--fa-blue-300);">
+					Boosting Services
+				</h2>
+				<div class="flex flex-wrap gap-4 text-sm" style="color: var(--text-muted);">
+					<span
+						>Orders: <strong style="color: var(--text);">{stats.boosting?.totalOrders || 0}</strong
+						></span
+					>
+					<span
+						>Lifetime revenue: <strong style="color: var(--text);"
+							>{formatMoney(stats.boosting?.totalRevenue || 0)}</strong
+						></span
+					>
+					<span
+						>This month: <strong style="color: var(--text);"
+							>{formatMoney(stats.boosting?.thisMonthRevenue || 0)}</strong
+						></span
+					>
+				</div>
+			</div>
+			<div class="mt-3">
+				<AreaLineChart
+					data={(stats.boosting?.revenueBreakdown?.lineTrend || []).map(
+						(point: { key: string; revenue: number }) => ({
+							key: point.key,
+							value: point.revenue
+						})
+					)}
+					formatLabel={(key) => key.slice(5)}
+					emptyMessage="No boosting revenue data yet."
+				/>
+			</div>
+		</section>
+
+		<section
+			class="rounded-lg p-3"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
 			<div class="flex flex-wrap items-center justify-between gap-2">

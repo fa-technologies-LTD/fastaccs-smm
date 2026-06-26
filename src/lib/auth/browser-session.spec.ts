@@ -39,6 +39,8 @@ function buildUser(overrides: Partial<User> = {}): User {
 		affiliateUnlockedPopupSeenAt: null,
 		firstPurchasePopupSeenAt: null,
 		catalogUpdatesLastSeenAt: null,
+		boostingLaunchPopupSeenAt: null,
+		bankDetailsPopupSeenAt: null,
 		...overrides
 	};
 }
