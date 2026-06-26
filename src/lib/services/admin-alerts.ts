@@ -1,5 +1,7 @@
 import { prisma } from '$lib/prisma';
 import { sendEmail } from '$lib/services/email';
+import { sendPushToUsers } from '$lib/services/push-notifications';
+import { getAdminUserIds } from '$lib/auth/admin-roles';
 import {
 	getBusinessTimezoneSetting,
 	getLowStockThresholdSetting,
@@ -9,6 +11,14 @@ import {
 	setLowStockAlertState
 } from '$lib/services/admin-settings';
 import { getBusinessDateKey, getStartOfBusinessDayUtc } from '$lib/helpers/business-timezone';
+
+async function pushToAdmins(title: string, body: string, url?: string): Promise<void> {
+	const adminUserIds = await getAdminUserIds();
+	if (adminUserIds.length === 0) return;
+	await sendPushToUsers(adminUserIds, { title, body, url: url ?? '/admin' }).catch((error) => {
+		console.error('Admin push delivery failed:', error);
+	});
+}
 
 const LOW_STOCK_DIGEST_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const LOW_STOCK_MAX_EMAILS_PER_DAY = 3;
@@ -246,7 +256,8 @@ export async function sendLowStockAdminAlertIfNeeded(
 			sentToday: effectiveSentToday + 1,
 			suppressedCount: 0,
 			lastAlertAt: sentAtIso
-		})
+		}),
+		pushToAdmins(subject, bodyLines[0], '/admin/inventory')
 	]);
 
 	return { sent: true };
@@ -310,6 +321,7 @@ export async function sendCriticalAdminAlert(params: {
 
 	if (atLeastOneSent) {
 		criticalAlertCooldown.set(dedupeKey, Date.now());
+		await pushToAdmins(params.title, params.message);
 	}
 
 	return { sent: atLeastOneSent, reason: atLeastOneSent ? undefined : 'send_failed' };

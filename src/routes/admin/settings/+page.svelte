@@ -1,8 +1,43 @@
 <script lang="ts">
 	import type { ActionData, PageData } from './$types';
 	import { addToast } from '$lib/stores/toasts';
+	import {
+		isPushSupported,
+		getPushPermissionState,
+		subscribeToPush,
+		unsubscribeFromPush
+	} from '$lib/helpers/push-notifications';
 
 	let { data, form }: { data: PageData; form: ActionData | null } = $props();
+
+	let pushSupported = $state(false);
+	let pushPermission = $state<NotificationPermission | 'unsupported'>('unsupported');
+	let pushBusy = $state(false);
+
+	$effect(() => {
+		pushSupported = isPushSupported();
+		pushPermission = getPushPermissionState();
+	});
+
+	async function handleEnablePush() {
+		pushBusy = true;
+		const result = await subscribeToPush();
+		pushBusy = false;
+		if (result.success) {
+			pushPermission = getPushPermissionState();
+			addToast({ type: 'success', title: 'Push alerts enabled on this device', duration: 2500 });
+		} else {
+			addToast({ type: 'error', title: result.error || 'Could not enable push alerts', duration: 4000 });
+		}
+	}
+
+	async function handleDisablePush() {
+		pushBusy = true;
+		await unsubscribeFromPush();
+		pushBusy = false;
+		pushPermission = getPushPermissionState();
+		addToast({ type: 'success', title: 'Push alerts disabled on this device', duration: 2200 });
+	}
 
 	const settings = data.settings;
 	const announcementBanner = data.announcementBanner;
@@ -784,6 +819,47 @@
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
 			<h2 class="text-lg font-semibold" style="color: var(--text)">Notification Thresholds</h2>
+
+			<div
+				class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg p-3"
+				style="border: 1px solid var(--border); background: var(--bg);"
+			>
+				<div>
+					<p class="text-sm font-semibold" style="color: var(--text);">Push alerts on this device</p>
+					<p class="mt-1 text-xs" style="color: var(--text-muted);">
+						Critical alerts and low-stock digests already go to your admin recipient emails below.
+						Enable push to also get them as browser notifications on this device.
+					</p>
+				</div>
+				{#if !pushSupported}
+					<span class="text-xs" style="color: var(--text-muted);">Not supported on this browser</span>
+				{:else if pushPermission === 'granted'}
+					<button
+						type="button"
+						onclick={handleDisablePush}
+						disabled={pushBusy}
+						class="rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
+						style="background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border);"
+					>
+						{pushBusy ? 'Working…' : 'Disable push'}
+					</button>
+				{:else if pushPermission === 'denied'}
+					<span class="text-xs" style="color: var(--status-error);"
+						>Blocked — re-enable notifications for this site in your browser settings</span
+					>
+				{:else}
+					<button
+						type="button"
+						onclick={handleEnablePush}
+						disabled={pushBusy}
+						class="rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
+						style="background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border);"
+					>
+						{pushBusy ? 'Enabling…' : 'Enable push'}
+					</button>
+				{/if}
+			</div>
+
 			<form method="POST" action="?/saveNotifications" class="mt-4 space-y-4">
 				<label class="block text-sm" style="color: var(--text-muted);">
 					Admin recipients

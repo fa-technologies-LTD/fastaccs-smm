@@ -62,6 +62,13 @@ export async function getAdminRole(userId: string): Promise<AdminRole | null> {
 	return assignment?.role || null;
 }
 
+export async function getAdminUserIds(): Promise<string[]> {
+	const assignments = await prisma.adminRoleAssignment.findMany({
+		select: { userId: true }
+	});
+	return assignments.map((assignment) => assignment.userId);
+}
+
 export async function ensureAdminRoleAssignment(userId: string): Promise<AdminRole> {
 	const assignment = await prisma.adminRoleAssignment.upsert({
 		where: { userId },

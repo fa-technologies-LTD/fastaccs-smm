@@ -96,5 +96,60 @@ export const blogPosts: BlogPost[] = [
 		publishedAt: '2026-06-16',
 		updatedAt: '2026-06-16',
 		tags: ['Make Money Online', 'Affiliate Marketing', 'Side Hustle']
+	},
+	{
+		slug: 'organic-vs-bought-engagement-what-actually-moves-the-algorithm',
+		title: 'Organic vs. Bought Engagement: What Actually Moves the Algorithm',
+		description:
+			"Organic and bought engagement do different jobs. Here's an honest, research-backed breakdown of what each one actually changes in the algorithm — and how to combine them.",
+		excerpt:
+			"Organic engagement builds the algorithm's long-term model of your audience. Bought engagement clears the cold-start hurdle on a new post. Here's the actual mechanism behind both, and why the strongest strategy uses them together.",
+		publishedAt: '2026-06-26',
+		updatedAt: '2026-06-26',
+		tags: ['Engagement', 'Algorithm', 'Boosting Services']
+	},
+	{
+		slug: 'how-instagrams-algorithm-ranks-content-engagement-velocity',
+		title: "How Instagram's Algorithm Really Ranks Your Content (and Why Engagement Velocity Matters)",
+		description:
+			"Instagram doesn't rank content once — it re-ranks constantly based on engagement velocity. Here's how the system actually works and how to use that timing to your advantage.",
+		excerpt:
+			"Instagram's own documentation confirms it: how recently a post was published is a direct ranking input. That's what creates engagement velocity — and why the first hour after posting matters more than almost anything else.",
+		publishedAt: '2026-06-26',
+		updatedAt: '2026-06-26',
+		tags: ['Instagram', 'Algorithm', 'Boosting Services']
+	},
+	{
+		slug: '5-proven-ways-to-grow-organic-engagement-before-you-boost',
+		title: '5 Proven Ways to Grow Organic Engagement Before You Pay for a Boost',
+		description:
+			"A boost performs best on content that's already earning real attention. Here are 5 practical, free tactics to grow organic engagement before you spend on a boost.",
+		excerpt:
+			"A boost amplifies what's already working — it doesn't manufacture interest from nothing. These five free tactics build the organic foundation that makes a boost actually pay off.",
+		publishedAt: '2026-06-26',
+		updatedAt: '2026-06-26',
+		tags: ['Organic Growth', 'Strategy', 'Boosting Services']
+	},
+	{
+		slug: 'is-buying-followers-safe-what-platform-policies-actually-say',
+		title: 'Is Buying Followers Safe? What Platform Policies Actually Say',
+		description:
+			"Most 'is it safe' articles guess. This one quotes the actual policy language from Instagram, TikTok, YouTube, and Facebook, and explains what they really enforce against.",
+		excerpt:
+			'Platform policies target automated bot behavior and deception, not the act of paid promotion itself. Here is the actual enforcement logic, and a practical framework for judging real risk.',
+		publishedAt: '2026-06-26',
+		updatedAt: '2026-06-26',
+		tags: ['Safety', 'Platform Policies', 'Boosting Services']
+	},
+	{
+		slug: 'engagement-rate-explained-how-to-calculate-yours',
+		title: "Engagement Rate Explained: How to Calculate Yours and What's 'Good' by Platform",
+		description:
+			"Engagement rate is the one metric that actually tells you if your audience is real. Here's how to calculate it correctly and what counts as 'good' by platform and account size.",
+		excerpt:
+			'Follower count tells you audience size. Engagement rate tells you if anyone is actually paying attention. Here is the correct formula, real benchmarks by account size, and a 5-minute way to calculate yours.',
+		publishedAt: '2026-06-26',
+		updatedAt: '2026-06-26',
+		tags: ['Engagement Rate', 'Analytics', 'Boosting Services']
 	}
 ];
