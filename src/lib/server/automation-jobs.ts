@@ -51,6 +51,14 @@ export const AUTOMATION_JOBS = {
 		lockTimeoutMinutes: 30,
 		expectedIntervalMinutes: 240
 	},
+	nurture: {
+		name: 'nurture',
+		path: '/api/internal/cron/nurture',
+		schedule: 'daily',
+		risk: 'marketing',
+		lockTimeoutMinutes: 30,
+		expectedIntervalMinutes: 1440
+	},
 	'affiliate-lifecycle': {
 		name: 'affiliate-lifecycle',
 		path: '/api/internal/cron/affiliate-lifecycle',

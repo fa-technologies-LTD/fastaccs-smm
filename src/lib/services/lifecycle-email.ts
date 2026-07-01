@@ -6,6 +6,19 @@ const ONBOARDING_STEP_A_DELAY_HOURS = 24;
 const ONBOARDING_STEP_B_DELAY_HOURS = 48;
 const ABANDONED_ORDER_DELAY_MINUTES = 15;
 
+// Nurture drip for verified users who signed up but never bought — a gentle
+// 3-email sequence (day 3 / day 10 / day 21 after registration), then it stops.
+// Gated behind NURTURE_ENABLED so it never sends until explicitly switched on.
+const NURTURE_STEP_DELAYS_HOURS = [72, 240, 504];
+
+function isNurtureEnabled(): boolean {
+	return (env.NURTURE_ENABLED || '').trim().toLowerCase() === 'true';
+}
+
+function getNurturePromoCode(): string {
+	return (env.NURTURE_PROMO_CODE || 'WELCOME10').trim().toUpperCase();
+}
+
 const DEFAULT_BATCH_LIMIT = 300;
 const SCAN_CHUNK_MULTIPLIER = 3;
 const MAX_SCAN_FACTOR = 30;
@@ -360,6 +373,206 @@ ${message.body}`,
 			ctaUrl: candidate.sendingStepA ? `${baseUrl}/platforms` : `${baseUrl}/support`,
 			userId: candidate.userId,
 			notificationType: 'onboarding_step',
+			referenceId: candidate.referenceId,
+			campaignKey: candidate.referenceId
+		});
+
+		if (result.success) {
+			sent += 1;
+		} else if (result.suppressed) {
+			skipped += 1;
+		} else {
+			failed += 1;
+		}
+	}
+
+	return { queued, sent, skipped, failed };
+}
+
+interface NurtureDispatchCandidate {
+	userId: string;
+	email: string;
+	firstName: string;
+	step: number;
+	referenceId: string;
+}
+
+function getNurtureContent(step: number, promoCode: string): { subject: string; body: string } {
+	if (step === 0) {
+		return {
+			subject: 'A welcome gift — 10% off your first order 🎁',
+			body: `You created your Fast Accounts account but haven't placed your first order yet — so here's a little nudge, with a bonus.
+
+Use code ${promoCode} for 10% off your first purchase. Browse verified social accounts ready for instant delivery, or boost an account you already own with followers, likes, and views.
+
+Thousands of orders delivered so far — yours could be next.`
+		};
+	}
+	if (step === 1) {
+		return {
+			subject: "See what everyone's ordering this week 🔥",
+			body: `Still deciding? Here's what's moving fast right now — verified accounts across the platforms people ask for most, delivered the moment your payment lands.
+
+Your ${promoCode} code for 10% off your first order is still active. Take a look and grab what fits.`
+		};
+	}
+	return {
+		subject: "One last nudge (then we'll leave you be) 👋",
+		body: `We don't want to crowd your inbox, so this is the last reminder from us for now.
+
+If you've been meaning to try Fast Accounts, your 10% first-order code ${promoCode} is still here — instant delivery, verified accounts, and real support if you need it.
+
+Whenever you're ready, we're here.`
+	};
+}
+
+/**
+ * Gentle 3-email drip to verified users who signed up but never completed a
+ * purchase. Steps fire at ~day 3 / 10 / 21 after registration, never skip
+ * ahead, and stop the moment the user buys. No-op unless NURTURE_ENABLED=true.
+ */
+export async function runNurtureSequence(params?: {
+	limit?: number;
+}): Promise<LifecycleEmailRunSummary> {
+	if (!isNurtureEnabled()) {
+		return { queued: 0, sent: 0, skipped: 0, failed: 0 };
+	}
+
+	const now = new Date();
+	const batchLimit = Math.min(Math.max(Number(params?.limit || DEFAULT_BATCH_LIMIT), 1), 1000);
+	const stepReadyAt = NURTURE_STEP_DELAYS_HOURS.map(
+		(hours) => new Date(now.getTime() - hours * 60 * 60 * 1000)
+	);
+	const promoCode = getNurturePromoCode();
+	const baseUrl = getBaseUrl();
+	const scanChunk = Math.min(1000, Math.max(batchLimit * SCAN_CHUNK_MULTIPLIER, batchLimit));
+	const maxScanRows = Math.max(scanChunk, batchLimit * MAX_SCAN_FACTOR);
+
+	const dispatchQueue: NurtureDispatchCandidate[] = [];
+	let scannedRows = 0;
+	let userCursor: { registeredAt: Date; id: string } | null = null;
+	let queued = 0;
+	let sent = 0;
+	let skipped = 0;
+	let failed = 0;
+
+	while (dispatchQueue.length < batchLimit && scannedRows < maxScanRows) {
+		const users = (await prisma.user.findMany({
+			where: {
+				isActive: true,
+				emailVerified: true,
+				email: { not: null },
+				userType: { not: 'ADMIN' },
+				// Eligible once they've reached at least the first step's delay.
+				registeredAt: { lte: stepReadyAt[0] },
+				...getUserAfterCursorWhere(userCursor)
+			},
+			select: {
+				id: true,
+				email: true,
+				fullName: true,
+				registeredAt: true
+			},
+			orderBy: [{ registeredAt: 'asc' }, { id: 'asc' }],
+			take: scanChunk
+		})) as OnboardingUserRow[];
+
+		if (users.length === 0) {
+			break;
+		}
+
+		scannedRows += users.length;
+		const lastUser = users[users.length - 1];
+		userCursor = { registeredAt: lastUser.registeredAt, id: lastUser.id };
+
+		const userIds = users.map((user) => user.id);
+		const existingSends = await prisma.emailNotification.findMany({
+			where: {
+				userId: { in: userIds },
+				notificationType: 'nurture_step',
+				status: 'sent',
+				referenceId: { startsWith: 'nurture:' }
+			},
+			select: { userId: true, referenceId: true }
+		});
+		const sentByUser = new Map<string, Set<string>>();
+		for (const row of existingSends) {
+			if (!row.userId) continue;
+			const set = sentByUser.get(row.userId) || new Set<string>();
+			if (row.referenceId) set.add(row.referenceId);
+			sentByUser.set(row.userId, set);
+		}
+
+		// Anyone who has ever paid/completed an order drops out of the sequence.
+		const paidOrders = await prisma.order.findMany({
+			where: {
+				userId: { in: userIds },
+				OR: [{ status: 'paid' }, { status: 'completed' }, { paymentStatus: 'paid' }]
+			},
+			select: { userId: true },
+			distinct: ['userId']
+		});
+		const paidUserIds = new Set(
+			paidOrders.map((order) => order.userId).filter((userId): userId is string => Boolean(userId))
+		);
+
+		for (const user of users) {
+			const email = normalizeEmail(user.email);
+			if (!email) {
+				skipped += 1;
+				continue;
+			}
+			if (paidUserIds.has(user.id)) {
+				skipped += 1;
+				continue;
+			}
+
+			const sentReferences = sentByUser.get(user.id) || new Set<string>();
+			// First unsent step decides — never skip ahead, only send if it's due.
+			let chosenStep = -1;
+			for (let i = 0; i < NURTURE_STEP_DELAYS_HOURS.length; i++) {
+				const ref = `nurture:step_${i + 1}:${user.id}`;
+				if (sentReferences.has(ref)) continue;
+				if (user.registeredAt <= stepReadyAt[i]) chosenStep = i;
+				break;
+			}
+
+			if (chosenStep === -1) {
+				skipped += 1;
+				continue;
+			}
+
+			dispatchQueue.push({
+				userId: user.id,
+				email,
+				firstName: getFirstName(user.fullName, email),
+				step: chosenStep,
+				referenceId: `nurture:step_${chosenStep + 1}:${user.id}`
+			});
+
+			if (dispatchQueue.length >= batchLimit) {
+				break;
+			}
+		}
+	}
+
+	if (dispatchQueue.length === 0) {
+		return { queued: 0, sent: 0, skipped, failed: 0 };
+	}
+
+	for (const candidate of dispatchQueue) {
+		const message = getNurtureContent(candidate.step, promoCode);
+		queued += 1;
+		const result = await sendMarketingEmail({
+			to: candidate.email,
+			subject: message.subject,
+			body: `Hi ${candidate.firstName},
+
+${message.body}`,
+			ctaText: 'Shop now',
+			ctaUrl: `${baseUrl}/platforms`,
+			userId: candidate.userId,
+			notificationType: 'nurture_step',
 			referenceId: candidate.referenceId,
 			campaignKey: candidate.referenceId
 		});

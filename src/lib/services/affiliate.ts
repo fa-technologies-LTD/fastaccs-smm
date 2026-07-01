@@ -32,7 +32,7 @@ const AFFILIATE_CONFIG_KEYS = {
 } as const;
 
 const DEFAULT_AFFILIATE_CONFIG = {
-	unlockThreshold: 50_000,
+	unlockThreshold: 20_000,
 	discountStage1Percent: 5,
 	discountStage1Cap: 1_000,
 	discountStage2Percent: 2,
@@ -540,6 +540,15 @@ async function countLifetimeCompletedSpend(userId: string): Promise<number> {
 	return Number(aggregate._sum.totalAmount || 0);
 }
 
+async function countCompletedOrders(userId: string): Promise<number> {
+	return prisma.order.count({
+		where: {
+			userId,
+			OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
+		}
+	});
+}
+
 async function parseAffiliateConfig(): Promise<AffiliateConfig> {
 	const keyList = Object.values(AFFILIATE_CONFIG_KEYS);
 	const rows = await prisma.microcopy.findMany({
@@ -897,7 +906,7 @@ export async function generateAffiliateCode(userId: string): Promise<string> {
 export async function getAffiliateQualificationStatus(
 	userId: string
 ): Promise<AffiliateQualificationStatus> {
-	const [user, config, lifetimeCompletedSpend] = await Promise.all([
+	const [user, config, lifetimeCompletedSpend, completedOrderCount] = await Promise.all([
 		prisma.user.findUnique({
 			where: { id: userId },
 			select: {
@@ -906,7 +915,8 @@ export async function getAffiliateQualificationStatus(
 			}
 		}),
 		getAffiliateConfig(),
-		countLifetimeCompletedSpend(userId)
+		countLifetimeCompletedSpend(userId),
+		countCompletedOrders(userId)
 	]);
 
 	if (!user) {
@@ -927,7 +937,10 @@ export async function getAffiliateQualificationStatus(
 		};
 	}
 
-	if (lifetimeCompletedSpend < config.unlockThreshold) {
+	// Access unlocks on the first completed purchase, or once lifetime completed
+	// spend reaches the (lowered) threshold as a fallback.
+	const hasCompletedPurchase = completedOrderCount > 0;
+	if (!hasCompletedPurchase && lifetimeCompletedSpend < config.unlockThreshold) {
 		return {
 			eligible: false,
 			lifetimeCompletedSpend,

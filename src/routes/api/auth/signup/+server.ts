@@ -23,6 +23,7 @@ interface SignupPayload {
 	email?: unknown;
 	password?: unknown;
 	fullName?: unknown;
+	phone?: unknown;
 	redirectTo?: unknown;
 }
 
@@ -41,6 +42,8 @@ export const POST: RequestHandler = async (event) => {
 		const email = normalizeEmail(body.email);
 		const password = typeof body.password === 'string' ? body.password : '';
 		const fullName = typeof body.fullName === 'string' ? body.fullName.trim() : '';
+		// Optional WhatsApp number — kept low-friction: stored as-is, no validation gate.
+		const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
 		const redirectTo = sanitizeInternalRedirectPath(
 			typeof body.redirectTo === 'string' ? body.redirectTo : null
 		);
@@ -151,6 +154,7 @@ export const POST: RequestHandler = async (event) => {
 				email,
 				passwordHash,
 				fullName: fullName || firstNameFallback,
+				phone: phone || null,
 				userType: getUserTypeFromEmail(email),
 				emailVerified: false,
 				emailVerifiedAt: null,

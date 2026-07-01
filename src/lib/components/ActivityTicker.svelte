@@ -1,15 +1,21 @@
 <script lang="ts">
 	import { Zap } from '$lib/icons';
+	import { browser } from '$app/environment';
 
+	// Show the "orders fulfilled" ticker only once, on a visitor's first visit.
+	const SEEN_KEY = 'fa_orders_ticker_seen';
 	let ordersFulfilled = $state<number | null>(null);
 
 	$effect(() => {
+		if (!browser || localStorage.getItem(SEEN_KEY)) return;
+
 		fetch('/api/homepage/activity-stats')
 			.then((res) => (res.ok ? res.json() : null))
 			.then((result) => {
 				const count = result?.data?.ordersFulfilled;
-				if (typeof count === 'number') {
+				if (typeof count === 'number' && count > 0) {
 					ordersFulfilled = count;
+					localStorage.setItem(SEEN_KEY, '1');
 				}
 			})
 			.catch(() => {});

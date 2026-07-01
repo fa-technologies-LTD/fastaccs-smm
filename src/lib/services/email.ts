@@ -13,6 +13,7 @@ export type EmailNotificationType =
 	| 'verification'
 	| 'welcome'
 	| 'onboarding_step'
+	| 'nurture_step'
 	| 'abandoned_order'
 	| 'order_confirmation'
 	| 'order_delivery'

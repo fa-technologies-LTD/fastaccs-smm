@@ -14,6 +14,7 @@
 
 	const redirectTo = data.returnUrl || page.url.searchParams.get('returnUrl') || '/dashboard';
 	let fullName = $state('');
+	let phone = $state('');
 	let email = $state('');
 	let password = $state('');
 	let confirmPassword = $state('');
@@ -50,6 +51,7 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					fullName,
+					phone,
 					email,
 					password,
 					redirectTo
@@ -134,6 +136,24 @@
 							style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
 							placeholder="John Doe"
 						/>
+					</div>
+
+					<div>
+						<label for="signup-phone" class="mb-1 block text-sm font-medium" style="color: var(--text);">
+							WhatsApp number <span style="color: var(--text-muted);">(optional)</span>
+						</label>
+						<input
+							id="signup-phone"
+							type="tel"
+							bind:value={phone}
+							autocomplete="tel"
+							class="w-full rounded-lg px-3 py-2"
+							style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
+							placeholder="+234 801 234 5678"
+						/>
+						<p class="mt-1 text-xs" style="color: var(--text-muted);">
+							So we can reach you quickly about your orders.
+						</p>
 					</div>
 
 					<div>

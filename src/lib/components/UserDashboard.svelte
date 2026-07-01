@@ -59,7 +59,7 @@
 		Boolean(affiliateState?.unlocked || affiliateState?.isActive || affiliateState?.eligible)
 	);
 	const affiliateLifetimeSpend = $derived(Number(affiliateState?.lifetimeCompletedSpend || 0));
-	const affiliateUnlockThreshold = $derived(Number(affiliateState?.unlockThreshold || 50000));
+	const affiliateUnlockThreshold = $derived(Number(affiliateState?.unlockThreshold || 20000));
 	const affiliateRemainingSpend = $derived(
 		Math.max(0, affiliateUnlockThreshold - affiliateLifetimeSpend)
 	);

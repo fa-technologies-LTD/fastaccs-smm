@@ -29,6 +29,10 @@
 			"schedule": "50 */4 * * *"
 		},
 		{
+			"path": "/api/internal/cron/nurture",
+			"schedule": "40 10 * * *"
+		},
+		{
 			"path": "/api/internal/cron/winback",
 			"schedule": "20 9 * * *"
 		},
