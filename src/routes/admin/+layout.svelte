@@ -43,6 +43,17 @@
 		}
 	);
 
+	// "Needs attention" counts for sidebar badges, keyed by nav href.
+	let attentionCounts = $state<Record<string, number>>({});
+	$effect(() => {
+		fetch('/api/admin/attention-counts')
+			.then((r) => (r.ok ? r.json() : null))
+			.then((counts) => {
+				if (counts) attentionCounts = counts;
+			})
+			.catch(() => {});
+	});
+
 	const adminNavItems = $derived.by(() => {
 		const allItems: Array<{
 			href: string;
@@ -177,6 +188,15 @@
 								class="mr-3 h-4 w-4 flex-shrink-0 transition-transform group-hover:scale-95 group-hover:rotate-12"
 							/>
 							{item.label}
+							{#if attentionCounts[item.href] > 0}
+								<span
+									class="ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none"
+									style="background: var(--fa-lime-700); color: #0a0a0a;"
+									title="Needs attention"
+								>
+									{attentionCounts[item.href]}
+								</span>
+							{/if}
 						</a>
 					{/each}
 				</nav>
@@ -227,6 +247,15 @@
 										class="mr-4 h-6 w-6 transition-transform group-hover:scale-95 group-hover:rotate-12"
 									/>
 									{item.label}
+									{#if attentionCounts[item.href] > 0}
+										<span
+											class="ml-auto rounded-full px-2 py-0.5 text-xs font-bold leading-none"
+											style="background: var(--fa-lime-700); color: #0a0a0a;"
+											title="Needs attention"
+										>
+											{attentionCounts[item.href]}
+										</span>
+									{/if}
 								</a>
 							{/each}
 						</nav>
