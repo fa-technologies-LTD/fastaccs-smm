@@ -3,6 +3,12 @@ import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
 import { getAdminSettingsSnapshot } from '$lib/services/admin-settings';
 import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
 
+// Fire the "order paid" admin alert only ONCE per order. Manual/boosting orders
+// stay in status 'paid' (never 'completed'), so re-settlement would otherwise
+// re-trigger the alert every time the old 24h cooldown lapsed. A ~10-year window
+// makes the persisted dedupe record effectively permanent per order.
+const NOTIFY_ONCE_PER_ORDER_MS = 3650 * 24 * 60 * 60 * 1000;
+
 function fallbackOrderLabel(orderNumber: string | null, orderId: string): string {
 	const normalizedOrderNumber = String(orderNumber || '').trim();
 	if (normalizedOrderNumber) return normalizedOrderNumber;
@@ -57,7 +63,7 @@ export async function notifyManualHandoverOrderPaid(orderId: string, source: str
 		message: bodyLines.join('\n'),
 		source,
 		dedupeKey: `manual-handover-paid:${order.id}`,
-		cooldownMs: 24 * 60 * 60 * 1000
+		cooldownMs: NOTIFY_ONCE_PER_ORDER_MS
 	});
 }
 
@@ -114,6 +120,6 @@ export async function notifyBoostingOrderPaid(orderId: string, source: string): 
 		message: bodyLines.join('\n'),
 		source,
 		dedupeKey: `boosting-paid:${order.id}`,
-		cooldownMs: 24 * 60 * 60 * 1000
+		cooldownMs: NOTIFY_ONCE_PER_ORDER_MS
 	});
 }
