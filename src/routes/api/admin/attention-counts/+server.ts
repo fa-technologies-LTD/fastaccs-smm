@@ -6,7 +6,7 @@ import { ORDER_STATUS_GROUPS } from '$lib/helpers/order-status';
 // Lightweight "needs attention" counts for the admin sidebar badges.
 // Read-only, side-effect free, keyed by nav href so the layout can map directly.
 export const GET: RequestHandler = async () => {
-	const [orders, boostingOrders] = await Promise.all([
+	const [orders, boostingOrders, outOfStock] = await Promise.all([
 		// Account orders that are paid but not yet delivered — awaiting fulfillment.
 		prisma.order.count({
 			where: {
@@ -22,11 +22,21 @@ export const GET: RequestHandler = async () => {
 				boostFulfillmentStatus: 'pending',
 				order: { paymentStatus: 'paid' }
 			}
+		}),
+		// Active tiers with zero available accounts — out of stock (needs restock).
+		prisma.category.count({
+			where: {
+				categoryType: 'tier',
+				isActive: true,
+				parentId: { not: null },
+				accounts: { none: { status: 'available' } }
+			}
 		})
 	]);
 
 	return json({
 		'/admin/orders': orders,
-		'/admin/boosting-orders': boostingOrders
+		'/admin/boosting-orders': boostingOrders,
+		'/admin/inventory': outOfStock
 	});
 };
