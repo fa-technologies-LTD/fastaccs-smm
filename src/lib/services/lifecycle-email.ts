@@ -10,6 +10,11 @@ const ABANDONED_ORDER_DELAY_MINUTES = 15;
 // 3-email sequence (day 3 / day 10 / day 21 after registration), then it stops.
 // Gated behind NURTURE_ENABLED so it never sends until explicitly switched on.
 const NURTURE_STEP_DELAYS_HOURS = [72, 240, 504];
+// Minimum spacing between consecutive nurture emails. Keeps the existing backlog
+// (whose registration-age delays are all already passed) gently spaced instead of
+// receiving all three on consecutive days. New signups are already spaced by the
+// registration-age delays above, so this rarely binds for them.
+const NURTURE_MIN_STEP_GAP_MS = 7 * 24 * 60 * 60 * 1000;
 
 function isNurtureEnabled(): boolean {
 	return (env.NURTURE_ENABLED || '').trim().toLowerCase() === 'true';
@@ -493,14 +498,14 @@ export async function runNurtureSequence(params?: {
 				status: 'sent',
 				referenceId: { startsWith: 'nurture:' }
 			},
-			select: { userId: true, referenceId: true }
+			select: { userId: true, referenceId: true, sentAt: true }
 		});
-		const sentByUser = new Map<string, Set<string>>();
+		const sentByUser = new Map<string, Map<string, Date | null>>();
 		for (const row of existingSends) {
-			if (!row.userId) continue;
-			const set = sentByUser.get(row.userId) || new Set<string>();
-			if (row.referenceId) set.add(row.referenceId);
-			sentByUser.set(row.userId, set);
+			if (!row.userId || !row.referenceId) continue;
+			const stepMap = sentByUser.get(row.userId) || new Map<string, Date | null>();
+			stepMap.set(row.referenceId, row.sentAt);
+			sentByUser.set(row.userId, stepMap);
 		}
 
 		// Anyone who has ever paid/completed an order drops out of the sequence.
@@ -527,13 +532,21 @@ export async function runNurtureSequence(params?: {
 				continue;
 			}
 
-			const sentReferences = sentByUser.get(user.id) || new Set<string>();
-			// First unsent step decides — never skip ahead, only send if it's due.
+			const sentSteps = sentByUser.get(user.id) || new Map<string, Date | null>();
+			// First unsent step decides — never skip ahead, and only send when it's
+			// due by registration age AND at least the min gap after the prior step.
 			let chosenStep = -1;
 			for (let i = 0; i < NURTURE_STEP_DELAYS_HOURS.length; i++) {
 				const ref = `nurture:step_${i + 1}:${user.id}`;
-				if (sentReferences.has(ref)) continue;
-				if (user.registeredAt <= stepReadyAt[i]) chosenStep = i;
+				if (sentSteps.has(ref)) continue;
+				if (user.registeredAt > stepReadyAt[i]) break;
+				if (i > 0) {
+					const prevSentAt = sentSteps.get(`nurture:step_${i}:${user.id}`);
+					if (!prevSentAt || now.getTime() - prevSentAt.getTime() < NURTURE_MIN_STEP_GAP_MS) {
+						break;
+					}
+				}
+				chosenStep = i;
 				break;
 			}
 
