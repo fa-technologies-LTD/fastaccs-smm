@@ -25,7 +25,7 @@ import {
 	isOrderPaymentConfirmed
 } from '$lib/helpers/buyer-order-visibility';
 
-export type PaymentSettlementSource = 'verify' | 'webhook' | 'reconcile';
+export type PaymentSettlementSource = 'verify' | 'webhook' | 'reconcile' | 'admin_release';
 
 export interface PaymentSettlementResult {
 	success: boolean;

@@ -1,13 +1,21 @@
 import type { Prisma } from '@prisma/client';
 import { REVENUE_ORDER_STATUSES } from './order-revenue';
 
+// Orders an owner admin releases to a profile (self-offload of specific logs)
+// carry this payment channel so they are excluded from ALL revenue/analytics —
+// they are fulfilled but were never a real sale.
+export const MANUAL_RELEASE_CHANNEL = 'manual_release';
+
 function buildDateWindow(gte: Date, lte?: Date): { gte: Date; lte?: Date } {
 	return lte ? { gte, lte } : { gte };
 }
 
 export function buildRevenueOrderWhere(): Prisma.OrderWhereInput {
 	return {
-		OR: [{ status: { in: [...REVENUE_ORDER_STATUSES] } }, { paymentStatus: 'paid' }]
+		AND: [
+			{ OR: [{ status: { in: [...REVENUE_ORDER_STATUSES] } }, { paymentStatus: 'paid' }] },
+			{ NOT: { paymentChannel: MANUAL_RELEASE_CHANNEL } }
+		]
 	};
 }
 
