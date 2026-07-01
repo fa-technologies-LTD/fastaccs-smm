@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import {
 		ArrowLeft,
 		User,
@@ -39,6 +39,7 @@
 			items: OrderItemWithDetails[];
 			error: string | null;
 			canViewRevenue?: boolean;
+			adminRole?: string;
 		};
 	}
 
@@ -223,6 +224,49 @@
 		}
 	}
 
+	// Owner-only: mark a pending order paid and allocate its logs to the buyer's
+	// profile, WITHOUT counting as revenue. Used to self-offload specific logs.
+	async function releaseToProfile() {
+		if (isProcessing) return;
+		if (
+			!confirm(
+				"Release this order's logs to the buyer's profile as PAID, with NO revenue counted? This allocates real inventory."
+			)
+		)
+			return;
+
+		isProcessing = true;
+		try {
+			const res = await fetch(`/api/orders/${order.id}/release-to-profile`, { method: 'POST' });
+			const result = await res.json();
+			if (!res.ok || !result.success) {
+				addToast({
+					type: 'error',
+					title: 'Release failed',
+					message: result.error || 'Unknown error',
+					duration: 4000
+				});
+			} else {
+				addToast({
+					type: 'success',
+					title: 'Logs released to profile',
+					message: 'Marked paid (no revenue) and logs allocated.',
+					duration: 3000
+				});
+				await invalidateAll();
+			}
+		} catch (error) {
+			addToast({
+				type: 'error',
+				title: 'Release failed',
+				message: error instanceof Error ? error.message : 'Unknown error',
+				duration: 3000
+			});
+		} finally {
+			isProcessing = false;
+		}
+	}
+
 	async function processDelivery() {
 		if (isProcessing) return;
 
@@ -378,6 +422,16 @@
 							<Clock class="h-4 w-4" />
 							Start Processing
 						</button>
+						{#if data.adminRole === 'FULL_ADMIN'}
+							<button
+								onclick={releaseToProfile}
+								disabled={isProcessing}
+								class="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 hover:bg-amber-500/20 disabled:opacity-50 sm:px-4 sm:text-sm"
+								title="Owner only: mark paid & allocate logs to the buyer, excluded from revenue"
+							>
+								Release logs to my profile
+							</button>
+						{/if}
 					{/if}
 
 					{#if order.status === 'processing'}
