@@ -79,8 +79,10 @@ export async function getRecentActivityFeed(limit = 10): Promise<RecentActivityI
 	return items.slice(0, limit);
 }
 
+const UNHEALTHY_JOB_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 export async function getDashboardIssues(): Promise<DashboardIssues> {
-	const [failedEmails, unhealthyJobs] = await Promise.all([
+	const [failedEmails, candidateUnhealthyJobs] = await Promise.all([
 		prisma.emailNotification.findMany({
 			where: { status: 'failed', ...EMAIL_FAILURE_NOISE_FILTER },
 			orderBy: { failedAt: 'desc' },
@@ -94,9 +96,13 @@ export async function getDashboardIssues(): Promise<DashboardIssues> {
 			}
 		}),
 		prisma.automationJobRun.findMany({
-			where: { status: { in: ['failed', 'unhealthy'] } },
+			// Only recent failures — ancient ones age out on their own.
+			where: {
+				status: { in: ['failed', 'unhealthy'] },
+				startedAt: { gte: new Date(Date.now() - UNHEALTHY_JOB_WINDOW_MS) }
+			},
 			orderBy: { startedAt: 'desc' },
-			take: 5,
+			take: 25,
 			select: {
 				id: true,
 				jobName: true,
@@ -106,6 +112,24 @@ export async function getDashboardIssues(): Promise<DashboardIssues> {
 			}
 		})
 	]);
+
+	// Drop failures already resolved by a later successful run of the same job,
+	// so a fixed problem stops showing instead of lingering as a stale alert.
+	const failedJobNames = [...new Set(candidateUnhealthyJobs.map((job) => job.jobName))];
+	const latestSuccesses = failedJobNames.length
+		? await prisma.automationJobRun.groupBy({
+				by: ['jobName'],
+				where: { jobName: { in: failedJobNames }, status: 'succeeded' },
+				_max: { startedAt: true }
+			})
+		: [];
+	const lastSuccessByJob = new Map(
+		latestSuccesses.map((row) => [row.jobName, row._max.startedAt?.getTime() ?? 0])
+	);
+
+	const unhealthyJobs = candidateUnhealthyJobs
+		.filter((job) => job.startedAt.getTime() > (lastSuccessByJob.get(job.jobName) ?? 0))
+		.slice(0, 5);
 
 	return { failedEmails, unhealthyJobs };
 }
