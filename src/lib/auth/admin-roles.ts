@@ -42,6 +42,10 @@ const ROLE_PERMISSION_MAP: Record<AdminRole, AdminPermission[]> = {
 		'admin:inventory:manage',
 		'admin:catalog:manage'
 	],
+	// Assistant admin: can view site state, fulfil/manage orders (incl. manual
+	// handover) and restock/import inventory — but NOT view revenue/analytics,
+	// create tiers/edit catalog, offload accounts, or manage users/settings.
+	ASSISTANT: ['admin:access', 'admin:orders:manage', 'admin:inventory:manage'],
 	READ_ONLY: ['admin:access']
 };
 

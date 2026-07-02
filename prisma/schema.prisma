@@ -653,6 +653,7 @@ enum AdminRole {
   FULL_ADMIN
   ORDER_MANAGER
   READ_ONLY
+  ASSISTANT
 }
 
 enum PromotionType {

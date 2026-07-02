@@ -6,7 +6,12 @@ import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { getFeatureFlagSnapshot } from '$lib/services/feature-flags';
 
 function parseRole(value: unknown): AdminRole | null {
-	if (value === 'FULL_ADMIN' || value === 'ORDER_MANAGER' || value === 'READ_ONLY') {
+	if (
+		value === 'FULL_ADMIN' ||
+		value === 'ORDER_MANAGER' ||
+		value === 'READ_ONLY' ||
+		value === 'ASSISTANT'
+	) {
 		return value;
 	}
 	return null;

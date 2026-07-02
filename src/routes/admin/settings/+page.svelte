@@ -48,6 +48,7 @@
 	const sessions = data.sessions || [];
 	type AdminRow = NonNullable<PageData['admins']>[number];
 	let admins = $state<AdminRow[]>(data.admins || []);
+	let newAdminEmail = $state('');
 	const canManageSettings = data.canManageSettings;
 	const canManageRoles = data.canManageRoles;
 	const roleManagementEnabled = Boolean(featureFlags.adminRoleManagement);
@@ -96,6 +97,30 @@
 			title: 'Admin role updated',
 			duration: 2200
 		});
+	}
+
+	async function addAdminByEmail() {
+		const email = newAdminEmail.trim();
+		if (!canManageRoles || !email) return;
+
+		const response = await fetch('/api/admin/roles', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ email, role: 'ASSISTANT' })
+		});
+		const result = await response.json();
+
+		if (!response.ok || !result.success) {
+			addToast({ type: 'error', title: result.error || 'Failed to add admin', duration: 3200 });
+			return;
+		}
+
+		const added = result.data as AdminRow;
+		admins = admins.some((admin) => admin.id === added.id)
+			? admins.map((admin) => (admin.id === added.id ? { ...admin, role: added.role } : admin))
+			: [...admins, added];
+		newAdminEmail = '';
+		addToast({ type: 'success', title: `${added.email} added as ${added.role}`, duration: 2600 });
 	}
 
 	$effect(() => {
@@ -983,7 +1008,9 @@
 		>
 			<h2 class="text-lg font-semibold" style="color: var(--text)">Admin Roles</h2>
 			<p class="mt-1 text-sm" style="color: var(--text-muted);">
-				Role split is enforced server-side: FULL_ADMIN, ORDER_MANAGER, READ_ONLY.
+				Role split is enforced server-side: FULL_ADMIN, ORDER_MANAGER, ASSISTANT, READ_ONLY.
+				ASSISTANT can run orders &amp; inventory but never sees revenue/analytics and can't
+				create tiers, offload accounts, or manage users.
 			</p>
 			{#if !roleManagementEnabled}
 				<p class="mt-3 text-sm" style="color: var(--text-muted);">
@@ -1012,6 +1039,7 @@
 							>
 								<option value="FULL_ADMIN">FULL_ADMIN</option>
 								<option value="ORDER_MANAGER">ORDER_MANAGER</option>
+								<option value="ASSISTANT">ASSISTANT</option>
 								<option value="READ_ONLY">READ_ONLY</option>
 							</select>
 						</div>
@@ -1022,11 +1050,33 @@
 					class="mt-4 rounded-lg p-3"
 					style="border: 1px dashed var(--border); background: var(--bg);"
 				>
-					<p class="text-sm font-semibold" style="color: var(--text)">Granting Admin Access</p>
+					<p class="text-sm font-semibold" style="color: var(--text)">Add an assistant admin</p>
 					<p class="mt-1 text-xs" style="color: var(--text-muted);">
-						To grant a new admin access, add their email to the <code>ADMIN_EMAILS</code>
-						environment variable in Vercel. They'll get FULL_ADMIN access automatically on their next
-						login — adjust their role above afterward if needed.
+						Enter the email of an existing account to add them as an ASSISTANT. They must have
+						signed up first. Adjust their role above afterward if needed.
+					</p>
+					<div class="mt-2 flex flex-wrap gap-2">
+						<input
+							type="email"
+							bind:value={newAdminEmail}
+							placeholder="assistant@example.com"
+							disabled={!canManageRoles}
+							class="min-w-0 flex-1 rounded-lg px-3 py-2 text-sm"
+							style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
+						/>
+						<button
+							type="button"
+							onclick={addAdminByEmail}
+							disabled={!canManageRoles || !newAdminEmail.trim()}
+							class="rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+							style="background: var(--primary); color: #04140C;"
+						>
+							Add assistant
+						</button>
+					</div>
+					<p class="mt-3 text-xs" style="color: var(--text-muted);">
+						For full admins, add their email to the <code>ADMIN_EMAILS</code> environment variable
+						in Vercel — they'll get FULL_ADMIN automatically on next login.
 					</p>
 				</div>
 			{/if}
