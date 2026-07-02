@@ -37,6 +37,7 @@ function buildUser(overrides: Partial<User> = {}): User {
 		affiliateProgress80PopupSeenAt: null,
 		affiliateProgress95PopupSeenAt: null,
 		affiliateUnlockedPopupSeenAt: null,
+		affiliateShareCodePopupSeenAt: null,
 		firstPurchasePopupSeenAt: null,
 		catalogUpdatesLastSeenAt: null,
 		boostingLaunchPopupSeenAt: null,

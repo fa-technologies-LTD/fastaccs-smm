@@ -40,6 +40,11 @@
 				<ul class="ml-6 list-disc space-y-1">
 					<li>Account profile data such as name, email, and sign-in identifiers.</li>
 					<li>Order and delivery records, payment references, and support conversations.</li>
+					<li>
+						Affiliate payout details (bank name, account number, account name), collected only
+						if you join our affiliate programme and used solely to pay out your affiliate
+						earnings — never to charge or debit your account.
+					</li>
 					<li>Security and usage signals used to prevent abuse and improve reliability.</li>
 				</ul>
 			</section>

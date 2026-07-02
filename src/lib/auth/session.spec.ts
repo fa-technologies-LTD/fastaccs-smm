@@ -60,6 +60,7 @@ function buildUser(emailVerified: boolean): User {
 		affiliateProgress80PopupSeenAt: null,
 		affiliateProgress95PopupSeenAt: null,
 		affiliateUnlockedPopupSeenAt: null,
+		affiliateShareCodePopupSeenAt: null,
 		firstPurchasePopupSeenAt: null,
 		catalogUpdatesLastSeenAt: null,
 		boostingLaunchPopupSeenAt: null,

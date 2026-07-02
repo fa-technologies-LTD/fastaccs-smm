@@ -9,12 +9,22 @@
 		title: string;
 		body: string;
 		ctaText?: string;
+		ctaHref?: string;
 		secondaryHref?: string;
 		secondaryText?: string;
 	}
 
-	let { isOpen, onClose, icon, title, body, ctaText = 'Got it', secondaryHref, secondaryText }: Props =
-		$props();
+	let {
+		isOpen,
+		onClose,
+		icon,
+		title,
+		body,
+		ctaText = 'Got it',
+		ctaHref,
+		secondaryHref,
+		secondaryText
+	}: Props = $props();
 
 	function handleBackdropClick(event: MouseEvent) {
 		if (event.target === event.currentTarget) {
@@ -72,13 +82,24 @@
 
 			<p class="mb-6 text-sm" style="color: var(--text-muted);">{body}</p>
 
-			<button
-				onclick={onClose}
-				class="w-full cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition-all hover:scale-95"
-				style="background: var(--primary); color: #04140C;"
-			>
-				{ctaText}
-			</button>
+			{#if ctaHref}
+				<a
+					href={ctaHref}
+					onclick={onClose}
+					class="block w-full cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition-all hover:scale-95"
+					style="background: var(--primary); color: #04140C;"
+				>
+					{ctaText}
+				</a>
+			{:else}
+				<button
+					onclick={onClose}
+					class="w-full cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition-all hover:scale-95"
+					style="background: var(--primary); color: #04140C;"
+				>
+					{ctaText}
+				</button>
+			{/if}
 
 			{#if secondaryHref && secondaryText}
 				<a

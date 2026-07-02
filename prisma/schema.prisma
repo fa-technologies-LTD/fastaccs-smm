@@ -40,6 +40,7 @@ model User {
   affiliateProgress80PopupSeenAt DateTime?     @map("affiliate_progress_80_popup_seen_at")
   affiliateProgress95PopupSeenAt DateTime?     @map("affiliate_progress_95_popup_seen_at")
   affiliateUnlockedPopupSeenAt   DateTime?     @map("affiliate_unlocked_popup_seen_at")
+  affiliateShareCodePopupSeenAt  DateTime?     @map("affiliate_share_code_popup_seen_at")
   firstPurchasePopupSeenAt DateTime?           @map("first_purchase_popup_seen_at")
   catalogUpdatesLastSeenAt DateTime?           @map("catalog_updates_last_seen_at")
   boostingLaunchPopupSeenAt DateTime?          @map("boosting_launch_popup_seen_at")

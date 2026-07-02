@@ -69,14 +69,19 @@ export type AffiliatePopupType =
 	| 'progress_50'
 	| 'progress_80'
 	| 'progress_95'
-	| 'unlocked';
+	| 'unlocked'
+	| 'share_code';
 
 const AFFILIATE_POPUP_SEEN_FIELDS = {
 	welcome: 'affiliateWelcomePopupSeenAt',
 	progress_50: 'affiliateProgress50PopupSeenAt',
 	progress_80: 'affiliateProgress80PopupSeenAt',
 	progress_95: 'affiliateProgress95PopupSeenAt',
-	unlocked: 'affiliateUnlockedPopupSeenAt'
+	// 'unlocked' now carries the "add bank details to withdraw" (KYC-first) prompt.
+	unlocked: 'affiliateUnlockedPopupSeenAt',
+	// 'share_code' is the follow-up "copy & share your code" prompt, shown once
+	// after the affiliate has saved payout bank details.
+	share_code: 'affiliateShareCodePopupSeenAt'
 } as const;
 
 export interface AffiliateConfig {
@@ -246,6 +251,7 @@ export function getAffiliateReferralBaseUrl(): string {
 
 export function getPendingAffiliatePopup(input: {
 	unlocked: boolean;
+	hasBankDetails: boolean;
 	spendProgressPercent: number;
 	popupsEnabled: boolean;
 	seenAt: {
@@ -254,11 +260,16 @@ export function getPendingAffiliatePopup(input: {
 		progress80: Date | null;
 		progress95: Date | null;
 		unlocked: Date | null;
+		shareCode: Date | null;
 	};
 }): AffiliatePopupType | null {
 	if (!input.popupsEnabled) return null;
 
-	if (input.unlocked && !input.seenAt.unlocked) return 'unlocked';
+	// KYC-first: on unlock, prompt for payout bank details before anything else.
+	if (input.unlocked && !input.hasBankDetails && !input.seenAt.unlocked) return 'unlocked';
+
+	// Once bank details are saved, prompt (once) to copy & share the referral code.
+	if (input.unlocked && input.hasBankDetails && !input.seenAt.shareCode) return 'share_code';
 
 	const milestoneSeenAt: Record<(typeof PROGRESS_MILESTONES)[number], Date | null> = {
 		95: input.seenAt.progress95,
@@ -1807,7 +1818,9 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 				affiliateProgress50PopupSeenAt: true,
 				affiliateProgress80PopupSeenAt: true,
 				affiliateProgress95PopupSeenAt: true,
-				affiliateUnlockedPopupSeenAt: true
+				affiliateUnlockedPopupSeenAt: true,
+				affiliateShareCodePopupSeenAt: true,
+				affiliatePayoutDetails: { select: { id: true } }
 			}
 		}),
 		getAffiliateLedgerSummary(userId)
@@ -2053,6 +2066,7 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 			: 100;
 	const pendingPopup = getPendingAffiliatePopup({
 		unlocked,
+		hasBankDetails: Boolean(user?.affiliatePayoutDetails),
 		spendProgressPercent: spendProgressPercentForPopup,
 		popupsEnabled: config.dashboardPopupsEnabled,
 		seenAt: {
@@ -2060,7 +2074,8 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 			progress50: user?.affiliateProgress50PopupSeenAt ?? null,
 			progress80: user?.affiliateProgress80PopupSeenAt ?? null,
 			progress95: user?.affiliateProgress95PopupSeenAt ?? null,
-			unlocked: user?.affiliateUnlockedPopupSeenAt ?? null
+			unlocked: user?.affiliateUnlockedPopupSeenAt ?? null,
+			shareCode: user?.affiliateShareCodePopupSeenAt ?? null
 		}
 	});
 

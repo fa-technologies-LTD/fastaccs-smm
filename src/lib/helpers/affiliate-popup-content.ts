@@ -5,6 +5,7 @@ export interface AffiliatePopupContent {
 	title: string;
 	body: string;
 	ctaText: string;
+	ctaHref?: string;
 	secondaryHref: string;
 	secondaryText: string;
 }
@@ -47,9 +48,18 @@ export const AFFILIATE_POPUP_CONTENT: Record<AffiliatePopupType, AffiliatePopupC
 	},
 	unlocked: {
 		icon: '🎉',
-		title: "You're unlocked!",
-		body: 'You can now earn real cash from your referrals. Activate your code, share your link, and start earning.',
-		ctaText: 'Got it',
+		title: "You've unlocked affiliate earnings!",
+		body: "One quick step before you start earning: add the bank account where we'll send your payouts. We only ever use these details to pay out your affiliate earnings — never to charge or debit you.",
+		ctaText: 'Add bank details',
+		ctaHref: '/affiliate/bank-details',
+		secondaryHref: HOW_IT_WORKS_HREF,
+		secondaryText: HOW_IT_WORKS_TEXT
+	},
+	share_code: {
+		icon: '💸',
+		title: "You're all set to earn!",
+		body: 'Your payout account is saved. Now share your referral code below — every friend who buys with it earns you affiliate cash.',
+		ctaText: 'Show my referral code',
 		secondaryHref: HOW_IT_WORKS_HREF,
 		secondaryText: HOW_IT_WORKS_TEXT
 	}
