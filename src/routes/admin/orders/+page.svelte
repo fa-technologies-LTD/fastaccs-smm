@@ -71,9 +71,24 @@
 		return counts;
 	});
 
+	// Pin unresolved manual-handover orders (paid, awaiting WhatsApp handover) to
+	// the top so they aren't missed; once delivered they fall back into date order.
+	function isUnresolvedManual(order: any): boolean {
+		return (
+			order?.deliveryMethod === 'whatsapp' &&
+			String(order?.deliveryStatus || '').toLowerCase() !== 'delivered' &&
+			!isCancelledOrder(order)
+		);
+	}
+	const sortedForAttention = $derived.by(() =>
+		[...filteredOrders].sort(
+			(a: any, b: any) => (isUnresolvedManual(a) ? 0 : 1) - (isUnresolvedManual(b) ? 0 : 1)
+		)
+	);
+
 	const paginatedOrders = $derived.by(() => {
 		const startIndex = (currentPage - 1) * itemsPerPage;
-		return filteredOrders.slice(startIndex, startIndex + itemsPerPage);
+		return sortedForAttention.slice(startIndex, startIndex + itemsPerPage);
 	});
 
 	const totalPages = $derived(Math.ceil(filteredOrders.length / itemsPerPage));
