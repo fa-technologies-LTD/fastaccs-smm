@@ -21,6 +21,8 @@
 		previewable_accounts?: number | null;
 		missing_profile_link_accounts?: number | null;
 		exact_preview_screenshot_accounts?: number | null;
+		is_manual?: boolean | null;
+		manual_available?: boolean | null;
 	};
 
 	let { data }: { data: PageData } = $props();
@@ -153,15 +155,25 @@
 		}
 	}
 
-	function getStatusStyle(available: number, threshold: number): string {
-		if (available === 0)
-			return 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border)';
-		if (available <= threshold)
-			return 'background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border)';
-		return 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border)';
+	const STATUS_SUCCESS =
+		'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border)';
+	const STATUS_WARNING =
+		'background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border)';
+	const STATUS_ERROR =
+		'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border)';
+
+	function getStatusStyle(item: InventoryRow, threshold: number): string {
+		// Manual-handover tiers use their availability toggle, not account stock.
+		if (item.is_manual) return item.manual_available ? STATUS_SUCCESS : STATUS_WARNING;
+		const available = item.available_accounts || 0;
+		if (available === 0) return STATUS_ERROR;
+		if (available <= threshold) return STATUS_WARNING;
+		return STATUS_SUCCESS;
 	}
 
-	function getStatusText(available: number, threshold: number): string {
+	function getStatusText(item: InventoryRow, threshold: number): string {
+		if (item.is_manual) return item.manual_available ? 'available' : 'unavailable';
+		const available = item.available_accounts || 0;
 		if (available === 0) return 'out of stock';
 		if (available <= threshold) return 'low stock';
 		return 'in stock';
@@ -287,7 +299,7 @@
 					{#each attentionRows as item (getInventoryKey(item))}
 						<span
 							class="rounded-full px-2.5 py-1 text-xs font-semibold"
-							style={getStatusStyle(item.available_accounts || 0, lowStockThreshold)}
+							style={getStatusStyle(item, lowStockThreshold)}
 						>
 							{item.platform_name || 'Unknown'} · {item.tier_name || 'Unknown'}:
 							{item.available_accounts || 0}
@@ -468,9 +480,9 @@
 							<td class="px-6 py-4 whitespace-nowrap">
 								<span
 									class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-									style={getStatusStyle(item.available_accounts || 0, lowStockThreshold)}
+									style={getStatusStyle(item, lowStockThreshold)}
 								>
-									{getStatusText(item.available_accounts || 0, lowStockThreshold)}
+									{getStatusText(item, lowStockThreshold)}
 								</span>
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">

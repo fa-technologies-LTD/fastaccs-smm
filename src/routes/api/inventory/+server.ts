@@ -5,6 +5,7 @@ import { getInventoryStatsSnapshot } from '$lib/services/admin-metrics';
 import { getLowStockPolicyState, getLowStockThresholdSetting } from '$lib/services/admin-settings';
 import { getAllocatedLikeAccountStatuses, normalizeAccountStatus } from '$lib/helpers/account-status';
 import { getTierExactPreviewConfig } from '$lib/helpers/tier-exact-preview';
+import { getTierDeliveryConfig } from '$lib/helpers/tier-delivery-config';
 import {
 	getExactPreviewProfileUrl,
 	getExactPreviewScreenshotUrl
@@ -48,6 +49,7 @@ function getExactPreviewInventoryMetrics(tier: {
 		getExactPreviewScreenshotUrl(account)
 	);
 
+	const deliveryConfig = getTierDeliveryConfig(tier.metadata);
 	return {
 		exact_preview_enabled: getTierExactPreviewConfig(tier.metadata).enabled,
 		previewable_accounts: previewableAccounts.length,
@@ -55,7 +57,9 @@ function getExactPreviewInventoryMetrics(tier: {
 			0,
 			previewCandidates.length - previewableAccounts.length
 		),
-		exact_preview_screenshot_accounts: screenshotReadyAccounts.length
+		exact_preview_screenshot_accounts: screenshotReadyAccounts.length,
+		is_manual: deliveryConfig.mode === 'manual_handover',
+		manual_available: deliveryConfig.manualAvailable
 	};
 }
 
