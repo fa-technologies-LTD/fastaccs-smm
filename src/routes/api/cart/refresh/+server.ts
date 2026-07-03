@@ -2,7 +2,11 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { CartItemWithTier } from '$lib/types/cart';
 import { prisma } from '$lib/prisma';
-import { normalizeTierDeliveryMode, type TierDeliveryMode } from '$lib/helpers/tier-delivery-config';
+import {
+	normalizeTierDeliveryMode,
+	getTierStockStatus,
+	type TierDeliveryMode
+} from '$lib/helpers/tier-delivery-config';
 import {
 	EXACT_PREVIEW_RESERVATION_KEY,
 	EXACT_PREVIEW_SOURCE,
@@ -390,14 +394,24 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 
 			const requestedQuantity = Math.max(1, Math.floor(Number(input.quantity || 1)));
-			const available = (availableByTierId.get(tier.id) || 0) + (heldByTierId.get(tier.id) || 0);
+			const isManualTier = tierPayload.deliveryMode === 'manual_handover';
+			// Manual-handover tiers have no account inventory — availability is the owner toggle.
+			const available = isManualTier
+				? getTierStockStatus(tier.metadata, 0).available
+					? 99
+					: 0
+				: (availableByTierId.get(tier.id) || 0) + (heldByTierId.get(tier.id) || 0);
 			if (available <= 0) {
-				messages.push(`${tier.name} is out of stock, so it was removed from your cart.`);
+				messages.push(
+					isManualTier
+						? `${tier.name} is currently unavailable, so it was removed from your cart.`
+						: `${tier.name} is out of stock, so it was removed from your cart.`
+				);
 				continue;
 			}
 
 			const quantity = Math.min(requestedQuantity, available);
-			if (quantity < requestedQuantity) {
+			if (quantity < requestedQuantity && !isManualTier) {
 				messages.push(
 					`Only ${quantity} ${tier.name} ${quantity === 1 ? 'account remains' : 'accounts remain'}, so your cart was updated.`
 				);

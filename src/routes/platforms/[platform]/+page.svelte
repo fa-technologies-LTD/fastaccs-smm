@@ -1231,11 +1231,22 @@
 										class="mb-3 flex flex-wrap items-center gap-2 text-sm"
 										style="color: var(--text-muted);"
 									>
-										<span><span class="font-medium">{tier.visible_available}</span> available</span>
-										{#if tierStatus}
-											<span class="tier-status-chip tier-status-chip--warning">
-												{tierStatus.status}
-											</span>
+										{#if tier.is_manual}
+											{#if tier.visible_available > 0}
+												<span
+													class="tier-status-chip"
+													style="background: rgba(37,181,112,0.14); color: #1f9d63; border: 1px solid rgba(37,181,112,0.28);"
+												>
+													Available
+												</span>
+											{/if}
+										{:else}
+											<span><span class="font-medium">{tier.visible_available}</span> available</span>
+											{#if tierStatus}
+												<span class="tier-status-chip tier-status-chip--warning">
+													{tierStatus.status}
+												</span>
+											{/if}
 										{/if}
 									</div>
 

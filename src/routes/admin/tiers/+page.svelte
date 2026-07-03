@@ -112,6 +112,7 @@
 			is_featured: false,
 			featured_badge: 'Featured',
 			delivery_mode: 'instant_auto' as TierDeliveryMode,
+				manual_available: true,
 			manual_handover_promise: DEFAULT_MANUAL_HANDOVER_PROMISE,
 			login_guide_url: '',
 			login_guide_label: DEFAULT_LOGIN_GUIDE_LABEL,
@@ -176,6 +177,7 @@
 				is_featured: merchandising.isFeatured,
 				featured_badge: merchandising.featuredBadge || 'Featured',
 				delivery_mode: deliveryConfig.mode,
+					manual_available: deliveryConfig.manualAvailable,
 				manual_handover_promise:
 					deliveryConfig.manualHandoverPromise || DEFAULT_MANUAL_HANDOVER_PROMISE,
 				login_guide_url: deliveryConfig.loginGuideUrl || '',
@@ -213,6 +215,7 @@
 				is_featured: false,
 				featured_badge: 'Featured',
 				delivery_mode: 'instant_auto',
+					manual_available: true,
 				manual_handover_promise: DEFAULT_MANUAL_HANDOVER_PROMISE,
 				login_guide_url: '',
 				login_guide_label: DEFAULT_LOGIN_GUIDE_LABEL,

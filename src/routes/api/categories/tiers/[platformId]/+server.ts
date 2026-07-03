@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 import { getTierMerchandisingState } from '$lib/helpers/tier-merchandising';
+import { getTierStockStatus } from '$lib/helpers/tier-delivery-config';
 import { getLowStockThresholdSetting } from '$lib/services/admin-settings';
 import { releaseExpiredExactPreviewReservations } from '$lib/services/exact-preview';
 
@@ -27,6 +28,9 @@ interface TierListItem {
 	pinPriority: number | null;
 	isFeatured: boolean;
 	featuredBadge: string | null;
+	isManual: boolean;
+	available: boolean;
+	showAsCount: boolean;
 }
 
 // GET /api/categories/tiers/[platformId] - Get tiers for a specific platform
@@ -70,6 +74,7 @@ export async function GET({ params }) {
 		const tiersWithCounts: TierListItem[] = tiers.map((tier) => {
 			const metadata = tier.metadata as TierMetadata;
 			const merchandising = getTierMerchandisingState(tier.metadata);
+			const stock = getTierStockStatus(tier.metadata, tier._count.accounts);
 
 			// Extract price from new or old metadata format
 			let price = 0;
@@ -94,7 +99,10 @@ export async function GET({ params }) {
 				isPinned: merchandising.isPinned,
 				pinPriority: merchandising.pinPriority,
 				isFeatured: merchandising.isFeatured,
-				featuredBadge: merchandising.featuredBadge
+				featuredBadge: merchandising.featuredBadge,
+				isManual: stock.isManual,
+				available: stock.available,
+				showAsCount: stock.showAsCount
 			};
 		});
 

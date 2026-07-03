@@ -32,6 +32,7 @@
 				is_featured: boolean;
 				featured_badge: string;
 				delivery_mode: TierDeliveryMode;
+				manual_available: boolean;
 				manual_handover_promise: string;
 				login_guide_url: string;
 				login_guide_label: string;
@@ -284,6 +285,20 @@
 								</div>
 
 								{#if tierForm.metadata.delivery_mode === 'manual_handover'}
+									<label
+										class="mt-3 flex items-center gap-2 text-sm font-medium"
+										style="color: var(--text);"
+									>
+										<input
+											type="checkbox"
+											bind:checked={tierForm.metadata.manual_available}
+											class="h-4 w-4 rounded"
+										/>
+										Available on WhatsApp
+										<span class="text-xs font-normal" style="color: var(--text-muted);">
+											(uncheck to show as unavailable on the storefront)
+										</span>
+									</label>
 									<div class="mt-3">
 										<label
 											for="edit-manual-handover-promise"

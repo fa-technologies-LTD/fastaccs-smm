@@ -21,6 +21,7 @@ import {
 import { canViewRevenue, redactOrderFinancials } from '$lib/services/admin-revenue-visibility';
 import {
 	normalizeTierDeliveryMode,
+	getTierStockStatus,
 	type TierDeliveryMode
 } from '$lib/helpers/tier-delivery-config';
 import {
@@ -567,7 +568,12 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		const stockCheckCategoryIds = [
 			...new Set(
 				itemsWithNames
-					.filter((item) => !item.exactAccountId && !item.boostTargetUrl)
+					.filter(
+						(item) =>
+							!item.exactAccountId &&
+							!item.boostTargetUrl &&
+							item.deliveryMode !== 'manual_handover'
+					)
 					.map((item) => item.categoryId)
 			)
 		];
@@ -589,6 +595,17 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 		for (const item of itemsWithNames) {
 			if (item.exactAccountId || item.boostTargetUrl) continue;
+			// Manual-handover tiers have no account inventory — availability is the
+			// owner toggle, not a stock count.
+			if (item.deliveryMode === 'manual_handover') {
+				if (!getTierStockStatus(item.categoryMetadata, 0).available) {
+					return json(
+						{ success: false, error: `${item.categoryName} is currently unavailable.` },
+						{ status: 409 }
+					);
+				}
+				continue;
+			}
 			const availableCount = availabilityByCategory.get(item.categoryId) || 0;
 			if (availableCount < item.quantity) {
 				return json(
@@ -819,7 +836,10 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				await reserveStandardAccountsForOrder({
 					client: tx,
 					reservedUntil: reservationExpiresAt,
-					items: reservationItems.filter((item) => !item.boostTargetUrl)
+					// Manual-handover items have no account inventory to reserve.
+					items: reservationItems.filter(
+						(item) => !item.boostTargetUrl && item.deliveryMode !== 'manual_handover'
+					)
 				});
 
 				if (exactSelectionItems.length > 0) {

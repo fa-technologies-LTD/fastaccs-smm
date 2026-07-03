@@ -12,6 +12,7 @@ export interface TierInventory {
 	accounts_available: number;
 	reservations_active: number;
 	visible_available: number;
+	is_manual: boolean;
 	price: number;
 	product_status: string;
 	tier_active: boolean;
@@ -37,6 +38,10 @@ export interface PageData {
 	lowStockThreshold: number;
 	seo?: { title: string; description: string; type: string };
 }
+
+// Stand-in "stock" for an available manual-handover tier — high enough to never
+// read as low/out-of-stock, capped so quantity limits stay sane.
+const MANUAL_AVAILABLE_STOCK = 99;
 
 export const load: PageLoad = async ({ params, fetch }): Promise<PageData> => {
 	const platformSlug = params.platform;
@@ -87,6 +92,8 @@ export const load: PageLoad = async ({ params, fetch }): Promise<PageData> => {
 					pinPriority?: number | null;
 					isFeatured?: boolean;
 					featuredBadge?: string | null;
+					isManual?: boolean;
+					available?: boolean;
 				}) => ({
 					product_id: tier.productId || tier.id,
 					tier_name: tier.name,
@@ -96,7 +103,14 @@ export const load: PageLoad = async ({ params, fetch }): Promise<PageData> => {
 					description: tier.description,
 					metadata: tier.metadata || {},
 					accounts_available: tier.accountCount,
-					visible_available: tier.accountCount,
+					// Manual-handover tiers have no account inventory — availability is a
+					// toggle: available → treated as in-stock, unavailable → sold-out.
+					visible_available: tier.isManual
+						? tier.available
+							? MANUAL_AVAILABLE_STOCK
+							: 0
+						: tier.accountCount,
+					is_manual: Boolean(tier.isManual),
 					price: tier.price,
 					product_status: tier.productStatus,
 					tier_active: tier.isActive,

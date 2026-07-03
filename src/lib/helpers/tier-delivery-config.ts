@@ -2,6 +2,9 @@ export const TIER_DELIVERY_MODE_KEY = 'delivery_mode';
 export const TIER_MANUAL_HANDOVER_PROMISE_KEY = 'manual_handover_promise';
 export const TIER_LOGIN_GUIDE_URL_KEY = 'login_guide_url';
 export const TIER_LOGIN_GUIDE_LABEL_KEY = 'login_guide_label';
+// Manual-handover tiers have no uploaded account inventory — availability is a
+// manual owner toggle stored here (defaults to available unless explicitly false).
+export const TIER_MANUAL_AVAILABLE_KEY = 'manual_available';
 
 export const DEFAULT_MANUAL_HANDOVER_PROMISE =
 	'Secure WhatsApp handover by our team, usually within 15–60 minutes.';
@@ -18,6 +21,33 @@ export interface TierDeliveryConfig {
 	manualHandoverPromise: string | null;
 	loginGuideUrl: string | null;
 	loginGuideLabel: string | null;
+	/** Manual-handover only: owner availability toggle. Defaults to true (available). */
+	manualAvailable: boolean;
+}
+
+export interface TierStockStatus {
+	/** True for manual-handover tiers (availability is a toggle, not a count). */
+	isManual: boolean;
+	/** Can the tier be purchased right now? */
+	available: boolean;
+	/** Storefront should show a numeric stock count (true) vs. just Available/Unavailable (false). */
+	showAsCount: boolean;
+}
+
+/**
+ * Single source of truth for whether a tier is purchasable and how to display it.
+ * Manual-handover tiers use the owner toggle (no account inventory); everything
+ * else uses the available-account count as before.
+ */
+export function getTierStockStatus(
+	metadata: unknown,
+	availableAccountCount: number
+): TierStockStatus {
+	const config = getTierDeliveryConfig(metadata);
+	if (config.mode === 'manual_handover') {
+		return { isManual: true, available: config.manualAvailable, showAsCount: false };
+	}
+	return { isManual: false, available: availableAccountCount > 0, showAsCount: true };
 }
 
 export function getTierDeliveryModeLabel(mode: TierDeliveryMode): string {
@@ -65,7 +95,8 @@ export function getTierDeliveryConfig(metadata: unknown): TierDeliveryConfig {
 			mode: 'instant_auto',
 			manualHandoverPromise: null,
 			loginGuideUrl: null,
-			loginGuideLabel: null
+			loginGuideLabel: null,
+			manualAvailable: true
 		};
 	}
 
@@ -74,6 +105,8 @@ export function getTierDeliveryConfig(metadata: unknown): TierDeliveryConfig {
 	const manualHandoverPromise = sanitizeText(record[TIER_MANUAL_HANDOVER_PROMISE_KEY], 180);
 	const loginGuideUrl = sanitizeGuideUrl(record[TIER_LOGIN_GUIDE_URL_KEY]);
 	const loginGuideLabel = sanitizeText(record[TIER_LOGIN_GUIDE_LABEL_KEY], 80);
+	// Available unless the owner explicitly set it false.
+	const manualAvailable = record[TIER_MANUAL_AVAILABLE_KEY] !== false;
 
 	return {
 		mode,
@@ -82,7 +115,8 @@ export function getTierDeliveryConfig(metadata: unknown): TierDeliveryConfig {
 				? manualHandoverPromise || DEFAULT_MANUAL_HANDOVER_PROMISE
 				: manualHandoverPromise,
 		loginGuideUrl,
-		loginGuideLabel
+		loginGuideLabel,
+		manualAvailable
 	};
 }
 
@@ -101,8 +135,10 @@ export function applyTierDeliveryConfigSanitization(
 	if (config.mode === 'manual_handover') {
 		safeMetadata[TIER_MANUAL_HANDOVER_PROMISE_KEY] =
 			config.manualHandoverPromise || DEFAULT_MANUAL_HANDOVER_PROMISE;
+		safeMetadata[TIER_MANUAL_AVAILABLE_KEY] = config.manualAvailable;
 	} else {
 		delete safeMetadata[TIER_MANUAL_HANDOVER_PROMISE_KEY];
+		delete safeMetadata[TIER_MANUAL_AVAILABLE_KEY];
 	}
 
 	if (config.loginGuideUrl) {
