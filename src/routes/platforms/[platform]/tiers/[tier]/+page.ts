@@ -1,5 +1,9 @@
 import { error } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
+import { getTierStockStatus } from '$lib/helpers/tier-delivery-config';
+
+// Stand-in "stock" for an available manual-handover tier (no account inventory).
+const MANUAL_AVAILABLE_STOCK = 99;
 
 export const load: PageLoad = async ({ params, fetch }) => {
 	const { platform, tier } = params;
@@ -41,6 +45,7 @@ export const load: PageLoad = async ({ params, fetch }) => {
 		// Use the actual tier data (Category) for cart - no mock product needed
 
 		// Create tier data in the expected format
+		const manualStock = getTierStockStatus(tierData.metadata, tierData.accountCount || 0);
 		const tierInventoryData = {
 			product_id: tierData.id,
 			tier_name: tierData.name,
@@ -51,7 +56,13 @@ export const load: PageLoad = async ({ params, fetch }) => {
 			metadata: tierData.metadata || {},
 			accounts_available: tierData.accountCount || 0, // Use actual account count
 			reservations_active: 0, // No longer using database reservations
-			visible_available: tierData.accountCount || 0,
+			// Manual-handover tiers have no account inventory — availability is a toggle.
+			visible_available: manualStock.isManual
+				? manualStock.available
+					? MANUAL_AVAILABLE_STOCK
+					: 0
+				: tierData.accountCount || 0,
+			is_manual: manualStock.isManual,
 			price: tierData.price || 0,
 			product_status: 'active',
 			tier_active: tierData.isActive,

@@ -729,7 +729,7 @@
 								>
 									{formatPrice(data.tier.price)}
 								</span>
-								<span>{data.tier.visible_available} available</span>
+								<span>{data.tier.is_manual ? 'Available' : `${data.tier.visible_available} available`}</span>
 								<span
 									class="rounded-full border px-2 py-0.5 font-semibold"
 									style={tierDeliveryConfig.mode === 'manual_handover'
@@ -1030,9 +1030,11 @@
 									<Plus class="h-4 w-4" />
 								</button>
 							</div>
-							<div class="mt-2 text-xs text-[var(--color-text-muted)]">
-								Max: {data.tier.visible_available} available
-							</div>
+							{#if !data.tier.is_manual}
+								<div class="mt-2 text-xs text-[var(--color-text-muted)]">
+									Max: {data.tier.visible_available} available
+								</div>
+							{/if}
 
 							<div class="mt-4 rounded-lg bg-[var(--color-surface)] p-3">
 								<div
