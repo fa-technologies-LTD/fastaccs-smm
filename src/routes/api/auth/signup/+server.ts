@@ -18,6 +18,7 @@ import {
 } from '$lib/auth/rate-limit';
 import { sanitizeInternalRedirectPath } from '$lib/auth/redirect';
 import { maybeLockReferralFromCookie } from '$lib/services/affiliate';
+import { sanitizePhone } from '$lib/helpers/phone';
 
 interface SignupPayload {
 	email?: unknown;
@@ -42,8 +43,8 @@ export const POST: RequestHandler = async (event) => {
 		const email = normalizeEmail(body.email);
 		const password = typeof body.password === 'string' ? body.password : '';
 		const fullName = typeof body.fullName === 'string' ? body.fullName.trim() : '';
-		// Optional WhatsApp number — kept low-friction: stored as-is, no validation gate.
-		const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
+		// Optional WhatsApp number — validated so bot/garbage values are dropped (stored null).
+		const phone = sanitizePhone(body.phone);
 		const redirectTo = sanitizeInternalRedirectPath(
 			typeof body.redirectTo === 'string' ? body.redirectTo : null
 		);
@@ -154,7 +155,7 @@ export const POST: RequestHandler = async (event) => {
 				email,
 				passwordHash,
 				fullName: fullName || firstNameFallback,
-				phone: phone || null,
+				phone,
 				userType: getUserTypeFromEmail(email),
 				emailVerified: false,
 				emailVerifiedAt: null,

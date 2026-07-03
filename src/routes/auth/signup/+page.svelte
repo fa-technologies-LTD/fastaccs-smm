@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { UserPlus, ArrowLeft } from '$lib/icons';
+	import { isValidPhone } from '$lib/helpers/phone';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
@@ -41,6 +42,11 @@
 
 		if (password !== confirmPassword) {
 			error = 'Passwords do not match.';
+			return;
+		}
+
+		if (phone.trim() && !isValidPhone(phone)) {
+			error = 'Please enter a valid phone number — digits only, e.g. +234 801 234 5678';
 			return;
 		}
 
@@ -152,7 +158,7 @@
 							placeholder="+234 801 234 5678"
 						/>
 						<p class="mt-1 text-xs" style="color: var(--text-muted);">
-							So we can reach you quickly about your orders.
+							Get order updates, faster support, and access to our WhatsApp giveaways.
 						</p>
 					</div>
 
