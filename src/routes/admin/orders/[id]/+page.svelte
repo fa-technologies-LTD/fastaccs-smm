@@ -267,6 +267,48 @@
 		}
 	}
 
+	// Cancel-with-refund: returns the paid amount to the buyer as Store Credit.
+	async function refundOrder() {
+		if (isProcessing) return;
+		if (
+			!confirm(
+				"Refund this order to the buyer's Store Credit? The order will be marked refunded. This can't be undone here."
+			)
+		)
+			return;
+
+		isProcessing = true;
+		try {
+			const res = await fetch(`/api/orders/${order.id}/refund`, { method: 'POST' });
+			const result = await res.json();
+			if (!res.ok || !result.success) {
+				addToast({
+					type: 'error',
+					title: 'Refund failed',
+					message: result.error || 'Unknown error',
+					duration: 4000
+				});
+			} else {
+				addToast({
+					type: 'success',
+					title: 'Refunded to store credit',
+					message: `₦${Number(result.refundedAmount || 0).toLocaleString()} credited to the buyer.`,
+					duration: 3000
+				});
+				await invalidateAll();
+			}
+		} catch (error) {
+			addToast({
+				type: 'error',
+				title: 'Refund failed',
+				message: error instanceof Error ? error.message : 'Unknown error',
+				duration: 3000
+			});
+		} finally {
+			isProcessing = false;
+		}
+	}
+
 	async function processDelivery() {
 		if (isProcessing) return;
 
@@ -453,6 +495,18 @@
 						>
 							<CheckCircle class="h-4 w-4" />
 							Mark Complete
+						</button>
+					{/if}
+
+					{#if (order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'completed') && order.status !== 'refunded' && order.paymentStatus !== 'refunded'}
+						<button
+							onclick={refundOrder}
+							disabled={isProcessing}
+							class="flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-300 hover:bg-rose-500/20 disabled:opacity-50 sm:px-4 sm:text-sm"
+							title="Refund the paid amount to the buyer's store credit"
+						>
+							<RefreshCw class="h-4 w-4" />
+							Refund to store credit
 						</button>
 					{/if}
 				</div>
