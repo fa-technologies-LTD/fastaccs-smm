@@ -1,6 +1,7 @@
 import { env } from '$env/dynamic/private';
 import type { Cookies } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
+import { SC_REDEEM_EARNED } from '$lib/services/store-credit';
 import {
 	sendAffiliateUnlockEmailIfNeeded,
 	sendFirstStoreCreditEmailIfNeeded
@@ -455,13 +456,17 @@ async function getAffiliateLedgerSummary(userId: string): Promise<AffiliateLedge
 		where: {
 			userId,
 			type: {
-				in: [AFFILIATE_LEDGER_CREDIT_TYPE, AFFILIATE_LEDGER_PAYOUT_TYPE]
+				in: [AFFILIATE_LEDGER_CREDIT_TYPE, AFFILIATE_LEDGER_PAYOUT_TYPE, SC_REDEEM_EARNED]
 			}
 		},
 		_sum: {
 			amount: true
 		}
 	});
+
+	// Earned store credit spent on-site reduces what's still cashable, so a user
+	// can never both spend and cash out the same credit.
+	let earnedRedeemedOnSite = 0;
 
 	const creditByStatus: Record<AffiliateLedgerStatus, number> = {
 		pending: 0,
@@ -491,6 +496,8 @@ async function getAffiliateLedgerSummary(userId: string): Promise<AffiliateLedge
 			creditByStatus[status] += amount;
 		} else if (String(row.type) === AFFILIATE_LEDGER_PAYOUT_TYPE) {
 			payoutByStatus[status] += amount;
+		} else if (String(row.type) === SC_REDEEM_EARNED) {
+			earnedRedeemedOnSite += amount;
 		}
 	}
 
@@ -510,7 +517,7 @@ async function getAffiliateLedgerSummary(userId: string): Promise<AffiliateLedge
 	);
 	const availableStoreCredit = Math.max(
 		0,
-		creditByStatus.available - requestedStoreCredit - paidStoreCredit
+		creditByStatus.available - requestedStoreCredit - paidStoreCredit - earnedRedeemedOnSite
 	);
 
 	return {
