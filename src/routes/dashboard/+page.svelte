@@ -27,6 +27,7 @@
 	name={data.user.fullName}
 	orders={data.orders}
 	affiliateData={data.affiliateData}
+	storeCredit={data.storeCredit}
 	purchases={data.purchases}
 	whatsappNumber={data.support?.whatsappNumber || ''}
 />

@@ -39,6 +39,7 @@
 		name = '',
 		orders = [],
 		affiliateData: initialAffiliateData = null,
+		storeCredit = null,
 		purchases: initialPurchases = [],
 		whatsappNumber = ''
 	}: {
@@ -46,9 +47,12 @@
 		name?: string | null;
 		orders?: DashboardOrder[];
 		affiliateData?: unknown;
+		storeCredit?: { totalAvailable?: number } | null;
 		purchases?: DashboardPurchase[];
 		whatsappNumber?: string;
 	} = $props();
+
+	const storeCreditBalance = $derived(Math.max(0, Number(storeCredit?.totalAvailable || 0)));
 
 	const affiliateState = $derived(
 		initialAffiliateData && typeof initialAffiliateData === 'object'
@@ -283,7 +287,7 @@
 		</div>
 	{/if}
 
-	<div class="mb-5 grid grid-cols-2 gap-3">
+	<div class="mb-5 grid grid-cols-3 gap-3">
 		<div
 			class="rounded-[var(--r-sm)] border border-[var(--border)] px-3 py-3"
 			style="background: var(--surface-2);"
@@ -307,6 +311,28 @@
 				₦{totalSpent.toLocaleString()}
 			</div>
 			<div class="mt-1 text-xs" style="color: var(--text-muted);">Total spent</div>
+		</div>
+		<div
+			class="rounded-[var(--r-sm)] border border-[var(--border)] px-3 py-3"
+			style="background: var(--surface-2);"
+		>
+			<div
+				class="text-xl leading-none font-semibold sm:text-2xl"
+				style="color: var(--text); font-family: var(--font-head);"
+			>
+				₦{storeCreditBalance.toLocaleString()}
+			</div>
+			<div class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs" style="color: var(--text-muted);">
+				<span>Store Credit</span>
+				<button
+					type="button"
+					onclick={() => (activeTab = 'affiliate')}
+					class="text-[10px] font-semibold underline-offset-2 hover:underline"
+					style="color: var(--primary);"
+				>
+					earn more from referrals →
+				</button>
+			</div>
 		</div>
 	</div>
 

@@ -9,6 +9,7 @@ import {
 } from '$lib/helpers/tier-delivery-config';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { getAffiliateDashboardState } from '$lib/services/affiliate';
+import { getStoreCreditBuckets } from '$lib/services/store-credit';
 import { reconcilePendingPayments } from '$lib/services/payment-reconciliation';
 import { getAdminSettingsSnapshot } from '$lib/services/admin-settings';
 import {
@@ -169,11 +170,18 @@ export const GET: RequestHandler = async ({ locals }) => {
 				})
 		);
 
+		const storeCredit = await getStoreCreditBuckets(user.id).catch(() => ({
+			earnedAvailable: 0,
+			refundAvailable: 0,
+			totalAvailable: 0
+		}));
+
 		return json({
 			success: true,
 			data: {
 				orders,
 				affiliateData,
+				storeCredit,
 				purchases: purchasesFormatted,
 				support: {
 					whatsappNumber: settings?.business.whatsappNumber || ''

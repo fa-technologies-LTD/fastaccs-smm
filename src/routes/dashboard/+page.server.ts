@@ -26,6 +26,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 			user: toBrowserUser(locals.user),
 			orders: result.data.orders || [],
 			affiliateData: result.data.affiliateData || null,
+			storeCredit: result.data.storeCredit || null,
 			purchases: result.data.purchases || [],
 			support: result.data.support || { whatsappNumber: '' },
 			messages: [], // TODO: Implement messages/notifications system
@@ -37,6 +38,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 			user: toBrowserUser(locals.user),
 			orders: [],
 			affiliateData: null,
+			storeCredit: null,
 			purchases: [],
 			support: { whatsappNumber: '' },
 			messages: [],
