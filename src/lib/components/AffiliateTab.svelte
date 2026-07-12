@@ -179,6 +179,13 @@
 	const recentReferralActivity = $derived(
 		Array.isArray(affiliateData?.recentReferralActivity) ? affiliateData.recentReferralActivity : []
 	);
+	// Pending referrals = people who signed up with your code but haven't bought yet.
+	const pendingReferrals = $derived(
+		Math.max(
+			0,
+			toNumber(affiliateData?.totalReferredUsers) - toNumber(affiliateData?.paidReferredUsers)
+		)
+	);
 	const recentStoreCreditActivity = $derived(
 		Array.isArray(affiliateData?.recentStoreCreditActivity)
 			? affiliateData.recentStoreCreditActivity
@@ -477,6 +484,11 @@
 					>
 						{toNumber(affiliateData?.totalReferredUsers)}
 					</div>
+					{#if pendingReferrals > 0}
+						<div class="mt-0.5 text-[10px] sm:text-xs" style="color: var(--text-muted);">
+							{pendingReferrals} pending · not bought yet
+						</div>
+					{/if}
 				</div>
 				<div
 					class="rounded-[var(--r-sm)] border border-[var(--border)] p-3 sm:p-4"
