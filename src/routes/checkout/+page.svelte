@@ -64,6 +64,30 @@
 	let cartTotal = $state(0);
 	let failedCheckoutIcons = $state<Record<string, boolean>>({});
 	const checkoutTotal = $derived(Math.max(0, cartTotal - promoDiscountAmount));
+
+	// Store credit (signed-in buyers). Mirrors the server redemption rule so we can
+	// preview the discount — the refund bucket spends up to 100% of the order, the
+	// earned bucket is capped at 30%. The server recomputes authoritatively at
+	// checkout, so this is only an estimate for display.
+	const STORE_CREDIT_EARNED_CAP = 0.3;
+	let applyStoreCredit = $state(false);
+	const storeCreditAvailable = $derived(data.storeCredit?.totalAvailable ?? 0);
+	const storeCreditApplied = $derived.by(() => {
+		if (!applyStoreCredit || storeCreditAvailable <= 0 || checkoutTotal <= 0) return 0;
+		const total = checkoutTotal;
+		const refund = Math.min(data.storeCredit?.refundAvailable ?? 0, total);
+		const remaining = total - refund;
+		const earned = Math.max(
+			0,
+			Math.min(
+				data.storeCredit?.earnedAvailable ?? 0,
+				Math.floor(total * STORE_CREDIT_EARNED_CAP),
+				remaining
+			)
+		);
+		return refund + earned;
+	});
+	const payableTotal = $derived(Math.max(0, checkoutTotal - storeCreditApplied));
 	const hasManualHandover = $derived(
 		cartItems.some((item) => item.tier.deliveryMode === 'manual_handover')
 	);
@@ -440,6 +464,7 @@
 					checkoutKey: getOrCreateCheckoutKey(),
 					affiliateCode: hasBoostingOrder ? undefined : affiliateCode || undefined,
 					promotionCode: hasBoostingOrder ? undefined : promoAppliedCode || undefined,
+					useStoreCredit: applyStoreCredit && storeCreditAvailable > 0,
 					analytics: {
 						ga4ClientId: getGa4ClientId()
 					}
@@ -473,6 +498,18 @@
 					await loadCartData();
 				}
 				throw new Error(orderResult.error || 'Failed to create order');
+			}
+
+			// Store credit covered the full total — no gateway payment. Route to the
+			// verify page, which settles/fulfils the already-paid order and shows the
+			// standard success UI.
+			if (orderResult.paidWithStoreCredit && orderResult.redirectUrl) {
+				const paidOrderId = String(orderResult.orderId || '');
+				if (paidOrderId) {
+					sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, paidOrderId);
+				}
+				window.location.href = orderResult.redirectUrl;
+				return;
 			}
 
 			if (!orderResult.checkoutUrl) {
@@ -1018,11 +1055,47 @@
 									>Free</span
 								>
 							</div>
+							{#if storeCreditAvailable > 0}
+								<label
+									class="flex cursor-pointer items-center justify-between gap-2 rounded-lg p-3"
+									style="background: var(--bg-elev-2); border: 1px solid var(--border-2);"
+								>
+									<span
+										class="flex items-center gap-2 text-xs sm:text-sm"
+										style="color: var(--text); font-family: var(--font-body);"
+									>
+										<input
+											type="checkbox"
+											bind:checked={applyStoreCredit}
+											class="h-4 w-4 cursor-pointer"
+											style="accent-color: var(--primary);"
+										/>
+										Use store credit
+									</span>
+									<span
+										class="text-xs font-medium sm:text-sm"
+										style="color: var(--text-muted); font-family: var(--font-body);"
+										>{formatPrice(storeCreditAvailable)} available</span
+									>
+								</label>
+							{/if}
+							{#if storeCreditApplied > 0}
+								<div
+									class="flex justify-between text-xs font-semibold sm:text-sm"
+									style="color: var(--primary); font-family: var(--font-body);"
+								>
+									<span class="flex items-center gap-1">
+										<Tag size={14} />
+										Store Credit
+									</span>
+									<span>-{formatPrice(storeCreditApplied)}</span>
+								</div>
+							{/if}
 							<hr style="border-color: var(--border);" />
 							<div class="flex justify-between text-base font-bold sm:text-lg">
 								<span style="color: var(--text); font-family: var(--font-head);">Total</span>
 								<span style="color: var(--primary); font-family: var(--font-head);">
-									{formatPrice(checkoutTotal)}
+									{formatPrice(payableTotal)}
 								</span>
 							</div>
 						</div>
@@ -1071,6 +1144,9 @@
 							{:else if !user}
 								<Lock size={18} class="sm:h-5 sm:w-5" />
 								<span class="text-sm sm:text-base">Login Required</span>
+							{:else if payableTotal <= 0}
+								<CreditCard size={18} class="sm:h-5 sm:w-5" />
+								<span class="text-sm sm:text-base">Complete Order</span>
 							{:else}
 								<CreditCard size={18} class="sm:h-5 sm:w-5" />
 								<span class="text-sm sm:text-base">Pay Now</span>

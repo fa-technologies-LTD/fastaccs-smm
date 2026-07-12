@@ -10,6 +10,15 @@ function buildDateWindow(gte: Date, lte?: Date): { gte: Date; lte?: Date } {
 	return lte ? { gte, lte } : { gte };
 }
 
+// Cash revenue = order value MINUS store credit applied. Store credit (refunds,
+// affiliate earnings, gifts) is not new cash, so it must not count as revenue.
+// Callers add `storeCreditApplied: true` alongside `totalAmount: true` in the
+// aggregate's `_sum`. All legacy orders have storeCreditApplied = 0, so this is a
+// no-op on historical data and only affects credit-paid orders going forward.
+export function toCashRevenue(totalAmount: unknown, storeCreditApplied: unknown): number {
+	return Number(totalAmount || 0) - Number(storeCreditApplied || 0);
+}
+
 export function buildRevenueOrderWhere(): Prisma.OrderWhereInput {
 	return {
 		AND: [

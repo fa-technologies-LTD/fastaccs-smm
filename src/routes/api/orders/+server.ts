@@ -40,6 +40,14 @@ import {
 	reserveStandardAccountsForOrder
 } from '$lib/services/order-reservations';
 import {
+	getStoreCreditBuckets,
+	computeOrderRedemption,
+	redeemStoreCreditForOrder,
+	reverseStoreCreditRedemption
+} from '$lib/services/store-credit';
+import { recoverPaidOrder } from '$lib/services/payment-settlement';
+import { logOrderStatusTransition } from '$lib/services/order-audit';
+import {
 	getPaymentReservationExpiresAt,
 	getPendingPaymentExpiresAt
 } from '$lib/helpers/payment-expiry.server';
@@ -77,6 +85,7 @@ interface CreateOrderInput {
 	checkoutKey?: string;
 	affiliateCode?: string;
 	promotionCode?: string;
+	useStoreCredit?: boolean;
 	analytics?: {
 		ga4ClientId?: string | null;
 	};
@@ -744,26 +753,53 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			}
 		}
 
-		const initializationIssue = getMonnifyInitializationIssue({
-			amount: finalOrderTotal,
-			currency: orderCurrency
-		});
-		if (initializationIssue) {
-			logPaymentEvent('warn', 'checkout.initialize.rejected', {
-				traceId,
-				userId: checkoutUserId,
-				amount: finalOrderTotal,
-				currency: orderCurrency,
-				errorCode: initializationIssue
+		// Store-credit redemption (registered users, opt-in). The credit is
+		// reserve-debited in the order transaction below; a failed/expired payment
+		// reverses it. Refund credit spends freely; earned/gifted capped at 30%.
+		let storeCreditRedemption = { refundApplied: 0, earnedApplied: 0, totalApplied: 0 };
+		if (orderData.useStoreCredit && checkoutUserId) {
+			try {
+				storeCreditRedemption = computeOrderRedemption(
+					finalOrderTotal,
+					await getStoreCreditBuckets(checkoutUserId)
+				);
+			} catch {
+				logPaymentEvent('warn', 'checkout.store_credit.compute_failed', {
+					traceId,
+					userId: checkoutUserId
+				});
+			}
+		}
+		const amountToCharge = Math.max(
+			0,
+			Math.round((finalOrderTotal - storeCreditRedemption.totalApplied) * 100) / 100
+		);
+		const isFullyCreditPaid = amountToCharge <= 0 && storeCreditRedemption.totalApplied > 0;
+
+		// Only validate the gateway amount when there is a real charge — a fully
+		// credit-paid order skips the payment gateway entirely.
+		if (amountToCharge > 0) {
+			const initializationIssue = getMonnifyInitializationIssue({
+				amount: amountToCharge,
+				currency: orderCurrency
 			});
-			return json(
-				{
-					success: false,
-					error: getMonnifyInitializationErrorMessage(initializationIssue),
-					traceId
-				},
-				{ status: 400 }
-			);
+			if (initializationIssue) {
+				logPaymentEvent('warn', 'checkout.initialize.rejected', {
+					traceId,
+					userId: checkoutUserId,
+					amount: amountToCharge,
+					currency: orderCurrency,
+					errorCode: initializationIssue
+				});
+				return json(
+					{
+						success: false,
+						error: getMonnifyInitializationErrorMessage(initializationIssue),
+						traceId
+					},
+					{ status: 400 }
+				);
+			}
 		}
 
 		if (finalOrderTotal < minimumOrderValue) {
@@ -794,6 +830,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						guestPhone: customerPhone || null,
 						subtotal: subtotalAmount,
 						discountAmount,
+						storeCreditApplied: storeCreditRedemption.totalApplied,
 						totalAmount: finalOrderTotal,
 						currency: orderCurrency,
 						paymentMethod: paymentMethod,
@@ -859,6 +896,17 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					});
 				}
 
+					// Reserve (debit) store credit for this order. A failed/expired payment
+					// reverses it via reverseStoreCreditRedemption.
+					if (storeCreditRedemption.totalApplied > 0 && checkoutUserId) {
+						await redeemStoreCreditForOrder(tx, {
+							userId: checkoutUserId,
+							orderId: createdOrder.id,
+							orderNumber: createdOrder.orderNumber,
+							redemption: storeCreditRedemption
+						});
+					}
+
 				return createdOrder;
 			});
 		} catch (error) {
@@ -886,6 +934,57 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		// Invalidate admin stats cache after order creation
 		invalidateAdminStatsCache();
 
+		// Zero-charge order: store credit covers the full total, nothing to charge.
+		// The credit was already reserved (redeemStoreCreditForOrder) inside the
+		// create transaction. Skip Monnify — mark the order paid and fulfil via the
+		// same proven path Monnify orders use (recoverPaidOrder: boosting / manual /
+		// account allocation), then route the browser through /checkout/verify so the
+		// buyer sees the standard success + delivery UI.
+		if (isFullyCreditPaid) {
+			await prisma.order.update({
+				where: { id: data.id },
+				data: {
+					status: 'paid',
+					paymentStatus: 'paid',
+					paidAt: new Date(),
+					paymentMethod: 'store_credit',
+					paymentChannel: 'store_credit',
+					paymentExpiresAt: null,
+					paymentCheckoutUrl: null
+				}
+			});
+			invalidateAdminStatsCache();
+			logOrderStatusTransition({
+				orderId: data.id,
+				source: 'store_credit',
+				fromStatus: data.status,
+				toStatus: 'paid',
+				fromPaymentStatus: data.paymentStatus,
+				toPaymentStatus: 'paid'
+			});
+
+			const settlement = await recoverPaidOrder(data.id, 'store_credit').catch(
+				(settleError) => {
+					// Order is paid and the credit is reserved; the paid-order recovery
+					// cron (and the verify page below) will retry fulfilment.
+					console.error('Store-credit order fulfilment error:', settleError);
+					return null;
+				}
+			);
+
+			const verifyUrl = `${url.origin}/checkout/verify?orderId=${encodeURIComponent(data.id)}`;
+			return json({
+				data,
+				success: true,
+				orderId: data.id,
+				paidWithStoreCredit: true,
+				redirectUrl: verifyUrl,
+				deliveryMode: orderDeliveryMode,
+				message: settlement?.warning || 'Paid with store credit. Your order is being processed.',
+				error: null
+			});
+		}
+
 		if (paymentMethod === 'monnify') {
 			const shortOrderId = data.id.substring(0, 8);
 			const paymentReference = `ORD_${shortOrderId}_${Date.now()}`;
@@ -901,7 +1000,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			});
 
 			const initResult = await initializeTransaction({
-				amount: Number(data.totalAmount),
+				amount: amountToCharge,
 				currency: data.currency,
 				customerName: locals.user.fullName || customerEmail || 'Customer',
 				customerEmail,
@@ -926,6 +1025,11 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				});
 				try {
 					await releaseOrderReservations(data.id);
+					if (storeCreditRedemption.totalApplied > 0 && checkoutUserId) {
+						await prisma.$transaction((tx) =>
+							reverseStoreCreditRedemption(tx, { userId: checkoutUserId, orderId: data.id })
+						);
+					}
 					await prisma.order.update({
 						where: { id: data.id },
 						data: {

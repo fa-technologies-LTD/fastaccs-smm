@@ -8,6 +8,7 @@ import { ORDER_STATUS_GROUPS } from '$lib/helpers/order-status';
 import { getStartOfBusinessDayUtc } from '$lib/helpers/business-timezone';
 import {
 	buildRevenueOrderWhere,
+	toCashRevenue,
 	buildRevenueOrderItemWhere,
 	buildRevenueOrderWindowWhere
 } from '$lib/helpers/order-revenue.server';
@@ -97,11 +98,11 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 		prisma.order.count({ where: { ...ACCOUNT_ORDER_FILTER, createdAt: { gte: today } } }),
 		// Revenue ("Sales") stays combined across account + boosting by design.
 		prisma.order.aggregate({
-			_sum: { totalAmount: true },
+			_sum: { totalAmount: true, storeCreditApplied: true },
 			where: buildRevenueOrderWhere()
 		}),
 		prisma.order.aggregate({
-			_sum: { totalAmount: true },
+			_sum: { totalAmount: true, storeCreditApplied: true },
 			where: buildRevenueOrderWindowWhere(today)
 		}),
 		// Units sold tracks real account/stock inventory only — boosting never touches it.
@@ -121,8 +122,8 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 		cancelled_orders: cancelledOrders,
 		failed_orders: failedOrders,
 		todays_orders: todaysOrders,
-		total_revenue: Number(totalRevenue._sum.totalAmount || 0),
-		todays_revenue: Number(todaysRevenue._sum.totalAmount || 0),
+		total_revenue: toCashRevenue(totalRevenue._sum.totalAmount, totalRevenue._sum.storeCreditApplied),
+		todays_revenue: toCashRevenue(todaysRevenue._sum.totalAmount, todaysRevenue._sum.storeCreditApplied),
 		units_sold: Number(unitsSold._sum.quantity || 0),
 		total_users: totalUsers
 	};
@@ -141,15 +142,15 @@ export async function getBoostingOrderStatsSnapshot(): Promise<AdminBoostingOrde
 				where: { ...BOOSTING_ORDER_FILTER, ...buildRevenueOrderWhere() }
 			}),
 			prisma.order.aggregate({
-				_sum: { totalAmount: true },
+				_sum: { totalAmount: true, storeCreditApplied: true },
 				where: { ...BOOSTING_ORDER_FILTER, ...buildRevenueOrderWhere() }
 			}),
 			prisma.order.aggregate({
-				_sum: { totalAmount: true },
+				_sum: { totalAmount: true, storeCreditApplied: true },
 				where: { ...BOOSTING_ORDER_FILTER, ...buildRevenueOrderWindowWhere(today) }
 			}),
 			prisma.order.aggregate({
-				_sum: { totalAmount: true },
+				_sum: { totalAmount: true, storeCreditApplied: true },
 				where: { ...BOOSTING_ORDER_FILTER, ...buildRevenueOrderWindowWhere(startOfMonth) }
 			}),
 			prisma.orderItem.groupBy({
@@ -175,9 +176,12 @@ export async function getBoostingOrderStatsSnapshot(): Promise<AdminBoostingOrde
 		pending_fulfillment: fulfillmentCounts.pending,
 		in_progress_fulfillment: fulfillmentCounts.in_progress,
 		completed_fulfillment: fulfillmentCounts.completed,
-		total_revenue: Number(totalRevenue._sum.totalAmount || 0),
-		todays_revenue: Number(todaysRevenue._sum.totalAmount || 0),
-		this_month_revenue: Number(thisMonthRevenue._sum.totalAmount || 0)
+		total_revenue: toCashRevenue(totalRevenue._sum.totalAmount, totalRevenue._sum.storeCreditApplied),
+		todays_revenue: toCashRevenue(todaysRevenue._sum.totalAmount, todaysRevenue._sum.storeCreditApplied),
+		this_month_revenue: toCashRevenue(
+			thisMonthRevenue._sum.totalAmount,
+			thisMonthRevenue._sum.storeCreditApplied
+		)
 	};
 }
 

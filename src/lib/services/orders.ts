@@ -31,6 +31,7 @@ export interface CreateOrderData {
 	checkoutKey?: string;
 	affiliateCode?: string;
 	promotionCode?: string;
+	useStoreCredit?: boolean;
 	analytics?: {
 		ga4ClientId?: string | null;
 	};

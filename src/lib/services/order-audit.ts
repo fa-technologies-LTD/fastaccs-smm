@@ -1,4 +1,10 @@
-type StatusTransitionSource = 'verify' | 'webhook' | 'reconcile' | 'manual' | 'admin_release';
+type StatusTransitionSource =
+	| 'verify'
+	| 'webhook'
+	| 'reconcile'
+	| 'manual'
+	| 'admin_release'
+	| 'store_credit';
 
 interface StatusTransitionLogInput {
 	orderId: string;

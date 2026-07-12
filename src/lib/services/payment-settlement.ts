@@ -15,6 +15,7 @@ import { notifyManualHandoverOrderPaid, notifyBoostingOrderPaid } from '$lib/ser
 import { logOrderStatusTransition } from '$lib/services/order-audit';
 import { isManualHandoverOrder, isBoostingOrder } from '$lib/services/order-delivery-mode';
 import { releaseOrderReservations } from '$lib/services/order-reservations';
+import { reverseStoreCreditRedemption } from '$lib/services/store-credit';
 import { recordPromotionRedemption } from '$lib/services/promotions';
 import {
 	isGa4MeasurementProtocolConfigured,
@@ -25,7 +26,12 @@ import {
 	isOrderPaymentConfirmed
 } from '$lib/helpers/buyer-order-visibility';
 
-export type PaymentSettlementSource = 'verify' | 'webhook' | 'reconcile' | 'admin_release';
+export type PaymentSettlementSource =
+	| 'verify'
+	| 'webhook'
+	| 'reconcile'
+	| 'admin_release'
+	| 'store_credit';
 
 export interface PaymentSettlementResult {
 	success: boolean;
@@ -189,6 +195,16 @@ export async function settleFailedPayment(input: {
 	}
 
 	await releaseOrderReservations(order.id);
+	// Release any store credit reserved for this order back to the buyer.
+	if (order.userId && Number(order.storeCreditApplied || 0) > 0) {
+		await prisma
+			.$transaction((tx) =>
+				reverseStoreCreditRedemption(tx, { userId: order.userId as string, orderId: order.id })
+			)
+			.catch((error) => {
+				console.error('Failed to reverse store credit on payment failure:', error);
+			});
+	}
 	invalidateAdminStatsCache();
 
 	logOrderStatusTransition({

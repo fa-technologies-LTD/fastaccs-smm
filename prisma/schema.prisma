@@ -173,6 +173,7 @@ model Order {
   subtotal           Decimal
   taxAmount          Decimal        @default(0) @map("tax_amount")
   discountAmount     Decimal        @default(0) @map("discount_amount")
+  storeCreditApplied Decimal        @default(0) @map("store_credit_applied")
   totalAmount        Decimal        @map("total_amount")
   currency           String         @default("NGN")
   paymentMethod      String?        @map("payment_method")

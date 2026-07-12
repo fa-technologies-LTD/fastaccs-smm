@@ -19,6 +19,7 @@ import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
 import { getFeatureFlagSnapshot } from '$lib/services/feature-flags';
 import {
 	buildRevenueOrderWhere,
+	toCashRevenue,
 	buildRevenueOrderWindowWhere
 } from '$lib/helpers/order-revenue.server';
 import { ANALYTICS_FUNNEL_STEPS } from '$lib/services/analytics-events';
@@ -189,11 +190,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 		] = await Promise.all([
 				prisma.order.aggregate({
 					where: buildRevenueOrderWindowWhere(startOfLastMonth, endOfLastMonth),
-					_sum: { totalAmount: true }
+					_sum: { totalAmount: true, storeCreditApplied: true }
 				}),
 				prisma.order.aggregate({
 					where: buildRevenueOrderWindowWhere(startOfMonth),
-					_sum: { totalAmount: true }
+					_sum: { totalAmount: true, storeCreditApplied: true }
 				}),
 			prisma.order.count({
 				where: { createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } }
@@ -242,7 +243,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				where: {
 					AND: [buildRevenueOrderWhere(), { affiliateUserId: { not: null } }]
 				},
-				_sum: { totalAmount: true }
+				_sum: { totalAmount: true, storeCreditApplied: true }
 			}),
 			prisma.walletTransaction.aggregate({
 				where: {
@@ -263,7 +264,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			prisma.order.count({ where: { orderType: 'account' } }),
 				prisma.order.aggregate({
 					where: buildRevenueOrderWhere(),
-					_sum: { totalAmount: true }
+					_sum: { totalAmount: true, storeCreditApplied: true }
 				}),
 				prisma.order.aggregate({
 					where: buildRevenueOrderWhere(),
@@ -594,18 +595,18 @@ export const load: PageServerLoad = async ({ locals }) => {
 				key: 'revenue_snapshot_vs_orders',
 				label: 'Revenue snapshot matches order aggregate',
 				expected: orderStatsSnapshot.total_revenue,
-				actual: Number(directRevenueAggregate._sum.totalAmount || 0),
+				actual: toCashRevenue(directRevenueAggregate._sum.totalAmount, directRevenueAggregate._sum.storeCreditApplied),
 				delta:
-					Number(directRevenueAggregate._sum.totalAmount || 0) - orderStatsSnapshot.total_revenue,
+					toCashRevenue(directRevenueAggregate._sum.totalAmount, directRevenueAggregate._sum.storeCreditApplied) - orderStatsSnapshot.total_revenue,
 				ok:
 					Math.abs(
-						Number(directRevenueAggregate._sum.totalAmount || 0) - orderStatsSnapshot.total_revenue
+						toCashRevenue(directRevenueAggregate._sum.totalAmount, directRevenueAggregate._sum.storeCreditApplied) - orderStatsSnapshot.total_revenue
 					) < 0.01
 			},
 				{
 					key: 'revenue_orders_vs_items',
 					label: 'Revenue from orders matches item totals net discounts plus tax',
-					expected: Number(directRevenueAggregate._sum.totalAmount || 0),
+					expected: toCashRevenue(directRevenueAggregate._sum.totalAmount, directRevenueAggregate._sum.storeCreditApplied),
 					actual:
 						Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0) -
 						Number(directDiscountAggregate._sum.discountAmount || 0) +
@@ -614,13 +615,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 						(Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0) -
 							Number(directDiscountAggregate._sum.discountAmount || 0) +
 							Number(directTaxAggregate._sum.taxAmount || 0)) -
-						Number(directRevenueAggregate._sum.totalAmount || 0),
+						toCashRevenue(directRevenueAggregate._sum.totalAmount, directRevenueAggregate._sum.storeCreditApplied),
 					ok:
 						Math.abs(
 							(Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0) -
 								Number(directDiscountAggregate._sum.discountAmount || 0) +
 								Number(directTaxAggregate._sum.taxAmount || 0)) -
-								Number(directRevenueAggregate._sum.totalAmount || 0)
+								toCashRevenue(directRevenueAggregate._sum.totalAmount, directRevenueAggregate._sum.storeCreditApplied)
 						) < 0.01
 				}
 			];
@@ -668,11 +669,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 				: 0;
 		const thisMonthAov =
 			thisMonthOrders > 0
-				? toAmount(Number(thisMonthRevenue._sum.totalAmount || 0) / thisMonthOrders)
+				? toAmount(toCashRevenue(thisMonthRevenue._sum.totalAmount, thisMonthRevenue._sum.storeCreditApplied) / thisMonthOrders)
 				: 0;
 		const lastMonthAov =
 			lastMonthOrders > 0
-				? toAmount(Number(lastMonthRevenue._sum.totalAmount || 0) / lastMonthOrders)
+				? toAmount(toCashRevenue(lastMonthRevenue._sum.totalAmount, lastMonthRevenue._sum.storeCreditApplied) / lastMonthOrders)
 				: 0;
 		const aovChange =
 			lastMonthAov > 0 ? ((thisMonthAov - lastMonthAov) / lastMonthAov) * 100 : 0;
@@ -702,7 +703,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			.sort((a, b) => b.count - a.count);
 
 		const affiliateRevenueAmount = revenueVisible
-			? Number(affiliateSalesAggregate._sum.totalAmount || 0)
+			? toCashRevenue(affiliateSalesAggregate._sum.totalAmount, affiliateSalesAggregate._sum.storeCreditApplied)
 			: 0;
 		const nonAffiliateRevenueAmount = revenueVisible
 			? Math.max(
@@ -728,9 +729,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 				advancedAnalyticsEnabled: featureFlags.adminAdvancedAnalytics,
 			totalRevenue: revenueVisible ? Number(orderStatsSnapshot.total_revenue || 0) : 0,
 			revenueChange: revenueVisible
-				? ((Number(thisMonthRevenue._sum.totalAmount || 0) -
-						Number(lastMonthRevenue._sum.totalAmount || 0)) /
-						Number(lastMonthRevenue._sum.totalAmount || 1)) *
+				? ((toCashRevenue(thisMonthRevenue._sum.totalAmount, thisMonthRevenue._sum.storeCreditApplied) -
+						toCashRevenue(lastMonthRevenue._sum.totalAmount, lastMonthRevenue._sum.storeCreditApplied)) /
+						(toCashRevenue(lastMonthRevenue._sum.totalAmount, lastMonthRevenue._sum.storeCreditApplied) || 1)) *
 					100
 				: 0,
 			aov: revenueVisible ? aov : 0,
@@ -744,7 +745,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			accountsChange: ((thisMonthAccounts - lastMonthAccounts) / (lastMonthAccounts || 1)) * 100,
 			activeAffiliates: affiliateProgramStats._count.id || 0,
 			totalReferrals: affiliateProgramStats._sum.totalReferrals || 0,
-			affiliateSales: revenueVisible ? Number(affiliateSalesAggregate._sum.totalAmount || 0) : 0,
+			affiliateSales: revenueVisible ? toCashRevenue(affiliateSalesAggregate._sum.totalAmount, affiliateSalesAggregate._sum.storeCreditApplied) : 0,
 			totalStoreCreditEarned: revenueVisible
 				? Number(affiliateCreditAggregate._sum.amount || 0)
 				: 0,

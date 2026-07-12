@@ -496,7 +496,7 @@ async function getAffiliateLedgerSummary(userId: string): Promise<AffiliateLedge
 			creditByStatus[status] += amount;
 		} else if (String(row.type) === AFFILIATE_LEDGER_PAYOUT_TYPE) {
 			payoutByStatus[status] += amount;
-		} else if (String(row.type) === SC_REDEEM_EARNED) {
+		} else if (String(row.type) === SC_REDEEM_EARNED && status === 'available') {
 			earnedRedeemedOnSite += amount;
 		}
 	}

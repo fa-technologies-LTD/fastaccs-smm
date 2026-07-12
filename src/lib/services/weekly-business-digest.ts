@@ -1,6 +1,9 @@
 import { prisma } from '$lib/prisma';
 import { getBusinessDateKey, getStartOfBusinessDayUtc } from '$lib/helpers/business-timezone';
-import { buildRevenueOrderWindowWhere } from '$lib/helpers/order-revenue.server';
+import {
+	buildRevenueOrderWindowWhere,
+	toCashRevenue
+} from '$lib/helpers/order-revenue.server';
 import {
 	getBusinessTimezoneSetting,
 	getLowStockThresholdSetting,
@@ -87,6 +90,7 @@ function getRevenueOrders(start: Date, end: Date) {
 			userId: true,
 			guestEmail: true,
 			totalAmount: true,
+			storeCreditApplied: true,
 			affiliateUserId: true,
 			deliveryMethod: true,
 			orderItems: {
@@ -350,18 +354,18 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 	]);
 
 	const currentRevenue = currentOrders.reduce(
-		(sum, order) => sum + Number(order.totalAmount || 0),
+		(sum, order) => sum + toCashRevenue(order.totalAmount, order.storeCreditApplied),
 		0
 	);
 	const previousRevenue = previousOrders.reduce(
-		(sum, order) => sum + Number(order.totalAmount || 0),
+		(sum, order) => sum + toCashRevenue(order.totalAmount, order.storeCreditApplied),
 		0
 	);
 	const buyerStats = getBuyerStats(currentOrders);
 	const catalog = buildCatalogLeaders(currentOrders);
 	const affiliateOrders = currentOrders.filter((order) => order.affiliateUserId);
 	const affiliateRevenue = affiliateOrders.reduce(
-		(sum, order) => sum + Number(order.totalAmount || 0),
+		(sum, order) => sum + toCashRevenue(order.totalAmount, order.storeCreditApplied),
 		0
 	);
 	const manualHandoverOrders = currentOrders.filter(

@@ -112,8 +112,10 @@ export async function getStoreCreditBuckets(userId: string, db: Db = prisma): Pr
 		const status = String(row.status || '').toLowerCase();
 		if (EARNED_CREDIT_TYPES.includes(type) && status === 'available') earnedCredits += amount;
 		else if (REFUND_CREDIT_TYPES.includes(type) && status === 'available') refundCredits += amount;
-		else if (type === SC_REDEEM_EARNED) earnedRedeemed += amount;
-		else if (type === SC_REDEEM_REFUND) refundRedeemed += amount;
+		// Redemptions only reduce available while active; reversed ones (failed/
+		// expired payments) are excluded so the credit is restored.
+		else if (type === SC_REDEEM_EARNED && status === 'available') earnedRedeemed += amount;
+		else if (type === SC_REDEEM_REFUND && status === 'available') refundRedeemed += amount;
 		else if (type === SC_PAYOUT && (status === 'requested' || status === 'paid')) payoutsOut += amount;
 	}
 
@@ -197,7 +199,9 @@ export async function redeemStoreCreditForOrder(
 				balanceBefore,
 				balanceAfter: balance,
 				description: `Store Credit applied to order ${params.orderNumber}`,
-				reference: params.orderId,
+				// One row per bucket; reference has a global unique constraint, so it
+				// must be unique per bucket. Reversal matches the `${orderId}:` prefix.
+				reference: `${params.orderId}:${row.bucket}`,
 				status: 'available',
 				metadata: { orderId: params.orderId, bucket: row.bucket }
 			}
@@ -205,4 +209,41 @@ export async function redeemStoreCreditForOrder(
 	}
 
 	await tx.wallet.update({ where: { id: wallet.id }, data: { balance } });
+}
+
+/**
+ * Reverse an order's not-yet-consumed redemption (payment failed or expired):
+ * mark the redemption rows reversed (so they stop reducing available credit) and
+ * restore the wallet balance. Idempotent — only touches still-active redemptions.
+ */
+export async function reverseStoreCreditRedemption(
+	tx: Prisma.TransactionClient,
+	params: { userId: string; orderId: string }
+): Promise<void> {
+	const debits = await tx.walletTransaction.findMany({
+		where: {
+			userId: params.userId,
+			reference: { startsWith: `${params.orderId}:` },
+			type: { in: [SC_REDEEM_EARNED, SC_REDEEM_REFUND] },
+			status: 'available'
+		},
+		select: { id: true, amount: true }
+	});
+	if (debits.length === 0) return;
+
+	const total = debits.reduce((sum, d) => sum + Math.max(0, Number(d.amount || 0)), 0);
+	await tx.walletTransaction.updateMany({
+		where: { id: { in: debits.map((d) => d.id) } },
+		data: { status: 'reversed' }
+	});
+
+	if (total > 0) {
+		const wallet = await tx.wallet.findUnique({ where: { userId: params.userId } });
+		if (wallet) {
+			await tx.wallet.update({
+				where: { id: wallet.id },
+				data: { balance: Number(wallet.balance || 0) + total }
+			});
+		}
+	}
 }
