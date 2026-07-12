@@ -39,12 +39,15 @@
 			items: OrderItemWithDetails[];
 			error: string | null;
 			canViewRevenue?: boolean;
+			canViewOrderAmounts?: boolean;
 			adminRole?: string;
 		};
 	}
 
 	let { data }: Props = $props();
-	const canViewRevenue = Boolean(data.canViewRevenue);
+	// Order detail shows per-order amounts (what the buyer paid) — visible to the
+	// assistant so she can process refunds. Not gated on canViewRevenue.
+	const canViewOrderAmounts = Boolean(data.canViewOrderAmounts);
 	let hideMonetaryAmounts = $state(false);
 
 	let order = $state(data.order);
@@ -124,7 +127,7 @@
 
 	function formatAdminAmount(amount: number): string {
 		return formatAdminMoney(amount, {
-			canViewRevenue,
+			canView: canViewOrderAmounts,
 			hideMonetaryAmounts,
 			format: formatPrice
 		});

@@ -13,11 +13,13 @@
 			orders: any[];
 			error: string | null;
 			canViewRevenue?: boolean;
+			canViewOrderAmounts?: boolean;
 		};
 	}>();
 
 	// State
 	const canViewRevenue = Boolean(data.canViewRevenue);
+	const canViewOrderAmounts = Boolean(data.canViewOrderAmounts);
 	let hideMonetaryAmounts = $state(false);
 	let searchTerm = $state('');
 	let statusFilter = $state<'all' | 'pending' | 'processing' | 'completed' | 'cancelled'>('all');
@@ -168,9 +170,19 @@
 		currentPage = 1;
 	});
 
+	// Aggregate revenue (summary) — FULL_ADMIN only.
 	function formatAdminAmount(amount: number): string {
 		return formatAdminMoney(amount, {
-			canViewRevenue,
+			canView: canViewRevenue,
+			hideMonetaryAmounts,
+			format: formatPrice
+		});
+	}
+
+	// Per-order amount (what the buyer paid) — visible to order managers/assistant.
+	function formatOrderAmount(amount: number): string {
+		return formatAdminMoney(amount, {
+			canView: canViewOrderAmounts,
 			hideMonetaryAmounts,
 			format: formatPrice
 		});
@@ -376,7 +388,7 @@
 					<div>
 						<div style="color: var(--text-dim);">Total</div>
 						<div class="font-semibold" style="color: var(--text);">
-							{formatAdminAmount(Number(order.totalAmount || 0))}
+							{formatOrderAmount(Number(order.totalAmount || 0))}
 						</div>
 					</div>
 					<div>
@@ -499,7 +511,7 @@
 								</span>
 							</td>
 							<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
-								{formatAdminAmount(Number(order.totalAmount || 0))}
+								{formatOrderAmount(Number(order.totalAmount || 0))}
 							</td>
 							<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
 								{formatDate(order.createdAt)}

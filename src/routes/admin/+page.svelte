@@ -43,6 +43,7 @@
 				todays_revenue: number;
 				units_sold: number;
 				total_users: number;
+				manual_handovers_completed?: number;
 			};
 			inventoryStats: {
 				total_tiers: number;
@@ -184,7 +185,7 @@
 
 	function formatMonetaryAmount(amount: number): string {
 		return formatAdminMoney(amount, {
-			canViewRevenue,
+			canView: canViewRevenue,
 			hideMonetaryAmounts,
 			format: formatPrice
 		});
@@ -456,6 +457,34 @@
 						<div class="mt-1 flex items-center">
 							<span class="text-xs sm:text-sm" style="color: var(--text-muted)">
 								All accounts
+							</span>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Manual Handovers Completed (for reconciling manual-handover credit) -->
+			<div
+				class="group rounded-lg p-3 sm:p-4"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+			>
+				<div class="flex items-center">
+					<div class="rounded-lg p-2 sm:p-3" style="background: rgba(34,197,94,0.12);">
+						<Package
+							class="size-5 transition-all group-hover:scale-80 group-hover:-rotate-20 sm:size-6"
+							style="color: #4ade80;"
+						/>
+					</div>
+					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
+						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+							Manual Handovers
+						</p>
+						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
+							{orderStats.manual_handovers_completed || 0}
+						</p>
+						<div class="mt-1 flex items-center">
+							<span class="text-xs sm:text-sm" style="color: var(--text-muted)">
+								Completed (delivered)
 							</span>
 						</div>
 					</div>

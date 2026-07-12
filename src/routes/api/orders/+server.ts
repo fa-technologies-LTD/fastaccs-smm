@@ -18,7 +18,10 @@ import {
 	getMinimumOrderValueSetting,
 	isCheckoutEnabledSetting
 } from '$lib/services/admin-settings';
-import { canViewRevenue, redactOrderFinancials } from '$lib/services/admin-revenue-visibility';
+import {
+	canViewOrderAmounts,
+	redactOrderFinancials
+} from '$lib/services/admin-revenue-visibility';
 import {
 	normalizeTierDeliveryMode,
 	getTierStockStatus,
@@ -204,7 +207,9 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			...(limit ? { take: limit } : {})
 		});
 		const responseData =
-			admin && !canViewRevenue(locals) ? data.map((order) => redactOrderFinancials(order)) : data;
+			admin && !canViewOrderAmounts(locals)
+				? data.map((order) => redactOrderFinancials(order))
+				: data;
 
 		return json({ data: responseData, error: null });
 	} catch (error) {

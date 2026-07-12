@@ -152,7 +152,7 @@
 
 	function formatAdminAmount(amount: number): string {
 		return formatAdminMoney(amount, {
-			canViewRevenue,
+			canView: canViewRevenue,
 			hideMonetaryAmounts,
 			format: formatPrice
 		});

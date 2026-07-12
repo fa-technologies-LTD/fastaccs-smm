@@ -36,7 +36,7 @@
 
 	function formatMoney(value: number): string {
 		return formatAdminMoney(Number(value || 0), {
-			canViewRevenue,
+			canView: canViewRevenue,
 			hideMonetaryAmounts,
 			format: formatPrice
 		});

@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
+import { canViewRevenue, redactBatchCost } from '$lib/services/admin-revenue-visibility';
 
 // GET /api/batches - Get all batches with optional filters
 export async function GET({ url, locals }) {
@@ -35,7 +36,11 @@ export async function GET({ url, locals }) {
 			...(limit && { take: parseInt(limit) })
 		});
 
-		return json({ data, error: null });
+		// Cost basis + supplier are company-sensitive — hide from non-revenue admins
+		// (e.g. the assistant, who has inventory access but must not see cost/margin).
+		const responseData = canViewRevenue(locals) ? data : data.map((batch) => redactBatchCost(batch));
+
+		return json({ data: responseData, error: null });
 	} catch (error) {
 		console.error('Database error:', error);
 		return json(

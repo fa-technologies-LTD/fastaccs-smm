@@ -20,6 +20,7 @@ export interface AdminContext {
 	role: AdminRole;
 	permissions: AdminPermission[];
 	canViewRevenue: boolean;
+	canViewOrderAmounts: boolean;
 }
 
 const ROLE_PERMISSION_MAP: Record<AdminRole, AdminPermission[]> = {
@@ -110,7 +111,12 @@ export async function getAdminContext(user: User | null | undefined): Promise<Ad
 		userId: user.id,
 		role,
 		permissions,
-		canViewRevenue: permissions.includes('admin:revenue:view')
+		canViewRevenue: permissions.includes('admin:revenue:view'),
+		// Per-ORDER money amounts (what a customer paid) are visible to anyone who
+		// manages orders — the assistant needs them to process refunds. This is
+		// distinct from canViewRevenue, which gates AGGREGATE revenue, customer
+		// lifetime spend, and cost basis (FULL_ADMIN only).
+		canViewOrderAmounts: permissions.includes('admin:orders:manage')
 	};
 }
 

@@ -2,7 +2,10 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
-import { canViewRevenue, redactOrderFinancials } from '$lib/services/admin-revenue-visibility';
+import {
+	canViewOrderAmounts,
+	redactOrderFinancials
+} from '$lib/services/admin-revenue-visibility';
 import type { Prisma } from '@prisma/client';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { releaseOrderReservations } from '$lib/services/order-reservations';
@@ -180,7 +183,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 		}
 
 		let responseData: Record<string, unknown> =
-			isAdmin && !canViewRevenue(locals)
+			isAdmin && !canViewOrderAmounts(locals)
 				? (redactOrderFinancials(data) as Record<string, unknown>)
 				: ((isAdmin ? data : sanitizeBuyerOrderAccounts(data)) as unknown as Record<
 						string,

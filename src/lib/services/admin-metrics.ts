@@ -28,6 +28,7 @@ export interface AdminOrderStatsSnapshot {
 	todays_revenue: number;
 	units_sold: number;
 	total_users: number;
+	manual_handovers_completed: number;
 }
 
 export interface AdminBoostingOrderStatsSnapshot {
@@ -73,7 +74,8 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 		totalRevenue,
 		todaysRevenue,
 		unitsSold,
-		totalUsers
+		totalUsers,
+		manualHandoversCompleted
 	] = await Promise.all([
 		prisma.order.count({ where: ACCOUNT_ORDER_FILTER }),
 		prisma.order.count({ where: { ...ACCOUNT_ORDER_FILTER, ...buildRevenueOrderWhere() } }),
@@ -110,7 +112,14 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 			_sum: { quantity: true },
 			where: { order: { ...buildRevenueOrderWhere(), ...ACCOUNT_ORDER_FILTER } }
 		}),
-		prisma.user.count()
+		prisma.user.count(),
+		// Completed manual-handover sales (WhatsApp delivery, marked completed) — a
+		// plain count for reconciling the assistant's manual-handover credit tallied
+		// outside the app. Manual handovers finish at status='completed' (their
+		// deliveryStatus stays 'processing'), so key off status.
+		prisma.order.count({
+			where: { deliveryMethod: 'whatsapp', status: 'completed' }
+		})
 	]);
 
 	return {
@@ -125,7 +134,8 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 		total_revenue: toCashRevenue(totalRevenue._sum.totalAmount, totalRevenue._sum.storeCreditApplied),
 		todays_revenue: toCashRevenue(todaysRevenue._sum.totalAmount, todaysRevenue._sum.storeCreditApplied),
 		units_sold: Number(unitsSold._sum.quantity || 0),
-		total_users: totalUsers
+		total_users: totalUsers,
+		manual_handovers_completed: manualHandoversCompleted
 	};
 }
 

@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
 import { ORDER_STATUS_GROUPS, getOrderStatusLabel } from '$lib/helpers/order-status';
-import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
+import { canViewRevenue, canViewOrderAmounts } from '$lib/services/admin-revenue-visibility';
 import { isRevenueOrder } from '$lib/helpers/order-revenue';
 
 interface TimelineEntry {
@@ -185,6 +185,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		throw error(403, 'Unauthorized');
 	}
 	const revenueVisible = canViewRevenue(locals);
+	// Per-order amounts stay visible to order managers (refund workflow); only the
+	// aggregate lifetime spend is gated on revenue visibility.
+	const orderAmountsVisible = canViewOrderAmounts(locals);
 
 	const [user, adminAuditLogs] = await Promise.all([
 		prisma.user.findUnique({
@@ -283,7 +286,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		orderNumber: order.orderNumber,
 		status: order.status,
 		paymentStatus: order.paymentStatus,
-		totalAmount: revenueVisible ? Number(order.totalAmount || 0) : 0,
+		totalAmount: orderAmountsVisible ? Number(order.totalAmount || 0) : 0,
 		currency: order.currency,
 		createdAt: order.createdAt,
 		updatedAt: order.updatedAt,

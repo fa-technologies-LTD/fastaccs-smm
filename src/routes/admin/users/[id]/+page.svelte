@@ -16,6 +16,7 @@
 	const timeline = $derived(data.timeline || []);
 	const recentSessions = $derived(data.recentSessions || []);
 	const canViewRevenue = Boolean(data.canViewRevenue);
+	const canViewOrderAmounts = Boolean(data.canViewOrderAmounts);
 	let hideMonetaryAmounts = $state(false);
 	let orderSearchQuery = $state('');
 	let orderStatusFilter = $state<'all' | 'paid' | 'failed' | 'pending' | 'processing'>('all');
@@ -134,9 +135,20 @@
 		return 'var(--text-dim)';
 	}
 
+	// Lifetime spend / aggregate customer value — FULL_ADMIN only.
 	function formatAdminAmount(amount: number): string {
 		return formatAdminMoney(amount, {
-			canViewRevenue,
+			canView: canViewRevenue,
+			hideMonetaryAmounts,
+			format: formatPrice
+		});
+	}
+
+	// Per-order amounts + wallet/store-credit balance — visible to order managers
+	// (assistant needs the wallet balance and order totals to process refunds).
+	function formatOrderAmount(amount: number): string {
+		return formatAdminMoney(amount, {
+			canView: canViewOrderAmounts,
 			hideMonetaryAmounts,
 			format: formatPrice
 		});
@@ -267,7 +279,7 @@
 				<p class="text-xs uppercase" style="color: var(--text-dim);">Store Credit</p>
 				{#if user.isAffiliateEnabled}
 					<p class="mt-1 text-lg font-bold" style="color: var(--text);">
-						{formatAdminAmount(user.storeCreditBalance || 0)}
+						{formatOrderAmount(user.storeCreditBalance || 0)}
 					</p>
 				{:else}
 					<p class="mt-1 text-sm font-semibold" style="color: var(--text-dim);">Not enabled</p>
@@ -341,7 +353,7 @@
 								</span>
 								<span style="color: var(--text-muted);">•</span>
 								<span style="color: var(--text); font-weight: 600;">
-									{formatAdminAmount(order.totalAmount)}
+									{formatOrderAmount(order.totalAmount)}
 								</span>
 							</div>
 						</div>

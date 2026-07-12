@@ -7,13 +7,15 @@ export function maskMoneyText(formattedAmount: string): string {
 export function formatAdminMoney(
 	amount: number,
 	options: {
-		canViewRevenue: boolean;
+		// Whether the current admin may see THIS amount. Per-order surfaces pass
+		// canViewOrderAmounts; aggregate/lifetime surfaces pass canViewRevenue.
+		canView: boolean;
 		hideMonetaryAmounts: boolean;
 		format: (value: number) => string;
 	}
 ): string {
-	if (!options.canViewRevenue) {
-		return 'Restricted';
+	if (!options.canView) {
+		return '*';
 	}
 
 	const formatted = options.format(amount);

@@ -2,6 +2,20 @@ export function canViewRevenue(locals: App.Locals): boolean {
 	return Boolean(locals.adminContext?.canViewRevenue);
 }
 
+// Per-ORDER money amounts (what a buyer paid) — visible to anyone who manages
+// orders, so the assistant can process refunds. Distinct from canViewRevenue.
+export function canViewOrderAmounts(locals: App.Locals): boolean {
+	return Boolean(locals.adminContext?.canViewOrderAmounts);
+}
+
+// Cost basis / supplier are company-sensitive — hide from non-revenue admins.
+export function redactBatchCost<T extends object>(batch: T): T {
+	const next = { ...batch } as Record<string, unknown>;
+	if ('supplier' in next) next.supplier = null;
+	if ('costPerUnit' in next) next.costPerUnit = null;
+	return next as T;
+}
+
 function redactOrderItemFinancials<T extends object>(item: T): T {
 	const next = { ...item } as Record<string, unknown>;
 	if ('unitPrice' in next) next.unitPrice = 0;

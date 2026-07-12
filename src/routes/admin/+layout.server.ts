@@ -31,6 +31,7 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 		adminRole: locals.adminContext.role,
 		adminPermissions: locals.adminContext.permissions,
 		canViewRevenue: locals.adminContext.canViewRevenue,
+		canViewOrderAmounts: locals.adminContext.canViewOrderAmounts,
 		featureFlags
 	};
 };
