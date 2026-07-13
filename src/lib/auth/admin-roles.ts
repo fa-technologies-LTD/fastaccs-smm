@@ -134,7 +134,7 @@ const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
 	},
 	{
 		prefix: '/admin/automation',
-		readPermission: 'admin:access',
+		readPermission: 'admin:settings:manage',
 		writePermission: 'admin:settings:manage'
 	},
 	{
@@ -175,7 +175,7 @@ const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
 	{ prefix: '/admin/users', readPermission: 'admin:access', writePermission: 'admin:users:manage' },
 	{
 		prefix: '/admin/analytics',
-		readPermission: 'admin:access',
+		readPermission: 'admin:revenue:view',
 		writePermission: 'admin:revenue:view'
 	},
 	{
@@ -250,7 +250,7 @@ const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
 	},
 	{
 		prefix: '/api/admin/automation',
-		readPermission: 'admin:access',
+		readPermission: 'admin:settings:manage',
 		writePermission: 'admin:settings:manage'
 	},
 	{

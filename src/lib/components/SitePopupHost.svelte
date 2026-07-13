@@ -62,6 +62,7 @@
 		icon={activePopup.icon}
 		title={activePopup.title}
 		body={activePopup.body}
+		bodyItems={activePopup.bodyItems}
 		ctaText={activePopup.ctaText}
 		secondaryHref={activePopup.secondaryHref}
 		secondaryText={activePopup.secondaryText}

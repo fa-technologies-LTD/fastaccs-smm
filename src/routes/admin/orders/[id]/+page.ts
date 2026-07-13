@@ -38,6 +38,14 @@ export const load = async ({ params, fetch }: { params: { id: string }; fetch: t
 		}));
 	});
 
+	// What was ordered (tier + quantity) — always available even when no accounts
+	// are allocated yet (manual handover, unfulfilled), so the order is never blank.
+	const orderedItems = orderItems.map((item: any) => ({
+		tierName: item.category?.name || item.productName || 'Unknown tier',
+		platformName: item.category?.parent?.name || item.productCategory || '',
+		quantity: Number(item.quantity || 0)
+	}));
+
 	const orderTotal = Number(rawOrder.totalAmount || 0);
 	const itemCount = orderItems.reduce(
 		(sum: number, item: any) => sum + Number(item.quantity || 0),
@@ -68,6 +76,7 @@ export const load = async ({ params, fetch }: { params: { id: string }; fetch: t
 	return {
 		order: normalizedOrder,
 		items: flattenedAccounts,
+		orderedItems,
 		error: null
 	};
 };

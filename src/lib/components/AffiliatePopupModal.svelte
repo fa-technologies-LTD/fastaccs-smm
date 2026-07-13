@@ -8,6 +8,7 @@
 		icon: string;
 		title: string;
 		body: string;
+		bodyItems?: string[];
 		ctaText?: string;
 		ctaHref?: string;
 		secondaryHref?: string;
@@ -20,6 +21,7 @@
 		icon,
 		title,
 		body,
+		bodyItems,
 		ctaText = 'Got it',
 		ctaHref,
 		secondaryHref,
@@ -80,7 +82,18 @@
 				{title}
 			</h2>
 
-			<p class="mb-6 text-sm" style="color: var(--text-muted);">{body}</p>
+			<p class="mb-3 text-sm" style="color: var(--text-muted);">{body}</p>
+
+			{#if bodyItems && bodyItems.length > 0}
+				<ul class="mb-6 space-y-1.5 text-left">
+					{#each bodyItems as item}
+						<li class="flex items-start gap-2 text-sm" style="color: var(--text);">
+							<span style="color: var(--primary);">•</span>
+							<span>{item}</span>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 
 			{#if ctaHref}
 				<a

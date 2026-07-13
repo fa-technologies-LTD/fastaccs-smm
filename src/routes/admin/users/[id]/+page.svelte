@@ -17,6 +17,11 @@
 	const recentSessions = $derived(data.recentSessions || []);
 	const canViewRevenue = Boolean(data.canViewRevenue);
 	const canViewOrderAmounts = Boolean(data.canViewOrderAmounts);
+	// Owner-only actions: suspending users and overriding affiliate access. The
+	// assistant lacks these perms (and the API blocks her too) — hide the buttons.
+	const adminPermissions = (data as { adminPermissions?: string[] }).adminPermissions ?? [];
+	const canManageUsers = adminPermissions.includes('admin:users:manage');
+	const canManageAffiliates = adminPermissions.includes('admin:affiliates:manage');
 	let hideMonetaryAmounts = $state(false);
 	let orderSearchQuery = $state('');
 	let orderStatusFilter = $state<'all' | 'paid' | 'failed' | 'pending' | 'processing'>('all');
@@ -170,33 +175,37 @@
 			Back to Users
 		</button>
 
-		<button
-			onclick={toggleUserAccess}
-			disabled={togglingStatus}
-			class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition hover:opacity-90 disabled:opacity-60"
-			style={user.isActive
-				? 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border);'
-				: 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border);'}
-		>
-			{#if user.isActive}
-				<ShieldOff class="h-4 w-4" />
-				Suspend User
-			{:else}
-				<ShieldCheck class="h-4 w-4" />
-				Unblock User
-			{/if}
-		</button>
+		{#if canManageUsers}
+			<button
+				onclick={toggleUserAccess}
+				disabled={togglingStatus}
+				class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition hover:opacity-90 disabled:opacity-60"
+				style={user.isActive
+					? 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border);'
+					: 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border);'}
+			>
+				{#if user.isActive}
+					<ShieldOff class="h-4 w-4" />
+					Suspend User
+				{:else}
+					<ShieldCheck class="h-4 w-4" />
+					Unblock User
+				{/if}
+			</button>
+		{/if}
 
-		<button
-			onclick={toggleAffiliateAccess}
-			disabled={togglingAffiliate}
-			class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition hover:opacity-90 disabled:opacity-60"
-			style={user.isAffiliateEnabled
-				? 'background: rgba(226,75,74,0.1); color: var(--status-danger); border: 1px solid rgba(226,75,74,0.32);'
-				: 'background: rgba(5,212,113,0.1); color: var(--status-success); border: 1px solid rgba(5,212,113,0.32);'}
-		>
-			{user.isAffiliateEnabled ? 'Disable Affiliate' : 'Enable Affiliate'}
-		</button>
+		{#if canManageAffiliates}
+			<button
+				onclick={toggleAffiliateAccess}
+				disabled={togglingAffiliate}
+				class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition hover:opacity-90 disabled:opacity-60"
+				style={user.isAffiliateEnabled
+					? 'background: rgba(226,75,74,0.1); color: var(--status-danger); border: 1px solid rgba(226,75,74,0.32);'
+					: 'background: rgba(5,212,113,0.1); color: var(--status-success); border: 1px solid rgba(5,212,113,0.32);'}
+			>
+				{user.isAffiliateEnabled ? 'Disable Affiliate' : 'Enable Affiliate'}
+			</button>
+		{/if}
 	</div>
 
 	<section

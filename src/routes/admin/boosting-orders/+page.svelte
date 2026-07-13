@@ -3,6 +3,7 @@
 	import { showError, showSuccess } from '$lib/stores/toasts';
 	import { getBoostingServiceConfig } from '$lib/helpers/boosting-service-config';
 	import { formatPrice } from '$lib/helpers/utils';
+	import { formatAdminMoney } from '$lib/helpers/admin-money';
 	import type { PageData } from './$types';
 
 	interface BoostingOrderItem {
@@ -24,6 +25,16 @@
 	}
 
 	let { data }: { data: PageData } = $props();
+
+	// Boosting revenue is company revenue — show '*' to non-revenue admins (assistant).
+	const canViewRevenue = Boolean((data as { canViewRevenue?: boolean }).canViewRevenue);
+	function formatMonetaryAmount(amount: number): string {
+		return formatAdminMoney(amount, {
+			canView: canViewRevenue,
+			hideMonetaryAmounts: false,
+			format: formatPrice
+		});
+	}
 
 	if (data.error) {
 		showError('Failed to load boosting orders', data.error);
@@ -132,7 +143,7 @@
 				<span class="text-xs font-medium" style="color: var(--text-muted);">Lifetime Revenue</span>
 			</div>
 			<p class="mt-1 text-xl font-bold" style="color: var(--text);">
-				{formatPrice(stats.total_revenue)}
+				{formatMonetaryAmount(stats.total_revenue)}
 			</p>
 		</div>
 		<div
@@ -144,7 +155,7 @@
 				<span class="text-xs font-medium" style="color: var(--text-muted);">This Month</span>
 			</div>
 			<p class="mt-1 text-xl font-bold" style="color: var(--text);">
-				{formatPrice(stats.this_month_revenue)}
+				{formatMonetaryAmount(stats.this_month_revenue)}
 			</p>
 		</div>
 		<div

@@ -13,6 +13,7 @@ export interface PendingSitePopup {
 	icon: string;
 	title: string;
 	body: string;
+	bodyItems?: string[];
 	ctaText: string;
 	secondaryHref?: string;
 	secondaryText?: string;
@@ -100,12 +101,22 @@ async function getCatalogUpdatesPopup(since: Date): Promise<PendingSitePopup | n
 	if (restockedNames.length === 0 && platformNames.length === 0) return null;
 
 	let body: string;
+	let bodyItems: string[];
 	if (restockedNames.length > 0 && platformNames.length > 0) {
-		body = `New stock just landed for ${joinNames(restockedNames)}, and we've added ${joinNames(platformNames)} to the catalog!`;
+		body = 'Fresh restocks and new additions to the catalog:';
+		bodyItems = [
+			...restockedNames.map((name) => `${name} — back in stock`),
+			...platformNames.map((name) => `${name} — new`)
+		];
 	} else if (restockedNames.length > 0) {
-		body = `New stock just landed for ${joinNames(restockedNames)} — grab one before they're gone!`;
+		body =
+			restockedNames.length === 1
+				? 'Back in stock — grab it before it’s gone:'
+				: 'Back in stock — grab them before they’re gone:';
+		bodyItems = restockedNames;
 	} else {
-		body = `We just added ${joinNames(platformNames)} to the catalog — check ${platformNames.length === 1 ? 'it' : 'them'} out!`;
+		body = 'Just added to the catalog:';
+		bodyItems = platformNames;
 	}
 
 	return {
@@ -113,6 +124,7 @@ async function getCatalogUpdatesPopup(since: Date): Promise<PendingSitePopup | n
 		icon: '🆕',
 		title: "Here's what's new since your last visit",
 		body,
+		bodyItems,
 		ctaText: 'Got it'
 	};
 }

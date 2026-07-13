@@ -87,6 +87,7 @@
 			(a: any, b: any) => (isUnresolvedManual(a) ? 0 : 1) - (isUnresolvedManual(b) ? 0 : 1)
 		)
 	);
+	const needsActionCount = $derived(filteredOrders.filter(isUnresolvedManual).length);
 
 	const paginatedOrders = $derived.by(() => {
 		const startIndex = (currentPage - 1) * itemsPerPage;
@@ -360,6 +361,16 @@
 		/>
 	</div>
 
+	{#if needsActionCount > 0}
+		<div
+			class="mb-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs sm:text-sm"
+			style="background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border);"
+		>
+			<span class="font-semibold">{needsActionCount} manual handover{needsActionCount === 1 ? '' : 's'} awaiting delivery</span>
+			<span style="opacity: 0.85;">— pinned to the top; they return to date order once delivered.</span>
+		</div>
+	{/if}
+
 	<!-- Orders Table -->
 	<div class="space-y-3 lg:hidden">
 		{#each paginatedOrders as order}
@@ -376,12 +387,22 @@
 							{order.guestEmail || 'N/A'}
 						</div>
 					</div>
-					<span
-						class="inline-flex rounded-full px-2 py-1 text-[11px] font-semibold"
-						style={getStatusStyle(order.status)}
-					>
-						{formatStatusLabel(order.status)}
-					</span>
+					<div class="flex flex-col items-end gap-1">
+						<span
+							class="inline-flex rounded-full px-2 py-1 text-[11px] font-semibold"
+							style={getStatusStyle(order.status)}
+						>
+							{formatStatusLabel(order.status)}
+						</span>
+						{#if isUnresolvedManual(order)}
+							<span
+								class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold"
+								style="background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border);"
+							>
+								Needs action
+							</span>
+						{/if}
+					</div>
 				</div>
 
 				<div class="mb-3 grid grid-cols-2 gap-2 text-xs">
@@ -509,6 +530,15 @@
 								>
 									{formatStatusLabel(order.status)}
 								</span>
+								{#if isUnresolvedManual(order)}
+									<span
+										class="ml-2 inline-flex rounded-full px-2 py-1 text-xs font-semibold"
+										style="background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border);"
+										title="Manual handover awaiting delivery — pinned to the top until resolved"
+									>
+										Needs action
+									</span>
+								{/if}
 							</td>
 							<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
 								{formatOrderAmount(Number(order.totalAmount || 0))}

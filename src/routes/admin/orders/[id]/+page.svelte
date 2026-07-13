@@ -37,6 +37,7 @@
 		data: {
 			order: OrderMetadata;
 			items: OrderItemWithDetails[];
+			orderedItems?: Array<{ tierName: string; platformName: string; quantity: number }>;
 			error: string | null;
 			canViewRevenue?: boolean;
 			canViewOrderAmounts?: boolean;
@@ -52,6 +53,7 @@
 
 	let order = $state(data.order);
 	let items = $state<OrderItemWithDetails[]>(data.items);
+	const orderedItems = $derived(data.orderedItems || []);
 	const isBoostingOrder = $derived(
 		Array.isArray((order as unknown as { orderItems?: Array<{ boostTargetUrl?: string | null }> }).orderItems) &&
 			(
@@ -271,15 +273,12 @@
 	}
 
 	// Cancel-with-refund: returns the paid amount to the buyer as Store Credit.
+	// Two-step: the button must be "armed" first (see template) so it can't be
+	// triggered by an accidental single click.
+	let refundArmed = $state(false);
 	async function refundOrder() {
 		if (isProcessing) return;
-		if (
-			!confirm(
-				"Refund this order to the buyer's Store Credit? The order will be marked refunded. This can't be undone here."
-			)
-		)
-			return;
-
+		refundArmed = false;
 		isProcessing = true;
 		try {
 			const res = await fetch(`/api/orders/${order.id}/refund`, { method: 'POST' });
@@ -501,16 +500,38 @@
 						</button>
 					{/if}
 
-					{#if (order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'completed') && order.status !== 'refunded' && order.paymentStatus !== 'refunded'}
-						<button
-							onclick={refundOrder}
-							disabled={isProcessing}
-							class="flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-300 hover:bg-rose-500/20 disabled:opacity-50 sm:px-4 sm:text-sm"
-							title="Refund the paid amount to the buyer's store credit"
-						>
-							<RefreshCw class="h-4 w-4" />
-							Refund to store credit
-						</button>
+					<!-- Refund: only while payment is received but the order is NOT yet
+					     completed/delivered (hard-blocked once completed). Two-step to
+					     avoid accidental clicks. -->
+					{#if order.paymentStatus === 'paid' && (order.status === 'paid' || order.status === 'processing')}
+						{#if refundArmed}
+							<button
+								onclick={refundOrder}
+								disabled={isProcessing}
+								class="flex items-center gap-2 rounded-lg border border-rose-500 bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50 sm:px-4 sm:text-sm"
+								title="Confirm: refund the paid amount to the buyer's store credit"
+							>
+								<RefreshCw class="h-4 w-4" />
+								Confirm refund
+							</button>
+							<button
+								onclick={() => (refundArmed = false)}
+								disabled={isProcessing}
+								class="rounded-lg border border-gray-300 px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50 sm:px-4 sm:text-sm"
+							>
+								Cancel
+							</button>
+						{:else}
+							<button
+								onclick={() => (refundArmed = true)}
+								disabled={isProcessing}
+								class="flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-300 hover:bg-rose-500/20 disabled:opacity-50 sm:px-4 sm:text-sm"
+								title="Refund the paid amount to the buyer's store credit"
+							>
+								<RefreshCw class="h-4 w-4" />
+								Refund to store credit
+							</button>
+						{/if}
 					{/if}
 				</div>
 			</div>
@@ -571,6 +592,28 @@
 						</div>
 					</div>
 				</div>
+
+				<!-- Items Ordered (what was sold) — always shown, even with 0 accounts -->
+				{#if orderedItems.length > 0}
+					<div class="rounded-lg border border-gray-200 bg-white shadow-sm">
+						<div class="border-b border-gray-200 px-6 py-4">
+							<h2 class="text-lg font-semibold text-gray-900">Items Ordered</h2>
+						</div>
+						<div class="divide-y divide-gray-100">
+							{#each orderedItems as ordered}
+								<div class="flex items-center justify-between px-6 py-3">
+									<div class="min-w-0">
+										<div class="truncate text-sm font-semibold text-gray-900">{ordered.tierName}</div>
+										{#if ordered.platformName}
+											<div class="truncate text-xs text-gray-500">{ordered.platformName}</div>
+										{/if}
+									</div>
+									<div class="text-sm font-medium text-gray-700">×{ordered.quantity}</div>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/if}
 
 				<!-- Allocated Accounts -->
 				<div class="rounded-lg border border-gray-200 bg-white shadow-sm">

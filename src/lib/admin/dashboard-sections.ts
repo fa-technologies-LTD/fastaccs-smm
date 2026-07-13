@@ -78,13 +78,15 @@ export const ADMIN_DASHBOARD_SECTIONS: AdminDashboardSection[] = [
 		href: '/admin/wallets',
 		label: 'Wallets',
 		description: 'Affiliate wallet balances & transactions',
-		icon: Wallet
+		icon: Wallet,
+		permission: 'admin:revenue:view'
 	},
 	{
 		href: '/admin/analytics',
 		label: 'Analytics',
 		description: 'Revenue, sales & stock trends',
-		icon: BarChart3
+		icon: BarChart3,
+		permission: 'admin:revenue:view'
 	},
 	{
 		href: '/admin/promotions',
@@ -112,7 +114,8 @@ export const ADMIN_DASHBOARD_SECTIONS: AdminDashboardSection[] = [
 		href: '/admin/automation',
 		label: 'Automation',
 		description: 'Monitor scheduled jobs',
-		icon: Activity
+		icon: Activity,
+		permission: 'admin:settings:manage'
 	},
 	{
 		href: '/admin/settings',
