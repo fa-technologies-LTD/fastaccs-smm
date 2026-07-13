@@ -64,6 +64,20 @@
 		recentReferralActivity?: AffiliateRecentReferralActivity[];
 		recentStoreCreditActivity?: AffiliateRecentStoreCreditActivity[];
 		pendingPopup?: AffiliatePopupType | null;
+		isSuperAffiliate?: boolean;
+		superReferrals?: SuperReferralItem[];
+		superActivationsThisMonth?: number;
+	}
+
+	interface SuperReferralItem {
+		userId: string;
+		displayName: string;
+		status: 'pending' | 'activated';
+		orderCount: number;
+		cumulativeSpend: number;
+		orderTarget: number;
+		spendTarget: number;
+		activatedAt: string | null;
 	}
 
 	let { initialAffiliateData } = $props();
@@ -179,6 +193,24 @@
 	const recentReferralActivity = $derived(
 		Array.isArray(affiliateData?.recentReferralActivity) ? affiliateData.recentReferralActivity : []
 	);
+
+	// Super affiliate: per-referral progress + monthly activations/tier (display only).
+	const isSuperAffiliate = $derived(Boolean(affiliateData?.isSuperAffiliate));
+	const superReferrals = $derived<SuperReferralItem[]>(
+		Array.isArray(affiliateData?.superReferrals) ? affiliateData.superReferrals : []
+	);
+	const superActivationsThisMonth = $derived(toNumber(affiliateData?.superActivationsThisMonth));
+	const superBonusTier = $derived.by(() => {
+		const n = superActivationsThisMonth;
+		if (n >= 30) return { count: 30, amount: 15000 };
+		if (n >= 20) return { count: 20, amount: 8000 };
+		if (n >= 10) return { count: 10, amount: 3000 };
+		return null;
+	});
+	function superProgressPct(value: number, target: number): number {
+		if (target <= 0) return 0;
+		return Math.min(100, Math.round((value / target) * 100));
+	}
 	// Pending referrals = people who signed up with your code but haven't bought yet.
 	const pendingReferrals = $derived(
 		Math.max(
@@ -676,6 +708,136 @@
 					</span>
 				</div>
 			</div>
+
+			{#if isSuperAffiliate}
+				<div
+					class="mb-4 rounded-[var(--r-md)] border border-[var(--border)] p-4"
+					style="background: var(--surface);"
+				>
+					<div class="mb-3 flex items-center justify-between gap-2">
+						<h4
+							class="text-sm font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							Super Affiliate
+						</h4>
+						<span
+							class="rounded-full px-2 py-0.5 text-xs font-semibold"
+							style="background: rgba(105,109,250,0.12); color: var(--link);">₦700 / activation</span
+						>
+					</div>
+
+					<!-- Monthly activations + bonus tier (display only — bonus is paid separately) -->
+					<div class="mb-4 grid grid-cols-2 gap-2">
+						<div class="rounded-[var(--r-sm)] border border-[var(--border)] p-3">
+							<div class="text-xs" style="color: var(--text-muted);">Activations this month</div>
+							<div class="text-lg font-bold" style="color: var(--text);">
+								{superActivationsThisMonth}
+							</div>
+						</div>
+						<div class="rounded-[var(--r-sm)] border border-[var(--border)] p-3">
+							<div class="text-xs" style="color: var(--text-muted);">Monthly bonus</div>
+							{#if superBonusTier}
+								<div class="text-lg font-bold" style="color: var(--primary);">
+									₦{superBonusTier.amount.toLocaleString()}
+								</div>
+								<div class="text-[10px]" style="color: var(--text-muted);">
+									{superBonusTier.count}+ activations this month
+								</div>
+							{:else}
+								<div class="text-sm" style="color: var(--text-muted);">
+									— <span class="text-[10px]">(10+ unlocks ₦3k)</span>
+								</div>
+							{/if}
+						</div>
+					</div>
+
+					<div class="mb-2 text-xs font-semibold" style="color: var(--text-muted);">
+						Your referrals
+					</div>
+					{#if superReferrals.length === 0}
+						<p class="text-sm" style="color: var(--text-muted);">
+							No referrals yet — share your code to get started.
+						</p>
+					{:else}
+						<div class="space-y-3">
+							{#each superReferrals as ref (ref.userId)}
+								<div class="rounded-[var(--r-sm)] border border-[var(--border)] p-3">
+									<div class="mb-2 flex items-center justify-between gap-2">
+										<span class="truncate text-sm font-medium" style="color: var(--text);"
+											>{ref.displayName}</span
+										>
+										{#if ref.status === 'activated'}
+											<span
+												class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+												style="background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border);"
+												>Activated</span
+											>
+										{:else}
+											<span
+												class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+												style="background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border);"
+												>Pending</span
+											>
+										{/if}
+									</div>
+									{#if ref.status === 'pending'}
+										<div class="space-y-1.5">
+											<div>
+												<div
+													class="mb-0.5 flex justify-between text-[11px]"
+													style="color: var(--text-muted);"
+												>
+													<span>Orders</span><span>{ref.orderCount}/{ref.orderTarget}</span>
+												</div>
+												<div
+													class="h-1.5 w-full overflow-hidden rounded-full"
+													style="background: var(--bg-elev-2);"
+												>
+													<div
+														class="h-full rounded-full"
+														style="width: {superProgressPct(
+															ref.orderCount,
+															ref.orderTarget
+														)}%; background: var(--link);"
+													></div>
+												</div>
+											</div>
+											<div>
+												<div
+													class="mb-0.5 flex justify-between text-[11px]"
+													style="color: var(--text-muted);"
+												>
+													<span>Spend</span><span
+														>₦{ref.cumulativeSpend.toLocaleString()}/₦{ref.spendTarget.toLocaleString()}</span
+													>
+												</div>
+												<div
+													class="h-1.5 w-full overflow-hidden rounded-full"
+													style="background: var(--bg-elev-2);"
+												>
+													<div
+														class="h-full rounded-full"
+														style="width: {superProgressPct(
+															ref.cumulativeSpend,
+															ref.spendTarget
+														)}%; background: var(--primary);"
+													></div>
+												</div>
+											</div>
+										</div>
+									{:else}
+										<div class="text-[11px]" style="color: var(--text-muted);">
+											Earned ₦700 · {ref.orderCount} order{ref.orderCount === 1 ? '' : 's'}, ₦{ref.cumulativeSpend.toLocaleString()}
+											spent
+										</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			{/if}
 
 			<div class="grid grid-cols-2 gap-2 sm:gap-3">
 				<details

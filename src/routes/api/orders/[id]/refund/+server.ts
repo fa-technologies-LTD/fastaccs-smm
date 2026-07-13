@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { creditStoreCredit, SC_CREDIT_REFUND } from '$lib/services/store-credit';
+import { maybeVoidSuperActivationOnRefund } from '$lib/services/affiliate';
 import { createAdminAuditLog } from '$lib/services/admin-audit';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
@@ -21,6 +22,7 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 			id: true,
 			orderNumber: true,
 			userId: true,
+			affiliateUserId: true,
 			totalAmount: true,
 			paymentStatus: true,
 			status: true
@@ -67,6 +69,13 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 	});
 
 	invalidateAdminStatsCache();
+
+	// If this order was a super-affiliate referral's qualifying order, void the
+	// ₦700 activation reward when the refund drops them back below the threshold.
+	await maybeVoidSuperActivationOnRefund({
+		userId: order.userId,
+		affiliateUserId: order.affiliateUserId
+	}).catch((error) => console.error('super activation void failed:', error));
 
 	await createAdminAuditLog({
 		actorUserId: locals.user.id,

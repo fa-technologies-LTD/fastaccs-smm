@@ -173,6 +173,20 @@ export interface AffiliateDashboardState {
 	recentReferralActivity: AffiliateRecentReferralActivity[];
 	recentStoreCreditActivity: AffiliateRecentStoreCreditActivity[];
 	pendingPopup: AffiliatePopupType | null;
+	isSuperAffiliate: boolean;
+	superReferrals: SuperReferralProgressItem[];
+	superActivationsThisMonth: number;
+}
+
+export interface SuperReferralProgressItem {
+	userId: string;
+	displayName: string;
+	status: 'pending' | 'activated';
+	orderCount: number;
+	cumulativeSpend: number;
+	orderTarget: number;
+	spendTarget: number;
+	activatedAt: string | null;
 }
 
 interface AffiliateLedgerSummary {
@@ -1569,6 +1583,212 @@ function buildOrderItemCredit(
 	return toRoundedNaira(lineCredit);
 }
 
+// Super affiliate: a referral ACTIVATES on EITHER threshold (whichever first),
+// counting only paid, non-refunded orders. On activation the super affiliate
+// earns a flat reward, once per referral.
+export const SUPER_ACTIVATION_SPEND_THRESHOLD = 3500;
+export const SUPER_ACTIVATION_ORDER_THRESHOLD = 3;
+export const SUPER_ACTIVATION_REWARD = 700;
+
+/** Live progress of one referral toward activation (reused by the dashboard). */
+export async function getSuperReferralProgress(
+	superUserId: string,
+	referredUserId: string
+): Promise<{ orderCount: number; cumulativeSpend: number; activated: boolean }> {
+	const paidOrders = await prisma.order.findMany({
+		where: {
+			userId: referredUserId,
+			affiliateUserId: superUserId,
+			OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }],
+			NOT: { OR: [{ status: 'refunded' }, { paymentStatus: 'refunded' }] }
+		},
+		select: { totalAmount: true }
+	});
+	const orderCount = paidOrders.length;
+	const cumulativeSpend = paidOrders.reduce(
+		(sum, o) => sum + Math.max(0, Number(o.totalAmount || 0)),
+		0
+	);
+	const activated =
+		cumulativeSpend >= SUPER_ACTIVATION_SPEND_THRESHOLD ||
+		orderCount >= SUPER_ACTIVATION_ORDER_THRESHOLD;
+	return { orderCount, cumulativeSpend, activated };
+}
+
+/**
+ * Super-affiliate reward path (replaces the per-order reward). On each paid order
+ * by a referral: if the referral is already activated, do nothing (value captured,
+ * pings stop). Otherwise re-check the thresholds and, if newly crossed, credit the
+ * flat reward exactly once (idempotent via the activation reference).
+ */
+/** Notify a super affiliate when their monthly activations cross 10/20/30. */
+async function notifySuperMonthlyTierCrossing(superUserId: string): Promise<void> {
+	const startOfMonth = new Date();
+	startOfMonth.setDate(1);
+	startOfMonth.setHours(0, 0, 0, 0);
+	const count = await prisma.walletTransaction.count({
+		where: {
+			userId: superUserId,
+			reference: { startsWith: `super:activation:${superUserId}:` },
+			createdAt: { gte: startOfMonth }
+		}
+	});
+	const tierAmount: Record<number, number> = { 10: 3000, 20: 8000, 30: 15000 };
+	const amount = tierAmount[count];
+	if (!amount) return; // fire only exactly on 10/20/30
+	await prisma.notification.create({
+		data: {
+			userId: superUserId,
+			type: 'affiliate_store_credit',
+			title: 'Monthly bonus unlocked 🚀',
+			message: `You hit ${count} activations this month — ₦${amount.toLocaleString()} bonus unlocked.`
+		}
+	});
+}
+
+async function recordSuperAffiliateActivation(params: {
+	superUserId: string;
+	referredUserId: string;
+	affiliateCode: string;
+	triggerOrderId: string;
+}): Promise<{ success: boolean; storeCreditAwarded?: number; error?: string }> {
+	const { superUserId, referredUserId, affiliateCode, triggerOrderId } = params;
+	const activationReference = `super:activation:${superUserId}:${referredUserId}`;
+
+	const existing = await prisma.walletTransaction.findUnique({
+		where: { reference: activationReference },
+		select: { id: true }
+	});
+	if (existing) {
+		return { success: true, storeCreditAwarded: 0 };
+	}
+
+	const { orderCount, cumulativeSpend, activated } = await getSuperReferralProgress(
+		superUserId,
+		referredUserId
+	);
+	if (!activated) {
+		return { success: true, storeCreditAwarded: 0 };
+	}
+
+	const referredUser = await prisma.user
+		.findUnique({ where: { id: referredUserId }, select: { fullName: true } })
+		.catch(() => null);
+	const referralName = formatAffiliateDisplayName(referredUser?.fullName);
+
+	try {
+		await prisma.$transaction(async (tx) => {
+			const wallet = await tx.wallet.upsert({
+				where: { userId: superUserId },
+				update: {},
+				create: { userId: superUserId, balance: 0, currency: 'NGN' }
+			});
+			const balanceBefore = Number(wallet.balance || 0);
+			const balanceAfter = balanceBefore + SUPER_ACTIVATION_REWARD;
+			await tx.wallet.update({ where: { id: wallet.id }, data: { balance: balanceAfter } });
+			await tx.walletTransaction.create({
+				data: {
+					walletId: wallet.id,
+					userId: superUserId,
+					type: 'affiliate_credit',
+					amount: SUPER_ACTIVATION_REWARD,
+					balanceBefore,
+					balanceAfter,
+					description: 'Super affiliate — referral activated',
+					reference: activationReference,
+					status: AFFILIATE_LEDGER_STATUS.available,
+					metadata: {
+						kind: 'super_activation',
+						referredUserId,
+						affiliateCode,
+						activatedByOrderId: triggerOrderId,
+						cumulativeSpend,
+						orderCount,
+						lifecycleStatus: AFFILIATE_LEDGER_STATUS.available
+					}
+				}
+			});
+			await tx.notification.create({
+				data: {
+					userId: superUserId,
+					type: 'affiliate_store_credit',
+					title: 'Referral qualified 🎉',
+					message: `${referralName} qualified — ₦${SUPER_ACTIVATION_REWARD.toLocaleString()} earned.`
+				}
+			});
+		});
+	} catch (error) {
+		// Unique-reference collision = a concurrent order already activated this
+		// referral; treat as success (never double-credit).
+		if ((error as { code?: string })?.code === 'P2002') {
+			return { success: true, storeCreditAwarded: 0 };
+		}
+		throw error;
+	}
+
+	// Monthly bonus-tier crossing ping (display/notify only — bonus paid out-of-band).
+	await notifySuperMonthlyTierCrossing(superUserId).catch((err) =>
+		console.error('super monthly tier notify failed:', err)
+	);
+
+	return { success: true, storeCreditAwarded: SUPER_ACTIVATION_REWARD };
+}
+
+/**
+ * If a refunded order removes a referral's qualification, void the one-time ₦700
+ * super-affiliate activation reward — but only while it's still available (not
+ * requested/paid out). Called from the refund flow. Idempotent + best-effort.
+ */
+export async function maybeVoidSuperActivationOnRefund(order: {
+	userId: string | null;
+	affiliateUserId: string | null;
+}): Promise<void> {
+	const superUserId = order.affiliateUserId;
+	const referredUserId = order.userId;
+	if (!superUserId || !referredUserId) return;
+
+	const program = await prisma.affiliateProgram.findFirst({
+		where: { userId: superUserId },
+		select: { isSuperAffiliate: true }
+	});
+	if (!program?.isSuperAffiliate) return;
+
+	const activationReference = `super:activation:${superUserId}:${referredUserId}`;
+	const activation = await prisma.walletTransaction.findUnique({
+		where: { reference: activationReference },
+		select: { id: true, amount: true, status: true }
+	});
+	// Not activated, or already requested/paid out — leave it (can't claw back cash).
+	if (!activation || activation.status !== AFFILIATE_LEDGER_STATUS.available) return;
+
+	// getSuperReferralProgress already excludes the now-refunded order.
+	const { activated } = await getSuperReferralProgress(superUserId, referredUserId);
+	if (activated) return; // still qualifies via other orders — keep the reward
+
+	const amount = Math.max(0, Number(activation.amount || 0));
+	await prisma.$transaction(async (tx) => {
+		await tx.walletTransaction.update({
+			where: { id: activation.id },
+			data: { status: AFFILIATE_LEDGER_STATUS.reversed }
+		});
+		const wallet = await tx.wallet.findUnique({ where: { userId: superUserId } });
+		if (wallet) {
+			await tx.wallet.update({
+				where: { id: wallet.id },
+				data: { balance: Math.max(0, Number(wallet.balance || 0) - amount) }
+			});
+		}
+		await tx.notification.create({
+			data: {
+				userId: superUserId,
+				type: 'affiliate_store_credit',
+				title: 'Activation reversed',
+				message: `A referral no longer qualifies after a refund — ₦${amount.toLocaleString()} was reversed.`
+			}
+		});
+	});
+}
+
 export async function recordAffiliateStoreCreditForOrder(orderId: string): Promise<{
 	success: boolean;
 	storeCreditAwarded?: number;
@@ -1617,6 +1837,24 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 			!(order.status === 'paid' || order.status === 'completed' || order.paymentStatus === 'paid')
 		) {
 			return { success: true, storeCreditAwarded: 0 };
+		}
+
+		// Super affiliates use a flat per-ACTIVATION reward instead of the per-order
+		// reward below — flag-gated so the regular path is completely untouched.
+		const affiliateProgram = await prisma.affiliateProgram.findFirst({
+			where: {
+				userId: order.affiliateUserId,
+				affiliateCode: order.affiliateCode
+			},
+			select: { isSuperAffiliate: true }
+		});
+		if (affiliateProgram?.isSuperAffiliate) {
+			return await recordSuperAffiliateActivation({
+				superUserId: order.affiliateUserId,
+				referredUserId: order.userId,
+				affiliateCode: order.affiliateCode,
+				triggerOrderId: order.id
+			});
 		}
 
 		const reference = `affiliate:credit:order:${order.id}`;
@@ -1813,7 +2051,8 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 			select: {
 				id: true,
 				affiliateCode: true,
-				status: true
+				status: true,
+				isSuperAffiliate: true
 			}
 		}),
 		prisma.user.findUnique({
@@ -2056,6 +2295,69 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 
 	const paidReferredUsers = paidUserIdSet.size;
 
+	// Super-affiliate per-referral progress + monthly activations (display only).
+	const isSuperAffiliate = Boolean(program?.isSuperAffiliate);
+	let superReferrals: SuperReferralProgressItem[] = [];
+	let superActivationsThisMonth = 0;
+	if (isSuperAffiliate) {
+		const [superOrderAgg, activationRows] = await Promise.all([
+			referredUserIdList.length
+				? prisma.order.groupBy({
+						by: ['userId'],
+						where: {
+							userId: { in: referredUserIdList },
+							affiliateUserId: userId,
+							OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }],
+							NOT: { OR: [{ status: 'refunded' }, { paymentStatus: 'refunded' }] }
+						},
+						_count: { _all: true },
+						_sum: { totalAmount: true }
+					})
+				: Promise.resolve([]),
+			prisma.walletTransaction.findMany({
+				where: { userId, reference: { startsWith: `super:activation:${userId}:` } },
+				select: { reference: true, createdAt: true }
+			})
+		]);
+
+		const orderAggByUser = new Map<string, { orderCount: number; cumulativeSpend: number }>();
+		for (const row of superOrderAgg) {
+			if (!row.userId) continue;
+			orderAggByUser.set(row.userId, {
+				orderCount: row._count._all,
+				cumulativeSpend: Math.max(0, Number(row._sum.totalAmount || 0))
+			});
+		}
+
+		const activatedAtByUser = new Map<string, string>();
+		for (const row of activationRows) {
+			const referredUserId = row.reference?.split(':').pop() || '';
+			if (referredUserId) activatedAtByUser.set(referredUserId, row.createdAt.toISOString());
+			if (row.createdAt >= startOfMonth) superActivationsThisMonth += 1;
+		}
+
+		superReferrals = referredUserIdList
+			.map((referredUserId) => {
+				const agg = orderAggByUser.get(referredUserId) || { orderCount: 0, cumulativeSpend: 0 };
+				const activatedAt = activatedAtByUser.get(referredUserId) || null;
+				return {
+					userId: referredUserId,
+					displayName: formatAffiliateDisplayName(usersById.get(referredUserId)?.fullName),
+					status: activatedAt ? ('activated' as const) : ('pending' as const),
+					orderCount: agg.orderCount,
+					cumulativeSpend: agg.cumulativeSpend,
+					orderTarget: SUPER_ACTIVATION_ORDER_THRESHOLD,
+					spendTarget: SUPER_ACTIVATION_SPEND_THRESHOLD,
+					activatedAt
+				};
+			})
+			// Pending first (she cares who's close), then by most progress.
+			.sort((a, b) => {
+				if (a.status !== b.status) return a.status === 'pending' ? -1 : 1;
+				return b.cumulativeSpend - a.cumulativeSpend;
+			});
+	}
+
 	const accountAgeDays = user
 		? Math.floor((Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24))
 		: 0;
@@ -2114,7 +2416,10 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 		programStatus: program?.status || null,
 		recentReferralActivity,
 		recentStoreCreditActivity,
-		pendingPopup
+		pendingPopup,
+		isSuperAffiliate,
+		superReferrals,
+		superActivationsThisMonth
 	};
 }
 

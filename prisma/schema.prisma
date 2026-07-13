@@ -322,6 +322,9 @@ model AffiliateProgram {
   userId            String             @map("user_id") @db.Uuid
   affiliateCode     String             @unique @map("affiliate_code")
   commissionRate    Decimal            @default(10.00) @map("commission_rate")
+  // Super affiliate: flat ₦700 per activated referral (replaces the per-order
+  // reward). Regular affiliates stay false — their path is unchanged.
+  isSuperAffiliate  Boolean            @default(false) @map("is_super_affiliate")
   totalReferrals    Int                @default(0) @map("total_referrals")
   totalSales        Decimal            @default(0) @map("total_sales")
   totalCommission   Decimal            @default(0) @map("total_commission")
