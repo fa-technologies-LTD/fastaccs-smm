@@ -586,6 +586,8 @@ model PromotionCode {
   endsAt           DateTime?            @map("ends_at")
   isActive         Boolean              @default(true) @map("is_active")
   createdBy        String?              @map("created_by") @db.Uuid
+  // When set, only this user may redeem the code (e.g. spend-milestone rewards).
+  issuedToUserId   String?              @map("issued_to_user_id") @db.Uuid
   createdAt        DateTime             @default(now()) @map("created_at")
   updatedAt        DateTime             @default(now()) @map("updated_at")
   orders           Order[]

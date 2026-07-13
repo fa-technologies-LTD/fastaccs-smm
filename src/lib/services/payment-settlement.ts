@@ -16,6 +16,7 @@ import { logOrderStatusTransition } from '$lib/services/order-audit';
 import { isManualHandoverOrder, isBoostingOrder } from '$lib/services/order-delivery-mode';
 import { releaseOrderReservations } from '$lib/services/order-reservations';
 import { reverseStoreCreditRedemption } from '$lib/services/store-credit';
+import { maybeGrantSpendMilestones } from '$lib/services/spend-milestones';
 import { recordPromotionRedemption } from '$lib/services/promotions';
 import {
 	isGa4MeasurementProtocolConfigured,
@@ -271,6 +272,9 @@ export async function recoverPaidOrder(
 			error: 'Payment has not been confirmed.'
 		};
 	}
+
+	// Buyer spend-milestone rewards (₦8k promo, ₦70k gift) — idempotent, best-effort.
+	await maybeGrantSpendMilestones(order.userId);
 
 	if (order.status === 'completed') {
 		void sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED');

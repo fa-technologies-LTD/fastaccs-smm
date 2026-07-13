@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { creditStoreCredit, SC_CREDIT_REFUND } from '$lib/services/store-credit';
 import { maybeVoidSuperActivationOnRefund } from '$lib/services/affiliate';
+import { maybeClawbackSpendMilestones } from '$lib/services/spend-milestones';
 import { createAdminAuditLog } from '$lib/services/admin-audit';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
@@ -76,6 +77,11 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 		userId: order.userId,
 		affiliateUserId: order.affiliateUserId
 	}).catch((error) => console.error('super activation void failed:', error));
+
+	// If the refund drops the buyer below a spend milestone, void the unspent reward.
+	await maybeClawbackSpendMilestones(order.userId).catch((error) =>
+		console.error('spend-milestone clawback failed:', error)
+	);
 
 	await createAdminAuditLog({
 		actorUserId: locals.user.id,

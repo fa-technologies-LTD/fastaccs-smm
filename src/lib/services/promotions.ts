@@ -169,6 +169,16 @@ export async function validatePromotionCode(
 		};
 	}
 
+	// User-locked promo (e.g. spend-milestone reward) — only the recipient may use it.
+	if (promotion.issuedToUserId && promotion.issuedToUserId !== input.userId) {
+		return {
+			valid: false,
+			error: 'This promo code is not available on your account.',
+			discountAmount: 0,
+			finalTotal: subtotal
+		};
+	}
+
 	if (subtotal < Number(promotion.minOrderValue || 0)) {
 		return {
 			valid: false,
