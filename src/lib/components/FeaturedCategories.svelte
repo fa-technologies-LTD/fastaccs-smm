@@ -154,7 +154,7 @@
 							onclick={() => goto('/platforms')}
 							class="btn-fa btn-fa--primary w-full"
 						>
-							See available accounts
+							See more
 						</button>
 					</div>
 				</div>

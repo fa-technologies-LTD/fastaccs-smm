@@ -244,12 +244,21 @@
 				>
 					{user.userType}
 				</span>
-				{#if user.isAffiliateEnabled}
+				{#if user.isSuperAffiliate}
+					<span
+						class="rounded-full px-2.5 py-1 font-semibold"
+						style="background: rgba(245,158,11,0.14); color: #f59e0b; border: 1px solid #f59e0b;"
+						title={user.affiliateCode ? `Super affiliate · ${user.affiliateCode}` : 'Super affiliate'}
+					>
+						★ Super Affiliate
+					</span>
+				{:else if user.isAffiliateEnabled}
 					<span
 						class="rounded-full px-2.5 py-1 font-semibold"
 						style="background: rgba(168,85,247,0.12); color: #a855f7; border: 1px solid #a855f7;"
+						title={user.affiliateCode ? `Affiliate · ${user.affiliateCode}` : 'Affiliate'}
 					>
-						Affiliate enabled
+						Affiliate
 					</span>
 				{/if}
 			</div>

@@ -76,8 +76,12 @@
 	// Pin unresolved manual-handover orders (paid, awaiting WhatsApp handover) to
 	// the top so they aren't missed; once delivered they fall back into date order.
 	function isUnresolvedManual(order: any): boolean {
+		// A manual handover is "done" once the order is marked completed (handed over
+		// on WhatsApp) — those keep deliveryStatus 'processing', so check status too.
+		const status = String(order?.status || '').toLowerCase();
 		return (
 			order?.deliveryMethod === 'whatsapp' &&
+			status !== 'completed' &&
 			String(order?.deliveryStatus || '').toLowerCase() !== 'delivered' &&
 			!isCancelledOrder(order)
 		);

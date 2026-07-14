@@ -200,6 +200,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 				userType: true,
 				isActive: true,
 				isAffiliateEnabled: true,
+				affiliatePrograms: {
+					select: { affiliateCode: true, isSuperAffiliate: true, status: true },
+					take: 1
+				},
 				emailVerified: true,
 				emailVerifiedAt: true,
 				registeredAt: true,
@@ -336,6 +340,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			userType: user.userType,
 			isActive: user.isActive,
 			isAffiliateEnabled: user.isAffiliateEnabled,
+			affiliateCode: user.affiliatePrograms[0]?.affiliateCode ?? null,
+			isSuperAffiliate: Boolean(user.affiliatePrograms[0]?.isSuperAffiliate),
 			emailVerified: user.emailVerified,
 			emailVerifiedAt: user.emailVerifiedAt,
 			registeredAt: user.registeredAt,

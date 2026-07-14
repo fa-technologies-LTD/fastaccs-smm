@@ -142,7 +142,7 @@
 				class="rounded-full px-5 py-2 text-sm font-semibold"
 				style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.35); color: var(--primary);"
 			>
-				See available accounts
+				See more
 			</a>
 			<a
 				href="/services"

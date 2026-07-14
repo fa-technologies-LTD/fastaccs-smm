@@ -87,18 +87,18 @@
 	function getStatusColor(status: string) {
 		switch (status) {
 			case 'completed':
-				return 'text-green-600 bg-green-100';
+				return 'text-[var(--status-success)] bg-[var(--status-success-bg)]';
 			case 'processing':
-				return 'text-blue-600 bg-blue-100';
+				return 'text-[var(--link)] bg-[var(--bg-elev-2)]';
 			case 'pending':
 			case 'pending_payment':
-				return 'text-yellow-700 bg-yellow-100';
+				return 'text-[var(--status-warning)] bg-[var(--status-warning-bg)]';
 			case 'failed':
-				return 'text-red-600 bg-red-100';
+				return 'text-[var(--status-error)] bg-[var(--status-error-bg)]';
 			case 'cancelled':
-				return 'text-gray-600 bg-gray-100';
+				return 'text-[var(--text-muted)] bg-[var(--bg-elev-2)]';
 			default:
-				return 'text-yellow-600 bg-yellow-100';
+				return 'text-[var(--status-warning)] bg-[var(--status-warning-bg)]';
 		}
 	}
 
@@ -152,19 +152,19 @@
 			case 'delivered':
 			case 'completed':
 			case 'sold':
-				return 'text-green-600 bg-green-100';
+				return 'text-[var(--status-success)] bg-[var(--status-success-bg)]';
 			case 'reserved':
 			case 'processing':
-				return 'text-yellow-700 bg-yellow-100';
+				return 'text-[var(--status-warning)] bg-[var(--status-warning-bg)]';
 			case 'failed':
 			case 'retired':
 			case 'unavailable':
-				return 'text-red-600 bg-red-100';
+				return 'text-[var(--status-error)] bg-[var(--status-error-bg)]';
 			case 'assigned':
 			case 'allocated':
-				return 'text-blue-600 bg-blue-100';
+				return 'text-[var(--link)] bg-[var(--bg-elev-2)]';
 			default:
-				return 'text-gray-600 bg-gray-100';
+				return 'text-[var(--text-muted)] bg-[var(--bg-elev-2)]';
 		}
 	}
 
@@ -198,6 +198,23 @@
 		newStatus: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled'
 	) {
 		if (isProcessing) return;
+
+		// Cancelling a PAID order: offer to refund it to store credit in the same step.
+		if (
+			newStatus === 'cancelled' &&
+			order.paymentStatus === 'paid' &&
+			String(order.status) !== 'refunded' &&
+			String(order.status) !== 'completed'
+		) {
+			const amount = Number(order.total_amount || 0);
+			const doRefund = confirm(
+				`This order was paid ₦${amount.toLocaleString()}.\n\nOK = refund it to the buyer's store credit (recommended).\nCancel = cancel the order WITHOUT a refund.`
+			);
+			if (doRefund) {
+				await refundOrder();
+				return;
+			}
+		}
 
 		isProcessing = true;
 		try {
@@ -426,7 +443,7 @@
 				<div class="flex items-start gap-3 sm:gap-4">
 					<button
 						onclick={goBack}
-						class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 transition-colors hover:bg-gray-50"
+						class="flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--border)] transition-colors hover:bg-[var(--bg-elev-2)]"
 					>
 						<ArrowLeft class="h-5 w-5" />
 					</button>
@@ -503,7 +520,7 @@
 					<!-- Refund: only while payment is received but the order is NOT yet
 					     completed/delivered (hard-blocked once completed). Two-step to
 					     avoid accidental clicks. -->
-					{#if order.paymentStatus === 'paid' && (order.status === 'paid' || order.status === 'processing')}
+					{#if order.paymentStatus === 'paid' && String(order.status) !== 'completed' && String(order.status) !== 'refunded'}
 						{#if refundArmed}
 							<button
 								onclick={refundOrder}
@@ -517,7 +534,7 @@
 							<button
 								onclick={() => (refundArmed = false)}
 								disabled={isProcessing}
-								class="rounded-lg border border-gray-300 px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50 sm:px-4 sm:text-sm"
+								class="rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)] hover:bg-[var(--bg-elev-2)] disabled:opacity-50 sm:px-4 sm:text-sm"
 							>
 								Cancel
 							</button>
@@ -551,26 +568,26 @@
 			<!-- Main Content -->
 			<div class="space-y-6 lg:col-span-2">
 				<!-- Order Summary -->
-				<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-					<h2 class="mb-4 text-lg font-semibold text-gray-900">Order Summary</h2>
+				<div class="rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] p-6 shadow-sm">
+					<h2 class="mb-4 text-lg font-semibold text-[var(--text)]">Order Summary</h2>
 					<div class="grid grid-cols-1 gap-6 md:grid-cols-3">
 						<div>
 							<div class="mb-2 flex items-center">
-								<Package class="mr-2 h-4 w-4 text-gray-400" />
-								<span class="text-sm font-medium text-gray-500">Items</span>
+								<Package class="mr-2 h-4 w-4 text-[var(--text-dim)]" />
+								<span class="text-sm font-medium text-[var(--text-muted)]">Items</span>
 							</div>
-							<p class="text-2xl font-bold text-gray-900">{order.item_count}</p>
-							<p class="text-sm text-gray-500">{isBoostingOrder ? 'boost quantity' : 'accounts ordered'}</p>
+							<p class="text-2xl font-bold text-[var(--text)]">{order.item_count}</p>
+							<p class="text-sm text-[var(--text-muted)]">{isBoostingOrder ? 'boost quantity' : 'accounts ordered'}</p>
 						</div>
 						<div>
 							<div class="mb-2 flex items-center">
-								<CreditCard class="mr-2 h-4 w-4 text-gray-400" />
-								<span class="text-sm font-medium text-gray-500">Total Amount</span>
+								<CreditCard class="mr-2 h-4 w-4 text-[var(--text-dim)]" />
+								<span class="text-sm font-medium text-[var(--text-muted)]">Total Amount</span>
 							</div>
 							<p class="text-2xl font-bold" style="color: var(--text);">
 								{formatAdminAmount(Number(order.total_amount || 0))}
 							</p>
-							<p class="text-sm text-gray-500">
+							<p class="text-sm text-[var(--text-muted)]">
 								{#if order.payment_id}
 									Payment ID: {order.payment_id}
 								{:else}
@@ -580,13 +597,13 @@
 						</div>
 						<div>
 							<div class="mb-2 flex items-center">
-								<Calendar class="mr-2 h-4 w-4 text-gray-400" />
-								<span class="text-sm font-medium text-gray-500">Order Date</span>
+								<Calendar class="mr-2 h-4 w-4 text-[var(--text-dim)]" />
+								<span class="text-sm font-medium text-[var(--text-muted)]">Order Date</span>
 							</div>
-							<p class="text-lg font-bold text-gray-900">
+							<p class="text-lg font-bold text-[var(--text)]">
 								{new Date(order.created_at).toLocaleDateString()}
 							</p>
-							<p class="text-sm text-gray-500">
+							<p class="text-sm text-[var(--text-muted)]">
 								{new Date(order.created_at).toLocaleTimeString()}
 							</p>
 						</div>
@@ -595,20 +612,20 @@
 
 				<!-- Items Ordered (what was sold) — always shown, even with 0 accounts -->
 				{#if orderedItems.length > 0}
-					<div class="rounded-lg border border-gray-200 bg-white shadow-sm">
-						<div class="border-b border-gray-200 px-6 py-4">
-							<h2 class="text-lg font-semibold text-gray-900">Items Ordered</h2>
+					<div class="rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] shadow-sm">
+						<div class="border-b border-[var(--border)] px-6 py-4">
+							<h2 class="text-lg font-semibold text-[var(--text)]">Items Ordered</h2>
 						</div>
-						<div class="divide-y divide-gray-100">
+						<div class="divide-y divide-[var(--border)]">
 							{#each orderedItems as ordered}
 								<div class="flex items-center justify-between px-6 py-3">
 									<div class="min-w-0">
-										<div class="truncate text-sm font-semibold text-gray-900">{ordered.tierName}</div>
+										<div class="truncate text-sm font-semibold text-[var(--text)]">{ordered.tierName}</div>
 										{#if ordered.platformName}
-											<div class="truncate text-xs text-gray-500">{ordered.platformName}</div>
+											<div class="truncate text-xs text-[var(--text-muted)]">{ordered.platformName}</div>
 										{/if}
 									</div>
-									<div class="text-sm font-medium text-gray-700">×{ordered.quantity}</div>
+									<div class="text-sm font-medium text-[var(--text-muted)]">×{ordered.quantity}</div>
 								</div>
 							{/each}
 						</div>
@@ -616,15 +633,15 @@
 				{/if}
 
 				<!-- Allocated Accounts -->
-				<div class="rounded-lg border border-gray-200 bg-white shadow-sm">
-					<div class="border-b border-gray-200 px-6 py-4">
+				<div class="rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] shadow-sm">
+					<div class="border-b border-[var(--border)] px-6 py-4">
 						<div class="flex flex-wrap items-center justify-between gap-2">
-							<h2 class="text-lg font-semibold text-gray-900">Allocated Accounts</h2>
+							<h2 class="text-lg font-semibold text-[var(--text)]">Allocated Accounts</h2>
 							<div class="flex items-center gap-3">
 								{#if items.length > 0}
 									<button
 										onclick={() => (showCredentials = !showCredentials)}
-										class="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-1 text-sm text-gray-600 hover:bg-gray-50"
+										class="flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-1 text-sm text-[var(--text-muted)] hover:bg-[var(--bg-elev-2)]"
 									>
 										{#if showCredentials}
 											<EyeOff class="h-4 w-4" />
@@ -635,7 +652,7 @@
 										{/if}
 									</button>
 								{/if}
-								<span class="text-sm text-gray-500">
+								<span class="text-sm text-[var(--text-muted)]">
 									{items.length} accounts
 								</span>
 							</div>
@@ -644,24 +661,24 @@
 
 						{#if isBoostingOrder}
 							<div class="p-12 text-center">
-								<Package class="mx-auto mb-4 h-12 w-12 text-gray-300" />
-								<h3 class="mb-2 text-lg font-medium text-gray-900">This is a boosting order</h3>
-								<p class="mb-4 text-gray-500">
+								<Package class="mx-auto mb-4 h-12 w-12 text-[var(--text-dim)]" />
+								<h3 class="mb-2 text-lg font-medium text-[var(--text)]">This is a boosting order</h3>
+								<p class="mb-4 text-[var(--text-muted)]">
 									No accounts to allocate — manage the link and fulfillment status from the
 									Boosting Orders queue.
 								</p>
 								<a
 									href="/admin/boosting-orders"
-									class="inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+									class="inline-flex items-center gap-2 rounded-full bg-[var(--bg-elev-2)] px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
 								>
 									Go to Boosting Orders
 								</a>
 							</div>
 						{:else if items.length === 0}
 							<div class="p-12 text-center">
-								<Package class="mx-auto mb-4 h-12 w-12 text-gray-300" />
-								<h3 class="mb-2 text-lg font-medium text-gray-900">No accounts allocated</h3>
-								<p class="text-gray-500">Accounts will be allocated when the order is processed.</p>
+								<Package class="mx-auto mb-4 h-12 w-12 text-[var(--text-dim)]" />
+								<h3 class="mb-2 text-lg font-medium text-[var(--text)]">No accounts allocated</h3>
+								<p class="text-[var(--text-muted)]">Accounts will be allocated when the order is processed.</p>
 							</div>
 						{:else}
 									<div class="space-y-3 p-3 lg:hidden">
@@ -677,13 +694,13 @@
 												deliveryNotes: item.account_delivery_notes,
 												credentialExtras: item.account_credential_extras || {}
 											})}
-											<div class="rounded-lg border border-gray-200 p-3">
+											<div class="rounded-lg border border-[var(--border)] p-3">
 										<div class="mb-2 flex items-start justify-between gap-2">
 											<div class="min-w-0">
-												<div class="truncate text-sm font-semibold text-gray-900">
+												<div class="truncate text-sm font-semibold text-[var(--text)]">
 													@{item.account_username || 'N/A'}
 												</div>
-												<div class="truncate text-xs text-gray-500">
+												<div class="truncate text-xs text-[var(--text-muted)]">
 													{item.account_email || 'No email'}
 												</div>
 											</div>
@@ -695,14 +712,14 @@
 												{formatStatusLabel(accountStatus)}
 											</span>
 										</div>
-										<div class="mb-3 text-xs text-gray-600">
+										<div class="mb-3 text-xs text-[var(--text-muted)]">
 											{item.platform_name} · {item.tier_name}
 										</div>
 
 											{#if showCredentials}
-												<div class="mb-3 space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs">
+												<div class="mb-3 space-y-1 rounded border border-[var(--border)] bg-[var(--bg-elev-2)] p-2 font-mono text-xs">
 													{#if credentialEntries.length === 0}
-														<div class="text-[11px] text-gray-500">No credential fields found.</div>
+														<div class="text-[11px] text-[var(--text-muted)]">No credential fields found.</div>
 													{:else}
 														{#each credentialEntries as entry}
 															<div>
@@ -730,9 +747,9 @@
 												{/if}
 											</div>
 										{:else}
-											<div class="mb-3 rounded border border-gray-200 bg-gray-50 p-2">
-												<div class="text-[11px] text-gray-500">Password</div>
-												<div class="font-mono text-xs break-all text-gray-900">
+											<div class="mb-3 rounded border border-[var(--border)] bg-[var(--bg-elev-2)] p-2">
+												<div class="text-[11px] text-[var(--text-muted)]">Password</div>
+												<div class="font-mono text-xs break-all text-[var(--text)]">
 													{item.account_password || 'No password'}
 												</div>
 											</div>
@@ -740,7 +757,7 @@
 
 										<button
 											onclick={() => copyToClipboard(buildAccountLogText(item))}
-											class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
+											class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-elev-2)] px-3 py-1 text-xs font-semibold text-[var(--link)]"
 											title="Copy account details"
 										>
 											<Copy class="h-3.5 w-3.5" />
@@ -751,46 +768,46 @@
 						</div>
 
 						<div class="hidden overflow-x-auto lg:block">
-							<table class="min-w-full divide-y divide-gray-200">
-								<thead class="bg-gray-50">
+							<table class="min-w-full divide-y divide-[var(--border)]">
+								<thead class="bg-[var(--bg-elev-2)]">
 									<tr>
 										<th
-											class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+											class="px-6 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
 										>
 											Account
 										</th>
 										<th
-											class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+											class="px-6 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
 										>
 											Platform/Tier
 										</th>
 										{#if showCredentials}
 											<th
-												class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+												class="px-6 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
 											>
 												Credentials Log
 											</th>
 										{/if}
 										<th
-											class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+											class="px-6 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
 										>
 											Status
 										</th>
 										{#if showCredentials}
 											<th
-												class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
+												class="px-6 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
 											>
 												Timeline
 											</th>
 										{/if}
 										<th
-											class="px-6 py-3 text-right text-xs font-medium tracking-wider text-gray-500 uppercase"
+											class="px-6 py-3 text-right text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
 										>
 											Actions
 										</th>
 									</tr>
 								</thead>
-										<tbody class="divide-y divide-gray-200 bg-white">
+										<tbody class="divide-y divide-[var(--border)] bg-[var(--bg-elev-1)]">
 											{#each items as item}
 												{@const accountStatus = getAccountStatus(item)}
 												{@const credentialEntries = getCanonicalCredentialEntries({
@@ -803,32 +820,32 @@
 													deliveryNotes: item.account_delivery_notes,
 													credentialExtras: item.account_credential_extras || {}
 												})}
-												<tr class="hover:bg-gray-50">
+												<tr class="hover:bg-[var(--bg-elev-2)]">
 											<td class="px-6 py-4 whitespace-nowrap">
 												<div>
-													<div class="text-sm font-medium text-gray-900">
+													<div class="text-sm font-medium text-[var(--text)]">
 														@{item.account_username || 'N/A'}
 													</div>
-													<div class="text-sm text-gray-500">
+													<div class="text-sm text-[var(--text-muted)]">
 														{item.account_email || 'No email'}
 													</div>
 												</div>
 											</td>
 											<td class="px-6 py-4 whitespace-nowrap">
 												<div>
-													<div class="text-sm font-medium text-gray-900">
+													<div class="text-sm font-medium text-[var(--text)]">
 														{item.platform_name}
 													</div>
-													<div class="text-sm text-gray-500">
+													<div class="text-sm text-[var(--text-muted)]">
 														{item.tier_name}
 													</div>
 												</div>
 											</td>
 												{#if showCredentials}
 													<td class="px-6 py-4 align-top">
-														<div class="space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs">
+														<div class="space-y-1 rounded border border-[var(--border)] bg-[var(--bg-elev-2)] p-2 font-mono text-xs">
 															{#if credentialEntries.length === 0}
-																<div class="text-[11px] text-gray-500">No credential fields found.</div>
+																<div class="text-[11px] text-[var(--text-muted)]">No credential fields found.</div>
 															{:else}
 																{#each credentialEntries as entry}
 																	<div>
@@ -863,7 +880,7 @@
 												</span>
 											</td>
 											{#if showCredentials}
-												<td class="px-6 py-4 align-top text-xs text-gray-500">
+												<td class="px-6 py-4 align-top text-xs text-[var(--text-muted)]">
 													<div>Added: {formatDateTime(item.account_created_at)}</div>
 													{#if item.account_delivered_at}
 														<div class="mt-1">Delivered: {formatDateTime(item.account_delivered_at)}</div>
@@ -873,7 +890,7 @@
 											<td class="px-6 py-4 text-right text-sm font-medium whitespace-nowrap">
 												<button
 													onclick={() => copyToClipboard(buildAccountLogText(item))}
-													class="text-blue-600 hover:text-blue-900"
+													class="text-[var(--link)] hover:text-[var(--link)]"
 													title="Copy account details"
 												>
 													<Copy class="h-4 w-4" />
@@ -891,31 +908,31 @@
 			<!-- Sidebar -->
 			<div class="space-y-6">
 				<!-- Customer Information -->
-				<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-					<h3 class="mb-4 text-lg font-semibold text-gray-900">Customer Information</h3>
+				<div class="rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] p-6 shadow-sm">
+					<h3 class="mb-4 text-lg font-semibold text-[var(--text)]">Customer Information</h3>
 					<div class="space-y-4">
 						<div class="flex items-center">
-							<User class="mr-3 h-4 w-4 text-gray-400" />
+							<User class="mr-3 h-4 w-4 text-[var(--text-dim)]" />
 							<div>
-								<p class="text-sm font-medium text-gray-900">
+								<p class="text-sm font-medium text-[var(--text)]">
 									{order.customer_name || 'No name provided'}
 								</p>
-								<p class="text-xs text-gray-500">Customer Name</p>
+								<p class="text-xs text-[var(--text-muted)]">Customer Name</p>
 							</div>
 						</div>
 						<div class="flex items-center">
-							<Mail class="mr-3 h-4 w-4 text-gray-400" />
+							<Mail class="mr-3 h-4 w-4 text-[var(--text-dim)]" />
 							<div>
-								<p class="text-sm font-medium text-gray-900">{order.customer_email}</p>
-								<p class="text-xs text-gray-500">Email Address</p>
+								<p class="text-sm font-medium text-[var(--text)]">{order.customer_email}</p>
+								<p class="text-xs text-[var(--text-muted)]">Email Address</p>
 							</div>
 						</div>
 						{#if order.metadata?.customer_phone}
 							<div class="flex items-center">
-								<Phone class="mr-3 h-4 w-4 text-gray-400" />
+								<Phone class="mr-3 h-4 w-4 text-[var(--text-dim)]" />
 								<div>
-									<p class="text-sm font-medium text-gray-900">{order.metadata.customer_phone}</p>
-									<p class="text-xs text-gray-500">Phone Number</p>
+									<p class="text-sm font-medium text-[var(--text)]">{order.metadata.customer_phone}</p>
+									<p class="text-xs text-[var(--text-muted)]">Phone Number</p>
 								</div>
 							</div>
 						{/if}
@@ -924,31 +941,31 @@
 
 				<!-- Affiliate Information -->
 				{#if order.affiliateCode}
-					<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-						<h3 class="mb-4 text-lg font-semibold text-gray-900">Affiliate Information</h3>
+					<div class="rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] p-6 shadow-sm">
+						<h3 class="mb-4 text-lg font-semibold text-[var(--text)]">Affiliate Information</h3>
 						<div class="space-y-4">
-							<div class="flex items-center justify-between rounded-lg bg-blue-50 p-3">
-								<span class="text-sm font-medium text-gray-700">Affiliate Promo Code</span>
+							<div class="flex items-center justify-between rounded-lg bg-[var(--bg-elev-2)] p-3">
+								<span class="text-sm font-medium text-[var(--text-muted)]">Affiliate Promo Code</span>
 								<a
 									href="/admin/affiliates?code={order.affiliateCode}"
-									class="font-mono text-sm font-semibold text-blue-600 transition-colors hover:text-blue-900"
+									class="font-mono text-sm font-semibold text-[var(--link)] transition-colors hover:text-[var(--link)]"
 								>
 									{order.affiliateCode}
 								</a>
 							</div>
 							{#if order.affiliateUserId}
-								<div class="flex items-center justify-between rounded-lg bg-gray-50 p-3">
-									<span class="text-sm font-medium text-gray-700">Referred By</span>
+								<div class="flex items-center justify-between rounded-lg bg-[var(--bg-elev-2)] p-3">
+									<span class="text-sm font-medium text-[var(--text-muted)]">Referred By</span>
 									<a
 										href="/admin/affiliates/{order.affiliateUserId}"
-										class="text-sm font-medium text-blue-600 transition-colors hover:text-blue-900"
+										class="text-sm font-medium text-[var(--link)] transition-colors hover:text-[var(--link)]"
 									>
 										View Affiliate
 									</a>
 								</div>
 							{/if}
 							<div class="flex items-center justify-between rounded-lg bg-green-50 p-3">
-								<span class="text-sm font-medium text-gray-700">Store Credit Award</span>
+								<span class="text-sm font-medium text-[var(--text-muted)]">Store Credit Award</span>
 								<span class="text-sm font-bold text-green-600">
 									Tracked in affiliate ledger
 								</span>
@@ -958,18 +975,18 @@
 				{/if}
 
 				<!-- Delivery Management -->
-				<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-					<h3 class="mb-4 text-lg font-semibold text-gray-900">Delivery Management</h3>
+				<div class="rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] p-6 shadow-sm">
+					<h3 class="mb-4 text-lg font-semibold text-[var(--text)]">Delivery Management</h3>
 
 					<div class="space-y-4">
 						<div>
-							<label for="delivery-method" class="mb-2 block text-sm font-medium text-gray-700">
+							<label for="delivery-method" class="mb-2 block text-sm font-medium text-[var(--text-muted)]">
 								Delivery Method
 							</label>
 							<select
 								id="delivery-method"
 								bind:value={selectedDeliveryMethod}
-								class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+								class="w-full rounded-lg border border-[var(--border)] px-3 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
 							>
 								<option value="email">Email</option>
 								<option value="whatsapp">WhatsApp</option>
@@ -994,8 +1011,8 @@
 				</div>
 
 				<!-- Order Status Management -->
-				<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-					<h3 class="mb-4 text-lg font-semibold text-gray-900">Status Management</h3>
+				<div class="rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] p-6 shadow-sm">
+					<h3 class="mb-4 text-lg font-semibold text-[var(--text)]">Status Management</h3>
 
 					<div class="space-y-3">
 						{#if order.status === 'pending' || order.status === 'pending_payment'}
@@ -1034,21 +1051,21 @@
 				</div>
 
 				<!-- Order Notes -->
-				<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-					<h3 class="mb-4 text-lg font-semibold text-gray-900">Order Notes</h3>
+				<div class="rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] p-6 shadow-sm">
+					<h3 class="mb-4 text-lg font-semibold text-[var(--text)]">Order Notes</h3>
 
 					<!-- Add Note -->
 					<div class="mb-4">
 						<textarea
 							bind:value={newNote}
 							placeholder="Add a note about this order..."
-							class="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+							class="w-full resize-none rounded-lg border border-[var(--border)] px-3 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
 							rows="3"
 						></textarea>
 						<button
 							onclick={addNote}
 							disabled={!newNote.trim() || isProcessing}
-							class="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-gray-600 px-4 py-2 text-white hover:bg-gray-700 disabled:opacity-50"
+							class="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--bg-elev-2)] px-4 py-2 text-white hover:bg-gray-700 disabled:opacity-50"
 						>
 							Add Note
 						</button>
@@ -1058,11 +1075,11 @@
 					<div class="max-h-60 space-y-3 overflow-y-auto">
 						{#if order.metadata?.notes && order.metadata.notes.length > 0}
 							{#each order.metadata.notes as note}
-								<div class="rounded-lg bg-gray-50 p-3">
-									<p class="text-sm text-gray-900">
+								<div class="rounded-lg bg-[var(--bg-elev-2)] p-3">
+									<p class="text-sm text-[var(--text)]">
 										{typeof note === 'string' ? note : note.note}
 									</p>
-									<div class="mt-2 flex items-center justify-between text-xs text-gray-500">
+									<div class="mt-2 flex items-center justify-between text-xs text-[var(--text-muted)]">
 										<span>{typeof note === 'string' ? 'Admin' : note.author || 'Admin'}</span>
 										<span>
 											{typeof note === 'string'
@@ -1073,7 +1090,7 @@
 								</div>
 							{/each}
 						{:else}
-							<p class="py-4 text-center text-sm text-gray-500">No notes yet</p>
+							<p class="py-4 text-center text-sm text-[var(--text-muted)]">No notes yet</p>
 						{/if}
 					</div>
 				</div>
@@ -1085,34 +1102,6 @@
 <style>
 	:global(.admin-order-page) {
 		background: var(--bg);
-	}
-
-	:global(.admin-order-page .bg-gray-50) {
-		background: var(--bg-elev-1) !important;
-	}
-
-	:global(.admin-order-page .bg-white) {
-		background: var(--surface) !important;
-	}
-
-	:global(.admin-order-page .border-gray-200),
-	:global(.admin-order-page .border-gray-300) {
-		border-color: var(--border) !important;
-	}
-
-	:global(.admin-order-page .text-gray-900) {
-		color: var(--text) !important;
-	}
-
-	:global(.admin-order-page .text-gray-800),
-	:global(.admin-order-page .text-gray-700),
-	:global(.admin-order-page .text-gray-600) {
-		color: var(--text-muted) !important;
-	}
-
-	:global(.admin-order-page .text-gray-500),
-	:global(.admin-order-page .text-gray-400) {
-		color: var(--text-dim) !important;
 	}
 
 	:global(.admin-order-page code) {

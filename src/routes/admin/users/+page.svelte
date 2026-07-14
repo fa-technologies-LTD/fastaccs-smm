@@ -21,6 +21,10 @@
 
 	let { data }: { data: PageData } = $props();
 	const canViewRevenue = Boolean(data.canViewRevenue);
+	// Suspending users is owner-only; the assistant lacks users:manage.
+	const canManageUsers = ((data as { adminPermissions?: string[] }).adminPermissions ?? []).includes(
+		'admin:users:manage'
+	);
 	let hideMonetaryAmounts = $state(false);
 
 	let searchQuery = $state('');
@@ -310,24 +314,26 @@
 			</div>
 		</div>
 
-		<div
-			class="rounded-lg p-4"
-			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
-		>
-			<div class="flex items-center justify-between">
-				<div class="flex-1">
-					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted)">
-						Suspended Access
-					</p>
-					<p class="mt-1 text-xl font-bold" style="color: var(--status-error);">
-						{stats.suspendedUsers}
-					</p>
-				</div>
-				<div class="rounded-full p-2" style="background: var(--status-error-bg);">
-					<ShieldOff class="h-5 w-5" style="color: var(--status-error);" />
+		{#if canManageUsers}
+			<div
+				class="rounded-lg p-4"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
+			>
+				<div class="flex items-center justify-between">
+					<div class="flex-1">
+						<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted)">
+							Suspended Access
+						</p>
+						<p class="mt-1 text-xl font-bold" style="color: var(--status-error);">
+							{stats.suspendedUsers}
+						</p>
+					</div>
+					<div class="rounded-full p-2" style="background: var(--status-error-bg);">
+						<ShieldOff class="h-5 w-5" style="color: var(--status-error);" />
+					</div>
 				</div>
 			</div>
-		</div>
+		{/if}
 
 		<div
 			class="rounded-lg p-4"
@@ -602,26 +608,28 @@
 											<ArrowUpRight class="h-3.5 w-3.5" />
 											View Activity
 										</a>
-										<button
-											onclick={() =>
-												toggleUserAccess(
-													user.id,
-													user.isActive,
-													user.fullName || user.email || 'User'
-												)}
-											class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all hover:scale-95 active:scale-90"
-											style={user.isActive
-												? 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border)'
-												: 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border)'}
-										>
-											{#if user.isActive}
-												<ShieldOff class="h-3.5 w-3.5" />
-												Suspend
-											{:else}
-												<ShieldCheck class="h-3.5 w-3.5" />
-												Unblock
-											{/if}
-										</button>
+										{#if canManageUsers}
+											<button
+												onclick={() =>
+													toggleUserAccess(
+														user.id,
+														user.isActive,
+														user.fullName || user.email || 'User'
+													)}
+												class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all hover:scale-95 active:scale-90"
+												style={user.isActive
+													? 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border)'
+													: 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border)'}
+											>
+												{#if user.isActive}
+													<ShieldOff class="h-3.5 w-3.5" />
+													Suspend
+												{:else}
+													<ShieldCheck class="h-3.5 w-3.5" />
+													Unblock
+												{/if}
+											</button>
+										{/if}
 									</div>
 								</td>
 							</tr>
