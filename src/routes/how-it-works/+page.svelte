@@ -697,11 +697,18 @@
 		<section class="px-4 py-16">
 			<div class="mx-auto max-w-6xl">
 				<h2
-					class="mb-12 text-center text-3xl font-bold"
+					class="mb-4 text-center text-3xl font-bold"
 					style="color: var(--text); font-family: var(--font-head);"
 				>
 					Turn Your Referrals Into Real Cash
 				</h2>
+				<p
+					class="mx-auto mb-12 max-w-2xl text-center"
+					style="color: var(--text-muted); font-family: var(--font-body);"
+				>
+					Every friend you bring earns you withdrawable Naira, no cap, no catch. Share your code,
+					they save, you get paid.
+				</p>
 
 				<!-- Affiliate Steps -->
 				<div class="space-y-12">
@@ -725,21 +732,20 @@
 								Unlock Affiliate Access
 							</h3>
 							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Reach the spending threshold shown in your dashboard, then activate
-								affiliate access. The system automatically generates your unique referral code.
+								Hit the spending threshold on your dashboard and flip on affiliate access — the moment you do, your unique referral code is generated automatically, no forms, no approval wait.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Unlock progress tracked in your dashboard</span>
+									<span>Track your unlock progress live in your dashboard</span>
 								</li>
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Unique code generated instantly</span>
+									<span>Your code is created the instant you qualify</span>
 								</li>
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Access to affiliate dashboard</span>
+									<span>Full access to your affiliate dashboard</span>
 								</li>
 							</ul>
 						</div>
@@ -794,21 +800,20 @@
 								Share Your Code
 							</h3>
 							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Share your affiliate promo code or referral link with friends, social media
-								followers, or customers. They get checkout discounts, you earn Cash.
+								Drop your code or referral link anywhere — WhatsApp, your status, your customers, your followers. Every person who uses it saves money at checkout, and every order they place puts Cash in your pocket.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>New buyers get referral discounts</span>
+									<span>New buyers get a real discount on checkout</span>
 								</li>
 								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Easy copy-paste sharing</span>
+									<span>Copy, paste, share, done</span>
 								</li>
 								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Unique referral link provided</span>
+									<span>Your own referral link, ready to go</span>
 								</li>
 							</ul>
 						</div>
@@ -877,27 +882,26 @@
 								Track Your Earnings
 							</h3>
 							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Track referred users, successful referred orders, and withdrawable Cash
-								activity in your affiliate dashboard.
+								Watch it add up in real time — who you referred, which orders landed, and how much withdrawable Cash you've banked, all in one dashboard.
 							</p>
 							<p
 								class="mb-4 text-sm"
 								style="color: var(--text-muted); font-family: var(--font-body);"
 							>
-								Cash is real and withdrawable once payout requirements are met.
+								Cash is real Naira and fully withdrawable once you meet the payout minimums.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Earn withdrawable Cash from successful referred orders</span>
+									<span>Earn Cash on every successful referred order</span>
 								</li>
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Real-time Cash tracking</span>
+									<span>Live tracking, no refreshing, no waiting</span>
 								</li>
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Withdrawal progress and payout status</span>
+									<span>See exactly when you can cash out</span>
 								</li>
 							</ul>
 						</div>
@@ -958,10 +962,10 @@
 							class="mb-2 text-lg font-semibold"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
-							Real Cash Rewards
+							Real Cash, Not Points
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Earn withdrawable Cash every time someone you refer makes a successful order
+							Withdrawable Naira lands in your dashboard every time someone you referred completes an order. No store credit, no gimmicks.
 						</p>
 					</div>
 					<div class="text-center">
@@ -975,10 +979,10 @@
 							class="mb-2 text-lg font-semibold"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
-							Instant Tracking
+							Live Tracking
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Watch referrals and earnings update live on your dashboard, no waiting around
+							Referrals and earnings update the second they happen. You always know where you stand.
 						</p>
 					</div>
 					<div class="text-center">
@@ -992,10 +996,10 @@
 							class="mb-2 text-lg font-semibold"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
-							No Limits
+							Zero Ceiling
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							No cap on referrals or earnings, the more people you bring, the more you earn
+							No cap on referrals or earnings. The more people you bring, the more you make, simple as that.
 						</p>
 					</div>
 					<div class="text-center">
@@ -1012,7 +1016,7 @@
 							Free to Join
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							No sign-up fees, no hidden charges, just shop your way in and start earning
+							No sign-up fee, no hidden charges. Shop your way in and start earning.
 						</p>
 					</div>
 				</div>
@@ -1046,9 +1050,7 @@
 							Affiliate Promo Code
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Your unique code, shown on your dashboard. It doubles as a discount code, anyone who
-							uses it at checkout gets a referral discount, and you earn Cash on their
-							order.
+							Your unique code, front and center on your dashboard. It's a discount code and an earning code — anyone who uses it saves at checkout, and you earn Cash on their order.
 						</p>
 					</div>
 					<div
@@ -1062,8 +1064,7 @@
 							Cash
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Real, withdrawable cash you earn from successful referred orders. It builds up in
-							your dashboard and can be paid out once you meet the payout requirements below.
+							Real, withdrawable Naira from your referred orders. It stacks up in your dashboard and pays out once you clear the minimums below.
 						</p>
 					</div>
 					<div
@@ -1077,9 +1078,7 @@
 							Discount Stages
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Buyers you refer get a bigger discount on their first couple of orders, then a
-							smaller ongoing discount for several more. Your dashboard shows the current stage
-							for each referral.
+							Your referrals get a bigger discount on their first couple of orders, then a smaller ongoing one for several more. Your dashboard shows exactly which stage each referral is at.
 						</p>
 					</div>
 					<div
