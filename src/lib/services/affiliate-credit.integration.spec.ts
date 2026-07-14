@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
 	findOrder: vi.fn(),
 	findWalletTransaction: vi.fn(),
+	findAffiliateProgram: vi.fn(),
 	transaction: vi.fn()
 }));
 
@@ -13,6 +14,9 @@ vi.mock('$lib/prisma', () => ({
 		},
 		walletTransaction: {
 			findUnique: mocks.findWalletTransaction
+		},
+		affiliateProgram: {
+			findFirst: mocks.findAffiliateProgram
 		},
 		$transaction: mocks.transaction
 	}
@@ -46,6 +50,8 @@ function buildOrder(overrides: Record<string, unknown> = {}) {
 describe('affiliate credit settlement boundaries', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// Default: the referrer is a regular (non-super) affiliate.
+		mocks.findAffiliateProgram.mockResolvedValue(null);
 	});
 
 	it('does not award Store Credit for an unpaid pending order', async () => {

@@ -781,6 +781,27 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		);
 		const isFullyCreditPaid = amountToCharge <= 0 && storeCreditRedemption.totalApplied > 0;
 
+		// A zero/negative charge is only valid when store credit fully covers the
+		// order (the zero-charge path). Anything else — e.g. an over-discounted promo
+		// with no store credit — is an invalid amount and must be rejected up front.
+		if (amountToCharge <= 0 && !isFullyCreditPaid) {
+			logPaymentEvent('warn', 'checkout.initialize.rejected', {
+				traceId,
+				userId: checkoutUserId,
+				amount: amountToCharge,
+				currency: orderCurrency,
+				errorCode: 'invalid_amount'
+			});
+			return json(
+				{
+					success: false,
+					error: 'Payment amount is invalid. Please refresh your cart and try again.',
+					traceId
+				},
+				{ status: 400 }
+			);
+		}
+
 		// Only validate the gateway amount when there is a real charge — a fully
 		// credit-paid order skips the payment gateway entirely.
 		if (amountToCharge > 0) {
