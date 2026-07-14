@@ -97,7 +97,12 @@
 				permission: 'admin:affiliates:manage'
 			},
 			{ href: '/admin/users', label: 'Users', icon: Users },
-			{ href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
+			{
+				href: '/admin/analytics',
+				label: 'Analytics',
+				icon: BarChart3,
+				permission: 'admin:revenue:view'
+			},
 			{
 				href: '/admin/promotions',
 				label: 'Promotions',
@@ -120,7 +125,8 @@
 			{
 				href: '/admin/automation',
 				label: 'Automation',
-				icon: Activity
+				icon: Activity,
+				permission: 'admin:settings:manage'
 			},
 			{
 				href: '/admin/settings',
