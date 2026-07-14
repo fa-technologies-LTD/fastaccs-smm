@@ -337,14 +337,13 @@
 			</div>
 			<div class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs" style="color: var(--text-muted);">
 				<span>Store Credit</span>
-				<button
-					type="button"
-					onclick={goToAffiliateTab}
+				<a
+					href="/how-it-works?tab=affiliate"
 					class="text-[10px] font-semibold underline-offset-2 hover:underline"
 					style="color: var(--primary);"
 				>
 					earn more from referrals →
-				</button>
+				</a>
 			</div>
 		</div>
 	</div>
