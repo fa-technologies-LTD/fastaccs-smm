@@ -380,7 +380,9 @@
 		{#each paginatedOrders as order}
 			<article
 				class="rounded-lg p-3"
-				style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+				style={isUnresolvedManual(order)
+					? 'border: 1.5px solid var(--primary); background: var(--bg-elev-1); box-shadow: 0 0 0 1px rgba(5,212,113,0.25);'
+					: 'border: 1px solid var(--border); background: var(--bg-elev-1);'}
 			>
 				<div class="mb-2 flex items-start justify-between gap-3">
 					<div class="min-w-0">
@@ -498,7 +500,9 @@
 					{#each paginatedOrders as order}
 						<tr
 							class="transition-colors"
-							style="--hover-bg: var(--bg-elev-2);"
+							style={isUnresolvedManual(order)
+								? '--hover-bg: var(--bg-elev-2); box-shadow: inset 4px 0 0 0 var(--primary);'
+								: '--hover-bg: var(--bg-elev-2);'}
 							onmouseenter={(e) => (e.currentTarget.style.background = 'var(--bg-elev-2)')}
 							onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
 						>

@@ -905,23 +905,23 @@
 								</li>
 							</ul>
 						</div>
-						<div class="w-full rounded-xl bg-white p-6 shadow-lg md:w-80">
+						<div class="w-full rounded-xl bg-[var(--bg-elev-1)] p-6 shadow-lg md:w-80">
 							<div class="mb-4">
-								<h4 class="font-semibold text-gray-900">Affiliate Stats</h4>
+								<h4 class="font-semibold text-[var(--text)]">Affiliate Stats</h4>
 							</div>
 							<div class="space-y-4">
-								<div class="rounded-lg bg-green-50 p-4">
-									<div class="mb-1 text-sm text-gray-600">Total Earned</div>
+								<div class="rounded-lg bg-[var(--status-success-bg)] p-4">
+									<div class="mb-1 text-sm text-[var(--text-muted)]">Total Earned</div>
 									<div class="text-2xl font-bold text-green-600">₦125,000</div>
 								</div>
 								<div class="grid grid-cols-2 gap-3">
-									<div class="rounded-lg bg-gray-50 p-3">
-										<div class="mb-1 text-xs text-gray-600">Referrals</div>
-										<div class="text-xl font-bold text-gray-900">45</div>
+									<div class="rounded-lg bg-[var(--bg-elev-2)] p-3">
+										<div class="mb-1 text-xs text-[var(--text-muted)]">Referrals</div>
+										<div class="text-xl font-bold text-[var(--text)]">45</div>
 									</div>
-									<div class="rounded-lg bg-gray-50 p-3">
-										<div class="mb-1 text-xs text-gray-600">Total Sales</div>
-										<div class="text-xl font-bold text-gray-900">₦1.25M</div>
+									<div class="rounded-lg bg-[var(--bg-elev-2)] p-3">
+										<div class="mb-1 text-xs text-[var(--text-muted)]">Total Sales</div>
+										<div class="text-xl font-bold text-[var(--text)]">₦1.25M</div>
 									</div>
 								</div>
 							</div>
