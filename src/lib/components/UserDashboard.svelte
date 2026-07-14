@@ -79,6 +79,19 @@
 		return `₦${Math.max(0, Math.round(value)).toLocaleString()}`;
 	}
 
+	// Switch to the Affiliate tab AND scroll to it — the CTAs sit above the tab bar,
+	// so without scrolling the tab changes off-screen and looks like nothing happened.
+	function goToAffiliateTab(): void {
+		activeTab = 'affiliate';
+		if (typeof document !== 'undefined') {
+			requestAnimationFrame(() =>
+				document
+					.getElementById('dashboard-tabs')
+					?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+			);
+		}
+	}
+
 	function applyRouteContext(url: URL): void {
 		const tabParam = String(url.searchParams.get('tab') || '').toLowerCase();
 		if (tabParam === 'orders' || tabParam === 'purchases' || tabParam === 'affiliate') {
@@ -257,7 +270,7 @@
 						<button
 							type="button"
 							onclick={() => {
-								activeTab = 'affiliate';
+								goToAffiliateTab();
 								showAffiliateAccessNudge = false;
 							}}
 							class="rounded-full px-3 py-1.5 text-xs font-semibold"
@@ -326,7 +339,7 @@
 				<span>Store Credit</span>
 				<button
 					type="button"
-					onclick={() => (activeTab = 'affiliate')}
+					onclick={goToAffiliateTab}
 					class="text-[10px] font-semibold underline-offset-2 hover:underline"
 					style="color: var(--primary);"
 				>
@@ -336,7 +349,7 @@
 		</div>
 	</div>
 
-	<div class="mb-4 overflow-x-auto border-b border-[var(--border)]">
+	<div id="dashboard-tabs" class="mb-4 overflow-x-auto border-b border-[var(--border)]">
 		<nav class="flex flex-nowrap gap-6 pb-2 whitespace-nowrap">
 			<button
 				onclick={() => (activeTab = 'orders')}
