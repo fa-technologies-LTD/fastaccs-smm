@@ -549,6 +549,15 @@
 								Refund to store credit
 							</button>
 						{/if}
+					{:else if String(order.status) === 'refunded' || String(order.paymentStatus) === 'refunded'}
+						<span
+							class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold sm:px-4 sm:text-sm"
+							style="border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--status-success);"
+							title="This order was refunded to the buyer's store credit"
+						>
+							<CheckCircle class="h-4 w-4" />
+							Refunded to store credit
+						</span>
 					{/if}
 				</div>
 			</div>
