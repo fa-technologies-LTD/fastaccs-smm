@@ -128,6 +128,55 @@ export async function getStoreCreditBuckets(userId: string, db: Db = prisma): Pr
 	};
 }
 
+/**
+ * Batched, ledger-derived spendable store credit for many users at once
+ * (one query). Use this for lists instead of the cached wallet.balance, which
+ * can drift from the ledger source of truth.
+ */
+export async function getStoreCreditTotalsForUsers(
+	userIds: string[]
+): Promise<Map<string, number>> {
+	const result = new Map<string, number>();
+	if (userIds.length === 0) return result;
+
+	const grouped = await prisma.walletTransaction.groupBy({
+		by: ['userId', 'type', 'status'],
+		where: {
+			userId: { in: userIds },
+			type: {
+				in: [
+					SC_CREDIT_AFFILIATE,
+					SC_CREDIT_GIFT,
+					SC_CREDIT_REFUND,
+					SC_REDEEM_EARNED,
+					SC_REDEEM_REFUND,
+					SC_PAYOUT
+				]
+			}
+		},
+		_sum: { amount: true }
+	});
+
+	const acc = new Map<string, { ec: number; rc: number; er: number; rr: number; po: number }>();
+	for (const row of grouped) {
+		if (!row.userId) continue;
+		const u = acc.get(row.userId) || { ec: 0, rc: 0, er: 0, rr: 0, po: 0 };
+		const amount = Math.max(0, Number(row._sum.amount || 0));
+		const type = String(row.type);
+		const status = String(row.status || '').toLowerCase();
+		if (EARNED_CREDIT_TYPES.includes(type) && status === 'available') u.ec += amount;
+		else if (REFUND_CREDIT_TYPES.includes(type) && status === 'available') u.rc += amount;
+		else if (type === SC_REDEEM_EARNED && status === 'available') u.er += amount;
+		else if (type === SC_REDEEM_REFUND && status === 'available') u.rr += amount;
+		else if (type === SC_PAYOUT && (status === 'requested' || status === 'paid')) u.po += amount;
+		acc.set(row.userId, u);
+	}
+	for (const [userId, u] of acc) {
+		result.set(userId, Math.max(0, u.ec - u.er - u.po) + Math.max(0, u.rc - u.rr));
+	}
+	return result;
+}
+
 /** Credit a user's store credit (refunds, gifts). Runs inside a caller transaction. */
 export async function creditStoreCredit(
 	tx: Prisma.TransactionClient,

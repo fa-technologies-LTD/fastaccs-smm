@@ -2,6 +2,7 @@ import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
 import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
 import { isRevenueOrder } from '$lib/helpers/order-revenue';
+import { getStoreCreditTotalsForUsers } from '$lib/services/store-credit';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	try {
@@ -24,6 +25,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 				createdAt: 'desc'
 			}
 		});
+
+		// Spendable store credit from the LEDGER (source of truth), not the cached
+		// wallet.balance which can drift.
+		const storeCreditByUser = await getStoreCreditTotalsForUsers(usersRaw.map((u) => u.id));
 
 		// Convert Decimal types to numbers and aggregate stats
 		const users = usersRaw.map((user) => {
@@ -55,7 +60,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				totalSpent: revenueVisible
 					? successfulOrders.reduce((sum, order) => sum + Number(order.totalAmount), 0)
 					: 0,
-				storeCreditBalance: user.wallet ? Number(user.wallet.balance) : 0,
+				storeCreditBalance: storeCreditByUser.get(user.id) ?? 0,
 				walletBalance: user.wallet ? Number(user.wallet.balance) : 0
 			};
 		});

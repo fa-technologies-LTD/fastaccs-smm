@@ -675,8 +675,19 @@ export const load: PageServerLoad = async ({ locals }) => {
 			lastMonthOrders > 0
 				? toAmount(toCashRevenue(lastMonthRevenue._sum.totalAmount, lastMonthRevenue._sum.storeCreditApplied) / lastMonthOrders)
 				: 0;
-		const aovChange =
-			lastMonthAov > 0 ? ((thisMonthAov - lastMonthAov) / lastMonthAov) * 100 : 0;
+		const thisMonthCash = toCashRevenue(
+			thisMonthRevenue._sum.totalAmount,
+			thisMonthRevenue._sum.storeCreditApplied
+		);
+		const lastMonthCash = toCashRevenue(
+			lastMonthRevenue._sum.totalAmount,
+			lastMonthRevenue._sum.storeCreditApplied
+		);
+		// Growth % — null when there is no prior baseline, so the UI can show "New"
+		// instead of a misleading huge percentage (dividing by 1).
+		const growthPct = (current: number, previous: number): number | null =>
+			previous > 0 ? ((current - previous) / previous) * 100 : null;
+		const aovChange = growthPct(thisMonthAov, lastMonthAov);
 
 		const STATUS_DONUT_LABELS: Record<string, string> = {
 			pending: 'Pending',
@@ -728,21 +739,15 @@ export const load: PageServerLoad = async ({ locals }) => {
 				},
 				advancedAnalyticsEnabled: featureFlags.adminAdvancedAnalytics,
 			totalRevenue: revenueVisible ? Number(orderStatsSnapshot.total_revenue || 0) : 0,
-			revenueChange: revenueVisible
-				? ((toCashRevenue(thisMonthRevenue._sum.totalAmount, thisMonthRevenue._sum.storeCreditApplied) -
-						toCashRevenue(lastMonthRevenue._sum.totalAmount, lastMonthRevenue._sum.storeCreditApplied)) /
-						(toCashRevenue(lastMonthRevenue._sum.totalAmount, lastMonthRevenue._sum.storeCreditApplied) || 1)) *
-					100
-				: 0,
+			revenueChange: revenueVisible ? growthPct(thisMonthCash, lastMonthCash) : null,
 			aov: revenueVisible ? aov : 0,
-			aovChange: revenueVisible ? aovChange : 0,
+			aovChange: revenueVisible ? aovChange : null,
 			totalOrders: orderStatsSnapshot.total_orders,
-			ordersChange: ((thisMonthOrders - lastMonthOrders) / (lastMonthOrders || 1)) * 100,
+			ordersChange: growthPct(thisMonthOrders, lastMonthOrders),
 			totalCustomers,
-			customersChange:
-				((thisMonthCustomers - lastMonthCustomers) / (lastMonthCustomers || 1)) * 100,
+			customersChange: growthPct(thisMonthCustomers, lastMonthCustomers),
 			accountsSold,
-			accountsChange: ((thisMonthAccounts - lastMonthAccounts) / (lastMonthAccounts || 1)) * 100,
+			accountsChange: growthPct(thisMonthAccounts, lastMonthAccounts),
 			activeAffiliates: affiliateProgramStats._count.id || 0,
 			totalReferrals: affiliateProgramStats._sum.totalReferrals || 0,
 			affiliateSales: revenueVisible ? toCashRevenue(affiliateSalesAggregate._sum.totalAmount, affiliateSalesAggregate._sum.storeCreditApplied) : 0,

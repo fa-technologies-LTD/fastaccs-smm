@@ -23,7 +23,10 @@ export function buildRevenueOrderWhere(): Prisma.OrderWhereInput {
 	return {
 		AND: [
 			{ OR: [{ status: { in: [...REVENUE_ORDER_STATUSES] } }, { paymentStatus: 'paid' }] },
-			{ NOT: { paymentChannel: MANUAL_RELEASE_CHANNEL } }
+			// Exclude owner self-offloads (manual_release) but KEEP orders with a NULL
+			// paymentChannel — `NOT: { paymentChannel: 'x' }` drops NULLs in SQL, which
+			// was silently excluding legitimate revenue.
+			{ OR: [{ paymentChannel: null }, { paymentChannel: { not: MANUAL_RELEASE_CHANNEL } }] }
 		]
 	};
 }

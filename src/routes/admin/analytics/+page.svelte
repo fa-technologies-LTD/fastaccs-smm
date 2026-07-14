@@ -42,8 +42,10 @@
 		});
 	}
 
-	function formatPct(value: number): string {
-		return `${Number(value || 0).toFixed(1)}%`;
+	function formatPct(value: number | null): string {
+		// null = no prior baseline this metric could grow from.
+		if (value === null || value === undefined) return 'New';
+		return `${Number(value).toFixed(1)}%`;
 	}
 
 	let granularity = $state<'day' | 'week' | 'month'>('day');
@@ -108,12 +110,13 @@
 				{formatMoney(stats.totalRevenue || 0)}
 			</p>
 			<div class="mt-1 flex items-center gap-1 text-xs" style="color: var(--text-muted);">
-				{#if Number(stats.revenueChange || 0) >= 0}
+				{#if stats.revenueChange === null || stats.revenueChange === undefined}
+				{:else if stats.revenueChange >= 0}
 					<ArrowUp class="h-3.5 w-3.5 text-green-600" />
 				{:else}
 					<ArrowDown class="h-3.5 w-3.5 text-red-600" />
 				{/if}
-				<span>{formatPct(stats.revenueChange || 0)} vs last month</span>
+				<span>{formatPct(stats.revenueChange)} vs last month</span>
 			</div>
 			<div class="mt-2">
 				<Sparkline
@@ -130,7 +133,7 @@
 			<p class="text-sm" style="color: var(--text-muted)">Total Orders</p>
 			<p class="mt-1 text-2xl font-bold" style="color: var(--text)">{stats.totalOrders || 0}</p>
 			<p class="mt-1 text-xs" style="color: var(--text-muted)">
-				{formatPct(stats.ordersChange || 0)} vs last month
+				{formatPct(stats.ordersChange)} vs last month
 			</p>
 			<div class="mt-2">
 				<Sparkline
@@ -148,7 +151,7 @@
 			<p class="text-sm" style="color: var(--text-muted)">Total Customers</p>
 			<p class="mt-1 text-2xl font-bold" style="color: var(--text)">{stats.totalCustomers || 0}</p>
 			<p class="mt-1 text-xs" style="color: var(--text-muted)">
-				{formatPct(stats.customersChange || 0)} vs last month
+				{formatPct(stats.customersChange)} vs last month
 			</p>
 		</div>
 		<div
@@ -158,7 +161,7 @@
 			<p class="text-sm" style="color: var(--text-muted)">Accounts Sold</p>
 			<p class="mt-1 text-2xl font-bold" style="color: var(--text)">{stats.accountsSold || 0}</p>
 			<p class="mt-1 text-xs" style="color: var(--text-muted)">
-				{formatPct(stats.accountsChange || 0)} vs last month
+				{formatPct(stats.accountsChange)} vs last month
 			</p>
 		</div>
 		<div
@@ -170,12 +173,13 @@
 				{formatMoney(stats.aov || 0)}
 			</p>
 			<div class="mt-1 flex items-center gap-1 text-xs" style="color: var(--text-muted);">
-				{#if Number(stats.aovChange || 0) >= 0}
+				{#if stats.aovChange === null || stats.aovChange === undefined}
+				{:else if stats.aovChange >= 0}
 					<ArrowUp class="h-3.5 w-3.5 text-green-600" />
 				{:else}
 					<ArrowDown class="h-3.5 w-3.5 text-red-600" />
 				{/if}
-				<span>{formatPct(stats.aovChange || 0)} vs last month</span>
+				<span>{formatPct(stats.aovChange)} vs last month</span>
 			</div>
 		</div>
 	</div>

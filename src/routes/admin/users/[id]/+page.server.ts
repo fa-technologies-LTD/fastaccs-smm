@@ -4,6 +4,7 @@ import { prisma } from '$lib/prisma';
 import { ORDER_STATUS_GROUPS, getOrderStatusLabel } from '$lib/helpers/order-status';
 import { canViewRevenue, canViewOrderAmounts } from '$lib/services/admin-revenue-visibility';
 import { isRevenueOrder } from '$lib/helpers/order-revenue';
+import { getStoreCreditBuckets } from '$lib/services/store-credit';
 
 interface TimelineEntry {
 	id: string;
@@ -188,6 +189,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	// Per-order amounts stay visible to order managers (refund workflow); only the
 	// aggregate lifetime spend is gated on revenue visibility.
 	const orderAmountsVisible = canViewOrderAmounts(locals);
+	// Ledger-derived spendable store credit (source of truth), not cached balance.
+	const storeCreditAvailable = await getStoreCreditBuckets(params.id)
+		.then((b) => b.totalAvailable)
+		.catch(() => 0);
 
 	const [user, adminAuditLogs] = await Promise.all([
 		prisma.user.findUnique({
@@ -352,7 +357,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 				Date.now() - 60 * 24 * 60 * 60 * 1000,
 			createdAt: user.createdAt,
 			updatedAt: user.updatedAt,
-			storeCreditBalance: Number(user.wallet?.balance || 0)
+			storeCreditBalance: storeCreditAvailable
 		},
 		stats: totals,
 		recentSessions: user.sessions.map(
