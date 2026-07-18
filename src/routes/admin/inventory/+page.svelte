@@ -61,15 +61,17 @@
 			if (sortMode === 'stock_desc') return bAvailable - aAvailable || alphabetical;
 			if (sortMode === 'stock_asc') return aAvailable - bAvailable || alphabetical;
 
-			const aAttention = aAvailable === 0 ? 0 : aAvailable <= lowStockThreshold ? 1 : 2;
-			const bAttention = bAvailable === 0 ? 0 : bAvailable <= lowStockThreshold ? 1 : 2;
+			// Manual-handover tiers aren't stock-based, so they never "need attention"
+			// on account count — rank them with the healthy tiers (2), not the top.
+			const aAttention = a.is_manual ? 2 : aAvailable === 0 ? 0 : aAvailable <= lowStockThreshold ? 1 : 2;
+			const bAttention = b.is_manual ? 2 : bAvailable === 0 ? 0 : bAvailable <= lowStockThreshold ? 1 : 2;
 			return aAttention - bAttention || aAvailable - bAvailable || alphabetical;
 		});
 	});
 
 	const attentionRows = $derived.by(() =>
 		inventoryRows
-			.filter((item) => (item.available_accounts || 0) <= lowStockThreshold)
+			.filter((item) => !item.is_manual && (item.available_accounts || 0) <= lowStockThreshold)
 			.sort((a, b) => (a.available_accounts || 0) - (b.available_accounts || 0))
 	);
 

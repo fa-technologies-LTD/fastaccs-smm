@@ -249,7 +249,9 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 			where: {
 				categoryType: 'tier',
 				isActive: true,
-				parentId: { not: null }
+				parentId: { not: null },
+				// Manual-handover tiers aren't stock-based — exclude from restock urgency.
+				NOT: { metadata: { path: ['delivery_mode'], equals: 'manual_handover' } }
 			},
 			select: {
 				name: true,

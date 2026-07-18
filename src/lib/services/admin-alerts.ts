@@ -62,7 +62,11 @@ export async function sendLowStockAdminAlertIfNeeded(
 		where: {
 			categoryType: 'tier',
 			isActive: true,
-			parentId: { not: null }
+			parentId: { not: null },
+			// Manual-handover tiers have no account inventory — their availability is a
+			// manual toggle, not a stock count — so they are never "zero-stock". Switching
+			// a tier to instant delivery flips delivery_mode back and re-includes it here.
+			NOT: { metadata: { path: ['delivery_mode'], equals: 'manual_handover' } }
 		},
 		select: {
 			id: true,
