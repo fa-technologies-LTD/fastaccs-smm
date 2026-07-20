@@ -732,16 +732,16 @@
 								Unlock Affiliate Access
 							</h3>
 							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Hit the spending threshold on your dashboard and flip on affiliate access — the moment you do, your unique referral code is generated automatically, no forms, no approval wait.
+								Make your first purchase and affiliate access unlocks automatically — your unique referral code is generated on the spot. No forms, no approval wait.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Track your unlock progress live in your dashboard</span>
+									<span>Unlocks the moment your first order completes</span>
 								</li>
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Your code is created the instant you qualify</span>
+									<span>Your code is created instantly — nothing to apply for</span>
 								</li>
 								<li class="flex items-start gap-2" style="color: var(--text);">
 									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
