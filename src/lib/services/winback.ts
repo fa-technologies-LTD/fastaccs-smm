@@ -143,7 +143,7 @@ export async function runWinBackCampaign(): Promise<{
 
 It has been a while since your last Fast Accounts visit.
 
-We have added fresh stock, account options, and boosting services since then.
+We've added fresh stock, new account options, and boosting — grow any account with real followers, likes & views pricing from ₦700 per 1,000.
 
 ${platformLine}`,
 			ctaText: 'See what is available',

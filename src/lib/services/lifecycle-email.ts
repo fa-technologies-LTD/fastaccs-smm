@@ -446,15 +446,21 @@ function getNurtureContent(step: number, promoCode: string): { subject: string; 
 			subject: 'A welcome gift — 10% off your first order 🎁',
 			body: `You created your Fast Accounts account but haven't placed your first order yet — so here's a little nudge, with a bonus.
 
-Use code ${promoCode} for 10% off your first purchase. Browse verified social accounts ready for instant delivery, or boost an account you already own with followers, likes, and views.
+Use code ${promoCode} for 10% off your first purchase. Browse verified social accounts ready for instant delivery, or boost any account with real followers, likes & views — from just ₦700 per 1,000.
 
-Thousands of orders delivered so far — yours could be next.`
+Hundreds of orders delivered so far — yours could be next.`
 		};
 	}
 	if (step === 1) {
 		return {
-			subject: "See what everyone's ordering this week 🔥",
-			body: `Still deciding? Here's what's moving fast right now — verified accounts across the platforms people ask for most, delivered the moment your payment lands.
+			subject: "See what everyone's ordering 🔥",
+			body: `Still deciding? Here's what other customers are grabbing right now:
+
+• Instagram followers — from ₦2,500 (240+ delivered)
+• X (Twitter) accounts — from ₦1,800
+• 1,000 IG followers — ₦4,500
+
+362 orders delivered to 114 customers, and counting — real accounts, sent the moment your payment lands.
 
 Your ${promoCode} code for 10% off your first order is still active. Take a look and grab what fits.`
 		};
