@@ -33,9 +33,13 @@
 	let pendingMessage = $state('');
 	let orderId = $state<string | null>(null);
 	let attemptCount = $state(0);
+	// Post-purchase boosting upsell (shown on the success screen for account orders).
+	let showBoostUpsell = $state(false);
+	let purchasesRedirectPath = $state('/dashboard?tab=purchases');
 
 	let isDisposed = false;
 	let retryTimer: ReturnType<typeof setTimeout> | null = null;
+	let upsellRedirectTimer: ReturnType<typeof setTimeout> | null = null;
 	let pendingToastShown = false;
 
 	function sanitizeOrderId(value: string | null): string | null {
@@ -224,7 +228,13 @@
 							goto(getOrdersDashboardPath(resolvedOrderId));
 						} else {
 							showSuccess('Payment successful!', 'Your order has been completed.');
-							goto(getPurchasesDashboardPath(resolvedOrderId));
+							// Hold on the success screen with a boosting upsell instead of bouncing
+							// straight to purchases; a fallback still redirects passive buyers.
+							purchasesRedirectPath = getPurchasesDashboardPath(resolvedOrderId);
+							showBoostUpsell = true;
+							upsellRedirectTimer = setTimeout(() => {
+								if (!isDisposed) goto(purchasesRedirectPath);
+							}, 20000);
 						}
 						return;
 					}
@@ -344,6 +354,10 @@
 		return () => {
 			isDisposed = true;
 			clearRetryTimer();
+			if (upsellRedirectTimer) {
+				clearTimeout(upsellRedirectTimer);
+				upsellRedirectTimer = null;
+			}
 		};
 	});
 </script>
@@ -435,12 +449,37 @@
 						>
 					</div>
 				{/if}
-				<p
+				{#if showBoostUpsell}
+					<div class="mb-2 rounded-xl p-4 text-left" style="background: var(--bg); border: 1px solid var(--primary);">
+						<p class="mb-1 text-sm font-bold" style="color: var(--text); font-family: var(--font-head);">
+							Make your new account look established ⚡
+						</p>
+						<p class="mb-3 text-xs sm:text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
+							Add real followers, likes &amp; views from our Boosting Services — grow it in minutes.
+						</p>
+						<button
+							onclick={() => goto('/services')}
+							class="mb-2 w-full rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
+							style="background: var(--btn-primary-gradient); color: #04140C; font-family: var(--font-head);"
+						>
+							Boost my account →
+						</button>
+						<button
+							onclick={() => goto(purchasesRedirectPath)}
+							class="w-full rounded-full px-6 py-2 text-xs sm:text-sm"
+							style="color: var(--text-muted); font-family: var(--font-body);"
+						>
+							Continue to my purchases →
+						</button>
+					</div>
+				{:else}
+					<p
 					class="text-xs sm:text-sm"
 					style="color: var(--text-dim); font-family: var(--font-body);"
-				>
+					>
 					Redirecting to your purchases...
-				</p>
+					</p>
+				{/if}
 			{:else if pending}
 				<!-- Pending State -->
 				<div class="mb-6 flex justify-center">
