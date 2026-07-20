@@ -57,7 +57,7 @@ describe('affiliate lifecycle email recovery', () => {
 		prismaMock.emailNotification.findFirst.mockResolvedValue(null);
 	});
 
-	it('introduces the program on the second successful purchase and records a progress milestone', async () => {
+	it('sends the unlock invite (not a stale "spend more" email) to a purchased non-affiliate', async () => {
 		prismaMock.user.findMany.mockResolvedValue([
 			{
 				id: 'user-1',
@@ -65,28 +65,17 @@ describe('affiliate lifecycle email recovery', () => {
 				fullName: 'Buyer One',
 				isAffiliateEnabled: false,
 				affiliatePrograms: [],
+				affiliatePayoutDetails: null,
 				orders: [{ totalAmount: 10_000 }, { totalAmount: 15_000 }]
 			}
 		]);
 
-		const result = await runAffiliateLifecycleEmailRecovery();
+		await runAffiliateLifecycleEmailRecovery();
 
-		expect(sendMarketingEmailMock).toHaveBeenCalledTimes(2);
-		expect(sendMarketingEmailMock).toHaveBeenNthCalledWith(
-			1,
-			expect.objectContaining({
-				notificationType: 'affiliate_introduction',
-				campaignKey: 'affiliate_introduction:user-1'
-			})
-		);
-		expect(sendMarketingEmailMock).toHaveBeenNthCalledWith(
-			2,
-			expect.objectContaining({
-				notificationType: 'affiliate_progress',
-				campaignKey: 'affiliate_progress:50:user-1'
-			})
-		);
-		expect(result.sent).toBe(2);
+		// First purchase already unlocks access, so we invite them to claim their code
+		// rather than telling them to "spend more".
+		expect(maybeSendAffiliateUnlockInviteMock).toHaveBeenCalledWith('user-1');
+		expect(sendMarketingEmailMock).not.toHaveBeenCalled();
 	});
 
 	it('does not introduce the program before the second successful purchase', async () => {
@@ -155,7 +144,7 @@ describe('affiliate lifecycle email recovery', () => {
 		expect(result.sent).toBe(1);
 	});
 
-	it('does not nudge an affiliate who already has referrals or was nudged recently', async () => {
+	it('does not nudge an earning affiliate who already has bank details', async () => {
 		prismaMock.user.findMany.mockResolvedValue([
 			{
 				id: 'user-1',
@@ -171,6 +160,7 @@ describe('affiliate lifecycle email recovery', () => {
 						createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)
 					}
 				],
+				affiliatePayoutDetails: { id: 'bank-1' },
 				orders: []
 			}
 		]);
@@ -178,5 +168,37 @@ describe('affiliate lifecycle email recovery', () => {
 		await runAffiliateLifecycleEmailRecovery();
 
 		expect(sendMarketingEmailMock).not.toHaveBeenCalled();
+	});
+
+	it('nudges an earning affiliate with no bank details to add them', async () => {
+		prismaMock.user.findMany.mockResolvedValue([
+			{
+				id: 'user-1',
+				email: 'affiliate@example.com',
+				fullName: 'Affiliate One',
+				isAffiliateEnabled: true,
+				affiliatePrograms: [
+					{
+						id: 'program-1',
+						affiliateCode: 'AFF001',
+						totalReferrals: 3,
+						status: 'active',
+						createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)
+					}
+				],
+				affiliatePayoutDetails: null,
+				orders: []
+			}
+		]);
+
+		const result = await runAffiliateLifecycleEmailRecovery();
+
+		expect(sendMarketingEmailMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				notificationType: 'affiliate_bank_details_nudge',
+				referenceId: 'affiliate_bank_details_nudge:user-1'
+			})
+		);
+		expect(result.sent).toBe(1);
 	});
 });

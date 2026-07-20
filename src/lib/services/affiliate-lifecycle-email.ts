@@ -1,7 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { sendMarketingEmail } from '$lib/services/email';
 import {
-	PROGRESS_MILESTONES,
 	getAffiliateConfig,
 	maybeSendAffiliateUnlockInvite
 } from '$lib/services/affiliate';
@@ -45,6 +44,7 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 			email: true,
 			fullName: true,
 			isAffiliateEnabled: true,
+			affiliatePayoutDetails: { select: { id: true } },
 			affiliatePrograms: {
 				select: {
 					id: true,
@@ -82,39 +82,50 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 			(total, order) => total + Number(order.totalAmount || 0),
 			0
 		);
-		const eligible = lifetimeCompletedSpend >= config.unlockThreshold;
+		// Access unlocks on the FIRST completed purchase (the spend threshold is only a
+		// legacy fallback). Every user reaching this loop already has >=1 paid order.
+		const eligible = successfulPurchaseCount > 0 || lifetimeCompletedSpend >= config.unlockThreshold;
 		const alreadyActive = user.isAffiliateEnabled || user.affiliatePrograms.length > 0;
 		const firstName = getFirstName(user.fullName, user.email);
+		const cooldownStart = new Date(Date.now() - ACTIVATION_NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
+		const cooldownBucket = Math.floor(Date.now() / (ACTIVATION_NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000));
 
+		// Eligible but not yet an affiliate -> invite them to claim their code.
 		if (eligible && !alreadyActive) {
 			await maybeSendAffiliateUnlockInvite(user.id);
 			skipped += 1;
 			continue;
 		}
-		if (alreadyActive) {
-			const program = user.affiliatePrograms[0];
-			const isInactiveSharer =
-				program &&
+		if (!alreadyActive) {
+			skipped += 1;
+			continue;
+		}
+
+		const program = user.affiliatePrograms[0];
+		const agedEnough = Boolean(
+			program &&
 				program.status === 'active' &&
-				program.totalReferrals === 0 &&
 				program.affiliateCode &&
 				Date.now() - program.createdAt.getTime() >=
-					ACTIVATION_NUDGE_MIN_PROGRAM_AGE_DAYS * 24 * 60 * 60 * 1000;
+					ACTIVATION_NUDGE_MIN_PROGRAM_AGE_DAYS * 24 * 60 * 60 * 1000
+		);
+		if (!program || !agedEnough) {
+			skipped += 1;
+			continue;
+		}
 
-			if (!isInactiveSharer) {
-				skipped += 1;
-				continue;
-			}
+		const hasBankDetails = Boolean(user.affiliatePayoutDetails);
+		const hasStartedEarning = program.totalReferrals > 0;
+		const referralLink = `${baseUrl}/ref/${program.affiliateCode}`;
 
-			const cooldownThreshold = new Date(
-				Date.now() - ACTIVATION_NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000
-			);
+		// Earning but no bank details yet -> nudge them to get payout-ready.
+		if (hasStartedEarning && !hasBankDetails) {
 			const recentlyNudged = await prisma.emailNotification.findFirst({
 				where: {
 					userId: user.id,
-					notificationType: 'affiliate_activation_nudge',
+					notificationType: 'affiliate_bank_details_nudge',
 					status: 'sent',
-					createdAt: { gte: cooldownThreshold }
+					createdAt: { gte: cooldownStart }
 				},
 				select: { id: true }
 			});
@@ -122,24 +133,48 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 				skipped += 1;
 				continue;
 			}
+			const bank = await sendMarketingEmail({
+				to: user.email,
+				userId: user.id,
+				subject: "You're earning — add your bank details to get paid",
+				body: `Hi ${firstName},\n\nYour referrals are earning you cash 🎉\n\nAdd your bank details now so your withdrawal is ready the moment you reach ₦10,000. It takes a minute — we handle the rest.\n\nYour referral link: ${referralLink}`,
+				ctaText: 'Add bank details',
+				ctaUrl: `${baseUrl}/dashboard?tab=affiliate`,
+				notificationType: 'affiliate_bank_details_nudge',
+				referenceId: `affiliate_bank_details_nudge:${user.id}`,
+				campaignKey: `affiliate_bank_details_nudge:${user.id}:${cooldownBucket}`
+			});
+			if (bank.success) sent += 1;
+			else if (bank.suppressed) skipped += 1;
+			else failed += 1;
+			continue;
+		}
 
-			const referralLink = `${baseUrl}/ref/${program!.affiliateCode}`;
+		// Active but not sharing yet (no referrals) -> nudge to share the code.
+		if (!hasStartedEarning) {
+			const recentlyNudged = await prisma.emailNotification.findFirst({
+				where: {
+					userId: user.id,
+					notificationType: 'affiliate_activation_nudge',
+					status: 'sent',
+					createdAt: { gte: cooldownStart }
+				},
+				select: { id: true }
+			});
+			if (recentlyNudged) {
+				skipped += 1;
+				continue;
+			}
 			const activation = await sendMarketingEmail({
 				to: user.email,
 				userId: user.id,
 				subject: 'Your affiliate code is ready — start earning',
-				body: `Hi ${firstName},
-
-You have an affiliate code, but you haven't shared it yet.
-
-Share code ${program!.affiliateCode} with friends and followers. They get a discount at checkout, and you earn real, withdrawable cash on their order.
-
-Your referral link: ${referralLink}`,
+				body: `Hi ${firstName},\n\nYou have an affiliate code, but you haven't shared it yet.\n\nShare code ${program.affiliateCode} with friends and followers. They get a discount at checkout, and you earn real, withdrawable cash on their order.\n\nYour referral link: ${referralLink}`,
 				ctaText: 'Share your code',
 				ctaUrl: `${baseUrl}/dashboard?tab=affiliate`,
 				notificationType: 'affiliate_activation_nudge',
 				referenceId: `affiliate_activation_nudge:${user.id}`,
-				campaignKey: `affiliate_activation_nudge:${user.id}:${Math.floor(Date.now() / (ACTIVATION_NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000))}`
+				campaignKey: `affiliate_activation_nudge:${user.id}:${cooldownBucket}`
 			});
 			if (activation.success) sent += 1;
 			else if (activation.suppressed) skipped += 1;
@@ -147,56 +182,8 @@ Your referral link: ${referralLink}`,
 			continue;
 		}
 
-		if (successfulPurchaseCount >= 2) {
-			const remaining = Math.max(0, config.unlockThreshold - lifetimeCompletedSpend);
-			const introduction = await sendMarketingEmail({
-				to: user.email,
-				userId: user.id,
-				subject: 'Earn Cash with Fast Accounts referrals',
-				body: `Hi ${firstName},
-
-You can earn Cash by referring buyers to Fast Accounts.
-
-Once you unlock affiliate access, you will receive a unique referral code and link. Referred buyers save at checkout, and you earn real, withdrawable Cash from successful referred purchases.
-
-Spend ₦${remaining.toLocaleString('en-US')} more to unlock affiliate access.`,
-				ctaText: 'See how affiliate access works',
-				ctaUrl: `${baseUrl}/affiliate`,
-				notificationType: 'affiliate_introduction',
-				referenceId: `affiliate_introduction:${user.id}`,
-				campaignKey: `affiliate_introduction:${user.id}`
-			});
-			if (introduction.success) sent += 1;
-			else if (introduction.suppressed) skipped += 1;
-			else failed += 1;
-		}
-
-		const progressPercent =
-			config.unlockThreshold > 0
-				? Math.min(100, Math.floor((lifetimeCompletedSpend / config.unlockThreshold) * 100))
-				: 100;
-		const milestone = PROGRESS_MILESTONES.find((candidate) => progressPercent >= candidate);
-		if (!milestone) continue;
-
-		const remaining = Math.max(0, config.unlockThreshold - lifetimeCompletedSpend);
-		const progress = await sendMarketingEmail({
-			to: user.email,
-			userId: user.id,
-			subject: 'You are close to affiliate access',
-			body: `Hi ${firstName},
-
-You are now ${progressPercent}% of the way to affiliate access.
-
-Spend ₦${remaining.toLocaleString('en-US')} more on successful Fast Accounts orders to unlock your referral code and start earning real, withdrawable Cash.`,
-			ctaText: 'View your progress',
-			ctaUrl: `${baseUrl}/dashboard?tab=affiliate`,
-			notificationType: 'affiliate_progress',
-			referenceId: `affiliate_progress:${milestone}:${user.id}`,
-			campaignKey: `affiliate_progress:${milestone}:${user.id}`
-		});
-		if (progress.success) sent += 1;
-		else if (progress.suppressed) skipped += 1;
-		else failed += 1;
+		// Active, earning, and payout-ready -> nothing to nudge.
+		skipped += 1;
 	}
 
 	const [firstCredit, payoutStatus] = await Promise.all([

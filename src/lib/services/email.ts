@@ -23,6 +23,7 @@ export type EmailNotificationType =
 	| 'affiliate_unlock'
 	| 'affiliate_introduction'
 	| 'affiliate_activation_nudge'
+	| 'affiliate_bank_details_nudge'
 	| 'affiliate_progress'
 	| 'affiliate_store_credit'
 	| 'affiliate_payout'
