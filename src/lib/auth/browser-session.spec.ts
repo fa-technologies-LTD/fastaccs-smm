@@ -41,6 +41,7 @@ function buildUser(overrides: Partial<User> = {}): User {
 		firstPurchasePopupSeenAt: null,
 		catalogUpdatesLastSeenAt: null,
 		boostingLaunchPopupSeenAt: null,
+		boostingCrossSellPopupSeenCount: 0,
 		bankDetailsPopupSeenAt: null,
 		...overrides
 	};

@@ -6,7 +6,11 @@ export type SitePopupType =
 	| 'first_purchase'
 	| 'catalog_updates'
 	| 'boosting_launch'
+	| 'boosting_crosssell'
 	| 'bank_details_outcome';
+
+// Cross-sell popup only nudges buyers for their first few orders, then stops.
+const BOOSTING_CROSSSELL_MAX_ORDERS = 3;
 
 export interface PendingSitePopup {
 	type: SitePopupType;
@@ -35,6 +39,16 @@ const BOOSTING_LAUNCH_POPUP: PendingSitePopup = {
 	ctaText: 'Got it',
 	secondaryHref: '/services',
 	secondaryText: 'Browse Boosting Services'
+};
+
+const BOOSTING_CROSSSELL_POPUP: PendingSitePopup = {
+	type: 'boosting_crosssell',
+	icon: '⚡',
+	title: 'Grow the account you just bought',
+	body: 'Add real followers, likes & views with our Boosting Services — pick a platform, paste your link, done.',
+	ctaText: 'Maybe later',
+	secondaryHref: '/services',
+	secondaryText: 'Boost my account →'
 };
 
 function getBankDetailsOutcomePopup(submission: {
@@ -140,6 +154,30 @@ async function hasUserCompletedAnyPurchase(userId: string): Promise<boolean> {
 	return count > 0;
 }
 
+async function countCompletedPurchases(userId: string): Promise<number> {
+	return prisma.order.count({
+		where: {
+			userId,
+			status: { in: ['paid', 'processing', 'completed'] },
+			paymentStatus: { in: [...CONFIRMED_PAYMENT_STATUSES] }
+		}
+	});
+}
+
+async function hasUserPurchasedBoosting(userId: string): Promise<boolean> {
+	const count = await prisma.orderItem.count({
+		where: {
+			boostTargetUrl: { not: null },
+			order: {
+				userId,
+				status: { in: ['paid', 'processing', 'completed'] },
+				paymentStatus: { in: [...CONFIRMED_PAYMENT_STATUSES] }
+			}
+		}
+	});
+	return count > 0;
+}
+
 export async function getPendingSitePopup(userId: string): Promise<PendingSitePopup | null> {
 	const popupsEnabled = await getSitePopupsEnabledSetting();
 	if (!popupsEnabled) return null;
@@ -150,6 +188,7 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 			firstPurchasePopupSeenAt: true,
 			catalogUpdatesLastSeenAt: true,
 			boostingLaunchPopupSeenAt: true,
+			boostingCrossSellPopupSeenCount: true,
 			bankDetailsPopupSeenAt: true,
 			affiliatePayoutDetails: {
 				select: { status: true, rejectionReason: true, reviewedAt: true }
@@ -179,6 +218,17 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 		return BOOSTING_LAUNCH_POPUP;
 	}
 
+	// Boosting cross-sell: nudge buyers who haven't tried boosting, once per order
+	// for their first BOOSTING_CROSSSELL_MAX_ORDERS orders (shown-count < min(orders, cap)).
+	{
+		const completedOrders = await countCompletedPurchases(userId);
+		const target = Math.min(completedOrders, BOOSTING_CROSSSELL_MAX_ORDERS);
+		if (completedOrders > 0 && user.boostingCrossSellPopupSeenCount < target) {
+			const boughtBoosting = await hasUserPurchasedBoosting(userId);
+			if (!boughtBoosting) return BOOSTING_CROSSSELL_POPUP;
+		}
+	}
+
 	if (!user.catalogUpdatesLastSeenAt) {
 		await prisma.user.update({
 			where: { id: userId },
@@ -191,6 +241,16 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 }
 
 export async function markSitePopupSeen(userId: string, type: SitePopupType): Promise<void> {
+	// Cross-sell is count-based (shown once per order for the first few orders),
+	// not a one-time date flag — increment instead of stamping a timestamp.
+	if (type === 'boosting_crosssell') {
+		await prisma.user.update({
+			where: { id: userId },
+			data: { boostingCrossSellPopupSeenCount: { increment: 1 } }
+		});
+		return;
+	}
+
 	const field:
 		| 'firstPurchasePopupSeenAt'
 		| 'catalogUpdatesLastSeenAt'

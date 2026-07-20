@@ -6,6 +6,7 @@ const SITE_POPUP_TYPES = [
 	'first_purchase',
 	'catalog_updates',
 	'boosting_launch',
+	'boosting_crosssell',
 	'bank_details_outcome'
 ] as const satisfies readonly SitePopupType[];
 
