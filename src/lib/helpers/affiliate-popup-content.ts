@@ -22,26 +22,28 @@ export const AFFILIATE_POPUP_CONTENT: Record<AffiliatePopupType, AffiliatePopupC
 		secondaryHref: HOW_IT_WORKS_HREF,
 		secondaryText: HOW_IT_WORKS_TEXT
 	},
+	// progress_50 / progress_80 slots are repurposed for payout progress (30% / 80%).
 	progress_50: {
 		icon: '🚀',
-		title: "You're 50% of the way there",
-		body: "You're halfway to unlocking your referral code and earning real cash from referrals. Keep going!",
+		title: "You're 30% of the way to your first payout",
+		body: "Your referral earnings are adding up — you're 30% of the way to the ₦10,000 payout minimum. Keep sharing your code!",
 		ctaText: 'Keep going',
 		secondaryHref: HOW_IT_WORKS_HREF,
 		secondaryText: HOW_IT_WORKS_TEXT
 	},
 	progress_80: {
 		icon: '🔥',
-		title: "You're 80% of the way there",
-		body: "Almost there! A little more and you'll unlock your referral code and start earning real cash from referrals.",
+		title: "You're 80% of the way to your first payout",
+		body: "Almost there! A little more and you'll hit the ₦10,000 minimum and can withdraw your affiliate earnings to your bank.",
 		ctaText: 'Almost there',
 		secondaryHref: HOW_IT_WORKS_HREF,
 		secondaryText: HOW_IT_WORKS_TEXT
 	},
+	// Retired: the 95% slot is no longer triggered (payout uses 30% / 80% only).
 	progress_95: {
 		icon: '⚡',
-		title: 'Almost unlocked — 95%!',
-		body: "One more step and your referral code is live, real cash earnings included.",
+		title: "You're almost at your payout",
+		body: "You're nearly at the ₦10,000 payout minimum — add your bank details so you're ready to withdraw.",
 		ctaText: 'Got it',
 		secondaryHref: HOW_IT_WORKS_HREF,
 		secondaryText: HOW_IT_WORKS_TEXT

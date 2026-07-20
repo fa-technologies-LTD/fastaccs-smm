@@ -63,7 +63,8 @@ const AFFILIATE_LEDGER_CREDIT_TYPE = 'affiliate_credit';
 const AFFILIATE_LEDGER_PAYOUT_TYPE = 'affiliate_payout';
 const AFFILIATE_REFERRAL_BASE_URL = 'https://smm.fastaccs.com';
 
-export const PROGRESS_MILESTONES = [95, 80, 50] as const;
+// Payout-progress milestone marks (descending) that trigger a dashboard pop-up.
+export const PROGRESS_MILESTONES = [80, 30] as const;
 
 export type AffiliatePopupType =
 	| 'welcome'
@@ -267,7 +268,7 @@ export function getAffiliateReferralBaseUrl(): string {
 export function getPendingAffiliatePopup(input: {
 	unlocked: boolean;
 	hasBankDetails: boolean;
-	spendProgressPercent: number;
+	payoutProgressPercent: number;
 	popupsEnabled: boolean;
 	seenAt: {
 		welcome: Date | null;
@@ -286,15 +287,17 @@ export function getPendingAffiliatePopup(input: {
 	// Once bank details are saved, prompt (once) to copy & share the referral code.
 	if (input.unlocked && input.hasBankDetails && !input.seenAt.shareCode) return 'share_code';
 
-	const milestoneSeenAt: Record<(typeof PROGRESS_MILESTONES)[number], Date | null> = {
-		95: input.seenAt.progress95,
-		80: input.seenAt.progress80,
-		50: input.seenAt.progress50
-	};
-	const milestone = PROGRESS_MILESTONES.find(
-		(candidate) => input.spendProgressPercent >= candidate && !milestoneSeenAt[candidate]
+	// Payout-progress milestones (repurposed from the retired spend milestones): show
+	// how close the affiliate is to the ₦-payout minimum, at 80% and 30%. We reuse the
+	// existing progress_80 / progress_50 popup slots; the 95% slot is retired.
+	const payoutMilestones: Array<{ percent: number; type: AffiliatePopupType; seen: Date | null }> = [
+		{ percent: 80, type: 'progress_80', seen: input.seenAt.progress80 },
+		{ percent: 30, type: 'progress_50', seen: input.seenAt.progress50 }
+	];
+	const milestone = payoutMilestones.find(
+		(candidate) => input.payoutProgressPercent >= candidate.percent && !candidate.seen
 	);
-	if (milestone) return `progress_${milestone}` as AffiliatePopupType;
+	if (milestone) return milestone.type;
 
 	if (!input.seenAt.welcome) return 'welcome';
 
@@ -2366,17 +2369,14 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 		availableStoreCredit >= config.payoutMinimum &&
 		accountAgeDays >= config.payoutMinAccountAgeDays;
 
-	const spendProgressPercentForPopup =
-		qualification.threshold > 0
-			? Math.min(
-					100,
-					Math.floor((qualification.lifetimeCompletedSpend / qualification.threshold) * 100)
-				)
-			: 100;
+	const payoutProgressPercentForPopup =
+		config.payoutMinimum > 0
+			? Math.min(100, Math.floor((availableStoreCredit / config.payoutMinimum) * 100))
+			: 0;
 	const pendingPopup = getPendingAffiliatePopup({
 		unlocked,
 		hasBankDetails: Boolean(user?.affiliatePayoutDetails),
-		spendProgressPercent: spendProgressPercentForPopup,
+		payoutProgressPercent: payoutProgressPercentForPopup,
 		popupsEnabled: config.dashboardPopupsEnabled,
 		seenAt: {
 			welcome: user?.affiliateWelcomePopupSeenAt ?? null,

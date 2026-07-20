@@ -35,15 +35,15 @@ const NO_POPUPS_SEEN = {
 const SEEN = new Date('2026-01-01T00:00:00.000Z');
 
 describe('getPendingAffiliatePopup', () => {
-	it('returns the email progress milestones in descending order', () => {
-		expect(PROGRESS_MILESTONES).toEqual([95, 80, 50]);
+	it('exposes the payout progress milestones in descending order', () => {
+		expect(PROGRESS_MILESTONES).toEqual([80, 30]);
 	});
 
 	it('returns null when the admin kill-switch is off, even if popups would otherwise apply', () => {
 		const result = getPendingAffiliatePopup({
 			unlocked: true,
 			hasBankDetails: false,
-			spendProgressPercent: 100,
+			payoutProgressPercent: 100,
 			popupsEnabled: false,
 			seenAt: NO_POPUPS_SEEN
 		});
@@ -55,7 +55,7 @@ describe('getPendingAffiliatePopup', () => {
 		const result = getPendingAffiliatePopup({
 			unlocked: true,
 			hasBankDetails: false,
-			spendProgressPercent: 100,
+			payoutProgressPercent: 100,
 			popupsEnabled: true,
 			seenAt: NO_POPUPS_SEEN
 		});
@@ -67,7 +67,7 @@ describe('getPendingAffiliatePopup', () => {
 		const result = getPendingAffiliatePopup({
 			unlocked: true,
 			hasBankDetails: true,
-			spendProgressPercent: 100,
+			payoutProgressPercent: 100,
 			popupsEnabled: true,
 			seenAt: { ...NO_POPUPS_SEEN, unlocked: SEEN }
 		});
@@ -79,7 +79,7 @@ describe('getPendingAffiliatePopup', () => {
 		const result = getPendingAffiliatePopup({
 			unlocked: true,
 			hasBankDetails: true,
-			spendProgressPercent: 100,
+			payoutProgressPercent: 100,
 			popupsEnabled: true,
 			seenAt: { ...NO_POPUPS_SEEN, unlocked: SEEN, shareCode: SEEN }
 		});
@@ -91,7 +91,7 @@ describe('getPendingAffiliatePopup', () => {
 		const result = getPendingAffiliatePopup({
 			unlocked: false,
 			hasBankDetails: false,
-			spendProgressPercent: 0,
+			payoutProgressPercent: 0,
 			popupsEnabled: true,
 			seenAt: NO_POPUPS_SEEN
 		});
@@ -103,19 +103,19 @@ describe('getPendingAffiliatePopup', () => {
 		const result = getPendingAffiliatePopup({
 			unlocked: false,
 			hasBankDetails: false,
-			spendProgressPercent: 96,
+			payoutProgressPercent: 96,
 			popupsEnabled: true,
 			seenAt: { ...NO_POPUPS_SEEN, progress50: SEEN }
 		});
 
-		expect(result).toBe('progress_95');
+		expect(result).toBe('progress_80');
 	});
 
 	it('falls back to a lower milestone once the higher one has been seen', () => {
 		const result = getPendingAffiliatePopup({
 			unlocked: false,
 			hasBankDetails: false,
-			spendProgressPercent: 85,
+			payoutProgressPercent: 85,
 			popupsEnabled: true,
 			seenAt: { ...NO_POPUPS_SEEN, progress80: SEEN }
 		});
@@ -127,19 +127,19 @@ describe('getPendingAffiliatePopup', () => {
 		const result = getPendingAffiliatePopup({
 			unlocked: true,
 			hasBankDetails: false,
-			spendProgressPercent: 100,
+			payoutProgressPercent: 100,
 			popupsEnabled: true,
 			seenAt: { ...NO_POPUPS_SEEN, unlocked: SEEN }
 		});
 
-		expect(result).toBe('progress_95');
+		expect(result).toBe('progress_80');
 	});
 
 	it('returns null once everything relevant has been seen', () => {
 		const result = getPendingAffiliatePopup({
 			unlocked: true,
 			hasBankDetails: true,
-			spendProgressPercent: 100,
+			payoutProgressPercent: 100,
 			popupsEnabled: true,
 			seenAt: {
 				welcome: SEEN,
