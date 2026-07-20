@@ -12,12 +12,17 @@ export type SitePopupType =
 // Cross-sell popup only nudges buyers for their first few orders, then stops.
 const BOOSTING_CROSSSELL_MAX_ORDERS = 3;
 
+export interface SitePopupBodyItem {
+	label: string;
+	href?: string;
+}
+
 export interface PendingSitePopup {
 	type: SitePopupType;
 	icon: string;
 	title: string;
 	body: string;
-	bodyItems?: string[];
+	bodyItems?: SitePopupBodyItem[];
 	ctaText: string;
 	secondaryHref?: string;
 	secondaryText?: string;
@@ -95,7 +100,7 @@ async function getCatalogUpdatesPopup(since: Date): Promise<PendingSitePopup | n
 				accountBatches: { some: { createdAt: { gt: since } } },
 				accounts: { some: { status: 'available' } }
 			},
-			select: { name: true },
+			select: { name: true, slug: true, parent: { select: { slug: true } } },
 			orderBy: { name: 'asc' }
 		}),
 		prisma.category.findMany({
@@ -104,33 +109,35 @@ async function getCatalogUpdatesPopup(since: Date): Promise<PendingSitePopup | n
 				isActive: true,
 				createdAt: { gt: since }
 			},
-			select: { name: true },
+			select: { name: true, slug: true },
 			orderBy: { name: 'asc' }
 		})
 	]);
 
-	const restockedNames = restockedTypes.map((category) => category.name);
-	const platformNames = newPlatforms.map((category) => category.name);
+	if (restockedTypes.length === 0 && newPlatforms.length === 0) return null;
 
-	if (restockedNames.length === 0 && platformNames.length === 0) return null;
+	// A restocked tier deep-links to its tier page; a new platform to its platform page.
+	const tierHref = (r: { slug: string | null; parent: { slug: string | null } | null }) =>
+		r.parent?.slug && r.slug ? `/platforms/${r.parent.slug}/tiers/${r.slug}` : undefined;
+	const platformHref = (p: { slug: string | null }) => (p.slug ? `/platforms/${p.slug}` : undefined);
 
 	let body: string;
-	let bodyItems: string[];
-	if (restockedNames.length > 0 && platformNames.length > 0) {
+	let bodyItems: SitePopupBodyItem[];
+	if (restockedTypes.length > 0 && newPlatforms.length > 0) {
 		body = 'Fresh restocks and new additions to the catalog:';
 		bodyItems = [
-			...restockedNames.map((name) => `${name} — back in stock`),
-			...platformNames.map((name) => `${name} — new`)
+			...restockedTypes.map((r) => ({ label: `${r.name} — back in stock`, href: tierHref(r) })),
+			...newPlatforms.map((p) => ({ label: `${p.name} — new`, href: platformHref(p) }))
 		];
-	} else if (restockedNames.length > 0) {
+	} else if (restockedTypes.length > 0) {
 		body =
-			restockedNames.length === 1
-				? 'Back in stock — grab it before it’s gone:'
-				: 'Back in stock — grab them before they’re gone:';
-		bodyItems = restockedNames;
+			restockedTypes.length === 1
+				? "Back in stock — grab it before it's gone:"
+				: "Back in stock — grab them before they're gone:";
+		bodyItems = restockedTypes.map((r) => ({ label: r.name, href: tierHref(r) }));
 	} else {
 		body = 'Just added to the catalog:';
-		bodyItems = platformNames;
+		bodyItems = newPlatforms.map((p) => ({ label: p.name, href: platformHref(p) }));
 	}
 
 	return {

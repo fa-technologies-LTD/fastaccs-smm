@@ -8,11 +8,12 @@
 		icon: string;
 		title: string;
 		body: string;
-		bodyItems?: string[];
+		bodyItems?: { label: string; href?: string }[];
 		ctaText?: string;
 		ctaHref?: string;
 		secondaryHref?: string;
 		secondaryText?: string;
+		onItemNavigate?: (href: string) => void;
 	}
 
 	let {
@@ -25,7 +26,8 @@
 		ctaText = 'Got it',
 		ctaHref,
 		secondaryHref,
-		secondaryText
+		secondaryText,
+		onItemNavigate
 	}: Props = $props();
 
 	function handleBackdropClick(event: MouseEvent) {
@@ -89,7 +91,21 @@
 					{#each bodyItems as item}
 						<li class="flex items-start gap-2 text-sm" style="color: var(--text);">
 							<span style="color: var(--primary);">•</span>
-							<span>{item}</span>
+							{#if item.href}
+								<a
+									href={item.href}
+									onclick={(event) => {
+										if (onItemNavigate) {
+											event.preventDefault();
+											onItemNavigate(item.href!);
+										}
+									}}
+									class="underline decoration-dotted underline-offset-2 transition-colors hover:opacity-80"
+									style="color: var(--text);">{item.label}</a
+								>
+							{:else}
+								<span>{item.label}</span>
+							{/if}
 						</li>
 					{/each}
 				</ul>

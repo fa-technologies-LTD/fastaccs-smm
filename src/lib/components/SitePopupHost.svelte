@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import AffiliatePopupModal from './AffiliatePopupModal.svelte';
 	import type { PendingSitePopup } from '$lib/services/site-popups';
 
@@ -53,6 +54,23 @@
 				console.error('Failed to mark site popup as seen:', error);
 			});
 	}
+
+	// A clicked catalog item marks the popup seen (so it won't reappear) and then
+	// navigates to that product — client-side, so the fire-and-forget POST completes.
+	function handleItemNavigate(href: string): void {
+		const popup = activePopup;
+		activePopup = null;
+		if (popup) {
+			fetch('/api/dashboard/popup-seen', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: popup.type })
+			}).catch((error) => {
+				console.error('Failed to mark site popup as seen:', error);
+			});
+		}
+		goto(href);
+	}
 </script>
 
 {#if activePopup}
@@ -66,5 +84,6 @@
 		ctaText={activePopup.ctaText}
 		secondaryHref={activePopup.secondaryHref}
 		secondaryText={activePopup.secondaryText}
+		onItemNavigate={handleItemNavigate}
 	/>
 {/if}
