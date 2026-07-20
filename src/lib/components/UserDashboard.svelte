@@ -62,13 +62,10 @@
 	const affiliateAccessUnlocked = $derived(
 		Boolean(affiliateState?.unlocked || affiliateState?.isActive || affiliateState?.eligible)
 	);
-	const affiliateLifetimeSpend = $derived(Number(affiliateState?.lifetimeCompletedSpend || 0));
-	const affiliateUnlockThreshold = $derived(Number(affiliateState?.unlockThreshold || 20000));
-	const affiliateRemainingSpend = $derived(
-		Math.max(0, affiliateUnlockThreshold - affiliateLifetimeSpend)
-	);
-	const shouldShowAffiliateNudge = $derived(
-		!affiliateAccessUnlocked && affiliateLifetimeSpend >= 20000 && affiliateRemainingSpend > 0
+	// Eligible (access unlocks on the first purchase) but hasn't activated their referral
+	// code yet — the real conversion gap. Nudge them to claim it, not to "spend more".
+	const affiliateEligibleNotActive = $derived(
+		Boolean(affiliateState?.unlocked || affiliateState?.eligible) && !affiliateState?.isActive
 	);
 	let activeTab = $state<DashboardTab>('orders');
 	let selectedOrderId = $state<string | null>(null);
@@ -126,7 +123,7 @@
 		applyRouteContext(new URL(window.location.href));
 		const dismissed =
 			window.sessionStorage.getItem('fastaccs_affiliate_access_nudge_dismissed') === '1';
-		showAffiliateAccessNudge = shouldShowAffiliateNudge && !dismissed;
+		showAffiliateAccessNudge = affiliateEligibleNotActive && !dismissed;
 
 		const handlePopState = () => {
 			applyRouteContext(new URL(window.location.href));
@@ -261,10 +258,10 @@
 						class="text-sm font-semibold"
 						style="color: var(--text); font-family: var(--font-head);"
 					>
-						You are close to affiliate access
+						Affiliate access unlocked 🎉
 					</p>
 					<p class="text-xs sm:text-sm" style="color: var(--text-muted);">
-						Spend about {formatMoney(affiliateRemainingSpend)} more to unlock referral earning.
+						Claim your referral code and earn real cash whenever a friend orders.
 					</p>
 					<div class="mt-2 flex flex-wrap gap-2">
 						<button
