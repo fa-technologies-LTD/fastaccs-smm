@@ -6,6 +6,42 @@ const ONBOARDING_STEP_A_DELAY_HOURS = 24;
 const ONBOARDING_STEP_B_DELAY_HOURS = 48;
 const ABANDONED_ORDER_DELAY_MINUTES = 15;
 
+// Abandoned-checkout reminders are a 3-step sequence: 15 min, ~4 h, ~24 h.
+// Each step dedupes on its own referenceId suffix; a later step only sends once
+// the previous one has, so the reminders naturally space out.
+const ABANDONED_REMINDER_STEPS = [
+	{ step: 1, minAgeMinutes: ABANDONED_ORDER_DELAY_MINUTES, refSuffix: '' },
+	{ step: 2, minAgeMinutes: 4 * 60, refSuffix: ':r2' },
+	{ step: 3, minAgeMinutes: 24 * 60, refSuffix: ':r3' }
+] as const;
+
+function getAbandonedReminderContent(
+	step: number,
+	ctx: { firstName: string; orderLabel: string; currency: string; amountText: string }
+): { subject: string; body: string; ctaText: string } {
+	const { firstName, orderLabel, currency, amountText } = ctx;
+	const support = `If you need help, contact support:\n- WhatsApp: https://wa.link/fast_accounts\n- Email: support@fastaccs.com\n\n**Important:** If this email lands in Spam or Promotions, mark it as Not Spam and move it to Primary.`;
+	if (step === 2) {
+		return {
+			subject: `Still want these? Your order is held (${orderLabel})`,
+			ctaText: 'Complete my order',
+			body: `Hi ${firstName},\n\nYour order is still waiting \u2014 payment hasn't come through yet.\n\nOrder: ${orderLabel}\nAmount: ${currency} ${amountText}\n\nWe're holding your items, but stock moves fast. Tap below to finish and we'll deliver right away.\n\n${support}`
+		};
+	}
+	if (step === 3) {
+		return {
+			subject: `Last call \u2014 your held order is about to be released (${orderLabel})`,
+			ctaText: 'Finish before it expires',
+			body: `Hi ${firstName},\n\nThis is the last reminder for your order \u2014 we can only hold your items a little longer.\n\nOrder: ${orderLabel}\nAmount: ${currency} ${amountText}\n\nIf you still want them, complete your payment now before they're released to other buyers.\n\n${support}`
+		};
+	}
+	return {
+		subject: `Complete your FastAccs order (${orderLabel})`,
+		ctaText: 'Resume payment',
+		body: `Hi ${firstName},\n\nYou started an order a few minutes ago, but payment hasn't gone through yet.\n\nOrder: ${orderLabel}\nAmount: ${currency} ${amountText}\n\nYour items are still being held for you, but not for much longer. Tap the button below to finish your payment now.\n\n${support}`
+	};
+}
+
 // Nurture drip for verified users who signed up but never bought — a gentle
 // 3-email sequence (day 3 / day 10 / day 21 after registration), then it stops.
 // Gated behind NURTURE_ENABLED so it never sends until explicitly switched on.
@@ -208,6 +244,8 @@ interface AbandonedOrderDispatchCandidate {
 	userId: string | null;
 	fullName: string | null;
 	targetEmail: string;
+	step: number;
+	refSuffix: string;
 }
 
 interface AbandonedOrderRow {
@@ -658,35 +696,47 @@ export async function runAbandonedOrderReminder(params?: {
 			id: lastOrder.id
 		};
 
+		const candidateRefs: string[] = [];
+		for (const order of candidateOrders) {
+			for (const stepDef of ABANDONED_REMINDER_STEPS) {
+				candidateRefs.push(`${order.id}${stepDef.refSuffix}`);
+			}
+		}
 		const existingReminderSends = await prisma.emailNotification.findMany({
 			where: {
 				notificationType: 'abandoned_order',
 				status: 'sent',
-				referenceId: {
-					in: candidateOrders.map((order) => order.id)
-				}
+				referenceId: { in: candidateRefs }
 			},
-			select: {
-				referenceId: true
-			}
+			select: { referenceId: true }
 		});
-		const sentOrderIds = new Set(
+		const sentRefs = new Set(
 			existingReminderSends
 				.map((row) => row.referenceId)
-				.filter(
-					(referenceId): referenceId is string =>
-						typeof referenceId === 'string' && Boolean(referenceId)
-				)
+				.filter((r): r is string => typeof r === 'string' && Boolean(r))
 		);
 
 		for (const order of candidateOrders) {
-			if (sentOrderIds.has(order.id)) {
+			const targetEmail = normalizeEmail(order.user?.email || order.guestEmail);
+			if (!targetEmail) {
 				skipped += 1;
 				continue;
 			}
 
-			const targetEmail = normalizeEmail(order.user?.email || order.guestEmail);
-			if (!targetEmail) {
+			// Pick the next unsent reminder step this order is old enough for.
+			const ageMinutes = (now.getTime() - order.createdAt.getTime()) / 60000;
+			let chosenStep: (typeof ABANDONED_REMINDER_STEPS)[number] | null = null;
+			for (const stepDef of ABANDONED_REMINDER_STEPS) {
+				if (sentRefs.has(`${order.id}${stepDef.refSuffix}`)) continue;
+				if (ageMinutes < stepDef.minAgeMinutes) break;
+				if (stepDef.step > 1) {
+					const prev = ABANDONED_REMINDER_STEPS[stepDef.step - 2];
+					if (!sentRefs.has(`${order.id}${prev.refSuffix}`)) break;
+				}
+				chosenStep = stepDef;
+				break;
+			}
+			if (!chosenStep) {
 				skipped += 1;
 				continue;
 			}
@@ -698,7 +748,9 @@ export async function runAbandonedOrderReminder(params?: {
 				currency: order.currency || 'NGN',
 				userId: order.user?.id || null,
 				fullName: order.user?.fullName || null,
-				targetEmail
+				targetEmail,
+				step: chosenStep.step,
+				refSuffix: chosenStep.refSuffix
 			});
 
 			if (dispatchQueue.length >= batchLimit) {
@@ -735,30 +787,23 @@ export async function runAbandonedOrderReminder(params?: {
 		const orderLabel = toOrderLabel(candidate.orderNumber);
 		const orderUrl = `${baseUrl}/order/${encodeURIComponent(candidate.orderId)}`;
 		const amountText = candidate.totalAmount.toLocaleString('en-US');
+		const content = getAbandonedReminderContent(candidate.step, {
+			firstName,
+			orderLabel,
+			currency: candidate.currency,
+			amountText
+		});
 
 		queued += 1;
 		const result = await sendEmail({
 			to: candidate.targetEmail,
-			subject: `Complete your FastAccs order (${orderLabel})`,
-			body: `Hi ${firstName},
-
-You started an order a few minutes ago, but payment hasn't gone through yet.
-
-Order: ${orderLabel}
-Amount: ${candidate.currency} ${amountText}
-
-Your items are still being held for you, but not for much longer. Tap the button below to finish your payment now.
-
-If you need help, contact support:
-- WhatsApp: https://wa.link/fast_accounts
-- Email: support@fastaccs.com
-
-**Important:** If this email lands in Spam or Promotions, mark it as Not Spam and move it to Primary.`,
-			ctaText: 'Resume payment',
+			subject: content.subject,
+			body: content.body,
+			ctaText: content.ctaText,
 			ctaUrl: orderUrl,
 			userId: candidate.userId,
 			notificationType: 'abandoned_order',
-			referenceId: candidate.orderId
+			referenceId: `${candidate.orderId}${candidate.refSuffix}`
 		});
 
 		if (result.success) {
