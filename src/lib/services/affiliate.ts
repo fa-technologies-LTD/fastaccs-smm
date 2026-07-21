@@ -912,30 +912,57 @@ export async function getNextRunningNumber(initials: string): Promise<number> {
 /**
  * Generate a unique affiliate code using initials + running number.
  */
+// Build a recognizable, name-based code stub (e.g. "Elon Musk" -> "ELMSK"): first two
+// letters of the first name + a consonant-compressed stub of the last name. Single-word
+// names take their first 6 letters; empty names fall back to "FA".
+export function buildAffiliateCodeBase(fullName: string | null | undefined): string {
+	const cleaned = String(fullName || '')
+		.toUpperCase()
+		.replace(/[^A-Z\s]/g, ' ')
+		.trim();
+	const words = cleaned.split(/\s+/).filter(Boolean);
+	if (words.length === 0) return 'FA';
+
+	const compress = (word: string, max: number): string => {
+		const first = word[0];
+		const rest = word.slice(1).replace(/[AEIOU]/g, '');
+		const stub = first + rest;
+		return (stub.length >= 2 ? stub : word).slice(0, max);
+	};
+
+	const base =
+		words.length === 1
+			? words[0].slice(0, 6)
+			: (words[0].slice(0, 2) + compress(words[words.length - 1], 3)).slice(0, 6);
+	return base.length >= 2 ? base : (base + 'FA').slice(0, 2);
+}
+
+// Return `base`, or base2/base3/... if already taken. `excludeProgramId` lets a program
+// keep/settle on its own code during a rename without colliding with itself.
+export async function ensureUniqueAffiliateCode(
+	base: string,
+	excludeProgramId?: string
+): Promise<string> {
+	for (let n = 1; n < 1000; n++) {
+		const candidate = n === 1 ? base : `${base}${n}`;
+		const existing = await prisma.affiliateProgram.findUnique({
+			where: { affiliateCode: candidate },
+			select: { id: true }
+		});
+		if (!existing || existing.id === excludeProgramId) return candidate;
+	}
+	return `${base}${Date.now().toString().slice(-4)}`;
+}
+
 export async function generateAffiliateCode(userId: string): Promise<string> {
 	const user = await prisma.user.findUnique({
 		where: { id: userId },
 		select: { fullName: true }
 	});
-
 	if (!user) {
 		throw new Error('User not found');
 	}
-
-	const initials = extractInitials(user.fullName || '');
-	const runningNumber = await getNextRunningNumber(initials);
-	const formattedNumber = runningNumber.toString().padStart(3, '0');
-	const affiliateCode = `${initials}${formattedNumber}`;
-
-	const existing = await prisma.affiliateProgram.findUnique({
-		where: { affiliateCode }
-	});
-
-	if (existing) {
-		return generateAffiliateCode(userId);
-	}
-
-	return affiliateCode;
+	return ensureUniqueAffiliateCode(buildAffiliateCodeBase(user.fullName));
 }
 
 export async function getAffiliateQualificationStatus(
