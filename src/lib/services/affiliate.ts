@@ -972,10 +972,10 @@ export async function getAffiliateQualificationStatus(
 		};
 	}
 
-	// Access unlocks on the first completed purchase, or once lifetime completed
-	// spend reaches the (lowered) threshold as a fallback.
-	const hasCompletedPurchase = completedOrderCount > 0;
-	if (!hasCompletedPurchase && lifetimeCompletedSpend < config.unlockThreshold) {
+	// Access unlocks on the first completed purchase. The old spend threshold is
+	// retired as a gate — you cannot spend without a completed order, so it was
+	// unreachable; config.unlockThreshold is kept only for informational display.
+	if (completedOrderCount <= 0) {
 		return {
 			eligible: false,
 			lifetimeCompletedSpend,
@@ -1709,6 +1709,19 @@ async function recordSuperAffiliateActivation(params: {
 						orderCount,
 						lifecycleStatus: AFFILIATE_LEDGER_STATUS.available
 					}
+				}
+			});
+			// Keep the program's stored aggregates in step with the regular path so the
+			// dashboard/admin totals reflect activated referrals for super affiliates too.
+			await tx.affiliateProgram.updateMany({
+				where: {
+					userId: superUserId,
+					affiliateCode,
+					status: 'active'
+				},
+				data: {
+					totalReferrals: { increment: 1 },
+					totalSales: { increment: cumulativeSpend }
 				}
 			});
 			await tx.notification.create({

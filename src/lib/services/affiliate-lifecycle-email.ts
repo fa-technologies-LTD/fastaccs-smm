@@ -1,7 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { sendMarketingEmail } from '$lib/services/email';
 import {
-	getAffiliateConfig,
 	maybeSendAffiliateUnlockInvite
 } from '$lib/services/affiliate';
 import { recoverFirstStoreCreditEmails } from '$lib/services/affiliate-notification-email';
@@ -26,7 +25,6 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 	firstCredit: Awaited<ReturnType<typeof recoverFirstStoreCreditEmails>>;
 	payoutStatus: Awaited<ReturnType<typeof recoverAffiliatePayoutStatusEmails>>;
 }> {
-	const config = await getAffiliateConfig();
 	const users = await prisma.user.findMany({
 		where: {
 			isActive: true,
@@ -78,13 +76,9 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 		}
 
 		const successfulPurchaseCount = user.orders.length;
-		const lifetimeCompletedSpend = user.orders.reduce(
-			(total, order) => total + Number(order.totalAmount || 0),
-			0
-		);
-		// Access unlocks on the FIRST completed purchase (the spend threshold is only a
-		// legacy fallback). Every user reaching this loop already has >=1 paid order.
-		const eligible = successfulPurchaseCount > 0 || lifetimeCompletedSpend >= config.unlockThreshold;
+		// Access unlocks on the FIRST completed purchase. Every user in this query
+		// already has >=1 paid order, so all are eligible.
+		const eligible = successfulPurchaseCount > 0;
 		const alreadyActive = user.isAffiliateEnabled || user.affiliatePrograms.length > 0;
 		const firstName = getFirstName(user.fullName, user.email);
 		const cooldownStart = new Date(Date.now() - ACTIVATION_NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
