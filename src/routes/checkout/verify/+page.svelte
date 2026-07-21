@@ -234,7 +234,7 @@
 							showBoostUpsell = true;
 							upsellRedirectTimer = setTimeout(() => {
 								if (!isDisposed) goto(purchasesRedirectPath);
-							}, 20000);
+							}, 10000);
 						}
 						return;
 					}

@@ -446,7 +446,7 @@ function getNurtureContent(step: number, promoCode: string): { subject: string; 
 			subject: 'A welcome gift — 10% off your first order 🎁',
 			body: `You created your Fast Accounts account but haven't placed your first order yet — so here's a little nudge, with a bonus.
 
-Use code ${promoCode} for 10% off your first purchase. Browse verified social accounts ready for instant delivery, or boost any account with real followers, likes & views — from just ₦700 per 1,000.
+Use code ${promoCode} for 10% off your first purchase. Browse verified social accounts ready for instant delivery, or boost any account with real followers, likes & views — starting at ₦700 per 1,000.
 
 Hundreds of orders delivered so far — yours could be next.`
 		};
