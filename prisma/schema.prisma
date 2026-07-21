@@ -194,6 +194,7 @@ model Order {
   createdAt          DateTime       @default(now()) @map("created_at")
   updatedAt          DateTime       @default(now()) @map("updated_at")
   paymentChannel     String?        @map("payment_channel")
+  cancellationReason String?        @map("cancellation_reason")
   promotionId        String?        @map("promotion_id") @db.Uuid
   promotionCode      String?        @map("promotion_code")
   checkoutKey        String?        @unique @map("checkout_key")

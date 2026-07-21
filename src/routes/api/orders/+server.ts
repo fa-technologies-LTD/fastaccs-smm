@@ -337,13 +337,30 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				);
 			}
 
+			const supersedes = ['pending', 'pending_payment'].includes(existingCheckout.status);
+			if (supersedes) {
+				// Instrumentation: a fresh checkout attempt for the same cart cancels the
+				// prior pending order. Tag + log it so we can measure how much of the
+				// "cancelled" volume is retry churn vs real abandonment/expiry.
+				logPaymentEvent('info', 'checkout.superseded', {
+					traceId,
+					orderId: existingCheckout.id,
+					userId: checkoutUserId,
+					status: existingCheckout.status,
+					source: 'checkout_retry'
+				});
+			}
 			await releaseOrderReservations(existingCheckout.id);
 			await prisma.order.update({
 				where: { id: existingCheckout.id },
 				data: {
 					checkoutKey: null,
-					...(['pending', 'pending_payment'].includes(existingCheckout.status)
-						? { status: 'cancelled', paymentStatus: 'cancelled' }
+					...(supersedes
+						? {
+								status: 'cancelled',
+								paymentStatus: 'cancelled',
+								cancellationReason: 'superseded_retry'
+							}
 						: {})
 				}
 			});
@@ -1062,7 +1079,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 							status: 'failed',
 							paymentStatus: 'failed',
 							checkoutKey: null,
-							paymentCheckoutUrl: null
+							paymentCheckoutUrl: null,
+							cancellationReason: 'init_failed'
 						}
 					});
 					invalidateAdminStatsCache();
