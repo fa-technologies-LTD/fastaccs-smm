@@ -5,6 +5,7 @@
 	import PurchaseTab from './PurchaseTab.svelte';
 	import AffiliateTab from './AffiliateTab.svelte';
 	import { isRevenueOrder } from '$lib/helpers/order-revenue';
+	import { addToast } from '$lib/stores/toasts';
 
 	type DashboardTab = 'orders' | 'purchases' | 'affiliate';
 
@@ -86,6 +87,33 @@
 					.getElementById('dashboard-tabs')
 					?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 			);
+		}
+	}
+
+	let isClaimingAffiliate = $state(false);
+	// One-click claim: activate the eligible user's affiliate program right from the
+	// dashboard nudge, then land them on the affiliate tab to copy & share their code.
+	async function claimAffiliateCode(): Promise<void> {
+		if (isClaimingAffiliate) return;
+		isClaimingAffiliate = true;
+		try {
+			const response = await fetch('/api/affiliate/enable', { method: 'POST' });
+			const data = await response.json();
+			if (data?.success) {
+				addToast({ type: 'success', title: 'Your affiliate code is ready 🎉', duration: 3000 });
+				showAffiliateAccessNudge = false;
+				window.location.href = '/dashboard?tab=affiliate';
+			} else {
+				addToast({
+					type: 'error',
+					title: data?.error || 'Could not activate affiliate access',
+					duration: 3600
+				});
+			}
+		} catch {
+			addToast({ type: 'error', title: 'Could not activate affiliate access', duration: 3600 });
+		} finally {
+			isClaimingAffiliate = false;
 		}
 	}
 
@@ -266,14 +294,12 @@
 					<div class="mt-2 flex flex-wrap gap-2">
 						<button
 							type="button"
-							onclick={() => {
-								goToAffiliateTab();
-								showAffiliateAccessNudge = false;
-							}}
-							class="rounded-full px-3 py-1.5 text-xs font-semibold"
+							onclick={claimAffiliateCode}
+							disabled={isClaimingAffiliate}
+							class="rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
 							style="background: rgba(5,212,113,0.16); border: 1px solid rgba(5,212,113,0.35); color: var(--primary);"
 						>
-							View progress
+							{isClaimingAffiliate ? 'Activating…' : 'Claim my code'}
 						</button>
 						<a
 							href="/affiliate"
