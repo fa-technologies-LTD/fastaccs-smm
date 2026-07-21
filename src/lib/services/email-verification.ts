@@ -13,9 +13,11 @@ const MAX_VERIFICATION_REQUESTS_PER_HOUR = 3;
 const MAX_VERIFICATION_ATTEMPTS_PER_CODE = 5;
 const RESEND_COOLDOWN_SECONDS = 60;
 
-const parsedExpiryMinutes = Number(env.VERIFICATION_CODE_EXPIRY_MINUTES || 10);
+// 30-minute window (was 10): email delivery latency + a distracted buyer meant codes
+// often expired before they were entered, blocking purchase-intent users at checkout.
+const parsedExpiryMinutes = Number(env.VERIFICATION_CODE_EXPIRY_MINUTES || 30);
 const VERIFICATION_CODE_EXPIRY_MINUTES =
-	Number.isFinite(parsedExpiryMinutes) && parsedExpiryMinutes > 0 ? parsedExpiryMinutes : 10;
+	Number.isFinite(parsedExpiryMinutes) && parsedExpiryMinutes > 0 ? parsedExpiryMinutes : 30;
 
 interface MinimalUser {
 	id: string;
@@ -182,7 +184,9 @@ export async function ensureVerificationCode(
 
 This code expires in ${VERIFICATION_CODE_EXPIRY_MINUTES} minutes.
 
-Do not share this code with anyone.`,
+Do not share this code with anyone.
+
+If this email lands in Spam or Promotions, mark it as Not Spam so future messages reach your inbox.`,
 		userId: user.id,
 		notificationType: 'verification',
 		referenceId: 'code_request',
