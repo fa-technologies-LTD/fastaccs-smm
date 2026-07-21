@@ -80,6 +80,11 @@ function buildOrderPatchData(payload: unknown): { data?: Prisma.OrderUpdateInput
 			return { error: 'Invalid status value' };
 		}
 		data.status = normalized;
+		// Instrumentation: distinguish admin-initiated cancellations from retry-supersede
+		// / init-failure in the cancellationReason breakdown.
+		if (normalized === 'cancelled') {
+			data.cancellationReason = 'admin_cancelled';
+		}
 	}
 
 	if (Object.prototype.hasOwnProperty.call(raw, 'paymentStatus')) {
