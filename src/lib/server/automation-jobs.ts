@@ -90,6 +90,14 @@ export const AUTOMATION_JOBS = {
 		risk: 'operational',
 		lockTimeoutMinutes: 15,
 		expectedIntervalMinutes: 60
+	},
+	'affiliate-announcement': {
+		name: 'affiliate-announcement',
+		path: '/api/internal/cron/affiliate-announcement',
+		schedule: 'manual (one-time)',
+		risk: 'marketing',
+		lockTimeoutMinutes: 15,
+		expectedIntervalMinutes: 0
 	}
 } as const satisfies Record<string, AutomationJobDefinition>;
 

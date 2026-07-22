@@ -1,5 +1,5 @@
 import { prisma } from '$lib/prisma';
-import { sendMarketingEmail } from '$lib/services/email';
+import { sendEmail, sendMarketingEmail } from '$lib/services/email';
 import {
 	maybeSendAffiliateUnlockInvite
 } from '$lib/services/affiliate';
@@ -16,6 +16,77 @@ function getFirstName(fullName: string | null, email: string): string {
 
 const ACTIVATION_NUDGE_MIN_PROGRAM_AGE_DAYS = 3;
 const ACTIVATION_NUDGE_COOLDOWN_DAYS = 14;
+
+// One-time announcement of the refreshed affiliate program: greets newly-onboarded
+// affiliates ("you're now an affiliate") and reminds existing ones of their code.
+// Excludes owner/test accounts; idempotent via a per-user referenceId.
+const AFFILIATE_ANNOUNCEMENT_EXCLUDE = new Set(['verystrongethan@gmail.com', 'teerex.trx@gmail.com']);
+const AFFILIATE_ANNOUNCEMENT_NEW_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+
+export async function sendAffiliateAnnouncementEmails(): Promise<{
+	sent: number;
+	skipped: number;
+	failed: number;
+}> {
+	const baseUrl = getBaseUrl();
+	const programs = await prisma.affiliateProgram.findMany({
+		where: { status: 'active' },
+		select: {
+			affiliateCode: true,
+			createdAt: true,
+			user: { select: { id: true, email: true, fullName: true, isActive: true } }
+		}
+	});
+	let sent = 0;
+	let skipped = 0;
+	let failed = 0;
+	for (const p of programs) {
+		const u = p.user;
+		if (!u?.email || !u.isActive || AFFILIATE_ANNOUNCEMENT_EXCLUDE.has(u.email.toLowerCase())) {
+			skipped += 1;
+			continue;
+		}
+		const referenceId = `affiliate_announcement:${u.id}`;
+		const already = await prisma.emailNotification.findFirst({
+			where: { referenceId, status: 'sent' },
+			select: { id: true }
+		});
+		if (already) {
+			skipped += 1;
+			continue;
+		}
+		const firstName = getFirstName(u.fullName, u.email);
+		const link = `${baseUrl}/ref/${p.affiliateCode}`;
+		const dash = `${baseUrl}/dashboard?tab=affiliate`;
+		const isNew = Date.now() - p.createdAt.getTime() <= AFFILIATE_ANNOUNCEMENT_NEW_WINDOW_MS;
+		const content = isNew
+			? {
+					subject: "You're now a FastAccounts affiliate 🎉 (here's your code)",
+					body: `Hi ${firstName},\n\nYou're one of our top customers — so we've switched on affiliate access for your account. You can now earn real, withdrawable cash whenever someone orders with your code.\n\nYour referral code: ${p.affiliateCode}\n\nShare it with friends. When they order, you earn — and once you reach ₦10,000 you can withdraw straight to your bank. Nothing to sign up for; it's live now.\n\nYour referral link: ${link}\n\nThanks for being one of our best 🙌 — FastAccs`,
+					ctaText: 'View my affiliate dashboard'
+				}
+			: {
+					subject: 'Your affiliate code is ready — start sharing',
+					body: `Hi ${firstName},\n\nQuick reminder: your affiliate code is ${p.affiliateCode}. Share it (or your link below) and earn real, withdrawable cash on every friend's order — cash you can spend on-site or withdraw to your bank at ₦10,000.\n\nYour referral link: ${link}\n\n— FastAccs`,
+					ctaText: 'Share my code'
+				};
+		const result = await sendEmail({
+			to: u.email,
+			subject: content.subject,
+			body: content.body,
+			ctaText: content.ctaText,
+			ctaUrl: dash,
+			showCta: true,
+			userId: u.id,
+			notificationType: 'affiliate_unlock',
+			classification: 'transactional',
+			referenceId
+		});
+		if (result.success) sent += 1;
+		else failed += 1;
+	}
+	return { sent, skipped, failed };
+}
 
 export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 	processed: number;
