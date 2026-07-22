@@ -21,7 +21,17 @@ const ACTIVATION_NUDGE_COOLDOWN_DAYS = 14;
 // affiliates ("you're now an affiliate") and reminds existing ones of their code.
 // Excludes owner/test accounts; idempotent via a per-user referenceId.
 const AFFILIATE_ANNOUNCEMENT_EXCLUDE = new Set(['verystrongethan@gmail.com', 'teerex.trx@gmail.com']);
-const AFFILIATE_ANNOUNCEMENT_NEW_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+// The exact set of silently-onboarded affiliates who get the "you're now an affiliate"
+// greeting; everyone else already knew they were an affiliate and gets the code reminder.
+const AFFILIATE_ANNOUNCEMENT_NEW_ONBOARDS = new Set([
+	'elonmusk52781@gmail.com',
+	'okoriev99@gmail.com',
+	'verifyright68@gmail.com',
+	'omerejeffrey@gmail.com',
+	'samuelokobia2@gmail.com',
+	'paulhelen1177@gmail.com',
+	'fameomovo@gmail.com'
+]);
 
 export async function sendAffiliateAnnouncementEmails(): Promise<{
 	sent: number;
@@ -58,7 +68,7 @@ export async function sendAffiliateAnnouncementEmails(): Promise<{
 		const firstName = getFirstName(u.fullName, u.email);
 		const link = `${baseUrl}/ref/${p.affiliateCode}`;
 		const dash = `${baseUrl}/dashboard?tab=affiliate`;
-		const isNew = Date.now() - p.createdAt.getTime() <= AFFILIATE_ANNOUNCEMENT_NEW_WINDOW_MS;
+		const isNew = AFFILIATE_ANNOUNCEMENT_NEW_ONBOARDS.has(u.email.toLowerCase());
 		const content = isNew
 			? {
 					subject: "You're now a FastAccounts affiliate 🎉 (here's your code)",
