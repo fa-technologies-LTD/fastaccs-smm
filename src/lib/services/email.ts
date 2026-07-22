@@ -518,7 +518,7 @@ async function reserveMarketingEmail(params: SendEmailParams & { campaignKey: st
 		if (suppressionReason) {
 			await tx.emailNotification.create({
 				data: {
-					userId: params.userId,
+					userId: params.userId || null,
 					email: user.email.toLowerCase(),
 					notificationType: params.notificationType,
 					classification: 'marketing',
@@ -535,7 +535,7 @@ async function reserveMarketingEmail(params: SendEmailParams & { campaignKey: st
 
 		const notification = await tx.emailNotification.create({
 			data: {
-				userId: params.userId,
+				userId: params.userId || null,
 				email: user.email.toLowerCase(),
 				notificationType: params.notificationType,
 				classification: 'marketing',
@@ -827,7 +827,7 @@ export async function sendWelcomeEmailIfNeeded(params: {
 
 		const notification = await tx.emailNotification.create({
 			data: {
-				userId: params.userId,
+				userId: params.userId || null,
 				email: params.email.toLowerCase(),
 				notificationType: 'welcome',
 				classification: 'transactional',
