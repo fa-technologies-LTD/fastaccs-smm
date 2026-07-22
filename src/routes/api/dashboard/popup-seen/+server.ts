@@ -7,6 +7,7 @@ const SITE_POPUP_TYPES = [
 	'catalog_updates',
 	'boosting_launch',
 	'boosting_crosssell',
+	'affiliate_refresh',
 	'bank_details_outcome'
 ] as const satisfies readonly SitePopupType[];
 

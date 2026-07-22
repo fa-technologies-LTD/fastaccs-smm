@@ -7,6 +7,7 @@ export type SitePopupType =
 	| 'catalog_updates'
 	| 'boosting_launch'
 	| 'boosting_crosssell'
+	| 'affiliate_refresh'
 	| 'bank_details_outcome';
 
 // Cross-sell popup only nudges buyers for their first few orders, then stops.
@@ -55,6 +56,31 @@ const BOOSTING_CROSSSELL_POPUP: PendingSitePopup = {
 	secondaryHref: '/services',
 	secondaryText: 'Boost my account →'
 };
+
+// One-time "the affiliate program got better" announcement, adaptive to whether the
+// viewer is already an active affiliate (WS3.9 all-users + WS3.2c new-affiliate notice).
+function getAffiliateRefreshPopup(isActiveAffiliate: boolean): PendingSitePopup {
+	if (isActiveAffiliate) {
+		return {
+			type: 'affiliate_refresh',
+			icon: '⚡',
+			title: 'Your affiliate program just leveled up',
+			body: 'Your referral code is ready to share — and you now earn real, withdrawable cash on every friend’s order. Spend it on-site or cash it out to your bank.',
+			ctaText: 'Got it',
+			secondaryHref: '/dashboard?tab=affiliate',
+			secondaryText: 'View my code →'
+		};
+	}
+	return {
+		type: 'affiliate_refresh',
+		icon: '🎉',
+		title: 'Earn cash by referring friends',
+		body: 'Our affiliate program is better than ever: make your first purchase to unlock your own referral code, then earn real, withdrawable cash every time a friend buys with it.',
+		ctaText: 'Got it',
+		secondaryHref: '/how-it-works?tab=affiliate',
+		secondaryText: 'See how it works →'
+	};
+}
 
 function getBankDetailsOutcomePopup(submission: {
 	status: string;
@@ -196,7 +222,10 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 			catalogUpdatesLastSeenAt: true,
 			boostingLaunchPopupSeenAt: true,
 			boostingCrossSellPopupSeenCount: true,
+			affiliateRefreshPopupSeenAt: true,
+			isAffiliateEnabled: true,
 			bankDetailsPopupSeenAt: true,
+			affiliatePrograms: { select: { status: true }, take: 1 },
 			affiliatePayoutDetails: {
 				select: { status: true, rejectionReason: true, reviewedAt: true }
 			}
@@ -219,6 +248,14 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 		if (hasUnseenOutcome) {
 			return getBankDetailsOutcomePopup(submission!);
 		}
+	}
+
+	// One-time affiliate-program refresh announcement (adaptive to affiliate status).
+	if (!user.affiliateRefreshPopupSeenAt) {
+		const isActiveAffiliate = Boolean(
+			user.isAffiliateEnabled && user.affiliatePrograms[0]?.status === 'active'
+		);
+		return getAffiliateRefreshPopup(isActiveAffiliate);
 	}
 
 	if (!user.boostingLaunchPopupSeenAt) {
@@ -262,14 +299,17 @@ export async function markSitePopupSeen(userId: string, type: SitePopupType): Pr
 		| 'firstPurchasePopupSeenAt'
 		| 'catalogUpdatesLastSeenAt'
 		| 'boostingLaunchPopupSeenAt'
+		| 'affiliateRefreshPopupSeenAt'
 		| 'bankDetailsPopupSeenAt' =
 		type === 'first_purchase'
 			? 'firstPurchasePopupSeenAt'
 			: type === 'boosting_launch'
 				? 'boostingLaunchPopupSeenAt'
-				: type === 'bank_details_outcome'
-					? 'bankDetailsPopupSeenAt'
-					: 'catalogUpdatesLastSeenAt';
+				: type === 'affiliate_refresh'
+					? 'affiliateRefreshPopupSeenAt'
+					: type === 'bank_details_outcome'
+						? 'bankDetailsPopupSeenAt'
+						: 'catalogUpdatesLastSeenAt';
 
 	await prisma.user.update({
 		where: { id: userId },
