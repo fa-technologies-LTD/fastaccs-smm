@@ -5,6 +5,29 @@ import { getAdminSettingsSnapshot } from '$lib/services/admin-settings';
 import { sanitizeBuyerOrderAccounts } from '$lib/helpers/buyer-order-visibility';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
+import { Prisma } from '@prisma/client';
+
+// Prisma Decimal objects can't cross the SvelteKit load boundary (they're non-POJOs and
+// throw "Cannot stringify arbitrary non-POJOs"). Deep-convert every Decimal to a number so
+// no field — storeCreditApplied, engagementRate, or any future one — can 500 this page.
+// Uses Prisma.Decimal.isDecimal (minification-proof) rather than constructor.name.
+function toSerializableDecimals<T>(value: T): T {
+	if (value === null || value === undefined || value instanceof Date) return value;
+	if (Prisma.Decimal.isDecimal(value)) {
+		return (value as unknown as Prisma.Decimal).toNumber() as unknown as T;
+	}
+	if (typeof value === 'object') {
+		if (Array.isArray(value)) {
+			return value.map((item) => toSerializableDecimals(item)) as unknown as T;
+		}
+		const out: Record<string, unknown> = {};
+		for (const key of Object.keys(value as Record<string, unknown>)) {
+			out[key] = toSerializableDecimals((value as Record<string, unknown>)[key]);
+		}
+		return out as T;
+	}
+	return value;
+}
 
 export const load: PageServerLoad = async ({ params, locals, url }) => {
 	if (!locals.user) {
@@ -56,11 +79,12 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			whatsappNumber: settings?.business.whatsappNumber || '',
 			loginGuideFallbackUrl: 'https://smm.fastaccs.com/support#after-purchase-guide'
 		},
-		order: {
+		order: toSerializableDecimals({
 			...buyerOrder,
 			subtotal: Number(buyerOrder.subtotal),
 			taxAmount: Number(buyerOrder.taxAmount),
 			discountAmount: Number(buyerOrder.discountAmount),
+			storeCreditApplied: Number(buyerOrder.storeCreditApplied),
 			totalAmount: Number(buyerOrder.totalAmount),
 			orderItems: buyerOrder.orderItems.map((item) => ({
 				...item,
@@ -68,6 +92,6 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 				totalPrice: Number(item.totalPrice),
 				allocatedCount: item.accounts.length
 			}))
-		}
+		})
 	};
 };
