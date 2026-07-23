@@ -1,5 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { sendEmail } from '$lib/services/email';
+import { getRewardVestingDays } from '$lib/services/affiliate-vesting';
 
 const FIRST_CREDIT_PENDING_STALE_MS = 10 * 60 * 1000;
 const AFFILIATE_UNLOCK_PENDING_STALE_MS = 10 * 60 * 1000;
@@ -77,18 +78,18 @@ export async function sendFirstStoreCreditEmailIfNeeded(params: {
 
 	if (!reservation) return false;
 
+	const vestingDays = await getRewardVestingDays();
+
 	const result = await sendEmail({
 		to: reservation.email,
-		subject: 'You earned your first Store Credit',
+		subject: 'You earned your first referral reward 🎉',
 		body: `Hi ${reservation.firstName},
 
-You just earned your first Store Credit from a successful Fast Accounts referral.
+You earned your first referral reward 🎉
 
-Store Credit earned: ₦${params.creditAmount.toLocaleString('en-US')}
+**₦${params.creditAmount.toLocaleString('en-US')}** — clearing now, yours to spend or withdraw in ${vestingDays} days.
 
-It's real, withdrawable cash — it just needs to clear first. Referral rewards become spendable and withdrawable once the order passes its return window, so you'll see this move from **Pending** to **Available** on your dashboard.
-
-Keep sharing your link to earn more on every successful referral.`,
+Keep sharing your link to earn on every order.`,
 		ctaText: 'View affiliate dashboard',
 		ctaUrl: `${getBaseUrl()}/dashboard?tab=affiliate`,
 		userId: params.userId,
@@ -186,7 +187,9 @@ export async function recoverFirstStoreCreditEmails(limit = 300): Promise<{
 	const credits = await prisma.walletTransaction.findMany({
 		where: {
 			type: 'affiliate_credit',
-			status: 'available',
+			// Rewards land as `pending` (vesting) — recovery must see those too, since the
+			// first-reward email fires at earn time, not at vest time.
+			status: { in: ['pending', 'available'] },
 			user: {
 				isActive: true,
 				email: { not: null }

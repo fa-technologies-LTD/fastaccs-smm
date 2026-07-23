@@ -11,11 +11,18 @@ export const DEFAULT_REWARD_VESTING_DAYS = 14;
 const REFUNDED_ORDER_STATUSES = new Set(['refunded', 'cancelled', 'failed', 'expired']);
 
 export async function getRewardVestingDays(): Promise<number> {
-	const row = await prisma.microcopy
-		.findFirst({ where: { key: REWARD_VESTING_DAYS_KEY }, select: { value: true } })
-		.catch(() => null);
-	const n = Number(row?.value);
-	return Number.isFinite(n) && n > 0 ? n : DEFAULT_REWARD_VESTING_DAYS;
+	// Defensive: a config-read failure must never break reward recording or the emails
+	// that depend on it — fall back to the default window.
+	try {
+		const row = await prisma.microcopy.findFirst({
+			where: { key: REWARD_VESTING_DAYS_KEY },
+			select: { value: true }
+		});
+		const n = Number(row?.value);
+		return Number.isFinite(n) && n > 0 ? n : DEFAULT_REWARD_VESTING_DAYS;
+	} catch {
+		return DEFAULT_REWARD_VESTING_DAYS;
+	}
 }
 
 export function computeVestsAt(days: number, from: Date = new Date()): Date {

@@ -72,12 +72,12 @@ export async function sendAffiliateAnnouncementEmails(): Promise<{
 		const content = isNew
 			? {
 					subject: "You're now a FastAccounts affiliate 🎉 (here's your code)",
-					body: `Hi ${firstName},\n\nYou're one of our top customers — so we've switched on affiliate access for your account. It's a win-win: your friends get a discount at checkout, and you earn real, withdrawable cash on every order they make.\n\nYour referral code: ${p.affiliateCode}\n\nShare it with friends — they save, you earn. Once your earnings reach ₦10,000 you can withdraw straight to your bank. Nothing to sign up for; it's live now.\n\nYour referral link: ${link}\n\nThanks for being one of our best 🙌 — FastAccs`,
+					body: `Hi ${firstName},\n\nYou're now a FastAccounts affiliate 🎉\n\nYour code: **${p.affiliateCode}**\n\nFriends get a discount, you earn cash on every order they make. Withdraw to your bank at ₦10,000.\n\nYour link: ${link}\n\nThanks for being one of our best 🙌 — FastAccs`,
 					ctaText: 'View my affiliate dashboard'
 				}
 			: {
 					subject: 'Your affiliate code is ready — start sharing',
-					body: `Hi ${firstName},\n\nQuick reminder: your affiliate code is ${p.affiliateCode}. Share it (or your link below) — your friends get a discount at checkout, and you earn real, withdrawable cash on every order they make. Spend it on-site or withdraw to your bank once your earnings reach ₦10,000.\n\nYour referral link: ${link}\n\n— FastAccs`,
+					body: `Hi ${firstName},\n\nYour affiliate code: **${p.affiliateCode}**\n\nFriends get a discount, you earn cash on every order. Withdraw to your bank at ₦10,000.\n\nYour link: ${link}\n\n— FastAccs`,
 					ctaText: 'Share my code'
 				};
 		const result = await sendEmail({
@@ -212,7 +212,7 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 				to: user.email,
 				userId: user.id,
 				subject: "You're earning — add your bank details to get paid",
-				body: `Hi ${firstName},\n\nYour referrals are earning you cash 🎉\n\nAdd your bank details now so your withdrawal is ready the moment you reach ₦10,000. It takes a minute — we handle the rest.\n\nYour referral link: ${referralLink}`,
+				body: `Hi ${firstName},\n\nYour referrals are earning 🎉\n\nAdd your bank details so you're ready to withdraw at ₦10,000. Takes a minute.\n\nYour link: ${referralLink}`,
 				ctaText: 'Add bank details',
 				ctaUrl: `${baseUrl}/dashboard?tab=affiliate`,
 				notificationType: 'affiliate_bank_details_nudge',
