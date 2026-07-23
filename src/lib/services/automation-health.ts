@@ -86,7 +86,11 @@ export async function evaluateAutomationHealth(): Promise<AutomationHealthSummar
 		const latestSuccess = recentRuns.find((run) => run.status === 'succeeded') || null;
 		const consecutiveFailures = recentRuns.findIndex((run) => run.status === 'succeeded');
 		const failureCount = consecutiveFailures === -1 ? recentRuns.length : consecutiveFailures;
-		const overdue = latestRun.startedAt < getOverdueThreshold(job);
+		// Jobs with no expected interval (manual / one-time, e.g. a one-off announcement)
+		// are never "overdue" — they aren't meant to run again on a schedule. They can
+		// still be flagged for repeated failures below.
+		const overdue =
+			job.expectedIntervalMinutes > 0 && latestRun.startedAt < getOverdueThreshold(job);
 		const repeatedlyFailing = failureCount >= FAILURE_ALERT_THRESHOLD;
 		const unhealthy = overdue || repeatedlyFailing;
 		const reason = overdue
