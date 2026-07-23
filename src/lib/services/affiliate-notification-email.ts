@@ -85,9 +85,10 @@ export async function sendFirstStoreCreditEmailIfNeeded(params: {
 You just earned your first Store Credit from a successful Fast Accounts referral.
 
 Store Credit earned: ₦${params.creditAmount.toLocaleString('en-US')}
-Available Store Credit: ₦${reservation.availableCredit.toLocaleString('en-US')}
 
-Nice — your first Store Credit just landed! Keep sharing your link to earn more on every successful referral. It's real, withdrawable cash.`,
+It's real, withdrawable cash — it just needs to clear first. Referral rewards become spendable and withdrawable once the order passes its return window, so you'll see this move from **Pending** to **Available** on your dashboard.
+
+Keep sharing your link to earn more on every successful referral.`,
 		ctaText: 'View affiliate dashboard',
 		ctaUrl: `${getBaseUrl()}/dashboard?tab=affiliate`,
 		userId: params.userId,

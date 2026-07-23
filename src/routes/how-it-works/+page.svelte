@@ -889,6 +889,9 @@
 								style="color: var(--text-muted); font-family: var(--font-body);"
 							>
 								Cash is real Naira and fully withdrawable once you meet the payout minimums.
+									New rewards show as <strong style="color: var(--text);">Pending</strong> while the
+									order clears its return window, then move to
+									<strong style="color: var(--text);">Available</strong> to spend or withdraw.
 							</p>
 							<ul class="space-y-2">
 								<li class="flex items-start gap-2" style="color: var(--text);">
