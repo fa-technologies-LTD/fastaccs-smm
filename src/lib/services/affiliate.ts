@@ -9,6 +9,11 @@ import {
 import { sendAffiliatePayoutStatusEmailIfNeeded } from '$lib/services/affiliate-payout-email';
 import { sendEmail } from '$lib/services/email';
 import { getOperationalAlertRecipients } from '$lib/services/admin-settings';
+import {
+	getRewardVestingDays,
+	computeVestsAt,
+	detectSharedPayoutBank
+} from '$lib/services/affiliate-vesting';
 
 export const AFFILIATE_REFERRAL_COOKIE = 'fa_aff_ref';
 
@@ -1705,6 +1710,7 @@ async function recordSuperAffiliateActivation(params: {
 		.findUnique({ where: { id: referredUserId }, select: { fullName: true } })
 		.catch(() => null);
 	const referralName = formatAffiliateDisplayName(referredUser?.fullName);
+	const superVestsAt = computeVestsAt(await getRewardVestingDays());
 
 	try {
 		await prisma.$transaction(async (tx) => {
@@ -1714,8 +1720,7 @@ async function recordSuperAffiliateActivation(params: {
 				create: { userId: superUserId, balance: 0, currency: 'NGN' }
 			});
 			const balanceBefore = Number(wallet.balance || 0);
-			const balanceAfter = balanceBefore + SUPER_ACTIVATION_REWARD;
-			await tx.wallet.update({ where: { id: wallet.id }, data: { balance: balanceAfter } });
+			// Vesting: pending, not added to the balance until it vests (same as regular).
 			await tx.walletTransaction.create({
 				data: {
 					walletId: wallet.id,
@@ -1723,10 +1728,10 @@ async function recordSuperAffiliateActivation(params: {
 					type: 'affiliate_credit',
 					amount: SUPER_ACTIVATION_REWARD,
 					balanceBefore,
-					balanceAfter,
+					balanceAfter: balanceBefore,
 					description: 'Super affiliate — referral activated',
 					reference: activationReference,
-					status: AFFILIATE_LEDGER_STATUS.available,
+					status: AFFILIATE_LEDGER_STATUS.pending,
 					metadata: {
 						kind: 'super_activation',
 						referredUserId,
@@ -1734,7 +1739,8 @@ async function recordSuperAffiliateActivation(params: {
 						activatedByOrderId: triggerOrderId,
 						cumulativeSpend,
 						orderCount,
-						lifecycleStatus: AFFILIATE_LEDGER_STATUS.available
+						vestsAt: superVestsAt.toISOString(),
+						lifecycleStatus: AFFILIATE_LEDGER_STATUS.pending
 					}
 				}
 			});
@@ -1756,7 +1762,7 @@ async function recordSuperAffiliateActivation(params: {
 					userId: superUserId,
 					type: 'affiliate_store_credit',
 					title: 'Referral qualified 🎉',
-					message: `${referralName} qualified — ₦${SUPER_ACTIVATION_REWARD.toLocaleString()} earned.`
+					message: `${referralName} qualified — ₦${SUPER_ACTIVATION_REWARD.toLocaleString()} earned. It clears for spending and withdrawal after the return window.`
 				}
 			});
 		});
@@ -1941,6 +1947,16 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 			Math.min(config.storeCreditMax, normalizedCredit)
 		);
 		const creditAmount = toRoundedNaira(boundedCredit);
+		const rewardVestsAt = computeVestsAt(await getRewardVestingDays());
+		const suspectedSelfReferral = await detectSharedPayoutBank(
+			order.affiliateUserId as string,
+			order.userId as string
+		);
+		if (suspectedSelfReferral) {
+			console.warn(
+				`[affiliate] suspected self-referral on order ${order.id}: buyer ${order.userId} shares a payout bank with affiliate ${order.affiliateUserId}. Reward flagged — will not auto-vest until admin review.`
+			);
+		}
 
 		await prisma.$transaction(async (tx) => {
 			const wallet = await tx.wallet.upsert({
@@ -1954,15 +1970,10 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 			});
 
 			const balanceBefore = Number(wallet.balance || 0);
-			const balanceAfter = balanceBefore + creditAmount;
 
-			await tx.wallet.update({
-				where: { id: wallet.id },
-				data: {
-					balance: balanceAfter
-				}
-			});
-
+			// Vesting: record as PENDING and do NOT add to the spendable balance yet. A
+			// vesting job flips it to available after the refund window; a refund inside
+			// the window voids it (see affiliate-vesting.ts).
 			await tx.walletTransaction.create({
 				data: {
 					walletId: wallet.id,
@@ -1970,16 +1981,18 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 					type: 'affiliate_credit',
 					amount: creditAmount,
 					balanceBefore,
-					balanceAfter,
+					balanceAfter: balanceBefore,
 					description: `Store Credit from referred order ${order.orderNumber}`,
 					reference,
-					status: AFFILIATE_LEDGER_STATUS.available,
+					status: AFFILIATE_LEDGER_STATUS.pending,
 					metadata: {
 						orderId: order.id,
 						buyerUserId: order.userId,
 						affiliateCode: order.affiliateCode,
 						awardedFrom: 'referral_order',
-						lifecycleStatus: AFFILIATE_LEDGER_STATUS.available
+						vestsAt: rewardVestsAt.toISOString(),
+						lifecycleStatus: AFFILIATE_LEDGER_STATUS.pending,
+						...(suspectedSelfReferral ? { suspectedSelfReferral: true } : {})
 					}
 				}
 			});
@@ -2000,8 +2013,8 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 				data: {
 					userId: order.affiliateUserId as string,
 					type: 'affiliate_store_credit',
-					title: 'Cash approved',
-					message: `₦${creditAmount.toLocaleString()} was added from referred order ${order.orderNumber}.`
+					title: 'Referral reward earned',
+					message: `₦${creditAmount.toLocaleString()} from referred order ${order.orderNumber} — it clears for spending and withdrawal after the return window.`
 				}
 			});
 		});

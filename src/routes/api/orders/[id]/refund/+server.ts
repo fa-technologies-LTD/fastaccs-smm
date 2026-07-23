@@ -3,6 +3,10 @@ import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { creditStoreCredit, SC_CREDIT_REFUND } from '$lib/services/store-credit';
 import { maybeVoidSuperActivationOnRefund } from '$lib/services/affiliate';
+import {
+	voidUnvestedRewardsForOrder,
+	reverseVestedRegularRewardForOrder
+} from '$lib/services/affiliate-vesting';
 import { maybeClawbackSpendMilestones } from '$lib/services/spend-milestones';
 import { createAdminAuditLog } from '$lib/services/admin-audit';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
@@ -77,6 +81,16 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 		userId: order.userId,
 		affiliateUserId: order.affiliateUserId
 	}).catch((error) => console.error('super activation void failed:', error));
+
+	// Vesting: void any still-pending affiliate reward for this order (a refund inside the
+	// window means it simply never vests), and reverse a regular reward that already
+	// vested as a backstop for late refunds.
+	await voidUnvestedRewardsForOrder(order.id).catch((error) =>
+		console.error('void unvested affiliate reward failed:', error)
+	);
+	await reverseVestedRegularRewardForOrder(order.id).catch((error) =>
+		console.error('reverse vested affiliate reward failed:', error)
+	);
 
 	// If the refund drops the buyer below a spend milestone, void the unspent reward.
 	await maybeClawbackSpendMilestones(order.userId).catch((error) =>
