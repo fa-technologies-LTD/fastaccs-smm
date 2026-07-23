@@ -637,17 +637,6 @@
 						{/if}
 					</p>
 				</div>
-				<p class="mt-2 text-sm" style="color: var(--text-muted);">
-					Payout unlocks at
-					<strong style="color: var(--text);"
-						>₦{toNumber(affiliateData?.payoutMinimum).toLocaleString()}</strong
-					>
-					approved Cash and
-					<strong style="color: var(--text);"
-						>{toNumber(affiliateData?.payoutMinAccountAgeDays)} days</strong
-					>
-					affiliate age.
-				</p>
 				<p
 					class="mt-2 text-sm"
 					style="color: {affiliateData?.payoutEligible ? 'var(--primary)' : 'var(--text-muted)'};"
@@ -689,18 +678,22 @@
 					>
 						Pending: ₦{toNumber(affiliateData?.pendingStoreCredit).toLocaleString()}
 					</span>
-					<span
-						class="rounded-full px-2.5 py-1"
-						style="background: rgba(226,75,74,0.12); border: 1px solid rgba(226,75,74,0.28); color: #ffb5b1;"
-					>
-						Under review: ₦{toNumber(affiliateData?.underReviewStoreCredit).toLocaleString()}
-					</span>
-					<span
-						class="rounded-full px-2.5 py-1"
-						style="background: rgba(105,109,250,0.16); border: 1px solid rgba(105,109,250,0.35); color: #c0c4ff;"
-					>
-						Requested: ₦{toNumber(affiliateData?.requestedStoreCredit).toLocaleString()}
-					</span>
+					{#if toNumber(affiliateData?.underReviewStoreCredit) > 0}
+						<span
+							class="rounded-full px-2.5 py-1"
+							style="background: rgba(226,75,74,0.12); border: 1px solid rgba(226,75,74,0.28); color: #ffb5b1;"
+						>
+							Under review: ₦{toNumber(affiliateData?.underReviewStoreCredit).toLocaleString()}
+						</span>
+					{/if}
+					{#if toNumber(affiliateData?.requestedStoreCredit) > 0}
+						<span
+							class="rounded-full px-2.5 py-1"
+							style="background: rgba(105,109,250,0.16); border: 1px solid rgba(105,109,250,0.35); color: #c0c4ff;"
+						>
+							Requested: ₦{toNumber(affiliateData?.requestedStoreCredit).toLocaleString()}
+						</span>
+					{/if}
 				</div>
 			</div>
 

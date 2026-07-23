@@ -72,6 +72,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 					orderNumber: order.orderNumber,
 					orderDate: order.createdAt,
 					deliveredAt: order.deliveredAt,
+					status: order.status,
+					deliveryStatus: order.deliveryStatus,
 					categoryName: item.category.name,
 					platform: item.productCategory || item.category.name,
 					quantity: item.quantity,

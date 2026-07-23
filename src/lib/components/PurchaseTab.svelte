@@ -74,8 +74,19 @@
 		return buildWhatsAppSupportLink(whatsappNumber, msg);
 	}
 
+	function isManualHandoverFulfilled(purchase: any): boolean {
+		return (
+			purchase.deliveryMode === 'manual_handover' &&
+			(purchase.deliveryStatus === 'delivered' ||
+				purchase.status === 'completed' ||
+				Boolean(purchase.deliveredAt))
+		);
+	}
+
 	function getPurchaseStatusLabel(purchase: any): string {
-		if (purchase.deliveryMode === 'manual_handover') return 'Manual handover';
+		if (purchase.deliveryMode === 'manual_handover') {
+			return isManualHandoverFulfilled(purchase) ? 'Handover complete' : 'Manual handover';
+		}
 		return purchase.accounts?.length > 0 ? 'Delivered' : 'Processing';
 	}
 </script>
@@ -324,6 +335,26 @@
 								</div>
 							{/each}
 						</div>
+					{:else if purchase.deliveryMode === 'manual_handover' && isManualHandoverFulfilled(purchase)}
+						<div
+							class="flex flex-wrap items-center justify-between gap-2 rounded-[var(--r-sm)] border p-3 text-sm"
+							style="border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--text);"
+						>
+							<span class="inline-flex items-center gap-1.5 font-semibold" style="color: var(--status-success);">
+								✓ Handover complete
+							</span>
+							{#if getManualHandoverLink(purchase)}
+								<a
+									href={getManualHandoverLink(purchase)}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="text-xs font-medium underline-offset-2 hover:underline"
+									style="color: var(--text-muted);"
+								>
+									Resend receipt on WhatsApp
+								</a>
+							{/if}
+						</div>
 					{:else if purchase.deliveryMode === 'manual_handover' && getManualHandoverLink(purchase)}
 						<a
 							href={getManualHandoverLink(purchase)}
@@ -332,7 +363,7 @@
 							class="inline-flex w-full items-center justify-center rounded-xl px-5 py-3 text-sm font-bold transition-all hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98]"
 							style="background: linear-gradient(180deg, rgba(5, 212, 113, 0.98), rgba(13, 145, 82, 0.98)); border: 1px solid rgba(5, 212, 113, 0.5); color: #04140c;"
 						>
-							Send receipt on WhatsApp
+							Continue on WhatsApp
 						</a>
 					{:else}
 						<div
