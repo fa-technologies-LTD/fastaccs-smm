@@ -106,6 +106,14 @@ export const AUTOMATION_JOBS = {
 		risk: 'financial',
 		lockTimeoutMinutes: 15,
 		expectedIntervalMinutes: 180
+	},
+	'phone-rentals-sweep': {
+		name: 'phone-rentals-sweep',
+		path: '/api/internal/cron/phone-rentals-sweep',
+		schedule: 'every 5 minutes',
+		risk: 'financial',
+		lockTimeoutMinutes: 10,
+		expectedIntervalMinutes: 5
 	}
 } as const satisfies Record<string, AutomationJobDefinition>;
 

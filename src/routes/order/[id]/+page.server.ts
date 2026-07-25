@@ -46,7 +46,8 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			orderItems: {
 				include: {
 					accounts: true,
-					category: true
+					category: true,
+					phoneRental: true
 				}
 			},
 			user: {
@@ -72,9 +73,27 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 	const settings = await getAdminSettingsSnapshot().catch(() => null);
 	const buyerOrder = sanitizeBuyerOrderAccounts(order);
 
+	// Phone (Numbers) orders: expose the rented number + OTP state for the live view.
+	const phoneItem = order.orderType === 'phone'
+		? order.orderItems.find((item) => item.phoneRental)
+		: null;
+	const phone = phoneItem?.phoneRental
+		? {
+				orderItemId: phoneItem.id,
+				serviceName: phoneItem.phoneRental.serviceName,
+				countryName: phoneItem.phoneRental.countryName,
+				phoneNumber: phoneItem.phoneRental.phoneNumber,
+				status: phoneItem.phoneRental.status,
+				otp: phoneItem.phoneRental.otp,
+				smsMessage: phoneItem.phoneRental.smsMessage,
+				expiresAt: phoneItem.phoneRental.expiresAt?.toISOString() ?? null
+			}
+		: null;
+
 	// Convert Decimal fields to numbers for serialization
 	return {
 		fromTab,
+		phone,
 		support: {
 			whatsappNumber: settings?.business.whatsappNumber || '',
 			loginGuideFallbackUrl: 'https://smm.fastaccs.com/support#after-purchase-guide'

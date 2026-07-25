@@ -241,12 +241,46 @@ model OrderItem {
   category         Category  @relation(fields: [categoryId], references: [id])
   order            Order     @relation(fields: [orderId], references: [id])
   reviews          Review[]
+  phoneRental      PhoneRental?
 
   @@index([orderId])
   @@index([categoryId])
   @@index([allocationStatus])
   @@index([boostFulfillmentStatus])
   @@map("order_items")
+}
+
+// Automated verification-number (SMS/OTP) rental fulfilled via hub-man.
+// One per phone-type OrderItem; orderItemId is the idempotency key.
+model PhoneRental {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderItemId   String    @unique @map("order_item_id") @db.Uuid
+  hubOrderUuid  String?   @map("hub_order_uuid")
+  serviceId     Int       @map("service_id")
+  serviceName   String    @map("service_name")
+  countryId     Int       @map("country_id")
+  countryName   String    @map("country_name")
+  phoneNumber   String?   @map("phone_number")
+  // pending | renting | awaiting_sms | received | expired | cancelled | refunded | failed
+  status        String    @default("pending")
+  otp           String?
+  smsMessage    String?   @map("sms_message")
+  senderName    String?   @map("sender_name")
+  costCents     Int?      @map("cost_cents") // actual hub-man price_cents charged (USD cents)
+  maxPriceCents Int?      @map("max_price_cents") // ceiling we sent (USD cents)
+  saleAmountNgn Decimal?  @map("sale_amount_ngn") // what the customer paid, NGN
+  expiresAt     DateTime? @map("expires_at")
+  receivedAt    DateTime? @map("received_at")
+  refundedAt    DateTime? @map("refunded_at")
+  failureReason String?   @map("failure_reason")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @map("updated_at")
+  orderItem     OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([hubOrderUuid])
+  @@index([createdAt])
+  @@map("phone_rentals")
 }
 
 model CartItem {

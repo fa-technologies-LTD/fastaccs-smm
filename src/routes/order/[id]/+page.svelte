@@ -3,6 +3,7 @@
 	import { CheckCircle, Clock, XCircle, Copy, ExternalLink, CircleHelp } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import NumbersOtpCard from '$lib/components/NumbersOtpCard.svelte';
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import { formatDate, formatPrice, copyToClipboard, copyAllAccounts } from '$lib/helpers/utils';
@@ -166,6 +167,10 @@
 			</h1>
 			<p style="color: var(--text-muted);">Placed on {formatDate(data.order.createdAt)}</p>
 		</div>
+
+		{#if data.phone}
+			<NumbersOtpCard phone={data.phone} />
+		{/if}
 
 		<div class="grid gap-8 lg:grid-cols-3">
 			<!-- Order Details -->

@@ -14,6 +14,7 @@ import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
 import { notifyManualHandoverOrderPaid, notifyBoostingOrderPaid } from '$lib/services/manual-handover';
 import { logOrderStatusTransition } from '$lib/services/order-audit';
 import { isManualHandoverOrder, isBoostingOrder } from '$lib/services/order-delivery-mode';
+import { fulfillPhoneOrder, isPhoneOrder } from '$lib/services/phone-fulfillment';
 import { releaseOrderReservations } from '$lib/services/order-reservations';
 import { reverseStoreCreditRedemption } from '$lib/services/store-credit';
 import { maybeGrantSpendMilestones } from '$lib/services/spend-milestones';
@@ -40,6 +41,7 @@ export interface PaymentSettlementResult {
 	status: 'PAID' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'PENDING';
 	manualHandover?: boolean;
 	boosting?: boolean;
+	phone?: boolean;
 	warning?: string | null;
 	error?: string;
 }
@@ -334,6 +336,30 @@ export async function recoverPaidOrder(
 			status: 'PAID',
 			manualHandover: true,
 			warning: 'Payment confirmed. Manual handover is in progress on WhatsApp.'
+		};
+	}
+
+	if (order.orderType === 'phone' && (await isPhoneOrder(order.id))) {
+		const phoneResult = await fulfillPhoneOrder(order.id, source);
+		await recordAffiliateStoreCreditForOrder(order.id).catch((error) => {
+			console.error(`[payments.${source}] failed to record affiliate store credit:`, error);
+		});
+		if (order.userId) {
+			void maybeSendAffiliateUnlockInvite(order.userId);
+		}
+		void sendServerPurchaseVerifiedEvent(order.id, 'PAID');
+		invalidateAdminStatsCache();
+		return {
+			success: true,
+			orderId: order.id,
+			status: phoneResult.status === 'received' ? 'COMPLETED' : 'PAID',
+			phone: true,
+			warning:
+				phoneResult.status === 'refunded'
+					? phoneResult.message
+					: phoneResult.status === 'received'
+						? null
+						: 'Payment confirmed. Your number is ready — waiting for the code.'
 		};
 	}
 

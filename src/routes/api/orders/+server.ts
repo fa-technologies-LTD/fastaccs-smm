@@ -465,7 +465,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		const categories = await prisma.category.findMany({
 			where: {
 				id: { in: uniqueCategoryIds },
-				categoryType: { in: ['tier', 'boosting_service'] },
+				categoryType: { in: ['tier', 'boosting_service', 'numbers_tier'] },
 				isActive: true
 			},
 			include: {
@@ -603,7 +603,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						(item) =>
 							!item.exactAccountId &&
 							!item.boostTargetUrl &&
-							item.deliveryMode !== 'manual_handover'
+							item.deliveryMode !== 'manual_handover' &&
+							item.deliveryMode !== 'auto_sms'
 					)
 					.map((item) => item.categoryId)
 			)
@@ -626,9 +627,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 		for (const item of itemsWithNames) {
 			if (item.exactAccountId || item.boostTargetUrl) continue;
-			// Manual-handover tiers have no account inventory — availability is the
-			// owner toggle, not a stock count.
-			if (item.deliveryMode === 'manual_handover') {
+			// Manual-handover and auto-SMS (Numbers) tiers have no account inventory —
+			// availability is a toggle/flag, not a stock count.
+			if (item.deliveryMode === 'manual_handover' || item.deliveryMode === 'auto_sms') {
 				if (!getTierStockStatus(item.categoryMetadata, 0).available) {
 					return json(
 						{ success: false, error: `${item.categoryName} is currently unavailable.` },
@@ -664,6 +665,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		}
 
 		const isBoostingCheckout = orderDeliveryMode === 'boosting_manual';
+		const isPhoneCheckout = orderDeliveryMode === 'auto_sms';
 		const requestedPromotionCode = String(orderData.promotionCode || '')
 			.trim()
 			.toUpperCase();
@@ -882,7 +884,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						deliveryContact: customerEmail,
 						deliveryStatus: isManualHandoverOrder ? 'processing' : 'pending',
 						status: 'pending',
-						orderType: isBoostingCheckout ? 'boosting' : 'account',
+						orderType: isBoostingCheckout ? 'boosting' : isPhoneCheckout ? 'phone' : 'account',
 						affiliateCode: attribution.affiliateCode || null,
 						affiliateUserId: attribution.affiliateUserId || null,
 						promotionId,
@@ -916,9 +918,12 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				await reserveStandardAccountsForOrder({
 					client: tx,
 					reservedUntil: reservationExpiresAt,
-					// Manual-handover items have no account inventory to reserve.
+					// Manual-handover and auto-SMS items have no account inventory to reserve.
 					items: reservationItems.filter(
-						(item) => !item.boostTargetUrl && item.deliveryMode !== 'manual_handover'
+						(item) =>
+							!item.boostTargetUrl &&
+							item.deliveryMode !== 'manual_handover' &&
+							item.deliveryMode !== 'auto_sms'
 					)
 				});
 

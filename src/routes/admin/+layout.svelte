@@ -20,7 +20,8 @@
 		Mail,
 		Tag,
 		Activity,
-		Zap
+		Zap,
+		Phone
 	} from '$lib/icons';
 
 	import logo from '$lib/assets/logo.png';
@@ -74,6 +75,12 @@
 				href: '/admin/boosting-services',
 				label: 'Boosting Services',
 				icon: Zap,
+				permission: 'admin:catalog:manage'
+			},
+			{
+				href: '/admin/numbers',
+				label: 'Numbers',
+				icon: Phone,
 				permission: 'admin:catalog:manage'
 			},
 			{

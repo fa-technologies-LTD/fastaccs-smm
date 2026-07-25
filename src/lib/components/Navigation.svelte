@@ -246,6 +246,13 @@
 						Browse Accounts
 					</a>
 					<a
+						href="/numbers"
+						data-sveltekit-preload-data="hover"
+						class="nav-link-active font-medium"
+					>
+						Numbers
+					</a>
+					<a
 						href="/services"
 						data-sveltekit-preload-data="hover"
 						class="nav-link-active font-medium"
@@ -263,6 +270,9 @@
 					<!-- Guest Navigation -->
 					<a href="/platforms" data-sveltekit-preload-data="hover" class="nav-link font-medium">
 						Accounts
+					</a>
+					<a href="/numbers" data-sveltekit-preload-data="hover" class="nav-link font-medium">
+						Numbers
 					</a>
 					<a href="/services" data-sveltekit-preload-data="hover" class="nav-link font-medium">
 						Boosting Services
@@ -577,6 +587,13 @@
 							class="nav-link-active block py-3 text-sm font-medium"
 						>
 							Browse Accounts
+						</a>
+						<a
+							href="/numbers"
+							data-sveltekit-preload-data="hover"
+							class="nav-link-active block py-3 text-sm font-medium"
+						>
+							Numbers
 						</a>
 						<a
 							href="/services"

@@ -13,8 +13,9 @@ export const DEFAULT_LOGIN_GUIDE_LABEL = 'How to login this account';
 export const INSTANT_DELIVERY_LABEL = 'Instant Delivery';
 export const MANUAL_HANDOVER_WHATSAPP_LABEL = 'Manual Handover (WhatsApp)';
 export const BOOSTING_MANUAL_LABEL = 'Boosting Order';
+export const AUTO_SMS_LABEL = 'Instant Number (OTP)';
 
-export type TierDeliveryMode = 'instant_auto' | 'manual_handover' | 'boosting_manual';
+export type TierDeliveryMode = 'instant_auto' | 'manual_handover' | 'boosting_manual' | 'auto_sms';
 
 export interface TierDeliveryConfig {
 	mode: TierDeliveryMode;
@@ -47,12 +48,18 @@ export function getTierStockStatus(
 	if (config.mode === 'manual_handover') {
 		return { isManual: true, available: config.manualAvailable, showAsCount: false };
 	}
+	// Auto-SMS (Numbers) tiers have no account inventory — availability is the tier's
+	// active flag (checked upstream). Treat as available, no numeric count.
+	if (config.mode === 'auto_sms') {
+		return { isManual: true, available: true, showAsCount: false };
+	}
 	return { isManual: false, available: availableAccountCount > 0, showAsCount: true };
 }
 
 export function getTierDeliveryModeLabel(mode: TierDeliveryMode): string {
 	if (mode === 'manual_handover') return MANUAL_HANDOVER_WHATSAPP_LABEL;
 	if (mode === 'boosting_manual') return BOOSTING_MANUAL_LABEL;
+	if (mode === 'auto_sms') return AUTO_SMS_LABEL;
 	return INSTANT_DELIVERY_LABEL;
 }
 
@@ -86,6 +93,7 @@ export function normalizeTierDeliveryMode(value: unknown): TierDeliveryMode {
 	const normalized = value.trim().toLowerCase();
 	if (normalized === 'manual_handover') return 'manual_handover';
 	if (normalized === 'boosting_manual') return 'boosting_manual';
+	if (normalized === 'auto_sms') return 'auto_sms';
 	return 'instant_auto';
 }
 
