@@ -87,21 +87,25 @@
 	});
 </script>
 
-<div class="rounded-2xl border border-sky-200 bg-sky-50/40 p-6 mb-6">
+<div class="rounded-2xl p-6 mb-6" style="border: 1px solid var(--border); background: var(--surface);">
 	<div class="flex items-center gap-2 mb-4">
-		<Phone class="w-5 h-5 text-sky-600" />
-		<h3 class="font-semibold text-lg">{phone.serviceName} — {phone.countryName}</h3>
+		<Phone class="w-5 h-5" style="color: var(--fa-lime-400);" />
+		<h3 class="font-semibold text-lg" style="color: var(--text);">{phone.serviceName} — {phone.countryName}</h3>
 	</div>
 
 	{#if phoneNumber}
-		<div class="flex items-center justify-between bg-white rounded-lg border border-gray-200 px-4 py-3 mb-4">
+		<div
+			class="flex items-center justify-between rounded-lg px-4 py-3 mb-4"
+			style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+		>
 			<div>
-				<div class="text-xs text-gray-500">Your number</div>
-				<div class="text-xl font-mono font-semibold tracking-wide">{phoneNumber}</div>
+				<div class="text-xs" style="color: var(--text-muted);">Your number</div>
+				<div class="text-xl font-mono font-semibold tracking-wide" style="color: var(--text);">{phoneNumber}</div>
 			</div>
 			<button
 				onclick={() => copy(phoneNumber ?? '', 'Number')}
-				class="inline-flex items-center gap-1 text-sm text-sky-600 hover:underline"
+				class="inline-flex items-center gap-1 text-sm hover:underline"
+				style="color: var(--fa-lime-400);"
 			>
 				<Copy class="w-4 h-4" /> Copy
 			</button>
@@ -109,36 +113,37 @@
 	{/if}
 
 	{#if isReceived && otp}
-		<div class="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-4 text-center">
-			<div class="text-xs text-emerald-700 mb-1 flex items-center justify-center gap-1">
+		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid #34d399; background: rgba(16,185,129,0.10);">
+			<div class="text-xs mb-1 flex items-center justify-center gap-1" style="color: #34d399;">
 				<ShieldCheck class="w-4 h-4" /> Your code arrived
 			</div>
 			<button
 				onclick={() => copy(otp ?? '', 'Code')}
-				class="text-3xl font-bold font-mono tracking-widest text-emerald-800 hover:opacity-80"
+				class="text-3xl font-bold font-mono tracking-widest hover:opacity-80"
+				style="color: #34d399;"
 				title="Click to copy"
 			>
 				{otp}
 			</button>
 			{#if smsMessage}
-				<div class="text-xs text-gray-500 mt-2">{smsMessage}</div>
+				<div class="text-xs mt-2" style="color: var(--text-muted);">{smsMessage}</div>
 			{/if}
 		</div>
 	{:else if isWaiting}
-		<div class="rounded-lg bg-white border border-gray-200 px-4 py-4 text-center">
-			<div class="inline-flex items-center gap-2 text-gray-600">
-				<RefreshCw class="w-4 h-4 animate-spin text-sky-500" />
+		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
+			<div class="inline-flex items-center gap-2" style="color: var(--text);">
+				<RefreshCw class="w-4 h-4 animate-spin" style="color: var(--fa-lime-400);" />
 				Waiting for your code…
 			</div>
 			{#if countdown}
-				<div class="text-xs text-gray-400 mt-1">Expires in {countdown}</div>
+				<div class="text-xs mt-1" style="color: var(--text-muted);">Expires in {countdown}</div>
 			{/if}
-			<div class="text-xs text-gray-400 mt-2">
+			<div class="text-xs mt-2" style="color: var(--text-dim);">
 				Use this number now on {phone.serviceName}. Your code appears here automatically.
 			</div>
 		</div>
 	{:else if isRefunded}
-		<div class="rounded-lg bg-amber-50 border border-amber-200 px-4 py-4 text-center text-amber-800">
+		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid rgba(245,158,11,0.4); background: rgba(245,158,11,0.10); color: #fbbf24;">
 			<div class="inline-flex items-center gap-2">
 				<AlertTriangle class="w-4 h-4" />
 				No code arrived — you've been refunded to store credit.

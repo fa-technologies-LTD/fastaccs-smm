@@ -214,7 +214,13 @@
 						orderId = resolvedOrderId;
 						clearPendingOrderStorage();
 						cart.clear();
-						if (result.boosting === true) {
+						if (result.phone === true) {
+							showSuccess(
+								result.status === 'COMPLETED' ? 'Your code is ready!' : 'Number ready!',
+								'View your number and code on your order page.'
+							);
+							goto(`/order/${resolvedOrderId}`);
+						} else if (result.boosting === true) {
 							showSuccess('Payment confirmed!', 'Your boost is now being processed.');
 							goto(getOrdersDashboardPath(resolvedOrderId));
 						} else if (

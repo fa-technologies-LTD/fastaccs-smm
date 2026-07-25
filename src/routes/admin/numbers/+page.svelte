@@ -39,30 +39,23 @@
 	);
 	const activeCount = $derived(rows.filter((r) => r.active && r.priceNgn > 0).length);
 
-	// Round UP to the nearest ₦50 for clean customer-facing prices.
 	function roundNgnUp(amount: number, step = 50): number {
 		if (!Number.isFinite(amount) || amount <= 0) return 0;
 		return Math.ceil(amount / step) * step;
 	}
-
 	function costCentsOf(r: Row): number {
 		return r.liveCostCents ?? r.expectedCostCents ?? 0;
 	}
-
-	// The auto-calculated naira price = cost($) × rate × (1 + margin%).
 	function computedPrice(r: Row): number {
 		const cents = costCentsOf(r);
 		if (!cents) return 0;
 		return roundNgnUp((cents / 100) * usdNgnRate * (1 + marginPercent / 100));
 	}
-
 	function costLabel(r: Row): string {
 		const cents = costCentsOf(r);
 		if (!cents) return '—';
-		const usd = (cents / 100).toFixed(2);
-		return `$${usd}${r.liveCostCents == null ? ' (last known)' : ''}`;
+		return `$${(cents / 100).toFixed(2)}${r.liveCostCents == null ? ' *' : ''}`;
 	}
-
 	function applyToAll() {
 		for (const r of rows) r.priceNgn = computedPrice(r);
 		showSuccess('Prices calculated from your rate + margin. Review and Save all.');
@@ -76,7 +69,6 @@
 		});
 		return res.json();
 	}
-
 	async function saveAll() {
 		saving = true;
 		try {
@@ -92,7 +84,6 @@
 			saving = false;
 		}
 	}
-
 	async function refreshCatalog() {
 		seeding = true;
 		try {
@@ -107,13 +98,13 @@
 	}
 </script>
 
-<div class="p-6 max-w-6xl mx-auto">
+<div class="p-6 max-w-6xl mx-auto" style="color: var(--text);">
 	<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
 		<div class="flex items-center gap-3">
-			<Phone class="w-6 h-6 text-sky-500" />
+			<Phone class="w-6 h-6" style="color: var(--fa-lime-400);" />
 			<div>
-				<h1 class="text-2xl font-bold">Numbers — Pricing</h1>
-				<p class="text-sm text-gray-500">
+				<h1 class="text-2xl font-bold" style="color: var(--text);">Numbers — Pricing</h1>
+				<p class="text-sm" style="color: var(--text-muted);">
 					Set your dollar rate + profit margin to auto-calculate prices. Override any row if needed.
 				</p>
 			</div>
@@ -121,14 +112,16 @@
 		<div class="flex items-center gap-2">
 			<a
 				href="/admin/numbers/analytics"
-				class="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
+				class="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg"
+				style="border: 1px solid var(--border); color: var(--text);"
 			>
 				Analytics
 			</a>
 			<button
 				onclick={refreshCatalog}
 				disabled={seeding}
-				class="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+				class="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg disabled:opacity-50"
+				style="border: 1px solid var(--border); color: var(--text);"
 			>
 				<RefreshCw class="w-4 h-4 {seeding ? 'animate-spin' : ''}" />
 				Refresh costs
@@ -136,7 +129,8 @@
 			<button
 				onclick={saveAll}
 				disabled={saving}
-				class="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
+				class="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg font-medium disabled:opacity-50"
+				style="background: var(--fa-lime-700); color: #0a0a0a;"
 			>
 				<Save class="w-4 h-4" />
 				{saving ? 'Saving…' : 'Save all'}
@@ -145,49 +139,55 @@
 	</div>
 
 	{#if !data.hubmanConfigured}
-		<div class="mb-4 p-3 rounded-lg bg-amber-50 text-amber-800 text-sm flex items-center gap-2">
+		<div
+			class="mb-4 p-3 rounded-lg text-sm flex items-center gap-2"
+			style="background: rgba(245,158,11,0.12); color: #fbbf24;"
+		>
 			<AlertTriangle class="w-4 h-4" /> hub-man API token not configured — set HUBMAN_API_TOKEN.
 		</div>
 	{/if}
 
-	<!-- Pricing rules: the two numbers that drive every price -->
-	<div class="mb-6 rounded-xl border border-sky-200 bg-sky-50/50 p-5">
+	<!-- Pricing rules -->
+	<div class="mb-6 rounded-xl p-5" style="border: 1px solid var(--border); background: var(--surface);">
 		<div class="flex items-center gap-2 mb-3">
-			<DollarSign class="w-5 h-5 text-sky-600" />
-			<h2 class="font-semibold text-sky-900">Pricing rules</h2>
+			<DollarSign class="w-5 h-5" style="color: var(--fa-lime-400);" />
+			<h2 class="font-semibold" style="color: var(--text);">Pricing rules</h2>
 		</div>
-		<p class="text-sm text-gray-600 mb-4">
+		<p class="text-sm mb-4" style="color: var(--text-muted);">
 			Customer price = <span class="font-mono">hub-man cost ($) × your rate × (1 + margin%)</span>,
 			rounded up to the nearest ₦50.
 		</p>
 		<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
 			<label class="block">
-				<span class="text-xs font-medium text-gray-600">Dollar rate (₦ per $1)</span>
+				<span class="text-xs font-medium" style="color: var(--text-muted);">Dollar rate (₦ per $1)</span>
 				<input
 					type="number"
 					bind:value={usdNgnRate}
 					min="1"
-					class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2"
+					class="mt-1 w-full rounded-lg px-3 py-2"
+					style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
 				/>
 			</label>
 			<label class="block">
-				<span class="text-xs font-medium text-gray-600">Profit margin (%)</span>
+				<span class="text-xs font-medium" style="color: var(--text-muted);">Profit margin (%)</span>
 				<input
 					type="number"
 					bind:value={marginPercent}
 					min="0"
-					class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2"
+					class="mt-1 w-full rounded-lg px-3 py-2"
+					style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
 				/>
 			</label>
 			<button
 				type="button"
 				onclick={applyToAll}
-				class="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-700"
+				class="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium"
+				style="background: var(--fa-lime-700); color: #0a0a0a;"
 			>
 				<DollarSign class="w-4 h-4" /> Calculate all prices
 			</button>
 		</div>
-		<p class="text-xs text-gray-500 mt-3">
+		<p class="text-xs mt-3" style="color: var(--text-dim);">
 			“Calculate all prices” fills every row below. You can still edit any single price before saving.
 		</p>
 	</div>
@@ -195,24 +195,27 @@
 	<!-- Balance -->
 	<div class="mb-6">
 		<div
-			class="inline-flex items-center gap-3 px-4 py-3 rounded-lg border {lowBalance
-				? 'border-red-300 bg-red-50'
-				: 'border-gray-200'}"
+			class="inline-flex items-center gap-3 px-4 py-3 rounded-lg"
+			style="border: 1px solid {lowBalance ? '#dc2626' : 'var(--border)'}; background: {lowBalance
+				? 'rgba(220,38,38,0.10)'
+				: 'var(--surface)'};"
 		>
-			<span class="text-xs text-gray-500">hub-man balance</span>
-			<span class="text-lg font-bold {lowBalance ? 'text-red-600' : ''}">
+			<span class="text-xs" style="color: var(--text-muted);">hub-man balance</span>
+			<span class="text-lg font-bold" style="color: {lowBalance ? '#f87171' : 'var(--text)'};">
 				{hubBalance == null ? '—' : `$${hubBalance}`}
 			</span>
-			{#if lowBalance}<span class="text-xs text-red-600">Low — top up soon</span>{/if}
+			{#if lowBalance}<span class="text-xs" style="color: #f87171;">Low — top up soon</span>{/if}
 		</div>
 	</div>
 
-	<div class="text-sm text-gray-500 mb-2">{activeCount} numbers live · {rows.length} tiers</div>
+	<div class="text-sm mb-2" style="color: var(--text-muted);">
+		{activeCount} numbers live · {rows.length} tiers
+	</div>
 
-	<div class="overflow-x-auto rounded-lg border border-gray-200">
+	<div class="overflow-x-auto rounded-lg" style="border: 1px solid var(--border);">
 		<table class="w-full text-sm">
-			<thead class="bg-gray-50 text-left text-xs uppercase text-gray-500">
-				<tr>
+			<thead style="background: var(--bg-elev-1);">
+				<tr class="text-left text-xs uppercase" style="color: var(--text-muted);">
 					<th class="px-4 py-3">Service</th>
 					<th class="px-4 py-3">Country</th>
 					<th class="px-4 py-3">Cost</th>
@@ -221,17 +224,18 @@
 					<th class="px-4 py-3 text-center">Live</th>
 				</tr>
 			</thead>
-			<tbody class="divide-y divide-gray-100">
+			<tbody>
 				{#each rows as row (row.tierId)}
-					<tr class={row.active && row.priceNgn > 0 ? 'bg-white' : 'bg-gray-50/50'}>
-						<td class="px-4 py-2 font-medium">{row.serviceName}</td>
-						<td class="px-4 py-2">{row.countryName}</td>
-						<td class="px-4 py-2 text-gray-600 whitespace-nowrap">{costLabel(row)}</td>
+					<tr style="border-top: 1px solid var(--border); background: var(--surface);">
+						<td class="px-4 py-2 font-medium" style="color: var(--text);">{row.serviceName}</td>
+						<td class="px-4 py-2" style="color: var(--text-muted);">{row.countryName}</td>
+						<td class="px-4 py-2 whitespace-nowrap" style="color: var(--text-muted);">{costLabel(row)}</td>
 						<td class="px-4 py-2">
 							<button
 								type="button"
 								onclick={() => (row.priceNgn = computedPrice(row))}
-								class="text-sky-600 hover:underline"
+								class="hover:underline"
+								style="color: var(--fa-lime-400);"
 								title="Use this price"
 							>
 								₦{computedPrice(row).toLocaleString()}
@@ -242,7 +246,8 @@
 								type="number"
 								bind:value={row.priceNgn}
 								min="0"
-								class="w-28 border rounded px-2 py-1"
+								class="w-28 rounded px-2 py-1"
+								style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
 							/>
 						</td>
 						<td class="px-4 py-2 text-center">
@@ -256,11 +261,11 @@
 					</tr>
 				{/each}
 				{#if rows.length === 0}
-					<tr
-						><td colspan="6" class="px-4 py-8 text-center text-gray-400">
+					<tr style="background: var(--surface);">
+						<td colspan="6" class="px-4 py-8 text-center" style="color: var(--text-dim);">
 							No tiers yet. Click “Refresh costs” to load the catalog.
-						</td></tr
-					>
+						</td>
+					</tr>
 				{/if}
 			</tbody>
 		</table>

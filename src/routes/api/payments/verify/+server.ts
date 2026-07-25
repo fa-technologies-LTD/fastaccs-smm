@@ -388,6 +388,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				orderId: settlement.orderId,
 				manualHandover: settlement.manualHandover === true,
 				boosting: settlement.boosting === true,
+				phone: settlement.phone === true,
 				warning: settlement.warning || undefined,
 				message:
 					settlement.status === 'COMPLETED'

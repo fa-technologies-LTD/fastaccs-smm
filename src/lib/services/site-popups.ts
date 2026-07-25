@@ -188,9 +188,12 @@ async function hasUserCompletedAnyPurchase(userId: string): Promise<boolean> {
 }
 
 async function countCompletedPurchases(userId: string): Promise<number> {
+	// Only account purchases count toward the "grow the account you just bought"
+	// cross-sell — number (phone) and boosting orders must not trigger it.
 	return prisma.order.count({
 		where: {
 			userId,
+			orderType: 'account',
 			status: { in: ['paid', 'processing', 'completed'] },
 			paymentStatus: { in: [...CONFIRMED_PAYMENT_STATUSES] }
 		}
