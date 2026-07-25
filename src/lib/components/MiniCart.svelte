@@ -5,6 +5,8 @@
 	import type { CartItem, CartItemWithTier } from '$lib/types/cart';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
+	import BrandIcon from '$lib/components/BrandIcon.svelte';
+	import { brandKey } from '$lib/components/BrandIcon.svelte';
 
 	// Reactive state
 	const isOpen = $derived(cart.isOpen);
@@ -253,6 +255,8 @@
 							{#each cartItems as item (getCartLineKey(item))}
 								{@const PlatformIcon = getPlatformIcon(item.tier.platformSlug)}
 								{@const renderPlatformImage = shouldRenderPlatformImage(item)}
+								{@const isNumber =
+									item.tier.deliveryMode === 'auto_sms' && Boolean(brandKey(item.tier.name))}
 								<div
 									class="flex items-center gap-3"
 									style="padding: var(--space-md); border-bottom: 1px solid var(--border);"
@@ -273,9 +277,13 @@
 														: !renderPlatformImage
 															? 'from-gray-500 to-gray-600'
 															: ''}"
-										style="border-radius: var(--r-sm); box-shadow: 0 2px 8px rgba(0,0,0,0.2);"
+										style="border-radius: var(--r-sm); box-shadow: 0 2px 8px rgba(0,0,0,0.2); {isNumber
+											? 'background: var(--bg-elev-2);'
+											: ''}"
 									>
-										{#if renderPlatformImage}
+										{#if isNumber}
+											<BrandIcon service={item.tier.name} size={26} />
+										{:else if renderPlatformImage}
 											<img
 												src={item.tier.platformIcon}
 												alt={item.tier.platformName}

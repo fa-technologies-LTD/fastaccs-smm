@@ -17,6 +17,8 @@
 	} from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import BrandIcon from '$lib/components/BrandIcon.svelte';
+	import { brandKey } from '$lib/components/BrandIcon.svelte';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
@@ -92,6 +94,9 @@
 		cartItems.some((item) => item.tier.deliveryMode === 'manual_handover')
 	);
 	const hasBoostingOrder = $derived(cartItems.some((item) => Boolean(item.boosting)));
+	const hasNumbersOrder = $derived(
+		cartItems.some((item) => item.tier.deliveryMode === 'auto_sms')
+	);
 
 	onMount(() => {
 		loading = false;
@@ -788,6 +793,8 @@
 							{#each cartItems as item (getCartLineKey(item))}
 								{@const PlatformIcon = getPlatformIcon(item.tier.platformSlug)}
 								{@const renderPlatformImage = shouldRenderCheckoutPlatformImage(item)}
+								{@const isNumber =
+									item.tier.deliveryMode === 'auto_sms' && Boolean(brandKey(item.tier.name))}
 								<div class="flex gap-3">
 									<div
 										class="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br sm:h-16 sm:w-16 {item
@@ -805,8 +812,13 @@
 															? 'from-gray-500 to-gray-600'
 															: ''}"
 									>
-										<div class="flex h-full w-full items-center justify-center">
-											{#if renderPlatformImage}
+										<div
+											class="flex h-full w-full items-center justify-center"
+											style={isNumber ? 'background: var(--bg-elev-2);' : ''}
+										>
+											{#if isNumber}
+												<BrandIcon service={item.tier.name} size={28} />
+											{:else if renderPlatformImage}
 												<img
 													src={item.tier.platformIcon}
 													alt={item.tier.platformName}
@@ -980,7 +992,7 @@
 
 						<hr class="my-8" style="border-color: var(--border);" />
 
-						{#if !hasBoostingOrder}
+						{#if !hasBoostingOrder && !hasNumbersOrder}
 							<div
 								class="mb-4 rounded-lg p-3"
 								style="border: 1px solid var(--border); background: var(--bg);"

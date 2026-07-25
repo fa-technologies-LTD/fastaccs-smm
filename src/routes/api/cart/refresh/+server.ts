@@ -395,15 +395,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 			const requestedQuantity = Math.max(1, Math.floor(Number(input.quantity || 1)));
 			const isManualTier = tierPayload.deliveryMode === 'manual_handover';
-			// Manual-handover tiers have no account inventory — availability is the owner toggle.
-			const available = isManualTier
+			// Manual-handover and auto-SMS (Numbers) tiers have no account inventory —
+			// availability is a toggle/flag, not a stock count.
+			const isNoInventoryTier = isManualTier || tierPayload.deliveryMode === 'auto_sms';
+			const available = isNoInventoryTier
 				? getTierStockStatus(tier.metadata, 0).available
 					? 99
 					: 0
 				: (availableByTierId.get(tier.id) || 0) + (heldByTierId.get(tier.id) || 0);
 			if (available <= 0) {
 				messages.push(
-					isManualTier
+					isNoInventoryTier
 						? `${tier.name} is currently unavailable, so it was removed from your cart.`
 						: `${tier.name} is out of stock, so it was removed from your cart.`
 				);
@@ -411,7 +413,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 
 			const quantity = Math.min(requestedQuantity, available);
-			if (quantity < requestedQuantity && !isManualTier) {
+			if (quantity < requestedQuantity && !isNoInventoryTier) {
 				messages.push(
 					`Only ${quantity} ${tier.name} ${quantity === 1 ? 'account remains' : 'accounts remain'}, so your cart was updated.`
 				);

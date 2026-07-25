@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Phone, Copy, RefreshCw, ShieldCheck, AlertTriangle } from '$lib/icons';
+	import { Copy, RefreshCw, ShieldCheck, AlertTriangle } from '$lib/icons';
 	import { showSuccess } from '$lib/stores/toasts';
+	import BrandIcon from '$lib/components/BrandIcon.svelte';
 
 	interface PhoneState {
 		orderItemId: string;
@@ -88,8 +89,10 @@
 </script>
 
 <div class="rounded-2xl p-6 mb-6" style="border: 1px solid var(--border); background: var(--surface);">
-	<div class="flex items-center gap-2 mb-4">
-		<Phone class="w-5 h-5" style="color: var(--fa-lime-400);" />
+	<div class="flex items-center gap-2.5 mb-4">
+		<span class="flex items-center justify-center w-9 h-9 rounded-lg" style="background: var(--bg-elev-1);">
+			<BrandIcon service={phone.serviceName} size={22} />
+		</span>
 		<h3 class="font-semibold text-lg" style="color: var(--text);">{phone.serviceName} — {phone.countryName}</h3>
 	</div>
 
