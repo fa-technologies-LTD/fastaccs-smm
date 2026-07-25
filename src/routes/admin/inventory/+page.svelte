@@ -2,6 +2,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
 	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
+	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 
 	type InventoryRow = {
@@ -68,6 +69,84 @@
 			return aAttention - bAttention || aAvailable - bAvailable || alphabetical;
 		});
 	});
+
+	// --- Platform grouping (collapsible dropdowns) ---
+	const searchActive = $derived(searchTerm.trim().length > 0);
+	const groupedInventory = $derived.by((): Array<[string, InventoryRow[]]> => {
+		const order: string[] = [];
+		const byPlatform: Record<string, InventoryRow[]> = {};
+		for (const item of filteredInventory) {
+			const key = item.platform_name || 'Other';
+			if (!byPlatform[key]) {
+				byPlatform[key] = [];
+				order.push(key);
+			}
+			byPlatform[key].push(item);
+		}
+		return order.map((key) => [key, byPlatform[key]]);
+	});
+
+	function groupSummary(items: InventoryRow[]) {
+		const available = items.reduce((sum, i) => sum + (i.available_accounts || 0), 0);
+		const attention = items.some(
+			(i) => !i.is_manual && (i.available_accounts || 0) <= lowStockThreshold
+		);
+		return { tiers: items.length, available, attention };
+	}
+
+	let expandedPlatforms = $state<string[]>([]);
+	let seededExpansion = false;
+	$effect(() => {
+		if (seededExpansion || inventoryRows.length === 0) return;
+		// Start with attention platforms open so low/zero-stock tiers are visible.
+		const open: string[] = [];
+		for (const item of inventoryRows) {
+			if (!item.is_manual && (item.available_accounts || 0) <= lowStockThreshold) {
+				const key = item.platform_name || 'Other';
+				if (!open.includes(key)) open.push(key);
+			}
+		}
+		expandedPlatforms = open;
+		seededExpansion = true;
+	});
+	function isPlatformExpanded(platform: string): boolean {
+		return searchActive || expandedPlatforms.includes(platform);
+	}
+	function togglePlatform(platform: string) {
+		expandedPlatforms = expandedPlatforms.includes(platform)
+			? expandedPlatforms.filter((p) => p !== platform)
+			: [...expandedPlatforms, platform];
+	}
+
+	// --- Copy links / logs of a tier's available accounts (read-only, never deletes) ---
+	let copyingKey = $state<string | null>(null);
+	async function copyTierAccounts(item: InventoryRow, format: 'links' | 'logs') {
+		if (!item.id) {
+			addToast({ type: 'error', title: 'Tier id missing', duration: 2500 });
+			return;
+		}
+		if (copyingKey) return;
+		copyingKey = `${item.id}:${format}`;
+		try {
+			const res = await fetch(`/api/admin/tier-accounts/${item.id}?format=${format}`);
+			const payload = await res.json();
+			if (!res.ok) throw new Error(payload?.error || 'Request failed');
+			if (!payload.text) {
+				addToast({ type: 'info', title: `No ${format} — this tier has no available accounts`, duration: 3000 });
+				return;
+			}
+			await navigator.clipboard.writeText(payload.text);
+			addToast({
+				type: 'success',
+				title: `Copied ${payload.count} ${format === 'links' ? 'link(s)' : 'account log(s)'}`,
+				duration: 2500
+			});
+		} catch {
+			addToast({ type: 'error', title: `Could not copy ${format}`, duration: 3000 });
+		} finally {
+			copyingKey = null;
+		}
+	}
 
 	const attentionRows = $derived.by(() =>
 		inventoryRows
@@ -363,14 +442,27 @@
 	</div>
 
 	<!-- Search -->
-	<div class="mb-4 flex flex-col gap-2 sm:flex-row">
-		<input
-			type="text"
-			placeholder="Search platforms or tiers..."
-			bind:value={searchTerm}
-			class="min-w-0 flex-1 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:outline-none"
-			style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
-		/>
+	<div class="mb-1 flex flex-col gap-2 sm:flex-row sm:items-center">
+		<div class="relative min-w-0 flex-1">
+			<input
+				type="text"
+				placeholder="Search platforms or tiers..."
+				bind:value={searchTerm}
+				class="w-full rounded-lg px-3 py-1.5 pr-8 text-sm focus:ring-1 focus:outline-none"
+				style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
+			/>
+			{#if searchTerm}
+				<button
+					type="button"
+					onclick={() => (searchTerm = '')}
+					class="absolute top-1/2 right-2 -translate-y-1/2 rounded px-1 text-sm leading-none"
+					style="color: var(--text-muted);"
+					aria-label="Clear search"
+				>
+					✕
+				</button>
+			{/if}
+		</div>
 		<select
 			bind:value={sortMode}
 			class="rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:outline-none"
@@ -383,6 +475,13 @@
 			<option value="stock_desc">Highest stock first</option>
 		</select>
 	</div>
+	{#if searchActive}
+		<p class="mb-3 text-xs" style="color: var(--text-muted);">
+			{filteredInventory.length} tier{filteredInventory.length === 1 ? '' : 's'} match "{searchTerm}"
+		</p>
+	{:else}
+		<div class="mb-3"></div>
+	{/if}
 
 	<!-- Inventory Table -->
 	<div
@@ -435,69 +534,98 @@
 						>
 							Last Restocked
 						</th>
+						<th
+							class="px-6 py-3 text-right text-xs font-medium tracking-wider uppercase"
+							style="color: var(--text-muted);"
+						>
+							Copy
+						</th>
 					</tr>
 				</thead>
 				<tbody class="divide-y" style="border-color: var(--border); background: var(--bg-elev-1);">
-					{#each filteredInventory as item (getInventoryKey(item))}
-						<tr
-							class="transition-colors"
-							style="--hover-bg: var(--bg-elev-2);"
-							onmouseenter={(e) => (e.currentTarget.style.background = 'var(--bg-elev-2)')}
-							onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
-						>
-							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm font-medium" style="color: var(--text);">
-									{item.platform_name || 'Unknown'}
-								</div>
-								<div class="text-sm" style="color: var(--text-muted);">
-									{item.tier_name || 'Unknown'}
-								</div>
-							</td>
-							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm" style="color: var(--text);">
-									{(item.lifetime_total_accounts ?? item.total_accounts ?? 0).toLocaleString()}
-								</div>
-							</td>
-							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm" style="color: var(--status-success);">
-									{item.available_accounts?.toLocaleString() || 0}
-								</div>
-							</td>
-							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm" style="color: var(--link);">
-									{(
-										item.delivered_accounts ??
-										item.sold_accounts ??
-										item.allocated_accounts ??
-										item.assigned_accounts ??
-										0
-									).toLocaleString()}
-								</div>
-							</td>
-							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm" style="color: var(--text);">
-									{item.tier_price && item.tier_price > 0 ? formatPrice(item.tier_price) : 'N/A'}
-								</div>
-							</td>
-							<td class="px-6 py-4 whitespace-nowrap">
-								<span
-									class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-									style={getStatusStyle(item, lowStockThreshold)}
+					{#each groupedInventory as [platform, items] (platform)}
+						{@const summary = groupSummary(items)}
+						<tr style="background: var(--bg-elev-2);">
+							<td colspan="8" class="p-0">
+								<button
+									type="button"
+									onclick={() => togglePlatform(platform)}
+									class="flex w-full items-center gap-2 px-6 py-2.5 text-left"
 								>
-									{getStatusText(item, lowStockThreshold)}
-								</span>
-							</td>
-							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm" style="color: var(--text-muted);">
-									{item.created_at ? formatDate(new Date(item.created_at)) : 'N/A'}
-								</div>
+									<span class="text-xs" style="color: var(--text-muted);">{isPlatformExpanded(platform) ? '▾' : '▸'}</span>
+									<span class="text-sm font-semibold" style="color: var(--text);">{platform}</span>
+									<span class="text-xs" style="color: var(--text-muted);"
+										>· {summary.tiers} tier{summary.tiers === 1 ? '' : 's'} · {summary.available.toLocaleString()} available</span
+									>
+									{#if summary.attention}
+										<span
+											class="ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+											style="background: rgba(226,75,74,0.12); color: #ffb5b1;">needs attention</span
+										>
+									{/if}
+								</button>
 							</td>
 						</tr>
+						{#if isPlatformExpanded(platform)}
+							{#each items as item (getInventoryKey(item))}
+								<tr
+									class="transition-colors"
+									style="--hover-bg: var(--bg-elev-2);"
+									onmouseenter={(e) => (e.currentTarget.style.background = 'var(--bg-elev-2)')}
+									onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
+								>
+									<td class="px-6 py-4 whitespace-nowrap">
+										<div class="text-sm font-medium" style="color: var(--text);">{item.platform_name || 'Unknown'}</div>
+										<div class="text-sm" style="color: var(--text-muted);">{item.tier_name || 'Unknown'}</div>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap">
+										<div class="text-sm" style="color: var(--text);">{(item.lifetime_total_accounts ?? item.total_accounts ?? 0).toLocaleString()}</div>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap">
+										<div class="text-sm" style="color: var(--status-success);">{item.available_accounts?.toLocaleString() || 0}</div>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap">
+										<div class="text-sm" style="color: var(--link);">{(item.delivered_accounts ?? item.sold_accounts ?? item.allocated_accounts ?? item.assigned_accounts ?? 0).toLocaleString()}</div>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap">
+										<div class="text-sm" style="color: var(--text);">{item.tier_price && item.tier_price > 0 ? formatPrice(item.tier_price) : 'N/A'}</div>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap">
+										<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium" style={getStatusStyle(item, lowStockThreshold)}>{getStatusText(item, lowStockThreshold)}</span>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap">
+										<div class="text-sm" style="color: var(--text-muted);">{item.created_at ? formatDate(new Date(item.created_at)) : 'N/A'}</div>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap text-right">
+										{#if (item.available_accounts || 0) > 0}
+											<div class="inline-flex gap-1.5">
+												<button
+													type="button"
+													onclick={() => copyTierAccounts(item, 'links')}
+													disabled={copyingKey !== null}
+													class="rounded-md px-2 py-1 text-xs font-medium disabled:opacity-50"
+													style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
+													title="Copy profile links of available accounts"
+												>{copyingKey === `${item.id}:links` ? '…' : 'Links'}</button>
+												<button
+													type="button"
+													onclick={() => copyTierAccounts(item, 'logs')}
+													disabled={copyingKey !== null}
+													class="rounded-md px-2 py-1 text-xs font-medium disabled:opacity-50"
+													style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
+													title="Copy full logs of available accounts"
+												>{copyingKey === `${item.id}:logs` ? '…' : 'Logs'}</button>
+											</div>
+										{:else}
+											<span class="text-xs" style="color: var(--text-muted);">—</span>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						{/if}
 					{:else}
 						<tr>
-							<td colspan="7" class="px-6 py-8 text-center" style="color: var(--text-muted);">
-								No inventory found
-							</td>
+							<td colspan="8" class="px-6 py-8 text-center" style="color: var(--text-muted);">No inventory found</td>
 						</tr>
 					{/each}
 				</tbody>
