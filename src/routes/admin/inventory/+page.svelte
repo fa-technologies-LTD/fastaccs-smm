@@ -94,6 +94,30 @@
 		return { tiers: items.length, available, attention };
 	}
 
+	let expandedPlatforms = $state<string[]>([]);
+	let seededExpansion = false;
+	$effect(() => {
+		if (seededExpansion || inventoryRows.length === 0) return;
+		// Start with attention platforms open so low/zero-stock tiers are visible.
+		const open: string[] = [];
+		for (const item of inventoryRows) {
+			if (!item.is_manual && (item.available_accounts || 0) <= lowStockThreshold) {
+				const key = item.platform_name || 'Other';
+				if (!open.includes(key)) open.push(key);
+			}
+		}
+		expandedPlatforms = open;
+		seededExpansion = true;
+	});
+	function isPlatformExpanded(platform: string): boolean {
+		return searchActive || expandedPlatforms.includes(platform);
+	}
+	function togglePlatform(platform: string) {
+		expandedPlatforms = expandedPlatforms.includes(platform)
+			? expandedPlatforms.filter((p) => p !== platform)
+			: [...expandedPlatforms, platform];
+	}
+
 
 	// --- Copy links / logs of a tier's available accounts (read-only, never deletes) ---
 	let copyingKey = $state<string | null>(null);
@@ -524,7 +548,12 @@
 						{@const summary = groupSummary(items)}
 						<tr style="background: var(--bg-elev-2);">
 							<td colspan="8" class="p-0">
-								<div class="flex w-full items-center gap-2 px-6 py-2.5 text-left">
+								<button
+									type="button"
+									onclick={() => togglePlatform(platform)}
+									class="flex w-full items-center gap-2 px-6 py-2.5 text-left"
+								>
+									<span class="text-xs" style="color: var(--text-muted);">{isPlatformExpanded(platform) ? '▾' : '▸'}</span>
 									<span class="text-sm font-semibold" style="color: var(--text);">{platform}</span>
 									<span class="text-xs" style="color: var(--text-muted);"
 										>· {summary.tiers} tier{summary.tiers === 1 ? '' : 's'} · {summary.available.toLocaleString()} available</span
@@ -535,9 +564,10 @@
 											style="background: rgba(226,75,74,0.12); color: #ffb5b1;">needs attention</span
 										>
 									{/if}
-								</div>
+								</button>
 							</td>
 						</tr>
+						{#if isPlatformExpanded(platform)}
 						{#each items as item (getInventoryKey(item))}
 								<tr
 									class="transition-colors"
@@ -593,6 +623,7 @@
 									</td>
 								</tr>
 							{/each}
+					{/if}
 					{:else}
 						<tr>
 							<td colspan="8" class="px-6 py-8 text-center" style="color: var(--text-muted);">No inventory found</td>

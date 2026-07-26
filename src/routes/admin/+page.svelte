@@ -16,7 +16,8 @@
 		ChevronDown,
 		ChevronUp,
 		Mail,
-		Zap
+		Zap,
+		Phone
 	} from '$lib/icons';
 	import { getOrderStats } from '$lib/services/orders';
 	import { getInventoryStats } from '$lib/services/inventory';
@@ -25,6 +26,7 @@
 	import { ADMIN_DASHBOARD_SECTIONS } from '$lib/admin/dashboard-sections';
 	import type { AdminPermission } from '$lib/auth/admin-roles';
 	import type { RecentActivityItem, DashboardIssues } from '$lib/services/admin-dashboard';
+	import type { NumbersDashboardSummary } from '$lib/services/phone-analytics';
 	import type { FeatureFlagSnapshot } from '$lib/services/feature-flags';
 
 	// Props from load function
@@ -71,6 +73,7 @@
 			canViewRevenue?: boolean;
 			recentActivity?: RecentActivityItem[];
 			dashboardIssues?: DashboardIssues;
+			numbersSummary?: NumbersDashboardSummary;
 			adminPermissions?: AdminPermission[];
 			featureFlags?: FeatureFlagSnapshot;
 		};
@@ -672,6 +675,100 @@
 									{boostingStats.pending_fulfillment} pending · {boostingStats.in_progress_fulfillment}
 									in progress
 								</span>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Numbers (automated verification numbers) -->
+		<div class="mb-4 sm:mb-6">
+			<div class="mb-2 flex items-center justify-between sm:mb-3">
+				<p
+					class="text-xs font-semibold tracking-[0.1em] uppercase"
+					style="color: var(--fa-lime-400);"
+				>
+					Numbers
+				</p>
+				<a
+					href="/admin/numbers/analytics"
+					class="inline-flex items-center gap-1 text-xs font-medium hover:underline"
+					style="color: var(--fa-lime-400);"
+				>
+					View analytics <ArrowUpRight class="size-3.5" />
+				</a>
+			</div>
+			<div class="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3">
+				<div
+					class="group rounded-lg p-3 sm:p-4"
+					style="background: var(--bg-elev-1); border: 1px solid rgba(202,219,46,0.3)"
+				>
+					<div class="flex items-center">
+						<div class="rounded-lg p-2 sm:p-3" style="background: rgba(202,219,46,0.14);">
+							<Phone class="size-5 sm:size-6" style="color: var(--fa-lime-400);" />
+						</div>
+						<div class="ml-3 min-w-0 flex-1 sm:ml-4">
+							<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Numbers Sold</p>
+							<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
+								{data.numbersSummary?.totalRents ?? 0}
+							</p>
+							<div class="mt-1 text-xs sm:text-sm" style="color: var(--text-muted);">
+								{data.numbersSummary?.receivedRents ?? 0} delivered · {data.numbersSummary
+									?.inFlightRents ?? 0} in progress
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div
+					class="group rounded-lg p-3 sm:p-4"
+					style="background: var(--bg-elev-1); border: 1px solid rgba(202,219,46,0.3)"
+				>
+					<div class="flex items-center">
+						<div class="rounded-lg p-2 sm:p-3" style="background: rgba(202,219,46,0.14);">
+							<DollarSign class="size-5 sm:size-6" style="color: var(--fa-lime-400);" />
+						</div>
+						<div class="ml-3 min-w-0 flex-1 sm:ml-4">
+							<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+								Numbers Revenue
+							</p>
+							<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
+								{formatMonetaryAmount(data.numbersSummary?.revenueNgn ?? 0)}
+							</p>
+							<div class="mt-1 text-xs sm:text-sm" style="color: var(--text-muted);">
+								Margin: {formatMonetaryAmount(data.numbersSummary?.marginNgn ?? 0)}
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div
+					class="group rounded-lg p-3 sm:p-4"
+					style="background: var(--bg-elev-1); border: 1px solid {data.numbersSummary?.lowBalance
+						? 'rgba(226,75,74,0.4)'
+						: 'rgba(202,219,46,0.3)'}"
+				>
+					<div class="flex items-center">
+						<div class="rounded-lg p-2 sm:p-3" style="background: rgba(202,219,46,0.14);">
+							<Activity class="size-5 sm:size-6" style="color: var(--fa-lime-400);" />
+						</div>
+						<div class="ml-3 min-w-0 flex-1 sm:ml-4">
+							<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+								hub-man Balance
+							</p>
+							<p
+								class="text-xl font-bold sm:text-2xl"
+								style="color: {data.numbersSummary?.lowBalance ? '#f87171' : 'var(--text)'}"
+							>
+								{data.numbersSummary?.hubBalanceCents == null
+									? '—'
+									: `$${(data.numbersSummary.hubBalanceCents / 100).toFixed(2)}`}
+							</p>
+							<div class="mt-1 text-xs sm:text-sm" style="color: var(--text-muted);">
+								{data.numbersSummary?.successRatePct == null
+									? 'No rentals yet'
+									: `${data.numbersSummary.successRatePct}% success${data.numbersSummary?.lowBalance ? ' · top up soon' : ''}`}
 							</div>
 						</div>
 					</div>

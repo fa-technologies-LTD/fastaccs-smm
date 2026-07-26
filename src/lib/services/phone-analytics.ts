@@ -1,5 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { getPhonePricingConfig } from './phone-pricing';
+import { getBalanceCents, isHubmanConfigured } from './hubman';
 
 /**
  * Analytics for the Numbers service — how each hub-man service/country performs and
@@ -134,4 +135,46 @@ export async function getNumbersAnalytics(): Promise<NumbersAnalytics> {
 			costUsd: r.costCents != null ? r.costCents / 100 : null
 		}))
 	};
+}
+
+export interface NumbersDashboardSummary {
+	totalRents: number;
+	receivedRents: number;
+	inFlightRents: number;
+	successRatePct: number | null;
+	revenueNgn: number;
+	marginNgn: number;
+	hubBalanceCents: number | null;
+	lowBalance: boolean;
+}
+
+/** Compact headline stats for the main admin dashboard. Best-effort (never throws). */
+export async function getNumbersDashboardSummary(): Promise<NumbersDashboardSummary> {
+	try {
+		const analytics = await getNumbersAnalytics();
+		const pricing = await getPhonePricingConfig();
+		let hubBalanceCents: number | null = null;
+		if (isHubmanConfigured()) hubBalanceCents = await getBalanceCents().catch(() => null);
+		return {
+			totalRents: analytics.overall.total,
+			receivedRents: analytics.overall.received,
+			inFlightRents: analytics.overall.inFlight,
+			successRatePct: analytics.overall.successRatePct,
+			revenueNgn: analytics.overall.revenueNgn,
+			marginNgn: analytics.overall.marginNgn,
+			hubBalanceCents,
+			lowBalance: hubBalanceCents != null && hubBalanceCents < pricing.lowBalanceThresholdCents
+		};
+	} catch {
+		return {
+			totalRents: 0,
+			receivedRents: 0,
+			inFlightRents: 0,
+			successRatePct: null,
+			revenueNgn: 0,
+			marginNgn: 0,
+			hubBalanceCents: null,
+			lowBalance: false
+		};
+	}
 }

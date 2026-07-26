@@ -64,13 +64,27 @@
 	}
 	let tierStatusFilter = $state<'active' | 'archived' | 'all'>('active');
 	let tierViewMode = $state<'compact' | 'cards'>('compact');
+	let tierSearch = $state('');
+	const searchActive = $derived(tierSearch.trim().length > 0);
 
 	const activeTierCount = $derived(tiers.filter((tier) => isTierActive(tier)).length);
 	const archivedTierCount = $derived(tiers.filter((tier) => !isTierActive(tier)).length);
 	const visibleTiers = $derived.by(() => {
-		if (tierStatusFilter === 'archived') return tiers.filter((tier) => !isTierActive(tier));
-		if (tierStatusFilter === 'all') return tiers;
-		return tiers.filter((tier) => isTierActive(tier));
+		let list =
+			tierStatusFilter === 'archived'
+				? tiers.filter((tier) => !isTierActive(tier))
+				: tierStatusFilter === 'all'
+					? tiers
+					: tiers.filter((tier) => isTierActive(tier));
+		const q = tierSearch.trim().toLowerCase();
+		if (q) {
+			list = list.filter(
+				(tier) =>
+					String(tier.name || '').toLowerCase().includes(q) ||
+					getTierPlatformName(tier).toLowerCase().includes(q)
+			);
+		}
+		return list;
 	});
 	const sortedVisibleTiers = $derived.by(() =>
 		[...visibleTiers].sort((a, b) => {
@@ -555,6 +569,16 @@
 			</div>
 		</div>
 
+		<div class="mt-3">
+			<input
+				type="search"
+				bind:value={tierSearch}
+				placeholder="Search tiers by name or platform…"
+				class="w-full rounded-lg px-3 py-2 text-sm sm:max-w-xs"
+				style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
+			/>
+		</div>
+
 		<div class="mt-3 flex flex-wrap items-center gap-2">
 			<button
 				type="button"
@@ -660,7 +684,7 @@
 								<ChevronDown
 									class="h-4 w-4 shrink-0 transition-transform duration-200 {expandedGroups[
 										group.platformId
-									]
+									] || searchActive
 										? 'rotate-180'
 										: ''}"
 									style="color: var(--text-muted);"
@@ -678,11 +702,11 @@
 								class="rounded-full px-2.5 py-1 text-xs font-semibold"
 								style="background: rgba(105,109,250,0.12); color: var(--link); border: 1px solid rgba(105,109,250,0.24);"
 							>
-								{expandedGroups[group.platformId] ? 'Hide' : 'Show'}
+								{expandedGroups[group.platformId] || searchActive ? 'Hide' : 'Show'}
 							</span>
 						</button>
 
-						{#if expandedGroups[group.platformId]}
+						{#if expandedGroups[group.platformId] || searchActive}
 						<div class="divide-y" style="border-color: var(--border);">
 							{#each group.tiers as tier (getTierId(tier))}
 								{@const metadata = tier.metadata as any}
