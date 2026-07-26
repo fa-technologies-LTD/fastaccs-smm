@@ -66,7 +66,11 @@ export async function sendLowStockAdminAlertIfNeeded(
 			// Manual-handover tiers have no account inventory — their availability is a
 			// manual toggle, not a stock count — so they are never "zero-stock". Switching
 			// a tier to instant delivery flips delivery_mode back and re-includes it here.
-			NOT: { metadata: { path: ['delivery_mode'], equals: 'manual_handover' } }
+			// Manual-handover and auto-SMS (Numbers) tiers have no account inventory.
+			NOT: [
+				{ metadata: { path: ['delivery_mode'], equals: 'manual_handover' } },
+				{ metadata: { path: ['delivery_mode'], equals: 'auto_sms' } }
+			]
 		},
 		select: {
 			id: true,

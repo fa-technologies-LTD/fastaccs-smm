@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { showSuccess, showWarning } from '$lib/stores/toasts';
@@ -18,6 +19,15 @@
 		Indonesia: '🇮🇩',
 		Malaysia: '🇲🇾'
 	};
+
+	// Remember this section so checkout returns here (not the accounts page) on empty cart.
+	onMount(() => {
+		try {
+			sessionStorage.setItem('shopReturn', '/numbers');
+		} catch {
+			/* ignore */
+		}
+	});
 
 	// Accordion: first service open by default; the rest collapsed.
 	let openId = $state<number | null>(data.services[0]?.serviceId ?? null);

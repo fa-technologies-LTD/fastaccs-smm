@@ -106,7 +106,9 @@ export async function GET({ url, locals }) {
 					where: {
 						parentId: { not: null }, // Get child categories (tiers)
 						categoryType: 'tier',
-						isActive: true
+						isActive: true,
+						// Numbers (auto-SMS) tiers have no account inventory — exclude from account inventory.
+						NOT: { metadata: { path: ['delivery_mode'], equals: 'auto_sms' } },
 					},
 				include: {
 					parent: true, // Get parent category (platform)
@@ -187,7 +189,9 @@ export async function GET({ url, locals }) {
 					where: {
 						parentId: { not: null }, // Get child categories (tiers)
 						categoryType: 'tier',
-						isActive: true
+						isActive: true,
+						// Numbers (auto-SMS) tiers have no account inventory — exclude from account inventory.
+						NOT: { metadata: { path: ['delivery_mode'], equals: 'auto_sms' } },
 					},
 				include: {
 					parent: true, // Get parent category (platform)

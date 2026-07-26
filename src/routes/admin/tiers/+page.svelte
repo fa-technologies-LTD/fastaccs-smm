@@ -9,7 +9,8 @@
 		DollarSign,
 		Package,
 		AlertCircle,
-		Target
+		Target,
+		ChevronDown
 	} from '$lib/icons';
 	import { createCategory, updateCategory, deleteCategory, retireCategory } from '$lib/services/categories';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
@@ -55,6 +56,12 @@
 	let selectedTier = $state<CategoryMetadata | null>(null);
 	let tierToDelete = $state<CategoryMetadata | null>(null);
 	let busyTierAction = $state<string | null>(null);
+	// Collapsible platform groups (compact view) — collapsed by default so David
+	// picks a platform instead of scrolling every tier.
+	let expandedGroups = $state<Record<string, boolean>>({});
+	function toggleGroup(platformId: string) {
+		expandedGroups[platformId] = !expandedGroups[platformId];
+	}
 	let tierStatusFilter = $state<'active' | 'archived' | 'all'>('active');
 	let tierViewMode = $state<'compact' | 'cards'>('compact');
 
@@ -643,26 +650,39 @@
 						class="overflow-hidden rounded-xl"
 						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 					>
-						<div
-							class="flex items-center justify-between gap-3 px-4 py-3"
+						<button
+							type="button"
+							onclick={() => toggleGroup(group.platformId)}
+							class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors"
 							style="background: var(--bg-elev-2); border-bottom: 1px solid var(--border);"
 						>
-							<div>
-								<h2 class="text-sm font-semibold" style="color: var(--text);">
-									{group.platformName}
-								</h2>
-								<p class="text-xs" style="color: var(--text-muted);">
-									{group.tiers.length} {group.tiers.length === 1 ? 'tier' : 'tiers'}
-								</p>
+							<div class="flex items-center gap-3">
+								<ChevronDown
+									class="h-4 w-4 shrink-0 transition-transform duration-200 {expandedGroups[
+										group.platformId
+									]
+										? 'rotate-180'
+										: ''}"
+									style="color: var(--text-muted);"
+								/>
+								<div>
+									<h2 class="text-sm font-semibold" style="color: var(--text);">
+										{group.platformName}
+									</h2>
+									<p class="text-xs" style="color: var(--text-muted);">
+										{group.tiers.length} {group.tiers.length === 1 ? 'tier' : 'tiers'}
+									</p>
+								</div>
 							</div>
 							<span
 								class="rounded-full px-2.5 py-1 text-xs font-semibold"
 								style="background: rgba(105,109,250,0.12); color: var(--link); border: 1px solid rgba(105,109,250,0.24);"
 							>
-								Grouped
+								{expandedGroups[group.platformId] ? 'Hide' : 'Show'}
 							</span>
-						</div>
+						</button>
 
+						{#if expandedGroups[group.platformId]}
 						<div class="divide-y" style="border-color: var(--border);">
 							{#each group.tiers as tier (getTierId(tier))}
 								{@const metadata = tier.metadata as any}
@@ -754,6 +774,7 @@
 								</div>
 							{/each}
 						</div>
+						{/if}
 					</section>
 				{/each}
 			</div>

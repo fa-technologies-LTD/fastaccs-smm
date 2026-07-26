@@ -250,8 +250,11 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 				categoryType: 'tier',
 				isActive: true,
 				parentId: { not: null },
-				// Manual-handover tiers aren't stock-based — exclude from restock urgency.
-				NOT: { metadata: { path: ['delivery_mode'], equals: 'manual_handover' } }
+				// Manual-handover and auto-SMS (Numbers) tiers aren't stock-based — exclude from restock urgency.
+				NOT: [
+					{ metadata: { path: ['delivery_mode'], equals: 'manual_handover' } },
+					{ metadata: { path: ['delivery_mode'], equals: 'auto_sms' } }
+				]
 			},
 			select: {
 				name: true,

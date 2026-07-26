@@ -126,11 +126,28 @@
 		return cartLoadPromise;
 	}
 
+	// Return to the storefront section the shopper came from (numbers/boosting/accounts),
+	// so an empty cart never dumps a numbers shopper onto the accounts page.
+	function shopReturnPath(): string {
+		if (typeof sessionStorage !== 'undefined') {
+			const r = sessionStorage.getItem('shopReturn');
+			if (r === '/numbers' || r === '/services' || r === '/platforms') return r;
+		}
+		return '/platforms';
+	}
+	const shopReturnLabel = $derived(
+		shopReturnPath() === '/numbers'
+			? 'Browse Numbers'
+			: shopReturnPath() === '/services'
+				? 'Browse Boosting'
+				: 'Browse Accounts'
+	);
+
 	async function performCartLoad() {
 		loadingCartData = true;
 		cartLoadError = null;
 		if (cart.itemCount === 0) {
-			await goto('/platforms');
+			await goto(shopReturnPath());
 			loadingCartData = false;
 			return;
 		}
@@ -146,7 +163,7 @@
 				showWarning('Cart updated', cart.notice);
 			}
 			if (cartItems.length === 0 && cart.itemCount === 0 && !cart.error) {
-				await goto('/platforms');
+				await goto(shopReturnPath());
 				return;
 			}
 			// Cart mutation invalidates promo context. Re-apply manually for deterministic totals.
@@ -156,6 +173,18 @@
 			}
 			if (cartItems.length > 0) {
 				trackCheckoutCartView();
+				// Keep the return path in sync with what's actually in the cart, so if the
+				// cart later empties we send the shopper back to the right section.
+				try {
+					const section = cartItems.every((i) => i.tier.deliveryMode === 'auto_sms')
+						? '/numbers'
+						: cartItems.every((i) => Boolean(i.boosting))
+							? '/services'
+							: '/platforms';
+					sessionStorage.setItem('shopReturn', section);
+				} catch {
+					/* ignore */
+				}
 			}
 		} catch (error) {
 			console.error('Failed to load cart data:', error);
@@ -688,11 +717,11 @@
 					Add some accounts to continue with checkout
 				</p>
 				<button
-					onclick={() => goto('/platforms')}
+					onclick={() => goto(shopReturnPath())}
 					class="rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-all sm:px-8 sm:py-3 sm:text-base"
 					style="background: var(--btn-primary-gradient);"
 				>
-					Browse Accounts
+					{shopReturnLabel}
 				</button>
 			</div>
 		{:else}
