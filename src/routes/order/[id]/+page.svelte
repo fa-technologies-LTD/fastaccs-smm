@@ -205,6 +205,10 @@
 										: `Payment confirmed. Your boost is being processed. ${BOOSTING_TURNAROUND_MESSAGE}`}
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.status === 'completed'}
 									Your accounts have been successfully allocated and delivered.
+								{:else if data.phone}
+									{data.order.status === 'completed'
+										? 'Your verification code has arrived — see it above.'
+										: 'Payment confirmed. Use the number above to receive your code.'}
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.deliveryMethod === 'whatsapp' && data.order.deliveryStatus === 'processing'}
 									Payment confirmed. Manual handover is in progress on WhatsApp.
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'pending'}
@@ -232,7 +236,22 @@
 					</div>
 				</div>
 
-				{#if !isManualHandoverOrder() && !isBoostingOrder()}
+				{#if data.phone}
+					<div
+						class="mb-6 rounded-lg p-4"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+					>
+						<p class="text-sm" style="color: var(--text-muted);">
+							Enter the number above on {data.phone.serviceName} to request your code — it appears
+							here automatically. No code within the window? You're refunded to store credit. Need
+							help? See the <a
+								href="/support#faq"
+								class="font-medium hover:underline"
+								style="color: var(--link);">Support FAQ</a
+							>.
+						</p>
+					</div>
+				{:else if !isManualHandoverOrder() && !isBoostingOrder()}
 					<div
 						class="mb-6 rounded-lg p-4"
 						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
@@ -288,6 +307,8 @@
 												>
 													{getBoostingStatusLabel(item)}
 												</span>
+											{:else if data.phone}
+												<span class="status-badge status-success">Verification number</span>
 											{:else if !isManualHandoverItem(item)}
 												<span
 													class={`status-badge ${
@@ -325,7 +346,7 @@
 													{item.boostTargetUrl}
 												</a>
 											</div>
-										{:else if !isManualHandoverItem(item)}
+										{:else if !isManualHandoverItem(item) && !data.phone}
 											<div
 												class="mt-3 rounded-lg border p-3"
 												style="border-color: rgba(170, 173, 255, 0.25); background: rgba(170, 173, 255, 0.08);"

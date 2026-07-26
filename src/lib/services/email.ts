@@ -1009,8 +1009,17 @@ export async function sendOrderConfirmationEmailIfNeeded(orderId: string): Promi
 	const humanOrderNumber = `FA-${normalizedOrderSuffix}`;
 
 	const isBoosting = order.orderItems.some((item) => Boolean(item.boostTargetUrl));
+	const isPhone =
+		!isBoosting &&
+		order.orderItems.some(
+			(item) =>
+				normalizeTierDeliveryMode(
+					(item.category?.metadata as Record<string, unknown> | null)?.delivery_mode
+				) === 'auto_sms'
+		);
 	const isManualHandover =
 		!isBoosting &&
+		!isPhone &&
 		order.orderItems.some(
 			(item) =>
 				normalizeTierDeliveryMode(
@@ -1036,24 +1045,32 @@ ${itemLines.join('\n')}`;
 		? `${orderSummary}
 
 Your boost is now queued and will begin processing shortly. ${BOOSTING_TURNAROUND_MESSAGE} Track its status anytime from your order page.`
-		: isManualHandover
+		: isPhone
 			? `${orderSummary}
 
+Open your order page to see your number and get your one-time code — it appears automatically once it arrives. If no code comes through within the activation window, you're automatically refunded to your store credit.`
+			: isManualHandover
+				? `${orderSummary}
+
 This is a manual handover order. To receive your full account login details, send your payment receipt to our team on WhatsApp. Tap the button below — your order number is pre-filled.`
-			: `${orderSummary}
+				: `${orderSummary}
 
 Your account details are ready on your dashboard. Log in to view your full credentials.`;
 
 	const ctaText = isBoosting
 		? 'View order status'
-		: isManualHandover
-			? 'Send receipt on WhatsApp'
-			: 'View account details';
+		: isPhone
+			? 'View your number'
+			: isManualHandover
+				? 'Send receipt on WhatsApp'
+				: 'View account details';
 	const ctaUrl = isBoosting
 		? `${getBaseUrl()}/order/${order.id}`
-		: isManualHandover
-			? waLink
-			: `${getBaseUrl()}/dashboard?tab=purchases`;
+		: isPhone
+			? `${getBaseUrl()}/order/${order.id}`
+			: isManualHandover
+				? waLink
+				: `${getBaseUrl()}/dashboard?tab=purchases`;
 
 	await prisma.emailNotification.update({
 		where: { id: notificationId },

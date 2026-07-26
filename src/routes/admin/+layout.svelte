@@ -98,6 +98,12 @@
 			{ href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
 			{ href: '/admin/boosting-orders', label: 'Boosting Orders', icon: Zap },
 			{
+				href: '/admin/numbers/analytics',
+				label: 'Numbers Orders',
+				icon: Phone,
+				permission: 'admin:catalog:manage'
+			},
+			{
 				href: '/admin/affiliates',
 				label: 'Affiliates',
 				icon: UserCheck,

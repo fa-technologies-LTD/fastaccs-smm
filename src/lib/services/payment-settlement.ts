@@ -14,7 +14,7 @@ import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
 import { notifyManualHandoverOrderPaid, notifyBoostingOrderPaid } from '$lib/services/manual-handover';
 import { logOrderStatusTransition } from '$lib/services/order-audit';
 import { isManualHandoverOrder, isBoostingOrder } from '$lib/services/order-delivery-mode';
-import { fulfillPhoneOrder, isPhoneOrder } from '$lib/services/phone-fulfillment';
+import { initPhoneOrder, isPhoneOrder } from '$lib/services/phone-fulfillment';
 import { releaseOrderReservations } from '$lib/services/order-reservations';
 import { reverseStoreCreditRedemption } from '$lib/services/store-credit';
 import { maybeGrantSpendMilestones } from '$lib/services/spend-milestones';
@@ -340,7 +340,9 @@ export async function recoverPaidOrder(
 	}
 
 	if (order.orderType === 'phone' && (await isPhoneOrder(order.id))) {
-		const phoneResult = await fulfillPhoneOrder(order.id, source);
+		// Fast path: confirm payment now, rent the number on the order page (keeps
+		// payment verification snappy). Fulfillment failures still auto-refund.
+		await initPhoneOrder(order.id);
 		await recordAffiliateStoreCreditForOrder(order.id).catch((error) => {
 			console.error(`[payments.${source}] failed to record affiliate store credit:`, error);
 		});
@@ -352,14 +354,9 @@ export async function recoverPaidOrder(
 		return {
 			success: true,
 			orderId: order.id,
-			status: phoneResult.status === 'received' ? 'COMPLETED' : 'PAID',
+			status: 'PAID',
 			phone: true,
-			warning:
-				phoneResult.status === 'refunded'
-					? phoneResult.message
-					: phoneResult.status === 'received'
-						? null
-						: 'Payment confirmed. Your number is ready — waiting for the code.'
+			warning: 'Payment confirmed. Getting your number…'
 		};
 	}
 

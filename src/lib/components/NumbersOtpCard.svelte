@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Copy, RefreshCw, ShieldCheck, AlertTriangle } from '$lib/icons';
-	import { showSuccess } from '$lib/stores/toasts';
+	import { Copy, RefreshCw, ShieldCheck, AlertTriangle, X } from '$lib/icons';
+	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
 
 	interface PhoneState {
@@ -17,17 +17,25 @@
 
 	let { phone }: { phone: PhoneState } = $props();
 
+	const ACTIVE = ['pending', 'renting', 'preparing', 'awaiting_sms'];
+
 	let status = $state(phone.status);
 	let phoneNumber = $state(phone.phoneNumber);
 	let otp = $state(phone.otp);
 	let smsMessage = $state(phone.smsMessage);
 	let expiresAt = $state(phone.expiresAt);
+	let canCancel = $state(false);
+	let cancelling = $state(false);
 	let now = $state(Date.now());
 
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 	let clockTimer: ReturnType<typeof setInterval> | null = null;
 
-	const isWaiting = $derived(['pending', 'renting', 'awaiting_sms'].includes(status));
+	// Preparing = paid, number being fetched. Waiting = number in hand, awaiting the code.
+	const isPreparing = $derived(
+		['pending', 'renting', 'preparing'].includes(status) || (status === 'awaiting_sms' && !phoneNumber)
+	);
+	const isWaiting = $derived(status === 'awaiting_sms' && Boolean(phoneNumber));
 	const isReceived = $derived(status === 'received');
 	const isRefunded = $derived(status === 'refunded' || status === 'cancelled' || status === 'expired');
 
@@ -44,6 +52,7 @@
 			if (!res.ok) return;
 			const data = await res.json();
 			if (data.phoneNumber) phoneNumber = data.phoneNumber;
+			canCancel = data.canCancel === true;
 			if (data.status === 'received') {
 				status = 'received';
 				otp = data.otp ?? otp;
@@ -55,6 +64,8 @@
 			} else if (data.status === 'awaiting_sms') {
 				status = 'awaiting_sms';
 				if (data.expiresAt) expiresAt = data.expiresAt;
+			} else if (data.status === 'preparing') {
+				status = 'preparing';
 			}
 		} catch {
 			/* transient — keep polling */
@@ -64,6 +75,31 @@
 	function stopPolling() {
 		if (pollTimer) clearInterval(pollTimer);
 		pollTimer = null;
+	}
+
+	async function cancelNumber() {
+		if (cancelling) return;
+		if (!confirm('Cancel this number and refund to your store credit?')) return;
+		cancelling = true;
+		try {
+			const res = await fetch(`/api/numbers/${phone.orderItemId}/cancel`, { method: 'POST' });
+			const data = await res.json();
+			if (data.outcome === 'refunded') {
+				status = 'refunded';
+				stopPolling();
+				showSuccess('Cancelled', data.message);
+			} else if (data.outcome === 'received') {
+				status = 'received';
+				await poll();
+				showWarning('Code arrived', data.message);
+			} else {
+				showWarning('Not cancelled yet', data.message);
+			}
+		} catch {
+			showError('Could not cancel', 'Please try again in a moment.');
+		} finally {
+			cancelling = false;
+		}
 	}
 
 	async function copy(text: string, label: string) {
@@ -77,7 +113,7 @@
 
 	onMount(() => {
 		clockTimer = setInterval(() => (now = Date.now()), 1000);
-		if (['pending', 'renting', 'awaiting_sms'].includes(status)) {
+		if (ACTIVE.includes(status)) {
 			poll();
 			pollTimer = setInterval(poll, 3000);
 		}
@@ -132,6 +168,16 @@
 				<div class="text-xs mt-2" style="color: var(--text-muted);">{smsMessage}</div>
 			{/if}
 		</div>
+	{:else if isPreparing}
+		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
+			<div class="inline-flex items-center gap-2" style="color: var(--text);">
+				<RefreshCw class="w-4 h-4 animate-spin" style="color: var(--fa-lime-400);" />
+				Getting your number…
+			</div>
+			<div class="text-xs mt-2" style="color: var(--text-dim);">
+				This takes just a moment. Your {phone.serviceName} number will appear here.
+			</div>
+		</div>
 	{:else if isWaiting}
 		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
 			<div class="inline-flex items-center gap-2" style="color: var(--text);">
@@ -142,14 +188,25 @@
 				<div class="text-xs mt-1" style="color: var(--text-muted);">Expires in {countdown}</div>
 			{/if}
 			<div class="text-xs mt-2" style="color: var(--text-dim);">
-				Use this number now on {phone.serviceName}. Your code appears here automatically.
+				Enter this number on {phone.serviceName} now. Your code appears here automatically.
 			</div>
+			{#if canCancel}
+				<button
+					onclick={cancelNumber}
+					disabled={cancelling}
+					class="mt-3 inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-60"
+					style="border: 1px solid var(--border); color: var(--text-muted);"
+				>
+					<X class="w-3.5 h-3.5" />
+					{cancelling ? 'Cancelling…' : 'No code? Cancel & refund'}
+				</button>
+			{/if}
 		</div>
 	{:else if isRefunded}
 		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid rgba(245,158,11,0.4); background: rgba(245,158,11,0.10); color: #fbbf24;">
 			<div class="inline-flex items-center gap-2">
 				<AlertTriangle class="w-4 h-4" />
-				No code arrived — you've been refunded to store credit.
+				This number was refunded to your store credit.
 			</div>
 		</div>
 	{/if}
