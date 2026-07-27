@@ -20,8 +20,8 @@
 				class="mx-auto mb-6 max-w-2xl text-base sm:mb-8 sm:text-lg"
 				style="font-family: var(--font-body); color: rgba(255,255,255,0.82);"
 			>
-				Instagram, X, TikTok, Facebook and more — full login access, sent the moment you pay. Buy
-				one, or in bulk for resale.
+				Instagram, X, TikTok, Facebook and more — full login access, instant delivery. Buy one, or
+				in bulk for resale.
 			</p>
 		</div>
 

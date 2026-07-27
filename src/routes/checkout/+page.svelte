@@ -1169,8 +1169,7 @@
 							{:else if hasManualHandover}
 								Login details are delivered on WhatsApp. Your order page will show you the link.
 							{:else}
-								⚡ Instant delivery — your account details appear on your dashboard the moment payment
-								confirms.
+								Account details will be available on your dashboard once payment is confirmed.
 							{/if}
 						</p>
 						<!-- Pay with Monnify -->

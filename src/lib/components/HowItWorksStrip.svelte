@@ -21,8 +21,8 @@
 			<div class="step">
 				<span class="step-num">3</span>
 				<div>
-					<p class="step-title">Receive full details</p>
-					<p class="step-body">Login credentials delivered to your email within minutes.</p>
+					<p class="step-title">Get your logs</p>
+					<p class="step-body">Your login details are ready on your dashboard within minutes.</p>
 				</div>
 			</div>
 		</div>
