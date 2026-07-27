@@ -1055,7 +1055,7 @@ Open your order page to see your number and get your one-time code — it appear
 This is a manual handover order. To receive your full account login details, send your payment receipt to our team on WhatsApp. Tap the button below — your order number is pre-filled.`
 				: `${orderSummary}
 
-Your account details are ready on your dashboard. Log in to view your full credentials.`;
+Your account details are ready. Open your dashboard to view your login. Anything off? Message support and we'll sort it fast.`;
 
 	const ctaText = isBoosting
 		? 'View order status'

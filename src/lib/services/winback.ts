@@ -1,6 +1,7 @@
 import { env } from '$env/dynamic/private';
 import { prisma } from '$lib/prisma';
 import { sendMarketingEmail } from './email';
+import { pickVariantIndex, WINBACK_VARIANTS } from './email-variants';
 
 const WINBACK_DAYS = Math.max(Number(env.WINBACK_DAYS_THRESHOLD || 60), 1);
 const WINBACK_COOLDOWN_DAYS = 60;
@@ -136,17 +137,13 @@ export async function runWinBackCampaign(): Promise<{
 
 		queued += 1;
 		const firstName = getFirstName(user.fullName, user.email);
+		const vi = await pickVariantIndex(user.id, 'win_back', WINBACK_VARIANTS.length);
+		const variant = WINBACK_VARIANTS[vi];
 		const result = await sendMarketingEmail({
 			to: user.email,
-			subject: 'See what is new on Fast Accounts',
-			body: `Hi ${firstName},
-
-It has been a while since your last Fast Accounts visit.
-
-We've added fresh stock, new account options, and boosting — grow any account with real followers, likes & views, starting at ₦700 per 1,000.
-
-${platformLine}`,
-			ctaText: 'See what is available',
+			subject: variant.subject,
+			body: variant.body({ firstName, platformLine }),
+			ctaText: variant.ctaText,
 			ctaUrl: `${getBaseUrl()}/platforms`,
 			userId: user.id,
 			notificationType: 'win_back',

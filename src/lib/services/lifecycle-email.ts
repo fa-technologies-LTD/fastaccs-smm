@@ -124,23 +124,19 @@ function toOrderLabel(orderNumber: string): string {
 
 function getOnboardingStepAContent(): { subject: string; body: string } {
 	return {
-		subject: 'Ready for your first Fast Accounts order?',
-		body: `Your Fast Accounts account is ready whenever you are.
+		subject: 'Ready for your first order?',
+		body: `Your account's ready. Browse what's in stock, pick what fits, and check out in a couple of taps — delivery is instant.
 
-Browse available accounts, or boost an account you already own with followers, likes, and views — choose what fits your needs and complete checkout in a few simple steps.
-
-Your purchases and delivery status will always be available from your dashboard.`
+Everything shows on your dashboard.`
 	};
 }
 
 function getOnboardingStepBContent(): { subject: string; body: string } {
 	return {
-		subject: 'Need help choosing the right account?',
-		body: `Not sure which account is right for you — or want to boost one you already have?
+		subject: 'Need help picking an account?',
+		body: `Not sure what to get? Every account page shows exactly what you receive, the price, and how delivery works.
 
-Our platform and account pages show what is available, how delivery works, and the important details to check before buying. Our boosting services page covers followers, likes, and views if you'd rather grow an existing account.
-
-If you still need help, message us and we will point you in the right direction.`
+Reselling or growing a page? Message us and we'll point you to the right one.`
 	};
 }
 
@@ -443,35 +439,29 @@ interface NurtureDispatchCandidate {
 function getNurtureContent(step: number, promoCode: string): { subject: string; body: string } {
 	if (step === 0) {
 		return {
-			subject: 'A welcome gift — 10% off your first order 🎁',
-			body: `You created your Fast Accounts account but haven't placed your first order yet — so here's a little nudge, with a bonus.
+			subject: '10% off your first order 🎁',
+			body: `You signed up but haven't ordered yet — here's 10% off to start. Use code ${promoCode} at checkout.
 
-Use code ${promoCode} for 10% off your first purchase. Browse verified social accounts ready for instant delivery, or boost any account with real followers, likes & views — starting at ₦700 per 1,000.
-
-Hundreds of orders delivered so far — yours could be next.`
+Verified accounts, instant delivery, from small tiers to bulk. See what's available.`
 		};
 	}
 	if (step === 1) {
 		return {
-			subject: "See what everyone's ordering 🔥",
-			body: `Still deciding? Here's what other customers are grabbing right now:
+			subject: 'What people are buying right now',
+			body: `Still deciding? Today's fast movers:
 
-• Instagram followers — from ₦2,500 (240+ delivered)
+• Instagram followers — from ₦2,500
 • X (Twitter) accounts — from ₦1,800
 • 1,000 IG followers — ₦4,500
 
-362 orders delivered to 114 customers, and counting — real accounts, sent the moment your payment lands.
-
-Your ${promoCode} code for 10% off your first order is still active. Take a look and grab what fits.`
+Real accounts, sent the second your payment lands. Your 10% code ${promoCode} still works.`
 		};
 	}
 	return {
-		subject: "One last nudge (then we'll leave you be) 👋",
-		body: `We don't want to crowd your inbox, so this is the last reminder from us for now.
+		subject: 'Last nudge 👋',
+		body: `We won't crowd your inbox — this is the last one.
 
-If you've been meaning to try Fast Accounts, your 10% first-order code ${promoCode} is still here — instant delivery, verified accounts, and real support if you need it.
-
-Whenever you're ready, we're here.`
+Your 10% code ${promoCode} is still live: instant delivery, verified accounts, real support. Whenever you're ready.`
 	};
 }
 

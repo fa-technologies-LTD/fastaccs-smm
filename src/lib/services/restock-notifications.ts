@@ -1,5 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { sendMarketingEmail } from './email';
+import { pickVariantIndex, RESTOCK_VARIANTS } from './email-variants';
 import { sendPushToUser } from './push-notifications';
 import { env } from '$env/dynamic/private';
 
@@ -79,13 +80,18 @@ export async function triggerRestockNotificationsForTier(tierId: string): Promis
 	const notifiedSubscriptionIds = (
 		await Promise.all(
 			subscribers.map(async (subscriber) => {
+				const vi = await pickVariantIndex(subscriber.userId, 'restock_alert', RESTOCK_VARIANTS.length);
+				const variant = RESTOCK_VARIANTS[vi];
+				const vars = {
+					tier: tierInfo.name,
+					platform: tierInfo.platformName,
+					urgency: urgencyNote
+				};
 				const emailResult = await sendMarketingEmail({
 					to: subscriber.email,
-					subject: `${tierInfo.name} is back in stock`,
-					body: `${tierInfo.name} on ${tierInfo.platformName} is available again.
-
-${urgencyNote}`,
-					ctaText: 'See available accounts',
+					subject: variant.subject(vars),
+					body: variant.body(vars),
+					ctaText: variant.ctaText,
 					ctaUrl: tierUrl,
 					userId: subscriber.userId,
 					notificationType: 'restock_alert',
