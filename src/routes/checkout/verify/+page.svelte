@@ -256,18 +256,18 @@
 						cancelled =
 							result.cancelled === true ||
 							['CANCELLED', 'CANCELED', 'EXPIRED', 'ABANDONED'].includes(normalizedStatus);
-						errorMessage =
-							result.error ||
-							result.message ||
-							(cancelled
-								? 'Payment was cancelled before completion.'
-								: 'Payment verification failed.');
+						errorMessage = cancelled
+							? "No problem — you weren't charged, and your items are still in your cart whenever you're ready."
+							: "If money left your account, your order will finish on its own in a few minutes — check your orders. If it didn't, nothing was taken. You can try again anytime.";
 						clearPendingOrderStorage();
 
 						if (cancelled) {
-							showWarning('Payment cancelled', errorMessage);
+							showWarning('Payment cancelled', "You weren't charged. Your cart is safe.");
 						} else {
-							showError('Payment failed', errorMessage);
+							showError(
+								"Payment didn't go through",
+								"Check your orders — if you were charged, it'll complete shortly."
+							);
 						}
 						return;
 					}
@@ -325,18 +325,27 @@
 					pending = false;
 					cancelled = false;
 					timedOut = false;
-					errorMessage = result.error || 'Payment verification failed';
-					showError('Payment failed', errorMessage);
+					errorMessage =
+						"If money left your account, your order will finish on its own in a few minutes — check your orders. If it didn't, nothing was taken. You can try again anytime.";
+					showError(
+						"Payment didn't go through",
+						"Check your orders — if you were charged, it'll complete shortly."
+					);
 					return;
 				} catch (error) {
 					if (isDisposed) return;
+					void error;
 
 					verifying = false;
 					pending = false;
 					cancelled = false;
 					timedOut = false;
-					errorMessage = error instanceof Error ? error.message : 'An error occurred';
-					showError('Verification failed', errorMessage);
+					errorMessage =
+						"If money left your account, your order will finish on its own in a few minutes — check your orders. If it didn't, nothing was taken. You can try again anytime.";
+					showError(
+						"Payment didn't go through",
+						"Check your orders — if you were charged, it'll complete shortly."
+					);
 					return;
 				}
 			}
@@ -559,7 +568,7 @@
 					class="mb-2 text-2xl font-bold"
 					style="color: var(--text); font-family: var(--font-head);"
 				>
-					{cancelled ? 'Payment Cancelled' : 'Payment Failed'}
+					{cancelled ? 'Payment cancelled' : "Payment didn't go through"}
 				</h1>
 				<p
 					class="mb-6 text-sm sm:text-base"
@@ -573,14 +582,14 @@
 						class="w-full rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
 						style="background: var(--btn-primary-gradient); color: #04140C; font-family: var(--font-head);"
 					>
-						View Orders
+						Check my orders
 					</button>
 					<button
 						onclick={retryCheckout}
 						class="w-full rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
 						style="border: 1px solid var(--border); color: var(--text); font-family: var(--font-head);"
 					>
-						Retry Payment
+						Try again
 					</button>
 				</div>
 			{/if}

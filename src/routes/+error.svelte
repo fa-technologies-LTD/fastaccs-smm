@@ -30,8 +30,8 @@
 			<h1 class="mb-4 text-6xl font-bold" style="color: var(--text);">404</h1>
 			<h2 class="mb-4 text-2xl font-semibold" style="color: var(--text);">Page Not Found</h2>
 			<p class="mb-8" style="color: var(--text-muted);">
-				Sorry, we couldn't find the page you're looking for. The platform or page may no longer be
-				available.
+				We couldn't find that page — it may have moved, or the product sold out. Take a look at
+				what's live right now.
 			</p>
 		{:else}
 			<h1 class="mb-4 text-6xl font-bold" style="color: var(--text);">{status}</h1>
@@ -60,16 +60,16 @@
 			class="mt-12 rounded-lg p-6"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
-			<h3 class="mb-2 font-semibold" style="color: var(--text);">Need Help?</h3>
+			<h3 class="mb-2 font-semibold" style="color: var(--text);">Need a hand?</h3>
 			<p class="mb-4 text-sm" style="color: var(--text-muted);">
-				If you believe this is an error, please contact our support team.
+				This one's on us, not you. Message us and we'll sort it fast.
 			</p>
 			<button
 				onclick={() => goto('/support')}
 				class="text-sm font-medium hover:underline"
 				style="color: var(--primary);"
 			>
-				Contact Support →
+				Message support →
 			</button>
 		</div>
 	</div>

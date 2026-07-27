@@ -216,12 +216,12 @@
 						<h4
 							style="margin-bottom: var(--space-xs); font-weight: 500; color: var(--text); font-family: var(--font-head);"
 						>
-							Your cart is empty
+							Your cart's empty
 						</h4>
 						<p
 							style="margin-bottom: var(--space-md); font-size: 0.875rem; color: var(--text-muted); font-family: var(--font-body);"
 						>
-							Browse our accounts to get started!
+							Browse what's in stock and grab your first.
 						</p>
 						<button
 							onclick={continueShopping}
