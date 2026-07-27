@@ -1164,10 +1164,13 @@
 							{#if hasBoostingOrder}
 								Your boost starts after payment is confirmed. {BOOSTING_TURNAROUND_MESSAGE} Track
 								its status on your order page.
+							{:else if hasNumbersOrder}
+								Your number and code appear on your order page the moment payment confirms.
 							{:else if hasManualHandover}
 								Login details are delivered on WhatsApp. Your order page will show you the link.
 							{:else}
-								Account details will be available on your dashboard once payment is confirmed.
+								⚡ Instant delivery — your account details appear on your dashboard the moment payment
+								confirms.
 							{/if}
 						</p>
 						<!-- Pay with Monnify -->

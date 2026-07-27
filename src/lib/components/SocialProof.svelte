@@ -91,25 +91,25 @@
 			<div class="flex flex-wrap items-center justify-center gap-8" style="opacity: 0.75;">
 				<div class="flex items-center">
 					<CheckCircle class="mr-2 h-5 w-5" style="color: var(--status-success);" />
-					<span style="color: var(--text-muted); font-family: var(--font-body);">SSL Encrypted</span
+					<span style="color: var(--text-muted); font-family: var(--font-body);">Secure checkout</span
 					>
 				</div>
 				<div class="flex items-center">
 					<CheckCircle class="mr-2 h-5 w-5" style="color: var(--status-success);" />
 					<span style="color: var(--text-muted); font-family: var(--font-body);"
-						>Tiered Listings</span
+						>Priced for every budget</span
 					>
 				</div>
 				<div class="flex items-center">
 					<CheckCircle class="mr-2 h-5 w-5" style="color: var(--status-success);" />
 					<span style="color: var(--text-muted); font-family: var(--font-body);"
-						>Issue Resolution</span
+						>Support that replies</span
 					>
 				</div>
 				<div class="flex items-center">
 					<CheckCircle class="mr-2 h-5 w-5" style="color: var(--status-success);" />
 					<span style="color: var(--text-muted); font-family: var(--font-body);"
-						>Premium Quality</span
+						>Real, working accounts</span
 					>
 				</div>
 			</div>

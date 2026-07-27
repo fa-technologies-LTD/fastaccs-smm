@@ -20,8 +20,8 @@
 				class="mx-auto mb-6 max-w-2xl text-base sm:mb-8 sm:text-lg"
 				style="font-family: var(--font-body); color: rgba(255,255,255,0.82);"
 			>
-				Buy aged Instagram, TikTok, X, and Facebook accounts — full login access, instant delivery,
-				and support included.
+				Instagram, X, TikTok, Facebook and more — full login access, sent the moment you pay. Buy
+				one, or in bulk for resale.
 			</p>
 		</div>
 
@@ -52,10 +52,10 @@
 					class="mb-1 text-2xl font-bold"
 					style="color: var(--fa-lime-400); font-family: var(--font-head);"
 				>
-					Full Details
+					Full access
 				</div>
 				<div style="color: rgba(255,255,255,0.82); font-size: 0.9rem; font-family: var(--font-body);">
-					Complete login handover on every account
+					Complete login details on every account
 				</div>
 			</div>
 			<div
@@ -66,10 +66,10 @@
 					class="mb-1 text-2xl font-bold"
 					style="color: var(--fa-lime-400); font-family: var(--font-head);"
 				>
-					Verified Listings
+					Checked first
 				</div>
 				<div style="color: rgba(255,255,255,0.82); font-size: 0.9rem; font-family: var(--font-body);">
-					Accounts reviewed before going live
+					Every account reviewed before it's listed
 				</div>
 			</div>
 			<div
@@ -80,10 +80,10 @@
 					class="mb-1 text-2xl font-bold"
 					style="color: var(--fa-lime-400); font-family: var(--font-head);"
 				>
-					WhatsApp Support
+					Real support
 				</div>
 				<div style="color: rgba(255,255,255,0.82); font-size: 0.9rem; font-family: var(--font-body);">
-					Real support if anything goes wrong
+					Message us on WhatsApp if anything's off
 				</div>
 			</div>
 		</div>

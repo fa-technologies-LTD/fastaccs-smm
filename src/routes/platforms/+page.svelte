@@ -211,9 +211,9 @@
 		</div>
 
 		<div class="trust-strip">
-			<span><Check size={12} class="trust-icon" /> Secure logs</span>
+			<span><Check size={12} class="trust-icon" /> Full login details</span>
 			<span><Zap size={12} class="trust-icon" /> Instant delivery</span>
-			<span><ShieldCheck size={12} class="trust-icon" /> Support ready</span>
+			<span><ShieldCheck size={12} class="trust-icon" /> Support that replies</span>
 		</div>
 	</section>
 
