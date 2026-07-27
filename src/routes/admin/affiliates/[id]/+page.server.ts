@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
 import { error } from '@sveltejs/kit';
+import { toSerializableDecimals } from '$lib/helpers/serialize';
 
 export const load: PageServerLoad = async ({ locals, params }) => {
 	if (!locals.user || locals.user.userType !== 'ADMIN') {
@@ -184,7 +185,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				Number(creditByStatus.paid || 0)
 		};
 
-		return {
+		return toSerializableDecimals({
 			affiliate: {
 				id: affiliate.id,
 				fullName: affiliate.fullName,
@@ -239,7 +240,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				sales: recentSales,
 				storeCredit: recentStoreCredit
 			}
-		};
+		});
 	} catch (err) {
 		if (err && typeof err === 'object' && 'status' in err) {
 			throw err;

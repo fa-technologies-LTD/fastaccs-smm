@@ -23,6 +23,7 @@ import {
 	buildRevenueOrderWindowWhere
 } from '$lib/helpers/order-revenue.server';
 import { ANALYTICS_FUNNEL_STEPS } from '$lib/services/analytics-events';
+import { toSerializableDecimals } from '$lib/helpers/serialize';
 
 type IntegrityCheckResult = {
 	key: string;
@@ -831,7 +832,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 					}
 		};
 
-		return {
+		return toSerializableDecimals({
 			stats,
 			canViewRevenue: revenueVisible,
 			integrity: {
@@ -840,7 +841,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				checks: visibleIntegrityChecks,
 				mismatches: integrityMismatches
 			}
-		};
+		});
 	} catch (error) {
 		console.error('Error loading analytics:', error);
 		return { stats: {} };
