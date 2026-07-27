@@ -4,7 +4,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Runtime queries go through the Neon pooler (pgbouncer=true disables prepared
+  // statements, which transaction-pooling requires). Migrations use the direct,
+  // non-pooled connection — running DDL through pgbouncer is unreliable.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
