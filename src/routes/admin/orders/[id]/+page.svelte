@@ -328,6 +328,42 @@
 		}
 	}
 
+	// Per-account faulty refund: flag one bad account and refund its unit price to store credit.
+	let refundingAccountId = $state<string | null>(null);
+	async function refundFaultyAccount(accountId: string | undefined, username: string | undefined) {
+		if (!accountId || refundingAccountId) return;
+		const reason = prompt(
+			`Mark @${username || 'this account'} as faulty and refund the buyer to store credit?\n\nOptional reason (shown in the audit log):`
+		);
+		if (reason === null) return; // cancelled
+		refundingAccountId = accountId;
+		try {
+			const res = await fetch(`/api/orders/${order.id}/refund-account`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ accountId, reason })
+			});
+			const result = await res.json();
+			if (!res.ok || !result.success) throw new Error(result.error || 'Refund failed');
+			addToast({
+				type: 'success',
+				title: 'Faulty account refunded',
+				message: `₦${Number(result.refundedAmount || 0).toLocaleString()} to store credit.${result.orderFullyRefunded ? ' Order fully refunded.' : ''}`,
+				duration: 3500
+			});
+			await invalidateAll();
+		} catch (error) {
+			addToast({
+				type: 'error',
+				title: 'Refund failed',
+				message: error instanceof Error ? error.message : 'Unknown error',
+				duration: 4000
+			});
+		} finally {
+			refundingAccountId = null;
+		}
+	}
+
 	async function processDelivery() {
 		if (isProcessing) return;
 
@@ -721,8 +757,19 @@
 												{formatStatusLabel(accountStatus)}
 											</span>
 										</div>
-										<div class="mb-3 text-xs text-[var(--text-muted)]">
-											{item.platform_name} · {item.tier_name}
+										<div class="mb-3 flex items-center justify-between gap-2 text-xs text-[var(--text-muted)]">
+											<span>{item.platform_name} · {item.tier_name}</span>
+											{#if getAccountStatus(item) === 'faulty'}
+												<span class="text-[11px] font-medium text-amber-500">Refunded (faulty)</span>
+											{:else}
+												<button
+													onclick={() => refundFaultyAccount(item.id, item.account_username)}
+													disabled={refundingAccountId === item.id}
+													class="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-50"
+												>
+													{refundingAccountId === item.id ? 'Refunding…' : 'Mark faulty & refund'}
+												</button>
+											{/if}
 										</div>
 
 											{#if showCredentials}
@@ -897,13 +944,27 @@
 												</td>
 											{/if}
 											<td class="px-6 py-4 text-right text-sm font-medium whitespace-nowrap">
-												<button
-													onclick={() => copyToClipboard(buildAccountLogText(item))}
-													class="text-[var(--link)] hover:text-[var(--link)]"
-													title="Copy account details"
-												>
-													<Copy class="h-4 w-4" />
-												</button>
+												<div class="inline-flex items-center gap-3">
+													{#if accountStatus === 'faulty'}
+														<span class="text-[11px] font-medium text-amber-500">Refunded</span>
+													{:else}
+														<button
+															onclick={() => refundFaultyAccount(item.id, item.account_username)}
+															disabled={refundingAccountId === item.id}
+															class="rounded-lg border border-[var(--border)] px-2 py-1 text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-50"
+															title="Mark faulty & refund to store credit"
+														>
+															{refundingAccountId === item.id ? '…' : 'Faulty & refund'}
+														</button>
+													{/if}
+													<button
+														onclick={() => copyToClipboard(buildAccountLogText(item))}
+														class="text-[var(--link)] hover:text-[var(--link)]"
+														title="Copy account details"
+													>
+														<Copy class="h-4 w-4" />
+													</button>
+												</div>
 											</td>
 										</tr>
 									{/each}
