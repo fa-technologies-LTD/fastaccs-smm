@@ -24,15 +24,18 @@ export const GET: RequestHandler = async () => {
 			}
 		}),
 		// Active tiers with zero available accounts — out of stock (needs restock).
-		// Manual-handover tiers are excluded: they have no account inventory and
-		// their availability is a manual toggle, not a stock count.
+		// Manual-handover and auto-SMS (Numbers) tiers are excluded: they have no
+		// account inventory and their availability is not a stock count.
 		prisma.category.count({
 			where: {
 				categoryType: 'tier',
 				isActive: true,
 				parentId: { not: null },
 				accounts: { none: { status: 'available' } },
-				NOT: { metadata: { path: ['delivery_mode'], equals: 'manual_handover' } }
+				NOT: [
+					{ metadata: { path: ['delivery_mode'], equals: 'manual_handover' } },
+					{ metadata: { path: ['delivery_mode'], equals: 'auto_sms' } }
+				]
 			}
 		})
 	]);

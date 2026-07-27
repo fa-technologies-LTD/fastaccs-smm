@@ -356,16 +356,17 @@ export async function pollPhoneRentalSms(orderItemId: string): Promise<PhonePoll
 	const canCancel = Date.now() - rental.createdAt.getTime() > CANCEL_MIN_AGE_MS;
 
 	let sms: hubman.HubmanSms | null = null;
+	// hub-man returns 422 "order inactive/expired" once the activation window has closed —
+	// that's a definitive "dead, no code", not a transient failure, so it must reach the
+	// cancel+refund path below (otherwise the rental sticks in awaiting_sms forever).
+	let hubInactive = false;
 	try {
 		sms = await hubman.getSms(rental.hubOrderUuid);
 	} catch (error) {
-		console.error(`[phone.poll] getSms failed for ${orderItemId}:`, (error as Error).message);
-		return {
-			status: 'awaiting_sms',
-			phoneNumber: rental.phoneNumber ?? undefined,
-			expiresAt: rental.expiresAt?.toISOString() ?? null,
-			canCancel
-		};
+		hubInactive = error instanceof HubmanError && error.status === 422;
+		if (!hubInactive) {
+			console.error(`[phone.poll] getSms failed for ${orderItemId}:`, (error as Error).message);
+		}
 	}
 
 	if (sms && sms.otp) {
@@ -378,22 +379,22 @@ export async function pollPhoneRentalSms(orderItemId: string): Promise<PhonePoll
 		};
 	}
 
-	// No SMS yet — has the window closed?
+	// No code yet — has the window closed (by our clock, or per hub-man)?
 	const pricing = await getPhonePricingConfig();
 	const deadline = rental.expiresAt
 		? rental.expiresAt.getTime()
 		: rental.createdAt.getTime() + pricing.activationTimeoutMinutes * 60_000;
 
-	if (Date.now() > deadline) {
+	if (Date.now() > deadline || hubInactive) {
 		const outcome = await cancelAndRefundRental(
 			orderItemId,
-			'No code arrived in time — refunded to store credit'
+			'No code arrived — refunded to store credit'
 		);
 		if (outcome === 'received')
 			return { status: 'received', phoneNumber: rental.phoneNumber ?? undefined };
 		if (outcome === 'refunded')
 			return { status: 'refunded', message: 'No code arrived — refunded to store credit' };
-		// Cancel not yet possible (e.g. 2-min window) — keep waiting.
+		// 'pending' — a transient hiccup during cancel; the next sweep retries.
 		return {
 			status: 'awaiting_sms',
 			phoneNumber: rental.phoneNumber ?? undefined,
@@ -402,6 +403,7 @@ export async function pollPhoneRentalSms(orderItemId: string): Promise<PhonePoll
 		};
 	}
 
+	// Within the window; if getSms hit a transient error we simply keep waiting.
 	return {
 		status: 'awaiting_sms',
 		phoneNumber: rental.phoneNumber ?? undefined,
@@ -413,14 +415,15 @@ export async function pollPhoneRentalSms(orderItemId: string): Promise<PhonePoll
 export type CancelOutcome = 'received' | 'refunded' | 'pending';
 
 /**
- * Cancel + refund a rental — but NEVER refund a rental that has a billable code.
- *
- * Order of checks (this closes the "code delivered AND refunded" money leak):
- *  1. Final getSms — if a code is present, mark received (no refund).
- *  2. Cancel on hub-man — only refund if hub-man CONFIRMS the cancel (which it refuses
- *     once an SMS has been billed), proving we owe nothing.
- *  3. If the cancel is refused (or too early), re-check for a code; otherwise leave the
- *     rental for a later retry rather than refunding blindly.
+ * Cancel + refund a rental. The SMS record — not the cancel call — is authoritative:
+ *  - getSms returns a code  → fulfilled, mark received, NEVER refund (closes the
+ *    "code delivered AND refunded" money leak).
+ *  - getSms returns no code (still waiting, OR hub-man says the activation expired/inactive
+ *    with a 422) → no billable SMS exists, so best-effort cancel to release our balance and
+ *    refund the customer. This also rescues rentals hub-man already expired on its side,
+ *    which the old "only refund if cancel succeeds" rule left stuck forever.
+ *  - getSms fails transiently (network / 5xx) → leave it for the next sweep, don't refund blind.
+ * Only call this when a refund is contextually due (past the activation window, or a user cancel).
  * Idempotent and safe to call repeatedly.
  */
 export async function cancelAndRefundRental(
@@ -439,32 +442,25 @@ export async function cancelAndRefundRental(
 		return 'refunded';
 	}
 
-	// 1. Final code check before doing anything irreversible.
-	const smsBefore = await hubman.getSms(rental.hubOrderUuid).catch(() => null);
-	if (smsBefore && smsBefore.otp) {
-		await markRentalReceived(orderItemId, smsBefore);
+	// Authoritative check: does hub-man have a billable code for us?
+	let sms: hubman.HubmanSms | null = null;
+	try {
+		sms = await hubman.getSms(rental.hubOrderUuid); // null = waiting/no code
+	} catch (error) {
+		// 422 = expired/inactive → no retrievable code, refund-eligible. Anything else is
+		// transient — back off and let the next sweep retry rather than refunding blindly.
+		if (!(error instanceof HubmanError && error.status === 422)) {
+			return 'pending';
+		}
+	}
+	if (sms && sms.otp) {
+		await markRentalReceived(orderItemId, sms);
 		return 'received';
 	}
 
-	// 2. Cancel on hub-man; refund ONLY if it confirms (no billed SMS).
-	let cancelled = false;
-	try {
-		cancelled = await hubman.cancelRent(rental.hubOrderUuid);
-	} catch (error) {
-		console.error(`[phone.cancel] hub-man cancel failed for ${orderItemId}:`, (error as Error).message);
-		cancelled = false;
-	}
-
-	if (!cancelled) {
-		// 3. Refused — a code may have just landed, or it's still inside the 2-min window.
-		const smsAfter = await hubman.getSms(rental.hubOrderUuid).catch(() => null);
-		if (smsAfter && smsAfter.otp) {
-			await markRentalReceived(orderItemId, smsAfter);
-			return 'received';
-		}
-		return 'pending'; // retry on the next poll / sweep
-	}
-
+	// No billable code. Best-effort cancel to release our balance if the rental is still
+	// active (hub-man refuses once expired — harmless), then refund the customer.
+	await hubman.cancelRent(rental.hubOrderUuid).catch(() => {});
 	const orderId = await orderIdForItem(orderItemId);
 	if (orderId) await refundPhoneOrderToStoreCredit(orderId, description, 'cancel');
 	return 'refunded';
