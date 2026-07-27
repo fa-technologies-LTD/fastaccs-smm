@@ -228,7 +228,7 @@
 			</div>
 
 			<!-- Desktop Navigation -->
-			<div class="hidden items-center space-x-8 md:flex">
+			<div class="hidden items-center space-x-6 min-[1160px]:flex">
 				{#if user}
 					<!-- Authenticated User Navigation -->
 					<a
@@ -295,7 +295,7 @@
 			</div>
 
 			<!-- Desktop Actions -->
-			<div class="hidden items-center space-x-4 md:flex">
+			<div class="hidden items-center space-x-4 min-[1160px]:flex">
 				<!-- Storefront cart stays available to admins for user-flow testing. -->
 				{#if showStorefrontCart}
 					<button
@@ -448,7 +448,7 @@
 			</div>
 
 			<!-- Mobile menu button -->
-			<div class="flex items-center gap-2 md:hidden">
+			<div class="flex items-center gap-2 min-[1160px]:hidden">
 				<!-- Mobile storefront cart -->
 				{#if showStorefrontCart}
 					<button
@@ -566,7 +566,7 @@
 	<!-- Mobile menu -->
 	{#if mobileMenuOpen}
 		<div
-			class="md:hidden"
+			class="min-[1160px]:hidden"
 			style="border-top: 1px solid var(--border); background: var(--bg-elev-1);"
 		>
 			<div class="space-y-4 px-4 py-6">
