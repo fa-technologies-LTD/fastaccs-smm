@@ -179,6 +179,7 @@ export async function GET({ url, locals }) {
 					delivered_accounts: 0,
 					sold_accounts: 0,
 					out_of_stock: 0, // Will be filled below
+					outOfStockTiersCount: 0, // Real out-of-stock account-tier count (filled below)
 					low_stock: 0, // Will be filled below
 					low_stock_threshold: 0,
 					platforms: 0 // Will be filled below
@@ -258,6 +259,14 @@ export async function GET({ url, locals }) {
 		stats.out_of_stock = outOfStockBatches;
 		stats.low_stock = lowStockBatches;
 		stats.platforms = platformsCount.length;
+
+		// Real out-of-stock TIER count (what the dashboard shows) — account tiers only,
+		// excluding manual-handover and numbers (auto-SMS), which have no stock concept.
+		stats.outOfStockTiersCount = categories.filter((t) => {
+			const mode = getTierDeliveryConfig(t.metadata).mode;
+			if (mode === 'manual_handover' || mode === 'auto_sms') return false;
+			return !t.accounts.some((a) => a.status === 'available');
+		}).length;
 
 		// Transform categories to show PLATFORM/TIER inventory
 			const tierInventoryData = categories.map((tier) => {

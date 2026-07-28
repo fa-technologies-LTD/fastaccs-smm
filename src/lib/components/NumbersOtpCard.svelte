@@ -26,6 +26,7 @@
 	let expiresAt = $state(phone.expiresAt);
 	let canCancel = $state(false);
 	let cancelling = $state(false);
+	let cancelledByUser = $state(false);
 	let now = $state(Date.now());
 
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -86,6 +87,7 @@
 			const data = await res.json();
 			if (data.outcome === 'refunded') {
 				status = 'refunded';
+				cancelledByUser = true;
 				stopPolling();
 				showSuccess('Cancelled', data.message);
 			} else if (data.outcome === 'received') {
@@ -206,7 +208,9 @@
 		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid rgba(245,158,11,0.4); background: rgba(245,158,11,0.10); color: #fbbf24;">
 			<div class="inline-flex items-center gap-2">
 				<AlertTriangle class="w-4 h-4" />
-				This number was refunded to your store credit.
+				{cancelledByUser
+					? 'Cancelled — refunded to your store credit.'
+					: 'No code arrived in time — refunded to your store credit.'}
 			</div>
 		</div>
 	{/if}

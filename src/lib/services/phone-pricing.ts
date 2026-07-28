@@ -32,10 +32,13 @@ const DEFAULTS = {
 	activationTimeoutMinutes: 20 // wait this long for the OTP before auto-cancel+refund
 } as const;
 
-/** Round a NGN amount UP to the nearest `step` for clean, stable customer pricing. */
-export function roundNgnUp(amount: number, step = 50): number {
-	if (!Number.isFinite(amount) || amount <= 0) return step;
-	return Math.ceil(amount / step) * step;
+// No number is sold below this, and prices round to clean ₦100s (fewer payment mistakes).
+export const NUMBERS_PRICE_FLOOR_NGN = 1000;
+
+/** Round a NGN amount UP to the nearest ₦100, with a ₦1,000 floor. */
+export function roundNgnUp(amount: number, step = 100): number {
+	if (!Number.isFinite(amount) || amount <= 0) return NUMBERS_PRICE_FLOOR_NGN;
+	return Math.max(NUMBERS_PRICE_FLOOR_NGN, Math.ceil(amount / step) * step);
 }
 
 export interface PhonePricingConfig {

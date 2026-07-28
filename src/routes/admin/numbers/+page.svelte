@@ -39,9 +39,11 @@
 	);
 	const activeCount = $derived(rows.filter((r) => r.active && r.priceNgn > 0).length);
 
-	function roundNgnUp(amount: number, step = 50): number {
-		if (!Number.isFinite(amount) || amount <= 0) return 0;
-		return Math.ceil(amount / step) * step;
+	// Round up to clean ₦100s, floor at ₦1,000 (matches the server pricing rule).
+	const PRICE_FLOOR_NGN = 1000;
+	function roundNgnUp(amount: number, step = 100): number {
+		if (!Number.isFinite(amount) || amount <= 0) return PRICE_FLOOR_NGN;
+		return Math.max(PRICE_FLOOR_NGN, Math.ceil(amount / step) * step);
 	}
 	function costCentsOf(r: Row): number {
 		return r.liveCostCents ?? r.expectedCostCents ?? 0;
@@ -155,7 +157,7 @@
 		</div>
 		<p class="text-sm mb-4" style="color: var(--text-muted);">
 			Customer price = <span class="font-mono">hub-man cost ($) × your rate × (1 + margin%)</span>,
-			rounded up to the nearest ₦50.
+			rounded up to the nearest ₦100 (minimum ₦1,000).
 		</p>
 		<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
 			<label class="block">

@@ -46,6 +46,10 @@
 			return { label: 'Payment Failed', tone: 'failure' };
 		}
 
+		if (orderStatus === 'refunded' || payment === 'refunded') {
+			return { label: 'Refunded', tone: 'failure' };
+		}
+
 		if (
 			['cancelled', 'abandoned', 'expired'].includes(orderStatus) ||
 			['cancelled', 'canceled', 'abandoned', 'expired', 'user_cancelled'].includes(payment)
@@ -66,12 +70,14 @@
 		deliveryStatus: string,
 		paymentTone: 'success' | 'pending' | 'failure'
 	): string {
+		const orderStatus = normalizeLower(status);
+		const delivery = normalizeLower(deliveryStatus);
+
+		if (orderStatus === 'refunded' || delivery === 'refunded') return 'Refunded';
+
 		if (paymentTone !== 'success') {
 			return 'Not Started';
 		}
-
-		const orderStatus = normalizeLower(status);
-		const delivery = normalizeLower(deliveryStatus);
 
 		if (delivery === 'delivered' || orderStatus === 'completed') return 'Completed';
 		if (delivery === 'processing' || orderStatus === 'processing') return 'Processing';
@@ -206,9 +212,13 @@
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.status === 'completed'}
 									Your accounts have been successfully allocated and delivered.
 								{:else if data.phone}
-									{data.order.status === 'completed'
-										? 'Your verification code has arrived — see it above.'
-										: 'Payment confirmed. Use the number above to receive your code.'}
+									{#if data.order.status === 'refunded'}
+										This number was cancelled and refunded to your store credit.
+									{:else if data.order.status === 'completed'}
+										Your verification code has arrived — see it above.
+									{:else}
+										Payment confirmed. Use the number above to receive your code.
+									{/if}
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.deliveryMethod === 'whatsapp' && data.order.deliveryStatus === 'processing'}
 									Payment confirmed. Manual handover is in progress on WhatsApp.
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'pending'}

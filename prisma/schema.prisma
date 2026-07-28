@@ -273,6 +273,7 @@ model PhoneRental {
   costCents     Int?      @map("cost_cents") // actual hub-man price_cents charged (USD cents)
   maxPriceCents Int?      @map("max_price_cents") // ceiling we sent (USD cents)
   saleAmountNgn Decimal?  @map("sale_amount_ngn") // what the customer paid, NGN
+  rentedAt      DateTime? @map("rented_at") // when the number was actually rented (drives the 2-min cancel window)
   expiresAt     DateTime? @map("expires_at")
   receivedAt    DateTime? @map("received_at")
   refundedAt    DateTime? @map("refunded_at")

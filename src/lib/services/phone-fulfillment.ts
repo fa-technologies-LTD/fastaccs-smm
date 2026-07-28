@@ -104,6 +104,17 @@ export async function initPhoneOrder(orderId: string): Promise<{ ok: boolean }> 
 	const ctx = await loadPhoneOrderContext(orderId);
 	if (!ctx) return { ok: false };
 
+	// Never resurrect an already-resolved rental — if it was refunded/cancelled/received,
+	// leave the order as-is (the reconcile cron can otherwise re-run this and flip a
+	// refunded order back to paid/processing).
+	const existing = await prisma.phoneRental.findUnique({
+		where: { orderItemId: ctx.orderItemId },
+		select: { status: true }
+	});
+	if (existing && TERMINAL_STATUSES.has(existing.status)) {
+		return { ok: false };
+	}
+
 	await prisma.phoneRental.upsert({
 		where: { orderItemId: ctx.orderItemId },
 		update: {},
@@ -203,6 +214,7 @@ export async function fulfillPhoneOrder(
 				phoneNumber: formatPhoneNumber(result.phone_number),
 				costCents: Number.isFinite(costCents) ? Math.round(costCents) : null,
 				maxPriceCents: maxPriceCents ?? null,
+				rentedAt: new Date(),
 				expiresAt,
 				status: 'awaiting_sms'
 			}
@@ -290,7 +302,9 @@ export async function refundPhoneOrderToStoreCredit(
 
 		await tx.order.update({
 			where: { id: ctx.orderId },
-			data: { status: 'refunded', deliveryStatus: 'refunded' }
+			// paymentStatus MUST flip too, or the reconcile cron (which re-processes any
+			// `paymentStatus:'paid'` order) resurrects this refunded order back to paid/processing.
+			data: { status: 'refunded', paymentStatus: 'refunded', deliveryStatus: 'refunded' }
 		});
 		return true;
 	});
@@ -353,7 +367,10 @@ export async function pollPhoneRentalSms(orderItemId: string): Promise<PhonePoll
 	if (rental.status !== 'awaiting_sms' || !rental.hubOrderUuid)
 		return { status: 'preparing', message: 'Getting your number…' };
 
-	const canCancel = Date.now() - rental.createdAt.getTime() > CANCEL_MIN_AGE_MS;
+	// hub-man only allows cancel 2 min after the number was RENTED (not when the row was
+	// created at payment — those differ now that renting is deferred to the order page).
+	const rentBaseline = rental.rentedAt ?? rental.createdAt;
+	const canCancel = Date.now() - rentBaseline.getTime() > CANCEL_MIN_AGE_MS;
 
 	let sms: hubman.HubmanSms | null = null;
 	// hub-man returns 422 "order inactive/expired" once the activation window has closed —
@@ -480,7 +497,7 @@ export async function userCancelPhoneRental(
 		return { ok: false, outcome: 'received', message: 'Your code already arrived — this order is complete.' };
 	if (TERMINAL_STATUSES.has(rental.status))
 		return { ok: true, outcome: 'refunded', message: 'This order was already refunded.' };
-	if (Date.now() - rental.createdAt.getTime() <= CANCEL_MIN_AGE_MS)
+	if (Date.now() - (rental.rentedAt ?? rental.createdAt).getTime() <= CANCEL_MIN_AGE_MS)
 		return {
 			ok: false,
 			outcome: 'pending',
