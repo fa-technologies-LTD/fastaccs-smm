@@ -3,6 +3,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
+import { runWithDbRetry } from '$lib/server/db-retry';
 import { fulfillOrder } from '$lib/services/fulfillment';
 import { initializeTransaction } from '$lib/services/monnify';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
@@ -865,7 +866,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		}));
 		let data;
 		try {
-			data = await prisma.$transaction(async (tx) => {
+			data = await runWithDbRetry(() =>
+				prisma.$transaction(async (tx) => {
 				const createdOrder = await tx.order.create({
 					data: {
 						userId: checkoutUserId,
@@ -956,7 +958,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					}
 
 				return createdOrder;
-			});
+				})
+			);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Could not reserve order stock.';
 			if (message.startsWith('STOCK_HOLD_INCOMPLETE:')) {
