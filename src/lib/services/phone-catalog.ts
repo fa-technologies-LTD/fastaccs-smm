@@ -355,6 +355,9 @@ export interface NumbersStorefrontTier {
 export async function getNumbersStorefront(): Promise<
 	Array<{ serviceId: number; serviceName: string; tiers: NumbersStorefrontTier[] }>
 > {
+	// Fail-safe: never offer numbers the backend can't actually rent (e.g. token not
+	// configured in this environment) — the storefront shows "coming soon" instead.
+	if (!hubman.isHubmanConfigured()) return [];
 	const platformId = await getNumbersPlatformId();
 	if (!platformId) return [];
 	const tiers = await prisma.category.findMany({
