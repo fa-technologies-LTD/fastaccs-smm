@@ -140,7 +140,7 @@
 <div class="p-6 max-w-6xl mx-auto" style="color: var(--text);">
 	<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
 		<div class="flex items-center gap-3">
-			<Phone class="w-6 h-6" style="color: var(--fa-lime-400);" />
+			<Phone class="w-6 h-6" style="color: #38bdf8;" />
 			<div>
 				<h1 class="text-2xl font-bold" style="color: var(--text);">Numbers — Pricing</h1>
 				<p class="text-sm" style="color: var(--text-muted);">
@@ -169,7 +169,7 @@
 				onclick={saveAll}
 				disabled={saving}
 				class="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg font-medium disabled:opacity-50"
-				style="background: var(--fa-lime-700); color: #0a0a0a;"
+				style="background: #0ea5e9; color: #ffffff;"
 			>
 				<Save class="w-4 h-4" />
 				{saving ? 'Saving…' : 'Save all'}
@@ -189,7 +189,7 @@
 	<!-- Pricing rules -->
 	<div class="mb-6 rounded-xl p-5" style="border: 1px solid var(--border); background: var(--surface);">
 		<div class="flex items-center gap-2 mb-3">
-			<DollarSign class="w-5 h-5" style="color: var(--fa-lime-400);" />
+			<DollarSign class="w-5 h-5" style="color: #38bdf8;" />
 			<h2 class="font-semibold" style="color: var(--text);">Pricing rules</h2>
 		</div>
 		<p class="text-sm mb-4" style="color: var(--text-muted);">
@@ -221,7 +221,7 @@
 				type="button"
 				onclick={applyToAll}
 				class="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium"
-				style="background: var(--fa-lime-700); color: #0a0a0a;"
+				style="background: #0ea5e9; color: #ffffff;"
 			>
 				<DollarSign class="w-4 h-4" /> Calculate all prices
 			</button>
@@ -262,7 +262,7 @@
 						onclick={launchCampaign}
 						disabled={campaignBusy}
 						class="px-4 py-2 text-sm rounded-lg font-semibold disabled:opacity-50"
-						style="background: var(--fa-lime-700); color: #0a0a0a;"
+						style="background: #0ea5e9; color: #ffffff;"
 					>
 						{campaignBusy ? 'Launching…' : '🚀 Launch announcement'}
 					</button>
@@ -314,7 +314,7 @@
 								type="button"
 								onclick={() => (row.priceNgn = computedPrice(row))}
 								class="hover:underline"
-								style="color: var(--fa-lime-400);"
+								style="color: #38bdf8;"
 								title="Use this price"
 							>
 								₦{computedPrice(row).toLocaleString()}

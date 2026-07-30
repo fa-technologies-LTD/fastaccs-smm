@@ -15,18 +15,22 @@
 		Clock,
 		Eye,
 		Copy,
-		DollarSign
+		DollarSign,
+		Phone,
+		RefreshCw
 	} from '$lib/icons';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 
-	let selectedTab = $state<'buyer' | 'boosting' | 'affiliate'>(
+	let selectedTab = $state<'buyer' | 'numbers' | 'boosting' | 'affiliate'>(
 		page.url.searchParams.get('tab') === 'affiliate'
 			? 'affiliate'
 			: page.url.searchParams.get('tab') === 'boosting'
 				? 'boosting'
-				: 'buyer'
+				: page.url.searchParams.get('tab') === 'numbers'
+					? 'numbers'
+					: 'buyer'
 	);
 	let animatedSteps = $state<number[]>([]);
 
@@ -80,6 +84,18 @@
 				>
 					<ShoppingBag class="mr-2 inline h-5 w-5" />
 					Buying Accounts
+				</button>
+				<button
+					onclick={() => (selectedTab = 'numbers')}
+					class="px-4 py-4 text-sm font-semibold transition-colors md:text-base"
+					style="border-bottom: 2px solid {selectedTab === 'numbers'
+						? '#0ea5e9'
+						: 'transparent'}; color: {selectedTab === 'numbers'
+						? '#0ea5e9'
+						: 'var(--text-muted)'}; font-family: var(--font-head);"
+				>
+					<Phone class="mr-2 inline h-5 w-5" />
+					Verification Numbers
 				</button>
 				<button
 					onclick={() => (selectedTab = 'boosting')}
@@ -548,6 +564,60 @@
 							Account listings are organized by tier details so you can choose what best matches
 							your goals.
 						</p>
+					</div>
+				</div>
+			</div>
+		</section>
+	{:else if selectedTab === 'numbers'}
+		<!-- Numbers (verification) Flow Section -->
+		<section class="px-4 py-16">
+			<div class="mx-auto max-w-6xl">
+				<h2
+					class="mb-3 text-center text-3xl font-bold"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
+					Verify any account in seconds
+				</h2>
+				<p class="mx-auto mb-12 max-w-2xl text-center" style="color: var(--text-muted);">
+					Instant phone numbers for WhatsApp, Telegram, Google and more. Buy a number, receive
+					your one-time code automatically — no waiting, no chat.
+				</p>
+
+				<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+					{#each [{ n: 1, icon: Phone, title: 'Pick a service', body: 'Choose from 20+ apps and a country, each with a clear Naira price.' }, { n: 2, icon: CreditCard, title: 'Pay', body: 'Checkout with Monnify or your store credit — the same fast flow as everything else.' }, { n: 3, icon: Eye, title: 'Get your number', body: 'Your number appears on the order page instantly, ready to use.' }, { n: 4, icon: RefreshCw, title: 'Code arrives', body: 'Your one-time code shows automatically in seconds. No code? Instant refund to store credit.' }] as step (step.n)}
+						{@const StepIcon = step.icon}
+						<div
+							class="rounded-2xl p-6 text-center transition-all duration-500 {animatedSteps.includes(step.n) ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}"
+							style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+						>
+							<div
+								class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full text-white"
+								style="background: linear-gradient(135deg, #0ea5e9, #0284c7);"
+							>
+								<StepIcon class="h-8 w-8" />
+							</div>
+							<div class="mb-1 text-sm font-bold" style="color: #0ea5e9;">Step {step.n}</div>
+							<h3 class="mb-2 text-lg font-bold" style="color: var(--text); font-family: var(--font-head);">
+								{step.title}
+							</h3>
+							<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
+								{step.body}
+							</p>
+						</div>
+					{/each}
+				</div>
+
+				<div class="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+					<button
+						onclick={() => goto('/numbers')}
+						class="rounded-full px-6 py-3 font-semibold text-white transition-transform active:scale-95"
+						style="background: #0ea5e9;"
+					>
+						Get a verification number
+					</button>
+					<div class="flex items-center gap-4 text-sm" style="color: var(--text-muted);">
+						<span class="inline-flex items-center gap-1.5"><Zap class="h-4 w-4" style="color:#fbbf24;" /> Instant</span>
+						<span class="inline-flex items-center gap-1.5"><Shield class="h-4 w-4" style="color:#34d399;" /> No-code refund</span>
 					</div>
 				</div>
 			</div>

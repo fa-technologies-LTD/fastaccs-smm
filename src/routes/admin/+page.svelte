@@ -687,14 +687,14 @@
 			<div class="mb-2 flex items-center justify-between sm:mb-3">
 				<p
 					class="text-xs font-semibold tracking-[0.1em] uppercase"
-					style="color: var(--fa-lime-400);"
+					style="color: #38bdf8;"
 				>
 					Numbers
 				</p>
 				<a
 					href="/admin/numbers/analytics"
 					class="inline-flex items-center gap-1 text-xs font-medium hover:underline"
-					style="color: var(--fa-lime-400);"
+					style="color: #38bdf8;"
 				>
 					View analytics <ArrowUpRight class="size-3.5" />
 				</a>
@@ -702,11 +702,11 @@
 			<div class="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3">
 				<div
 					class="group rounded-lg p-3 sm:p-4"
-					style="background: var(--bg-elev-1); border: 1px solid rgba(202,219,46,0.3)"
+					style="background: var(--bg-elev-1); border: 1px solid rgba(56,189,248,0.3)"
 				>
 					<div class="flex items-center">
-						<div class="rounded-lg p-2 sm:p-3" style="background: rgba(202,219,46,0.14);">
-							<Phone class="size-5 sm:size-6" style="color: var(--fa-lime-400);" />
+						<div class="rounded-lg p-2 sm:p-3" style="background: rgba(56,189,248,0.14);">
+							<Phone class="size-5 sm:size-6" style="color: #38bdf8;" />
 						</div>
 						<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 							<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Numbers Sold</p>
@@ -723,11 +723,11 @@
 
 				<div
 					class="group rounded-lg p-3 sm:p-4"
-					style="background: var(--bg-elev-1); border: 1px solid rgba(202,219,46,0.3)"
+					style="background: var(--bg-elev-1); border: 1px solid rgba(56,189,248,0.3)"
 				>
 					<div class="flex items-center">
-						<div class="rounded-lg p-2 sm:p-3" style="background: rgba(202,219,46,0.14);">
-							<DollarSign class="size-5 sm:size-6" style="color: var(--fa-lime-400);" />
+						<div class="rounded-lg p-2 sm:p-3" style="background: rgba(56,189,248,0.14);">
+							<DollarSign class="size-5 sm:size-6" style="color: #38bdf8;" />
 						</div>
 						<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 							<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
@@ -747,11 +747,11 @@
 					class="group rounded-lg p-3 sm:p-4"
 					style="background: var(--bg-elev-1); border: 1px solid {data.numbersSummary?.lowBalance
 						? 'rgba(226,75,74,0.4)'
-						: 'rgba(202,219,46,0.3)'}"
+						: 'rgba(56,189,248,0.3)'}"
 				>
 					<div class="flex items-center">
-						<div class="rounded-lg p-2 sm:p-3" style="background: rgba(202,219,46,0.14);">
-							<Activity class="size-5 sm:size-6" style="color: var(--fa-lime-400);" />
+						<div class="rounded-lg p-2 sm:p-3" style="background: rgba(56,189,248,0.14);">
+							<Activity class="size-5 sm:size-6" style="color: #38bdf8;" />
 						</div>
 						<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 							<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">

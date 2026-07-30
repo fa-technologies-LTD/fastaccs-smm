@@ -146,7 +146,7 @@
 			<button
 				onclick={() => copy(phoneNumber ?? '', 'Number')}
 				class="inline-flex items-center gap-1 text-sm hover:underline"
-				style="color: var(--fa-lime-400);"
+				style="color: #38bdf8;"
 			>
 				<Copy class="w-4 h-4" /> Copy
 			</button>
@@ -173,7 +173,7 @@
 	{:else if isPreparing}
 		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
 			<div class="inline-flex items-center gap-2" style="color: var(--text);">
-				<RefreshCw class="w-4 h-4 animate-spin" style="color: var(--fa-lime-400);" />
+				<RefreshCw class="w-4 h-4 animate-spin" style="color: #38bdf8;" />
 				Getting your number…
 			</div>
 			<div class="text-xs mt-2" style="color: var(--text-dim);">
@@ -183,7 +183,7 @@
 	{:else if isWaiting}
 		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
 			<div class="inline-flex items-center gap-2" style="color: var(--text);">
-				<RefreshCw class="w-4 h-4 animate-spin" style="color: var(--fa-lime-400);" />
+				<RefreshCw class="w-4 h-4 animate-spin" style="color: #38bdf8;" />
 				Waiting for your code…
 			</div>
 			{#if countdown}

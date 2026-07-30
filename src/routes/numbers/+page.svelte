@@ -74,7 +74,7 @@
 		<div class="text-center mb-8">
 			<div
 				class="inline-flex items-center gap-2 mb-3 px-3 py-1 rounded-full text-xs font-semibold"
-				style="background: color-mix(in srgb, var(--fa-lime-700) 22%, transparent); color: var(--fa-lime-400);"
+				style="background: rgba(14,165,233,0.20); color: #38bdf8;"
 			>
 				<Zap class="w-3.5 h-3.5" /> Instant OTP · one code per number
 			</div>
@@ -85,7 +85,7 @@
 			<div class="flex items-center justify-center gap-5 mt-4 text-sm" style="color: var(--text-muted);">
 				<span class="inline-flex items-center gap-1.5"><Zap class="w-4 h-4" style="color:#fbbf24;" /> Instant</span>
 				<span class="inline-flex items-center gap-1.5"><ShieldCheck class="w-4 h-4" style="color:#34d399;" /> No-code refund</span>
-				<span class="inline-flex items-center gap-1.5"><RefreshCw class="w-4 h-4" style="color: var(--fa-lime-400);" /> Auto-delivered</span>
+				<span class="inline-flex items-center gap-1.5"><RefreshCw class="w-4 h-4" style="color: #38bdf8;" /> Auto-delivered</span>
 			</div>
 		</div>
 
@@ -100,7 +100,7 @@
 					{@const isOpen = openId === service.serviceId}
 					<div
 						class="rounded-2xl overflow-hidden transition-shadow"
-						style="border: 1px solid {isOpen ? 'var(--fa-lime-700)' : 'var(--border)'}; background: var(--surface);"
+						style="border: 1px solid {isOpen ? '#0ea5e9' : 'var(--border)'}; background: var(--surface);"
 					>
 						<!-- Service header (accordion trigger) -->
 						<button
@@ -148,7 +148,7 @@
 												onclick={() => buy(tier.tierId, `${service.serviceName} — ${tier.countryName}`)}
 												disabled={buyingTierId === tier.tierId}
 												class="px-4 py-1.5 text-sm rounded-lg font-semibold transition-transform active:scale-95 hover:brightness-110 disabled:opacity-60"
-												style="background: var(--fa-lime-700); color: #0a0a0a;"
+												style="background: #0ea5e9; color: #ffffff;"
 											>
 												{buyingTierId === tier.tierId ? '…' : 'Buy'}
 											</button>

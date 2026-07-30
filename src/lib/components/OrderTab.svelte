@@ -505,7 +505,7 @@
 									style="color: var(--text); font-family: var(--font-head);"
 								>
 									{#if isNumbersOrder(order)}
-										<Phone class="h-3.5 w-3.5 flex-shrink-0" style="color: var(--fa-lime-400);" />
+										<Phone class="h-3.5 w-3.5 flex-shrink-0" style="color: #38bdf8;" />
 									{/if}
 									<span class="truncate">{getDisplayOrderNumber(order)}</span>
 								</div>
