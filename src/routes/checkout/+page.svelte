@@ -965,7 +965,7 @@
 												>
 													{item.boosting.boostQuantity.toLocaleString()} qty
 												</span>
-											{:else if item.exactAccount}
+											{:else if item.exactAccount || item.tier.deliveryMode === 'auto_sms'}
 												<span
 													class="rounded-md px-2 py-1 text-xs font-semibold"
 													style="border: 1px solid var(--border); color: var(--text-muted); background: var(--bg-elev-2);"

@@ -667,6 +667,19 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 		const isBoostingCheckout = orderDeliveryMode === 'boosting_manual';
 		const isPhoneCheckout = orderDeliveryMode === 'auto_sms';
+
+		// Numbers are fulfilled one activation per order. Enforce a single number at
+		// quantity 1 server-side, so a tampered/edited cart can never charge for more
+		// numbers than we actually rent (fulfillment rents exactly one).
+		if (isPhoneCheckout && (itemsWithNames.length !== 1 || itemsWithNames[0].quantity !== 1)) {
+			return json(
+				{
+					success: false,
+					error: 'Numbers are sold one per order — please buy a single number at a time.'
+				},
+				{ status: 400 }
+			);
+		}
 		const requestedPromotionCode = String(orderData.promotionCode || '')
 			.trim()
 			.toUpperCase();

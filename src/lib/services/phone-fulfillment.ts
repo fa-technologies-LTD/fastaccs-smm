@@ -191,65 +191,111 @@ export async function fulfillPhoneOrder(
 		};
 	}
 
-	// We own the rent. Cap the price so a spike can't eat the margin.
+	// We own the rent. Cap the price so a spike can't eat the margin — and NEVER pay
+	// more than the customer actually paid us (converted to USD cents). This guarantees
+	// no loss regardless of how rate/margin/tolerance are configured: if the live cost
+	// exceeds the customer's payment, the rent fails and they're refunded instead.
 	const expectedCost = ctx.tier.expectedCostCents || undefined;
-	const maxPriceCents = expectedCost
+	const paidCapCents = Math.max(
+		1,
+		Math.floor((ctx.saleAmountNgn / Math.max(1, pricing.usdNgnRate)) * 100)
+	);
+	const toleranceCap = expectedCost
 		? computeMaxPriceCents(expectedCost, pricing.ceilingTolerancePercent)
-		: undefined;
+		: paidCapCents;
+	const maxPriceCents = Math.min(toleranceCap, paidCapCents);
 
+	// Step 1: rent. A failure here means no number and no charge to reclaim → refund.
+	let result: hubman.HubmanRentResult;
 	try {
-		const result = await hubman.rentActivationNumber({
+		result = await hubman.rentActivationNumber({
 			countryId: ctx.tier.countryId,
 			serviceId: ctx.tier.serviceId,
 			maxPriceCents
 		});
-
-		const costCents = Number(result.price_cents);
-		const expiresAt = result.expires_at ? new Date(result.expires_at) : null;
-
-		await prisma.phoneRental.update({
-			where: { orderItemId: ctx.orderItemId },
-			data: {
-				hubOrderUuid: result.order_uuid,
-				phoneNumber: formatPhoneNumber(result.phone_number),
-				costCents: Number.isFinite(costCents) ? Math.round(costCents) : null,
-				maxPriceCents: maxPriceCents ?? null,
-				rentedAt: new Date(),
-				expiresAt,
-				status: 'awaiting_sms'
-			}
-		});
-
-		await prisma.order.update({
-			where: { id: orderId },
-			data: { status: 'paid', paymentStatus: 'paid', deliveryStatus: 'processing' }
-		});
-
-		return {
-			status: 'awaiting_sms',
-			phoneNumber: formatPhoneNumber(result.phone_number),
-			message: 'Your number is ready — waiting for the code'
-		};
 	} catch (error) {
-		// Rent failed after payment (no stock, over-ceiling, or API error).
 		const reason =
 			error instanceof HubmanError
 				? `hub-man rent failed: ${error.message}`
 				: `rent error: ${(error as Error).message}`;
 		console.error(`[phone.${source}] ${reason} (order ${ctx.orderNumber})`);
-
 		await prisma.phoneRental.updateMany({
 			where: { orderItemId: ctx.orderItemId, status: 'renting' },
 			data: { status: 'failed', failureReason: reason }
 		});
-
 		await refundPhoneOrderToStoreCredit(orderId, 'We could not get your number — fully refunded', source);
-
 		return {
 			status: 'refunded',
 			message: 'We could not get a number right now — your payment was refunded to store credit.'
 		};
 	}
+
+	// Step 2: the number is now billed on hub-man. Persist it (with retries). If we can
+	// NEVER persist it, cancel it on hub-man to reclaim our balance and refund — so a
+	// rented number is always either recorded, or cancelled+refunded (never orphaned,
+	// never double-rented).
+	const costCents = Number(result.price_cents);
+	const expiresAt = result.expires_at ? new Date(result.expires_at) : null;
+	let persisted = false;
+	for (let attempt = 0; attempt < 3 && !persisted; attempt++) {
+		try {
+			await prisma.phoneRental.update({
+				where: { orderItemId: ctx.orderItemId },
+				data: {
+					hubOrderUuid: result.order_uuid,
+					phoneNumber: formatPhoneNumber(result.phone_number),
+					costCents: Number.isFinite(costCents) ? Math.round(costCents) : null,
+					maxPriceCents: maxPriceCents ?? null,
+					rentedAt: new Date(),
+					expiresAt,
+					status: 'awaiting_sms'
+				}
+			});
+			persisted = true;
+		} catch (e) {
+			console.error(`[phone.${source}] persist attempt ${attempt + 1} failed:`, (e as Error).message);
+			await new Promise((r) => setTimeout(r, 400));
+		}
+	}
+
+	if (!persisted) {
+		await hubman.cancelRent(result.order_uuid).catch(() => {});
+		await prisma.phoneRental
+			.updateMany({
+				where: { orderItemId: ctx.orderItemId, status: 'renting' },
+				data: { status: 'failed', failureReason: 'rent persist failed — cancelled + refunded' }
+			})
+			.catch(() => {});
+		await refundPhoneOrderToStoreCredit(
+			orderId,
+			'We could not complete your number — fully refunded',
+			source
+		).catch(() => {});
+		await sendCriticalAdminAlert({
+			title: 'Phone rent could not be recorded',
+			message: `Rented hub-man ${result.order_uuid} for order ${ctx.orderNumber} but failed to persist it; cancelled + refunded. Verify the rent is released on hub-man.`,
+			source: `phone.${source}`,
+			dedupeKey: `phone-persist-fail:${ctx.orderItemId}`
+		}).catch(() => {});
+		return {
+			status: 'refunded',
+			message: 'We could not complete your number — your payment was refunded to store credit.'
+		};
+	}
+
+	// Order status is non-money-critical; best-effort.
+	await prisma.order
+		.update({
+			where: { id: orderId },
+			data: { status: 'paid', paymentStatus: 'paid', deliveryStatus: 'processing' }
+		})
+		.catch(() => {});
+
+	return {
+		status: 'awaiting_sms',
+		phoneNumber: formatPhoneNumber(result.phone_number),
+		message: 'Your number is ready — waiting for the code'
+	};
 }
 
 /**
@@ -340,18 +386,34 @@ export async function pollPhoneRentalSms(orderItemId: string): Promise<PhonePoll
 	if (TERMINAL_STATUSES.has(rental.status))
 		return { status: rental.status === 'refunded' ? 'refunded' : 'expired' };
 
-	// Recover a stuck rent (claimed but never completed — e.g. a crash mid-rent):
-	// after 2 minutes with no hub-man uuid, reset to pending so it retries below.
+	// Stuck 'renting' with no hub-man id for >3 min = a hard crash between renting and
+	// recording it. We can't tell whether a number was billed, so we must NOT re-rent
+	// (that could double-spend). Refund the customer and alert an admin to reconcile any
+	// orphaned rent on hub-man. (The normal rent path already cancels+refunds on a
+	// recoverable persist failure, so reaching here is extremely rare.)
 	if (
 		rental.status === 'renting' &&
 		!rental.hubOrderUuid &&
-		Date.now() - rental.createdAt.getTime() > 120_000
+		Date.now() - rental.createdAt.getTime() > 180_000
 	) {
+		const orderId = await orderIdForItem(orderItemId);
 		await prisma.phoneRental.updateMany({
 			where: { orderItemId, status: 'renting', hubOrderUuid: null },
-			data: { status: 'pending' }
+			data: { status: 'failed', failureReason: 'stuck renting — refunded; check hub-man for orphan' }
 		});
-		rental.status = 'pending';
+		if (orderId)
+			await refundPhoneOrderToStoreCredit(
+				orderId,
+				'We could not complete your number — refunded to store credit',
+				'poll'
+			).catch(() => {});
+		await sendCriticalAdminAlert({
+			title: 'Phone rent stuck — refunded; check for orphan',
+			message: `Order item ${orderItemId} was stuck 'renting' with no hub-man id; refunded the customer. Check hub-man active rents for an orphaned number to cancel.`,
+			source: 'phone.poll',
+			dedupeKey: `phone-stuck-renting:${orderItemId}`
+		}).catch(() => {});
+		return { status: 'refunded', message: 'Refunded to store credit' };
 	}
 
 	// Not rented yet — kick off the rent now (idempotent claim inside fulfillPhoneOrder).

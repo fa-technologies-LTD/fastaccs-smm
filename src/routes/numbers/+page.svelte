@@ -50,6 +50,14 @@
 				);
 				return;
 			}
+			// Numbers are fulfilled one per order — don't let a second number pile into the cart.
+			if (cart.itemCount > 0) {
+				showWarning(
+					'One number at a time',
+					'Numbers are bought one per order. Check out this one first, then grab the next.'
+				);
+				return;
+			}
 			cart.addTier(tierId, 1);
 			showSuccess('Added to cart', `${label} — tap to check out.`, 6000, '/checkout');
 		} finally {
