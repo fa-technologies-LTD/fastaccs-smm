@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { getOrders } from '$lib/services/orders';
+	import OrderTypeTabs from '$lib/components/admin/OrderTypeTabs.svelte';
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
 	import { getOrderStatusLabel, isOrderStatusInGroup } from '$lib/helpers/order-status';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
@@ -230,9 +231,11 @@
 		<div class="min-w-0 flex-1">
 			<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">Order Management</h1>
 			<p class="mt-1 text-sm sm:text-base" style="color: var(--text-muted)">
-				Manage customer orders and processing status. Account orders only —
-				<a href="/admin/boosting-orders" style="color: var(--fa-blue-300);">boosting orders live here</a>.
+				Manage customer orders and processing status.
 			</p>
+			<div class="mt-2">
+				<OrderTypeTabs active="accounts" />
+			</div>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			<button

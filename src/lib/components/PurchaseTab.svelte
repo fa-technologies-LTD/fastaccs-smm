@@ -10,7 +10,7 @@
 		CircleHelp
 	} from '$lib/icons';
 	import { addToast } from '$lib/stores/toasts';
-	import { copyToClipboard } from '$lib/helpers/utils';
+	import { copyToClipboard, formatOrderRef } from '$lib/helpers/utils';
 	import {
 		buildCredentialPlainText,
 		getCanonicalCredentialEntries
@@ -148,7 +148,7 @@
 								class="flex flex-wrap items-center gap-2 text-xs sm:gap-3 sm:text-sm"
 								style="color: var(--text-muted);"
 							>
-								<span class="min-w-0 truncate font-medium">#{purchase.orderNumber}</span>
+								<span class="min-w-0 truncate font-medium">{formatOrderRef(purchase.orderNumber)}</span>
 								<span class="text-[color:var(--text-dim)]">•</span>
 								<div class="flex items-center gap-1.5">
 									<Clock class="h-3.5 w-3.5" style="color: var(--text-dim);" />

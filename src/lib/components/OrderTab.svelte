@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { CheckCircle, RefreshCw, Clock } from '$lib/icons';
+	import { CheckCircle, RefreshCw, Clock, Phone } from '$lib/icons';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
+	import { formatOrderRef } from '$lib/helpers/utils';
 	import { goto } from '$app/navigation';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { normalizePaymentStatus } from '$lib/helpers/payment-status';
@@ -48,7 +49,7 @@
 		focusOrderId = null
 	}: { initialOrders?: OrderRecord[]; focusOrderId?: string | null } = $props();
 	let orders = $state<OrderRecord[]>(initialOrders);
-	let orderTypeFilter = $state<'all' | 'account' | 'boosting'>('all');
+	let orderTypeFilter = $state<'all' | 'account' | 'boosting' | 'numbers'>('all');
 	let checkingPaymentByOrderId = $state<Record<string, boolean>>({});
 	let resumingPaymentByOrderId = $state<Record<string, boolean>>({});
 	let showReorderModal = $state(false);
@@ -78,10 +79,7 @@
 	}
 
 	function getDisplayOrderNumber(order: OrderRecord): string {
-		if (order.orderNumber && order.orderNumber.trim()) {
-			return order.orderNumber;
-		}
-		return `ORD-${order.id.slice(0, 8).toUpperCase()}`;
+		return formatOrderRef(order.orderNumber, order.id);
 	}
 
 	function normalizeLower(value: string | null | undefined): string {
@@ -136,14 +134,22 @@
 		return getBoostingItems(order).length > 0;
 	}
 
+	// Number (verification) orders are labelled "Numbers …" at creation.
+	function isNumbersOrder(order: OrderRecord): boolean {
+		return getOrderItems(order).some((item) => (item.productName || '').startsWith('Numbers'));
+	}
+
 	const filteredOrders = $derived(
 		orderTypeFilter === 'all'
 			? orders
-			: orders.filter((order) =>
-					orderTypeFilter === 'boosting' ? isBoostingOrder(order) : !isBoostingOrder(order)
-				)
+			: orders.filter((order) => {
+					if (orderTypeFilter === 'boosting') return isBoostingOrder(order);
+					if (orderTypeFilter === 'numbers') return isNumbersOrder(order);
+					return !isBoostingOrder(order) && !isNumbersOrder(order); // accounts
+				})
 	);
 	const hasBoostingOrders = $derived(orders.some(isBoostingOrder));
+	const hasNumbersOrders = $derived(orders.some(isNumbersOrder));
 
 	function getFulfillmentState(order: OrderRecord): string {
 		const payment = getPaymentState(order);
@@ -452,9 +458,9 @@
 			</p>
 		</div>
 	{:else}
-		{#if hasBoostingOrders}
+		{#if hasBoostingOrders || hasNumbersOrders}
 			<div class="flex flex-wrap gap-2 border-b border-[var(--border)] p-3 sm:p-4">
-				{#each [{ value: 'all', label: 'All' }, { value: 'account', label: 'Accounts' }, { value: 'boosting', label: 'Boosting' }] as option}
+				{#each [{ value: 'all', label: 'All' }, { value: 'account', label: 'Accounts' }, ...(hasBoostingOrders ? [{ value: 'boosting', label: 'Boosting' }] : []), ...(hasNumbersOrders ? [{ value: 'numbers', label: 'Numbers' }] : [])] as option}
 					<button
 						type="button"
 						onclick={() => (orderTypeFilter = option.value as typeof orderTypeFilter)}
@@ -495,10 +501,13 @@
 							{/if}
 							<div class="min-w-0 flex-1">
 								<div
-									class="truncate font-semibold"
+									class="flex items-center gap-1.5 truncate font-semibold"
 									style="color: var(--text); font-family: var(--font-head);"
 								>
-									{getDisplayOrderNumber(order)}
+									{#if isNumbersOrder(order)}
+										<Phone class="h-3.5 w-3.5 flex-shrink-0" style="color: var(--fa-lime-400);" />
+									{/if}
+									<span class="truncate">{getDisplayOrderNumber(order)}</span>
 								</div>
 								<div class="text-xs sm:text-sm" style="color: var(--text-dim);">
 									{formatOrderDate(order)}

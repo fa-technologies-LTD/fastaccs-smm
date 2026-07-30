@@ -250,6 +250,7 @@
 		} catch (error) {
 			promoAppliedCode = null;
 			promoDiscountAmount = 0;
+			promoCodeInput = ''; // clear so a failed code doesn't look applied
 			showWarning(
 				'Promo not applied',
 				error instanceof Error ? error.message : 'Invalid promo code'

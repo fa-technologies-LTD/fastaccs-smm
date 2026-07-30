@@ -155,3 +155,10 @@ export function exportToCSV(
 	document.body.removeChild(link);
 	URL.revokeObjectURL(url);
 }
+
+/** Customer-facing order reference — branded FA- form, consistent across dashboard + email. */
+export function formatOrderRef(orderNumber: string | null | undefined, id?: string): string {
+	const raw = (orderNumber || '').trim();
+	if (raw) return `FA-${raw.replace(/^ORD-?/i, '')}`;
+	return id ? `FA-${id.slice(0, 8).toUpperCase()}` : 'FA-—';
+}

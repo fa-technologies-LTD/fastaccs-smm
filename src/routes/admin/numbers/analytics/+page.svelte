@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Phone, TrendingUp, AlertTriangle, ShieldCheck } from '$lib/icons';
+	import OrderTypeTabs from '$lib/components/admin/OrderTypeTabs.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -25,12 +26,15 @@
 </script>
 
 <div class="p-6 max-w-6xl mx-auto" style="color: var(--text);">
-	<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+	<div class="flex items-center justify-between mb-3 flex-wrap gap-3">
 		<div class="flex items-center gap-3">
 			<Phone class="w-6 h-6" style="color: var(--fa-lime-400);" />
-			<h1 class="text-2xl font-bold" style="color: var(--text);">Numbers — Analytics</h1>
+			<h1 class="text-2xl font-bold" style="color: var(--text);">Numbers — Orders & Analytics</h1>
 		</div>
-		<a href="/admin/numbers" class="text-sm hover:underline" style="color: var(--fa-lime-400);">← Pricing</a>
+		<a href="/admin/numbers" class="text-sm hover:underline" style="color: var(--fa-lime-400);">Pricing →</a>
+	</div>
+	<div class="mb-6">
+		<OrderTypeTabs active="numbers" />
 	</div>
 
 	{#if lowBalance}

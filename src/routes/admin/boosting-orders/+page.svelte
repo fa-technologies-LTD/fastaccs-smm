@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Copy, Zap, ExternalLink, DollarSign, ShoppingCart } from '$lib/icons';
 	import { showError, showSuccess } from '$lib/stores/toasts';
+	import OrderTypeTabs from '$lib/components/admin/OrderTypeTabs.svelte';
 	import { getBoostingServiceConfig } from '$lib/helpers/boosting-service-config';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { formatAdminMoney } from '$lib/helpers/admin-money';
@@ -131,6 +132,9 @@
 			Copy all links for a service at once, place them with your supplier, then mark each order
 			in progress and completed.
 		</p>
+		<div class="mt-2">
+			<OrderTypeTabs active="boosting" />
+		</div>
 	</div>
 
 	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
