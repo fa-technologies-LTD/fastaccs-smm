@@ -64,6 +64,7 @@ function buildUser(emailVerified: boolean): User {
 		firstPurchasePopupSeenAt: null,
 		catalogUpdatesLastSeenAt: null,
 		boostingLaunchPopupSeenAt: null,
+		numbersLaunchPopupSeenAt: null,
 		boostingCrossSellPopupSeenCount: 0,
 		affiliateRefreshPopupSeenAt: null,
 		bankDetailsPopupSeenAt: null

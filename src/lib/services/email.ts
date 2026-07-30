@@ -28,6 +28,7 @@ export type EmailNotificationType =
 	| 'affiliate_store_credit'
 	| 'affiliate_payout'
 	| 'marketing_campaign'
+	| 'numbers_launch'
 	| 'admin_broadcast';
 
 export type EmailClassification = 'transactional' | 'marketing' | 'operational';

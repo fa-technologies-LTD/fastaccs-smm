@@ -37,6 +37,10 @@
 			"schedule": "*/5 * * * *"
 		},
 		{
+			"path": "/api/internal/cron/numbers-campaign",
+			"schedule": "30 9 * * *"
+		},
+		{
 			"path": "/api/internal/cron/nurture",
 			"schedule": "40 10 * * *"
 		},

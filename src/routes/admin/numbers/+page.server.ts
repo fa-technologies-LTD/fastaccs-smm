@@ -4,6 +4,7 @@ import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { getNumbersCatalogForAdmin, seedNumbersCatalog } from '$lib/services/phone-catalog';
 import { getPhonePricingConfig } from '$lib/services/phone-pricing';
 import { getBalanceCents, isHubmanConfigured } from '$lib/services/hubman';
+import { getNumbersCampaignState } from '$lib/services/numbers-campaign';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	if (!locals.adminContext || !hasAdminPermission(locals.adminContext, 'admin:catalog:manage')) {
@@ -21,6 +22,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const hubBalanceCents = isHubmanConfigured()
 		? await getBalanceCents().catch(() => null)
 		: null;
+	const campaign = await getNumbersCampaignState();
+	const canManageCampaign = hasAdminPermission(locals.adminContext, 'admin:settings:manage');
 
 	return {
 		rows: catalog.rows,
@@ -28,6 +31,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 		marginPercent: catalog.marginPercent,
 		lowBalanceThresholdCents: pricing.lowBalanceThresholdCents,
 		hubBalanceCents,
-		hubmanConfigured: isHubmanConfigured()
+		hubmanConfigured: isHubmanConfigured(),
+		campaign,
+		canManageCampaign
 	};
 };

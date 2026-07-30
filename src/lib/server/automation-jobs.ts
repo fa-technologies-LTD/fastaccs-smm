@@ -114,6 +114,14 @@ export const AUTOMATION_JOBS = {
 		risk: 'financial',
 		lockTimeoutMinutes: 10,
 		expectedIntervalMinutes: 5
+	},
+	'numbers-campaign': {
+		name: 'numbers-campaign',
+		path: '/api/internal/cron/numbers-campaign',
+		schedule: 'daily 09:30',
+		risk: 'marketing',
+		lockTimeoutMinutes: 10,
+		expectedIntervalMinutes: 1440
 	}
 } as const satisfies Record<string, AutomationJobDefinition>;
 

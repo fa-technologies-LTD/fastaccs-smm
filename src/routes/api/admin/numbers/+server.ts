@@ -3,6 +3,7 @@ import type { RequestHandler } from '@sveltejs/kit';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { seedNumbersCatalog, updateNumbersTiers } from '$lib/services/phone-catalog';
 import { savePhonePricingConfig } from '$lib/services/phone-pricing';
+import { launchNumbersCampaign, stopNumbersCampaign } from '$lib/services/numbers-campaign';
 
 function guard(locals: App.Locals): boolean {
 	return Boolean(
@@ -35,6 +36,24 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 				usdNgnRate: body.usdNgnRate,
 				marginPercent: body.marginPercent
 			});
+			return json({ success: true });
+		}
+
+		// Launch requires the owner (not just catalog managers) — it emails everyone,
+		// retires the manual tiers, and fires push. Gated to admin:access + owner role.
+		if (action === 'launch-campaign') {
+			if (!hasAdminPermission(locals.adminContext, 'admin:settings:manage')) {
+				return json({ success: false, error: 'Owner only' }, { status: 403 });
+			}
+			const result = await launchNumbersCampaign();
+			return json({ success: true, ...result });
+		}
+
+		if (action === 'stop-campaign') {
+			if (!hasAdminPermission(locals.adminContext, 'admin:settings:manage')) {
+				return json({ success: false, error: 'Owner only' }, { status: 403 });
+			}
+			await stopNumbersCampaign();
 			return json({ success: true });
 		}
 

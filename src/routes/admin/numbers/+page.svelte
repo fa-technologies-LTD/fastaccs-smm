@@ -98,6 +98,43 @@
 			seeding = false;
 		}
 	}
+
+	// --- Launch campaign (announce + retire manual tiers). Fires ONLY on click. ---
+	let campaignBusy = $state(false);
+	async function launchCampaign() {
+		if (
+			!confirm(
+				'Launch the Numbers announcement?\n\nThis will:\n• email + push every customer (touch 1 of 3)\n• put the announcement banner up\n• RETIRE the manual phone tiers from the store\n\nDo this only after merging to production.'
+			)
+		)
+			return;
+		campaignBusy = true;
+		try {
+			const out = await post({ action: 'launch-campaign' });
+			if (!out.success) throw new Error(out.error || 'Launch failed');
+			showSuccess(
+				`Campaign launched — ${out.manualTiersRetired} manual tiers retired, ${out.emailSent} emails sent, ${out.pushed} push notified. Reloading…`
+			);
+			setTimeout(() => location.reload(), 1200);
+		} catch (e) {
+			showError(e instanceof Error ? e.message : 'Launch failed');
+			campaignBusy = false;
+		}
+	}
+	async function stopCampaign() {
+		if (!confirm('Stop the campaign and take the banner down? (Reminders stop; manual tiers stay retired.)'))
+			return;
+		campaignBusy = true;
+		try {
+			const out = await post({ action: 'stop-campaign' });
+			if (!out.success) throw new Error(out.error || 'Stop failed');
+			showSuccess('Campaign stopped. Reloading…');
+			setTimeout(() => location.reload(), 900);
+		} catch (e) {
+			showError(e instanceof Error ? e.message : 'Stop failed');
+			campaignBusy = false;
+		}
+	}
 </script>
 
 <div class="p-6 max-w-6xl mx-auto" style="color: var(--text);">
@@ -193,6 +230,46 @@
 			“Calculate all prices” fills every row below. You can still edit any single price before saving.
 		</p>
 	</div>
+
+	<!-- Launch announcement campaign -->
+	{#if data.canManageCampaign}
+		<div class="mb-6 rounded-xl p-5" style="border: 1px solid var(--border); background: var(--surface);">
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<div>
+					<h2 class="font-semibold" style="color: var(--text);">Launch announcement</h2>
+					<p class="text-sm mt-1" style="color: var(--text-muted);">
+						{#if data.campaign?.enabled && data.campaign?.launchedAt}
+							🟢 Live since {new Date(data.campaign.launchedAt).toLocaleString()} — 3 reminders
+							over ~7 days (email · popup · banner · push), auto-suppressed for number-buyers.
+						{:else}
+							Announces Numbers across email, in-app popup, banner + push (3 tapered reminders),
+							and <strong>retires the manual phone tiers</strong>. Do this only after merging to
+							production.
+						{/if}
+					</p>
+				</div>
+				{#if data.campaign?.enabled}
+					<button
+						onclick={stopCampaign}
+						disabled={campaignBusy}
+						class="px-4 py-2 text-sm rounded-lg font-medium disabled:opacity-50"
+						style="border: 1px solid var(--border); color: var(--text);"
+					>
+						{campaignBusy ? 'Working…' : 'Stop campaign'}
+					</button>
+				{:else}
+					<button
+						onclick={launchCampaign}
+						disabled={campaignBusy}
+						class="px-4 py-2 text-sm rounded-lg font-semibold disabled:opacity-50"
+						style="background: var(--fa-lime-700); color: #0a0a0a;"
+					>
+						{campaignBusy ? 'Launching…' : '🚀 Launch announcement'}
+					</button>
+				{/if}
+			</div>
+		</div>
+	{/if}
 
 	<!-- Balance -->
 	<div class="mb-6">
