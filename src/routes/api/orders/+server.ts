@@ -1023,7 +1023,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				}
 			);
 
-			const verifyUrl = `${url.origin}/checkout/verify?orderId=${encodeURIComponent(data.id)}`;
+			const verifyUrl = `${url.origin}/checkout/verify?orderId=${encodeURIComponent(data.id)}&method=store_credit`;
 			return json({
 				data,
 				success: true,

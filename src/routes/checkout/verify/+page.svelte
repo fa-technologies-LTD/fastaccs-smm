@@ -40,6 +40,14 @@
 	let isDisposed = false;
 	let retryTimer: ReturnType<typeof setTimeout> | null = null;
 	let upsellRedirectTimer: ReturnType<typeof setTimeout> | null = null;
+	// Store-credit orders are already settled — show a matching message, not Monnify's.
+	let isStoreCredit = $state(false);
+	const verifyingTitle = $derived(isStoreCredit ? 'Confirming your order' : 'Verifying Payment');
+	const verifyingBody = $derived(
+		isStoreCredit
+			? 'Applying your store credit — this only takes a moment.'
+			: 'Waiting for payment confirmation from Monnify.'
+	);
 	let pendingToastShown = false;
 
 	function sanitizeOrderId(value: string | null): string | null {
@@ -150,6 +158,7 @@
 		}
 
 		orderId = orderIdParam;
+		isStoreCredit = $page.url.searchParams.get('method') === 'store_credit';
 
 		console.info('[checkout.verify] callback_received', {
 			hasPaymentReference: Boolean(paymentReference),
@@ -424,13 +433,13 @@
 					class="mb-2 text-2xl font-bold"
 					style="color: var(--text); font-family: var(--font-head);"
 				>
-					Verifying Payment
+					{verifyingTitle}
 				</h1>
 				<p
 					class="text-sm sm:text-base"
 					style="color: var(--text-muted); font-family: var(--font-body);"
 				>
-					Waiting for payment confirmation from Monnify.
+					{verifyingBody}
 				</p>
 			{:else if success}
 				<!-- Success State -->

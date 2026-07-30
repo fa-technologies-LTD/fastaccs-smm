@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { CheckCircle, RefreshCw, Clock, Phone } from '$lib/icons';
+	import { CheckCircle, RefreshCw, Clock, Phone, Zap } from '$lib/icons';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import { formatOrderRef } from '$lib/helpers/utils';
 	import { goto } from '$app/navigation';
@@ -109,9 +109,13 @@
 			return { label: 'Payment Failed', tone: 'failure' };
 		}
 
+		if (['expired', 'abandoned'].includes(orderStatus) || ['expired', 'abandoned'].includes(paymentStatus)) {
+			return { label: 'Payment Expired', tone: 'failure' };
+		}
+
 		if (
-			['cancelled', 'abandoned', 'expired'].includes(orderStatus) ||
-			['cancelled', 'canceled', 'abandoned', 'expired', 'user_cancelled'].includes(paymentStatus)
+			['cancelled'].includes(orderStatus) ||
+			['cancelled', 'canceled', 'user_cancelled'].includes(paymentStatus)
 		) {
 			return { label: 'Payment Cancelled', tone: 'failure' };
 		}
@@ -506,6 +510,8 @@
 								>
 									{#if isNumbersOrder(order)}
 										<Phone class="h-3.5 w-3.5 flex-shrink-0" style="color: #38bdf8;" />
+									{:else if isBoostingOrder(order)}
+										<Zap class="h-3.5 w-3.5 flex-shrink-0" style="color: #a78bfa;" />
 									{/if}
 									<span class="truncate">{getDisplayOrderNumber(order)}</span>
 								</div>
@@ -558,18 +564,19 @@
 									onclick={() => checkPaymentStatus(order)}
 									disabled={checkingPaymentByOrderId[order.id]}
 									class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
-									style="background: rgba(202,219,46,0.12); border: 1px solid rgba(202,219,46,0.32); color: var(--text);"
+									style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);"
 								>
 									{checkingPaymentByOrderId[order.id] ? 'Checking...' : 'Refresh payment'}
 								</button>
 							{/if}
+							<!-- Order Again is the primary action only when there's no Resume payment. -->
 							<button
 								onclick={() =>
 									isBoostingOrder(order) ? reorderBoostingOrder(order) : reorderItems(order)}
 								data-sveltekit-preload-data="hover"
 								class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 sm:px-4 sm:text-sm"
-								style={isBoostingOrder(order)
-									? 'background: var(--fa-blue-500); border: 1px solid rgba(105,109,250,0.5); color: #ffffff;'
+								style={isPaymentRecheckable(order)
+									? 'background: var(--surface-2); border: 1px solid var(--border); color: var(--text);'
 									: 'background: var(--btn-primary-gradient); border: 1px solid var(--btn-primary-border); color: var(--btn-primary-text);'}
 							>
 								Order Again
@@ -578,7 +585,7 @@
 								onclick={() => viewOrderDetails(order.id)}
 								data-sveltekit-preload-data="hover"
 								class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 sm:px-4 sm:text-sm"
-								style="background: linear-gradient(180deg, rgba(105,109,250,0.18), rgba(170,173,255,0.10)); border: 1px solid rgba(170,173,255,0.25); color: var(--text);"
+								style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);"
 							>
 								View Details
 							</button>
