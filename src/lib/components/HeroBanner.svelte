@@ -25,24 +25,27 @@
 			</p>
 		</div>
 
-		<!-- CTA Buttons -->
+		<!-- CTA Buttons — each glows in its service colour and fills solid on click -->
 		<div class="mb-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
 			<button
-				class="btn-hero-primary w-full cursor-pointer sm:w-auto"
+				class="btn-glow w-full cursor-pointer sm:w-auto"
+				style="--c: #c2db2e; --tc: #04140c;"
 				onclick={() => goto('/platforms')}
 				data-sveltekit-preload-data="hover"
 			>
 				Browse Accounts
 			</button>
 			<button
-				class="btn-hero-secondary w-full cursor-pointer sm:w-auto"
+				class="btn-glow w-full cursor-pointer sm:w-auto"
+				style="--c: #38bdf8; --tc: #06222f;"
 				onclick={() => goto('/numbers')}
 				data-sveltekit-preload-data="hover"
 			>
 				Verification Numbers
 			</button>
 			<button
-				class="btn-hero-secondary w-full cursor-pointer sm:w-auto"
+				class="btn-glow w-full cursor-pointer sm:w-auto"
+				style="--c: #a78bfa; --tc: #1c1044;"
 				onclick={() => goto('/services')}
 			>
 				Boosting Services
@@ -98,54 +101,75 @@
 </section>
 
 <style>
-	.btn-hero-primary {
+	/* Glowing service buttons. --c = accent colour, --tc = text colour when filled. */
+	.btn-glow {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		min-height: 48px;
 		padding: 0.75rem 2rem;
 		border-radius: var(--r-full);
-		border: 1px solid rgba(202, 219, 46, 0.5);
-		background: var(--fa-lime-700);
-		color: #04140c;
+		border: 2px solid var(--c);
+		background: transparent;
+		color: #ffffff;
 		font-family: var(--font-head);
 		font-size: 1rem;
 		font-weight: 700;
 		text-decoration: none;
 		cursor: pointer;
-		transition: background 180ms ease, transform 140ms ease;
+		box-shadow:
+			0 0 14px -3px var(--c),
+			inset 0 0 12px -8px var(--c);
+		animation: btn-glow-pulse 2.6s ease-in-out infinite;
+		transition:
+			background 180ms ease,
+			color 180ms ease,
+			box-shadow 200ms ease,
+			transform 140ms ease;
 	}
-	.btn-hero-primary:hover {
-		background: var(--fa-lime-400);
-		transform: translateY(-1px);
+	.btn-glow:hover {
+		background: var(--c);
+		color: var(--tc);
+		transform: translateY(-2px);
+		box-shadow:
+			0 0 26px -2px var(--c),
+			0 0 8px -1px var(--c);
+		animation: none;
 	}
-	.btn-hero-primary:active {
-		transform: scale(0.985);
+	/* On click, snap fully to the colour. */
+	.btn-glow:active {
+		background: var(--c);
+		color: var(--tc);
+		transform: scale(0.97);
+		box-shadow:
+			0 0 34px 0 var(--c),
+			inset 0 0 16px -6px rgba(0, 0, 0, 0.25);
+		animation: none;
+	}
+	.btn-glow:focus-visible {
+		outline: none;
+		box-shadow:
+			0 0 0 3px rgba(255, 255, 255, 0.85),
+			0 0 22px -1px var(--c);
 	}
 
-	.btn-hero-secondary {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		min-height: 48px;
-		padding: 0.75rem 2rem;
-		border-radius: var(--r-full);
-		border: 1.5px solid rgba(255, 255, 255, 0.55);
-		background: transparent;
-		color: #ffffff;
-		font-family: var(--font-head);
-		font-size: 1rem;
-		font-weight: 600;
-		text-decoration: none;
-		cursor: pointer;
-		transition: background 180ms ease, border-color 180ms ease, transform 140ms ease;
+	@keyframes btn-glow-pulse {
+		0%,
+		100% {
+			box-shadow:
+				0 0 10px -4px var(--c),
+				inset 0 0 10px -8px var(--c);
+		}
+		50% {
+			box-shadow:
+				0 0 20px -1px var(--c),
+				inset 0 0 12px -6px var(--c);
+		}
 	}
-	.btn-hero-secondary:hover {
-		background: rgba(255, 255, 255, 0.12);
-		border-color: rgba(255, 255, 255, 0.85);
-		transform: translateY(-1px);
-	}
-	.btn-hero-secondary:active {
-		transform: scale(0.985);
+
+	@media (prefers-reduced-motion: reduce) {
+		.btn-glow {
+			animation: none;
+		}
 	}
 </style>
