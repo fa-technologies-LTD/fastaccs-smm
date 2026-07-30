@@ -84,18 +84,27 @@ export async function ensureNumbersPlatform(): Promise<string> {
 }
 
 /** Live min-cost (USD cents) per service for a country, from hub-man. */
-async function fetchCountryServiceCosts(countryId: number): Promise<Map<number, number>> {
-	const out = new Map<number, number>();
+async function fetchCountryServiceCosts(
+	countryId: number
+): Promise<{ ok: boolean; costs: Map<number, number> }> {
+	const costs = new Map<number, number>();
 	try {
 		const data = await hubman.getAvailableServices(countryId);
 		const byService = data[String(countryId)] || {};
 		for (const [sid, info] of Object.entries(byService)) {
-			out.set(Number(sid), info.min_price_cents);
+			costs.set(Number(sid), info.min_price_cents);
 		}
+		return { ok: true, costs };
 	} catch (error) {
+		// A transient failure must NOT deactivate this country's tiers — signal it.
 		console.error(`[phone-catalog] failed to fetch costs for country ${countryId}:`, (error as Error).message);
+		return { ok: false, costs };
 	}
-	return out;
+}
+
+function countryIdFromSlug(slug: string): number | null {
+	const m = /country(\d+)$/.exec(slug);
+	return m ? Number(m[1]) : null;
 }
 
 export interface CatalogSyncResult {
@@ -144,11 +153,14 @@ export async function syncNumbersCatalog(): Promise<CatalogSyncResult> {
 	const idBySlug = new Map(existingTiers.map((t) => [t.slug, t.id]));
 
 	// Fetch every country's cost map in parallel (the heavy part).
-	const costsByCountry = new Map<number, Map<number, number>>(
+	const fetched = new Map(
 		await Promise.all(
 			countryIds.map(async (cid) => [cid, await fetchCountryServiceCosts(cid)] as const)
 		)
 	);
+	const availableCountries = new Set(countryIds);
+	// Only countries we fetched successfully can have their tiers safely deactivated.
+	const confirmedCountries = new Set([...fetched].filter(([, r]) => r.ok).map(([cid]) => cid));
 
 	const liveSlugs = new Set<string>();
 	let created = 0;
@@ -156,7 +168,7 @@ export async function syncNumbersCatalog(): Promise<CatalogSyncResult> {
 
 	for (const countryId of countryIds) {
 		const meta = countryMeta.get(countryId) || { name: `Country ${countryId}`, code: '' };
-		const costs = costsByCountry.get(countryId) ?? new Map();
+		const costs = fetched.get(countryId)?.costs ?? new Map<number, number>();
 		for (const [serviceId, cost] of costs) {
 			if (!MAJOR_SERVICE_IDS.has(serviceId)) continue;
 			const serviceName = SERVICE_NAME_BY_ID.get(serviceId)!;
@@ -200,8 +212,17 @@ export async function syncNumbersCatalog(): Promise<CatalogSyncResult> {
 		}
 	}
 
-	// Deactivate any tier whose combo is no longer available (single query).
-	const stale = existingTiers.filter((t) => !liveSlugs.has(t.slug)).map((t) => t.id);
+	// Deactivate a tier only when we're CONFIDENT it's gone: either its country rotated
+	// out of availability entirely, or we successfully re-fetched that country and the
+	// combo wasn't in stock. A country whose fetch FAILED this run is left untouched.
+	const stale = existingTiers
+		.filter((t) => {
+			if (liveSlugs.has(t.slug)) return false;
+			const cid = countryIdFromSlug(t.slug);
+			if (cid == null) return false; // unknown slug shape — don't touch
+			return !availableCountries.has(cid) || confirmedCountries.has(cid);
+		})
+		.map((t) => t.id);
 	let deactivated = 0;
 	if (stale.length) {
 		const res = await prisma.category.updateMany({
@@ -263,7 +284,7 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 	const countryIds = [...new Set(tiers.map((t) => getPhoneTierConfig(t.metadata)?.countryId).filter((x): x is number => x != null))];
 	const liveCosts = new Map<number, Map<number, number>>();
 	await Promise.all(
-		countryIds.map(async (cid) => liveCosts.set(cid, await fetchCountryServiceCosts(cid)))
+		countryIds.map(async (cid) => liveCosts.set(cid, (await fetchCountryServiceCosts(cid)).costs))
 	);
 
 	const rows: NumbersAdminRow[] = [];

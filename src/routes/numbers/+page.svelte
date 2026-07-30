@@ -136,11 +136,11 @@
 										class="flex items-center justify-between px-4 sm:px-5 py-3"
 										style="border-top: 1px solid var(--border);"
 									>
-										<span class="flex items-center gap-2.5">
-											<span class="text-xl">{codeToFlag(tier.countryCode)}</span>
-											<span style="color: var(--text);">{tier.countryName}</span>
+										<span class="flex items-center gap-2.5 min-w-0">
+											<span class="text-xl shrink-0">{codeToFlag(tier.countryCode)}</span>
+											<span class="truncate" style="color: var(--text);">{tier.countryName}</span>
 										</span>
-										<span class="flex items-center gap-3">
+										<span class="flex items-center gap-3 shrink-0 pl-3">
 											<span class="font-semibold tabular-nums" style="color: var(--text);">
 												₦{tier.priceNgn.toLocaleString()}
 											</span>

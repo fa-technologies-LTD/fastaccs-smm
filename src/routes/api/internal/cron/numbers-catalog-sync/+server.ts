@@ -3,6 +3,9 @@ import { runAuthorizedAutomationCron } from '$lib/server/automation-cron';
 import { syncNumbersCatalog } from '$lib/services/phone-catalog';
 import { isHubmanConfigured } from '$lib/services/hubman';
 
+// The sync fetches several large hub-man payloads + upserts ~100 tiers; give it room.
+export const config = { maxDuration: 120 };
+
 // Keeps the Numbers storefront in sync with hub-man's rotating availability: adds newly
 // available country×app combos, deactivates ones that lost stock, and re-prices from the
 // current rate + margin. No-op when hub-man isn't configured.
