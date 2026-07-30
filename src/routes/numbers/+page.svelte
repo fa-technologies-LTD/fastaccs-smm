@@ -11,14 +11,12 @@
 
 	let { data }: { data: PageData } = $props();
 
-	const COUNTRY_FLAGS: Record<string, string> = {
-		USA: '🇺🇸',
-		'United Kingdom': '🇬🇧',
-		Canada: '🇨🇦',
-		Poland: '🇵🇱',
-		Indonesia: '🇮🇩',
-		Malaysia: '🇲🇾'
-	};
+	// 2-letter ISO country code → flag emoji (regional indicator letters).
+	function codeToFlag(code: string): string {
+		const cc = (code || '').trim().toUpperCase().slice(0, 2);
+		if (!/^[A-Z]{2}$/.test(cc)) return '🌍';
+		return String.fromCodePoint(...[...cc].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65));
+	}
 
 	// Remember this section so checkout returns here (not the accounts page) on empty cart.
 	onMount(() => {
@@ -139,7 +137,7 @@
 										style="border-top: 1px solid var(--border);"
 									>
 										<span class="flex items-center gap-2.5">
-											<span class="text-xl">{COUNTRY_FLAGS[tier.countryName] ?? '🌍'}</span>
+											<span class="text-xl">{codeToFlag(tier.countryCode)}</span>
 											<span style="color: var(--text);">{tier.countryName}</span>
 										</span>
 										<span class="flex items-center gap-3">

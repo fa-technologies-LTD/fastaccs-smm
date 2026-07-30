@@ -20,24 +20,33 @@ export const NUMBERS_PLATFORM_TYPE = 'numbers_platform';
 // flow; they're distinguished from account tiers by their parent (the Numbers platform).
 export const NUMBERS_TIER_TYPE = 'tier';
 
-// Major services to stock first (verified hub-man IDs).
+// The 20 curated apps to stock (verified hub-man service IDs). Countries are NOT
+// curated — they're synced live from hub-man's rotating availability (see syncNumbersCatalog).
 export const MAJOR_SERVICES = [
 	{ id: 1, name: 'WhatsApp' },
 	{ id: 2, name: 'Telegram' },
-	{ id: 3, name: 'Google / Gmail' },
 	{ id: 7, name: 'Instagram' },
-	{ id: 11, name: 'Facebook' }
+	{ id: 11, name: 'Facebook' },
+	{ id: 3, name: 'Google / Gmail' },
+	{ id: 50, name: 'TikTok' },
+	{ id: 47, name: 'Discord' },
+	{ id: 12, name: 'X / Twitter' },
+	{ id: 73, name: 'Snapchat' },
+	{ id: 28, name: 'Tinder' },
+	{ id: 13, name: 'Uber' },
+	{ id: 60, name: 'Amazon' },
+	{ id: 41, name: 'Netflix' },
+	{ id: 120, name: 'PayPal' },
+	{ id: 9, name: 'Viber' },
+	{ id: 2419, name: 'OpenAI / ChatGPT' },
+	{ id: 27, name: 'Steam' },
+	{ id: 122, name: 'Coinbase' },
+	{ id: 355, name: 'Revolut' },
+	{ id: 258, name: 'Bumble' }
 ] as const;
 
-// Curated countries (USA, UK, Canada + 3 major EU/Asian), verified available.
-export const SEED_COUNTRIES = [
-	{ id: 180, name: 'USA', code: 'US' },
-	{ id: 41, name: 'United Kingdom', code: 'GB' },
-	{ id: 89, name: 'Canada', code: 'CA' },
-	{ id: 153, name: 'Poland', code: 'PL' },
-	{ id: 75, name: 'Indonesia', code: 'ID' },
-	{ id: 116, name: 'Malaysia', code: 'MY' }
-] as const;
+const MAJOR_SERVICE_IDS = new Set<number>(MAJOR_SERVICES.map((s) => s.id));
+const SERVICE_NAME_BY_ID = new Map<number, string>(MAJOR_SERVICES.map((s) => [s.id, s.name]));
 
 function tierSlug(serviceId: number, countryId: number): string {
 	return `numbers-svc${serviceId}-country${countryId}`;
@@ -89,62 +98,126 @@ async function fetchCountryServiceCosts(countryId: number): Promise<Map<number, 
 	return out;
 }
 
+export interface CatalogSyncResult {
+	created: number;
+	refreshed: number;
+	deactivated: number;
+	countries: number;
+}
+
 /**
- * Seed/refresh the curated Numbers tiers. Idempotent — creates missing tiers
- * (inactive, price 0) and refreshes the stored expected cost from live hub-man data.
- * Never overwrites David's set price or active flag.
+ * Sync the Numbers catalog to hub-man's LIVE availability.
+ *
+ * For every currently-available country × curated app that is in stock, upsert an
+ * ACTIVE, AUTO-PRICED tier (price = cost × rate × margin). Any tier whose combo is no
+ * longer available is deactivated (hidden from the storefront). hub-man only offers a
+ * rotating ~7-8 countries at a time, so this keeps the storefront showing exactly what
+ * is really buyable, with zero per-country upkeep. Called by the admin Refresh button
+ * and the hourly cron.
  */
-export async function seedNumbersCatalog(): Promise<{ created: number; refreshed: number }> {
+export async function syncNumbersCatalog(): Promise<CatalogSyncResult> {
 	const platformId = await ensureNumbersPlatform();
+	const pricing = await getPhonePricingConfig();
+
+	let countryIds: number[] = [];
+	try {
+		countryIds = await hubman.getAvailableCountryIds();
+	} catch (error) {
+		console.error('[phone-catalog] failed to fetch available countries:', (error as Error).message);
+		return { created: 0, refreshed: 0, deactivated: 0, countries: 0 };
+	}
+
+	// Country name + ISO code from the master catalog (for display + flag emoji).
+	const countryMeta = new Map<number, { name: string; code: string }>();
+	try {
+		const catalog = await hubman.getCatalog();
+		for (const c of catalog.countries) countryMeta.set(c.id, { name: c.name, code: c.code });
+	} catch (error) {
+		console.error('[phone-catalog] failed to fetch master catalog:', (error as Error).message);
+	}
+
+	// Fetch existing tiers once (slug → id) to avoid a query per combo.
+	const existingTiers = await prisma.category.findMany({
+		where: { parentId: platformId },
+		select: { id: true, slug: true }
+	});
+	const idBySlug = new Map(existingTiers.map((t) => [t.slug, t.id]));
+
+	// Fetch every country's cost map in parallel (the heavy part).
+	const costsByCountry = new Map<number, Map<number, number>>(
+		await Promise.all(
+			countryIds.map(async (cid) => [cid, await fetchCountryServiceCosts(cid)] as const)
+		)
+	);
+
+	const liveSlugs = new Set<string>();
 	let created = 0;
 	let refreshed = 0;
 
-	for (const country of SEED_COUNTRIES) {
-		const costs = await fetchCountryServiceCosts(country.id);
-		for (const service of MAJOR_SERVICES) {
-			const cost = costs.get(service.id);
-			if (cost == null) continue; // service not available in this country right now
+	for (const countryId of countryIds) {
+		const meta = countryMeta.get(countryId) || { name: `Country ${countryId}`, code: '' };
+		const costs = costsByCountry.get(countryId) ?? new Map();
+		for (const [serviceId, cost] of costs) {
+			if (!MAJOR_SERVICE_IDS.has(serviceId)) continue;
+			const serviceName = SERVICE_NAME_BY_ID.get(serviceId)!;
+			const slug = tierSlug(serviceId, countryId);
+			liveSlugs.add(slug);
 
-			const slug = tierSlug(service.id, country.id);
-			const existing = await prisma.category.findFirst({
-				where: { parentId: platformId, slug },
-				select: { id: true, metadata: true }
-			});
-
-			if (existing) {
-				const md = (existing.metadata as Record<string, unknown>) || {};
-				md[PHONE_TIER_KEYS.expectedCostCents] = cost;
+			const metadata: Prisma.InputJsonValue = {
+				[PHONE_TIER_KEYS.deliveryMode]: PHONE_DELIVERY_MODE,
+				[PHONE_TIER_KEYS.serviceId]: serviceId,
+				[PHONE_TIER_KEYS.serviceName]: serviceName,
+				[PHONE_TIER_KEYS.countryId]: countryId,
+				[PHONE_TIER_KEYS.countryName]: meta.name,
+				hub_country_code: meta.code,
+				[PHONE_TIER_KEYS.expectedCostCents]: cost,
+				pricing: { currency: 'NGN', base_price: computeSaleNgn(cost, pricing) }
+			};
+			const name = `${serviceName} — ${meta.name}`;
+			const existingId = idBySlug.get(slug);
+			if (existingId) {
 				await prisma.category.update({
-					where: { id: existing.id },
-					data: { metadata: md as Prisma.InputJsonValue }
+					where: { id: existingId },
+					data: { name, isActive: true, metadata }
 				});
 				refreshed += 1;
 			} else {
-				await prisma.category.create({
+				const row = await prisma.category.create({
 					data: {
-						name: `${service.name} — ${country.name}`,
+						name,
 						slug,
 						categoryType: NUMBERS_TIER_TYPE,
 						parentId: platformId,
-						isActive: false, // David prices it before it goes live
-						sortOrder: service.id * 1000 + country.id,
-						metadata: {
-							[PHONE_TIER_KEYS.deliveryMode]: PHONE_DELIVERY_MODE,
-							[PHONE_TIER_KEYS.serviceId]: service.id,
-							[PHONE_TIER_KEYS.serviceName]: service.name,
-							[PHONE_TIER_KEYS.countryId]: country.id,
-							[PHONE_TIER_KEYS.countryName]: country.name,
-							[PHONE_TIER_KEYS.expectedCostCents]: cost,
-							pricing: { currency: 'NGN', base_price: 0 }
-						}
-					}
+						isActive: true,
+						sortOrder: serviceId * 1000 + countryId,
+						metadata
+					},
+					select: { id: true }
 				});
+				idBySlug.set(slug, row.id);
 				created += 1;
 			}
 		}
 	}
 
-	return { created, refreshed };
+	// Deactivate any tier whose combo is no longer available (single query).
+	const stale = existingTiers.filter((t) => !liveSlugs.has(t.slug)).map((t) => t.id);
+	let deactivated = 0;
+	if (stale.length) {
+		const res = await prisma.category.updateMany({
+			where: { id: { in: stale }, isActive: true },
+			data: { isActive: false }
+		});
+		deactivated = res.count;
+	}
+
+	return { created, refreshed, deactivated, countries: countryIds.length };
+}
+
+/** Back-compat alias — the admin Refresh button + first-visit seed call this. */
+export async function seedNumbersCatalog(): Promise<{ created: number; refreshed: number }> {
+	const r = await syncNumbersCatalog();
+	return { created: r.created, refreshed: r.refreshed };
 }
 
 function readBasePrice(metadata: unknown): number {
@@ -253,6 +326,7 @@ export interface NumbersStorefrontTier {
 	serviceName: string;
 	countryId: number;
 	countryName: string;
+	countryCode: string;
 	priceNgn: number;
 }
 
@@ -273,6 +347,7 @@ export async function getNumbersStorefront(): Promise<
 		const cfg = getPhoneTierConfig(tier.metadata);
 		const price = readBasePrice(tier.metadata);
 		if (!cfg || price <= 0) continue;
+		const countryCode = String((tier.metadata as Record<string, unknown>)?.hub_country_code || '');
 		if (!byService.has(cfg.serviceId))
 			byService.set(cfg.serviceId, { serviceId: cfg.serviceId, serviceName: cfg.serviceName, tiers: [] });
 		byService.get(cfg.serviceId)!.tiers.push({
@@ -281,8 +356,14 @@ export async function getNumbersStorefront(): Promise<
 			serviceName: cfg.serviceName,
 			countryId: cfg.countryId,
 			countryName: cfg.countryName,
+			countryCode,
 			priceNgn: price
 		});
 	}
-	return [...byService.values()];
+	// Cheapest country first within each app; apps in curated order.
+	const order = new Map<number, number>(MAJOR_SERVICES.map((s, i) => [s.id, i]));
+	for (const group of byService.values()) group.tiers.sort((a, b) => a.priceNgn - b.priceNgn);
+	return [...byService.values()].sort(
+		(a, b) => (order.get(a.serviceId) ?? 999) - (order.get(b.serviceId) ?? 999)
+	);
 }

@@ -19,8 +19,14 @@ export const load: PageLoad = async ({ fetch }) => {
 			};
 		}
 
+		// Numbers (auto-SMS) tiers are managed in /admin/numbers, not here — they're not
+		// account stock, so keep them out of Tier Management.
+		const tiers = ((tiersResult.data || []) as Array<{ metadata?: { delivery_mode?: string } }>).filter(
+			(tier) => tier?.metadata?.delivery_mode !== 'auto_sms'
+		);
+
 		return {
-			tiers: tiersResult.data || [],
+			tiers,
 			platforms: platformsResult.data || [],
 			error: null
 		};

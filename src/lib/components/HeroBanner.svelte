@@ -20,8 +20,8 @@
 				class="mx-auto mb-6 max-w-2xl text-base sm:mb-8 sm:text-lg"
 				style="font-family: var(--font-body); color: rgba(255,255,255,0.82);"
 			>
-				Instagram, X, TikTok, Facebook and more — full login access, instant delivery. Buy one, or
-				in bulk for resale.
+				Social media accounts, instant verification numbers, and real engagement — full login
+				access, instant delivery. Buy one, or in bulk for resale.
 			</p>
 		</div>
 
@@ -33,6 +33,13 @@
 				data-sveltekit-preload-data="hover"
 			>
 				Browse Accounts
+			</button>
+			<button
+				class="btn-hero-secondary w-full cursor-pointer sm:w-auto"
+				onclick={() => goto('/numbers')}
+				data-sveltekit-preload-data="hover"
+			>
+				Verification Numbers
 			</button>
 			<button
 				class="btn-hero-secondary w-full cursor-pointer sm:w-auto"

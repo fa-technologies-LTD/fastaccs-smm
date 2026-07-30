@@ -122,6 +122,14 @@ export const AUTOMATION_JOBS = {
 		risk: 'marketing',
 		lockTimeoutMinutes: 10,
 		expectedIntervalMinutes: 1440
+	},
+	'numbers-catalog-sync': {
+		name: 'numbers-catalog-sync',
+		path: '/api/internal/cron/numbers-catalog-sync',
+		schedule: 'hourly :15',
+		risk: 'operational',
+		lockTimeoutMinutes: 10,
+		expectedIntervalMinutes: 60
 	}
 } as const satisfies Record<string, AutomationJobDefinition>;
 

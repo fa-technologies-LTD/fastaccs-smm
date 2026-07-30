@@ -80,6 +80,21 @@
 			question: 'What link should I submit for a boosting order?',
 			answer:
 				'Submit the public profile or post link for the account you want boosted (e.g. your profile URL or a specific post). No password or login access is ever needed.'
+		},
+		{
+			question: 'How do verification numbers work?',
+			answer:
+				'Pick a service (WhatsApp, Telegram, Google and more) on the Numbers page and pay. Your number appears on your order page and its one-time code shows automatically the moment it arrives — usually within a couple of minutes.'
+		},
+		{
+			question: 'What if my verification number never receives a code?',
+			answer:
+				"If no code arrives within the activation window, you're automatically refunded to your store credit — no need to ask. You can also cancel and refund yourself from the order page after 2 minutes if a code hasn't come through."
+		},
+		{
+			question: 'Can I reuse a verification number?',
+			answer:
+				'Each number is for a single one-time verification. Once the code arrives the order is complete. Need to verify again? Just buy another number — it only takes seconds.'
 		}
 	];
 

@@ -45,6 +45,11 @@
 						>
 					</li>
 					<li>
+						<a href="/numbers" data-sveltekit-preload-data="hover" class="footer-link"
+							>Verification Numbers</a
+						>
+					</li>
+					<li>
 						<a href="/services" data-sveltekit-preload-data="hover" class="footer-link"
 							>Boosting Services</a
 						>

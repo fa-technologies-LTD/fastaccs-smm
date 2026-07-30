@@ -12,10 +12,10 @@
 </script>
 
 <svelte:head>
-	<title>Buy Social Media Accounts & Boosting Services | FastAccs</title>
+	<title>Buy Social Media Accounts, Verification Numbers & Boosting | FastAccs</title>
 	<meta
 		name="description"
-		content="Get Instagram, TikTok, X, Facebook accounts and boosting services with secure checkout, instant delivery, and buyer support."
+		content="Get Instagram, TikTok, X, Facebook accounts, instant verification numbers (WhatsApp, Telegram, Google & more), and boosting services — secure checkout, instant delivery, buyer support."
 	/>
 </svelte:head>
 
