@@ -33,7 +33,7 @@ export interface NumbersCampaignState {
 // ---- Copy (Speed hook) -----------------------------------------------------
 
 export const NUMBERS_LAUNCH_BANNER_TEXT =
-	'⚡ New: instant verification numbers — get your one-time code in seconds.';
+	'Instant verification numbers for WhatsApp, Telegram, Google & more — get your one-time code in seconds.';
 
 export const NUMBERS_LAUNCH_POPUP = {
 	icon: '⚡',

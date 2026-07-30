@@ -257,39 +257,25 @@
 
 <div class="min-h-screen" style="background: linear-gradient(180deg, #07090C 0%, #050607 100%);">
 	{#if announcementBanner && !bannerDismissed}
-		<div
-			class="border-b px-4 py-2 text-sm"
-			style="border-color: rgba(59, 130, 246, 0.35); background: linear-gradient(90deg, rgba(30, 64, 175, 0.28) 0%, rgba(15, 23, 42, 0.8) 100%); color: #dbeafe;"
-		>
-			<div
-				class="mx-auto flex max-w-6xl flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between"
-			>
-				<div class="min-w-0">
-					<span class="font-semibold tracking-wide uppercase" style="color: #93c5fd;"
-						>Announcement</span
-					>
-					<span class="ml-2 break-words">{announcementBanner.text}</span>
+		<div class="announce-bar">
+			<div class="announce-inner mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2">
+				<span class="announce-new"><span class="announce-dot"></span>NEW</span>
+				<span class="announce-text">{announcementBanner.text}</span>
+				<div class="announce-actions">
 					{#if announcementBanner.link}
-						<a
-							href={announcementBanner.link}
-							class="ml-3 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold transition-opacity hover:opacity-90"
-							style="background: rgba(59, 130, 246, 0.28); color: #bfdbfe; border: 1px solid rgba(147, 197, 253, 0.3);"
+						<a href={announcementBanner.link} class="announce-cta">Learn more →</a>
+					{/if}
+					{#if announcementBanner.dismissible}
+						<button
+							type="button"
+							class="announce-x"
+							onclick={dismissAnnouncementBanner}
+							aria-label="Dismiss announcement"
 						>
-							Learn more
-						</a>
+							✕
+						</button>
 					{/if}
 				</div>
-				{#if announcementBanner.dismissible}
-					<button
-						type="button"
-						class="rounded-full px-2 py-0.5 text-xs font-semibold transition-opacity hover:opacity-90"
-						style="border: 1px solid rgba(147, 197, 253, 0.4); color: #dbeafe;"
-						onclick={dismissAnnouncementBanner}
-						aria-label="Dismiss announcement"
-					>
-						Dismiss
-					</button>
-				{/if}
 			</div>
 		</div>
 	{/if}
@@ -302,3 +288,134 @@
 	<CookieConsentBar />
 	<ToastContainer />
 </div>
+
+<style>
+	/* Numbers-launch announcement bar — sky-blue identity, glow + subtle shine. */
+	.announce-bar {
+		position: relative;
+		overflow: hidden;
+		border-bottom: 1px solid rgba(56, 189, 248, 0.3);
+		background:
+			radial-gradient(130% 200% at 0% 50%, rgba(14, 165, 233, 0.32), transparent 58%),
+			linear-gradient(90deg, rgba(2, 132, 199, 0.22), rgba(2, 6, 23, 0.9));
+		color: #e0f2fe;
+	}
+	.announce-bar::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(
+			100deg,
+			transparent 30%,
+			rgba(125, 211, 252, 0.16) 50%,
+			transparent 70%
+		);
+		transform: translateX(-100%);
+		animation: announce-shine 6s ease-in-out infinite;
+		pointer-events: none;
+	}
+	@keyframes announce-shine {
+		0% {
+			transform: translateX(-100%);
+		}
+		55%,
+		100% {
+			transform: translateX(100%);
+		}
+	}
+	.announce-inner {
+		position: relative;
+		padding: 0.55rem 1rem;
+	}
+	.announce-new {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex-shrink: 0;
+		border-radius: 9999px;
+		padding: 0.15rem 0.6rem;
+		font-size: 0.68rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		color: #082f49;
+		background: linear-gradient(180deg, #7dd3fc, #38bdf8);
+		box-shadow: 0 0 14px -2px rgba(56, 189, 248, 0.7);
+	}
+	.announce-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 9999px;
+		background: #082f49;
+		animation: announce-pulse 1.6s ease-in-out infinite;
+	}
+	@keyframes announce-pulse {
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.3;
+		}
+	}
+	.announce-text {
+		flex: 1 1 220px;
+		min-width: 0;
+		font-size: 0.875rem;
+		line-height: 1.35;
+	}
+	.announce-actions {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-shrink: 0;
+		margin-left: auto;
+	}
+	.announce-cta {
+		display: inline-flex;
+		align-items: center;
+		border-radius: 9999px;
+		padding: 0.3rem 0.9rem;
+		font-size: 0.78rem;
+		font-weight: 700;
+		white-space: nowrap;
+		color: #ffffff;
+		background: #0ea5e9;
+		box-shadow: 0 0 16px -3px rgba(14, 165, 233, 0.85);
+		transition:
+			transform 140ms ease,
+			box-shadow 200ms ease,
+			filter 160ms ease;
+	}
+	.announce-cta:hover {
+		transform: translateY(-1px);
+		filter: brightness(1.08);
+		box-shadow: 0 0 22px -1px rgba(14, 165, 233, 0.95);
+	}
+	.announce-x {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		border-radius: 9999px;
+		font-size: 0.8rem;
+		line-height: 1;
+		color: #bae6fd;
+		border: 1px solid rgba(125, 211, 252, 0.3);
+		background: transparent;
+		cursor: pointer;
+		transition:
+			background 160ms ease,
+			color 160ms ease;
+	}
+	.announce-x:hover {
+		background: rgba(56, 189, 248, 0.16);
+		color: #ffffff;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.announce-bar::after,
+		.announce-dot {
+			animation: none;
+		}
+	}
+</style>
