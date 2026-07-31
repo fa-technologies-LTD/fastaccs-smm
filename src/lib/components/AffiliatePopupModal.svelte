@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X } from '$lib/icons';
+	import { X, Phone } from '$lib/icons';
 	import { lockScroll, unlockScroll } from '$lib/helpers/scroll-lock';
 
 	interface Props {
@@ -14,6 +14,10 @@
 		secondaryHref?: string;
 		secondaryText?: string;
 		onItemNavigate?: (href: string) => void;
+		// When set, the modal takes on a themed look (glowing icon chip in this colour,
+		// coloured primary action). Used for the Numbers launch popup (sky-blue + phone).
+		accent?: string | null;
+		iconKind?: 'emoji' | 'phone';
 	}
 
 	let {
@@ -27,7 +31,9 @@
 		ctaHref,
 		secondaryHref,
 		secondaryText,
-		onItemNavigate
+		onItemNavigate,
+		accent = null,
+		iconKind = 'emoji'
 	}: Props = $props();
 
 	function handleBackdropClick(event: MouseEvent) {
@@ -65,8 +71,10 @@
 		style="background: rgba(0, 0, 0, 0.5);"
 	>
 		<div
-			class="w-full max-w-md rounded-lg p-6 text-center shadow-xl"
-			style="background: var(--bg-elev-1);"
+			class="relative w-full max-w-md overflow-hidden rounded-lg p-6 text-center shadow-xl"
+			style={accent
+				? `background: radial-gradient(120% 80% at 50% 0%, ${accent}22, transparent 60%), var(--bg-elev-1); border: 1px solid ${accent}55;`
+				: 'background: var(--bg-elev-1);'}
 		>
 			<div class="mb-2 flex justify-end">
 				<button
@@ -78,7 +86,20 @@
 				</button>
 			</div>
 
-			<div class="mb-3 text-4xl">{icon}</div>
+			{#if accent || iconKind === 'phone'}
+				<div class="mb-3 flex justify-center">
+					<span
+						class="popup-icon-chip flex h-16 w-16 items-center justify-center rounded-2xl"
+						style="background: linear-gradient(160deg, {accent ?? '#0ea5e9'}, {accent
+							? accent + 'cc'
+							: '#0284c7'}); box-shadow: 0 0 28px -6px {accent ?? '#0ea5e9'};"
+					>
+						<Phone class="h-8 w-8" style="color: #ffffff;" />
+					</span>
+				</div>
+			{:else}
+				<div class="mb-3 text-4xl">{icon}</div>
+			{/if}
 
 			<h2 id="affiliate-popup-title" class="mb-2 text-lg font-semibold" style="color: var(--text);">
 				{title}
@@ -111,34 +132,77 @@
 				</ul>
 			{/if}
 
-			{#if ctaHref}
-				<a
-					href={ctaHref}
-					onclick={onClose}
-					class="block w-full cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition-all hover:scale-95"
-					style="background: var(--primary); color: #04140C;"
-				>
-					{ctaText}
-				</a>
-			{:else}
-				<button
-					onclick={onClose}
-					class="w-full cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition-all hover:scale-95"
-					style="background: var(--primary); color: #04140C;"
-				>
-					{ctaText}
-				</button>
-			{/if}
-
-			{#if secondaryHref && secondaryText}
+			{#if accent && secondaryHref && secondaryText}
+				<!-- Themed variant: lead with the action, keep dismiss subtle. -->
 				<a
 					href={secondaryHref}
-					class="mt-3 inline-block text-sm font-medium underline-offset-2 hover:underline"
-					style="color: var(--text-muted);"
+					onclick={onClose}
+					class="popup-cta block w-full cursor-pointer rounded-full px-4 py-2.5 text-sm font-bold transition-all active:scale-95"
+					style="background: {accent}; color: #ffffff; box-shadow: 0 0 22px -4px {accent};"
 				>
 					{secondaryText}
 				</a>
+				<button
+					onclick={onClose}
+					class="mt-3 cursor-pointer text-sm font-medium underline-offset-2 hover:underline"
+					style="color: var(--text-muted); background: transparent;"
+				>
+					{ctaText}
+				</button>
+			{:else}
+				{#if ctaHref}
+					<a
+						href={ctaHref}
+						onclick={onClose}
+						class="block w-full cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition-all hover:scale-95"
+						style="background: var(--primary); color: #04140C;"
+					>
+						{ctaText}
+					</a>
+				{:else}
+					<button
+						onclick={onClose}
+						class="w-full cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition-all hover:scale-95"
+						style="background: var(--primary); color: #04140C;"
+					>
+						{ctaText}
+					</button>
+				{/if}
+
+				{#if secondaryHref && secondaryText}
+					<a
+						href={secondaryHref}
+						class="mt-3 inline-block text-sm font-medium underline-offset-2 hover:underline"
+						style="color: var(--text-muted);"
+					>
+						{secondaryText}
+					</a>
+				{/if}
 			{/if}
 		</div>
 	</div>
 {/if}
+
+<style>
+	.popup-icon-chip {
+		animation: popup-chip-pulse 2.4s ease-in-out infinite;
+	}
+	@keyframes popup-chip-pulse {
+		0%,
+		100% {
+			transform: translateY(0) scale(1);
+		}
+		50% {
+			transform: translateY(-2px) scale(1.04);
+		}
+	}
+	.popup-cta:hover {
+		transform: translateY(-1px);
+		filter: brightness(1.08);
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.popup-icon-chip {
+			animation: none;
+		}
+	}
+</style>

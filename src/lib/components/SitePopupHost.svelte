@@ -85,5 +85,7 @@
 		secondaryHref={activePopup.secondaryHref}
 		secondaryText={activePopup.secondaryText}
 		onItemNavigate={handleItemNavigate}
+		accent={activePopup.type === 'numbers_launch' ? '#0ea5e9' : null}
+		iconKind={activePopup.type === 'numbers_launch' ? 'phone' : 'emoji'}
 	/>
 {/if}
