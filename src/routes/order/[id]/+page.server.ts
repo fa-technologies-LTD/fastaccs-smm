@@ -55,6 +55,24 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 	const phoneItem = order.orderType === 'phone'
 		? order.orderItems.find((item) => item.phoneRental)
 		: null;
+	const phoneRefundMessage = (() => {
+		const r = phoneItem?.phoneRental;
+		if (!r) return null;
+		if (!['refunded', 'failed', 'expired', 'cancelled'].includes(r.status)) return null;
+		const reason = (r.failureReason || '').toLowerCase();
+		if (reason.includes('cancelled by you'))
+			return 'Cancelled — refunded to your store credit.';
+		if (
+			reason.includes('available number') ||
+			reason.includes('could not') ||
+			reason.includes('rent') ||
+			reason.includes('persist') ||
+			!r.hubOrderUuid // never got a number at all
+		)
+			return "We couldn't get you a number right now — you've been refunded to store credit. Please try again in a few minutes.";
+		return "No code arrived in time — you've been refunded to your store credit.";
+	})();
+
 	const phone = phoneItem?.phoneRental
 		? {
 				orderItemId: phoneItem.id,
@@ -64,7 +82,8 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 				status: phoneItem.phoneRental.status,
 				otp: phoneItem.phoneRental.otp,
 				smsMessage: phoneItem.phoneRental.smsMessage,
-				expiresAt: phoneItem.phoneRental.expiresAt?.toISOString() ?? null
+				expiresAt: phoneItem.phoneRental.expiresAt?.toISOString() ?? null,
+				refundMessage: phoneRefundMessage
 			}
 		: null;
 

@@ -226,7 +226,8 @@ export async function fulfillPhoneOrder(
 		await refundPhoneOrderToStoreCredit(orderId, 'We could not get your number — fully refunded', source);
 		return {
 			status: 'refunded',
-			message: 'We could not get a number right now — your payment was refunded to store credit.'
+			message:
+				"We couldn't get you a number right now — you've been refunded to store credit. Please try again in a few minutes."
 		};
 	}
 

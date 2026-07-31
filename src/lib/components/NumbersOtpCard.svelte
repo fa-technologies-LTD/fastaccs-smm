@@ -13,6 +13,7 @@
 		otp: string | null;
 		smsMessage: string | null;
 		expiresAt: string | null;
+		refundMessage?: string | null;
 	}
 
 	let { phone }: { phone: PhoneState } = $props();
@@ -27,6 +28,7 @@
 	let canCancel = $state(false);
 	let cancelling = $state(false);
 	let cancelledByUser = $state(false);
+	let refundMessage = $state<string | null>(phone.refundMessage ?? null);
 	let now = $state(Date.now());
 
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -61,6 +63,7 @@
 				stopPolling();
 			} else if (data.status === 'refunded' || data.status === 'expired') {
 				status = data.status;
+				if (data.message) refundMessage = data.message;
 				stopPolling();
 			} else if (data.status === 'awaiting_sms') {
 				status = 'awaiting_sms';
@@ -88,6 +91,7 @@
 			if (data.outcome === 'refunded') {
 				status = 'refunded';
 				cancelledByUser = true;
+				refundMessage = 'Cancelled — refunded to your store credit.';
 				stopPolling();
 				showSuccess('Cancelled', data.message);
 			} else if (data.outcome === 'received') {
@@ -208,9 +212,10 @@
 		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid rgba(245,158,11,0.4); background: rgba(245,158,11,0.10); color: #fbbf24;">
 			<div class="inline-flex items-center gap-2">
 				<AlertTriangle class="w-4 h-4" />
-				{cancelledByUser
-					? 'Cancelled — refunded to your store credit.'
-					: 'No code arrived in time — refunded to your store credit.'}
+				{refundMessage ??
+					(cancelledByUser
+						? 'Cancelled — refunded to your store credit.'
+						: 'No code arrived in time — refunded to your store credit.')}
 			</div>
 		</div>
 	{/if}

@@ -687,11 +687,15 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			.trim()
 			.toUpperCase();
 
-		if (isBoostingCheckout && (requestedPromotionCode || requestedAffiliateCode)) {
+		// Promo/affiliate pricing applies to ACCOUNTS only. Blocked on boosting and on
+		// numbers (a ₦1,000 code on a ₦1,000-floor number would be a guaranteed loss).
+		if ((isBoostingCheckout || isPhoneCheckout) && (requestedPromotionCode || requestedAffiliateCode)) {
 			return json(
 				{
 					success: false,
-					error: 'Promo codes and affiliate pricing do not apply to boosting services.'
+					error: isPhoneCheckout
+						? 'Promo and affiliate codes do not apply to Numbers.'
+						: 'Promo codes and affiliate pricing do not apply to boosting services.'
 				},
 				{ status: 400 }
 			);
@@ -714,7 +718,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		let discountAmount = 0;
 		let finalOrderTotal = Math.round(subtotalAmount * 100) / 100;
 
-		if (!isBoostingCheckout) {
+		if (!isBoostingCheckout && !isPhoneCheckout) {
 			let affiliateCodeInput = requestedAffiliateCode || null;
 			if (!affiliateCodeInput && requestedPromotionCode) {
 				const affiliateFromPromotionCode = await validateAffiliateCode(requestedPromotionCode);

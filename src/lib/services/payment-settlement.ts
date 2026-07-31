@@ -283,6 +283,19 @@ export async function recoverPaidOrder(
 		return { success: true, orderId: order.id, status: 'COMPLETED' };
 	}
 
+	// Terminal-refunded guard: once an order has been refunded/cancelled (e.g. a Numbers
+	// rent that found no stock and auto-refunded to store credit), a late/retried payment
+	// webhook or reconcile pass must NEVER re-settle it back to "paid". This closes the
+	// status-resurrection bug. `deliveryStatus === 'refunded'` also catches an order whose
+	// status was already wrongly resurrected but whose delivery state proves the refund.
+	if (
+		order.status === 'refunded' ||
+		order.status === 'cancelled' ||
+		order.deliveryStatus === 'refunded'
+	) {
+		return { success: true, orderId: order.id, status: 'CANCELLED' };
+	}
+
 	await recordPromotionRedemption(order.id).catch((error) => {
 		console.warn(`[payments.${source}] failed to record promotion redemption:`, error);
 	});

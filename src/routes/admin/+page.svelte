@@ -107,9 +107,9 @@
 	let issuesExpanded = $state(false);
 	let managementExpanded = $state(true);
 	let activityExpanded = $state(true);
-	const outOfStockCount = $derived(
-		inventoryStats.outOfStockTiersCount || inventoryStats.out_of_stock || 0
-	);
+	// Use the real out-of-stock TIER count (0 is valid) — `??`, not `||`, so a true
+	// zero isn't mistaken for "missing" and replaced by the unrelated batch count.
+	const outOfStockCount = $derived(inventoryStats.outOfStockTiersCount ?? 0);
 	const totalIssueCount = $derived(
 		outOfStockCount + dashboardIssues.failedEmails.length + dashboardIssues.unhealthyJobs.length
 	);
