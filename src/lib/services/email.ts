@@ -29,6 +29,7 @@ export type EmailNotificationType =
 	| 'affiliate_payout'
 	| 'marketing_campaign'
 	| 'numbers_launch'
+	| 'promo_reminder'
 	| 'admin_broadcast';
 
 export type EmailClassification = 'transactional' | 'marketing' | 'operational';

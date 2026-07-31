@@ -130,6 +130,14 @@ export const AUTOMATION_JOBS = {
 		risk: 'operational',
 		lockTimeoutMinutes: 10,
 		expectedIntervalMinutes: 60
+	},
+	'promo-reminder': {
+		name: 'promo-reminder',
+		path: '/api/internal/cron/promo-reminder',
+		schedule: 'daily 10:10',
+		risk: 'marketing',
+		lockTimeoutMinutes: 10,
+		expectedIntervalMinutes: 1440
 	}
 } as const satisfies Record<string, AutomationJobDefinition>;
 
