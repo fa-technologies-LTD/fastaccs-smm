@@ -129,6 +129,7 @@ export async function sendPromoReminderPreview(email: string): Promise<{ ok: boo
 		select: { id: true, email: true, fullName: true }
 	});
 	if (!user) return { ok: false, reason: 'user not found' };
+	if (!user.email) return { ok: false, reason: 'user has no email' };
 
 	const own = await prisma.promotionCode.findFirst({
 		where: { issuedToUserId: user.id, isActive: true, usageCount: 0 },
