@@ -1030,6 +1030,23 @@
 								<p class="mb-2 text-xs font-semibold uppercase" style="color: var(--text-muted);">
 									Promo or affiliate code (optional)
 								</p>
+								{#if data.availablePromo && !promoAppliedCode}
+									<button
+										type="button"
+										onclick={() => {
+											promoCodeInput = data.availablePromo!.code;
+											void applyPromoCode();
+										}}
+										class="mb-2 flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold transition-transform active:scale-[0.99]"
+										style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.35); color: var(--primary);"
+									>
+										<span>🎁 You've got ₦{data.availablePromo.value.toLocaleString()} off — tap to apply</span>
+										<span
+											class="shrink-0 rounded-full px-2 py-0.5"
+											style="background: var(--primary); color: #04140c;">Apply</span
+										>
+									</button>
+								{/if}
 								<div class="flex items-center gap-2">
 									<input
 										type="text"
