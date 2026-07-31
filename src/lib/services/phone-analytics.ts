@@ -46,12 +46,21 @@ export interface NumbersAnalytics {
 		status: string;
 		saleNgn: number;
 		costUsd: number | null;
+		buyer: string | null;
+		buyerUserId: string | null;
 	}>;
 }
 
 export async function getNumbersAnalytics(): Promise<NumbersAnalytics> {
 	const { usdNgnRate } = await getPhonePricingConfig();
-	const rentals = await prisma.phoneRental.findMany({ orderBy: { createdAt: 'desc' } });
+	const rentals = await prisma.phoneRental.findMany({
+		orderBy: { createdAt: 'desc' },
+		include: {
+			orderItem: {
+				select: { order: { select: { user: { select: { id: true, email: true, fullName: true } } } } }
+			}
+		}
+	});
 
 	const groups = new Map<string, NumbersServiceStat & { _otpSum: number; _otpCount: number }>();
 	const overall = { total: 0, received: 0, refunded: 0, inFlight: 0, revenueNgn: 0, costNgn: 0 };
@@ -125,15 +134,20 @@ export async function getNumbersAnalytics(): Promise<NumbersAnalytics> {
 			marginNgn: overall.revenueNgn - overall.costNgn
 		},
 		byService,
-		recent: rentals.slice(0, 25).map((r) => ({
-			createdAt: r.createdAt.toISOString(),
-			serviceName: r.serviceName,
-			countryName: r.countryName,
-			phoneNumber: r.phoneNumber,
-			status: r.status,
-			saleNgn: Number(r.saleAmountNgn ?? 0),
-			costUsd: r.costCents != null ? r.costCents / 100 : null
-		}))
+		recent: rentals.slice(0, 25).map((r) => {
+			const u = r.orderItem?.order?.user ?? null;
+			return {
+				createdAt: r.createdAt.toISOString(),
+				serviceName: r.serviceName,
+				countryName: r.countryName,
+				phoneNumber: r.phoneNumber,
+				status: r.status,
+				saleNgn: Number(r.saleAmountNgn ?? 0),
+				costUsd: r.costCents != null ? r.costCents / 100 : null,
+				buyer: u ? u.fullName?.trim() || u.email : null,
+				buyerUserId: u?.id ?? null
+			};
+		})
 	};
 }
 

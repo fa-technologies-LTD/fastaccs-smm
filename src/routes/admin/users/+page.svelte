@@ -213,6 +213,9 @@
 
 	onMount(() => {
 		hideMonetaryAmounts = localStorage.getItem(ADMIN_MONEY_VISIBILITY_KEY) === 'true';
+		// Prefill search from ?q= (e.g. clicking a buyer from Numbers analytics).
+		const q = new URL(window.location.href).searchParams.get('q');
+		if (q) searchQuery = q;
 	});
 
 	$effect(() => {

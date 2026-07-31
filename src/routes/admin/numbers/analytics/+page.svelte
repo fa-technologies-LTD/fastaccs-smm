@@ -135,6 +135,7 @@
 			<thead style="background: var(--bg-elev-1);">
 				<tr class="text-left text-xs uppercase" style="color: var(--text-muted);">
 					<th class="px-4 py-3">When</th>
+					<th class="px-4 py-3">Buyer</th>
 					<th class="px-4 py-3">Service</th>
 					<th class="px-4 py-3">Number</th>
 					<th class="px-4 py-3">Status</th>
@@ -148,6 +149,17 @@
 						<td class="px-4 py-2 whitespace-nowrap" style="color: var(--text-muted);">
 							{new Date(r.createdAt).toLocaleString()}
 						</td>
+						<td class="px-4 py-2" style="color: var(--text);">
+							{#if r.buyer}
+								<a
+									href="/admin/users?q={encodeURIComponent(r.buyer)}"
+									class="hover:underline"
+									style="color: #38bdf8;">{r.buyer}</a
+								>
+							{:else}
+								<span style="color: var(--text-dim);">guest</span>
+							{/if}
+						</td>
 						<td class="px-4 py-2" style="color: var(--text);">{r.serviceName} — {r.countryName}</td>
 						<td class="px-4 py-2 font-mono" style="color: var(--text);">{r.phoneNumber ?? '—'}</td>
 						<td class="px-4 py-2 font-medium" style="color: {statusColor(r.status)};">{r.status}</td>
@@ -159,7 +171,7 @@
 				{/each}
 				{#if a.recent.length === 0}
 					<tr style="background: var(--surface);">
-						<td colspan="6" class="px-4 py-8 text-center" style="color: var(--text-dim);">No rentals yet.</td>
+						<td colspan="7" class="px-4 py-8 text-center" style="color: var(--text-dim);">No rentals yet.</td>
 					</tr>
 				{/if}
 			</tbody>
