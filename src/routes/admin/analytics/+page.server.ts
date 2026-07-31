@@ -23,6 +23,7 @@ import {
 	buildRevenueOrderWindowWhere
 } from '$lib/helpers/order-revenue.server';
 import { ANALYTICS_FUNNEL_STEPS } from '$lib/services/analytics-events';
+import { getUserAnalytics } from '$lib/services/user-analytics';
 import { toSerializableDecimals } from '$lib/helpers/serialize';
 
 type IntegrityCheckResult = {
@@ -832,8 +833,14 @@ export const load: PageServerLoad = async ({ locals }) => {
 					}
 		};
 
+		const userAnalytics = await getUserAnalytics().catch((error) => {
+			console.error('Failed to load user analytics:', error);
+			return null;
+		});
+
 		return toSerializableDecimals({
 			stats,
+			userAnalytics,
 			canViewRevenue: revenueVisible,
 			integrity: {
 				checkedAt: new Date().toISOString(),

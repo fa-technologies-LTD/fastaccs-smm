@@ -48,6 +48,26 @@
 		return `${Number(value).toFixed(1)}%`;
 	}
 
+	type AnalyticsTab = 'overview' | 'users' | 'numbers';
+	let activeTab = $state<AnalyticsTab>('overview');
+	const ua = $derived((data.userAnalytics ?? null) as Record<string, any> | null);
+	const uaMaxSignup = $derived(
+		ua?.signupsByDay?.length ? Math.max(1, ...ua.signupsByDay.map((d: any) => d.count)) : 1
+	);
+	const uaRt = $derived(
+		(ua?.revenueByType ?? { account: 0, numbers: 0, boosting: 0 }) as {
+			account: number;
+			numbers: number;
+			boosting: number;
+		}
+	);
+	const uaTotalRt = $derived(Math.max(1, uaRt.account + uaRt.numbers + uaRt.boosting));
+	const ANALYTICS_TABS: { id: AnalyticsTab; label: string }[] = [
+		{ id: 'overview', label: 'Overview' },
+		{ id: 'users', label: 'Users' },
+		{ id: 'numbers', label: 'Numbers' }
+	];
+
 	let granularity = $state<'day' | 'week' | 'month'>('day');
 	const granularityData = $derived.by(() => {
 		const key =
@@ -79,6 +99,23 @@
 		{/if}
 	</div>
 
+	<!-- Analytics hub tabs -->
+	<div class="flex flex-wrap gap-2">
+		{#each ANALYTICS_TABS as tab (tab.id)}
+			<button
+				type="button"
+				onclick={() => (activeTab = tab.id)}
+				class="rounded-full px-4 py-1.5 text-sm font-semibold transition-colors"
+				style={activeTab === tab.id
+					? 'background: var(--fa-lime-700); color: #0a0a0a;'
+					: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
+			>
+				{tab.label}
+			</button>
+		{/each}
+	</div>
+
+	{#if activeTab === 'overview'}
 	<div
 		class="rounded-lg border p-3"
 		style={`background: ${integrity.ok ? 'var(--status-success-bg)' : 'var(--status-warning-bg)'}; border-color: ${integrity.ok ? 'var(--status-success-border)' : 'var(--status-warning-border)'}`}
@@ -567,5 +604,144 @@
 				{/if}
 			</section>
 		</div>
+	{/if}
+	{:else if activeTab === 'users'}
+		{#if ua}
+			<!-- Insight callouts -->
+			{#if ua.insights?.length}
+				<div class="grid gap-2 sm:grid-cols-2">
+					{#each ua.insights as insight}
+						<div
+							class="rounded-lg p-3 text-sm"
+							style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
+						>
+							💡 {insight}
+						</div>
+					{/each}
+				</div>
+			{/if}
+
+			<!-- User KPIs -->
+			<div class="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+				{#snippet ukpi(label: string, value: string, sub = '')}
+					<div class="rounded-lg p-4" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
+						<p class="text-xs" style="color: var(--text-muted);">{label}</p>
+						<p class="text-xl font-bold" style="color: var(--text);">{value}</p>
+						{#if sub}<p class="text-xs" style="color: var(--text-dim);">{sub}</p>{/if}
+					</div>
+				{/snippet}
+				{@render ukpi('Total users', ua.totalUsers.toLocaleString(), `${ua.newUsers30d} new (30d)`)}
+				{@render ukpi('Buyers', ua.buyers.toLocaleString(), `${ua.buyerConversionRate}% of signups`)}
+				{@render ukpi('Repeat rate', `${ua.repeatRate}%`, `${ua.repeatBuyers} repeat`)}
+				{@render ukpi('Avg orders/buyer', String(ua.avgOrdersPerBuyer))}
+				{@render ukpi('Days to 1st buy', ua.avgDaysToFirstPurchase == null ? '—' : String(ua.avgDaysToFirstPurchase))}
+				{@render ukpi('Returning rev.', formatMoney(ua.returningRevenue), `New: ${formatMoney(ua.newRevenue)}`)}
+			</div>
+
+			<!-- Signups (30d) -->
+			<section class="rounded-lg border p-4" style="background: var(--surface); border-color: var(--border);">
+				<h2 class="mb-3 text-base font-semibold" style="color: var(--text);">Signups — last 30 days</h2>
+				<div class="flex items-end gap-1" style="height: 90px;">
+					{#each ua.signupsByDay as d (d.key)}
+						<div
+							class="flex-1 rounded-t"
+							style="height: {Math.round((d.count / uaMaxSignup) * 100)}%; min-height: 2px; background: #38bdf8;"
+							title="{d.key}: {d.count}"
+						></div>
+					{/each}
+				</div>
+			</section>
+
+			<div class="grid gap-4 lg:grid-cols-2">
+				<!-- Cohorts -->
+				<section class="rounded-lg border p-4" style="background: var(--surface); border-color: var(--border);">
+					<h2 class="mb-3 text-base font-semibold" style="color: var(--text);">Signup cohorts → conversion</h2>
+					<div class="overflow-x-auto">
+						<table class="w-full text-sm">
+							<thead>
+								<tr class="text-left text-xs uppercase" style="color: var(--text-muted);">
+									<th class="py-2">Month</th>
+									<th class="py-2 text-right">Signups</th>
+									<th class="py-2 text-right">Converted</th>
+									<th class="py-2 text-right">Rate</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each ua.cohorts as c (c.month)}
+									<tr style="border-top: 1px solid var(--border);">
+										<td class="py-2" style="color: var(--text);">{c.month}</td>
+										<td class="py-2 text-right" style="color: var(--text);">{c.signups}</td>
+										<td class="py-2 text-right" style="color: var(--text);">{c.converted}</td>
+										<td class="py-2 text-right" style="color: #34d399;">{c.rate}%</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</section>
+
+				<!-- Revenue mix by service -->
+				<section class="rounded-lg border p-4" style="background: var(--surface); border-color: var(--border);">
+					<h2 class="mb-3 text-base font-semibold" style="color: var(--text);">Revenue by service</h2>
+					{#each [{ k: 'Accounts', v: uaRt.account, c: '#84cc16' }, { k: 'Numbers', v: uaRt.numbers, c: '#38bdf8' }, { k: 'Boosting', v: uaRt.boosting, c: '#a78bfa' }] as row}
+						<div class="mb-2">
+							<div class="mb-1 flex justify-between text-sm">
+								<span style="color: var(--text);">{row.k}</span>
+								<span style="color: var(--text-muted);">{formatMoney(row.v)} · {Math.round((row.v / uaTotalRt) * 100)}%</span>
+							</div>
+							<div class="h-2 rounded-full" style="background: var(--bg-elev-2);">
+								<div class="h-2 rounded-full" style="width: {Math.round((row.v / uaTotalRt) * 100)}%; background: {row.c};"></div>
+							</div>
+						</div>
+					{/each}
+				</section>
+			</div>
+
+			<!-- Top customers -->
+			<section class="rounded-lg border p-4" style="background: var(--surface); border-color: var(--border);">
+				<h2 class="mb-3 text-base font-semibold" style="color: var(--text);">Top customers by lifetime spend</h2>
+				<div class="overflow-x-auto">
+					<table class="w-full text-sm">
+						<thead>
+							<tr class="text-left text-xs uppercase" style="color: var(--text-muted);">
+								<th class="py-2">Customer</th>
+								<th class="py-2 text-right">Orders</th>
+								<th class="py-2 text-right">Lifetime spend</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each ua.topCustomers as c (c.userId)}
+								<tr style="border-top: 1px solid var(--border);">
+									<td class="py-2">
+										<a href="/admin/users?q={encodeURIComponent(c.name)}" class="hover:underline" style="color: #38bdf8;">{c.name}</a>
+									</td>
+									<td class="py-2 text-right" style="color: var(--text);">{c.orders}</td>
+									<td class="py-2 text-right" style="color: var(--text);">{formatMoney(c.spent)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</section>
+		{:else}
+			<p class="text-sm" style="color: var(--text-muted);">User analytics are unavailable right now.</p>
+		{/if}
+	{:else if activeTab === 'numbers'}
+		<section
+			class="rounded-lg border p-6 text-center"
+			style="background: var(--surface); border-color: var(--border);"
+		>
+			<p class="mb-2 text-base font-semibold" style="color: var(--text);">Numbers analytics live in their own dashboard</p>
+			<p class="mb-4 text-sm" style="color: var(--text-muted);">
+				Rents, success rate, revenue, margin, hub-man balance, buyer attribution and recent rentals.
+			</p>
+			<a
+				href="/admin/numbers/analytics"
+				class="inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold"
+				style="background: #0ea5e9; color: #ffffff;"
+			>
+				Open Numbers analytics →
+			</a>
+		</section>
 	{/if}
 </div>
