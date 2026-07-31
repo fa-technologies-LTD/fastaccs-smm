@@ -1,7 +1,7 @@
 import { prisma } from '$lib/prisma';
 import { Prisma } from '@prisma/client';
 import * as hubman from './hubman';
-import { getPhonePricingConfig, computeSaleNgn } from './phone-pricing';
+import { getPhonePricingConfig, computeSaleNgn, computeStickyPrice } from './phone-pricing';
 import { PHONE_TIER_KEYS, PHONE_DELIVERY_MODE, getPhoneTierConfig } from '$lib/helpers/phone-tier-config';
 
 /**
@@ -92,7 +92,9 @@ async function fetchCountryServiceCosts(
 		const data = await hubman.getAvailableServices(countryId);
 		const byService = data[String(countryId)] || {};
 		for (const [sid, info] of Object.entries(byService)) {
-			costs.set(Number(sid), info.min_price_cents);
+			// Worst-case cost: any in-stock number could be up to max, so price + ceiling
+			// must be anchored here (using min underprices volatile services and refund-loops).
+			costs.set(Number(sid), info.max_price_cents);
 		}
 		return { ok: true, costs };
 	} catch (error) {
@@ -145,12 +147,14 @@ export async function syncNumbersCatalog(): Promise<CatalogSyncResult> {
 		console.error('[phone-catalog] failed to fetch master catalog:', (error as Error).message);
 	}
 
-	// Fetch existing tiers once (slug → id) to avoid a query per combo.
+	// Fetch existing tiers once (slug → id + current price) to avoid a query per combo
+	// and to apply sticky pricing (keep the current price unless the profit floor forces a bump).
 	const existingTiers = await prisma.category.findMany({
 		where: { parentId: platformId },
-		select: { id: true, slug: true }
+		select: { id: true, slug: true, metadata: true }
 	});
 	const idBySlug = new Map(existingTiers.map((t) => [t.slug, t.id]));
+	const priceBySlug = new Map(existingTiers.map((t) => [t.slug, readBasePrice(t.metadata)]));
 
 	// Fetch every country's cost map in parallel (the heavy part).
 	const fetched = new Map(
@@ -175,6 +179,9 @@ export async function syncNumbersCatalog(): Promise<CatalogSyncResult> {
 			const slug = tierSlug(serviceId, countryId);
 			liveSlugs.add(slug);
 
+			// Sticky price: keep the existing price unless the worst-case cost has risen
+			// close enough to threaten the ₦1,000 profit floor, then bump up. New tiers seed.
+			const stickyPrice = computeStickyPrice(priceBySlug.get(slug) ?? 0, cost, pricing);
 			const metadata: Prisma.InputJsonValue = {
 				[PHONE_TIER_KEYS.deliveryMode]: PHONE_DELIVERY_MODE,
 				[PHONE_TIER_KEYS.serviceId]: serviceId,
@@ -183,7 +190,7 @@ export async function syncNumbersCatalog(): Promise<CatalogSyncResult> {
 				[PHONE_TIER_KEYS.countryName]: meta.name,
 				hub_country_code: meta.code,
 				[PHONE_TIER_KEYS.expectedCostCents]: cost,
-				pricing: { currency: 'NGN', base_price: computeSaleNgn(cost, pricing) }
+				pricing: { currency: 'NGN', base_price: stickyPrice }
 			};
 			const name = `${serviceName} — ${meta.name}`;
 			const existingId = idBySlug.get(slug);

@@ -141,6 +141,46 @@ export function computeMaxPriceCents(
 	return Math.ceil(Math.max(1, expectedCostCents) * (1 + tolerancePercent / 100));
 }
 
+/**
+ * Minimum naira profit we require on every number rental. Prices are STICKY: they only
+ * bump UP (never down) when hub-man's cost climbs close enough to threaten this floor.
+ */
+export const NUMBERS_MIN_PROFIT_NGN = 1000;
+
+/**
+ * Sticky price for a tier. Keeps the current price if it still clears the ₦1,000 profit
+ * floor at this cost; otherwise bumps UP to the lowest clean ₦100 that restores the floor.
+ * New tiers (currentPrice ≤ 0) are seeded from cost × margin, but never below the floor.
+ * Prices never auto-decrease — this stops the constant re-pricing churn.
+ *
+ * `costCents` should be the WORST-CASE (max) live cost, so the floor holds against the
+ * priciest number actually in stock.
+ */
+export function computeStickyPrice(
+	currentPriceNgn: number,
+	worstCaseCostCents: number,
+	config: Pick<PhonePricingConfig, 'usdNgnRate' | 'marginPercent'>
+): number {
+	const costNgn = (Math.max(0, worstCaseCostCents) / 100) * config.usdNgnRate;
+	const floorPrice = roundNgnUp(costNgn + NUMBERS_MIN_PROFIT_NGN); // ≥ cost + ₦1,000, on a ₦100 grid
+	if (currentPriceNgn > 0) return Math.max(currentPriceNgn, floorPrice);
+	return Math.max(computeSaleNgn(worstCaseCostCents, config), floorPrice);
+}
+
+/**
+ * The `max_price_cents` we'll pay hub-man for THIS sale and still keep the ₦1,000 profit
+ * floor — i.e. pay up to (sale price − ₦1,000), converted to USD cents. Because sticky
+ * pricing guarantees price ≥ worst-case cost + ₦1,000, this ceiling always covers what's
+ * actually in stock, so rentals reliably succeed instead of refund-looping.
+ */
+export function computeMaxPriceCentsForSale(
+	saleNgn: number,
+	config: Pick<PhonePricingConfig, 'usdNgnRate'>
+): number {
+	const usableNgn = Math.max(0, saleNgn - NUMBERS_MIN_PROFIT_NGN);
+	return Math.max(1, Math.floor((usableNgn / Math.max(1, config.usdNgnRate)) * 100));
+}
+
 /** Realized margin (NGN) on a completed rental, for analytics. */
 export function computeRealizedMarginNgn(
 	saleNgn: number,

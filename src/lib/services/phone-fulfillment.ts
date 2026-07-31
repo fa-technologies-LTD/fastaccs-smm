@@ -2,7 +2,7 @@ import { prisma } from '$lib/prisma';
 import * as hubman from './hubman';
 import { HubmanError } from './hubman';
 import { getPhoneTierConfig, type PhoneTierConfig } from '$lib/helpers/phone-tier-config';
-import { getPhonePricingConfig, computeMaxPriceCents } from './phone-pricing';
+import { getPhonePricingConfig, computeMaxPriceCentsForSale } from './phone-pricing';
 import { creditStoreCredit, SC_CREDIT_REFUND } from './store-credit';
 import { sendCriticalAdminAlert } from './admin-alerts';
 
@@ -191,19 +191,11 @@ export async function fulfillPhoneOrder(
 		};
 	}
 
-	// We own the rent. Cap the price so a spike can't eat the margin — and NEVER pay
-	// more than the customer actually paid us (converted to USD cents). This guarantees
-	// no loss regardless of how rate/margin/tolerance are configured: if the live cost
-	// exceeds the customer's payment, the rent fails and they're refunded instead.
-	const expectedCost = ctx.tier.expectedCostCents || undefined;
-	const paidCapCents = Math.max(
-		1,
-		Math.floor((ctx.saleAmountNgn / Math.max(1, pricing.usdNgnRate)) * 100)
-	);
-	const toleranceCap = expectedCost
-		? computeMaxPriceCents(expectedCost, pricing.ceilingTolerancePercent)
-		: paidCapCents;
-	const maxPriceCents = Math.min(toleranceCap, paidCapCents);
+	// We own the rent. Pay up to (sale price − ₦1,000 profit floor), in USD cents — so we
+	// rent any in-stock number that still clears our profit floor, and never below it.
+	// Sticky pricing keeps price ≥ worst-case cost + ₦1,000, so this ceiling reliably
+	// covers what's actually in stock (no more "no available number" refund loops).
+	const maxPriceCents = computeMaxPriceCentsForSale(ctx.saleAmountNgn, pricing);
 
 	// Step 1: rent. A failure here means no number and no charge to reclaim → refund.
 	let result: hubman.HubmanRentResult;
