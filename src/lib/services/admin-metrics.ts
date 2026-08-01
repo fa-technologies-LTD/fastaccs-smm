@@ -212,7 +212,9 @@ export async function getInventoryStatsSnapshot(
 				where: {
 					categoryType: 'tier',
 					isActive: true,
-					parentId: { not: null }
+					parentId: { not: null },
+					// Numbers (auto-SMS) tiers aren't account inventory — exclude from the tier count.
+					NOT: { metadata: { path: ['delivery_mode'], equals: 'auto_sms' } }
 				}
 			}),
 			prisma.category.count({
@@ -229,8 +231,12 @@ export async function getInventoryStatsSnapshot(
 					categoryType: 'tier',
 					isActive: true,
 					parentId: { not: null },
-					// Manual-handover tiers have no account inventory — never "out of stock".
-					NOT: { metadata: { path: ['delivery_mode'], equals: 'manual_handover' } }
+					// Manual-handover AND numbers (auto-SMS) tiers have no account inventory —
+					// they must never count toward account "out of stock".
+					NOT: [
+						{ metadata: { path: ['delivery_mode'], equals: 'manual_handover' } },
+						{ metadata: { path: ['delivery_mode'], equals: 'auto_sms' } }
+					]
 				},
 				select: {
 					id: true,
