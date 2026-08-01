@@ -6,6 +6,7 @@
 	import { getOrderStatusLabel } from '$lib/helpers/order-status';
 	import { ArrowLeft, ShieldCheck, ShieldOff, Clock3, ShoppingBag, Activity } from '$lib/icons';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
+	import OrderTypeIcon from '$lib/components/admin/OrderTypeIcon.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -346,8 +347,9 @@
 						>
 							<div class="flex items-start justify-between gap-3">
 								<div class="min-w-0">
-									<p class="truncate text-sm font-semibold" style="color: var(--text);">
-										{order.orderNumber}
+									<p class="flex items-center gap-1.5 truncate text-sm font-semibold" style="color: var(--text);">
+										<OrderTypeIcon {order} />
+										<span class="truncate">{order.orderNumber}</span>
 									</p>
 									<p class="text-xs" style="color: var(--text-muted);">
 										{formatDate(order.createdAt)}

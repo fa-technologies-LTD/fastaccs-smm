@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { getOrders } from '$lib/services/orders';
 	import OrderTypeTabs from '$lib/components/admin/OrderTypeTabs.svelte';
+	import OrderTypeIcon from '$lib/components/admin/OrderTypeIcon.svelte';
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
 	import { getOrderStatusLabel, isOrderStatusInGroup } from '$lib/helpers/order-status';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
@@ -510,7 +511,10 @@
 							onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
 						>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="text-sm font-medium" style="color: var(--text)">#{order.id}</div>
+								<div class="flex items-center gap-1.5 text-sm font-medium" style="color: var(--text)">
+									<OrderTypeIcon {order} />
+									<span>#{order.id}</span>
+								</div>
 								{#if order.orderNumber}
 									<div class="text-sm" style="color: var(--text-muted);">{order.orderNumber}</div>
 								{/if}

@@ -235,6 +235,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 					select: {
 						id: true,
 						orderNumber: true,
+						orderType: true,
 						status: true,
 						paymentStatus: true,
 						totalAmount: true,
@@ -244,7 +245,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 						paidAt: true,
 						orderItems: {
 							select: {
-								quantity: true
+								quantity: true,
+								productName: true,
+								boostTargetUrl: true
 							}
 						}
 					},
