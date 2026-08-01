@@ -7,7 +7,10 @@ const AFFILIATE_POPUP_TYPES = [
 	'progress_50',
 	'progress_80',
 	'progress_95',
-	'unlocked'
+	'unlocked',
+	// Was missing — so the "you're all set, share your code" popup could never be marked
+	// seen server-side and re-fired on every fresh visit. It persists once now.
+	'share_code'
 ] as const satisfies readonly AffiliatePopupType[];
 
 export const POST: RequestHandler = async ({ locals, request }) => {
