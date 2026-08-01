@@ -424,14 +424,20 @@ export async function settleSuccessfulPayment(input: {
 		return recoverPaidOrder(order.id, input.source);
 	}
 
+	// Store credit covers part of the total; the gateway only charges the remainder,
+	// so validate the paid amount against total − store credit (not the full total).
+	const expectedGatewayAmount = Math.max(
+		0,
+		Number(order.totalAmount) - Number(order.storeCreditApplied || 0)
+	);
 	if (
-		!isPaymentAmountValid(Number(order.totalAmount), Number(input.amountPaid || 0)) ||
+		!isPaymentAmountValid(expectedGatewayAmount, Number(input.amountPaid || 0)) ||
 		!isPaymentCurrencyValid(order.currency, input.currency)
 	) {
-		const mismatchMessage = `Order ${order.orderNumber} expected ${order.currency} ${Number(order.totalAmount)}, but ${input.source} verified ${input.currency} ${Number(input.amountPaid || 0)}.`;
+		const mismatchMessage = `Order ${order.orderNumber} expected ${order.currency} ${expectedGatewayAmount}, but ${input.source} verified ${input.currency} ${Number(input.amountPaid || 0)}.`;
 		console.warn(`[payments.${input.source}] payment_amount_or_currency_mismatch`, {
 			orderId: order.id,
-			expectedAmount: Number(order.totalAmount),
+			expectedAmount: expectedGatewayAmount,
 			paidAmount: Number(input.amountPaid || 0),
 			expectedCurrency: order.currency,
 			paidCurrency: input.currency
