@@ -351,6 +351,14 @@
 				message: `₦${Number(result.refundedAmount || 0).toLocaleString()} to store credit.${result.orderFullyRefunded ? ' Order fully refunded.' : ''}`,
 				duration: 3500
 			});
+			// Optimistically reflect the refund so the button hides immediately (the local
+			// `items`/`order` are $state copies that invalidateAll can't refresh in place).
+			items = items.map((it) =>
+				it.id === accountId ? { ...it, account_status: 'faulty' } : it
+			);
+			if (result.orderFullyRefunded) {
+				order = { ...order, status: 'refunded', paymentStatus: 'refunded' };
+			}
 			await invalidateAll();
 		} catch (error) {
 			addToast({
