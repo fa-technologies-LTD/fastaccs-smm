@@ -692,7 +692,11 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			const phoneCfg = phoneCategory ? getPhoneTierConfig(phoneCategory.metadata) : null;
 			if (!phoneCfg) {
 				return json(
-					{ success: false, error: 'This number is no longer available — please pick another.' },
+					{
+						success: false,
+						error: 'This number is currently unavailable — check back later or choose another.',
+						code: 'number_unavailable'
+					},
 					{ status: 409 }
 				);
 			}
@@ -707,7 +711,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					return json(
 						{
 							success: false,
-							error: 'That number just sold out — please pick another from the list.',
+							error: 'This number is currently unavailable — check back later or choose another.',
 							code: 'number_unavailable'
 						},
 						{ status: 409 }

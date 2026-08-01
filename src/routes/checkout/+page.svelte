@@ -525,16 +525,18 @@
 					goto(`/verify-email?next=${encodeURIComponent(nextPath)}`);
 					return;
 				}
-				// A number sold out between browsing and paying — send them back to pick another,
-				// with a clear message (not a scary "payment failed"). No money was touched.
+				// A number went unavailable between browsing and paying — send them back to pick
+				// another, with a clean message (strip the raw "HTTP 409:" prefix; no scary
+				// "payment failed"). No money was touched.
+				const cleanOrderError = String(orderResult.error || '').replace(/^HTTP \d+:\s*/i, '');
 				if (
-					/just sold out|no longer available|momentarily unavailable/i.test(
-						String(orderResult.error || '')
+					/currently unavailable|just sold out|no longer available|momentarily unavailable/i.test(
+						cleanOrderError
 					)
 				) {
 					showWarning(
 						'Number unavailable',
-						orderResult.error || 'That number just sold out — please pick another.'
+						cleanOrderError || 'This number is currently unavailable — check back later or choose another.'
 					);
 					cart.clear();
 					goto('/numbers');
