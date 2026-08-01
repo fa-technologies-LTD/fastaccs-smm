@@ -229,13 +229,27 @@ export async function rentActivationNumber(params: {
  * `data: []` the published spec implies). We treat that as "no SMS yet". Any other
  * error still throws.
  */
+/**
+ * Parse hub-man's `/sms` payload `data` into an SMS or null.
+ *
+ * hub-man wraps the SMS in an ARRAY: `[]` = still waiting, `[{...}]` = the code ARRIVED.
+ * (It can also return a bare object.) Treating a non-empty array as "waiting" was dropping
+ * every delivered code — the cause of refunding successful rents. Exported + unit-tested.
+ */
+export function parsePhoneSmsResponse(data: unknown): HubmanSms | null {
+	if (Array.isArray(data)) {
+		const first = data[0];
+		return first && typeof first === 'object' ? (first as HubmanSms) : null;
+	}
+	return data && typeof data === 'object' ? (data as HubmanSms) : null;
+}
+
 export async function getSms(uuid: string): Promise<HubmanSms | null> {
 	try {
-		const res = await hubmanRequest<{ data: HubmanSms | unknown[] }>(
+		const res = await hubmanRequest<{ data: HubmanSms | HubmanSms[] | unknown[] }>(
 			`/api/rent/${encodeURIComponent(uuid)}/sms`
 		);
-		if (Array.isArray(res.data)) return null;
-		return res.data as HubmanSms;
+		return parsePhoneSmsResponse(res.data);
 	} catch (error) {
 		if (error instanceof HubmanError && error.status === 422 && isWaitingForSms(error.body)) {
 			return null;

@@ -29,6 +29,22 @@ function formatPhoneNumber(raw: number | string): string {
 // Terminal states — nothing further happens once a rental reaches one of these.
 const TERMINAL_STATUSES = new Set(['received', 'refunded', 'cancelled', 'failed', 'expired']);
 
+/**
+ * hub-man delivered a billable SMS if it returns EITHER a parsed OTP or any message text.
+ * A delivered SMS means the activation succeeded on hub-man's side (non-refundable there), so
+ * this must gate every refund — a rental with a message must be marked received, never refunded.
+ */
+export function hasDeliveredSms(sms: hubman.HubmanSms | null | undefined): boolean {
+	return Boolean(sms && ((sms.otp && sms.otp.trim()) || (sms.message && sms.message.trim())));
+}
+
+/** The code to show the customer: hub-man's parsed OTP, or the first digit-run in the message. */
+export function resolveOtp(sms: hubman.HubmanSms): string {
+	if (sms.otp && sms.otp.trim()) return sms.otp.trim();
+	const match = (sms.message || '').match(/\b(\d{4,8})\b/);
+	return match ? match[1] : '';
+}
+
 export interface PhoneOrderItemContext {
 	orderItemId: string;
 	orderId: string;
@@ -75,7 +91,7 @@ async function markRentalReceived(orderItemId: string, sms: hubman.HubmanSms): P
 		where: { orderItemId, status: 'awaiting_sms' },
 		data: {
 			status: 'received',
-			otp: sms.otp,
+			otp: resolveOtp(sms),
 			smsMessage: sms.message,
 			senderName: sms.sender_name,
 			receivedAt: new Date()
@@ -441,13 +457,13 @@ export async function pollPhoneRentalSms(orderItemId: string): Promise<PhonePoll
 		}
 	}
 
-	if (sms && sms.otp) {
-		await markRentalReceived(orderItemId, sms);
+	if (hasDeliveredSms(sms)) {
+		await markRentalReceived(orderItemId, sms!);
 		return {
 			status: 'received',
 			phoneNumber: rental.phoneNumber ?? undefined,
-			otp: sms.otp,
-			message: sms.message
+			otp: resolveOtp(sms!),
+			message: sms!.message
 		};
 	}
 
@@ -525,14 +541,23 @@ export async function cancelAndRefundRental(
 			return 'pending';
 		}
 	}
-	if (sms && sms.otp) {
-		await markRentalReceived(orderItemId, sms);
+	if (hasDeliveredSms(sms)) {
+		await markRentalReceived(orderItemId, sms!);
 		return 'received';
 	}
 
-	// No billable code. Best-effort cancel to release our balance if the rental is still
-	// active (hub-man refuses once expired — harmless), then refund the customer.
-	await hubman.cancelRent(rental.hubOrderUuid).catch(() => {});
+	// No billable code yet. Try to cancel to release our balance. Defense-in-depth against the
+	// narrow race where a code lands between our check and the cancel: if hub-man REFUSES the
+	// cancel (it won't cancel a used/delivered number), re-check once and mark received rather
+	// than refunding a delivered activation.
+	const cancelled = await hubman.cancelRent(rental.hubOrderUuid).catch(() => false);
+	if (!cancelled) {
+		const late = await hubman.getSms(rental.hubOrderUuid).catch(() => null);
+		if (hasDeliveredSms(late)) {
+			await markRentalReceived(orderItemId, late!);
+			return 'received';
+		}
+	}
 	const orderId = await orderIdForItem(orderItemId);
 	if (orderId) await refundPhoneOrderToStoreCredit(orderId, description, 'cancel');
 	return 'refunded';
