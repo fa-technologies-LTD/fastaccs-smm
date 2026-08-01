@@ -11,6 +11,39 @@ import { getBalanceCents, isHubmanConfigured } from './hubman';
 const RECEIVED = 'received';
 const FAILED_STATES = new Set(['refunded', 'expired', 'cancelled', 'failed']);
 
+// Auto-hide a service+country from the storefront once it fails too often, but only after
+// enough real attempts that the rate is trustworthy (one unlucky number never hides a tier).
+export const SUCCESS_HIDE_THRESHOLD_PCT = 70;
+export const SUCCESS_HIDE_MIN_SAMPLE = 10;
+
+/**
+ * The set of `serviceName||countryName` tiers whose recent delivery is poor enough to pull
+ * from the storefront. Keyed to match the catalog sync's tier key. Cheap: one grouped read.
+ */
+export async function getLowSuccessTierKeys(): Promise<Set<string>> {
+	const rentals = await prisma.phoneRental.findMany({
+		select: { serviceName: true, countryName: true, status: true }
+	});
+	const agg = new Map<string, { received: number; resolved: number }>();
+	for (const r of rentals) {
+		const key = `${r.serviceName}||${r.countryName}`;
+		if (!agg.has(key)) agg.set(key, { received: 0, resolved: 0 });
+		const a = agg.get(key)!;
+		if (r.status === RECEIVED) {
+			a.received += 1;
+			a.resolved += 1;
+		} else if (FAILED_STATES.has(r.status)) {
+			a.resolved += 1;
+		}
+	}
+	const out = new Set<string>();
+	for (const [key, a] of agg) {
+		if (a.resolved >= SUCCESS_HIDE_MIN_SAMPLE && (a.received / a.resolved) * 100 < SUCCESS_HIDE_THRESHOLD_PCT)
+			out.add(key);
+	}
+	return out;
+}
+
 export interface NumbersServiceStat {
 	serviceName: string;
 	countryName: string;

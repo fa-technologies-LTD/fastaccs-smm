@@ -2,6 +2,7 @@ import { prisma } from '$lib/prisma';
 import { Prisma } from '@prisma/client';
 import * as hubman from './hubman';
 import { getPhonePricingConfig, computeAutoPrice } from './phone-pricing';
+import { getLowSuccessTierKeys } from './phone-analytics';
 import { PHONE_TIER_KEYS, PHONE_DELIVERY_MODE, getPhoneTierConfig } from '$lib/helpers/phone-tier-config';
 
 /**
@@ -172,6 +173,8 @@ export async function syncNumbersCatalog(
 			countryIds.map(async (cid) => [cid, await fetchCountryServiceCosts(cid)] as const)
 		)
 	);
+	// Tiers our own delivery data says are failing too often — hidden alongside no-stock ones.
+	const lowSuccessKeys = await getLowSuccessTierKeys().catch(() => new Set<string>());
 	let created = 0;
 	let refreshed = 0;
 
@@ -189,9 +192,12 @@ export async function syncNumbersCatalog(
 			if (!existingId && !options.expand) continue;
 
 			// Fully-automatic price, recomputed from live cost every refresh (never stale).
-			// Auto-hide from the storefront when there's no live stock to rent.
+			// Auto-hide from the storefront when there's no live stock OR delivery is failing.
 			const autoPrice = computeAutoPrice(costCents, pricing);
-			const autoHidden = available <= 0;
+			const noStock = available <= 0;
+			const lowSuccess = lowSuccessKeys.has(`${serviceName}||${meta.name}`);
+			const autoHidden = noStock || lowSuccess;
+			const hideReason = noStock ? 'no_stock' : lowSuccess ? 'low_success' : null;
 			const metadata: Prisma.InputJsonValue = {
 				[PHONE_TIER_KEYS.deliveryMode]: PHONE_DELIVERY_MODE,
 				[PHONE_TIER_KEYS.serviceId]: serviceId,
@@ -202,7 +208,7 @@ export async function syncNumbersCatalog(
 				[PHONE_TIER_KEYS.expectedCostCents]: costCents,
 				[PHONE_TIER_KEYS.availableCount]: available,
 				[PHONE_TIER_KEYS.autoHidden]: autoHidden,
-				[PHONE_TIER_KEYS.hideReason]: autoHidden ? 'no_stock' : null,
+				[PHONE_TIER_KEYS.hideReason]: hideReason,
 				pricing: { currency: 'NGN', base_price: autoPrice }
 			};
 			const name = `${serviceName} — ${meta.name}`;
@@ -301,6 +307,10 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 		const costCents = live?.costCents ?? cfg.expectedCostCents;
 		const priceNgn = costCents ? computeAutoPrice(costCents, pricing) : readBasePrice(tier.metadata);
 		const costNgn = (costCents / 100) * pricing.usdNgnRate;
+		// Live stock decides no_stock; low_success comes from the stored flag (delivery history).
+		const liveNoStock = live ? live.available <= 0 : cfg.hideReason === 'no_stock';
+		const autoHidden = liveNoStock || cfg.autoHidden;
+		const hideReason = liveNoStock ? 'no_stock' : cfg.autoHidden ? cfg.hideReason ?? 'no_stock' : null;
 		rows.push({
 			tierId: tier.id,
 			serviceId: cfg.serviceId,
@@ -311,8 +321,8 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 			priceNgn,
 			profitNgn: Math.round(priceNgn - costNgn),
 			available: live?.available ?? cfg.availableCount,
-			autoHidden: live ? live.available <= 0 : cfg.autoHidden,
-			hideReason: (live ? live.available <= 0 : cfg.autoHidden) ? cfg.hideReason ?? 'no_stock' : null,
+			autoHidden,
+			hideReason,
 			active: tier.isActive
 		});
 	}
