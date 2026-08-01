@@ -177,6 +177,9 @@ export async function syncNumbersCatalog(
 	const lowSuccessKeys = await getLowSuccessTierKeys().catch(() => new Set<string>());
 	let created = 0;
 	let refreshed = 0;
+	// Every service+country hub-man actually reported this sync — used afterwards to flag
+	// existing tiers hub-man has rotated OUT (so they don't sit on stale "OK" metadata).
+	const seenSlugs = new Set<string>();
 
 	for (const countryId of countryIds) {
 		const meta = countryMeta.get(countryId) || { name: `Country ${countryId}`, code: '' };
@@ -185,6 +188,7 @@ export async function syncNumbersCatalog(
 			if (!MAJOR_SERVICE_IDS.has(serviceId)) continue;
 			const serviceName = SERVICE_NAME_BY_ID.get(serviceId)!;
 			const slug = tierSlug(serviceId, countryId);
+			seenSlugs.add(slug);
 			const existingId = idBySlug.get(slug);
 
 			// Refresh mode only touches tiers already in the curated set. New combos are
@@ -239,8 +243,41 @@ export async function syncNumbersCatalog(
 		}
 	}
 
-	// Frozen set: never auto-deactivate. The admin removes tiers manually.
-	return { created, refreshed, deactivated: 0, countries: countryIds.length };
+	// Flag existing tiers hub-man rotated OUT since the last sync (no longer in availability),
+	// so they hide from the storefront and read accurately in admin — instead of keeping stale
+	// "OK" metadata forever. Guarded so a transient blip can't hide the whole catalog:
+	//  - only when we actually got a countries list (empty list already returned early above),
+	//  - skip a country whose per-country fetch FAILED this run (transient, not a real rotation).
+	let rotatedOut = 0;
+	// Empty countries list = a hub-man blip, not "everything rotated out" — never mass-hide.
+	const availabilityIsTrustworthy = countryIds.length > 0;
+	for (const t of existingTiers) {
+		if (!availabilityIsTrustworthy) break;
+		if (seenSlugs.has(t.slug)) continue;
+		const cid = countryIdFromSlug(t.slug);
+		if (cid == null) continue;
+		const countryFetch = fetched.get(cid);
+		if (countryFetch && !countryFetch.ok) continue; // transient fetch failure — leave as-is
+		const md =
+			t.metadata && typeof t.metadata === 'object' && !Array.isArray(t.metadata)
+				? { ...(t.metadata as Record<string, unknown>) }
+				: {};
+		// Already flagged no-stock? Skip the write.
+		if (md[PHONE_TIER_KEYS.autoHidden] === true && md[PHONE_TIER_KEYS.hideReason] === 'no_stock') {
+			continue;
+		}
+		md[PHONE_TIER_KEYS.availableCount] = 0;
+		md[PHONE_TIER_KEYS.autoHidden] = true;
+		md[PHONE_TIER_KEYS.hideReason] = 'no_stock';
+		await prisma.category.update({
+			where: { id: t.id },
+			data: { metadata: md as Prisma.InputJsonValue }
+		});
+		rotatedOut += 1;
+	}
+
+	// "deactivated" here = tiers flagged out of stock this run. We never hard-deactivate.
+	return { created, refreshed, deactivated: rotatedOut, countries: countryIds.length };
 }
 
 /** Back-compat alias — the admin Refresh button + first-visit seed call this. */
