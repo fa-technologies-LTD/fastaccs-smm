@@ -42,7 +42,7 @@
 		},
 		{
 			"path": "/api/internal/cron/numbers-catalog-sync",
-			"schedule": "15 * * * *"
+			"schedule": "15 3 * * *"
 		},
 		{
 			"path": "/api/internal/cron/promo-reminder",

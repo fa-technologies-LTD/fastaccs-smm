@@ -126,10 +126,10 @@ export const AUTOMATION_JOBS = {
 	'numbers-catalog-sync': {
 		name: 'numbers-catalog-sync',
 		path: '/api/internal/cron/numbers-catalog-sync',
-		schedule: 'hourly :15',
+		schedule: 'daily 03:15',
 		risk: 'operational',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 60
+		expectedIntervalMinutes: 1440
 	},
 	'promo-reminder': {
 		name: 'promo-reminder',

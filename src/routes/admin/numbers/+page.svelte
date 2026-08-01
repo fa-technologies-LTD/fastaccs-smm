@@ -91,11 +91,30 @@
 		try {
 			const out = await post({ action: 'seed' });
 			if (!out.success) throw new Error(out.error || 'Refresh failed');
-			showSuccess(`Catalog refreshed (${out.created} new, ${out.refreshed} updated). Reloading…`);
+			showSuccess(`Costs refreshed (${out.refreshed} tiers). Reloading…`);
 			setTimeout(() => location.reload(), 800);
 		} catch (e) {
 			showError(e instanceof Error ? e.message : 'Refresh failed');
 			seeding = false;
+		}
+	}
+	let expanding = $state(false);
+	async function expandCatalog() {
+		if (
+			!confirm(
+				'Add any newly-available countries/apps to the catalog?\n\nThis expands your stable set — it never removes anything. New tiers arrive active and auto-priced.'
+			)
+		)
+			return;
+		expanding = true;
+		try {
+			const out = await post({ action: 'expand' });
+			if (!out.success) throw new Error(out.error || 'Expand failed');
+			showSuccess(`Catalog expanded (${out.created} new, ${out.refreshed} refreshed). Reloading…`);
+			setTimeout(() => location.reload(), 900);
+		} catch (e) {
+			showError(e instanceof Error ? e.message : 'Expand failed');
+			expanding = false;
 		}
 	}
 
@@ -164,6 +183,15 @@
 			>
 				<RefreshCw class="w-4 h-4 {seeding ? 'animate-spin' : ''}" />
 				Refresh costs
+			</button>
+			<button
+				onclick={expandCatalog}
+				disabled={expanding}
+				class="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg disabled:opacity-50"
+				style="border: 1px solid var(--border); color: var(--text);"
+				title="Add any newly-available countries/apps (never removes)"
+			>
+				{expanding ? 'Expanding…' : '+ Expand catalog'}
 			</button>
 			<button
 				onclick={saveAll}

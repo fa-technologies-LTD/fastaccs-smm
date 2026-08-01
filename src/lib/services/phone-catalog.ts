@@ -117,16 +117,21 @@ export interface CatalogSyncResult {
 }
 
 /**
- * Sync the Numbers catalog to hub-man's LIVE availability.
+ * Sync the Numbers catalog.
  *
- * For every currently-available country × curated app that is in stock, upsert an
- * ACTIVE, AUTO-PRICED tier (price = cost × rate × margin). Any tier whose combo is no
- * longer available is deactivated (hidden from the storefront). hub-man only offers a
- * rotating ~7-8 countries at a time, so this keeps the storefront showing exactly what
- * is really buyable, with zero per-country upkeep. Called by the admin Refresh button
- * and the hourly cron.
+ * The catalog is a STABLE, curated set — we do NOT auto-add or auto-remove countries/apps
+ * on a schedule (that churned the storefront hourly). Instead:
+ *  - Default (refresh): only refresh the live cost of EXISTING active tiers and apply
+ *    sticky pricing (bump the price up only if cost threatens the ₦1,000 profit floor).
+ *    Never adds or deactivates — the storefront set stays frozen. Used by the daily cron
+ *    and the admin "Refresh costs" button.
+ *  - `expand: true`: additionally create tiers for any currently-available combo not yet
+ *    in the set (manual curation via the admin "Expand catalog" button, and first seed).
+ *    Still never deactivates — the admin removes tiers by unchecking "active".
  */
-export async function syncNumbersCatalog(): Promise<CatalogSyncResult> {
+export async function syncNumbersCatalog(
+	options: { expand?: boolean } = {}
+): Promise<CatalogSyncResult> {
 	const platformId = await ensureNumbersPlatform();
 	const pricing = await getPhonePricingConfig();
 
@@ -162,11 +167,6 @@ export async function syncNumbersCatalog(): Promise<CatalogSyncResult> {
 			countryIds.map(async (cid) => [cid, await fetchCountryServiceCosts(cid)] as const)
 		)
 	);
-	const availableCountries = new Set(countryIds);
-	// Only countries we fetched successfully can have their tiers safely deactivated.
-	const confirmedCountries = new Set([...fetched].filter(([, r]) => r.ok).map(([cid]) => cid));
-
-	const liveSlugs = new Set<string>();
 	let created = 0;
 	let refreshed = 0;
 
@@ -177,7 +177,11 @@ export async function syncNumbersCatalog(): Promise<CatalogSyncResult> {
 			if (!MAJOR_SERVICE_IDS.has(serviceId)) continue;
 			const serviceName = SERVICE_NAME_BY_ID.get(serviceId)!;
 			const slug = tierSlug(serviceId, countryId);
-			liveSlugs.add(slug);
+			const existingId = idBySlug.get(slug);
+
+			// Refresh mode only touches tiers already in the curated set. New combos are
+			// added only when explicitly expanding.
+			if (!existingId && !options.expand) continue;
 
 			// Sticky price: keep the existing price unless the worst-case cost has risen
 			// close enough to threaten the ₦1,000 profit floor, then bump up. New tiers seed.
@@ -193,11 +197,12 @@ export async function syncNumbersCatalog(): Promise<CatalogSyncResult> {
 				pricing: { currency: 'NGN', base_price: stickyPrice }
 			};
 			const name = `${serviceName} — ${meta.name}`;
-			const existingId = idBySlug.get(slug);
 			if (existingId) {
+				// Refresh cost + price only. Do NOT flip isActive — the admin controls
+				// which tiers are live; a momentary availability blip won't hide/show them.
 				await prisma.category.update({
 					where: { id: existingId },
-					data: { name, isActive: true, metadata }
+					data: { metadata }
 				});
 				refreshed += 1;
 			} else {
@@ -219,32 +224,14 @@ export async function syncNumbersCatalog(): Promise<CatalogSyncResult> {
 		}
 	}
 
-	// Deactivate a tier only when we're CONFIDENT it's gone: either its country rotated
-	// out of availability entirely, or we successfully re-fetched that country and the
-	// combo wasn't in stock. A country whose fetch FAILED this run is left untouched.
-	const stale = existingTiers
-		.filter((t) => {
-			if (liveSlugs.has(t.slug)) return false;
-			const cid = countryIdFromSlug(t.slug);
-			if (cid == null) return false; // unknown slug shape — don't touch
-			return !availableCountries.has(cid) || confirmedCountries.has(cid);
-		})
-		.map((t) => t.id);
-	let deactivated = 0;
-	if (stale.length) {
-		const res = await prisma.category.updateMany({
-			where: { id: { in: stale }, isActive: true },
-			data: { isActive: false }
-		});
-		deactivated = res.count;
-	}
-
-	return { created, refreshed, deactivated, countries: countryIds.length };
+	// Frozen set: never auto-deactivate. The admin removes tiers manually.
+	return { created, refreshed, deactivated: 0, countries: countryIds.length };
 }
 
 /** Back-compat alias — the admin Refresh button + first-visit seed call this. */
 export async function seedNumbersCatalog(): Promise<{ created: number; refreshed: number }> {
-	const r = await syncNumbersCatalog();
+	// First-time seed / manual "Expand catalog" — adds any currently-available combos.
+	const r = await syncNumbersCatalog({ expand: true });
 	return { created: r.created, refreshed: r.refreshed };
 }
 

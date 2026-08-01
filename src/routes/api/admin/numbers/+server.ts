@@ -1,7 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
-import { seedNumbersCatalog, updateNumbersTiers } from '$lib/services/phone-catalog';
+import {
+	seedNumbersCatalog,
+	syncNumbersCatalog,
+	updateNumbersTiers
+} from '$lib/services/phone-catalog';
 import { savePhonePricingConfig } from '$lib/services/phone-pricing';
 import { launchNumbersCampaign, stopNumbersCampaign } from '$lib/services/numbers-campaign';
 
@@ -21,6 +25,13 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	try {
 		if (action === 'seed') {
+			// "Refresh costs" — cost/price refresh only; keeps the curated set frozen.
+			const result = await syncNumbersCatalog();
+			return json({ success: true, ...result });
+		}
+
+		if (action === 'expand') {
+			// "Expand catalog" — add any currently-available combos not yet in the set.
 			const result = await seedNumbersCatalog();
 			return json({ success: true, ...result });
 		}
