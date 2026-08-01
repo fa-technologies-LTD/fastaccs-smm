@@ -141,29 +141,25 @@ export function computeMaxPriceCents(
 	return Math.ceil(Math.max(1, expectedCostCents) * (1 + tolerancePercent / 100));
 }
 
-/**
- * Minimum naira profit we require on every number rental. Prices are STICKY: they only
- * bump UP (never down) when hub-man's cost climbs close enough to threaten this floor.
- */
+/** Minimum naira profit we guarantee on every number rental (the floor, never the target). */
 export const NUMBERS_MIN_PROFIT_NGN = 1000;
 
 /**
- * Sticky price for a tier. Keeps the current price if it still clears the ₦1,000 profit
- * floor at this cost; otherwise bumps UP to the lowest clean ₦100 that restores the floor.
- * New tiers (currentPrice ≤ 0) are seeded from cost × margin, but never below the floor.
- * Prices never auto-decrease — this stops the constant re-pricing churn.
+ * Fully-automatic price for a tier — recomputed on every catalog refresh (never sticky,
+ * never manual). The customer price is always `cost × margin`, and never less than
+ * `cost + ₦1,000`, rounded up to a clean ₦100.
  *
- * `costCents` should be the WORST-CASE (max) live cost, so the floor holds against the
- * priciest number actually in stock.
+ * `worstCaseCostCents` is hub-man's MAX cost for the service+country, so the margin holds
+ * no matter which in-stock number we actually rent — rents fill reliably instead of
+ * refund-looping. Because this runs every refresh, the price can never go stale against a
+ * moved cost, so it can never show a loss.
  */
-export function computeStickyPrice(
-	currentPriceNgn: number,
+export function computeAutoPrice(
 	worstCaseCostCents: number,
 	config: Pick<PhonePricingConfig, 'usdNgnRate' | 'marginPercent'>
 ): number {
 	const costNgn = (Math.max(0, worstCaseCostCents) / 100) * config.usdNgnRate;
 	const floorPrice = roundNgnUp(costNgn + NUMBERS_MIN_PROFIT_NGN); // ≥ cost + ₦1,000, on a ₦100 grid
-	if (currentPriceNgn > 0) return Math.max(currentPriceNgn, floorPrice);
 	return Math.max(computeSaleNgn(worstCaseCostCents, config), floorPrice);
 }
 

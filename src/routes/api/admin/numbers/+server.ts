@@ -47,6 +47,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 				usdNgnRate: body.usdNgnRate,
 				marginPercent: body.marginPercent
 			});
+			// Recompute every tier's automatic price from the new rate/margin right away.
+			await syncNumbersCatalog();
 			return json({ success: true });
 		}
 

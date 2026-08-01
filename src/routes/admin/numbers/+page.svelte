@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { RefreshCw, Save, Phone, AlertTriangle, DollarSign } from '$lib/icons';
+	import { Save, Phone, AlertTriangle, DollarSign } from '$lib/icons';
 	import { showSuccess, showError } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 
@@ -7,29 +7,24 @@
 
 	interface Row {
 		tierId: string;
+		serviceId: number;
 		serviceName: string;
 		countryName: string;
 		liveCostCents: number | null;
-		expectedCostCents: number;
 		priceNgn: number;
+		profitNgn: number;
+		available: number;
+		autoHidden: boolean;
+		hideReason: string | null;
 		active: boolean;
 	}
 
-	let rows = $state<Row[]>(
-		data.rows.map((r) => ({
-			tierId: r.tierId,
-			serviceName: r.serviceName,
-			countryName: r.countryName,
-			liveCostCents: r.liveCostCents,
-			expectedCostCents: r.expectedCostCents,
-			priceNgn: r.priceNgn,
-			active: r.active
-		}))
-	);
+	let rows = $state<Row[]>(data.rows.map((r) => ({ ...r })));
 	let usdNgnRate = $state(data.usdNgnRate);
 	let marginPercent = $state(data.marginPercent);
 	let saving = $state(false);
-	let seeding = $state(false);
+	let expanding = $state(false);
+	let appFilter = $state<'all' | number>('all');
 
 	const hubBalance = $derived(
 		data.hubBalanceCents == null ? null : (data.hubBalanceCents / 100).toFixed(2)
@@ -37,30 +32,32 @@
 	const lowBalance = $derived(
 		data.hubBalanceCents != null && data.hubBalanceCents < data.lowBalanceThresholdCents
 	);
-	const activeCount = $derived(rows.filter((r) => r.active && r.priceNgn > 0).length);
+	// Live = admin-active AND priced AND not auto-hidden (no stock / failing).
+	const liveCount = $derived(
+		rows.filter((r) => r.active && r.priceNgn > 0 && !r.autoHidden).length
+	);
+	const flaggedCount = $derived(rows.filter((r) => r.autoHidden || r.profitNgn < 1000).length);
 
-	// Round up to clean ₦100s, floor at ₦1,000 (matches the server pricing rule).
-	const PRICE_FLOOR_NGN = 1000;
-	function roundNgnUp(amount: number, step = 100): number {
-		if (!Number.isFinite(amount) || amount <= 0) return PRICE_FLOOR_NGN;
-		return Math.max(PRICE_FLOOR_NGN, Math.ceil(amount / step) * step);
-	}
-	function costCentsOf(r: Row): number {
-		return r.liveCostCents ?? r.expectedCostCents ?? 0;
-	}
-	function computedPrice(r: Row): number {
-		const cents = costCentsOf(r);
-		if (!cents) return 0;
-		return roundNgnUp((cents / 100) * usdNgnRate * (1 + marginPercent / 100));
-	}
+	// Distinct apps for the sort/filter dropdown, in the order they appear.
+	const apps = $derived.by(() => {
+		const seen = new Map<number, string>();
+		for (const r of rows) if (!seen.has(r.serviceId)) seen.set(r.serviceId, r.serviceName);
+		return [...seen.entries()].map(([id, name]) => ({ id, name }));
+	});
+	const visibleRows = $derived(
+		appFilter === 'all' ? rows : rows.filter((r) => r.serviceId === appFilter)
+	);
+
 	function costLabel(r: Row): string {
-		const cents = costCentsOf(r);
-		if (!cents) return '—';
-		return `$${(cents / 100).toFixed(2)}${r.liveCostCents == null ? ' *' : ''}`;
+		if (r.liveCostCents == null) return '—';
+		return `$${(r.liveCostCents / 100).toFixed(2)}`;
 	}
-	function applyToAll() {
-		for (const r of rows) r.priceNgn = computedPrice(r);
-		showSuccess('Prices calculated from your rate + margin. Review and Save all.');
+	function flag(r: Row): { text: string; color: string } | null {
+		if (r.autoHidden && r.hideReason === 'low_success')
+			return { text: 'Hidden · low success', color: '#f59e0b' };
+		if (r.autoHidden) return { text: 'Hidden · no stock', color: '#94a3b8' };
+		if (r.profitNgn < 1000) return { text: `Low profit · ₦${r.profitNgn.toLocaleString()}`, color: '#dc2626' };
+		return null;
 	}
 
 	async function post(payload: Record<string, unknown>) {
@@ -71,38 +68,26 @@
 		});
 		return res.json();
 	}
+	// Saving the rate/margin resyncs prices server-side, so we reload to show fresh figures.
 	async function saveAll() {
 		saving = true;
 		try {
 			const cfg = await post({ action: 'config', usdNgnRate, marginPercent });
 			if (!cfg.success) throw new Error(cfg.error || 'Failed to save settings');
-			const updates = rows.map((r) => ({ tierId: r.tierId, priceNgn: r.priceNgn, active: r.active }));
+			const updates = rows.map((r) => ({ tierId: r.tierId, active: r.active }));
 			const out = await post({ action: 'save', updates });
-			if (!out.success) throw new Error(out.error || 'Failed to save prices');
-			showSuccess('Saved. Active, priced numbers are now live on the storefront.');
+			if (!out.success) throw new Error(out.error || 'Failed to save');
+			showSuccess('Saved. Prices recalculated from your rate + margin. Reloading…');
+			setTimeout(() => location.reload(), 900);
 		} catch (e) {
 			showError(e instanceof Error ? e.message : 'Save failed');
-		} finally {
 			saving = false;
 		}
 	}
-	async function refreshCatalog() {
-		seeding = true;
-		try {
-			const out = await post({ action: 'seed' });
-			if (!out.success) throw new Error(out.error || 'Refresh failed');
-			showSuccess(`Costs refreshed (${out.refreshed} tiers). Reloading…`);
-			setTimeout(() => location.reload(), 800);
-		} catch (e) {
-			showError(e instanceof Error ? e.message : 'Refresh failed');
-			seeding = false;
-		}
-	}
-	let expanding = $state(false);
 	async function expandCatalog() {
 		if (
 			!confirm(
-				'Add any newly-available countries/apps to the catalog?\n\nThis expands your stable set — it never removes anything. New tiers arrive active and auto-priced.'
+				'Add any newly-available countries/apps to the catalog?\n\nThis expands your set — it never removes anything. New tiers arrive active and auto-priced.'
 			)
 		)
 			return;
@@ -163,7 +148,7 @@
 			<div>
 				<h1 class="text-2xl font-bold" style="color: var(--text);">Numbers — Pricing</h1>
 				<p class="text-sm" style="color: var(--text-muted);">
-					Set your dollar rate + profit margin to auto-calculate prices. Override any row if needed.
+					Prices are fully automatic. Set your dollar rate + margin; every price recalculates itself.
 				</p>
 			</div>
 		</div>
@@ -175,15 +160,6 @@
 			>
 				Analytics
 			</a>
-			<button
-				onclick={refreshCatalog}
-				disabled={seeding}
-				class="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg disabled:opacity-50"
-				style="border: 1px solid var(--border); color: var(--text);"
-			>
-				<RefreshCw class="w-4 h-4 {seeding ? 'animate-spin' : ''}" />
-				Refresh costs
-			</button>
 			<button
 				onclick={expandCatalog}
 				disabled={expanding}
@@ -200,7 +176,7 @@
 				style="background: #0ea5e9; color: #ffffff;"
 			>
 				<Save class="w-4 h-4" />
-				{saving ? 'Saving…' : 'Save all'}
+				{saving ? 'Saving…' : 'Save'}
 			</button>
 		</div>
 	</div>
@@ -222,9 +198,10 @@
 		</div>
 		<p class="text-sm mb-4" style="color: var(--text-muted);">
 			Customer price = <span class="font-mono">hub-man cost ($) × your rate × (1 + margin%)</span>,
-			rounded up to the nearest ₦100 (minimum ₦1,000).
+			rounded up to the nearest ₦100, and never less than <span class="font-mono">cost + ₦1,000</span>.
+			Prices update themselves on every refresh — you never set one by hand.
 		</p>
-		<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+		<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
 			<label class="block">
 				<span class="text-xs font-medium" style="color: var(--text-muted);">Dollar rate (₦ per $1)</span>
 				<input
@@ -245,17 +222,9 @@
 					style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
 				/>
 			</label>
-			<button
-				type="button"
-				onclick={applyToAll}
-				class="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium"
-				style="background: #0ea5e9; color: #ffffff;"
-			>
-				<DollarSign class="w-4 h-4" /> Calculate all prices
-			</button>
 		</div>
 		<p class="text-xs mt-3" style="color: var(--text-dim);">
-			“Calculate all prices” fills every row below. You can still edit any single price before saving.
+			Hit <strong>Save</strong> to apply a new rate or margin — every price recalculates instantly.
 		</p>
 	</div>
 
@@ -315,8 +284,26 @@
 		</div>
 	</div>
 
-	<div class="text-sm mb-2" style="color: var(--text-muted);">
-		{activeCount} numbers live · {rows.length} tiers
+	<div class="flex items-center justify-between flex-wrap gap-3 mb-2">
+		<div class="text-sm" style="color: var(--text-muted);">
+			{liveCount} numbers live · {rows.length} tiers
+			{#if flaggedCount > 0}
+				· <span style="color: #f59e0b;">{flaggedCount} flagged for review</span>
+			{/if}
+		</div>
+		<label class="flex items-center gap-2 text-sm" style="color: var(--text-muted);">
+			Sort by app
+			<select
+				bind:value={appFilter}
+				class="rounded-lg px-3 py-1.5"
+				style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
+			>
+				<option value="all">All apps</option>
+				{#each apps as app (app.id)}
+					<option value={app.id}>{app.name}</option>
+				{/each}
+			</select>
+		</label>
 	</div>
 
 	<div class="overflow-x-auto rounded-lg" style="border: 1px solid var(--border);">
@@ -326,51 +313,59 @@
 					<th class="px-4 py-3">Service</th>
 					<th class="px-4 py-3">Country</th>
 					<th class="px-4 py-3">Cost</th>
-					<th class="px-4 py-3">Calculated ₦</th>
-					<th class="px-4 py-3">Customer price ₦</th>
+					<th class="px-4 py-3">Price ₦</th>
+					<th class="px-4 py-3">Profit ₦</th>
+					<th class="px-4 py-3">Stock</th>
+					<th class="px-4 py-3">Status</th>
 					<th class="px-4 py-3 text-center">Live</th>
 				</tr>
 			</thead>
 			<tbody>
-				{#each rows as row (row.tierId)}
+				{#each visibleRows as row (row.tierId)}
+					{@const f = flag(row)}
 					<tr style="border-top: 1px solid var(--border); background: var(--surface);">
 						<td class="px-4 py-2 font-medium" style="color: var(--text);">{row.serviceName}</td>
 						<td class="px-4 py-2" style="color: var(--text-muted);">{row.countryName}</td>
 						<td class="px-4 py-2 whitespace-nowrap" style="color: var(--text-muted);">{costLabel(row)}</td>
-						<td class="px-4 py-2">
-							<button
-								type="button"
-								onclick={() => (row.priceNgn = computedPrice(row))}
-								class="hover:underline"
-								style="color: #38bdf8;"
-								title="Use this price"
-							>
-								₦{computedPrice(row).toLocaleString()}
-							</button>
+						<td class="px-4 py-2 font-semibold whitespace-nowrap" style="color: var(--text);">
+							₦{row.priceNgn.toLocaleString()}
+						</td>
+						<td
+							class="px-4 py-2 whitespace-nowrap"
+							style="color: {row.profitNgn < 1000 ? '#f87171' : '#34d399'};"
+						>
+							₦{row.profitNgn.toLocaleString()}
+						</td>
+						<td class="px-4 py-2" style="color: {row.available <= 0 ? '#f87171' : 'var(--text-muted)'};">
+							{row.available.toLocaleString()}
 						</td>
 						<td class="px-4 py-2">
-							<input
-								type="number"
-								bind:value={row.priceNgn}
-								min="0"
-								class="w-28 rounded px-2 py-1"
-								style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
-							/>
+							{#if f}
+								<span
+									class="inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
+									style="background: {f.color}20; color: {f.color};"
+								>
+									⚑ {f.text}
+								</span>
+							{:else}
+								<span class="text-xs" style="color: var(--text-dim);">OK</span>
+							{/if}
 						</td>
 						<td class="px-4 py-2 text-center">
 							<input
 								type="checkbox"
 								bind:checked={row.active}
-								disabled={row.priceNgn <= 0}
-								title={row.priceNgn <= 0 ? 'Set a price first' : 'Show on storefront'}
+								title="Show on storefront (auto-hidden tiers stay hidden until stock/quality recovers)"
 							/>
 						</td>
 					</tr>
 				{/each}
-				{#if rows.length === 0}
+				{#if visibleRows.length === 0}
 					<tr style="background: var(--surface);">
-						<td colspan="6" class="px-4 py-8 text-center" style="color: var(--text-dim);">
-							No tiers yet. Click “Refresh costs” to load the catalog.
+						<td colspan="8" class="px-4 py-8 text-center" style="color: var(--text-dim);">
+							{rows.length === 0
+								? 'No tiers yet. Click “Expand catalog” to load the catalog.'
+								: 'No tiers for this app.'}
 						</td>
 					</tr>
 				{/if}

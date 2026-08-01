@@ -1,7 +1,7 @@
 import { prisma } from '$lib/prisma';
 import { Prisma } from '@prisma/client';
 import * as hubman from './hubman';
-import { getPhonePricingConfig, computeSaleNgn, computeStickyPrice } from './phone-pricing';
+import { getPhonePricingConfig, computeAutoPrice } from './phone-pricing';
 import { PHONE_TIER_KEYS, PHONE_DELIVERY_MODE, getPhoneTierConfig } from '$lib/helpers/phone-tier-config';
 
 /**
@@ -9,8 +9,9 @@ import { PHONE_TIER_KEYS, PHONE_DELIVERY_MODE, getPhoneTierConfig } from '$lib/h
  *
  * A Numbers tier is a Category with categoryType 'numbers_tier' under the single
  * 'numbers_platform' parent, carrying a hub-man service+country mapping in metadata
- * plus a manually-set NGN price (metadata.pricing.base_price). David prices each tier
- * himself in the admin table; the margin config only produces a *suggested* price.
+ * plus a FULLY-AUTOMATIC NGN price (metadata.pricing.base_price = cost × margin, ₦1,000
+ * floor). Prices are never set by hand — they recompute on every catalog refresh from
+ * the admin's USD rate + margin, so they can never go stale or show a loss.
  */
 
 export const NUMBERS_PLATFORM_SLUG = 'numbers';
@@ -83,18 +84,25 @@ export async function ensureNumbersPlatform(): Promise<string> {
 	return created.id;
 }
 
-/** Live min-cost (USD cents) per service for a country, from hub-man. */
+/** Live cost (worst-case USD cents) + available stock per service for a country, from hub-man. */
+export interface ServiceCost {
+	costCents: number;
+	available: number;
+}
 async function fetchCountryServiceCosts(
 	countryId: number
-): Promise<{ ok: boolean; costs: Map<number, number> }> {
-	const costs = new Map<number, number>();
+): Promise<{ ok: boolean; costs: Map<number, ServiceCost> }> {
+	const costs = new Map<number, ServiceCost>();
 	try {
 		const data = await hubman.getAvailableServices(countryId);
 		const byService = data[String(countryId)] || {};
 		for (const [sid, info] of Object.entries(byService)) {
 			// Worst-case cost: any in-stock number could be up to max, so price + ceiling
-			// must be anchored here (using min underprices volatile services and refund-loops).
-			costs.set(Number(sid), info.max_price_cents);
+			// must be anchored here so the margin holds for whichever number we actually rent.
+			costs.set(Number(sid), {
+				costCents: info.max_price_cents,
+				available: Number(info.available_numbers_count) || 0
+			});
 		}
 		return { ok: true, costs };
 	} catch (error) {
@@ -121,13 +129,12 @@ export interface CatalogSyncResult {
  *
  * The catalog is a STABLE, curated set — we do NOT auto-add or auto-remove countries/apps
  * on a schedule (that churned the storefront hourly). Instead:
- *  - Default (refresh): only refresh the live cost of EXISTING active tiers and apply
- *    sticky pricing (bump the price up only if cost threatens the ₦1,000 profit floor).
- *    Never adds or deactivates — the storefront set stays frozen. Used by the daily cron
- *    and the admin "Refresh costs" button.
+ *  - Default (refresh): re-fetch each EXISTING tier's live cost + stock and RECOMPUTE its
+ *    automatic price (cost × margin, ₦1,000 floor). Auto-hides a tier from the storefront
+ *    when it has no live stock (`auto_hidden`), but never hard-deactivates it — the admin's
+ *    manual active flag is separate. Used by the daily cron.
  *  - `expand: true`: additionally create tiers for any currently-available combo not yet
- *    in the set (manual curation via the admin "Expand catalog" button, and first seed).
- *    Still never deactivates — the admin removes tiers by unchecking "active".
+ *    in the set (first seed / manual "Expand catalog").
  */
 export async function syncNumbersCatalog(
 	options: { expand?: boolean } = {}
@@ -152,16 +159,14 @@ export async function syncNumbersCatalog(
 		console.error('[phone-catalog] failed to fetch master catalog:', (error as Error).message);
 	}
 
-	// Fetch existing tiers once (slug → id + current price) to avoid a query per combo
-	// and to apply sticky pricing (keep the current price unless the profit floor forces a bump).
+	// Fetch existing tiers once (slug → id) to avoid a query per combo.
 	const existingTiers = await prisma.category.findMany({
 		where: { parentId: platformId },
 		select: { id: true, slug: true, metadata: true }
 	});
 	const idBySlug = new Map(existingTiers.map((t) => [t.slug, t.id]));
-	const priceBySlug = new Map(existingTiers.map((t) => [t.slug, readBasePrice(t.metadata)]));
 
-	// Fetch every country's cost map in parallel (the heavy part).
+	// Fetch every country's cost + stock map in parallel (the heavy part).
 	const fetched = new Map(
 		await Promise.all(
 			countryIds.map(async (cid) => [cid, await fetchCountryServiceCosts(cid)] as const)
@@ -172,8 +177,8 @@ export async function syncNumbersCatalog(
 
 	for (const countryId of countryIds) {
 		const meta = countryMeta.get(countryId) || { name: `Country ${countryId}`, code: '' };
-		const costs = fetched.get(countryId)?.costs ?? new Map<number, number>();
-		for (const [serviceId, cost] of costs) {
+		const costs = fetched.get(countryId)?.costs ?? new Map<number, ServiceCost>();
+		for (const [serviceId, { costCents, available }] of costs) {
 			if (!MAJOR_SERVICE_IDS.has(serviceId)) continue;
 			const serviceName = SERVICE_NAME_BY_ID.get(serviceId)!;
 			const slug = tierSlug(serviceId, countryId);
@@ -183,9 +188,10 @@ export async function syncNumbersCatalog(
 			// added only when explicitly expanding.
 			if (!existingId && !options.expand) continue;
 
-			// Sticky price: keep the existing price unless the worst-case cost has risen
-			// close enough to threaten the ₦1,000 profit floor, then bump up. New tiers seed.
-			const stickyPrice = computeStickyPrice(priceBySlug.get(slug) ?? 0, cost, pricing);
+			// Fully-automatic price, recomputed from live cost every refresh (never stale).
+			// Auto-hide from the storefront when there's no live stock to rent.
+			const autoPrice = computeAutoPrice(costCents, pricing);
+			const autoHidden = available <= 0;
 			const metadata: Prisma.InputJsonValue = {
 				[PHONE_TIER_KEYS.deliveryMode]: PHONE_DELIVERY_MODE,
 				[PHONE_TIER_KEYS.serviceId]: serviceId,
@@ -193,13 +199,16 @@ export async function syncNumbersCatalog(
 				[PHONE_TIER_KEYS.countryId]: countryId,
 				[PHONE_TIER_KEYS.countryName]: meta.name,
 				hub_country_code: meta.code,
-				[PHONE_TIER_KEYS.expectedCostCents]: cost,
-				pricing: { currency: 'NGN', base_price: stickyPrice }
+				[PHONE_TIER_KEYS.expectedCostCents]: costCents,
+				[PHONE_TIER_KEYS.availableCount]: available,
+				[PHONE_TIER_KEYS.autoHidden]: autoHidden,
+				[PHONE_TIER_KEYS.hideReason]: autoHidden ? 'no_stock' : null,
+				pricing: { currency: 'NGN', base_price: autoPrice }
 			};
 			const name = `${serviceName} — ${meta.name}`;
 			if (existingId) {
-				// Refresh cost + price only. Do NOT flip isActive — the admin controls
-				// which tiers are live; a momentary availability blip won't hide/show them.
+				// Refresh cost, price, stock and auto-hidden flag. Do NOT flip isActive —
+				// that's the admin's manual switch; storefront visibility uses auto_hidden.
 				await prisma.category.update({
 					where: { id: existingId },
 					data: { metadata }
@@ -249,16 +258,19 @@ export interface NumbersAdminRow {
 	serviceName: string;
 	countryId: number;
 	countryName: string;
-	expectedCostCents: number;
 	liveCostCents: number | null;
-	suggestedNgn: number;
-	priceNgn: number;
-	active: boolean;
+	priceNgn: number; // fully automatic (cost × margin, ₦1,000 floor) — read-only
+	profitNgn: number; // priceNgn − liveCostNGN, for a quick margin read
+	available: number; // live stock at last fetch
+	autoHidden: boolean; // hidden from storefront by the auto-rules
+	hideReason: string | null; // 'no_stock' | 'low_success'
+	active: boolean; // admin manual switch
 }
 
 /**
- * Rows for the admin pricing table: each tier with its stored cost, a freshly
- * fetched live cost, a suggested NGN price, David's current price, and active flag.
+ * Rows for the admin Numbers table: each tier with its live cost, its automatic price,
+ * realized profit, live stock, the auto-hide flag + reason, and the admin's active switch.
+ * Prices are NOT editable here — they recompute automatically from the USD rate + margin.
  */
 export async function getNumbersCatalogForAdmin(): Promise<{
 	rows: NumbersAdminRow[];
@@ -274,9 +286,9 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 		orderBy: { sortOrder: 'asc' }
 	});
 
-	// Refresh live costs once per country.
+	// Refresh live costs + stock once per country.
 	const countryIds = [...new Set(tiers.map((t) => getPhoneTierConfig(t.metadata)?.countryId).filter((x): x is number => x != null))];
-	const liveCosts = new Map<number, Map<number, number>>();
+	const liveCosts = new Map<number, Map<number, ServiceCost>>();
 	await Promise.all(
 		countryIds.map(async (cid) => liveCosts.set(cid, (await fetchCountryServiceCosts(cid)).costs))
 	);
@@ -285,18 +297,22 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 	for (const tier of tiers) {
 		const cfg = getPhoneTierConfig(tier.metadata);
 		if (!cfg) continue;
-		const liveCost = liveCosts.get(cfg.countryId)?.get(cfg.serviceId) ?? null;
-		const costForSuggestion = liveCost ?? cfg.expectedCostCents;
+		const live = liveCosts.get(cfg.countryId)?.get(cfg.serviceId) ?? null;
+		const costCents = live?.costCents ?? cfg.expectedCostCents;
+		const priceNgn = costCents ? computeAutoPrice(costCents, pricing) : readBasePrice(tier.metadata);
+		const costNgn = (costCents / 100) * pricing.usdNgnRate;
 		rows.push({
 			tierId: tier.id,
 			serviceId: cfg.serviceId,
 			serviceName: cfg.serviceName,
 			countryId: cfg.countryId,
 			countryName: cfg.countryName,
-			expectedCostCents: cfg.expectedCostCents,
-			liveCostCents: liveCost,
-			suggestedNgn: costForSuggestion ? computeSaleNgn(costForSuggestion, pricing) : 0,
-			priceNgn: readBasePrice(tier.metadata),
+			liveCostCents: live?.costCents ?? null,
+			priceNgn,
+			profitNgn: Math.round(priceNgn - costNgn),
+			available: live?.available ?? cfg.availableCount,
+			autoHidden: live ? live.available <= 0 : cfg.autoHidden,
+			hideReason: (live ? live.available <= 0 : cfg.autoHidden) ? cfg.hideReason ?? 'no_stock' : null,
 			active: tier.isActive
 		});
 	}
@@ -304,34 +320,24 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 	return { rows, usdNgnRate: pricing.usdNgnRate, marginPercent: pricing.marginPercent };
 }
 
-/** Persist per-tier price + active flag from the admin table. A tier can't go active at price 0. */
+/**
+ * Persist the admin's manual active switch from the Numbers table. Prices are automatic
+ * and never set here. A tier can't go active with no computed price.
+ */
 export async function updateNumbersTiers(
-	updates: Array<{ tierId: string; priceNgn?: number; active?: boolean }>
+	updates: Array<{ tierId: string; active?: boolean }>
 ): Promise<void> {
 	const platformId = await getNumbersPlatformId();
 	if (!platformId) return;
 	for (const u of updates) {
+		if (u.active == null) continue;
 		const tier = await prisma.category.findFirst({
 			where: { id: u.tierId, parentId: platformId },
 			select: { id: true, metadata: true }
 		});
 		if (!tier) continue;
-
-		const md = (tier.metadata as Record<string, unknown>) || {};
-		const pricing = (md.pricing as Record<string, unknown>) || { currency: 'NGN' };
-		let price = readBasePrice(md);
-		if (u.priceNgn != null && Number.isFinite(u.priceNgn) && u.priceNgn >= 0) {
-			price = Math.round(u.priceNgn);
-			pricing.base_price = price;
-			pricing.currency = 'NGN';
-			md.pricing = pricing;
-		}
-
-		const active = u.active === true && price > 0;
-		await prisma.category.update({
-			where: { id: tier.id },
-			data: { metadata: md as Prisma.InputJsonValue, isActive: u.active == null ? undefined : active }
-		});
+		const active = u.active === true && readBasePrice(tier.metadata) > 0;
+		await prisma.category.update({ where: { id: tier.id }, data: { isActive: active } });
 	}
 }
 
@@ -364,7 +370,8 @@ export async function getNumbersStorefront(): Promise<
 	for (const tier of tiers) {
 		const cfg = getPhoneTierConfig(tier.metadata);
 		const price = readBasePrice(tier.metadata);
-		if (!cfg || price <= 0) continue;
+		// Skip tiers the auto-rules pulled (no live stock / failing) even while isActive stays on.
+		if (!cfg || price <= 0 || cfg.autoHidden) continue;
 		const countryCode = String((tier.metadata as Record<string, unknown>)?.hub_country_code || '');
 		if (!byService.has(cfg.serviceId))
 			byService.set(cfg.serviceId, { serviceId: cfg.serviceId, serviceName: cfg.serviceName, tiers: [] });
