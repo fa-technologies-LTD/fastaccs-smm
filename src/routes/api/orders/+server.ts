@@ -5,6 +5,8 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { runWithDbRetry } from '$lib/server/db-retry';
 import { fulfillOrder } from '$lib/services/fulfillment';
+import * as hubman from '$lib/services/hubman';
+import { getPhoneTierConfig } from '$lib/helpers/phone-tier-config';
 import { initializeTransaction } from '$lib/services/monnify';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { validatePromotionCode } from '$lib/services/promotions';
@@ -679,6 +681,49 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				},
 				{ status: 400 }
 			);
+		}
+
+		// Authoritative buy-time availability guard: the storefront can be a few minutes stale,
+		// so before we take a single naira we confirm hub-man can actually supply this number.
+		// This stops the "pay → no stock → refund" churn that erodes trust. Fail safe: if the
+		// stock can't be confirmed (hub-man down), we don't create the order rather than risk it.
+		if (isPhoneCheckout) {
+			const phoneCategory = categoryById.get(itemsWithNames[0].categoryId);
+			const phoneCfg = phoneCategory ? getPhoneTierConfig(phoneCategory.metadata) : null;
+			if (!phoneCfg) {
+				return json(
+					{ success: false, error: 'This number is no longer available — please pick another.' },
+					{ status: 409 }
+				);
+			}
+			try {
+				const services = await hubman.getAvailableServices(phoneCfg.countryId);
+				const available =
+					Number(
+						services[String(phoneCfg.countryId)]?.[String(phoneCfg.serviceId)]
+							?.available_numbers_count
+					) || 0;
+				if (available <= 0) {
+					return json(
+						{
+							success: false,
+							error: 'That number just sold out — please pick another from the list.',
+							code: 'number_unavailable'
+						},
+						{ status: 409 }
+					);
+				}
+			} catch (err) {
+				console.error('[orders] phone availability check failed:', (err as Error).message);
+				return json(
+					{
+						success: false,
+						error: 'Numbers are momentarily unavailable — please try again in a few seconds.',
+						code: 'hubman_unreachable'
+					},
+					{ status: 503 }
+				);
+			}
 		}
 		const requestedPromotionCode = String(orderData.promotionCode || '')
 			.trim()

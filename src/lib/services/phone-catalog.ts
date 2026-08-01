@@ -361,6 +361,26 @@ export interface NumbersStorefrontTier {
 	priceNgn: number;
 }
 
+// hub-man rotates which countries have numbers, so the daily catalog snapshot goes stale
+// between syncs. We filter the storefront by the CURRENT available-country list, cached
+// briefly so we don't call hub-man on every page load, and fail-open (never blank the store
+// on a hub-man blip — the authoritative buy-time check still protects the customer's money).
+let availableCountryCache: { ids: Set<number>; at: number } | null = null;
+const AVAILABLE_COUNTRY_TTL_MS = 120_000;
+async function getLiveAvailableCountryIds(): Promise<Set<number> | null> {
+	if (availableCountryCache && Date.now() - availableCountryCache.at < AVAILABLE_COUNTRY_TTL_MS) {
+		return availableCountryCache.ids;
+	}
+	try {
+		const ids = await hubman.getAvailableCountryIds();
+		if (ids.length === 0) return availableCountryCache?.ids ?? null; // treat empty as a blip
+		availableCountryCache = { ids: new Set(ids), at: Date.now() };
+		return availableCountryCache.ids;
+	} catch {
+		return availableCountryCache?.ids ?? null; // stale cache, or null = don't filter
+	}
+}
+
 /** Active, priced tiers for the storefront, grouped by service. */
 export async function getNumbersStorefront(): Promise<
 	Array<{ serviceId: number; serviceName: string; tiers: NumbersStorefrontTier[] }>
@@ -370,11 +390,14 @@ export async function getNumbersStorefront(): Promise<
 	if (!hubman.isHubmanConfigured()) return [];
 	const platformId = await getNumbersPlatformId();
 	if (!platformId) return [];
-	const tiers = await prisma.category.findMany({
-		where: { parentId: platformId, isActive: true },
-		select: { id: true, metadata: true },
-		orderBy: { sortOrder: 'asc' }
-	});
+	const [tiers, liveCountries] = await Promise.all([
+		prisma.category.findMany({
+			where: { parentId: platformId, isActive: true },
+			select: { id: true, metadata: true },
+			orderBy: { sortOrder: 'asc' }
+		}),
+		getLiveAvailableCountryIds()
+	]);
 
 	const byService = new Map<number, { serviceId: number; serviceName: string; tiers: NumbersStorefrontTier[] }>();
 	for (const tier of tiers) {
@@ -382,6 +405,9 @@ export async function getNumbersStorefront(): Promise<
 		const price = readBasePrice(tier.metadata);
 		// Skip tiers the auto-rules pulled (no live stock / failing) even while isActive stays on.
 		if (!cfg || price <= 0 || cfg.autoHidden) continue;
+		// Skip whole countries hub-man has rotated out since the last sync (when we have a
+		// live list; if the call failed we show the stored set and rely on the buy-time guard).
+		if (liveCountries && !liveCountries.has(cfg.countryId)) continue;
 		const countryCode = String((tier.metadata as Record<string, unknown>)?.hub_country_code || '');
 		if (!byService.has(cfg.serviceId))
 			byService.set(cfg.serviceId, { serviceId: cfg.serviceId, serviceName: cfg.serviceName, tiers: [] });

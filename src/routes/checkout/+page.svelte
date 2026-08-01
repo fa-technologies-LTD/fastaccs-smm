@@ -525,6 +525,22 @@
 					goto(`/verify-email?next=${encodeURIComponent(nextPath)}`);
 					return;
 				}
+				// A number sold out between browsing and paying — send them back to pick another,
+				// with a clear message (not a scary "payment failed"). No money was touched.
+				if (
+					/just sold out|no longer available|momentarily unavailable/i.test(
+						String(orderResult.error || '')
+					)
+				) {
+					showWarning(
+						'Number unavailable',
+						orderResult.error || 'That number just sold out — please pick another.'
+					);
+					cart.clear();
+					goto('/numbers');
+					loading = false;
+					return;
+				}
 				if (
 					String(orderResult.error || '')
 						.toLowerCase()

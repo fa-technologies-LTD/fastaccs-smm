@@ -120,6 +120,12 @@
 			return { label: 'Payment Cancelled', tone: 'failure' };
 		}
 
+		// A refunded order is terminal — it must NOT read as "Awaiting Payment" (which would
+		// wrongly show Resume/Refresh). Numbers auto-refund to store credit on a failed rent.
+		if (['refunded'].includes(orderStatus) || ['refunded', 'refund'].includes(paymentStatus)) {
+			return { label: 'Refunded to store credit', tone: 'failure' };
+		}
+
 		if (orderStatus === 'pending_payment') {
 			if (paymentStatus === 'processing') {
 				return { label: 'Confirming with Monnify', tone: 'pending' };
@@ -158,6 +164,11 @@
 	function getFulfillmentState(order: OrderRecord): string {
 		const payment = getPaymentState(order);
 		if (payment.tone !== 'success') {
+			const orderStatus = normalizeLower(order.status);
+			const paymentStatus = normalizeLower(order.paymentStatus);
+			if (['refunded'].includes(orderStatus) || ['refunded', 'refund'].includes(paymentStatus)) {
+				return 'Refunded';
+			}
 			return 'Not Started';
 		}
 
