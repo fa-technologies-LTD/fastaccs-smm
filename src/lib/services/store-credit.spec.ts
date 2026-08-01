@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { computeOrderRedemption, EARNED_REDEMPTION_CAP_PERCENT } from './store-credit';
+import {
+	computeOrderRedemption,
+	EARNED_REDEMPTION_CAP_PERCENT,
+	redemptionExceedsAvailable
+} from './store-credit';
 
 describe('computeOrderRedemption', () => {
 	it('applies refund credit first, uncapped up to the order total', () => {
@@ -80,5 +84,56 @@ describe('computeOrderRedemption', () => {
 		expect(
 			computeOrderRedemption(10000, { refundAvailable: 0, earnedAvailable: 9000 }, { earnedCapPercent: 0.5 })
 		).toEqual({ refundApplied: 0, earnedApplied: 5000, totalApplied: 5000 });
+	});
+});
+
+/**
+ * The concurrency guard (F1): under a wallet row-lock we re-check the redemption against the
+ * live buckets, so a second simultaneous checkout that would over-spend is refused. This tests
+ * that per-bucket rule directly.
+ */
+describe('redemptionExceedsAvailable', () => {
+	it('allows a redemption that exactly matches the available buckets', () => {
+		expect(
+			redemptionExceedsAvailable(
+				{ refundApplied: 1000, earnedApplied: 500 },
+				{ refundAvailable: 1000, earnedAvailable: 500 }
+			)
+		).toBe(false);
+	});
+	it('refuses when the refund bucket is over-spent', () => {
+		expect(
+			redemptionExceedsAvailable(
+				{ refundApplied: 1500, earnedApplied: 0 },
+				{ refundAvailable: 1000, earnedAvailable: 0 }
+			)
+		).toBe(true);
+	});
+	it('refuses when the earned bucket is over-spent even if the total looks fine', () => {
+		// A naive total-only check (800 ≤ 5000+500) would pass; the per-bucket rule catches it.
+		expect(
+			redemptionExceedsAvailable(
+				{ refundApplied: 0, earnedApplied: 800 },
+				{ refundAvailable: 5000, earnedAvailable: 500 }
+			)
+		).toBe(true);
+	});
+	it('models the race: a second checkout after the first drained the balance is refused', () => {
+		// Balance was 5000 when this order computed a 3000 redemption; a concurrent order already
+		// spent it down to 2000 before we acquired the lock → refuse rather than leak 1000.
+		expect(
+			redemptionExceedsAvailable(
+				{ refundApplied: 3000, earnedApplied: 0 },
+				{ refundAvailable: 2000, earnedAvailable: 0 }
+			)
+		).toBe(true);
+	});
+	it('tolerates a sub-naira rounding difference', () => {
+		expect(
+			redemptionExceedsAvailable(
+				{ refundApplied: 1000.4, earnedApplied: 0 },
+				{ refundAvailable: 1000, earnedAvailable: 0 }
+			)
+		).toBe(false);
 	});
 });

@@ -78,6 +78,21 @@ export function computeOrderRedemption(
 	return { refundApplied, earnedApplied, totalApplied };
 }
 
+/**
+ * True if a redemption asks for more than the buckets actually hold (whole-naira tolerance).
+ * The guard against concurrent store-credit over-spend: checked under a wallet row-lock, so a
+ * second simultaneous checkout that would push a bucket negative is refused, not silently leaked.
+ */
+export function redemptionExceedsAvailable(
+	redemption: Pick<OrderRedemption, 'refundApplied' | 'earnedApplied'>,
+	buckets: Pick<StoreCreditBuckets, 'refundAvailable' | 'earnedAvailable'>
+): boolean {
+	return (
+		redemption.refundApplied - buckets.refundAvailable > 0.5 ||
+		redemption.earnedApplied - buckets.earnedAvailable > 0.5
+	);
+}
+
 type Db = PrismaClient | Prisma.TransactionClient;
 
 /** Compute a user's spendable store-credit buckets from the ledger. */
@@ -230,6 +245,19 @@ export async function redeemStoreCreditForOrder(
 		update: {},
 		create: { userId: params.userId, balance: 0, currency: 'NGN' }
 	});
+
+	// Lock this wallet row for the rest of the transaction so two checkouts fired at the
+	// same instant can't both spend the same balance (TOCTOU race → store-credit over-spend).
+	// A concurrent redemption blocks here until we commit, then re-reads the reduced balance.
+	await tx.$queryRaw`SELECT id FROM wallets WHERE user_id = ${params.userId}::uuid FOR UPDATE`;
+
+	// Re-verify sufficiency from the ledger now that we hold the lock (the amount was computed
+	// earlier, outside the transaction). If the balance moved under us, refuse rather than leak.
+	const liveBuckets = await getStoreCreditBuckets(params.userId, tx);
+	if (redemptionExceedsAvailable(params.redemption, liveBuckets)) {
+		throw new Error('INSUFFICIENT_STORE_CREDIT');
+	}
+
 	let balance = Number(wallet.balance || 0);
 
 	const rows: Array<{ type: string; amount: number; bucket: string }> = [];

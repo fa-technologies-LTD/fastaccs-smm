@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/private';
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { logPaymentEvent } from '$lib/server/payment-observability';
 import {
 	getMonnifyInitializationErrorMessage,
@@ -289,7 +289,10 @@ export async function verifyTransaction(reference: string): Promise<TransactionV
 export function verifyWebhookSignature(signature: string, rawBody: string): boolean {
 	try {
 		const hash = createHmac('sha512', MONNIFY_SECRET_KEY).update(rawBody).digest('hex');
-		return hash === signature;
+		// Constant-time compare so a forger can't probe the signature byte-by-byte via timing.
+		const expected = Buffer.from(hash);
+		const provided = Buffer.from(String(signature || ''));
+		return expected.length === provided.length && timingSafeEqual(expected, provided);
 	} catch (error) {
 		console.error('Monnify webhook signature verification error:', error);
 		return false;

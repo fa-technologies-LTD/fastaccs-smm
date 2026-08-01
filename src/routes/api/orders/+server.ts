@@ -1028,6 +1028,15 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Could not reserve order stock.';
+			if (message === 'INSUFFICIENT_STORE_CREDIT') {
+				return json(
+					{
+						success: false,
+						error: 'Your store credit balance changed — please refresh and try again.'
+					},
+					{ status: 409 }
+				);
+			}
 			if (message.startsWith('STOCK_HOLD_INCOMPLETE:')) {
 				const [, productName, requested, available] = message.split(':');
 				return json(

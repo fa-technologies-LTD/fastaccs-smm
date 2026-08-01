@@ -51,6 +51,30 @@ function isPaymentAmountValid(orderTotal: number, paidAmount: number): boolean {
 	return paidAmount + 0.01 >= orderTotal;
 }
 
+/**
+ * The amount the payment gateway must actually cover: the order total minus any store
+ * credit already applied. (Store credit pays part, the gateway pays the remainder.)
+ */
+export function computeExpectedGatewayAmount(totalAmount: number, storeCreditApplied: number): number {
+	return Math.max(0, Number(totalAmount) - Number(storeCreditApplied || 0));
+}
+
+/**
+ * Is the gateway-verified amount enough to settle this order? Compares the paid amount
+ * against total − store credit, so a valid store-credit + card split is never rejected,
+ * and a genuine underpayment always is. This is the exported, unit-tested money rule.
+ */
+export function isGatewayAmountSufficient(
+	totalAmount: number,
+	storeCreditApplied: number,
+	amountPaid: number
+): boolean {
+	return isPaymentAmountValid(
+		computeExpectedGatewayAmount(totalAmount, storeCreditApplied),
+		Number(amountPaid || 0)
+	);
+}
+
 function isPaymentCurrencyValid(
 	orderCurrency: string | null | undefined,
 	paidCurrency: string
@@ -426,12 +450,16 @@ export async function settleSuccessfulPayment(input: {
 
 	// Store credit covers part of the total; the gateway only charges the remainder,
 	// so validate the paid amount against total − store credit (not the full total).
-	const expectedGatewayAmount = Math.max(
-		0,
-		Number(order.totalAmount) - Number(order.storeCreditApplied || 0)
+	const expectedGatewayAmount = computeExpectedGatewayAmount(
+		Number(order.totalAmount),
+		Number(order.storeCreditApplied || 0)
 	);
 	if (
-		!isPaymentAmountValid(expectedGatewayAmount, Number(input.amountPaid || 0)) ||
+		!isGatewayAmountSufficient(
+			Number(order.totalAmount),
+			Number(order.storeCreditApplied || 0),
+			Number(input.amountPaid || 0)
+		) ||
 		!isPaymentCurrencyValid(order.currency, input.currency)
 	) {
 		const mismatchMessage = `Order ${order.orderNumber} expected ${order.currency} ${expectedGatewayAmount}, but ${input.source} verified ${input.currency} ${Number(input.amountPaid || 0)}.`;
