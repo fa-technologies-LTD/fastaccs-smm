@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { slide } from 'svelte/transition';
 	import { cart } from '$lib/stores/cart.svelte';
-	import { showSuccess, showWarning } from '$lib/stores/toasts';
+	import { showWarning } from '$lib/stores/toasts';
 	import { Zap, ShieldCheck, RefreshCw, ChevronDown, Phone } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -50,16 +51,12 @@
 				);
 				return;
 			}
-			// Numbers are fulfilled one per order — don't let a second number pile into the cart.
-			if (cart.itemCount > 0) {
-				showWarning(
-					'One number at a time',
-					'Numbers are bought one per order. Check out this one first, then grab the next.'
-				);
-				return;
-			}
+			// One number per order, by construction: reset the cart to exactly this number
+			// (clears any leftover), then go straight to checkout — no accumulation possible.
+			cart.clear();
 			cart.addTier(tierId, 1);
-			showSuccess('Added to cart', `${label} — tap to check out.`, 6000, '/checkout');
+			void label;
+			goto('/checkout');
 		} finally {
 			buyingTierId = null;
 		}
