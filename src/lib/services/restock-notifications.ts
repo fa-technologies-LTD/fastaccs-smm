@@ -119,3 +119,59 @@ export async function triggerRestockNotificationsForTier(tierId: string): Promis
 		});
 	}
 }
+
+/**
+ * Notify subscribers that a Numbers tier (service + country) is buyable again. Numbers have no
+ * `accounts`, so this can't use the account-stock path above — the caller (catalog sync) passes
+ * the display name + price and points customers at /numbers. Best-effort; never throws.
+ */
+export async function triggerNumbersRestockForTier(
+	tierId: string,
+	tierName: string,
+	priceNgn: number
+): Promise<void> {
+	const subscribers = await prisma.restockSubscription.findMany({
+		where: { tierId, notifiedAt: null }
+	});
+	if (subscribers.length === 0) return;
+
+	const baseUrl = (
+		env.PUBLIC_BASE_URL ||
+		process.env.PUBLIC_BASE_URL ||
+		'https://smm.fastaccs.com'
+	).replace(/\/+$/, '');
+	const url = `${baseUrl}/numbers`;
+	const priceLabel = priceNgn > 0 ? ` — now ₦${priceNgn.toLocaleString()}` : '';
+
+	const notified = (
+		await Promise.all(
+			subscribers.map(async (s) => {
+				const emailResult = await sendMarketingEmail({
+					to: s.email,
+					subject: `${tierName} numbers are back in stock`,
+					body: `Good news — ${tierName} verification numbers are available again${priceLabel}. Grab one before they sell out.`,
+					ctaText: 'Get your number',
+					ctaUrl: url,
+					userId: s.userId,
+					notificationType: 'restock_alert',
+					referenceId: tierId,
+					campaignKey: `restock:${s.id}`
+				});
+				if (!emailResult.success) return null;
+				await sendPushToUser(s.userId, {
+					title: `${tierName} numbers are back`,
+					body: 'Tap to grab one before they sell out.',
+					url
+				}).catch(() => {});
+				return s.id;
+			})
+		)
+	).filter((id): id is string => id !== null);
+
+	if (notified.length > 0) {
+		await prisma.restockSubscription.updateMany({
+			where: { id: { in: notified } },
+			data: { notifiedAt: new Date() }
+		});
+	}
+}

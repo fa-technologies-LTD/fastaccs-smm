@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import * as hubman from './hubman';
 import { getPhonePricingConfig, computeAutoPrice } from './phone-pricing';
 import { getLowSuccessTierKeys } from './phone-analytics';
+import { triggerNumbersRestockForTier } from './restock-notifications';
 import { PHONE_TIER_KEYS, PHONE_DELIVERY_MODE, getPhoneTierConfig } from '$lib/helpers/phone-tier-config';
 
 /**
@@ -166,6 +167,12 @@ export async function syncNumbersCatalog(
 		select: { id: true, slug: true, metadata: true }
 	});
 	const idBySlug = new Map(existingTiers.map((t) => [t.slug, t.id]));
+	// Prior auto-hidden state per tier, to detect an unavailable→available transition (restock).
+	const wasHiddenBySlug = new Map(
+		existingTiers.map((t) => [t.slug, getPhoneTierConfig(t.metadata)?.autoHidden ?? false])
+	);
+	// Tiers that just came back in stock this sync → notify their "Notify me" subscribers.
+	const becameAvailable: Array<{ tierId: string; name: string; price: number }> = [];
 
 	// Fetch every country's cost + stock map in parallel (the heavy part).
 	const fetched = new Map(
@@ -224,6 +231,10 @@ export async function syncNumbersCatalog(
 					data: { metadata }
 				});
 				refreshed += 1;
+				// Unavailable → available transition: queue a restock notification for subscribers.
+				if ((wasHiddenBySlug.get(slug) ?? false) && !autoHidden) {
+					becameAvailable.push({ tierId: existingId, name, price: autoPrice });
+				}
 			} else {
 				const row = await prisma.category.create({
 					data: {
@@ -274,6 +285,14 @@ export async function syncNumbersCatalog(
 			data: { metadata: md as Prisma.InputJsonValue }
 		});
 		rotatedOut += 1;
+	}
+
+	// Notify "Notify me" subscribers for tiers that came back in stock (best-effort, never
+	// blocks the sync). Each subscription is consumed (notifiedAt set) so it fires once.
+	for (const t of becameAvailable) {
+		await triggerNumbersRestockForTier(t.tierId, t.name, t.price).catch((e) =>
+			console.error('[phone-catalog] restock notify failed for', t.tierId, (e as Error).message)
+		);
 	}
 
 	// "deactivated" here = tiers flagged out of stock this run. We never hard-deactivate.
@@ -396,6 +415,7 @@ export interface NumbersStorefrontTier {
 	countryName: string;
 	countryCode: string;
 	priceNgn: number;
+	available: boolean; // false = temporarily out of stock / rotated out → shown muted, not buyable
 }
 
 // hub-man rotates which countries have numbers, so the daily catalog snapshot goes stale
@@ -440,11 +460,14 @@ export async function getNumbersStorefront(): Promise<
 	for (const tier of tiers) {
 		const cfg = getPhoneTierConfig(tier.metadata);
 		const price = readBasePrice(tier.metadata);
-		// Skip tiers the auto-rules pulled (no live stock / failing) even while isActive stays on.
-		if (!cfg || price <= 0 || cfg.autoHidden) continue;
-		// Skip whole countries hub-man has rotated out since the last sync (when we have a
-		// live list; if the call failed we show the stored set and rely on the buy-time guard).
-		if (liveCountries && !liveCountries.has(cfg.countryId)) continue;
+		if (!cfg || price <= 0) continue;
+		// Persistently-failing tiers are removed entirely — not shown as "temporarily unavailable".
+		if (cfg.hideReason === 'low_success') continue;
+		// A tier is buyable now only if it has stock (not auto-hidden) AND its country is in
+		// hub-man's current availability. Otherwise we still SHOW it, muted, so the customer
+		// sees we usually offer it — but it can't be bought (the buy-time guard also backs this).
+		const liveOk = liveCountries ? liveCountries.has(cfg.countryId) : true;
+		const available = !cfg.autoHidden && liveOk;
 		const countryCode = String((tier.metadata as Record<string, unknown>)?.hub_country_code || '');
 		if (!byService.has(cfg.serviceId))
 			byService.set(cfg.serviceId, { serviceId: cfg.serviceId, serviceName: cfg.serviceName, tiers: [] });
@@ -455,12 +478,17 @@ export async function getNumbersStorefront(): Promise<
 			countryId: cfg.countryId,
 			countryName: cfg.countryName,
 			countryCode,
-			priceNgn: price
+			priceNgn: price,
+			available
 		});
 	}
-	// Cheapest country first within each app; apps in curated order.
+	// Available countries first (cheapest first), unavailable ones muted at the bottom; apps
+	// in curated order.
 	const order = new Map<number, number>(MAJOR_SERVICES.map((s, i) => [s.id, i]));
-	for (const group of byService.values()) group.tiers.sort((a, b) => a.priceNgn - b.priceNgn);
+	for (const group of byService.values())
+		group.tiers.sort((a, b) =>
+			a.available === b.available ? a.priceNgn - b.priceNgn : a.available ? -1 : 1
+		);
 	return [...byService.values()].sort(
 		(a, b) => (order.get(a.serviceId) ?? 999) - (order.get(b.serviceId) ?? 999)
 	);

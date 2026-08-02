@@ -3,8 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { slide } from 'svelte/transition';
 	import { cart } from '$lib/stores/cart.svelte';
-	import { showWarning } from '$lib/stores/toasts';
-	import { Zap, ShieldCheck, RefreshCw, ChevronDown, Phone } from '$lib/icons';
+	import { showWarning, showSuccess, showError } from '$lib/stores/toasts';
+	import { Zap, ShieldCheck, RefreshCw, ChevronDown, Phone, BellRing, Check } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
@@ -31,13 +31,46 @@
 	// Accordion: first service open by default; the rest collapsed.
 	let openId = $state<number | null>(data.services[0]?.serviceId ?? null);
 	let buyingTierId = $state<string | null>(null);
+	let notifyingTierId = $state<string | null>(null);
+	let notifiedTiers = $state<Set<string>>(new Set());
+
+	// "Notify me" for an out-of-stock number — records a restock subscription (fires once).
+	async function notifyMe(tierId: string, label: string) {
+		notifyingTierId = tierId;
+		try {
+			const res = await fetch('/api/restock-subscriptions', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ tierId })
+			});
+			if (res.status === 401) {
+				showWarning('Log in first', 'Sign in and we’ll alert you the moment this number is back.');
+				return;
+			}
+			const j = await res.json();
+			if (j.success) {
+				notifiedTiers = new Set(notifiedTiers).add(tierId);
+				showSuccess('You’re on the list', `We’ll alert you when ${label} is back in stock.`);
+			} else {
+				showError('Could not set the alert', j.error || 'Please try again.');
+			}
+		} catch {
+			showError('Could not set the alert', 'Please try again.');
+		} finally {
+			notifyingTierId = null;
+		}
+	}
 
 	function toggle(id: number) {
 		openId = openId === id ? null : id;
 	}
 
+	function availableTiers(tiers: PageData['services'][number]['tiers']) {
+		return tiers.filter((t) => t.available);
+	}
 	function cheapest(tiers: PageData['services'][number]['tiers']): number {
-		return Math.min(...tiers.map((t) => t.priceNgn));
+		const live = availableTiers(tiers);
+		return live.length ? Math.min(...live.map((t) => t.priceNgn)) : 0;
 	}
 
 	async function buy(tierId: string, label: string) {
@@ -123,8 +156,14 @@
 							<span class="flex-1 min-w-0">
 								<span class="block font-semibold" style="color: var(--text);">{service.serviceName}</span>
 								<span class="block text-xs" style="color: var(--text-muted);">
-									{service.tiers.length}
-									{service.tiers.length === 1 ? 'country' : 'countries'} · from ₦{cheapest(service.tiers).toLocaleString()}
+									{#if availableTiers(service.tiers).length > 0}
+										{availableTiers(service.tiers).length}
+										{availableTiers(service.tiers).length === 1 ? 'country' : 'countries'} · from ₦{cheapest(
+											service.tiers
+										).toLocaleString()}
+									{:else}
+										Currently unavailable · back soon
+									{/if}
 								</span>
 							</span>
 							<ChevronDown
@@ -139,25 +178,55 @@
 								{#each service.tiers as tier (tier.tierId)}
 									<li
 										class="flex items-center justify-between px-4 sm:px-5 py-3"
-										style="border-top: 1px solid var(--border);"
+										style="border-top: 1px solid var(--border); opacity: {tier.available ? 1 : 0.55};"
 									>
 										<span class="flex items-center gap-2.5 min-w-0">
 											<span class="text-xl shrink-0">{codeToFlag(tier.countryCode)}</span>
 											<span class="truncate" style="color: var(--text);">{tier.countryName}</span>
 										</span>
-										<span class="flex items-center gap-3 shrink-0 pl-3">
-											<span class="font-semibold tabular-nums" style="color: var(--text);">
-												₦{tier.priceNgn.toLocaleString()}
+										{#if tier.available}
+											<span class="flex items-center gap-3 shrink-0 pl-3">
+												<span class="font-semibold tabular-nums" style="color: var(--text);">
+													₦{tier.priceNgn.toLocaleString()}
+												</span>
+												<button
+													onclick={() => buy(tier.tierId, `${service.serviceName} — ${tier.countryName}`)}
+													disabled={buyingTierId === tier.tierId}
+													class="px-4 py-1.5 text-sm rounded-lg font-semibold transition-transform active:scale-95 hover:brightness-110 disabled:opacity-60"
+													style="background: #0ea5e9; color: #ffffff;"
+												>
+													{buyingTierId === tier.tierId ? '…' : 'Buy'}
+												</button>
 											</span>
-											<button
-												onclick={() => buy(tier.tierId, `${service.serviceName} — ${tier.countryName}`)}
-												disabled={buyingTierId === tier.tierId}
-												class="px-4 py-1.5 text-sm rounded-lg font-semibold transition-transform active:scale-95 hover:brightness-110 disabled:opacity-60"
-												style="background: #0ea5e9; color: #ffffff;"
-											>
-												{buyingTierId === tier.tierId ? '…' : 'Buy'}
-											</button>
-										</span>
+										{:else}
+											<span class="flex items-center gap-2 shrink-0 pl-3">
+												<span
+													class="text-xs font-medium whitespace-nowrap"
+													style="color: var(--text-dim);"
+												>
+													Unavailable
+												</span>
+												{#if notifiedTiers.has(tier.tierId)}
+													<span
+														class="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap"
+														style="background: rgba(52,211,153,0.14); color: #34d399;"
+													>
+														<Check class="w-3.5 h-3.5" /> We’ll alert you
+													</span>
+												{:else}
+													<button
+														onclick={() =>
+															notifyMe(tier.tierId, `${service.serviceName} — ${tier.countryName}`)}
+														disabled={notifyingTierId === tier.tierId}
+														class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-transform active:scale-95 hover:brightness-110 disabled:opacity-60"
+														style="border: 1px solid #0ea5e9; color: #38bdf8; background: rgba(14,165,233,0.08);"
+													>
+														<BellRing class="w-3.5 h-3.5" />
+														{notifyingTierId === tier.tierId ? '…' : 'Notify me'}
+													</button>
+												{/if}
+											</span>
+										{/if}
 									</li>
 								{/each}
 							</ul>
