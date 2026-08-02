@@ -86,6 +86,37 @@
 					class="mb-2 text-2xl font-semibold"
 					style="color: var(--text); font-family: var(--font-head);"
 				>
+					Verification Numbers
+				</h2>
+				<ul class="ml-6 list-disc space-y-1">
+					<li>
+						Each verification number is supplied for a <strong>single one-time code</strong> (OTP) on the
+						selected service. Once a code is delivered the order is complete; numbers are not reusable
+						and are not intended for long-term ownership or repeated use across accounts.
+					</li>
+					<li>
+						If no code arrives within the activation window, the order is
+						<strong>automatically refunded to your store credit</strong>. Because a delivered code is a
+						completed service, orders where a code was received are not refundable.
+					</li>
+					<li>
+						Numbers must be used only for <strong>legitimate verification you are authorised to
+						perform</strong> — never for fraud, impersonation, ban evasion, spam, or any service whose
+						terms require a personal carrier number.
+					</li>
+					<li>
+						Delivery speed and success depend on the upstream network and the destination platform,
+						which are outside our control. Acceptance of a number by any third-party platform is not
+						guaranteed.
+					</li>
+				</ul>
+			</section>
+
+			<section>
+				<h2
+					class="mb-2 text-2xl font-semibold"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
 					Platform Risk Disclosure
 				</h2>
 				<p>

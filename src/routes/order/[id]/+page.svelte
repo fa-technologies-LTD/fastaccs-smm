@@ -252,12 +252,12 @@
 						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 					>
 						<p class="text-sm" style="color: var(--text-muted);">
-							Enter the number above on {data.phone.serviceName} to request your code — it appears
-							here automatically. No code within the window? You're refunded to store credit. Need
-							help? See the <a
-								href="/support#faq"
+							Enter the number above on {data.phone.serviceName} (pick the same country), then
+							request your code once — it appears here automatically. No VPN needed. No code within
+							the window? You're refunded to store credit. See <a
+								href="/support#numbers"
 								class="font-medium hover:underline"
-								style="color: var(--link);">Support FAQ</a
+								style="color: var(--link);">how to use your number &amp; tips</a
 							>.
 						</p>
 					</div>

@@ -10,7 +10,7 @@
 		ArrowRight
 	} from '$lib/icons';
 
-	const faqs = [
+	const faqs: Array<{ id?: string; question: string; answer: string }> = [
 		{
 			question: 'How long does delivery take?',
 			answer:
@@ -82,9 +82,20 @@
 				'Submit the public profile or post link for the account you want boosted (e.g. your profile URL or a specific post). No password or login access is ever needed.'
 		},
 		{
+			id: 'numbers',
 			question: 'How do verification numbers work?',
 			answer:
-				'Pick a service (WhatsApp, Telegram, Google and more) on the Numbers page and pay. Your number appears on your order page and its one-time code shows automatically the moment it arrives — usually within a couple of minutes.'
+				'Pick a service (WhatsApp, Telegram, TikTok and more) on the Numbers page and pay. Your number appears on your order page and its one-time code shows automatically the moment it arrives — usually within a couple of minutes. To use it: open the app, choose the same country as your number, enter the number, and request the code once. When it lands on your order page, type it into the app. That’s it — no VPN, no setup.'
+		},
+		{
+			question: 'Do I need a VPN to use a verification number?',
+			answer:
+				'No. The code arrives without a VPN, and one isn’t needed for WhatsApp, Telegram or TikTok verification. A VPN only helps in special cases — creating a brand-new account and wanting the app’s region to match the number in the first 24 hours, or using an app that’s restricted in your country. For a normal one-time verification, it’s plug-and-play.'
+		},
+		{
+			question: 'Tips to make sure your verification goes through',
+			answer:
+				'1) Match the country code to your number when you enter it. 2) Request the code once and wait 60–120 seconds — spamming “Resend” triggers rate limits and slows delivery. 3) Right after you verify WhatsApp or Telegram, set a PIN or recovery email, since you won’t keep this number. 4) Use it promptly — the activation window is short. 5) One number is for one verification; don’t reuse it across accounts.'
 		},
 		{
 			question: 'What if my verification number never receives a code?',
@@ -304,8 +315,9 @@
 			<div class="space-y-4">
 				{#each faqs as faq, i}
 					<div
+						id={faq.id}
 						class="overflow-hidden rounded-xl transition-all"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border); scroll-margin-top: 90px;"
 					>
 						<button
 							onclick={() => (expandedFaq = expandedFaq === i ? null : i)}
