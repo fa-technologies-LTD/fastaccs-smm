@@ -22,6 +22,8 @@ interface OrderSummary {
 	status: string;
 	paymentStatus: string;
 	totalAmount: number;
+	storeCreditApplied: number;
+	paymentReference: string | null;
 	currency: string;
 	createdAt: Date;
 	updatedAt: Date;
@@ -49,6 +51,8 @@ function buildTimeline(input: {
 		updatedAt: Date;
 		paidAt: Date | null;
 		totalAmount: number;
+		storeCreditApplied: number;
+		paymentReference: string | null;
 	}>;
 	sessionLogins: Date[];
 	adminActionLogs: Array<{
@@ -130,14 +134,24 @@ function buildTimeline(input: {
 			orderNumber: order.orderNumber
 		});
 
+		// Payment source, amount-free so it's safe to show even when amounts are hidden:
+		// a gateway reference means a card was charged; no reference means pure store credit.
+		const paidWithCard = Boolean(order.paymentReference);
+		const usedStoreCredit = Number(order.storeCreditApplied || 0) > 0;
+		const source = !paidWithCard
+			? 'Store credit'
+			: usedStoreCredit
+				? 'Card + store credit'
+				: 'Card';
+
 		if (order.paidAt) {
 			events.push({
 				id: `${order.id}-paid`,
 				type: 'payment',
 				title: `Payment confirmed (${order.orderNumber})`,
 				description: input.revenueVisible
-					? `Amount: ₦${Number(order.totalAmount || 0).toLocaleString()}`
-					: 'Payment confirmed.',
+					? `Amount: ₦${Number(order.totalAmount || 0).toLocaleString()} • via ${source}`
+					: `Payment confirmed • via ${source}`,
 				at: order.paidAt.toISOString(),
 				orderId: order.id,
 				orderNumber: order.orderNumber
@@ -148,6 +162,22 @@ function buildTimeline(input: {
 				type: 'payment',
 				title: `Payment outcome (${order.orderNumber})`,
 				description: `Order ended as ${getOrderStatusLabel(order.status)}.`,
+				at: order.updatedAt.toISOString(),
+				orderId: order.id,
+				orderNumber: order.orderNumber
+			});
+		}
+
+		// Explicit refund event, so a refunded order doesn't just read as "Payment confirmed"
+		// with no follow-up. Numbers (and our other refunds) return funds to store credit.
+		if (order.status === 'refunded' || order.paymentStatus === 'refunded') {
+			events.push({
+				id: `${order.id}-refunded`,
+				type: 'payment',
+				title: `Refunded (${order.orderNumber})`,
+				description: input.revenueVisible
+					? `₦${Number(order.totalAmount || 0).toLocaleString()} refunded to store credit`
+					: 'Order refunded to store credit.',
 				at: order.updatedAt.toISOString(),
 				orderId: order.id,
 				orderNumber: order.orderNumber
@@ -239,6 +269,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 						status: true,
 						paymentStatus: true,
 						totalAmount: true,
+						storeCreditApplied: true,
+						paymentReference: true,
 						currency: true,
 						createdAt: true,
 						updatedAt: true,
@@ -299,6 +331,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		status: order.status,
 		paymentStatus: order.paymentStatus,
 		totalAmount: orderAmountsVisible ? Number(order.totalAmount || 0) : 0,
+		storeCreditApplied: orderAmountsVisible ? Number(order.storeCreditApplied || 0) : 0,
+		paymentReference: order.paymentReference ?? null,
 		currency: order.currency,
 		createdAt: order.createdAt,
 		updatedAt: order.updatedAt,
