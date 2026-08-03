@@ -260,6 +260,10 @@ model OrderItem {
 model PhoneRental {
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orderItemId   String    @unique @map("order_item_id") @db.Uuid
+  // Which source supplied this number. hub-man keeps using hubOrderUuid as its handle;
+  // pvapins (and any future source) stores its opaque handle in providerRef.
+  provider      String    @default("hubman")
+  providerRef   String?   @map("provider_ref")
   hubOrderUuid  String?   @map("hub_order_uuid")
   serviceId     Int       @map("service_id")
   serviceName   String    @map("service_name")
