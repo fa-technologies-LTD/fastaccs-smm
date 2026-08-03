@@ -218,8 +218,8 @@
 														onclick={() =>
 															notifyMe(tier.tierId, `${service.serviceName} — ${tier.countryName}`)}
 														disabled={notifyingTierId === tier.tierId}
-														class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-transform active:scale-95 hover:brightness-110 disabled:opacity-60"
-														style="border: 1px solid #0ea5e9; color: #38bdf8; background: rgba(14,165,233,0.08);"
+														class="notify-glow inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-transform active:scale-95 hover:brightness-110 disabled:opacity-60"
+														style="border: 1px solid #38bdf8; color: #7dd3fc; background: rgba(14,165,233,0.18);"
 													>
 														<BellRing class="w-3.5 h-3.5" />
 														{notifyingTierId === tier.tierId ? '…' : 'Notify me'}
@@ -243,3 +243,30 @@
 </main>
 
 <Footer />
+
+<style>
+	/* Soft pulsing glow so the "Notify me" restock button reads as live, not muted. */
+	.notify-glow {
+		box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.5);
+		animation: notify-pulse 2.4s ease-in-out infinite;
+	}
+	.notify-glow:hover {
+		animation-play-state: paused;
+		box-shadow: 0 0 14px 2px rgba(56, 189, 248, 0.55);
+	}
+	@keyframes notify-pulse {
+		0%,
+		100% {
+			box-shadow: 0 0 6px 0 rgba(56, 189, 248, 0.35);
+		}
+		50% {
+			box-shadow: 0 0 14px 3px rgba(56, 189, 248, 0.6);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.notify-glow {
+			animation: none;
+			box-shadow: 0 0 10px 1px rgba(56, 189, 248, 0.45);
+		}
+	}
+</style>

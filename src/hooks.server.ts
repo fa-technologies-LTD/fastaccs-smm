@@ -142,7 +142,17 @@ function getCanonicalRedirectTarget(event: RequestEvent): URL | null {
 	return new URL(`${event.url.pathname}${event.url.search}`, canonicalBase);
 }
 
+// Well-known vulnerability-scanner probe paths (exposed .git/.env, WordPress, etc.). We have
+// none of these, so answer with a fast bare 404 instead of rendering a full SvelteKit error
+// page — saves compute and stops the noisy error-level logs these bot sweeps generate.
+const BOT_SCAN_RE =
+	/\/\.(git|env|svn|hg|aws|ssh)(\/|$)|\/wp-(admin|login|content|includes)|\/vendor\/|\/phpinfo|\/\.DS_Store/i;
+
 export const handle: Handle = async ({ event, resolve }) => {
+	if (BOT_SCAN_RE.test(event.url.pathname)) {
+		return new Response('Not Found', { status: 404 });
+	}
+
 	const canonicalRedirectTarget = getCanonicalRedirectTarget(event);
 	if (canonicalRedirectTarget) {
 		return new Response(null, {

@@ -14,18 +14,18 @@ export const AUTOMATION_JOBS = {
 	'payments-reconcile': {
 		name: 'payments-reconcile',
 		path: '/api/internal/cron/payments-reconcile',
-		schedule: 'every 5 minutes',
+		schedule: 'every 15 minutes',
 		risk: 'financial',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 5
+		expectedIntervalMinutes: 15
 	},
 	'abandoned-orders': {
 		name: 'abandoned-orders',
 		path: '/api/internal/cron/abandoned-orders',
-		schedule: 'every 10 minutes',
+		schedule: 'every 20 minutes',
 		risk: 'operational',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 10
+		expectedIntervalMinutes: 20
 	},
 	'exact-preview-thumbnails': {
 		name: 'exact-preview-thumbnails',
@@ -126,10 +126,10 @@ export const AUTOMATION_JOBS = {
 	'numbers-catalog-sync': {
 		name: 'numbers-catalog-sync',
 		path: '/api/internal/cron/numbers-catalog-sync',
-		schedule: 'daily 03:15',
+		schedule: 'every 30 minutes',
 		risk: 'operational',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 1440
+		expectedIntervalMinutes: 30
 	},
 	'promo-reminder': {
 		name: 'promo-reminder',
