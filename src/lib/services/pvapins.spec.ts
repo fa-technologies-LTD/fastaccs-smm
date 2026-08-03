@@ -19,6 +19,18 @@ describe('parsePvapinsSms (leak-safe: "received" iff a code is present)', () => 
 		expect(r).toMatchObject({ status: 'received', otp: '483920' });
 	});
 
+	it('handles the EXACT documented received shape (from/message/timestamp, code embedded mid-sentence)', () => {
+		const raw = JSON.stringify([
+			{
+				from: '22000',
+				message: 'If someone requests this code, it is a scam. Use code 418494 to verify.',
+				timestamp: '17/08/2025 08:15 pm'
+			}
+		]);
+		const r = parsePvapinsSms(raw);
+		expect(r).toMatchObject({ status: 'received', otp: '418494', from: '22000' });
+	});
+
 	it('detects a code from a JSON object shape', () => {
 		const r = parsePvapinsSms(JSON.stringify({ message: '[TikTok] 038502 is your verification code' }));
 		expect(r).toMatchObject({ status: 'received', otp: '038502' });
