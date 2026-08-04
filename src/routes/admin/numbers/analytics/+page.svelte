@@ -137,6 +137,7 @@
 					<th class="px-4 py-3">When</th>
 					<th class="px-4 py-3">Buyer</th>
 					<th class="px-4 py-3">Service</th>
+					<th class="px-4 py-3">Source</th>
 					<th class="px-4 py-3">Number</th>
 					<th class="px-4 py-3">Status</th>
 					<th class="px-4 py-3 text-right">Sale</th>
@@ -161,6 +162,15 @@
 							{/if}
 						</td>
 						<td class="px-4 py-2" style="color: var(--text);">{r.serviceName} — {r.countryName}</td>
+						<td class="px-4 py-2">
+							<span
+								class="inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold"
+								style={r.provider === 'pvapins'
+									? 'background: rgba(167,139,250,0.14); color: #a78bfa; border: 1px solid rgba(167,139,250,0.3);'
+									: 'background: rgba(56,189,248,0.12); color: #38bdf8; border: 1px solid rgba(56,189,248,0.28);'}
+								>{r.provider === 'pvapins' ? 'pvapins' : 'hub-man'}</span
+							>
+						</td>
 						<td class="px-4 py-2 font-mono" style="color: var(--text);">{r.phoneNumber ?? '—'}</td>
 						<td class="px-4 py-2 font-medium" style="color: {statusColor(r.status)};">{r.status}</td>
 						<td class="px-4 py-2 text-right" style="color: var(--text);">{ngn(r.saleNgn)}</td>
@@ -171,7 +181,7 @@
 				{/each}
 				{#if a.recent.length === 0}
 					<tr style="background: var(--surface);">
-						<td colspan="7" class="px-4 py-8 text-center" style="color: var(--text-dim);">No rentals yet.</td>
+						<td colspan="8" class="px-4 py-8 text-center" style="color: var(--text-dim);">No rentals yet.</td>
 					</tr>
 				{/if}
 			</tbody>

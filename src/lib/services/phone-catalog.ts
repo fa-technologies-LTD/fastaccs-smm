@@ -409,6 +409,7 @@ export interface NumbersAdminRow {
 	autoHidden: boolean; // hidden from storefront by the auto-rules
 	hideReason: string | null; // 'no_stock' | 'low_success'
 	active: boolean; // admin manual switch
+	primarySource: string; // 'hubman' | 'pvapins' — which source currently backs this tier
 }
 
 /**
@@ -461,7 +462,8 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 			available: live?.available ?? cfg.availableCount,
 			autoHidden,
 			hideReason,
-			active: tier.isActive
+			active: tier.isActive,
+			primarySource: String((tier.metadata as Record<string, unknown>)?.primary_source ?? 'hubman')
 		});
 	}
 

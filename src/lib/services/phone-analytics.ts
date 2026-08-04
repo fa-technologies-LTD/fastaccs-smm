@@ -77,6 +77,7 @@ export interface NumbersAnalytics {
 		countryName: string;
 		phoneNumber: string | null;
 		status: string;
+		provider: string;
 		saleNgn: number;
 		costUsd: number | null;
 		buyer: string | null;
@@ -175,6 +176,7 @@ export async function getNumbersAnalytics(): Promise<NumbersAnalytics> {
 				countryName: r.countryName,
 				phoneNumber: r.phoneNumber,
 				status: r.status,
+				provider: r.provider,
 				saleNgn: Number(r.saleAmountNgn ?? 0),
 				costUsd: r.costCents != null ? r.costCents / 100 : null,
 				buyer: u ? u.fullName?.trim() || u.email : null,

@@ -17,6 +17,7 @@
 		autoHidden: boolean;
 		hideReason: string | null;
 		active: boolean;
+		primarySource: string;
 	}
 
 	let rows = $state<Row[]>(data.rows.map((r) => ({ ...r })));
@@ -312,6 +313,7 @@
 				<tr class="text-left text-xs uppercase" style="color: var(--text-muted);">
 					<th class="px-4 py-3">Service</th>
 					<th class="px-4 py-3">Country</th>
+					<th class="px-4 py-3">Source</th>
 					<th class="px-4 py-3">Cost</th>
 					<th class="px-4 py-3">Price ₦</th>
 					<th class="px-4 py-3">Profit ₦</th>
@@ -326,6 +328,21 @@
 					<tr style="border-top: 1px solid var(--border); background: var(--surface);">
 						<td class="px-4 py-2 font-medium" style="color: var(--text);">{row.serviceName}</td>
 						<td class="px-4 py-2" style="color: var(--text-muted);">{row.countryName}</td>
+						<td class="px-4 py-2">
+							{#if row.primarySource === 'pvapins'}
+								<span
+									class="inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold"
+									style="background: rgba(167,139,250,0.14); color: #a78bfa; border: 1px solid rgba(167,139,250,0.3);"
+									>pvapins</span
+								>
+							{:else}
+								<span
+									class="inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold"
+									style="background: rgba(56,189,248,0.12); color: #38bdf8; border: 1px solid rgba(56,189,248,0.28);"
+									>hub-man</span
+								>
+							{/if}
+						</td>
 						<td class="px-4 py-2 whitespace-nowrap" style="color: var(--text-muted);">{costLabel(row)}</td>
 						<td class="px-4 py-2 font-semibold whitespace-nowrap" style="color: var(--text);">
 							₦{row.priceNgn.toLocaleString()}
@@ -362,7 +379,7 @@
 				{/each}
 				{#if visibleRows.length === 0}
 					<tr style="background: var(--surface);">
-						<td colspan="8" class="px-4 py-8 text-center" style="color: var(--text-dim);">
+						<td colspan="9" class="px-4 py-8 text-center" style="color: var(--text-dim);">
 							{rows.length === 0
 								? 'No tiers yet. Click “Expand catalog” to load the catalog.'
 								: 'No tiers for this app.'}
