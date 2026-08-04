@@ -5,6 +5,7 @@ import { getPhoneTierConfig, type PhoneTierConfig } from '$lib/helpers/phone-tie
 import { getPhonePricingConfig, computeMaxPriceCentsForSale } from './phone-pricing';
 import { creditStoreCredit, SC_CREDIT_REFUND } from './store-credit';
 import { sendCriticalAdminAlert } from './admin-alerts';
+import { providerForRental, refForRental, type ProviderSmsResult } from './number-providers';
 
 /**
  * Fulfillment for the automated Numbers service.
@@ -85,15 +86,19 @@ async function orderIdForItem(orderItemId: string): Promise<string | null> {
 	return oi?.orderId ?? null;
 }
 
-/** Persist a received OTP and complete the order. Idempotent (claims awaiting_sms). */
-async function markRentalReceived(orderItemId: string, sms: hubman.HubmanSms): Promise<boolean> {
+/** Persist a received OTP and complete the order. Idempotent (claims awaiting_sms).
+ * Takes a provider-normalized code (from any source), not hub-man's raw SMS shape. */
+async function markRentalReceived(
+	orderItemId: string,
+	received: { otp: string; message: string; from?: string }
+): Promise<boolean> {
 	const claim = await prisma.phoneRental.updateMany({
 		where: { orderItemId, status: 'awaiting_sms' },
 		data: {
 			status: 'received',
-			otp: resolveOtp(sms),
-			smsMessage: sms.message,
-			senderName: sms.sender_name,
+			otp: received.otp,
+			smsMessage: received.message,
+			senderName: received.from ?? null,
 			receivedAt: new Date()
 		}
 	});
@@ -435,45 +440,39 @@ export async function pollPhoneRentalSms(orderItemId: string): Promise<PhonePoll
 		}
 	}
 	// Rent claimed but not yet stored (another caller is renting) — still preparing.
-	if (rental.status !== 'awaiting_sms' || !rental.hubOrderUuid)
+	if (rental.status !== 'awaiting_sms' || !refForRental(rental))
 		return { status: 'preparing', message: 'Getting your number…' };
 
-	// hub-man only allows cancel 2 min after the number was RENTED (not when the row was
-	// created at payment — those differ now that renting is deferred to the order page).
+	// Cancel is only allowed a couple of minutes after the number was RENTED (not when the
+	// row was created at payment — those differ now that renting is deferred to the order page).
 	const rentBaseline = rental.rentedAt ?? rental.createdAt;
 	const canCancel = Date.now() - rentBaseline.getTime() > CANCEL_MIN_AGE_MS;
 
-	let sms: hubman.HubmanSms | null = null;
-	// hub-man returns 422 "order inactive/expired" once the activation window has closed —
-	// that's a definitive "dead, no code", not a transient failure, so it must reach the
-	// cancel+refund path below (otherwise the rental sticks in awaiting_sms forever).
-	let hubInactive = false;
-	try {
-		sms = await hubman.getSms(rental.hubOrderUuid);
-	} catch (error) {
-		hubInactive = error instanceof HubmanError && error.status === 422;
-		if (!hubInactive) {
-			console.error(`[phone.poll] getSms failed for ${orderItemId}:`, (error as Error).message);
-		}
-	}
+	// Poll whichever source served this rental (hub-man or pvapins) through the abstraction.
+	// 'received' → a code; 'expired' → provider says the window closed (→ cancel+refund below);
+	// 'error'/'waiting' → keep waiting until our own deadline.
+	const ref = refForRental(rental)!;
+	const poll: ProviderSmsResult = await providerForRental(rental)
+		.pollSms(ref)
+		.catch(() => ({ status: 'error', reason: 'poll failed' }) as ProviderSmsResult);
 
-	if (hasDeliveredSms(sms)) {
-		await markRentalReceived(orderItemId, sms!);
+	if (poll.status === 'received') {
+		await markRentalReceived(orderItemId, { otp: poll.otp, message: poll.message, from: poll.from });
 		return {
 			status: 'received',
 			phoneNumber: rental.phoneNumber ?? undefined,
-			otp: resolveOtp(sms!),
-			message: sms!.message
+			otp: poll.otp,
+			message: poll.message
 		};
 	}
 
-	// No code yet — has the window closed (by our clock, or per hub-man)?
+	// No code yet — has the window closed (by our clock, or because the provider says expired)?
 	const pricing = await getPhonePricingConfig();
 	const deadline = rental.expiresAt
 		? rental.expiresAt.getTime()
 		: rental.createdAt.getTime() + pricing.activationTimeoutMinutes * 60_000;
 
-	if (Date.now() > deadline || hubInactive) {
+	if (Date.now() > deadline || poll.status === 'expired') {
 		const outcome = await cancelAndRefundRental(
 			orderItemId,
 			'No code arrived — refunded to store credit'
@@ -523,38 +522,38 @@ export async function cancelAndRefundRental(
 	if (rental.status === 'received') return 'received';
 	if (TERMINAL_STATUSES.has(rental.status)) return 'refunded';
 
-	// Never rented (still pending) — no hub-man cost, safe to refund.
-	if (!rental.hubOrderUuid) {
+	// Never rented (still pending) — no provider cost to reclaim, safe to refund.
+	const ref = refForRental(rental);
+	if (!ref) {
 		const orderId = await orderIdForItem(orderItemId);
 		if (orderId) await refundPhoneOrderToStoreCredit(orderId, description, 'cancel');
 		return 'refunded';
 	}
 
-	// Authoritative check: does hub-man have a billable code for us?
-	let sms: hubman.HubmanSms | null = null;
-	try {
-		sms = await hubman.getSms(rental.hubOrderUuid); // null = waiting/no code
-	} catch (error) {
-		// 422 = expired/inactive → no retrievable code, refund-eligible. Anything else is
-		// transient — back off and let the next sweep retry rather than refunding blindly.
-		if (!(error instanceof HubmanError && error.status === 422)) {
-			return 'pending';
-		}
-	}
-	if (hasDeliveredSms(sms)) {
-		await markRentalReceived(orderItemId, sms!);
+	const provider = providerForRental(rental);
+
+	// Authoritative check: did the source deliver a billable code?
+	const poll = await provider
+		.pollSms(ref)
+		.catch(() => ({ status: 'error', reason: 'poll failed' }) as ProviderSmsResult);
+	// Transient failure → back off and let the next sweep retry rather than refunding blind.
+	if (poll.status === 'error') return 'pending';
+	if (poll.status === 'received') {
+		await markRentalReceived(orderItemId, { otp: poll.otp, message: poll.message, from: poll.from });
 		return 'received';
 	}
 
-	// No billable code yet. Try to cancel to release our balance. Defense-in-depth against the
-	// narrow race where a code lands between our check and the cancel: if hub-man REFUSES the
-	// cancel (it won't cancel a used/delivered number), re-check once and mark received rather
-	// than refunding a delivered activation.
-	const cancelled = await hubman.cancelRent(rental.hubOrderUuid).catch(() => false);
+	// No billable code (waiting/expired). Best-effort cancel to release our balance. Defense against
+	// the narrow race where a code lands between our check and the cancel: if the cancel is REFUSED
+	// (a used/delivered number can't be cancelled), re-check once and mark received rather than
+	// refunding a delivered activation.
+	const cancelled = await provider.cancel(ref).catch(() => false);
 	if (!cancelled) {
-		const late = await hubman.getSms(rental.hubOrderUuid).catch(() => null);
-		if (hasDeliveredSms(late)) {
-			await markRentalReceived(orderItemId, late!);
+		const late = await provider
+			.pollSms(ref)
+			.catch(() => ({ status: 'error', reason: 'recheck failed' }) as ProviderSmsResult);
+		if (late.status === 'received') {
+			await markRentalReceived(orderItemId, { otp: late.otp, message: late.message, from: late.from });
 			return 'received';
 		}
 	}
