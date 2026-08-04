@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Save, Phone, AlertTriangle, DollarSign } from '$lib/icons';
+	import { Save, Phone, AlertTriangle, DollarSign, Lock, Unlock } from '$lib/icons';
 	import { showSuccess, showError } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 
@@ -70,12 +70,11 @@
 		});
 		return res.json();
 	}
-	// Saving the rate/margin resyncs prices server-side, so we reload to show fresh figures.
 	async function saveAll() {
 		saving = true;
 		try {
-			const cfg = await post({ action: 'config', usdNgnRate, marginPercent });
-			if (!cfg.success) throw new Error(cfg.error || 'Failed to save settings');
+			// Apply per-tier changes first (prices, locks, active). A locked price persists; an
+			// unlocked one reverts to automatic pricing on the next sync.
 			const updates = rows.map((r) => ({
 				tierId: r.tierId,
 				active: r.active,
@@ -84,7 +83,20 @@
 			}));
 			const out = await post({ action: 'save', updates });
 			if (!out.success) throw new Error(out.error || 'Failed to save');
-			showSuccess('Saved. Prices recalculated from your rate + margin. Reloading…');
+
+			// Only re-sync from the rate/margin when they actually changed (a full re-price is slow).
+			// The sync respects locks, so locked prices stay put through a rate/margin change.
+			const rateMarginChanged =
+				usdNgnRate !== data.usdNgnRate || marginPercent !== data.marginPercent;
+			if (rateMarginChanged) {
+				const cfg = await post({ action: 'config', usdNgnRate, marginPercent });
+				if (!cfg.success) throw new Error(cfg.error || 'Failed to save settings');
+			}
+			showSuccess(
+				rateMarginChanged
+					? 'Saved. Unlocked prices recalculated; locked prices protected. Reloading…'
+					: 'Saved. Locked prices protected. Reloading…'
+			);
 			setTimeout(() => location.reload(), 900);
 		} catch (e) {
 			showError(e instanceof Error ? e.message : 'Save failed');
@@ -358,23 +370,30 @@
 									min="0"
 									step="50"
 									bind:value={row.priceNgn}
-									oninput={() => (row.priceLocked = true)}
 									class="w-24 rounded-md px-2 py-1 text-right font-semibold"
 									style="background: var(--bg-elev-1); border: 1px solid {row.priceLocked
 										? '#fbbf24'
 										: 'var(--border)'}; color: var(--text);"
-									title={row.priceLocked ? 'Manual price (locked)' : 'Auto price — edit to override'}
 								/>
-								{#if row.priceLocked}
-									<button
-										onclick={() => (row.priceLocked = false)}
-										class="text-[11px] hover:underline"
-										style="color: #fbbf24;"
-										title="Revert to automatic pricing on next save"
-									>
-										🔒 auto
-									</button>
-								{/if}
+								<button
+									onclick={() => (row.priceLocked = !row.priceLocked)}
+									class="flex items-center justify-center w-7 h-7 rounded-md transition-colors"
+									style="background: {row.priceLocked
+										? 'rgba(251,191,36,0.15)'
+										: 'var(--bg-elev-1)'}; border: 1px solid {row.priceLocked
+										? '#fbbf24'
+										: 'var(--border)'};"
+									title={row.priceLocked
+										? 'Locked — this price is protected from auto-repricing (rate/margin/refresh). Click to unlock.'
+										: 'Unlocked — follows automatic pricing. Set a price and click to lock it in place.'}
+									aria-label={row.priceLocked ? 'Unlock price' : 'Lock price'}
+								>
+									{#if row.priceLocked}
+										<Lock class="w-3.5 h-3.5" style="color: #fbbf24;" />
+									{:else}
+										<Unlock class="w-3.5 h-3.5" style="color: var(--text-dim);" />
+									{/if}
+								</button>
 							</div>
 						</td>
 						<td
