@@ -18,6 +18,7 @@
 		hideReason: string | null;
 		active: boolean;
 		primarySource: string;
+		priceLocked: boolean;
 	}
 
 	let rows = $state<Row[]>(data.rows.map((r) => ({ ...r })));
@@ -75,7 +76,12 @@
 		try {
 			const cfg = await post({ action: 'config', usdNgnRate, marginPercent });
 			if (!cfg.success) throw new Error(cfg.error || 'Failed to save settings');
-			const updates = rows.map((r) => ({ tierId: r.tierId, active: r.active }));
+			const updates = rows.map((r) => ({
+				tierId: r.tierId,
+				active: r.active,
+				priceNgn: r.priceLocked ? r.priceNgn : undefined,
+				lockPrice: r.priceLocked
+			}));
 			const out = await post({ action: 'save', updates });
 			if (!out.success) throw new Error(out.error || 'Failed to save');
 			showSuccess('Saved. Prices recalculated from your rate + margin. Reloading…');
@@ -344,8 +350,32 @@
 							{/if}
 						</td>
 						<td class="px-4 py-2 whitespace-nowrap" style="color: var(--text-muted);">{costLabel(row)}</td>
-						<td class="px-4 py-2 font-semibold whitespace-nowrap" style="color: var(--text);">
-							₦{row.priceNgn.toLocaleString()}
+						<td class="px-4 py-2 whitespace-nowrap">
+							<div class="flex items-center gap-1.5">
+								<span style="color: var(--text-muted);">₦</span>
+								<input
+									type="number"
+									min="0"
+									step="50"
+									bind:value={row.priceNgn}
+									oninput={() => (row.priceLocked = true)}
+									class="w-24 rounded-md px-2 py-1 text-right font-semibold"
+									style="background: var(--bg-elev-1); border: 1px solid {row.priceLocked
+										? '#fbbf24'
+										: 'var(--border)'}; color: var(--text);"
+									title={row.priceLocked ? 'Manual price (locked)' : 'Auto price — edit to override'}
+								/>
+								{#if row.priceLocked}
+									<button
+										onclick={() => (row.priceLocked = false)}
+										class="text-[11px] hover:underline"
+										style="color: #fbbf24;"
+										title="Revert to automatic pricing on next save"
+									>
+										🔒 auto
+									</button>
+								{/if}
+							</div>
 						</td>
 						<td
 							class="px-4 py-2 whitespace-nowrap"

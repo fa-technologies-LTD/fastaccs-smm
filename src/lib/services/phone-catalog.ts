@@ -227,9 +227,13 @@ export async function syncNumbersCatalog(
 			// added only when explicitly expanding.
 			if (!existingId && !options.expand) continue;
 
-			// Fully-automatic price, recomputed from live cost every refresh (never stale).
+			// Fully-automatic price, recomputed from live cost every refresh (never stale) — UNLESS
+			// the admin manually locked this tier's price, in which case we keep their figure.
 			// Auto-hide from the storefront when there's no live stock OR delivery is failing.
+			const oldMd = metaBySlug.get(slug);
+			const locked = isPriceLocked(oldMd);
 			const autoPrice = computeAutoPrice(costCents, pricing);
+			const finalPrice = locked ? readBasePrice(oldMd) || autoPrice : autoPrice;
 			const noStock = available <= 0;
 			const lowSuccess = lowSuccessKeys.has(`${serviceName}||${meta.name}`);
 			const autoHidden = noStock || lowSuccess;
@@ -246,7 +250,8 @@ export async function syncNumbersCatalog(
 				[PHONE_TIER_KEYS.autoHidden]: autoHidden,
 				[PHONE_TIER_KEYS.hideReason]: hideReason,
 				primary_source: 'hubman',
-				pricing: { currency: 'NGN', base_price: autoPrice }
+				price_locked: locked,
+				pricing: { currency: 'NGN', base_price: finalPrice }
 			};
 			const name = `${serviceName} — ${meta.name}`;
 			if (existingId) {
@@ -311,9 +316,17 @@ export async function syncNumbersCatalog(
 			pvAppsByCountryId.set(country.id, apps);
 		}
 		const matched = pvapinsAppsForService(service.pvapinsPrefixes, apps);
-		const costs = matched.map((a) => pvapins.usdStringToCents(a.deduct)).filter((n) => n > 0);
+		const costs = matched
+			.map((a) => pvapins.usdStringToCents(a.deduct))
+			.filter((n) => n > 0)
+			.sort((a, b) => a - b);
 		if (costs.length === 0) return null;
-		return { costCents: Math.min(...costs), count: matched.length };
+		// Reliability-first pricing (user choice). The ₦1,000-floor margin already lifts the rent
+		// ceiling to ~2.2× the basis cost, so a ~20th-percentile basis makes ~75–80% of suppliers
+		// affordable → strong failover → best delivery, at a sensible price (not the extreme a
+		// high-percentile basis would produce). The cheapest basis leaves only 1–2 usable.
+		const idx = Math.min(costs.length - 1, Math.floor(0.2 * costs.length));
+		return { costCents: costs[idx], count: matched.length };
 	}
 
 	for (const t of existingTiers) {
@@ -335,7 +348,10 @@ export async function syncNumbersCatalog(
 			: null;
 		if (fill && cfg) {
 			const wasHidden = md[PHONE_TIER_KEYS.autoHidden] === true;
-			const price = computeAutoPrice(fill.costCents, pricing);
+			// Keep a manually-locked price; otherwise price automatically from the pvapins cost.
+			const price = isPriceLocked(t.metadata)
+				? readBasePrice(t.metadata) || computeAutoPrice(fill.costCents, pricing)
+				: computeAutoPrice(fill.costCents, pricing);
 			md[PHONE_TIER_KEYS.expectedCostCents] = fill.costCents;
 			md[PHONE_TIER_KEYS.availableCount] = fill.count;
 			md[PHONE_TIER_KEYS.autoHidden] = false;
@@ -396,6 +412,13 @@ function readBasePrice(metadata: unknown): number {
 	return Number.isFinite(raw) && raw > 0 ? raw : 0;
 }
 
+/** A tier whose price the admin manually set — the auto-recompute must NOT overwrite it. */
+function isPriceLocked(metadata: unknown): boolean {
+	return Boolean(
+		metadata && typeof metadata === 'object' && (metadata as Record<string, unknown>).price_locked === true
+	);
+}
+
 export interface NumbersAdminRow {
 	tierId: string;
 	serviceId: number;
@@ -410,6 +433,7 @@ export interface NumbersAdminRow {
 	hideReason: string | null; // 'no_stock' | 'low_success'
 	active: boolean; // admin manual switch
 	primarySource: string; // 'hubman' | 'pvapins' — which source currently backs this tier
+	priceLocked: boolean; // admin manually set this price (auto-recompute won't overwrite it)
 }
 
 /**
@@ -444,7 +468,13 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 		if (!cfg) continue;
 		const live = liveCosts.get(cfg.countryId)?.get(cfg.serviceId) ?? null;
 		const costCents = live?.costCents ?? cfg.expectedCostCents;
-		const priceNgn = costCents ? computeAutoPrice(costCents, pricing) : readBasePrice(tier.metadata);
+		const priceLocked = isPriceLocked(tier.metadata);
+		// Locked tiers show the admin's figure; otherwise the automatic price.
+		const priceNgn = priceLocked
+			? readBasePrice(tier.metadata)
+			: costCents
+				? computeAutoPrice(costCents, pricing)
+				: readBasePrice(tier.metadata);
 		const costNgn = (costCents / 100) * pricing.usdNgnRate;
 		// Live stock decides no_stock; low_success comes from the stored flag (delivery history).
 		const liveNoStock = live ? live.available <= 0 : cfg.hideReason === 'no_stock';
@@ -463,7 +493,8 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 			autoHidden,
 			hideReason,
 			active: tier.isActive,
-			primarySource: String((tier.metadata as Record<string, unknown>)?.primary_source ?? 'hubman')
+			primarySource: String((tier.metadata as Record<string, unknown>)?.primary_source ?? 'hubman'),
+			priceLocked
 		});
 	}
 
@@ -475,19 +506,38 @@ export async function getNumbersCatalogForAdmin(): Promise<{
  * and never set here. A tier can't go active with no computed price.
  */
 export async function updateNumbersTiers(
-	updates: Array<{ tierId: string; active?: boolean }>
+	updates: Array<{ tierId: string; active?: boolean; priceNgn?: number; lockPrice?: boolean }>
 ): Promise<void> {
 	const platformId = await getNumbersPlatformId();
 	if (!platformId) return;
 	for (const u of updates) {
-		if (u.active == null) continue;
 		const tier = await prisma.category.findFirst({
 			where: { id: u.tierId, parentId: platformId },
 			select: { id: true, metadata: true }
 		});
 		if (!tier) continue;
-		const active = u.active === true && readBasePrice(tier.metadata) > 0;
-		await prisma.category.update({ where: { id: tier.id }, data: { isActive: active } });
+		const md =
+			tier.metadata && typeof tier.metadata === 'object' && !Array.isArray(tier.metadata)
+				? { ...(tier.metadata as Record<string, unknown>) }
+				: {};
+		const pricing: Record<string, unknown> =
+			md.pricing && typeof md.pricing === 'object'
+				? { ...(md.pricing as Record<string, unknown>) }
+				: { currency: 'NGN' };
+
+		// Manual price override — persists across the auto-recompute until unlocked.
+		if (u.priceNgn != null && Number.isFinite(u.priceNgn) && u.priceNgn >= 0) {
+			pricing.base_price = Math.round(u.priceNgn);
+			pricing.currency = 'NGN';
+			md.pricing = pricing;
+			md.price_locked = true;
+		}
+		// Explicit unlock → the next sync recomputes the automatic price.
+		if (u.lockPrice === false) md.price_locked = false;
+
+		const data: Prisma.CategoryUpdateInput = { metadata: md as Prisma.InputJsonValue };
+		if (u.active != null) data.isActive = u.active === true && readBasePrice(md) > 0;
+		await prisma.category.update({ where: { id: tier.id }, data });
 	}
 }
 
@@ -502,26 +552,6 @@ export interface NumbersStorefrontTier {
 	available: boolean; // false = temporarily out of stock / rotated out → shown muted, not buyable
 }
 
-// hub-man rotates which countries have numbers, so the daily catalog snapshot goes stale
-// between syncs. We filter the storefront by the CURRENT available-country list, cached
-// briefly so we don't call hub-man on every page load, and fail-open (never blank the store
-// on a hub-man blip — the authoritative buy-time check still protects the customer's money).
-let availableCountryCache: { ids: Set<number>; at: number } | null = null;
-const AVAILABLE_COUNTRY_TTL_MS = 120_000;
-async function getLiveAvailableCountryIds(): Promise<Set<number> | null> {
-	if (availableCountryCache && Date.now() - availableCountryCache.at < AVAILABLE_COUNTRY_TTL_MS) {
-		return availableCountryCache.ids;
-	}
-	try {
-		const ids = await hubman.getAvailableCountryIds();
-		if (ids.length === 0) return availableCountryCache?.ids ?? null; // treat empty as a blip
-		availableCountryCache = { ids: new Set(ids), at: Date.now() };
-		return availableCountryCache.ids;
-	} catch {
-		return availableCountryCache?.ids ?? null; // stale cache, or null = don't filter
-	}
-}
-
 /** Active, priced tiers for the storefront, grouped by service. */
 export async function getNumbersStorefront(): Promise<
 	Array<{ serviceId: number; serviceName: string; tiers: NumbersStorefrontTier[] }>
@@ -531,14 +561,11 @@ export async function getNumbersStorefront(): Promise<
 	if (!hubman.isHubmanConfigured()) return [];
 	const platformId = await getNumbersPlatformId();
 	if (!platformId) return [];
-	const [tiers, liveCountries] = await Promise.all([
-		prisma.category.findMany({
-			where: { parentId: platformId, isActive: true },
-			select: { id: true, metadata: true },
-			orderBy: { sortOrder: 'asc' }
-		}),
-		getLiveAvailableCountryIds()
-	]);
+	const tiers = await prisma.category.findMany({
+		where: { parentId: platformId, isActive: true },
+		select: { id: true, metadata: true },
+		orderBy: { sortOrder: 'asc' }
+	});
 
 	const byService = new Map<number, { serviceId: number; serviceName: string; tiers: NumbersStorefrontTier[] }>();
 	for (const tier of tiers) {
@@ -547,11 +574,11 @@ export async function getNumbersStorefront(): Promise<
 		if (!cfg || price <= 0) continue;
 		// Persistently-failing tiers are removed entirely — not shown as "temporarily unavailable".
 		if (cfg.hideReason === 'low_success') continue;
-		// A tier is buyable now only if it has stock (not auto-hidden) AND its country is in
-		// hub-man's current availability. Otherwise we still SHOW it, muted, so the customer
-		// sees we usually offer it — but it can't be bought (the buy-time guard also backs this).
-		const liveOk = liveCountries ? liveCountries.has(cfg.countryId) : true;
-		const available = !cfg.autoHidden && liveOk;
+		// Buyable now if the (two-source) sync says it has stock. autoHidden is maintained every
+		// 5 min across BOTH hub-man and pvapins, so a pvapins-only country (e.g. USA when hub-man
+		// is out) correctly shows available. Out-of-stock ones stay muted ("usually offered").
+		// The buy-time candidate pool + failover is the authoritative backstop either way.
+		const available = !cfg.autoHidden;
 		const countryCode = String((tier.metadata as Record<string, unknown>)?.hub_country_code || '');
 		if (!byService.has(cfg.serviceId))
 			byService.set(cfg.serviceId, { serviceId: cfg.serviceId, serviceName: cfg.serviceName, tiers: [] });
