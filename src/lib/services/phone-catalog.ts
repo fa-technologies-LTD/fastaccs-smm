@@ -121,6 +121,28 @@ function countryIdFromSlug(slug: string): number | null {
 	return m ? Number(m[1]) : null;
 }
 
+/**
+ * A signature of the only tier fields the sync ever changes (cost, price, stock, hidden flag,
+ * source). Comparing it lets a frequent sync SKIP writing tiers that didn't actually change —
+ * so we can run every few minutes for live availability without churning the DB.
+ */
+function economicsSignature(metadata: unknown): string {
+	const m =
+		metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+			? (metadata as Record<string, unknown>)
+			: {};
+	const pricing =
+		m.pricing && typeof m.pricing === 'object' ? (m.pricing as Record<string, unknown>) : {};
+	return JSON.stringify([
+		m[PHONE_TIER_KEYS.expectedCostCents] ?? null,
+		pricing.base_price ?? null,
+		m[PHONE_TIER_KEYS.availableCount] ?? null,
+		m[PHONE_TIER_KEYS.autoHidden] ?? null,
+		m[PHONE_TIER_KEYS.hideReason] ?? null,
+		m.primary_source ?? null
+	]);
+}
+
 export interface CatalogSyncResult {
 	created: number;
 	refreshed: number;
@@ -169,6 +191,7 @@ export async function syncNumbersCatalog(
 		select: { id: true, slug: true, metadata: true }
 	});
 	const idBySlug = new Map(existingTiers.map((t) => [t.slug, t.id]));
+	const metaBySlug = new Map(existingTiers.map((t) => [t.slug, t.metadata]));
 	// Prior auto-hidden state per tier, to detect an unavailable→available transition (restock).
 	const wasHiddenBySlug = new Map(
 		existingTiers.map((t) => [t.slug, getPhoneTierConfig(t.metadata)?.autoHidden ?? false])
@@ -222,17 +245,18 @@ export async function syncNumbersCatalog(
 				[PHONE_TIER_KEYS.availableCount]: available,
 				[PHONE_TIER_KEYS.autoHidden]: autoHidden,
 				[PHONE_TIER_KEYS.hideReason]: hideReason,
+				primary_source: 'hubman',
 				pricing: { currency: 'NGN', base_price: autoPrice }
 			};
 			const name = `${serviceName} — ${meta.name}`;
 			if (existingId) {
-				// Refresh cost, price, stock and auto-hidden flag. Do NOT flip isActive —
-				// that's the admin's manual switch; storefront visibility uses auto_hidden.
-				await prisma.category.update({
-					where: { id: existingId },
-					data: { metadata }
-				});
-				refreshed += 1;
+				// Refresh cost, price, stock and auto-hidden flag ONLY when something changed —
+				// so a frequent (every-few-minutes) sync doesn't rewrite unchanged tiers. Do NOT
+				// flip isActive — that's the admin's manual switch; visibility uses auto_hidden.
+				if (economicsSignature(metaBySlug.get(slug)) !== economicsSignature(metadata)) {
+					await prisma.category.update({ where: { id: existingId }, data: { metadata } });
+					refreshed += 1;
+				}
 				// Unavailable → available transition: queue a restock notification for subscribers.
 				if ((wasHiddenBySlug.get(slug) ?? false) && !autoHidden) {
 					becameAvailable.push({ tierId: existingId, name, price: autoPrice });
@@ -318,8 +342,10 @@ export async function syncNumbersCatalog(
 			md[PHONE_TIER_KEYS.hideReason] = null;
 			md.primary_source = 'pvapins';
 			md.pricing = { currency: 'NGN', base_price: price };
-			await prisma.category.update({ where: { id: t.id }, data: { metadata: md as Prisma.InputJsonValue } });
-			revivedByPvapins += 1;
+			if (economicsSignature(t.metadata) !== economicsSignature(md)) {
+				await prisma.category.update({ where: { id: t.id }, data: { metadata: md as Prisma.InputJsonValue } });
+				revivedByPvapins += 1;
+			}
 			if (wasHidden) {
 				becameAvailable.push({ tierId: t.id, name: `${cfg.serviceName} — ${cfg.countryName}`, price });
 			}
