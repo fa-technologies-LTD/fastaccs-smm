@@ -94,6 +94,7 @@ export async function getBalanceCents(): Promise<number> {
 export interface PvapinsCountry {
 	id: number;
 	full_name: string;
+	picture?: string; // e.g. ".../106321864_us.webp" — carries the ISO2 code
 }
 export async function loadCountries(): Promise<PvapinsCountry[]> {
 	const text = await pvapinsRequest('load_countries.php', {}, { withAuth: false });
