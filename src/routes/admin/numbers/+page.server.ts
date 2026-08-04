@@ -4,6 +4,7 @@ import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { getNumbersCatalogForAdmin, seedNumbersCatalog } from '$lib/services/phone-catalog';
 import { getPhonePricingConfig } from '$lib/services/phone-pricing';
 import { getBalanceCents, isHubmanConfigured } from '$lib/services/hubman';
+import { getBalanceCents as getPvapinsBalanceCents, isPvapinsConfigured } from '$lib/services/pvapins';
 import { getNumbersCampaignState } from '$lib/services/numbers-campaign';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -19,9 +20,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 
 	const pricing = await getPhonePricingConfig();
-	const hubBalanceCents = isHubmanConfigured()
-		? await getBalanceCents().catch(() => null)
-		: null;
+	const [hubBalanceCents, pvapinsBalanceCents] = await Promise.all([
+		isHubmanConfigured() ? getBalanceCents().catch(() => null) : null,
+		isPvapinsConfigured() ? getPvapinsBalanceCents().catch(() => null) : null
+	]);
 	const campaign = await getNumbersCampaignState();
 	const canManageCampaign = hasAdminPermission(locals.adminContext, 'admin:settings:manage');
 
@@ -29,8 +31,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 		rows: catalog.rows,
 		usdNgnRate: catalog.usdNgnRate,
 		marginPercent: catalog.marginPercent,
+		minProfitNgn: pricing.minProfitNgn,
 		lowBalanceThresholdCents: pricing.lowBalanceThresholdCents,
 		hubBalanceCents,
+		pvapinsBalanceCents,
 		hubmanConfigured: isHubmanConfigured(),
 		campaign,
 		canManageCampaign

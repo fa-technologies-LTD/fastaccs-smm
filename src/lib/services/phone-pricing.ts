@@ -19,6 +19,7 @@ const SETTINGS_CATEGORY = 'settings';
 const PHONE_PRICING_KEYS = {
 	usdNgnRate: 'config.phone.usd_ngn_rate',
 	marginPercent: 'config.phone.margin_percent',
+	minProfitNgn: 'config.phone.min_profit_ngn',
 	ceilingTolerancePercent: 'config.phone.ceiling_tolerance_percent',
 	lowBalanceThresholdCents: 'config.phone.low_balance_threshold_cents',
 	activationTimeoutMinutes: 'config.phone.activation_timeout_minutes'
@@ -27,6 +28,7 @@ const PHONE_PRICING_KEYS = {
 const DEFAULTS = {
 	usdNgnRate: Math.max(1, Number(env.HUBMAN_USD_NGN_RATE || 1700)),
 	marginPercent: 100, // 2× cost by default; David tunes this in admin
+	minProfitNgn: 1000, // floor profit per number; David can raise/lower it in admin
 	ceilingTolerancePercent: 20, // allow live cost up to 20% over expected before failing
 	lowBalanceThresholdCents: 500, // alert when hub-man balance drops below $5
 	activationTimeoutMinutes: 20 // wait this long for the OTP before auto-cancel+refund
@@ -44,6 +46,7 @@ export function roundNgnUp(amount: number, step = 100): number {
 export interface PhonePricingConfig {
 	usdNgnRate: number;
 	marginPercent: number;
+	minProfitNgn: number;
 	ceilingTolerancePercent: number;
 	lowBalanceThresholdCents: number;
 	activationTimeoutMinutes: number;
@@ -65,6 +68,7 @@ export async function getPhonePricingConfig(): Promise<PhonePricingConfig> {
 	return {
 		usdNgnRate: parseNumber(map.get(PHONE_PRICING_KEYS.usdNgnRate), DEFAULTS.usdNgnRate, 1),
 		marginPercent: parseNumber(map.get(PHONE_PRICING_KEYS.marginPercent), DEFAULTS.marginPercent, 0),
+		minProfitNgn: parseNumber(map.get(PHONE_PRICING_KEYS.minProfitNgn), DEFAULTS.minProfitNgn, 0),
 		ceilingTolerancePercent: parseNumber(
 			map.get(PHONE_PRICING_KEYS.ceilingTolerancePercent),
 			DEFAULTS.ceilingTolerancePercent,
@@ -89,6 +93,8 @@ export async function savePhonePricingConfig(input: Partial<PhonePricingConfig>)
 		entries.push([PHONE_PRICING_KEYS.usdNgnRate, Math.max(1, input.usdNgnRate), 'USD→NGN rate for Numbers pricing']);
 	if (input.marginPercent != null)
 		entries.push([PHONE_PRICING_KEYS.marginPercent, Math.max(0, input.marginPercent), 'Profit margin % on Numbers']);
+	if (input.minProfitNgn != null)
+		entries.push([PHONE_PRICING_KEYS.minProfitNgn, Math.max(0, Math.round(input.minProfitNgn)), 'Minimum profit floor per number (NGN)']);
 	if (input.ceilingTolerancePercent != null)
 		entries.push([
 			PHONE_PRICING_KEYS.ceilingTolerancePercent,
@@ -156,10 +162,11 @@ export const NUMBERS_MIN_PROFIT_NGN = 1000;
  */
 export function computeAutoPrice(
 	worstCaseCostCents: number,
-	config: Pick<PhonePricingConfig, 'usdNgnRate' | 'marginPercent'>
+	config: Pick<PhonePricingConfig, 'usdNgnRate' | 'marginPercent' | 'minProfitNgn'>
 ): number {
+	const minProfit = config.minProfitNgn ?? NUMBERS_MIN_PROFIT_NGN;
 	const costNgn = (Math.max(0, worstCaseCostCents) / 100) * config.usdNgnRate;
-	const floorPrice = roundNgnUp(costNgn + NUMBERS_MIN_PROFIT_NGN); // ≥ cost + ₦1,000, on a ₦100 grid
+	const floorPrice = roundNgnUp(costNgn + minProfit); // ≥ cost + min profit, on a ₦100 grid
 	return Math.max(computeSaleNgn(worstCaseCostCents, config), floorPrice);
 }
 
@@ -171,9 +178,10 @@ export function computeAutoPrice(
  */
 export function computeMaxPriceCentsForSale(
 	saleNgn: number,
-	config: Pick<PhonePricingConfig, 'usdNgnRate'>
+	config: Pick<PhonePricingConfig, 'usdNgnRate' | 'minProfitNgn'>
 ): number {
-	const usableNgn = Math.max(0, saleNgn - NUMBERS_MIN_PROFIT_NGN);
+	const minProfit = config.minProfitNgn ?? NUMBERS_MIN_PROFIT_NGN;
+	const usableNgn = Math.max(0, saleNgn - minProfit);
 	return Math.max(1, Math.floor((usableNgn / Math.max(1, config.usdNgnRate)) * 100));
 }
 

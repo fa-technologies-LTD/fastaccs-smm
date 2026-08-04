@@ -25,12 +25,16 @@
 	let rows = $state<Row[]>(data.rows.map((r) => ({ ...r })));
 	let usdNgnRate = $state(data.usdNgnRate);
 	let marginPercent = $state(data.marginPercent);
+	let minProfitNgn = $state(data.minProfitNgn);
 	let saving = $state(false);
 	let expanding = $state(false);
 	let appFilter = $state<'all' | number>('all');
 
 	const hubBalance = $derived(
 		data.hubBalanceCents == null ? null : (data.hubBalanceCents / 100).toFixed(2)
+	);
+	const pvapinsBalance = $derived(
+		data.pvapinsBalanceCents == null ? null : (data.pvapinsBalanceCents / 100).toFixed(2)
 	);
 	const lowBalance = $derived(
 		data.hubBalanceCents != null && data.hubBalanceCents < data.lowBalanceThresholdCents
@@ -92,9 +96,11 @@
 			// Only re-sync from the rate/margin when they actually changed (a full re-price is slow).
 			// The sync respects locks, so locked prices stay put through a rate/margin change.
 			const rateMarginChanged =
-				usdNgnRate !== data.usdNgnRate || marginPercent !== data.marginPercent;
+				usdNgnRate !== data.usdNgnRate ||
+				marginPercent !== data.marginPercent ||
+				minProfitNgn !== data.minProfitNgn;
 			if (rateMarginChanged) {
-				const cfg = await post({ action: 'config', usdNgnRate, marginPercent });
+				const cfg = await post({ action: 'config', usdNgnRate, marginPercent, minProfitNgn });
 				if (!cfg.success) throw new Error(cfg.error || 'Failed to save settings');
 			}
 			showSuccess(
@@ -225,7 +231,7 @@
 			rounded up to the nearest ₦100, and never less than <span class="font-mono">cost + ₦1,000</span>.
 			Prices update themselves on every refresh — you never set one by hand.
 		</p>
-		<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+		<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
 			<label class="block">
 				<span class="text-xs font-medium" style="color: var(--text-muted);">Dollar rate (₦ per $1)</span>
 				<input
@@ -246,9 +252,21 @@
 					style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
 				/>
 			</label>
+			<label class="block">
+				<span class="text-xs font-medium" style="color: var(--text-muted);">Min profit floor (₦)</span>
+				<input
+					type="number"
+					bind:value={minProfitNgn}
+					min="0"
+					step="100"
+					class="mt-1 w-full rounded-lg px-3 py-2"
+					style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
+				/>
+			</label>
 		</div>
 		<p class="text-xs mt-3" style="color: var(--text-dim);">
-			Hit <strong>Save</strong> to apply a new rate or margin — every price recalculates instantly.
+			Hit <strong>Save</strong> to apply a new rate, margin, or profit floor — unlocked prices
+			recalculate instantly; locked prices stay put.
 		</p>
 	</div>
 
@@ -293,7 +311,7 @@
 	{/if}
 
 	<!-- Balance -->
-	<div class="mb-6">
+	<div class="mb-6 flex flex-wrap items-center gap-3">
 		<div
 			class="inline-flex items-center gap-3 px-4 py-3 rounded-lg"
 			style="border: 1px solid {lowBalance ? '#dc2626' : 'var(--border)'}; background: {lowBalance
@@ -306,6 +324,15 @@
 			</span>
 			{#if lowBalance}<span class="text-xs" style="color: #f87171;">Low — top up soon</span>{/if}
 		</div>
+		{#if pvapinsBalance != null}
+			<div
+				class="inline-flex items-center gap-3 px-4 py-3 rounded-lg"
+				style="border: 1px solid rgba(167,139,250,0.3); background: rgba(167,139,250,0.08);"
+			>
+				<span class="text-xs" style="color: var(--text-muted);">pvapins balance</span>
+				<span class="text-lg font-bold" style="color: #a78bfa;">${pvapinsBalance}</span>
+			</div>
+		{/if}
 	</div>
 
 	<div class="flex items-center justify-between flex-wrap gap-3 mb-2">

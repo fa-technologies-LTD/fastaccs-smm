@@ -334,6 +334,27 @@ export async function syncNumbersCatalog(
 		return { costCents: costs[idx], count: matched.length };
 	}
 
+	// Pre-fetch pvapins app lists for every gap country IN PARALLEL (each is large + slow). Doing
+	// them sequentially blew the time budget and caused slow fetches to fail → tiers flickering
+	// hidden. Parallel + cached makes the gap-fill fast and reliable.
+	if (pvapinsReady && pvCountries.length > 0) {
+		const gapCountryIds = new Set<number>();
+		for (const t of existingTiers) {
+			if (seenSlugs.has(t.slug)) continue;
+			const cfg = getPhoneTierConfig(t.metadata);
+			if (!cfg) continue;
+			const code = String((t.metadata as Record<string, unknown>)?.hub_country_code ?? '');
+			const country = findPvapinsCountry(pvCountries, code, cfg.countryName);
+			if (country) gapCountryIds.add(country.id);
+		}
+		await Promise.all(
+			[...gapCountryIds].map(async (id) => {
+				if (pvAppsByCountryId.has(id)) return;
+				pvAppsByCountryId.set(id, await pvapins.loadApps(id).catch(() => 'failed' as const));
+			})
+		);
+	}
+
 	for (const t of existingTiers) {
 		if (!availabilityIsTrustworthy) break;
 		if (seenSlugs.has(t.slug)) continue;
