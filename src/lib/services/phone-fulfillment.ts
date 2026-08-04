@@ -10,6 +10,7 @@ import {
 	refForRental,
 	getProvider,
 	buildLiveCandidatePool,
+	candidateKeyFromRental,
 	type ProviderSmsResult,
 	type NumberProviderId
 } from './number-providers';
@@ -179,7 +180,8 @@ export interface PhoneFulfillmentResult {
  */
 export async function fulfillPhoneOrder(
 	orderId: string,
-	source: string
+	source: string,
+	options: { excludeKeys?: string[] } = {}
 ): Promise<PhoneFulfillmentResult> {
 	const ctx = await loadPhoneOrderContext(orderId);
 	if (!ctx) return { status: 'error', message: 'Not a phone order' };
@@ -238,7 +240,11 @@ export async function fulfillPhoneOrder(
 		hubCountryCode: ctx.tier.countryCode,
 		hubCountryName: ctx.tier.countryName
 	}).catch(() => []);
-	const affordable = pool.filter((c) => c.costCents <= maxPriceCents).slice(0, MAX_RENT_ATTEMPTS);
+	const excludeKeys = new Set(options.excludeKeys ?? []);
+	const affordable = pool
+		.filter((c) => c.costCents <= maxPriceCents)
+		.filter((c) => !excludeKeys.has(`${c.provider}:${c.providerServiceRef}`))
+		.slice(0, MAX_RENT_ATTEMPTS);
 
 	let rented: {
 		provider: NumberProviderId;
@@ -631,6 +637,86 @@ export async function userCancelPhoneRental(
 	if (outcome === 'refunded')
 		return { ok: true, outcome, message: 'Cancelled and refunded to your store credit.' };
 	return { ok: false, outcome, message: 'Could not cancel yet — please try again shortly.' };
+}
+
+// How many times a customer may "try another number" on one order before we refund instead.
+const MAX_CUSTOMER_RETRIES = 3;
+// A customer can request a retry only this long after the number was shown (gives the code a chance).
+const RETRY_MIN_AGE_MS = 60_000;
+
+/**
+ * Customer-initiated "try another number": when a code hasn't arrived, swap the current supplier
+ * for the next-best one WITHOUT re-charging the customer. Capped, release-before-retry, and it
+ * re-checks for a code first so a just-arrived code is never dropped.
+ */
+export async function customerRetryPhoneRental(
+	orderItemId: string
+): Promise<{ ok: boolean; status: string; phoneNumber?: string; message: string }> {
+	const rental = await prisma.phoneRental.findUnique({ where: { orderItemId } });
+	if (!rental) return { ok: false, status: 'unknown', message: 'Order not found.' };
+	if (rental.status === 'received')
+		return { ok: false, status: 'received', message: 'Your code already arrived — this order is complete.' };
+	if (TERMINAL_STATUSES.has(rental.status))
+		return { ok: false, status: rental.status, message: 'This order is already resolved.' };
+	if (rental.status !== 'awaiting_sms' || !refForRental(rental))
+		return { ok: false, status: 'preparing', message: 'Still getting your number — one moment.' };
+	if (Date.now() - (rental.rentedAt ?? rental.createdAt).getTime() < RETRY_MIN_AGE_MS)
+		return { ok: false, status: 'awaiting_sms', message: 'Give it a few more seconds before trying another.' };
+
+	const ref = refForRental(rental)!;
+	const provider = providerForRental(rental);
+
+	// Never drop a code that just arrived.
+	const poll = await provider
+		.pollSms(ref)
+		.catch(() => ({ status: 'error', reason: 'poll failed' }) as ProviderSmsResult);
+	if (poll.status === 'received') {
+		await markRentalReceived(orderItemId, { otp: poll.otp, message: poll.message, from: poll.from });
+		return {
+			ok: false,
+			status: 'received',
+			phoneNumber: rental.phoneNumber ?? undefined,
+			message: 'Your code just arrived!'
+		};
+	}
+
+	// Out of retries → cancel + refund instead of trying forever.
+	if ((rental.retryCount ?? 0) >= MAX_CUSTOMER_RETRIES) {
+		const outcome = await cancelAndRefundRental(orderItemId, 'No code after several tries — refunded to store credit');
+		if (outcome === 'received')
+			return { ok: false, status: 'received', message: 'Your code just arrived — this order is complete.' };
+		return {
+			ok: true,
+			status: 'refunded',
+			message: "We couldn't get a code after several tries — you've been refunded to store credit."
+		};
+	}
+
+	// Best-effort release of the current number, then rent the NEXT-best supplier (excluding this one).
+	await provider.cancel(ref).catch(() => {});
+	const excludeKey = candidateKeyFromRental(rental);
+	const orderId = await orderIdForItem(orderItemId);
+	if (!orderId) return { ok: false, status: 'error', message: 'Order not found.' };
+
+	// Reset to pending + count the retry, then re-fulfill excluding the supplier that didn't deliver.
+	await prisma.phoneRental.updateMany({
+		where: { orderItemId, status: 'awaiting_sms' },
+		data: {
+			status: 'pending',
+			hubOrderUuid: null,
+			providerRef: null,
+			phoneNumber: null,
+			otp: null,
+			smsMessage: null,
+			retryCount: { increment: 1 }
+		}
+	});
+
+	const r = await fulfillPhoneOrder(orderId, 'retry', { excludeKeys: [excludeKey] });
+	if (r.status === 'awaiting_sms')
+		return { ok: true, status: 'awaiting_sms', phoneNumber: r.phoneNumber, message: 'Here’s a fresh number — request your code again.' };
+	if (r.status === 'refunded') return { ok: true, status: 'refunded', message: r.message };
+	return { ok: false, status: r.status, message: r.message };
 }
 
 /** Alert (once per day) when our hub-man balance drops below the configured threshold. */

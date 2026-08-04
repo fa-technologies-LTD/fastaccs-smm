@@ -264,6 +264,7 @@ model PhoneRental {
   // pvapins (and any future source) stores its opaque handle in providerRef.
   provider      String    @default("hubman")
   providerRef   String?   @map("provider_ref")
+  retryCount    Int       @default(0) @map("retry_count") // customer 'try another' attempts used
   hubOrderUuid  String?   @map("hub_order_uuid")
   serviceId     Int       @map("service_id")
   serviceName   String    @map("service_name")

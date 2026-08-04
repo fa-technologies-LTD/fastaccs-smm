@@ -42,3 +42,4 @@ export * from './types';
 export { encodePvapinsRef, decodePvapinsRef } from './pvapins-provider';
 export { buildLiveCandidatePool } from './live-pool';
 export { type Candidate, rankCandidates, poolFloorCostCents } from './selection';
+export { candidateKeyFromRental, loadCandidateReliability, summarizeReliability } from './reliability';
