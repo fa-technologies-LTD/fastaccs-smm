@@ -136,9 +136,23 @@ export type PvapinsSmsResult =
 const SMS_WAITING_MARKERS = ['not received any code', 'no code yet', 'waiting'];
 const SMS_ERROR_MARKERS = ['balance is expired', 'balance expired', 'not found', 'expired'];
 
-function extractOtp(s: string): string {
-	const m = String(s).match(/(\d{4,8})/);
-	return m ? m[1] : '';
+/**
+ * Extract the OTP from a code/message. Handles SEPARATED codes like WhatsApp's "852-570"
+ * (confirmed live: pvapins returns the code hyphenated) — a naive /\d{4,8}/ misses those and
+ * would treat a delivered code as "still waiting" → refund a delivered code (the leak class).
+ */
+export function extractOtp(s: string): string {
+	const t = String(s ?? '');
+	// 1) A run of 4-8 consecutive digits (the common case).
+	const run = t.match(/\d{4,8}/);
+	if (run) return run[0];
+	// 2) A code split by a single separator: "852-570", "852 570", "852.570".
+	const split = t.match(/\d{2,4}[\s\-.]\d{2,4}/);
+	if (split) {
+		const digits = split[0].replace(/\D/g, '');
+		if (digits.length >= 4 && digits.length <= 8) return digits;
+	}
+	return '';
 }
 
 /**

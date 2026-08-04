@@ -57,9 +57,20 @@ export interface NumberProvider {
 	cancel(providerRef: string): Promise<boolean>;
 }
 
-/** OTP shown to the customer: a provider's parsed code, or the first 4–8 digit run in the text. */
+/**
+ * OTP shown to the customer: a provider's parsed code, else extracted from the message.
+ * Handles SEPARATED codes ("852-570" — WhatsApp via pvapins, confirmed live) so a delivered
+ * code is never mistaken for "no code yet" (which would refund a delivered code — the leak class).
+ */
 export function resolveOtpFromText(otp: string | null | undefined, message: string | null | undefined): string {
 	if (otp && otp.trim()) return otp.trim();
-	const m = String(message ?? '').match(/(\d{4,8})/);
-	return m ? m[1] : '';
+	const t = String(message ?? '');
+	const run = t.match(/\d{4,8}/);
+	if (run) return run[0];
+	const split = t.match(/\d{2,4}[\s\-.]\d{2,4}/);
+	if (split) {
+		const digits = split[0].replace(/\D/g, '');
+		if (digits.length >= 4 && digits.length <= 8) return digits;
+	}
+	return '';
 }

@@ -25,6 +25,10 @@ describe('resolveOtpFromText', () => {
 	it('falls back to the first 4–8 digit run in the message', () => {
 		expect(resolveOtpFromText('', 'Use code 418494 to verify')).toBe('418494');
 	});
+	it('extracts a hyphen-split code like WhatsApp "852-570" (real live shape)', () => {
+		expect(resolveOtpFromText('', '852-570')).toBe('852570');
+		expect(resolveOtpFromText(null, 'Your code: 852 570')).toBe('852570');
+	});
 	it('returns empty when there is no code', () => {
 		expect(resolveOtpFromText(null, 'no digits here')).toBe('');
 	});

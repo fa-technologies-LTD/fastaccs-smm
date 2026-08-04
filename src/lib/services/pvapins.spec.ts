@@ -41,6 +41,13 @@ describe('parsePvapinsSms (leak-safe: "received" iff a code is present)', () => 
 		expect(r).toMatchObject({ status: 'received', otp: '771234' });
 	});
 
+	it('handles the REAL live shape — a bare hyphenated WhatsApp code "852-570" (captured 2026-08-04)', () => {
+		// get_sms returned exactly this; a naive /\d{4,8}/ would have said "waiting" → refund a
+		// delivered code. Must be received with the hyphen stripped.
+		const r = parsePvapinsSms('852-570');
+		expect(r).toMatchObject({ status: 'received', otp: '852570' });
+	});
+
 	it('surfaces a balance-expired error rather than settling or refunding blindly', () => {
 		expect(parsePvapinsSms('Your balance is expired').status).toBe('error');
 	});
