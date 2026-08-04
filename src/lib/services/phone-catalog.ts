@@ -1,6 +1,8 @@
 import { prisma } from '$lib/prisma';
 import { Prisma } from '@prisma/client';
 import * as hubman from './hubman';
+import * as pvapins from './pvapins';
+import { serviceByHubId, pvapinsAppsForService, findPvapinsCountry } from './number-providers/service-map';
 import { getPhonePricingConfig, computeAutoPrice } from './phone-pricing';
 import { getLowSuccessTierKeys } from './phone-analytics';
 import { triggerNumbersRestockForTier } from './restock-notifications';
@@ -260,8 +262,36 @@ export async function syncNumbersCatalog(
 	//  - only when we actually got a countries list (empty list already returned early above),
 	//  - skip a country whose per-country fetch FAILED this run (transient, not a real rotation).
 	let rotatedOut = 0;
+	let revivedByPvapins = 0;
 	// Empty countries list = a hub-man blip, not "everything rotated out" — never mass-hide.
 	const availabilityIsTrustworthy = countryIds.length > 0;
+
+	// pvapins fills hub-man's gaps: a tier hub-man rotated out stays LIVE (priced from pvapins)
+	// if pvapins carries that service+country. Fetched lazily and cached per country. Fail-soft.
+	const pvapinsReady = pvapins.isPvapinsConfigured();
+	const pvCountries = pvapinsReady ? await pvapins.loadCountries().catch(() => []) : [];
+	const pvAppsByCountryId = new Map<number, Awaited<ReturnType<typeof pvapins.loadApps>>>();
+	async function pvapinsFillFor(
+		hubCode: string,
+		hubName: string,
+		serviceId: number
+	): Promise<{ costCents: number; count: number } | null> {
+		if (!pvapinsReady) return null;
+		const service = serviceByHubId(serviceId);
+		if (!service) return null;
+		const country = findPvapinsCountry(pvCountries, hubCode, hubName);
+		if (!country) return null;
+		let apps = pvAppsByCountryId.get(country.id);
+		if (!apps) {
+			apps = await pvapins.loadApps(country.id).catch(() => []);
+			pvAppsByCountryId.set(country.id, apps);
+		}
+		const matched = pvapinsAppsForService(service.pvapinsPrefixes, apps);
+		const costs = matched.map((a) => pvapins.usdStringToCents(a.deduct)).filter((n) => n > 0);
+		if (costs.length === 0) return null;
+		return { costCents: Math.min(...costs), count: matched.length };
+	}
+
 	for (const t of existingTiers) {
 		if (!availabilityIsTrustworthy) break;
 		if (seenSlugs.has(t.slug)) continue;
@@ -273,6 +303,29 @@ export async function syncNumbersCatalog(
 			t.metadata && typeof t.metadata === 'object' && !Array.isArray(t.metadata)
 				? { ...(t.metadata as Record<string, unknown>) }
 				: {};
+
+		// Can pvapins fill this hub-man gap? Revive it (priced from pvapins) instead of hiding.
+		const cfg = getPhoneTierConfig(t.metadata);
+		const fill = cfg
+			? await pvapinsFillFor(String(md.hub_country_code ?? ''), cfg.countryName, cfg.serviceId)
+			: null;
+		if (fill && cfg) {
+			const wasHidden = md[PHONE_TIER_KEYS.autoHidden] === true;
+			const price = computeAutoPrice(fill.costCents, pricing);
+			md[PHONE_TIER_KEYS.expectedCostCents] = fill.costCents;
+			md[PHONE_TIER_KEYS.availableCount] = fill.count;
+			md[PHONE_TIER_KEYS.autoHidden] = false;
+			md[PHONE_TIER_KEYS.hideReason] = null;
+			md.primary_source = 'pvapins';
+			md.pricing = { currency: 'NGN', base_price: price };
+			await prisma.category.update({ where: { id: t.id }, data: { metadata: md as Prisma.InputJsonValue } });
+			revivedByPvapins += 1;
+			if (wasHidden) {
+				becameAvailable.push({ tierId: t.id, name: `${cfg.serviceName} — ${cfg.countryName}`, price });
+			}
+			continue;
+		}
+
 		// Already flagged no-stock? Skip the write.
 		if (md[PHONE_TIER_KEYS.autoHidden] === true && md[PHONE_TIER_KEYS.hideReason] === 'no_stock') {
 			continue;
@@ -285,6 +338,9 @@ export async function syncNumbersCatalog(
 			data: { metadata: md as Prisma.InputJsonValue }
 		});
 		rotatedOut += 1;
+	}
+	if (revivedByPvapins > 0) {
+		console.log(`[phone-catalog] pvapins filled ${revivedByPvapins} hub-man gap tier(s)`);
 	}
 
 	// Notify "Notify me" subscribers for tiers that came back in stock (best-effort, never
