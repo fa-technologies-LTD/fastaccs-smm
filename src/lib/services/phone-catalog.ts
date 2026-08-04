@@ -299,22 +299,27 @@ export async function syncNumbersCatalog(
 	// if pvapins carries that service+country. Fetched lazily and cached per country. Fail-soft.
 	const pvapinsReady = pvapins.isPvapinsConfigured();
 	const pvCountries = pvapinsReady ? await pvapins.loadCountries().catch(() => []) : [];
-	const pvAppsByCountryId = new Map<number, Awaited<ReturnType<typeof pvapins.loadApps>>>();
+	type PvApps = Awaited<ReturnType<typeof pvapins.loadApps>>;
+	const pvAppsByCountryId = new Map<number, PvApps | 'failed'>();
+	// Returns coverage (revive), null (pvapins genuinely has none → mark no-stock), or
+	// 'fetch_failed' (a transient pvapins error — leave the tier as-is, never flip it to no-stock).
 	async function pvapinsFillFor(
 		hubCode: string,
 		hubName: string,
 		serviceId: number
-	): Promise<{ costCents: number; count: number } | null> {
+	): Promise<{ costCents: number; count: number } | null | 'fetch_failed'> {
 		if (!pvapinsReady) return null;
+		if (pvCountries.length === 0) return 'fetch_failed'; // loadCountries failed/blipped
 		const service = serviceByHubId(serviceId);
 		if (!service) return null;
 		const country = findPvapinsCountry(pvCountries, hubCode, hubName);
 		if (!country) return null;
 		let apps = pvAppsByCountryId.get(country.id);
-		if (!apps) {
-			apps = await pvapins.loadApps(country.id).catch(() => []);
+		if (apps === undefined) {
+			apps = await pvapins.loadApps(country.id).catch(() => 'failed' as const);
 			pvAppsByCountryId.set(country.id, apps);
 		}
+		if (apps === 'failed') return 'fetch_failed';
 		const matched = pvapinsAppsForService(service.pvapinsPrefixes, apps);
 		const costs = matched
 			.map((a) => pvapins.usdStringToCents(a.deduct))
@@ -346,6 +351,8 @@ export async function syncNumbersCatalog(
 		const fill = cfg
 			? await pvapinsFillFor(String(md.hub_country_code ?? ''), cfg.countryName, cfg.serviceId)
 			: null;
+		// A transient pvapins failure must NOT flip a tier to no-stock — leave it exactly as it is.
+		if (fill === 'fetch_failed') continue;
 		if (fill && cfg) {
 			const wasHidden = md[PHONE_TIER_KEYS.autoHidden] === true;
 			// Keep a manually-locked price; otherwise price automatically from the pvapins cost.
@@ -426,6 +433,7 @@ export interface NumbersAdminRow {
 	countryId: number;
 	countryName: string;
 	liveCostCents: number | null;
+	costCents: number; // effective cost used for pricing (USD cents) — for live profit calc
 	priceNgn: number; // fully automatic (cost × margin, ₦1,000 floor) — read-only
 	profitNgn: number; // priceNgn − liveCostNGN, for a quick margin read
 	available: number; // live stock at last fetch
@@ -466,7 +474,11 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 	for (const tier of tiers) {
 		const cfg = getPhoneTierConfig(tier.metadata);
 		if (!cfg) continue;
-		const live = liveCosts.get(cfg.countryId)?.get(cfg.serviceId) ?? null;
+		const primarySource = String((tier.metadata as Record<string, unknown>)?.primary_source ?? 'hubman');
+		const isPvapins = primarySource === 'pvapins';
+		// hub-man tiers get a fresh live cost/stock; pvapins tiers TRUST the stored two-source state
+		// (hub-man live is irrelevant to them — that's what made them wrongly read "0 / no stock").
+		const live = isPvapins ? null : (liveCosts.get(cfg.countryId)?.get(cfg.serviceId) ?? null);
 		const costCents = live?.costCents ?? cfg.expectedCostCents;
 		const priceLocked = isPriceLocked(tier.metadata);
 		// Locked tiers show the admin's figure; otherwise the automatic price.
@@ -476,24 +488,30 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 				? computeAutoPrice(costCents, pricing)
 				: readBasePrice(tier.metadata);
 		const costNgn = (costCents / 100) * pricing.usdNgnRate;
-		// Live stock decides no_stock; low_success comes from the stored flag (delivery history).
-		const liveNoStock = live ? live.available <= 0 : cfg.hideReason === 'no_stock';
-		const autoHidden = liveNoStock || cfg.autoHidden;
-		const hideReason = liveNoStock ? 'no_stock' : cfg.autoHidden ? cfg.hideReason ?? 'no_stock' : null;
+		const liveNoStock = isPvapins ? false : live ? live.available <= 0 : cfg.hideReason === 'no_stock';
+		const autoHidden = isPvapins ? cfg.autoHidden : liveNoStock || cfg.autoHidden;
+		const hideReason = isPvapins
+			? cfg.hideReason
+			: liveNoStock
+				? 'no_stock'
+				: cfg.autoHidden
+					? cfg.hideReason ?? 'no_stock'
+					: null;
 		rows.push({
 			tierId: tier.id,
 			serviceId: cfg.serviceId,
 			serviceName: cfg.serviceName,
 			countryId: cfg.countryId,
 			countryName: cfg.countryName,
-			liveCostCents: live?.costCents ?? null,
+			liveCostCents: live?.costCents ?? (isPvapins ? costCents : null),
+			costCents,
 			priceNgn,
 			profitNgn: Math.round(priceNgn - costNgn),
-			available: live?.available ?? cfg.availableCount,
+			available: isPvapins ? cfg.availableCount : live?.available ?? cfg.availableCount,
 			autoHidden,
 			hideReason,
 			active: tier.isActive,
-			primarySource: String((tier.metadata as Record<string, unknown>)?.primary_source ?? 'hubman'),
+			primarySource,
 			priceLocked
 		});
 	}

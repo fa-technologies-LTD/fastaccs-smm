@@ -11,6 +11,7 @@
 		serviceName: string;
 		countryName: string;
 		liveCostCents: number | null;
+		costCents: number;
 		priceNgn: number;
 		profitNgn: number;
 		available: number;
@@ -38,7 +39,7 @@
 	const liveCount = $derived(
 		rows.filter((r) => r.active && r.priceNgn > 0 && !r.autoHidden).length
 	);
-	const flaggedCount = $derived(rows.filter((r) => r.autoHidden || r.profitNgn < 1000).length);
+	const flaggedCount = $derived(rows.filter((r) => r.autoHidden || profitOf(r) < 1000).length);
 
 	// Distinct apps for the sort/filter dropdown, in the order they appear.
 	const apps = $derived.by(() => {
@@ -54,11 +55,15 @@
 		if (r.liveCostCents == null) return '—';
 		return `$${(r.liveCostCents / 100).toFixed(2)}`;
 	}
+	// Live profit — recomputes as the admin types/locks a price (price − cost at the current rate).
+	function profitOf(r: Row): number {
+		return Math.round(r.priceNgn - (r.costCents / 100) * usdNgnRate);
+	}
 	function flag(r: Row): { text: string; color: string } | null {
 		if (r.autoHidden && r.hideReason === 'low_success')
 			return { text: 'Hidden · low success', color: '#f59e0b' };
 		if (r.autoHidden) return { text: 'Hidden · no stock', color: '#94a3b8' };
-		if (r.profitNgn < 1000) return { text: `Low profit · ₦${r.profitNgn.toLocaleString()}`, color: '#dc2626' };
+		if (profitOf(r) < 1000) return { text: `Low profit · ₦${profitOf(r).toLocaleString()}`, color: '#dc2626' };
 		return null;
 	}
 
@@ -397,10 +402,10 @@
 							</div>
 						</td>
 						<td
-							class="px-4 py-2 whitespace-nowrap"
-							style="color: {row.profitNgn < 1000 ? '#f87171' : '#34d399'};"
+							class="px-4 py-2 whitespace-nowrap font-medium"
+							style="color: {profitOf(row) < 1000 ? '#f87171' : '#34d399'};"
 						>
-							₦{row.profitNgn.toLocaleString()}
+							₦{profitOf(row).toLocaleString()}
 						</td>
 						<td class="px-4 py-2" style="color: {row.available <= 0 ? '#f87171' : 'var(--text-muted)'};">
 							{row.available.toLocaleString()}

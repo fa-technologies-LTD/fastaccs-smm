@@ -108,7 +108,13 @@ export interface PvapinsApp {
 	trending: number;
 }
 export async function loadApps(countryId: number): Promise<PvapinsApp[]> {
-	const text = await pvapinsRequest('load_apps.php', { country_id: countryId }, { withAuth: false });
+	// The app list is large (~11k apps / ~270KB) and pvapins can be slow to serve it — allow more
+	// time so a slow response doesn't get read as "no coverage" (which would hide the tier).
+	const text = await pvapinsRequest(
+		'load_apps.php',
+		{ country_id: countryId },
+		{ withAuth: false, timeoutMs: 45000 }
+	);
 	return parseJsonArray(text) as PvapinsApp[];
 }
 
