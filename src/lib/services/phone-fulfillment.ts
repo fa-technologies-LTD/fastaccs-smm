@@ -5,7 +5,18 @@ import { getPhoneTierConfig, type PhoneTierConfig } from '$lib/helpers/phone-tie
 import { getPhonePricingConfig, computeMaxPriceCentsForSale } from './phone-pricing';
 import { creditStoreCredit, SC_CREDIT_REFUND } from './store-credit';
 import { sendCriticalAdminAlert } from './admin-alerts';
-import { providerForRental, refForRental, type ProviderSmsResult } from './number-providers';
+import {
+	providerForRental,
+	refForRental,
+	getProvider,
+	buildLiveCandidatePool,
+	type ProviderSmsResult,
+	type NumberProviderId
+} from './number-providers';
+
+// How many candidate suppliers we'll try to rent from before giving up + refunding. Bounds the
+// work and (for pay-on-rent hub-man) the cost; pvapins failures are free (pay-on-success).
+const MAX_RENT_ATTEMPTS = 4;
 
 /**
  * Fulfillment for the automated Numbers service.
@@ -212,29 +223,61 @@ export async function fulfillPhoneOrder(
 		};
 	}
 
-	// We own the rent. Pay up to (sale price − ₦1,000 profit floor), in USD cents — so we
-	// rent any in-stock number that still clears our profit floor, and never below it.
-	// Sticky pricing keeps price ≥ worst-case cost + ₦1,000, so this ceiling reliably
-	// covers what's actually in stock (no more "no available number" refund loops).
+	// We own the rent. Pay up to (sale price − ₦1,000 profit floor), in USD cents — so we rent
+	// any in-stock number that still clears our profit floor, and never below it.
 	const maxPriceCents = computeMaxPriceCentsForSale(ctx.saleAmountNgn, pricing);
 
-	// Step 1: rent. A failure here means no number and no charge to reclaim → refund.
-	let result: hubman.HubmanRentResult;
-	try {
-		result = await hubman.rentActivationNumber({
-			countryId: ctx.tier.countryId,
-			serviceId: ctx.tier.serviceId,
-			maxPriceCents
-		});
-	} catch (error) {
-		const reason =
-			error instanceof HubmanError
-				? `hub-man rent failed: ${error.message}`
-				: `rent error: ${(error as Error).message}`;
-		console.error(`[phone.${source}] ${reason} (order ${ctx.orderNumber})`);
+	// Step 1: build the ranked candidate pool (hub-man + pvapins suppliers) and rent the best
+	// one we can afford. FAILOVER: an out-of-stock / over-ceiling / erroring candidate is skipped
+	// and we try the next — invisible to the customer. A candidate whose cost exceeds our ceiling
+	// is filtered out entirely (protects the ₦1,000 profit floor for BOTH providers). No candidate
+	// succeeds → no number and (for pay-on-success pvapins) no charge → refund.
+	const pool = await buildLiveCandidatePool({
+		hubServiceId: ctx.tier.serviceId,
+		hubCountryId: ctx.tier.countryId,
+		hubCountryCode: ctx.tier.countryCode,
+		hubCountryName: ctx.tier.countryName
+	}).catch(() => []);
+	const affordable = pool.filter((c) => c.costCents <= maxPriceCents).slice(0, MAX_RENT_ATTEMPTS);
+
+	let rented: {
+		provider: NumberProviderId;
+		providerRef: string;
+		phoneNumber: string;
+		costCents: number;
+		expiresAt: Date | null;
+	} | null = null;
+	let lastError = affordable.length === 0 ? 'no affordable in-stock supplier' : '';
+	for (const candidate of affordable) {
+		try {
+			const r = await getProvider(candidate.provider).rent({
+				serviceId: ctx.tier.serviceId,
+				countryId: ctx.tier.countryId,
+				serviceName: ctx.tier.serviceName,
+				countryName: ctx.tier.countryName,
+				providerServiceRef: candidate.providerServiceRef,
+				providerCountryRef: candidate.providerCountryRef,
+				maxPriceCents,
+				expectedCostCents: candidate.costCents
+			});
+			rented = {
+				provider: candidate.provider,
+				providerRef: r.providerRef,
+				phoneNumber: formatPhoneNumber(r.phoneNumber),
+				costCents: Number(r.costCents),
+				expiresAt: r.expiresAt
+			};
+			break;
+		} catch (error) {
+			lastError = `${candidate.label}: ${(error as Error).message}`;
+			console.error(`[phone.${source}] rent via ${lastError}`);
+		}
+	}
+
+	if (!rented) {
 		await prisma.phoneRental.updateMany({
 			where: { orderItemId: ctx.orderItemId, status: 'renting' },
-			data: { status: 'failed', failureReason: reason }
+			data: { status: 'failed', failureReason: `no candidate: ${lastError}`.slice(0, 200) }
 		});
 		await refundPhoneOrderToStoreCredit(orderId, 'We could not get your number — fully refunded', source);
 		return {
@@ -244,24 +287,23 @@ export async function fulfillPhoneOrder(
 		};
 	}
 
-	// Step 2: the number is now billed on hub-man. Persist it (with retries). If we can
-	// NEVER persist it, cancel it on hub-man to reclaim our balance and refund — so a
-	// rented number is always either recorded, or cancelled+refunded (never orphaned,
-	// never double-rented).
-	const costCents = Number(result.price_cents);
-	const expiresAt = result.expires_at ? new Date(result.expires_at) : null;
+	// Step 2: the number is now held on the provider. Persist it (with retries). If we can NEVER
+	// persist it, cancel it on the provider to release/reclaim and refund — so a held number is
+	// always either recorded, or cancelled+refunded (never orphaned, never double-charged).
 	let persisted = false;
 	for (let attempt = 0; attempt < 3 && !persisted; attempt++) {
 		try {
 			await prisma.phoneRental.update({
 				where: { orderItemId: ctx.orderItemId },
 				data: {
-					hubOrderUuid: result.order_uuid,
-					phoneNumber: formatPhoneNumber(result.phone_number),
-					costCents: Number.isFinite(costCents) ? Math.round(costCents) : null,
+					provider: rented.provider,
+					providerRef: rented.providerRef,
+					hubOrderUuid: rented.provider === 'hubman' ? rented.providerRef : null,
+					phoneNumber: rented.phoneNumber,
+					costCents: Number.isFinite(rented.costCents) ? Math.round(rented.costCents) : null,
 					maxPriceCents: maxPriceCents ?? null,
 					rentedAt: new Date(),
-					expiresAt,
+					expiresAt: rented.expiresAt,
 					status: 'awaiting_sms'
 				}
 			});
@@ -273,7 +315,7 @@ export async function fulfillPhoneOrder(
 	}
 
 	if (!persisted) {
-		await hubman.cancelRent(result.order_uuid).catch(() => {});
+		await getProvider(rented.provider).cancel(rented.providerRef).catch(() => {});
 		await prisma.phoneRental
 			.updateMany({
 				where: { orderItemId: ctx.orderItemId, status: 'renting' },
@@ -287,7 +329,7 @@ export async function fulfillPhoneOrder(
 		).catch(() => {});
 		await sendCriticalAdminAlert({
 			title: 'Phone rent could not be recorded',
-			message: `Rented hub-man ${result.order_uuid} for order ${ctx.orderNumber} but failed to persist it; cancelled + refunded. Verify the rent is released on hub-man.`,
+			message: `Rented ${rented.provider} ${rented.providerRef} for order ${ctx.orderNumber} but failed to persist it; cancelled + refunded. Verify the rent is released on the provider.`,
 			source: `phone.${source}`,
 			dedupeKey: `phone-persist-fail:${ctx.orderItemId}`
 		}).catch(() => {});
@@ -307,7 +349,7 @@ export async function fulfillPhoneOrder(
 
 	return {
 		status: 'awaiting_sms',
-		phoneNumber: formatPhoneNumber(result.phone_number),
+		phoneNumber: rented.phoneNumber,
 		message: 'Your number is ready — waiting for the code'
 	};
 }

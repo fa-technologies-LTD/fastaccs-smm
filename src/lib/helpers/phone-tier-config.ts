@@ -25,6 +25,7 @@ export interface PhoneTierConfig {
 	countryId: number;
 	serviceName: string;
 	countryName: string;
+	countryCode: string; // ISO2 (for matching pvapins countries)
 	expectedCostCents: number;
 	availableCount: number;
 	autoHidden: boolean;
@@ -51,6 +52,7 @@ export function getPhoneTierConfig(metadata: unknown): PhoneTierConfig | null {
 		countryId,
 		serviceName: String(r[PHONE_TIER_KEYS.serviceName] || `Service ${serviceId}`),
 		countryName: String(r[PHONE_TIER_KEYS.countryName] || `Country ${countryId}`),
+		countryCode: String(r.hub_country_code || ''),
 		expectedCostCents: Number.isFinite(expectedCostCents) && expectedCostCents > 0 ? expectedCostCents : 0,
 		availableCount: Number.isFinite(availableCount) && availableCount > 0 ? availableCount : 0,
 		autoHidden: r[PHONE_TIER_KEYS.autoHidden] === true,
