@@ -1,4 +1,5 @@
 import type { NumberProviderId } from './types';
+import type { ReliabilityStat } from './reliability';
 
 /**
  * Candidate-pool selection. A storefront product (service×country) is backed by many candidate
@@ -54,4 +55,45 @@ export function poolFloorCostCents(candidates: Candidate[]): number | null {
 	const inStock = candidates.filter((c) => c.available > 0 && c.costCents > 0);
 	if (inStock.length === 0) return null;
 	return Math.min(...inStock.map((c) => c.costCents));
+}
+
+/**
+ * Assemble a product's candidate pool from provider-availability inputs, attach each supplier's
+ * learned reliability, and return it in fulfillment order (ranked). Pure — the caller fetches the
+ * live availability/cost; this stitches in reliability and ranks. `available` for pvapins is
+ * "presumed" (pvapins doesn't expose per-app stock), and rent-time failover confirms it.
+ */
+export function buildCandidatePool(input: {
+	hub?: { serviceRef: string; countryRef: string; costCents: number; available: number } | null;
+	pvapins: Array<{ app: string; countryName: string; costCents: number; available: number }>;
+	reliability: Map<string, ReliabilityStat>;
+}): Candidate[] {
+	const candidates: Candidate[] = [];
+	if (input.hub) {
+		const stat = input.reliability.get(`hubman:${input.hub.serviceRef}`);
+		candidates.push({
+			provider: 'hubman',
+			providerServiceRef: input.hub.serviceRef,
+			providerCountryRef: input.hub.countryRef,
+			label: `hubman:${input.hub.serviceRef}`,
+			costCents: input.hub.costCents,
+			available: input.hub.available,
+			reliability: stat?.reliability ?? null,
+			sampleSize: stat?.total ?? 0
+		});
+	}
+	for (const p of input.pvapins) {
+		const stat = input.reliability.get(`pvapins:${p.app}`);
+		candidates.push({
+			provider: 'pvapins',
+			providerServiceRef: p.app,
+			providerCountryRef: p.countryName,
+			label: `pvapins:${p.app}`,
+			costCents: p.costCents,
+			available: p.available,
+			reliability: stat?.reliability ?? null,
+			sampleSize: stat?.total ?? 0
+		});
+	}
+	return rankCandidates(candidates);
 }

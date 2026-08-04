@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { rankCandidates, poolFloorCostCents, effectiveReliability, type Candidate } from './selection';
+import {
+	rankCandidates,
+	poolFloorCostCents,
+	effectiveReliability,
+	buildCandidatePool,
+	type Candidate
+} from './selection';
+import type { ReliabilityStat } from './reliability';
 
 const c = (over: Partial<Candidate>): Candidate => ({
 	provider: 'pvapins',
@@ -61,6 +68,35 @@ describe('effectiveReliability', () => {
 	});
 	it('uses the measured value once trusted', () => {
 		expect(effectiveReliability({ reliability: 0.9, sampleSize: 20 })).toBe(0.9);
+	});
+});
+
+describe('buildCandidatePool', () => {
+	it('merges hub-man + pvapins, attaches reliability, and ranks by it (bad supplier sinks)', () => {
+		const reliability = new Map<string, ReliabilityStat>([
+			['pvapins:Whatsapp24', { received: 18, total: 20, reliability: 0.9 }],
+			['pvapins:Whatsapp46', { received: 1, total: 20, reliability: 0.05 }],
+			['hubman:1', { received: 5, total: 20, reliability: 0.25 }]
+		]);
+		const pool = buildCandidatePool({
+			hub: { serviceRef: '1', countryRef: '58', costCents: 50, available: 3 },
+			pvapins: [
+				{ app: 'Whatsapp24', countryName: 'USA', costCents: 66, available: 5 },
+				{ app: 'Whatsapp46', countryName: 'USA', costCents: 40, available: 5 }
+			],
+			reliability
+		});
+		// Whatsapp24 (0.9) first; the rate-limited Whatsapp46 (0.05) last despite being cheapest.
+		expect(pool.map((c) => c.label)).toEqual(['pvapins:Whatsapp24', 'hubman:1', 'pvapins:Whatsapp46']);
+	});
+
+	it('lists an unproven pvapins supplier ahead of a proven-poor hub-man one', () => {
+		const pool = buildCandidatePool({
+			hub: { serviceRef: '1', countryRef: '58', costCents: 50, available: 3 },
+			pvapins: [{ app: 'Whatsapp99', countryName: 'USA', costCents: 66, available: 5 }],
+			reliability: new Map([['hubman:1', { received: 2, total: 20, reliability: 0.1 }]])
+		});
+		expect(pool[0].label).toBe('pvapins:Whatsapp99');
 	});
 });
 
