@@ -30,6 +30,11 @@
 	let cancelledByUser = $state(false);
 	let refundMessage = $state<string | null>(phone.refundMessage ?? null);
 	let now = $state(Date.now());
+	// When the customer taps "I've requested the code", we start a focused window; if the code
+	// doesn't land in it, we offer "try another number". (We can't detect the request otherwise.)
+	const EXPECTED_CODE_MS = 75_000;
+	let requestedAt = $state<number | null>(null);
+	let retrying = $state(false);
 
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 	let clockTimer: ReturnType<typeof setInterval> | null = null;
@@ -48,6 +53,51 @@
 	const countdown = $derived(
 		secondsLeft == null ? '' : `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`
 	);
+
+	// "Soda bar" progress toward the expected code arrival, once the customer says they requested it.
+	const requestProgress = $derived(
+		requestedAt == null ? 0 : Math.min(100, ((now - requestedAt) / EXPECTED_CODE_MS) * 100)
+	);
+	const showTryAnother = $derived(
+		isWaiting && requestedAt != null && now - requestedAt >= EXPECTED_CODE_MS
+	);
+
+	function requestCode() {
+		requestedAt = Date.now();
+	}
+
+	async function tryAnother() {
+		if (retrying) return;
+		retrying = true;
+		try {
+			const res = await fetch(`/api/numbers/${phone.orderItemId}/retry`, { method: 'POST' });
+			const data = await res.json();
+			if (data.status === 'awaiting_sms') {
+				phoneNumber = data.phoneNumber ?? phoneNumber;
+				status = 'awaiting_sms';
+				requestedAt = null; // re-request on the fresh number
+				expiresAt = null;
+				showSuccess('Fresh number ready', data.message);
+				if (!pollTimer) pollTimer = setInterval(poll, 3000);
+				poll();
+			} else if (data.status === 'received') {
+				status = 'received';
+				await poll();
+				showWarning('Code arrived', data.message);
+			} else if (data.status === 'refunded') {
+				status = 'refunded';
+				refundMessage = data.message;
+				stopPolling();
+				showSuccess('Refunded', data.message);
+			} else {
+				showWarning('One moment', data.message);
+			}
+		} catch {
+			showError('Could not try another', 'Please try again in a moment.');
+		} finally {
+			retrying = false;
+		}
+	}
 
 	async function poll() {
 		try {
@@ -180,32 +230,61 @@
 				<RefreshCw class="w-4 h-4 animate-spin" style="color: #38bdf8;" />
 				Getting your number…
 			</div>
-			<div class="text-xs mt-2" style="color: var(--text-dim);">
+			<div class="text-xs mt-2 mb-3" style="color: var(--text-dim);">
 				This takes just a moment. Your {phone.serviceName} number will appear here.
 			</div>
+			<div class="soda-track"><div class="soda-fill soda-fill-indeterminate"></div></div>
 		</div>
 	{:else if isWaiting}
-		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
-			<div class="inline-flex items-center gap-2" style="color: var(--text);">
-				<RefreshCw class="w-4 h-4 animate-spin" style="color: #38bdf8;" />
-				Waiting for your code…
-			</div>
-			{#if countdown}
-				<div class="text-xs mt-1" style="color: var(--text-muted);">Expires in {countdown}</div>
-			{/if}
-			<div class="text-xs mt-2" style="color: var(--text-dim);">
-				Enter this number on {phone.serviceName} now. Your code appears here automatically.
-			</div>
-			{#if canCancel}
-				<button
-					onclick={cancelNumber}
-					disabled={cancelling}
-					class="mt-3 inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-60"
-					style="border: 1px solid var(--border); color: var(--text-muted);"
-				>
-					<X class="w-3.5 h-3.5" />
-					{cancelling ? 'Cancelling…' : 'No code? Cancel & refund'}
-				</button>
+		<div class="rounded-lg px-4 py-4" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
+			{#if !requestedAt}
+				<!-- Number in hand — prompt to request the code (we can't detect the request otherwise). -->
+				<div class="text-center text-sm" style="color: var(--text);">
+					Enter this number on {phone.serviceName}, then request your verification code.
+				</div>
+				<button onclick={requestCode} class="soda-cta mt-3">✓ I’ve requested the code</button>
+				<div class="text-xs mt-2 text-center" style="color: var(--text-dim);">
+					Your code appears here automatically the moment it arrives.
+				</div>
+			{:else}
+				<!-- Requested — a calm progress bar fills toward the expected arrival. -->
+				<div class="flex items-center justify-center gap-2 text-sm mb-3" style="color: var(--text);">
+					{#if showTryAnother}
+						<AlertTriangle class="w-4 h-4" style="color: #fbbf24;" />
+						Taking longer than usual…
+					{:else}
+						<RefreshCw class="w-4 h-4 animate-spin" style="color: #38bdf8;" />
+						Your code should arrive any moment…
+					{/if}
+				</div>
+				<div class="soda-track">
+					<div
+						class="soda-fill"
+						class:soda-fill-done={showTryAnother}
+						style="width: {requestProgress}%;"
+					></div>
+				</div>
+				{#if showTryAnother}
+					<div class="flex flex-wrap items-center justify-center gap-2 mt-4">
+						<button onclick={tryAnother} disabled={retrying} class="soda-cta">
+							{retrying ? 'Finding a stronger number…' : 'Try another number'}
+						</button>
+						{#if canCancel}
+							<button
+								onclick={cancelNumber}
+								disabled={cancelling}
+								class="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium disabled:opacity-60"
+								style="border: 1px solid var(--border); color: var(--text-muted);"
+							>
+								<X class="w-3.5 h-3.5" />
+								{cancelling ? 'Cancelling…' : 'Cancel & refund'}
+							</button>
+						{/if}
+					</div>
+					<div class="text-xs mt-2 text-center" style="color: var(--text-dim);">
+						"Try another" swaps to a different supplier — no extra charge.
+					</div>
+				{/if}
 			{/if}
 		</div>
 	{:else if isRefunded}
@@ -220,3 +299,72 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	/* "Soda bar": a calm, filling progress bar to reduce waiting anxiety (vs a stark countdown). */
+	.soda-track {
+		height: 8px;
+		border-radius: 999px;
+		background: rgba(148, 163, 184, 0.14);
+		overflow: hidden;
+		border: 1px solid var(--border);
+	}
+	.soda-fill {
+		height: 100%;
+		border-radius: 999px;
+		background: linear-gradient(90deg, #38bdf8, #34d399);
+		transition: width 0.9s linear;
+		box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+	}
+	.soda-fill-done {
+		background: linear-gradient(90deg, #f59e0b, #fbbf24);
+		box-shadow: 0 0 12px rgba(245, 158, 11, 0.5);
+	}
+	.soda-fill-indeterminate {
+		width: 40%;
+		animation: soda-slide 1.4s ease-in-out infinite;
+	}
+	@keyframes soda-slide {
+		0% {
+			margin-left: -40%;
+		}
+		100% {
+			margin-left: 100%;
+		}
+	}
+	.soda-cta {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		padding: 9px 20px;
+		border-radius: 999px;
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: #0b1220;
+		background: linear-gradient(90deg, #38bdf8, #34d399);
+		box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+		border: none;
+		cursor: pointer;
+		transition: transform 0.1s ease, filter 0.1s ease;
+	}
+	.soda-cta:hover {
+		filter: brightness(1.08);
+	}
+	.soda-cta:active {
+		transform: scale(0.97);
+	}
+	.soda-cta:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.soda-fill {
+			transition: none;
+		}
+		.soda-fill-indeterminate {
+			animation: none;
+			margin-left: 30%;
+		}
+	}
+</style>
