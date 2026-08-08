@@ -16,6 +16,7 @@ import {
 } from '$lib/helpers/business-timezone';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
+import { getAcquisitionBreakdown } from '$lib/services/acquisition-analytics';
 import { getFeatureFlagSnapshot } from '$lib/services/feature-flags';
 import {
 	buildRevenueOrderWhere,
@@ -838,9 +839,15 @@ export const load: PageServerLoad = async ({ locals }) => {
 			return null;
 		});
 
+		const acquisition = await getAcquisitionBreakdown(90).catch((error) => {
+			console.error('Failed to load acquisition breakdown:', error);
+			return null;
+		});
+
 		return toSerializableDecimals({
 			stats,
 			userAnalytics,
+			acquisition,
 			canViewRevenue: revenueVisible,
 			integrity: {
 				checkedAt: new Date().toISOString(),

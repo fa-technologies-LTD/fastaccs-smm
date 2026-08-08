@@ -51,6 +51,20 @@
 	type AnalyticsTab = 'overview' | 'users' | 'numbers';
 	let activeTab = $state<AnalyticsTab>('overview');
 	const ua = $derived((data.userAnalytics ?? null) as Record<string, any> | null);
+	const acq = $derived(
+		(data.acquisition ?? null) as {
+			rows: Array<{
+				source: string;
+				signups: number;
+				buyers: number;
+				revenueNgn: number;
+				convPct: number;
+			}>;
+			totalSignups: number;
+			attributedSignups: number;
+			windowDays: number;
+		} | null
+	);
 	const uaMaxSignup = $derived(
 		ua?.signupsByDay?.length ? Math.max(1, ...ua.signupsByDay.map((d: any) => d.count)) : 1
 	);
@@ -539,6 +553,69 @@
 				{/if}
 			</section>
 		</div>
+
+		{#if acq}
+			<section
+				class="mb-4 rounded-lg p-3"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
+				<div class="flex items-baseline justify-between gap-2">
+					<h2 class="text-base font-semibold" style="color: var(--text)">
+						Signups &amp; Revenue by Source (Last {acq.windowDays} Days)
+					</h2>
+					<span class="text-xs" style="color: var(--text-muted);"
+						>{acq.attributedSignups}/{acq.totalSignups} attributed</span
+					>
+				</div>
+				{#if acq.rows.length}
+					<div class="mt-3 overflow-x-auto">
+						<table class="w-full text-sm">
+							<thead>
+								<tr
+									class="text-left text-xs uppercase tracking-wide"
+									style="color: var(--text-muted);"
+								>
+									<th class="py-2 pr-3 font-medium">Source</th>
+									<th class="px-3 py-2 text-right font-medium">Signups</th>
+									<th class="px-3 py-2 text-right font-medium">Buyers</th>
+									<th class="px-3 py-2 text-right font-medium">Conv.</th>
+									<th class="py-2 pl-3 text-right font-medium">Revenue</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each acq.rows as r}
+									<tr style="border-top: 1px solid var(--border);">
+										<td
+											class="py-2 pr-3 font-medium"
+											style="color: {r.source === 'untracked'
+												? 'var(--text-dim)'
+												: 'var(--text)'};">{r.source}</td
+										>
+										<td class="px-3 py-2 text-right" style="color: var(--text-muted);">{r.signups}</td>
+										<td class="px-3 py-2 text-right" style="color: var(--text-muted);">{r.buyers}</td>
+										<td class="px-3 py-2 text-right" style="color: var(--text-muted);"
+											>{r.convPct.toFixed(0)}%</td
+										>
+										<td
+											class="py-2 pl-3 text-right font-semibold"
+											style="color: var(--fa-green-500);">{formatMoney(r.revenueNgn)}</td
+										>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					{#if acq.attributedSignups === 0}
+						<p class="mt-3 text-xs" style="color: var(--text-dim);">
+							Attribution just went live — new signups will show their real source here (existing
+							users are “untracked”).
+						</p>
+					{/if}
+				{:else}
+					<p class="mt-3 text-sm" style="color: var(--text-muted);">No signups in this window yet.</p>
+				{/if}
+			</section>
+		{/if}
 
 		<div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
 			<section

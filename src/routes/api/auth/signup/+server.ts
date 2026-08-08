@@ -9,6 +9,7 @@ import {
 	hashPassword
 } from '$lib/auth/password';
 import { getUserTypeFromEmail } from '$lib/auth/admin';
+import { ATTRIBUTION_COOKIE, parseAttribution, attributionToUserFields } from '$lib/services/attribution';
 import { createSession, generateSessionToken, setSessionTokenCookie } from '$lib/auth/session';
 import {
 	SIGNUP_RATE_LIMITS,
@@ -160,7 +161,8 @@ export const POST: RequestHandler = async (event) => {
 				emailVerified: false,
 				emailVerifiedAt: null,
 				registeredAt: new Date(),
-				lastLogin: new Date()
+				lastLogin: new Date(),
+				...attributionToUserFields(parseAttribution(event.cookies.get(ATTRIBUTION_COOKIE)))
 			}
 		});
 

@@ -25,7 +25,10 @@ export async function getUserFromEmail(email: string): Promise<User | null> {
 }
 
 // Create new user from Google OAuth data
-export async function createUserFromGoogle(googleUser: GoogleUserData): Promise<User> {
+export async function createUserFromGoogle(
+	googleUser: GoogleUserData,
+	attribution: Record<string, string | null> = {}
+): Promise<User> {
 	const userType = getUserTypeFromEmail(googleUser.email);
 	// Google already verified the email; trust it
 	const now = new Date();
@@ -41,7 +44,8 @@ export async function createUserFromGoogle(googleUser: GoogleUserData): Promise<
 			emailVerifiedAt: now,
 			registeredAt: now,
 			lastLogin: now,
-			lastSeenAt: now
+			lastSeenAt: now,
+			...attribution
 		}
 	});
 }

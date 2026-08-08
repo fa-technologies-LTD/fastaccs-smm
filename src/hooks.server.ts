@@ -14,6 +14,7 @@ import {
 	shouldLogAdminMutation
 } from '$lib/services/admin-audit';
 import { recordUserPresenceIfStale, shouldRecordUserPresence } from '$lib/services/user-presence';
+import { ATTRIBUTION_COOKIE, ATTRIBUTION_MAX_AGE_S, buildFirstTouch } from '$lib/services/attribution';
 import type { Handle, RequestEvent } from '@sveltejs/kit';
 
 const GENERIC_API_ERROR_MESSAGE = 'Internal server error';
@@ -148,10 +149,37 @@ function getCanonicalRedirectTarget(event: RequestEvent): URL | null {
 const BOT_SCAN_RE =
 	/\/\.(git|env|svn|hg|aws|ssh)(\/|$)|\/wp-(admin|login|content|includes)|\/vendor\/|\/phpinfo|\/\.DS_Store/i;
 
+// First-touch acquisition capture: on a visitor's first attributable page GET, record where they
+// came from in a first-party cookie (utm_source, else the referrer domain). Persisted at signup.
+function captureFirstTouch(event: RequestEvent): void {
+	if (event.request.method !== 'GET') return;
+	if (event.url.pathname.startsWith('/api/')) return;
+	if (event.cookies.get(ATTRIBUTION_COOKIE)) return; // first-touch wins — never overwrite
+	const attr = buildFirstTouch({
+		searchParams: event.url.searchParams,
+		referrer: event.request.headers.get('referer') || '',
+		pathname: event.url.pathname,
+		ownHost: getIncomingHost(event)
+	});
+	if (!attr) return;
+	try {
+		event.cookies.set(ATTRIBUTION_COOKIE, JSON.stringify(attr), {
+			path: '/',
+			maxAge: ATTRIBUTION_MAX_AGE_S,
+			httpOnly: true,
+			sameSite: 'lax'
+		});
+	} catch {
+		/* cookie set is best-effort; never block the request */
+	}
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
 	if (BOT_SCAN_RE.test(event.url.pathname)) {
 		return new Response('Not Found', { status: 404 });
 	}
+
+	captureFirstTouch(event);
 
 	const canonicalRedirectTarget = getCanonicalRedirectTarget(event);
 	if (canonicalRedirectTarget) {

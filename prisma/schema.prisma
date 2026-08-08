@@ -27,6 +27,12 @@ model User {
   emailVerified           Boolean             @default(false) @map("email_verified")
   emailVerifiedAt         DateTime?           @map("email_verified_at")
   registeredAt            DateTime            @default(now()) @map("registered_at")
+  // First-touch acquisition attribution (where this user originally came from).
+  acquisitionSource       String?             @map("acquisition_source")
+  acquisitionMedium       String?             @map("acquisition_medium")
+  acquisitionCampaign     String?             @map("acquisition_campaign")
+  acquisitionReferrer     String?             @map("acquisition_referrer")
+  acquisitionLanding      String?             @map("acquisition_landing")
   lastLogin               DateTime?           @map("last_login")
   lastSeenAt              DateTime?           @map("last_seen_at")
   marketingEmailEnabled   Boolean             @default(true) @map("marketing_email_enabled")
