@@ -326,11 +326,13 @@ export async function syncNumbersCatalog(
 			.filter((n) => n > 0)
 			.sort((a, b) => a - b);
 		if (costs.length === 0) return null;
-		// Reliability-first pricing (user choice). The ₦1,000-floor margin already lifts the rent
-		// ceiling to ~2.2× the basis cost, so a ~20th-percentile basis makes ~75–80% of suppliers
-		// affordable → strong failover → best delivery, at a sensible price (not the extreme a
-		// high-percentile basis would produce). The cheapest basis leaves only 1–2 usable.
-		const idx = Math.min(costs.length - 1, Math.floor(0.2 * costs.length));
+		// Availability-first pricing (user choice): price off the ~90th-percentile supplier cost so
+		// the rent ceiling covers virtually EVERY variant. Combined with the full-ladder sweep, we
+		// can afford whichever variant is in stock at the moment — price high, rent the cheapest
+		// available, pocket the spread. The 90th percentile is an outlier-robust "high" (it ignores
+		// the top ~10%, so one scam/outlier price can't spike the sticker). Admin can price-lock to
+		// hand-tune any tier.
+		const idx = Math.min(costs.length - 1, Math.floor(0.9 * costs.length));
 		return { costCents: costs[idx], count: matched.length };
 	}
 

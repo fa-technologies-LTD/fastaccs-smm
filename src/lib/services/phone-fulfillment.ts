@@ -2,7 +2,7 @@ import { prisma } from '$lib/prisma';
 import * as hubman from './hubman';
 import { HubmanError } from './hubman';
 import { getPhoneTierConfig, type PhoneTierConfig } from '$lib/helpers/phone-tier-config';
-import { getPhonePricingConfig, computeMaxPriceCentsForSale } from './phone-pricing';
+import { getPhonePricingConfig } from './phone-pricing';
 import { creditStoreCredit, SC_CREDIT_REFUND } from './store-credit';
 import { sendCriticalAdminAlert } from './admin-alerts';
 import {
@@ -15,9 +15,12 @@ import {
 	type NumberProviderId
 } from './number-providers';
 
-// How many candidate suppliers we'll try to rent from before giving up + refunding. Bounds the
-// work and (for pay-on-rent hub-man) the cost; pvapins failures are free (pay-on-success).
-const MAX_RENT_ATTEMPTS = 4;
+// Sweep the price ladder: try up to this many suppliers, cheapest-first, before giving up. High
+// because pvapins out-of-stock tries are FREE (pay-on-success) — we'd rather climb the ladder than
+// refund. Bounded by MAX_RENT_ATTEMPTS (a hard cap) AND RENT_SWEEP_BUDGET_MS (so the customer isn't
+// left waiting, and we respect pvapins' ~5/min rate limit).
+const MAX_RENT_ATTEMPTS = 20;
+const RENT_SWEEP_BUDGET_MS = 22_000;
 
 /**
  * Fulfillment for the automated Numbers service.
@@ -225,15 +228,15 @@ export async function fulfillPhoneOrder(
 		};
 	}
 
-	// We own the rent. Pay up to (sale price − ₦1,000 profit floor), in USD cents — so we rent
-	// any in-stock number that still clears our profit floor, and never below it.
-	const maxPriceCents = computeMaxPriceCentsForSale(ctx.saleAmountNgn, pricing);
+	// We own the rent. Ceiling = BREAK-EVEN (never a loss): the sale price already bakes in ≥₦1,000
+	// over the ~90th-percentile supplier cost, so we prefer the cheapest in-stock variant (fat
+	// margin) but will climb to a pricier in-stock one — down to zero profit — rather than refund.
+	const breakEvenCents = Math.floor((ctx.saleAmountNgn / Math.max(1, pricing.usdNgnRate)) * 100);
 
-	// Step 1: build the ranked candidate pool (hub-man + pvapins suppliers) and rent the best
-	// one we can afford. FAILOVER: an out-of-stock / over-ceiling / erroring candidate is skipped
-	// and we try the next — invisible to the customer. A candidate whose cost exceeds our ceiling
-	// is filtered out entirely (protects the ₦1,000 profit floor for BOTH providers). No candidate
-	// succeeds → no number and (for pay-on-success pvapins) no charge → refund.
+	// Step 1: build the candidate pool (hub-man + every pvapins variant) and sweep the price LADDER
+	// cheapest-first. FAILOVER: an out-of-stock / erroring supplier is skipped and we climb to the
+	// next rung — invisible to the customer. We rent the cheapest that's actually in stock and
+	// pocket the spread. Only if NOTHING rentable at/under break-even exists → refund.
 	const pool = await buildLiveCandidatePool({
 		hubServiceId: ctx.tier.serviceId,
 		hubCountryId: ctx.tier.countryId,
@@ -241,9 +244,10 @@ export async function fulfillPhoneOrder(
 		hubCountryName: ctx.tier.countryName
 	}).catch(() => []);
 	const excludeKeys = new Set(options.excludeKeys ?? []);
-	const affordable = pool
-		.filter((c) => c.costCents <= maxPriceCents)
+	const ladder = pool
+		.filter((c) => c.costCents <= breakEvenCents)
 		.filter((c) => !excludeKeys.has(`${c.provider}:${c.providerServiceRef}`))
+		.sort((a, b) => a.costCents - b.costCents) // cheapest first — rent cheap, climb only if dry
 		.slice(0, MAX_RENT_ATTEMPTS);
 
 	let rented: {
@@ -253,8 +257,13 @@ export async function fulfillPhoneOrder(
 		costCents: number;
 		expiresAt: Date | null;
 	} | null = null;
-	let lastError = affordable.length === 0 ? 'no affordable in-stock supplier' : '';
-	for (const candidate of affordable) {
+	let lastError = ladder.length === 0 ? 'no in-stock supplier at/under break-even' : '';
+	const sweepStarted = Date.now();
+	for (const candidate of ladder) {
+		if (Date.now() - sweepStarted > RENT_SWEEP_BUDGET_MS) {
+			lastError = `${lastError || 'still searching'} (time budget reached)`;
+			break;
+		}
 		try {
 			const r = await getProvider(candidate.provider).rent({
 				serviceId: ctx.tier.serviceId,
@@ -263,7 +272,7 @@ export async function fulfillPhoneOrder(
 				countryName: ctx.tier.countryName,
 				providerServiceRef: candidate.providerServiceRef,
 				providerCountryRef: candidate.providerCountryRef,
-				maxPriceCents,
+				maxPriceCents: breakEvenCents,
 				expectedCostCents: candidate.costCents
 			});
 			rented = {
@@ -307,7 +316,7 @@ export async function fulfillPhoneOrder(
 					hubOrderUuid: rented.provider === 'hubman' ? rented.providerRef : null,
 					phoneNumber: rented.phoneNumber,
 					costCents: Number.isFinite(rented.costCents) ? Math.round(rented.costCents) : null,
-					maxPriceCents: maxPriceCents ?? null,
+					maxPriceCents: breakEvenCents,
 					rentedAt: new Date(),
 					expiresAt: rented.expiresAt,
 					status: 'awaiting_sms'
@@ -692,13 +701,16 @@ export async function customerRetryPhoneRental(
 		};
 	}
 
-	// Best-effort release of the current number, then rent the NEXT-best supplier (excluding this one).
+	// Best-effort release of the current number, then climb to the next rung — excluding EVERY
+	// supplier tried on this order so we never repeat one (a true progressive climb).
 	await provider.cancel(ref).catch(() => {});
-	const excludeKey = candidateKeyFromRental(rental);
+	const tried = Array.from(
+		new Set([...(rental.triedSuppliers ?? []), candidateKeyFromRental(rental)])
+	);
 	const orderId = await orderIdForItem(orderItemId);
 	if (!orderId) return { ok: false, status: 'error', message: 'Order not found.' };
 
-	// Reset to pending + count the retry, then re-fulfill excluding the supplier that didn't deliver.
+	// Reset to pending + record the tried suppliers + count the retry, then re-fulfill up the ladder.
 	await prisma.phoneRental.updateMany({
 		where: { orderItemId, status: 'awaiting_sms' },
 		data: {
@@ -708,11 +720,12 @@ export async function customerRetryPhoneRental(
 			phoneNumber: null,
 			otp: null,
 			smsMessage: null,
+			triedSuppliers: tried,
 			retryCount: { increment: 1 }
 		}
 	});
 
-	const r = await fulfillPhoneOrder(orderId, 'retry', { excludeKeys: [excludeKey] });
+	const r = await fulfillPhoneOrder(orderId, 'retry', { excludeKeys: tried });
 	if (r.status === 'awaiting_sms')
 		return { ok: true, status: 'awaiting_sms', phoneNumber: r.phoneNumber, message: 'Here’s a fresh number — request your code again.' };
 	if (r.status === 'refunded') return { ok: true, status: 'refunded', message: r.message };

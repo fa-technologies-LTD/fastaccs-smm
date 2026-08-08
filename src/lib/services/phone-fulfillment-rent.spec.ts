@@ -158,4 +158,48 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 		expect(res.status).toBe('refunded');
 		expect(rentMock).not.toHaveBeenCalled(); // never even attempted — over ceiling
 	});
+
+	// The price-ladder sweep (break-even ceiling for a ₦4,800 sale @ rate 1500 = 320¢).
+	const pv = (ref: string, costCents: number) =>
+		candidate({ provider: 'pvapins', providerServiceRef: ref, providerCountryRef: 'USA', label: `pvapins:${ref}`, costCents });
+
+	it('climbs past many out-of-stock suppliers (NOT capped at 4) until one is in stock', async () => {
+		buildLiveCandidatePoolMock.mockResolvedValue(
+			[50, 60, 70, 80, 90, 100].map((c, i) => pv(`Whatsapp${i}`, c))
+		);
+		rentMock
+			.mockImplementationOnce(() => { throw new Error('oos'); })
+			.mockImplementationOnce(() => { throw new Error('oos'); })
+			.mockImplementationOnce(() => { throw new Error('oos'); })
+			.mockImplementationOnce(() => { throw new Error('oos'); })
+			.mockImplementationOnce(() => { throw new Error('oos'); })
+			.mockResolvedValueOnce({ providerRef: 'n|USA|Whatsapp5', phoneNumber: '15550000006', costCents: 100, expiresAt: null });
+
+		const res = await fulfillPhoneOrder('order-1', 'test');
+		expect(res.status).toBe('awaiting_sms');
+		expect(rentMock).toHaveBeenCalledTimes(6); // proves it did not stop at 4
+	});
+
+	it('sweeps cheapest-first — rent cheap, pocket the spread', async () => {
+		buildLiveCandidatePoolMock.mockResolvedValue([pv('B', 120), pv('A', 40)]); // out of order
+		rentMock.mockResolvedValue({ providerRef: 'n|USA|A', phoneNumber: '1555', costCents: 40, expiresAt: null });
+		await fulfillPhoneOrder('order-1', 'test');
+		expect(rentMock.mock.calls[0][0]).toMatchObject({ providerServiceRef: 'A', expectedCostCents: 40 });
+	});
+
+	it('takes a pricier in-stock variant up to break-even rather than refunding', async () => {
+		// 300¢ is above the old sale−₦1,000 ceiling (~253¢) but within break-even (320¢) → now rented.
+		buildLiveCandidatePoolMock.mockResolvedValue([pv('Whatsapp24', 300)]);
+		rentMock.mockResolvedValue({ providerRef: 'n|USA|Whatsapp24', phoneNumber: '1555', costCents: 300, expiresAt: null });
+		const res = await fulfillPhoneOrder('order-1', 'test');
+		expect(res.status).toBe('awaiting_sms');
+		expect(rentMock).toHaveBeenCalledOnce();
+	});
+
+	it('refuses to rent above break-even (never a loss) → refund', async () => {
+		buildLiveCandidatePoolMock.mockResolvedValue([pv('Whatsapp99', 500)]); // 500¢ > 320¢ break-even
+		const res = await fulfillPhoneOrder('order-1', 'test');
+		expect(res.status).toBe('refunded');
+		expect(rentMock).not.toHaveBeenCalled();
+	});
 });
