@@ -332,7 +332,10 @@ export async function syncNumbersCatalog(
 		// available, pocket the spread. The 90th percentile is an outlier-robust "high" (it ignores
 		// the top ~10%, so one scam/outlier price can't spike the sticker). Admin can price-lock to
 		// hand-tune any tier.
-		const idx = Math.min(costs.length - 1, Math.floor(0.9 * costs.length));
+		// 90th-percentile by nearest-rank on (length-1), so we don't pick the literal max as the
+		// basis (that would let one outlier/scam price set the sticker). For large N this lands ~90th;
+		// for a handful of variants it sits near the top without being the single most expensive.
+		const idx = Math.min(costs.length - 1, Math.round(0.9 * (costs.length - 1)));
 		return { costCents: costs[idx], count: matched.length };
 	}
 

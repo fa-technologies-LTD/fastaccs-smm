@@ -154,6 +154,9 @@ const BOT_SCAN_RE =
 function captureFirstTouch(event: RequestEvent): void {
 	if (event.request.method !== 'GET') return;
 	if (event.url.pathname.startsWith('/api/')) return;
+	// Only real page navigations — not asset/data/prefetch fetches, which could otherwise stamp a
+	// bogus "direct" source before the actual landing request.
+	if (!(event.request.headers.get('accept') || '').includes('text/html')) return;
 	if (event.cookies.get(ATTRIBUTION_COOKIE)) return; // first-touch wins — never overwrite
 	const attr = buildFirstTouch({
 		searchParams: event.url.searchParams,

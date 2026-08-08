@@ -15,12 +15,13 @@ import {
 	type NumberProviderId
 } from './number-providers';
 
-// Sweep the price ladder: try up to this many suppliers, cheapest-first, before giving up. High
-// because pvapins out-of-stock tries are FREE (pay-on-success) — we'd rather climb the ladder than
-// refund. Bounded by MAX_RENT_ATTEMPTS (a hard cap) AND RENT_SWEEP_BUDGET_MS (so the customer isn't
-// left waiting, and we respect pvapins' ~5/min rate limit).
-const MAX_RENT_ATTEMPTS = 20;
-const RENT_SWEEP_BUDGET_MS = 22_000;
+// Sweep the price ladder: try up to this many suppliers, cheapest-first, before giving up. pvapins
+// out-of-stock tries are FREE (pay-on-success), so we climb rather than refund. Bounded by
+// MAX_RENT_ATTEMPTS AND a time budget kept comfortably UNDER the request's function timeout — so a
+// long sweep + persist can never be killed mid-rent (which would orphan a paid-for number). If a
+// batch runs out of budget without a hit, the customer's "try another" continues the climb.
+const MAX_RENT_ATTEMPTS = 12;
+const RENT_SWEEP_BUDGET_MS = 9_000;
 
 /**
  * Fulfillment for the automated Numbers service.

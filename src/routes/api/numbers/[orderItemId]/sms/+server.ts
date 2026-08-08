@@ -4,6 +4,10 @@ import { prisma } from '$lib/prisma';
 import { pollPhoneRentalSms } from '$lib/services/phone-fulfillment';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 
+// The first poll on a pending order kicks off the rent SWEEP (up to ~9s) + persist; give the
+// function headroom so it can never be killed mid-rent (which would orphan a paid-for number).
+export const config = { maxDuration: 30 };
+
 // Live OTP poll for a Numbers order. Owner (or admin) only.
 export const GET: RequestHandler = async ({ params, locals }) => {
 	if (!locals.user) {

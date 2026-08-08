@@ -4,6 +4,10 @@ import { prisma } from '$lib/prisma';
 import { customerRetryPhoneRental } from '$lib/services/phone-fulfillment';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 
+// "Try another" cancels the current number + runs a fresh rent sweep (up to ~9s) + persist; give
+// the function headroom so it can never be killed mid-rent (which would orphan a paid-for number).
+export const config = { maxDuration: 30 };
+
 // Buyer-initiated "try another number": when no code arrived, swap to the next-best supplier
 // without re-charging. Owner (or admin) only. The service enforces the wait window, the retry
 // cap, and the "code = final, never dropped" rule.
