@@ -65,6 +65,30 @@
 			windowDays: number;
 		} | null
 	);
+	const cust = $derived(
+		(data.customers ?? null) as {
+			totalBuyers: number;
+			avgLtvNgn: number;
+			segments: Array<{ segment: string; buyers: number; revenueNgn: number; avgSpendNgn: number }>;
+			ltvByFirstProduct: Array<{ product: string; buyers: number; avgLtvNgn: number }>;
+			cohorts: Array<{ cohort: string; size: number; retentionPct: (number | null)[] }>;
+			cohortMonths: number;
+		} | null
+	);
+	// Segment → colour + one-line meaning (so the table reads as actions, not jargon).
+	const SEGMENT_META: Record<string, { color: string; note: string }> = {
+		VIP: { color: '#34d399', note: 'reward / protect' },
+		Loyal: { color: '#38bdf8', note: 'keep engaged' },
+		New: { color: '#22d3ee', note: 'onboard well' },
+		Casual: { color: 'var(--text-muted)', note: 'nudge to repeat' },
+		'At-risk': { color: '#fbbf24', note: 'win back now' },
+		Churned: { color: '#f87171', note: 'reactivation offer' }
+	};
+	function retentionColor(pct: number | null): string {
+		if (pct === null) return 'transparent';
+		const a = Math.min(0.85, 0.12 + (pct / 100) * 0.73);
+		return `rgba(5, 212, 113, ${a})`;
+	}
 	const uaMaxSignup = $derived(
 		ua?.signupsByDay?.length ? Math.max(1, ...ua.signupsByDay.map((d: any) => d.count)) : 1
 	);
@@ -615,6 +639,108 @@
 					{/if}
 				{:else}
 					<p class="mt-3 text-sm" style="color: var(--text-muted);">No signups in this window yet.</p>
+				{/if}
+			</section>
+		{/if}
+
+		{#if cust && cust.totalBuyers > 0}
+			<section
+				class="mb-4 rounded-lg p-3"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
+				<div class="flex flex-wrap items-baseline justify-between gap-2">
+					<h2 class="text-base font-semibold" style="color: var(--text)">Customer Intelligence</h2>
+					<span class="text-xs" style="color: var(--text-muted);"
+						>{cust.totalBuyers} buyers · avg lifetime spend {formatMoney(cust.avgLtvNgn)}</span
+					>
+				</div>
+
+				<p
+					class="mt-3 mb-2 text-xs font-semibold tracking-wide uppercase"
+					style="color: var(--text-dim);"
+				>
+					Segments (RFM)
+				</p>
+				<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+					{#each cust.segments as s (s.segment)}
+						<div
+							class="rounded-lg p-2.5"
+							style="background: var(--surface); border: 1px solid var(--border); border-left: 3px solid {SEGMENT_META[
+								s.segment
+							]?.color};"
+						>
+							<div class="text-sm font-semibold" style="color: var(--text);">{s.segment}</div>
+							<div class="text-lg font-bold" style="color: var(--text);">{s.buyers}</div>
+							<div class="text-[11px]" style="color: var(--text-muted);">avg {formatMoney(s.avgSpendNgn)}</div>
+							<div class="text-[10px]" style="color: {SEGMENT_META[s.segment]?.color};">
+								{SEGMENT_META[s.segment]?.note}
+							</div>
+						</div>
+					{/each}
+				</div>
+
+				{#if cust.ltvByFirstProduct.length}
+					<p
+						class="mt-4 mb-2 text-xs font-semibold tracking-wide uppercase"
+						style="color: var(--text-dim);"
+					>
+						Lifetime value by first product
+					</p>
+					<div class="flex flex-wrap gap-2">
+						{#each cust.ltvByFirstProduct as l (l.product)}
+							<div
+								class="rounded-lg px-3 py-2"
+								style="background: var(--surface); border: 1px solid var(--border);"
+							>
+								<span class="text-sm" style="color: var(--text-muted);">{l.product}</span>
+								<span class="ml-2 text-sm font-bold" style="color: var(--fa-green-500);"
+									>{formatMoney(l.avgLtvNgn)}</span
+								>
+								<span class="ml-1 text-[11px]" style="color: var(--text-dim);">· {l.buyers} buyers</span>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				{#if cust.cohorts.length}
+					<p
+						class="mt-4 mb-2 text-xs font-semibold tracking-wide uppercase"
+						style="color: var(--text-dim);"
+					>
+						Cohort retention — % who bought, by months since signup
+					</p>
+					<div class="overflow-x-auto">
+						<table class="w-full text-xs">
+							<thead>
+								<tr style="color: var(--text-muted);">
+									<th class="py-1 pr-3 text-left font-medium">Cohort</th>
+									<th class="px-2 py-1 text-right font-medium">Size</th>
+									{#each Array(cust.cohortMonths) as _, i (i)}
+										<th class="px-1 py-1 text-center font-medium">M{i}</th>
+									{/each}
+								</tr>
+							</thead>
+							<tbody>
+								{#each cust.cohorts as c (c.cohort)}
+									<tr>
+										<td class="py-1 pr-3 font-medium" style="color: var(--text);">{c.cohort}</td>
+										<td class="px-2 py-1 text-right" style="color: var(--text-muted);">{c.size}</td>
+										{#each c.retentionPct as pct, i (i)}
+											<td
+												class="px-1 py-1 text-center"
+												style="background: {retentionColor(pct)}; color: {pct !== null && pct > 45
+													? '#04140c'
+													: 'var(--text)'};">{pct === null ? '' : pct + '%'}</td
+											>
+										{/each}
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<p class="mt-1 text-[10px]" style="color: var(--text-dim);">
+						M0 = bought in their signup month (activation). Greener = higher retention.
+					</p>
 				{/if}
 			</section>
 		{/if}
