@@ -96,6 +96,15 @@
 		}
 	}
 
+	// Show guidance only when it's actually relevant, so refunded/failed orders aren't cluttered
+	// with account-care tips for a product that was never delivered.
+	const paymentState = $derived(getPaymentState(data.order.status, data.order.paymentStatus));
+	const fulfillmentLabel = $derived(
+		getFulfillmentState(data.order.status, data.order.deliveryStatus, paymentState.tone)
+	);
+	const orderDelivered = $derived(fulfillmentLabel === 'Completed');
+	const orderDead = $derived(fulfillmentLabel === 'Refunded' || fulfillmentLabel === 'Failed');
+
 	function isManualHandoverItem(item: (typeof data.order.orderItems)[number]): boolean {
 		return getTierDeliveryConfig(item.category?.metadata).mode === 'manual_handover';
 	}
@@ -246,35 +255,23 @@
 					</div>
 				</div>
 
-				{#if data.phone}
-					<div
-						class="mb-6 rounded-lg p-4"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
-						<p class="text-sm" style="color: var(--text-muted);">
-							Enter the number above on {data.phone.serviceName} (pick the same country), then
-							request your code once — it appears here automatically. No VPN needed. No code within
-							the window? You're refunded to store credit. See <a
-								href="/support#numbers"
-								class="font-medium hover:underline"
-								style="color: var(--link);">how to use your number &amp; tips</a
-							>.
-						</p>
-					</div>
-				{:else if !isManualHandoverOrder() && !isBoostingOrder()}
-					<div
-						class="mb-6 rounded-lg p-4"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
-						<p class="text-sm" style="color: var(--text-muted);">
-							For smooth access, test your login soon after delivery and report issues quickly. For
-							the fastest support response, message us within 2 hours of purchase. See the <a
-								href="/support#faq"
-								class="font-medium hover:underline"
-								style="color: var(--link);">Support FAQ</a
-							> for account-care tips.
-						</p>
-					</div>
+				{#if data.phone && !orderDead}
+					<p class="mb-4 text-xs" style="color: var(--text-dim);">
+						Enter the number on {data.phone.serviceName} (same country) and request your code — it
+						appears here automatically, no VPN needed. <a
+							href="/support#numbers"
+							class="hover:underline"
+							style="color: var(--link);">How to use it</a
+						>.
+					</p>
+				{:else if orderDelivered && !isManualHandoverOrder() && !isBoostingOrder()}
+					<p class="mb-4 text-xs" style="color: var(--text-dim);">
+						Test your login soon — issues reported within 2 hours get the fastest support. <a
+							href="/support#faq"
+							class="hover:underline"
+							style="color: var(--link);">Support FAQ</a
+						>.
+					</p>
 				{/if}
 
 				{#if getManualHandoverLink()}
