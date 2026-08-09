@@ -55,6 +55,28 @@
 
 	const storeCreditBalance = $derived(Math.max(0, Number(storeCredit?.totalAvailable || 0)));
 
+	// Store-credit history (lazy-loaded when the card is tapped).
+	type CreditEntry = { at: string; description: string; delta: number; kind: string; category: string };
+	let showCreditHistory = $state(false);
+	let creditHistory = $state<CreditEntry[] | null>(null);
+	let creditHistoryLoading = $state(false);
+	async function openCreditHistory(): Promise<void> {
+		showCreditHistory = true;
+		if (creditHistory) return;
+		creditHistoryLoading = true;
+		try {
+			const res = await fetch('/api/store-credit/history').then((r) => r.json());
+			if (res?.success) creditHistory = res.entries ?? [];
+		} catch {
+			creditHistory = [];
+		} finally {
+			creditHistoryLoading = false;
+		}
+	}
+	function creditDate(iso: string): string {
+		return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+	}
+
 	const affiliateState = $derived(
 		initialAffiliateData && typeof initialAffiliateData === 'object'
 			? (initialAffiliateData as AffiliateStateFlags)
@@ -348,9 +370,12 @@
 			</div>
 			<div class="mt-1 text-xs" style="color: var(--text-muted);">Total spent</div>
 		</div>
-		<div
-			class="rounded-[var(--r-sm)] border border-[var(--border)] px-3 py-3"
+		<button
+			type="button"
+			onclick={openCreditHistory}
+			class="rounded-[var(--r-sm)] border border-[var(--border)] px-3 py-3 text-left transition-colors hover:border-[var(--primary)]"
 			style="background: var(--surface-2);"
+			title="View store-credit history"
 		>
 			<div
 				class="text-xl leading-none font-semibold sm:text-2xl"
@@ -360,15 +385,9 @@
 			</div>
 			<div class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs" style="color: var(--text-muted);">
 				<span>Store Credit</span>
-				<a
-					href="/how-it-works?tab=affiliate"
-					class="text-[10px] font-semibold underline-offset-2 hover:underline"
-					style="color: var(--primary);"
-				>
-					earn more from referrals →
-				</a>
+				<span class="text-[10px] font-semibold" style="color: var(--primary);">· view history →</span>
 			</div>
-		</div>
+		</button>
 	</div>
 
 	<div id="dashboard-tabs" class="mb-4 overflow-x-auto border-b border-[var(--border)]">
@@ -457,6 +476,72 @@
 		</a>
 	</div>
 </div>
+
+{#if showCreditHistory}
+	<div
+		class="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
+		style="background: rgba(0,0,0,0.6);"
+		onclick={() => (showCreditHistory = false)}
+		role="presentation"
+	>
+		<div
+			class="flex max-h-[80vh] w-full flex-col rounded-t-2xl border border-[var(--border)] sm:max-w-md sm:rounded-2xl"
+			style="background: var(--surface);"
+			onclick={(e) => e.stopPropagation()}
+			role="presentation"
+		>
+			<div class="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+				<div>
+					<h3 class="text-base font-semibold" style="color: var(--text); font-family: var(--font-head);">
+						Store Credit
+					</h3>
+					<p class="text-xs" style="color: var(--text-muted);">
+						₦{storeCreditBalance.toLocaleString()} available
+					</p>
+				</div>
+				<button
+					onclick={() => (showCreditHistory = false)}
+					class="rounded-lg p-1.5 hover:bg-white/5"
+					aria-label="Close"
+					style="color: var(--text-muted);">✕</button
+				>
+			</div>
+			<div class="flex-1 overflow-y-auto px-4 py-1">
+				{#if creditHistoryLoading}
+					<p class="py-8 text-center text-sm" style="color: var(--text-muted);">Loading…</p>
+				{:else if !creditHistory || creditHistory.length === 0}
+					<p class="py-8 text-center text-sm" style="color: var(--text-muted);">
+						No store-credit activity yet.
+					</p>
+				{:else}
+					{#each creditHistory as e (e.at + e.description)}
+						<div
+							class="flex items-center justify-between gap-3 border-b border-[var(--border)] py-2.5 last:border-0"
+						>
+							<div class="min-w-0">
+								<p class="truncate text-sm" style="color: var(--text);">{e.description}</p>
+								<p class="text-[11px]" style="color: var(--text-dim);">
+									{e.category} · {creditDate(e.at)}
+								</p>
+							</div>
+							<span
+								class="shrink-0 text-sm font-semibold"
+								style="color: {e.kind === 'credit' ? '#34d399' : 'var(--text-muted)'};"
+							>
+								{e.delta >= 0 ? '+' : '−'}₦{Math.abs(e.delta).toLocaleString()}
+							</span>
+						</div>
+					{/each}
+				{/if}
+			</div>
+			<div class="border-t border-[var(--border)] px-4 py-2.5 text-center">
+				<a href="/how-it-works?tab=affiliate" class="text-xs font-semibold" style="color: var(--primary);">
+					earn more from referrals →
+				</a>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <style>
 	.quick-action-card {

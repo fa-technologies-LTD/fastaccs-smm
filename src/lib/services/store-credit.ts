@@ -25,6 +25,50 @@ export const SC_REDEEM_REFUND = 'store_credit_redemption_refund';
 // Existing cash-out type (earned bucket only).
 export const SC_PAYOUT = 'affiliate_payout';
 
+// Human category per transaction type, for the customer-facing ledger.
+const SC_CATEGORY: Record<string, string> = {
+	[SC_CREDIT_AFFILIATE]: 'Affiliate commission',
+	[SC_CREDIT_GIFT]: 'Gift',
+	[SC_CREDIT_REFUND]: 'Refund',
+	[SC_REDEEM_EARNED]: 'Spent',
+	[SC_REDEEM_REFUND]: 'Spent',
+	[SC_PAYOUT]: 'Payout'
+};
+
+export interface StoreCreditEntry {
+	at: string;
+	description: string;
+	delta: number; // + credit, − debit (whole naira)
+	kind: 'credit' | 'debit';
+	category: string;
+}
+
+/**
+ * A user's store-credit ledger for the dashboard (most recent first). Sign is derived from the
+ * stored balanceBefore/After so it's always correct regardless of how the row was written.
+ */
+export async function getStoreCreditHistory(
+	userId: string,
+	limit = 50
+): Promise<StoreCreditEntry[]> {
+	const rows = await prisma.walletTransaction.findMany({
+		where: { userId, status: { notIn: ['failed', 'reversed', 'cancelled'] } },
+		orderBy: { createdAt: 'desc' },
+		take: limit,
+		select: { type: true, balanceBefore: true, balanceAfter: true, description: true, createdAt: true }
+	});
+	return rows.map((r) => {
+		const delta = Math.round(Number(r.balanceAfter) - Number(r.balanceBefore));
+		return {
+			at: r.createdAt.toISOString(),
+			description: r.description,
+			delta,
+			kind: delta >= 0 ? ('credit' as const) : ('debit' as const),
+			category: SC_CATEGORY[r.type] ?? (delta >= 0 ? 'Credit' : 'Spent')
+		};
+	});
+}
+
 const EARNED_CREDIT_TYPES = [SC_CREDIT_AFFILIATE, SC_CREDIT_GIFT];
 const REFUND_CREDIT_TYPES = [SC_CREDIT_REFUND];
 
