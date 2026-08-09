@@ -3,6 +3,7 @@ import { maybeSendAffiliateUnlockInvite, recordAffiliateStoreCreditForOrder } fr
 import { sendOrderConfirmationEmailIfNeeded } from './email';
 import { invalidateAdminStatsCache } from './admin-metrics';
 import { sendLowStockAdminAlertIfNeeded } from './admin-alerts';
+import { createUserNotification } from './notifications';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { allocateReservedExactPreviewAccountsForItem } from '$lib/services/exact-preview';
 import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
@@ -341,13 +342,24 @@ async function deliverAccounts(orderId: string) {
 		}
 
 		// Update order delivery status
-		await prisma.order.update({
+		const deliveredOrder = await prisma.order.update({
 			where: { id: orderId },
 			data: {
 				deliveryStatus: 'delivered',
 				deliveredAt: new Date()
-			}
+			},
+			select: { userId: true }
 		});
+		// Bell: the account order is ready to use.
+		if (deliveredOrder.userId) {
+			await createUserNotification({
+				userId: deliveredOrder.userId,
+				type: 'order_delivered',
+				title: 'Your order is ready ✅',
+				message: 'Your account details are ready — tap to view them.',
+				orderId
+			});
+		}
 
 		// Update account status to delivered
 		const accountIds = order.orderItems.flatMap((item) => item.accounts.map((acc) => acc.id));

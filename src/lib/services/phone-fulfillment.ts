@@ -5,6 +5,7 @@ import { getPhoneTierConfig, type PhoneTierConfig } from '$lib/helpers/phone-tie
 import { getPhonePricingConfig } from './phone-pricing';
 import { creditStoreCredit, SC_CREDIT_REFUND } from './store-credit';
 import { sendCriticalAdminAlert } from './admin-alerts';
+import { createUserNotification } from './notifications';
 import {
 	providerForRental,
 	refForRental,
@@ -121,12 +122,23 @@ async function markRentalReceived(
 	if (claim.count > 0) {
 		const orderId = await orderIdForItem(orderItemId);
 		if (orderId) {
-			await prisma.order
+			const order = await prisma.order
 				.update({
 					where: { id: orderId },
-					data: { status: 'completed', deliveryStatus: 'delivered', deliveredAt: new Date() }
+					data: { status: 'completed', deliveryStatus: 'delivered', deliveredAt: new Date() },
+					select: { userId: true }
 				})
-				.catch(() => {});
+				.catch(() => null);
+			// Bell: the customer's code just landed — the single most useful notification we send.
+			if (order?.userId) {
+				await createUserNotification({
+					userId: order.userId,
+					type: 'code_arrived',
+					title: 'Your code arrived 🎉',
+					message: 'Your verification code is ready — tap to view it.',
+					orderId
+				});
+			}
 		}
 	}
 	return claim.count > 0;
@@ -397,7 +409,7 @@ export async function refundPhoneOrderToStoreCredit(
 		return false;
 	}
 
-	return prisma.$transaction(async (tx) => {
+	const refunded = await prisma.$transaction(async (tx) => {
 		// Claim the refund: only rentals not yet refunded and not received.
 		const claim = await tx.phoneRental.updateMany({
 			where: {
@@ -426,6 +438,18 @@ export async function refundPhoneOrderToStoreCredit(
 		});
 		return true;
 	});
+
+	// Bell: tell the customer their money is back (best-effort, outside the money transaction).
+	if (refunded && ctx.userId) {
+		await createUserNotification({
+			userId: ctx.userId,
+			type: 'store_credit',
+			title: 'Refunded to store credit',
+			message: `₦${Math.round(Number(ctx.saleAmountNgn)).toLocaleString()} is back in your balance.`,
+			orderId: ctx.orderId
+		});
+	}
+	return refunded;
 }
 
 export interface PhonePollResult {

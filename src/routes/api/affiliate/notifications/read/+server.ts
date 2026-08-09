@@ -2,13 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 
-const AFFILIATE_NOTIFICATION_TYPES = [
-	'affiliate_unlock',
-	'affiliate_store_credit',
-	'affiliate_referral_signup',
-	'affiliate_payout'
-] as const;
-
+// Mark notifications read for the bell (all types — the feed is universal now).
 export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!locals.user) {
 		return json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -21,15 +15,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 	if (markAll) {
 		await prisma.notification.updateMany({
-			where: {
-				userId: locals.user.id,
-				type: { in: [...AFFILIATE_NOTIFICATION_TYPES] },
-				read: false
-			},
-			data: {
-				read: true,
-				readAt: now
-			}
+			where: { userId: locals.user.id, read: false },
+			data: { read: true, readAt: now }
 		});
 		return json({ success: true });
 	}
@@ -39,15 +26,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 
 	const result = await prisma.notification.updateMany({
-		where: {
-			id: notificationId,
-			userId: locals.user.id,
-			type: { in: [...AFFILIATE_NOTIFICATION_TYPES] }
-		},
-		data: {
-			read: true,
-			readAt: now
-		}
+		where: { id: notificationId, userId: locals.user.id },
+		data: { read: true, readAt: now }
 	});
 
 	if (result.count === 0) {

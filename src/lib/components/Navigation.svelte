@@ -18,6 +18,7 @@
 		message: string;
 		read: boolean;
 		createdAt: string;
+		orderId: string | null;
 	}
 
 	let affiliateCanShowBell = $state(false);
@@ -128,7 +129,8 @@
 							title: String(item.title || 'Notification'),
 							message: String(item.message || ''),
 							read: Boolean(item.read),
-							createdAt: String(item.createdAt || new Date().toISOString())
+							createdAt: String(item.createdAt || new Date().toISOString()),
+							orderId: item.orderId ? String(item.orderId) : null
 						};
 					})
 				: [];
@@ -136,6 +138,14 @@
 			console.error('Failed to load affiliate notifications:', error);
 		} finally {
 			affiliateInboxLoading = false;
+		}
+	}
+
+	function handleNoteClick(note: AffiliateNotificationItem): void {
+		if (!note.read) void markAffiliateNotificationRead(note.id);
+		if (note.orderId) {
+			affiliateInboxOpen = false;
+			void goto(`/order/${note.orderId}`);
 		}
 	}
 
@@ -367,7 +377,7 @@
 													{#each affiliateNotifications as note (note.id)}
 														<button
 															type="button"
-															onclick={() => !note.read && markAffiliateNotificationRead(note.id)}
+															onclick={() => handleNoteClick(note)}
 															class="w-full rounded-[10px] border p-2 text-left transition-colors"
 															style="border-color: {note.read
 																? 'rgba(255,255,255,0.08)'
@@ -512,7 +522,7 @@
 										{#each affiliateNotifications as note (note.id)}
 											<button
 												type="button"
-												onclick={() => !note.read && markAffiliateNotificationRead(note.id)}
+												onclick={() => handleNoteClick(note)}
 												class="w-full rounded-[10px] border p-2 text-left transition-colors"
 												style="border-color: {note.read
 													? 'rgba(255,255,255,0.08)'
