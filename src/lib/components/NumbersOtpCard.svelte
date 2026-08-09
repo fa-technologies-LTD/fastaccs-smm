@@ -242,7 +242,9 @@
 				<div class="text-center text-sm" style="color: var(--text);">
 					Enter this number on {phone.serviceName}, then request your verification code.
 				</div>
-				<button onclick={requestCode} class="soda-cta mt-3">✓ I’ve requested the code</button>
+				<div class="mt-3 flex justify-center">
+					<button onclick={requestCode} class="soda-cta">✓ I’ve requested the code</button>
+				</div>
 				<div class="text-xs mt-2 text-center" style="color: var(--text-dim);">
 					Your code appears here automatically the moment it arrives.
 				</div>

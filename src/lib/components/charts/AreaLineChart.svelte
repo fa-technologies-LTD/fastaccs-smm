@@ -12,18 +12,34 @@
 		height = DEFAULT_CHART_HEIGHT,
 		color = 'var(--primary)',
 		formatLabel = (key: string) => key,
+		formatValue = (value: number) => String(value),
 		emptyMessage = 'No revenue data available.'
 	}: {
 		data: Point[];
 		height?: number;
 		color?: string;
 		formatLabel?: (key: string) => string;
+		formatValue?: (value: number) => string;
 		emptyMessage?: string;
 	} = $props();
 
 	const isEmpty = $derived(data.length === 0 || data.every((d) => d.value === 0));
 
-	const margin = { top: 8, right: 8, bottom: 20, left: 8 };
+	const margin = { top: 12, right: 8, bottom: 20, left: 8 };
+
+	let hoverIndex = $state<number | null>(null);
+
+	// Map the pointer to the nearest data point (points are evenly spread across the plot width).
+	function onHover(e: PointerEvent) {
+		const svg = (e.currentTarget as SVGElement).ownerSVGElement;
+		const n = data.length;
+		if (!svg || n < 1) return;
+		const r = svg.getBoundingClientRect();
+		const plot = r.width - margin.left - margin.right;
+		if (plot <= 0) return;
+		const frac = (e.clientX - r.left - margin.left) / plot;
+		hoverIndex = Math.max(0, Math.min(n - 1, Math.round(frac * (n - 1))));
+	}
 </script>
 
 <ChartContainer {height} empty={isEmpty} {emptyMessage} ariaLabel="Revenue trend chart">
@@ -57,6 +73,9 @@
 				stroke="var(--border)"
 				stroke-width="1"
 			/>
+			<text x={margin.left} y={y(tick) - 2} font-size="9" fill="var(--text-dim)">
+				{formatValue(tick)}
+			</text>
 		{/each}
 
 		{#if areaPath}
@@ -79,5 +98,42 @@
 				</text>
 			{/if}
 		{/each}
+
+		<!-- Hover tooltip: guide line + dot + value at the nearest point. -->
+		{#if hoverIndex !== null && data[hoverIndex]}
+			{@const hx = x(data[hoverIndex].key) ?? 0}
+			{@const hy = y(data[hoverIndex].value)}
+			{@const label = formatValue(data[hoverIndex].value)}
+			{@const tw = label.length * 6.5 + 16}
+			{@const tx = Math.min(width - margin.right - tw, Math.max(margin.left, hx - tw / 2))}
+			<line
+				x1={hx}
+				x2={hx}
+				y1={margin.top}
+				y2={h - margin.bottom}
+				stroke="var(--text-dim)"
+				stroke-width="1"
+				stroke-dasharray="3 3"
+			/>
+			<circle cx={hx} cy={hy} r="4" fill={color} stroke="var(--bg-elev-1)" stroke-width="1.5" />
+			<g transform="translate({tx}, {Math.max(0, hy - 26)})">
+				<rect width={tw} height="19" rx="4" fill="var(--bg-elev-1)" stroke="var(--border)" />
+				<text x={tw / 2} y="13" text-anchor="middle" font-size="11" font-weight="600" fill="var(--text)"
+					>{label}</text
+				>
+			</g>
+		{/if}
+
+		<!-- Transparent capture layer for pointer tracking. -->
+		<rect
+			x={margin.left}
+			y={margin.top}
+			width={Math.max(0, width - margin.left - margin.right)}
+			height={Math.max(0, h - margin.top - margin.bottom)}
+			fill="transparent"
+			style="cursor: crosshair;"
+			onpointermove={onHover}
+			onpointerleave={() => (hoverIndex = null)}
+		/>
 	{/snippet}
 </ChartContainer>

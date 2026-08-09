@@ -28,7 +28,9 @@
 			.range([0, 100])
 	);
 
-	const margin = { top: 8, right: 8, bottom: 20, left: 8 };
+	const margin = { top: 14, right: 8, bottom: 20, left: 8 };
+
+	let hoverIndex = $state<number | null>(null);
 </script>
 
 {#if orientation === 'horizontal'}
@@ -86,6 +88,9 @@
 					stroke="var(--border)"
 					stroke-width="1"
 				/>
+				<text x={margin.left} y={y(tick) - 2} font-size="9" fill="var(--text-dim)">
+					{formatValue(tick)}
+				</text>
 			{/each}
 
 			{#each data as d, i (d.label)}
@@ -95,7 +100,12 @@
 					width={x.bandwidth()}
 					height={h - margin.bottom - y(d.value)}
 					fill={d.color || color}
+					fill-opacity={hoverIndex === null || hoverIndex === i ? 1 : 0.45}
 					rx="2"
+					style="cursor: pointer;"
+					role="presentation"
+					onpointerenter={() => (hoverIndex = i)}
+					onpointerleave={() => (hoverIndex = null)}
 				/>
 				{#if i % step === 0 || i === data.length - 1}
 					<text
@@ -109,6 +119,26 @@
 					</text>
 				{/if}
 			{/each}
+
+			<!-- Value tooltip above the hovered bar. -->
+			{#if hoverIndex !== null && data[hoverIndex]}
+				{@const d = data[hoverIndex]}
+				{@const cx = (x(d.label) ?? 0) + x.bandwidth() / 2}
+				{@const label = formatValue(d.value)}
+				{@const tw = label.length * 6.5 + 16}
+				{@const tx = Math.min(width - margin.right - tw, Math.max(margin.left, cx - tw / 2))}
+				<g transform="translate({tx}, {Math.max(0, y(d.value) - 24)})">
+					<rect width={tw} height="19" rx="4" fill="var(--bg-elev-1)" stroke="var(--border)" />
+					<text
+						x={tw / 2}
+						y="13"
+						text-anchor="middle"
+						font-size="11"
+						font-weight="600"
+						fill="var(--text)">{label}</text
+					>
+				</g>
+			{/if}
 		{/snippet}
 	</ChartContainer>
 {/if}

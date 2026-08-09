@@ -131,17 +131,23 @@ export async function getUserAnalytics(): Promise<UserAnalytics> {
 			rate: v.signups > 0 ? Math.round((v.converted / v.signups) * 1000) / 10 : 0
 		}));
 
-	// Top customers by lifetime spend.
-	const nameById = new Map(users.map((u) => [u.id, u.fullName?.trim() || u.email]));
-	const topCustomers = [...byUser.entries()]
-		.map(([userId, b]) => ({
-			userId,
-			name: nameById.get(userId) || 'Unknown',
-			orders: b.orders,
-			spent: Math.round(b.spent)
-		}))
-		.sort((a, b) => b.spent - a.spent)
-		.slice(0, 10);
+	// Top customers by lifetime spend. Resolve names for the actual top IDs directly (any user
+	// type) — the `users` set above is filtered to REGISTERED/CONVERTED, so a guest/other-type
+	// spender would otherwise fall through to a wrong "Unknown".
+	const topEntries = [...byUser.entries()].sort((a, b) => b[1].spent - a[1].spent).slice(0, 10);
+	const topNameRows = await prisma.user.findMany({
+		where: { id: { in: topEntries.map(([id]) => id) } },
+		select: { id: true, fullName: true, email: true }
+	});
+	const topNameById = new Map(
+		topNameRows.map((u) => [u.id, u.fullName?.trim() || u.email || 'Unknown'])
+	);
+	const topCustomers = topEntries.map(([userId, b]) => ({
+		userId,
+		name: topNameById.get(userId) || 'Unknown',
+		orders: b.orders,
+		spent: Math.round(b.spent)
+	}));
 
 	const buyerConversionRate = totalUsers > 0 ? Math.round((buyers / totalUsers) * 1000) / 10 : 0;
 	const repeatRate = buyers > 0 ? Math.round((repeatBuyers / buyers) * 1000) / 10 : 0;

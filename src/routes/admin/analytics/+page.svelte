@@ -68,6 +68,7 @@
 	const uaMaxSignup = $derived(
 		ua?.signupsByDay?.length ? Math.max(1, ...ua.signupsByDay.map((d: any) => d.count)) : 1
 	);
+	let hoveredSignup = $state<{ key: string; count: number } | null>(null);
 	const uaRt = $derived(
 		(ua?.revenueByType ?? { account: 0, numbers: 0, boosting: 0 }) as {
 			account: number;
@@ -296,6 +297,7 @@
 						})
 					)}
 					formatLabel={(key) => key.slice(5)}
+					formatValue={formatMoney}
 					emptyMessage="No revenue data available."
 				/>
 			</div>
@@ -717,13 +719,27 @@
 
 			<!-- Signups (30d) -->
 			<section class="rounded-lg border p-4" style="background: var(--surface); border-color: var(--border);">
-				<h2 class="mb-3 text-base font-semibold" style="color: var(--text);">Signups — last 30 days</h2>
+				<div class="mb-3 flex items-baseline justify-between">
+					<h2 class="text-base font-semibold" style="color: var(--text);">Signups — last 30 days</h2>
+					<span class="text-xs" style="color: var(--text-muted);">
+						{#if hoveredSignup}
+							{hoveredSignup.key}: <strong style="color: var(--text);">{hoveredSignup.count}</strong>
+						{:else}
+							hover a bar for the count
+						{/if}
+					</span>
+				</div>
 				<div class="flex items-end gap-1" style="height: 90px;">
 					{#each ua.signupsByDay as d (d.key)}
 						<div
-							class="flex-1 rounded-t"
-							style="height: {Math.round((d.count / uaMaxSignup) * 100)}%; min-height: 2px; background: #38bdf8;"
-							title="{d.key}: {d.count}"
+							class="flex-1 rounded-t transition-opacity"
+							style="height: {Math.round((d.count / uaMaxSignup) * 100)}%; min-height: 2px; background: #38bdf8; opacity: {hoveredSignup &&
+							hoveredSignup.key !== d.key
+								? 0.45
+								: 1}; cursor: pointer;"
+							role="presentation"
+							onpointerenter={() => (hoveredSignup = d)}
+							onpointerleave={() => (hoveredSignup = null)}
 						></div>
 					{/each}
 				</div>
