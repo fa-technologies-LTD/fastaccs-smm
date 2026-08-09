@@ -18,6 +18,7 @@ import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
 import { getAcquisitionBreakdown } from '$lib/services/acquisition-analytics';
 import { getCustomerAnalytics } from '$lib/services/customer-analytics';
+import { getSalesHeatmap, getLeakAnalysis } from '$lib/services/business-insights';
 import { getFeatureFlagSnapshot } from '$lib/services/feature-flags';
 import {
 	buildRevenueOrderWhere,
@@ -850,11 +851,24 @@ export const load: PageServerLoad = async ({ locals }) => {
 			return null;
 		});
 
+		const [heatmap, leaks] = await Promise.all([
+			getSalesHeatmap(90).catch((error) => {
+				console.error('Failed to load sales heatmap:', error);
+				return null;
+			}),
+			getLeakAnalysis(90).catch((error) => {
+				console.error('Failed to load leak analysis:', error);
+				return null;
+			})
+		]);
+
 		return toSerializableDecimals({
 			stats,
 			userAnalytics,
 			acquisition,
 			customers,
+			heatmap,
+			leaks,
 			canViewRevenue: revenueVisible,
 			integrity: {
 				checkedAt: new Date().toISOString(),

@@ -89,6 +89,33 @@
 		const a = Math.min(0.85, 0.12 + (pct / 100) * 0.73);
 		return `rgba(5, 212, 113, ${a})`;
 	}
+
+	const heat = $derived(
+		(data.heatmap ?? null) as {
+			grid: number[][];
+			maxCell: number;
+			totalOrders: number;
+			byHour: number[];
+			peak: { label: string; count: number } | null;
+			windowDays: number;
+		} | null
+	);
+	const leaks = $derived(
+		(data.leaks ?? null) as {
+			windowDays: number;
+			payments: { attempts: number; failed: number; failedPct: number; byReason: Array<{ reason: string; count: number }> };
+			numbers: { resolved: number; received: number; successPct: number; worst: Array<{ label: string; successPct: number; total: number }> };
+			refunds: { orders: number; refunded: number; cancelled: number; refundedPct: number; byType: Array<{ type: string; refunded: number; cancelled: number }> };
+		} | null
+	);
+	const HEAT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+	function heatColor(count: number, mx: number): string {
+		if (!count || !mx) return 'var(--bg-elev-1)';
+		return `rgba(56, 189, 248, ${0.12 + (count / mx) * 0.8})`;
+	}
+	function leakTone(pct: number, warn: number, bad: number): string {
+		return pct >= bad ? '#f87171' : pct >= warn ? '#fbbf24' : '#34d399';
+	}
 	const uaMaxSignup = $derived(
 		ua?.signupsByDay?.length ? Math.max(1, ...ua.signupsByDay.map((d: any) => d.count)) : 1
 	);
@@ -742,6 +769,128 @@
 						M0 = bought in their signup month (activation). Greener = higher retention.
 					</p>
 				{/if}
+			</section>
+		{/if}
+
+		{#if heat && heat.totalOrders > 0}
+			<section
+				class="mb-4 rounded-lg p-3"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
+				<div class="flex flex-wrap items-baseline justify-between gap-2">
+					<h2 class="text-base font-semibold" style="color: var(--text)">
+						When Customers Buy (WAT · last {heat.windowDays}d)
+					</h2>
+					{#if heat.peak}
+						<span class="text-xs" style="color: var(--text-muted);"
+							>Peak: <strong style="color: var(--text);">{heat.peak.label}</strong></span
+						>
+					{/if}
+				</div>
+				<div class="mt-3 overflow-x-auto">
+					<table class="border-separate" style="border-spacing: 2px;">
+						<thead>
+							<tr>
+								<th></th>
+								{#each Array(24) as _, h (h)}
+									<th class="text-[8px] font-normal" style="color: var(--text-dim);"
+										>{h % 3 === 0 ? h : ''}</th
+									>
+								{/each}
+							</tr>
+						</thead>
+						<tbody>
+							{#each heat.grid as row, day (day)}
+								<tr>
+									<td class="pr-1.5 text-right text-[10px]" style="color: var(--text-muted);"
+										>{HEAT_DAYS[day]}</td
+									>
+									{#each row as count, h (h)}
+										<td
+											class="rounded-sm"
+											style="width: 13px; height: 13px; background: {heatColor(count, heat.maxCell)};"
+											title="{HEAT_DAYS[day]} {h}:00 · {count} orders"
+										></td>
+									{/each}
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+				<p class="mt-1 text-[10px]" style="color: var(--text-dim);">
+					Hour of day (0–23) across, day down. Brighter = more orders — hover a cell for the count.
+				</p>
+			</section>
+		{/if}
+
+		{#if leaks}
+			<section
+				class="mb-4 rounded-lg p-3"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
+				<h2 class="text-base font-semibold" style="color: var(--text)">
+					Leak-Finder (last {leaks.windowDays}d)
+				</h2>
+				<div class="mt-3 grid gap-3 md:grid-cols-3">
+					<div class="rounded-lg p-3" style="background: var(--surface); border: 1px solid var(--border);">
+						<div class="flex items-baseline justify-between">
+							<span class="text-sm font-semibold" style="color: var(--text);">Payment failures</span>
+							<span class="text-lg font-bold" style="color: {leakTone(leaks.payments.failedPct, 5, 15)};"
+								>{leaks.payments.failedPct}%</span
+							>
+						</div>
+						<p class="text-[11px]" style="color: var(--text-muted);">
+							{leaks.payments.failed} of {leaks.payments.attempts} orders
+						</p>
+						{#each leaks.payments.byReason.slice(0, 4) as r (r.reason)}
+							<div class="mt-1 flex justify-between gap-2 text-xs">
+								<span class="truncate" style="color: var(--text-muted);">{r.reason}</span>
+								<span style="color: var(--text);">{r.count}</span>
+							</div>
+						{/each}
+					</div>
+
+					<div class="rounded-lg p-3" style="background: var(--surface); border: 1px solid var(--border);">
+						<div class="flex items-baseline justify-between">
+							<span class="text-sm font-semibold" style="color: var(--text);">Numbers delivery</span>
+							<span
+								class="text-lg font-bold"
+								style="color: {leakTone(100 - leaks.numbers.successPct, 15, 40)};"
+								>{leaks.numbers.successPct}%</span
+							>
+						</div>
+						<p class="text-[11px]" style="color: var(--text-muted);">
+							{leaks.numbers.received} codes / {leaks.numbers.resolved} rentals
+						</p>
+						{#if leaks.numbers.worst.length}
+							<p class="mt-1 text-[10px] uppercase" style="color: var(--text-dim);">Worst combos</p>
+							{#each leaks.numbers.worst.slice(0, 4) as w (w.label)}
+								<div class="flex justify-between gap-2 text-xs">
+									<span class="truncate" style="color: var(--text-muted);">{w.label}</span>
+									<span style="color: {leakTone(100 - w.successPct, 15, 40)};">{w.successPct}%</span>
+								</div>
+							{/each}
+						{/if}
+					</div>
+
+					<div class="rounded-lg p-3" style="background: var(--surface); border: 1px solid var(--border);">
+						<div class="flex items-baseline justify-between">
+							<span class="text-sm font-semibold" style="color: var(--text);">Refunds & cancels</span>
+							<span class="text-lg font-bold" style="color: {leakTone(leaks.refunds.refundedPct, 5, 12)};"
+								>{leaks.refunds.refundedPct}%</span
+							>
+						</div>
+						<p class="text-[11px]" style="color: var(--text-muted);">
+							{leaks.refunds.refunded} refunded · {leaks.refunds.cancelled} cancelled
+						</p>
+						{#each leaks.refunds.byType as t (t.type)}
+							<div class="mt-1 flex justify-between gap-2 text-xs">
+								<span style="color: var(--text-muted);">{t.type}</span>
+								<span style="color: var(--text);">{t.refunded}R · {t.cancelled}C</span>
+							</div>
+						{/each}
+					</div>
+				</div>
 			</section>
 		{/if}
 
