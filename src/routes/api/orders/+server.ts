@@ -5,7 +5,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { runWithDbRetry } from '$lib/server/db-retry';
 import { fulfillOrder } from '$lib/services/fulfillment';
-import * as hubman from '$lib/services/hubman';
+import { buildLiveCandidatePool } from '$lib/services/number-providers';
 import { getPhoneTierConfig } from '$lib/helpers/phone-tier-config';
 import { initializeTransaction } from '$lib/services/monnify';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
@@ -700,14 +700,18 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					{ status: 409 }
 				);
 			}
+			// Two-source availability: confirm SOME supplier (hub-man OR pvapins) can serve this
+			// number before charging. Uses the exact candidate pool fulfillment will sweep, so the
+			// guard, the storefront, and the rent path all agree. (Previously hub-man-only, which
+			// falsely rejected pvapins-only tiers like Canada/USA WhatsApp when hub-man was dry.)
 			try {
-				const services = await hubman.getAvailableServices(phoneCfg.countryId);
-				const available =
-					Number(
-						services[String(phoneCfg.countryId)]?.[String(phoneCfg.serviceId)]
-							?.available_numbers_count
-					) || 0;
-				if (available <= 0) {
+				const pool = await buildLiveCandidatePool({
+					hubServiceId: phoneCfg.serviceId,
+					hubCountryId: phoneCfg.countryId,
+					hubCountryCode: phoneCfg.countryCode,
+					hubCountryName: phoneCfg.countryName
+				});
+				if (pool.length === 0) {
 					return json(
 						{
 							success: false,
@@ -718,15 +722,10 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					);
 				}
 			} catch (err) {
-				console.error('[orders] phone availability check failed:', (err as Error).message);
-				return json(
-					{
-						success: false,
-						error: 'Numbers are momentarily unavailable — please try again in a few seconds.',
-						code: 'hubman_unreachable'
-					},
-					{ status: 503 }
-				);
+				// Fail-open: if the pool can't be built (both providers erroring), don't block the
+				// sale — the post-payment sweep + auto-refund is the safety net. Better than blocking
+				// every Numbers purchase during a transient provider blip.
+				console.error('[orders] phone availability pool build failed (allowing):', (err as Error).message);
 			}
 		}
 		const requestedPromotionCode = String(orderData.promotionCode || '')
