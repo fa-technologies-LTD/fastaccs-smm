@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import * as hubman from './hubman';
 import * as pvapins from './pvapins';
 import { serviceByHubId, pvapinsAppsForService, findPvapinsCountry } from './number-providers/service-map';
-import { getPhonePricingConfig, computeAutoPrice } from './phone-pricing';
+import { getPhonePricingConfig, computeAutoPrice, stabilizePrice } from './phone-pricing';
 import {
 	getLowSuccessTierKeys,
 	getRealizedCostByTier,
@@ -195,6 +195,7 @@ export async function syncNumbersCatalog(
 ): Promise<CatalogSyncResult> {
 	const platformId = await ensureNumbersPlatform();
 	const pricing = await getPhonePricingConfig();
+	const now = new Date();
 	// Realized per-tier cost (clean, post-epoch) to self-tune the price basis. Fail-soft: an empty
 	// map just means every tier prices off its listed catalog cost (the safe cold-start prior).
 	const realizedByTier = await getRealizedCostByTier().catch(() => new Map<string, RealizedTierCost>());
@@ -266,7 +267,13 @@ export async function syncNumbersCatalog(
 			const oldMd = metaBySlug.get(slug);
 			const locked = isPriceLocked(oldMd);
 			const autoPrice = computeAutoPrice(basisFor(serviceId, countryId, costCents), pricing);
-			const finalPrice = locked ? readBasePrice(oldMd) || autoPrice : autoPrice;
+			// Anti-thrash: hold the current price through small/too-frequent moves (locked tiers keep
+			// the admin's figure). `changed` decides whether we stamp a fresh price_updated_at.
+			const stab = locked
+				? { price: readBasePrice(oldMd) || autoPrice, changed: false }
+				: stabilizePrice(readBasePrice(oldMd), autoPrice, readPriceUpdatedAt(oldMd), now);
+			const finalPrice = stab.price;
+			const priceUpdatedAt = stab.changed ? now.toISOString() : readPriceUpdatedAtIso(oldMd);
 			const noStock = available <= 0;
 			const lowSuccess = lowSuccessKeys.has(`${serviceName}||${meta.name}`);
 			const autoHidden = noStock || lowSuccess;
@@ -287,7 +294,11 @@ export async function syncNumbersCatalog(
 				[PHONE_TIER_KEYS.hideReason]: hideReason,
 				primary_source: 'hubman',
 				price_locked: locked,
-				pricing: { currency: 'NGN', base_price: finalPrice },
+				pricing: {
+					currency: 'NGN',
+					base_price: finalPrice,
+					...(priceUpdatedAt ? { updated_at: priceUpdatedAt } : {})
+				},
 				...(floorOverride != null ? { [PHONE_TIER_KEYS.minFulfillmentProfitNgn]: floorOverride } : {})
 			};
 			const name = `${serviceName} — ${meta.name}`;
@@ -415,17 +426,25 @@ export async function syncNumbersCatalog(
 		if (fill === 'fetch_failed') continue;
 		if (fill && cfg) {
 			const wasHidden = md[PHONE_TIER_KEYS.autoHidden] === true;
-			// Keep a manually-locked price; otherwise price automatically from the pvapins cost basis.
+			// Keep a manually-locked price; otherwise price from the pvapins basis, with the same
+			// anti-thrash hysteresis as the hub-man path so a jiggling gap-fill cost can't bounce it.
 			const pvBasis = basisFor(cfg.serviceId, cfg.countryId, fill.costCents);
-			const price = isPriceLocked(t.metadata)
-				? readBasePrice(t.metadata) || computeAutoPrice(pvBasis, pricing)
-				: computeAutoPrice(pvBasis, pricing);
+			const pvAuto = computeAutoPrice(pvBasis, pricing);
+			const pvStab = isPriceLocked(t.metadata)
+				? { price: readBasePrice(t.metadata) || pvAuto, changed: false }
+				: stabilizePrice(readBasePrice(t.metadata), pvAuto, readPriceUpdatedAt(t.metadata), now);
+			const price = pvStab.price;
 			md[PHONE_TIER_KEYS.expectedCostCents] = fill.costCents;
 			md[PHONE_TIER_KEYS.availableCount] = fill.count;
 			md[PHONE_TIER_KEYS.autoHidden] = false;
 			md[PHONE_TIER_KEYS.hideReason] = null;
 			md.primary_source = 'pvapins';
-			md.pricing = { currency: 'NGN', base_price: price };
+			const pvUpdatedAt = pvStab.changed ? now.toISOString() : readPriceUpdatedAtIso(t.metadata);
+			md.pricing = {
+				currency: 'NGN',
+				base_price: price,
+				...(pvUpdatedAt ? { updated_at: pvUpdatedAt } : {})
+			};
 			if (economicsSignature(t.metadata) !== economicsSignature(md)) {
 				await prisma.category.update({ where: { id: t.id }, data: { metadata: md as Prisma.InputJsonValue } });
 				revivedByPvapins += 1;
@@ -478,6 +497,23 @@ function readBasePrice(metadata: unknown): number {
 	if (!pricing || typeof pricing !== 'object') return 0;
 	const raw = Number((pricing as Record<string, unknown>).base_price);
 	return Number.isFinite(raw) && raw > 0 ? raw : 0;
+}
+
+/** The raw ISO string of when this tier's price last changed (for anti-thrash), or null. */
+function readPriceUpdatedAtIso(metadata: unknown): string | null {
+	if (!metadata || typeof metadata !== 'object') return null;
+	const pricing = (metadata as Record<string, unknown>).pricing;
+	if (!pricing || typeof pricing !== 'object') return null;
+	const raw = (pricing as Record<string, unknown>).updated_at;
+	return typeof raw === 'string' && raw ? raw : null;
+}
+
+/** When this tier's price last changed, as a Date (for the min-reprice-interval), or null. */
+function readPriceUpdatedAt(metadata: unknown): Date | null {
+	const iso = readPriceUpdatedAtIso(metadata);
+	if (!iso) return null;
+	const d = new Date(iso);
+	return Number.isNaN(d.getTime()) ? null : d;
 }
 
 /** A tier whose price the admin manually set — the auto-recompute must NOT overwrite it. */
@@ -547,12 +583,10 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 		const costCents = live?.costCents ?? cfg.expectedCostCents;
 		const priceLocked = isPriceLocked(tier.metadata);
 		const basisCents = blendedBasisCents(costCents, realizedByTier.get(`${cfg.serviceId}||${cfg.countryId}`));
-		// Locked tiers show the admin's figure; otherwise the automatic price (same basis as sync).
-		const priceNgn = priceLocked
-			? readBasePrice(tier.metadata)
-			: costCents
-				? computeAutoPrice(basisCents, pricing)
-				: readBasePrice(tier.metadata);
+		// Show the actual LIVE price the customer pays — the stored (stabilized) base_price — so admin
+		// matches the storefront. Fall back to the freshly-computed auto price only if none is stored.
+		const priceNgn =
+			readBasePrice(tier.metadata) || (costCents ? computeAutoPrice(basisCents, pricing) : 0);
 		const costNgn = (costCents / 100) * pricing.usdNgnRate;
 		const effectiveFloorNgn = cfg.minFulfillmentProfitNgn ?? pricing.minFulfillmentProfitNgn;
 		const thin = isThinTier(priceNgn, costNgn, effectiveFloorNgn);

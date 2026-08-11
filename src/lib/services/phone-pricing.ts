@@ -251,6 +251,36 @@ export function computeAutoPrice(
 	return Math.min(Math.max(marginPrice, floorPrice), Math.max(floorPrice, capPrice));
 }
 
+// Price stability (anti-thrash). The 5-min sync recomputes every tier from live cost; without
+// hysteresis a jiggling supplier cost would bounce the sticker (₦1,800↔₦2,100↔₦1,700) and erode
+// trust. Rules: ignore small moves (deadband); react immediately to a big move (cost genuinely
+// shifted); allow only-so-often moderate moves (min interval). The realized-cost blend already
+// smooths the basis; this smooths the final customer-facing price.
+export const NUMBERS_PRICE_DEADBAND_PCT = 0.08; // ignore < 8% moves
+export const NUMBERS_PRICE_BIG_MOVE_PCT = 0.25; // ≥ 25% → reprice now, ignore the interval
+export const NUMBERS_PRICE_MIN_REPRICE_INTERVAL_MS = 6 * 60 * 60 * 1000; // moderate moves: at most every 6h
+
+/**
+ * Decide the price to store this sync given the current price and the freshly-computed one.
+ * Pure + deterministic so the anti-thrash policy is unit-testable. `changed` tells the caller
+ * whether to stamp a new price_updated_at.
+ */
+export function stabilizePrice(
+	currentNgn: number,
+	computedNgn: number,
+	lastUpdatedAt: Date | null,
+	now: Date
+): { price: number; changed: boolean } {
+	if (!(currentNgn > 0)) return { price: computedNgn, changed: computedNgn !== currentNgn }; // new tier
+	if (computedNgn === currentNgn) return { price: currentNgn, changed: false };
+	const deltaPct = Math.abs(computedNgn - currentNgn) / currentNgn;
+	if (deltaPct < NUMBERS_PRICE_DEADBAND_PCT) return { price: currentNgn, changed: false }; // jiggle
+	if (deltaPct >= NUMBERS_PRICE_BIG_MOVE_PCT) return { price: computedNgn, changed: true }; // react now
+	const sinceMs = lastUpdatedAt ? now.getTime() - lastUpdatedAt.getTime() : Number.POSITIVE_INFINITY;
+	if (sinceMs >= NUMBERS_PRICE_MIN_REPRICE_INTERVAL_MS) return { price: computedNgn, changed: true };
+	return { price: currentNgn, changed: false }; // moderate move, too soon → hold
+}
+
 /**
  * The HARD procurement ceiling (USD cents) for an already-paid order: the most we will ever spend
  * on suppliers for it while preserving the minimum fulfilment profit. There is NO intentional loss
