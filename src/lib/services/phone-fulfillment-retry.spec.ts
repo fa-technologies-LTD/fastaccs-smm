@@ -139,4 +139,22 @@ describe('customerRetryPhoneRental', () => {
 			expect.objectContaining({ data: expect.objectContaining({ retryCount: { increment: 1 } }) })
 		);
 	});
+
+	it('confirmed release reserves NO liability', async () => {
+		prismaMock.phoneRental.findUnique.mockResolvedValue(rental({ costCents: 66 }));
+		cancelMock.mockResolvedValue(true); // provider confirmed the number is released
+		await customerRetryPhoneRental('item-1');
+		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
+			expect.objectContaining({ data: expect.objectContaining({ reservedLiabilityCents: { increment: 0 } }) })
+		);
+	});
+
+	it('reserves the old number cost when release is NOT confirmed (could still bill)', async () => {
+		prismaMock.phoneRental.findUnique.mockResolvedValue(rental({ costCents: 66 }));
+		cancelMock.mockResolvedValue(false); // pvapins "Not able to reject." — number may still receive an OTP
+		await customerRetryPhoneRental('item-1');
+		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
+			expect.objectContaining({ data: expect.objectContaining({ reservedLiabilityCents: { increment: 66 } }) })
+		);
+	});
 });

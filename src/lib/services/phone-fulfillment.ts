@@ -254,6 +254,21 @@ export async function fulfillPhoneOrder(
 		minFulfillmentProfitNgn,
 		rate
 	);
+	// Order-wide accounting: subtract any UNRESOLVED liability from earlier attempts on this order
+	// (e.g. a prior pvapins number we couldn't confirm-reject that could still bill). The next rent
+	// must fit what's LEFT, so even if every reserved liability materializes, total spend still keeps
+	// the profit floor. reserved accumulates across retries (see customerRetryPhoneRental).
+	let reservedLiabilityCents = 0;
+	try {
+		const liabilityRow = await prisma.phoneRental.findUnique({
+			where: { orderItemId: ctx.orderItemId },
+			select: { reservedLiabilityCents: true }
+		});
+		reservedLiabilityCents = liabilityRow?.reservedLiabilityCents ?? 0;
+	} catch {
+		reservedLiabilityCents = 0;
+	}
+	const effectiveCeilingCents = Math.max(0, procurementCeilingCents - reservedLiabilityCents);
 
 	// Step 1: build the candidate pool (hub-man + every pvapins variant) and sweep the price LADDER
 	// cheapest-first. FAILOVER: an out-of-stock / erroring supplier is skipped and we climb to the
@@ -267,7 +282,7 @@ export async function fulfillPhoneOrder(
 	}).catch(() => []);
 	const excludeKeys = new Set(options.excludeKeys ?? []);
 	const ladder = pool
-		.filter((c) => c.costCents > 0 && c.costCents <= procurementCeilingCents)
+		.filter((c) => c.costCents > 0 && c.costCents <= effectiveCeilingCents)
 		.filter((c) => !excludeKeys.has(`${c.provider}:${c.providerServiceRef}`))
 		.sort((a, b) => a.costCents - b.costCents) // cheapest first — rent cheap, climb only if dry
 		.slice(0, MAX_RENT_ATTEMPTS);
@@ -294,7 +309,7 @@ export async function fulfillPhoneOrder(
 				countryName: ctx.tier.countryName,
 				providerServiceRef: candidate.providerServiceRef,
 				providerCountryRef: candidate.providerCountryRef,
-				maxPriceCents: procurementCeilingCents,
+				maxPriceCents: effectiveCeilingCents,
 				expectedCostCents: candidate.costCents
 			});
 			rented = {
@@ -338,7 +353,7 @@ export async function fulfillPhoneOrder(
 					hubOrderUuid: rented.provider === 'hubman' ? rented.providerRef : null,
 					phoneNumber: rented.phoneNumber,
 					costCents: Number.isFinite(rented.costCents) ? Math.round(rented.costCents) : null,
-					maxPriceCents: procurementCeilingCents,
+					maxPriceCents: effectiveCeilingCents,
 					rentedAt: new Date(),
 					expiresAt: rented.expiresAt,
 					status: 'awaiting_sms'
@@ -735,16 +750,21 @@ export async function customerRetryPhoneRental(
 		};
 	}
 
-	// Best-effort release of the current number, then climb to the next rung — excluding EVERY
-	// supplier tried on this order so we never repeat one (a true progressive climb).
-	await provider.cancel(ref).catch(() => {});
+	// Release the current number, then climb to the next rung — excluding EVERY supplier tried on
+	// this order so we never repeat one. Crucially, we use the cancel RESULT: if the provider won't
+	// confirm the release (e.g. pvapins "Not able to reject."), the old number can still receive an
+	// OTP and bill us, so we RESERVE its cost against this order's budget — the replacement then can
+	// only spend what's left, and total exposure still preserves the hard profit floor (§9–12).
+	const released = await provider.cancel(ref).catch(() => false);
+	const reserveCents = released ? 0 : rental.costCents ?? 0;
 	const tried = Array.from(
 		new Set([...(rental.triedSuppliers ?? []), candidateKeyFromRental(rental)])
 	);
 	const orderId = await orderIdForItem(orderItemId);
 	if (!orderId) return { ok: false, status: 'error', message: 'Order not found.' };
 
-	// Reset to pending + record the tried suppliers + count the retry, then re-fulfill up the ladder.
+	// Reset to pending + record the tried suppliers + count the retry + accrue any unresolved
+	// liability, then re-fulfill up the ladder (which subtracts the reservation from the budget).
 	await prisma.phoneRental.updateMany({
 		where: { orderItemId, status: 'awaiting_sms' },
 		data: {
@@ -755,7 +775,8 @@ export async function customerRetryPhoneRental(
 			otp: null,
 			smsMessage: null,
 			triedSuppliers: tried,
-			retryCount: { increment: 1 }
+			retryCount: { increment: 1 },
+			reservedLiabilityCents: { increment: reserveCents }
 		}
 	});
 

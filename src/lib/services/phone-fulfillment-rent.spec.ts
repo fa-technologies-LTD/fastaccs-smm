@@ -209,6 +209,17 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 		expect(rentMock).not.toHaveBeenCalled();
 	});
 
+	it('subtracts unresolved prior-attempt liability from the ceiling (order-wide ₦500 floor)', async () => {
+		// Full budget 400¢, but ₦-equivalent 300¢ is reserved for a prior number that could still bill.
+		// Remaining = 100¢, so a 200¢ candidate that would fit the FULL budget is refused → refund.
+		maxRentMock.mockReturnValue(400);
+		prismaMock.phoneRental.findUnique.mockResolvedValue({ reservedLiabilityCents: 300 });
+		buildLiveCandidatePoolMock.mockResolvedValue([pv('Whatsapp24', 200)]);
+		const res = await fulfillPhoneOrder('order-1', 'test');
+		expect(res.status).toBe('refunded');
+		expect(rentMock).not.toHaveBeenCalled();
+	});
+
 	it('uses the per-tier floor override (₦200) over the global default when set', async () => {
 		getPhoneTierConfigMock.mockReturnValue({
 			serviceId: 1, countryId: 58, serviceName: 'WhatsApp', countryName: 'USA', countryCode: 'US',

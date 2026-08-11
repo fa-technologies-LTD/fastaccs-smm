@@ -286,6 +286,11 @@ model PhoneRental {
   senderName    String?   @map("sender_name")
   costCents     Int?      @map("cost_cents") // actual hub-man price_cents charged (USD cents)
   maxPriceCents Int?      @map("max_price_cents") // ceiling we sent (USD cents)
+  // Unresolved supplier liability from EARLIER attempts on this order (USD cents) — e.g. a prior
+  // pvapins number we couldn't confirm-reject that could still bill. Reserved out of the procurement
+  // budget so a replacement can never push total spend past the hard profit floor. Accumulates
+  // across retries; conservative (only released when the order terminally resolves).
+  reservedLiabilityCents Int @default(0) @map("reserved_liability_cents")
   saleAmountNgn Decimal?  @map("sale_amount_ngn") // what the customer paid, NGN
   rentedAt      DateTime? @map("rented_at") // when the number was actually rented (drives the 2-min cancel window)
   expiresAt     DateTime? @map("expires_at")
