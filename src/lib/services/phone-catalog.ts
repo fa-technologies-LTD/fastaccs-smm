@@ -4,7 +4,12 @@ import * as hubman from './hubman';
 import * as pvapins from './pvapins';
 import { serviceByHubId, pvapinsAppsForService, findPvapinsCountry } from './number-providers/service-map';
 import { getPhonePricingConfig, computeAutoPrice } from './phone-pricing';
-import { getLowSuccessTierKeys } from './phone-analytics';
+import {
+	getLowSuccessTierKeys,
+	getRealizedCostByTier,
+	REALIZED_COST_PRIOR_STRENGTH,
+	type RealizedTierCost
+} from './phone-analytics';
 import { triggerNumbersRestockForTier } from './restock-notifications';
 import { PHONE_TIER_KEYS, PHONE_DELIVERY_MODE, getPhoneTierConfig } from '$lib/helpers/phone-tier-config';
 
@@ -101,10 +106,11 @@ async function fetchCountryServiceCosts(
 		const data = await hubman.getAvailableServices(countryId);
 		const byService = data[String(countryId)] || {};
 		for (const [sid, info] of Object.entries(byService)) {
-			// Worst-case cost: any in-stock number could be up to max, so price + ceiling
-			// must be anchored here so the margin holds for whichever number we actually rent.
+			// PRICING basis = the CHEAPEST (min) live cost — the competitive, typical figure we
+			// actually rent at. (We no longer anchor the sticker to the worst-case max; the wide
+			// delivery ceiling in fulfilment, not the price, is what guarantees rents fill.)
 			costs.set(Number(sid), {
-				costCents: info.max_price_cents,
+				costCents: info.min_price_cents,
 				available: Number(info.available_numbers_count) || 0
 			});
 		}
@@ -143,6 +149,18 @@ function economicsSignature(metadata: unknown): string {
 	]);
 }
 
+/**
+ * Self-tuning price basis: shrink the listed (catalog) cost toward what we ACTUALLY realized for
+ * this tier, weighted by how much clean data we have. weight = n/(n+K) — with no clean samples the
+ * listed prior is used unchanged; as clean rents accumulate, realized cost takes over smoothly, so
+ * one weird rent never reprices a tier and price re-centers on reality over time.
+ */
+export function blendedBasisCents(listedCents: number, realized: RealizedTierCost | undefined): number {
+	if (!realized || realized.count <= 0 || realized.medianCents <= 0) return Math.max(0, listedCents);
+	const w = realized.count / (realized.count + REALIZED_COST_PRIOR_STRENGTH);
+	return Math.max(1, Math.round(w * realized.medianCents + (1 - w) * Math.max(0, listedCents)));
+}
+
 export interface CatalogSyncResult {
 	created: number;
 	refreshed: number;
@@ -167,6 +185,11 @@ export async function syncNumbersCatalog(
 ): Promise<CatalogSyncResult> {
 	const platformId = await ensureNumbersPlatform();
 	const pricing = await getPhonePricingConfig();
+	// Realized per-tier cost (clean, post-epoch) to self-tune the price basis. Fail-soft: an empty
+	// map just means every tier prices off its listed catalog cost (the safe cold-start prior).
+	const realizedByTier = await getRealizedCostByTier().catch(() => new Map<string, RealizedTierCost>());
+	const basisFor = (serviceId: number, countryId: number, listedCents: number): number =>
+		blendedBasisCents(listedCents, realizedByTier.get(`${serviceId}||${countryId}`));
 
 	let countryIds: number[] = [];
 	try {
@@ -232,7 +255,7 @@ export async function syncNumbersCatalog(
 			// Auto-hide from the storefront when there's no live stock OR delivery is failing.
 			const oldMd = metaBySlug.get(slug);
 			const locked = isPriceLocked(oldMd);
-			const autoPrice = computeAutoPrice(costCents, pricing);
+			const autoPrice = computeAutoPrice(basisFor(serviceId, countryId, costCents), pricing);
 			const finalPrice = locked ? readBasePrice(oldMd) || autoPrice : autoPrice;
 			const noStock = available <= 0;
 			const lowSuccess = lowSuccessKeys.has(`${serviceName}||${meta.name}`);
@@ -326,16 +349,13 @@ export async function syncNumbersCatalog(
 			.filter((n) => n > 0)
 			.sort((a, b) => a - b);
 		if (costs.length === 0) return null;
-		// Availability-first pricing (user choice): price off the ~90th-percentile supplier cost so
-		// the rent ceiling covers virtually EVERY variant. Combined with the full-ladder sweep, we
-		// can afford whichever variant is in stock at the moment — price high, rent the cheapest
-		// available, pocket the spread. The 90th percentile is an outlier-robust "high" (it ignores
-		// the top ~10%, so one scam/outlier price can't spike the sticker). Admin can price-lock to
-		// hand-tune any tier.
-		// 90th-percentile by nearest-rank on (length-1), so we don't pick the literal max as the
-		// basis (that would let one outlier/scam price set the sticker). For large N this lands ~90th;
-		// for a handful of variants it sits near the top without being the single most expensive.
-		const idx = Math.min(costs.length - 1, Math.round(0.9 * (costs.length - 1)));
+		// PRICING basis = the ~35th-percentile (low/typical) variant cost — the cheap cluster we
+		// actually rent from, not the expensive tail. Pricing off the tail (old p90) produced
+		// uncompetitive stickers (USA WhatsApp ≈ ₦8,800) and killed sales, even though the sweep
+		// almost always rents a ~$0.50 variant. The wide fulfilment ceiling still lets us climb to
+		// a pricier in-stock variant at a bounded loss, so a low sticker doesn't cost reliability.
+		// Nearest-rank on (length-1); for a handful of variants it lands in the cheap third.
+		const idx = Math.max(0, Math.min(costs.length - 1, Math.round(0.35 * (costs.length - 1))));
 		return { costCents: costs[idx], count: matched.length };
 	}
 
@@ -381,10 +401,11 @@ export async function syncNumbersCatalog(
 		if (fill === 'fetch_failed') continue;
 		if (fill && cfg) {
 			const wasHidden = md[PHONE_TIER_KEYS.autoHidden] === true;
-			// Keep a manually-locked price; otherwise price automatically from the pvapins cost.
+			// Keep a manually-locked price; otherwise price automatically from the pvapins cost basis.
+			const pvBasis = basisFor(cfg.serviceId, cfg.countryId, fill.costCents);
 			const price = isPriceLocked(t.metadata)
-				? readBasePrice(t.metadata) || computeAutoPrice(fill.costCents, pricing)
-				: computeAutoPrice(fill.costCents, pricing);
+				? readBasePrice(t.metadata) || computeAutoPrice(pvBasis, pricing)
+				: computeAutoPrice(pvBasis, pricing);
 			md[PHONE_TIER_KEYS.expectedCostCents] = fill.costCents;
 			md[PHONE_TIER_KEYS.availableCount] = fill.count;
 			md[PHONE_TIER_KEYS.autoHidden] = false;
@@ -492,6 +513,7 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 	// Refresh live costs + stock once per country.
 	const countryIds = [...new Set(tiers.map((t) => getPhoneTierConfig(t.metadata)?.countryId).filter((x): x is number => x != null))];
 	const liveCosts = new Map<number, Map<number, ServiceCost>>();
+	const realizedByTier = await getRealizedCostByTier().catch(() => new Map<string, RealizedTierCost>());
 	await Promise.all(
 		countryIds.map(async (cid) => liveCosts.set(cid, (await fetchCountryServiceCosts(cid)).costs))
 	);
@@ -507,11 +529,12 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 		const live = isPvapins ? null : (liveCosts.get(cfg.countryId)?.get(cfg.serviceId) ?? null);
 		const costCents = live?.costCents ?? cfg.expectedCostCents;
 		const priceLocked = isPriceLocked(tier.metadata);
-		// Locked tiers show the admin's figure; otherwise the automatic price.
+		const basisCents = blendedBasisCents(costCents, realizedByTier.get(`${cfg.serviceId}||${cfg.countryId}`));
+		// Locked tiers show the admin's figure; otherwise the automatic price (same basis as sync).
 		const priceNgn = priceLocked
 			? readBasePrice(tier.metadata)
 			: costCents
-				? computeAutoPrice(costCents, pricing)
+				? computeAutoPrice(basisCents, pricing)
 				: readBasePrice(tier.metadata);
 		const costNgn = (costCents / 100) * pricing.usdNgnRate;
 		const liveNoStock = isPvapins ? false : live ? live.available <= 0 : cfg.hideReason === 'no_stock';

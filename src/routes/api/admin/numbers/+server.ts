@@ -46,7 +46,10 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			await savePhonePricingConfig({
 				usdNgnRate: body.usdNgnRate,
 				marginPercent: body.marginPercent,
-				minProfitNgn: body.minProfitNgn
+				minProfitNgn: body.minProfitNgn,
+				maxPriceMultiple: body.maxPriceMultiple,
+				deliveryLossCapNgn: body.deliveryLossCapNgn,
+				rescueBudgetDailyNgn: body.rescueBudgetDailyNgn
 			});
 			// Recompute every tier's automatic price from the new rate/margin right away.
 			await syncNumbersCatalog();

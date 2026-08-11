@@ -41,8 +41,10 @@ vi.mock('./store-credit', () => ({ creditStoreCredit: creditStoreCreditMock, SC_
 vi.mock('./admin-alerts', () => ({ sendCriticalAdminAlert: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('./phone-pricing', () => ({
 	getPhonePricingConfig: getPhonePricingConfigMock,
-	computeMaxPriceCentsForSale: () => 100000
+	computeMaxPriceCentsForSale: () => 100000,
+	computeMaxRentCents: () => 100000
 }));
+vi.mock('./phone-analytics', () => ({ getRescueSpentLast24hNgn: () => Promise.resolve(0) }));
 vi.mock('$lib/helpers/phone-tier-config', () => ({ getPhoneTierConfig: getPhoneTierConfigMock }));
 
 import { customerRetryPhoneRental } from './phone-fulfillment';

@@ -22,7 +22,10 @@ const PHONE_PRICING_KEYS = {
 	minProfitNgn: 'config.phone.min_profit_ngn',
 	ceilingTolerancePercent: 'config.phone.ceiling_tolerance_percent',
 	lowBalanceThresholdCents: 'config.phone.low_balance_threshold_cents',
-	activationTimeoutMinutes: 'config.phone.activation_timeout_minutes'
+	activationTimeoutMinutes: 'config.phone.activation_timeout_minutes',
+	maxPriceMultiple: 'config.phone.max_price_multiple',
+	deliveryLossCapNgn: 'config.phone.delivery_loss_cap_ngn',
+	rescueBudgetDailyNgn: 'config.phone.rescue_budget_daily_ngn'
 } as const;
 
 const DEFAULTS = {
@@ -31,11 +34,26 @@ const DEFAULTS = {
 	minProfitNgn: 1000, // floor profit per number; David can raise/lower it in admin
 	ceilingTolerancePercent: 20, // allow live cost up to 20% over expected before failing
 	lowBalanceThresholdCents: 500, // alert when hub-man balance drops below $5
-	activationTimeoutMinutes: 20 // wait this long for the OTP before auto-cancel+refund
+	activationTimeoutMinutes: 20, // wait this long for the OTP before auto-cancel+refund
+	maxPriceMultiple: 2.5, // competitive price cap: sticker ≤ 2.5× basis cost (floor still wins)
+	deliveryLossCapNgn: 1000, // per-order: absorb up to this much loss to deliver vs refund
+	rescueBudgetDailyNgn: 5000 // portfolio: total rescue loss allowed across a rolling 24h
 } as const;
 
 // No number is sold below this, and prices round to clean ₦100s (fewer payment mistakes).
 export const NUMBERS_PRICE_FLOOR_NGN = 1000;
+
+/** Default competitive price cap: the sticker never exceeds this multiple of the basis cost. */
+export const NUMBERS_MAX_PRICE_MULTIPLE = 2.5;
+
+/**
+ * The learning epoch. Only rentals RECEIVED on/after this instant may train pricing (realized
+ * cost) or reliability. Everything before it was produced under the three now-fixed bugs
+ * (hub-man delivered-SMS-in-array parse, pvapins hyphenated-OTP parse, hub-man-only availability
+ * guard) and would poison the learning with false failures / missing successes. Accounting and
+ * audit history are untouched — this cutoff only gates the adaptive signals.
+ */
+export const NUMBERS_CLEAN_EPOCH = new Date('2026-08-10T00:00:00Z');
 
 /** Round a NGN amount UP to the nearest ₦100, with a ₦1,000 floor. */
 export function roundNgnUp(amount: number, step = 100): number {
@@ -50,6 +68,9 @@ export interface PhonePricingConfig {
 	ceilingTolerancePercent: number;
 	lowBalanceThresholdCents: number;
 	activationTimeoutMinutes: number;
+	maxPriceMultiple: number;
+	deliveryLossCapNgn: number;
+	rescueBudgetDailyNgn: number;
 }
 
 function parseNumber(value: string | undefined, fallback: number, min = 0): number {
@@ -83,6 +104,13 @@ export async function getPhonePricingConfig(): Promise<PhonePricingConfig> {
 			map.get(PHONE_PRICING_KEYS.activationTimeoutMinutes),
 			DEFAULTS.activationTimeoutMinutes,
 			1
+		),
+		maxPriceMultiple: parseNumber(map.get(PHONE_PRICING_KEYS.maxPriceMultiple), DEFAULTS.maxPriceMultiple, 1),
+		deliveryLossCapNgn: parseNumber(map.get(PHONE_PRICING_KEYS.deliveryLossCapNgn), DEFAULTS.deliveryLossCapNgn, 0),
+		rescueBudgetDailyNgn: parseNumber(
+			map.get(PHONE_PRICING_KEYS.rescueBudgetDailyNgn),
+			DEFAULTS.rescueBudgetDailyNgn,
+			0
 		)
 	};
 }
@@ -112,6 +140,24 @@ export async function savePhonePricingConfig(input: Partial<PhonePricingConfig>)
 			PHONE_PRICING_KEYS.activationTimeoutMinutes,
 			Math.max(1, Math.round(input.activationTimeoutMinutes)),
 			'Minutes to wait for OTP before auto-cancel+refund'
+		]);
+	if (input.maxPriceMultiple != null)
+		entries.push([
+			PHONE_PRICING_KEYS.maxPriceMultiple,
+			Math.max(1, input.maxPriceMultiple),
+			'Competitive price cap — sticker ≤ this × basis cost (floor still wins)'
+		]);
+	if (input.deliveryLossCapNgn != null)
+		entries.push([
+			PHONE_PRICING_KEYS.deliveryLossCapNgn,
+			Math.max(0, Math.round(input.deliveryLossCapNgn)),
+			'Per-order loss we will absorb to deliver rather than refund (NGN)'
+		]);
+	if (input.rescueBudgetDailyNgn != null)
+		entries.push([
+			PHONE_PRICING_KEYS.rescueBudgetDailyNgn,
+			Math.max(0, Math.round(input.rescueBudgetDailyNgn)),
+			'Rolling 24h portfolio cap on total rescue loss (NGN)'
 		]);
 
 	for (const [key, value, description] of entries) {
@@ -152,22 +198,44 @@ export const NUMBERS_MIN_PROFIT_NGN = 1000;
 
 /**
  * Fully-automatic price for a tier — recomputed on every catalog refresh (never sticky,
- * never manual). The customer price is always `cost × margin`, and never less than
- * `cost + ₦1,000`, rounded up to a clean ₦100.
+ * never manual), from a **margin collar** on a competitive cost basis:
  *
- * `worstCaseCostCents` is hub-man's MAX cost for the service+country, so the margin holds
- * no matter which in-stock number we actually rent — rents fill reliably instead of
- * refund-looping. Because this runs every refresh, the price can never go stale against a
- * moved cost, so it can never show a loss.
+ *   price = clamp( cost × (1+margin) , floor , cap )   with the FLOOR always winning
+ *   floor = roundUp(cost + minProfit)   — never sell below the guaranteed profit
+ *   cap   = roundUp(cost × maxMultiple) — stay competitive; don't balloon a mid-cost tier
+ *
+ * `basisCostCents` is the *typical* fulfilment cost (a low percentile of the listed variants,
+ * blended toward what we actually realize), NOT the worst-case tail — so the sticker tracks
+ * what we really pay, not a $5 variant we almost never rent. On very cheap tiers the cap can
+ * fall below the floor; the floor wins there, so we always clear min profit. The wider
+ * delivery ceiling (see computeMaxRentCents) is what keeps rents filling — this price is only
+ * about competitiveness, decoupled from how much we'll spend to fulfil.
  */
 export function computeAutoPrice(
-	worstCaseCostCents: number,
-	config: Pick<PhonePricingConfig, 'usdNgnRate' | 'marginPercent' | 'minProfitNgn'>
+	basisCostCents: number,
+	config: Pick<PhonePricingConfig, 'usdNgnRate' | 'marginPercent' | 'minProfitNgn' | 'maxPriceMultiple'>
 ): number {
 	const minProfit = config.minProfitNgn ?? NUMBERS_MIN_PROFIT_NGN;
-	const costNgn = (Math.max(0, worstCaseCostCents) / 100) * config.usdNgnRate;
+	const multiple = config.maxPriceMultiple ?? NUMBERS_MAX_PRICE_MULTIPLE;
+	const costNgn = (Math.max(0, basisCostCents) / 100) * config.usdNgnRate;
 	const floorPrice = roundNgnUp(costNgn + minProfit); // ≥ cost + min profit, on a ₦100 grid
-	return Math.max(computeSaleNgn(worstCaseCostCents, config), floorPrice);
+	const capPrice = roundNgnUp(costNgn * Math.max(1, multiple)); // competitive ceiling
+	const marginPrice = computeSaleNgn(basisCostCents, config); // cost × (1+margin)
+	// Clamp margin price into [floor, cap]; if cap < floor (very cheap tier), floor wins.
+	return Math.min(Math.max(marginPrice, floorPrice), Math.max(floorPrice, capPrice));
+}
+
+/**
+ * The USD-cents ceiling we'll pay a supplier to fulfil THIS already-paid order — the
+ * *fulfilment* lever, deliberately separate from and wider than the customer price. We may
+ * spend up to `sale + allowedLoss` (in NGN, converted to cents) so a rare cheap-stock-dry
+ * moment delivers a number at a small bounded loss instead of refunding. `allowedLoss` is
+ * pre-clamped by the caller to both the per-order cap and the rolling portfolio budget, so
+ * when the rescue budget is exhausted this collapses to break-even (sale only).
+ */
+export function computeMaxRentCents(saleNgn: number, allowedLossNgn: number, usdNgnRate: number): number {
+	const budgetNgn = Math.max(0, saleNgn) + Math.max(0, allowedLossNgn);
+	return Math.max(1, Math.floor((budgetNgn / Math.max(1, usdNgnRate)) * 100));
 }
 
 /**

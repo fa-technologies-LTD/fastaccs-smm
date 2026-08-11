@@ -20,6 +20,7 @@ const creditStoreCreditMock = vi.hoisted(() => vi.fn());
 const getPhoneTierConfigMock = vi.hoisted(() => vi.fn());
 const getPhonePricingConfigMock = vi.hoisted(() => vi.fn());
 const maxPriceMock = vi.hoisted(() => vi.fn(() => 100000));
+const maxRentMock = vi.hoisted(() => vi.fn(() => 100000)); // the delivery ceiling (USD cents)
 
 vi.mock('$lib/prisma', () => ({ prisma: prismaMock }));
 vi.mock('./number-providers', () => ({
@@ -40,8 +41,10 @@ vi.mock('./store-credit', () => ({ creditStoreCredit: creditStoreCreditMock, SC_
 vi.mock('./admin-alerts', () => ({ sendCriticalAdminAlert: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('./phone-pricing', () => ({
 	getPhonePricingConfig: getPhonePricingConfigMock,
-	computeMaxPriceCentsForSale: maxPriceMock
+	computeMaxPriceCentsForSale: maxPriceMock,
+	computeMaxRentCents: maxRentMock
 }));
+vi.mock('./phone-analytics', () => ({ getRescueSpentLast24hNgn: () => Promise.resolve(0) }));
 vi.mock('$lib/helpers/phone-tier-config', () => ({ getPhoneTierConfig: getPhoneTierConfigMock }));
 
 import { fulfillPhoneOrder } from './phone-fulfillment';
@@ -61,6 +64,7 @@ const candidate = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
 	vi.clearAllMocks();
 	maxPriceMock.mockReturnValue(100000);
+	maxRentMock.mockReturnValue(100000);
 	prismaMock.phoneRental.upsert.mockResolvedValue({});
 	prismaMock.phoneRental.updateMany.mockResolvedValue({ count: 1 }); // claim pending→renting
 	prismaMock.phoneRental.update.mockResolvedValue({});
@@ -151,15 +155,15 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 		expect(creditStoreCreditMock).toHaveBeenCalledOnce();
 	});
 
-	it('filters out over-ceiling candidates (protects the profit floor) and refunds if none remain', async () => {
-		maxPriceMock.mockReturnValue(100); // ceiling 100 cents
+	it('filters out over-ceiling candidates and refunds if none remain', async () => {
+		maxRentMock.mockReturnValue(100); // delivery ceiling 100 cents
 		buildLiveCandidatePoolMock.mockResolvedValue([candidate({ costCents: 9999 })]); // too expensive
 		const res = await fulfillPhoneOrder('order-1', 'test');
 		expect(res.status).toBe('refunded');
 		expect(rentMock).not.toHaveBeenCalled(); // never even attempted — over ceiling
 	});
 
-	// The price-ladder sweep (break-even ceiling for a ₦4,800 sale @ rate 1500 = 320¢).
+	// The price-ladder sweep. The delivery ceiling is set per-test via maxRentMock (USD cents).
 	const pv = (ref: string, costCents: number) =>
 		candidate({ provider: 'pvapins', providerServiceRef: ref, providerCountryRef: 'USA', label: `pvapins:${ref}`, costCents });
 
@@ -187,8 +191,10 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 		expect(rentMock.mock.calls[0][0]).toMatchObject({ providerServiceRef: 'A', expectedCostCents: 40 });
 	});
 
-	it('takes a pricier in-stock variant up to break-even rather than refunding', async () => {
-		// 300¢ is above the old sale−₦1,000 ceiling (~253¢) but within break-even (320¢) → now rented.
+	it('takes a pricier in-stock variant at a bounded loss (rescue) rather than refunding', async () => {
+		// Delivery ceiling 400¢ (sale + bounded rescue loss). A 300¢ variant is above break-even but
+		// within the ceiling → we rent it and eat the small loss to deliver, instead of refunding.
+		maxRentMock.mockReturnValue(400);
 		buildLiveCandidatePoolMock.mockResolvedValue([pv('Whatsapp24', 300)]);
 		rentMock.mockResolvedValue({ providerRef: 'n|USA|Whatsapp24', phoneNumber: '1555', costCents: 300, expiresAt: null });
 		const res = await fulfillPhoneOrder('order-1', 'test');
@@ -196,8 +202,9 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 		expect(rentMock).toHaveBeenCalledOnce();
 	});
 
-	it('refuses to rent above break-even (never a loss) → refund', async () => {
-		buildLiveCandidatePoolMock.mockResolvedValue([pv('Whatsapp99', 500)]); // 500¢ > 320¢ break-even
+	it('refuses to rent above the delivery ceiling (bounded loss) → refund', async () => {
+		maxRentMock.mockReturnValue(400); // ceiling 400¢ (sale + rescue cap)
+		buildLiveCandidatePoolMock.mockResolvedValue([pv('Whatsapp99', 500)]); // 500¢ > 400¢ ceiling
 		const res = await fulfillPhoneOrder('order-1', 'test');
 		expect(res.status).toBe('refunded');
 		expect(rentMock).not.toHaveBeenCalled();

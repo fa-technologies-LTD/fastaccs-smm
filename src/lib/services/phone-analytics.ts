@@ -1,5 +1,5 @@
 import { prisma } from '$lib/prisma';
-import { getPhonePricingConfig } from './phone-pricing';
+import { getPhonePricingConfig, NUMBERS_CLEAN_EPOCH } from './phone-pricing';
 import { getBalanceCents, isHubmanConfigured } from './hubman';
 
 /**
@@ -42,6 +42,71 @@ export async function getLowSuccessTierKeys(): Promise<Set<string>> {
 			out.add(key);
 	}
 	return out;
+}
+
+// How far back realized cost is trusted, and the shrinkage prior strength (K). With `n` clean
+// samples, price weight on realized cost = n/(n+K); below that it leans on the catalog prior. K≈20
+// means a tier needs ~20 clean rents before realized cost dominates — smooth, not twitchy.
+export const REALIZED_COST_WINDOW_DAYS = 14;
+export const REALIZED_COST_PRIOR_STRENGTH = 20;
+
+export interface RealizedTierCost {
+	medianCents: number; // robust central cost we ACTUALLY paid (USD cents)
+	count: number; // clean sample size, for the shrinkage weight
+}
+
+/**
+ * Median realized supplier cost per tier (`serviceId||countryId`) from our own recent, CLEAN
+ * `received` rentals — the self-tuning input to pricing. Median (not mean) so one expensive rescue
+ * rent can't yank the basis. Only rentals received since the clean epoch (post-bugfix) count, so
+ * corrupted-era outcomes never train price. Empty until real clean traffic exists → callers fall
+ * back to the catalog prior.
+ */
+export async function getRealizedCostByTier(): Promise<Map<string, RealizedTierCost>> {
+	const windowStart = Date.now() - REALIZED_COST_WINDOW_DAYS * 86_400_000;
+	const since = new Date(Math.max(windowStart, NUMBERS_CLEAN_EPOCH.getTime()));
+	const rentals = await prisma.phoneRental.findMany({
+		where: { status: RECEIVED, receivedAt: { gte: since }, costCents: { not: null } },
+		select: { serviceId: true, countryId: true, costCents: true }
+	});
+	const byTier = new Map<string, number[]>();
+	for (const r of rentals) {
+		if (r.costCents == null || r.costCents <= 0) continue;
+		const key = `${r.serviceId}||${r.countryId}`;
+		let arr = byTier.get(key);
+		if (!arr) byTier.set(key, (arr = []));
+		arr.push(r.costCents);
+	}
+	const out = new Map<string, RealizedTierCost>();
+	for (const [key, costs] of byTier) {
+		costs.sort((a, b) => a - b);
+		const mid = Math.floor(costs.length / 2);
+		const median = costs.length % 2 ? costs[mid] : Math.round((costs[mid - 1] + costs[mid]) / 2);
+		out.set(key, { medianCents: median, count: costs.length });
+	}
+	return out;
+}
+
+/**
+ * Total rescue loss (NGN) we've already absorbed in the last rolling 24h — the sum of
+ * `supplierCost − salePrice` over recent `received` rentals where we paid more than the customer.
+ * The fulfilment sweep subtracts this from the daily rescue budget so a supplier outage can't
+ * quietly bleed a capped loss across many orders (each order alone would think it's within cap).
+ * Uses only stored rental data — no new table.
+ */
+export async function getRescueSpentLast24hNgn(usdNgnRate: number): Promise<number> {
+	const since = new Date(Date.now() - 86_400_000);
+	const rentals = await prisma.phoneRental.findMany({
+		where: { status: RECEIVED, receivedAt: { gte: since }, costCents: { not: null } },
+		select: { costCents: true, saleAmountNgn: true }
+	});
+	let spent = 0;
+	for (const r of rentals) {
+		const costNgn = ((r.costCents ?? 0) / 100) * usdNgnRate;
+		const sale = Number(r.saleAmountNgn ?? 0);
+		if (costNgn > sale) spent += costNgn - sale;
+	}
+	return Math.round(spent);
 }
 
 export interface NumbersServiceStat {

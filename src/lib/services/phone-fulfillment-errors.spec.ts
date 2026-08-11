@@ -36,7 +36,8 @@ vi.mock('./hubman', () => ({
 }));
 vi.mock('./store-credit', () => ({ creditStoreCredit: creditStoreCreditMock, SC_CREDIT_REFUND: 'X' }));
 vi.mock('./admin-alerts', () => ({ sendCriticalAdminAlert: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('./phone-pricing', () => ({ getPhonePricingConfig: vi.fn(), computeMaxPriceCentsForSale: vi.fn() }));
+vi.mock('./phone-pricing', () => ({ getPhonePricingConfig: vi.fn(), computeMaxPriceCentsForSale: vi.fn(), computeMaxRentCents: () => 100000 }));
+vi.mock('./phone-analytics', () => ({ getRescueSpentLast24hNgn: () => Promise.resolve(0) }));
 vi.mock('$lib/helpers/phone-tier-config', () => ({ getPhoneTierConfig: getPhoneTierConfigMock }));
 
 import { cancelAndRefundRental } from './phone-fulfillment';
