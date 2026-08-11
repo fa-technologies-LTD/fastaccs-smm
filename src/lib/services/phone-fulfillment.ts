@@ -699,13 +699,18 @@ export async function userCancelPhoneRental(
 
 // How many times a customer may "try another number" on one order before we refund instead.
 const MAX_CUSTOMER_RETRIES = 3;
-// A customer can request a retry only this long after the number was shown (gives the code a chance).
-const RETRY_MIN_AGE_MS = 60_000;
 
 /**
  * Customer-initiated "try another number": when a code hasn't arrived, swap the current supplier
  * for the next-best one WITHOUT re-charging the customer. Capped, release-before-retry, and it
  * re-checks for a code first so a just-arrived code is never dropped.
+ *
+ * Budget model (revised): the replacement wait runs from when the customer confirmed "I've
+ * requested the code" (otpRequestedAt), not rent time. After ~120s with no OTP, an unconfirmed
+ * pvapins number is treated as a CONTINGENT "shadow" (pay-on-success, very likely dead) — it does
+ * NOT reserve budget, so the replacement keeps its full headroom to climb into a better variant.
+ * hub-man (pay-on-rent, already debited) still reserves its committed cost. The ₦500 rule stays
+ * hard for known costs + the candidate we actively buy. Overlap is capped at one shadow.
  */
 export async function customerRetryPhoneRental(
 	orderItemId: string
@@ -718,8 +723,14 @@ export async function customerRetryPhoneRental(
 		return { ok: false, status: rental.status, message: 'This order is already resolved.' };
 	if (rental.status !== 'awaiting_sms' || !refForRental(rental))
 		return { ok: false, status: 'preparing', message: 'Still getting your number — one moment.' };
-	if (Date.now() - (rental.rentedAt ?? rental.createdAt).getTime() < RETRY_MIN_AGE_MS)
-		return { ok: false, status: 'awaiting_sms', message: 'Give it a few more seconds before trying another.' };
+
+	// The replacement wait runs from the customer's explicit "I've requested the code" confirmation.
+	const pricing = await getPhonePricingConfig();
+	const waitMs = Math.max(30, pricing.otpReplacementWaitSeconds ?? 120) * 1000;
+	if (!rental.otpRequestedAt)
+		return { ok: false, status: 'awaiting_sms', message: "Tap “I’ve requested the code”, then give it about 2 minutes." };
+	if (Date.now() - rental.otpRequestedAt.getTime() < waitMs)
+		return { ok: false, status: 'awaiting_sms', message: 'Give the code a couple of minutes to arrive before trying another.' };
 
 	const ref = refForRental(rental)!;
 	const provider = providerForRental(rental);
@@ -750,21 +761,43 @@ export async function customerRetryPhoneRental(
 		};
 	}
 
-	// Release the current number, then climb to the next rung — excluding EVERY supplier tried on
-	// this order so we never repeat one. Crucially, we use the cancel RESULT: if the provider won't
-	// confirm the release (e.g. pvapins "Not able to reject."), the old number can still receive an
-	// OTP and bill us, so we RESERVE its cost against this order's budget — the replacement then can
-	// only spend what's left, and total exposure still preserves the hard profit floor (§9–12).
+	// Release the current number (using the cancel RESULT), then decide how it affects the budget:
+	//  - hub-man (pay-on-rent): an unconfirmed cancel is a REAL committed cost → reserve it.
+	//  - pvapins (pay-on-success): after the 120s no-OTP wait it's very likely dead. An unconfirmed
+	//    one becomes a CONTINGENT shadow — not reserved 1:1 — so the replacement keeps headroom. We
+	//    keep it durable (shadow_*) for background reconciliation + late-charge accounting. Overlap
+	//    is capped at ONE shadow: a 2nd simultaneous stale pvapins falls back to reserving its cost.
 	const released = await provider.cancel(ref).catch(() => false);
-	const reserveCents = released ? 0 : rental.costCents ?? 0;
+	const oldCostCents = rental.costCents ?? 0;
+	let reserveCents = 0;
+	const shadowData: {
+		shadowProviderRef?: string;
+		shadowCostCents?: number;
+		shadowStaleAt?: Date;
+	} = {};
+	if (!released) {
+		if (rental.provider === 'pvapins') {
+			if (!rental.shadowProviderRef) {
+				// First free shadow — reopen the replacement's headroom, record it durably.
+				shadowData.shadowProviderRef = ref;
+				shadowData.shadowCostCents = oldCostCents;
+				shadowData.shadowStaleAt = new Date();
+			} else {
+				reserveCents = oldCostCents; // already one shadow → cap overlap, reserve this one
+			}
+		} else {
+			reserveCents = oldCostCents; // hub-man committed cost
+		}
+	}
 	const tried = Array.from(
 		new Set([...(rental.triedSuppliers ?? []), candidateKeyFromRental(rental)])
 	);
 	const orderId = await orderIdForItem(orderItemId);
 	if (!orderId) return { ok: false, status: 'error', message: 'Order not found.' };
 
-	// Reset to pending + record the tried suppliers + count the retry + accrue any unresolved
-	// liability, then re-fulfill up the ladder (which subtracts the reservation from the budget).
+	// Reset to pending (fresh number ⇒ clear otpRequestedAt), record tried suppliers + retry count,
+	// accrue any hard reservation, and durably record the shadow. Then re-fulfill up the ladder
+	// (which subtracts only the RESERVED liability — not the contingent shadow — from the budget).
 	await prisma.phoneRental.updateMany({
 		where: { orderItemId, status: 'awaiting_sms' },
 		data: {
@@ -774,6 +807,8 @@ export async function customerRetryPhoneRental(
 			phoneNumber: null,
 			otp: null,
 			smsMessage: null,
+			otpRequestedAt: null,
+			...shadowData,
 			triedSuppliers: tried,
 			retryCount: { increment: 1 },
 			reservedLiabilityCents: { increment: reserveCents }

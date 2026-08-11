@@ -31,8 +31,9 @@
 	let refundMessage = $state<string | null>(phone.refundMessage ?? null);
 	let now = $state(Date.now());
 	// When the customer taps "I've requested the code", we start a focused window; if the code
-	// doesn't land in it, we offer "try another number". (We can't detect the request otherwise.)
-	const EXPECTED_CODE_MS = 75_000;
+	// doesn't land in it, we offer "try another number". This mirrors the server's replacement wait
+	// (~120s from the request), so the button never appears before the backend will allow a swap.
+	const EXPECTED_CODE_MS = 120_000;
 	let requestedAt = $state<number | null>(null);
 	let retrying = $state(false);
 
@@ -64,6 +65,8 @@
 
 	function requestCode() {
 		requestedAt = Date.now();
+		// Stamp the authoritative server-side request time (the replacement wait runs from it).
+		fetch(`/api/numbers/${phone.orderItemId}/requested`, { method: 'POST' }).catch(() => {});
 	}
 
 	async function tryAnother() {

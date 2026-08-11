@@ -24,7 +24,8 @@ const PHONE_PRICING_KEYS = {
 	lowBalanceThresholdCents: 'config.phone.low_balance_threshold_cents',
 	activationTimeoutMinutes: 'config.phone.activation_timeout_minutes',
 	maxPriceMultiple: 'config.phone.max_price_multiple',
-	minFulfillmentProfitNgn: 'config.phone.min_fulfillment_profit_ngn'
+	minFulfillmentProfitNgn: 'config.phone.min_fulfillment_profit_ngn',
+	otpReplacementWaitSeconds: 'config.phone.otp_replacement_wait_seconds'
 } as const;
 
 const DEFAULTS = {
@@ -35,7 +36,8 @@ const DEFAULTS = {
 	lowBalanceThresholdCents: 500, // alert when hub-man balance drops below $5
 	activationTimeoutMinutes: 20, // wait this long for the OTP before auto-cancel+refund
 	maxPriceMultiple: 2.5, // competitive price cap: sticker ≤ 2.5× basis cost (floor still wins)
-	minFulfillmentProfitNgn: 500 // HARD floor: never intentionally procure a number that leaves < this profit
+	minFulfillmentProfitNgn: 500, // HARD floor: never intentionally procure a number that leaves < this profit
+	otpReplacementWaitSeconds: 120 // wait this long after "I've requested the code" before allowing a replacement
 } as const;
 
 // No number is sold below this, and prices round to clean ₦100s (fewer payment mistakes).
@@ -76,6 +78,7 @@ export interface PhonePricingConfig {
 	activationTimeoutMinutes: number;
 	maxPriceMultiple: number;
 	minFulfillmentProfitNgn: number;
+	otpReplacementWaitSeconds: number;
 }
 
 function parseNumber(value: string | undefined, fallback: number, min = 0): number {
@@ -115,6 +118,11 @@ export async function getPhonePricingConfig(): Promise<PhonePricingConfig> {
 			map.get(PHONE_PRICING_KEYS.minFulfillmentProfitNgn),
 			DEFAULTS.minFulfillmentProfitNgn,
 			0
+		),
+		otpReplacementWaitSeconds: parseNumber(
+			map.get(PHONE_PRICING_KEYS.otpReplacementWaitSeconds),
+			DEFAULTS.otpReplacementWaitSeconds,
+			30
 		)
 	};
 }
@@ -156,6 +164,12 @@ export async function savePhonePricingConfig(input: Partial<PhonePricingConfig>)
 			PHONE_PRICING_KEYS.minFulfillmentProfitNgn,
 			Math.max(0, Math.round(input.minFulfillmentProfitNgn)),
 			'Hard minimum profit per successful number — never intentionally procure below it (NGN)'
+		]);
+	if (input.otpReplacementWaitSeconds != null)
+		entries.push([
+			PHONE_PRICING_KEYS.otpReplacementWaitSeconds,
+			Math.max(30, Math.round(input.otpReplacementWaitSeconds)),
+			'Seconds to wait after "I\'ve requested the code" before allowing a replacement number'
 		]);
 
 	for (const [key, value, description] of entries) {

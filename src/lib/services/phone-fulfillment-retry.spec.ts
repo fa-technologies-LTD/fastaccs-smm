@@ -48,7 +48,7 @@ vi.mock('$lib/helpers/phone-tier-config', () => ({ getPhoneTierConfig: getPhoneT
 
 import { customerRetryPhoneRental } from './phone-fulfillment';
 
-const oldEnough = new Date(Date.now() - 120_000);
+const oldEnough = new Date(Date.now() - 130_000); // past the ~120s replacement wait
 
 const rental = (over: Record<string, unknown> = {}) => ({
 	orderItemId: 'item-1',
@@ -59,6 +59,9 @@ const rental = (over: Record<string, unknown> = {}) => ({
 	phoneNumber: '19999999999',
 	rentedAt: oldEnough,
 	createdAt: oldEnough,
+	otpRequestedAt: oldEnough, // customer requested the code long enough ago to allow a replacement
+	shadowProviderRef: null,
+	costCents: 66,
 	retryCount: 0,
 	serviceId: 1,
 	...over
@@ -113,8 +116,16 @@ describe('customerRetryPhoneRental', () => {
 		expect(creditStoreCreditMock).toHaveBeenCalledOnce();
 	});
 
-	it('blocks a too-soon retry (gives the code a chance)', async () => {
-		prismaMock.phoneRental.findUnique.mockResolvedValue(rental({ rentedAt: new Date(), createdAt: new Date() }));
+	it('blocks a too-soon retry — within the ~120s wait after the code was requested', async () => {
+		prismaMock.phoneRental.findUnique.mockResolvedValue(rental({ otpRequestedAt: new Date() })); // just now
+		const res = await customerRetryPhoneRental('item-1');
+		expect(res.ok).toBe(false);
+		expect(res.status).toBe('awaiting_sms');
+		expect(cancelMock).not.toHaveBeenCalled();
+	});
+
+	it('blocks a retry when the customer has not requested the code yet', async () => {
+		prismaMock.phoneRental.findUnique.mockResolvedValue(rental({ otpRequestedAt: null }));
 		const res = await customerRetryPhoneRental('item-1');
 		expect(res.ok).toBe(false);
 		expect(res.status).toBe('awaiting_sms');
@@ -149,12 +160,40 @@ describe('customerRetryPhoneRental', () => {
 		);
 	});
 
-	it('reserves the old number cost when release is NOT confirmed (could still bill)', async () => {
-		prismaMock.phoneRental.findUnique.mockResolvedValue(rental({ costCents: 66 }));
-		cancelMock.mockResolvedValue(false); // pvapins "Not able to reject." — number may still receive an OTP
+	it('stale pvapins + unconfirmed release → reopens headroom (reserve 0) and records a shadow', async () => {
+		prismaMock.phoneRental.findUnique.mockResolvedValue(rental({ costCents: 66, provider: 'pvapins' }));
+		cancelMock.mockResolvedValue(false); // "Not able to reject." — contingent, likely dead after 120s
+		await customerRetryPhoneRental('item-1');
+		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({
+					reservedLiabilityCents: { increment: 0 }, // headroom NOT reduced
+					shadowProviderRef: 'old|USA|Whatsapp46', // durable shadow for reconciliation
+					otpRequestedAt: null
+				})
+			})
+		);
+	});
+
+	it('second overlapping stale pvapins (shadow already exists) → reserves it (overlap cap)', async () => {
+		prismaMock.phoneRental.findUnique.mockResolvedValue(
+			rental({ costCents: 66, provider: 'pvapins', shadowProviderRef: 'earlier|USA|Whatsapp1' })
+		);
+		cancelMock.mockResolvedValue(false);
 		await customerRetryPhoneRental('item-1');
 		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
 			expect.objectContaining({ data: expect.objectContaining({ reservedLiabilityCents: { increment: 66 } }) })
+		);
+	});
+
+	it('hub-man unconfirmed cancel reserves the committed cost (pay-on-rent, no shadow)', async () => {
+		prismaMock.phoneRental.findUnique.mockResolvedValue(
+			rental({ provider: 'hubman', hubOrderUuid: 'hub-uuid-1', providerRef: null, costCents: 80 })
+		);
+		cancelMock.mockResolvedValue(false);
+		await customerRetryPhoneRental('item-1');
+		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
+			expect.objectContaining({ data: expect.objectContaining({ reservedLiabilityCents: { increment: 80 } }) })
 		);
 	});
 });

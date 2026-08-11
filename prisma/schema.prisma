@@ -286,11 +286,20 @@ model PhoneRental {
   senderName    String?   @map("sender_name")
   costCents     Int?      @map("cost_cents") // actual hub-man price_cents charged (USD cents)
   maxPriceCents Int?      @map("max_price_cents") // ceiling we sent (USD cents)
-  // Unresolved supplier liability from EARLIER attempts on this order (USD cents) — e.g. a prior
-  // pvapins number we couldn't confirm-reject that could still bill. Reserved out of the procurement
-  // budget so a replacement can never push total spend past the hard profit floor. Accumulates
-  // across retries; conservative (only released when the order terminally resolves).
+  // KNOWN committed liability from earlier attempts (USD cents) reserved out of the procurement
+  // budget so a replacement can never push total spend past the hard profit floor — e.g. a hub-man
+  // rent (pay-on-rent, already debited) whose cancel isn't confirmed, or a 2nd overlapping stale
+  // pvapins hold. Accumulates across retries; conservative (released when the order terminally resolves).
   reservedLiabilityCents Int @default(0) @map("reserved_liability_cents")
+  // When the customer confirmed "I've requested the code" — the authoritative server clock the
+  // ~120s replacement wait runs from (not rent time). Cleared on each fresh number.
+  otpRequestedAt DateTime? @map("otp_requested_at")
+  // The single "shadow": a stale pvapins predecessor that timed out the 120s wait with release
+  // unconfirmed. Pay-on-success + likely-dead, so it's CONTINGENT (not reserved 1:1) — kept durable
+  // for background reconciliation + late-charge (leakage) accounting. Overlap capped at one shadow.
+  shadowProviderRef String?   @map("shadow_provider_ref")
+  shadowCostCents   Int?      @map("shadow_cost_cents")
+  shadowStaleAt     DateTime? @map("shadow_stale_at")
   saleAmountNgn Decimal?  @map("sale_amount_ngn") // what the customer paid, NGN
   rentedAt      DateTime? @map("rented_at") // when the number was actually rented (drives the 2-min cancel window)
   expiresAt     DateTime? @map("expires_at")

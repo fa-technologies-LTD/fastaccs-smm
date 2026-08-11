@@ -48,7 +48,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 				marginPercent: body.marginPercent,
 				minProfitNgn: body.minProfitNgn,
 				maxPriceMultiple: body.maxPriceMultiple,
-				minFulfillmentProfitNgn: body.minFulfillmentProfitNgn
+				minFulfillmentProfitNgn: body.minFulfillmentProfitNgn,
+				otpReplacementWaitSeconds: body.otpReplacementWaitSeconds
 			});
 			// Recompute every tier's automatic price from the new rate/margin right away.
 			await syncNumbersCatalog();
