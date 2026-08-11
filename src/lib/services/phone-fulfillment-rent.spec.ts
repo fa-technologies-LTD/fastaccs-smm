@@ -21,6 +21,7 @@ const getPhoneTierConfigMock = vi.hoisted(() => vi.fn());
 const getPhonePricingConfigMock = vi.hoisted(() => vi.fn());
 const maxPriceMock = vi.hoisted(() => vi.fn(() => 100000));
 const maxRentMock = vi.hoisted(() => vi.fn(() => 100000)); // hard procurement ceiling (USD cents)
+const acquireRateTokenMock = vi.hoisted(() => vi.fn(() => Promise.resolve(true)));
 
 vi.mock('$lib/prisma', () => ({ prisma: prismaMock }));
 vi.mock('./number-providers', () => ({
@@ -44,6 +45,11 @@ vi.mock('./phone-pricing', () => ({
 	computeMaxPriceCentsForSale: maxPriceMock,
 	computeProcurementCeilingCents: maxRentMock
 }));
+vi.mock('./rate-limiter', () => ({
+	acquireRateToken: acquireRateTokenMock,
+	pvapinsRateSpec: () => ({ capacity: 5, refillPerSec: 5 / 60 }),
+	PVAPINS_GET_NUMBER_BUCKET: 'pvapins:get_number'
+}));
 vi.mock('$lib/helpers/phone-tier-config', () => ({ getPhoneTierConfig: getPhoneTierConfigMock }));
 
 import { fulfillPhoneOrder } from './phone-fulfillment';
@@ -64,6 +70,7 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	maxPriceMock.mockReturnValue(100000);
 	maxRentMock.mockReturnValue(100000);
+	acquireRateTokenMock.mockResolvedValue(true);
 	prismaMock.phoneRental.upsert.mockResolvedValue({});
 	prismaMock.phoneRental.updateMany.mockResolvedValue({ count: 1 }); // claim pending→renting
 	prismaMock.phoneRental.update.mockResolvedValue({});
@@ -220,6 +227,31 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 		const res = await fulfillPhoneOrder('order-1', 'test');
 		expect(res.status).toBe('refunded');
 		expect(rentMock).not.toHaveBeenCalled();
+	});
+
+	it('pvapins rate-limited → keeps SECURING (no refund), reverts to pending', async () => {
+		acquireRateTokenMock.mockResolvedValue(false); // global limiter has no token right now
+		buildLiveCandidatePoolMock.mockResolvedValue([pv('Whatsapp24', 40)]);
+		const res = await fulfillPhoneOrder('order-1', 'test');
+		expect(res.status).toBe('awaiting_sms');
+		expect(res.message).toMatch(/securing/i);
+		expect(rentMock).not.toHaveBeenCalled(); // token denied → pvapins never called
+		expect(creditStoreCreditMock).not.toHaveBeenCalled(); // rate-limit is NOT a refund
+		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
+			expect.objectContaining({ data: { status: 'pending' } })
+		);
+	});
+
+	it('rate-limited but PAST the activation window → refund (bounded, never loops forever)', async () => {
+		acquireRateTokenMock.mockResolvedValue(false);
+		prismaMock.phoneRental.findUnique.mockResolvedValue({
+			reservedLiabilityCents: 0,
+			createdAt: new Date(Date.now() - 60 * 60_000) // 1h ago, well past the 20-min window
+		});
+		buildLiveCandidatePoolMock.mockResolvedValue([pv('Whatsapp24', 40)]);
+		const res = await fulfillPhoneOrder('order-1', 'test');
+		expect(res.status).toBe('refunded');
+		expect(creditStoreCreditMock).toHaveBeenCalledOnce();
 	});
 
 	it('uses the per-tier floor override (₦200) over the global default when set', async () => {

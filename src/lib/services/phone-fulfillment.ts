@@ -3,6 +3,7 @@ import * as hubman from './hubman';
 import { HubmanError } from './hubman';
 import { getPhoneTierConfig, type PhoneTierConfig } from '$lib/helpers/phone-tier-config';
 import { getPhonePricingConfig, computeProcurementCeilingCents } from './phone-pricing';
+import { acquireRateToken, pvapinsRateSpec, PVAPINS_GET_NUMBER_BUCKET } from './rate-limiter';
 import { creditStoreCredit, SC_CREDIT_REFUND } from './store-credit';
 import { sendCriticalAdminAlert } from './admin-alerts';
 import { createUserNotification } from './notifications';
@@ -259,12 +260,14 @@ export async function fulfillPhoneOrder(
 	// must fit what's LEFT, so even if every reserved liability materializes, total spend still keeps
 	// the profit floor. reserved accumulates across retries (see customerRetryPhoneRental).
 	let reservedLiabilityCents = 0;
+	let orderCreatedAt: Date | null = null;
 	try {
 		const liabilityRow = await prisma.phoneRental.findUnique({
 			where: { orderItemId: ctx.orderItemId },
-			select: { reservedLiabilityCents: true }
+			select: { reservedLiabilityCents: true, createdAt: true }
 		});
 		reservedLiabilityCents = liabilityRow?.reservedLiabilityCents ?? 0;
+		if (liabilityRow?.createdAt) orderCreatedAt = liabilityRow.createdAt;
 	} catch {
 		reservedLiabilityCents = 0;
 	}
@@ -297,11 +300,21 @@ export async function fulfillPhoneOrder(
 		expiresAt: Date | null;
 	} | null = null;
 	let lastError = ladder.length === 0 ? 'no in-stock supplier within procurement ceiling' : '';
+	// Did we skip any pvapins candidate purely because the GLOBAL rate limiter had no token? That's
+	// "supplier capacity momentarily exhausted", NOT out of stock — it must never trigger a refund.
+	let rateLimited = false;
+	const rlSpec = pvapinsRateSpec(pricing.pvapinsRateLimitPerMin);
 	const sweepStarted = Date.now();
 	for (const candidate of ladder) {
 		if (Date.now() - sweepStarted > RENT_SWEEP_BUDGET_MS) {
 			lastError = `${lastError || 'still searching'} (time budget reached)`;
 			break;
+		}
+		// pvapins get_number is globally rate-limited (~5/min). Take a shared token before calling it;
+		// if none is free, skip this candidate WITHOUT touching its stock/reliability signal.
+		if (candidate.provider === 'pvapins' && !(await acquireRateToken(PVAPINS_GET_NUMBER_BUCKET, rlSpec))) {
+			rateLimited = true;
+			continue;
 		}
 		try {
 			const r = await getProvider(candidate.provider).rent({
@@ -329,6 +342,19 @@ export async function fulfillPhoneOrder(
 	}
 
 	if (!rented) {
+		// Rate-limited (not out of stock) and still inside the activation window? Keep the order in a
+		// recoverable "securing" state — revert renting→pending so the client poll + the 5-min sweep
+		// retry as tokens free up. NEVER refund on rate pressure. Bounded by the window so it can't
+		// loop forever: past the window (or on genuine no-stock), fall through to refund.
+		const windowMs = pricing.activationTimeoutMinutes * 60_000;
+		const withinWindow = !orderCreatedAt || Date.now() - orderCreatedAt.getTime() < windowMs;
+		if (rateLimited && withinWindow) {
+			await prisma.phoneRental.updateMany({
+				where: { orderItemId: ctx.orderItemId, status: 'renting' },
+				data: { status: 'pending' }
+			});
+			return { status: 'awaiting_sms', message: 'Securing your number…' };
+		}
 		await prisma.phoneRental.updateMany({
 			where: { orderItemId: ctx.orderItemId, status: 'renting' },
 			data: { status: 'failed', failureReason: `no candidate: ${lastError}`.slice(0, 200) }

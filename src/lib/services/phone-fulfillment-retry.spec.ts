@@ -44,6 +44,11 @@ vi.mock('./phone-pricing', () => ({
 	computeMaxPriceCentsForSale: () => 100000,
 	computeProcurementCeilingCents: () => 100000
 }));
+vi.mock('./rate-limiter', () => ({
+	acquireRateToken: () => Promise.resolve(true),
+	pvapinsRateSpec: () => ({ capacity: 5, refillPerSec: 5 / 60 }),
+	PVAPINS_GET_NUMBER_BUCKET: 'pvapins:get_number'
+}));
 vi.mock('$lib/helpers/phone-tier-config', () => ({ getPhoneTierConfig: getPhoneTierConfigMock }));
 
 import { customerRetryPhoneRental } from './phone-fulfillment';

@@ -25,7 +25,8 @@ const PHONE_PRICING_KEYS = {
 	activationTimeoutMinutes: 'config.phone.activation_timeout_minutes',
 	maxPriceMultiple: 'config.phone.max_price_multiple',
 	minFulfillmentProfitNgn: 'config.phone.min_fulfillment_profit_ngn',
-	otpReplacementWaitSeconds: 'config.phone.otp_replacement_wait_seconds'
+	otpReplacementWaitSeconds: 'config.phone.otp_replacement_wait_seconds',
+	pvapinsRateLimitPerMin: 'config.phone.pvapins_rate_limit_per_min'
 } as const;
 
 const DEFAULTS = {
@@ -37,7 +38,8 @@ const DEFAULTS = {
 	activationTimeoutMinutes: 20, // wait this long for the OTP before auto-cancel+refund
 	maxPriceMultiple: 2.5, // competitive price cap: sticker ≤ 2.5× basis cost (floor still wins)
 	minFulfillmentProfitNgn: 500, // HARD floor: never intentionally procure a number that leaves < this profit
-	otpReplacementWaitSeconds: 120 // wait this long after "I've requested the code" before allowing a replacement
+	otpReplacementWaitSeconds: 120, // wait this long after "I've requested the code" before allowing a replacement
+	pvapinsRateLimitPerMin: 5 // global cap on pvapins get_number calls/min (supplier limit ~5/min)
 } as const;
 
 // No number is sold below this, and prices round to clean ₦100s (fewer payment mistakes).
@@ -79,6 +81,7 @@ export interface PhonePricingConfig {
 	maxPriceMultiple: number;
 	minFulfillmentProfitNgn: number;
 	otpReplacementWaitSeconds: number;
+	pvapinsRateLimitPerMin: number;
 }
 
 function parseNumber(value: string | undefined, fallback: number, min = 0): number {
@@ -123,6 +126,11 @@ export async function getPhonePricingConfig(): Promise<PhonePricingConfig> {
 			map.get(PHONE_PRICING_KEYS.otpReplacementWaitSeconds),
 			DEFAULTS.otpReplacementWaitSeconds,
 			30
+		),
+		pvapinsRateLimitPerMin: parseNumber(
+			map.get(PHONE_PRICING_KEYS.pvapinsRateLimitPerMin),
+			DEFAULTS.pvapinsRateLimitPerMin,
+			1
 		)
 	};
 }
@@ -170,6 +178,12 @@ export async function savePhonePricingConfig(input: Partial<PhonePricingConfig>)
 			PHONE_PRICING_KEYS.otpReplacementWaitSeconds,
 			Math.max(30, Math.round(input.otpReplacementWaitSeconds)),
 			'Seconds to wait after "I\'ve requested the code" before allowing a replacement number'
+		]);
+	if (input.pvapinsRateLimitPerMin != null)
+		entries.push([
+			PHONE_PRICING_KEYS.pvapinsRateLimitPerMin,
+			Math.max(1, Math.round(input.pvapinsRateLimitPerMin)),
+			'Global cap on pvapins get_number calls per minute (supplier limit ~5/min)'
 		]);
 
 	for (const [key, value, description] of entries) {

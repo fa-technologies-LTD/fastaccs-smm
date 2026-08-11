@@ -745,3 +745,14 @@ model BlogPostLike {
   @@index([slug])
   @@map("blog_post_likes")
 }
+
+// Distributed token bucket for coordinating scarce upstream supplier calls (e.g. pvapins
+// get_number ~5/min) across all serverless invocations. One row per bucket key; the token count
+// refills over time. Concurrency-safe via SELECT ... FOR UPDATE inside a transaction.
+model RateBucket {
+  key       String   @id
+  tokens    Float
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("rate_buckets")
+}
