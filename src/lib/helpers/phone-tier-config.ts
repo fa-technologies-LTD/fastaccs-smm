@@ -13,7 +13,8 @@ export const PHONE_TIER_KEYS = {
 	expectedCostCents: 'hub_expected_cost_cents',
 	availableCount: 'hub_available_count', // live stock at last refresh
 	autoHidden: 'auto_hidden', // pulled from storefront by the auto-rules (no stock / failing)
-	hideReason: 'auto_hide_reason' // 'no_stock' | 'low_success' — shown as the admin flag cue
+	hideReason: 'auto_hide_reason', // 'no_stock' | 'low_success' — shown as the admin flag cue
+	minFulfillmentProfitNgn: 'min_fulfillment_profit_ngn' // per-tier hard profit floor override (else global)
 } as const;
 
 export const PHONE_DELIVERY_MODE = 'auto_sms';
@@ -30,6 +31,7 @@ export interface PhoneTierConfig {
 	availableCount: number;
 	autoHidden: boolean;
 	hideReason: PhoneHideReason | null;
+	minFulfillmentProfitNgn: number | null; // per-tier hard profit floor; null → use global default
 }
 
 export function getPhoneTierConfig(metadata: unknown): PhoneTierConfig | null {
@@ -47,6 +49,9 @@ export function getPhoneTierConfig(metadata: unknown): PhoneTierConfig | null {
 	const hideReason: PhoneHideReason | null =
 		rawReason === 'no_stock' || rawReason === 'low_success' ? rawReason : null;
 
+	const rawFloor = Number(r[PHONE_TIER_KEYS.minFulfillmentProfitNgn]);
+	const minFulfillmentProfitNgn = Number.isFinite(rawFloor) && rawFloor >= 0 ? rawFloor : null;
+
 	return {
 		serviceId,
 		countryId,
@@ -56,7 +61,8 @@ export function getPhoneTierConfig(metadata: unknown): PhoneTierConfig | null {
 		expectedCostCents: Number.isFinite(expectedCostCents) && expectedCostCents > 0 ? expectedCostCents : 0,
 		availableCount: Number.isFinite(availableCount) && availableCount > 0 ? availableCount : 0,
 		autoHidden: r[PHONE_TIER_KEYS.autoHidden] === true,
-		hideReason
+		hideReason,
+		minFulfillmentProfitNgn
 	};
 }
 

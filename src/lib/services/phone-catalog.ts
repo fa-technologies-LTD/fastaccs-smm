@@ -161,6 +161,16 @@ export function blendedBasisCents(listedCents: number, realized: RealizedTierCos
 	return Math.max(1, Math.round(w * realized.medianCents + (1 - w) * Math.max(0, listedCents)));
 }
 
+// A tier is "thin" when the climbing room left after the hard profit floor is barely above the
+// typical supplier cost — so losing the cheap variant pushes the next one over the ceiling and we
+// refund. headroom = (price − floor) / cost; below this multiple = thin (admin guidance only, the
+// system never changes the floor on its own — the owner sets a per-tier override).
+export const THIN_TIER_HEADROOM_MULTIPLE = 2;
+export function isThinTier(priceNgn: number, costNgn: number, floorNgn: number): boolean {
+	if (!(costNgn > 0) || !(priceNgn > 0)) return false;
+	return (priceNgn - floorNgn) / costNgn < THIN_TIER_HEADROOM_MULTIPLE;
+}
+
 export interface CatalogSyncResult {
 	created: number;
 	refreshed: number;
@@ -261,6 +271,9 @@ export async function syncNumbersCatalog(
 			const lowSuccess = lowSuccessKeys.has(`${serviceName}||${meta.name}`);
 			const autoHidden = noStock || lowSuccess;
 			const hideReason = noStock ? 'no_stock' : lowSuccess ? 'low_success' : null;
+			// This path rebuilds metadata from scratch, so carry over the admin's per-tier hard-floor
+			// override (the sync must never wipe it — it's set out-of-band via updateNumbersTiers).
+			const floorOverride = getPhoneTierConfig(oldMd)?.minFulfillmentProfitNgn ?? null;
 			const metadata: Prisma.InputJsonValue = {
 				[PHONE_TIER_KEYS.deliveryMode]: PHONE_DELIVERY_MODE,
 				[PHONE_TIER_KEYS.serviceId]: serviceId,
@@ -274,7 +287,8 @@ export async function syncNumbersCatalog(
 				[PHONE_TIER_KEYS.hideReason]: hideReason,
 				primary_source: 'hubman',
 				price_locked: locked,
-				pricing: { currency: 'NGN', base_price: finalPrice }
+				pricing: { currency: 'NGN', base_price: finalPrice },
+				...(floorOverride != null ? { [PHONE_TIER_KEYS.minFulfillmentProfitNgn]: floorOverride } : {})
 			};
 			const name = `${serviceName} — ${meta.name}`;
 			if (existingId) {
@@ -489,6 +503,9 @@ export interface NumbersAdminRow {
 	active: boolean; // admin manual switch
 	primarySource: string; // 'hubman' | 'pvapins' — which source currently backs this tier
 	priceLocked: boolean; // admin manually set this price (auto-recompute won't overwrite it)
+	minFulfillmentProfitNgn: number; // effective hard profit floor for this tier (override ?? global)
+	floorOverridden: boolean; // true when this tier carries its own floor (not the global default)
+	thin: boolean; // headroom < ~2× — a candidate for a lower (e.g. ₦200) per-tier floor
 }
 
 /**
@@ -537,6 +554,8 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 				? computeAutoPrice(basisCents, pricing)
 				: readBasePrice(tier.metadata);
 		const costNgn = (costCents / 100) * pricing.usdNgnRate;
+		const effectiveFloorNgn = cfg.minFulfillmentProfitNgn ?? pricing.minFulfillmentProfitNgn;
+		const thin = isThinTier(priceNgn, costNgn, effectiveFloorNgn);
 		const liveNoStock = isPvapins ? false : live ? live.available <= 0 : cfg.hideReason === 'no_stock';
 		const autoHidden = isPvapins ? cfg.autoHidden : liveNoStock || cfg.autoHidden;
 		const hideReason = isPvapins
@@ -561,7 +580,10 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 			hideReason,
 			active: tier.isActive,
 			primarySource,
-			priceLocked
+			priceLocked,
+			minFulfillmentProfitNgn: effectiveFloorNgn,
+			floorOverridden: cfg.minFulfillmentProfitNgn != null,
+			thin
 		});
 	}
 
@@ -573,7 +595,13 @@ export async function getNumbersCatalogForAdmin(): Promise<{
  * and never set here. A tier can't go active with no computed price.
  */
 export async function updateNumbersTiers(
-	updates: Array<{ tierId: string; active?: boolean; priceNgn?: number; lockPrice?: boolean }>
+	updates: Array<{
+		tierId: string;
+		active?: boolean;
+		priceNgn?: number;
+		lockPrice?: boolean;
+		minFulfillmentProfitNgn?: number | null; // per-tier hard floor; null clears it (→ global default)
+	}>
 ): Promise<void> {
 	const platformId = await getNumbersPlatformId();
 	if (!platformId) return;
@@ -601,6 +629,14 @@ export async function updateNumbersTiers(
 		}
 		// Explicit unlock → the next sync recomputes the automatic price.
 		if (u.lockPrice === false) md.price_locked = false;
+
+		// Per-tier hard fulfilment-profit floor override. A number sets it; null clears it (the tier
+		// falls back to the global ₦500). The catalog sync never touches this key, so it persists.
+		if (u.minFulfillmentProfitNgn === null) {
+			delete md[PHONE_TIER_KEYS.minFulfillmentProfitNgn];
+		} else if (u.minFulfillmentProfitNgn != null && Number.isFinite(u.minFulfillmentProfitNgn) && u.minFulfillmentProfitNgn >= 0) {
+			md[PHONE_TIER_KEYS.minFulfillmentProfitNgn] = Math.round(u.minFulfillmentProfitNgn);
+		}
 
 		const data: Prisma.CategoryUpdateInput = { metadata: md as Prisma.InputJsonValue };
 		if (u.active != null) data.isActive = u.active === true && readBasePrice(md) > 0;

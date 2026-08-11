@@ -208,4 +208,17 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 		expect(res.status).toBe('refunded');
 		expect(rentMock).not.toHaveBeenCalled();
 	});
+
+	it('uses the per-tier floor override (₦200) over the global default when set', async () => {
+		getPhoneTierConfigMock.mockReturnValue({
+			serviceId: 1, countryId: 58, serviceName: 'WhatsApp', countryName: 'USA', countryCode: 'US',
+			expectedCostCents: 66, availableCount: 5, autoHidden: false, hideReason: null,
+			minFulfillmentProfitNgn: 200
+		});
+		buildLiveCandidatePoolMock.mockResolvedValue([pv('Whatsapp24', 60)]);
+		rentMock.mockResolvedValue({ providerRef: 'n|USA|Whatsapp24', phoneNumber: '1555', costCents: 60, expiresAt: null });
+		await fulfillPhoneOrder('order-1', 'test');
+		// ceiling computed from the tier's ₦200 floor, not the global — sale ₦4,800, rate 1500.
+		expect(maxRentMock).toHaveBeenCalledWith(4800, 200, 1500);
+	});
 });

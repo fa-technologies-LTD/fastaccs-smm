@@ -22,7 +22,7 @@ vi.mock('$lib/helpers/phone-tier-config', () => ({
 	getPhoneTierConfig: vi.fn()
 }));
 
-import { blendedBasisCents } from './phone-catalog';
+import { blendedBasisCents, isThinTier } from './phone-catalog';
 
 describe('blendedBasisCents — self-tuning price basis (shrinkage, K=20)', () => {
 	it('no clean data → uses the listed catalog prior unchanged', () => {
@@ -39,5 +39,24 @@ describe('blendedBasisCents — self-tuning price basis (shrinkage, K=20)', () =
 	it('n ≫ K → realized cost dominates', () => {
 		// w = 60/(60+20) = 0.75 → 0.75*600 + 0.25*1000 = 700
 		expect(blendedBasisCents(1000, { medianCents: 600, count: 60 })).toBe(700);
+	});
+});
+
+describe('isThinTier — headroom flag (headroom < 2× typical cost)', () => {
+	it('flags a low-priced tier as thin at the ₦500 floor', () => {
+		expect(isThinTier(1800, 750, 500)).toBe(true); // (1800−500)/750 = 1.73
+	});
+
+	it('a high (locked) price has ample headroom → not thin', () => {
+		expect(isThinTier(5500, 750, 500)).toBe(false); // (5000)/750 = 6.67
+	});
+
+	it('lowering the floor to ₦200 lifts a thin tier out of thin', () => {
+		expect(isThinTier(1800, 750, 200)).toBe(false); // (1600)/750 = 2.13
+	});
+
+	it('is false when cost or price is unknown', () => {
+		expect(isThinTier(1800, 0, 500)).toBe(false);
+		expect(isThinTier(0, 750, 500)).toBe(false);
 	});
 });

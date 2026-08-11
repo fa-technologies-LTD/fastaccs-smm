@@ -247,9 +247,11 @@ export async function fulfillPhoneOrder(
 	// than the floor. If the ceiling is 0 (sale doesn't even clear the floor), nothing is affordable
 	// → refund rather than take a loss-making rent.
 	const rate = Math.max(1, pricing.usdNgnRate);
+	// Per-tier override wins (e.g. ₦200 on a "thin" tier to deliver more); else the global floor.
+	const minFulfillmentProfitNgn = ctx.tier.minFulfillmentProfitNgn ?? pricing.minFulfillmentProfitNgn;
 	const procurementCeilingCents = computeProcurementCeilingCents(
 		ctx.saleAmountNgn,
-		pricing.minFulfillmentProfitNgn,
+		minFulfillmentProfitNgn,
 		rate
 	);
 
