@@ -270,10 +270,13 @@ export async function fulfillPhoneOrder(
 	}
 	const effectiveCeilingCents = Math.max(0, procurementCeilingCents - reservedLiabilityCents);
 
-	// Step 1: build the candidate pool (hub-man + every pvapins variant) and sweep the price LADDER
-	// cheapest-first. FAILOVER: an out-of-stock / erroring supplier is skipped and we climb to the
-	// next rung — invisible to the customer. We rent the cheapest that's actually in stock and
-	// pocket the spread. Only if NOTHING rentable within the hard procurement ceiling exists → refund.
+	// Step 1: build the candidate pool (hub-man + every pvapins variant) and sweep it in the ranker's
+	// order — RELIABILITY BAND first, cheapest within a band (see rankCandidates). We do NOT re-sort
+	// by cost here: a $0.40 variant that's usually dry is worse than a $0.48 one that reliably works,
+	// so we prefer the candidate most likely to deliver on the first try and only pay a little more
+	// when reliability warrants. FAILOVER: an OOS/erroring supplier is skipped and we climb to the
+	// next rung — invisible to the customer. Only if NOTHING rentable within the hard procurement
+	// ceiling exists → refund. (The ₦500 floor still bounds every candidate's cost.)
 	const pool = await buildLiveCandidatePool({
 		hubServiceId: ctx.tier.serviceId,
 		hubCountryId: ctx.tier.countryId,
@@ -284,8 +287,7 @@ export async function fulfillPhoneOrder(
 	const ladder = pool
 		.filter((c) => c.costCents > 0 && c.costCents <= effectiveCeilingCents)
 		.filter((c) => !excludeKeys.has(`${c.provider}:${c.providerServiceRef}`))
-		.sort((a, b) => a.costCents - b.costCents) // cheapest first — rent cheap, climb only if dry
-		.slice(0, MAX_RENT_ATTEMPTS);
+		.slice(0, MAX_RENT_ATTEMPTS); // preserve the ranked order — do not override with cost-only sort
 
 	let rented: {
 		provider: NumberProviderId;

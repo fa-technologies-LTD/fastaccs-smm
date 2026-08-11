@@ -59,6 +59,23 @@ describe('rankCandidates', () => {
 	it('returns empty for an empty pool', () => {
 		expect(rankCandidates([])).toEqual([]);
 	});
+
+	it('prefers proven-reliable variants (cheapest among them) over cheaper unproven ones (§22)', () => {
+		// Two excellent variants ($0.68, $0.74) + a pricier excellent ($1.90) + cheaper unproven ones.
+		const ranked = rankCandidates([
+			c({ label: 'wa8-0.51-unproven', costCents: 51, reliability: null, sampleSize: 0 }),
+			c({ label: 'wa52-1.90-excellent', costCents: 190, reliability: 0.97, sampleSize: 30 }),
+			c({ label: 'wa31-0.68-excellent', costCents: 68, reliability: 0.97, sampleSize: 30 }),
+			c({ label: 'wa44-0.74-excellent', costCents: 74, reliability: 0.97, sampleSize: 30 })
+		]).map((x) => x.label);
+		// Excellent band first, cheapest within it → 0.68 then 0.74 then 1.90; unproven last.
+		expect(ranked).toEqual([
+			'wa31-0.68-excellent',
+			'wa44-0.74-excellent',
+			'wa52-1.90-excellent',
+			'wa8-0.51-unproven'
+		]);
+	});
 });
 
 describe('effectiveReliability', () => {

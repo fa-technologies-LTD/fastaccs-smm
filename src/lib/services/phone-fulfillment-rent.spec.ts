@@ -183,11 +183,13 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 		expect(rentMock).toHaveBeenCalledTimes(6); // proves it did not stop at 4
 	});
 
-	it('sweeps cheapest-first — rent cheap, pocket the spread', async () => {
-		buildLiveCandidatePoolMock.mockResolvedValue([pv('B', 120), pv('A', 40)]); // out of order
-		rentMock.mockResolvedValue({ providerRef: 'n|USA|A', phoneNumber: '1555', costCents: 40, expiresAt: null });
+	it('sweeps in the ranker\'s order — does NOT re-sort by cost (reliability wins)', async () => {
+		// The pool arrives pre-ranked (reliability band, then cost). A pricier but more-reliable
+		// candidate is first; fulfilment must try it first, not jump to the cheaper one.
+		buildLiveCandidatePoolMock.mockResolvedValue([pv('reliable', 90), pv('cheapButDry', 40)]);
+		rentMock.mockResolvedValue({ providerRef: 'n|USA|reliable', phoneNumber: '1555', costCents: 90, expiresAt: null });
 		await fulfillPhoneOrder('order-1', 'test');
-		expect(rentMock.mock.calls[0][0]).toMatchObject({ providerServiceRef: 'A', expectedCostCents: 40 });
+		expect(rentMock.mock.calls[0][0]).toMatchObject({ providerServiceRef: 'reliable', expectedCostCents: 90 });
 	});
 
 	it('compresses margin: takes a pricier variant that still clears the ₦500 floor rather than refunding', async () => {
