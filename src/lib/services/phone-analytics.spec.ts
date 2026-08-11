@@ -8,25 +8,9 @@ vi.mock('./phone-pricing', () => ({
 }));
 vi.mock('./hubman', () => ({ getBalanceCents: vi.fn(), isHubmanConfigured: () => false }));
 
-import { getRescueSpentLast24hNgn, getRealizedCostByTier } from './phone-analytics';
+import { getRealizedCostByTier } from './phone-analytics';
 
 beforeEach(() => vi.clearAllMocks());
-
-describe('getRescueSpentLast24hNgn — rolling portfolio loss', () => {
-	it('sums ONLY the orders where supplier cost exceeded the sale price', () => {
-		prismaMock.phoneRental.findMany.mockResolvedValue([
-			{ costCents: 500, saleAmountNgn: 1000 }, // cost ₦7,500 > ₦1,000 → loss ₦6,500
-			{ costCents: 10, saleAmountNgn: 1000 }, // cost ₦150 < ₦1,000 → profit, ignored
-			{ costCents: 100, saleAmountNgn: 1000 } // cost ₦1,500 > ₦1,000 → loss ₦500
-		]);
-		return expect(getRescueSpentLast24hNgn(1500)).resolves.toBe(7000);
-	});
-
-	it('is zero when every order was profitable', () => {
-		prismaMock.phoneRental.findMany.mockResolvedValue([{ costCents: 40, saleAmountNgn: 1800 }]);
-		return expect(getRescueSpentLast24hNgn(1500)).resolves.toBe(0);
-	});
-});
 
 describe('getRealizedCostByTier — robust median per tier', () => {
 	it('keys by serviceId||countryId and takes the median cost, skipping bad rows', () => {

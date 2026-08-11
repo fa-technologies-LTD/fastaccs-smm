@@ -24,8 +24,7 @@ const PHONE_PRICING_KEYS = {
 	lowBalanceThresholdCents: 'config.phone.low_balance_threshold_cents',
 	activationTimeoutMinutes: 'config.phone.activation_timeout_minutes',
 	maxPriceMultiple: 'config.phone.max_price_multiple',
-	deliveryLossCapNgn: 'config.phone.delivery_loss_cap_ngn',
-	rescueBudgetDailyNgn: 'config.phone.rescue_budget_daily_ngn'
+	minFulfillmentProfitNgn: 'config.phone.min_fulfillment_profit_ngn'
 } as const;
 
 const DEFAULTS = {
@@ -36,8 +35,7 @@ const DEFAULTS = {
 	lowBalanceThresholdCents: 500, // alert when hub-man balance drops below $5
 	activationTimeoutMinutes: 20, // wait this long for the OTP before auto-cancel+refund
 	maxPriceMultiple: 2.5, // competitive price cap: sticker ≤ 2.5× basis cost (floor still wins)
-	deliveryLossCapNgn: 1000, // per-order: absorb up to this much loss to deliver vs refund
-	rescueBudgetDailyNgn: 5000 // portfolio: total rescue loss allowed across a rolling 24h
+	minFulfillmentProfitNgn: 500 // HARD floor: never intentionally procure a number that leaves < this profit
 } as const;
 
 // No number is sold below this, and prices round to clean ₦100s (fewer payment mistakes).
@@ -45,6 +43,14 @@ export const NUMBERS_PRICE_FLOOR_NGN = 1000;
 
 /** Default competitive price cap: the sticker never exceeds this multiple of the basis cost. */
 export const NUMBERS_MAX_PRICE_MULTIPLE = 2.5;
+
+/**
+ * The HARD minimum profit on every successful fulfilment (the owner's absolute floor). Distinct
+ * from the pricing profit floor (NUMBERS_MIN_PROFIT_NGN ₦1,000, which the *sticker* aims for):
+ * once an order is paid, we may compress margin to deliver, but we NEVER intentionally rent a
+ * number that would leave less than this profit. No intentional-loss / rescue spending exists.
+ */
+export const NUMBERS_MIN_FULFILLMENT_PROFIT_NGN = 500;
 
 /**
  * The learning epoch. Only rentals RECEIVED on/after this instant may train pricing (realized
@@ -69,8 +75,7 @@ export interface PhonePricingConfig {
 	lowBalanceThresholdCents: number;
 	activationTimeoutMinutes: number;
 	maxPriceMultiple: number;
-	deliveryLossCapNgn: number;
-	rescueBudgetDailyNgn: number;
+	minFulfillmentProfitNgn: number;
 }
 
 function parseNumber(value: string | undefined, fallback: number, min = 0): number {
@@ -106,10 +111,9 @@ export async function getPhonePricingConfig(): Promise<PhonePricingConfig> {
 			1
 		),
 		maxPriceMultiple: parseNumber(map.get(PHONE_PRICING_KEYS.maxPriceMultiple), DEFAULTS.maxPriceMultiple, 1),
-		deliveryLossCapNgn: parseNumber(map.get(PHONE_PRICING_KEYS.deliveryLossCapNgn), DEFAULTS.deliveryLossCapNgn, 0),
-		rescueBudgetDailyNgn: parseNumber(
-			map.get(PHONE_PRICING_KEYS.rescueBudgetDailyNgn),
-			DEFAULTS.rescueBudgetDailyNgn,
+		minFulfillmentProfitNgn: parseNumber(
+			map.get(PHONE_PRICING_KEYS.minFulfillmentProfitNgn),
+			DEFAULTS.minFulfillmentProfitNgn,
 			0
 		)
 	};
@@ -147,17 +151,11 @@ export async function savePhonePricingConfig(input: Partial<PhonePricingConfig>)
 			Math.max(1, input.maxPriceMultiple),
 			'Competitive price cap — sticker ≤ this × basis cost (floor still wins)'
 		]);
-	if (input.deliveryLossCapNgn != null)
+	if (input.minFulfillmentProfitNgn != null)
 		entries.push([
-			PHONE_PRICING_KEYS.deliveryLossCapNgn,
-			Math.max(0, Math.round(input.deliveryLossCapNgn)),
-			'Per-order loss we will absorb to deliver rather than refund (NGN)'
-		]);
-	if (input.rescueBudgetDailyNgn != null)
-		entries.push([
-			PHONE_PRICING_KEYS.rescueBudgetDailyNgn,
-			Math.max(0, Math.round(input.rescueBudgetDailyNgn)),
-			'Rolling 24h portfolio cap on total rescue loss (NGN)'
+			PHONE_PRICING_KEYS.minFulfillmentProfitNgn,
+			Math.max(0, Math.round(input.minFulfillmentProfitNgn)),
+			'Hard minimum profit per successful number — never intentionally procure below it (NGN)'
 		]);
 
 	for (const [key, value, description] of entries) {
@@ -208,8 +206,8 @@ export const NUMBERS_MIN_PROFIT_NGN = 1000;
  * blended toward what we actually realize), NOT the worst-case tail — so the sticker tracks
  * what we really pay, not a $5 variant we almost never rent. On very cheap tiers the cap can
  * fall below the floor; the floor wins there, so we always clear min profit. The wider
- * delivery ceiling (see computeMaxRentCents) is what keeps rents filling — this price is only
- * about competitiveness, decoupled from how much we'll spend to fulfil.
+ * procurement ceiling (see computeProcurementCeilingCents) is what bounds fulfilment spend — this
+ * price is only about competitiveness, decoupled from how much we'll spend to fulfil.
  */
 export function computeAutoPrice(
 	basisCostCents: number,
@@ -226,16 +224,25 @@ export function computeAutoPrice(
 }
 
 /**
- * The USD-cents ceiling we'll pay a supplier to fulfil THIS already-paid order — the
- * *fulfilment* lever, deliberately separate from and wider than the customer price. We may
- * spend up to `sale + allowedLoss` (in NGN, converted to cents) so a rare cheap-stock-dry
- * moment delivers a number at a small bounded loss instead of refunding. `allowedLoss` is
- * pre-clamped by the caller to both the per-order cap and the rolling portfolio budget, so
- * when the rescue budget is exhausted this collapses to break-even (sale only).
+ * The HARD procurement ceiling (USD cents) for an already-paid order: the most we will ever spend
+ * on suppliers for it while preserving the minimum fulfilment profit. There is NO intentional loss
+ * and NO rescue budget — this is `sale − minFulfillmentProfit`, converted to cents.
+ *
+ *   procurementBudgetNgn = saleNgn − minFulfillmentProfitNgn
+ *
+ * Returns **0** when the budget is zero or negative (the order cannot be fulfilled at a safe
+ * margin at this price → refund, never a loss-making rent). Callers must treat 0 as "nothing
+ * affordable" (no candidate has cost ≤ 0). For a multi-attempt order, subtract already-committed
+ * and unresolved supplier liability from this budget before evaluating the next candidate.
  */
-export function computeMaxRentCents(saleNgn: number, allowedLossNgn: number, usdNgnRate: number): number {
-	const budgetNgn = Math.max(0, saleNgn) + Math.max(0, allowedLossNgn);
-	return Math.max(1, Math.floor((budgetNgn / Math.max(1, usdNgnRate)) * 100));
+export function computeProcurementCeilingCents(
+	saleNgn: number,
+	minFulfillmentProfitNgn: number,
+	usdNgnRate: number
+): number {
+	const budgetNgn = Math.max(0, saleNgn) - Math.max(0, minFulfillmentProfitNgn);
+	if (budgetNgn <= 0) return 0;
+	return Math.floor((budgetNgn / Math.max(1, usdNgnRate)) * 100);
 }
 
 /**

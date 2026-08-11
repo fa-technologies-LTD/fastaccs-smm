@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 vi.mock('$lib/prisma', () => ({ prisma: {} }));
 
-import { computeAutoPrice, computeMaxRentCents } from './phone-pricing';
+import { computeAutoPrice, computeProcurementCeilingCents } from './phone-pricing';
 
 const CFG = { usdNgnRate: 1500, marginPercent: 120, minProfitNgn: 1000, maxPriceMultiple: 2.5 };
 
@@ -30,17 +30,19 @@ describe('computeAutoPrice — margin collar', () => {
 	});
 });
 
-describe('computeMaxRentCents — delivery ceiling', () => {
-	it('adds the allowed rescue loss on top of the sale price', () => {
-		// sale ₦1,800 + ₦1,000 loss = ₦2,800 → 2800/1500*100 = 186¢
-		expect(computeMaxRentCents(1800, 1000, 1500)).toBe(186);
+describe('computeProcurementCeilingCents — hard ₦500 fulfilment floor', () => {
+	it('is sale − ₦500 profit, converted to USD cents (no loss, ever)', () => {
+		// ₦1,800 − ₦500 = ₦1,300 budget → 1300/1500*100 = 86¢ (≈ $0.86)
+		expect(computeProcurementCeilingCents(1800, 500, 1500)).toBe(86);
 	});
 
-	it('collapses to break-even when the rescue budget is exhausted (allowedLoss 0)', () => {
-		expect(computeMaxRentCents(1800, 0, 1500)).toBe(120); // 1800/1500*100
+	it('a manually-locked high price gives more procurement headroom', () => {
+		// ₦5,500 − ₦500 = ₦5,000 → 5000/1500*100 = 333¢ (≈ $3.33)
+		expect(computeProcurementCeilingCents(5500, 500, 1500)).toBe(333);
 	});
 
-	it('never returns below 1 cent', () => {
-		expect(computeMaxRentCents(0, 0, 1500)).toBe(1);
+	it('returns 0 (unfulfillable — refund, never a loss) when the sale cannot clear the floor', () => {
+		expect(computeProcurementCeilingCents(500, 500, 1500)).toBe(0);
+		expect(computeProcurementCeilingCents(400, 500, 1500)).toBe(0);
 	});
 });

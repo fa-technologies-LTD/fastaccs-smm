@@ -2,8 +2,7 @@ import { prisma } from '$lib/prisma';
 import * as hubman from './hubman';
 import { HubmanError } from './hubman';
 import { getPhoneTierConfig, type PhoneTierConfig } from '$lib/helpers/phone-tier-config';
-import { getPhonePricingConfig, computeMaxRentCents } from './phone-pricing';
-import { getRescueSpentLast24hNgn } from './phone-analytics';
+import { getPhonePricingConfig, computeProcurementCeilingCents } from './phone-pricing';
 import { creditStoreCredit, SC_CREDIT_REFUND } from './store-credit';
 import { sendCriticalAdminAlert } from './admin-alerts';
 import { createUserNotification } from './notifications';
@@ -242,22 +241,22 @@ export async function fulfillPhoneOrder(
 		};
 	}
 
-	// We own the rent. The DELIVERY CEILING is decoupled from the customer price and deliberately
-	// WIDER: we'll spend up to sale + a bounded rescue loss to deliver a number rather than refund.
-	// That loss is capped twice — per order (deliveryLossCapNgn) AND across a rolling 24h portfolio
-	// (rescueBudgetDailyNgn) — so a supplier outage can't quietly bleed a capped loss across dozens
-	// of orders. When the portfolio budget is spent, allowedLoss → 0 and the ceiling collapses to
-	// break-even (sale only). We still sweep cheapest-first and pocket the spread on the common case.
+	// We own the rent. HARD PROCUREMENT CEILING: the most we'll ever spend on a supplier for this
+	// order while still keeping the minimum fulfilment profit (₦500). NO intentional loss, NO rescue
+	// budget — we may compress margin to deliver, but we never rent a number that would leave less
+	// than the floor. If the ceiling is 0 (sale doesn't even clear the floor), nothing is affordable
+	// → refund rather than take a loss-making rent.
 	const rate = Math.max(1, pricing.usdNgnRate);
-	const rescueSpentNgn = await getRescueSpentLast24hNgn(rate).catch(() => 0);
-	const portfolioRoomNgn = Math.max(0, (pricing.rescueBudgetDailyNgn ?? 0) - rescueSpentNgn);
-	const allowedLossNgn = Math.max(0, Math.min(pricing.deliveryLossCapNgn ?? 0, portfolioRoomNgn));
-	const deliverCeilingCents = computeMaxRentCents(ctx.saleAmountNgn, allowedLossNgn, rate);
+	const procurementCeilingCents = computeProcurementCeilingCents(
+		ctx.saleAmountNgn,
+		pricing.minFulfillmentProfitNgn,
+		rate
+	);
 
 	// Step 1: build the candidate pool (hub-man + every pvapins variant) and sweep the price LADDER
 	// cheapest-first. FAILOVER: an out-of-stock / erroring supplier is skipped and we climb to the
 	// next rung — invisible to the customer. We rent the cheapest that's actually in stock and
-	// pocket the spread. Only if NOTHING rentable at/under the delivery ceiling exists → refund.
+	// pocket the spread. Only if NOTHING rentable within the hard procurement ceiling exists → refund.
 	const pool = await buildLiveCandidatePool({
 		hubServiceId: ctx.tier.serviceId,
 		hubCountryId: ctx.tier.countryId,
@@ -266,7 +265,7 @@ export async function fulfillPhoneOrder(
 	}).catch(() => []);
 	const excludeKeys = new Set(options.excludeKeys ?? []);
 	const ladder = pool
-		.filter((c) => c.costCents <= deliverCeilingCents)
+		.filter((c) => c.costCents > 0 && c.costCents <= procurementCeilingCents)
 		.filter((c) => !excludeKeys.has(`${c.provider}:${c.providerServiceRef}`))
 		.sort((a, b) => a.costCents - b.costCents) // cheapest first — rent cheap, climb only if dry
 		.slice(0, MAX_RENT_ATTEMPTS);
@@ -278,7 +277,7 @@ export async function fulfillPhoneOrder(
 		costCents: number;
 		expiresAt: Date | null;
 	} | null = null;
-	let lastError = ladder.length === 0 ? 'no in-stock supplier at/under delivery ceiling' : '';
+	let lastError = ladder.length === 0 ? 'no in-stock supplier within procurement ceiling' : '';
 	const sweepStarted = Date.now();
 	for (const candidate of ladder) {
 		if (Date.now() - sweepStarted > RENT_SWEEP_BUDGET_MS) {
@@ -293,7 +292,7 @@ export async function fulfillPhoneOrder(
 				countryName: ctx.tier.countryName,
 				providerServiceRef: candidate.providerServiceRef,
 				providerCountryRef: candidate.providerCountryRef,
-				maxPriceCents: deliverCeilingCents,
+				maxPriceCents: procurementCeilingCents,
 				expectedCostCents: candidate.costCents
 			});
 			rented = {
@@ -337,7 +336,7 @@ export async function fulfillPhoneOrder(
 					hubOrderUuid: rented.provider === 'hubman' ? rented.providerRef : null,
 					phoneNumber: rented.phoneNumber,
 					costCents: Number.isFinite(rented.costCents) ? Math.round(rented.costCents) : null,
-					maxPriceCents: deliverCeilingCents,
+					maxPriceCents: procurementCeilingCents,
 					rentedAt: new Date(),
 					expiresAt: rented.expiresAt,
 					status: 'awaiting_sms'

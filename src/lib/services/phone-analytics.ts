@@ -87,28 +87,6 @@ export async function getRealizedCostByTier(): Promise<Map<string, RealizedTierC
 	return out;
 }
 
-/**
- * Total rescue loss (NGN) we've already absorbed in the last rolling 24h — the sum of
- * `supplierCost − salePrice` over recent `received` rentals where we paid more than the customer.
- * The fulfilment sweep subtracts this from the daily rescue budget so a supplier outage can't
- * quietly bleed a capped loss across many orders (each order alone would think it's within cap).
- * Uses only stored rental data — no new table.
- */
-export async function getRescueSpentLast24hNgn(usdNgnRate: number): Promise<number> {
-	const since = new Date(Date.now() - 86_400_000);
-	const rentals = await prisma.phoneRental.findMany({
-		where: { status: RECEIVED, receivedAt: { gte: since }, costCents: { not: null } },
-		select: { costCents: true, saleAmountNgn: true }
-	});
-	let spent = 0;
-	for (const r of rentals) {
-		const costNgn = ((r.costCents ?? 0) / 100) * usdNgnRate;
-		const sale = Number(r.saleAmountNgn ?? 0);
-		if (costNgn > sale) spent += costNgn - sale;
-	}
-	return Math.round(spent);
-}
-
 export interface NumbersServiceStat {
 	serviceName: string;
 	countryName: string;
