@@ -30,6 +30,7 @@ vi.mock('./store-credit', () => ({
 	creditStoreCredit: creditStoreCreditMock,
 	SC_CREDIT_REFUND: 'SC_CREDIT_REFUND'
 }));
+vi.mock('./phone-telemetry', () => ({ recordPhoneAttempt: () => Promise.resolve(null), recordAttemptOtpReceived: () => Promise.resolve(), recordAttemptRejection: () => Promise.resolve(), classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' }) }));
 vi.mock('./admin-alerts', () => ({ sendCriticalAdminAlert: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('./phone-pricing', () => ({
 	getPhonePricingConfig: vi.fn(),

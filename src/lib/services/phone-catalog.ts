@@ -588,7 +588,13 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 		const priceNgn =
 			readBasePrice(tier.metadata) || (costCents ? computeAutoPrice(basisCents, pricing) : 0);
 		const costNgn = (costCents / 100) * pricing.usdNgnRate;
-		const effectiveFloorNgn = cfg.minFulfillmentProfitNgn ?? pricing.minFulfillmentProfitNgn;
+		// A per-tier override can only RAISE the floor above the global firewall (never below ₦500).
+		// So a stored sub-global value is ignored (neutralizes the old thin-tier ₦200 without a migration).
+		const effectiveFloorNgn = Math.max(
+			pricing.minFulfillmentProfitNgn,
+			cfg.minFulfillmentProfitNgn ?? pricing.minFulfillmentProfitNgn
+		);
+		const floorOverridden = effectiveFloorNgn > pricing.minFulfillmentProfitNgn;
 		const thin = isThinTier(priceNgn, costNgn, effectiveFloorNgn);
 		const liveNoStock = isPvapins ? false : live ? live.available <= 0 : cfg.hideReason === 'no_stock';
 		const autoHidden = isPvapins ? cfg.autoHidden : liveNoStock || cfg.autoHidden;
@@ -616,7 +622,7 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 			primarySource,
 			priceLocked,
 			minFulfillmentProfitNgn: effectiveFloorNgn,
-			floorOverridden: cfg.minFulfillmentProfitNgn != null,
+			floorOverridden,
 			thin
 		});
 	}

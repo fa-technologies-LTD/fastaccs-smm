@@ -330,10 +330,11 @@
 					/>
 				</label>
 				<p class="text-xs flex-1 min-w-[220px]" style="color: var(--text-muted);">
-					FastAccs may use more expensive stock to <em>save</em> an order, but will never
-					intentionally procure past the point where less than this profit remains. It is
-					<strong>not</strong> a loss cap — losses are never allowed. This is separate from the pricing
-					target above.
+					FastAccs may use more expensive stock to <em>save</em> an order, but
+					<strong>will not intentionally procure below this profit floor</strong>. (Rare supplier
+					anomalies — a stale number that charges late, a failed cancellation — can still cause
+					leakage; monitoring surfaces those.) Separate from the pricing target above. A per-tier
+					override can only <em>raise</em> this floor, never drop below it.
 				</p>
 			</div>
 		</div>
@@ -491,8 +492,8 @@
 					<th class="px-4 py-3">Cost</th>
 					<th class="px-4 py-3">Price ₦</th>
 					<th class="px-4 py-3">Profit ₦</th>
-					<th class="px-4 py-3" title="Most we'll spend on a supplier for this tier while keeping its hard floor">Max spend</th>
-					<th class="px-4 py-3" title="Hard minimum profit for this tier — overrides the global when set">Fulfil. floor</th>
+					<th class="px-4 py-3" title="Max supplier spend for a NEW order at this price while keeping its hard floor (price − floor). A live order's remaining headroom can be less after prior costs.">New-order budget</th>
+					<th class="px-4 py-3" title="Hard minimum profit for this tier. A per-tier value can only RAISE it above the global floor, never below.">Fulfil. floor</th>
 					<th class="px-4 py-3">Stock</th>
 					<th class="px-4 py-3">Status</th>
 					<th class="px-4 py-3 text-center">Live</th>
@@ -569,7 +570,7 @@
 								<span style="color: var(--text-dim);">₦</span>
 								<input
 									type="number"
-									min="0"
+									min={minFulfillmentProfitNgn}
 									step="50"
 									disabled={!row.floorOverridden}
 									bind:value={row.minFulfillmentProfitNgn}
@@ -578,8 +579,8 @@
 										? '#a78bfa'
 										: 'var(--border)'}; color: var(--text);"
 									title={row.floorOverridden
-										? 'Per-tier hard floor (override). Click the badge to revert to the global.'
-										: 'Using the global hard floor. Click the badge to set a per-tier value.'}
+										? 'Per-tier hard floor — can only RAISE above the global, never below. Click the badge to revert.'
+										: 'Using the global hard floor. Click the badge to set a higher per-tier value.'}
 								/>
 								<button
 									onclick={() => toggleFloorOverride(row)}
@@ -619,7 +620,7 @@
 									<span
 										class="inline-block px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap"
 										style="background: rgba(56,189,248,0.12); color: #38bdf8;"
-										title="Thin headroom — a lower per-tier fulfilment floor would let it deliver more often"
+										title="Thin headroom — cheap stock going dry tends to refund here; the durable fix is a higher price (self-tunes as costs rise), not a lower floor"
 									>
 										Thin
 									</span>

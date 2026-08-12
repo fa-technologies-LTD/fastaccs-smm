@@ -4,6 +4,12 @@ import { HubmanError } from './hubman';
 import { getPhoneTierConfig, type PhoneTierConfig } from '$lib/helpers/phone-tier-config';
 import { getPhonePricingConfig, computeProcurementCeilingCents } from './phone-pricing';
 import { acquireRateToken, pvapinsRateSpec, PVAPINS_GET_NUMBER_BUCKET } from './rate-limiter';
+import {
+	recordPhoneAttempt,
+	recordAttemptOtpReceived,
+	recordAttemptRejection,
+	classifyRentFailure
+} from './phone-telemetry';
 import { creditStoreCredit, SC_CREDIT_REFUND } from './store-credit';
 import { sendCriticalAdminAlert } from './admin-alerts';
 import { createUserNotification } from './notifications';
@@ -121,6 +127,23 @@ async function markRentalReceived(
 		}
 	});
 	if (claim.count > 0) {
+		// Telemetry (best-effort, floated async so it can never slow or break the money path): stamp
+		// OTP delivery + latency on this number's attempt.
+		void (async () => {
+			try {
+				const r = await prisma.phoneRental.findUnique({
+					where: { orderItemId },
+					select: { provider: true, providerRef: true, hubOrderUuid: true, otpRequestedAt: true, rentedAt: true, createdAt: true }
+				});
+				if (!r) return;
+				const ref = r.provider === 'hubman' ? r.hubOrderUuid : r.providerRef;
+				const from = (r.otpRequestedAt ?? r.rentedAt ?? r.createdAt)?.getTime();
+				const latencySec = from ? (Date.now() - from) / 1000 : null;
+				await recordAttemptOtpReceived(orderItemId, ref, latencySec);
+			} catch {
+				/* observational only */
+			}
+		})();
 		const orderId = await orderIdForItem(orderItemId);
 		if (orderId) {
 			const order = await prisma.order
@@ -248,8 +271,13 @@ export async function fulfillPhoneOrder(
 	// than the floor. If the ceiling is 0 (sale doesn't even clear the floor), nothing is affordable
 	// → refund rather than take a loss-making rent.
 	const rate = Math.max(1, pricing.usdNgnRate);
-	// Per-tier override wins (e.g. ₦200 on a "thin" tier to deliver more); else the global floor.
-	const minFulfillmentProfitNgn = ctx.tier.minFulfillmentProfitNgn ?? pricing.minFulfillmentProfitNgn;
+	// The global hard floor is a firewall a per-tier override can only RAISE, never weaken — so a tier
+	// can be more conservative, but nothing drops below the global ₦500 (sub-floor is a deliberate
+	// future decision, not an accident). max(global, override) enforces that.
+	const minFulfillmentProfitNgn = Math.max(
+		pricing.minFulfillmentProfitNgn,
+		ctx.tier.minFulfillmentProfitNgn ?? pricing.minFulfillmentProfitNgn
+	);
 	const procurementCeilingCents = computeProcurementCeilingCents(
 		ctx.saleAmountNgn,
 		minFulfillmentProfitNgn,
@@ -303,17 +331,29 @@ export async function fulfillPhoneOrder(
 	// Did we skip any pvapins candidate purely because the GLOBAL rate limiter had no token? That's
 	// "supplier capacity momentarily exhausted", NOT out of stock — it must never trigger a refund.
 	let rateLimited = false;
+	let attemptNumber = 0;
 	const rlSpec = pvapinsRateSpec(pricing.pvapinsRateLimitPerMin);
 	const sweepStarted = Date.now();
+	// Telemetry is OBSERVATIONAL + best-effort: floated (void) so it can never slow the rent budget
+	// or break fulfillment. recordPhoneAttempt swallows its own errors.
 	for (const candidate of ladder) {
 		if (Date.now() - sweepStarted > RENT_SWEEP_BUDGET_MS) {
 			lastError = `${lastError || 'still searching'} (time budget reached)`;
 			break;
 		}
+		attemptNumber += 1;
 		// pvapins get_number is globally rate-limited (~5/min). Take a shared token before calling it;
 		// if none is free, skip this candidate WITHOUT touching its stock/reliability signal.
 		if (candidate.provider === 'pvapins' && !(await acquireRateToken(PVAPINS_GET_NUMBER_BUCKET, rlSpec))) {
 			rateLimited = true;
+			void recordPhoneAttempt({
+				orderItemId: ctx.orderItemId,
+				attemptNumber,
+				provider: candidate.provider,
+				providerServiceRef: candidate.providerServiceRef,
+				expectedCostCents: candidate.costCents,
+				outcome: 'rate_limited'
+			});
 			continue;
 		}
 		try {
@@ -334,10 +374,31 @@ export async function fulfillPhoneOrder(
 				costCents: Number(r.costCents),
 				expiresAt: r.expiresAt
 			};
+			void recordPhoneAttempt({
+				orderItemId: ctx.orderItemId,
+				attemptNumber,
+				provider: candidate.provider,
+				providerServiceRef: candidate.providerServiceRef,
+				providerRef: r.providerRef,
+				expectedCostCents: candidate.costCents,
+				actualCostCents: Number.isFinite(rented.costCents) ? Math.round(rented.costCents) : null,
+				phoneNumber: rented.phoneNumber,
+				outcome: 'rented'
+			});
 			break;
 		} catch (error) {
 			lastError = `${candidate.label}: ${(error as Error).message}`;
 			console.error(`[phone.${source}] rent via ${lastError}`);
+			const cls = classifyRentFailure((error as Error).message);
+			void recordPhoneAttempt({
+				orderItemId: ctx.orderItemId,
+				attemptNumber,
+				provider: candidate.provider,
+				providerServiceRef: candidate.providerServiceRef,
+				expectedCostCents: candidate.costCents,
+				outcome: cls.outcome,
+				failureCategory: cls.category
+			});
 		}
 	}
 
@@ -682,6 +743,7 @@ export async function cancelAndRefundRental(
 	// (a used/delivered number can't be cancelled), re-check once and mark received rather than
 	// refunding a delivered activation.
 	const cancelled = await provider.cancel(ref).catch(() => false);
+	void recordAttemptRejection(orderItemId, ref, cancelled);
 	if (!cancelled) {
 		const late = await provider
 			.pollSms(ref)
@@ -796,6 +858,7 @@ export async function customerRetryPhoneRental(
 	//    keep it durable (shadow_*) for background reconciliation + late-charge accounting. Overlap
 	//    is capped at ONE shadow: a 2nd simultaneous stale pvapins falls back to reserving its cost.
 	const released = await provider.cancel(ref).catch(() => false);
+	void recordAttemptRejection(orderItemId, ref, released);
 	const oldCostCents = rental.costCents ?? 0;
 	let reserveCents = 0;
 	const shadowData: {

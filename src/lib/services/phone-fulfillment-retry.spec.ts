@@ -38,6 +38,7 @@ vi.mock('./hubman', () => ({
 	HubmanError: class HubmanError extends Error {}
 }));
 vi.mock('./store-credit', () => ({ creditStoreCredit: creditStoreCreditMock, SC_CREDIT_REFUND: 'X' }));
+vi.mock('./phone-telemetry', () => ({ recordPhoneAttempt: () => Promise.resolve(null), recordAttemptOtpReceived: () => Promise.resolve(), recordAttemptRejection: () => Promise.resolve(), classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' }) }));
 vi.mock('./admin-alerts', () => ({ sendCriticalAdminAlert: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('./phone-pricing', () => ({
 	getPhonePricingConfig: getPhonePricingConfigMock,
@@ -93,7 +94,7 @@ beforeEach(() => {
 		serviceId: 1, countryId: 58, serviceName: 'WhatsApp', countryName: 'USA', countryCode: 'US',
 		expectedCostCents: 66, availableCount: 5, autoHidden: false, hideReason: null
 	});
-	getPhonePricingConfigMock.mockResolvedValue({ usdNgnRate: 1500, marginPercent: 120, activationTimeoutMinutes: 20 });
+	getPhonePricingConfigMock.mockResolvedValue({ usdNgnRate: 1500, marginPercent: 120, activationTimeoutMinutes: 20, minFulfillmentProfitNgn: 500 });
 	prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => unknown) =>
 		cb({ phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, order: { update: vi.fn() } })
 	);

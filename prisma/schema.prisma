@@ -756,3 +756,34 @@ model RateBucket {
 
   @@map("rate_buckets")
 }
+
+// Durable per-attempt telemetry for the Numbers system — FastAccs' OWN empirical supplier record
+// (which variant, cost, rent outcome, OTP timing, rejection, actual COGS). Purely OBSERVATIONAL:
+// it is NOT part of financial correctness. Writes are best-effort — a telemetry failure must never
+// break a paid customer's fulfillment. No FK to orders/rentals on purpose (decoupled from the money
+// path); orderItemId is a plain indexed column for joining in analytics.
+model PhoneAttempt {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderItemId        String    @map("order_item_id") @db.Uuid
+  attemptNumber      Int       @default(1) @map("attempt_number")
+  provider           String // 'hubman' | 'pvapins'
+  providerServiceRef String    @map("provider_service_ref") // variant, e.g. 'Whatsapp24' or hub service id
+  providerRef        String?   @map("provider_ref") // rent handle (matches OTP/rejection updates)
+  expectedCostCents  Int?      @map("expected_cost_cents")
+  actualCostCents    Int?      @map("actual_cost_cents")
+  outcome            String // rented | oos | rate_limited | error | otp_received | otp_timeout
+  failureCategory    String?   @map("failure_category")
+  phoneNumber        String?   @map("phone_number")
+  otpRequestedAt     DateTime? @map("otp_requested_at")
+  otpReceivedAt      DateTime? @map("otp_received_at")
+  otpLatencySec      Int?      @map("otp_latency_sec")
+  rejectionAttempted Boolean   @default(false) @map("rejection_attempted")
+  rejectionSuccess   Boolean?  @map("rejection_success")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([orderItemId])
+  @@index([provider, providerServiceRef, createdAt])
+  @@index([outcome, createdAt])
+  @@map("phone_attempts")
+}

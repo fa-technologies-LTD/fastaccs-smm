@@ -39,6 +39,7 @@ vi.mock('./hubman', () => ({
 	HubmanError: class HubmanError extends Error {}
 }));
 vi.mock('./store-credit', () => ({ creditStoreCredit: creditStoreCreditMock, SC_CREDIT_REFUND: 'X' }));
+vi.mock('./phone-telemetry', () => ({ recordPhoneAttempt: () => Promise.resolve(null), recordAttemptOtpReceived: () => Promise.resolve(), recordAttemptRejection: () => Promise.resolve(), classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' }) }));
 vi.mock('./admin-alerts', () => ({ sendCriticalAdminAlert: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('./phone-pricing', () => ({
 	getPhonePricingConfig: getPhonePricingConfigMock,
@@ -92,7 +93,7 @@ beforeEach(() => {
 		autoHidden: false,
 		hideReason: null
 	});
-	getPhonePricingConfigMock.mockResolvedValue({ usdNgnRate: 1500, marginPercent: 120, activationTimeoutMinutes: 20 });
+	getPhonePricingConfigMock.mockResolvedValue({ usdNgnRate: 1500, marginPercent: 120, activationTimeoutMinutes: 20, minFulfillmentProfitNgn: 500 });
 	getProviderMock.mockReturnValue({ rent: rentMock, cancel: cancelMock });
 	prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => unknown) =>
 		cb({ phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, order: { update: vi.fn() } })
@@ -254,7 +255,19 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 		expect(creditStoreCreditMock).toHaveBeenCalledOnce();
 	});
 
-	it('uses the per-tier floor override (₦200) over the global default when set', async () => {
+	it('a per-tier floor override can only RAISE above the global — a ₦800 tier floor is used', async () => {
+		getPhoneTierConfigMock.mockReturnValue({
+			serviceId: 1, countryId: 58, serviceName: 'WhatsApp', countryName: 'USA', countryCode: 'US',
+			expectedCostCents: 66, availableCount: 5, autoHidden: false, hideReason: null,
+			minFulfillmentProfitNgn: 800
+		});
+		buildLiveCandidatePoolMock.mockResolvedValue([pv('Whatsapp24', 60)]);
+		rentMock.mockResolvedValue({ providerRef: 'n|USA|Whatsapp24', phoneNumber: '1555', costCents: 60, expiresAt: null });
+		await fulfillPhoneOrder('order-1', 'test');
+		expect(maxRentMock).toHaveBeenCalledWith(4800, 800, 1500); // tier floor > global → tier wins
+	});
+
+	it('a sub-global tier floor (₦200) is CLAMPED up to the global firewall (₦500)', async () => {
 		getPhoneTierConfigMock.mockReturnValue({
 			serviceId: 1, countryId: 58, serviceName: 'WhatsApp', countryName: 'USA', countryCode: 'US',
 			expectedCostCents: 66, availableCount: 5, autoHidden: false, hideReason: null,
@@ -263,7 +276,6 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 		buildLiveCandidatePoolMock.mockResolvedValue([pv('Whatsapp24', 60)]);
 		rentMock.mockResolvedValue({ providerRef: 'n|USA|Whatsapp24', phoneNumber: '1555', costCents: 60, expiresAt: null });
 		await fulfillPhoneOrder('order-1', 'test');
-		// ceiling computed from the tier's ₦200 floor, not the global — sale ₦4,800, rate 1500.
-		expect(maxRentMock).toHaveBeenCalledWith(4800, 200, 1500);
+		expect(maxRentMock).toHaveBeenCalledWith(4800, 500, 1500); // never below the global floor
 	});
 });
