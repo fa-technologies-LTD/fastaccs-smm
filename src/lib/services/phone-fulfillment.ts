@@ -953,3 +953,71 @@ export async function sweepExpiredPhoneRentals(): Promise<number> {
 	}
 	return acted;
 }
+
+// A stale pvapins "shadow" can't keep receiving forever — a pvapins activation expires. Past this
+// age with no code, treat it as dead/free and stop tracking it.
+const SHADOW_MAX_AGE_MS = 30 * 60_000;
+
+/** Null out a resolved shadow (race-safe: only if it's still this exact shadow ref). Best-effort. */
+async function clearShadow(orderItemId: string, shadowRef: string): Promise<void> {
+	await prisma.phoneRental
+		.updateMany({
+			where: { orderItemId, shadowProviderRef: shadowRef },
+			data: { shadowProviderRef: null, shadowCostCents: null, shadowStaleAt: null }
+		})
+		.catch(() => {});
+}
+
+/**
+ * Reconcile abandoned "shadow" pvapins numbers (stale predecessors from "try another"). Because
+ * pvapins is pay-on-success, an abandoned number can still receive a code later and bill us — a
+ * leakage the customer never sees. This polls each open shadow (get_sms is NOT the ~5/min-limited
+ * get_number endpoint) and resolves it:
+ *  - received → the shadow LATE-CHARGED us: record it on its attempt (now auditable COGS) + alert.
+ *  - expired / too old → dead/free: best-effort reject, then stop tracking.
+ *  - waiting / error → leave it for the next pass.
+ * Purely OBSERVATIONAL + best-effort — it never touches customer fulfillment, budgets, or refunds.
+ */
+export async function reconcilePhoneShadows(): Promise<{ reconciled: number; leaked: number }> {
+	const shadows = await prisma.phoneRental
+		.findMany({
+			where: { shadowProviderRef: { not: null } },
+			select: { orderItemId: true, shadowProviderRef: true, shadowCostCents: true, shadowStaleAt: true }
+		})
+		.catch(() => [] as Array<{ orderItemId: string; shadowProviderRef: string | null; shadowCostCents: number | null; shadowStaleAt: Date | null }>);
+	let reconciled = 0;
+	let leaked = 0;
+	for (const s of shadows) {
+		const ref = s.shadowProviderRef;
+		if (!ref) continue;
+		try {
+			const provider = getProvider('pvapins');
+			const poll: ProviderSmsResult = await provider
+				.pollSms(ref)
+				.catch(() => ({ status: 'error', reason: 'poll failed' }) as ProviderSmsResult);
+			const tooOld = s.shadowStaleAt != null && Date.now() - s.shadowStaleAt.getTime() > SHADOW_MAX_AGE_MS;
+			if (poll.status === 'received') {
+				// Leakage: an abandoned number received a code → pvapins charged us for a number the
+				// customer never used. Make it auditable (its attempt's real COGS) and alert.
+				await recordAttemptOtpReceived(s.orderItemId, ref, null);
+				await sendCriticalAdminAlert({
+					title: 'Numbers: abandoned pvapins number late-charged (leakage)',
+					message: `Order item ${s.orderItemId}: a stale pvapins number received a code after the customer moved on — supplier cost ~$${((s.shadowCostCents ?? 0) / 100).toFixed(2)} leaked. If these become frequent, raise the replacement wait or the tier price.`,
+					source: 'phone.shadow',
+					dedupeKey: `phone-shadow-leak:${s.orderItemId}:${ref}`
+				}).catch(() => {});
+				await clearShadow(s.orderItemId, ref);
+				leaked += 1;
+				reconciled += 1;
+			} else if (poll.status === 'expired' || tooOld) {
+				await provider.cancel(ref).catch(() => {});
+				await clearShadow(s.orderItemId, ref);
+				reconciled += 1;
+			}
+			// waiting / error → leave it; the next sweep re-checks.
+		} catch (error) {
+			console.error('[phone.shadow] reconcile failed (ignored):', (error as Error).message);
+		}
+	}
+	return { reconciled, leaked };
+}
