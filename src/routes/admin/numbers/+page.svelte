@@ -20,12 +20,22 @@
 		active: boolean;
 		primarySource: string;
 		priceLocked: boolean;
+		minFulfillmentProfitNgn: number; // effective hard floor for this tier (override ?? global)
+		floorOverridden: boolean; // carries its own floor (not the global default)
+		thin: boolean; // headroom < ~2× — a candidate for a lower per-tier floor
 	}
 
 	let rows = $state<Row[]>(data.rows.map((r) => ({ ...r })));
 	let usdNgnRate = $state(data.usdNgnRate);
 	let marginPercent = $state(data.marginPercent);
 	let minProfitNgn = $state(data.minProfitNgn);
+	// Fulfilment SAFETY floor — the hard ₦ profit we never intentionally go below. Distinct from the
+	// pricing profit target above (which the sticker AIMS for). §48/§49.
+	let minFulfillmentProfitNgn = $state(data.minFulfillmentProfitNgn);
+	let maxPriceMultiple = $state(data.maxPriceMultiple);
+	let otpReplacementWaitSeconds = $state(data.otpReplacementWaitSeconds);
+	let pvapinsRateLimitPerMin = $state(data.pvapinsRateLimitPerMin);
+	let showAdvanced = $state(false);
 	let saving = $state(false);
 	let expanding = $state(false);
 	let appFilter = $state<'all' | number>('all');
@@ -43,7 +53,7 @@
 	const liveCount = $derived(
 		rows.filter((r) => r.active && r.priceNgn > 0 && !r.autoHidden).length
 	);
-	const flaggedCount = $derived(rows.filter((r) => r.autoHidden || profitOf(r) < 1000).length);
+	const flaggedCount = $derived(rows.filter((r) => r.autoHidden || profitOf(r) < minProfitNgn).length);
 
 	// Distinct apps for the sort/filter dropdown, in the order they appear.
 	const apps = $derived.by(() => {
@@ -63,11 +73,30 @@
 	function profitOf(r: Row): number {
 		return Math.round(r.priceNgn - (r.costCents / 100) * usdNgnRate);
 	}
+	// The most we'll ever spend on a supplier for this tier while keeping its hard floor (§50).
+	function maxSpendNgn(r: Row): number {
+		return Math.max(0, Math.round(r.priceNgn - r.minFulfillmentProfitNgn));
+	}
+	// Economic health at the current price + live cost (§51). Green normal / amber compressed /
+	// red at-risk (cost above the procurement ceiling → often refunds rather than a loss).
+	function health(r: Row): { text: string; color: string } {
+		const costNgn = (r.costCents / 100) * usdNgnRate;
+		if (r.priceNgn <= r.minFulfillmentProfitNgn) return { text: 'Unfulfillable', color: '#dc2626' };
+		if (costNgn > maxSpendNgn(r)) return { text: 'At risk', color: '#dc2626' };
+		if (profitOf(r) < minProfitNgn) return { text: 'Compressed', color: '#f59e0b' };
+		return { text: 'Healthy', color: '#34d399' };
+	}
+	// Toggle a per-tier fulfilment-floor override on/off (off = fall back to the global).
+	function toggleFloorOverride(r: Row) {
+		r.floorOverridden = !r.floorOverridden;
+		if (!r.floorOverridden) r.minFulfillmentProfitNgn = minFulfillmentProfitNgn;
+	}
 	function flag(r: Row): { text: string; color: string } | null {
 		if (r.autoHidden && r.hideReason === 'low_success')
 			return { text: 'Hidden · low success', color: '#f59e0b' };
 		if (r.autoHidden) return { text: 'Hidden · no stock', color: '#94a3b8' };
-		if (profitOf(r) < 1000) return { text: `Low profit · ₦${profitOf(r).toLocaleString()}`, color: '#dc2626' };
+		if (profitOf(r) < minProfitNgn)
+			return { text: `Low profit · ₦${profitOf(r).toLocaleString()}`, color: '#dc2626' };
 		return null;
 	}
 
@@ -88,7 +117,9 @@
 				tierId: r.tierId,
 				active: r.active,
 				priceNgn: r.priceLocked ? r.priceNgn : undefined,
-				lockPrice: r.priceLocked
+				lockPrice: r.priceLocked,
+				// A per-tier fulfilment-floor override (null clears it → back to the global default).
+				minFulfillmentProfitNgn: r.floorOverridden ? r.minFulfillmentProfitNgn : null
 			}));
 			const out = await post({ action: 'save', updates });
 			if (!out.success) throw new Error(out.error || 'Failed to save');
@@ -98,9 +129,22 @@
 			const rateMarginChanged =
 				usdNgnRate !== data.usdNgnRate ||
 				marginPercent !== data.marginPercent ||
-				minProfitNgn !== data.minProfitNgn;
+				minProfitNgn !== data.minProfitNgn ||
+				minFulfillmentProfitNgn !== data.minFulfillmentProfitNgn ||
+				maxPriceMultiple !== data.maxPriceMultiple ||
+				otpReplacementWaitSeconds !== data.otpReplacementWaitSeconds ||
+				pvapinsRateLimitPerMin !== data.pvapinsRateLimitPerMin;
 			if (rateMarginChanged) {
-				const cfg = await post({ action: 'config', usdNgnRate, marginPercent, minProfitNgn });
+				const cfg = await post({
+					action: 'config',
+					usdNgnRate,
+					marginPercent,
+					minProfitNgn,
+					minFulfillmentProfitNgn,
+					maxPriceMultiple,
+					otpReplacementWaitSeconds,
+					pvapinsRateLimitPerMin
+				});
 				if (!cfg.success) throw new Error(cfg.error || 'Failed to save settings');
 			}
 			showSuccess(
@@ -253,7 +297,7 @@
 				/>
 			</label>
 			<label class="block">
-				<span class="text-xs font-medium" style="color: var(--text-muted);">Min profit floor (₦)</span>
+				<span class="text-xs font-medium" style="color: var(--text-muted);">Pricing profit target (₦)</span>
 				<input
 					type="number"
 					bind:value={minProfitNgn}
@@ -262,11 +306,91 @@
 					class="mt-1 w-full rounded-lg px-3 py-2"
 					style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
 				/>
+				<span class="text-[11px]" style="color: var(--text-dim);">Profit the sticker AIMS for.</span>
 			</label>
 		</div>
+
+		<!-- Fulfilment SAFETY floor — deliberately separate + strongly labelled (not a "loss cap"). §48/§49/§88 -->
+		<div
+			class="mt-4 rounded-lg p-4"
+			style="border: 1px solid rgba(52,211,153,0.35); background: rgba(52,211,153,0.06);"
+		>
+			<div class="flex flex-wrap items-end gap-4">
+				<label class="block">
+					<span class="text-xs font-semibold" style="color: #34d399;"
+						>Hard minimum profit per successful number (₦)</span
+					>
+					<input
+						type="number"
+						bind:value={minFulfillmentProfitNgn}
+						min="0"
+						step="100"
+						class="mt-1 w-40 rounded-lg px-3 py-2"
+						style="background: var(--bg-elev-1); color: var(--text); border: 1px solid rgba(52,211,153,0.4);"
+					/>
+				</label>
+				<p class="text-xs flex-1 min-w-[220px]" style="color: var(--text-muted);">
+					FastAccs may use more expensive stock to <em>save</em> an order, but will never
+					intentionally procure past the point where less than this profit remains. It is
+					<strong>not</strong> a loss cap — losses are never allowed. This is separate from the pricing
+					target above.
+				</p>
+			</div>
+		</div>
+
+		<!-- Advanced dials — kept out of the way; defaults are sensible. -->
+		<div class="mt-3">
+			<button
+				type="button"
+				onclick={() => (showAdvanced = !showAdvanced)}
+				class="text-xs font-medium"
+				style="color: var(--text-muted);"
+			>
+				{showAdvanced ? '▾' : '▸'} Advanced pricing & supplier dials
+			</button>
+			{#if showAdvanced}
+				<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end mt-3">
+					<label class="block">
+						<span class="text-xs font-medium" style="color: var(--text-muted);">Max price multiple (×cost)</span>
+						<input
+							type="number"
+							bind:value={maxPriceMultiple}
+							min="1"
+							step="0.1"
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
+						/>
+						<span class="text-[11px]" style="color: var(--text-dim);">Competitive cap (floor still wins).</span>
+					</label>
+					<label class="block">
+						<span class="text-xs font-medium" style="color: var(--text-muted);">Replacement wait (sec)</span>
+						<input
+							type="number"
+							bind:value={otpReplacementWaitSeconds}
+							min="30"
+							step="10"
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
+						/>
+						<span class="text-[11px]" style="color: var(--text-dim);">After "I've requested the code".</span>
+					</label>
+					<label class="block">
+						<span class="text-xs font-medium" style="color: var(--text-muted);">pvapins calls / min</span>
+						<input
+							type="number"
+							bind:value={pvapinsRateLimitPerMin}
+							min="1"
+							step="1"
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
+						/>
+						<span class="text-[11px]" style="color: var(--text-dim);">Global get_number rate cap.</span>
+					</label>
+				</div>
+			{/if}
+		</div>
 		<p class="text-xs mt-3" style="color: var(--text-dim);">
-			Hit <strong>Save</strong> to apply a new rate, margin, or profit floor — unlocked prices
-			recalculate instantly; locked prices stay put.
+			Hit <strong>Save</strong> to apply — unlocked prices recalculate instantly; locked prices stay put.
 		</p>
 	</div>
 
@@ -367,6 +491,8 @@
 					<th class="px-4 py-3">Cost</th>
 					<th class="px-4 py-3">Price ₦</th>
 					<th class="px-4 py-3">Profit ₦</th>
+					<th class="px-4 py-3" title="Most we'll spend on a supplier for this tier while keeping its hard floor">Max spend</th>
+					<th class="px-4 py-3" title="Hard minimum profit for this tier — overrides the global when set">Fulfil. floor</th>
 					<th class="px-4 py-3">Stock</th>
 					<th class="px-4 py-3">Status</th>
 					<th class="px-4 py-3 text-center">Live</th>
@@ -375,6 +501,7 @@
 			<tbody>
 				{#each visibleRows as row (row.tierId)}
 					{@const f = flag(row)}
+					{@const h = health(row)}
 					<tr style="border-top: 1px solid var(--border); background: var(--surface);">
 						<td class="px-4 py-2 font-medium" style="color: var(--text);">{row.serviceName}</td>
 						<td class="px-4 py-2" style="color: var(--text-muted);">{row.countryName}</td>
@@ -430,24 +557,74 @@
 						</td>
 						<td
 							class="px-4 py-2 whitespace-nowrap font-medium"
-							style="color: {profitOf(row) < 1000 ? '#f87171' : '#34d399'};"
+							style="color: {profitOf(row) < minProfitNgn ? '#f87171' : '#34d399'};"
 						>
 							₦{profitOf(row).toLocaleString()}
+						</td>
+						<td class="px-4 py-2 whitespace-nowrap" style="color: var(--text-muted);">
+							₦{maxSpendNgn(row).toLocaleString()}
+						</td>
+						<td class="px-4 py-2 whitespace-nowrap">
+							<div class="flex items-center gap-1.5">
+								<span style="color: var(--text-dim);">₦</span>
+								<input
+									type="number"
+									min="0"
+									step="50"
+									disabled={!row.floorOverridden}
+									bind:value={row.minFulfillmentProfitNgn}
+									class="w-20 rounded-md px-2 py-1 text-right disabled:opacity-50"
+									style="background: var(--bg-elev-1); border: 1px solid {row.floorOverridden
+										? '#a78bfa'
+										: 'var(--border)'}; color: var(--text);"
+									title={row.floorOverridden
+										? 'Per-tier hard floor (override). Click the badge to revert to the global.'
+										: 'Using the global hard floor. Click the badge to set a per-tier value.'}
+								/>
+								<button
+									onclick={() => toggleFloorOverride(row)}
+									class="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+									style="background: {row.floorOverridden
+										? 'rgba(167,139,250,0.15)'
+										: 'var(--bg-elev-1)'}; border: 1px solid {row.floorOverridden
+										? '#a78bfa'
+										: 'var(--border)'}; color: {row.floorOverridden ? '#a78bfa' : 'var(--text-dim)'};"
+									title={row.floorOverridden ? 'Revert to the global floor' : 'Override for this tier'}
+								>
+									{row.floorOverridden ? 'tier' : 'global'}
+								</button>
+							</div>
 						</td>
 						<td class="px-4 py-2" style="color: {row.available <= 0 ? '#f87171' : 'var(--text-muted)'};">
 							{row.available.toLocaleString()}
 						</td>
 						<td class="px-4 py-2">
-							{#if f}
-								<span
-									class="inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
-									style="background: {f.color}20; color: {f.color};"
-								>
-									⚑ {f.text}
-								</span>
-							{:else}
-								<span class="text-xs" style="color: var(--text-dim);">OK</span>
-							{/if}
+							<div class="flex flex-wrap items-center gap-1">
+								{#if f}
+									<span
+										class="inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
+										style="background: {f.color}20; color: {f.color};"
+									>
+										⚑ {f.text}
+									</span>
+								{:else}
+									<span
+										class="inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
+										style="background: {h.color}20; color: {h.color};"
+									>
+										{h.text}
+									</span>
+								{/if}
+								{#if row.thin}
+									<span
+										class="inline-block px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap"
+										style="background: rgba(56,189,248,0.12); color: #38bdf8;"
+										title="Thin headroom — a lower per-tier fulfilment floor would let it deliver more often"
+									>
+										Thin
+									</span>
+								{/if}
+							</div>
 						</td>
 						<td class="px-4 py-2 text-center">
 							<input
@@ -460,7 +637,7 @@
 				{/each}
 				{#if visibleRows.length === 0}
 					<tr style="background: var(--surface);">
-						<td colspan="9" class="px-4 py-8 text-center" style="color: var(--text-dim);">
+						<td colspan="11" class="px-4 py-8 text-center" style="color: var(--text-dim);">
 							{rows.length === 0
 								? 'No tiers yet. Click “Expand catalog” to load the catalog.'
 								: 'No tiers for this app.'}
