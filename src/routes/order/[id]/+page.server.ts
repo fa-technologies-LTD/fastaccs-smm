@@ -76,6 +76,9 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 	const phone = phoneItem?.phoneRental
 		? {
 				orderItemId: phoneItem.id,
+				// The tier (Category) id, so "Try another number" can re-buy this exact service+country
+				// straight to checkout instead of sending the customer back to re-pick. Read-only.
+				tierId: phoneItem.categoryId ?? null,
 				serviceName: phoneItem.phoneRental.serviceName,
 				countryName: phoneItem.phoneRental.countryName,
 				phoneNumber: phoneItem.phoneRental.phoneNumber,

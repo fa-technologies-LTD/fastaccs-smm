@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { cart } from '$lib/stores/cart.svelte';
 	import { Copy, RefreshCw, ShieldCheck, Check } from '$lib/icons';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
@@ -16,6 +18,7 @@
 		expiresAt: string | null;
 		otpRequestedAt?: string | null;
 		saleAmountNgn?: number | null;
+		tierId?: string | null;
 		refundMessage?: string | null;
 	}
 
@@ -102,6 +105,18 @@
 	);
 	function scrollToCard() {
 		cardEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
+	// "Try another number" after a refund → re-buy this exact service+country straight to checkout
+	// (one number per order, so reset the cart first). Falls back to the storefront if we lack the tier.
+	function buyAnother() {
+		if (!phone.tierId) {
+			goto('/numbers');
+			return;
+		}
+		cart.clear();
+		cart.addTier(phone.tierId, 1);
+		goto('/checkout');
 	}
 
 	// Securing reassurance evolves with elapsed UI time (never a fake %), so a longer wait reads as
@@ -409,7 +424,7 @@
 				</div>
 			{/if}
 			<div class="flex flex-wrap items-center justify-center gap-3 mt-4">
-				<a href="/numbers" class="soda-cta">Try another number</a>
+				<button onclick={buyAnother} class="soda-cta">Try another number</button>
 				<a href="/dashboard" class="text-xs hover:underline" style="color: var(--text-muted);">View balance</a>
 			</div>
 		</div>
