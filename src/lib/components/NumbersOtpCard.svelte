@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Copy, RefreshCw, ShieldCheck, X, Check } from '$lib/icons';
+	import { Copy, RefreshCw, ShieldCheck, Check } from '$lib/icons';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
 
@@ -70,13 +70,14 @@
 		secondsLeft == null ? '' : `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`
 	);
 
-	// "Soda bar" progress toward the expected code arrival, once the customer says they requested it.
-	const requestProgress = $derived(
-		requestedAt == null ? 0 : Math.min(100, ((now - requestedAt) / EXPECTED_CODE_MS) * 100)
-	);
+	// The ~120s is a REPLACEMENT-eligibility rule, not a delivery ETA — so we never render it as a
+	// filling bar/countdown (that makes a 30–60s wait feel like a 2-minute ordeal). We only use it to
+	// decide when to offer another number. `keepWaiting` lets the customer dismiss that offer and stay.
 	const showTryAnother = $derived(
 		isWaiting && requestedAt != null && now - requestedAt >= EXPECTED_CODE_MS
 	);
+	let keepWaiting = $state(false);
+	const offerSwitch = $derived(showTryAnother && !keepWaiting && !retrying);
 
 	// Securing reassurance evolves with elapsed UI time (never a fake %), so a longer wait reads as
 	// "still working" rather than "stuck". Payment is already confirmed by the time this card renders.
@@ -106,6 +107,8 @@
 				phoneNumber = data.phoneNumber ?? phoneNumber;
 				status = 'awaiting_sms';
 				requestedAt = null; // re-request on the fresh number
+				keepWaiting = false;
+				numberShownAt = null; // re-mute the request button for the fresh number
 				expiresAt = null;
 				showSuccess('Fresh number ready', data.message);
 				if (!pollTimer) pollTimer = setInterval(poll, 3000);
@@ -302,48 +305,51 @@
 						</span>
 					{/if}
 				</div>
-			{:else}
-				<!-- Requested — waiting calmly; FastAccs checks automatically (no fake countdown). -->
-				<div class="flex items-center justify-center gap-2 text-sm mb-1" style="color: var(--text);">
-					{#if showTryAnother}
-						No code yet?
-					{:else}
-						<RefreshCw class="w-4 h-4 animate-spin" style="color: #38bdf8;" />
-						Waiting for your code
+			{:else if offerSwitch}
+				<!-- ≥120s, no code — a calm recovery CHOICE, not an error/countdown. -->
+				<div class="text-center text-sm mb-1" style="color: var(--text);">No code yet?</div>
+				<div class="text-xs text-center mb-4" style="color: var(--text-dim);">
+					We can switch you to another number at no extra charge.
+				</div>
+				<div class="flex flex-col items-center gap-2">
+					<button onclick={tryAnother} disabled={retrying} class="soda-cta">Use another number</button>
+					<button onclick={() => (keepWaiting = true)} class="text-xs hover:underline" style="color: var(--text-muted);">
+						Keep waiting
+					</button>
+					{#if canCancel}
+						<button
+							onclick={cancelNumber}
+							disabled={cancelling}
+							class="text-xs hover:underline disabled:opacity-60"
+							style="color: var(--text-dim);"
+						>
+							{cancelling ? 'Cancelling…' : 'Cancel & refund instead'}
+						</button>
 					{/if}
 				</div>
+			{:else}
+				<!-- Calm active waiting (and the "switching…" state during a replacement). A continuous
+				     activity indicator — never a filling bar tied to the 120s rule. -->
+				<div class="flex items-center justify-center gap-2 text-sm mb-1" style="color: var(--text);">
+					<RefreshCw class="w-4 h-4 animate-spin" style="color: #38bdf8;" />
+					{retrying ? 'Getting another number…' : 'Waiting for your code'}
+				</div>
 				<div class="text-xs text-center mb-3" style="color: var(--text-dim);">
-					{#if showTryAnother}
-						We can switch you to another number at no extra charge.
+					{#if retrying}
+						No extra charge. We’ll update this page when it’s ready.
 					{:else}
 						Checking automatically… · No need to refresh.
 					{/if}
 				</div>
-				<div class="soda-track">
-					<div
-						class="soda-fill"
-						class:soda-fill-done={showTryAnother}
-						style="width: {requestProgress}%;"
-					></div>
-				</div>
-				{#if showTryAnother}
-					<div class="flex flex-wrap items-center justify-center gap-2 mt-4">
-						<button onclick={tryAnother} disabled={retrying} class="soda-cta">
-							{retrying ? 'Getting another number…' : 'Try another number'}
+				<div class="soda-track"><div class="soda-fill soda-fill-indeterminate"></div></div>
+				{#if showTryAnother && keepWaiting && !retrying}
+					<div class="text-xs mt-3 text-center" style="color: var(--text-dim);">
+						Still no code?
+						<button onclick={() => (keepWaiting = false)} class="hover:underline" style="color: #38bdf8;">
+							Use another number
 						</button>
-						{#if canCancel}
-							<button
-								onclick={cancelNumber}
-								disabled={cancelling}
-								class="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-medium disabled:opacity-60"
-								style="border: 1px solid var(--border); color: var(--text-muted);"
-							>
-								<X class="w-3.5 h-3.5" />
-								{cancelling ? 'Cancelling…' : 'Cancel & refund'}
-							</button>
-						{/if}
 					</div>
-				{:else}
+				{:else if !retrying}
 					<div class="text-xs mt-3 text-center" style="color: var(--text-dim);">
 						No code? We’ll switch you to another number or refund your store credit — automatically.
 					</div>
@@ -378,10 +384,6 @@
 		background: linear-gradient(90deg, #38bdf8, #34d399);
 		transition: width 0.9s linear;
 		box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
-	}
-	.soda-fill-done {
-		background: linear-gradient(90deg, #f59e0b, #fbbf24);
-		box-shadow: 0 0 12px rgba(245, 158, 11, 0.5);
 	}
 	.soda-fill-indeterminate {
 		width: 40%;
