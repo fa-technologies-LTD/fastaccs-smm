@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Copy, RefreshCw, ShieldCheck, X } from '$lib/icons';
+	import { Copy, RefreshCw, ShieldCheck, X, Check } from '$lib/icons';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
 
@@ -13,6 +13,8 @@
 		otp: string | null;
 		smsMessage: string | null;
 		expiresAt: string | null;
+		otpRequestedAt?: string | null;
+		saleAmountNgn?: number | null;
 		refundMessage?: string | null;
 	}
 
@@ -34,8 +36,21 @@
 	// doesn't land in it, we offer "try another number". This mirrors the server's replacement wait
 	// (~120s from the request), so the button never appears before the backend will allow a swap.
 	const EXPECTED_CODE_MS = 120_000;
-	let requestedAt = $state<number | null>(null);
+	// D1: seed from the server's authoritative request time so a refresh / return from WhatsApp
+	// reconstructs the waiting state instead of re-prompting "I've requested the code".
+	let requestedAt = $state<number | null>(
+		phone.otpRequestedAt ? new Date(phone.otpRequestedAt).getTime() : null
+	);
 	let retrying = $state(false);
+	let copiedLabel = $state<string | null>(null);
+	// The "I've requested the code" button is muted briefly after the number appears — long enough to
+	// nudge the customer to actually request the SMS first, short enough not to feel blocked.
+	const REQUEST_MUTE_MS = 15_000;
+	let numberShownAt = $state<number | null>(null);
+	$effect(() => {
+		if (phoneNumber && numberShownAt == null) numberShownAt = Date.now();
+	});
+	const requestMuted = $derived(numberShownAt != null && now - numberShownAt < REQUEST_MUTE_MS);
 
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 	let clockTimer: ReturnType<typeof setInterval> | null = null;
@@ -176,7 +191,10 @@
 	async function copy(text: string, label: string) {
 		try {
 			await navigator.clipboard.writeText(text);
-			showSuccess('Copied', `${label} copied to clipboard.`);
+			copiedLabel = label;
+			setTimeout(() => {
+				if (copiedLabel === label) copiedLabel = null;
+			}, 1600);
 		} catch {
 			/* ignore */
 		}
@@ -215,9 +233,13 @@
 			<button
 				onclick={() => copy(phoneNumber ?? '', 'Number')}
 				class="inline-flex items-center gap-1 text-sm hover:underline"
-				style="color: #38bdf8;"
+				style="color: {copiedLabel === 'Number' ? '#34d399' : '#38bdf8'};"
 			>
-				<Copy class="w-4 h-4" /> Copy
+				{#if copiedLabel === 'Number'}
+					<Check class="w-4 h-4" /> Copied
+				{:else}
+					<Copy class="w-4 h-4" /> Copy
+				{/if}
 			</button>
 		</div>
 	{/if}
@@ -256,15 +278,29 @@
 	{:else if isWaiting}
 		<div class="rounded-lg px-4 py-4" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
 			{#if !requestedAt}
-				<!-- Number in hand — prompt to request the code (we can't detect the request otherwise). -->
-				<div class="text-center text-sm" style="color: var(--text);">
-					Enter this number on {phone.serviceName}, then request your verification code.
-				</div>
-				<div class="mt-3 flex justify-center">
-					<button onclick={requestCode} class="soda-cta">✓ I’ve requested the code</button>
-				</div>
-				<div class="text-xs mt-2 text-center" style="color: var(--text-dim);">
-					Your code appears here automatically the moment it arrives.
+				<!-- Number in hand — a clear 3-step workflow, then request-code (muted briefly). -->
+				<ol class="text-sm space-y-2 mb-4" style="color: var(--text);">
+					<li class="flex gap-2">
+						<span class="font-semibold" style="color: #38bdf8;">1</span> Copy the number above.
+					</li>
+					<li class="flex gap-2">
+						<span class="font-semibold" style="color: #38bdf8;">2</span> Enter it in {phone.serviceName}
+						and request the SMS code.
+					</li>
+					<li class="flex gap-2">
+						<span class="font-semibold" style="color: #38bdf8;">3</span> Come back here — your code
+						appears automatically.
+					</li>
+				</ol>
+				<div class="flex flex-col items-center gap-1.5">
+					<button onclick={requestCode} disabled={requestMuted} class="soda-cta">
+						✓ I’ve requested the code
+					</button>
+					{#if requestMuted}
+						<span class="text-xs" style="color: var(--text-dim);">
+							Request the SMS in {phone.serviceName} first
+						</span>
+					{/if}
 				</div>
 			{:else}
 				<!-- Requested — waiting calmly; FastAccs checks automatically (no fake countdown). -->

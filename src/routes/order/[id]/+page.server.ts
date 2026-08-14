@@ -83,6 +83,14 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 				otp: phoneItem.phoneRental.otp,
 				smsMessage: phoneItem.phoneRental.smsMessage,
 				expiresAt: phoneItem.phoneRental.expiresAt?.toISOString() ?? null,
+				// D1: the authoritative "I've requested the code" time so a refresh/return from WhatsApp
+				// reconstructs the waiting state instead of re-prompting. D2: the sale amount (Numbers
+				// always refund the full sale) to show the exact ₦ refunded. Both read-only.
+				otpRequestedAt: phoneItem.phoneRental.otpRequestedAt?.toISOString() ?? null,
+				saleAmountNgn:
+					phoneItem.phoneRental.saleAmountNgn != null
+						? Number(phoneItem.phoneRental.saleAmountNgn)
+						: null,
 				refundMessage: phoneRefundMessage
 			}
 		: null;
