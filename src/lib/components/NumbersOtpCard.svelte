@@ -57,6 +57,13 @@
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 	let clockTimer: ReturnType<typeof setInterval> | null = null;
 
+	// Mobile: when the live card scrolls out of view during an active state, show a compact sticky
+	// status so the customer always knows where things stand. Tapping it scrolls back to the card —
+	// it never duplicates the card's action buttons (avoids confusing double CTAs).
+	let cardEl = $state<HTMLElement | null>(null);
+	let cardVisible = $state(true);
+	let observer: IntersectionObserver | null = null;
+
 	// Preparing = paid, number being fetched. Waiting = number in hand, awaiting the code.
 	const isPreparing = $derived(
 		['pending', 'renting', 'preparing'].includes(status) || (status === 'awaiting_sms' && !phoneNumber)
@@ -80,6 +87,22 @@
 	);
 	let keepWaiting = $state(false);
 	const offerSwitch = $derived(showTryAnother && !keepWaiting && !retrying);
+
+	// Mobile sticky mini-status (shown only when the card is scrolled out of view during an active
+	// state). Status text only — tapping scrolls back to the card, never duplicates its buttons.
+	const showSticky = $derived(!cardVisible && (isPreparing || isWaiting));
+	const stickyStatus = $derived(
+		isPreparing
+			? 'Getting your number…'
+			: isWaiting && !requestedAt
+				? 'Number ready · request your code'
+				: offerSwitch
+					? 'No code yet? · tap to switch'
+					: 'Waiting for your code · checking automatically'
+	);
+	function scrollToCard() {
+		cardEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
 
 	// Securing reassurance evolves with elapsed UI time (never a fake %), so a longer wait reads as
 	// "still working" rather than "stuck". Payment is already confirmed by the time this card renders.
@@ -211,14 +234,25 @@
 			poll();
 			pollTimer = setInterval(poll, 3000);
 		}
+		if (cardEl && typeof IntersectionObserver !== 'undefined') {
+			observer = new IntersectionObserver(([entry]) => (cardVisible = entry.isIntersecting), {
+				threshold: 0
+			});
+			observer.observe(cardEl);
+		}
 	});
 	onDestroy(() => {
 		stopPolling();
 		if (clockTimer) clearInterval(clockTimer);
+		observer?.disconnect();
 	});
 </script>
 
-<div class="rounded-2xl p-6 mb-6" style="border: 1px solid var(--border); background: var(--surface);">
+<div
+	bind:this={cardEl}
+	class="rounded-2xl p-6 mb-6"
+	style="border: 1px solid var(--border); background: var(--surface);"
+>
 	<div class="flex items-center gap-2.5 mb-4">
 		<span class="flex items-center justify-center w-9 h-9 rounded-lg" style="background: var(--bg-elev-1);">
 			<BrandIcon service={phone.serviceName} size={22} />
@@ -393,6 +427,18 @@
 	isDestructive={true}
 	isLoading={cancelling}
 />
+
+<!-- Mobile sticky mini-status: only when the live card is off-screen during an active state. -->
+{#if showSticky}
+	<button
+		onclick={scrollToCard}
+		class="fixed inset-x-0 bottom-0 z-40 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium sm:hidden"
+		style="background: var(--bg-elev-1); border-top: 1px solid var(--border); color: var(--text); box-shadow: 0 -4px 16px rgba(0,0,0,0.25);"
+	>
+		<RefreshCw class="w-4 h-4 animate-spin" style="color: #38bdf8;" />
+		{stickyStatus}
+	</button>
+{/if}
 
 <style>
 	/* "Soda bar": a calm, filling progress bar to reduce waiting anxiety (vs a stark countdown). */
