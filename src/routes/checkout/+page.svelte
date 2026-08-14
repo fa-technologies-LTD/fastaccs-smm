@@ -535,8 +535,8 @@
 					)
 				) {
 					showWarning(
-						'Number unavailable',
-						cleanOrderError || 'This number is currently unavailable — check back later or choose another.'
+						'This number isn’t available right now',
+						'You haven’t been charged. Choose another country or try again shortly.'
 					);
 					cart.clear();
 					goto('/numbers');

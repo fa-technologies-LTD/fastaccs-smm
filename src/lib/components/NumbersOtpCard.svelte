@@ -3,6 +3,7 @@
 	import { Copy, RefreshCw, ShieldCheck, Check } from '$lib/icons';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
+	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
 
 	interface PhoneState {
 		orderItemId: string;
@@ -30,6 +31,7 @@
 	let canCancel = $state(false);
 	let cancelling = $state(false);
 	let cancelledByUser = $state(false);
+	let showCancelModal = $state(false);
 	let refundMessage = $state<string | null>(phone.refundMessage ?? null);
 	let now = $state(Date.now());
 	// When the customer taps "I've requested the code", we start a focused window; if the code
@@ -164,9 +166,8 @@
 		pollTimer = null;
 	}
 
-	async function cancelNumber() {
+	async function confirmCancel() {
 		if (cancelling) return;
-		if (!confirm('Cancel this number and refund to your store credit?')) return;
 		cancelling = true;
 		try {
 			const res = await fetch(`/api/numbers/${phone.orderItemId}/cancel`, { method: 'POST' });
@@ -174,11 +175,12 @@
 			if (data.outcome === 'refunded') {
 				status = 'refunded';
 				cancelledByUser = true;
-				refundMessage = 'Cancelled — refunded to your store credit.';
+				refundMessage = null; // let the refund card render its own calm copy + exact amount
+				showCancelModal = false;
 				stopPolling();
-				showSuccess('Cancelled', data.message);
 			} else if (data.outcome === 'received') {
 				status = 'received';
+				showCancelModal = false;
 				await poll();
 				showWarning('Code arrived', data.message);
 			} else {
@@ -318,12 +320,11 @@
 					</button>
 					{#if canCancel}
 						<button
-							onclick={cancelNumber}
-							disabled={cancelling}
-							class="text-xs hover:underline disabled:opacity-60"
+							onclick={() => (showCancelModal = true)}
+							class="text-xs hover:underline"
 							style="color: var(--text-dim);"
 						>
-							{cancelling ? 'Cancelling…' : 'Cancel & refund instead'}
+							Cancel &amp; refund instead
 						</button>
 					{/if}
 				</div>
@@ -357,17 +358,41 @@
 			{/if}
 		</div>
 	{:else if isRefunded}
-		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid rgba(52,211,153,0.4); background: rgba(52,211,153,0.08); color: #34d399;">
-			<div class="inline-flex items-center gap-2">
-				<ShieldCheck class="w-4 h-4" />
+		<div class="rounded-lg px-4 py-5 text-center" style="border: 1px solid rgba(52,211,153,0.4); background: rgba(52,211,153,0.06);">
+			<div class="inline-flex items-center gap-2 mb-1" style="color: #34d399;">
+				<ShieldCheck class="w-5 h-5" />
+				<span class="font-semibold">{cancelledByUser ? 'Cancelled — refund complete' : 'Refund complete'}</span>
+			</div>
+			<div class="text-sm" style="color: var(--text-muted);">
 				{refundMessage ??
 					(cancelledByUser
-						? 'Cancelled — your payment is back in your store credit, ready to use.'
-						: 'No code arrived — your payment is back in your store credit, ready to use.')}
+						? 'You cancelled this number and your payment is back in your store credit.'
+						: 'No code arrived, so your payment is back in your store credit.')}
+			</div>
+			{#if phone.saleAmountNgn}
+				<div class="text-xs mt-1" style="color: var(--text-dim);">
+					₦{phone.saleAmountNgn.toLocaleString()} in your store credit — ready to use now.
+				</div>
+			{/if}
+			<div class="flex flex-wrap items-center justify-center gap-3 mt-4">
+				<a href="/numbers" class="soda-cta">Try another number</a>
+				<a href="/dashboard" class="text-xs hover:underline" style="color: var(--text-muted);">View balance</a>
 			</div>
 		</div>
 	{/if}
 </div>
+
+<ConfirmModal
+	isOpen={showCancelModal}
+	onClose={() => (showCancelModal = false)}
+	onConfirm={confirmCancel}
+	title="Cancel this number?"
+	message={`If no code has arrived, we’ll return ${phone.saleAmountNgn ? '₦' + phone.saleAmountNgn.toLocaleString() : 'your payment'} to your store credit.`}
+	confirmText="Cancel & refund"
+	cancelText="Keep waiting"
+	isDestructive={true}
+	isLoading={cancelling}
+/>
 
 <style>
 	/* "Soda bar": a calm, filling progress bar to reduce waiting anxiety (vs a stark countdown). */
