@@ -42,11 +42,11 @@
 	let upsellRedirectTimer: ReturnType<typeof setTimeout> | null = null;
 	// Store-credit orders are already settled — show a matching message, not Monnify's.
 	let isStoreCredit = $state(false);
-	const verifyingTitle = $derived(isStoreCredit ? 'Confirming your order' : 'Verifying Payment');
+	const verifyingTitle = $derived(isStoreCredit ? 'Confirming your order' : 'Confirming your payment');
 	const verifyingBody = $derived(
 		isStoreCredit
 			? 'Applying your store credit — this only takes a moment.'
-			: 'Waiting for payment confirmation from Monnify.'
+			: 'This normally finishes automatically.'
 	);
 	let pendingToastShown = false;
 

@@ -1201,7 +1201,8 @@
 								Your boost starts after payment is confirmed. {BOOSTING_TURNAROUND_MESSAGE} Track
 								its status on your order page.
 							{:else if hasNumbersOrder}
-								Your number and code appear on your order page the moment payment confirms.
+								After payment, we’ll take you straight to your number. Your code appears there
+								automatically.
 							{:else if hasManualHandover}
 								Login details are delivered on WhatsApp. Your order page will show you the link.
 							{:else}

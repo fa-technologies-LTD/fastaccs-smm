@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Copy, RefreshCw, ShieldCheck, AlertTriangle, X } from '$lib/icons';
+	import { Copy, RefreshCw, ShieldCheck, X } from '$lib/icons';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
 
@@ -61,6 +61,18 @@
 	);
 	const showTryAnother = $derived(
 		isWaiting && requestedAt != null && now - requestedAt >= EXPECTED_CODE_MS
+	);
+
+	// Securing reassurance evolves with elapsed UI time (never a fake %), so a longer wait reads as
+	// "still working" rather than "stuck". Payment is already confirmed by the time this card renders.
+	const startedAt = Date.now();
+	const securingElapsed = $derived((now - startedAt) / 1000);
+	const securingMessage = $derived(
+		securingElapsed < 15
+			? `We’re finding an available ${phone.serviceName} number for ${phone.countryName}.`
+			: securingElapsed < 40
+				? 'Still working — some numbers take a little longer to secure.'
+				: 'We’re still on it. You don’t need to refresh or pay again.'
 	);
 
 	function requestCode() {
@@ -229,12 +241,15 @@
 		</div>
 	{:else if isPreparing}
 		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
+			<div class="text-xs mb-2 inline-flex items-center gap-1" style="color: #34d399;">
+				<ShieldCheck class="w-3.5 h-3.5" /> Payment confirmed
+			</div>
 			<div class="inline-flex items-center gap-2" style="color: var(--text);">
 				<RefreshCw class="w-4 h-4 animate-spin" style="color: #38bdf8;" />
-				Getting your number…
+				Getting your number
 			</div>
 			<div class="text-xs mt-2 mb-3" style="color: var(--text-dim);">
-				This takes just a moment. Your {phone.serviceName} number will appear here.
+				{securingMessage}
 			</div>
 			<div class="soda-track"><div class="soda-fill soda-fill-indeterminate"></div></div>
 		</div>
@@ -252,14 +267,20 @@
 					Your code appears here automatically the moment it arrives.
 				</div>
 			{:else}
-				<!-- Requested — a calm progress bar fills toward the expected arrival. -->
-				<div class="flex items-center justify-center gap-2 text-sm mb-3" style="color: var(--text);">
+				<!-- Requested — waiting calmly; FastAccs checks automatically (no fake countdown). -->
+				<div class="flex items-center justify-center gap-2 text-sm mb-1" style="color: var(--text);">
 					{#if showTryAnother}
-						<AlertTriangle class="w-4 h-4" style="color: #fbbf24;" />
-						Taking longer than usual…
+						No code yet?
 					{:else}
 						<RefreshCw class="w-4 h-4 animate-spin" style="color: #38bdf8;" />
-						Your code should arrive any moment…
+						Waiting for your code
+					{/if}
+				</div>
+				<div class="text-xs text-center mb-3" style="color: var(--text-dim);">
+					{#if showTryAnother}
+						We can switch you to another number at no extra charge.
+					{:else}
+						Checking automatically… · No need to refresh.
 					{/if}
 				</div>
 				<div class="soda-track">
@@ -272,7 +293,7 @@
 				{#if showTryAnother}
 					<div class="flex flex-wrap items-center justify-center gap-2 mt-4">
 						<button onclick={tryAnother} disabled={retrying} class="soda-cta">
-							{retrying ? 'Finding a stronger number…' : 'Try another number'}
+							{retrying ? 'Getting another number…' : 'Try another number'}
 						</button>
 						{#if canCancel}
 							<button
@@ -286,20 +307,21 @@
 							</button>
 						{/if}
 					</div>
-					<div class="text-xs mt-2 text-center" style="color: var(--text-dim);">
-						"Try another" swaps to a different supplier — no extra charge.
+				{:else}
+					<div class="text-xs mt-3 text-center" style="color: var(--text-dim);">
+						No code? We’ll switch you to another number or refund your store credit — automatically.
 					</div>
 				{/if}
 			{/if}
 		</div>
 	{:else if isRefunded}
-		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid rgba(245,158,11,0.4); background: rgba(245,158,11,0.10); color: #fbbf24;">
+		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid rgba(52,211,153,0.4); background: rgba(52,211,153,0.08); color: #34d399;">
 			<div class="inline-flex items-center gap-2">
-				<AlertTriangle class="w-4 h-4" />
+				<ShieldCheck class="w-4 h-4" />
 				{refundMessage ??
 					(cancelledByUser
-						? 'Cancelled — refunded to your store credit.'
-						: 'No code arrived in time — refunded to your store credit.')}
+						? 'Cancelled — your payment is back in your store credit, ready to use.'
+						: 'No code arrived — your payment is back in your store credit, ready to use.')}
 			</div>
 		</div>
 	{/if}
