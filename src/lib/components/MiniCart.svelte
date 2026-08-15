@@ -233,7 +233,7 @@
 					</div>
 				{:else}
 					<!-- Loading State -->
-					{#if loading}
+					{#if loading && cartItems.length === 0}
 						<div class="flex items-center justify-center" style="padding: var(--space-2xl);">
 							<Loader size={24} class="animate-spin" style="color: var(--text-dim);" />
 							<span

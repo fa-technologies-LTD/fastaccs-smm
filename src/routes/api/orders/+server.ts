@@ -1023,7 +1023,13 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					}
 
 				return createdOrder;
-				})
+				},
+				// Prisma's default interactive-transaction timeout is 5s; a multi-step order create
+				// (order + reservations + store-credit debit) can exceed it on a slow/high-latency DB
+				// link (e.g. local dev against remote Neon), throwing "Transaction already closed" and
+				// failing checkout — most visibly on store-credit payments. Give it real headroom; on
+				// prod the tx finishes in well under this, so the ceiling is never actually reached.
+				{ maxWait: 10_000, timeout: 20_000 })
 			);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Could not reserve order stock.';
