@@ -255,6 +255,79 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 		expect(creditStoreCreditMock).toHaveBeenCalledOnce();
 	});
 
+	it('hits the 12-attempt cap with untried affordable candidates left → SECURING, no refund, persists tried', async () => {
+		// 20 affordable variants; a single pass tries 12 (all OOS). The batch cap must NOT be read as
+		// "unavailable" while 8 untried affordable variants remain — keep securing, persist the tried 12.
+		prismaMock.phoneRental.findUnique.mockResolvedValue({ reservedLiabilityCents: 0, createdAt: new Date() });
+		buildLiveCandidatePoolMock.mockResolvedValue(
+			Array.from({ length: 20 }, (_, i) => pv(`Whatsapp${i}`, 40))
+		);
+		rentMock.mockImplementation(() => {
+			throw new Error('oos');
+		});
+
+		const res = await fulfillPhoneOrder('order-1', 'test');
+
+		expect(res.status).toBe('awaiting_sms');
+		expect(res.message).toMatch(/securing/i);
+		expect(creditStoreCreditMock).not.toHaveBeenCalled(); // NOT a refund
+		expect(rentMock).toHaveBeenCalledTimes(12); // the batch cap, not "no availability"
+		const revert = prismaMock.phoneRental.updateMany.mock.calls.find(
+			([arg]) => arg?.data?.status === 'pending' && Array.isArray(arg?.data?.triedSuppliers)
+		);
+		expect(revert).toBeTruthy();
+		expect(revert![0].data.triedSuppliers).toHaveLength(12);
+	});
+
+	it('reaches candidate 13 on the NEXT pass (first 12 OOS) — proves passes CONTINUE, never restart', async () => {
+		buildLiveCandidatePoolMock.mockResolvedValue(
+			Array.from({ length: 15 }, (_, i) => pv(`Whatsapp${i}`, 40))
+		);
+
+		// Pass 1: the first 12 (Whatsapp0..11) are out of stock → securing, tried keys persisted.
+		prismaMock.phoneRental.findUnique.mockResolvedValue({ reservedLiabilityCents: 0, createdAt: new Date() });
+		rentMock.mockImplementation(() => {
+			throw new Error('oos');
+		});
+		const pass1 = await fulfillPhoneOrder('order-1', 'test');
+		expect(pass1.status).toBe('awaiting_sms');
+		expect(creditStoreCreditMock).not.toHaveBeenCalled();
+		const revert = prismaMock.phoneRental.updateMany.mock.calls.find(
+			([arg]) => arg?.data?.status === 'pending' && Array.isArray(arg?.data?.triedSuppliers)
+		);
+		const tried: string[] = revert![0].data.triedSuppliers;
+		expect(tried).toContain('pvapins:Whatsapp11');
+		expect(tried).not.toContain('pvapins:Whatsapp12');
+
+		// Simulate persistence: the next pass reads those tried keys back from the row.
+		prismaMock.phoneRental.findUnique.mockResolvedValue({ reservedLiabilityCents: 0, triedSuppliers: tried });
+
+		// Pass 2: excludes 0..11, so candidate 13 (Whatsapp12) is tried FIRST and succeeds.
+		rentMock.mockReset();
+		rentMock.mockResolvedValueOnce({ providerRef: 'n|USA|Whatsapp12', phoneNumber: '15550000013', costCents: 40, expiresAt: null });
+		const pass2 = await fulfillPhoneOrder('order-1', 'test');
+
+		expect(pass2.status).toBe('awaiting_sms');
+		expect(rentMock.mock.calls[0][0]).toMatchObject({ providerServiceRef: 'Whatsapp12' }); // NOT Whatsapp0
+		expect(prismaMock.phoneRental.update).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({ provider: 'pvapins', providerRef: 'n|USA|Whatsapp12' })
+			})
+		);
+	});
+
+	it('every affordable candidate tried and none in stock → genuinely unavailable → refund', async () => {
+		// Small pool, all attempted, all OOS: no untried affordable remain, no rate-limit → refund is
+		// correct here (this is the real "out of viable options" case, not a premature batch cut-off).
+		buildLiveCandidatePoolMock.mockResolvedValue([pv('Whatsapp0', 40), pv('Whatsapp1', 40)]);
+		rentMock.mockImplementation(() => {
+			throw new Error('oos');
+		});
+		const res = await fulfillPhoneOrder('order-1', 'test');
+		expect(res.status).toBe('refunded');
+		expect(creditStoreCreditMock).toHaveBeenCalledOnce();
+	});
+
 	it('a per-tier floor override can only RAISE above the global — a ₦800 tier floor is used', async () => {
 		getPhoneTierConfigMock.mockReturnValue({
 			serviceId: 1, countryId: 58, serviceName: 'WhatsApp', countryName: 'USA', countryCode: 'US',

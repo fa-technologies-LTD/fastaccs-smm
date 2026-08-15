@@ -289,13 +289,18 @@ export async function fulfillPhoneOrder(
 	// the profit floor. reserved accumulates across retries (see customerRetryPhoneRental).
 	let reservedLiabilityCents = 0;
 	let orderCreatedAt: Date | null = null;
+	// Variants genuinely tried on earlier passes (persisted). Reading them here is what lets each
+	// pass CONTINUE down the ladder instead of restarting at the top — the poll/sweep callers don't
+	// pass excludeKeys themselves, so without this they'd re-try the same first batch forever.
+	let persistedTried: string[] = [];
 	try {
 		const liabilityRow = await prisma.phoneRental.findUnique({
 			where: { orderItemId: ctx.orderItemId },
-			select: { reservedLiabilityCents: true, createdAt: true }
+			select: { reservedLiabilityCents: true, createdAt: true, triedSuppliers: true }
 		});
 		reservedLiabilityCents = liabilityRow?.reservedLiabilityCents ?? 0;
 		if (liabilityRow?.createdAt) orderCreatedAt = liabilityRow.createdAt;
+		persistedTried = liabilityRow?.triedSuppliers ?? [];
 	} catch {
 		reservedLiabilityCents = 0;
 	}
@@ -314,10 +319,16 @@ export async function fulfillPhoneOrder(
 		hubCountryCode: ctx.tier.countryCode,
 		hubCountryName: ctx.tier.countryName
 	}).catch(() => []);
-	const excludeKeys = new Set(options.excludeKeys ?? []);
-	const ladder = pool
-		.filter((c) => c.costCents > 0 && c.costCents <= effectiveCeilingCents)
-		.filter((c) => !excludeKeys.has(`${c.provider}:${c.providerServiceRef}`))
+	const excludeKeys = new Set([...(options.excludeKeys ?? []), ...persistedTried]);
+	const candidateKey = (c: { provider: string; providerServiceRef: string }) =>
+		`${c.provider}:${c.providerServiceRef}`;
+	// Affordable across BOTH suppliers, within the hard procurement ceiling (the ₦500 floor). Kept
+	// whole (not sliced) so we can tell whether UNTRIED affordable options still remain after a pass.
+	const affordable = pool.filter((c) => c.costCents > 0 && c.costCents <= effectiveCeilingCents);
+	// This pass attempts only the not-yet-tried affordable candidates, in the ranker's order, bounded
+	// by MAX_RENT_ATTEMPTS so we never hammer suppliers — the cap limits a BATCH, not "availability".
+	const ladder = affordable
+		.filter((c) => !excludeKeys.has(candidateKey(c)))
 		.slice(0, MAX_RENT_ATTEMPTS); // preserve the ranked order — do not override with cost-only sort
 
 	let rented: {
@@ -332,6 +343,10 @@ export async function fulfillPhoneOrder(
 	// "supplier capacity momentarily exhausted", NOT out of stock — it must never trigger a refund.
 	let rateLimited = false;
 	let attemptNumber = 0;
+	// Candidates we genuinely called rent() on this pass (OOS or errored). Rate-limit SKIPS are NOT
+	// added — those weren't tried, so they stay eligible for the next pass. Persisted on a keep-
+	// securing so the next pass skips past them and reaches the next batch (13–24 …).
+	const attemptedKeys = new Set<string>();
 	const rlSpec = pvapinsRateSpec(pricing.pvapinsRateLimitPerMin);
 	const sweepStarted = Date.now();
 	// Telemetry is OBSERVATIONAL + best-effort: floated (void) so it can never slow the rent budget
@@ -357,6 +372,7 @@ export async function fulfillPhoneOrder(
 			continue;
 		}
 		try {
+			attemptedKeys.add(candidateKey(candidate)); // genuinely tried (not a rate-limit skip)
 			const r = await getProvider(candidate.provider).rent({
 				serviceId: ctx.tier.serviceId,
 				countryId: ctx.tier.countryId,
@@ -403,19 +419,34 @@ export async function fulfillPhoneOrder(
 	}
 
 	if (!rented) {
-		// Rate-limited (not out of stock) and still inside the activation window? Keep the order in a
-		// recoverable "securing" state — revert renting→pending so the client poll + the 5-min sweep
-		// retry as tokens free up. NEVER refund on rate pressure. Bounded by the window so it can't
-		// loop forever: past the window (or on genuine no-stock), fall through to refund.
 		const windowMs = pricing.activationTimeoutMinutes * 60_000;
 		const withinWindow = !orderCreatedAt || Date.now() - orderCreatedAt.getTime() < windowMs;
-		if (rateLimited && withinWindow) {
+		// Do affordable candidates we've NOT genuinely tried yet still remain (this pass + all prior)?
+		// If so we haven't run out of options — we just hit the per-pass attempt/time cap. Refunding
+		// now would rule the tier out prematurely (the batch cap must never mean "unavailable").
+		const triedSoFar = new Set([...excludeKeys, ...attemptedKeys]);
+		const untriedAffordableRemain = affordable.some((c) => !triedSoFar.has(candidateKey(c)));
+		// Keep the order in a recoverable "securing" state — never refund — while EITHER a temporary
+		// condition (rate limit) OR an untried affordable candidate could still produce a number. The
+		// client poll + 5-min sweep drive the next pass; persisting the newly-tried keys makes that
+		// pass CONTINUE down the ladder (13–24 …) instead of restarting the same batch. Bounded by the
+		// activation window so it can never loop forever: past the window we fall through to refund.
+		if ((rateLimited || untriedAffordableRemain) && withinWindow) {
+			const revertData =
+				attemptedKeys.size > 0
+					? {
+							status: 'pending' as const,
+							triedSuppliers: Array.from(new Set([...persistedTried, ...attemptedKeys]))
+						}
+					: { status: 'pending' as const };
 			await prisma.phoneRental.updateMany({
 				where: { orderItemId: ctx.orderItemId, status: 'renting' },
-				data: { status: 'pending' }
+				data: revertData
 			});
 			return { status: 'awaiting_sms', message: 'Securing your number…' };
 		}
+		// Genuinely out of viable options — every affordable candidate has been tried and no temporary
+		// condition remains — or the activation window has closed → refund.
 		await prisma.phoneRental.updateMany({
 			where: { orderItemId: ctx.orderItemId, status: 'renting' },
 			data: { status: 'failed', failureReason: `no candidate: ${lastError}`.slice(0, 200) }
