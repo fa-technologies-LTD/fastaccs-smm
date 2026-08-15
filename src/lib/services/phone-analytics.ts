@@ -15,31 +15,61 @@ const FAILED_STATES = new Set(['refunded', 'expired', 'cancelled', 'failed']);
 // enough real attempts that the rate is trustworthy (one unlucky number never hides a tier).
 export const SUCCESS_HIDE_THRESHOLD_PCT = 70;
 export const SUCCESS_HIDE_MIN_SAMPLE = 10;
+// Only recent outcomes count — a bad streak ages out so a tier can recover on its own once the
+// supplier situation improves (matches the reliability ranker's window).
+export const SUCCESS_HIDE_WINDOW_DAYS = 14;
 
 /**
- * The set of `serviceName||countryName` tiers whose recent delivery is poor enough to pull
- * from the storefront. Keyed to match the catalog sync's tier key. Cheap: one grouped read.
+ * The set of `serviceName||countryName` tiers we should mute on the storefront because delivery
+ * is genuinely broken across BOTH suppliers. Keyed to match the catalog sync's tier key.
+ *
+ * Provider-aware, and deliberately reluctant: with two suppliers, one bad supplier must NEVER
+ * hide a tier the other can serve. We tally each provider (hub-man / pvapins) separately over the
+ * recent window and classify it:
+ *   - BAD      = enough attempts (≥ MIN_SAMPLE) and delivery below the threshold
+ *   - GOOD     = enough attempts and delivery at/above the threshold
+ *   - UNTESTED = not enough attempts yet — give it a chance (assume it can work)
+ * A tier is muted ONLY when at least one provider is proven BAD and NO provider is GOOD or
+ * UNTESTED — i.e. there is no working or unproven supplier left to fall back to. Otherwise the
+ * tier stays live and the buy-time candidate pool / reliability ranker routes around the bad one.
  */
 export async function getLowSuccessTierKeys(): Promise<Set<string>> {
+	const since = new Date(Date.now() - SUCCESS_HIDE_WINDOW_DAYS * 86_400_000);
 	const rentals = await prisma.phoneRental.findMany({
-		select: { serviceName: true, countryName: true, status: true }
+		where: { createdAt: { gte: since } },
+		select: { serviceName: true, countryName: true, provider: true, status: true }
 	});
-	const agg = new Map<string, { received: number; resolved: number }>();
+	// tier key -> provider -> tally
+	type Tally = { received: number; resolved: number };
+	const byTier = new Map<string, Map<string, Tally>>();
 	for (const r of rentals) {
-		const key = `${r.serviceName}||${r.countryName}`;
-		if (!agg.has(key)) agg.set(key, { received: 0, resolved: 0 });
-		const a = agg.get(key)!;
+		const tierKey = `${r.serviceName}||${r.countryName}`;
+		const provider = r.provider || 'unknown';
+		let providers = byTier.get(tierKey);
+		if (!providers) byTier.set(tierKey, (providers = new Map()));
+		let t = providers.get(provider);
+		if (!t) providers.set(provider, (t = { received: 0, resolved: 0 }));
 		if (r.status === RECEIVED) {
-			a.received += 1;
-			a.resolved += 1;
+			t.received += 1;
+			t.resolved += 1;
 		} else if (FAILED_STATES.has(r.status)) {
-			a.resolved += 1;
+			t.resolved += 1;
 		}
 	}
 	const out = new Set<string>();
-	for (const [key, a] of agg) {
-		if (a.resolved >= SUCCESS_HIDE_MIN_SAMPLE && (a.received / a.resolved) * 100 < SUCCESS_HIDE_THRESHOLD_PCT)
-			out.add(key);
+	for (const [tierKey, providers] of byTier) {
+		let anyBad = false;
+		let anyKeepAlive = false; // a GOOD or UNTESTED provider — a reason to keep the tier live
+		for (const t of providers.values()) {
+			if (t.resolved < SUCCESS_HIDE_MIN_SAMPLE) {
+				anyKeepAlive = true; // untested: unproven, so give it the benefit of the doubt
+			} else if ((t.received / t.resolved) * 100 < SUCCESS_HIDE_THRESHOLD_PCT) {
+				anyBad = true;
+			} else {
+				anyKeepAlive = true; // proven-good supplier keeps the whole tier live
+			}
+		}
+		if (anyBad && !anyKeepAlive) out.add(tierKey);
 	}
 	return out;
 }
