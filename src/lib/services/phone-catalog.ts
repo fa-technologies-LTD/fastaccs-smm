@@ -58,6 +58,15 @@ export const MAJOR_SERVICES = [
 const MAJOR_SERVICE_IDS = new Set<number>(MAJOR_SERVICES.map((s) => s.id));
 const SERVICE_NAME_BY_ID = new Map<number, string>(MAJOR_SERVICES.map((s) => [s.id, s.name]));
 
+// Curated markets we ALWAYS want offered when pvapins can serve them — even for a country hub-man
+// never lists at all. The normal sync is hub-man-driven (tiers only exist for countries hub-man
+// reports), so a pvapins-only country would otherwise never become sellable. On a manual "Expand
+// catalog" run we create a pvapins-primary tier for each of these × each curated service that
+// pvapins actually covers. EDIT THIS LIST to open a new market — ISO2 codes, must exist in
+// hub-man's master catalog (for a stable country id). Kept small on purpose to avoid storefront
+// bloat; grow it deliberately.
+export const TARGET_MARKET_CODES = new Set<string>(['US', 'CA', 'GB']);
+
 function tierSlug(serviceId: number, countryId: number): string {
 	return `numbers-svc${serviceId}-country${countryId}`;
 }
@@ -470,6 +479,64 @@ export async function syncNumbersCatalog(
 	}
 	if (revivedByPvapins > 0) {
 		console.log(`[phone-catalog] pvapins filled ${revivedByPvapins} hub-man gap tier(s)`);
+	}
+
+	// pvapins-only market creation: on a manual Expand, create a tier for each curated target market
+	// × curated service that pvapins covers but hub-man never lists (so it never got a tier above).
+	// Expand-only so the routine 5-min cron stays cheap; once created, the normal sync keeps these
+	// tiers priced/available like any other. Idempotent — a target that already has a tier is skipped.
+	let createdByPvapins = 0;
+	if (options.expand && pvapinsReady && pvCountries.length > 0 && countryMeta.size > 0) {
+		// Reverse the master catalog to resolve a target ISO2 → hub country id + name (stable id).
+		const hubCountryByCode = new Map<string, { id: number; name: string; code: string }>();
+		for (const [id, m] of countryMeta) {
+			if (m.code) hubCountryByCode.set(m.code.toUpperCase(), { id, name: m.name, code: m.code });
+		}
+		for (const code of TARGET_MARKET_CODES) {
+			const hubCountry = hubCountryByCode.get(code.toUpperCase());
+			if (!hubCountry) continue; // not in hub-man's master catalog → no stable country id
+			for (const serviceId of MAJOR_SERVICE_IDS) {
+				const slug = tierSlug(serviceId, hubCountry.id);
+				if (idBySlug.has(slug)) continue; // hub-man already made this tier (revive path covers it)
+				const fill = await pvapinsFillFor(hubCountry.code, hubCountry.name, serviceId);
+				if (!fill || fill === 'fetch_failed') continue; // pvapins doesn't carry it (or a blip)
+				const serviceName = SERVICE_NAME_BY_ID.get(serviceId)!;
+				const price = computeAutoPrice(basisFor(serviceId, hubCountry.id, fill.costCents), pricing);
+				const metadata: Prisma.InputJsonValue = {
+					[PHONE_TIER_KEYS.deliveryMode]: PHONE_DELIVERY_MODE,
+					[PHONE_TIER_KEYS.serviceId]: serviceId,
+					[PHONE_TIER_KEYS.serviceName]: serviceName,
+					[PHONE_TIER_KEYS.countryId]: hubCountry.id,
+					[PHONE_TIER_KEYS.countryName]: hubCountry.name,
+					hub_country_code: hubCountry.code,
+					[PHONE_TIER_KEYS.expectedCostCents]: fill.costCents,
+					[PHONE_TIER_KEYS.availableCount]: fill.count,
+					[PHONE_TIER_KEYS.autoHidden]: false,
+					[PHONE_TIER_KEYS.hideReason]: null,
+					primary_source: 'pvapins',
+					price_locked: false,
+					pricing: { currency: 'NGN', base_price: price, updated_at: now.toISOString() }
+				};
+				const row = await prisma.category.create({
+					data: {
+						name: `${serviceName} — ${hubCountry.name}`,
+						slug,
+						categoryType: NUMBERS_TIER_TYPE,
+						parentId: platformId,
+						isActive: true,
+						sortOrder: serviceId * 1000 + hubCountry.id,
+						metadata
+					},
+					select: { id: true }
+				});
+				idBySlug.set(slug, row.id);
+				created += 1;
+				createdByPvapins += 1;
+			}
+		}
+		if (createdByPvapins > 0) {
+			console.log(`[phone-catalog] created ${createdByPvapins} pvapins-only target-market tier(s)`);
+		}
 	}
 
 	// Notify "Notify me" subscribers for tiers that came back in stock (best-effort, never
