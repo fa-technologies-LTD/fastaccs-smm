@@ -95,6 +95,14 @@
 						and are not intended for long-term ownership or repeated use across accounts.
 					</li>
 					<li>
+						These are <strong>shared, previously-used SIMs</strong>, so the number is best treated as
+						disposable — for receiving a one-time code, not for anchoring an account you intend to keep.
+						Some platforms (WhatsApp in particular) assess a number's history and may later restrict or
+						<strong>ban an account registered on a reused number</strong>. This is a platform decision
+						outside our control and is not a fault in the number or grounds for a refund once the code has
+						been delivered. For a permanent account, register with a SIM you personally own.
+					</li>
+					<li>
 						If no code arrives within the activation window, the order is
 						<strong>automatically refunded to your store credit</strong>. Because a delivered code is a
 						completed service, orders where a code was received are not refundable.

@@ -715,8 +715,10 @@ export async function getNumbersStorefront(): Promise<
 		const cfg = getPhoneTierConfig(tier.metadata);
 		const price = readBasePrice(tier.metadata);
 		if (!cfg || price <= 0) continue;
-		// Persistently-failing tiers are removed entirely — not shown as "temporarily unavailable".
-		if (cfg.hideReason === 'low_success') continue;
+		// NOTE: `low_success` is no longer removed here. The sync only sets it when delivery is broken
+		// across BOTH suppliers (see getLowSuccessTierKeys) — a single bad supplier can't hide a tier
+		// the other serves. When it does fire, we mute it (below) like out-of-stock rather than delete
+		// it, so the tier stays visible and the buy-time failover still gets its shot.
 		// Buyable now if the (two-source) sync says it has stock. autoHidden is maintained every
 		// 5 min across BOTH hub-man and pvapins, so a pvapins-only country (e.g. USA when hub-man
 		// is out) correctly shows available. Out-of-stock ones stay muted ("usually offered").

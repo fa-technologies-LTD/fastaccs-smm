@@ -65,6 +65,26 @@
 		openId = openId === id ? null : id;
 	}
 
+	// Expectation-setting FAQ — factual and calm, kept below the buy flow (see markup).
+	const faqs = [
+		{
+			q: 'What exactly do I get?',
+			a: 'One phone number that receives a single verification code, once. When the code arrives (or the short window passes) the order is complete — grab a fresh number anytime you need another.'
+		},
+		{
+			q: 'What if no code arrives?',
+			a: "You're refunded automatically to your store credit. No code, no charge — so it's safe to try."
+		},
+		{
+			q: 'Will WhatsApp (or another app) keep my account long-term?',
+			a: 'These are shared, disposable numbers — perfect for receiving a one-time code, not for anchoring an account you plan to keep. Because the SIM has been used before, some platforms (WhatsApp especially) may later restrict an account registered on it. For a permanent account, register with a SIM you personally own.'
+		},
+		{
+			q: 'Can I reuse the number?',
+			a: 'No — one code per number by design. It’s single-use; buy another whenever you need a fresh verification.'
+		}
+	];
+
 	function availableTiers(tiers: PageData['services'][number]['tiers']) {
 		return tiers.filter((t) => t.available);
 	}
@@ -239,6 +259,29 @@
 				Numbers are single-use for one verification. Prices in Naira, all-inclusive.
 			</p>
 		{/if}
+
+		<!-- Below-the-fold FAQ: sets expectations (incl. reused-SIM / later-ban risk) calmly, out of
+		     the buy flow. Native <details> so it's quiet until a curious buyer opens it. -->
+		<section class="mt-14 pt-8 border-t" style="border-color: var(--border);">
+			<h2 class="text-lg font-semibold mb-4" style="color: var(--text);">Good to know</h2>
+			<div class="space-y-2">
+				{#each faqs as faq (faq.q)}
+					<details class="group rounded-xl px-4 py-3" style="background: var(--surface, rgba(255,255,255,0.03));">
+						<summary
+							class="flex items-center justify-between cursor-pointer list-none text-sm font-medium select-none"
+							style="color: var(--text);"
+						>
+							{faq.q}
+							<ChevronDown class="w-4 h-4 shrink-0 transition-transform group-open:rotate-180" style="color: var(--text-dim);" />
+						</summary>
+						<p class="mt-2.5 text-sm leading-relaxed" style="color: var(--text-muted);">{faq.a}</p>
+					</details>
+				{/each}
+			</div>
+			<p class="text-xs mt-4" style="color: var(--text-dim);">
+				Full details in our <a href="/terms" class="hover:underline" style="color: var(--link);">Terms</a>.
+			</p>
+		</section>
 	</div>
 </main>
 
