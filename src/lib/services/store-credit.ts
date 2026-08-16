@@ -175,7 +175,11 @@ export async function getStoreCreditBuckets(userId: string, db: Db = prisma): Pr
 		// expired payments) are excluded so the credit is restored.
 		else if (type === SC_REDEEM_EARNED && status === 'available') earnedRedeemed += amount;
 		else if (type === SC_REDEEM_REFUND && status === 'available') refundRedeemed += amount;
-		else if (type === SC_PAYOUT && (status === 'requested' || status === 'paid')) payoutsOut += amount;
+		else if (
+			type === SC_PAYOUT &&
+			(status === 'requested' || status === 'under_review' || status === 'paid')
+		)
+			payoutsOut += amount;
 	}
 
 	const earnedAvailable = Math.max(0, earnedCredits - earnedRedeemed - payoutsOut);
@@ -227,7 +231,11 @@ export async function getStoreCreditTotalsForUsers(
 		else if (REFUND_CREDIT_TYPES.includes(type) && status === 'available') u.rc += amount;
 		else if (type === SC_REDEEM_EARNED && status === 'available') u.er += amount;
 		else if (type === SC_REDEEM_REFUND && status === 'available') u.rr += amount;
-		else if (type === SC_PAYOUT && (status === 'requested' || status === 'paid')) u.po += amount;
+		else if (
+			type === SC_PAYOUT &&
+			(status === 'requested' || status === 'under_review' || status === 'paid')
+		)
+			u.po += amount;
 		acc.set(row.userId, u);
 	}
 	for (const [userId, u] of acc) {
@@ -256,7 +264,40 @@ export async function creditStoreCredit(
 		update: {},
 		create: { userId: params.userId, balance: 0, currency: 'NGN' }
 	});
-	const balanceBefore = Number(wallet.balance || 0);
+
+	// Every operation that changes the cached wallet balance takes the same row lock.
+	// Without this, two legitimate credits with different references can both read the
+	// same old balance and the later update silently overwrites the first one.
+	await tx.$queryRaw`SELECT id FROM wallets WHERE user_id = ${params.userId}::uuid FOR UPDATE`;
+
+	// A reference identifies one business event (for example one order refund). Treat an
+	// exact replay as success, but never let a reused reference hide a different credit.
+	if (params.reference) {
+		const existing = await tx.walletTransaction.findUnique({
+			where: { reference: params.reference },
+			select: { userId: true, type: true, amount: true }
+		});
+		if (existing) {
+			if (
+				existing.userId !== params.userId ||
+				existing.type !== params.type ||
+				Number(existing.amount) !== amount
+			) {
+				throw new Error('STORE_CREDIT_REFERENCE_CONFLICT');
+			}
+			return;
+		}
+	}
+
+	// The upsert result may have been read before a concurrent transaction released the
+	// lock. Re-read after acquiring it so balanceBefore/After remains a coherent audit trail.
+	const liveWallet = await tx.wallet.findUnique({
+		where: { id: wallet.id },
+		select: { balance: true }
+	});
+	if (!liveWallet) throw new Error('STORE_CREDIT_WALLET_NOT_FOUND');
+
+	const balanceBefore = Number(liveWallet.balance || 0);
 	const balanceAfter = balanceBefore + amount;
 
 	await tx.wallet.update({ where: { id: wallet.id }, data: { balance: balanceAfter } });
@@ -294,6 +335,11 @@ export async function redeemStoreCreditForOrder(
 	// same instant can't both spend the same balance (TOCTOU race → store-credit over-spend).
 	// A concurrent redemption blocks here until we commit, then re-reads the reduced balance.
 	await tx.$queryRaw`SELECT id FROM wallets WHERE user_id = ${params.userId}::uuid FOR UPDATE`;
+	const liveWallet = await tx.wallet.findUnique({
+		where: { id: wallet.id },
+		select: { balance: true }
+	});
+	if (!liveWallet) throw new Error('STORE_CREDIT_WALLET_NOT_FOUND');
 
 	// Re-verify sufficiency from the ledger now that we hold the lock (the amount was computed
 	// earlier, outside the transaction). If the balance moved under us, refuse rather than leak.
@@ -302,7 +348,7 @@ export async function redeemStoreCreditForOrder(
 		throw new Error('INSUFFICIENT_STORE_CREDIT');
 	}
 
-	let balance = Number(wallet.balance || 0);
+	let balance = Number(liveWallet.balance || 0);
 
 	const rows: Array<{ type: string; amount: number; bucket: string }> = [];
 	if (refundApplied > 0) rows.push({ type: SC_REDEEM_REFUND, amount: refundApplied, bucket: 'refund' });
@@ -341,6 +387,16 @@ export async function reverseStoreCreditRedemption(
 	tx: Prisma.TransactionClient,
 	params: { userId: string; orderId: string }
 ): Promise<void> {
+	const wallet = await tx.wallet.findUnique({
+		where: { userId: params.userId },
+		select: { id: true }
+	});
+	if (!wallet) return;
+
+	// Serialize reversals with credits and redemptions for this buyer. Selecting the
+	// debit rows only after the lock also makes two recovery workers safely idempotent.
+	await tx.$queryRaw`SELECT id FROM wallets WHERE user_id = ${params.userId}::uuid FOR UPDATE`;
+
 	const debits = await tx.walletTransaction.findMany({
 		where: {
 			userId: params.userId,
@@ -359,12 +415,14 @@ export async function reverseStoreCreditRedemption(
 	});
 
 	if (total > 0) {
-		const wallet = await tx.wallet.findUnique({ where: { userId: params.userId } });
-		if (wallet) {
-			await tx.wallet.update({
-				where: { id: wallet.id },
-				data: { balance: Number(wallet.balance || 0) + total }
-			});
-		}
+		const liveWallet = await tx.wallet.findUnique({
+			where: { id: wallet.id },
+			select: { balance: true }
+		});
+		if (!liveWallet) throw new Error('STORE_CREDIT_WALLET_NOT_FOUND');
+		await tx.wallet.update({
+			where: { id: wallet.id },
+			data: { balance: Number(liveWallet.balance || 0) + total }
+		});
 	}
 }

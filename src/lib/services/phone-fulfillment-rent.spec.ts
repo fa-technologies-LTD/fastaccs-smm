@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const prismaMock = vi.hoisted(() => ({
 	phoneRental: { upsert: vi.fn(), updateMany: vi.fn(), update: vi.fn(), findUnique: vi.fn() },
 	orderItem: { findFirst: vi.fn(), findUnique: vi.fn() },
-	order: { update: vi.fn() },
+	order: { update: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
 	$transaction: vi.fn()
 }));
 const rentMock = vi.hoisted(() => vi.fn());
@@ -39,7 +39,7 @@ vi.mock('./hubman', () => ({
 	HubmanError: class HubmanError extends Error {}
 }));
 vi.mock('./store-credit', () => ({ creditStoreCredit: creditStoreCreditMock, SC_CREDIT_REFUND: 'X' }));
-vi.mock('./phone-telemetry', () => ({ recordPhoneAttempt: () => Promise.resolve(null), recordAttemptOtpReceived: () => Promise.resolve(), recordAttemptRejection: () => Promise.resolve(), classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' }) }));
+vi.mock('./phone-telemetry', () => ({ recordPhoneAttempt: () => Promise.resolve(null), recordAttemptOtpReceived: () => Promise.resolve(), recordAttemptOtpTimeout: () => Promise.resolve(), recordAttemptRejection: () => Promise.resolve(), classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' }) }));
 vi.mock('./admin-alerts', () => ({ sendCriticalAdminAlert: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('./phone-pricing', () => ({
 	getPhonePricingConfig: getPhonePricingConfigMock,
@@ -53,7 +53,7 @@ vi.mock('./rate-limiter', () => ({
 }));
 vi.mock('$lib/helpers/phone-tier-config', () => ({ getPhoneTierConfig: getPhoneTierConfigMock }));
 
-import { fulfillPhoneOrder } from './phone-fulfillment';
+import { fulfillPhoneOrder, pollPhoneRentalSms } from './phone-fulfillment';
 
 const candidate = (over: Record<string, unknown> = {}) => ({
 	provider: 'hubman',
@@ -74,13 +74,16 @@ beforeEach(() => {
 	acquireRateTokenMock.mockResolvedValue(true);
 	prismaMock.phoneRental.upsert.mockResolvedValue({});
 	prismaMock.phoneRental.updateMany.mockResolvedValue({ count: 1 }); // claim pending→renting
+	prismaMock.phoneRental.findUnique.mockResolvedValue({ generation: 1, reservedLiabilityCents: 0, triedSuppliers: [], createdAt: new Date() });
 	prismaMock.phoneRental.update.mockResolvedValue({});
 	prismaMock.order.update.mockResolvedValue({});
+	prismaMock.order.updateMany.mockResolvedValue({ count: 1 });
+	prismaMock.order.findUnique.mockResolvedValue({ userId: 'user-1' });
 	prismaMock.orderItem.findFirst.mockResolvedValue({
 		id: 'item-1',
 		totalPrice: 4800,
 		category: { metadata: {} },
-		order: { userId: 'user-1', orderNumber: 'ORD-1' }
+		order: { userId: 'user-1', orderNumber: 'ORD-1', status: 'paid', paymentStatus: 'paid', deliveryStatus: 'processing' }
 	});
 	getPhoneTierConfigMock.mockReturnValue({
 		serviceId: 1,
@@ -96,7 +99,11 @@ beforeEach(() => {
 	getPhonePricingConfigMock.mockResolvedValue({ usdNgnRate: 1500, marginPercent: 120, activationTimeoutMinutes: 20, minFulfillmentProfitNgn: 500 });
 	getProviderMock.mockReturnValue({ rent: rentMock, cancel: cancelMock });
 	prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => unknown) =>
-		cb({ phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, order: { update: vi.fn() } })
+		cb({
+			$queryRaw: vi.fn().mockResolvedValue([]),
+			phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			order: { update: vi.fn() }
+		})
 	);
 });
 
@@ -108,7 +115,7 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 		const res = await fulfillPhoneOrder('order-1', 'test');
 
 		expect(res.status).toBe('awaiting_sms');
-		expect(prismaMock.phoneRental.update).toHaveBeenCalledWith(
+		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
 			expect.objectContaining({
 				data: expect.objectContaining({ provider: 'hubman', providerRef: 'uuid-1', hubOrderUuid: 'uuid-1' })
 			})
@@ -131,7 +138,7 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 
 		expect(res.status).toBe('awaiting_sms');
 		// Persisted the pvapins supplier; hubOrderUuid null for non-hub-man.
-		expect(prismaMock.phoneRental.update).toHaveBeenCalledWith(
+		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
 			expect.objectContaining({
 				data: expect.objectContaining({
 					provider: 'pvapins',
@@ -239,8 +246,23 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 		expect(rentMock).not.toHaveBeenCalled(); // token denied → pvapins never called
 		expect(creditStoreCreditMock).not.toHaveBeenCalled(); // rate-limit is NOT a refund
 		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
-			expect.objectContaining({ data: { status: 'pending' } })
+			expect.objectContaining({ data: expect.objectContaining({ status: 'pending' }) })
 		);
+	});
+
+	it('rate-limited pvapins variants cannot starve an available hub-man candidate later in the ladder', async () => {
+		acquireRateTokenMock.mockResolvedValue(false);
+		buildLiveCandidatePoolMock.mockResolvedValue([
+			...Array.from({ length: 15 }, (_, i) => pv(`Whatsapp${i}`, 40 + i)),
+			candidate({ provider: 'hubman', providerServiceRef: '1', label: 'hubman:1', costCents: 80 })
+		]);
+		rentMock.mockResolvedValue({ providerRef: 'hub-available', phoneNumber: '15550000009', costCents: 80, expiresAt: null });
+
+		const result = await fulfillPhoneOrder('order-1', 'test');
+
+		expect(result.status).toBe('awaiting_sms');
+		expect(rentMock).toHaveBeenCalledOnce();
+		expect(rentMock.mock.calls[0][0]).toMatchObject({ providerServiceRef: '1' });
 	});
 
 	it('rate-limited but PAST the activation window → refund (bounded, never loops forever)', async () => {
@@ -309,7 +331,7 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 
 		expect(pass2.status).toBe('awaiting_sms');
 		expect(rentMock.mock.calls[0][0]).toMatchObject({ providerServiceRef: 'Whatsapp12' }); // NOT Whatsapp0
-		expect(prismaMock.phoneRental.update).toHaveBeenCalledWith(
+		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
 			expect.objectContaining({
 				data: expect.objectContaining({ provider: 'pvapins', providerRef: 'n|USA|Whatsapp12' })
 			})
@@ -350,5 +372,119 @@ describe('fulfillPhoneOrder — candidate rent + failover', () => {
 		rentMock.mockResolvedValue({ providerRef: 'n|USA|Whatsapp24', phoneNumber: '1555', costCents: 60, expiresAt: null });
 		await fulfillPhoneOrder('order-1', 'test');
 		expect(maxRentMock).toHaveBeenCalledWith(4800, 500, 1500); // never below the global floor
+	});
+
+	it('serializes duplicate drivers for one rental generation — exactly one upstream rent', async () => {
+		const state: Record<string, unknown> = {
+			orderItemId: 'item-1',
+			status: 'pending',
+			generation: 0,
+			provider: 'hubman',
+			providerRef: null,
+			hubOrderUuid: null,
+			phoneNumber: null,
+			reservedLiabilityCents: 0,
+			triedSuppliers: [],
+			createdAt: new Date()
+		};
+		prismaMock.phoneRental.updateMany.mockImplementation(async ({ where, data }) => {
+			if (where.orderItemId !== 'item-1' || (where.status && where.status !== state.status)) {
+				return { count: 0 };
+			}
+			if (where.rentLeaseToken && where.rentLeaseToken !== state.rentLeaseToken) return { count: 0 };
+			if (data.generation?.increment) state.generation = Number(state.generation) + data.generation.increment;
+			Object.assign(state, data, { generation: state.generation });
+			return { count: 1 };
+		});
+		prismaMock.phoneRental.findUnique.mockImplementation(async () => ({ ...state }));
+		buildLiveCandidatePoolMock.mockResolvedValue([candidate()]);
+		rentMock.mockResolvedValue({ providerRef: 'uuid-one', phoneNumber: '15550000001', costCents: 50, expiresAt: null });
+
+		const [a, b] = await Promise.all([
+			fulfillPhoneOrder('order-1', 'poll'),
+			fulfillPhoneOrder('order-1', 'cron')
+		]);
+
+		expect(rentMock).toHaveBeenCalledTimes(1);
+		expect([a.status, b.status]).toEqual(['awaiting_sms', 'awaiting_sms']);
+	});
+
+	it('does not globally lock the storefront — two separate buyers rent concurrently', async () => {
+		const states = new Map<string, Record<string, unknown>>([
+			['item-a', { orderItemId: 'item-a', status: 'pending', generation: 0, provider: 'hubman', providerRef: null, hubOrderUuid: null, reservedLiabilityCents: 0, triedSuppliers: [], createdAt: new Date() }],
+			['item-b', { orderItemId: 'item-b', status: 'pending', generation: 0, provider: 'hubman', providerRef: null, hubOrderUuid: null, reservedLiabilityCents: 0, triedSuppliers: [], createdAt: new Date() }]
+		]);
+		prismaMock.orderItem.findFirst.mockImplementation(async ({ where }) => ({
+			id: where.orderId === 'order-a' ? 'item-a' : 'item-b',
+			totalPrice: 4800,
+			category: { metadata: {} },
+			order: { userId: where.orderId === 'order-a' ? 'user-a' : 'user-b', orderNumber: where.orderId, status: 'paid', paymentStatus: 'paid', deliveryStatus: 'processing' }
+		}));
+		prismaMock.phoneRental.updateMany.mockImplementation(async ({ where, data }) => {
+			const state = states.get(where.orderItemId);
+			if (!state || (where.status && where.status !== state.status)) return { count: 0 };
+			if (where.rentLeaseToken && where.rentLeaseToken !== state.rentLeaseToken) return { count: 0 };
+			if (data.generation?.increment) state.generation = Number(state.generation) + data.generation.increment;
+			Object.assign(state, data, { generation: state.generation });
+			return { count: 1 };
+		});
+		prismaMock.phoneRental.findUnique.mockImplementation(async ({ where }) => ({ ...states.get(where.orderItemId)! }));
+		buildLiveCandidatePoolMock.mockResolvedValue([candidate()]);
+		rentMock
+			.mockResolvedValueOnce({ providerRef: 'uuid-a', phoneNumber: '15550000001', costCents: 50, expiresAt: null })
+			.mockResolvedValueOnce({ providerRef: 'uuid-b', phoneNumber: '15550000002', costCents: 50, expiresAt: null });
+
+		const results = await Promise.all([
+			fulfillPhoneOrder('order-a', 'poll'),
+			fulfillPhoneOrder('order-b', 'poll')
+		]);
+
+		expect(rentMock).toHaveBeenCalledTimes(2);
+		expect(results.every((r) => r.status === 'awaiting_sms')).toBe(true);
+	});
+
+	it('fences a late rent result after refund and releases only that stale provider reference', async () => {
+		const state: Record<string, unknown> = {
+			orderItemId: 'item-1', status: 'pending', generation: 0, provider: 'hubman', providerRef: null,
+			hubOrderUuid: null, reservedLiabilityCents: 0, triedSuppliers: [], createdAt: new Date()
+		};
+		prismaMock.phoneRental.updateMany.mockImplementation(async ({ where, data }) => {
+			if (where.status && where.status !== state.status) return { count: 0 };
+			if (where.rentLeaseToken && where.rentLeaseToken !== state.rentLeaseToken) return { count: 0 };
+			if (data.generation?.increment) state.generation = Number(state.generation) + data.generation.increment;
+			Object.assign(state, data, { generation: state.generation });
+			return { count: 1 };
+		});
+		prismaMock.phoneRental.findUnique.mockImplementation(async () => ({ ...state }));
+		buildLiveCandidatePoolMock.mockResolvedValue([candidate({ provider: 'pvapins', providerServiceRef: 'Whatsapp161' })]);
+		let releaseRent!: (value: unknown) => void;
+		rentMock.mockImplementation(() => new Promise((resolve) => (releaseRent = resolve)));
+		cancelMock.mockResolvedValue(true);
+
+		const running = fulfillPhoneOrder('order-1', 'poll');
+		await vi.waitFor(() => expect(rentMock).toHaveBeenCalledOnce());
+		state.status = 'refunded';
+		state.refundedAt = new Date();
+		releaseRent({ providerRef: 'late|USA|Whatsapp161', phoneNumber: '16088011179', costCents: 195, expiresAt: null });
+		const result = await running;
+
+		expect(result.status).toBe('refunded');
+		expect(cancelMock).toHaveBeenCalledWith('late|USA|Whatsapp161');
+		expect(creditStoreCreditMock).not.toHaveBeenCalled();
+		expect(state.status).toBe('refunded');
+	});
+
+	it('keeps a slow pvapins rent with a live lease in preparing — never false-refunds it', async () => {
+		prismaMock.phoneRental.findUnique.mockResolvedValue({
+			orderItemId: 'item-1', status: 'renting', generation: 3, provider: 'pvapins', providerRef: null,
+			hubOrderUuid: null, rentLeaseToken: 'live-worker', rentLeaseExpiresAt: new Date(Date.now() + 60_000),
+			rentCallStartedAt: new Date(), createdAt: new Date(Date.now() - 20 * 60_000)
+		});
+
+		const result = await pollPhoneRentalSms('item-1');
+
+		expect(result.status).toBe('preparing');
+		expect(creditStoreCreditMock).not.toHaveBeenCalled();
+		expect(rentMock).not.toHaveBeenCalled();
 	});
 });

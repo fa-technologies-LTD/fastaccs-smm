@@ -1,6 +1,10 @@
 import { prisma } from '$lib/prisma';
+import { serverCache } from '$lib/helpers/cache';
 
 export const ANNOUNCEMENT_BANNER_KEY = 'config.store.announcement_banner';
+
+const ANNOUNCEMENT_BANNER_CACHE_KEY = 'settings:announcement-banner';
+const ANNOUNCEMENT_BANNER_CACHE_TTL_MS = 30_000;
 
 const DEFAULT_TIMEZONE = 'Africa/Lagos';
 const DEFAULT_VERSION = 1;
@@ -60,7 +64,9 @@ function parseBoolean(value: unknown, fallback = false): boolean {
 	if (typeof value === 'string') {
 		const normalized = value.trim().toLowerCase();
 		if (!normalized) return fallback;
-		return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+		return (
+			normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on'
+		);
 	}
 	return fallback;
 }
@@ -249,7 +255,10 @@ export function getAnnouncementBannerDismissCookieName(version: number): string 
 	return `fa_announcement_banner_v${Math.max(1, Math.round(version || DEFAULT_VERSION))}`;
 }
 
-export function isAnnouncementBannerActive(config: AnnouncementBannerConfig, now = new Date()): boolean {
+export function isAnnouncementBannerActive(
+	config: AnnouncementBannerConfig,
+	now = new Date()
+): boolean {
 	if (!config.enabled) return false;
 	if (!config.text.trim()) return false;
 
@@ -272,20 +281,32 @@ export function isAnnouncementBannerActive(config: AnnouncementBannerConfig, now
 }
 
 export async function getAnnouncementBannerConfig(): Promise<AnnouncementBannerConfig> {
+	const cached = serverCache.get<AnnouncementBannerConfig>(
+		ANNOUNCEMENT_BANNER_CACHE_KEY,
+		ANNOUNCEMENT_BANNER_CACHE_TTL_MS
+	);
+	if (cached) return cached;
+
 	const row = await prisma.microcopy.findUnique({
 		where: { key: ANNOUNCEMENT_BANNER_KEY },
 		select: { value: true }
 	});
 
 	if (!row?.value) {
-		return { ...DEFAULT_CONFIG };
+		const fallback = { ...DEFAULT_CONFIG };
+		serverCache.set(ANNOUNCEMENT_BANNER_CACHE_KEY, fallback);
+		return fallback;
 	}
 
 	try {
 		const parsed = JSON.parse(row.value);
-		return normalizeBannerConfig(parsed);
+		const config = normalizeBannerConfig(parsed);
+		serverCache.set(ANNOUNCEMENT_BANNER_CACHE_KEY, config);
+		return config;
 	} catch {
-		return { ...DEFAULT_CONFIG };
+		const fallback = { ...DEFAULT_CONFIG };
+		serverCache.set(ANNOUNCEMENT_BANNER_CACHE_KEY, fallback);
+		return fallback;
 	}
 }
 
@@ -358,17 +379,20 @@ export async function saveAnnouncementBannerConfig(
 		update: {
 			value: JSON.stringify(nextConfig),
 			category: 'settings',
-			description: 'Storefront announcement banner configuration (enabled, schedule, dismiss version).',
+			description:
+				'Storefront announcement banner configuration (enabled, schedule, dismiss version).',
 			isActive: true
 		},
 		create: {
 			key: ANNOUNCEMENT_BANNER_KEY,
 			value: JSON.stringify(nextConfig),
 			category: 'settings',
-			description: 'Storefront announcement banner configuration (enabled, schedule, dismiss version).',
+			description:
+				'Storefront announcement banner configuration (enabled, schedule, dismiss version).',
 			isActive: true
 		}
 	});
+	serverCache.invalidate(ANNOUNCEMENT_BANNER_CACHE_KEY);
 
 	return nextConfig;
 }

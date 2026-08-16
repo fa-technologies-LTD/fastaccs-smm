@@ -362,14 +362,22 @@ class CartStore {
 		}));
 
 		this.refreshPromise = (async () => {
-			const response = await fetch('/api/cart/refresh', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					items: requestItems,
-					checkoutKey: this.getCheckoutKey()
-				})
-			});
+			const controller = new AbortController();
+			const timeout = setTimeout(() => controller.abort(), 12_000);
+			let response: Response;
+			try {
+				response = await fetch('/api/cart/refresh', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						items: requestItems,
+						checkoutKey: this.getCheckoutKey()
+					}),
+					signal: controller.signal
+				});
+			} finally {
+				clearTimeout(timeout);
+			}
 
 			if (!response.ok) {
 				throw new Error('Failed to refresh cart');

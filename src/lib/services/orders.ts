@@ -53,15 +53,26 @@ async function handleApiCall(response: Response) {
 		const raw = await response.text();
 		let errorText = raw;
 		let traceId = '';
+		let orderId = '';
 		try {
-			const parsed = JSON.parse(raw) as { error?: unknown; message?: unknown; traceId?: unknown };
+			const parsed = JSON.parse(raw) as {
+				error?: unknown;
+				message?: unknown;
+				traceId?: unknown;
+				orderId?: unknown;
+			};
 			errorText = String(parsed.error || parsed.message || raw);
 			traceId = typeof parsed.traceId === 'string' ? parsed.traceId.trim().slice(0, 100) : '';
+			orderId = typeof parsed.orderId === 'string' ? parsed.orderId.trim() : '';
 		} catch {
 			errorText = raw;
 		}
 		const reference = traceId ? ` Reference: ${traceId}` : '';
-		return { data: null, error: `HTTP ${response.status}: ${errorText}${reference}` };
+		return {
+			data: null,
+			error: `HTTP ${response.status}: ${errorText}${reference}`,
+			...(orderId ? { orderId } : {})
+		};
 	}
 	return await response.json();
 }
@@ -122,19 +133,27 @@ export async function getTierOrderDetails(orderId: string, fetchFn: typeof fetch
 }
 
 // Create new order
-export async function createOrder(orderData: CreateOrderData) {
+export async function createOrder(orderData: CreateOrderData, options: { signal?: AbortSignal } = {}) {
 	try {
 		const response = await fetch('/api/orders', {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json'
 			},
-			body: JSON.stringify(orderData)
+			body: JSON.stringify(orderData),
+			signal: options.signal
 		});
 		return await handleApiCall(response);
 	} catch (error) {
 		console.error('Failed to create order:', error);
-		return { data: null, error: 'Failed to create order' };
+		if (error instanceof DOMException && error.name === 'AbortError') {
+			return {
+				data: null,
+				error: 'Checkout response timed out',
+				unknownOutcome: true
+			};
+		}
+		return { data: null, error: 'Failed to create order', unknownOutcome: true };
 	}
 }
 

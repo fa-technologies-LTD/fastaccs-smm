@@ -26,6 +26,8 @@
 	let affiliateNotifications = $state<AffiliateNotificationItem[]>([]);
 	let affiliateInboxOpen = $state(false);
 	let affiliateInboxLoading = $state(false);
+	let affiliateNotificationsLoaded = $state(false);
+	let affiliateNotificationsNextCursor = $state<string | null>(null);
 	let affiliateBellDesktopAnchor = $state<HTMLElement | null>(null);
 	let affiliateBellMobileAnchor = $state<HTMLElement | null>(null);
 
@@ -47,9 +49,18 @@
 	// Generate a consistent color based on user's name
 	function getAvatarColor(fullName: string | null | undefined): string {
 		const colors = [
-			'#ef4444', '#3b82f6', '#22c55e', '#eab308',
-			'#a855f7', '#ec4899', '#6366f1', '#14b8a6',
-			'#f97316', '#10b981', '#06b6d4', '#8b5cf6'
+			'#ef4444',
+			'#3b82f6',
+			'#22c55e',
+			'#eab308',
+			'#a855f7',
+			'#ec4899',
+			'#6366f1',
+			'#14b8a6',
+			'#f97316',
+			'#10b981',
+			'#06b6d4',
+			'#8b5cf6'
 		];
 		if (!fullName) return colors[0];
 		let hash = 0;
@@ -107,11 +118,15 @@
 		return `${Math.floor(diffMs / day)}d ago`;
 	}
 
-	async function loadAffiliateNotifications(limit = 20): Promise<void> {
+	async function loadAffiliateNotifications(limit = 20, append = false): Promise<void> {
 		if (!user) return;
 		affiliateInboxLoading = true;
 		try {
-			const response = await fetch(`/api/affiliate/notifications?limit=${limit}`);
+			const cursorParam =
+				append && affiliateNotificationsNextCursor
+					? `&cursor=${encodeURIComponent(affiliateNotificationsNextCursor)}`
+					: '';
+			const response = await fetch(`/api/affiliate/notifications?limit=${limit}${cursorParam}`);
 			const result = await response.json();
 			if (!response.ok || !result?.success) {
 				return;
@@ -120,7 +135,7 @@
 			const data = result.data || {};
 			affiliateCanShowBell = Boolean(data.canShowBell);
 			affiliateUnreadCount = Math.max(0, Number(data.unreadCount || 0));
-			affiliateNotifications = Array.isArray(data.notifications)
+			const nextNotifications: AffiliateNotificationItem[] = Array.isArray(data.notifications)
 				? data.notifications.map((raw: unknown) => {
 						const item = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
 						return {
@@ -134,10 +149,36 @@
 						};
 					})
 				: [];
+			affiliateNotifications = append
+				? [...affiliateNotifications, ...nextNotifications]
+				: nextNotifications;
+			affiliateNotificationsNextCursor = data.nextCursor ? String(data.nextCursor) : null;
+			affiliateNotificationsLoaded = true;
 		} catch (error) {
 			console.error('Failed to load affiliate notifications:', error);
 		} finally {
 			affiliateInboxLoading = false;
+		}
+	}
+
+	async function loadNotificationSummary(): Promise<void> {
+		if (!user) return;
+		try {
+			const response = await fetch('/api/affiliate/notifications?summary=1');
+			const result = await response.json();
+			if (!response.ok || !result?.success) return;
+			affiliateCanShowBell = Boolean(result.data?.canShowBell);
+			affiliateUnreadCount = Math.max(0, Number(result.data?.unreadCount || 0));
+			sessionStorage.setItem(
+				`fastaccs_notification_summary:${user.id}`,
+				JSON.stringify({
+					at: Date.now(),
+					canShowBell: affiliateCanShowBell,
+					unreadCount: affiliateUnreadCount
+				})
+			);
+		} catch (error) {
+			console.error('Failed to load notification summary:', error);
 		}
 	}
 
@@ -151,6 +192,9 @@
 
 	async function markAffiliateNotificationRead(notificationId: string): Promise<void> {
 		if (!notificationId) return;
+		const wasUnread = affiliateNotifications.some(
+			(item) => item.id === notificationId && !item.read
+		);
 		try {
 			const response = await fetch('/api/affiliate/notifications/read', {
 				method: 'POST',
@@ -161,10 +205,7 @@
 			affiliateNotifications = affiliateNotifications.map((item) =>
 				item.id === notificationId ? { ...item, read: true } : item
 			);
-			affiliateUnreadCount = Math.max(
-				0,
-				affiliateNotifications.filter((item) => !item.read).length
-			);
+			if (wasUnread) affiliateUnreadCount = Math.max(0, affiliateUnreadCount - 1);
 		} catch (error) {
 			console.error('Failed to mark affiliate notification as read:', error);
 		}
@@ -188,14 +229,33 @@
 
 	function toggleAffiliateInbox(): void {
 		affiliateInboxOpen = !affiliateInboxOpen;
-		if (affiliateInboxOpen && user) {
+		if (affiliateInboxOpen && user && !affiliateNotificationsLoaded) {
 			void loadAffiliateNotifications(20);
 		}
 	}
 
 	onMount(() => {
+		let summaryTimer: ReturnType<typeof setTimeout> | null = null;
+		let idleHandle: number | null = null;
 		if (user) {
-			void loadAffiliateNotifications(20);
+			try {
+				const cached = JSON.parse(
+					sessionStorage.getItem(`fastaccs_notification_summary:${user.id}`) || 'null'
+				) as { at?: number; canShowBell?: boolean; unreadCount?: number } | null;
+				if (cached && Date.now() - Number(cached.at || 0) < 60_000) {
+					affiliateCanShowBell = Boolean(cached.canShowBell);
+					affiliateUnreadCount = Math.max(0, Number(cached.unreadCount || 0));
+				}
+			} catch {
+				// A malformed browser cache should never block navigation.
+			}
+
+			const scheduleSummary = () => void loadNotificationSummary();
+			if ('requestIdleCallback' in window) {
+				idleHandle = window.requestIdleCallback(scheduleSummary, { timeout: 2_000 });
+			} else {
+				summaryTimer = setTimeout(scheduleSummary, 1_000);
+			}
 		}
 
 		const handleOutsideClick = (event: MouseEvent) => {
@@ -210,6 +270,10 @@
 
 		document.addEventListener('click', handleOutsideClick);
 		return () => {
+			if (summaryTimer) clearTimeout(summaryTimer);
+			if (idleHandle !== null && 'cancelIdleCallback' in window) {
+				window.cancelIdleCallback(idleHandle);
+			}
 			document.removeEventListener('click', handleOutsideClick);
 		};
 	});
@@ -219,6 +283,8 @@
 			affiliateCanShowBell = false;
 			affiliateUnreadCount = 0;
 			affiliateNotifications = [];
+			affiliateNotificationsLoaded = false;
+			affiliateNotificationsNextCursor = null;
 			affiliateInboxOpen = false;
 		}
 	});
@@ -269,11 +335,7 @@
 					>
 						Boosting Services
 					</a>
-					<a
-						href="/blog"
-						data-sveltekit-preload-data="hover"
-						class="nav-link-active font-medium"
-					>
+					<a href="/blog" data-sveltekit-preload-data="hover" class="nav-link-active font-medium">
 						Blog
 					</a>
 				{:else}
@@ -413,6 +475,17 @@
 														</button>
 													{/each}
 												</div>
+												{#if affiliateNotificationsNextCursor}
+													<button
+														type="button"
+														onclick={() => void loadAffiliateNotifications(20, true)}
+														disabled={affiliateInboxLoading}
+														class="mt-2 w-full rounded-lg py-2 text-xs font-semibold disabled:opacity-60"
+														style="border: 1px solid var(--border); color: var(--text-muted);"
+													>
+														{affiliateInboxLoading ? 'Loading...' : 'Load older updates'}
+													</button>
+												{/if}
 											{/if}
 										</div>
 									{/if}
@@ -552,6 +625,17 @@
 											</button>
 										{/each}
 									</div>
+									{#if affiliateNotificationsNextCursor}
+										<button
+											type="button"
+											onclick={() => void loadAffiliateNotifications(20, true)}
+											disabled={affiliateInboxLoading}
+											class="mt-2 w-full rounded-lg py-2 text-xs font-semibold disabled:opacity-60"
+											style="border: 1px solid var(--border); color: var(--text-muted);"
+										>
+											{affiliateInboxLoading ? 'Loading...' : 'Load older updates'}
+										</button>
+									{/if}
 								{/if}
 							</div>
 						{/if}
@@ -629,6 +713,13 @@
 							Accounts
 						</a>
 						<a
+							href="/numbers"
+							data-sveltekit-preload-data="hover"
+							class="nav-link block py-3 text-sm font-medium"
+						>
+							Numbers
+						</a>
+						<a
 							href="/services"
 							data-sveltekit-preload-data="hover"
 							class="nav-link block py-3 text-sm font-medium"
@@ -663,11 +754,7 @@
 				<!-- Mobile Cart & User -->
 				<div class="space-y-2 pt-4" style="border-top: 1px solid var(--border);">
 					{#if user}
-						<a
-							href="/dashboard"
-							data-sveltekit-preload-data="hover"
-							class="nav-link flex items-center py-3 text-base"
-						>
+						<div class="flex items-center py-3 text-base" style="color: var(--text-muted);">
 							{#if user.avatarUrl}
 								<img src={user.avatarUrl} alt="Profile" class="mr-3 h-5 w-5 rounded-full" />
 							{:else}
@@ -678,8 +765,8 @@
 									{getInitials(user.fullName)}
 								</div>
 							{/if}
-							My Account
-						</a>
+							<span class="truncate">{displayName}</span>
+						</div>
 						{#if user.userType === 'ADMIN'}
 							<a
 								href="/admin"

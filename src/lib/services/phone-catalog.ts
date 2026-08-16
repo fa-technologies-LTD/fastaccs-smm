@@ -2,7 +2,11 @@ import { prisma } from '$lib/prisma';
 import { Prisma } from '@prisma/client';
 import * as hubman from './hubman';
 import * as pvapins from './pvapins';
-import { serviceByHubId, pvapinsAppsForService, findPvapinsCountry } from './number-providers/service-map';
+import {
+	serviceByHubId,
+	pvapinsAppsForService,
+	findPvapinsCountry
+} from './number-providers/service-map';
 import { getPhonePricingConfig, computeAutoPrice, stabilizePrice } from './phone-pricing';
 import {
 	getLowSuccessTierKeys,
@@ -11,7 +15,11 @@ import {
 	type RealizedTierCost
 } from './phone-analytics';
 import { triggerNumbersRestockForTier } from './restock-notifications';
-import { PHONE_TIER_KEYS, PHONE_DELIVERY_MODE, getPhoneTierConfig } from '$lib/helpers/phone-tier-config';
+import {
+	PHONE_TIER_KEYS,
+	PHONE_DELIVERY_MODE,
+	getPhoneTierConfig
+} from '$lib/helpers/phone-tier-config';
 
 /**
  * Catalog management for the automated Numbers service.
@@ -30,33 +38,100 @@ export const NUMBERS_PLATFORM_TYPE = 'numbers_platform';
 // flow; they're distinguished from account tiers by their parent (the Numbers platform).
 export const NUMBERS_TIER_TYPE = 'tier';
 
-// The 20 curated apps to stock (verified hub-man service IDs). Countries are NOT
-// curated — they're synced live from hub-man's rotating availability (see syncNumbersCatalog).
+// Curated, recognizable apps with supplier IDs verified against hub-man's live catalog. Provider
+// variant labels remain backend-only. The order is the storefront discovery order; it is deliberately
+// not presented as measured popularity.
 export const MAJOR_SERVICES = [
 	{ id: 1, name: 'WhatsApp' },
 	{ id: 2, name: 'Telegram' },
+	{ id: 507, name: 'Signal' },
+	{ id: 3, name: 'Google / Gmail' },
 	{ id: 7, name: 'Instagram' },
 	{ id: 11, name: 'Facebook' },
-	{ id: 3, name: 'Google / Gmail' },
 	{ id: 50, name: 'TikTok' },
+	{ id: 18, name: 'Microsoft / Outlook' },
+	{ id: 131, name: 'Apple / iCloud' },
 	{ id: 47, name: 'Discord' },
 	{ id: 12, name: 'X / Twitter' },
 	{ id: 73, name: 'Snapchat' },
+	{ id: 33, name: 'LinkedIn' },
+	{ id: 2612, name: 'Reddit' },
+	{ id: 21, name: 'Yahoo' },
+	{ id: 5, name: 'VK' },
+	{ id: 31, name: 'KakaoTalk' },
+	{ id: 45, name: 'IMO' },
+	{ id: 354, name: 'Skype' },
+	{ id: 490, name: 'Clubhouse' },
+	{ id: 3609, name: 'BeReal' },
+	{ id: 84, name: 'Truecaller' },
 	{ id: 28, name: 'Tinder' },
+	{ id: 258, name: 'Bumble' },
+	{ id: 267, name: 'Hinge' },
+	{ id: 140, name: 'Grindr' },
+	{ id: 363, name: 'OkCupid' },
 	{ id: 13, name: 'Uber' },
 	{ id: 60, name: 'Amazon' },
+	{ id: 19, name: 'Airbnb' },
+	{ id: 379, name: 'DoorDash' },
+	{ id: 536, name: 'Lyft' },
+	{ id: 86, name: 'Bolt' },
+	{ id: 98, name: 'Foodpanda' },
+	{ id: 118, name: 'Deliveroo' },
+	{ id: 2784, name: 'Booking.com' },
 	{ id: 41, name: 'Netflix' },
+	{ id: 3066, name: 'Spotify' },
 	{ id: 120, name: 'PayPal' },
 	{ id: 9, name: 'Viber' },
+	{ id: 8, name: 'WeChat' },
+	{ id: 20, name: 'LINE' },
 	{ id: 2419, name: 'OpenAI / ChatGPT' },
+	{ id: 3965, name: 'Claude AI' },
+	{ id: 63, name: 'Proton Mail' },
+	{ id: 2846, name: 'Dropbox' },
+	{ id: 5863, name: 'GitLab' },
+	{ id: 352, name: 'Fiverr' },
+	{ id: 292, name: 'Upwork' },
 	{ id: 27, name: 'Steam' },
+	{ id: 785, name: 'Twitch' },
+	{ id: 3023, name: 'Pinterest' },
+	{ id: 2610, name: 'Roblox' },
+	{ id: 5667, name: 'Epic Games' },
+	{ id: 136, name: 'Blizzard' },
+	{ id: 3040, name: 'Riot Games' },
+	{ id: 981, name: 'PUBG' },
+	{ id: 124, name: 'eBay' },
+	{ id: 2590, name: 'Temu' },
+	{ id: 394, name: 'SHEIN' },
+	{ id: 523, name: 'AliExpress' },
+	{ id: 351, name: 'Walmart' },
+	{ id: 125, name: 'Nike' },
 	{ id: 122, name: 'Coinbase' },
-	{ id: 355, name: 'Revolut' },
-	{ id: 258, name: 'Bumble' }
+	{ id: 355, name: 'Revolut' }
 ] as const;
 
 const MAJOR_SERVICE_IDS = new Set<number>(MAJOR_SERVICES.map((s) => s.id));
 const SERVICE_NAME_BY_ID = new Map<number, string>(MAJOR_SERVICES.map((s) => [s.id, s.name]));
+
+// Deliberate storefront markets. Expansion creates missing app/country tiers only inside this set;
+// otherwise hub-man's 223-country catalog multiplied by the app list would create thousands of
+// low-signal rows in a single admin action. Existing tiers remain refreshable even if this list is
+// later narrowed.
+export const STOREFRONT_MARKET_CODES = new Set<string>([
+	'US',
+	'GB',
+	'CA',
+	'PL',
+	'ID',
+	'MY',
+	'KE',
+	'CL',
+	'HK'
+]);
+
+// pvapins publishes catalog listings rather than true stock. Only let it originate an otherwise
+// absent tier in the three core markets; elsewhere it can still compete/fail over behind a
+// hub-stock-backed tier. This avoids presenting hundreds of unproven cold-start products.
+export const PVAPINS_ONLY_MARKET_CODES = new Set<string>(['US', 'GB', 'CA']);
 
 function tierSlug(serviceId: number, countryId: number): string {
 	return `numbers-svc${serviceId}-country${countryId}`;
@@ -117,7 +192,10 @@ async function fetchCountryServiceCosts(
 		return { ok: true, costs };
 	} catch (error) {
 		// A transient failure must NOT deactivate this country's tiers — signal it.
-		console.error(`[phone-catalog] failed to fetch costs for country ${countryId}:`, (error as Error).message);
+		console.error(
+			`[phone-catalog] failed to fetch costs for country ${countryId}:`,
+			(error as Error).message
+		);
 		return { ok: false, costs };
 	}
 }
@@ -128,8 +206,8 @@ function countryIdFromSlug(slug: string): number | null {
 }
 
 /**
- * A signature of the only tier fields the sync ever changes (cost, price, stock, hidden flag,
- * source). Comparing it lets a frequent sync SKIP writing tiers that didn't actually change —
+ * A signature of the only tier fields the sync ever changes (country code, cost, price, stock,
+ * hidden flag, source). Comparing it lets a frequent sync SKIP writes when nothing changed —
  * so we can run every few minutes for live availability without churning the DB.
  */
 function economicsSignature(metadata: unknown): string {
@@ -140,6 +218,7 @@ function economicsSignature(metadata: unknown): string {
 	const pricing =
 		m.pricing && typeof m.pricing === 'object' ? (m.pricing as Record<string, unknown>) : {};
 	return JSON.stringify([
+		m.hub_country_code ?? null,
 		m[PHONE_TIER_KEYS.expectedCostCents] ?? null,
 		pricing.base_price ?? null,
 		m[PHONE_TIER_KEYS.availableCount] ?? null,
@@ -155,8 +234,12 @@ function economicsSignature(metadata: unknown): string {
  * listed prior is used unchanged; as clean rents accumulate, realized cost takes over smoothly, so
  * one weird rent never reprices a tier and price re-centers on reality over time.
  */
-export function blendedBasisCents(listedCents: number, realized: RealizedTierCost | undefined): number {
-	if (!realized || realized.count <= 0 || realized.medianCents <= 0) return Math.max(0, listedCents);
+export function blendedBasisCents(
+	listedCents: number,
+	realized: RealizedTierCost | undefined
+): number {
+	if (!realized || realized.count <= 0 || realized.medianCents <= 0)
+		return Math.max(0, listedCents);
 	const w = realized.count / (realized.count + REALIZED_COST_PRIOR_STRENGTH);
 	return Math.max(1, Math.round(w * realized.medianCents + (1 - w) * Math.max(0, listedCents)));
 }
@@ -198,25 +281,37 @@ export async function syncNumbersCatalog(
 	const now = new Date();
 	// Realized per-tier cost (clean, post-epoch) to self-tune the price basis. Fail-soft: an empty
 	// map just means every tier prices off its listed catalog cost (the safe cold-start prior).
-	const realizedByTier = await getRealizedCostByTier().catch(() => new Map<string, RealizedTierCost>());
+	const realizedByTier = await getRealizedCostByTier().catch(
+		() => new Map<string, RealizedTierCost>()
+	);
 	const basisFor = (serviceId: number, countryId: number, listedCents: number): number =>
 		blendedBasisCents(listedCents, realizedByTier.get(`${serviceId}||${countryId}`));
 
 	let countryIds: number[] = [];
-	try {
-		countryIds = await hubman.getAvailableCountryIds();
-	} catch (error) {
-		console.error('[phone-catalog] failed to fetch available countries:', (error as Error).message);
-		return { created: 0, refreshed: 0, deactivated: 0, countries: 0 };
+	let hubAvailabilityKnown = false;
+	if (hubman.isHubmanConfigured()) {
+		try {
+			countryIds = await hubman.getAvailableCountryIds();
+			hubAvailabilityKnown = true;
+		} catch (error) {
+			// hub-man is one source, not the catalog authority. Preserve existing state and
+			// continue so pvapins can still refresh/revive tiers on its own.
+			console.error(
+				'[phone-catalog] failed to fetch available countries:',
+				(error as Error).message
+			);
+		}
 	}
 
 	// Country name + ISO code from the master catalog (for display + flag emoji).
 	const countryMeta = new Map<number, { name: string; code: string }>();
-	try {
-		const catalog = await hubman.getCatalog();
-		for (const c of catalog.countries) countryMeta.set(c.id, { name: c.name, code: c.code });
-	} catch (error) {
-		console.error('[phone-catalog] failed to fetch master catalog:', (error as Error).message);
+	if (hubman.isHubmanConfigured()) {
+		try {
+			const catalog = await hubman.getCatalog();
+			for (const c of catalog.countries) countryMeta.set(c.id, { name: c.name, code: c.code });
+		} catch (error) {
+			console.error('[phone-catalog] failed to fetch master catalog:', (error as Error).message);
+		}
 	}
 
 	// Fetch existing tiers once (slug → id) to avoid a query per combo.
@@ -224,6 +319,16 @@ export async function syncNumbersCatalog(
 		where: { parentId: platformId },
 		select: { id: true, slug: true, metadata: true }
 	});
+	// Existing tier metadata is also a durable canonical country map. It lets a pvapins-only
+	// refresh proceed when hub-man is disabled or temporarily unreachable.
+	for (const tier of existingTiers) {
+		const cfg = getPhoneTierConfig(tier.metadata);
+		if (!cfg || countryMeta.has(cfg.countryId)) continue;
+		countryMeta.set(cfg.countryId, {
+			name: cfg.countryName,
+			code: String((tier.metadata as Record<string, unknown>)?.hub_country_code ?? '')
+		});
+	}
 	const idBySlug = new Map(existingTiers.map((t) => [t.slug, t.id]));
 	const metaBySlug = new Map(existingTiers.map((t) => [t.slug, t.metadata]));
 	// Prior auto-hidden state per tier, to detect an unavailable→available transition (restock).
@@ -233,10 +338,25 @@ export async function syncNumbersCatalog(
 	// Tiers that just came back in stock this sync → notify their "Notify me" subscribers.
 	const becameAvailable: Array<{ tierId: string; name: string; price: number }> = [];
 
-	// Fetch every country's cost + stock map in parallel (the heavy part).
+	// Refresh countries already represented in the catalog. During an explicit expansion, also
+	// fetch the deliberately supported markets. Do not fan out across all 223 hub-man countries.
+	const existingCountryIds = new Set(
+		existingTiers
+			.map((tier) => getPhoneTierConfig(tier.metadata)?.countryId)
+			.filter((id): id is number => id != null)
+	);
+	const syncCountryIds = countryIds.filter((countryId) => {
+		if (existingCountryIds.has(countryId)) return true;
+		if (!options.expand) return false;
+		return STOREFRONT_MARKET_CODES.has(
+			String(countryMeta.get(countryId)?.code || '').toUpperCase()
+		);
+	});
+
+	// Fetch only the relevant countries' cost + stock maps in parallel (the heavy part).
 	const fetched = new Map(
 		await Promise.all(
-			countryIds.map(async (cid) => [cid, await fetchCountryServiceCosts(cid)] as const)
+			syncCountryIds.map(async (cid) => [cid, await fetchCountryServiceCosts(cid)] as const)
 		)
 	);
 	// Tiers our own delivery data says are failing too often — hidden alongside no-stock ones.
@@ -247,19 +367,27 @@ export async function syncNumbersCatalog(
 	// existing tiers hub-man has rotated OUT (so they don't sit on stale "OK" metadata).
 	const seenSlugs = new Set<string>();
 
-	for (const countryId of countryIds) {
+	for (const countryId of syncCountryIds) {
 		const meta = countryMeta.get(countryId) || { name: `Country ${countryId}`, code: '' };
 		const costs = fetched.get(countryId)?.costs ?? new Map<number, ServiceCost>();
 		for (const [serviceId, { costCents, available }] of costs) {
 			if (!MAJOR_SERVICE_IDS.has(serviceId)) continue;
+			// Zero stock is not a hub-man-backed tier for this run. Defer the decision to
+			// the provider-neutral gap pass below, which gives pvapins a chance to serve it.
+			if (available <= 0) continue;
 			const serviceName = SERVICE_NAME_BY_ID.get(serviceId)!;
 			const slug = tierSlug(serviceId, countryId);
 			seenSlugs.add(slug);
 			const existingId = idBySlug.get(slug);
 
-			// Refresh mode only touches tiers already in the curated set. New combos are
-			// added only when explicitly expanding.
-			if (!existingId && !options.expand) continue;
+			// Refresh mode only touches existing tiers. Expansion creates new combinations only
+			// in deliberate storefront markets, never across the supplier's entire country list.
+			if (
+				!existingId &&
+				(!options.expand || !STOREFRONT_MARKET_CODES.has(String(meta.code || '').toUpperCase()))
+			) {
+				continue;
+			}
 
 			// Fully-automatic price, recomputed from live cost every refresh (never stale) — UNLESS
 			// the admin manually locked this tier's price, in which case we keep their figure.
@@ -274,10 +402,9 @@ export async function syncNumbersCatalog(
 				: stabilizePrice(readBasePrice(oldMd), autoPrice, readPriceUpdatedAt(oldMd), now);
 			const finalPrice = stab.price;
 			const priceUpdatedAt = stab.changed ? now.toISOString() : readPriceUpdatedAtIso(oldMd);
-			const noStock = available <= 0;
 			const lowSuccess = lowSuccessKeys.has(`${serviceName}||${meta.name}`);
-			const autoHidden = noStock || lowSuccess;
-			const hideReason = noStock ? 'no_stock' : lowSuccess ? 'low_success' : null;
+			const autoHidden = lowSuccess;
+			const hideReason = lowSuccess ? 'low_success' : null;
 			// This path rebuilds metadata from scratch, so carry over the admin's per-tier hard-floor
 			// override (the sync must never wipe it — it's set out-of-band via updateNumbersTiers).
 			const floorOverride = getPhoneTierConfig(oldMd)?.minFulfillmentProfitNgn ?? null;
@@ -299,7 +426,9 @@ export async function syncNumbersCatalog(
 					base_price: finalPrice,
 					...(priceUpdatedAt ? { updated_at: priceUpdatedAt } : {})
 				},
-				...(floorOverride != null ? { [PHONE_TIER_KEYS.minFulfillmentProfitNgn]: floorOverride } : {})
+				...(floorOverride != null
+					? { [PHONE_TIER_KEYS.minFulfillmentProfitNgn]: floorOverride }
+					: {})
 			};
 			const name = `${serviceName} — ${meta.name}`;
 			if (existingId) {
@@ -341,7 +470,7 @@ export async function syncNumbersCatalog(
 	let rotatedOut = 0;
 	let revivedByPvapins = 0;
 	// Empty countries list = a hub-man blip, not "everything rotated out" — never mass-hide.
-	const availabilityIsTrustworthy = countryIds.length > 0;
+	const hubAvailabilityIsTrustworthy = hubAvailabilityKnown && countryIds.length > 0;
 
 	// pvapins fills hub-man's gaps: a tier hub-man rotated out stays LIVE (priced from pvapins)
 	// if pvapins carries that service+country. Fetched lazily and cached per country. Fail-soft.
@@ -406,7 +535,6 @@ export async function syncNumbersCatalog(
 	}
 
 	for (const t of existingTiers) {
-		if (!availabilityIsTrustworthy) break;
 		if (seenSlugs.has(t.slug)) continue;
 		const cid = countryIdFromSlug(t.slug);
 		if (cid == null) continue;
@@ -419,13 +547,32 @@ export async function syncNumbersCatalog(
 
 		// Can pvapins fill this hub-man gap? Revive it (priced from pvapins) instead of hiding.
 		const cfg = getPhoneTierConfig(t.metadata);
+		const canonicalCountryCode = cfg
+			? String(countryMeta.get(cfg.countryId)?.code || '')
+					.trim()
+					.toUpperCase()
+			: '';
+		const repairedCountryCode =
+			Boolean(canonicalCountryCode) &&
+			String(md.hub_country_code || '').toUpperCase() !== canonicalCountryCode;
+		if (repairedCountryCode) md.hub_country_code = canonicalCountryCode;
 		const fill = cfg
 			? await pvapinsFillFor(String(md.hub_country_code ?? ''), cfg.countryName, cfg.serviceId)
 			: null;
 		// A transient pvapins failure must NOT flip a tier to no-stock — leave it exactly as it is.
-		if (fill === 'fetch_failed') continue;
+		if (fill === 'fetch_failed') {
+			if (repairedCountryCode) {
+				await prisma.category.update({
+					where: { id: t.id },
+					data: { metadata: md as Prisma.InputJsonValue }
+				});
+				refreshed += 1;
+			}
+			continue;
+		}
 		if (fill && cfg) {
 			const wasHidden = md[PHONE_TIER_KEYS.autoHidden] === true;
+			const lowSuccess = lowSuccessKeys.has(`${cfg.serviceName}||${cfg.countryName}`);
 			// Keep a manually-locked price; otherwise price from the pvapins basis, with the same
 			// anti-thrash hysteresis as the hub-man path so a jiggling gap-fill cost can't bounce it.
 			const pvBasis = basisFor(cfg.serviceId, cfg.countryId, fill.costCents);
@@ -436,8 +583,8 @@ export async function syncNumbersCatalog(
 			const price = pvStab.price;
 			md[PHONE_TIER_KEYS.expectedCostCents] = fill.costCents;
 			md[PHONE_TIER_KEYS.availableCount] = fill.count;
-			md[PHONE_TIER_KEYS.autoHidden] = false;
-			md[PHONE_TIER_KEYS.hideReason] = null;
+			md[PHONE_TIER_KEYS.autoHidden] = lowSuccess;
+			md[PHONE_TIER_KEYS.hideReason] = lowSuccess ? 'low_success' : null;
 			md.primary_source = 'pvapins';
 			const pvUpdatedAt = pvStab.changed ? now.toISOString() : readPriceUpdatedAtIso(t.metadata);
 			md.pricing = {
@@ -446,17 +593,48 @@ export async function syncNumbersCatalog(
 				...(pvUpdatedAt ? { updated_at: pvUpdatedAt } : {})
 			};
 			if (economicsSignature(t.metadata) !== economicsSignature(md)) {
-				await prisma.category.update({ where: { id: t.id }, data: { metadata: md as Prisma.InputJsonValue } });
+				await prisma.category.update({
+					where: { id: t.id },
+					data: { metadata: md as Prisma.InputJsonValue }
+				});
 				revivedByPvapins += 1;
 			}
-			if (wasHidden) {
-				becameAvailable.push({ tierId: t.id, name: `${cfg.serviceName} — ${cfg.countryName}`, price });
+			if (wasHidden && !lowSuccess) {
+				becameAvailable.push({
+					tierId: t.id,
+					name: `${cfg.serviceName} — ${cfg.countryName}`,
+					price
+				});
+			}
+			continue;
+		}
+		// If hub-man's availability is unknown, a pvapins miss is not evidence that the
+		// product is unavailable. Preserve the last known state rather than mass-hiding.
+		// When hub-man is intentionally absent, a successful pvapins catalog response is
+		// sufficient authority to mark an uncovered tier out of stock.
+		const providerStateConclusive =
+			hubAvailabilityIsTrustworthy ||
+			(!hubman.isHubmanConfigured() && pvapinsReady && pvCountries.length > 0);
+		if (!providerStateConclusive) {
+			if (repairedCountryCode) {
+				await prisma.category.update({
+					where: { id: t.id },
+					data: { metadata: md as Prisma.InputJsonValue }
+				});
+				refreshed += 1;
 			}
 			continue;
 		}
 
 		// Already flagged no-stock? Skip the write.
 		if (md[PHONE_TIER_KEYS.autoHidden] === true && md[PHONE_TIER_KEYS.hideReason] === 'no_stock') {
+			if (repairedCountryCode) {
+				await prisma.category.update({
+					where: { id: t.id },
+					data: { metadata: md as Prisma.InputJsonValue }
+				});
+				refreshed += 1;
+			}
 			continue;
 		}
 		md[PHONE_TIER_KEYS.availableCount] = 0;
@@ -472,6 +650,64 @@ export async function syncNumbersCatalog(
 		console.log(`[phone-catalog] pvapins filled ${revivedByPvapins} hub-man gap tier(s)`);
 	}
 
+	// pvapins-only market creation: on a manual Expand, create a tier for each curated target market
+	// × curated service that pvapins covers but hub-man never lists (so it never got a tier above).
+	// Expand-only so the routine 5-min cron stays cheap; once created, the normal sync keeps these
+	// tiers priced/available like any other. Idempotent — a target that already has a tier is skipped.
+	let createdByPvapins = 0;
+	if (options.expand && pvapinsReady && pvCountries.length > 0 && countryMeta.size > 0) {
+		// Reverse the master catalog to resolve a target ISO2 → hub country id + name (stable id).
+		const hubCountryByCode = new Map<string, { id: number; name: string; code: string }>();
+		for (const [id, m] of countryMeta) {
+			if (m.code) hubCountryByCode.set(m.code.toUpperCase(), { id, name: m.name, code: m.code });
+		}
+		for (const code of PVAPINS_ONLY_MARKET_CODES) {
+			const hubCountry = hubCountryByCode.get(code.toUpperCase());
+			if (!hubCountry) continue; // not in hub-man's master catalog → no stable country id
+			for (const serviceId of MAJOR_SERVICE_IDS) {
+				const slug = tierSlug(serviceId, hubCountry.id);
+				if (idBySlug.has(slug)) continue; // hub-man already made this tier (revive path covers it)
+				const fill = await pvapinsFillFor(hubCountry.code, hubCountry.name, serviceId);
+				if (!fill || fill === 'fetch_failed') continue; // pvapins doesn't carry it (or a blip)
+				const serviceName = SERVICE_NAME_BY_ID.get(serviceId)!;
+				const price = computeAutoPrice(basisFor(serviceId, hubCountry.id, fill.costCents), pricing);
+				const metadata: Prisma.InputJsonValue = {
+					[PHONE_TIER_KEYS.deliveryMode]: PHONE_DELIVERY_MODE,
+					[PHONE_TIER_KEYS.serviceId]: serviceId,
+					[PHONE_TIER_KEYS.serviceName]: serviceName,
+					[PHONE_TIER_KEYS.countryId]: hubCountry.id,
+					[PHONE_TIER_KEYS.countryName]: hubCountry.name,
+					hub_country_code: hubCountry.code,
+					[PHONE_TIER_KEYS.expectedCostCents]: fill.costCents,
+					[PHONE_TIER_KEYS.availableCount]: fill.count,
+					[PHONE_TIER_KEYS.autoHidden]: false,
+					[PHONE_TIER_KEYS.hideReason]: null,
+					primary_source: 'pvapins',
+					price_locked: false,
+					pricing: { currency: 'NGN', base_price: price, updated_at: now.toISOString() }
+				};
+				const row = await prisma.category.create({
+					data: {
+						name: `${serviceName} — ${hubCountry.name}`,
+						slug,
+						categoryType: NUMBERS_TIER_TYPE,
+						parentId: platformId,
+						isActive: true,
+						sortOrder: serviceId * 1000 + hubCountry.id,
+						metadata
+					},
+					select: { id: true }
+				});
+				idBySlug.set(slug, row.id);
+				created += 1;
+				createdByPvapins += 1;
+			}
+		}
+		if (createdByPvapins > 0) {
+			console.log(`[phone-catalog] created ${createdByPvapins} pvapins-only target-market tier(s)`);
+		}
+	}
+
 	// Notify "Notify me" subscribers for tiers that came back in stock (best-effort, never
 	// blocks the sync). Each subscription is consumed (notifiedAt set) so it fires once.
 	for (const t of becameAvailable) {
@@ -481,7 +717,7 @@ export async function syncNumbersCatalog(
 	}
 
 	// "deactivated" here = tiers flagged out of stock this run. We never hard-deactivate.
-	return { created, refreshed, deactivated: rotatedOut, countries: countryIds.length };
+	return { created, refreshed, deactivated: rotatedOut, countries: syncCountryIds.length };
 }
 
 /** Back-compat alias — the admin Refresh button + first-visit seed call this. */
@@ -519,7 +755,9 @@ function readPriceUpdatedAt(metadata: unknown): Date | null {
 /** A tier whose price the admin manually set — the auto-recompute must NOT overwrite it. */
 function isPriceLocked(metadata: unknown): boolean {
 	return Boolean(
-		metadata && typeof metadata === 'object' && (metadata as Record<string, unknown>).price_locked === true
+		metadata &&
+			typeof metadata === 'object' &&
+			(metadata as Record<string, unknown>).price_locked === true
 	);
 }
 
@@ -556,7 +794,8 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 }> {
 	const pricing = await getPhonePricingConfig();
 	const platformId = await getNumbersPlatformId();
-	if (!platformId) return { rows: [], usdNgnRate: pricing.usdNgnRate, marginPercent: pricing.marginPercent };
+	if (!platformId)
+		return { rows: [], usdNgnRate: pricing.usdNgnRate, marginPercent: pricing.marginPercent };
 	const tiers = await prisma.category.findMany({
 		where: { parentId: platformId },
 		select: { id: true, isActive: true, metadata: true },
@@ -564,9 +803,17 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 	});
 
 	// Refresh live costs + stock once per country.
-	const countryIds = [...new Set(tiers.map((t) => getPhoneTierConfig(t.metadata)?.countryId).filter((x): x is number => x != null))];
+	const countryIds = [
+		...new Set(
+			tiers
+				.map((t) => getPhoneTierConfig(t.metadata)?.countryId)
+				.filter((x): x is number => x != null)
+		)
+	];
 	const liveCosts = new Map<number, Map<number, ServiceCost>>();
-	const realizedByTier = await getRealizedCostByTier().catch(() => new Map<string, RealizedTierCost>());
+	const realizedByTier = await getRealizedCostByTier().catch(
+		() => new Map<string, RealizedTierCost>()
+	);
 	await Promise.all(
 		countryIds.map(async (cid) => liveCosts.set(cid, (await fetchCountryServiceCosts(cid)).costs))
 	);
@@ -575,14 +822,19 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 	for (const tier of tiers) {
 		const cfg = getPhoneTierConfig(tier.metadata);
 		if (!cfg) continue;
-		const primarySource = String((tier.metadata as Record<string, unknown>)?.primary_source ?? 'hubman');
+		const primarySource = String(
+			(tier.metadata as Record<string, unknown>)?.primary_source ?? 'hubman'
+		);
 		const isPvapins = primarySource === 'pvapins';
 		// hub-man tiers get a fresh live cost/stock; pvapins tiers TRUST the stored two-source state
 		// (hub-man live is irrelevant to them — that's what made them wrongly read "0 / no stock").
 		const live = isPvapins ? null : (liveCosts.get(cfg.countryId)?.get(cfg.serviceId) ?? null);
 		const costCents = live?.costCents ?? cfg.expectedCostCents;
 		const priceLocked = isPriceLocked(tier.metadata);
-		const basisCents = blendedBasisCents(costCents, realizedByTier.get(`${cfg.serviceId}||${cfg.countryId}`));
+		const basisCents = blendedBasisCents(
+			costCents,
+			realizedByTier.get(`${cfg.serviceId}||${cfg.countryId}`)
+		);
 		// Show the actual LIVE price the customer pays — the stored (stabilized) base_price — so admin
 		// matches the storefront. Fall back to the freshly-computed auto price only if none is stored.
 		const priceNgn =
@@ -596,14 +848,18 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 		);
 		const floorOverridden = effectiveFloorNgn > pricing.minFulfillmentProfitNgn;
 		const thin = isThinTier(priceNgn, costNgn, effectiveFloorNgn);
-		const liveNoStock = isPvapins ? false : live ? live.available <= 0 : cfg.hideReason === 'no_stock';
+		const liveNoStock = isPvapins
+			? false
+			: live
+				? live.available <= 0
+				: cfg.hideReason === 'no_stock';
 		const autoHidden = isPvapins ? cfg.autoHidden : liveNoStock || cfg.autoHidden;
 		const hideReason = isPvapins
 			? cfg.hideReason
 			: liveNoStock
 				? 'no_stock'
 				: cfg.autoHidden
-					? cfg.hideReason ?? 'no_stock'
+					? (cfg.hideReason ?? 'no_stock')
 					: null;
 		rows.push({
 			tierId: tier.id,
@@ -615,7 +871,7 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 			costCents,
 			priceNgn,
 			profitNgn: Math.round(priceNgn - costNgn),
-			available: isPvapins ? cfg.availableCount : live?.available ?? cfg.availableCount,
+			available: isPvapins ? cfg.availableCount : (live?.available ?? cfg.availableCount),
 			autoHidden,
 			hideReason,
 			active: tier.isActive,
@@ -674,7 +930,11 @@ export async function updateNumbersTiers(
 		// falls back to the global ₦500). The catalog sync never touches this key, so it persists.
 		if (u.minFulfillmentProfitNgn === null) {
 			delete md[PHONE_TIER_KEYS.minFulfillmentProfitNgn];
-		} else if (u.minFulfillmentProfitNgn != null && Number.isFinite(u.minFulfillmentProfitNgn) && u.minFulfillmentProfitNgn >= 0) {
+		} else if (
+			u.minFulfillmentProfitNgn != null &&
+			Number.isFinite(u.minFulfillmentProfitNgn) &&
+			u.minFulfillmentProfitNgn >= 0
+		) {
 			md[PHONE_TIER_KEYS.minFulfillmentProfitNgn] = Math.round(u.minFulfillmentProfitNgn);
 		}
 
@@ -701,7 +961,7 @@ export async function getNumbersStorefront(): Promise<
 > {
 	// Fail-safe: never offer numbers the backend can't actually rent (e.g. token not
 	// configured in this environment) — the storefront shows "coming soon" instead.
-	if (!hubman.isHubmanConfigured()) return [];
+	if (!hubman.isHubmanConfigured() && !pvapins.isPvapinsConfigured()) return [];
 	const platformId = await getNumbersPlatformId();
 	if (!platformId) return [];
 	const tiers = await prisma.category.findMany({
@@ -710,7 +970,10 @@ export async function getNumbersStorefront(): Promise<
 		orderBy: { sortOrder: 'asc' }
 	});
 
-	const byService = new Map<number, { serviceId: number; serviceName: string; tiers: NumbersStorefrontTier[] }>();
+	const byService = new Map<
+		number,
+		{ serviceId: number; serviceName: string; tiers: NumbersStorefrontTier[] }
+	>();
 	for (const tier of tiers) {
 		const cfg = getPhoneTierConfig(tier.metadata);
 		const price = readBasePrice(tier.metadata);
@@ -726,7 +989,11 @@ export async function getNumbersStorefront(): Promise<
 		const available = !cfg.autoHidden;
 		const countryCode = String((tier.metadata as Record<string, unknown>)?.hub_country_code || '');
 		if (!byService.has(cfg.serviceId))
-			byService.set(cfg.serviceId, { serviceId: cfg.serviceId, serviceName: cfg.serviceName, tiers: [] });
+			byService.set(cfg.serviceId, {
+				serviceId: cfg.serviceId,
+				serviceName: cfg.serviceName,
+				tiers: []
+			});
 		byService.get(cfg.serviceId)!.tiers.push({
 			tierId: tier.id,
 			serviceId: cfg.serviceId,

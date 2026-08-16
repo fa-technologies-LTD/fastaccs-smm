@@ -451,7 +451,7 @@
 								type="button"
 								onclick={() => addServiceToCart(service)}
 								disabled={addingServiceId === service.id || Number.isNaN(price)}
-								class="flex w-full items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+								class="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
 								style="background: var(--fa-blue-500); color: #ffffff;"
 							>
 								{addingServiceId === service.id

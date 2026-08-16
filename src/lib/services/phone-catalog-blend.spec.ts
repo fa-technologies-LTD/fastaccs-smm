@@ -22,7 +22,28 @@ vi.mock('$lib/helpers/phone-tier-config', () => ({
 	getPhoneTierConfig: vi.fn()
 }));
 
-import { blendedBasisCents, isThinTier } from './phone-catalog';
+import {
+	blendedBasisCents,
+	isThinTier,
+	MAJOR_SERVICES,
+	PVAPINS_ONLY_MARKET_CODES,
+	STOREFRONT_MARKET_CODES
+} from './phone-catalog';
+
+describe('curated catalog boundaries', () => {
+	it('has unique canonical service ids', () => {
+		const ids = MAJOR_SERVICES.map((service) => service.id);
+		expect(new Set(ids).size).toBe(ids.length);
+	});
+
+	it('keeps pvapins-only origination narrower than the storefront market set', () => {
+		expect([...PVAPINS_ONLY_MARKET_CODES].sort()).toEqual(['CA', 'GB', 'US']);
+		for (const code of PVAPINS_ONLY_MARKET_CODES) {
+			expect(STOREFRONT_MARKET_CODES.has(code)).toBe(true);
+		}
+		expect(STOREFRONT_MARKET_CODES.size).toBe(9);
+	});
+});
 
 describe('blendedBasisCents — self-tuning price basis (shrinkage, K=20)', () => {
 	it('no clean data → uses the listed catalog prior unchanged', () => {

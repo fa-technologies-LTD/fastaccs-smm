@@ -6,6 +6,7 @@ const recoverPaidOrderMock = vi.hoisted(() => vi.fn());
 const settleFailedPaymentMock = vi.hoisted(() => vi.fn());
 const settleSuccessfulPaymentMock = vi.hoisted(() => vi.fn());
 const releaseExpiredOrderReservationsMock = vi.hoisted(() => vi.fn());
+const releaseExpiredExactPreviewReservationsMock = vi.hoisted(() => vi.fn());
 const prismaMock = vi.hoisted(() => ({
 	order: {
 		findMany: vi.fn()
@@ -39,6 +40,10 @@ vi.mock('$lib/services/order-reservations', () => ({
 	releaseExpiredOrderReservations: releaseExpiredOrderReservationsMock
 }));
 
+vi.mock('$lib/services/exact-preview', () => ({
+	releaseExpiredExactPreviewReservations: releaseExpiredExactPreviewReservationsMock
+}));
+
 vi.mock('$lib/services/admin-alerts', () => ({
 	sendCriticalAdminAlert: vi.fn()
 }));
@@ -64,6 +69,7 @@ describe('payment reconciliation safety', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		releaseExpiredOrderReservationsMock.mockResolvedValue(0);
+		releaseExpiredExactPreviewReservationsMock.mockResolvedValue(0);
 		markPaymentPendingMock.mockResolvedValue(undefined);
 		recoverPaidOrderMock.mockResolvedValue({
 			success: true,

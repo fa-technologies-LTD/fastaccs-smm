@@ -2,7 +2,7 @@ import { prisma } from '$lib/prisma';
 import { decodePvapinsRef } from './pvapins-provider';
 
 /**
- * Learned reliability per candidate supplier, from our OWN rental outcomes. A "candidate" is a
+ * Learned OTP-delivery reliability per candidate supplier, from our OWN attempt outcomes. A "candidate" is a
  * specific supplier: a pvapins app-variant (Whatsapp24, Whatsapp46 …) or a hub-man service. This
  * is the signal the selector ranks on — bad suppliers sink automatically, good ones rise, with
  * zero manual judgement.
@@ -14,9 +14,7 @@ export interface ReliabilityStat {
 	reliability: number; // received / total, 0..1
 }
 
-// A resolved rental reached one of these terminal states (so its outcome is known).
-export const RESOLVED_STATUSES = ['received', 'refunded', 'expired', 'failed', 'cancelled'];
-const RECEIVED = 'received';
+export const RESOLVED_ATTEMPT_OUTCOMES = ['otp_received', 'otp_timeout'];
 
 /** Stable key identifying the supplier behind a rental (pvapins app, or hub-man service id). */
 export function candidateKeyFromRental(r: {
@@ -47,16 +45,28 @@ export function summarizeReliability(
 	return map;
 }
 
-/** Load recent per-supplier reliability from PhoneRental (best-effort; empty map on error). */
+/** Load recent per-supplier OTP reliability from resolved PhoneAttempt rows.
+ *
+ * Rent-time OOS, rate limits, mapping errors, unresolved holds, and order-level refunds are not
+ * delivery failures. Only a number that actually received an OTP or authoritatively timed out is
+ * eligible. This keeps routing provider-neutral and prevents the old race refunds from poisoning
+ * pvapins' score merely because it happened to be the last provider stored on an order.
+ */
 export async function loadCandidateReliability(windowDays = 14): Promise<Map<string, ReliabilityStat>> {
 	try {
 		const since = new Date(Date.now() - windowDays * 86_400_000);
-		const rows = await prisma.phoneRental.findMany({
-			where: { status: { in: RESOLVED_STATUSES }, createdAt: { gte: since } },
-			select: { provider: true, providerRef: true, serviceId: true, status: true }
+		const rows = await prisma.phoneAttempt.findMany({
+			where: {
+				outcome: { in: RESOLVED_ATTEMPT_OUTCOMES },
+				createdAt: { gte: since }
+			},
+			select: { provider: true, providerServiceRef: true, outcome: true }
 		});
 		return summarizeReliability(
-			rows.map((r) => ({ key: candidateKeyFromRental(r), received: r.status === RECEIVED }))
+			rows.map((r) => ({
+				key: `${r.provider}:${r.providerServiceRef}`,
+				received: r.outcome === 'otp_received'
+			}))
 		);
 	} catch {
 		return new Map();

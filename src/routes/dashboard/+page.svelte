@@ -26,9 +26,14 @@
 	user={data.user}
 	name={data.user.fullName}
 	orders={data.orders}
+	ordersNextCursor={data.ordersNextCursor}
+	metrics={data.metrics}
 	affiliateData={data.affiliateData}
+	affiliateLoaded={data.affiliateLoaded}
 	storeCredit={data.storeCredit}
 	purchases={data.purchases}
+	purchasesNextCursor={data.purchasesNextCursor}
+	purchasesLoaded={data.purchasesLoaded}
 	whatsappNumber={data.support?.whatsappNumber || ''}
 />
 

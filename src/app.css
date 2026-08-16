@@ -126,8 +126,16 @@
 	--gradient-linkedin: linear-gradient(135deg, #0077b5 0%, #005885 100%);
 
 	/* ===== BUTTON GRADIENTS ===== */
-	--btn-primary-gradient: linear-gradient(180deg, rgba(40, 166, 105, 0.98), rgba(10, 114, 68, 0.98));
-	--btn-primary-gradient-hover: linear-gradient(180deg, rgba(50, 184, 119, 1), rgba(13, 130, 78, 1));
+	--btn-primary-gradient: linear-gradient(
+		180deg,
+		rgba(40, 166, 105, 0.98),
+		rgba(10, 114, 68, 0.98)
+	);
+	--btn-primary-gradient-hover: linear-gradient(
+		180deg,
+		rgba(50, 184, 119, 1),
+		rgba(13, 130, 78, 1)
+	);
 	--btn-secondary-gradient: linear-gradient(
 		180deg,
 		rgba(105, 109, 250, 0.18),
@@ -194,7 +202,6 @@ h6 {
 	font-weight: 600;
 	letter-spacing: -0.02em;
 }
-
 
 /* ===== PRIMARY COLOR UTILITIES ===== */
 .bg-primary {
@@ -346,6 +353,20 @@ h6 {
 	border-color: rgba(170, 173, 255, 0.26);
 }
 
+.btn-fa--numbers {
+	background: linear-gradient(180deg, #38bdf8, #0284c7);
+	color: #061a24;
+	border-color: rgba(125, 211, 252, 0.52);
+	box-shadow: 0 8px 22px rgba(14, 165, 233, 0.16);
+}
+
+.btn-fa--boost {
+	background: linear-gradient(180deg, rgba(105, 109, 250, 0.98), rgba(46, 49, 146, 0.98));
+	color: #ffffff;
+	border-color: rgba(170, 173, 255, 0.35);
+	box-shadow: 0 8px 22px rgba(105, 109, 250, 0.16);
+}
+
 .btn-fa--ghost {
 	background: var(--surface);
 	color: var(--text);
@@ -370,6 +391,16 @@ h6 {
 .btn-fa--ghost:not(:disabled):hover {
 	border-color: rgba(170, 173, 255, 0.38);
 	background: var(--btn-secondary-gradient-hover);
+}
+
+.btn-fa--numbers:not(:disabled):hover {
+	background: linear-gradient(180deg, #7dd3fc, #0ea5e9);
+	border-color: rgba(186, 230, 253, 0.7);
+}
+
+.btn-fa--boost:not(:disabled):hover {
+	background: linear-gradient(180deg, #7c80ff, #373ab2);
+	border-color: rgba(196, 198, 255, 0.55);
 }
 
 .btn-fa--primary:not(:disabled):active {

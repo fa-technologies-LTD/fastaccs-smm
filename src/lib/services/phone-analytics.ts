@@ -37,22 +37,35 @@ export async function getLowSuccessTierKeys(): Promise<Set<string>> {
 	const since = new Date(Date.now() - SUCCESS_HIDE_WINDOW_DAYS * 86_400_000);
 	const rentals = await prisma.phoneRental.findMany({
 		where: { createdAt: { gte: since } },
-		select: { serviceName: true, countryName: true, provider: true, status: true }
+		select: { orderItemId: true, serviceName: true, countryName: true }
+	});
+	if (rentals.length === 0) return new Set();
+	const tierByOrderItem = new Map(
+		rentals.map((r) => [r.orderItemId, `${r.serviceName}||${r.countryName}`])
+	);
+	const attempts = await prisma.phoneAttempt.findMany({
+		where: {
+			orderItemId: { in: [...tierByOrderItem.keys()] },
+			outcome: { in: ['otp_received', 'otp_timeout'] },
+			createdAt: { gte: since }
+		},
+		select: { orderItemId: true, provider: true, outcome: true }
 	});
 	// tier key -> provider -> tally
 	type Tally = { received: number; resolved: number };
 	const byTier = new Map<string, Map<string, Tally>>();
-	for (const r of rentals) {
-		const tierKey = `${r.serviceName}||${r.countryName}`;
-		const provider = r.provider || 'unknown';
+	for (const attempt of attempts) {
+		const tierKey = tierByOrderItem.get(attempt.orderItemId);
+		if (!tierKey) continue;
+		const provider = attempt.provider || 'unknown';
 		let providers = byTier.get(tierKey);
 		if (!providers) byTier.set(tierKey, (providers = new Map()));
 		let t = providers.get(provider);
 		if (!t) providers.set(provider, (t = { received: 0, resolved: 0 }));
-		if (r.status === RECEIVED) {
+		if (attempt.outcome === 'otp_received') {
 			t.received += 1;
 			t.resolved += 1;
-		} else if (FAILED_STATES.has(r.status)) {
+		} else if (attempt.outcome === 'otp_timeout') {
 			t.resolved += 1;
 		}
 	}
@@ -60,7 +73,12 @@ export async function getLowSuccessTierKeys(): Promise<Set<string>> {
 	for (const [tierKey, providers] of byTier) {
 		let anyBad = false;
 		let anyKeepAlive = false; // a GOOD or UNTESTED provider — a reason to keep the tier live
-		for (const t of providers.values()) {
+		for (const provider of ['hubman', 'pvapins']) {
+			const t = providers.get(provider);
+			if (!t) {
+				anyKeepAlive = true; // no resolved attempts for this source: explicitly untested
+				continue;
+			}
 			if (t.resolved < SUCCESS_HIDE_MIN_SAMPLE) {
 				anyKeepAlive = true; // untested: unproven, so give it the benefit of the doubt
 			} else if ((t.received / t.resolved) * 100 < SUCCESS_HIDE_THRESHOLD_PCT) {
@@ -96,16 +114,37 @@ export async function getRealizedCostByTier(): Promise<Map<string, RealizedTierC
 	const windowStart = Date.now() - REALIZED_COST_WINDOW_DAYS * 86_400_000;
 	const since = new Date(Math.max(windowStart, NUMBERS_CLEAN_EPOCH.getTime()));
 	const rentals = await prisma.phoneRental.findMany({
-		where: { status: RECEIVED, receivedAt: { gte: since }, costCents: { not: null } },
-		select: { serviceId: true, countryId: true, costCents: true }
+		where: { status: RECEIVED, receivedAt: { gte: since } },
+		select: { orderItemId: true, serviceId: true, countryId: true, costCents: true }
 	});
+	const attempts = rentals.length
+		? await prisma.phoneAttempt.findMany({
+				where: {
+					orderItemId: { in: rentals.map((r) => r.orderItemId) },
+					actualCostCents: { not: null }
+				},
+				select: { orderItemId: true, actualCostCents: true }
+			})
+		: [];
+	const actualByOrderItem = new Map<string, number>();
+	for (const a of attempts) {
+		actualByOrderItem.set(
+			a.orderItemId,
+			(actualByOrderItem.get(a.orderItemId) ?? 0) + Math.max(0, a.actualCostCents ?? 0)
+		);
+	}
 	const byTier = new Map<string, number[]>();
 	for (const r of rentals) {
-		if (r.costCents == null || r.costCents <= 0) continue;
+		// Sum every charged attempt on the successful order (including an earlier failed supplier).
+		// Fall back to the final-rental cost only for pre-telemetry historical rows.
+		const realized = actualByOrderItem.has(r.orderItemId)
+			? actualByOrderItem.get(r.orderItemId)!
+			: (r.costCents ?? 0);
+		if (realized <= 0) continue;
 		const key = `${r.serviceId}||${r.countryId}`;
 		let arr = byTier.get(key);
 		if (!arr) byTier.set(key, (arr = []));
-		arr.push(r.costCents);
+		arr.push(realized);
 	}
 	const out = new Map<string, RealizedTierCost>();
 	for (const [key, costs] of byTier) {
@@ -168,6 +207,23 @@ export async function getNumbersAnalytics(): Promise<NumbersAnalytics> {
 			}
 		}
 	});
+	const attempts = rentals.length
+		? await prisma.phoneAttempt.findMany({
+				where: {
+					orderItemId: { in: rentals.map((r) => r.orderItemId) },
+					actualCostCents: { not: null }
+				},
+				select: { orderItemId: true, actualCostCents: true }
+			})
+		: [];
+	const actualCostByOrderItem = new Map<string, number>();
+	for (const attempt of attempts) {
+		actualCostByOrderItem.set(
+			attempt.orderItemId,
+			(actualCostByOrderItem.get(attempt.orderItemId) ?? 0) +
+				Math.max(0, attempt.actualCostCents ?? 0)
+		);
+	}
 
 	const groups = new Map<string, NumbersServiceStat & { _otpSum: number; _otpCount: number }>();
 	const overall = { total: 0, received: 0, refunded: 0, inFlight: 0, revenueNgn: 0, costNgn: 0 };
@@ -195,16 +251,21 @@ export async function getNumbersAnalytics(): Promise<NumbersAnalytics> {
 		const g = groups.get(key)!;
 		g.total += 1;
 		overall.total += 1;
+		const actualCostCents = actualCostByOrderItem.has(r.orderItemId)
+			? actualCostByOrderItem.get(r.orderItemId)!
+			: r.status === RECEIVED
+				? (r.costCents ?? 0)
+				: 0;
+		const cost = (actualCostCents / 100) * usdNgnRate;
+		g.costNgn += cost;
+		overall.costNgn += cost;
 
 		if (r.status === RECEIVED) {
 			g.received += 1;
 			overall.received += 1;
 			const sale = Number(r.saleAmountNgn ?? 0);
-			const cost = ((r.costCents ?? 0) / 100) * usdNgnRate;
 			g.revenueNgn += sale;
-			g.costNgn += cost;
 			overall.revenueNgn += sale;
-			overall.costNgn += cost;
 			if (r.receivedAt) {
 				g._otpSum += (r.receivedAt.getTime() - r.createdAt.getTime()) / 1000;
 				g._otpCount += 1;
@@ -251,7 +312,11 @@ export async function getNumbersAnalytics(): Promise<NumbersAnalytics> {
 				status: r.status,
 				provider: r.provider,
 				saleNgn: Number(r.saleAmountNgn ?? 0),
-				costUsd: r.costCents != null ? r.costCents / 100 : null,
+				costUsd: actualCostByOrderItem.has(r.orderItemId)
+					? actualCostByOrderItem.get(r.orderItemId)! / 100
+					: r.costCents != null
+						? r.costCents / 100
+						: null,
 				buyer: u ? u.fullName?.trim() || u.email : null,
 				buyerUserId: u?.id ?? null
 			};

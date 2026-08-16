@@ -169,11 +169,13 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				0,
 				Number(creditByStatus.available || 0) -
 					Number(payoutByStatus.requested || 0) -
+					Number(payoutByStatus.under_review || 0) -
 					Number(payoutByStatus.paid || 0)
 			),
 			pendingStoreCredit: Number(creditByStatus.pending || 0),
 			underReviewStoreCredit: Number(creditByStatus.under_review || 0),
-			requestedStoreCredit: Number(payoutByStatus.requested || 0),
+			requestedStoreCredit:
+				Number(payoutByStatus.requested || 0) + Number(payoutByStatus.under_review || 0),
 			paidStoreCredit: Number(payoutByStatus.paid || 0),
 			reversedStoreCredit:
 				Number(creditByStatus.reversed || 0) + Number(payoutByStatus.reversed || 0),

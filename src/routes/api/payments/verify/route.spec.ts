@@ -53,6 +53,16 @@ function pendingOrder(paymentReference = 'ORD_STORED') {
 	};
 }
 
+function paidPhoneOrder() {
+	return {
+		...pendingOrder(),
+		status: 'paid',
+		paymentStatus: 'paid',
+		paymentReference: null,
+		orderType: 'phone'
+	};
+}
+
 function verificationResult(paymentReference = 'ORD_STORED') {
 	return {
 		success: true,
@@ -136,5 +146,22 @@ describe('approved invariant: redirect payment verification boundary', () => {
 			})
 		);
 	});
-});
 
+	it('returns confirmed Numbers payment immediately without rerunning fulfilment', async () => {
+		mocks.findOrderById.mockResolvedValue(paidPhoneOrder());
+
+		const response = await callVerify({ orderId });
+		const body = await response.json();
+
+		expect(response.status).toBe(200);
+		expect(body).toMatchObject({
+			success: true,
+			state: 'SUCCESS',
+			status: 'PAID',
+			phone: true,
+			orderId
+		});
+		expect(mocks.recoverPaidOrder).not.toHaveBeenCalled();
+		expect(mocks.verifyPayment).not.toHaveBeenCalled();
+	});
+});

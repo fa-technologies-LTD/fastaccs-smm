@@ -7,7 +7,8 @@ import { prisma } from '$lib/prisma';
  *
  * CRITICAL: this is OBSERVATIONAL. It is NOT part of financial correctness. Every write is
  * best-effort and swallows its own errors — a telemetry failure must NEVER break a paid customer's
- * fulfillment. It observes the engine; it does not steer it (that comes later, once data is clean).
+ * fulfillment. Only the explicitly resolved OTP outcomes steer provider routing; operational rent
+ * errors and unresolved attempts remain separate signals and never masquerade as OTP failures.
  */
 
 export type AttemptOutcome =
@@ -20,6 +21,7 @@ export type AttemptOutcome =
 
 export interface RecordAttemptInput {
 	orderItemId: string;
+	generation: number;
 	attemptNumber: number;
 	provider: string;
 	providerServiceRef: string;
@@ -37,6 +39,7 @@ export async function recordPhoneAttempt(input: RecordAttemptInput): Promise<str
 		const row = await prisma.phoneAttempt.create({
 			data: {
 				orderItemId: input.orderItemId,
+				generation: input.generation,
 				attemptNumber: input.attemptNumber,
 				provider: input.provider,
 				providerServiceRef: input.providerServiceRef,
@@ -63,7 +66,8 @@ export async function recordPhoneAttempt(input: RecordAttemptInput): Promise<str
 export async function recordAttemptOtpReceived(
 	orderItemId: string,
 	providerRef: string | null | undefined,
-	latencySec: number | null
+	latencySec: number | null,
+	actualCostCents?: number | null
 ): Promise<void> {
 	if (!providerRef) return;
 	try {
@@ -72,7 +76,10 @@ export async function recordAttemptOtpReceived(
 			data: {
 				outcome: 'otp_received',
 				otpReceivedAt: new Date(),
-				otpLatencySec: latencySec != null && Number.isFinite(latencySec) ? Math.round(latencySec) : null
+				otpLatencySec: latencySec != null && Number.isFinite(latencySec) ? Math.round(latencySec) : null,
+				...(actualCostCents !== undefined
+					? { actualCostCents: actualCostCents == null ? null : Math.round(actualCostCents) }
+					: {})
 			}
 		});
 	} catch (error) {
@@ -80,17 +87,43 @@ export async function recordAttemptOtpReceived(
 	}
 }
 
+/** Mark one rented number as conclusively no-code after an authoritative wait/cancel path. */
+export async function recordAttemptOtpTimeout(
+	orderItemId: string,
+	providerRef: string | null | undefined
+): Promise<void> {
+	if (!providerRef) return;
+	try {
+		await prisma.phoneAttempt.updateMany({
+			where: {
+				orderItemId,
+				providerRef,
+				outcome: 'rented',
+				otpReceivedAt: null
+			},
+			data: { outcome: 'otp_timeout' }
+		});
+	} catch (error) {
+		console.error('[phone-telemetry] recordAttemptOtpTimeout failed (ignored):', (error as Error).message);
+	}
+}
+
 /** Record whether a rejection/cancel of a given number succeeded. Best-effort. */
 export async function recordAttemptRejection(
 	orderItemId: string,
 	providerRef: string | null | undefined,
-	success: boolean
+	success: boolean,
+	actualCostCents?: number | null
 ): Promise<void> {
 	if (!providerRef) return;
 	try {
 		await prisma.phoneAttempt.updateMany({
 			where: { orderItemId, providerRef },
-			data: { rejectionAttempted: true, rejectionSuccess: success }
+			data: {
+				rejectionAttempted: true,
+				rejectionSuccess: success,
+				...(actualCostCents !== undefined ? { actualCostCents } : {})
+			}
 		});
 	} catch (error) {
 		console.error('[phone-telemetry] recordAttemptRejection failed (ignored):', (error as Error).message);

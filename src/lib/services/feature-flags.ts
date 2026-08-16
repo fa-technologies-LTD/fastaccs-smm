@@ -1,4 +1,8 @@
 import { prisma } from '$lib/prisma';
+import { serverCache } from '$lib/helpers/cache';
+
+const FEATURE_FLAGS_CACHE_KEY = 'settings:feature-flags';
+const FEATURE_FLAGS_CACHE_TTL_MS = 30_000;
 
 export const FEATURE_FLAG_KEYS = {
 	adminPromotions: 'feature.admin_promotions.enabled',
@@ -32,6 +36,12 @@ function parseBooleanFlag(value: string | null | undefined, fallback: boolean): 
 }
 
 export async function getFeatureFlagSnapshot(): Promise<FeatureFlagSnapshot> {
+	const cached = serverCache.get<FeatureFlagSnapshot>(
+		FEATURE_FLAGS_CACHE_KEY,
+		FEATURE_FLAGS_CACHE_TTL_MS
+	);
+	if (cached) return cached;
+
 	const keys = Object.values(FEATURE_FLAG_KEYS);
 	const rows = await prisma.microcopy.findMany({
 		where: { key: { in: keys } },
@@ -40,7 +50,7 @@ export async function getFeatureFlagSnapshot(): Promise<FeatureFlagSnapshot> {
 
 	const valueByKey = new Map(rows.map((row) => [row.key, row.value]));
 
-	return {
+	const snapshot = {
 		adminPromotions: parseBooleanFlag(
 			valueByKey.get(FEATURE_FLAG_KEYS.adminPromotions),
 			DEFAULT_FLAGS.adminPromotions
@@ -62,6 +72,9 @@ export async function getFeatureFlagSnapshot(): Promise<FeatureFlagSnapshot> {
 			DEFAULT_FLAGS.adminStoreControls
 		)
 	};
+
+	serverCache.set(FEATURE_FLAGS_CACHE_KEY, snapshot);
+	return snapshot;
 }
 
 export async function saveFeatureFlags(next: Partial<FeatureFlagSnapshot>): Promise<void> {
@@ -110,4 +123,5 @@ export async function saveFeatureFlags(next: Partial<FeatureFlagSnapshot>): Prom
 			})
 		)
 	);
+	serverCache.invalidate(FEATURE_FLAGS_CACHE_KEY);
 }

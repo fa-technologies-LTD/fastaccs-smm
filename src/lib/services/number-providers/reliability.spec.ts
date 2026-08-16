@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { summarizeReliability, candidateKeyFromRental } from './reliability';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const prismaMock = vi.hoisted(() => ({ phoneAttempt: { findMany: vi.fn() } }));
+vi.mock('$lib/prisma', () => ({ prisma: prismaMock }));
+
+import { summarizeReliability, candidateKeyFromRental, loadCandidateReliability } from './reliability';
+
+beforeEach(() => vi.clearAllMocks());
 
 describe('candidateKeyFromRental', () => {
 	it('keys a pvapins rental by its app-variant (the supplier)', () => {
@@ -30,5 +36,23 @@ describe('summarizeReliability', () => {
 
 	it('is empty for no rows', () => {
 		expect(summarizeReliability([]).size).toBe(0);
+	});
+});
+
+describe('loadCandidateReliability — OTP delivery only', () => {
+	it('learns from resolved attempts and keeps providers co-equal', async () => {
+		prismaMock.phoneAttempt.findMany.mockResolvedValue([
+			{ provider: 'hubman', providerServiceRef: '1', outcome: 'otp_timeout' },
+			{ provider: 'pvapins', providerServiceRef: 'Whatsapp24', outcome: 'otp_received' },
+			{ provider: 'pvapins', providerServiceRef: 'Whatsapp24', outcome: 'otp_received' }
+		]);
+		const stats = await loadCandidateReliability();
+		expect(stats.get('hubman:1')?.reliability).toBe(0);
+		expect(stats.get('pvapins:Whatsapp24')?.reliability).toBe(1);
+		expect(prismaMock.phoneAttempt.findMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: expect.objectContaining({ outcome: { in: ['otp_received', 'otp_timeout'] } })
+			})
+		);
 	});
 });

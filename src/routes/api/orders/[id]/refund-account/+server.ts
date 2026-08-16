@@ -15,6 +15,10 @@ import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 
 const FAULTY_STATUS = 'faulty';
 
+function isUuid(value: string): boolean {
+	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 // POST /api/orders/[id]/refund-account  { accountId, reason }
 // Per-account refund: mark ONE delivered account as faulty (never resold) and refund its
 // unit price to the buyer's store credit. If it was the order's last good account, the whole
@@ -25,64 +29,60 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	}
 
 	const body = (await request.json().catch(() => ({}))) as { accountId?: string; reason?: string };
+	const orderId = String(params.id || '').trim();
 	const accountId = String(body.accountId || '').trim();
 	const reason = String(body.reason || '').trim().slice(0, 500);
-	if (!accountId) return json({ error: 'accountId is required' }, { status: 400 });
+	if (!isUuid(orderId)) return json({ error: 'Invalid order ID' }, { status: 400 });
+	if (!isUuid(accountId)) return json({ error: 'A valid accountId is required' }, { status: 400 });
 
-	const account = await prisma.account.findUnique({
-		where: { id: accountId },
-		select: {
-			id: true,
-			status: true,
-			username: true,
-			deliveryNotes: true,
-			orderItem: {
-				select: {
-					unitPrice: true,
-					order: {
-						select: {
-							id: true,
-							orderNumber: true,
-							userId: true,
-							affiliateUserId: true,
-							status: true,
-							paymentStatus: true
+	// Refund + flag the account atomically. Then decide if the whole order is now refunded.
+	const result = await prisma.$transaction(async (tx) => {
+		// This is the same order-level lock used by the full refund endpoint, so a
+		// full refund and a per-account refund can never credit overlapping value.
+		await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId}::uuid FOR UPDATE`;
+		const account = await tx.account.findUnique({
+			where: { id: accountId },
+			select: {
+				id: true,
+				status: true,
+				username: true,
+				deliveryNotes: true,
+				orderItem: {
+					select: {
+						unitPrice: true,
+						order: {
+							select: {
+								id: true,
+								orderNumber: true,
+								userId: true,
+								affiliateUserId: true,
+								status: true,
+								paymentStatus: true
+							}
 						}
 					}
 				}
 			}
+		});
+
+		const order = account?.orderItem?.order;
+		if (!account || !order || order.id !== orderId) return { outcome: 'not_found' as const };
+		const amount = Math.floor(Number(account.orderItem?.unitPrice || 0));
+		if (account.status === FAULTY_STATUS) {
+			return { outcome: 'already_refunded' as const, account, order, amount };
 		}
-	});
+		if (order.status === 'refunded' || order.paymentStatus === 'refunded') {
+			return { outcome: 'order_refunded' as const };
+		}
+		if (!order.userId) return { outcome: 'guest' as const };
+		const wasPaid =
+			order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'completed';
+		if (!wasPaid) return { outcome: 'not_paid' as const };
+		if (amount <= 0) return { outcome: 'no_amount' as const };
 
-	const order = account?.orderItem?.order;
-	if (!account || !order || order.id !== params.id) {
-		return json({ error: 'Account not found on this order' }, { status: 404 });
-	}
-	if (account.status === FAULTY_STATUS) {
-		return json({ error: 'This account was already refunded as faulty.' }, { status: 409 });
-	}
-	if (!order.userId) {
-		return json(
-			{ error: 'Guest order has no account to credit — handle this refund manually.' },
-			{ status: 409 }
-		);
-	}
-	const wasPaid =
-		order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'completed';
-	if (!wasPaid) {
-		return json({ error: 'This order was never paid.' }, { status: 409 });
-	}
-
-	const amount = Math.floor(Number(account.orderItem?.unitPrice || 0));
-	if (amount <= 0) return json({ error: 'Account has no unit price to refund.' }, { status: 400 });
-
-	const noteSuffix = `Refunded as faulty${reason ? `: ${reason}` : ''} (${new Date().toISOString().slice(0, 10)})`;
-
-	// Refund + flag the account atomically. Then decide if the whole order is now refunded.
-	let orderFullyRefunded = false;
-	await prisma.$transaction(async (tx) => {
+		const noteSuffix = `Refunded as faulty${reason ? `: ${reason}` : ''} (${new Date().toISOString().slice(0, 10)})`;
 		await creditStoreCredit(tx, {
-			userId: order.userId as string,
+			userId: order.userId,
 			amount,
 			type: SC_CREDIT_REFUND,
 			description: `Faulty-account refund for order ${order.orderNumber}`,
@@ -112,14 +112,49 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				status: { in: [...getAllocatedLikeAccountStatuses(), 'delivered'] }
 			}
 		});
-		if (remaining === 0) {
-			orderFullyRefunded = true;
+		const orderFullyRefunded = remaining === 0;
+		if (orderFullyRefunded) {
 			await tx.order.update({
 				where: { id: order.id },
 				data: { status: 'refunded', paymentStatus: 'refunded' }
 			});
 		}
+		return { outcome: 'refunded' as const, account, order, amount, orderFullyRefunded };
 	});
+
+	if (result.outcome === 'not_found') {
+		return json({ error: 'Account not found on this order' }, { status: 404 });
+	}
+	if (result.outcome === 'already_refunded') {
+		return json({
+			success: true,
+			alreadyRefunded: true,
+			refundedAmount: result.amount,
+			accountId: result.account.id,
+			orderFullyRefunded:
+				result.order.status === 'refunded' || result.order.paymentStatus === 'refunded'
+		});
+	}
+	if (result.outcome === 'order_refunded') {
+		return json(
+			{ error: 'The full order has already been refunded; no additional credit was added.' },
+			{ status: 409 }
+		);
+	}
+	if (result.outcome === 'guest') {
+		return json(
+			{ error: 'Guest order has no account to credit — handle this refund manually.' },
+			{ status: 409 }
+		);
+	}
+	if (result.outcome === 'not_paid') {
+		return json({ error: 'This order was never paid.' }, { status: 409 });
+	}
+	if (result.outcome === 'no_amount') {
+		return json({ error: 'Account has no unit price to refund.' }, { status: 400 });
+	}
+
+	const { account, order, amount, orderFullyRefunded } = result;
 
 	invalidateAdminStatsCache();
 

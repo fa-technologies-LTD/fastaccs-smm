@@ -29,14 +29,15 @@ const verifiedBuyer = {
 	userType: 'REGISTERED'
 };
 
-function buildRequest(checkoutKey: string): Request {
+function buildRequest(checkoutKey: string, useStoreCredit = false): Request {
 	return new Request('https://smm.fastaccs.com/api/orders', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify({
 			checkoutKey,
 			items: [{ categoryId: 'tier-1', quantity: 1 }],
-			paymentMethod: 'monnify'
+			paymentMethod: 'monnify',
+			useStoreCredit
 		})
 	});
 }
@@ -108,5 +109,74 @@ describe('checkout session ownership and resume behavior', () => {
 			checkoutUrl: 'https://monnify.example/checkout',
 			paymentReference: 'ORD_EXISTING'
 		});
+	});
+
+	it('does not resume a gateway checkout after the buyer switches to store credit', async () => {
+		mocks.findUnique.mockResolvedValue({
+			id: 'order-existing',
+			userId: verifiedBuyer.id,
+			status: 'pending_payment',
+			paymentStatus: 'pending',
+			paymentMethod: 'monnify',
+			storeCreditApplied: 0,
+			paymentCheckoutUrl: 'https://monnify.example/checkout',
+			paymentReference: 'ORD_EXISTING',
+			paymentExpiresAt: new Date(Date.now() + 60_000),
+			updatedAt: new Date(),
+			deliveryMethod: 'email'
+		});
+
+		const response = await POST({
+			request: buildRequest('checkout-key-payment-intent-changed', true),
+			locals: {
+				user: verifiedBuyer,
+				session: null,
+				adminContext: null
+			},
+			url: new URL('https://smm.fastaccs.com/api/orders')
+		} as never);
+
+		expect(response.status).toBe(409);
+		expect(await response.json()).toMatchObject({
+			success: false,
+			code: 'CHECKOUT_INTENT_CHANGED'
+		});
+	});
+
+	it('resumes a paid store-credit checkout after the original response was lost', async () => {
+		mocks.findUnique.mockResolvedValue({
+			id: 'order-paid',
+			userId: verifiedBuyer.id,
+			status: 'paid',
+			paymentStatus: 'paid',
+			paymentMethod: 'store_credit',
+			paymentCheckoutUrl: null,
+			paymentReference: null,
+			paymentExpiresAt: null,
+			updatedAt: new Date(),
+			deliveryMethod: 'email',
+			orderType: 'phone'
+		});
+
+		const response = await POST({
+			request: buildRequest('checkout-key-paid-response-was-lost', true),
+			locals: {
+				user: verifiedBuyer,
+				session: null,
+				adminContext: null
+			},
+			url: new URL('https://smm.fastaccs.com/api/orders')
+		} as never);
+		const body = await response.json();
+
+		expect(response.status).toBe(200);
+		expect(body).toMatchObject({
+			success: true,
+			resumed: true,
+			orderId: 'order-paid',
+			paidWithStoreCredit: true,
+			deliveryMode: 'auto_sms'
+		});
+		expect(body.redirectUrl).toContain('/checkout/verify?orderId=order-paid&method=store_credit');
 	});
 });

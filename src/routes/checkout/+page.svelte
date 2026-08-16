@@ -29,6 +29,7 @@
 	import { validateLinkForAction } from '$lib/helpers/social-link-validator';
 	import { BOOSTING_TURNAROUND_MESSAGE } from '$lib/helpers/boosting-service-config';
 	import type { BoostingPlatform, BoostingActionType } from '$lib/helpers/social-link-validator';
+	import { buildCheckoutFingerprint } from '$lib/helpers/checkout-session';
 	import { trackSnapEvent } from '$lib/services/snap-pixel';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import {
@@ -52,6 +53,7 @@
 	let promoValidationLoading = $state(false);
 	let loadingCartData = $state(true);
 	let cartLoadError = $state<string | null>(null);
+	let checkoutSlow = $state(false);
 	let lastCartNotice = $state('');
 	let lastGa4CartKey = $state('');
 	let cartLoadPromise: Promise<void> | null = null;
@@ -94,9 +96,7 @@
 		cartItems.some((item) => item.tier.deliveryMode === 'manual_handover')
 	);
 	const hasBoostingOrder = $derived(cartItems.some((item) => Boolean(item.boosting)));
-	const hasNumbersOrder = $derived(
-		cartItems.some((item) => item.tier.deliveryMode === 'auto_sms')
-	);
+	const hasNumbersOrder = $derived(cartItems.some((item) => item.tier.deliveryMode === 'auto_sms'));
 
 	onMount(() => {
 		loading = false;
@@ -201,10 +201,7 @@
 
 			if (result.valid) {
 				affiliateCode = code.toUpperCase();
-				showSuccess(
-					'Referral detected',
-					`${affiliateCode} captured for referral pricing.`
-				);
+				showSuccess('Referral detected', `${affiliateCode} captured for referral pricing.`);
 			} else {
 				showWarning('Invalid affiliate code', 'The code you entered is not valid');
 			}
@@ -363,7 +360,11 @@
 			item_brand: 'FastAccs',
 			item_category: item.boosting ? 'Boosting Services' : 'SMM accounts',
 			item_category2: item.tier.platformName,
-			item_variant: item.boosting ? 'boosting_service' : item.exactAccount ? 'exact_profile' : 'standard_pool',
+			item_variant: item.boosting
+				? 'boosting_service'
+				: item.exactAccount
+					? 'exact_profile'
+					: 'standard_pool',
 			price: cart.getItemLinePrice(item),
 			quantity: item.quantity,
 			index
@@ -388,7 +389,7 @@
 	}
 
 	function getCheckoutFingerprint(): string {
-		return JSON.stringify({
+		return buildCheckoutFingerprint({
 			userId: user?.id || null,
 			items: cartItems.map((item) => ({
 				id: getCartLineKey(item),
@@ -397,8 +398,11 @@
 				exactAccountId: item.exactAccount?.accountId || null
 			})),
 			affiliateCode,
-			promoAppliedCode,
-			total: checkoutTotal
+			promotionCode: promoAppliedCode,
+			total: checkoutTotal,
+			useStoreCredit: applyStoreCredit && storeCreditAvailable > 0,
+			storeCreditApplied,
+			payableTotal
 		});
 	}
 
@@ -425,9 +429,10 @@
 		localStorage.removeItem(CHECKOUT_SESSION_STORAGE_KEY);
 	}
 
-	function isCheckoutSessionConflict(errorText: unknown): boolean {
+	function shouldRotateCheckoutSession(errorText: unknown): boolean {
 		return (
-			typeof errorText === 'string' && errorText.toLowerCase().includes('checkout session conflict')
+			typeof errorText === 'string' &&
+			/checkout session conflict|checkout payment option changed/i.test(errorText)
 		);
 	}
 
@@ -470,6 +475,10 @@
 		}
 
 		loading = true;
+		checkoutSlow = false;
+		const slowTimer = window.setTimeout(() => {
+			checkoutSlow = true;
+		}, 6_000);
 		try {
 			if (cartLoadError) {
 				await loadCartData();
@@ -480,34 +489,49 @@
 
 			const finalTotal = checkoutTotal;
 
-			const createCheckoutOrder = () =>
-				createOrder({
-					email: user.email || '',
-					phone: user.phone || '',
-					items: cartItems.map((item) => ({
-						categoryId: item.tierId,
-						quantity: item.quantity,
-						price: cart.getItemLinePrice(item),
-						exactAccountId: item.exactAccount?.accountId,
-						exactAccountLabel: item.exactAccount?.displayLabel,
-						boostTargetUrl: item.boosting?.targetUrl,
-						boostQuantity: item.boosting?.boostQuantity
-					})),
-					totalAmount: finalTotal,
-					currency: 'NGN',
-					paymentMethod: 'monnify',
-					checkoutKey: getOrCreateCheckoutKey(),
-					affiliateCode: hasBoostingOrder ? undefined : affiliateCode || undefined,
-					promotionCode: hasBoostingOrder ? undefined : promoAppliedCode || undefined,
-					useStoreCredit: applyStoreCredit && storeCreditAvailable > 0,
-					analytics: {
-						ga4ClientId: getGa4ClientId()
-					}
-				});
+			const createCheckoutOrder = async () => {
+				const controller = new AbortController();
+				const timeout = window.setTimeout(() => controller.abort(), 30_000);
+				try {
+					return await createOrder(
+						{
+							email: user.email || '',
+							phone: user.phone || '',
+							items: cartItems.map((item) => ({
+								categoryId: item.tierId,
+								quantity: item.quantity,
+								price: cart.getItemLinePrice(item),
+								exactAccountId: item.exactAccount?.accountId,
+								exactAccountLabel: item.exactAccount?.displayLabel,
+								boostTargetUrl: item.boosting?.targetUrl,
+								boostQuantity: item.boosting?.boostQuantity
+							})),
+							totalAmount: finalTotal,
+							currency: 'NGN',
+							paymentMethod: 'monnify',
+							checkoutKey: getOrCreateCheckoutKey(),
+							affiliateCode: hasBoostingOrder ? undefined : affiliateCode || undefined,
+							promotionCode: hasBoostingOrder ? undefined : promoAppliedCode || undefined,
+							useStoreCredit: applyStoreCredit && storeCreditAvailable > 0,
+							analytics: {
+								ga4ClientId: getGa4ClientId()
+							}
+						},
+						{ signal: controller.signal }
+					);
+				} finally {
+					window.clearTimeout(timeout);
+				}
+			};
 
 			// A shared browser can retain another account's checkout key. Rotate it once and retry.
 			let orderResult = await createCheckoutOrder();
-			if (!orderResult.success && isCheckoutSessionConflict(orderResult.error)) {
+			// The POST is idempotent by checkout key. If the browser lost the response,
+			// replay once to retrieve the durable order instead of declaring failure.
+			if (orderResult.unknownOutcome) {
+				orderResult = await createCheckoutOrder();
+			}
+			if (!orderResult.success && shouldRotateCheckoutSession(orderResult.error)) {
 				resetCheckoutSession();
 				orderResult = await createCheckoutOrder();
 			}
@@ -525,6 +549,20 @@
 					goto(`/verify-email?next=${encodeURIComponent(nextPath)}`);
 					return;
 				}
+				if (/checkout is still initializing/i.test(String(orderResult.error || ''))) {
+					const savedOrderId = String(orderResult.orderId || '');
+					if (savedOrderId) sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, savedOrderId);
+					showWarning(
+						'Your order is saved',
+						'We’re finishing the checkout setup. Open My Orders to continue from the saved order.'
+					);
+					goto(
+						savedOrderId
+							? `/dashboard?tab=orders&orderId=${encodeURIComponent(savedOrderId)}&paymentPending=1`
+							: '/dashboard?tab=orders&paymentPending=1'
+					);
+					return;
+				}
 				// A number went unavailable between browsing and paying — send them back to pick
 				// another, with a clean message (strip the raw "HTTP 409:" prefix; no scary
 				// "payment failed"). No money was touched.
@@ -535,8 +573,8 @@
 					)
 				) {
 					showWarning(
-						'Number unavailable',
-						cleanOrderError || 'This number is currently unavailable — check back later or choose another.'
+						'This number isn’t available right now',
+						'You haven’t been charged. Choose another country or try again shortly.'
 					);
 					cart.clear();
 					goto('/numbers');
@@ -608,11 +646,20 @@
 				loading = false;
 				return;
 			}
-			showError(
-				'Payment failed',
-				`Failed to initialize payment: ${error instanceof Error ? error.message : 'Please try again.'}`
-			);
+			const message = error instanceof Error ? error.message : 'Please try again.';
+			if (/timed out|failed to create order/i.test(message)) {
+				showWarning(
+					'We’re finishing this safely',
+					'Open My Orders to see the saved checkout status. Don’t start a second payment.'
+				);
+				goto('/dashboard?tab=orders&paymentPending=1');
+			} else {
+				showError('Checkout could not start', message);
+			}
 			loading = false;
+		} finally {
+			window.clearTimeout(slowTimer);
+			checkoutSlow = false;
 		}
 	}
 </script>
@@ -626,7 +673,7 @@
 <Navigation />
 
 <main class="min-h-screen py-4 sm:py-8" style="background: var(--bg);">
-	<div class="mx-auto max-w-6xl px-4 sm:px-6">
+	<div class="mx-auto max-w-3xl px-4 sm:px-6">
 		<!-- Header -->
 		<div class="mb-6 sm:mb-8">
 			<h1
@@ -744,45 +791,30 @@
 				</button>
 			</div>
 		{:else}
-			<div class="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
-				<!-- Order Summary -->
-				<div class="order-2 lg:order-1 lg:col-span-2">
+			<div class="flex flex-col gap-4 sm:gap-6">
+				<div class="order-2">
 					<!-- Customer Information -->
 					<div
-						class="mb-6 rounded-lg p-4 shadow-sm sm:mb-8 sm:p-6"
+						class="rounded-lg p-4 shadow-sm sm:p-5"
 						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 					>
-						<h3
-							class="mb-4 text-base font-semibold sm:mb-6 sm:text-lg"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Customer Information
-						</h3>
 						{#if user}
-							<div
-								class="rounded-lg p-4"
-								style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.3);"
-							>
-								<div class="flex items-center gap-3">
-									<Check size={20} style="color: var(--primary);" />
-									<div class="flex-1">
-										<p
-											class="font-medium"
-											style="color: var(--text); font-family: var(--font-body);"
-										>
-											Logged in as {user?.fullName || user?.email}
-										</p>
-										<p
-											class="text-sm"
-											style="color: var(--text-muted); font-family: var(--font-body);"
-										>
-											Your order will be saved to your account
-										</p>
-									</div>
-									{#if user?.avatarUrl}
-										<img src={user.avatarUrl} alt="Profile" class="h-10 w-10 rounded-full" />
-									{/if}
+							<div class="flex items-center gap-3">
+								<Check size={20} style="color: var(--primary);" />
+								<div class="flex-1">
+									<p class="font-medium" style="color: var(--text); font-family: var(--font-body);">
+										Ordering as {user?.fullName || user?.email}
+									</p>
+									<p
+										class="text-sm"
+										style="color: var(--text-muted); font-family: var(--font-body);"
+									>
+										This order will be saved to your account
+									</p>
 								</div>
+								{#if user?.avatarUrl}
+									<img src={user.avatarUrl} alt="Profile" class="h-10 w-10 rounded-full" />
+								{/if}
 							</div>
 						{:else}
 							<!-- Login Required -->
@@ -790,6 +822,12 @@
 								class="rounded-lg p-4"
 								style="background: rgba(202,219,46,0.12); border: 1px solid rgba(202,219,46,0.3);"
 							>
+								<h3
+									class="mb-3 text-base font-semibold"
+									style="color: var(--text); font-family: var(--font-head);"
+								>
+									Customer Information
+								</h3>
 								<div class="flex items-center gap-3">
 									<Lock size={20} style="color: var(--fa-lime-700);" />
 									<div class="flex-1">
@@ -823,10 +861,10 @@
 					</div>
 				</div>
 
-				<!-- Order Summary Sidebar -->
-				<div class="order-1 lg:order-2 lg:col-span-1">
+				<!-- Order Summary -->
+				<div class="order-1">
 					<div
-						class="rounded-lg p-6 shadow-sm sm:p-8"
+						class="rounded-lg p-4 shadow-sm sm:p-6"
 						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 					>
 						<h3
@@ -1058,7 +1096,9 @@
 										class="mb-2 flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold transition-transform active:scale-[0.99]"
 										style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.35); color: var(--primary);"
 									>
-										<span>🎁 You've got ₦{data.availablePromo.value.toLocaleString()} off — tap to apply</span>
+										<span
+											>🎁 You've got ₦{data.availablePromo.value.toLocaleString()} off — tap to apply</span
+										>
 										<span
 											class="shrink-0 rounded-full px-2 py-0.5"
 											style="background: var(--primary); color: #04140c;">Apply</span
@@ -1176,50 +1216,67 @@
 								</span>
 							</div>
 						</div>
-						<!-- Security Banner -->
+						<!-- Payment method status -->
 						<div
 							class="mb-4 flex items-center justify-between rounded-lg p-3"
 							style="background: var(--bg-elev-2); border: 1px solid var(--border-2);"
 						>
 							<div class="flex items-center gap-2">
-								<Shield size={20} style="color: var(--fa-blue-300);" />
+								<Shield
+									size={20}
+									style={payableTotal <= 0
+										? 'color: var(--primary);'
+										: 'color: var(--fa-blue-300);'}
+								/>
 								<span
 									class="text-sm font-medium"
 									style="color: var(--text); font-family: var(--font-body);"
-									>Payments secured by Monnify</span
+									>{payableTotal <= 0
+										? 'Covered by your store credit'
+										: 'Payments secured by Monnify'}</span
 								>
 							</div>
-							<a
-								href="/support"
-								class="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
-							>
-								Payment FAQ
-							</a>
+							{#if payableTotal > 0}
+								<a
+									href="/support"
+									class="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
+								>
+									Payment FAQ
+								</a>
+							{/if}
 						</div>
 						<p class="mb-2 text-center text-xs leading-relaxed" style="color: var(--text-dim);">
 							{#if hasBoostingOrder}
-								Your boost starts after payment is confirmed. {BOOSTING_TURNAROUND_MESSAGE} Track
-								its status on your order page.
+								Your boost starts after payment is confirmed. {BOOSTING_TURNAROUND_MESSAGE} Track its
+								status on your order page.
 							{:else if hasNumbersOrder}
-								Your number and code appear on your order page the moment payment confirms.
+								After payment, we’ll take you straight to your number. Your code appears there
+								automatically.
 							{:else if hasManualHandover}
 								Login details are delivered on WhatsApp. Your order page will show you the link.
 							{:else}
 								Account details will be available on your dashboard once payment is confirmed.
 							{/if}
 						</p>
-						<!-- Pay with Monnify -->
+						<!-- Complete checkout -->
 						<button
 							onclick={payWithMonnify}
 							disabled={loading || !user}
-							style="background: var(--btn-primary-gradient); color: #04140C; font-family: var(--font-head);"
-							class="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-full py-3 text-sm font-semibold active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-base"
+							class="btn-fa btn-fa--primary mt-6 w-full py-3 sm:py-4 sm:text-base"
 						>
 							{#if loading}
 								<div
 									class="h-4 w-4 animate-spin rounded-full border-2 border-[#04140C] border-t-transparent sm:h-5 sm:w-5"
 								></div>
-								<span class="text-sm sm:text-base">Processing...</span>
+								<span class="text-sm sm:text-base"
+									>{payableTotal <= 0
+										? checkoutSlow
+											? 'Still applying safely…'
+											: 'Applying your store credit…'
+										: checkoutSlow
+											? 'Saving your order…'
+											: 'Processing…'}</span
+								>
 							{:else if !user}
 								<Lock size={18} class="sm:h-5 sm:w-5" />
 								<span class="text-sm sm:text-base">Login Required</span>
@@ -1235,7 +1292,8 @@
 							class="mt-3 text-center text-xs leading-relaxed"
 							style="color: var(--text-dim); font-family: var(--font-body);"
 						>
-							By continuing with payment, you agree to our
+							{payableTotal <= 0 ? 'By completing your order' : 'By continuing with payment'}, you
+							agree to our
 							<a href="/terms" class="hover:underline" style="color: var(--link);">Terms</a>,
 							<a href="/refund-policy" class="hover:underline" style="color: var(--link);"
 								>Refund Policy</a
@@ -1255,7 +1313,7 @@
 								style="color: var(--text-dim); font-family: var(--font-body);"
 							>
 								<Lock size={12} />
-								<span>256-bit SSL encryption</span>
+								<span>Secure encrypted connection</span>
 							</div>
 						</div>
 					</div>

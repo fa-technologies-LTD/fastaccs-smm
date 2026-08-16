@@ -566,35 +566,37 @@
 							₦{maxSpendNgn(row).toLocaleString()}
 						</td>
 						<td class="px-4 py-2 whitespace-nowrap">
+							{#if row.floorOverridden}
 							<div class="flex items-center gap-1.5">
 								<span style="color: var(--text-dim);">₦</span>
 								<input
 									type="number"
 									min={minFulfillmentProfitNgn}
 									step="50"
-									disabled={!row.floorOverridden}
 									bind:value={row.minFulfillmentProfitNgn}
-									class="w-20 rounded-md px-2 py-1 text-right disabled:opacity-50"
-									style="background: var(--bg-elev-1); border: 1px solid {row.floorOverridden
-										? '#a78bfa'
-										: 'var(--border)'}; color: var(--text);"
-									title={row.floorOverridden
-										? 'Per-tier hard floor — can only RAISE above the global, never below. Click the badge to revert.'
-										: 'Using the global hard floor. Click the badge to set a higher per-tier value.'}
+									class="w-20 rounded-md px-2 py-1 text-right"
+									style="background: var(--bg-elev-1); border: 1px solid #a78bfa; color: var(--text);"
+									title="Per-tier hard floor — can only RAISE above the global, never below. Click the badge to revert."
 								/>
 								<button
 									onclick={() => toggleFloorOverride(row)}
 									class="text-[10px] px-1.5 py-0.5 rounded font-semibold"
-									style="background: {row.floorOverridden
-										? 'rgba(167,139,250,0.15)'
-										: 'var(--bg-elev-1)'}; border: 1px solid {row.floorOverridden
-										? '#a78bfa'
-										: 'var(--border)'}; color: {row.floorOverridden ? '#a78bfa' : 'var(--text-dim)'};"
-									title={row.floorOverridden ? 'Revert to the global floor' : 'Override for this tier'}
+									style="background: rgba(167,139,250,0.15); border: 1px solid #a78bfa; color: #a78bfa;"
+									title="Revert to the global floor"
 								>
-									{row.floorOverridden ? 'tier' : 'global'}
+									tier
 								</button>
 							</div>
+						{:else}
+							<button
+								onclick={() => toggleFloorOverride(row)}
+								class="text-[11px] px-2 py-0.5 rounded"
+								style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text-dim);"
+								title="Using the global hard floor (₦{minFulfillmentProfitNgn.toLocaleString()}). Click to set a higher per-tier value."
+							>
+								Global
+							</button>
+						{/if}
 						</td>
 						<td class="px-4 py-2" style="color: {row.available <= 0 ? '#f87171' : 'var(--text-muted)'};">
 							{row.available.toLocaleString()}

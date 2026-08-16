@@ -14,7 +14,11 @@ import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
 import { notifyManualHandoverOrderPaid, notifyBoostingOrderPaid } from '$lib/services/manual-handover';
 import { logOrderStatusTransition } from '$lib/services/order-audit';
 import { isManualHandoverOrder, isBoostingOrder } from '$lib/services/order-delivery-mode';
-import { initPhoneOrder, isPhoneOrder } from '$lib/services/phone-fulfillment';
+import {
+	confirmPhonePaymentAndInitializeRental,
+	initPhoneOrder,
+	isPhoneOrder
+} from '$lib/services/phone-fulfillment';
 import { releaseOrderReservations } from '$lib/services/order-reservations';
 import { reverseStoreCreditRedemption } from '$lib/services/store-credit';
 import { maybeGrantSpendMilestones } from '$lib/services/spend-milestones';
@@ -445,6 +449,20 @@ export async function settleSuccessfulPayment(input: {
 	}
 
 	if (isOrderPaymentConfirmed(order)) {
+		if (order.orderType === 'phone') {
+			// Already-paid is a success boundary. Best-effort creation repairs legacy
+			// records, but an infrastructure error must not relabel payment as failed.
+			await initPhoneOrder(order.id).catch((error) => {
+				console.error(`[payments.${input.source}] paid phone initialization deferred:`, error);
+			});
+			return {
+				success: true,
+				orderId: order.id,
+				status: order.status === 'completed' ? 'COMPLETED' : 'PAID',
+				phone: true,
+				warning: order.status === 'completed' ? null : 'Payment confirmed. Getting your number…'
+			};
+		}
 		return recoverPaidOrder(order.id, input.source);
 	}
 
@@ -490,6 +508,53 @@ export async function settleSuccessfulPayment(input: {
 			orderId: order.id,
 			status: 'FAILED',
 			error: 'Payment amount or currency did not match the order.'
+		};
+	}
+
+	// Numbers have a stricter commit boundary than ordinary delivery: the payment
+	// transition and pending rental must be atomic. Otherwise a process death between
+	// those two writes strands paid money with no fulfilment work for the cron to find.
+	if (order.orderType === 'phone' && (await isPhoneOrder(order.id))) {
+		const initialized = await confirmPhonePaymentAndInitializeRental({
+			orderId: order.id,
+			paymentReference: input.paymentReference || order.paymentReference,
+			paymentChannel: input.channel || order.paymentChannel,
+			paidAt: input.paidAt || order.paidAt
+		});
+		if (!initialized) {
+			const latest = await prisma.order.findUnique({ where: { id: order.id } });
+			if (latest && isOrderPaymentConfirmed(latest)) {
+				return {
+					success: true,
+					orderId: order.id,
+					status: latest.status === 'completed' ? 'COMPLETED' : 'PAID',
+					phone: true
+				};
+			}
+			return {
+				success: false,
+				orderId: order.id,
+				status: 'FAILED',
+				error: 'This order is already resolved.'
+			};
+		}
+
+		invalidateAdminStatsCache();
+		logOrderStatusTransition({
+			orderId: order.id,
+			source: input.source,
+			fromStatus: order.status,
+			toStatus: 'paid',
+			fromPaymentStatus: order.paymentStatus,
+			toPaymentStatus: 'paid'
+		});
+		void sendServerPurchaseVerifiedEvent(order.id, 'PAID');
+		return {
+			success: true,
+			orderId: order.id,
+			status: 'PAID',
+			phone: true,
+			warning: 'Payment confirmed. Getting your number…'
 		};
 	}
 

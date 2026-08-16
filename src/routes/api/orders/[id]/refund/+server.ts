@@ -12,6 +12,10 @@ import { createAdminAuditLog } from '$lib/services/admin-audit';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 
+function isUuid(value: string): boolean {
+	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 // POST /api/orders/[id]/refund
 // Cancel-with-refund: return the paid amount to the buyer as (spend-only) Store
 // Credit, mark the order refunded, and log it. Available to any admin with
@@ -20,58 +24,100 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 	if (!locals.user || !hasAdminPermission(locals.adminContext, 'admin:orders:manage')) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
+	const orderId = String(params.id || '').trim();
+	if (!isUuid(orderId)) return json({ error: 'Invalid order ID' }, { status: 400 });
 
-	const order = await prisma.order.findUnique({
-		where: { id: params.id },
-		select: {
-			id: true,
-			orderNumber: true,
-			userId: true,
-			affiliateUserId: true,
-			totalAmount: true,
-			paymentStatus: true,
-			status: true
+	const result = await prisma.$transaction(async (tx) => {
+		// Full-order and per-account refunds share this order lock. That prevents two
+		// admins from refunding overlapping value from different screens at the same time.
+		await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId}::uuid FOR UPDATE`;
+		const order = await tx.order.findUnique({
+			where: { id: orderId },
+			select: {
+				id: true,
+				orderNumber: true,
+				userId: true,
+				affiliateUserId: true,
+				totalAmount: true,
+				paymentStatus: true,
+				status: true
+			}
+		});
+		if (!order) return { outcome: 'not_found' as const };
+
+		const totalAmount = Math.floor(Number(order.totalAmount || 0));
+		if (order.status === 'refunded' || order.paymentStatus === 'refunded') {
+			return { outcome: 'already_refunded' as const, order, amount: totalAmount };
 		}
+
+		const wasPaid =
+			order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'completed';
+		if (!wasPaid) return { outcome: 'not_paid' as const };
+		if (!order.userId) return { outcome: 'guest' as const };
+		if (totalAmount <= 0) return { outcome: 'no_amount' as const };
+
+		// If individual faulty accounts were already refunded, refund only the remainder.
+		// This lets admins finish a partial refund safely without paying the same units twice.
+		const priorRefunds = await tx.walletTransaction.aggregate({
+			where: {
+				userId: order.userId,
+				type: SC_CREDIT_REFUND,
+				status: { notIn: ['failed', 'reversed', 'cancelled'] },
+				metadata: { path: ['orderId'], equals: order.id }
+			},
+			_sum: { amount: true }
+		});
+		const alreadyCredited = Math.max(0, Math.floor(Number(priorRefunds._sum.amount || 0)));
+		const amount = Math.max(0, totalAmount - alreadyCredited);
+
+		if (amount > 0) {
+			await creditStoreCredit(tx, {
+				userId: order.userId,
+				amount,
+				type: SC_CREDIT_REFUND,
+				description: `Refund for order ${order.orderNumber}`,
+				reference: order.id,
+				metadata: {
+					orderId: order.id,
+					orderNumber: order.orderNumber,
+					kind: 'order_refund',
+					priorPartialRefunds: alreadyCredited
+				}
+			});
+		}
+		await tx.order.update({
+			where: { id: order.id },
+			data: { status: 'refunded', paymentStatus: 'refunded' }
+		});
+		return { outcome: 'refunded' as const, order, amount, alreadyCredited };
 	});
-	if (!order) return json({ error: 'Order not found' }, { status: 404 });
 
-	if (order.status === 'refunded' || order.paymentStatus === 'refunded') {
-		return json({ error: 'This order has already been refunded.' }, { status: 409 });
-	}
-
-	const wasPaid =
-		order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'completed';
-	if (!wasPaid) {
+	if (result.outcome === 'not_found') return json({ error: 'Order not found' }, { status: 404 });
+	if (result.outcome === 'not_paid') {
 		return json(
 			{ error: 'This order was never paid — cancel it without a refund.' },
 			{ status: 409 }
 		);
 	}
-
-	if (!order.userId) {
+	if (result.outcome === 'guest') {
 		return json(
 			{ error: 'Guest order has no account to credit — handle this refund manually.' },
 			{ status: 409 }
 		);
 	}
-
-	const amount = Math.floor(Number(order.totalAmount || 0));
-	if (amount <= 0) return json({ error: 'Order has no amount to refund.' }, { status: 400 });
-
-	await prisma.$transaction(async (tx) => {
-		await creditStoreCredit(tx, {
-			userId: order.userId as string,
-			amount,
-			type: SC_CREDIT_REFUND,
-			description: `Refund for order ${order.orderNumber}`,
-			reference: order.id,
-			metadata: { orderId: order.id, orderNumber: order.orderNumber, kind: 'order_refund' }
+	if (result.outcome === 'no_amount') {
+		return json({ error: 'Order has no amount to refund.' }, { status: 400 });
+	}
+	if (result.outcome === 'already_refunded') {
+		return json({
+			success: true,
+			alreadyRefunded: true,
+			refundedAmount: result.amount,
+			orderId: result.order.id
 		});
-		await tx.order.update({
-			where: { id: order.id },
-			data: { status: 'refunded', paymentStatus: 'refunded' }
-		});
-	});
+	}
+
+	const { order, amount, alreadyCredited } = result;
 
 	invalidateAdminStatsCache();
 
@@ -104,7 +150,7 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 		resourceType: 'order',
 		resourceId: order.id,
 		description: `Refunded ₦${amount.toLocaleString()} to store credit for order ${order.orderNumber}`,
-		metadata: { amount, orderNumber: order.orderNumber }
+		metadata: { amount, priorPartialRefunds: alreadyCredited, orderNumber: order.orderNumber }
 	}).catch(() => {});
 
 	return json({ success: true, refundedAmount: amount, orderId: order.id });

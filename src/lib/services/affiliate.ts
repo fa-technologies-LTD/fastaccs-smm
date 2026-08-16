@@ -1,4 +1,6 @@
 import { env } from '$env/dynamic/private';
+import { randomUUID } from 'crypto';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import type { Cookies } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 import { SC_REDEEM_EARNED } from '$lib/services/store-credit';
@@ -472,8 +474,13 @@ function isKnownAffiliateLedgerStatus(value: string): value is AffiliateLedgerSt
 	return Object.values(AFFILIATE_LEDGER_STATUS).includes(value as AffiliateLedgerStatus);
 }
 
-async function getAffiliateLedgerSummary(userId: string): Promise<AffiliateLedgerSummary> {
-	const grouped = await prisma.walletTransaction.groupBy({
+type AffiliateDb = PrismaClient | Prisma.TransactionClient;
+
+async function getAffiliateLedgerSummary(
+	userId: string,
+	db: AffiliateDb = prisma
+): Promise<AffiliateLedgerSummary> {
+	const grouped = await db.walletTransaction.groupBy({
 		by: ['type', 'status'],
 		where: {
 			userId,
@@ -525,7 +532,9 @@ async function getAffiliateLedgerSummary(userId: string): Promise<AffiliateLedge
 
 	const pendingStoreCredit = creditByStatus.pending;
 	const underReviewStoreCredit = creditByStatus.under_review;
-	const requestedStoreCredit = payoutByStatus.requested;
+	// Moving a payout to admin review must not make the same money spendable or
+	// withdrawable again. Both requested and under-review payouts remain reserved.
+	const requestedStoreCredit = payoutByStatus.requested + payoutByStatus.under_review;
 	const paidStoreCredit = payoutByStatus.paid;
 	const reversedStoreCredit = creditByStatus.reversed + payoutByStatus.reversed;
 
@@ -1816,17 +1825,33 @@ export async function maybeVoidSuperActivationOnRefund(order: {
 
 	const amount = Math.max(0, Number(activation.amount || 0));
 	await prisma.$transaction(async (tx) => {
+		const wallet = await tx.wallet.findUnique({
+			where: { userId: superUserId },
+			select: { id: true }
+		});
+		if (!wallet) return;
+		await tx.$queryRaw`SELECT id FROM wallets WHERE user_id = ${superUserId}::uuid FOR UPDATE`;
+		const liveActivation = await tx.walletTransaction.findUnique({
+			where: { id: activation.id },
+			select: { status: true, amount: true }
+		});
+		if (liveActivation?.status !== AFFILIATE_LEDGER_STATUS.available) return;
+
 		await tx.walletTransaction.update({
 			where: { id: activation.id },
 			data: { status: AFFILIATE_LEDGER_STATUS.reversed }
 		});
-		const wallet = await tx.wallet.findUnique({ where: { userId: superUserId } });
-		if (wallet) {
-			await tx.wallet.update({
-				where: { id: wallet.id },
-				data: { balance: Math.max(0, Number(wallet.balance || 0) - amount) }
-			});
-		}
+		const liveWallet = await tx.wallet.findUnique({
+			where: { id: wallet.id },
+			select: { balance: true }
+		});
+		if (!liveWallet) return;
+		await tx.wallet.update({
+			where: { id: wallet.id },
+			data: {
+				balance: Math.max(0, Number(liveWallet.balance || 0) - Number(liveActivation.amount || 0))
+			}
+		});
 		await tx.notification.create({
 			data: {
 				userId: superUserId,
@@ -2518,27 +2543,9 @@ export async function requestAffiliatePayout(userId: string): Promise<{
 			return { success: false, error: 'Payout requirements are not met yet.' };
 		}
 
-		const amount = toRoundedNaira(dashboard.availableStoreCredit);
-		if (amount <= 0) {
+		const estimatedAmount = toRoundedNaira(dashboard.availableStoreCredit);
+		if (estimatedAmount <= 0) {
 			return { success: false, error: 'No available Cash to request.' };
-		}
-
-		const existingOpenRequest = await prisma.walletTransaction.findFirst({
-			where: {
-				userId,
-				type: AFFILIATE_LEDGER_PAYOUT_TYPE,
-				status: AFFILIATE_LEDGER_STATUS.requested
-			},
-			select: {
-				id: true
-			}
-		});
-
-		if (existingOpenRequest) {
-			return {
-				success: false,
-				error: 'A payout request is already pending review. Please wait for processing.'
-			};
 		}
 
 		const wallet = await prisma.wallet.upsert({
@@ -2555,10 +2562,44 @@ export async function requestAffiliatePayout(userId: string): Promise<{
 			}
 		});
 
-		const reference = `affiliate:payout:request:${userId}:${Date.now()}`;
-		const balance = Number(wallet.balance || 0);
+		const payoutResult = await prisma.$transaction(async (tx) => {
+			// One affiliate can submit only one live request at a time. The wallet lock
+			// serializes double-clicks and parallel devices before we re-read the ledger.
+			await tx.$queryRaw`SELECT id FROM wallets WHERE user_id = ${userId}::uuid FOR UPDATE`;
 
-		const payoutTransactionId = await prisma.$transaction(async (tx) => {
+			const existingOpenRequest = await tx.walletTransaction.findFirst({
+				where: {
+					userId,
+					type: AFFILIATE_LEDGER_PAYOUT_TYPE,
+					status: {
+						in: [AFFILIATE_LEDGER_STATUS.requested, AFFILIATE_LEDGER_STATUS.underReview]
+					}
+				},
+				select: { id: true }
+			});
+			if (existingOpenRequest) {
+				return {
+					success: false as const,
+					error: 'A payout request is already pending review. Please wait for processing.'
+				};
+			}
+
+			const liveLedger = await getAffiliateLedgerSummary(userId, tx);
+			const amount = toRoundedNaira(liveLedger.availableStoreCredit);
+			if (amount <= 0 || amount < dashboard.payoutMinimum) {
+				return {
+					success: false as const,
+					error: 'Payout requirements are no longer met. Refresh and try again.'
+				};
+			}
+
+			const liveWallet = await tx.wallet.findUnique({
+				where: { id: wallet.id },
+				select: { balance: true }
+			});
+			if (!liveWallet) throw new Error('AFFILIATE_WALLET_NOT_FOUND');
+			const balance = Number(liveWallet.balance || 0);
+			const reference = `affiliate:payout:request:${userId}:${randomUUID()}`;
 			const payoutTransaction = await tx.walletTransaction.create({
 				data: {
 					walletId: wallet.id,
@@ -2587,8 +2628,16 @@ export async function requestAffiliatePayout(userId: string): Promise<{
 						'Your payout request was received and will be reviewed for the next payout cycle.'
 				}
 			});
-			return payoutTransaction.id;
+			return {
+				success: true as const,
+				payoutTransactionId: payoutTransaction.id,
+				amount,
+				reference
+			};
 		});
+
+		if (!payoutResult.success) return payoutResult;
+		const { payoutTransactionId, amount, reference } = payoutResult;
 
 		const recipients = await getOperationalAlertRecipients().catch(() => []);
 		const payoutRecipients = recipients.filter(Boolean);
@@ -2600,7 +2649,7 @@ export async function requestAffiliatePayout(userId: string): Promise<{
 				sendEmail({
 					to: recipientEmail,
 					subject: `[FastAccs Ops] Affiliate payout request (${affiliateName})`,
-					body: `A new affiliate payout request was submitted.\n\nAffiliate: ${user.fullName || 'N/A'}\nEmail: ${user.email || 'N/A'}\nRequested amount: ₦${amount.toLocaleString()}\nCurrent available Store Credit: ₦${dashboard.availableStoreCredit.toLocaleString()}\nRequested at: ${new Date().toISOString()}\n\nReview affiliate details in admin to approve or follow up.`,
+					body: `A new affiliate payout request was submitted.\n\nAffiliate: ${user.fullName || 'N/A'}\nEmail: ${user.email || 'N/A'}\nRequested amount: ₦${amount.toLocaleString()}\nAvailable Store Credit at request time: ₦${amount.toLocaleString()}\nRequested at: ${new Date().toISOString()}\n\nReview affiliate details in admin to approve or follow up.`,
 					ctaText: 'Open admin affiliates',
 					ctaUrl: `${baseUrl}/admin/affiliates/${user.id}`,
 					notificationType: 'affiliate_payout',

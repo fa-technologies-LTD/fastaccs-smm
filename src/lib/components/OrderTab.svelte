@@ -46,9 +46,17 @@
 
 	let {
 		initialOrders = [],
+		initialNextCursor = null,
 		focusOrderId = null
-	}: { initialOrders?: OrderRecord[]; focusOrderId?: string | null } = $props();
+	}: {
+		initialOrders?: OrderRecord[];
+		initialNextCursor?: string | null;
+		focusOrderId?: string | null;
+	} = $props();
 	let orders = $state<OrderRecord[]>(initialOrders);
+	let nextCursor = $state<string | null>(initialNextCursor);
+	let loadingMore = $state(false);
+	let loadMoreError = $state('');
 	let orderTypeFilter = $state<'all' | 'account' | 'boosting' | 'numbers'>('all');
 	let checkingPaymentByOrderId = $state<Record<string, boolean>>({});
 	let resumingPaymentByOrderId = $state<Record<string, boolean>>({});
@@ -456,6 +464,29 @@
 	function viewOrderDetails(orderId: string) {
 		goto(`/order/${orderId}?fromTab=orders`);
 	}
+
+	async function loadMoreOrders(): Promise<void> {
+		if (!nextCursor || loadingMore) return;
+		loadingMore = true;
+		loadMoreError = '';
+		try {
+			const response = await fetch(
+				`/api/dashboard/orders?cursor=${encodeURIComponent(nextCursor)}&limit=20`
+			);
+			const result = await response.json().catch(() => ({}));
+			if (!response.ok || !result?.success) {
+				throw new Error(result?.error || 'Could not load more orders.');
+			}
+			const incoming = Array.isArray(result.data?.orders) ? result.data.orders : [];
+			const known = new Set(orders.map((order) => order.id));
+			orders = [...orders, ...incoming.filter((order: OrderRecord) => !known.has(order.id))];
+			nextCursor = result.data?.nextCursor || null;
+		} catch (error) {
+			loadMoreError = error instanceof Error ? error.message : 'Could not load more orders.';
+		} finally {
+			loadingMore = false;
+		}
+	}
 </script>
 
 <div
@@ -605,6 +636,22 @@
 				</div>
 			{/each}
 		</div>
+		{/if}
+		{#if nextCursor || loadMoreError}
+			<div class="border-t border-[var(--border)] p-4 text-center">
+				{#if loadMoreError}
+					<p class="mb-2 text-xs" style="color: var(--status-danger);">{loadMoreError}</p>
+				{/if}
+				<button
+					type="button"
+					onclick={loadMoreOrders}
+					disabled={loadingMore || !nextCursor}
+					class="rounded-full px-5 py-2 text-sm font-semibold disabled:opacity-60"
+					style="border: 1px solid var(--border); color: var(--text); background: var(--surface);"
+				>
+					{loadingMore ? 'Loading…' : 'Load older orders'}
+				</button>
+			</div>
 		{/if}
 	{/if}
 </div>

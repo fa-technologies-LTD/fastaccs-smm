@@ -1,12 +1,18 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { CheckCircle, Clock, XCircle, Copy, ExternalLink, CircleHelp } from '$lib/icons';
+	import { CheckCircle, Clock, XCircle, Copy, ExternalLink } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import NumbersOtpCard from '$lib/components/NumbersOtpCard.svelte';
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
-	import { formatDate, formatPrice, copyToClipboard, copyAllAccounts } from '$lib/helpers/utils';
+	import {
+		formatDate,
+		formatPrice,
+		formatOrderRef,
+		copyToClipboard,
+		copyAllAccounts
+	} from '$lib/helpers/utils';
 	import { getCanonicalCredentialEntries } from '$lib/helpers/credential-contract';
 	import {
 		DEFAULT_LOGIN_GUIDE_LABEL,
@@ -103,7 +109,8 @@
 		getFulfillmentState(data.order.status, data.order.deliveryStatus, paymentState.tone)
 	);
 	const orderDelivered = $derived(fulfillmentLabel === 'Completed');
-	const orderDead = $derived(fulfillmentLabel === 'Refunded' || fulfillmentLabel === 'Failed');
+	const isPhoneOrder = $derived(data.order.orderType === 'phone');
+	const displayOrderNumber = $derived(formatOrderRef(data.order.orderNumber, data.order.id));
 
 	function isManualHandoverItem(item: (typeof data.order.orderItems)[number]): boolean {
 		return getTierDeliveryConfig(item.category?.metadata).mode === 'manual_handover';
@@ -146,14 +153,10 @@
 		const message = `Hi, I'm sending my payment receipt for order ${orderLabel}.`;
 		return buildWhatsAppSupportLink(data.support?.whatsappNumber, message);
 	}
-
-	function getSupportGuideUrl(): string {
-		return data.support?.loginGuideFallbackUrl || DEFAULT_LOGIN_GUIDE_URL;
-	}
 </script>
 
 <svelte:head>
-	<title>Order #{data.order.id.slice(-8)} - FastAccs</title>
+	<title>{displayOrderNumber} - FastAccs</title>
 	<meta name="description" content="View your order status and account details" />
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
@@ -178,7 +181,7 @@
 				class="mt-4 text-3xl font-bold"
 				style="font-family: var(--font-head); color: var(--text);"
 			>
-				Order #{data.order.id.slice(-8)}
+				{displayOrderNumber}
 			</h1>
 			<p style="color: var(--text-muted);">Placed on {formatDate(data.order.createdAt)}</p>
 		</div>
@@ -190,81 +193,68 @@
 		<div class="grid gap-8 lg:grid-cols-3">
 			<!-- Order Details -->
 			<div class="lg:col-span-2">
-				<!-- Status Card -->
-				<div
-					class="mb-6 rounded-lg p-6"
-					style="background: var(--surface); border: 1px solid var(--border);"
-				>
-					<div class="flex items-center gap-4">
-						<div
-							class={`status-badge ${getStatusColorFromTone(
-								getPaymentState(data.order.status, data.order.paymentStatus).tone
-							)}`}
-						>
-							{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success'}
-								<CheckCircle class="h-6 w-6" />
-							{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'failure'}
-								<XCircle class="h-6 w-6" />
-							{:else}
-								<Clock class="h-6 w-6" />
-							{/if}
-						</div>
-						<div>
-							<h2 class="text-xl font-semibold" style="color: var(--text);">
-								{getPaymentState(data.order.status, data.order.paymentStatus).label}
-							</h2>
-							<p style="color: var(--text-muted);">
-								{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && isBoostingOrder()}
-									{data.order.orderItems.every((item) => item.boostFulfillmentStatus === 'completed')
-										? 'Your boost has been completed.'
-										: `Payment confirmed. Your boost is being processed. ${BOOSTING_TURNAROUND_MESSAGE}`}
-								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.status === 'completed'}
-									Your accounts have been successfully allocated and delivered.
-								{:else if data.phone}
-									{#if data.order.status === 'refunded'}
-										This number was cancelled and refunded to your store credit.
-									{:else if data.order.status === 'completed'}
-										Your verification code has arrived — see it above.
-									{:else}
-										Payment confirmed. Use the number above to receive your code.
-									{/if}
-								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.deliveryMethod === 'whatsapp' && data.order.deliveryStatus === 'processing'}
-									Payment confirmed. Manual handover is in progress on WhatsApp.
-								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'pending'}
-									Payment not confirmed yet. Credentials are locked.
+				<!-- The live Numbers card owns the active status once a rental exists. -->
+				{#if !data.phone}
+					<div
+						class="mb-6 rounded-lg p-6"
+						style="background: var(--surface); border: 1px solid var(--border);"
+					>
+						<div class="flex items-center gap-4">
+							<div
+								class={`status-badge ${getStatusColorFromTone(
+									getPaymentState(data.order.status, data.order.paymentStatus).tone
+								)}`}
+							>
+								{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success'}
+									<CheckCircle class="h-6 w-6" />
 								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'failure'}
-									Payment did not complete for this order. No account allocation was made.
+									<XCircle class="h-6 w-6" />
 								{:else}
-									Payment is confirmed. We are finalizing your account delivery.
+									<Clock class="h-6 w-6" />
 								{/if}
-							</p>
-							<div class="mt-2 flex flex-wrap items-center gap-2 text-xs sm:text-sm">
-								<span style="color: var(--text-dim);">
-									Payment: {getPaymentState(data.order.status, data.order.paymentStatus).label}
-								</span>
-								<span style="color: var(--text-dim);">•</span>
-								<span style="color: var(--text-dim);">
-									Fulfillment: {getFulfillmentState(
-										data.order.status,
-										data.order.deliveryStatus,
-										getPaymentState(data.order.status, data.order.paymentStatus).tone
-									)}
-								</span>
+							</div>
+							<div>
+								<h2 class="text-xl font-semibold" style="color: var(--text);">
+									{getPaymentState(data.order.status, data.order.paymentStatus).label}
+								</h2>
+								<p style="color: var(--text-muted);">
+									{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && isBoostingOrder()}
+										{data.order.orderItems.every(
+											(item) => item.boostFulfillmentStatus === 'completed'
+										)
+											? 'Your boost has been completed.'
+											: `Payment confirmed. Your boost is being processed. ${BOOSTING_TURNAROUND_MESSAGE}`}
+									{:else if isPhoneOrder}
+										Your payment is safe. We’re preparing your verification number now.
+									{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.status === 'completed'}
+										Your accounts have been successfully allocated and delivered.
+									{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.deliveryMethod === 'whatsapp' && data.order.deliveryStatus === 'processing'}
+										Payment confirmed. Manual handover is in progress on WhatsApp.
+									{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'pending'}
+										Payment not confirmed yet. Credentials are locked.
+									{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'failure'}
+										Payment did not complete for this order. No account allocation was made.
+									{:else}
+										Payment is confirmed. We are finalizing your account delivery.
+									{/if}
+								</p>
+								{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success'}
+									<div class="mt-2 text-xs sm:text-sm">
+										<span style="color: var(--text-dim);">
+											Fulfillment: {getFulfillmentState(
+												data.order.status,
+												data.order.deliveryStatus,
+												getPaymentState(data.order.status, data.order.paymentStatus).tone
+											)}
+										</span>
+									</div>
+								{/if}
 							</div>
 						</div>
 					</div>
-				</div>
+				{/if}
 
-				{#if data.phone && !orderDead}
-					<p class="mb-4 text-xs" style="color: var(--text-dim);">
-						Enter the number on {data.phone.serviceName} (same country) and request your code — it
-						appears here automatically, no VPN needed. <a
-							href="/support#numbers"
-							class="hover:underline"
-							style="color: var(--link);">How to use it</a
-						>.
-					</p>
-				{:else if orderDelivered && !isManualHandoverOrder() && !isBoostingOrder()}
+				{#if orderDelivered && !isPhoneOrder && !isManualHandoverOrder() && !isBoostingOrder()}
 					<p class="mb-4 text-xs" style="color: var(--text-dim);">
 						Test your login soon — issues reported within 2 hours get the fastest support. <a
 							href="/support#faq"
@@ -314,7 +304,7 @@
 												>
 													{getBoostingStatusLabel(item)}
 												</span>
-											{:else if data.phone}
+											{:else if isPhoneOrder}
 												<span class="status-badge status-success">Verification number</span>
 											{:else if !isManualHandoverItem(item)}
 												<span
@@ -341,19 +331,20 @@
 													Boost details
 												</p>
 												<p class="text-xs" style="color: var(--text-muted);">
-													{item.boostQuantity?.toLocaleString() ?? '?'} {item.category.name} for:
+													{item.boostQuantity?.toLocaleString() ?? '?'}
+													{item.category.name} for:
 												</p>
 												<a
 													href={item.boostTargetUrl}
 													target="_blank"
 													rel="noopener noreferrer"
-													class="mt-1 inline-block break-all text-xs underline"
+													class="mt-1 inline-block text-xs break-all underline"
 													style="color: var(--link);"
 												>
 													{item.boostTargetUrl}
 												</a>
 											</div>
-										{:else if !isManualHandoverItem(item) && !data.phone}
+										{:else if !isManualHandoverItem(item) && !isPhoneOrder && orderDelivered}
 											<div
 												class="mt-3 rounded-lg border p-3"
 												style="border-color: rgba(170, 173, 255, 0.25); background: rgba(170, 173, 255, 0.08);"
@@ -371,16 +362,6 @@
 													>
 														{getItemLoginGuide(item).label}
 														<ExternalLink class="h-3.5 w-3.5" />
-													</a>
-													<a
-														href={getSupportGuideUrl()}
-														target="_blank"
-														rel="noopener noreferrer"
-														class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all hover:-translate-y-0.5"
-														style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);"
-													>
-														<CircleHelp class="h-3.5 w-3.5" />
-														Support guide
 													</a>
 												</div>
 											</div>
@@ -501,22 +482,6 @@
 						<div class="flex justify-between">
 							<span style="color: var(--text-muted);">Order Date:</span>
 							<span style="color: var(--text);">{formatDate(data.order.createdAt)}</span>
-						</div>
-						<div class="flex justify-between">
-							<span style="color: var(--text-muted);">Payment:</span>
-							<span style="color: var(--text);"
-								>{getPaymentState(data.order.status, data.order.paymentStatus).label}</span
-							>
-						</div>
-						<div class="flex justify-between">
-							<span style="color: var(--text-muted);">Fulfillment:</span>
-							<span style="color: var(--text);"
-								>{getFulfillmentState(
-									data.order.status,
-									data.order.deliveryStatus,
-									getPaymentState(data.order.status, data.order.paymentStatus).tone
-								)}</span
-							>
 						</div>
 					</div>
 				</div>

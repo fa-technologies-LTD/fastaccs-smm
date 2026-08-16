@@ -75,7 +75,8 @@
 	async function updatePayoutStatus(
 		transactionId: string,
 		action: 'mark_paid' | 'mark_under_review' | 'mark_reversed',
-		notes?: string
+		notes?: string,
+		payoutReference?: string
 	) {
 		if (isUpdatingPayout(transactionId)) return;
 		const previous = [...payoutRows];
@@ -94,7 +95,12 @@
 			const response = await fetch(`/api/admin/affiliates/${data.affiliate.id}/payouts`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ transactionId, action, ...(notes ? { notes } : {}) })
+				body: JSON.stringify({
+					transactionId,
+					action,
+					...(notes ? { notes } : {}),
+					...(payoutReference ? { payoutReference } : {})
+				})
 			});
 			const result = await response.json();
 			if (!response.ok || !result.success) {
@@ -312,7 +318,7 @@
 					<p class="font-semibold" style="color: var(--status-warning);">{formatPrice(data.ledgerSummary.underReviewStoreCredit)}</p>
 				</div>
 				<div class="rounded-lg border p-3" style="border-color: var(--border); background: var(--bg-elev-2);">
-					<p style="color: var(--text-dim);">Requested payout</p>
+					<p style="color: var(--text-dim);">Open payout</p>
 					<p class="font-semibold" style="color: var(--fa-blue-300);">{formatPrice(data.ledgerSummary.requestedStoreCredit)}</p>
 				</div>
 				<div class="rounded-lg border p-3" style="border-color: var(--border); background: var(--bg-elev-2);">
@@ -379,7 +385,18 @@
 									{#if ['requested', 'under_review'].includes(String(payout.status || '').toLowerCase())}
 										<div class="flex gap-2">
 											<button
-												onclick={() => updatePayoutStatus(payout.id, 'mark_paid')}
+												onclick={() => {
+													const transferReference = window.prompt(
+														'Enter the completed bank transfer reference:'
+													);
+													if (!transferReference?.trim()) return;
+													updatePayoutStatus(
+														payout.id,
+														'mark_paid',
+														undefined,
+														transferReference.trim()
+													);
+												}}
 												disabled={isUpdatingPayout(payout.id)}
 												class="rounded px-2 py-1 disabled:opacity-60"
 												style="background: var(--status-success); color: var(--bg);"
@@ -400,6 +417,7 @@
 														'Reason for rejecting this payout (sent to the user by email):'
 													);
 													if (reason === null) return;
+													if (!reason.trim()) return;
 													updatePayoutStatus(payout.id, 'mark_reversed', reason.trim());
 												}}
 												disabled={isUpdatingPayout(payout.id)}

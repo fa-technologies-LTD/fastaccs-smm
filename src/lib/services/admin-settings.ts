@@ -1,8 +1,13 @@
 import { env } from '$env/dynamic/private';
 import { getAdminEmails } from '$lib/auth/admin';
 import { prisma } from '$lib/prisma';
+import { serverCache } from '$lib/helpers/cache';
 
 const SETTINGS_CATEGORY = 'settings';
+const BUSINESS_SETTINGS_CACHE_KEY = 'settings:business';
+const BUSINESS_SETTINGS_CACHE_TTL_MS = 60_000;
+const LOW_STOCK_THRESHOLD_CACHE_KEY = 'settings:low-stock-threshold';
+const LOW_STOCK_THRESHOLD_CACHE_TTL_MS = 30_000;
 
 const SETTINGS_KEYS = {
 	businessName: 'config.business.name',
@@ -190,7 +195,8 @@ function parseLowStockPolicyState(value: string | null): LowStockPolicyState {
 
 	try {
 		const parsed = JSON.parse(value);
-		const record = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+		const record =
+			parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
 		if (!record) return { ...DEFAULT_LOW_STOCK_POLICY_STATE };
 
 		const rawAvailability = record.availabilityByTier;
@@ -207,7 +213,8 @@ function parseLowStockPolicyState(value: string | null): LowStockPolicyState {
 		const unresolvedZeroTierIds = Array.isArray(record.unresolvedZeroTierIds)
 			? record.unresolvedZeroTierIds.filter((entry): entry is string => typeof entry === 'string')
 			: [];
-		const dayKey = typeof record.dayKey === 'string' && record.dayKey.trim() ? record.dayKey.trim() : null;
+		const dayKey =
+			typeof record.dayKey === 'string' && record.dayKey.trim() ? record.dayKey.trim() : null;
 		const lastDigestAt =
 			typeof record.lastDigestAt === 'string' && record.lastDigestAt.trim()
 				? record.lastDigestAt.trim()
@@ -273,6 +280,36 @@ async function getSettingsMap(keys: string[]): Promise<Map<string, string>> {
 	});
 
 	return new Map(rows.map((row) => [row.key, row.value]));
+}
+
+export async function getBusinessSettingsSnapshot(): Promise<BusinessSettings> {
+	const cached = serverCache.get<BusinessSettings>(
+		BUSINESS_SETTINGS_CACHE_KEY,
+		BUSINESS_SETTINGS_CACHE_TTL_MS
+	);
+	if (cached) return cached;
+
+	const values = await getSettingsMap([
+		SETTINGS_KEYS.businessName,
+		SETTINGS_KEYS.businessEmail,
+		SETTINGS_KEYS.whatsappNumber,
+		SETTINGS_KEYS.currencyCode,
+		SETTINGS_KEYS.businessTimezone
+	]);
+	const business = {
+		businessName: (values.get(SETTINGS_KEYS.businessName) || DEFAULTS.businessName).trim(),
+		businessEmail: (values.get(SETTINGS_KEYS.businessEmail) || DEFAULTS.businessEmail).trim(),
+		whatsappNumber: (values.get(SETTINGS_KEYS.whatsappNumber) || DEFAULTS.whatsappNumber).trim(),
+		currencyCode: (values.get(SETTINGS_KEYS.currencyCode) || DEFAULTS.currencyCode)
+			.trim()
+			.toUpperCase(),
+		businessTimezone: (
+			values.get(SETTINGS_KEYS.businessTimezone) || DEFAULTS.businessTimezone
+		).trim()
+	};
+
+	serverCache.set(BUSINESS_SETTINGS_CACHE_KEY, business);
+	return business;
 }
 
 export async function getAdminSettingsSnapshot(): Promise<AdminSettingsSnapshot> {
@@ -390,6 +427,7 @@ export async function saveBusinessSettings(input: Partial<BusinessSettings>): Pr
 			'Business reporting timezone used for analytics and operational consistency.'
 		)
 	]);
+	serverCache.invalidate(BUSINESS_SETTINGS_CACHE_KEY);
 }
 
 export async function savePaymentSettings(input: {
@@ -540,6 +578,7 @@ export async function saveNotificationSettings(input: {
 			'Broadcast delay between batch sends in milliseconds.'
 		)
 	]);
+	serverCache.invalidate(LOW_STOCK_THRESHOLD_CACHE_KEY);
 }
 
 export async function getOperationalAlertRecipients(): Promise<string[]> {
@@ -548,18 +587,36 @@ export async function getOperationalAlertRecipients(): Promise<string[]> {
 }
 
 export async function getLowStockThresholdSetting(): Promise<number> {
-	const snapshot = await getAdminSettingsSnapshot();
-	return snapshot.notifications.lowStockThreshold;
+	const cached = serverCache.get<number>(
+		LOW_STOCK_THRESHOLD_CACHE_KEY,
+		LOW_STOCK_THRESHOLD_CACHE_TTL_MS
+	);
+	if (cached !== null) return cached;
+	const values = await getSettingsMap([SETTINGS_KEYS.lowStockThreshold]);
+	const threshold = parseNumberSetting(
+		values.get(SETTINGS_KEYS.lowStockThreshold) || null,
+		DEFAULTS.lowStockThreshold,
+		{ min: 1, max: 999 }
+	);
+	serverCache.set(LOW_STOCK_THRESHOLD_CACHE_KEY, threshold);
+	return threshold;
 }
 
 export async function getHighSpenderMinTotalSetting(): Promise<number> {
-	const snapshot = await getAdminSettingsSnapshot();
-	return snapshot.notifications.highSpenderMinTotal;
+	const values = await getSettingsMap([SETTINGS_KEYS.highSpenderMinTotal]);
+	return parseNumberSetting(
+		values.get(SETTINGS_KEYS.highSpenderMinTotal) || null,
+		DEFAULTS.highSpenderMinTotal,
+		{ min: 1, max: 100_000_000 }
+	);
 }
 
 export async function getSitePopupsEnabledSetting(): Promise<boolean> {
 	const values = await getSettingsMap([SETTINGS_KEYS.sitePopupsEnabled]);
-	return parseBooleanSetting(values.get(SETTINGS_KEYS.sitePopupsEnabled) || null, DEFAULTS.sitePopupsEnabled);
+	return parseBooleanSetting(
+		values.get(SETTINGS_KEYS.sitePopupsEnabled) || null,
+		DEFAULTS.sitePopupsEnabled
+	);
 }
 
 export async function countHighSpenders(minTotal: number): Promise<number> {
@@ -576,8 +633,8 @@ export async function countHighSpenders(minTotal: number): Promise<number> {
 }
 
 export async function getBusinessTimezoneSetting(): Promise<string> {
-	const snapshot = await getAdminSettingsSnapshot();
-	return snapshot.business.businessTimezone || DEFAULTS.businessTimezone;
+	const business = await getBusinessSettingsSnapshot();
+	return business.businessTimezone || DEFAULTS.businessTimezone;
 }
 
 export function getSmtpHealthSnapshot(): SmtpHealthSnapshot {
@@ -609,23 +666,50 @@ export function getSmtpHealthSnapshot(): SmtpHealthSnapshot {
 }
 
 export async function getMinimumOrderValueSetting(): Promise<number> {
-	const snapshot = await getAdminSettingsSnapshot();
-	return snapshot.payment.minOrderValue;
+	const values = await getSettingsMap([SETTINGS_KEYS.paymentMinOrderValue]);
+	return parseNumberSetting(
+		values.get(SETTINGS_KEYS.paymentMinOrderValue) || null,
+		DEFAULTS.paymentMinOrderValue,
+		{ min: 0, max: 10_000_000 }
+	);
 }
 
 export async function getStoreControlsSnapshot(): Promise<StoreControlSettings> {
-	const snapshot = await getAdminSettingsSnapshot();
-	return snapshot.storeControls;
+	const values = await getSettingsMap([
+		SETTINGS_KEYS.storeMaintenanceMode,
+		SETTINGS_KEYS.storeCheckoutEnabled,
+		SETTINGS_KEYS.storeAutoDeliveryPaused
+	]);
+	return {
+		maintenanceMode: parseBooleanSetting(
+			values.get(SETTINGS_KEYS.storeMaintenanceMode) || null,
+			DEFAULTS.storeMaintenanceMode
+		),
+		checkoutEnabled: parseBooleanSetting(
+			values.get(SETTINGS_KEYS.storeCheckoutEnabled) || null,
+			DEFAULTS.storeCheckoutEnabled
+		),
+		autoDeliveryPaused: parseBooleanSetting(
+			values.get(SETTINGS_KEYS.storeAutoDeliveryPaused) || null,
+			DEFAULTS.storeAutoDeliveryPaused
+		)
+	};
 }
 
 export async function isCheckoutEnabledSetting(): Promise<boolean> {
-	const snapshot = await getStoreControlsSnapshot();
-	return snapshot.checkoutEnabled;
+	const values = await getSettingsMap([SETTINGS_KEYS.storeCheckoutEnabled]);
+	return parseBooleanSetting(
+		values.get(SETTINGS_KEYS.storeCheckoutEnabled) || null,
+		DEFAULTS.storeCheckoutEnabled
+	);
 }
 
 export async function isAutoDeliveryPausedSetting(): Promise<boolean> {
-	const snapshot = await getStoreControlsSnapshot();
-	return snapshot.autoDeliveryPaused;
+	const values = await getSettingsMap([SETTINGS_KEYS.storeAutoDeliveryPaused]);
+	return parseBooleanSetting(
+		values.get(SETTINGS_KEYS.storeAutoDeliveryPaused) || null,
+		DEFAULTS.storeAutoDeliveryPaused
+	);
 }
 
 export async function getLowStockAlertState(): Promise<{

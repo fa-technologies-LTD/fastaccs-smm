@@ -48,10 +48,7 @@ export async function sendFirstStoreCreditEmailIfNeeded(params: {
 			select: {
 				email: true,
 				fullName: true,
-				isActive: true,
-				wallet: {
-					select: { balance: true }
-				}
+				isActive: true
 			}
 		});
 		if (!user?.email || !user.isActive) return null;
@@ -71,8 +68,7 @@ export async function sendFirstStoreCreditEmailIfNeeded(params: {
 		return {
 			notificationId: notification.id,
 			email: user.email,
-			firstName: getFirstName(user.fullName, user.email),
-			availableCredit: Number(user.wallet?.balance || 0)
+			firstName: getFirstName(user.fullName, user.email)
 		};
 	});
 

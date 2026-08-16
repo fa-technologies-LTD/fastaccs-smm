@@ -21,6 +21,7 @@ import {
 	settleSuccessfulPayment
 } from '$lib/services/payment-settlement';
 import { releaseExpiredOrderReservations } from '$lib/services/order-reservations';
+import { releaseExpiredExactPreviewReservations } from '$lib/services/exact-preview';
 import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 import { createPaymentTraceId, logPaymentEvent } from '$lib/server/payment-observability';
 
@@ -117,6 +118,12 @@ export async function reconcilePendingPayments(
 		source: dryRun ? 'dry_run' : 'scheduled_or_manual',
 		status: 'STARTED'
 	});
+	if (!dryRun) {
+		await Promise.all([
+			releaseExpiredOrderReservations(),
+			releaseExpiredExactPreviewReservations()
+		]);
+	}
 	if (!hasMonnifyConfig()) {
 		summary.skipped = limit;
 		logPaymentEvent('warn', 'reconcile.skipped', {
@@ -130,10 +137,6 @@ export async function reconcilePendingPayments(
 	const now = Date.now();
 	const staleThreshold = now - staleMinutes * 60 * 1000;
 	const expiryThreshold = getPendingPaymentExpiryThreshold(expireMinutes);
-	if (!dryRun) {
-		await releaseExpiredOrderReservations();
-	}
-
 	const candidates = await prisma.order.findMany({
 		where: {
 			paymentMethod: 'monnify',

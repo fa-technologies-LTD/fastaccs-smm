@@ -1077,8 +1077,8 @@
 								<button
 									onclick={addToCart}
 									disabled={addingToCart}
-									class="mt-4 hidden w-full rounded-full py-3.5 text-sm font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 lg:block"
-									style="background: var(--btn-primary-gradient);"
+									class="mt-4 hidden w-full rounded-lg py-3.5 text-sm font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 lg:block"
+									style="background: var(--primary); color: #04140c;"
 								>
 									{#if addingToCart}
 										Adding to Cart...
@@ -1199,8 +1199,8 @@
 					<button
 						onclick={addToCart}
 						disabled={addingToCart}
-						class="rounded-full px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
-						style="background: var(--btn-primary-gradient);"
+						class="rounded-lg px-4 py-2.5 text-sm font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
+						style="background: var(--primary); color: #04140c;"
 					>
 						{#if addingToCart}
 							Adding...

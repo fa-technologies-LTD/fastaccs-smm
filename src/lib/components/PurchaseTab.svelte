@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import {
 		Package,
 		CheckCircle,
@@ -17,9 +18,58 @@
 	} from '$lib/helpers/credential-contract';
 	import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
 
-	let { initialPurchases, whatsappNumber = '' }: { initialPurchases: any[]; whatsappNumber?: string } =
-		$props();
+	let {
+		initialPurchases,
+		initialNextCursor = null,
+		initialLoaded = false,
+		whatsappNumber = ''
+	}: {
+		initialPurchases: any[];
+		initialNextCursor?: string | null;
+		initialLoaded?: boolean;
+		whatsappNumber?: string;
+	} = $props();
 	let purchases = $state<any[]>(initialPurchases);
+	let nextCursor = $state<string | null>(initialNextCursor);
+	let purchasesLoaded = $state(initialLoaded);
+	let purchasesLoading = $state(false);
+	let purchasesError = $state('');
+
+	function purchaseKey(purchase: any): string {
+		return `${purchase.orderId || ''}:${purchase.categoryName || ''}:${purchase.platform || ''}`;
+	}
+
+	async function loadPurchases(loadMore = false): Promise<void> {
+		if (purchasesLoading || (loadMore && !nextCursor)) return;
+		purchasesLoading = true;
+		purchasesError = '';
+		try {
+			const cursorParam = loadMore && nextCursor ? `?cursor=${encodeURIComponent(nextCursor)}` : '';
+			const response = await fetch(`/api/dashboard/purchases${cursorParam}`);
+			const result = await response.json().catch(() => ({}));
+			if (!response.ok || !result?.success) {
+				throw new Error(result?.error || 'Could not load purchases.');
+			}
+			const incoming = Array.isArray(result.data?.purchases) ? result.data.purchases : [];
+			if (loadMore) {
+				const merged = new Map(purchases.map((purchase) => [purchaseKey(purchase), purchase]));
+				for (const purchase of incoming) merged.set(purchaseKey(purchase), purchase);
+				purchases = Array.from(merged.values());
+			} else {
+				purchases = incoming;
+			}
+			nextCursor = result.data?.nextCursor || null;
+			purchasesLoaded = true;
+		} catch (error) {
+			purchasesError = error instanceof Error ? error.message : 'Could not load purchases.';
+		} finally {
+			purchasesLoading = false;
+		}
+	}
+
+	onMount(() => {
+		if (!purchasesLoaded) void loadPurchases();
+	});
 
 	function copyAccount(account: any, index: number) {
 		const details = buildCredentialPlainText(account, {
@@ -109,12 +159,13 @@
 			<div class="flex-1">
 				<div class="flex items-center gap-2">
 					<p class="text-sm font-semibold" style="color: var(--text);">
-						Your credentials are secure
+						Access to your credentials is limited
 					</p>
 					<Lock class="h-3.5 w-3.5" style="color: var(--primary);" />
 				</div>
 				<p class="mt-1 text-xs" style="color: var(--text-muted);">
-					All account details are encrypted and delivered only to you. Need login guidance? See the
+					Your details appear in your dashboard. Vetted support admins may also access them when
+					an order needs troubleshooting. Need login guidance? See the
 					<a href="/support#faq" class="font-medium underline" style="color: var(--link);">
 						quick account care guide
 					</a>
@@ -124,7 +175,23 @@
 		</div>
 	</div>
 
-	{#if purchases.length === 0}
+	{#if purchasesLoading && !purchasesLoaded}
+		<div class="p-12 text-center">
+			<p class="text-sm" style="color: var(--text-muted);">Loading your purchases…</p>
+		</div>
+	{:else if purchasesError && !purchasesLoaded}
+		<div class="p-12 text-center">
+			<p class="text-sm" style="color: var(--text-muted);">{purchasesError}</p>
+			<button
+				type="button"
+				onclick={() => loadPurchases()}
+				class="mt-3 rounded-full px-4 py-2 text-xs font-semibold"
+				style="background: var(--primary); color: #04140c;"
+			>
+				Try again
+			</button>
+		</div>
+	{:else if purchases.length === 0}
 		<div class="p-12 text-center">
 			<Package class="mx-auto mb-4 h-12 w-12" style="color: var(--text-dim);" />
 			<h3
@@ -376,6 +443,22 @@
 				</div>
 			{/each}
 		</div>
+		{#if nextCursor || purchasesError}
+			<div class="border-t border-[var(--border)] p-4 text-center">
+				{#if purchasesError}
+					<p class="mb-2 text-xs" style="color: var(--status-danger);">{purchasesError}</p>
+				{/if}
+				<button
+					type="button"
+					onclick={() => loadPurchases(true)}
+					disabled={purchasesLoading || !nextCursor}
+					class="rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-60"
+					style="background: var(--surface-2); border: 1px solid var(--border-2); color: var(--text);"
+				>
+					{purchasesLoading ? 'Loading…' : 'Load older purchases'}
+				</button>
+			</div>
+		{/if}
 	{/if}
 </div>
 
