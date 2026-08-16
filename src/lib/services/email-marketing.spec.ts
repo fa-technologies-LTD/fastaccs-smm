@@ -21,6 +21,16 @@ const prismaMock = vi.hoisted(() => ({
 	}
 }));
 
+vi.mock('$env/dynamic/private', () => ({
+	env: {
+		SMTP_HOST: 'smtp.test',
+		SMTP_PORT: '587',
+		SMTP_USER: 'mailer@test.invalid',
+		SMTP_PASSWORD: 'test-password',
+		SMTP_FROM_EMAIL: 'mailer@test.invalid'
+	}
+}));
+
 vi.mock('nodemailer', () => ({
 	default: {
 		createTransport: () => ({
