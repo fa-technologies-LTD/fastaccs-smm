@@ -27,6 +27,7 @@ vi.mock('./store-credit', () => ({ creditStoreCredit: vi.fn(), SC_CREDIT_REFUND:
 vi.mock('./phone-telemetry', () => ({
 	recordPhoneAttempt: () => Promise.resolve(null),
 	recordAttemptOtpReceived: recordOtpMock,
+	recordAttemptOtpTimeout: () => Promise.resolve(),
 	recordAttemptRejection: () => Promise.resolve(),
 	classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' })
 }));
@@ -71,7 +72,7 @@ describe('reconcilePhoneShadows', () => {
 		pollSmsMock.mockResolvedValue({ status: 'received', otp: '123456', message: '123456' });
 		const r = await reconcilePhoneShadows();
 		expect(r).toEqual({ reconciled: 1, leaked: 1 });
-		expect(recordOtpMock).toHaveBeenCalledWith('oi-1', '1555|USA|Whatsapp24', null); // auditable COGS
+		expect(recordOtpMock).toHaveBeenCalledWith('oi-1', '1555|USA|Whatsapp24', null, 66); // auditable COGS
 		expect(alertMock).toHaveBeenCalled();
 		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
 			expect.objectContaining({ data: CLEARED })

@@ -26,6 +26,7 @@
 		const n = serviceName.toLowerCase();
 		if (n.includes('whatsapp')) return 'whatsapp';
 		if (n.includes('telegram')) return 'telegram';
+		if (n.includes('signal')) return 'signal';
 		if (n.includes('instagram')) return 'instagram';
 		if (n.includes('tiktok')) return 'tiktok';
 		if (n.includes('discord')) return 'discord';
@@ -62,5 +63,11 @@
 		<path d={icon.d} />
 	</svg>
 {:else}
-	<span style="font-size:{size}px">📱</span>
+	<span
+		class="inline-flex items-center justify-center rounded-full font-bold uppercase"
+		style={`width:${size}px;height:${size}px;font-size:${Math.max(10, Math.round(size * 0.48))}px;background:rgba(56,189,248,0.16);color:#7dd3fc;border:1px solid rgba(56,189,248,0.28);`}
+		aria-label={service}
+	>
+		{service.trim().charAt(0) || '?'}
+	</span>
 {/if}

@@ -1,192 +1,23 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { randomUUID } from 'crypto';
-import { prisma } from '$lib/prisma';
-import {
-	DEFAULT_LOGIN_GUIDE_LABEL,
-	DEFAULT_LOGIN_GUIDE_URL,
-	getTierDeliveryConfig
-} from '$lib/helpers/tier-delivery-config';
-import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
-import { getAffiliateDashboardState } from '$lib/services/affiliate';
-import { getStoreCreditBuckets } from '$lib/services/store-credit';
-import { reconcilePendingPayments } from '$lib/services/payment-reconciliation';
-import { getAdminSettingsSnapshot } from '$lib/services/admin-settings';
-import {
-	CONFIRMED_PAYMENT_STATUSES,
-	getBuyerVisibleAccounts
-} from '$lib/helpers/buyer-order-visibility';
+import { getDashboardInitialData } from '$lib/server/dashboard-load';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	try {
 		const user = locals.user;
-		const purchasedAccountStatuses = [...getAllocatedLikeAccountStatuses(), 'delivered'];
 
 		if (!user) {
 			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
-		await reconcilePendingPayments({ limit: 25, staleMinutes: 20, expireMinutes: 20 }).catch(
-			(error) => {
-				console.warn('[dashboard] pending payment reconciliation skipped:', error);
-			}
-		);
-
-		// Fetch all dashboard data in parallel with optimized queries
-		const [orders, affiliateData, purchases, settings] = await Promise.all([
-			// Orders - only fetch necessary fields
-			prisma.order.findMany({
-				where: {
-					userId: user.id
-				},
-				select: {
-					id: true,
-					orderNumber: true,
-					totalAmount: true,
-					status: true,
-					paymentStatus: true,
-					paymentReference: true,
-					deliveryStatus: true,
-					createdAt: true,
-					orderItems: {
-						select: {
-							id: true,
-							categoryId: true,
-							productName: true,
-							quantity: true,
-							unitPrice: true,
-							totalPrice: true,
-							allocationStatus: true,
-							boostTargetUrl: true,
-							boostQuantity: true,
-							boostFulfillmentStatus: true
-						}
-					}
-				},
-				orderBy: { createdAt: 'desc' },
-				take: 50
-			}),
-
-			// Affiliate dashboard state
-			getAffiliateDashboardState(user.id),
-
-			// Purchases (orders with allocated or delivered accounts)
-			prisma.order.findMany({
-				where: {
-					userId: user.id,
-					AND: [
-						{
-							status: { in: ['paid', 'processing', 'completed'] },
-							paymentStatus: { in: [...CONFIRMED_PAYMENT_STATUSES] }
-						},
-						{
-							OR: [
-								{
-									orderItems: {
-										some: {
-											accounts: {
-												some: {
-													status: { in: purchasedAccountStatuses }
-												}
-											}
-										}
-									}
-								},
-								{
-									deliveryMethod: 'whatsapp'
-								}
-							]
-						}
-					]
-				},
-				select: {
-					id: true,
-					orderNumber: true,
-					status: true,
-					paymentStatus: true,
-					createdAt: true,
-					deliveredAt: true,
-					orderItems: {
-						select: {
-							id: true,
-							productName: true,
-							productCategory: true,
-							quantity: true,
-							category: {
-								select: {
-									name: true,
-									metadata: true
-								}
-							},
-							accounts: {
-								where: {
-									status: { in: purchasedAccountStatuses }
-								},
-								select: {
-									id: true,
-									status: true,
-									platform: true,
-									linkUrl: true,
-									username: true,
-									password: true,
-									email: true,
-									emailPassword: true,
-									twoFa: true,
-									credentialExtras: true,
-									followers: true,
-									following: true,
-									postsCount: true,
-									deliveryNotes: true
-								}
-							}
-						}
-					}
-				},
-				orderBy: { createdAt: 'desc' }
-			}),
-			getAdminSettingsSnapshot().catch(() => null)
-		]);
-
-		// Transform purchases data — boosting orders never have allocated accounts; they
-		// surface in the Orders tab instead, so exclude them here.
-		const purchasesFormatted = purchases.flatMap((order) =>
-			order.orderItems
-				.filter((item) => item.productCategory !== 'boosting_service')
-				.map((item) => {
-					const deliveryConfig = getTierDeliveryConfig(item.category.metadata);
-					return {
-						orderId: order.id,
-						orderNumber: order.orderNumber,
-						orderDate: order.createdAt,
-						deliveredAt: order.deliveredAt,
-						categoryName: item.category.name,
-						platform: item.productCategory || item.category.name,
-						quantity: item.quantity,
-						accounts: getBuyerVisibleAccounts(order, item),
-						deliveryMode: deliveryConfig.mode,
-						loginGuideUrl: deliveryConfig.loginGuideUrl || DEFAULT_LOGIN_GUIDE_URL,
-						loginGuideLabel: deliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL
-					};
-				})
-		);
-
-		const storeCredit = await getStoreCreditBuckets(user.id).catch(() => ({
-			earnedAvailable: 0,
-			refundAvailable: 0,
-			totalAvailable: 0
-		}));
+		// Dashboard reads must not run global payment repair. That work remains on the
+		// scheduled reconciliation job, so one buyer never waits on unrelated orders.
+		const data = await getDashboardInitialData(user.id);
 
 		return json({
 			success: true,
-			data: {
-				orders,
-				affiliateData,
-				storeCredit,
-				purchases: purchasesFormatted,
-				support: {
-					whatsappNumber: settings?.business.whatsappNumber || ''
-				}
-			}
+			data
 		});
 	} catch (error) {
 		const traceId = randomUUID();

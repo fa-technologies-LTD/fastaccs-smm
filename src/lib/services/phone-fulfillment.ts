@@ -1,12 +1,13 @@
 import { prisma } from '$lib/prisma';
+import { randomUUID } from 'node:crypto';
 import * as hubman from './hubman';
-import { HubmanError } from './hubman';
 import { getPhoneTierConfig, type PhoneTierConfig } from '$lib/helpers/phone-tier-config';
 import { getPhonePricingConfig, computeProcurementCeilingCents } from './phone-pricing';
 import { acquireRateToken, pvapinsRateSpec, PVAPINS_GET_NUMBER_BUCKET } from './rate-limiter';
 import {
 	recordPhoneAttempt,
 	recordAttemptOtpReceived,
+	recordAttemptOtpTimeout,
 	recordAttemptRejection,
 	classifyRentFailure
 } from './phone-telemetry';
@@ -30,11 +31,15 @@ import {
 // batch runs out of budget without a hit, the customer's "try another" continues the climb.
 const MAX_RENT_ATTEMPTS = 12;
 const RENT_SWEEP_BUDGET_MS = 9_000;
+// A rent call is expected to finish inside a 30s serverless request. Five minutes leaves ample
+// headroom for a slow provider/network while still making an abandoned claim recoverable.
+const RENT_LEASE_MS = 5 * 60_000;
+const OPERATION_LEASE_MS = 2 * 60_000;
 
 /**
  * Fulfillment for the automated Numbers service.
  *
- * Flow: on paid order → rent a hub-man activation number → poll for the OTP →
+ * Flow: on paid order → rent from the best eligible provider → poll for the OTP →
  * on no-SMS (or any rent failure) auto-refund the customer to store credit.
  *
  * Concurrency: webhook, reconcile cron, and client can all trigger fulfillment.
@@ -77,12 +82,26 @@ export interface PhoneOrderItemContext {
 	orderNumber: string;
 	saleAmountNgn: number;
 	tier: PhoneTierConfig;
+	orderStatus: string;
+	paymentStatus: string;
+	deliveryStatus: string;
 }
 
 async function loadPhoneOrderContext(orderId: string): Promise<PhoneOrderItemContext | null> {
 	const item = await prisma.orderItem.findFirst({
 		where: { orderId },
-		include: { category: true, order: { select: { userId: true, orderNumber: true } } }
+		include: {
+			category: true,
+			order: {
+				select: {
+					userId: true,
+					orderNumber: true,
+					status: true,
+					paymentStatus: true,
+					deliveryStatus: true
+				}
+			}
+		}
 	});
 	if (!item) return null;
 	const tier = getPhoneTierConfig(item.category?.metadata);
@@ -93,13 +112,77 @@ async function loadPhoneOrderContext(orderId: string): Promise<PhoneOrderItemCon
 		userId: item.order.userId,
 		orderNumber: item.order.orderNumber,
 		saleAmountNgn: Number(item.totalPrice),
-		tier
+		tier,
+		orderStatus: item.order.status,
+		paymentStatus: item.order.paymentStatus,
+		deliveryStatus: item.order.deliveryStatus
 	};
+}
+
+const CONFIRMED_PHONE_PAYMENTS = new Set(['paid', 'success', 'overpaid']);
+const TERMINAL_ORDER_STATES = new Set(['refunded', 'cancelled', 'canceled', 'completed']);
+
+function canFulfillOrder(ctx: PhoneOrderItemContext): boolean {
+	return (
+		CONFIRMED_PHONE_PAYMENTS.has(ctx.paymentStatus.toLowerCase()) &&
+		!TERMINAL_ORDER_STATES.has(ctx.orderStatus.toLowerCase()) &&
+		ctx.deliveryStatus.toLowerCase() !== 'refunded'
+	);
 }
 
 /** True if this paid order should be fulfilled as a Numbers (phone) order. */
 export async function isPhoneOrder(orderId: string): Promise<boolean> {
 	return (await loadPhoneOrderContext(orderId)) !== null;
+}
+
+/**
+ * Commit a gateway-confirmed Numbers payment and its durable rental intent together.
+ * Supplier work deliberately happens later, but there must never be a committed paid
+ * phone order with no PhoneRental for the page/cron to continue.
+ */
+export async function confirmPhonePaymentAndInitializeRental(input: {
+	orderId: string;
+	paymentReference?: string | null;
+	paymentChannel?: string | null;
+	paidAt?: Date | null;
+}): Promise<boolean> {
+	const ctx = await loadPhoneOrderContext(input.orderId);
+	if (!ctx) return false;
+
+	return prisma.$transaction(async (tx) => {
+		const advanced = await tx.order.updateMany({
+			where: {
+				id: input.orderId,
+				status: { notIn: ['refunded', 'cancelled', 'canceled', 'completed'] },
+				deliveryStatus: { not: 'refunded' }
+			},
+			data: {
+				status: 'paid',
+				paymentStatus: 'paid',
+				deliveryStatus: 'processing',
+				paymentReference: input.paymentReference || undefined,
+				paymentChannel: input.paymentChannel || undefined,
+				paidAt: input.paidAt || new Date(),
+				paymentCheckoutUrl: null
+			}
+		});
+		if (advanced.count === 0) return false;
+
+		await tx.phoneRental.upsert({
+			where: { orderItemId: ctx.orderItemId },
+			update: {},
+			create: {
+				orderItemId: ctx.orderItemId,
+				serviceId: ctx.tier.serviceId,
+				serviceName: ctx.tier.serviceName,
+				countryId: ctx.tier.countryId,
+				countryName: ctx.tier.countryName,
+				saleAmountNgn: ctx.saleAmountNgn,
+				status: 'pending'
+			}
+		});
+		return true;
+	});
 }
 
 async function orderIdForItem(orderItemId: string): Promise<string | null> {
@@ -110,20 +193,69 @@ async function orderIdForItem(orderItemId: string): Promise<string | null> {
 	return oi?.orderId ?? null;
 }
 
+interface RentalIdentity {
+	generation: number;
+	provider: string;
+	providerRef: string | null;
+	hubOrderUuid: string | null;
+}
+
+function rentalIdentityWhere(orderItemId: string, rental: RentalIdentity) {
+	return {
+		orderItemId,
+		generation: rental.generation,
+		provider: rental.provider,
+		providerRef: rental.providerRef,
+		hubOrderUuid: rental.hubOrderUuid
+	};
+}
+
+async function currentFulfillmentResult(orderItemId: string): Promise<PhoneFulfillmentResult> {
+	const current = await prisma.phoneRental.findUnique({ where: { orderItemId } });
+	if (current?.status === 'received') {
+		return {
+			status: 'received',
+			phoneNumber: current.phoneNumber ?? undefined,
+			message: 'Code received'
+		};
+	}
+	if (current?.status === 'failed' && !current.refundedAt) {
+		return { status: 'awaiting_sms', message: 'Finishing your refund…' };
+	}
+	if (current && TERMINAL_STATUSES.has(current.status)) {
+		return { status: 'refunded', message: 'Order already resolved' };
+	}
+	return {
+		status: 'awaiting_sms',
+		phoneNumber: current?.phoneNumber ?? undefined,
+		message:
+			current?.status === 'pending' || current?.status === 'renting'
+				? 'Securing your number…'
+				: 'Your number is ready — waiting for the code'
+	};
+}
+
 /** Persist a received OTP and complete the order. Idempotent (claims awaiting_sms).
  * Takes a provider-normalized code (from any source), not hub-man's raw SMS shape. */
 async function markRentalReceived(
 	orderItemId: string,
-	received: { otp: string; message: string; from?: string }
+	received: { otp: string; message: string; from?: string },
+	expected: RentalIdentity & { status: string; operationToken?: string | null }
 ): Promise<boolean> {
 	const claim = await prisma.phoneRental.updateMany({
-		where: { orderItemId, status: 'awaiting_sms' },
+		where: {
+			...rentalIdentityWhere(orderItemId, expected),
+			status: expected.status,
+			...(expected.operationToken !== undefined ? { operationToken: expected.operationToken } : {})
+		},
 		data: {
 			status: 'received',
 			otp: received.otp,
 			smsMessage: received.message,
 			senderName: received.from ?? null,
-			receivedAt: new Date()
+			receivedAt: new Date(),
+			operationToken: null,
+			operationLeaseExpiresAt: null
 		}
 	});
 	if (claim.count > 0) {
@@ -133,26 +265,48 @@ async function markRentalReceived(
 			try {
 				const r = await prisma.phoneRental.findUnique({
 					where: { orderItemId },
-					select: { provider: true, providerRef: true, hubOrderUuid: true, otpRequestedAt: true, rentedAt: true, createdAt: true }
+					select: {
+						provider: true,
+						providerRef: true,
+						hubOrderUuid: true,
+						costCents: true,
+						otpRequestedAt: true,
+						rentedAt: true,
+						createdAt: true
+					}
 				});
 				if (!r) return;
 				const ref = r.provider === 'hubman' ? r.hubOrderUuid : r.providerRef;
 				const from = (r.otpRequestedAt ?? r.rentedAt ?? r.createdAt)?.getTime();
 				const latencySec = from ? (Date.now() - from) / 1000 : null;
-				await recordAttemptOtpReceived(orderItemId, ref, latencySec);
+				await recordAttemptOtpReceived(
+					orderItemId,
+					ref,
+					latencySec,
+					r.provider === 'pvapins' ? r.costCents : undefined
+				);
 			} catch {
 				/* observational only */
 			}
 		})();
 		const orderId = await orderIdForItem(orderItemId);
 		if (orderId) {
-			const order = await prisma.order
-				.update({
-					where: { id: orderId },
-					data: { status: 'completed', deliveryStatus: 'delivered', deliveredAt: new Date() },
-					select: { userId: true }
+			const completed = await prisma.order
+				.updateMany({
+					where: {
+						id: orderId,
+						status: { notIn: ['refunded', 'cancelled', 'canceled'] },
+						paymentStatus: { notIn: ['refunded', 'cancelled', 'canceled'] },
+						deliveryStatus: { not: 'refunded' }
+					},
+					data: { status: 'completed', deliveryStatus: 'delivered', deliveredAt: new Date() }
 				})
-				.catch(() => null);
+				.catch(() => ({ count: 0 }));
+			const order = completed.count
+				? await prisma.order
+						.findUnique({ where: { id: orderId }, select: { userId: true } })
+						.catch(() => null)
+				: null;
 			// Bell: the customer's code just landed — the single most useful notification we send.
 			if (order?.userId) {
 				await createUserNotification({
@@ -176,6 +330,7 @@ async function markRentalReceived(
 export async function initPhoneOrder(orderId: string): Promise<{ ok: boolean }> {
 	const ctx = await loadPhoneOrderContext(orderId);
 	if (!ctx) return { ok: false };
+	if (!canFulfillOrder(ctx)) return { ok: false };
 
 	// Never resurrect an already-resolved rental — if it was refunded/cancelled/received,
 	// leave the order as-is (the reconcile cron can otherwise re-run this and flip a
@@ -201,11 +356,16 @@ export async function initPhoneOrder(orderId: string): Promise<{ ok: boolean }> 
 			status: 'pending'
 		}
 	});
-	await prisma.order.update({
-		where: { id: orderId },
+	const advanced = await prisma.order.updateMany({
+		where: {
+			id: orderId,
+			status: { notIn: ['refunded', 'cancelled', 'canceled', 'completed'] },
+			paymentStatus: { in: [...CONFIRMED_PHONE_PAYMENTS] },
+			deliveryStatus: { not: 'refunded' }
+		},
 		data: { status: 'paid', paymentStatus: 'paid', deliveryStatus: 'processing' }
 	});
-	return { ok: true };
+	return { ok: advanced.count > 0 };
 }
 
 export interface PhoneFulfillmentResult {
@@ -225,6 +385,9 @@ export async function fulfillPhoneOrder(
 ): Promise<PhoneFulfillmentResult> {
 	const ctx = await loadPhoneOrderContext(orderId);
 	if (!ctx) return { status: 'error', message: 'Not a phone order' };
+	if (!canFulfillOrder(ctx)) {
+		return { status: 'refunded', message: 'This order is already resolved.' };
+	}
 
 	const pricing = await getPhonePricingConfig();
 
@@ -243,27 +406,43 @@ export async function fulfillPhoneOrder(
 		}
 	});
 
-	// Claim the rent: only one caller can move pending → renting.
+	// Claim THIS order item's next generation. The token/lease is scoped to one rental row, so two
+	// different buyers can rent in parallel; only duplicate drivers for this same item are excluded.
+	const rentLeaseToken = randomUUID();
+	const rentingAt = new Date();
 	const claim = await prisma.phoneRental.updateMany({
 		where: { orderItemId: ctx.orderItemId, status: 'pending' },
-		data: { status: 'renting' }
+		data: {
+			status: 'renting',
+			generation: { increment: 1 },
+			rentLeaseToken,
+			rentingAt,
+			rentLeaseExpiresAt: new Date(rentingAt.getTime() + RENT_LEASE_MS),
+			rentCandidateProvider: null,
+			rentCandidateServiceRef: null,
+			rentCallStartedAt: null,
+			failureReason: null
+		}
 	});
 
 	if (claim.count === 0) {
-		// Someone else already advanced it — report current state.
-		const existing = await prisma.phoneRental.findUnique({
-			where: { orderItemId: ctx.orderItemId }
-		});
-		if (existing?.status === 'received')
-			return { status: 'received', phoneNumber: existing.phoneNumber ?? undefined, message: 'Code received' };
-		if (existing && TERMINAL_STATUSES.has(existing.status))
-			return { status: 'refunded', message: 'Order already resolved' };
-		return {
-			status: 'awaiting_sms',
-			phoneNumber: existing?.phoneNumber ?? undefined,
-			message: 'Your number is ready — waiting for the code'
-		};
+		return currentFulfillmentResult(ctx.orderItemId);
 	}
+
+	const owned = await prisma.phoneRental.findUnique({
+		where: { orderItemId: ctx.orderItemId },
+		select: { generation: true, rentLeaseToken: true }
+	});
+	if (!owned) {
+		return currentFulfillmentResult(ctx.orderItemId);
+	}
+	const generation = owned.generation;
+	const rentOwnerWhere = {
+		orderItemId: ctx.orderItemId,
+		status: 'renting',
+		generation,
+		rentLeaseToken
+	};
 
 	// We own the rent. HARD PROCUREMENT CEILING: the most we'll ever spend on a supplier for this
 	// order while still keeping the minimum fulfilment profit (₦500). NO intentional loss, NO rescue
@@ -327,9 +506,7 @@ export async function fulfillPhoneOrder(
 	const affordable = pool.filter((c) => c.costCents > 0 && c.costCents <= effectiveCeilingCents);
 	// This pass attempts only the not-yet-tried affordable candidates, in the ranker's order, bounded
 	// by MAX_RENT_ATTEMPTS so we never hammer suppliers — the cap limits a BATCH, not "availability".
-	const ladder = affordable
-		.filter((c) => !excludeKeys.has(candidateKey(c)))
-		.slice(0, MAX_RENT_ATTEMPTS); // preserve the ranked order — do not override with cost-only sort
+	const ladder = affordable.filter((c) => !excludeKeys.has(candidateKey(c)));
 
 	let rented: {
 		provider: NumberProviderId;
@@ -342,7 +519,9 @@ export async function fulfillPhoneOrder(
 	// Did we skip any pvapins candidate purely because the GLOBAL rate limiter had no token? That's
 	// "supplier capacity momentarily exhausted", NOT out of stock — it must never trigger a refund.
 	let rateLimited = false;
+	let ownershipLost = false;
 	let attemptNumber = 0;
+	let rentAttempts = 0;
 	// Candidates we genuinely called rent() on this pass (OOS or errored). Rate-limit SKIPS are NOT
 	// added — those weren't tried, so they stay eligible for the next pass. Persisted on a keep-
 	// securing so the next pass skips past them and reaches the next batch (13–24 …).
@@ -357,12 +536,17 @@ export async function fulfillPhoneOrder(
 			break;
 		}
 		attemptNumber += 1;
+		if (rentAttempts >= MAX_RENT_ATTEMPTS) break;
 		// pvapins get_number is globally rate-limited (~5/min). Take a shared token before calling it;
 		// if none is free, skip this candidate WITHOUT touching its stock/reliability signal.
-		if (candidate.provider === 'pvapins' && !(await acquireRateToken(PVAPINS_GET_NUMBER_BUCKET, rlSpec))) {
+		if (
+			candidate.provider === 'pvapins' &&
+			!(await acquireRateToken(PVAPINS_GET_NUMBER_BUCKET, rlSpec))
+		) {
 			rateLimited = true;
 			void recordPhoneAttempt({
 				orderItemId: ctx.orderItemId,
+				generation,
 				attemptNumber,
 				provider: candidate.provider,
 				providerServiceRef: candidate.providerServiceRef,
@@ -371,9 +555,30 @@ export async function fulfillPhoneOrder(
 			});
 			continue;
 		}
+		// Temporary rate-limit skips above do not consume the rent-attempt cap. This ensures a ranked
+		// block of throttled pvapins variants can never prevent an available hub-man candidate (or any
+		// future provider) later in the same ladder from being tried.
+		rentAttempts += 1;
 		try {
+			// Renew immediately before the side effect and record which call may be in flight. If a
+			// recovery/refund already took ownership, do not call the supplier at all.
+			const callStartedAt = new Date();
+			const renewed = await prisma.phoneRental.updateMany({
+				where: rentOwnerWhere,
+				data: {
+					rentLeaseExpiresAt: new Date(callStartedAt.getTime() + RENT_LEASE_MS),
+					rentCandidateProvider: candidate.provider,
+					rentCandidateServiceRef: candidate.providerServiceRef,
+					rentCallStartedAt: callStartedAt
+				}
+			});
+			if (renewed.count === 0) {
+				ownershipLost = true;
+				break;
+			}
 			attemptedKeys.add(candidateKey(candidate)); // genuinely tried (not a rate-limit skip)
-			const r = await getProvider(candidate.provider).rent({
+			const candidateProvider = getProvider(candidate.provider);
+			const r = await candidateProvider.rent({
 				serviceId: ctx.tier.serviceId,
 				countryId: ctx.tier.countryId,
 				serviceName: ctx.tier.serviceName,
@@ -392,12 +597,16 @@ export async function fulfillPhoneOrder(
 			};
 			void recordPhoneAttempt({
 				orderItemId: ctx.orderItemId,
+				generation,
 				attemptNumber,
 				provider: candidate.provider,
 				providerServiceRef: candidate.providerServiceRef,
 				providerRef: r.providerRef,
 				expectedCostCents: candidate.costCents,
-				actualCostCents: Number.isFinite(rented.costCents) ? Math.round(rented.costCents) : null,
+				actualCostCents:
+					candidateProvider.billing === 'pay-on-rent' && Number.isFinite(rented.costCents)
+						? Math.round(rented.costCents)
+						: null,
 				phoneNumber: rented.phoneNumber,
 				outcome: 'rented'
 			});
@@ -408,6 +617,7 @@ export async function fulfillPhoneOrder(
 			const cls = classifyRentFailure((error as Error).message);
 			void recordPhoneAttempt({
 				orderItemId: ctx.orderItemId,
+				generation,
 				attemptNumber,
 				provider: candidate.provider,
 				providerServiceRef: candidate.providerServiceRef,
@@ -415,8 +625,24 @@ export async function fulfillPhoneOrder(
 				outcome: cls.outcome,
 				failureCategory: cls.category
 			});
+			// The call finished without returning a number, so there is no unknown upstream hold. Keep
+			// the same generation lease, but clear the in-flight marker before trying the next candidate.
+			const cleared = await prisma.phoneRental.updateMany({
+				where: rentOwnerWhere,
+				data: {
+					rentCandidateProvider: null,
+					rentCandidateServiceRef: null,
+					rentCallStartedAt: null
+				}
+			});
+			if (cleared.count === 0) {
+				ownershipLost = true;
+				break;
+			}
 		}
 	}
+
+	if (ownershipLost) return currentFulfillmentResult(ctx.orderItemId);
 
 	if (!rented) {
 		const windowMs = pricing.activationTimeoutMinutes * 60_000;
@@ -439,19 +665,37 @@ export async function fulfillPhoneOrder(
 							triedSuppliers: Array.from(new Set([...persistedTried, ...attemptedKeys]))
 						}
 					: { status: 'pending' as const };
-			await prisma.phoneRental.updateMany({
-				where: { orderItemId: ctx.orderItemId, status: 'renting' },
-				data: revertData
+			const reverted = await prisma.phoneRental.updateMany({
+				where: rentOwnerWhere,
+				data: {
+					...revertData,
+					rentLeaseToken: null,
+					rentLeaseExpiresAt: null,
+					rentCandidateProvider: null,
+					rentCandidateServiceRef: null,
+					rentCallStartedAt: null
+				}
 			});
+			if (reverted.count === 0) return currentFulfillmentResult(ctx.orderItemId);
 			return { status: 'awaiting_sms', message: 'Securing your number…' };
 		}
 		// Genuinely out of viable options — every affordable candidate has been tried and no temporary
 		// condition remains — or the activation window has closed → refund.
-		await prisma.phoneRental.updateMany({
-			where: { orderItemId: ctx.orderItemId, status: 'renting' },
-			data: { status: 'failed', failureReason: `no candidate: ${lastError}`.slice(0, 200) }
-		});
-		await refundPhoneOrderToStoreCredit(orderId, 'We could not get your number — fully refunded', source);
+		// Make the terminal rental transition and wallet credit ONE transaction. If the database is
+		// briefly unavailable, the row stays `renting` and the lease recovery retries later instead of
+		// leaving a `failed` order whose customer was never actually credited.
+		const refunded = await refundPhoneOrderToStoreCredit(
+			orderId,
+			'We could not get your number — fully refunded',
+			source,
+			{
+				generation,
+				status: 'renting',
+				rentLeaseToken,
+				failureReason: `no candidate: ${lastError}`.slice(0, 200)
+			}
+		);
+		if (!refunded) return currentFulfillmentResult(ctx.orderItemId);
 		return {
 			status: 'refunded',
 			message:
@@ -463,10 +707,11 @@ export async function fulfillPhoneOrder(
 	// persist it, cancel it on the provider to release/reclaim and refund — so a held number is
 	// always either recorded, or cancelled+refunded (never orphaned, never double-charged).
 	let persisted = false;
+	let persistOwnershipLost = false;
 	for (let attempt = 0; attempt < 3 && !persisted; attempt++) {
 		try {
-			await prisma.phoneRental.update({
-				where: { orderItemId: ctx.orderItemId },
+			const write = await prisma.phoneRental.updateMany({
+				where: rentOwnerWhere,
 				data: {
 					provider: rented.provider,
 					providerRef: rented.providerRef,
@@ -476,29 +721,62 @@ export async function fulfillPhoneOrder(
 					maxPriceCents: effectiveCeilingCents,
 					rentedAt: new Date(),
 					expiresAt: rented.expiresAt,
-					status: 'awaiting_sms'
+					status: 'awaiting_sms',
+					rentLeaseToken: null,
+					rentLeaseExpiresAt: null,
+					rentCandidateProvider: null,
+					rentCandidateServiceRef: null,
+					rentCallStartedAt: null
 				}
 			});
-			persisted = true;
+			persisted = write.count > 0;
+			if (!persisted) persistOwnershipLost = true;
 		} catch (e) {
-			console.error(`[phone.${source}] persist attempt ${attempt + 1} failed:`, (e as Error).message);
+			console.error(
+				`[phone.${source}] persist attempt ${attempt + 1} failed:`,
+				(e as Error).message
+			);
 			await new Promise((r) => setTimeout(r, 400));
 		}
 	}
 
 	if (!persisted) {
-		await getProvider(rented.provider).cancel(rented.providerRef).catch(() => {});
-		await prisma.phoneRental
-			.updateMany({
-				where: { orderItemId: ctx.orderItemId, status: 'renting' },
-				data: { status: 'failed', failureReason: 'rent persist failed — cancelled + refunded' }
-			})
-			.catch(() => {});
-		await refundPhoneOrderToStoreCredit(
+		const cancelled = await getProvider(rented.provider)
+			.cancel(rented.providerRef)
+			.catch(() => false);
+		void recordAttemptRejection(
+			ctx.orderItemId,
+			rented.providerRef,
+			cancelled,
+			cancelled ? 0 : undefined
+		);
+		// A late worker that lost its generation must clean up only ITS provider result. It must never
+		// overwrite or refund the newer winner. This is the fence that prevents the incident's
+		// refund -> stale rent -> paid resurrection sequence.
+		if (persistOwnershipLost) {
+			if (!cancelled) {
+				await sendCriticalAdminAlert({
+					title: 'Numbers: stale rent could not be released',
+					message: `A stale worker rented ${rented.provider} ${rented.providerRef} for order ${ctx.orderNumber} after losing generation ${generation}. Its result was rejected by the database fence and provider release was not confirmed. Reconcile this exact provider reference.`,
+					source: `phone.${source}`,
+					dedupeKey: `phone-stale-rent:${ctx.orderItemId}:${rented.providerRef}`
+				}).catch(() => {});
+			}
+			return currentFulfillmentResult(ctx.orderItemId);
+		}
+
+		const refunded = await refundPhoneOrderToStoreCredit(
 			orderId,
 			'We could not complete your number — fully refunded',
-			source
-		).catch(() => {});
+			source,
+			{
+				generation,
+				status: 'renting',
+				rentLeaseToken,
+				failureReason: 'rent persist failed — provider release attempted; customer refunded'
+			}
+		);
+		if (!refunded) return currentFulfillmentResult(ctx.orderItemId);
 		await sendCriticalAdminAlert({
 			title: 'Phone rent could not be recorded',
 			message: `Rented ${rented.provider} ${rented.providerRef} for order ${ctx.orderNumber} but failed to persist it; cancelled + refunded. Verify the rent is released on the provider.`,
@@ -510,14 +788,6 @@ export async function fulfillPhoneOrder(
 			message: 'We could not complete your number — your payment was refunded to store credit.'
 		};
 	}
-
-	// Order status is non-money-critical; best-effort.
-	await prisma.order
-		.update({
-			where: { id: orderId },
-			data: { status: 'paid', paymentStatus: 'paid', deliveryStatus: 'processing' }
-		})
-		.catch(() => {});
 
 	return {
 		status: 'awaiting_sms',
@@ -533,7 +803,15 @@ export async function fulfillPhoneOrder(
 export async function refundPhoneOrderToStoreCredit(
 	orderId: string,
 	description: string,
-	source: string
+	source: string,
+	expected?: {
+		generation: number;
+		status: string;
+		operationToken?: string | null;
+		rentLeaseToken?: string | null;
+		rentLeaseExpiredAt?: Date;
+		failureReason?: string;
+	}
 ): Promise<boolean> {
 	const ctx = await loadPhoneOrderContext(orderId);
 	if (!ctx) return false;
@@ -541,8 +819,39 @@ export async function refundPhoneOrderToStoreCredit(
 	if (!ctx.userId) {
 		// Guests have no wallet — flag for manual handling.
 		await prisma.phoneRental.updateMany({
-			where: { orderItemId: ctx.orderItemId, refundedAt: null },
-			data: { status: 'refunded', refundedAt: new Date(), failureReason: 'guest — manual refund needed' }
+			where: {
+				orderItemId: ctx.orderItemId,
+				refundedAt: null,
+				...(expected
+					? {
+							generation: expected.generation,
+							status: expected.status,
+							...(expected.operationToken !== undefined
+								? { operationToken: expected.operationToken }
+								: {}),
+							...(expected.rentLeaseToken !== undefined
+								? { rentLeaseToken: expected.rentLeaseToken }
+								: {}),
+							...(expected.rentLeaseExpiredAt
+								? {
+										OR: [
+											{ rentLeaseExpiresAt: null },
+											{ rentLeaseExpiresAt: { lte: expected.rentLeaseExpiredAt } }
+										]
+									}
+								: {})
+						}
+					: {})
+			},
+			data: {
+				status: 'refunded',
+				refundedAt: new Date(),
+				failureReason: expected?.failureReason ?? 'guest — manual refund needed',
+				operationToken: null,
+				operationLeaseExpiresAt: null,
+				rentLeaseToken: null,
+				rentLeaseExpiresAt: null
+			}
 		});
 		await sendCriticalAdminAlert({
 			title: 'Phone order needs manual refund (guest)',
@@ -553,35 +862,69 @@ export async function refundPhoneOrderToStoreCredit(
 		return false;
 	}
 
-	const refunded = await prisma.$transaction(async (tx) => {
-		// Claim the refund: only rentals not yet refunded and not received.
-		const claim = await tx.phoneRental.updateMany({
-			where: {
-				orderItemId: ctx.orderItemId,
-				refundedAt: null,
-				status: { notIn: ['received', 'refunded'] }
-			},
-			data: { status: 'refunded', refundedAt: new Date() }
-		});
-		if (claim.count === 0) return false; // already refunded or already received
+	const refunded = await prisma.$transaction(
+		async (tx) => {
+			// All refund paths lock the order before the wallet. This serializes automatic
+			// Numbers refunds with manual full/per-account refunds and avoids both overlap
+			// and lock-order deadlocks between concurrent admin and fulfillment workers.
+			await tx.$queryRaw`SELECT id FROM orders WHERE id = ${ctx.orderId}::uuid FOR UPDATE`;
+			// Claim the refund: only rentals not yet refunded and not received.
+			const claim = await tx.phoneRental.updateMany({
+				where: {
+					orderItemId: ctx.orderItemId,
+					refundedAt: null,
+					...(expected
+						? {
+								generation: expected.generation,
+								status: expected.status,
+								...(expected.operationToken !== undefined
+									? { operationToken: expected.operationToken }
+									: {}),
+								...(expected.rentLeaseToken !== undefined
+									? { rentLeaseToken: expected.rentLeaseToken }
+									: {}),
+								...(expected.rentLeaseExpiredAt
+									? {
+											OR: [
+												{ rentLeaseExpiresAt: null },
+												{ rentLeaseExpiresAt: { lte: expected.rentLeaseExpiredAt } }
+											]
+										}
+									: {})
+							}
+						: { status: { notIn: ['received', 'refunded'] } })
+				},
+				data: {
+					status: 'refunded',
+					refundedAt: new Date(),
+					operationToken: null,
+					operationLeaseExpiresAt: null,
+					rentLeaseToken: null,
+					rentLeaseExpiresAt: null,
+					...(expected?.failureReason ? { failureReason: expected.failureReason } : {})
+				}
+			});
+			if (claim.count === 0) return false; // already refunded or already received
 
-		await creditStoreCredit(tx, {
-			userId: ctx.userId!,
-			amount: ctx.saleAmountNgn,
-			type: SC_CREDIT_REFUND,
-			description,
-			reference: ctx.orderId,
-			metadata: { orderItemId: ctx.orderItemId, kind: 'phone_refund' }
-		});
+			await creditStoreCredit(tx, {
+				userId: ctx.userId!,
+				amount: ctx.saleAmountNgn,
+				type: SC_CREDIT_REFUND,
+				description,
+				reference: ctx.orderId,
+				metadata: { orderItemId: ctx.orderItemId, kind: 'phone_refund' }
+			});
 
-		await tx.order.update({
-			where: { id: ctx.orderId },
-			// paymentStatus MUST flip too, or the reconcile cron (which re-processes any
-			// `paymentStatus:'paid'` order) resurrects this refunded order back to paid/processing.
-			data: { status: 'refunded', paymentStatus: 'refunded', deliveryStatus: 'refunded' }
-		});
-		return true;
-	});
+			await tx.order.update({
+				where: { id: ctx.orderId },
+				// paymentStatus MUST flip too, or the reconcile cron (which re-processes any
+				// `paymentStatus:'paid'` order) resurrects this refunded order back to paid/processing.
+				data: { status: 'refunded', paymentStatus: 'refunded', deliveryStatus: 'refunded' }
+			});
+			return true;
+		},
+		{ maxWait: 10_000, timeout: 20_000 }
+	);
 
 	// Bell: tell the customer their money is back (best-effort, outside the money transaction).
 	if (refunded && ctx.userId) {
@@ -609,7 +952,7 @@ export interface PhonePollResult {
 const CANCEL_MIN_AGE_MS = 2 * 60_000;
 
 /**
- * Drive an awaiting rental: kick off the rent if still pending, then poll hub-man for
+ * Drive an awaiting rental: kick off the rent if still pending, then poll its provider for
  * the OTP and persist it. If the activation window has passed with no SMS, cancel + refund.
  */
 export async function pollPhoneRentalSms(orderItemId: string): Promise<PhonePollResult> {
@@ -623,35 +966,117 @@ export async function pollPhoneRentalSms(orderItemId: string): Promise<PhonePoll
 			otp: rental.otp ?? undefined,
 			message: rental.smsMessage ?? undefined
 		};
+	// Recovery for legacy/transient failures created before refunds became atomic. A `failed` rental
+	// without `refundedAt` is not financially terminal: keep trying the idempotent wallet credit.
+	if (rental.status === 'failed' && !rental.refundedAt) {
+		const orderId = await orderIdForItem(orderItemId);
+		if (!orderId) return { status: 'unknown' };
+		const refunded = await refundPhoneOrderToStoreCredit(
+			orderId,
+			'We could not complete your number — refunded to store credit',
+			'failed-recovery',
+			{
+				generation: rental.generation,
+				status: 'failed',
+				failureReason: rental.failureReason ?? 'failed rental recovered and refunded'
+			}
+		);
+		return refunded
+			? { status: 'refunded', message: 'Refunded to store credit' }
+			: { status: 'preparing', message: 'Finishing your refund…' };
+	}
 	if (TERMINAL_STATUSES.has(rental.status))
 		return { status: rental.status === 'refunded' ? 'refunded' : 'expired' };
 
-	// Stuck 'renting' with no hub-man id for >3 min = a hard crash between renting and
-	// recording it. We can't tell whether a number was billed, so we must NOT re-rent
-	// (that could double-spend). Refund the customer and alert an admin to reconcile any
-	// orphaned rent on hub-man. (The normal rent path already cancels+refunds on a
-	// recoverable persist failure, so reaching here is extremely rare.)
-	if (
-		rental.status === 'renting' &&
-		!rental.hubOrderUuid &&
-		Date.now() - rental.createdAt.getTime() > 180_000
-	) {
+	// An in-progress cancel/replacement is also leased per rental. A live operation is left alone;
+	// an expired one is resumed through the same fenced path instead of spawning a competing action.
+	if (rental.status === 'cancelling' || rental.status === 'replacing') {
+		if (rental.operationLeaseExpiresAt && rental.operationLeaseExpiresAt.getTime() > Date.now()) {
+			return { status: 'preparing', message: 'Finishing the change…' };
+		}
+		if (rental.status === 'cancelling') {
+			const outcome = await cancelAndRefundRental(
+				orderItemId,
+				'No code arrived — refunded to store credit'
+			);
+			return outcome === 'received'
+				? { status: 'received' }
+				: outcome === 'refunded'
+					? { status: 'refunded', message: 'Refunded to store credit' }
+					: { status: 'preparing', message: 'Finishing the change…' };
+		}
+		const retry = await customerRetryPhoneRental(orderItemId);
+		return retry.status === 'received'
+			? { status: 'received', phoneNumber: retry.phoneNumber }
+			: retry.status === 'refunded'
+				? { status: 'refunded', message: retry.message }
+				: { status: 'preparing', phoneNumber: retry.phoneNumber, message: retry.message };
+	}
+
+	// A rent lease replaces the provider-specific `!hubOrderUuid && age > 3m` heuristic that caused
+	// the incident. A live slow pvapins call is never refunded. After lease expiry, a claim with no
+	// upstream call is safe to retry; an in-flight/legacy-unknown call is conservatively refunded and
+	// alerted, and any late result will fail its generation fence and be cancelled by its own worker.
+	if (rental.status === 'renting') {
+		const leaseLive =
+			rental.rentLeaseExpiresAt != null && rental.rentLeaseExpiresAt.getTime() > Date.now();
+		if (leaseLive) return { status: 'preparing', message: 'Getting your number…' };
+
+		const rentFence = {
+			orderItemId,
+			status: 'renting',
+			generation: rental.generation,
+			rentLeaseToken: rental.rentLeaseToken,
+			OR: [{ rentLeaseExpiresAt: null }, { rentLeaseExpiresAt: { lte: new Date() } }]
+		};
+		const upstreamCallMayExist =
+			rental.rentCallStartedAt != null || rental.rentLeaseToken?.startsWith('legacy:');
+		if (!upstreamCallMayExist) {
+			const reopened = await prisma.phoneRental.updateMany({
+				where: rentFence,
+				data: {
+					status: 'pending',
+					rentLeaseToken: null,
+					rentLeaseExpiresAt: null,
+					rentCandidateProvider: null,
+					rentCandidateServiceRef: null,
+					rentCallStartedAt: null,
+					failureReason: 'abandoned before provider call — safely retried'
+				}
+			});
+			if (reopened.count > 0) {
+				const orderId = await orderIdForItem(orderItemId);
+				if (orderId) {
+					const r = await fulfillPhoneOrder(orderId, 'lease-recovery');
+					return r.status === 'refunded'
+						? { status: 'refunded', message: r.message }
+						: { status: 'awaiting_sms', phoneNumber: r.phoneNumber, message: r.message };
+				}
+			}
+			return { status: 'preparing', message: 'Getting your number…' };
+		}
+
 		const orderId = await orderIdForItem(orderItemId);
-		await prisma.phoneRental.updateMany({
-			where: { orderItemId, status: 'renting', hubOrderUuid: null },
-			data: { status: 'failed', failureReason: 'stuck renting — refunded; check hub-man for orphan' }
-		});
-		if (orderId)
-			await refundPhoneOrderToStoreCredit(
-				orderId,
-				'We could not complete your number — refunded to store credit',
-				'poll'
-			).catch(() => {});
+		if (!orderId) return { status: 'preparing', message: 'Getting your number…' };
+		const rentLeaseExpiredAt = new Date();
+		const refunded = await refundPhoneOrderToStoreCredit(
+			orderId,
+			'We could not complete your number — refunded to store credit',
+			'poll',
+			{
+				generation: rental.generation,
+				status: 'renting',
+				rentLeaseToken: rental.rentLeaseToken,
+				rentLeaseExpiredAt,
+				failureReason: 'rent lease expired during provider call — refunded; reconcile provider ref'
+			}
+		);
+		if (!refunded) return { status: 'preparing', message: 'Getting your number…' };
 		await sendCriticalAdminAlert({
-			title: 'Phone rent stuck — refunded; check for orphan',
-			message: `Order item ${orderItemId} was stuck 'renting' with no hub-man id; refunded the customer. Check hub-man active rents for an orphaned number to cancel.`,
+			title: 'Numbers rent lease expired — reconcile possible provider hold',
+			message: `Order item ${orderItemId}, generation ${rental.generation}, expired while calling ${rental.rentCandidateProvider ?? 'an unknown provider'} (${rental.rentCandidateServiceRef ?? 'unknown candidate'}). The customer was refunded. Reconcile that provider; any late worker result is fenced and will attempt release.`,
 			source: 'phone.poll',
-			dedupeKey: `phone-stuck-renting:${orderItemId}`
+			dedupeKey: `phone-rent-lease-expired:${orderItemId}:${rental.generation}`
 		}).catch(() => {});
 		return { status: 'refunded', message: 'Refunded to store credit' };
 	}
@@ -683,7 +1108,19 @@ export async function pollPhoneRentalSms(orderItemId: string): Promise<PhonePoll
 		.catch(() => ({ status: 'error', reason: 'poll failed' }) as ProviderSmsResult);
 
 	if (poll.status === 'received') {
-		await markRentalReceived(orderItemId, { otp: poll.otp, message: poll.message, from: poll.from });
+		const received = await markRentalReceived(
+			orderItemId,
+			{ otp: poll.otp, message: poll.message, from: poll.from },
+			{ ...rental, status: 'awaiting_sms' }
+		);
+		if (!received) {
+			const current = await currentFulfillmentResult(orderItemId);
+			return current.status === 'received'
+				? { status: 'received', phoneNumber: current.phoneNumber }
+				: current.status === 'refunded'
+					? { status: 'refunded' }
+					: { status: 'preparing', phoneNumber: current.phoneNumber };
+		}
 		return {
 			status: 'received',
 			phoneNumber: rental.phoneNumber ?? undefined,
@@ -696,7 +1133,7 @@ export async function pollPhoneRentalSms(orderItemId: string): Promise<PhonePoll
 	const pricing = await getPhonePricingConfig();
 	const deadline = rental.expiresAt
 		? rental.expiresAt.getTime()
-		: rental.createdAt.getTime() + pricing.activationTimeoutMinutes * 60_000;
+		: (rental.rentedAt ?? rental.createdAt).getTime() + pricing.activationTimeoutMinutes * 60_000;
 
 	if (Date.now() > deadline || poll.status === 'expired') {
 		const outcome = await cancelAndRefundRental(
@@ -743,17 +1180,76 @@ export async function cancelAndRefundRental(
 	orderItemId: string,
 	description: string
 ): Promise<CancelOutcome> {
-	const rental = await prisma.phoneRental.findUnique({ where: { orderItemId } });
+	let rental = await prisma.phoneRental.findUnique({ where: { orderItemId } });
 	if (!rental) return 'refunded';
 	if (rental.status === 'received') return 'received';
 	if (TERMINAL_STATUSES.has(rental.status)) return 'refunded';
+	if (
+		rental.status !== 'pending' &&
+		rental.status !== 'awaiting_sms' &&
+		rental.status !== 'cancelling'
+	) {
+		return 'pending';
+	}
+	const resumeStatus = refForRental(rental) ? 'awaiting_sms' : 'pending';
+
+	const operationToken = randomUUID();
+	const now = new Date();
+	const recoverExpired =
+		rental.status === 'cancelling' &&
+		(!rental.operationLeaseExpiresAt || rental.operationLeaseExpiresAt.getTime() <= now.getTime());
+	if (rental.status === 'cancelling' && !recoverExpired) return 'pending';
+
+	const claim = await prisma.phoneRental.updateMany({
+		where: {
+			...rentalIdentityWhere(orderItemId, rental),
+			status: rental.status,
+			...(recoverExpired
+				? {
+						operationToken: rental.operationToken,
+						OR: [{ operationLeaseExpiresAt: null }, { operationLeaseExpiresAt: { lte: now } }]
+					}
+				: {})
+		},
+		data: {
+			status: 'cancelling',
+			operationToken,
+			operationLeaseExpiresAt: new Date(now.getTime() + OPERATION_LEASE_MS)
+		}
+	});
+	if (claim.count === 0) {
+		const current = await prisma.phoneRental.findUnique({ where: { orderItemId } });
+		if (current?.status === 'received') return 'received';
+		if (current && TERMINAL_STATUSES.has(current.status)) return 'refunded';
+		return 'pending';
+	}
+	rental = { ...rental, status: 'cancelling', operationToken };
+	const operationFence = {
+		...rentalIdentityWhere(orderItemId, rental),
+		status: 'cancelling',
+		operationToken
+	};
+	const releaseOperation = async () => {
+		await prisma.phoneRental.updateMany({
+			where: operationFence,
+			data: { status: resumeStatus, operationToken: null, operationLeaseExpiresAt: null }
+		});
+	};
 
 	// Never rented (still pending) — no provider cost to reclaim, safe to refund.
 	const ref = refForRental(rental);
 	if (!ref) {
 		const orderId = await orderIdForItem(orderItemId);
-		if (orderId) await refundPhoneOrderToStoreCredit(orderId, description, 'cancel');
-		return 'refunded';
+		if (!orderId) {
+			await releaseOperation();
+			return 'pending';
+		}
+		const refunded = await refundPhoneOrderToStoreCredit(orderId, description, 'cancel', {
+			generation: rental.generation,
+			status: 'cancelling',
+			operationToken
+		});
+		return refunded ? 'refunded' : 'pending';
 	}
 
 	const provider = providerForRental(rental);
@@ -763,10 +1259,17 @@ export async function cancelAndRefundRental(
 		.pollSms(ref)
 		.catch(() => ({ status: 'error', reason: 'poll failed' }) as ProviderSmsResult);
 	// Transient failure → back off and let the next sweep retry rather than refunding blind.
-	if (poll.status === 'error') return 'pending';
+	if (poll.status === 'error') {
+		await releaseOperation();
+		return 'pending';
+	}
 	if (poll.status === 'received') {
-		await markRentalReceived(orderItemId, { otp: poll.otp, message: poll.message, from: poll.from });
-		return 'received';
+		const received = await markRentalReceived(
+			orderItemId,
+			{ otp: poll.otp, message: poll.message, from: poll.from },
+			{ ...rental, status: 'cancelling', operationToken }
+		);
+		return received ? 'received' : 'pending';
 	}
 
 	// No billable code (waiting/expired). Best-effort cancel to release our balance. Defense against
@@ -774,24 +1277,62 @@ export async function cancelAndRefundRental(
 	// (a used/delivered number can't be cancelled), re-check once and mark received rather than
 	// refunding a delivered activation.
 	const cancelled = await provider.cancel(ref).catch(() => false);
-	void recordAttemptRejection(orderItemId, ref, cancelled);
+	void recordAttemptRejection(orderItemId, ref, cancelled, cancelled ? 0 : undefined);
 	if (!cancelled) {
 		const late = await provider
 			.pollSms(ref)
 			.catch(() => ({ status: 'error', reason: 'recheck failed' }) as ProviderSmsResult);
 		if (late.status === 'received') {
-			await markRentalReceived(orderItemId, { otp: late.otp, message: late.message, from: late.from });
-			return 'received';
+			const received = await markRentalReceived(
+				orderItemId,
+				{ otp: late.otp, message: late.message, from: late.from },
+				{ ...rental, status: 'cancelling', operationToken }
+			);
+			return received ? 'received' : 'pending';
+		}
+		if (late.status === 'error') {
+			await releaseOperation();
+			return 'pending';
+		}
+		if (rental.provider === 'pvapins') {
+			if (!rental.shadowProviderRef) {
+				await prisma.phoneRental.updateMany({
+					where: operationFence,
+					data: {
+						shadowProviderRef: ref,
+						shadowCostCents: rental.costCents,
+						shadowStaleAt: new Date()
+					}
+				});
+			} else if (rental.shadowProviderRef !== ref) {
+				await sendCriticalAdminAlert({
+					title: 'Numbers: second unresolved pvapins hold on refund',
+					message: `Order item ${orderItemId} already tracks shadow ${rental.shadowProviderRef}; provider release also failed for ${ref}. Reconcile this exact second reference manually.`,
+					source: 'phone.cancel',
+					dedupeKey: `phone-second-shadow:${orderItemId}:${ref}`
+				}).catch(() => {});
+			}
 		}
 	}
+	// Only train supplier delivery reliability when the buyer actually requested an OTP. A buyer
+	// who cancels an unused number is not evidence that the provider failed to deliver a code.
+	if (rental.otpRequestedAt) void recordAttemptOtpTimeout(orderItemId, ref);
 	const orderId = await orderIdForItem(orderItemId);
-	if (orderId) await refundPhoneOrderToStoreCredit(orderId, description, 'cancel');
-	return 'refunded';
+	if (!orderId) {
+		await releaseOperation();
+		return 'pending';
+	}
+	const refunded = await refundPhoneOrderToStoreCredit(orderId, description, 'cancel', {
+		generation: rental.generation,
+		status: 'cancelling',
+		operationToken
+	});
+	return refunded ? 'refunded' : 'pending';
 }
 
 /**
- * User-initiated cancel from the order page. Allowed only after the 2-minute hub-man
- * window and before a code arrives; refunds to store credit if hub-man confirms.
+ * User-initiated cancel from the order page. Allowed only after the 2-minute safety
+ * window and before a code arrives; refunds to store credit after a provider-aware check.
  */
 export async function userCancelPhoneRental(
 	orderItemId: string
@@ -800,7 +1341,11 @@ export async function userCancelPhoneRental(
 	if (!rental) return { ok: false, outcome: 'refunded', message: 'Not found' };
 
 	if (rental.status === 'received')
-		return { ok: false, outcome: 'received', message: 'Your code already arrived — this order is complete.' };
+		return {
+			ok: false,
+			outcome: 'received',
+			message: 'Your code already arrived — this order is complete.'
+		};
 	if (TERMINAL_STATUSES.has(rental.status))
 		return { ok: true, outcome: 'refunded', message: 'This order was already refunded.' };
 	if (Date.now() - (rental.rentedAt ?? rental.createdAt).getTime() <= CANCEL_MIN_AGE_MS)
@@ -810,7 +1355,10 @@ export async function userCancelPhoneRental(
 			message: 'You can cancel after 2 minutes if no code has arrived.'
 		};
 
-	const outcome = await cancelAndRefundRental(orderItemId, 'Cancelled by you — refunded to store credit');
+	const outcome = await cancelAndRefundRental(
+		orderItemId,
+		'Cancelled by you — refunded to store credit'
+	);
 	if (outcome === 'received')
 		return { ok: false, outcome, message: 'Your code just arrived — this order is now complete.' };
 	if (outcome === 'refunded')
@@ -836,22 +1384,92 @@ const MAX_CUSTOMER_RETRIES = 3;
 export async function customerRetryPhoneRental(
 	orderItemId: string
 ): Promise<{ ok: boolean; status: string; phoneNumber?: string; message: string }> {
-	const rental = await prisma.phoneRental.findUnique({ where: { orderItemId } });
+	let rental = await prisma.phoneRental.findUnique({ where: { orderItemId } });
 	if (!rental) return { ok: false, status: 'unknown', message: 'Order not found.' };
 	if (rental.status === 'received')
-		return { ok: false, status: 'received', message: 'Your code already arrived — this order is complete.' };
+		return {
+			ok: false,
+			status: 'received',
+			message: 'Your code already arrived — this order is complete.'
+		};
 	if (TERMINAL_STATUSES.has(rental.status))
 		return { ok: false, status: rental.status, message: 'This order is already resolved.' };
-	if (rental.status !== 'awaiting_sms' || !refForRental(rental))
+	if ((rental.status !== 'awaiting_sms' && rental.status !== 'replacing') || !refForRental(rental))
 		return { ok: false, status: 'preparing', message: 'Still getting your number — one moment.' };
+	if (
+		rental.status === 'replacing' &&
+		rental.operationLeaseExpiresAt &&
+		rental.operationLeaseExpiresAt.getTime() > Date.now()
+	) {
+		return {
+			ok: false,
+			status: 'preparing',
+			message: 'Still getting your replacement — one moment.'
+		};
+	}
 
 	// The replacement wait runs from the customer's explicit "I've requested the code" confirmation.
 	const pricing = await getPhonePricingConfig();
 	const waitMs = Math.max(30, pricing.otpReplacementWaitSeconds ?? 120) * 1000;
 	if (!rental.otpRequestedAt)
-		return { ok: false, status: 'awaiting_sms', message: "Tap “I’ve requested the code”, then give it about 2 minutes." };
+		return {
+			ok: false,
+			status: 'awaiting_sms',
+			message: 'Tap “I’ve requested the code”, then give it about 2 minutes.'
+		};
 	if (Date.now() - rental.otpRequestedAt.getTime() < waitMs)
-		return { ok: false, status: 'awaiting_sms', message: 'Give the code a couple of minutes to arrive before trying another.' };
+		return {
+			ok: false,
+			status: 'awaiting_sms',
+			message: 'Give the code a couple of minutes to arrive before trying another.'
+		};
+
+	// Claim this exact active number before polling/cancelling it. A concurrent poll may either win
+	// first and deliver the code, or lose to this replacement; it can never mutate the next number.
+	const operationToken = randomUUID();
+	const operationNow = new Date();
+	const priorOperationToken = rental.operationToken;
+	const retryClaim = await prisma.phoneRental.updateMany({
+		where: {
+			...rentalIdentityWhere(orderItemId, rental),
+			status: rental.status,
+			...(rental.status === 'replacing'
+				? {
+						operationToken: priorOperationToken,
+						OR: [
+							{ operationLeaseExpiresAt: null },
+							{ operationLeaseExpiresAt: { lte: operationNow } }
+						]
+					}
+				: {})
+		},
+		data: {
+			status: 'replacing',
+			operationToken,
+			operationLeaseExpiresAt: new Date(operationNow.getTime() + OPERATION_LEASE_MS)
+		}
+	});
+	if (retryClaim.count === 0) {
+		const current = await currentFulfillmentResult(orderItemId);
+		return {
+			ok: false,
+			status: current.status,
+			phoneNumber: current.phoneNumber,
+			message: current.message
+		};
+	}
+	rental = { ...rental, status: 'replacing', operationToken };
+	const operationFence = {
+		...rentalIdentityWhere(orderItemId, rental),
+		status: 'replacing',
+		operationToken
+	};
+	const releaseReplacement = async () => {
+		await prisma.phoneRental.updateMany({
+			where: operationFence,
+			data: { status: 'awaiting_sms', operationToken: null, operationLeaseExpiresAt: null }
+		});
+	};
 
 	const ref = refForRental(rental)!;
 	const provider = providerForRental(rental);
@@ -860,21 +1478,42 @@ export async function customerRetryPhoneRental(
 	const poll = await provider
 		.pollSms(ref)
 		.catch(() => ({ status: 'error', reason: 'poll failed' }) as ProviderSmsResult);
-	if (poll.status === 'received') {
-		await markRentalReceived(orderItemId, { otp: poll.otp, message: poll.message, from: poll.from });
+	if (poll.status === 'error') {
+		await releaseReplacement();
 		return {
 			ok: false,
-			status: 'received',
+			status: 'awaiting_sms',
 			phoneNumber: rental.phoneNumber ?? undefined,
-			message: 'Your code just arrived!'
+			message: 'Could not check the current number yet — please try again shortly.'
+		};
+	}
+	if (poll.status === 'received') {
+		const received = await markRentalReceived(
+			orderItemId,
+			{ otp: poll.otp, message: poll.message, from: poll.from },
+			{ ...rental, status: 'replacing', operationToken }
+		);
+		return {
+			ok: false,
+			status: received ? 'received' : 'preparing',
+			phoneNumber: rental.phoneNumber ?? undefined,
+			message: received ? 'Your code just arrived!' : 'Finishing your replacement…'
 		};
 	}
 
 	// Out of retries → cancel + refund instead of trying forever.
 	if ((rental.retryCount ?? 0) >= MAX_CUSTOMER_RETRIES) {
-		const outcome = await cancelAndRefundRental(orderItemId, 'No code after several tries — refunded to store credit');
+		await releaseReplacement();
+		const outcome = await cancelAndRefundRental(
+			orderItemId,
+			'No code after several tries — refunded to store credit'
+		);
 		if (outcome === 'received')
-			return { ok: false, status: 'received', message: 'Your code just arrived — this order is complete.' };
+			return {
+				ok: false,
+				status: 'received',
+				message: 'Your code just arrived — this order is complete.'
+			};
 		return {
 			ok: true,
 			status: 'refunded',
@@ -889,7 +1528,35 @@ export async function customerRetryPhoneRental(
 	//    keep it durable (shadow_*) for background reconciliation + late-charge accounting. Overlap
 	//    is capped at ONE shadow: a 2nd simultaneous stale pvapins falls back to reserving its cost.
 	const released = await provider.cancel(ref).catch(() => false);
-	void recordAttemptRejection(orderItemId, ref, released);
+	void recordAttemptRejection(orderItemId, ref, released, released ? 0 : undefined);
+	if (!released) {
+		const late = await provider
+			.pollSms(ref)
+			.catch(() => ({ status: 'error', reason: 'recheck failed' }) as ProviderSmsResult);
+		if (late.status === 'received') {
+			const received = await markRentalReceived(
+				orderItemId,
+				{ otp: late.otp, message: late.message, from: late.from },
+				{ ...rental, status: 'replacing', operationToken }
+			);
+			return {
+				ok: false,
+				status: received ? 'received' : 'preparing',
+				phoneNumber: rental.phoneNumber ?? undefined,
+				message: received ? 'Your code just arrived!' : 'Finishing your replacement…'
+			};
+		}
+		if (late.status === 'error') {
+			await releaseReplacement();
+			return {
+				ok: false,
+				status: 'awaiting_sms',
+				phoneNumber: rental.phoneNumber ?? undefined,
+				message: 'Could not safely release this number yet — please try again shortly.'
+			};
+		}
+	}
+	void recordAttemptOtpTimeout(orderItemId, ref);
 	const oldCostCents = rental.costCents ?? 0;
 	let reserveCents = 0;
 	const shadowData: {
@@ -920,8 +1587,8 @@ export async function customerRetryPhoneRental(
 	// Reset to pending (fresh number ⇒ clear otpRequestedAt), record tried suppliers + retry count,
 	// accrue any hard reservation, and durably record the shadow. Then re-fulfill up the ladder
 	// (which subtracts only the RESERVED liability — not the contingent shadow — from the budget).
-	await prisma.phoneRental.updateMany({
-		where: { orderItemId, status: 'awaiting_sms' },
+	const reset = await prisma.phoneRental.updateMany({
+		where: operationFence,
 		data: {
 			status: 'pending',
 			hubOrderUuid: null,
@@ -930,16 +1597,32 @@ export async function customerRetryPhoneRental(
 			otp: null,
 			smsMessage: null,
 			otpRequestedAt: null,
+			operationToken: null,
+			operationLeaseExpiresAt: null,
 			...shadowData,
 			triedSuppliers: tried,
 			retryCount: { increment: 1 },
 			reservedLiabilityCents: { increment: reserveCents }
 		}
 	});
+	if (reset.count === 0) {
+		const current = await currentFulfillmentResult(orderItemId);
+		return {
+			ok: false,
+			status: current.status,
+			phoneNumber: current.phoneNumber,
+			message: current.message
+		};
+	}
 
 	const r = await fulfillPhoneOrder(orderId, 'retry', { excludeKeys: tried });
 	if (r.status === 'awaiting_sms')
-		return { ok: true, status: 'awaiting_sms', phoneNumber: r.phoneNumber, message: 'Here’s a fresh number — request your code again.' };
+		return {
+			ok: true,
+			status: 'awaiting_sms',
+			phoneNumber: r.phoneNumber,
+			message: 'Here’s a fresh number — request your code again.'
+		};
 	if (r.status === 'refunded') return { ok: true, status: 'refunded', message: r.message };
 	return { ok: false, status: r.status, message: r.message };
 }
@@ -974,7 +1657,12 @@ export async function checkHubmanBalanceAndAlert(): Promise<void> {
  */
 export async function sweepExpiredPhoneRentals(): Promise<number> {
 	const candidates = await prisma.phoneRental.findMany({
-		where: { status: { in: ['pending', 'renting', 'awaiting_sms'] } },
+		where: {
+			OR: [
+				{ status: { in: ['pending', 'renting', 'awaiting_sms', 'cancelling', 'replacing'] } },
+				{ status: 'failed', refundedAt: null }
+			]
+		},
 		select: { orderItemId: true }
 	});
 	let acted = 0;
@@ -1013,9 +1701,22 @@ export async function reconcilePhoneShadows(): Promise<{ reconciled: number; lea
 	const shadows = await prisma.phoneRental
 		.findMany({
 			where: { shadowProviderRef: { not: null } },
-			select: { orderItemId: true, shadowProviderRef: true, shadowCostCents: true, shadowStaleAt: true }
+			select: {
+				orderItemId: true,
+				shadowProviderRef: true,
+				shadowCostCents: true,
+				shadowStaleAt: true
+			}
 		})
-		.catch(() => [] as Array<{ orderItemId: string; shadowProviderRef: string | null; shadowCostCents: number | null; shadowStaleAt: Date | null }>);
+		.catch(
+			() =>
+				[] as Array<{
+					orderItemId: string;
+					shadowProviderRef: string | null;
+					shadowCostCents: number | null;
+					shadowStaleAt: Date | null;
+				}>
+		);
 	let reconciled = 0;
 	let leaked = 0;
 	for (const s of shadows) {
@@ -1026,11 +1727,12 @@ export async function reconcilePhoneShadows(): Promise<{ reconciled: number; lea
 			const poll: ProviderSmsResult = await provider
 				.pollSms(ref)
 				.catch(() => ({ status: 'error', reason: 'poll failed' }) as ProviderSmsResult);
-			const tooOld = s.shadowStaleAt != null && Date.now() - s.shadowStaleAt.getTime() > SHADOW_MAX_AGE_MS;
+			const tooOld =
+				s.shadowStaleAt != null && Date.now() - s.shadowStaleAt.getTime() > SHADOW_MAX_AGE_MS;
 			if (poll.status === 'received') {
 				// Leakage: an abandoned number received a code → pvapins charged us for a number the
 				// customer never used. Make it auditable (its attempt's real COGS) and alert.
-				await recordAttemptOtpReceived(s.orderItemId, ref, null);
+				await recordAttemptOtpReceived(s.orderItemId, ref, null, s.shadowCostCents);
 				await sendCriticalAdminAlert({
 					title: 'Numbers: abandoned pvapins number late-charged (leakage)',
 					message: `Order item ${s.orderItemId}: a stale pvapins number received a code after the customer moved on — supplier cost ~$${((s.shadowCostCents ?? 0) / 100).toFixed(2)} leaked. If these become frequent, raise the replacement wait or the tier price.`,
@@ -1041,7 +1743,9 @@ export async function reconcilePhoneShadows(): Promise<{ reconciled: number; lea
 				leaked += 1;
 				reconciled += 1;
 			} else if (poll.status === 'expired' || tooOld) {
-				await provider.cancel(ref).catch(() => {});
+				const released = await provider.cancel(ref).catch(() => false);
+				await recordAttemptRejection(s.orderItemId, ref, released, released ? 0 : undefined);
+				await recordAttemptOtpTimeout(s.orderItemId, ref);
 				await clearShadow(s.orderItemId, ref);
 				reconciled += 1;
 			}

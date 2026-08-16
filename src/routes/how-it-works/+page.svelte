@@ -526,10 +526,11 @@
 							class="mb-2 text-xl font-semibold"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
-							100% Secure
+							Secure checkout
 						</h3>
 						<p style="color: var(--text-muted); font-family: var(--font-body);">
-							All transactions are encrypted and secure. Your payment information is never stored.
+							Checkout uses an encrypted connection. Card and bank credentials are handled by our
+							payment provider, not stored by FastAccs.
 						</p>
 					</div>
 					<div class="text-center">

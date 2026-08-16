@@ -116,11 +116,21 @@ async function buildExpiredPendingOrderResponse(
 }
 
 async function recoverPaidOrderIfNeeded(orderId: string) {
-	const result = await recoverPaidOrder(orderId, 'verify');
-	return {
-		fulfilled: result.status === 'COMPLETED',
-		warning: result.warning || result.error || null
-	};
+	try {
+		const result = await recoverPaidOrder(orderId, 'verify');
+		return {
+			fulfilled: result.status === 'COMPLETED',
+			warning: result.warning || result.error || null
+		};
+	} catch (error) {
+		// Payment confirmation is durable and authoritative. A downstream delivery
+		// retry failing must never turn the buyer's screen back into "payment failed".
+		console.error('[payments.verify] paid-order recovery deferred:', error);
+		return {
+			fulfilled: false,
+			warning: 'Payment confirmed. Delivery is continuing from your order page.'
+		};
+	}
 }
 
 export const POST: RequestHandler = async ({ request, locals }) => {
@@ -178,17 +188,30 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		if (orderById && isOrderPaymentConfirmed(orderById) && orderById.status === 'completed') {
-			await recoverPaidOrder(orderById.id, 'verify');
 			return json({
 				success: true,
 				state: 'SUCCESS',
 				status: orderById.status.toUpperCase(),
 				orderId: orderById.id,
+				phone: orderById.orderType === 'phone',
 				message: 'Order already processed'
 			});
 		}
 
 		if (orderById && isOrderPaymentConfirmed(orderById)) {
+			// Numbers delivery is intentionally driven by the order page + durable sweep.
+			// Once payment is confirmed, verification should route the buyer there rather
+			// than block on supplier work or reclassify a delivery error as a payment error.
+			if (orderById.orderType === 'phone') {
+				return json({
+					success: true,
+					state: 'SUCCESS',
+					orderId: orderById.id,
+					status: 'PAID',
+					phone: true,
+					message: 'Order confirmed. Getting your number…'
+				});
+			}
 			const recovered = await recoverPaidOrderIfNeeded(orderById.id);
 			if (recovered.fulfilled) {
 				return json({

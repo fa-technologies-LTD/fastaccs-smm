@@ -279,8 +279,23 @@ model PhoneRental {
   countryId     Int       @map("country_id")
   countryName   String    @map("country_name")
   phoneNumber   String?   @map("phone_number")
-  // pending | renting | awaiting_sms | received | expired | cancelled | refunded | failed
+  // pending | renting | awaiting_sms | cancelling | replacing | received | expired | cancelled | refunded | failed
   status        String    @default("pending")
+  // Monotonic ownership fence for replacement generations. Every pending -> renting claim
+  // increments this value; a late worker may only persist/cancel results for the generation it owns.
+  generation    Int       @default(0)
+  // Per-rental (never global) rent lease. Different order items can rent concurrently, while
+  // duplicate drivers for the same generation are reduced to one upstream rent caller.
+  rentLeaseToken      String?   @map("rent_lease_token")
+  rentLeaseExpiresAt  DateTime? @map("rent_lease_expires_at")
+  rentingAt           DateTime? @map("renting_at")
+  rentCandidateProvider   String?   @map("rent_candidate_provider")
+  rentCandidateServiceRef String?   @map("rent_candidate_service_ref")
+  rentCallStartedAt       DateTime? @map("rent_call_started_at")
+  // Short lease for cancel/replacement operations. It serializes actions on one active number
+  // without blocking unrelated buyers and lets the cron safely recover an interrupted operation.
+  operationToken          String?   @map("operation_token")
+  operationLeaseExpiresAt DateTime? @map("operation_lease_expires_at")
   otp           String?
   smsMessage    String?   @map("sms_message")
   senderName    String?   @map("sender_name")
@@ -311,6 +326,8 @@ model PhoneRental {
   orderItem     OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
 
   @@index([status])
+  @@index([status, rentLeaseExpiresAt])
+  @@index([status, operationLeaseExpiresAt])
   @@index([hubOrderUuid])
   @@index([createdAt])
   @@map("phone_rentals")
@@ -765,6 +782,7 @@ model RateBucket {
 model PhoneAttempt {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orderItemId        String    @map("order_item_id") @db.Uuid
+  generation         Int       @default(0)
   attemptNumber      Int       @default(1) @map("attempt_number")
   provider           String // 'hubman' | 'pvapins'
   providerServiceRef String    @map("provider_service_ref") // variant, e.g. 'Whatsapp24' or hub service id
@@ -782,7 +800,7 @@ model PhoneAttempt {
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
 
-  @@index([orderItemId])
+  @@index([orderItemId, generation])
   @@index([provider, providerServiceRef, createdAt])
   @@index([outcome, createdAt])
   @@map("phone_attempts")

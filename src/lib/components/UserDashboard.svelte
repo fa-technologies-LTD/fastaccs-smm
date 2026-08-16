@@ -4,7 +4,6 @@
 	import OrderTab from './OrderTab.svelte';
 	import PurchaseTab from './PurchaseTab.svelte';
 	import AffiliateTab from './AffiliateTab.svelte';
-	import { isRevenueOrder } from '$lib/helpers/order-revenue';
 	import { addToast } from '$lib/stores/toasts';
 
 	type DashboardTab = 'orders' | 'purchases' | 'affiliate';
@@ -27,6 +26,12 @@
 		quantity?: number | null;
 	}
 
+	interface DashboardMetrics {
+		completedOrders?: number;
+		totalSpent?: number;
+		accountsOwned?: number;
+	}
+
 	interface AffiliateStateFlags {
 		unlocked?: boolean;
 		isActive?: boolean;
@@ -39,17 +44,27 @@
 		user = null,
 		name = '',
 		orders = [],
+		ordersNextCursor = null,
+		metrics = null,
 		affiliateData: initialAffiliateData = null,
+		affiliateLoaded: initialAffiliateLoaded = false,
 		storeCredit = null,
 		purchases: initialPurchases = [],
+		purchasesNextCursor = null,
+		purchasesLoaded = false,
 		whatsappNumber = ''
 	}: {
 		user?: DashboardUser | null;
 		name?: string | null;
 		orders?: DashboardOrder[];
+		ordersNextCursor?: string | null;
+		metrics?: DashboardMetrics | null;
 		affiliateData?: unknown;
+		affiliateLoaded?: boolean;
 		storeCredit?: { totalAvailable?: number } | null;
 		purchases?: DashboardPurchase[];
+		purchasesNextCursor?: string | null;
+		purchasesLoaded?: boolean;
 		whatsappNumber?: string;
 	} = $props();
 
@@ -77,9 +92,14 @@
 		return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 	}
 
+	let affiliateData = $state<unknown>(initialAffiliateData);
+	let affiliateDataLoaded = $state(initialAffiliateLoaded);
+	let affiliateDataLoading = $state(false);
+	let affiliateDataError = $state('');
+
 	const affiliateState = $derived(
-		initialAffiliateData && typeof initialAffiliateData === 'object'
-			? (initialAffiliateData as AffiliateStateFlags)
+		affiliateData && typeof affiliateData === 'object'
+			? (affiliateData as AffiliateStateFlags)
 			: null
 	);
 	const affiliateAccessUnlocked = $derived(
@@ -95,20 +115,33 @@
 	let showPaymentPendingBanner = $state(false);
 	let showAffiliateAccessNudge = $state(false);
 
-	function formatMoney(value: number): string {
-		return `₦${Math.max(0, Math.round(value)).toLocaleString()}`;
+	function affiliateNudgeDismissed(): boolean {
+		return (
+			typeof window !== 'undefined' &&
+			window.sessionStorage.getItem('fastaccs_affiliate_access_nudge_dismissed') === '1'
+		);
 	}
 
-	// Switch to the Affiliate tab AND scroll to it — the CTAs sit above the tab bar,
-	// so without scrolling the tab changes off-screen and looks like nothing happened.
-	function goToAffiliateTab(): void {
-		activeTab = 'affiliate';
-		if (typeof document !== 'undefined') {
-			requestAnimationFrame(() =>
-				document
-					.getElementById('dashboard-tabs')
-					?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-			);
+	async function ensureAffiliateData(): Promise<void> {
+		if (affiliateDataLoaded || affiliateDataLoading) return;
+		affiliateDataLoading = true;
+		affiliateDataError = '';
+		try {
+			const response = await fetch('/api/affiliate/stats');
+			const result = await response.json().catch(() => ({}));
+			if (!response.ok || !result?.success) {
+				throw new Error(result?.error || 'Could not load affiliate details.');
+			}
+			affiliateData = result.data?.dashboard || null;
+			affiliateDataLoaded = true;
+			const state = affiliateData as AffiliateStateFlags | null;
+			showAffiliateAccessNudge =
+				Boolean(state?.unlocked || state?.eligible) && !state?.isActive && !affiliateNudgeDismissed();
+		} catch (error) {
+			affiliateDataError =
+				error instanceof Error ? error.message : 'Could not load affiliate details.';
+		} finally {
+			affiliateDataLoading = false;
 		}
 	}
 
@@ -171,9 +204,10 @@
 
 	onMount(() => {
 		applyRouteContext(new URL(window.location.href));
-		const dismissed =
-			window.sessionStorage.getItem('fastaccs_affiliate_access_nudge_dismissed') === '1';
-		showAffiliateAccessNudge = affiliateEligibleNotActive && !dismissed;
+		showAffiliateAccessNudge = affiliateEligibleNotActive && !affiliateNudgeDismissed();
+		// This no longer blocks the dashboard route. Load it after the orders have rendered,
+		// and immediately when a deep link opens the affiliate tab.
+		void ensureAffiliateData();
 
 		const handlePopState = () => {
 			applyRouteContext(new URL(window.location.href));
@@ -196,24 +230,9 @@
 			.join('') || 'FA'
 	);
 
-	let completedOrders = $derived(
-		orders.filter((order) =>
-			['delivered', 'completed', 'paid'].includes(String(order.status || ''))
-		).length
-	);
-	let totalSpent = $derived(
-		orders
-			.filter((order) =>
-				isRevenueOrder({
-					status: order.status,
-					paymentStatus: order.paymentStatus
-				})
-			)
-			.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0)
-	);
-	let accountsOwned = $derived(
-		initialPurchases.reduce((sum, purchase) => sum + Number(purchase.quantity || 0), 0)
-	);
+	let completedOrders = $derived(Math.max(0, Number(metrics?.completedOrders || 0)));
+	let totalSpent = $derived(Math.max(0, Number(metrics?.totalSpent || 0)));
+	let accountsOwned = $derived(Math.max(0, Number(metrics?.accountsOwned || 0)));
 	let isSecured = $derived(Boolean(user?.emailVerified));
 </script>
 
@@ -415,7 +434,10 @@
 				Purchases
 			</button>
 			<button
-				onclick={() => (activeTab = 'affiliate')}
+				onclick={() => {
+					activeTab = 'affiliate';
+					void ensureAffiliateData();
+				}}
 				class="border-b-2 px-1 py-2 text-sm font-semibold transition-all"
 				style="border-color: {activeTab === 'affiliate'
 					? 'var(--primary)'
@@ -430,11 +452,41 @@
 	</div>
 
 	{#if activeTab === 'orders'}
-		<OrderTab initialOrders={orders} focusOrderId={selectedOrderId} />
+		<OrderTab
+			initialOrders={orders}
+			initialNextCursor={ordersNextCursor}
+			focusOrderId={selectedOrderId}
+		/>
 	{:else if activeTab === 'purchases'}
-		<PurchaseTab {initialPurchases} {whatsappNumber} />
+		<PurchaseTab
+			{initialPurchases}
+			initialNextCursor={purchasesNextCursor}
+			initialLoaded={purchasesLoaded}
+			{whatsappNumber}
+		/>
 	{:else}
-		<AffiliateTab {initialAffiliateData} />
+		{#if affiliateDataLoaded}
+			<AffiliateTab initialAffiliateData={affiliateData} />
+		{:else}
+			<div
+				class="rounded-[var(--r-md)] border border-[var(--border)] p-10 text-center"
+				style="background: var(--surface-2);"
+			>
+				<p class="text-sm" style="color: var(--text-muted);">
+					{affiliateDataLoading ? 'Loading affiliate details…' : affiliateDataError || 'Affiliate details are not available yet.'}
+				</p>
+				{#if !affiliateDataLoading}
+					<button
+						type="button"
+						onclick={() => ensureAffiliateData()}
+						class="mt-3 rounded-full px-4 py-2 text-xs font-semibold"
+						style="background: var(--primary); color: #04140c;"
+					>
+						Try again
+					</button>
+				{/if}
+			</div>
+		{/if}
 	{/if}
 
 	<div class="mt-5 grid grid-cols-3 gap-2 sm:gap-3">

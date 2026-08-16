@@ -283,8 +283,8 @@
 				>
 			</div>
 			<p style="color: var(--text-muted); font-family: var(--font-body);" class="text-xs">
-				Your data is protected with industry-standard encryption. Passwords are securely hashed, and
-				we never share your personal information.
+				Your connection is protected with HTTPS, and FastAccs sign-in passwords are securely hashed.
+				We handle personal information as described in our Privacy Notice.
 			</p>
 		</div>
 	</div>

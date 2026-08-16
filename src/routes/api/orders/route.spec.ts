@@ -7,9 +7,14 @@ const mocks = vi.hoisted(() => ({
 	createTransaction: vi.fn(),
 	initializeTransaction: vi.fn(),
 	releaseOrderReservations: vi.fn(),
+	reserveStandardAccountsForOrder: vi.fn(),
 	resolveOrderAffiliateAttribution: vi.fn(),
 	validateAffiliateCode: vi.fn(),
-	validatePromotionCode: vi.fn()
+	validatePromotionCode: vi.fn(),
+	getStoreCreditBuckets: vi.fn(),
+	computeOrderRedemption: vi.fn(),
+	redeemStoreCreditForOrder: vi.fn(),
+	logOrderStatusTransition: vi.fn()
 }));
 
 vi.mock('$lib/prisma', () => ({
@@ -56,7 +61,16 @@ vi.mock('$lib/services/exact-preview', () => ({
 vi.mock('$lib/services/order-reservations', () => ({
 	releaseExpiredOrderReservations: vi.fn(),
 	releaseOrderReservations: mocks.releaseOrderReservations,
-	reserveStandardAccountsForOrder: vi.fn()
+	reserveStandardAccountsForOrder: mocks.reserveStandardAccountsForOrder
+}));
+vi.mock('$lib/services/store-credit', () => ({
+	getStoreCreditBuckets: mocks.getStoreCreditBuckets,
+	computeOrderRedemption: mocks.computeOrderRedemption,
+	redeemStoreCreditForOrder: mocks.redeemStoreCreditForOrder,
+	reverseStoreCreditRedemption: vi.fn()
+}));
+vi.mock('$lib/services/order-audit', () => ({
+	logOrderStatusTransition: mocks.logOrderStatusTransition
 }));
 vi.mock('$lib/helpers/payment-expiry.server', () => ({
 	getPendingPaymentExpiresAt: vi.fn(() => new Date('2026-06-06T19:40:00.000Z')),
@@ -77,7 +91,8 @@ const user = {
 function orderRequest(
 	checkoutKey = 'checkout_key_1234567890',
 	currency?: string,
-	promotionCode?: string
+	promotionCode?: string,
+	useStoreCredit = false
 ) {
 	return new Request('https://smm.fastaccs.com/api/orders', {
 		method: 'POST',
@@ -87,7 +102,8 @@ function orderRequest(
 			paymentMethod: 'monnify',
 			checkoutKey,
 			currency,
-			promotionCode
+			promotionCode,
+			useStoreCredit
 		})
 	});
 }
@@ -218,5 +234,100 @@ describe('approved invariant: emergency checkout order control', () => {
 		expect(mocks.createTransaction).not.toHaveBeenCalled();
 		expect(mocks.initializeTransaction).not.toHaveBeenCalled();
 		expect(mocks.releaseOrderReservations).not.toHaveBeenCalled();
+	});
+
+	it('commits a fully credit-paid Numbers order, wallet debit, and pending rental before responding', async () => {
+		vi.stubEnv('CHECKOUT_DISABLED', 'false');
+		mocks.findOrder.mockResolvedValue(null);
+		mocks.findCategories.mockResolvedValue([
+			{
+				id: 'tier-123',
+				name: 'WhatsApp — USA',
+				categoryType: 'tier',
+				parent: { name: 'Numbers' },
+				metadata: {
+					delivery_mode: 'auto_sms',
+					hub_service_id: 1,
+					hub_service_name: 'WhatsApp',
+					hub_country_id: 187,
+					hub_country_name: 'United States',
+					hub_country_code: 'US',
+					hub_expected_cost_cents: 195,
+					hub_available_count: 1,
+					pricing: { base_price: 5800 }
+				}
+			}
+		]);
+		mocks.getStoreCreditBuckets.mockResolvedValue({ refundAvailable: 5800, earnedAvailable: 0 });
+		mocks.computeOrderRedemption.mockReturnValue({
+			refundApplied: 5800,
+			earnedApplied: 0,
+			totalApplied: 5800
+		});
+
+		const phoneRentalCreate = vi.fn().mockResolvedValue({ id: 'rental-1' });
+		const orderCreate = vi.fn().mockResolvedValue({
+			id: 'order-credit-phone',
+			orderNumber: 'ORD-CREDIT-PHONE',
+			status: 'paid',
+			paymentStatus: 'paid',
+			totalAmount: 5800,
+			currency: 'NGN',
+			orderItems: []
+		});
+		mocks.createTransaction.mockImplementation(async (callback) =>
+			callback({
+				order: { create: orderCreate },
+				phoneRental: { create: phoneRentalCreate }
+			})
+		);
+
+		const response = await POST({
+			request: orderRequest('checkout_key_credit_phone', 'NGN', undefined, true),
+			locals: { user },
+			url: new URL('https://smm.fastaccs.com/api/orders')
+		} as never);
+		const body = await response.json();
+
+		expect(response.status).toBe(200);
+		expect(body).toMatchObject({
+			success: true,
+			orderId: 'order-credit-phone',
+			paidWithStoreCredit: true,
+			deliveryMode: 'auto_sms'
+		});
+		expect(body.redirectUrl).toContain(
+			'/checkout/verify?orderId=order-credit-phone&method=store_credit'
+		);
+		expect(orderCreate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({
+					status: 'paid',
+					paymentStatus: 'paid',
+					paymentMethod: 'store_credit',
+					deliveryStatus: 'processing',
+					orderType: 'phone'
+				})
+			})
+		);
+		expect(phoneRentalCreate).toHaveBeenCalledWith({
+			data: expect.objectContaining({
+				serviceId: 1,
+				serviceName: 'WhatsApp',
+				countryId: 187,
+				countryName: 'United States',
+				saleAmountNgn: 5800,
+				status: 'pending'
+			})
+		});
+		expect(mocks.redeemStoreCreditForOrder).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({
+				userId: user.id,
+				orderId: 'order-credit-phone',
+				redemption: expect.objectContaining({ totalApplied: 5800 })
+			})
+		);
+		expect(mocks.initializeTransaction).not.toHaveBeenCalled();
 	});
 });

@@ -1,14 +1,5 @@
 <script>
-	import {
-		Star,
-		MessageCircle,
-		CheckCircle,
-		Clock,
-		Shield,
-		Zap,
-		HeartHandshake,
-		Phone
-	} from '$lib/icons';
+	import { Shield, Zap, HeartHandshake, Phone } from '$lib/icons';
 </script>
 
 <section style="background: var(--bg-elev-1); padding: var(--space-4xl) var(--space-md);">
@@ -83,35 +74,6 @@
 				<p style="color: var(--text-muted); font-family: var(--font-body);">
 					Round-the-clock customer support when you need it
 				</p>
-			</div>
-		</div>
-
-		<!-- Trust Badges -->
-		<div style="margin-top: var(--space-3xl); text-align: center;">
-			<div class="flex flex-wrap items-center justify-center gap-8" style="opacity: 0.75;">
-				<div class="flex items-center">
-					<CheckCircle class="mr-2 h-5 w-5" style="color: var(--status-success);" />
-					<span style="color: var(--text-muted); font-family: var(--font-body);">Secure checkout</span
-					>
-				</div>
-				<div class="flex items-center">
-					<CheckCircle class="mr-2 h-5 w-5" style="color: var(--status-success);" />
-					<span style="color: var(--text-muted); font-family: var(--font-body);"
-						>Priced for every budget</span
-					>
-				</div>
-				<div class="flex items-center">
-					<CheckCircle class="mr-2 h-5 w-5" style="color: var(--status-success);" />
-					<span style="color: var(--text-muted); font-family: var(--font-body);"
-						>Support that replies</span
-					>
-				</div>
-				<div class="flex items-center">
-					<CheckCircle class="mr-2 h-5 w-5" style="color: var(--status-success);" />
-					<span style="color: var(--text-muted); font-family: var(--font-body);"
-						>Real, working accounts</span
-					>
-				</div>
 			</div>
 		</div>
 	</div>

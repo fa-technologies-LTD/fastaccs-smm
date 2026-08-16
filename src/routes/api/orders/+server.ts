@@ -5,7 +5,6 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { runWithDbRetry } from '$lib/server/db-retry';
 import { fulfillOrder } from '$lib/services/fulfillment';
-import { buildLiveCandidatePool } from '$lib/services/number-providers';
 import { getPhoneTierConfig } from '$lib/helpers/phone-tier-config';
 import { initializeTransaction } from '$lib/services/monnify';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
@@ -21,10 +20,7 @@ import {
 	getMinimumOrderValueSetting,
 	isCheckoutEnabledSetting
 } from '$lib/services/admin-settings';
-import {
-	canViewOrderAmounts,
-	redactOrderFinancials
-} from '$lib/services/admin-revenue-visibility';
+import { canViewOrderAmounts, redactOrderFinancials } from '$lib/services/admin-revenue-visibility';
 import {
 	normalizeTierDeliveryMode,
 	getTierStockStatus,
@@ -126,6 +122,13 @@ function isActiveCheckoutOrder(order: {
 	);
 }
 
+function existingCheckoutUsesStoreCredit(order: {
+	storeCreditApplied?: Prisma.Decimal | number | string | null;
+	paymentMethod?: string | null;
+}): boolean {
+	return order.paymentMethod === 'store_credit' || Number(order.storeCreditApplied || 0) > 0;
+}
+
 function buildOrderAnalyticsMetadata(
 	analytics: CreateOrderInput['analytics']
 ): Prisma.InputJsonObject {
@@ -177,8 +180,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		const limit = sanitizeLimit(url.searchParams.get('limit'));
 
 		const admin = hasAdminPermission(locals.adminContext, 'admin:access');
-		const where: { status?: string; guestEmail?: string; userId?: string; orderType?: string } =
-			{};
+		const where: { status?: string; guestEmail?: string; userId?: string; orderType?: string } = {};
 
 		if (status) where.status = status;
 		if (orderType === 'account' || orderType === 'boosting') where.orderType = orderType;
@@ -266,6 +268,17 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				return json({ success: false, error: 'Checkout session conflict.' }, { status: 409 });
 			}
 
+			if (Boolean(orderData.useStoreCredit) !== existingCheckoutUsesStoreCredit(existingCheckout)) {
+				return json(
+					{
+						success: false,
+						code: 'CHECKOUT_INTENT_CHANGED',
+						error: 'Checkout payment option changed. Please try again.'
+					},
+					{ status: 409 }
+				);
+			}
+
 			if (isActiveCheckoutOrder(existingCheckout)) {
 				logPaymentEvent('info', 'checkout.resumed', {
 					traceId,
@@ -310,14 +323,26 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				['paid', 'completed'].includes(existingCheckout.status) ||
 				existingCheckout.paymentStatus === 'paid'
 			) {
-				return json(
-					{
-						success: false,
-						orderId: existingCheckout.id,
-						error: 'This checkout has already been paid.'
-					},
-					{ status: 409 }
-				);
+				// The browser may have lost the original success response after the durable
+				// payment commit. Replaying the same checkout key must resume that paid order,
+				// never invite a second charge or claim that payment failed.
+				const paidWithStoreCredit = existingCheckout.paymentMethod === 'store_credit';
+				return json({
+					data: existingCheckout,
+					success: true,
+					resumed: true,
+					orderId: existingCheckout.id,
+					paidWithStoreCredit,
+					redirectUrl: `${url.origin}/checkout/verify?orderId=${encodeURIComponent(existingCheckout.id)}${paidWithStoreCredit ? '&method=store_credit' : ''}`,
+					deliveryMode:
+						existingCheckout.orderType === 'phone'
+							? 'auto_sms'
+							: existingCheckout.deliveryMethod === 'whatsapp'
+								? 'manual_handover'
+								: 'instant_auto',
+					traceId,
+					error: null
+				});
 			}
 
 			if (isNewCheckoutInitializationDisabled()) {
@@ -596,9 +621,6 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			);
 		}
 
-		await releaseExpiredOrderReservations();
-		await releaseExpiredExactPreviewReservations();
-
 		const stockCheckCategoryIds = [
 			...new Set(
 				itemsWithNames
@@ -612,6 +634,15 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					.map((item) => item.categoryId)
 			)
 		];
+		// Global reservation cleanup is maintenance, not part of a Numbers checkout.
+		// Keep it only on paths that actually consume account inventory; the scheduled
+		// reconciliation job remains the broad safety net.
+		if (stockCheckCategoryIds.length > 0) {
+			await releaseExpiredOrderReservations();
+		}
+		if (exactSelectionItems.length > 0) {
+			await releaseExpiredExactPreviewReservations();
+		}
 		const availabilityByCategory =
 			stockCheckCategoryIds.length > 0
 				? new Map(
@@ -683,14 +714,14 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			);
 		}
 
-		// Authoritative buy-time availability guard: the storefront can be a few minutes stale,
-		// so before we take a single naira we confirm hub-man can actually supply this number.
-		// This stops the "pay → no stock → refund" churn that erodes trust. Fail safe: if the
-		// stock can't be confirmed (hub-man down), we don't create the order rather than risk it.
+		let phoneTierConfig: ReturnType<typeof getPhoneTierConfig> = null;
+		// Validate the durable tier mapping at buy time. Supplier selection and live calls belong
+		// to fulfilment after the payment commit; blocking checkout on provider APIs made buyers
+		// wait and still could not guarantee that stock would remain available moments later.
 		if (isPhoneCheckout) {
 			const phoneCategory = categoryById.get(itemsWithNames[0].categoryId);
-			const phoneCfg = phoneCategory ? getPhoneTierConfig(phoneCategory.metadata) : null;
-			if (!phoneCfg) {
+			phoneTierConfig = phoneCategory ? getPhoneTierConfig(phoneCategory.metadata) : null;
+			if (!phoneTierConfig) {
 				return json(
 					{
 						success: false,
@@ -699,33 +730,6 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					},
 					{ status: 409 }
 				);
-			}
-			// Two-source availability: confirm SOME supplier (hub-man OR pvapins) can serve this
-			// number before charging. Uses the exact candidate pool fulfillment will sweep, so the
-			// guard, the storefront, and the rent path all agree. (Previously hub-man-only, which
-			// falsely rejected pvapins-only tiers like Canada/USA WhatsApp when hub-man was dry.)
-			try {
-				const pool = await buildLiveCandidatePool({
-					hubServiceId: phoneCfg.serviceId,
-					hubCountryId: phoneCfg.countryId,
-					hubCountryCode: phoneCfg.countryCode,
-					hubCountryName: phoneCfg.countryName
-				});
-				if (pool.length === 0) {
-					return json(
-						{
-							success: false,
-							error: 'This number is currently unavailable — check back later or choose another.',
-							code: 'number_unavailable'
-						},
-						{ status: 409 }
-					);
-				}
-			} catch (err) {
-				// Fail-open: if the pool can't be built (both providers erroring), don't block the
-				// sale — the post-payment sweep + auto-refund is the safety net. Better than blocking
-				// every Numbers purchase during a transient provider blip.
-				console.error('[orders] phone availability pool build failed (allowing):', (err as Error).message);
 			}
 		}
 		const requestedPromotionCode = String(orderData.promotionCode || '')
@@ -737,7 +741,10 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 		// Promo/affiliate pricing applies to ACCOUNTS only. Blocked on boosting and on
 		// numbers (a ₦1,000 code on a ₦1,000-floor number would be a guaranteed loss).
-		if ((isBoostingCheckout || isPhoneCheckout) && (requestedPromotionCode || requestedAffiliateCode)) {
+		if (
+			(isBoostingCheckout || isPhoneCheckout) &&
+			(requestedPromotionCode || requestedAffiliateCode)
+		) {
 			return json(
 				{
 					success: false,
@@ -801,7 +808,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				return json(
 					{
 						success: false,
-						error: 'Promo codes cannot be combined with affiliate referral pricing on the same order.'
+						error:
+							'Promo codes cannot be combined with affiliate referral pricing on the same order.'
 					},
 					{ status: 400 }
 				);
@@ -929,107 +937,136 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			...item,
 			orderItemId: randomUUID()
 		}));
+		const storeCreditPaidAt = isFullyCreditPaid ? new Date() : null;
 		let data;
 		try {
 			data = await runWithDbRetry(() =>
-				prisma.$transaction(async (tx) => {
-				const createdOrder = await tx.order.create({
-					data: {
-						userId: checkoutUserId,
-						orderNumber: `ORD-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`,
-						checkoutKey,
-						guestEmail: customerEmail,
-						guestPhone: customerPhone || null,
-						subtotal: subtotalAmount,
-						discountAmount,
-						storeCreditApplied: storeCreditRedemption.totalApplied,
-						totalAmount: finalOrderTotal,
-						currency: orderCurrency,
-						paymentMethod: paymentMethod,
-						paymentExpiresAt: paymentMethod === 'monnify' ? paymentExpiresAt : null,
-						deliveryMethod: isManualHandoverOrder ? 'whatsapp' : 'email',
-						deliveryContact: customerEmail,
-						deliveryStatus: isManualHandoverOrder ? 'processing' : 'pending',
-						status: 'pending',
-						orderType: isBoostingCheckout ? 'boosting' : isPhoneCheckout ? 'phone' : 'account',
-						affiliateCode: attribution.affiliateCode || null,
-						affiliateUserId: attribution.affiliateUserId || null,
-						promotionId,
-						promotionCode: appliedPromotionCode,
-						analyticsMetadata: buildOrderAnalyticsMetadata(orderData.analytics),
-						orderItems: {
-							create: reservationItems.map((item) => ({
-								id: item.orderItemId,
-								categoryId: item.categoryId,
-								quantity: item.quantity,
-								unitPrice: item.unitPrice,
-								totalPrice: item.unitPrice * item.quantity,
-								productName: item.categoryName,
-								productCategory: item.boostTargetUrl ? 'boosting_service' : 'tier',
-								boostTargetUrl: item.boostTargetUrl,
-								boostQuantity: item.boostQuantity,
-								boostFulfillmentStatus: item.boostTargetUrl ? 'pending' : null
-							}))
-						}
-					},
-					include: {
-						orderItems: {
-							include: {
-								accounts: true
+				prisma.$transaction(
+					async (tx) => {
+						const createdOrder = await tx.order.create({
+							data: {
+								userId: checkoutUserId,
+								orderNumber: `ORD-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`,
+								checkoutKey,
+								guestEmail: customerEmail,
+								guestPhone: customerPhone || null,
+								subtotal: subtotalAmount,
+								discountAmount,
+								storeCreditApplied: storeCreditRedemption.totalApplied,
+								totalAmount: finalOrderTotal,
+								currency: orderCurrency,
+								paymentMethod: isFullyCreditPaid ? 'store_credit' : paymentMethod,
+								paymentChannel: isFullyCreditPaid ? 'store_credit' : null,
+								paymentStatus: isFullyCreditPaid ? 'paid' : 'pending',
+								paidAt: storeCreditPaidAt,
+								paymentExpiresAt:
+									!isFullyCreditPaid && paymentMethod === 'monnify' ? paymentExpiresAt : null,
+								deliveryMethod: isManualHandoverOrder ? 'whatsapp' : 'email',
+								deliveryContact: customerEmail,
+								deliveryStatus:
+									isManualHandoverOrder || (isFullyCreditPaid && isPhoneCheckout)
+										? 'processing'
+										: 'pending',
+								status: isFullyCreditPaid ? 'paid' : 'pending',
+								orderType: isBoostingCheckout ? 'boosting' : isPhoneCheckout ? 'phone' : 'account',
+								affiliateCode: attribution.affiliateCode || null,
+								affiliateUserId: attribution.affiliateUserId || null,
+								promotionId,
+								promotionCode: appliedPromotionCode,
+								analyticsMetadata: buildOrderAnalyticsMetadata(orderData.analytics),
+								orderItems: {
+									create: reservationItems.map((item) => ({
+										id: item.orderItemId,
+										categoryId: item.categoryId,
+										quantity: item.quantity,
+										unitPrice: item.unitPrice,
+										totalPrice: item.unitPrice * item.quantity,
+										productName: item.categoryName,
+										productCategory: item.boostTargetUrl ? 'boosting_service' : 'tier',
+										boostTargetUrl: item.boostTargetUrl,
+										boostQuantity: item.boostQuantity,
+										boostFulfillmentStatus: item.boostTargetUrl ? 'pending' : null
+									}))
+								}
 							},
-							orderBy: { createdAt: 'asc' }
-						}
-					}
-				});
-
-				await reserveStandardAccountsForOrder({
-					client: tx,
-					reservedUntil: reservationExpiresAt,
-					// Manual-handover and auto-SMS items have no account inventory to reserve.
-					items: reservationItems.filter(
-						(item) =>
-							!item.boostTargetUrl &&
-							item.deliveryMode !== 'manual_handover' &&
-							item.deliveryMode !== 'auto_sms'
-					)
-				});
-
-				if (exactSelectionItems.length > 0) {
-					await attachExactPreviewSelectionsToOrder({
-						orderId: createdOrder.id,
-						userId: checkoutUserId,
-						client: tx,
-						expiresAt: reservationExpiresAt,
-						selections: reservationItems
-							.filter((item) => Boolean(item.exactAccountId))
-							.map((item) => ({
-								categoryId: item.categoryId,
-								accountId: item.exactAccountId as string,
-								displayLabel: item.exactAccountLabel || undefined,
-								orderItemId: item.orderItemId
-							}))
-					});
-				}
-
-					// Reserve (debit) store credit for this order. A failed/expired payment
-					// reverses it via reverseStoreCreditRedemption.
-					if (storeCreditRedemption.totalApplied > 0 && checkoutUserId) {
-						await redeemStoreCreditForOrder(tx, {
-							userId: checkoutUserId,
-							orderId: createdOrder.id,
-							orderNumber: createdOrder.orderNumber,
-							redemption: storeCreditRedemption
+							include: {
+								orderItems: {
+									include: {
+										accounts: true
+									},
+									orderBy: { createdAt: 'asc' }
+								}
+							}
 						});
-					}
 
-				return createdOrder;
-				},
-				// Prisma's default interactive-transaction timeout is 5s; a multi-step order create
-				// (order + reservations + store-credit debit) can exceed it on a slow/high-latency DB
-				// link (e.g. local dev against remote Neon), throwing "Transaction already closed" and
-				// failing checkout — most visibly on store-credit payments. Give it real headroom; on
-				// prod the tx finishes in well under this, so the ceiling is never actually reached.
-				{ maxWait: 10_000, timeout: 20_000 })
+						await reserveStandardAccountsForOrder({
+							client: tx,
+							reservedUntil: reservationExpiresAt,
+							// Manual-handover and auto-SMS items have no account inventory to reserve.
+							items: reservationItems.filter(
+								(item) =>
+									!item.boostTargetUrl &&
+									item.deliveryMode !== 'manual_handover' &&
+									item.deliveryMode !== 'auto_sms'
+							)
+						});
+
+						if (exactSelectionItems.length > 0) {
+							await attachExactPreviewSelectionsToOrder({
+								orderId: createdOrder.id,
+								userId: checkoutUserId,
+								client: tx,
+								expiresAt: reservationExpiresAt,
+								selections: reservationItems
+									.filter((item) => Boolean(item.exactAccountId))
+									.map((item) => ({
+										categoryId: item.categoryId,
+										accountId: item.exactAccountId as string,
+										displayLabel: item.exactAccountLabel || undefined,
+										orderItemId: item.orderItemId
+									}))
+							});
+						}
+
+						// For a fully store-credit-funded number, payment, the wallet debit, and the
+						// durable fulfilment intent must commit together. A lost HTTP response can then
+						// only leave a paid order that the page/cron can safely continue — never a paid
+						// order with no rental record.
+						if (isFullyCreditPaid && isPhoneCheckout && phoneTierConfig) {
+							const phoneItem = reservationItems[0];
+							await tx.phoneRental.create({
+								data: {
+									orderItemId: phoneItem.orderItemId,
+									serviceId: phoneTierConfig.serviceId,
+									serviceName: phoneTierConfig.serviceName,
+									countryId: phoneTierConfig.countryId,
+									countryName: phoneTierConfig.countryName,
+									saleAmountNgn: finalOrderTotal,
+									status: 'pending'
+								}
+							});
+						}
+
+						// Reserve (debit) store credit for this order. A failed/expired payment
+						// reverses it via reverseStoreCreditRedemption.
+						if (storeCreditRedemption.totalApplied > 0 && checkoutUserId) {
+							await redeemStoreCreditForOrder(tx, {
+								userId: checkoutUserId,
+								orderId: createdOrder.id,
+								orderNumber: createdOrder.orderNumber,
+								redemption: storeCreditRedemption
+							});
+						}
+
+						return createdOrder;
+					},
+					// Prisma's default interactive-transaction timeout is 5s; a multi-step order create
+					// (order + reservations + store-credit debit) can exceed it on a slow/high-latency DB
+					// link (e.g. local dev against remote Neon), throwing "Transaction already closed" and
+					// failing checkout — most visibly on store-credit payments. Give it real headroom; on
+					// prod the tx finishes in well under this, so the ceiling is never actually reached.
+					{ maxWait: 10_000, timeout: 20_000 }
+				)
 			);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Could not reserve order stock.';
@@ -1065,43 +1102,26 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		// Invalidate admin stats cache after order creation
 		invalidateAdminStatsCache();
 
-		// Zero-charge order: store credit covers the full total, nothing to charge.
-		// The credit was already reserved (redeemStoreCreditForOrder) inside the
-		// create transaction. Skip Monnify — mark the order paid and fulfil via the
-		// same proven path Monnify orders use (recoverPaidOrder: boosting / manual /
-		// account allocation), then route the browser through /checkout/verify so the
-		// buyer sees the standard success + delivery UI.
+		// Zero-charge order: payment and its credit debit committed atomically above.
+		// A Numbers order also has its pending rental in that same commit, so return
+		// immediately and let the order page + cron drive supplier fulfilment.
 		if (isFullyCreditPaid) {
-			await prisma.order.update({
-				where: { id: data.id },
-				data: {
-					status: 'paid',
-					paymentStatus: 'paid',
-					paidAt: new Date(),
-					paymentMethod: 'store_credit',
-					paymentChannel: 'store_credit',
-					paymentExpiresAt: null,
-					paymentCheckoutUrl: null
-				}
-			});
-			invalidateAdminStatsCache();
 			logOrderStatusTransition({
 				orderId: data.id,
 				source: 'store_credit',
-				fromStatus: data.status,
+				fromStatus: 'pending',
 				toStatus: 'paid',
-				fromPaymentStatus: data.paymentStatus,
+				fromPaymentStatus: 'pending',
 				toPaymentStatus: 'paid'
 			});
 
-			const settlement = await recoverPaidOrder(data.id, 'store_credit').catch(
-				(settleError) => {
-					// Order is paid and the credit is reserved; the paid-order recovery
-					// cron (and the verify page below) will retry fulfilment.
-					console.error('Store-credit order fulfilment error:', settleError);
-					return null;
-				}
-			);
+			const settlement = isPhoneCheckout
+				? null
+				: await recoverPaidOrder(data.id, 'store_credit').catch((settleError) => {
+						// Payment is durable; verify/reconciliation can retry non-Numbers delivery.
+						console.error('Store-credit order fulfilment error:', settleError);
+						return null;
+					});
 
 			const verifyUrl = `${url.origin}/checkout/verify?orderId=${encodeURIComponent(data.id)}&method=store_credit`;
 			return json({

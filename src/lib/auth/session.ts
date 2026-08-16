@@ -18,6 +18,7 @@ interface CachedSession {
 
 const sessionCache = new Map<string, CachedSession>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const STOREFRONT_USER_CACHE_TTL = 30 * 1000;
 
 function clearUserSessionsFromCache(userId: string, keepSessionId?: string): void {
 	for (const [sessionId, cached] of sessionCache.entries()) {
@@ -75,7 +76,12 @@ export async function createSession(token: string, userId: string): Promise<Sess
 }
 
 // Validate session token
-export async function validateSessionToken(token: string): Promise<SessionValidationResult> {
+export async function validateSessionToken(
+	token: string,
+	options: { allowWrites?: boolean; requireFreshUser?: boolean } = {}
+): Promise<SessionValidationResult> {
+	const allowWrites = options.allowWrites !== false;
+	const requireFreshUser = options.requireFreshUser !== false;
 	const sessionId = hashSessionToken(token);
 
 	// Check cache first
@@ -84,13 +90,16 @@ export async function validateSessionToken(token: string): Promise<SessionValida
 		if (Date.now() >= cached.session.expiresAt.getTime()) {
 			sessionCache.delete(sessionId);
 		} else {
-			// User state can change on another server instance, so never trust the cached copy.
+			if (!requireFreshUser && Date.now() - cached.cachedAt < STOREFRONT_USER_CACHE_TTL) {
+				return { session: cached.session, user: cached.user };
+			}
+			// Fresh-required paths always recheck user state in the database.
 			const freshUser = await prisma.user.findUnique({
 				where: { id: cached.user.id }
 			});
 
 			if (!freshUser?.isActive) {
-				await prisma.session.deleteMany({ where: { id: sessionId } });
+				if (allowWrites) await prisma.session.deleteMany({ where: { id: sessionId } });
 				sessionCache.delete(sessionId);
 				return { session: null, user: null };
 			}
@@ -98,7 +107,7 @@ export async function validateSessionToken(token: string): Promise<SessionValida
 			sessionCache.set(sessionId, {
 				session: cached.session,
 				user: freshUser,
-				cachedAt: cached.cachedAt
+				cachedAt: Date.now()
 			});
 
 			return { session: cached.session, user: freshUser };
@@ -119,13 +128,13 @@ export async function validateSessionToken(token: string): Promise<SessionValida
 	const { user, ...session } = result;
 
 	if (!user.isActive) {
-		await prisma.session.deleteMany({ where: { id: sessionId } });
+		if (allowWrites) await prisma.session.deleteMany({ where: { id: sessionId } });
 		sessionCache.delete(sessionId);
 		return { session: null, user: null };
 	}
 
 	if (Date.now() >= session.expiresAt.getTime()) {
-		await prisma.session.delete({ where: { id: sessionId } });
+		if (allowWrites) await prisma.session.delete({ where: { id: sessionId } });
 		sessionCache.delete(sessionId); // Remove from cache
 		return { session: null, user: null };
 	}
@@ -136,7 +145,7 @@ export async function validateSessionToken(token: string): Promise<SessionValida
 		Date.now() >= session.expiresAt.getTime() - 1000 * 60 * 60 * 24 * 15 &&
 		Date.now() - session.lastRefreshedAt.getTime() > REFRESH_INTERVAL;
 
-	if (shouldRefresh) {
+	if (shouldRefresh && allowWrites) {
 		// Refresh session expiry
 		session.expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
 		session.lastRefreshedAt = new Date();

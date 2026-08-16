@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const prismaMock = vi.hoisted(() => ({
 	phoneRental: { findUnique: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
 	orderItem: { findUnique: vi.fn(), findFirst: vi.fn() },
-	order: { update: vi.fn() },
+	order: { update: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
 	$transaction: vi.fn()
 }));
 const getSmsMock = vi.hoisted(() => vi.fn());
@@ -35,7 +35,7 @@ vi.mock('./hubman', () => ({
 	HubmanError
 }));
 vi.mock('./store-credit', () => ({ creditStoreCredit: creditStoreCreditMock, SC_CREDIT_REFUND: 'X' }));
-vi.mock('./phone-telemetry', () => ({ recordPhoneAttempt: () => Promise.resolve(null), recordAttemptOtpReceived: () => Promise.resolve(), recordAttemptRejection: () => Promise.resolve(), classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' }) }));
+vi.mock('./phone-telemetry', () => ({ recordPhoneAttempt: () => Promise.resolve(null), recordAttemptOtpReceived: () => Promise.resolve(), recordAttemptOtpTimeout: () => Promise.resolve(), recordAttemptRejection: () => Promise.resolve(), classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' }) }));
 vi.mock('./admin-alerts', () => ({ sendCriticalAdminAlert: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('./phone-pricing', () => ({ getPhonePricingConfig: vi.fn(), computeMaxPriceCentsForSale: vi.fn(), computeProcurementCeilingCents: () => 100000 }));
 vi.mock('$lib/helpers/phone-tier-config', () => ({ getPhoneTierConfig: getPhoneTierConfigMock }));
@@ -44,10 +44,16 @@ import { cancelAndRefundRental } from './phone-fulfillment';
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	prismaMock.phoneRental.updateMany.mockResolvedValue({ count: 1 });
 	prismaMock.phoneRental.findUnique.mockResolvedValue({
 		orderItemId: 'item-1',
 		status: 'awaiting_sms',
+		provider: 'hubman',
+		providerRef: 'hub-uuid-1',
 		hubOrderUuid: 'hub-uuid-1',
+		generation: 1,
+		operationToken: null,
+		operationLeaseExpiresAt: null,
 		rentedAt: new Date(Date.now() - 5 * 60_000),
 		createdAt: new Date(Date.now() - 6 * 60_000)
 	});
@@ -56,11 +62,12 @@ beforeEach(() => {
 		id: 'item-1',
 		totalPrice: 1200,
 		category: { metadata: {} },
-		order: { userId: 'user-1', orderNumber: 'ORD-1' }
+		order: { userId: 'user-1', orderNumber: 'ORD-1', status: 'paid', paymentStatus: 'paid', deliveryStatus: 'processing' }
 	});
 	getPhoneTierConfigMock.mockReturnValue({ serviceId: 1, countryId: 2, serviceName: 'WA', countryName: 'US' });
 	prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => unknown) =>
 		cb({
+			$queryRaw: vi.fn().mockResolvedValue([]),
 			phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 			order: { update: vi.fn().mockResolvedValue({}) }
 		})

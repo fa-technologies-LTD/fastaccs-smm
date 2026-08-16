@@ -75,11 +75,11 @@ export async function voidUnvestedRewardsForOrder(orderId: string): Promise<{ vo
 		select: { id: true }
 	});
 	if (pending.length === 0) return { voided: 0 };
-	await prisma.walletTransaction.updateMany({
-		where: { id: { in: pending.map((p) => p.id) } },
+	const result = await prisma.walletTransaction.updateMany({
+		where: { id: { in: pending.map((p) => p.id) }, status: 'pending' },
 		data: { status: 'reversed' }
 	});
-	return { voided: pending.length };
+	return { voided: result.count };
 }
 
 /**
@@ -99,21 +99,31 @@ export async function reverseVestedRegularRewardForOrder(
 		},
 		select: { id: true, amount: true, walletId: true }
 	});
+	let reversed = 0;
 	for (const row of rows) {
-		await prisma.$transaction(async (tx) => {
+		const changed = await prisma.$transaction(async (tx) => {
+			await tx.$queryRaw`SELECT id FROM wallets WHERE id = ${row.walletId}::uuid FOR UPDATE`;
+			const liveReward = await tx.walletTransaction.findUnique({
+				where: { id: row.id },
+				select: { status: true, amount: true }
+			});
+			if (liveReward?.status !== 'available') return false;
 			const w = await tx.wallet.findUnique({
 				where: { id: row.walletId },
 				select: { balance: true }
 			});
+			if (!w) return false;
 			const before = Number(w?.balance || 0);
 			await tx.wallet.update({
 				where: { id: row.walletId },
-				data: { balance: Math.max(0, before - Number(row.amount || 0)) }
+				data: { balance: Math.max(0, before - Number(liveReward.amount || 0)) }
 			});
 			await tx.walletTransaction.update({ where: { id: row.id }, data: { status: 'reversed' } });
+			return true;
 		});
+		if (changed) reversed += 1;
 	}
-	return { reversed: rows.length };
+	return { reversed };
 }
 
 /**
@@ -167,25 +177,32 @@ export async function vestMaturedAffiliateRewards(limit = 500): Promise<{
 				(REFUNDED_ORDER_STATUSES.has(order.status) ||
 					REFUNDED_ORDER_STATUSES.has(order.paymentStatus));
 			if (refunded) {
-				await prisma.walletTransaction.update({
-					where: { id: row.id },
+				const result = await prisma.walletTransaction.updateMany({
+					where: { id: row.id, status: 'pending' },
 					data: { status: 'reversed' }
 				});
-				voided += 1;
+				voided += result.count;
 				continue;
 			}
 		}
 
 		// Matured + order still good → vest: flip to available and credit the balance now.
-		await prisma.$transaction(async (tx) => {
+		const changed = await prisma.$transaction(async (tx) => {
+			await tx.$queryRaw`SELECT id FROM wallets WHERE id = ${row.walletId}::uuid FOR UPDATE`;
+			const liveReward = await tx.walletTransaction.findUnique({
+				where: { id: row.id },
+				select: { status: true, amount: true }
+			});
+			if (liveReward?.status !== 'pending') return false;
 			const w = await tx.wallet.findUnique({
 				where: { id: row.walletId },
 				select: { balance: true }
 			});
+			if (!w) return false;
 			const before = Number(w?.balance || 0);
 			await tx.wallet.update({
 				where: { id: row.walletId },
-				data: { balance: before + Number(row.amount || 0) }
+				data: { balance: before + Number(liveReward.amount || 0) }
 			});
 			await tx.walletTransaction.update({
 				where: { id: row.id },
@@ -194,8 +211,10 @@ export async function vestMaturedAffiliateRewards(limit = 500): Promise<{
 					metadata: { ...meta, lifecycleStatus: 'available', vestedAt: nowIso }
 				}
 			});
+			return true;
 		});
-		vested += 1;
+		if (changed) vested += 1;
+		else skipped += 1;
 	}
 
 	return { vested, voided, skipped };

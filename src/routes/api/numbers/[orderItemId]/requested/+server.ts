@@ -34,5 +34,15 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 		where: { orderItemId, status: 'awaiting_sms', otpRequestedAt: null },
 		data: { otpRequestedAt: new Date() }
 	});
-	return json({ ok: true });
+	const rental = await prisma.phoneRental.findUnique({
+		where: { orderItemId },
+		select: { status: true, otpRequestedAt: true }
+	});
+	if (!rental || rental.status !== 'awaiting_sms' || !rental.otpRequestedAt) {
+		return json(
+			{ ok: false, error: 'This number is not ready for a code request yet.' },
+			{ status: 409 }
+		);
+	}
+	return json({ ok: true, otpRequestedAt: rental.otpRequestedAt.toISOString() });
 };

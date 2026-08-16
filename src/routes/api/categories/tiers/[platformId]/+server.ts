@@ -3,7 +3,6 @@ import { prisma } from '$lib/prisma';
 import { getTierMerchandisingState } from '$lib/helpers/tier-merchandising';
 import { getTierStockStatus } from '$lib/helpers/tier-delivery-config';
 import { getLowStockThresholdSetting } from '$lib/services/admin-settings';
-import { releaseExpiredExactPreviewReservations } from '$lib/services/exact-preview';
 
 interface TierMetadata {
 	pricing?: {
@@ -47,8 +46,6 @@ export async function GET({ params }) {
 		if (!platform) {
 			return json({ data: null, error: 'Platform not found' }, { status: 404 });
 		}
-
-		await releaseExpiredExactPreviewReservations();
 
 		// Get all tiers that belong to this platform
 		const tiers = await prisma.category.findMany({

@@ -88,7 +88,7 @@
 			'Total Sales',
 			'Available Store Credit',
 			'Store Credit Earned',
-			'Requested Payouts',
+			'Open Payouts',
 			'Status',
 			'Joined Date'
 		];

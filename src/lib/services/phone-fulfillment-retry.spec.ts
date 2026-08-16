@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const prismaMock = vi.hoisted(() => ({
 	phoneRental: { upsert: vi.fn(), updateMany: vi.fn(), update: vi.fn(), findUnique: vi.fn() },
 	orderItem: { findFirst: vi.fn(), findUnique: vi.fn() },
-	order: { update: vi.fn() },
+	order: { update: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
 	$transaction: vi.fn()
 }));
 const pollSmsMock = vi.hoisted(() => vi.fn());
@@ -38,7 +38,7 @@ vi.mock('./hubman', () => ({
 	HubmanError: class HubmanError extends Error {}
 }));
 vi.mock('./store-credit', () => ({ creditStoreCredit: creditStoreCreditMock, SC_CREDIT_REFUND: 'X' }));
-vi.mock('./phone-telemetry', () => ({ recordPhoneAttempt: () => Promise.resolve(null), recordAttemptOtpReceived: () => Promise.resolve(), recordAttemptRejection: () => Promise.resolve(), classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' }) }));
+vi.mock('./phone-telemetry', () => ({ recordPhoneAttempt: () => Promise.resolve(null), recordAttemptOtpReceived: () => Promise.resolve(), recordAttemptOtpTimeout: () => Promise.resolve(), recordAttemptRejection: () => Promise.resolve(), classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' }) }));
 vi.mock('./admin-alerts', () => ({ sendCriticalAdminAlert: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('./phone-pricing', () => ({
 	getPhonePricingConfig: getPhonePricingConfigMock,
@@ -69,6 +69,9 @@ const rental = (over: Record<string, unknown> = {}) => ({
 	shadowProviderRef: null,
 	costCents: 66,
 	retryCount: 0,
+	generation: 1,
+	operationToken: null,
+	operationLeaseExpiresAt: null,
 	serviceId: 1,
 	...over
 });
@@ -83,12 +86,14 @@ beforeEach(() => {
 	prismaMock.phoneRental.upsert.mockResolvedValue({});
 	prismaMock.phoneRental.update.mockResolvedValue({});
 	prismaMock.order.update.mockResolvedValue({});
+	prismaMock.order.updateMany.mockResolvedValue({ count: 1 });
+	prismaMock.order.findUnique.mockResolvedValue({ userId: 'user-1' });
 	prismaMock.orderItem.findUnique.mockResolvedValue({ orderId: 'order-1' });
 	prismaMock.orderItem.findFirst.mockResolvedValue({
 		id: 'item-1',
 		totalPrice: 4800,
 		category: { metadata: {} },
-		order: { userId: 'user-1', orderNumber: 'ORD-1' }
+		order: { userId: 'user-1', orderNumber: 'ORD-1', status: 'paid', paymentStatus: 'paid', deliveryStatus: 'processing' }
 	});
 	getPhoneTierConfigMock.mockReturnValue({
 		serviceId: 1, countryId: 58, serviceName: 'WhatsApp', countryName: 'USA', countryCode: 'US',
@@ -96,7 +101,11 @@ beforeEach(() => {
 	});
 	getPhonePricingConfigMock.mockResolvedValue({ usdNgnRate: 1500, marginPercent: 120, activationTimeoutMinutes: 20, minFulfillmentProfitNgn: 500 });
 	prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => unknown) =>
-		cb({ phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, order: { update: vi.fn() } })
+		cb({
+			$queryRaw: vi.fn().mockResolvedValue([]),
+			phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			order: { update: vi.fn() }
+		})
 	);
 });
 
@@ -201,5 +210,35 @@ describe('customerRetryPhoneRental', () => {
 		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
 			expect.objectContaining({ data: expect.objectContaining({ reservedLiabilityCents: { increment: 80 } }) })
 		);
+	});
+
+	it('a stale replacement cannot reset or refund a newer generation', async () => {
+		const state = rental({ generation: 1 });
+		prismaMock.phoneRental.findUnique.mockImplementation(async () => ({ ...state }));
+		prismaMock.phoneRental.updateMany.mockImplementation(async ({ where, data }) => {
+			if (where.status && where.status !== state.status) return { count: 0 };
+			if (where.generation != null && where.generation !== state.generation) return { count: 0 };
+			if (where.operationToken && where.operationToken !== state.operationToken) return { count: 0 };
+			Object.assign(state, data);
+			return { count: 1 };
+		});
+		cancelMock.mockImplementation(async () => {
+			// Another recovery has already installed generation 2 while this old cancel was in flight.
+			Object.assign(state, {
+				status: 'awaiting_sms',
+				generation: 2,
+				providerRef: 'newer|USA|Whatsapp24',
+				phoneNumber: '15550000002',
+				operationToken: null
+			});
+			return true;
+		});
+
+		const result = await customerRetryPhoneRental('item-1');
+
+		expect(result.phoneNumber).toBe('15550000002');
+		expect(rentMock).not.toHaveBeenCalled();
+		expect(creditStoreCreditMock).not.toHaveBeenCalled();
+		expect(state.generation).toBe(2);
 	});
 });

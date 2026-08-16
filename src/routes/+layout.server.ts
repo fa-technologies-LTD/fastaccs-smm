@@ -9,15 +9,14 @@ export const load: LayoutServerLoad = async ({ locals, url, cookies }) => {
 
 	if (isStorefrontPath) {
 		try {
-			const flags = await getFeatureFlagSnapshot();
-			if (flags.adminAnnouncementBanner) {
-				const candidate = await getActiveAnnouncementBanner();
-				if (candidate) {
-					const dismissed =
-						candidate.dismissible && cookies.get(candidate.dismissCookieName) === '1';
-					if (!dismissed) {
-						announcementBanner = candidate;
-					}
+			const [flags, candidate] = await Promise.all([
+				getFeatureFlagSnapshot(),
+				getActiveAnnouncementBanner()
+			]);
+			if (flags.adminAnnouncementBanner && candidate) {
+				const dismissed = candidate.dismissible && cookies.get(candidate.dismissCookieName) === '1';
+				if (!dismissed) {
+					announcementBanner = candidate;
 				}
 			}
 		} catch (error) {

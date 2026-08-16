@@ -122,11 +122,16 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 			const availableStoreCredit = Math.max(
 				0,
-				getCredit('available') - getPayout('requested') - getPayout('paid')
+				getCredit('available') -
+					getPayout('requested') -
+					getPayout('under_review') -
+					getPayout('paid')
 			);
 			const pendingStoreCredit = getCredit('pending');
 			const underReviewStoreCredit = getCredit('under_review');
-			const requestedStoreCredit = getPayout('requested');
+			// Both requested and under-review payouts are still open liabilities. Keep
+			// them reserved and visible after an admin begins reviewing the request.
+			const requestedStoreCredit = getPayout('requested') + getPayout('under_review');
 			const paidStoreCredit = getPayout('paid');
 			const reversedStoreCredit = getCredit('reversed') + getPayout('reversed');
 			const totalStoreCreditEarned =

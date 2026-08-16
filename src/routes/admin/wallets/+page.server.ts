@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
+import { getStoreCreditTotalsForUsers } from '$lib/services/store-credit';
 
 export const load: PageServerLoad = async () => {
 	try {
@@ -48,11 +49,17 @@ export const load: PageServerLoad = async () => {
 			}
 		});
 
-		// Convert Decimal types to numbers for serialization
-		const wallets = walletsRaw.map((wallet) => ({
-			...wallet,
-			balance: Number(wallet.balance)
-		}));
+		// The ledger is authoritative. wallet.balance is only a write-path cache and can
+		// drift after payout lifecycle changes, so it must not drive admin decisions.
+		const storeCreditByUser = await getStoreCreditTotalsForUsers(
+			walletsRaw.map((wallet) => wallet.userId)
+		);
+		const wallets = walletsRaw
+			.map((wallet) => ({
+				...wallet,
+				balance: storeCreditByUser.get(wallet.userId) ?? 0
+			}))
+			.sort((a, b) => b.balance - a.balance);
 
 		const transactions = transactionsRaw.map((txn) => ({
 			...txn,

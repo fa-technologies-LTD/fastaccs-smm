@@ -41,6 +41,10 @@
 					<li>Account profile data such as name, email, and sign-in identifiers.</li>
 					<li>Order and delivery records, payment references, and support conversations.</li>
 					<li>
+						Purchased account credentials, visible to the buyer and accessible to vetted support
+						admins when needed to troubleshoot an order.
+					</li>
+					<li>
 						Affiliate payout details (bank name, account number, account name), collected only
 						if you join our affiliate programme and used solely to pay out your affiliate
 						earnings — never to charge or debit your account.

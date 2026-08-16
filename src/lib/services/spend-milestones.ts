@@ -149,14 +149,31 @@ async function maybeClawbackGift(userId: string): Promise<void> {
 	if (buckets.earnedAvailable < amount) return; // spent down — keep it
 
 	await prisma.$transaction(async (tx) => {
+		const wallet = await tx.wallet.findUnique({
+			where: { userId },
+			select: { id: true }
+		});
+		if (!wallet) return;
+		await tx.$queryRaw`SELECT id FROM wallets WHERE user_id = ${userId}::uuid FOR UPDATE`;
+		const liveGift = await tx.walletTransaction.findUnique({
+			where: { id: gift.id },
+			select: { status: true, amount: true }
+		});
+		if (liveGift?.status !== 'available') return;
+		const liveBuckets = await getStoreCreditBuckets(userId, tx);
+		const liveAmount = Math.max(0, Number(liveGift.amount || 0));
+		if (liveBuckets.earnedAvailable < liveAmount) return;
+
 		await tx.walletTransaction.update({ where: { id: gift.id }, data: { status: 'reversed' } });
-		const wallet = await tx.wallet.findUnique({ where: { userId } });
-		if (wallet) {
-			await tx.wallet.update({
-				where: { id: wallet.id },
-				data: { balance: Math.max(0, Number(wallet.balance || 0) - amount) }
-			});
-		}
+		const liveWallet = await tx.wallet.findUnique({
+			where: { id: wallet.id },
+			select: { balance: true }
+		});
+		if (!liveWallet) return;
+		await tx.wallet.update({
+			where: { id: wallet.id },
+			data: { balance: Math.max(0, Number(liveWallet.balance || 0) - liveAmount) }
+		});
 		await tx.notification.create({
 			data: {
 				userId,

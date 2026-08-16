@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+	creditStoreCredit,
 	computeOrderRedemption,
 	EARNED_REDEMPTION_CAP_PERCENT,
+	getStoreCreditBuckets,
 	redemptionExceedsAvailable
 } from './store-credit';
 
@@ -135,5 +137,86 @@ describe('redemptionExceedsAvailable', () => {
 				{ refundAvailable: 1000, earnedAvailable: 0 }
 			)
 		).toBe(false);
+	});
+});
+
+describe('store-credit ledger safeguards', () => {
+	it('re-reads the wallet balance after acquiring the row lock before crediting', async () => {
+		const tx = {
+			wallet: {
+				upsert: vi.fn().mockResolvedValue({ id: 'wallet-1', balance: 100 }),
+				findUnique: vi.fn().mockResolvedValue({ balance: 250 }),
+				update: vi.fn().mockResolvedValue({})
+			},
+			walletTransaction: {
+				findUnique: vi.fn().mockResolvedValue(null),
+				create: vi.fn().mockResolvedValue({})
+			},
+			$queryRaw: vi.fn().mockResolvedValue([])
+		};
+
+		await creditStoreCredit(tx as never, {
+			userId: '11111111-1111-4111-8111-111111111111',
+			amount: 100,
+			type: 'store_credit_refund',
+			description: 'Refund',
+			reference: 'order-1'
+		});
+
+		expect(tx.$queryRaw).toHaveBeenCalledOnce();
+		expect(tx.wallet.update).toHaveBeenCalledWith({
+			where: { id: 'wallet-1' },
+			data: { balance: 350 }
+		});
+		expect(tx.walletTransaction.create).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({ balanceBefore: 250, balanceAfter: 350 })
+			})
+		);
+	});
+
+	it('treats an exact referenced credit replay as success without adding money twice', async () => {
+		const tx = {
+			wallet: {
+				upsert: vi.fn().mockResolvedValue({ id: 'wallet-1', balance: 350 }),
+				findUnique: vi.fn(),
+				update: vi.fn()
+			},
+			walletTransaction: {
+				findUnique: vi.fn().mockResolvedValue({
+					userId: '11111111-1111-4111-8111-111111111111',
+					type: 'store_credit_refund',
+					amount: 100
+				}),
+				create: vi.fn()
+			},
+			$queryRaw: vi.fn().mockResolvedValue([])
+		};
+
+		await creditStoreCredit(tx as never, {
+			userId: '11111111-1111-4111-8111-111111111111',
+			amount: 100,
+			type: 'store_credit_refund',
+			description: 'Refund replay',
+			reference: 'order-1'
+		});
+
+		expect(tx.wallet.update).not.toHaveBeenCalled();
+		expect(tx.walletTransaction.create).not.toHaveBeenCalled();
+	});
+
+	it('keeps an affiliate payout reserved while it is under admin review', async () => {
+		const db = {
+			walletTransaction: {
+				groupBy: vi.fn().mockResolvedValue([
+					{ type: 'affiliate_credit', status: 'available', _sum: { amount: 1000 } },
+					{ type: 'affiliate_payout', status: 'under_review', _sum: { amount: 700 } }
+				])
+			}
+		};
+
+		await expect(
+			getStoreCreditBuckets('11111111-1111-4111-8111-111111111111', db as never)
+		).resolves.toEqual({ earnedAvailable: 300, refundAvailable: 0, totalAvailable: 300 });
 	});
 });

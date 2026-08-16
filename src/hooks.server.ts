@@ -1,6 +1,7 @@
 // Server-side hooks for session management
 import { env as publicEnv } from '$env/dynamic/public';
 import { env } from '$env/dynamic/private';
+import { dev } from '$app/environment';
 import { randomUUID } from 'node:crypto';
 import { validateSessionToken } from '$lib/auth/session';
 import {
@@ -14,8 +15,17 @@ import {
 	shouldLogAdminMutation
 } from '$lib/services/admin-audit';
 import { recordUserPresenceIfStale, shouldRecordUserPresence } from '$lib/services/user-presence';
-import { ATTRIBUTION_COOKIE, ATTRIBUTION_MAX_AGE_S, buildFirstTouch } from '$lib/services/attribution';
+import {
+	ATTRIBUTION_COOKIE,
+	ATTRIBUTION_MAX_AGE_S,
+	buildFirstTouch
+} from '$lib/services/attribution';
 import type { Handle, RequestEvent } from '@sveltejs/kit';
+import {
+	isLocalDataReadOnly,
+	localReadOnlyResponse,
+	shouldBlockLocalRequest
+} from '$lib/server/local-data-safety';
 
 const GENERIC_API_ERROR_MESSAGE = 'Internal server error';
 
@@ -182,6 +192,27 @@ export const handle: Handle = async ({ event, resolve }) => {
 		return new Response('Not Found', { status: 404 });
 	}
 
+	const localDataReadOnly = isLocalDataReadOnly({
+		dev,
+		configuredMode: env.FASTACCS_LOCAL_DATA_MODE,
+		hostname: event.url.hostname
+	});
+	if (
+		shouldBlockLocalRequest({
+			dev,
+			configuredMode: env.FASTACCS_LOCAL_DATA_MODE,
+			hostname: event.url.hostname,
+			method: event.request.method,
+			pathname: event.url.pathname
+		})
+	) {
+		console.warn('[local.data_write.blocked]', {
+			method: event.request.method,
+			path: event.url.pathname
+		});
+		return localReadOnlyResponse(event.url.pathname);
+	}
+
 	captureFirstTouch(event);
 
 	const canonicalRedirectTarget = getCanonicalRedirectTarget(event);
@@ -209,8 +240,16 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.session = null;
 	} else {
 		try {
+			const canUseBriefStorefrontCache =
+				event.request.method === 'GET' &&
+				!event.url.pathname.startsWith('/api/') &&
+				!event.url.pathname.startsWith('/admin') &&
+				!event.url.pathname.startsWith('/auth');
 			// Validate session
-			const { session, user } = await validateSessionToken(sessionToken);
+			const { session, user } = await validateSessionToken(sessionToken, {
+				allowWrites: !localDataReadOnly,
+				requireFreshUser: !canUseBriefStorefrontCache
+			});
 			event.locals.session = session;
 			event.locals.user = user;
 		} catch (error) {
@@ -224,7 +263,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 	}
 
-	if (event.locals.user && shouldRecordUserPresence(event.url.pathname, event.request.method)) {
+	if (
+		!localDataReadOnly &&
+		event.locals.user &&
+		shouldRecordUserPresence(event.url.pathname, event.request.method)
+	) {
 		try {
 			await recordUserPresenceIfStale(event.locals.user);
 		} catch (error) {

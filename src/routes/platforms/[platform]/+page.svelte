@@ -121,27 +121,11 @@
 	}
 
 	function hasPopularSignal(tier: TierCard): boolean {
-		if (tier.is_pinned || tier.is_featured) return true;
-		const featuredLabel = (tier.featured_badge || '').toLowerCase();
-		return /(hot|best|popular|top|pinned)/.test(featuredLabel);
+		return Number(tier.recent_paid_units || 0) > 0;
 	}
 
 	function getTierPopularityScore(tier: TierCard): number {
-		let score = 0;
-		if (tier.is_pinned) {
-			score += 1000;
-			if (typeof tier.pin_priority === 'number') {
-				score += Math.max(0, 80 - tier.pin_priority);
-			}
-		}
-		if (tier.is_featured) score += 220;
-		const featuredLabel = (tier.featured_badge || '').toLowerCase();
-		if (/hot/.test(featuredLabel)) score += 120;
-		if (/best/.test(featuredLabel)) score += 90;
-		if (/popular|top/.test(featuredLabel)) score += 75;
-		if (tier.visible_available > 0) score += 40;
-		score += Math.min(tier.visible_available || 0, 25);
-		return score;
+		return Number(tier.recent_paid_units || 0);
 	}
 
 	function compareTierByPriceAsc(a: TierCard, b: TierCard): number {
@@ -436,7 +420,7 @@
 		if (mobileQuickFilter === 'organic') {
 			tiers = tiers.filter(isOrganicTier);
 		} else if (mobileQuickFilter === 'popular') {
-			tiers.sort(compareTierByPopularity);
+			tiers = tiers.filter(hasPopularSignal).sort(compareTierByPopularity);
 		} else if (mobileQuickFilter === 'budget') {
 			tiers.sort(compareTierByPriceAsc);
 		}
@@ -1241,7 +1225,9 @@
 												</span>
 											{/if}
 										{:else}
-											<span><span class="font-medium">{tier.visible_available}</span> available</span>
+											<span
+												><span class="font-medium">{tier.visible_available}</span> available</span
+											>
 											{#if tierStatus}
 												<span class="tier-status-chip tier-status-chip--warning">
 													{tierStatus.status}
@@ -1336,8 +1322,8 @@
 											data-card-action
 											aria-label={`Quick add ${tier.tier_name}`}
 											disabled={exactQuickAddLoading}
-											class="flex w-full items-center justify-center gap-2 rounded-lg border border-transparent py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-[#7CFFC0] focus-visible:ring-offset-2 focus-visible:outline-none active:scale-[0.99] active:border-[#7CFFC0] active:shadow-[0_0_0_2px_rgba(52,211,153,0.45)] disabled:cursor-wait disabled:opacity-85 disabled:active:scale-100"
-											style="background: var(--btn-primary-gradient); color: #04140C;"
+											class="flex w-full items-center justify-center gap-2 rounded-lg border border-transparent py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-[#7CFFC0] focus-visible:ring-offset-2 focus-visible:outline-none active:scale-[0.99] active:border-[#7CFFC0] disabled:cursor-wait disabled:opacity-85 disabled:active:scale-100"
+											style="background: var(--primary); color: #04140c;"
 										>
 											{#if exactQuickAddLoading}
 												<span>Adding...</span>
@@ -1535,8 +1521,8 @@
 							type="button"
 							onclick={addQuickAddToCart}
 							disabled={quickAddSubmitting || quickAddRemaining === 0}
-							class="w-full rounded-full py-3 font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
-							style="background: var(--btn-primary-gradient); color: #04140C;"
+							class="w-full rounded-lg py-3 font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
+							style="background: var(--primary); color: #04140c;"
 						>
 							{#if quickAddSubmitting}
 								<div class="flex items-center justify-center gap-2">

@@ -19,7 +19,9 @@
 	} from '$lib/services/ga4';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 
-	const MAX_CONFIRMATION_WAIT_MS = 60_000;
+	const MAX_GATEWAY_CONFIRMATION_WAIT_MS = 60_000;
+	const MAX_STORE_CREDIT_CONFIRMATION_WAIT_MS = 20_000;
+	const STATUS_REQUEST_TIMEOUT_MS = 12_000;
 	const RETRY_INTERVAL_MS = 5_000;
 	const PENDING_ORDER_STORAGE_KEY = 'fastaccs_pending_order_id';
 	const CHECKOUT_SESSION_STORAGE_KEY = 'fastaccs_checkout_session';
@@ -31,6 +33,7 @@
 	let cancelled = $state(false);
 	let errorMessage = $state('');
 	let pendingMessage = $state('');
+	let statusCheckInterrupted = $state(false);
 	let orderId = $state<string | null>(null);
 	let attemptCount = $state(0);
 	// Post-purchase boosting upsell (shown on the success screen for account orders).
@@ -42,10 +45,12 @@
 	let upsellRedirectTimer: ReturnType<typeof setTimeout> | null = null;
 	// Store-credit orders are already settled — show a matching message, not Monnify's.
 	let isStoreCredit = $state(false);
-	const verifyingTitle = $derived(isStoreCredit ? 'Confirming your order' : 'Confirming your payment');
+	const verifyingTitle = $derived(
+		isStoreCredit ? 'Confirming your order' : 'Confirming your payment'
+	);
 	const verifyingBody = $derived(
 		isStoreCredit
-			? 'Applying your store credit — this only takes a moment.'
+			? 'Applying your store credit and opening your order…'
 			: 'This normally finishes automatically.'
 	);
 	let pendingToastShown = false;
@@ -170,26 +175,54 @@
 
 		const runVerification = async () => {
 			const startedAt = Date.now();
+			const maxConfirmationWaitMs = isStoreCredit
+				? MAX_STORE_CREDIT_CONFIRMATION_WAIT_MS
+				: MAX_GATEWAY_CONFIRMATION_WAIT_MS;
+
+			const continueAfterTemporaryIssue = async (message: string) => {
+				verifying = false;
+				pending = true;
+				cancelled = false;
+				timedOut = false;
+				statusCheckInterrupted = true;
+				pendingMessage = message;
+				if (Date.now() - startedAt < maxConfirmationWaitMs) {
+					await sleep(RETRY_INTERVAL_MS);
+					return true;
+				}
+				return false;
+			};
 
 			while (!isDisposed) {
 				attemptCount += 1;
 
 				try {
-					const response = await fetch('/api/payments/verify', {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({
-							paymentReference,
-							transactionReference,
-							orderId: orderIdParam,
-							callbackStatus,
-							callbackMessage,
-							callbackContext: {
-								queryKeys: callbackQueryKeys,
-								queryLength: $page.url.search.length
-							}
-						})
-					});
+					const controller = new AbortController();
+					const requestTimeout = window.setTimeout(
+						() => controller.abort(),
+						STATUS_REQUEST_TIMEOUT_MS
+					);
+					let response: Response;
+					try {
+						response = await fetch('/api/payments/verify', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								paymentReference,
+								transactionReference,
+								orderId: orderIdParam,
+								callbackStatus,
+								callbackMessage,
+								callbackContext: {
+									queryKeys: callbackQueryKeys,
+									queryLength: $page.url.search.length
+								}
+							}),
+							signal: controller.signal
+						});
+					} finally {
+						window.clearTimeout(requestTimeout);
+					}
 
 					const result = await response.json();
 
@@ -220,26 +253,18 @@
 						verifying = false;
 						cancelled = false;
 						timedOut = false;
+						statusCheckInterrupted = false;
 						orderId = resolvedOrderId;
 						clearPendingOrderStorage();
 						cart.clear();
 						if (result.phone === true) {
-							showSuccess(
-								result.status === 'COMPLETED' ? 'Your code is ready!' : 'Number ready!',
-								'View your number and code on your order page.'
-							);
 							goto(`/order/${resolvedOrderId}`);
 						} else if (result.boosting === true) {
-							showSuccess('Payment confirmed!', 'Your boost is now being processed.');
 							goto(getOrdersDashboardPath(resolvedOrderId));
 						} else if (
 							result.manualHandover === true ||
 							String(result.status || '').toUpperCase() === 'PAID'
 						) {
-							showSuccess(
-								'Payment confirmed!',
-								'Manual handover is now in progress. Continue on WhatsApp from your order details.'
-							);
 							goto(getOrdersDashboardPath(resolvedOrderId));
 						} else {
 							showSuccess('Payment successful!', 'Your order has been completed.');
@@ -290,16 +315,13 @@
 					}
 
 					if (!response.ok && response.status !== 202) {
-						verifying = false;
-						pending = false;
-						cancelled = false;
-						timedOut = false;
-						errorMessage =
-							result.error ||
-							result.message ||
-							`Verification failed with status ${response.status}`;
-						showError('Payment verification failed', errorMessage);
-						return;
+						const shouldContinue = await continueAfterTemporaryIssue(
+							isStoreCredit
+								? 'Your order is confirmed. Reconnecting to open its latest status…'
+								: 'Your order is saved. Reconnecting to confirm its latest payment status…'
+						);
+						if (shouldContinue) continue;
+						break;
 					}
 
 					const pendingResponse =
@@ -312,6 +334,7 @@
 						pending = true;
 						cancelled = false;
 						timedOut = false;
+						statusCheckInterrupted = false;
 						pendingMessage = result.message || 'Waiting for payment confirmation from Monnify.';
 
 						if (!pendingToastShown) {
@@ -322,7 +345,7 @@
 							pendingToastShown = true;
 						}
 
-						if (Date.now() - startedAt >= MAX_CONFIRMATION_WAIT_MS) {
+						if (Date.now() - startedAt >= maxConfirmationWaitMs) {
 							break;
 						}
 
@@ -330,32 +353,22 @@
 						continue;
 					}
 
-					verifying = false;
-					pending = false;
-					cancelled = false;
-					timedOut = false;
-					errorMessage =
-						"If money left your account, your order will finish on its own in a few minutes — check your orders. If it didn't, nothing was taken. You can try again anytime.";
-					showError(
-						"Payment didn't go through",
-						"Check your orders — if you were charged, it'll complete shortly."
+					const shouldContinue = await continueAfterTemporaryIssue(
+						'Your order is saved. Rechecking its latest status…'
 					);
-					return;
+					if (shouldContinue) continue;
+					break;
 				} catch (error) {
 					if (isDisposed) return;
 					void error;
 
-					verifying = false;
-					pending = false;
-					cancelled = false;
-					timedOut = false;
-					errorMessage =
-						"If money left your account, your order will finish on its own in a few minutes — check your orders. If it didn't, nothing was taken. You can try again anytime.";
-					showError(
-						"Payment didn't go through",
-						"Check your orders — if you were charged, it'll complete shortly."
+					const shouldContinue = await continueAfterTemporaryIssue(
+						isStoreCredit
+							? 'Your order is confirmed. Reconnecting to open it…'
+							: 'Your order is saved. Reconnecting to confirm its latest payment status…'
 					);
-					return;
+					if (shouldContinue) continue;
+					break;
 				}
 			}
 
@@ -364,10 +377,14 @@
 				pending = true;
 				cancelled = false;
 				timedOut = true;
-				pendingMessage = 'Waiting for payment confirmation from Monnify.';
+				pendingMessage = isStoreCredit
+					? 'Your order is confirmed and saved in My Orders. Opening it now…'
+					: statusCheckInterrupted
+						? 'Your order is saved in My Orders. Opening it now…'
+						: 'Payment confirmation is still in progress. Your order is saved in My Orders.';
 				showWarning(
-					'Payment confirmation pending',
-					'We are still confirming with Monnify. You will now be redirected to your orders.'
+					'Order saved',
+					'Opening My Orders so you can continue from the durable order record.'
 				);
 				goToOrdersDashboard(true);
 			}
@@ -474,11 +491,20 @@
 					</div>
 				{/if}
 				{#if showBoostUpsell}
-					<div class="mb-2 rounded-xl p-4 text-left" style="background: var(--bg); border: 1px solid var(--primary);">
-						<p class="mb-1 text-sm font-bold" style="color: var(--text); font-family: var(--font-head);">
+					<div
+						class="mb-2 rounded-xl p-4 text-left"
+						style="background: var(--bg); border: 1px solid var(--primary);"
+					>
+						<p
+							class="mb-1 text-sm font-bold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
 							Make your new account look established ⚡
 						</p>
-						<p class="mb-3 text-xs sm:text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
+						<p
+							class="mb-3 text-xs sm:text-sm"
+							style="color: var(--text-muted); font-family: var(--font-body);"
+						>
 							Add real followers, likes &amp; views from our Boosting Services — grow it in minutes.
 						</p>
 						<button
@@ -498,10 +524,10 @@
 					</div>
 				{:else}
 					<p
-					class="text-xs sm:text-sm"
-					style="color: var(--text-dim); font-family: var(--font-body);"
+						class="text-xs sm:text-sm"
+						style="color: var(--text-dim); font-family: var(--font-body);"
 					>
-					Redirecting to your purchases...
+						Redirecting to your purchases...
 					</p>
 				{/if}
 			{:else if pending}

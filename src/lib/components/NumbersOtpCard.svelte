@@ -15,7 +15,7 @@
 		status: string;
 		otp: string | null;
 		smsMessage: string | null;
-		expiresAt: string | null;
+		replacementWaitSeconds?: number | null;
 		otpRequestedAt?: string | null;
 		saleAmountNgn?: number | null;
 		tierId?: string | null;
@@ -30,7 +30,6 @@
 	let phoneNumber = $state(phone.phoneNumber);
 	let otp = $state(phone.otp);
 	let smsMessage = $state(phone.smsMessage);
-	let expiresAt = $state(phone.expiresAt);
 	let canCancel = $state(false);
 	let cancelling = $state(false);
 	let cancelledByUser = $state(false);
@@ -40,25 +39,57 @@
 	// When the customer taps "I've requested the code", we start a focused window; if the code
 	// doesn't land in it, we offer "try another number". This mirrors the server's replacement wait
 	// (~120s from the request), so the button never appears before the backend will allow a swap.
-	const EXPECTED_CODE_MS = 120_000;
+	const EXPECTED_CODE_MS = Math.max(30, Number(phone.replacementWaitSeconds || 120)) * 1000;
 	// D1: seed from the server's authoritative request time so a refresh / return from WhatsApp
 	// reconstructs the waiting state instead of re-prompting "I've requested the code".
 	let requestedAt = $state<number | null>(
 		phone.otpRequestedAt ? new Date(phone.otpRequestedAt).getTime() : null
 	);
 	let retrying = $state(false);
+	let replacingNumber = $state<string | null>(null);
+	let freshNumberVisible = $state(false);
+	let markingRequested = $state(false);
 	let copiedLabel = $state<string | null>(null);
 	// The "I've requested the code" button is muted briefly after the number appears — long enough to
 	// nudge the customer to actually request the SMS first, short enough not to feel blocked.
 	const REQUEST_MUTE_MS = 15_000;
 	let numberShownAt = $state<number | null>(null);
+	let leftToRequestCode = $state(false);
+	let activeNumberKey = $state<string | null>(null);
 	$effect(() => {
-		if (phoneNumber && numberShownAt == null) numberShownAt = Date.now();
+		if (!phoneNumber) return;
+		const key = `fastaccs_number_nudge:${phone.orderItemId}:${phoneNumber}`;
+		if (activeNumberKey === key) return;
+		activeNumberKey = key;
+		const stored =
+			typeof sessionStorage !== 'undefined' ? Number(sessionStorage.getItem(key)) : NaN;
+		numberShownAt = Number.isFinite(stored) && stored > 0 ? stored : Date.now();
+		if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(key, String(numberShownAt));
+		leftToRequestCode = false;
 	});
-	const requestMuted = $derived(numberShownAt != null && now - numberShownAt < REQUEST_MUTE_MS);
+	const requestNudgeSeconds = $derived(
+		numberShownAt == null
+			? 0
+			: Math.max(0, Math.ceil((REQUEST_MUTE_MS - (now - numberShownAt)) / 1000))
+	);
+	const requestMuted = $derived(requestNudgeSeconds > 0 && !leftToRequestCode);
 
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 	let clockTimer: ReturnType<typeof setInterval> | null = null;
+	let freshNumberTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function revealFreshNumber(nextNumber: string | null | undefined, highlight = false): void {
+		if (!nextNumber) return;
+		const changed = nextNumber !== phoneNumber;
+		phoneNumber = nextNumber;
+		if (!highlight || !changed) return;
+		freshNumberVisible = true;
+		if (freshNumberTimer) clearTimeout(freshNumberTimer);
+		freshNumberTimer = setTimeout(() => {
+			freshNumberVisible = false;
+			freshNumberTimer = null;
+		}, 5_000);
+	}
 
 	// Mobile: when the live card scrolls out of view during an active state, show a compact sticky
 	// status so the customer always knows where things stand. Tapping it scrolls back to the card —
@@ -69,17 +100,13 @@
 
 	// Preparing = paid, number being fetched. Waiting = number in hand, awaiting the code.
 	const isPreparing = $derived(
-		['pending', 'renting', 'preparing'].includes(status) || (status === 'awaiting_sms' && !phoneNumber)
+		['pending', 'renting', 'preparing'].includes(status) ||
+			(status === 'awaiting_sms' && !phoneNumber)
 	);
 	const isWaiting = $derived(status === 'awaiting_sms' && Boolean(phoneNumber));
 	const isReceived = $derived(status === 'received');
-	const isRefunded = $derived(status === 'refunded' || status === 'cancelled' || status === 'expired');
-
-	const secondsLeft = $derived(
-		expiresAt ? Math.max(0, Math.floor((new Date(expiresAt).getTime() - now) / 1000)) : null
-	);
-	const countdown = $derived(
-		secondsLeft == null ? '' : `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`
+	const isRefunded = $derived(
+		status === 'refunded' || status === 'cancelled' || status === 'expired'
 	);
 
 	// The ~120s is a REPLACEMENT-eligibility rule, not a delivery ETA — so we never render it as a
@@ -131,25 +158,42 @@
 				: 'We’re still on it. You don’t need to refresh or pay again.'
 	);
 
-	function requestCode() {
-		requestedAt = Date.now();
-		// Stamp the authoritative server-side request time (the replacement wait runs from it).
-		fetch(`/api/numbers/${phone.orderItemId}/requested`, { method: 'POST' }).catch(() => {});
+	async function requestCode() {
+		if (requestMuted || markingRequested) return;
+		markingRequested = true;
+		try {
+			const response = await fetch(`/api/numbers/${phone.orderItemId}/requested`, {
+				method: 'POST'
+			});
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok || !data?.ok || !data?.otpRequestedAt) {
+				throw new Error(data?.error || 'Could not confirm your request.');
+			}
+			requestedAt = new Date(data.otpRequestedAt).getTime();
+		} catch (error) {
+			showError(
+				'Could not start the code check',
+				error instanceof Error ? error.message : 'Please try again.'
+			);
+		} finally {
+			markingRequested = false;
+		}
 	}
 
 	async function tryAnother() {
 		if (retrying) return;
+		replacingNumber = phoneNumber;
+		freshNumberVisible = false;
 		retrying = true;
 		try {
 			const res = await fetch(`/api/numbers/${phone.orderItemId}/retry`, { method: 'POST' });
 			const data = await res.json();
 			if (data.status === 'awaiting_sms') {
-				phoneNumber = data.phoneNumber ?? phoneNumber;
+				revealFreshNumber(data.phoneNumber, true);
 				status = 'awaiting_sms';
 				requestedAt = null; // re-request on the fresh number
 				keepWaiting = false;
 				numberShownAt = null; // re-mute the request button for the fresh number
-				expiresAt = null;
 				showSuccess('Fresh number ready', data.message);
 				if (!pollTimer) pollTimer = setInterval(poll, 3000);
 				poll();
@@ -169,6 +213,7 @@
 			showError('Could not try another', 'Please try again in a moment.');
 		} finally {
 			retrying = false;
+			replacingNumber = null;
 		}
 	}
 
@@ -177,7 +222,7 @@
 			const res = await fetch(`/api/numbers/${phone.orderItemId}/sms`);
 			if (!res.ok) return;
 			const data = await res.json();
-			if (data.phoneNumber) phoneNumber = data.phoneNumber;
+			if (data.phoneNumber) revealFreshNumber(data.phoneNumber, Boolean(replacingNumber));
 			canCancel = data.canCancel === true;
 			if (data.status === 'received') {
 				status = 'received';
@@ -190,7 +235,6 @@
 				stopPolling();
 			} else if (data.status === 'awaiting_sms') {
 				status = 'awaiting_sms';
-				if (data.expiresAt) expiresAt = data.expiresAt;
 			} else if (data.status === 'preparing') {
 				status = 'preparing';
 			}
@@ -244,6 +288,12 @@
 	}
 
 	onMount(() => {
+		const handleVisibility = () => {
+			if (document.visibilityState === 'hidden' && isWaiting && !requestedAt) {
+				leftToRequestCode = true;
+			}
+		};
+		document.addEventListener('visibilitychange', handleVisibility);
 		clockTimer = setInterval(() => (now = Date.now()), 1000);
 		if (ACTIVE.includes(status)) {
 			poll();
@@ -255,34 +305,64 @@
 			});
 			observer.observe(cardEl);
 		}
+		return () => document.removeEventListener('visibilitychange', handleVisibility);
 	});
 	onDestroy(() => {
 		stopPolling();
 		if (clockTimer) clearInterval(clockTimer);
+		if (freshNumberTimer) clearTimeout(freshNumberTimer);
 		observer?.disconnect();
 	});
 </script>
 
 <div
 	bind:this={cardEl}
-	class="rounded-2xl p-6 mb-6"
+	class="mb-6 rounded-2xl p-6"
 	style="border: 1px solid var(--border); background: var(--surface);"
 >
-	<div class="flex items-center gap-2.5 mb-4">
-		<span class="flex items-center justify-center w-9 h-9 rounded-lg" style="background: var(--bg-elev-1);">
+	<div class="mb-4 flex items-center gap-2.5">
+		<span
+			class="flex h-9 w-9 items-center justify-center rounded-lg"
+			style="background: var(--bg-elev-1);"
+		>
 			<BrandIcon service={phone.serviceName} size={22} />
 		</span>
-		<h3 class="font-semibold text-lg" style="color: var(--text);">{phone.serviceName} — {phone.countryName}</h3>
+		<h3 class="text-lg font-semibold" style="color: var(--text);">
+			{phone.serviceName} — {phone.countryName}
+		</h3>
 	</div>
 
-	{#if phoneNumber}
+	{#if retrying && replacingNumber}
 		<div
-			class="flex items-center justify-between rounded-lg px-4 py-3 mb-4"
+			class="number-panel number-panel--retired mb-4 flex items-center justify-between rounded-lg px-4 py-3"
+		>
+			<div>
+				<div class="text-xs" style="color: var(--text-dim);">Previous number · replacing</div>
+				<div
+					class="font-mono text-lg font-semibold tracking-wide line-through"
+					style="color: var(--text-dim);"
+				>
+					{replacingNumber}
+				</div>
+			</div>
+			<span class="text-xs font-semibold" style="color: var(--status-warning);">Do not use</span>
+		</div>
+	{:else if phoneNumber}
+		<div
+			class:number-panel--fresh={freshNumberVisible}
+			class="number-panel mb-4 flex items-center justify-between rounded-lg px-4 py-3"
 			style="border: 1px solid var(--border); background: var(--bg-elev-1);"
 		>
 			<div>
-				<div class="text-xs" style="color: var(--text-muted);">Your number</div>
-				<div class="text-xl font-mono font-semibold tracking-wide" style="color: var(--text);">{phoneNumber}</div>
+				<div
+					class="text-xs"
+					style="color: {freshNumberVisible ? 'var(--status-success)' : 'var(--text-muted)'};"
+				>
+					{freshNumberVisible ? 'New number ready' : 'Your number'}
+				</div>
+				<div class="font-mono text-xl font-semibold tracking-wide" style="color: var(--text);">
+					{phoneNumber}
+				</div>
 			</div>
 			<button
 				onclick={() => copy(phoneNumber ?? '', 'Number')}
@@ -290,50 +370,78 @@
 				style="color: {copiedLabel === 'Number' ? '#34d399' : '#38bdf8'};"
 			>
 				{#if copiedLabel === 'Number'}
-					<Check class="w-4 h-4" /> Copied
+					<Check class="h-4 w-4" /> Copied
 				{:else}
-					<Copy class="w-4 h-4" /> Copy
+					<Copy class="h-4 w-4" /> Copy
 				{/if}
 			</button>
 		</div>
 	{/if}
 
-	{#if isReceived && otp}
-		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid #34d399; background: rgba(16,185,129,0.10);">
-			<div class="text-xs mb-1 flex items-center justify-center gap-1" style="color: #34d399;">
-				<ShieldCheck class="w-4 h-4" /> Your code arrived
+	{#if isReceived}
+		<div
+			class="rounded-lg px-4 py-4 text-center"
+			style="border: 1px solid #34d399; background: rgba(16,185,129,0.10);"
+		>
+			<div class="mb-1 flex items-center justify-center gap-1 text-xs" style="color: #34d399;">
+				<ShieldCheck class="h-4 w-4" /> Your code arrived
 			</div>
-			<button
-				onclick={() => copy(otp ?? '', 'Code')}
-				class="text-3xl font-bold font-mono tracking-widest hover:opacity-80"
-				style="color: #34d399;"
-				title="Click to copy"
-			>
-				{otp}
-			</button>
-			{#if smsMessage}
-				<div class="text-xs mt-2" style="color: var(--text-muted);">{smsMessage}</div>
+			{#if otp}
+				<button
+					onclick={() => copy(otp ?? '', 'Code')}
+					class="font-mono text-3xl font-bold tracking-widest hover:opacity-80"
+					style="color: #34d399;"
+					title="Copy code"
+				>
+					{otp}
+				</button>
+				<div class="mt-1 text-xs" style="color: var(--text-muted);">
+					{copiedLabel === 'Code' ? 'Copied' : 'Tap the code to copy'}
+				</div>
+				{#if smsMessage}
+					<div class="mt-2 text-xs" style="color: var(--text-muted);">{smsMessage}</div>
+				{/if}
+			{:else if smsMessage}
+				<div
+					class="mt-2 rounded-lg px-3 py-2 text-sm"
+					style="background: var(--surface); color: var(--text);"
+				>
+					{smsMessage}
+				</div>
+				<div class="mt-1 text-xs" style="color: var(--text-muted);">
+					The service sent a message without a separate numeric code.
+				</div>
+			{:else}
+				<div class="mt-2 text-sm" style="color: var(--text-muted);">
+					Message received. Refreshing the details…
+				</div>
 			{/if}
 		</div>
 	{:else if isPreparing}
-		<div class="rounded-lg px-4 py-4 text-center" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
-			<div class="text-xs mb-2 inline-flex items-center gap-1" style="color: #34d399;">
-				<ShieldCheck class="w-3.5 h-3.5" /> Payment confirmed
+		<div
+			class="rounded-lg px-4 py-4 text-center"
+			style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+		>
+			<div class="mb-2 inline-flex items-center gap-1 text-xs" style="color: #34d399;">
+				<ShieldCheck class="h-3.5 w-3.5" /> Payment confirmed
 			</div>
 			<div class="inline-flex items-center gap-2" style="color: var(--text);">
-				<RefreshCw class="w-4 h-4 animate-spin" style="color: #38bdf8;" />
+				<RefreshCw class="h-4 w-4 animate-spin" style="color: #38bdf8;" />
 				Getting your number
 			</div>
-			<div class="text-xs mt-2 mb-3" style="color: var(--text-dim);">
+			<div class="mt-2 mb-3 text-xs" style="color: var(--text-dim);">
 				{securingMessage}
 			</div>
 			<div class="soda-track"><div class="soda-fill soda-fill-indeterminate"></div></div>
 		</div>
 	{:else if isWaiting}
-		<div class="rounded-lg px-4 py-4" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
+		<div
+			class="rounded-lg px-4 py-4"
+			style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+		>
 			{#if !requestedAt}
 				<!-- Number in hand — a clear 3-step workflow, then request-code (muted briefly). -->
-				<ol class="text-sm space-y-2 mb-4" style="color: var(--text);">
+				<ol class="mb-4 space-y-2 text-sm" style="color: var(--text);">
 					<li class="flex gap-2">
 						<span class="font-semibold" style="color: #38bdf8;">1</span> Copy the number above.
 					</li>
@@ -342,29 +450,43 @@
 						and request the SMS code.
 					</li>
 					<li class="flex gap-2">
-						<span class="font-semibold" style="color: #38bdf8;">3</span> Come back here — your code
-						appears automatically.
+						<span class="font-semibold" style="color: #38bdf8;">3</span> Come back here — your code appears
+						automatically.
 					</li>
 				</ol>
 				<div class="flex flex-col items-center gap-1.5">
-					<button onclick={requestCode} disabled={requestMuted} class="soda-cta">
-						✓ I’ve requested the code
+					<button
+						onclick={requestCode}
+						disabled={requestMuted || markingRequested}
+						class="soda-cta"
+					>
+						{markingRequested ? 'Starting code check…' : '✓ I’ve requested the code'}
 					</button>
 					{#if requestMuted}
 						<span class="text-xs" style="color: var(--text-dim);">
-							Request the SMS in {phone.serviceName} first
+							Open {phone.serviceName} and request the SMS first · ready here in {requestNudgeSeconds}s
+						</span>
+					{:else}
+						<span class="text-xs" style="color: var(--text-dim);">
+							Tap only after {phone.serviceName} says the code was sent
 						</span>
 					{/if}
 				</div>
 			{:else if offerSwitch}
 				<!-- ≥120s, no code — a calm recovery CHOICE, not an error/countdown. -->
-				<div class="text-center text-sm mb-1" style="color: var(--text);">No code yet?</div>
-				<div class="text-xs text-center mb-4" style="color: var(--text-dim);">
+				<div class="mb-1 text-center text-sm" style="color: var(--text);">No code yet?</div>
+				<div class="mb-4 text-center text-xs" style="color: var(--text-dim);">
 					We can switch you to another number at no extra charge.
 				</div>
 				<div class="flex flex-col items-center gap-2">
-					<button onclick={tryAnother} disabled={retrying} class="soda-cta">Use another number</button>
-					<button onclick={() => (keepWaiting = true)} class="text-xs hover:underline" style="color: var(--text-muted);">
+					<button onclick={tryAnother} disabled={retrying} class="soda-cta"
+						>Use another number</button
+					>
+					<button
+						onclick={() => (keepWaiting = true)}
+						class="text-xs hover:underline"
+						style="color: var(--text-muted);"
+					>
 						Keep waiting
 					</button>
 					{#if canCancel}
@@ -380,11 +502,14 @@
 			{:else}
 				<!-- Calm active waiting (and the "switching…" state during a replacement). A continuous
 				     activity indicator — never a filling bar tied to the 120s rule. -->
-				<div class="flex items-center justify-center gap-2 text-sm mb-1" style="color: var(--text);">
-					<RefreshCw class="w-4 h-4 animate-spin" style="color: #38bdf8;" />
+				<div
+					class="mb-1 flex items-center justify-center gap-2 text-sm"
+					style="color: var(--text);"
+				>
+					<RefreshCw class="h-4 w-4 animate-spin" style="color: #38bdf8;" />
 					{retrying ? 'Getting another number…' : 'Waiting for your code'}
 				</div>
-				<div class="text-xs text-center mb-3" style="color: var(--text-dim);">
+				<div class="mb-3 text-center text-xs" style="color: var(--text-dim);">
 					{#if retrying}
 						No extra charge. We’ll update this page when it’s ready.
 					{:else}
@@ -393,24 +518,33 @@
 				</div>
 				<div class="soda-track"><div class="soda-fill soda-fill-indeterminate"></div></div>
 				{#if showTryAnother && keepWaiting && !retrying}
-					<div class="text-xs mt-3 text-center" style="color: var(--text-dim);">
+					<div class="mt-3 text-center text-xs" style="color: var(--text-dim);">
 						Still no code?
-						<button onclick={() => (keepWaiting = false)} class="hover:underline" style="color: #38bdf8;">
+						<button
+							onclick={() => (keepWaiting = false)}
+							class="hover:underline"
+							style="color: #38bdf8;"
+						>
 							Use another number
 						</button>
 					</div>
 				{:else if !retrying}
-					<div class="text-xs mt-3 text-center" style="color: var(--text-dim);">
+					<div class="mt-3 text-center text-xs" style="color: var(--text-dim);">
 						No code? We’ll switch you to another number or refund your store credit — automatically.
 					</div>
 				{/if}
 			{/if}
 		</div>
 	{:else if isRefunded}
-		<div class="rounded-lg px-4 py-5 text-center" style="border: 1px solid rgba(52,211,153,0.4); background: rgba(52,211,153,0.06);">
-			<div class="inline-flex items-center gap-2 mb-1" style="color: #34d399;">
-				<ShieldCheck class="w-5 h-5" />
-				<span class="font-semibold">{cancelledByUser ? 'Cancelled — refund complete' : 'Refund complete'}</span>
+		<div
+			class="rounded-lg px-4 py-5 text-center"
+			style="border: 1px solid rgba(52,211,153,0.4); background: rgba(52,211,153,0.06);"
+		>
+			<div class="mb-1 inline-flex items-center gap-2" style="color: #34d399;">
+				<ShieldCheck class="h-5 w-5" />
+				<span class="font-semibold"
+					>{cancelledByUser ? 'Cancelled — refund complete' : 'Refund complete'}</span
+				>
 			</div>
 			<div class="text-sm" style="color: var(--text-muted);">
 				{refundMessage ??
@@ -419,13 +553,15 @@
 						: 'No code arrived, so your payment is back in your store credit.')}
 			</div>
 			{#if phone.saleAmountNgn}
-				<div class="text-xs mt-1" style="color: var(--text-dim);">
+				<div class="mt-1 text-xs" style="color: var(--text-dim);">
 					₦{phone.saleAmountNgn.toLocaleString()} in your store credit — ready to use now.
 				</div>
 			{/if}
-			<div class="flex flex-wrap items-center justify-center gap-3 mt-4">
+			<div class="mt-4 flex flex-wrap items-center justify-center gap-3">
 				<button onclick={buyAnother} class="soda-cta">Try another number</button>
-				<a href="/dashboard" class="text-xs hover:underline" style="color: var(--text-muted);">View balance</a>
+				<a href="/dashboard" class="text-xs hover:underline" style="color: var(--text-muted);"
+					>View balance</a
+				>
 			</div>
 		</div>
 	{/if}
@@ -450,12 +586,30 @@
 		class="fixed inset-x-0 bottom-0 z-40 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium sm:hidden"
 		style="background: var(--bg-elev-1); border-top: 1px solid var(--border); color: var(--text); box-shadow: 0 -4px 16px rgba(0,0,0,0.25);"
 	>
-		<RefreshCw class="w-4 h-4 animate-spin" style="color: #38bdf8;" />
+		<RefreshCw class="h-4 w-4 animate-spin" style="color: #38bdf8;" />
 		{stickyStatus}
 	</button>
 {/if}
 
 <style>
+	.number-panel {
+		transition:
+			border-color 180ms ease,
+			background-color 180ms ease,
+			box-shadow 220ms ease,
+			opacity 180ms ease;
+	}
+	.number-panel--retired {
+		border: 1px dashed var(--border-2);
+		background: rgba(255, 255, 255, 0.025);
+		opacity: 0.72;
+	}
+	.number-panel--fresh {
+		border-color: var(--status-success) !important;
+		background: var(--status-success-bg) !important;
+		box-shadow: 0 0 0 3px rgba(5, 212, 113, 0.12);
+	}
+
 	/* "Soda bar": a calm, filling progress bar to reduce waiting anxiety (vs a stark countdown). */
 	.soda-track {
 		height: 8px;
@@ -497,7 +651,9 @@
 		box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
 		border: none;
 		cursor: pointer;
-		transition: transform 0.1s ease, filter 0.1s ease;
+		transition:
+			transform 0.1s ease,
+			filter 0.1s ease;
 	}
 	.soda-cta:hover {
 		filter: brightness(1.08);

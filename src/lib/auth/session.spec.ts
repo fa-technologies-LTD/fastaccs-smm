@@ -105,4 +105,18 @@ describe('session cache invalidation', () => {
 		expect(mocks.findUnique).toHaveBeenCalledTimes(1);
 		expect(mocks.findUser).toHaveBeenCalledWith({ where: { id: 'cache-user' } });
 	});
+
+	it('reuses a recent user snapshot only when a safe storefront read opts in', async () => {
+		const session = buildSession();
+		mocks.findUnique.mockResolvedValueOnce({ ...session, user: buildUser(true) });
+
+		await validateSessionToken('storefront-cache-token');
+		const cached = await validateSessionToken('storefront-cache-token', {
+			requireFreshUser: false
+		});
+
+		expect(cached.user?.emailVerified).toBe(true);
+		expect(mocks.findUnique).toHaveBeenCalledTimes(1);
+		expect(mocks.findUser).not.toHaveBeenCalled();
+	});
 });

@@ -41,6 +41,7 @@ describe('telemetry writes are best-effort — never throw', () => {
 		prismaMock.phoneAttempt.create.mockResolvedValue({ id: 'att-1' });
 		const id = await recordPhoneAttempt({
 			orderItemId: 'oi-1',
+			generation: 1,
 			attemptNumber: 1,
 			provider: 'pvapins',
 			providerServiceRef: 'Whatsapp24',
@@ -53,6 +54,7 @@ describe('telemetry writes are best-effort — never throw', () => {
 		prismaMock.phoneAttempt.create.mockRejectedValue(new Error('db down'));
 		const id = await recordPhoneAttempt({
 			orderItemId: 'oi-1',
+			generation: 1,
 			attemptNumber: 1,
 			provider: 'pvapins',
 			providerServiceRef: 'Whatsapp24',

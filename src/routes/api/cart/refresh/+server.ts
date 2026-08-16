@@ -134,9 +134,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ success: true, data: { items: [], messages: [] } });
 		}
 
-		await releaseExpiredOrderReservations();
-		await releaseExpiredExactPreviewReservations();
-
 		const tierInputs: string[] = Array.from(
 			new Set<string>(
 				inputItems.map((item) => normalizeText(item.tierId)).filter((value) => value.length > 0)
@@ -189,12 +186,34 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			tierByInput.set(tier.slug.toLowerCase(), tier);
 		}
 
-		const canonicalTierIds = Array.from(new Set(tiers.map((tier) => tier.id)));
-		const stockRows = canonicalTierIds.length
+		const inventoryTierIds = Array.from(
+			new Set(
+				tiers
+					.filter(
+						(tier) =>
+							tier.categoryType !== 'boosting_service' &&
+							!['manual_handover', 'auto_sms'].includes(
+								normalizeTierDeliveryMode(
+									(tier.metadata as Record<string, unknown> | null)?.delivery_mode
+								)
+							)
+					)
+					.map((tier) => tier.id)
+			)
+		);
+		const requestedExactAccountIds = inputItems
+			.map((item) => normalizeText(item.exactAccount?.accountId))
+			.filter((value) => value.length > 0 && isUuid(value));
+		// Avoid putting global inventory maintenance in the Numbers/boosting cart hot path.
+		// Account carts still clean the reservation class they rely on before counting stock.
+		if (inventoryTierIds.length > 0) await releaseExpiredOrderReservations();
+		if (requestedExactAccountIds.length > 0) await releaseExpiredExactPreviewReservations();
+
+		const stockRows = inventoryTierIds.length
 			? await prisma.account.groupBy({
 					by: ['categoryId'],
 					where: {
-						categoryId: { in: canonicalTierIds },
+						categoryId: { in: inventoryTierIds },
 						status: 'available'
 					},
 					_count: { _all: true }
@@ -245,12 +264,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 		}
 
-		const exactAccountIds = inputItems
-			.map((item) => normalizeText(item.exactAccount?.accountId))
-			.filter((value) => value.length > 0 && isUuid(value));
-		const exactAccounts = exactAccountIds.length
+		const exactAccounts = requestedExactAccountIds.length
 			? await prisma.account.findMany({
-					where: { id: { in: exactAccountIds } },
+					where: { id: { in: requestedExactAccountIds } },
 					select: {
 						id: true,
 						categoryId: true,

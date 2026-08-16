@@ -46,9 +46,6 @@
 		{ key: 'high-engagement', label: 'High Engagement' }
 	];
 
-	const HIGH_ENGAGEMENT_PATTERN =
-		/(engage|engagement|follower|followers|likes|views|subscriber|subscribers|reach|boost)/i;
-
 	function navigateToPlatform(platformSlug: string) {
 		goto(`/platforms/${platformSlug}`);
 	}
@@ -113,10 +110,6 @@
 		return minPrice > 0 ? `From ${formatPrice(minPrice)}` : 'Price updates soon';
 	}
 
-	function isHighEngagementPlatform(platform: PageData['platforms'][number]): boolean {
-		return HIGH_ENGAGEMENT_PATTERN.test(getSearchableText(platform));
-	}
-
 	function baseSort(a: PageData['platforms'][number], b: PageData['platforms'][number]): number {
 		const inStockA = (a.total_accounts || 0) > 0 ? 1 : 0;
 		const inStockB = (b.total_accounts || 0) > 0 ? 1 : 0;
@@ -144,21 +137,21 @@
 		}
 
 		if (activeFilter === 'high-engagement') {
-			platforms = platforms.filter(isHighEngagementPlatform);
+			platforms = platforms
+				.filter((platform) => (platform.high_engagement_accounts || 0) > 0)
+				.sort((a, b) => {
+					const rateDiff = (b.average_engagement_rate || 0) - (a.average_engagement_rate || 0);
+					if (rateDiff !== 0) return rateDiff;
+					return (b.high_engagement_accounts || 0) - (a.high_engagement_accounts || 0);
+				});
+			return platforms;
 		}
 
 		if (activeFilter === 'popular') {
+			platforms = platforms.filter((platform) => (platform.recent_paid_units || 0) > 0);
 			platforms.sort((a, b) => {
-				const inStockA = (a.total_accounts || 0) > 0 ? 1 : 0;
-				const inStockB = (b.total_accounts || 0) > 0 ? 1 : 0;
-				if (inStockA !== inStockB) return inStockB - inStockA;
-
-				const tierDiff = (b.tier_count || 0) - (a.tier_count || 0);
-				if (tierDiff !== 0) return tierDiff;
-
-				const stockDiff = (b.total_accounts || 0) - (a.total_accounts || 0);
-				if (stockDiff !== 0) return stockDiff;
-
+				const demandDiff = (b.recent_paid_units || 0) - (a.recent_paid_units || 0);
+				if (demandDiff !== 0) return demandDiff;
 				return a.name.localeCompare(b.name);
 			});
 			return platforms;
@@ -203,7 +196,7 @@
 				<Search size={16} class="search-icon" />
 				<input
 					type="text"
-					placeholder="Search platforms..."
+					aria-label="Search account platforms"
 					bind:value={searchQuery}
 					class="search-input"
 				/>
@@ -227,8 +220,16 @@
 		{:else if filteredPlatforms.length === 0}
 			<div class="empty-state">
 				<SearchX size={46} />
-				<p class="empty-title">No platforms match your search</p>
-				<p class="empty-subtitle">Try a different term or browse all platforms.</p>
+				{#if activeFilter === 'high-engagement' && !searchQuery.trim()}
+					<p class="empty-title">No engagement-rated stock right now</p>
+					<p class="empty-subtitle">This view only uses measured account engagement rates.</p>
+				{:else if activeFilter === 'popular' && !searchQuery.trim()}
+					<p class="empty-title">No recent purchases to rank yet</p>
+					<p class="empty-subtitle">Popular is based on paid purchases from the last 90 days.</p>
+				{:else}
+					<p class="empty-title">No platforms match your search</p>
+					<p class="empty-subtitle">Try a different term or browse all platforms.</p>
+				{/if}
 				<button type="button" class="clear-search-btn" onclick={clearSearch}>Clear search</button>
 			</div>
 		{:else}
