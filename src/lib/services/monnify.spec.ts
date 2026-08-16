@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('$env/dynamic/private', () => ({
+	env: {
+		MONNIFY_API_KEY: 'test-api-key',
+		MONNIFY_SECRET_KEY: 'test-secret-key',
+		MONNIFY_BASE_URL: 'https://sandbox.monnify.test',
+		MONNIFY_CONTRACT_CODE: '1234567890'
+	}
+}));
+
 function jsonResponse(body: unknown): Response {
 	return new Response(JSON.stringify(body), {
 		status: 200,
@@ -13,14 +22,9 @@ describe('Monnify checkout initialization', () => {
 		vi.spyOn(console, 'info').mockImplementation(() => undefined);
 		vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 		vi.spyOn(console, 'error').mockImplementation(() => undefined);
-		vi.stubEnv('MONNIFY_API_KEY', 'test-api-key');
-		vi.stubEnv('MONNIFY_SECRET_KEY', 'test-secret-key');
-		vi.stubEnv('MONNIFY_BASE_URL', 'https://sandbox.monnify.test');
-		vi.stubEnv('MONNIFY_CONTRACT_CODE', '1234567890');
 	});
 
 	afterEach(() => {
-		vi.unstubAllEnvs();
 		vi.unstubAllGlobals();
 		vi.restoreAllMocks();
 	});
