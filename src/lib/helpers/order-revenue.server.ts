@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { REVENUE_ORDER_STATUSES } from './order-revenue';
+import { REVENUE_ORDER_STATUSES, REFUNDED_MARKER } from './order-revenue';
 
 // Orders an owner admin releases to a profile (self-offload of specific logs)
 // carry this payment channel so they are excluded from ALL revenue/analytics —
@@ -23,6 +23,12 @@ export function buildRevenueOrderWhere(): Prisma.OrderWhereInput {
 	return {
 		AND: [
 			{ OR: [{ status: { in: [...REVENUE_ORDER_STATUSES] } }, { paymentStatus: 'paid' }] },
+			// Refunded money is never revenue. Mirrors isRevenueOrder() so the SQL aggregates and
+			// the in-memory predicate can never disagree. All three columns are NOT NULL with
+			// defaults, so `not` here cannot silently drop rows the way it would on a nullable one.
+			{ status: { not: REFUNDED_MARKER } },
+			{ paymentStatus: { not: REFUNDED_MARKER } },
+			{ deliveryStatus: { not: REFUNDED_MARKER } },
 			// Exclude owner self-offloads (manual_release) but KEEP orders with a NULL
 			// paymentChannel — `NOT: { paymentChannel: 'x' }` drops NULLs in SQL, which
 			// was silently excluding legitimate revenue.

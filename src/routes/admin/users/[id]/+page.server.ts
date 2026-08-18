@@ -21,6 +21,7 @@ interface OrderSummary {
 	orderNumber: string;
 	status: string;
 	paymentStatus: string;
+	deliveryStatus: string;
 	totalAmount: number;
 	storeCreditApplied: number;
 	paymentReference: string | null;
@@ -268,6 +269,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 						orderType: true,
 						status: true,
 						paymentStatus: true,
+						// isRevenueOrder needs this: the Numbers auto-refund marks deliveryStatus.
+						deliveryStatus: true,
 						totalAmount: true,
 						storeCreditApplied: true,
 						paymentReference: true,
@@ -330,6 +333,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		orderNumber: order.orderNumber,
 		status: order.status,
 		paymentStatus: order.paymentStatus,
+		deliveryStatus: order.deliveryStatus,
 		totalAmount: orderAmountsVisible ? Number(order.totalAmount || 0) : 0,
 		storeCreditApplied: orderAmountsVisible ? Number(order.storeCreditApplied || 0) : 0,
 		paymentReference: order.paymentReference ?? null,
@@ -346,7 +350,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	const paidOrderSummaries = orderSummaries.filter((order: OrderSummary) =>
 		isRevenueOrder({
 			status: order.status,
-			paymentStatus: order.paymentStatus
+			paymentStatus: order.paymentStatus,
+			deliveryStatus: order.deliveryStatus
 		})
 	);
 

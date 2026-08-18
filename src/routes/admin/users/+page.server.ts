@@ -16,6 +16,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 					select: {
 						status: true,
 						paymentStatus: true,
+						// Needed by isRevenueOrder: the Numbers auto-refund marks deliveryStatus, so
+						// without it a refunded number order still counted as a paid sale.
+						deliveryStatus: true,
 						totalAmount: true
 					}
 				},
@@ -35,7 +38,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 			const successfulOrders = user.orders.filter((order) =>
 				isRevenueOrder({
 					status: order.status,
-					paymentStatus: order.paymentStatus
+					paymentStatus: order.paymentStatus,
+					deliveryStatus: order.deliveryStatus
 				})
 			);
 			const lastSeenAt = user.lastSeenAt || user.lastLogin || user.registeredAt;

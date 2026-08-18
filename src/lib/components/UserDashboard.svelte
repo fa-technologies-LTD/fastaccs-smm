@@ -256,8 +256,10 @@
 					>
 						Hey, {firstName}
 					</h1>
+					<!-- This counts PAID (non-refunded) orders, not delivered ones — a paid order still
+					     being fulfilled was reading as "completed". Wording matches what it measures. -->
 					<p class="text-xs" style="color: var(--text-muted);">
-						{completedOrders} order{completedOrders === 1 ? '' : 's'} completed
+						{completedOrders} paid order{completedOrders === 1 ? '' : 's'}
 					</p>
 				</div>
 			</div>

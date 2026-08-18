@@ -12,6 +12,11 @@ import { releaseOrderReservations } from '$lib/services/order-reservations';
 import { sanitizeBuyerOrderAccounts } from '$lib/helpers/buyer-order-visibility';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
+import { isRefundReversal } from '$lib/helpers/order-refund-lock';
+
+function isUuid(value: string): boolean {
+	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
 
 const ALLOWED_PATCH_FIELDS = new Set([
 	'status',
@@ -266,25 +271,59 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 			return json({ data: null, error: 'Unauthorized' }, { status: 401 });
 		}
 
+		if (!isUuid(params.id)) {
+			return json({ data: null, error: 'Invalid order ID' }, { status: 400 });
+		}
+
 		const payload = await request.json().catch(() => null);
 		const { data: updateData, error: validationError } = buildOrderPatchData(payload);
 		if (!updateData || validationError) {
 			return json({ data: null, error: validationError || 'Invalid payload' }, { status: 400 });
 		}
 
-		const data = await prisma.order.update({
-			where: { id: params.id },
-			data: {
-				...updateData,
-				updatedAt: new Date()
-			},
-			include: {
-				orderItems: true,
-				user: {
-					select: ORDER_CUSTOMER_USER_SELECT
-				}
-			}
+		// Read the refund state and write under the SAME row lock the refund endpoints take, so a
+		// refund committing concurrently can never be reverted by an edit that read stale state.
+		const outcome = await prisma.$transaction(async (tx) => {
+			await tx.$queryRaw`SELECT id FROM orders WHERE id = ${params.id}::uuid FOR UPDATE`;
+			const current = await tx.order.findUnique({
+				where: { id: params.id },
+				select: { status: true, paymentStatus: true, deliveryStatus: true }
+			});
+			if (!current) return { blocked: 'not_found' as const };
+			if (isRefundReversal(current, updateData)) return { blocked: 'refunded' as const };
+
+			return {
+				data: await tx.order.update({
+					where: { id: params.id },
+					data: {
+						...updateData,
+						updatedAt: new Date()
+					},
+					include: {
+						orderItems: true,
+						user: {
+							select: ORDER_CUSTOMER_USER_SELECT
+						}
+					}
+				})
+			};
 		});
+
+		if (outcome.blocked === 'not_found') {
+			return json({ data: null, error: 'Order not found' }, { status: 404 });
+		}
+		if (outcome.blocked === 'refunded') {
+			return json(
+				{
+					data: null,
+					error:
+						'This order has been refunded. Its status, payment status and delivery status are locked so the refund cannot be reversed.'
+				},
+				{ status: 409 }
+			);
+		}
+
+		const data = outcome.data;
 		if (data.status === 'cancelled' || data.status === 'failed') {
 			await releaseOrderReservations(data.id);
 		}
