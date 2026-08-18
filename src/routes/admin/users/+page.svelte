@@ -581,16 +581,17 @@
 									</div>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
-									{#if user.isAffiliateEnabled}
-										<div class="flex items-center gap-1">
-											<Wallet class="h-4 w-4" style="color: var(--text-dim);" />
-											<span class="text-sm" style="color: var(--text);"
-												>{formatPrice(user.storeCreditBalance || 0)}</span
-											>
-										</div>
-									{:else}
-										<span class="text-sm" style="color: var(--text-dim);">—</span>
-									{/if}
+									<!-- Store credit is NOT affiliate-only: every refund mints it for any user. Gating this
+									     on isAffiliateEnabled hid real money we owe — a refunded buyer holding a balance read
+									     as "—". Always show the ledger figure; zero is dimmed rather than hidden. -->
+									<div class="flex items-center gap-1">
+										<Wallet class="h-4 w-4" style="color: var(--text-dim);" />
+										<span
+											class="text-sm"
+											style="color: {user.storeCreditBalance > 0 ? 'var(--text)' : 'var(--text-dim)'};"
+											>{formatPrice(user.storeCreditBalance || 0)}</span
+										>
+									</div>
 								</td>
 								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text-muted);">
 									<div class="flex items-center gap-1">

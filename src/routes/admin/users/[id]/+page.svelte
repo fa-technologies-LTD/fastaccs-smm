@@ -296,13 +296,11 @@
 				style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 			>
 				<p class="text-xs uppercase" style="color: var(--text-dim);">Store Credit</p>
-				{#if user.isAffiliateEnabled}
-					<p class="mt-1 text-lg font-bold" style="color: var(--text);">
-						{formatOrderAmount(user.storeCreditBalance || 0)}
-					</p>
-				{:else}
-					<p class="mt-1 text-sm font-semibold" style="color: var(--text-dim);">Not enabled</p>
-				{/if}
+				<!-- Store credit is NOT affiliate-only: refunds mint it for any buyer, so gating this
+				     on isAffiliateEnabled reported "Not enabled" for users we genuinely owe money. -->
+				<p class="mt-1 text-lg font-bold" style="color: var(--text);">
+					{formatOrderAmount(user.storeCreditBalance || 0)}
+				</p>
 			</div>
 		</div>
 	</section>

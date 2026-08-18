@@ -128,7 +128,8 @@
 		const paidOrders = filteredOrders.filter((o: any) =>
 			isRevenueOrder({
 				status: o.status,
-				paymentStatus: o.paymentStatus
+				paymentStatus: o.paymentStatus,
+				deliveryStatus: o.deliveryStatus
 			})
 		);
 		const cancelledOrders = filteredOrders.filter(isCancelledOrder).length;
