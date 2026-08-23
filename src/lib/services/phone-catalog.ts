@@ -125,13 +125,77 @@ export const STOREFRONT_MARKET_CODES = new Set<string>([
 	'MY',
 	'KE',
 	'CL',
-	'HK'
+	'HK',
+	'NG',
+	'GH',
+	'ZA',
+	'IN',
+	'DE',
+	'AU',
+	'BR',
+	'FR',
+	'PH',
+	'AE'
 ]);
 
 // pvapins publishes catalog listings rather than true stock. Only let it originate an otherwise
-// absent tier in the three core markets; elsewhere it can still compete/fail over behind a
-// hub-stock-backed tier. This avoids presenting hundreds of unproven cold-start products.
-export const PVAPINS_ONLY_MARKET_CODES = new Set<string>(['US', 'GB', 'CA']);
+// absent tier in the explicitly approved expansion markets; elsewhere it can still compete/fail
+// over behind a hub-stock-backed tier. This avoids presenting hundreds of unproven cold starts.
+export const PVAPINS_ONLY_MARKET_CODES = new Set<string>([
+	'US',
+	'GB',
+	'CA',
+	'NG',
+	'GH',
+	'ZA',
+	'IN',
+	'DE',
+	'AU',
+	'BR',
+	'FR',
+	'PH',
+	'AE'
+]);
+
+// Explicit product families approved for the current PVAPins-led expansion. The broader master
+// list remains available when hub-man exposes real stock, but a supplier catalog listing alone
+// cannot originate every obscure product on the storefront.
+export const PVAPINS_EXPANSION_SERVICE_IDS = new Set<number>([
+	1, 2, 507, 3, 7, 11, 50, 18, 131, 47, 12, 73, 33, 2612, 21, 63, 3965
+]);
+
+type PvapinsPublishEvidence = {
+	serviceId: number;
+	status: string;
+	releaseConfirmed: boolean | null;
+	metadata: unknown;
+};
+
+/** A supplier listing is discovery only; actual rent or buyer delivery is required to publish. */
+export function hasPublishablePvapinsEvidence(
+	serviceId: number,
+	countryCode: string,
+	evidence: PvapinsPublishEvidence[]
+): boolean {
+	const normalizedCode = countryCode.trim().toUpperCase();
+	return evidence.some((row) => {
+		if (row.serviceId !== serviceId) return false;
+		const metadata =
+			row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+				? (row.metadata as Record<string, unknown>)
+				: {};
+		if (
+			String(metadata.countryCode || '')
+				.trim()
+				.toUpperCase() !== normalizedCode
+		)
+			return false;
+		return (
+			row.status === 'delivery_proven' ||
+			(row.status === 'rentable' && row.releaseConfirmed === true)
+		);
+	});
+}
 
 function tierSlug(serviceId: number, countryId: number): string {
 	return `numbers-svc${serviceId}-country${countryId}`;
@@ -650,12 +714,36 @@ export async function syncNumbersCatalog(
 		console.log(`[phone-catalog] pvapins filled ${revivedByPvapins} hub-man gap tier(s)`);
 	}
 
-	// pvapins-only market creation: on a manual Expand, create a tier for each curated target market
-	// × curated service that pvapins covers but hub-man never lists (so it never got a tier above).
-	// Expand-only so the routine 5-min cron stays cheap; once created, the normal sync keeps these
-	// tiers priced/available like any other. Idempotent — a target that already has a tier is skipped.
+	// PVAPins-only market creation: catalog listings discover candidates, but only a controlled,
+	// successfully released rent (or a real buyer OTP) authorizes storefront publication. The
+	// ordinary sync can therefore publish a newly proven candidate shortly after the probe without
+	// waiting for another manual expansion. Idempotent — an existing tier is always skipped.
 	let createdByPvapins = 0;
-	if (options.expand && pvapinsReady && pvCountries.length > 0 && countryMeta.size > 0) {
+	const pvapinsPublishEvidence = pvapinsReady
+		? await prisma.phoneCatalogProbe
+				.findMany({
+					where: { status: { in: ['rentable', 'delivery_proven'] } },
+					select: {
+						serviceId: true,
+						status: true,
+						releaseConfirmed: true,
+						metadata: true
+					}
+				})
+				.catch((error) => {
+					console.error(
+						'[phone-catalog] failed to load publishable PVAPins evidence:',
+						(error as Error).message
+					);
+					return [];
+				})
+		: [];
+	if (
+		pvapinsReady &&
+		pvCountries.length > 0 &&
+		countryMeta.size > 0 &&
+		pvapinsPublishEvidence.length > 0
+	) {
 		// Reverse the master catalog to resolve a target ISO2 → hub country id + name (stable id).
 		const hubCountryByCode = new Map<string, { id: number; name: string; code: string }>();
 		for (const [id, m] of countryMeta) {
@@ -664,9 +752,10 @@ export async function syncNumbersCatalog(
 		for (const code of PVAPINS_ONLY_MARKET_CODES) {
 			const hubCountry = hubCountryByCode.get(code.toUpperCase());
 			if (!hubCountry) continue; // not in hub-man's master catalog → no stable country id
-			for (const serviceId of MAJOR_SERVICE_IDS) {
+			for (const serviceId of PVAPINS_EXPANSION_SERVICE_IDS) {
 				const slug = tierSlug(serviceId, hubCountry.id);
 				if (idBySlug.has(slug)) continue; // hub-man already made this tier (revive path covers it)
+				if (!hasPublishablePvapinsEvidence(serviceId, code, pvapinsPublishEvidence)) continue;
 				const fill = await pvapinsFillFor(hubCountry.code, hubCountry.name, serviceId);
 				if (!fill || fill === 'fetch_failed') continue; // pvapins doesn't carry it (or a blip)
 				const serviceName = SERVICE_NAME_BY_ID.get(serviceId)!;

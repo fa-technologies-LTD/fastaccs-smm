@@ -2,6 +2,7 @@ import type { RequestHandler } from './$types';
 import { runAuthorizedAutomationCron } from '$lib/server/automation-cron';
 import { syncNumbersCatalog } from '$lib/services/phone-catalog';
 import { isHubmanConfigured } from '$lib/services/hubman';
+import { isPvapinsConfigured } from '$lib/services/pvapins';
 
 // The sync fetches several large hub-man + pvapins payloads (per-country app lists) and upserts
 // ~160 tiers; the two-source gap-fill pushes it past 120s, so give it the Pro-tier headroom.
@@ -15,7 +16,9 @@ export const GET: RequestHandler = async ({ request }) =>
 		request,
 		jobName: 'numbers-catalog-sync',
 		work: async () => {
-			if (!isHubmanConfigured()) return { skipped: 'hubman not configured' };
+			if (!isHubmanConfigured() && !isPvapinsConfigured()) {
+				return { skipped: 'number providers not configured' };
+			}
 			return syncNumbersCatalog();
 		}
 	});

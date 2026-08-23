@@ -11,9 +11,21 @@ import {
 	recordAttemptRejection,
 	classifyRentFailure
 } from './phone-telemetry';
-import { creditStoreCredit, SC_CREDIT_REFUND } from './store-credit';
+import {
+	creditStoreCredit,
+	restoreStoreCreditRedemptionForLatePayment,
+	SC_CREDIT_REFUND
+} from './store-credit';
 import { sendCriticalAdminAlert } from './admin-alerts';
 import { createUserNotification } from './notifications';
+import { invalidateAdminStatsCache } from './admin-metrics';
+import { maybeVoidSuperActivationOnRefund, reconcileAffiliateSales } from './affiliate';
+import {
+	voidUnvestedRewardsForOrder,
+	reverseVestedRegularRewardForOrder
+} from './affiliate-vesting';
+import { maybeClawbackSpendMilestones } from './spend-milestones';
+import { recordOrderEvent, recordOrderEventBestEffort } from './order-events';
 import {
 	providerForRental,
 	refForRental,
@@ -79,6 +91,7 @@ export interface PhoneOrderItemContext {
 	orderItemId: string;
 	orderId: string;
 	userId: string | null;
+	affiliateUserId: string | null;
 	orderNumber: string;
 	saleAmountNgn: number;
 	tier: PhoneTierConfig;
@@ -95,7 +108,10 @@ async function loadPhoneOrderContext(orderId: string): Promise<PhoneOrderItemCon
 			order: {
 				select: {
 					userId: true,
+					affiliateUserId: true,
 					orderNumber: true,
+					totalAmount: true,
+					refundedAmount: true,
 					status: true,
 					paymentStatus: true,
 					deliveryStatus: true
@@ -110,8 +126,14 @@ async function loadPhoneOrderContext(orderId: string): Promise<PhoneOrderItemCon
 		orderItemId: item.id,
 		orderId,
 		userId: item.order.userId,
+		affiliateUserId: item.order.affiliateUserId,
 		orderNumber: item.order.orderNumber,
-		saleAmountNgn: Number(item.totalPrice),
+		// Margin and refunds must use what the buyer actually paid after promotions,
+		// not the pre-discount line price.
+		saleAmountNgn: Math.max(
+			0,
+			Number(item.order.totalAmount || 0) - Number(item.order.refundedAmount || 0)
+		),
 		tier,
 		orderStatus: item.order.status,
 		paymentStatus: item.order.paymentStatus,
@@ -149,40 +171,75 @@ export async function confirmPhonePaymentAndInitializeRental(input: {
 	const ctx = await loadPhoneOrderContext(input.orderId);
 	if (!ctx) return false;
 
-	return prisma.$transaction(async (tx) => {
-		const advanced = await tx.order.updateMany({
-			where: {
-				id: input.orderId,
-				status: { notIn: ['refunded', 'cancelled', 'canceled', 'completed'] },
-				deliveryStatus: { not: 'refunded' }
-			},
-			data: {
-				status: 'paid',
-				paymentStatus: 'paid',
-				deliveryStatus: 'processing',
-				paymentReference: input.paymentReference || undefined,
-				paymentChannel: input.paymentChannel || undefined,
-				paidAt: input.paidAt || new Date(),
-				paymentCheckoutUrl: null
+	return prisma.$transaction(
+		async (tx) => {
+			await tx.$queryRaw`SELECT id FROM orders WHERE id = ${input.orderId}::uuid FOR UPDATE`;
+			const lockedOrder = await tx.order.findUnique({
+				where: { id: input.orderId },
+				select: {
+					userId: true,
+					storeCreditApplied: true,
+					status: true,
+					paymentStatus: true,
+					deliveryStatus: true
+				}
+			});
+			if (!lockedOrder) return false;
+			if (
+				lockedOrder.status === 'refunded' ||
+				lockedOrder.status === 'cancelled' ||
+				lockedOrder.status === 'canceled' ||
+				lockedOrder.status === 'completed' ||
+				lockedOrder.paymentStatus === 'refunded' ||
+				lockedOrder.deliveryStatus === 'refunded'
+			) {
+				return false;
 			}
-		});
-		if (advanced.count === 0) return false;
+			if (Number(lockedOrder.storeCreditApplied || 0) > 0) {
+				if (!lockedOrder.userId) {
+					throw new Error('STORE_CREDIT_LATE_PAYMENT_USER_NOT_FOUND');
+				}
+				await restoreStoreCreditRedemptionForLatePayment(tx, {
+					userId: lockedOrder.userId,
+					orderId: input.orderId,
+					expectedAmount: Number(lockedOrder.storeCreditApplied)
+				});
+			}
+			const advanced = await tx.order.updateMany({
+				where: {
+					id: input.orderId,
+					status: { notIn: ['refunded', 'cancelled', 'canceled', 'completed'] },
+					deliveryStatus: { not: 'refunded' }
+				},
+				data: {
+					status: 'paid',
+					paymentStatus: 'paid',
+					deliveryStatus: 'processing',
+					paymentReference: input.paymentReference || undefined,
+					paymentChannel: input.paymentChannel || undefined,
+					paidAt: input.paidAt || new Date(),
+					paymentCheckoutUrl: null
+				}
+			});
+			if (advanced.count === 0) return false;
 
-		await tx.phoneRental.upsert({
-			where: { orderItemId: ctx.orderItemId },
-			update: {},
-			create: {
-				orderItemId: ctx.orderItemId,
-				serviceId: ctx.tier.serviceId,
-				serviceName: ctx.tier.serviceName,
-				countryId: ctx.tier.countryId,
-				countryName: ctx.tier.countryName,
-				saleAmountNgn: ctx.saleAmountNgn,
-				status: 'pending'
-			}
-		});
-		return true;
-	});
+			await tx.phoneRental.upsert({
+				where: { orderItemId: ctx.orderItemId },
+				update: {},
+				create: {
+					orderItemId: ctx.orderItemId,
+					serviceId: ctx.tier.serviceId,
+					serviceName: ctx.tier.serviceName,
+					countryId: ctx.tier.countryId,
+					countryName: ctx.tier.countryName,
+					saleAmountNgn: ctx.saleAmountNgn,
+					status: 'pending'
+				}
+			});
+			return true;
+		},
+		{ maxWait: 10_000, timeout: 20_000 }
+	);
 }
 
 async function orderIdForItem(orderItemId: string): Promise<string | null> {
@@ -283,7 +340,9 @@ async function markRentalReceived(
 					orderItemId,
 					ref,
 					latencySec,
-					r.provider === 'pvapins' ? r.costCents : undefined
+					getProvider(r.provider as NumberProviderId).billing === 'pay-on-success'
+						? r.costCents
+						: undefined
 				);
 			} catch {
 				/* observational only */
@@ -307,6 +366,16 @@ async function markRentalReceived(
 						.findUnique({ where: { id: orderId }, select: { userId: true } })
 						.catch(() => null)
 				: null;
+			if (completed.count) {
+				recordOrderEventBestEffort({
+					orderId,
+					orderItemId,
+					type: 'order_completed',
+					source: 'phone.otp',
+					description: 'Verification code received and order completed',
+					idempotencyKey: `phone:received:${orderItemId}`
+				});
+			}
 			// Bell: the customer's code just landed — the single most useful notification we send.
 			if (order?.userId) {
 				await createUserNotification({
@@ -411,7 +480,11 @@ export async function fulfillPhoneOrder(
 	const rentLeaseToken = randomUUID();
 	const rentingAt = new Date();
 	const claim = await prisma.phoneRental.updateMany({
-		where: { orderItemId: ctx.orderItemId, status: 'pending' },
+		where: {
+			orderItemId: ctx.orderItemId,
+			status: 'pending',
+			OR: [{ nextRentAttemptAt: null }, { nextRentAttemptAt: { lte: rentingAt } }]
+		},
 		data: {
 			status: 'renting',
 			generation: { increment: 1 },
@@ -421,6 +494,7 @@ export async function fulfillPhoneOrder(
 			rentCandidateProvider: null,
 			rentCandidateServiceRef: null,
 			rentCallStartedAt: null,
+			nextRentAttemptAt: null,
 			failureReason: null
 		}
 	});
@@ -519,6 +593,7 @@ export async function fulfillPhoneOrder(
 	// Did we skip any pvapins candidate purely because the GLOBAL rate limiter had no token? That's
 	// "supplier capacity momentarily exhausted", NOT out of stock — it must never trigger a refund.
 	let rateLimited = false;
+	let pvapinsLimited = false;
 	let ownershipLost = false;
 	let attemptNumber = 0;
 	let rentAttempts = 0;
@@ -539,11 +614,16 @@ export async function fulfillPhoneOrder(
 		if (rentAttempts >= MAX_RENT_ATTEMPTS) break;
 		// pvapins get_number is globally rate-limited (~5/min). Take a shared token before calling it;
 		// if none is free, skip this candidate WITHOUT touching its stock/reliability signal.
+		if (candidate.provider === 'pvapins' && pvapinsLimited) {
+			rateLimited = true;
+			continue;
+		}
 		if (
 			candidate.provider === 'pvapins' &&
 			!(await acquireRateToken(PVAPINS_GET_NUMBER_BUCKET, rlSpec))
 		) {
 			rateLimited = true;
+			pvapinsLimited = true;
 			void recordPhoneAttempt({
 				orderItemId: ctx.orderItemId,
 				generation,
@@ -673,7 +753,16 @@ export async function fulfillPhoneOrder(
 					rentLeaseExpiresAt: null,
 					rentCandidateProvider: null,
 					rentCandidateServiceRef: null,
-					rentCallStartedAt: null
+					rentCallStartedAt: null,
+					nextRentAttemptAt: rateLimited
+						? new Date(
+								Date.now() +
+									Math.max(
+										3_000,
+										Math.ceil(60_000 / Math.max(1, pricing.pvapinsRateLimitPerMin)) + 1_000
+									)
+							)
+						: null
 				}
 			});
 			if (reverted.count === 0) return currentFulfillmentResult(ctx.orderItemId);
@@ -912,15 +1001,42 @@ export async function refundPhoneOrderToStoreCredit(
 				type: SC_CREDIT_REFUND,
 				description,
 				reference: ctx.orderId,
-				metadata: { orderItemId: ctx.orderItemId, kind: 'phone_refund' }
+				metadata: {
+					orderId: ctx.orderId,
+					orderNumber: ctx.orderNumber,
+					orderItemId: ctx.orderItemId,
+					kind: 'phone_refund'
+				}
 			});
 
 			await tx.order.update({
 				where: { id: ctx.orderId },
 				// paymentStatus MUST flip too, or the reconcile cron (which re-processes any
 				// `paymentStatus:'paid'` order) resurrects this refunded order back to paid/processing.
-				data: { status: 'refunded', paymentStatus: 'refunded', deliveryStatus: 'refunded' }
+				data: {
+					status: 'refunded',
+					paymentStatus: 'refunded',
+					deliveryStatus: 'refunded',
+					refundedAmount: ctx.saleAmountNgn
+				}
 			});
+			await tx.orderItem.update({
+				where: { id: ctx.orderItemId },
+				data: { refundedAmount: { increment: ctx.saleAmountNgn } }
+			});
+			await recordOrderEvent(
+				{
+					orderId: ctx.orderId,
+					orderItemId: ctx.orderItemId,
+					type: 'order_refunded',
+					source: `phone.${source}`,
+					amount: ctx.saleAmountNgn,
+					description,
+					idempotencyKey: `refund:phone:${ctx.orderItemId}`,
+					metadata: { generation: expected?.generation ?? null }
+				},
+				tx
+			);
 			return true;
 		},
 		{ maxWait: 10_000, timeout: 20_000 }
@@ -928,6 +1044,23 @@ export async function refundPhoneOrderToStoreCredit(
 
 	// Bell: tell the customer their money is back (best-effort, outside the money transaction).
 	if (refunded && ctx.userId) {
+		invalidateAdminStatsCache();
+		await maybeVoidSuperActivationOnRefund({
+			userId: ctx.userId,
+			affiliateUserId: ctx.affiliateUserId
+		}).catch((error) => console.error('super activation void failed:', error));
+		await reconcileAffiliateSales(ctx.affiliateUserId).catch((error) =>
+			console.error('affiliate sales reconciliation failed:', error)
+		);
+		await voidUnvestedRewardsForOrder(ctx.orderId).catch((error) =>
+			console.error('void unvested affiliate reward failed:', error)
+		);
+		await reverseVestedRegularRewardForOrder(ctx.orderId).catch((error) =>
+			console.error('reverse vested affiliate reward failed:', error)
+		);
+		await maybeClawbackSpendMilestones(ctx.userId).catch((error) =>
+			console.error('spend-milestone clawback failed:', error)
+		);
 		await createUserNotification({
 			userId: ctx.userId,
 			type: 'store_credit',
@@ -1041,6 +1174,7 @@ export async function pollPhoneRentalSms(orderItemId: string): Promise<PhonePoll
 					rentCandidateProvider: null,
 					rentCandidateServiceRef: null,
 					rentCallStartedAt: null,
+					nextRentAttemptAt: null,
 					failureReason: 'abandoned before provider call — safely retried'
 				}
 			});
@@ -1083,6 +1217,9 @@ export async function pollPhoneRentalSms(orderItemId: string): Promise<PhonePoll
 
 	// Not rented yet — kick off the rent now (idempotent claim inside fulfillPhoneOrder).
 	if (rental.status === 'pending') {
+		if (rental.nextRentAttemptAt && rental.nextRentAttemptAt.getTime() > Date.now()) {
+			return { status: 'preparing', message: 'Securing your number…' };
+		}
 		const orderId = await orderIdForItem(orderItemId);
 		if (orderId) {
 			const r = await fulfillPhoneOrder(orderId, 'poll');
@@ -1521,12 +1658,11 @@ export async function customerRetryPhoneRental(
 		};
 	}
 
-	// Release the current number (using the cancel RESULT), then decide how it affects the budget:
-	//  - hub-man (pay-on-rent): an unconfirmed cancel is a REAL committed cost → reserve it.
-	//  - pvapins (pay-on-success): after the 120s no-OTP wait it's very likely dead. An unconfirmed
-	//    one becomes a CONTINGENT shadow — not reserved 1:1 — so the replacement keeps headroom. We
-	//    keep it durable (shadow_*) for background reconciliation + late-charge accounting. Overlap
-	//    is capped at ONE shadow: a 2nd simultaneous stale pvapins falls back to reserving its cost.
+	// Release the current number (using the cancel RESULT), then decide how it affects the budget.
+	// Current providers are pay-on-success, so an unconfirmed no-code cancellation is not recorded
+	// as realized spend and does not consume replacement headroom. PVAPins can still late-charge a
+	// stale predecessor, so keep its existing shadow reconciliation. A future pay-on-rent provider
+	// remains a committed liability when release cannot be confirmed.
 	const released = await provider.cancel(ref).catch(() => false);
 	void recordAttemptRejection(orderItemId, ref, released, released ? 0 : undefined);
 	if (!released) {
@@ -1565,8 +1701,10 @@ export async function customerRetryPhoneRental(
 		shadowStaleAt?: Date;
 	} = {};
 	if (!released) {
-		if (rental.provider === 'pvapins') {
-			if (!rental.shadowProviderRef) {
+		if (provider.billing === 'pay-on-success') {
+			if (rental.provider !== 'pvapins') {
+				reserveCents = 0;
+			} else if (!rental.shadowProviderRef) {
 				// First free shadow — reopen the replacement's headroom, record it durably.
 				shadowData.shadowProviderRef = ref;
 				shadowData.shadowCostCents = oldCostCents;
@@ -1574,9 +1712,7 @@ export async function customerRetryPhoneRental(
 			} else {
 				reserveCents = oldCostCents; // already one shadow → cap overlap, reserve this one
 			}
-		} else {
-			reserveCents = oldCostCents; // hub-man committed cost
-		}
+		} else reserveCents = oldCostCents;
 	}
 	const tried = Array.from(
 		new Set([...(rental.triedSuppliers ?? []), candidateKeyFromRental(rental)])
@@ -1646,31 +1782,6 @@ export async function checkHubmanBalanceAndAlert(): Promise<void> {
 			dedupeKey: `hubman-low-balance:${new Date().toISOString().slice(0, 10)}`
 		}).catch(() => {});
 	}
-}
-
-/**
- * Cron safety net. Drives every in-flight rental via pollPhoneRentalSms, which:
- *  - rents any still-`pending` order (buyer closed the tab before the page rented it),
- *  - resolves received codes, and
- *  - auto-cancels + refunds rentals whose window has closed.
- * Returns the count that reached a terminal state this run.
- */
-export async function sweepExpiredPhoneRentals(): Promise<number> {
-	const candidates = await prisma.phoneRental.findMany({
-		where: {
-			OR: [
-				{ status: { in: ['pending', 'renting', 'awaiting_sms', 'cancelling', 'replacing'] } },
-				{ status: 'failed', refundedAt: null }
-			]
-		},
-		select: { orderItemId: true }
-	});
-	let acted = 0;
-	for (const { orderItemId } of candidates) {
-		const result = await pollPhoneRentalSms(orderItemId).catch(() => null);
-		if (result && (result.status === 'received' || result.status === 'refunded')) acted += 1;
-	}
-	return acted;
 }
 
 // A stale pvapins "shadow" can't keep receiving forever — a pvapins activation expires. Past this

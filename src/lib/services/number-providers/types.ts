@@ -8,10 +8,9 @@
 export type NumberProviderId = 'hubman' | 'pvapins';
 
 /**
- * hub-man debits when you RENT and refunds on cancel; pvapins only charges when a code is
- * RECEIVED (verified live). This drives the no-code refund path: hub-man must cancel+reclaim
- * our cost, pvapins was never charged so there's nothing to reclaim. Customer refund is the
- * same either way.
+ * Both current suppliers ultimately charge only for a delivered SMS (verified from provider
+ * history/balance behaviour). The broader type keeps pay-on-rent available for future suppliers
+ * whose rent itself is a committed cost.
  */
 export type BillingModel = 'pay-on-rent' | 'pay-on-success';
 
@@ -62,7 +61,10 @@ export interface NumberProvider {
  * Handles SEPARATED codes ("852-570" — WhatsApp via pvapins, confirmed live) so a delivered
  * code is never mistaken for "no code yet" (which would refund a delivered code — the leak class).
  */
-export function resolveOtpFromText(otp: string | null | undefined, message: string | null | undefined): string {
+export function resolveOtpFromText(
+	otp: string | null | undefined,
+	message: string | null | undefined
+): string {
 	if (otp && otp.trim()) return otp.trim();
 	const t = String(message ?? '');
 	const run = t.match(/\d{4,8}/);

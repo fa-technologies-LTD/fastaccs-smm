@@ -9,12 +9,12 @@ import {
 
 /**
  * hub-man adapter — a thin wrapper over the existing hubman.ts client so its behaviour is
- * unchanged. providerRef is hub-man's order_uuid. Billing is pay-on-rent (debits on rent,
- * refunds on cancel).
+ * unchanged. providerRef is hub-man's order_uuid. Provider history and balance reconciliation
+ * confirm that cancelled/no-SMS activations are refunded, so realized cost finalizes on SMS.
  */
 export const hubmanProvider: NumberProvider = {
 	id: 'hubman',
-	billing: 'pay-on-rent',
+	billing: 'pay-on-success',
 
 	isConfigured: () => hubman.isHubmanConfigured(),
 

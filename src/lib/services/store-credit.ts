@@ -22,6 +22,8 @@ export const SC_CREDIT_REFUND = 'store_credit_refund'; // refund — refund buck
 // Debit (redemption) transaction types — one per bucket so sums stay clean.
 export const SC_REDEEM_EARNED = 'store_credit_redemption_earned';
 export const SC_REDEEM_REFUND = 'store_credit_redemption_refund';
+// Append-only debit used when a partial refund reduces an already-vested affiliate reward.
+export const SC_AFFILIATE_ADJUSTMENT = 'affiliate_credit_adjustment';
 // Existing cash-out type (earned bucket only).
 export const SC_PAYOUT = 'affiliate_payout';
 
@@ -32,6 +34,7 @@ const SC_CATEGORY: Record<string, string> = {
 	[SC_CREDIT_REFUND]: 'Refund',
 	[SC_REDEEM_EARNED]: 'Spent',
 	[SC_REDEEM_REFUND]: 'Spent',
+	[SC_AFFILIATE_ADJUSTMENT]: 'Commission adjustment',
 	[SC_PAYOUT]: 'Payout'
 };
 
@@ -55,7 +58,13 @@ export async function getStoreCreditHistory(
 		where: { userId, status: { notIn: ['failed', 'reversed', 'cancelled'] } },
 		orderBy: { createdAt: 'desc' },
 		take: limit,
-		select: { type: true, balanceBefore: true, balanceAfter: true, description: true, createdAt: true }
+		select: {
+			type: true,
+			balanceBefore: true,
+			balanceAfter: true,
+			description: true,
+			createdAt: true
+		}
 	});
 	return rows.map((r) => {
 		const delta = Math.round(Number(r.balanceAfter) - Number(r.balanceBefore));
@@ -140,7 +149,10 @@ export function redemptionExceedsAvailable(
 type Db = PrismaClient | Prisma.TransactionClient;
 
 /** Compute a user's spendable store-credit buckets from the ledger. */
-export async function getStoreCreditBuckets(userId: string, db: Db = prisma): Promise<StoreCreditBuckets> {
+export async function getStoreCreditBuckets(
+	userId: string,
+	db: Db = prisma
+): Promise<StoreCreditBuckets> {
 	const grouped = await db.walletTransaction.groupBy({
 		by: ['type', 'status'],
 		where: {
@@ -152,6 +164,7 @@ export async function getStoreCreditBuckets(userId: string, db: Db = prisma): Pr
 					SC_CREDIT_REFUND,
 					SC_REDEEM_EARNED,
 					SC_REDEEM_REFUND,
+					SC_AFFILIATE_ADJUSTMENT,
 					SC_PAYOUT
 				]
 			}
@@ -175,6 +188,7 @@ export async function getStoreCreditBuckets(userId: string, db: Db = prisma): Pr
 		// expired payments) are excluded so the credit is restored.
 		else if (type === SC_REDEEM_EARNED && status === 'available') earnedRedeemed += amount;
 		else if (type === SC_REDEEM_REFUND && status === 'available') refundRedeemed += amount;
+		else if (type === SC_AFFILIATE_ADJUSTMENT && status === 'available') earnedRedeemed += amount;
 		else if (
 			type === SC_PAYOUT &&
 			(status === 'requested' || status === 'under_review' || status === 'paid')
@@ -213,6 +227,7 @@ export async function getStoreCreditTotalsForUsers(
 					SC_CREDIT_REFUND,
 					SC_REDEEM_EARNED,
 					SC_REDEEM_REFUND,
+					SC_AFFILIATE_ADJUSTMENT,
 					SC_PAYOUT
 				]
 			}
@@ -231,6 +246,7 @@ export async function getStoreCreditTotalsForUsers(
 		else if (REFUND_CREDIT_TYPES.includes(type) && status === 'available') u.rc += amount;
 		else if (type === SC_REDEEM_EARNED && status === 'available') u.er += amount;
 		else if (type === SC_REDEEM_REFUND && status === 'available') u.rr += amount;
+		else if (type === SC_AFFILIATE_ADJUSTMENT && status === 'available') u.er += amount;
 		else if (
 			type === SC_PAYOUT &&
 			(status === 'requested' || status === 'under_review' || status === 'paid')
@@ -242,6 +258,58 @@ export async function getStoreCreditTotalsForUsers(
 		result.set(userId, Math.max(0, u.ec - u.er - u.po) + Math.max(0, u.rc - u.rr));
 	}
 	return result;
+}
+
+/**
+ * Total spendable credit currently owed to customers. This is ledger-derived and
+ * therefore does not trust the cached wallet balance. Requested/paid affiliate
+ * payouts are no longer spendable credit and are excluded here.
+ */
+export async function getTotalStoreCreditLiability(db: Db = prisma): Promise<number> {
+	const grouped = await db.walletTransaction.groupBy({
+		by: ['type', 'status'],
+		where: {
+			type: {
+				in: [
+					SC_CREDIT_AFFILIATE,
+					SC_CREDIT_GIFT,
+					SC_CREDIT_REFUND,
+					SC_REDEEM_EARNED,
+					SC_REDEEM_REFUND,
+					SC_AFFILIATE_ADJUSTMENT,
+					SC_PAYOUT
+				]
+			}
+		},
+		_sum: { amount: true }
+	});
+
+	let earnedCredits = 0;
+	let refundCredits = 0;
+	let earnedRedeemed = 0;
+	let refundRedeemed = 0;
+	let payoutsOut = 0;
+	for (const row of grouped) {
+		const amount = Math.max(0, Number(row._sum.amount || 0));
+		const type = String(row.type);
+		const status = String(row.status || '').toLowerCase();
+		if (EARNED_CREDIT_TYPES.includes(type) && status === 'available') earnedCredits += amount;
+		else if (REFUND_CREDIT_TYPES.includes(type) && status === 'available') refundCredits += amount;
+		else if (type === SC_REDEEM_EARNED && status === 'available') earnedRedeemed += amount;
+		else if (type === SC_REDEEM_REFUND && status === 'available') refundRedeemed += amount;
+		else if (type === SC_AFFILIATE_ADJUSTMENT && status === 'available') earnedRedeemed += amount;
+		else if (
+			type === SC_PAYOUT &&
+			(status === 'requested' || status === 'under_review' || status === 'paid')
+		) {
+			payoutsOut += amount;
+		}
+	}
+
+	return (
+		Math.max(0, earnedCredits - earnedRedeemed - payoutsOut) +
+		Math.max(0, refundCredits - refundRedeemed)
+	);
 }
 
 /** Credit a user's store credit (refunds, gifts). Runs inside a caller transaction. */
@@ -351,8 +419,10 @@ export async function redeemStoreCreditForOrder(
 	let balance = Number(liveWallet.balance || 0);
 
 	const rows: Array<{ type: string; amount: number; bucket: string }> = [];
-	if (refundApplied > 0) rows.push({ type: SC_REDEEM_REFUND, amount: refundApplied, bucket: 'refund' });
-	if (earnedApplied > 0) rows.push({ type: SC_REDEEM_EARNED, amount: earnedApplied, bucket: 'earned' });
+	if (refundApplied > 0)
+		rows.push({ type: SC_REDEEM_REFUND, amount: refundApplied, bucket: 'refund' });
+	if (earnedApplied > 0)
+		rows.push({ type: SC_REDEEM_EARNED, amount: earnedApplied, bucket: 'earned' });
 
 	for (const row of rows) {
 		const balanceBefore = balance;
@@ -425,4 +495,82 @@ export async function reverseStoreCreditRedemption(
 			data: { balance: Number(liveWallet.balance || 0) + total }
 		});
 	}
+}
+
+/**
+ * Re-reserve credit that was restored after a failed/expired split payment when the
+ * gateway later proves the cash portion succeeded. Runs under the caller's order lock
+ * and takes the wallet lock second, matching the refund lock order.
+ *
+ * If the buyer has already spent the restored credit, refuse rather than fulfilling an
+ * underfunded order. The paid cash portion then requires explicit operator review.
+ */
+export async function restoreStoreCreditRedemptionForLatePayment(
+	tx: Prisma.TransactionClient,
+	params: { userId: string; orderId: string; expectedAmount: number }
+): Promise<{ restoredAmount: number; alreadyReserved: boolean }> {
+	const expectedAmount = naira(params.expectedAmount);
+	if (expectedAmount <= 0) return { restoredAmount: 0, alreadyReserved: true };
+
+	const wallet = await tx.wallet.findUnique({
+		where: { userId: params.userId },
+		select: { id: true }
+	});
+	if (!wallet) throw new Error('STORE_CREDIT_LATE_PAYMENT_WALLET_NOT_FOUND');
+
+	await tx.$queryRaw`SELECT id FROM wallets WHERE user_id = ${params.userId}::uuid FOR UPDATE`;
+
+	const debits = await tx.walletTransaction.findMany({
+		where: {
+			userId: params.userId,
+			reference: { startsWith: `${params.orderId}:` },
+			type: { in: [SC_REDEEM_EARNED, SC_REDEEM_REFUND] }
+		},
+		select: { id: true, type: true, amount: true, status: true }
+	});
+	const supported = debits.filter((row) => ['available', 'reversed'].includes(row.status));
+	const recordedAmount = supported.reduce(
+		(sum, row) => sum + Math.max(0, Number(row.amount || 0)),
+		0
+	);
+	if (supported.length !== debits.length || Math.abs(recordedAmount - expectedAmount) > 0.5) {
+		throw new Error('STORE_CREDIT_LATE_PAYMENT_REDEMPTION_MISMATCH');
+	}
+
+	const reversed = supported.filter((row) => row.status === 'reversed');
+	if (reversed.length === 0) return { restoredAmount: 0, alreadyReserved: true };
+
+	const refundApplied = reversed
+		.filter((row) => row.type === SC_REDEEM_REFUND)
+		.reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
+	const earnedApplied = reversed
+		.filter((row) => row.type === SC_REDEEM_EARNED)
+		.reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
+	const liveBuckets = await getStoreCreditBuckets(params.userId, tx);
+	if (redemptionExceedsAvailable({ refundApplied, earnedApplied }, liveBuckets)) {
+		throw new Error('STORE_CREDIT_LATE_PAYMENT_INSUFFICIENT');
+	}
+
+	const liveWallet = await tx.wallet.findUnique({
+		where: { id: wallet.id },
+		select: { balance: true }
+	});
+	const restoredAmount = refundApplied + earnedApplied;
+	if (!liveWallet || Number(liveWallet.balance || 0) + 0.5 < restoredAmount) {
+		throw new Error('STORE_CREDIT_LATE_PAYMENT_BALANCE_MISMATCH');
+	}
+
+	const reactivated = await tx.walletTransaction.updateMany({
+		where: { id: { in: reversed.map((row) => row.id) }, status: 'reversed' },
+		data: { status: 'available' }
+	});
+	if (reactivated.count !== reversed.length) {
+		throw new Error('STORE_CREDIT_LATE_PAYMENT_REDEMPTION_CHANGED');
+	}
+	await tx.wallet.update({
+		where: { id: wallet.id },
+		data: { balance: Number(liveWallet.balance || 0) - restoredAmount }
+	});
+
+	return { restoredAmount, alreadyReserved: false };
 }

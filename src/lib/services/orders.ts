@@ -133,7 +133,10 @@ export async function getTierOrderDetails(orderId: string, fetchFn: typeof fetch
 }
 
 // Create new order
-export async function createOrder(orderData: CreateOrderData, options: { signal?: AbortSignal } = {}) {
+export async function createOrder(
+	orderData: CreateOrderData,
+	options: { signal?: AbortSignal } = {}
+) {
 	try {
 		const response = await fetch('/api/orders', {
 			method: 'POST',
@@ -365,6 +368,8 @@ export interface OrderMetadata extends Order {
 	customer_name?: string;
 	payment_id?: string;
 	total_amount: number;
+	net_sale_amount: number;
+	refunded_amount: number;
 	created_at: Date;
 	notes?: (string | OrderNote)[];
 	failedDeliveryAttempts?: number;

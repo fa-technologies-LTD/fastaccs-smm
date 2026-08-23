@@ -1,5 +1,5 @@
 import type { NumberProviderId } from './types';
-import type { ReliabilityStat } from './reliability';
+import { serviceCountryReliabilityKey, type ReliabilityStat } from './reliability';
 
 /**
  * Candidate-pool selection. A storefront product (service×country) is backed by many candidate
@@ -9,6 +9,8 @@ import type { ReliabilityStat } from './reliability';
  */
 export interface Candidate {
 	provider: NumberProviderId;
+	serviceId: number;
+	countryId: number;
 	/** How this provider addresses the service/country (hub-man: numeric ids as strings; pvapins: names). */
 	providerServiceRef: string;
 	providerCountryRef: string;
@@ -17,13 +19,15 @@ export interface Candidate {
 	costCents: number;
 	/** Live stock; 0 = cannot fulfill right now (filtered out). */
 	available: number;
+	/** hub-man exposes live stock; PVAPins exposes only a catalogue listing. */
+	stockConfidence: 'confirmed' | 'listed';
 	/** Observed success rate 0..1 from our own rents, or null when unproven. */
 	reliability: number | null;
 	/** Number of resolved rents behind `reliability` (drives cold-start handling). */
 	sampleSize: number;
 }
 
-// A candidate needs this many resolved rents before we trust its measured reliability.
+// A candidate needs this many resolved rents before we use its measured reliability at full weight.
 export const MIN_RELIABILITY_SAMPLE = 8;
 // Unproven candidates rank at this score: a fair shot (so new suppliers get tried and measured),
 // but below a proven-excellent one and above a proven-poor one.
@@ -31,10 +35,17 @@ export const COLD_START_SCORE = 0.75;
 // Group near-equal reliabilities so cost can break the tie instead of tiny noise dominating.
 const RELIABILITY_BUCKET = 0.05;
 
-/** The score we actually rank on: measured reliability once trusted, else the cold-start score. */
+/**
+ * Bayesian-style cold-start smoothing. Early outcomes influence routing without allowing one lucky
+ * success (or one unlucky timeout) to dominate; at the threshold the measured rate has full weight.
+ */
 export function effectiveReliability(c: Pick<Candidate, 'reliability' | 'sampleSize'>): number {
-	if (c.reliability == null || c.sampleSize < MIN_RELIABILITY_SAMPLE) return COLD_START_SCORE;
-	return c.reliability;
+	if (c.reliability == null || c.sampleSize <= 0) return COLD_START_SCORE;
+	const evidence = Math.min(MIN_RELIABILITY_SAMPLE, Math.max(0, c.sampleSize));
+	return (
+		(c.reliability * evidence + COLD_START_SCORE * (MIN_RELIABILITY_SAMPLE - evidence)) /
+		MIN_RELIABILITY_SAMPLE
+	);
 }
 
 /**
@@ -45,8 +56,14 @@ export function effectiveReliability(c: Pick<Candidate, 'reliability' | 'sampleS
 export function rankCandidates(candidates: Candidate[]): Candidate[] {
 	return candidates
 		.filter((c) => c.available > 0)
-		.map((c) => ({ c, bucket: Math.round(effectiveReliability(c) / RELIABILITY_BUCKET) }))
-		.sort((a, b) => b.bucket - a.bucket || a.c.costCents - b.c.costCents)
+		.map((c) => ({
+			c,
+			bucket: Math.round(effectiveReliability(c) / RELIABILITY_BUCKET),
+			stockRank: c.stockConfidence === 'confirmed' ? 1 : 0
+		}))
+		.sort(
+			(a, b) => b.bucket - a.bucket || b.stockRank - a.stockRank || a.c.costCents - b.c.costCents
+		)
 		.map((x) => x.c);
 }
 
@@ -64,33 +81,49 @@ export function poolFloorCostCents(candidates: Candidate[]): number | null {
  * "presumed" (pvapins doesn't expose per-app stock), and rent-time failover confirms it.
  */
 export function buildCandidatePool(input: {
+	serviceId: number;
+	countryId: number;
 	hub?: { serviceRef: string; countryRef: string; costCents: number; available: number } | null;
 	pvapins: Array<{ app: string; countryName: string; costCents: number; available: number }>;
 	reliability: Map<string, ReliabilityStat>;
 }): Candidate[] {
 	const candidates: Candidate[] = [];
 	if (input.hub) {
-		const stat = input.reliability.get(`hubman:${input.hub.serviceRef}`);
+		const stat =
+			input.reliability.get(
+				serviceCountryReliabilityKey('hubman', input.serviceId, input.countryId)
+			) ?? input.reliability.get('hubman:*');
 		candidates.push({
 			provider: 'hubman',
+			serviceId: input.serviceId,
+			countryId: input.countryId,
 			providerServiceRef: input.hub.serviceRef,
 			providerCountryRef: input.hub.countryRef,
 			label: `hubman:${input.hub.serviceRef}`,
 			costCents: input.hub.costCents,
 			available: input.hub.available,
+			stockConfidence: 'confirmed',
 			reliability: stat?.reliability ?? null,
 			sampleSize: stat?.total ?? 0
 		});
 	}
 	for (const p of input.pvapins) {
-		const stat = input.reliability.get(`pvapins:${p.app}`);
+		const stat =
+			input.reliability.get(`pvapins:${p.app}`) ??
+			input.reliability.get(
+				serviceCountryReliabilityKey('pvapins', input.serviceId, input.countryId)
+			) ??
+			input.reliability.get('pvapins:*');
 		candidates.push({
 			provider: 'pvapins',
+			serviceId: input.serviceId,
+			countryId: input.countryId,
 			providerServiceRef: p.app,
 			providerCountryRef: p.countryName,
 			label: `pvapins:${p.app}`,
 			costCents: p.costCents,
 			available: p.available,
+			stockConfidence: 'listed',
 			reliability: stat?.reliability ?? null,
 			sampleSize: stat?.total ?? 0
 		});

@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const prismaMock = vi.hoisted(() => ({
 	phoneRental: { findMany: vi.fn() },
-	phoneAttempt: { findMany: vi.fn() }
+	phoneAttempt: { findMany: vi.fn() },
+	analyticsEvent: { findMany: vi.fn() }
 }));
 vi.mock('$lib/prisma', () => ({ prisma: prismaMock }));
 vi.mock('./phone-pricing', () => ({
@@ -11,12 +12,17 @@ vi.mock('./phone-pricing', () => ({
 }));
 vi.mock('./hubman', () => ({ getBalanceCents: vi.fn(), isHubmanConfigured: () => false }));
 
-import { getRealizedCostByTier, getLowSuccessTierKeys } from './phone-analytics';
+import {
+	getRealizedCostByTier,
+	getLowSuccessTierKeys,
+	summarizeNumbersDemand
+} from './phone-analytics';
 
 beforeEach(() => {
 	vi.clearAllMocks();
 	rowId = 0;
 	prismaMock.phoneAttempt.findMany.mockResolvedValue([]);
+	prismaMock.analyticsEvent.findMany.mockResolvedValue([]);
 });
 
 let rowId = 0;
@@ -122,5 +128,28 @@ describe('getRealizedCostByTier — robust median per tier', () => {
 		]);
 		const map = await getRealizedCostByTier();
 		expect(map.get('1||58')).toEqual({ medianCents: 70, count: 1 });
+	});
+});
+
+describe('summarizeNumbersDemand', () => {
+	it('keeps opens, paid rental starts, and delivered codes as separate evidence', () => {
+		expect(
+			summarizeNumbersDemand(
+				[
+					{ serviceId: 507, serviceName: 'Signal', status: 'received' },
+					{ serviceId: 507, serviceName: 'Signal', status: 'refunded' },
+					{ serviceId: 1, serviceName: 'WhatsApp', status: 'received' }
+				],
+				[
+					{ path: '/numbers/service/507' },
+					{ path: '/numbers/service/507' },
+					{ path: '/numbers/service/1' },
+					{ path: '/numbers/not-a-service' }
+				]
+			)
+		).toEqual([
+			{ serviceId: 507, serviceName: 'Signal', opens: 2, purchases: 2, deliveries: 1 },
+			{ serviceId: 1, serviceName: 'WhatsApp', opens: 1, purchases: 1, deliveries: 1 }
+		]);
 	});
 });

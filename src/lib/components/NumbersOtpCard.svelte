@@ -77,6 +77,7 @@
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 	let clockTimer: ReturnType<typeof setInterval> | null = null;
 	let freshNumberTimer: ReturnType<typeof setTimeout> | null = null;
+	let pollInFlight = false;
 
 	function revealFreshNumber(nextNumber: string | null | undefined, highlight = false): void {
 		if (!nextNumber) return;
@@ -218,6 +219,8 @@
 	}
 
 	async function poll() {
+		if (pollInFlight) return;
+		pollInFlight = true;
 		try {
 			const res = await fetch(`/api/numbers/${phone.orderItemId}/sms`);
 			if (!res.ok) return;
@@ -240,6 +243,8 @@
 			}
 		} catch {
 			/* transient — keep polling */
+		} finally {
+			pollInFlight = false;
 		}
 	}
 

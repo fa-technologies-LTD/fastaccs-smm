@@ -12,7 +12,11 @@ import {
 	isSuccessPaymentStatus,
 	normalizePaymentStatus
 } from '$lib/helpers/payment-status';
-import { settleFailedPayment, settleSuccessfulPayment } from '$lib/services/payment-settlement';
+import {
+	computeExpectedGatewayAmount,
+	settleFailedPayment,
+	settleSuccessfulPayment
+} from '$lib/services/payment-settlement';
 import { extendOrderReservations } from '$lib/services/order-reservations';
 import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 import {
@@ -164,6 +168,21 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			);
 		}
 
+		// A stored reference means another request already claimed or created a
+		// gateway session. When its state is ambiguous, never create a second payable
+		// session for the same order; reconciliation/verification will resolve it.
+		if (order.paymentReference) {
+			return json(
+				{
+					success: false,
+					pending: true,
+					orderId,
+					error: 'Your payment session is still being confirmed. Please check this order again.'
+				},
+				{ status: 202 }
+			);
+		}
+
 		if (isNewCheckoutInitializationDisabled()) {
 			logPaymentEvent('warn', 'initialize.blocked', {
 				traceId,
@@ -184,7 +203,13 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			);
 		}
 
-		const amount = Number(order.totalAmount);
+		// A split-payment order has already reserved its store-credit portion. Never
+		// initialise a replacement gateway session for the gross order total, which
+		// would charge the buyer twice for that portion.
+		const amount = computeExpectedGatewayAmount(
+			Number(order.totalAmount),
+			Number(order.storeCreditApplied || 0)
+		);
 		const currency = String(order.currency || '')
 			.trim()
 			.toUpperCase();
@@ -212,6 +237,31 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		const paymentReference = `ORD_${shortOrderId}_${Date.now()}`;
 		const paymentExpiresAt = getPendingPaymentExpiresAt();
 		const redirectUrl = `${url.origin}/checkout/verify?orderId=${encodeURIComponent(orderId)}`;
+		const claimed = await prisma.order.updateMany({
+			where: {
+				id: orderId,
+				status: { in: ['pending', 'pending_payment'] },
+				paymentReference: null,
+				paymentStatus: { notIn: ['paid', 'success', 'overpaid', 'refunded'] }
+			},
+			data: {
+				paymentReference,
+				paymentExpiresAt,
+				status: 'pending_payment',
+				paymentStatus: 'pending'
+			}
+		});
+		if (claimed.count !== 1) {
+			return json(
+				{
+					success: false,
+					pending: true,
+					orderId,
+					error: 'Another payment request is already being confirmed for this order.'
+				},
+				{ status: 202 }
+			);
+		}
 
 		logPaymentEvent('info', 'initialize.started', {
 			traceId,
@@ -246,6 +296,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				errorCode: result.errorCode,
 				errorMessage: result.error || 'Failed to initialize payment'
 			});
+			await settleFailedPayment({ orderId, failureKind: 'failed', source: 'verify' });
 			return json(
 				{
 					success: false,
@@ -256,16 +307,36 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			);
 		}
 
-		await prisma.order.update({
-			where: { id: orderId },
-			data: {
+		const finalized = await prisma.order.updateMany({
+			where: {
+				id: orderId,
 				paymentReference,
+				status: { in: ['pending', 'pending_payment'] },
+				paymentStatus: { notIn: ['paid', 'success', 'overpaid', 'refunded'] }
+			},
+			data: {
 				paymentCheckoutUrl: result.checkoutUrl,
 				paymentExpiresAt,
 				status: 'pending_payment',
 				paymentStatus: 'pending'
 			}
 		});
+		if (finalized.count !== 1) {
+			const latest = await prisma.order.findUnique({ where: { id: orderId } });
+			if (latest && isOrderPaymentConfirmed(latest)) {
+				return json({ success: true, alreadyPaid: true, orderId });
+			}
+			return json(
+				{
+					success: false,
+					pending: true,
+					orderId,
+					error:
+						'Payment was created, but the order changed before checkout opened. Please check your order.'
+				},
+				{ status: 202 }
+			);
+		}
 		await extendOrderReservations(orderId, getPaymentReservationExpiresAt(paymentExpiresAt));
 
 		logPaymentEvent('info', 'initialize.pending_payment', {

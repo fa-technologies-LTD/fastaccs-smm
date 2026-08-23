@@ -1,4 +1,5 @@
 import { prisma } from '$lib/prisma';
+import { toNetSales } from '$lib/helpers/order-revenue';
 
 /**
  * "Signups & revenue by source" — joins each user's first-touch acquisition source to their
@@ -42,7 +43,7 @@ export async function getAcquisitionBreakdown(windowDays = 90): Promise<Acquisit
 					{ status: { in: ['completed', 'delivered', 'processing'] } }
 				]
 			},
-			select: { userId: true, totalAmount: true }
+			select: { userId: true, totalAmount: true, refundedAmount: true }
 		})
 	]);
 
@@ -69,7 +70,7 @@ export async function getAcquisitionBreakdown(windowDays = 90): Promise<Acquisit
 		const s = sourceByUser.get(o.userId);
 		if (!s) continue; // order by a user who signed up outside the window — don't misattribute
 		const row = ensure(s);
-		row.revenueNgn += Number(o.totalAmount || 0);
+		row.revenueNgn += toNetSales(o.totalAmount, o.refundedAmount);
 		const key = `${s}:${o.userId}`;
 		if (!countedBuyers.has(key)) {
 			countedBuyers.add(key);

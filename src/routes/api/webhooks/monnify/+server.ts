@@ -10,6 +10,7 @@ import {
 import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
 import { settleFailedPayment, settleSuccessfulPayment } from '$lib/services/payment-settlement';
 import { createPaymentTraceId, logPaymentEvent } from '$lib/server/payment-observability';
+import { isVerifiedPaymentBoundToOrder } from '$lib/helpers/payment-binding';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -19,9 +20,46 @@ function pickString(value: unknown): string | null {
 
 async function findOrderByPaymentReference(paymentReference: string | null) {
 	if (!paymentReference) return null;
-	return prisma.order.findFirst({
+	return prisma.order.findUnique({
 		where: { paymentReference }
 	});
+}
+
+async function resolveVerifiedOrder(input: {
+	metadataOrderId: string | null;
+	verifiedPaymentReference: string | null;
+}): Promise<{ order: Awaited<ReturnType<typeof findOrderByPaymentReference>>; mismatch: boolean }> {
+	const order = input.metadataOrderId
+		? await prisma.order.findUnique({ where: { id: input.metadataOrderId } })
+		: await findOrderByPaymentReference(input.verifiedPaymentReference);
+	if (!order) return { order: null, mismatch: false };
+
+	const bound = isVerifiedPaymentBoundToOrder({
+		orderId: order.id,
+		metadataOrderId: input.metadataOrderId,
+		storedPaymentReference: pickString(order.paymentReference),
+		verifiedPaymentReference: input.verifiedPaymentReference
+	});
+	return { order: bound ? order : null, mismatch: !bound };
+}
+
+function alertBindingMismatch(input: {
+	metadataOrderId: string | null;
+	verifiedPaymentReference: string | null;
+	traceId: string;
+}) {
+	logPaymentEvent('error', 'webhook.payment_order_binding_mismatch', {
+		traceId: input.traceId,
+		orderId: input.metadataOrderId,
+		paymentReference: input.verifiedPaymentReference,
+		errorCode: 'PAYMENT_ORDER_BINDING_MISMATCH'
+	});
+	void sendCriticalAdminAlert({
+		title: 'Payment held: order binding mismatch',
+		message: `A verified Monnify event referenced order ${input.metadataOrderId || 'unknown'}, but payment ${input.verifiedPaymentReference || 'unknown'} did not match the order's stored reference. No settlement or fulfilment was released.`,
+		source: 'api.webhooks.monnify',
+		dedupeKey: `payment-binding-mismatch:${input.verifiedPaymentReference || input.metadataOrderId || 'unknown'}`
+	}).catch((error) => console.error('Failed to alert on payment binding mismatch:', error));
 }
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -93,12 +131,18 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 
 			const metadataOrderId = pickString(verificationResult.metaData?.orderId);
-			const orderByReference = !metadataOrderId
-				? await findOrderByPaymentReference(
-						verificationResult.paymentReference || paymentReference || null
-					)
-				: null;
-			const orderId = metadataOrderId || orderByReference?.id || null;
+			const verifiedPaymentReference = pickString(
+				verificationResult.paymentReference || paymentReference
+			);
+			const resolution = await resolveVerifiedOrder({
+				metadataOrderId,
+				verifiedPaymentReference
+			});
+			if (resolution.mismatch) {
+				alertBindingMismatch({ metadataOrderId, verifiedPaymentReference, traceId });
+				return json({ success: false });
+			}
+			const orderId = resolution.order?.id || null;
 
 			if (!orderId) {
 				console.error('Monnify webhook: no orderId resolved for success event');
@@ -142,12 +186,18 @@ export const POST: RequestHandler = async ({ request }) => {
 
 				if (verificationResult.success || isSuccessPaymentStatus(gatewayStatus)) {
 					const metadataOrderId = pickString(verificationResult.metaData?.orderId);
-					const fallbackOrder = !metadataOrderId
-						? await findOrderByPaymentReference(
-								verificationResult.paymentReference || paymentReference || null
-							)
-						: null;
-					const successfulOrderId = metadataOrderId || fallbackOrder?.id || null;
+					const verifiedPaymentReference = pickString(
+						verificationResult.paymentReference || paymentReference
+					);
+					const resolution = await resolveVerifiedOrder({
+						metadataOrderId,
+						verifiedPaymentReference
+					});
+					if (resolution.mismatch) {
+						alertBindingMismatch({ metadataOrderId, verifiedPaymentReference, traceId });
+						return json({ success: false });
+					}
+					const successfulOrderId = resolution.order?.id || null;
 
 					if (successfulOrderId) {
 						await settleSuccessfulPayment({
@@ -166,7 +216,21 @@ export const POST: RequestHandler = async ({ request }) => {
 				resolvedFailureKind = resolvedFailureKind || getFailureKind(gatewayStatus);
 				resolvedPaymentReference =
 					verificationResult.paymentReference || resolvedPaymentReference || null;
-				resolvedOrderId = pickString(verificationResult.metaData?.orderId);
+				const metadataOrderId = pickString(verificationResult.metaData?.orderId);
+				if (metadataOrderId) {
+					const verifiedPaymentReference = pickString(
+						verificationResult.paymentReference || resolvedPaymentReference
+					);
+					const resolution = await resolveVerifiedOrder({
+						metadataOrderId,
+						verifiedPaymentReference
+					});
+					if (resolution.mismatch) {
+						alertBindingMismatch({ metadataOrderId, verifiedPaymentReference, traceId });
+						return json({ success: false });
+					}
+					resolvedOrderId = resolution.order?.id || null;
+				}
 			}
 
 			if (!resolvedFailureKind) {

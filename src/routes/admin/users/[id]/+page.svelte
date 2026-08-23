@@ -249,7 +249,9 @@
 					<span
 						class="rounded-full px-2.5 py-1 font-semibold"
 						style="background: rgba(245,158,11,0.14); color: #f59e0b; border: 1px solid #f59e0b;"
-						title={user.affiliateCode ? `Super affiliate · ${user.affiliateCode}` : 'Super affiliate'}
+						title={user.affiliateCode
+							? `Super affiliate · ${user.affiliateCode}`
+							: 'Super affiliate'}
 					>
 						★ Super Affiliate
 					</span>
@@ -345,7 +347,10 @@
 						>
 							<div class="flex items-start justify-between gap-3">
 								<div class="min-w-0">
-									<p class="flex items-center gap-1.5 truncate text-sm font-semibold" style="color: var(--text);">
+									<p
+										class="flex items-center gap-1.5 truncate text-sm font-semibold"
+										style="color: var(--text);"
+									>
 										<OrderTypeIcon {order} />
 										<span class="truncate">{order.orderNumber}</span>
 									</p>
@@ -371,8 +376,13 @@
 								</span>
 								<span style="color: var(--text-muted);">•</span>
 								<span style="color: var(--text); font-weight: 600;">
-									{formatOrderAmount(order.totalAmount)}
+									{formatOrderAmount(Math.max(0, order.totalAmount - order.refundedAmount))}
 								</span>
+								{#if order.refundedAmount > 0}
+									<span style="color: var(--text-dim);">
+										({formatOrderAmount(order.refundedAmount)} refunded)
+									</span>
+								{/if}
 							</div>
 						</div>
 					{/each}

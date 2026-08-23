@@ -1,5 +1,10 @@
 import { prisma } from '$lib/prisma';
-import { creditStoreCredit, getStoreCreditBuckets, SC_CREDIT_GIFT } from '$lib/services/store-credit';
+import {
+	creditStoreCredit,
+	getStoreCreditBuckets,
+	SC_CREDIT_GIFT
+} from '$lib/services/store-credit';
+import { buildRevenueOrderWhere, toNetSales } from '$lib/helpers/order-revenue.server';
 
 /**
  * Spend-milestone rewards (buyer-facing, driven by lifetime paid spend):
@@ -19,13 +24,10 @@ const GIFT_REFERENCE = (userId: string) => `spend:gift:70k:${userId}`;
 
 async function cumulativePaidSpend(userId: string): Promise<number> {
 	const agg = await prisma.order.aggregate({
-		where: {
-			userId,
-			OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
-		},
-		_sum: { totalAmount: true }
+		where: { AND: [buildRevenueOrderWhere(), { userId }] },
+		_sum: { totalAmount: true, refundedAmount: true }
 	});
-	return Number(agg._sum.totalAmount || 0);
+	return toNetSales(agg._sum.totalAmount, agg._sum.refundedAmount);
 }
 
 function generatePromoCode(): string {
@@ -84,9 +86,44 @@ async function maybeGrantSpendGift(userId: string): Promise<void> {
 async function maybeGrantSpendPromo(userId: string): Promise<void> {
 	const existing = await prisma.promotionCode.findFirst({
 		where: { issuedToUserId: userId, code: { startsWith: PROMO_CODE_PREFIX } },
-		select: { id: true }
+		select: { id: true, code: true, isActive: true, usageCount: true }
 	});
-	if (existing) return;
+	if (existing) {
+		// A refund can temporarily move the buyer below the milestone and deactivate an
+		// unused code. If later paid spend takes them back over the threshold, restore
+		// that same unused code instead of permanently denying the earned reward or
+		// minting multiple milestone codes for one buyer.
+		if (existing.isActive || existing.usageCount > 0) return;
+		const redeemed = await prisma.promotionRedemption.count({
+			where: { promotionId: existing.id }
+		});
+		if (redeemed > 0) return;
+
+		const restored = await prisma.promotionCode.updateMany({
+			where: {
+				id: existing.id,
+				isActive: false,
+				usageCount: 0,
+				redemptions: { none: {} }
+			},
+			data: {
+				isActive: true,
+				endsAt: new Date(Date.now() + PROMO_EXPIRY_DAYS * 24 * 60 * 60 * 1000)
+			}
+		});
+		if (restored.count === 0) return;
+		await prisma.notification
+			.create({
+				data: {
+					userId,
+					type: 'promotion',
+					title: 'Your ₦1,000 promo is available again 🎉',
+					message: `You reached ₦8,000 in paid orders again. Use code ${existing.code} within ${PROMO_EXPIRY_DAYS} days.`
+				}
+			})
+			.catch(() => {});
+		return;
+	}
 
 	const code = generatePromoCode();
 	try {
@@ -126,7 +163,9 @@ async function maybeGrantSpendPromo(userId: string): Promise<void> {
  * reward is still unspent/unused, reverse it (gift) or deactivate it (promo).
  * Never claws back a gift the buyer has already spent, or a redeemed promo.
  */
-export async function maybeClawbackSpendMilestones(userId: string | null | undefined): Promise<void> {
+export async function maybeClawbackSpendMilestones(
+	userId: string | null | undefined
+): Promise<void> {
 	if (!userId) return;
 	try {
 		const spend = await cumulativePaidSpend(userId);
@@ -205,7 +244,8 @@ async function deactivateUnusedPromo(userId: string): Promise<void> {
 				userId,
 				type: 'promotion',
 				title: 'Promo no longer available',
-				message: 'A refund brought you below the ₦8,000 threshold, so your ₦1,000 promo was withdrawn.'
+				message:
+					'A refund brought you below the ₦8,000 threshold, so your ₦1,000 promo was withdrawn.'
 			}
 		})
 		.catch(() => {});

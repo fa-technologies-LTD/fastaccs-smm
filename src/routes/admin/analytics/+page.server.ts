@@ -22,12 +22,16 @@ import { getSalesHeatmap, getLeakAnalysis } from '$lib/services/business-insight
 import { getFeatureFlagSnapshot } from '$lib/services/feature-flags';
 import {
 	buildRevenueOrderWhere,
-	toCashRevenue,
-	buildRevenueOrderWindowWhere
+	toNetSales,
+	buildRevenueOrderWindowWhere,
+	buildSettledOrderWhere
 } from '$lib/helpers/order-revenue.server';
+import { toExternalCash } from '$lib/helpers/order-revenue';
 import { ANALYTICS_FUNNEL_STEPS } from '$lib/services/analytics-events';
 import { getUserAnalytics } from '$lib/services/user-analytics';
 import { toSerializableDecimals } from '$lib/helpers/serialize';
+import { getFinancialReconciliation } from '$lib/services/financial-reconciliation';
+import { getTotalStoreCreditLiability } from '$lib/services/store-credit';
 
 type IntegrityCheckResult = {
 	key: string;
@@ -126,20 +130,25 @@ export const load: PageServerLoad = async ({ locals }) => {
 			return { stats: {} };
 		}
 
-		const [orderStatsSnapshot, boostingStatsSnapshot, inventorySnapshot, businessTimezone, featureFlags] =
-			await Promise.all([
-				getOrderStatsSnapshot(),
-				getBoostingOrderStatsSnapshot(),
-				getInventoryStatsSnapshot(),
-				getBusinessTimezoneSetting().catch(() => 'Africa/Lagos'),
-				getFeatureFlagSnapshot().catch(() => ({
-					adminPromotions: true,
-					adminAnnouncementBanner: false,
-					adminAdvancedAnalytics: true,
-					adminRoleManagement: true,
-					adminStoreControls: true
-				}))
-			]);
+		const [
+			orderStatsSnapshot,
+			boostingStatsSnapshot,
+			inventorySnapshot,
+			businessTimezone,
+			featureFlags
+		] = await Promise.all([
+			getOrderStatsSnapshot(),
+			getBoostingOrderStatsSnapshot(),
+			getInventoryStatsSnapshot(),
+			getBusinessTimezoneSetting().catch(() => 'Africa/Lagos'),
+			getFeatureFlagSnapshot().catch(() => ({
+				adminPromotions: true,
+				adminAnnouncementBanner: false,
+				adminAdvancedAnalytics: true,
+				adminRoleManagement: true,
+				adminStoreControls: true
+			}))
+		]);
 
 		const revenueVisible = canViewRevenue(locals);
 		const now = new Date();
@@ -158,6 +167,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		const endOfLastMonth = new Date(startOfMonth.getTime() - 1);
 		const advancedWindowStart = new Date(todayStart.getTime() - 180 * 24 * 60 * 60 * 1000);
 		const last30DaysStart = new Date(todayStart.getTime() - 30 * 24 * 60 * 60 * 1000);
+		const retainedAccountStatuses = [...getAllocatedLikeAccountStatuses(), 'delivered'];
 
 		const [
 			lastMonthRevenue,
@@ -167,21 +177,25 @@ export const load: PageServerLoad = async ({ locals }) => {
 			totalCustomers,
 			lastMonthCustomers,
 			thisMonthCustomers,
-			accountsSoldAggregate,
-			lastMonthAccountsAggregate,
-			thisMonthAccountsAggregate,
+			accountsSoldCount,
+			lastMonthAccountsCount,
+			thisMonthAccountsCount,
 			affiliateProgramStats,
 			affiliateSalesAggregate,
 			affiliateCreditAggregate,
+			affiliateAdjustmentAggregate,
 			totalAccounts,
 			soldAccounts,
 			pendingAccounts,
-				directTotalOrders,
-				directRevenueAggregate,
-				directDiscountAggregate,
-				directTaxAggregate,
-				revenueFromOrderItemsAggregate,
-				advancedRevenueOrders,
+			allOrderCount,
+			directTotalOrders,
+			directRevenueAggregate,
+			settledPaymentAggregate,
+			storeCreditLiability,
+			directDiscountAggregate,
+			directTaxAggregate,
+			revenueFromOrderItemsAggregate,
+			advancedRevenueOrders,
 			tierCatalog,
 			recentSoldByTier,
 			paidOrderCount,
@@ -193,20 +207,16 @@ export const load: PageServerLoad = async ({ locals }) => {
 			repeatBuyerGroups,
 			guestPaidOrderCount
 		] = await Promise.all([
-				prisma.order.aggregate({
-					where: buildRevenueOrderWindowWhere(startOfLastMonth, endOfLastMonth),
-					_sum: { totalAmount: true, storeCreditApplied: true }
-				}),
-				prisma.order.aggregate({
-					where: buildRevenueOrderWindowWhere(startOfMonth),
-					_sum: { totalAmount: true, storeCreditApplied: true }
-				}),
-			prisma.order.count({
-				where: { createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } }
+			prisma.order.aggregate({
+				where: buildRevenueOrderWindowWhere(startOfLastMonth, endOfLastMonth),
+				_sum: { totalAmount: true, storeCreditApplied: true, refundedAmount: true }
 			}),
-			prisma.order.count({
-				where: { createdAt: { gte: startOfMonth } }
+			prisma.order.aggregate({
+				where: buildRevenueOrderWindowWhere(startOfMonth),
+				_sum: { totalAmount: true, storeCreditApplied: true, refundedAmount: true }
 			}),
+			prisma.order.count({ where: buildRevenueOrderWindowWhere(startOfLastMonth, endOfLastMonth) }),
+			prisma.order.count({ where: buildRevenueOrderWindowWhere(startOfMonth) }),
 			prisma.user.count({
 				where: { userType: { in: ['REGISTERED', 'CONVERTED'] } }
 			}),
@@ -222,24 +232,37 @@ export const load: PageServerLoad = async ({ locals }) => {
 					createdAt: { gte: startOfMonth }
 				}
 			}),
-			prisma.orderItem.aggregate({
+			prisma.account.count({
 				where: {
-					order: buildRevenueOrderWhere()
-				},
-				_sum: { quantity: true }
+					status: { in: retainedAccountStatuses },
+					orderItem: {
+						order: { AND: [buildRevenueOrderWhere(), { orderType: 'account' }] }
+					}
+				}
 			}),
-				prisma.orderItem.aggregate({
-					where: {
-						order: buildRevenueOrderWindowWhere(startOfLastMonth, endOfLastMonth)
-					},
-					_sum: { quantity: true }
-				}),
-				prisma.orderItem.aggregate({
-					where: {
-						order: buildRevenueOrderWindowWhere(startOfMonth)
-					},
-					_sum: { quantity: true }
-				}),
+			prisma.account.count({
+				where: {
+					status: { in: retainedAccountStatuses },
+					orderItem: {
+						order: {
+							AND: [
+								buildRevenueOrderWindowWhere(startOfLastMonth, endOfLastMonth),
+								{ orderType: 'account' }
+							]
+						}
+					}
+				}
+			}),
+			prisma.account.count({
+				where: {
+					status: { in: retainedAccountStatuses },
+					orderItem: {
+						order: {
+							AND: [buildRevenueOrderWindowWhere(startOfMonth), { orderType: 'account' }]
+						}
+					}
+				}
+			}),
 			prisma.affiliateProgram.aggregate({
 				_sum: { totalReferrals: true },
 				_count: { id: true }
@@ -248,7 +271,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				where: {
 					AND: [buildRevenueOrderWhere(), { affiliateUserId: { not: null } }]
 				},
-				_sum: { totalAmount: true, storeCreditApplied: true }
+				_sum: { totalAmount: true, storeCreditApplied: true, refundedAmount: true }
 			}),
 			prisma.walletTransaction.aggregate({
 				where: {
@@ -259,44 +282,65 @@ export const load: PageServerLoad = async ({ locals }) => {
 				},
 				_sum: { amount: true }
 			}),
+			prisma.walletTransaction.aggregate({
+				where: {
+					type: 'affiliate_credit_adjustment',
+					status: 'available'
+				},
+				_sum: { amount: true }
+			}),
 			prisma.account.count(),
-				prisma.account.count({
-					where: { status: { in: ['allocated', 'delivered'] } }
-				}),
-				prisma.account.count({
-					where: { status: { in: getAllocatedLikeAccountStatuses() } }
-				}),
+			prisma.account.count({
+				where: { status: { in: retainedAccountStatuses } }
+			}),
+			prisma.account.count({
+				where: { status: { in: getAllocatedLikeAccountStatuses() } }
+			}),
+			prisma.order.count(),
 			prisma.order.count({ where: { orderType: 'account' } }),
-				prisma.order.aggregate({
-					where: buildRevenueOrderWhere(),
-					_sum: { totalAmount: true, storeCreditApplied: true }
-				}),
-				prisma.order.aggregate({
-					where: buildRevenueOrderWhere(),
-					_sum: { discountAmount: true }
-				}),
-				prisma.order.aggregate({
-					where: buildRevenueOrderWhere(),
-					_sum: { taxAmount: true }
-				}),
-				prisma.orderItem.aggregate({
-					where: { order: buildRevenueOrderWhere() },
-					_sum: { totalPrice: true }
-				}),
-				featureFlags.adminAdvancedAnalytics
-					? prisma.order.findMany({
-							where: buildRevenueOrderWindowWhere(advancedWindowStart),
-							select: {
-								id: true,
-								createdAt: true,
-								paidAt: true,
-								totalAmount: true,
-								orderType: true,
-								orderItems: {
+			prisma.order.aggregate({
+				where: buildRevenueOrderWhere(),
+				_sum: { totalAmount: true, storeCreditApplied: true, refundedAmount: true }
+			}),
+			prisma.order.aggregate({
+				where: buildSettledOrderWhere(),
+				_sum: { totalAmount: true, storeCreditApplied: true }
+			}),
+			getTotalStoreCreditLiability(),
+			prisma.order.aggregate({
+				where: buildRevenueOrderWhere(),
+				_sum: { discountAmount: true }
+			}),
+			prisma.order.aggregate({
+				where: buildRevenueOrderWhere(),
+				_sum: { taxAmount: true }
+			}),
+			prisma.orderItem.aggregate({
+				where: { order: buildRevenueOrderWhere() },
+				_sum: { totalPrice: true, refundedAmount: true }
+			}),
+			featureFlags.adminAdvancedAnalytics
+				? prisma.order.findMany({
+						where: buildRevenueOrderWindowWhere(advancedWindowStart),
+						select: {
+							id: true,
+							createdAt: true,
+							paidAt: true,
+							totalAmount: true,
+							refundedAmount: true,
+							subtotal: true,
+							orderType: true,
+							orderItems: {
 								select: {
 									categoryId: true,
 									quantity: true,
 									totalPrice: true,
+									refundedAmount: true,
+									_count: {
+										select: {
+											accounts: { where: { status: { in: retainedAccountStatuses } } }
+										}
+									},
 									category: {
 										select: {
 											id: true,
@@ -342,14 +386,19 @@ export const load: PageServerLoad = async ({ locals }) => {
 						orderBy: { name: 'asc' }
 					})
 				: Promise.resolve([]),
-				featureFlags.adminAdvancedAnalytics
-					? prisma.orderItem.groupBy({
-							by: ['categoryId'],
-							where: {
-								order: buildRevenueOrderWindowWhere(last30DaysStart)
-							},
-							_sum: { quantity: true }
-						})
+			featureFlags.adminAdvancedAnalytics
+				? prisma.account.groupBy({
+						by: ['categoryId'],
+						where: {
+							status: { in: retainedAccountStatuses },
+							orderItem: {
+								order: {
+									AND: [buildRevenueOrderWindowWhere(last30DaysStart), { orderType: 'account' }]
+								}
+							}
+						},
+						_count: { _all: true }
+					})
 				: Promise.resolve([]),
 			prisma.order.count({ where: buildRevenueOrderWhere() }),
 			prisma.order.count({ where: { status: { in: [...ORDER_STATUS_GROUPS.failed] } } }),
@@ -393,9 +442,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 				: Promise.resolve(0)
 		]);
 
-		const accountsSold = Number(accountsSoldAggregate._sum.quantity || 0);
-		const lastMonthAccounts = Number(lastMonthAccountsAggregate._sum.quantity || 0);
-		const thisMonthAccounts = Number(thisMonthAccountsAggregate._sum.quantity || 0);
+		const accountsSold = accountsSoldCount;
+		const lastMonthAccounts = lastMonthAccountsCount;
+		const thisMonthAccounts = thisMonthAccountsCount;
 
 		const revenueByPlatformMap = new Map<
 			string,
@@ -420,7 +469,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		const boostingByMonthMap = createBucketMap();
 
 		for (const order of advancedRevenueOrders) {
-			const orderTotal = toAmount(order.totalAmount);
+			const orderTotal = toNetSales(order.totalAmount, order.refundedAmount);
 			const settlementDate = order.paidAt || order.createdAt;
 			const dayKey = getBusinessDateKey(settlementDate, businessTimezone);
 			const weekKey = getBusinessWeekKey(settlementDate, businessTimezone);
@@ -441,13 +490,28 @@ export const load: PageServerLoad = async ({ locals }) => {
 			pushBucket(byWeekMap, weekKey, order.id, orderTotal);
 			pushBucket(byMonthMap, monthKey, order.id, orderTotal);
 
+			const grossItemTotal = order.orderItems.reduce(
+				(sum, item) => sum + Math.max(0, Number(item.totalPrice || 0)),
+				0
+			);
 			for (const item of order.orderItems) {
 				const platformId = item.category.parent?.id || 'unknown-platform';
 				const platformName = item.category.parent?.name || 'Unknown platform';
 				const tierId = item.category.id;
 				const tierName = item.category.name || 'Unknown tier';
-				const lineRevenue = toAmount(item.totalPrice);
-				const quantity = Number(item.quantity || 0);
+				// Allocate order-level discount/tax across lines, then remove the exact item refund.
+				// This keeps product/tier totals reconcilable to the order's net retained sale.
+				const lineBeforeRefund =
+					grossItemTotal > 0
+						? (Number(order.totalAmount || 0) * Number(item.totalPrice || 0)) / grossItemTotal
+						: 0;
+				const lineRevenue = toAmount(
+					Math.max(0, lineBeforeRefund - Number(item.refundedAmount || 0))
+				);
+				const quantity =
+					order.orderType === 'account'
+						? Number(item._count.accounts || 0)
+						: Number(item.quantity || 0);
 
 				const platformExisting = revenueByPlatformMap.get(platformId);
 				if (!platformExisting) {
@@ -531,7 +595,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		});
 
 		const soldByTier30Map = new Map<string, number>(
-			recentSoldByTier.map((row) => [row.categoryId, Number(row._sum.quantity || 0)])
+			recentSoldByTier.map((row) => [row.categoryId, Number(row._count._all || 0)])
 		);
 		const velocityRows: TierVelocityRow[] = tierCatalog
 			.map((tier) => {
@@ -587,7 +651,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 					) / 10
 				: null;
 
-			const integrityChecks: IntegrityCheckResult[] = [
+		const integrityChecks: IntegrityCheckResult[] = [
 			{
 				key: 'orders_total',
 				label: 'Total orders snapshot matches direct count',
@@ -600,36 +664,57 @@ export const load: PageServerLoad = async ({ locals }) => {
 				key: 'revenue_snapshot_vs_orders',
 				label: 'Revenue snapshot matches order aggregate',
 				expected: orderStatsSnapshot.total_revenue,
-				actual: toCashRevenue(directRevenueAggregate._sum.totalAmount, directRevenueAggregate._sum.storeCreditApplied),
+				actual: toNetSales(
+					directRevenueAggregate._sum.totalAmount,
+					directRevenueAggregate._sum.refundedAmount
+				),
 				delta:
-					toCashRevenue(directRevenueAggregate._sum.totalAmount, directRevenueAggregate._sum.storeCreditApplied) - orderStatsSnapshot.total_revenue,
+					toNetSales(
+						directRevenueAggregate._sum.totalAmount,
+						directRevenueAggregate._sum.refundedAmount
+					) - orderStatsSnapshot.total_revenue,
 				ok:
 					Math.abs(
-						toCashRevenue(directRevenueAggregate._sum.totalAmount, directRevenueAggregate._sum.storeCreditApplied) - orderStatsSnapshot.total_revenue
+						toNetSales(
+							directRevenueAggregate._sum.totalAmount,
+							directRevenueAggregate._sum.refundedAmount
+						) - orderStatsSnapshot.total_revenue
 					) < 0.01
 			},
-				{
-					key: 'revenue_orders_vs_items',
-					label: 'Revenue from orders matches item totals net discounts plus tax',
-					expected: toCashRevenue(directRevenueAggregate._sum.totalAmount, directRevenueAggregate._sum.storeCreditApplied),
-					actual:
+			{
+				key: 'revenue_orders_vs_items',
+				label: 'Revenue from orders matches item totals net discounts plus tax',
+				expected: toNetSales(
+					directRevenueAggregate._sum.totalAmount,
+					directRevenueAggregate._sum.refundedAmount
+				),
+				actual:
+					Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0) -
+					Number(directDiscountAggregate._sum.discountAmount || 0) +
+					Number(directTaxAggregate._sum.taxAmount || 0) -
+					Number(revenueFromOrderItemsAggregate._sum.refundedAmount || 0),
+				delta:
+					Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0) -
+					Number(directDiscountAggregate._sum.discountAmount || 0) +
+					Number(directTaxAggregate._sum.taxAmount || 0) -
+					Number(revenueFromOrderItemsAggregate._sum.refundedAmount || 0) -
+					toNetSales(
+						directRevenueAggregate._sum.totalAmount,
+						directRevenueAggregate._sum.refundedAmount
+					),
+				ok:
+					Math.abs(
 						Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0) -
-						Number(directDiscountAggregate._sum.discountAmount || 0) +
-						Number(directTaxAggregate._sum.taxAmount || 0),
-					delta:
-						(Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0) -
 							Number(directDiscountAggregate._sum.discountAmount || 0) +
-							Number(directTaxAggregate._sum.taxAmount || 0)) -
-						toCashRevenue(directRevenueAggregate._sum.totalAmount, directRevenueAggregate._sum.storeCreditApplied),
-					ok:
-						Math.abs(
-							(Number(revenueFromOrderItemsAggregate._sum.totalPrice || 0) -
-								Number(directDiscountAggregate._sum.discountAmount || 0) +
-								Number(directTaxAggregate._sum.taxAmount || 0)) -
-								toCashRevenue(directRevenueAggregate._sum.totalAmount, directRevenueAggregate._sum.storeCreditApplied)
-						) < 0.01
-				}
-			];
+							Number(directTaxAggregate._sum.taxAmount || 0) -
+							Number(revenueFromOrderItemsAggregate._sum.refundedAmount || 0) -
+							toNetSales(
+								directRevenueAggregate._sum.totalAmount,
+								directRevenueAggregate._sum.refundedAmount
+							)
+					) < 0.01
+			}
+		];
 
 		const visibleIntegrityChecks = revenueVisible
 			? integrityChecks
@@ -667,26 +752,32 @@ export const load: PageServerLoad = async ({ locals }) => {
 			orderCount: row.orderCount
 		}));
 
-		const totalOrdersForAov = orderStatsSnapshot.total_orders || 0;
+		const totalOrdersForAov = paidOrderCount || 0;
 		const aov =
 			totalOrdersForAov > 0
 				? toAmount(Number(orderStatsSnapshot.total_revenue || 0) / totalOrdersForAov)
 				: 0;
 		const thisMonthAov =
 			thisMonthOrders > 0
-				? toAmount(toCashRevenue(thisMonthRevenue._sum.totalAmount, thisMonthRevenue._sum.storeCreditApplied) / thisMonthOrders)
+				? toAmount(
+						toNetSales(thisMonthRevenue._sum.totalAmount, thisMonthRevenue._sum.refundedAmount) /
+							thisMonthOrders
+					)
 				: 0;
 		const lastMonthAov =
 			lastMonthOrders > 0
-				? toAmount(toCashRevenue(lastMonthRevenue._sum.totalAmount, lastMonthRevenue._sum.storeCreditApplied) / lastMonthOrders)
+				? toAmount(
+						toNetSales(lastMonthRevenue._sum.totalAmount, lastMonthRevenue._sum.refundedAmount) /
+							lastMonthOrders
+					)
 				: 0;
-		const thisMonthCash = toCashRevenue(
+		const thisMonthCash = toNetSales(
 			thisMonthRevenue._sum.totalAmount,
-			thisMonthRevenue._sum.storeCreditApplied
+			thisMonthRevenue._sum.refundedAmount
 		);
-		const lastMonthCash = toCashRevenue(
+		const lastMonthCash = toNetSales(
 			lastMonthRevenue._sum.totalAmount,
-			lastMonthRevenue._sum.storeCreditApplied
+			lastMonthRevenue._sum.refundedAmount
 		);
 		// Growth % — null when there is no prior baseline, so the UI can show "New"
 		// instead of a misleading huge percentage (dividing by 1).
@@ -719,7 +810,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 			.sort((a, b) => b.count - a.count);
 
 		const affiliateRevenueAmount = revenueVisible
-			? toCashRevenue(affiliateSalesAggregate._sum.totalAmount, affiliateSalesAggregate._sum.storeCreditApplied)
+			? toNetSales(
+					affiliateSalesAggregate._sum.totalAmount,
+					affiliateSalesAggregate._sum.refundedAmount
+				)
 			: 0;
 		const nonAffiliateRevenueAmount = revenueVisible
 			? Math.max(
@@ -734,20 +828,26 @@ export const load: PageServerLoad = async ({ locals }) => {
 		).length;
 		const firstTimeBuyerCount = firstTimeRegisteredCount + guestPaidOrderCount;
 
-			const stats = {
-				timezone: businessTimezone,
-				metricDefinitions: {
-					orders:
-						'Order volume metrics use order createdAt in the configured business timezone.',
-					revenue:
-						'Revenue timing metrics use paidAt, with createdAt fallback only when paidAt is missing on legacy paid orders.'
-				},
-				advancedAnalyticsEnabled: featureFlags.adminAdvancedAnalytics,
+		const stats = {
+			timezone: businessTimezone,
+			metricDefinitions: {
+				orders: 'Order volume metrics use order createdAt in the configured business timezone.',
+				revenue:
+					'Net sales are original paid order value minus refunds. Timing uses paidAt, with createdAt fallback only for legacy paid orders.'
+			},
+			advancedAnalyticsEnabled: featureFlags.adminAdvancedAnalytics,
 			totalRevenue: revenueVisible ? Number(orderStatsSnapshot.total_revenue || 0) : 0,
+			externalCashCollected: revenueVisible
+				? toExternalCash(
+						settledPaymentAggregate._sum.totalAmount,
+						settledPaymentAggregate._sum.storeCreditApplied
+					)
+				: 0,
+			storeCreditLiability: revenueVisible ? storeCreditLiability : 0,
 			revenueChange: revenueVisible ? growthPct(thisMonthCash, lastMonthCash) : null,
 			aov: revenueVisible ? aov : 0,
 			aovChange: revenueVisible ? aovChange : null,
-			totalOrders: orderStatsSnapshot.total_orders,
+			totalOrders: allOrderCount,
 			ordersChange: growthPct(thisMonthOrders, lastMonthOrders),
 			totalCustomers,
 			customersChange: growthPct(thisMonthCustomers, lastMonthCustomers),
@@ -755,9 +855,18 @@ export const load: PageServerLoad = async ({ locals }) => {
 			accountsChange: growthPct(thisMonthAccounts, lastMonthAccounts),
 			activeAffiliates: affiliateProgramStats._count.id || 0,
 			totalReferrals: affiliateProgramStats._sum.totalReferrals || 0,
-			affiliateSales: revenueVisible ? toCashRevenue(affiliateSalesAggregate._sum.totalAmount, affiliateSalesAggregate._sum.storeCreditApplied) : 0,
+			affiliateSales: revenueVisible
+				? toNetSales(
+						affiliateSalesAggregate._sum.totalAmount,
+						affiliateSalesAggregate._sum.refundedAmount
+					)
+				: 0,
 			totalStoreCreditEarned: revenueVisible
-				? Number(affiliateCreditAggregate._sum.amount || 0)
+				? Math.max(
+						0,
+						Number(affiliateCreditAggregate._sum.amount || 0) -
+							Number(affiliateAdjustmentAggregate._sum.amount || 0)
+					)
 				: 0,
 			totalAccounts,
 			availableAccounts: inventorySnapshot.total_available,
@@ -836,31 +945,36 @@ export const load: PageServerLoad = async ({ locals }) => {
 					}
 		};
 
-		const userAnalytics = await getUserAnalytics().catch((error) => {
-			console.error('Failed to load user analytics:', error);
-			return null;
-		});
-
-		const acquisition = await getAcquisitionBreakdown(90).catch((error) => {
-			console.error('Failed to load acquisition breakdown:', error);
-			return null;
-		});
-
-		const customers = await getCustomerAnalytics().catch((error) => {
-			console.error('Failed to load customer analytics:', error);
-			return null;
-		});
-
-		const [heatmap, leaks] = await Promise.all([
-			getSalesHeatmap(90).catch((error) => {
-				console.error('Failed to load sales heatmap:', error);
-				return null;
-			}),
-			getLeakAnalysis(90).catch((error) => {
-				console.error('Failed to load leak analysis:', error);
-				return null;
-			})
-		]);
+		// These sections are independent. Loading them together avoids a long serial admin-page wait.
+		const [userAnalytics, acquisition, customers, heatmap, leaks, financialReconciliation] =
+			await Promise.all([
+				getUserAnalytics().catch((error) => {
+					console.error('Failed to load user analytics:', error);
+					return null;
+				}),
+				getAcquisitionBreakdown(90).catch((error) => {
+					console.error('Failed to load acquisition breakdown:', error);
+					return null;
+				}),
+				getCustomerAnalytics().catch((error) => {
+					console.error('Failed to load customer analytics:', error);
+					return null;
+				}),
+				getSalesHeatmap(90).catch((error) => {
+					console.error('Failed to load sales heatmap:', error);
+					return null;
+				}),
+				getLeakAnalysis(90).catch((error) => {
+					console.error('Failed to load leak analysis:', error);
+					return null;
+				}),
+				revenueVisible
+					? getFinancialReconciliation().catch((error) => {
+							console.error('Failed to run financial reconciliation:', error);
+							return null;
+						})
+					: Promise.resolve(null)
+			]);
 
 		return toSerializableDecimals({
 			stats,
@@ -869,12 +983,26 @@ export const load: PageServerLoad = async ({ locals }) => {
 			customers,
 			heatmap,
 			leaks,
+			financialReconciliation,
 			canViewRevenue: revenueVisible,
 			integrity: {
 				checkedAt: new Date().toISOString(),
-				ok: integrityMismatches.length === 0,
+				ok: integrityMismatches.length === 0 && financialReconciliation?.ok !== false,
 				checks: visibleIntegrityChecks,
-				mismatches: integrityMismatches
+				mismatches:
+					financialReconciliation && !financialReconciliation.ok
+						? [
+								...integrityMismatches,
+								{
+									key: 'financial_reconciliation',
+									label: 'Order, item and refund ledgers reconcile',
+									expected: 0,
+									actual: financialReconciliation.issueCount,
+									delta: financialReconciliation.issueCount,
+									ok: false
+								}
+							]
+						: integrityMismatches
 			}
 		});
 	} catch (error) {

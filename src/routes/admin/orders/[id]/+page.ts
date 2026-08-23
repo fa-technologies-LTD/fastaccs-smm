@@ -1,7 +1,13 @@
 import { getOrderById } from '$lib/services/orders';
 import { error } from '@sveltejs/kit';
 
-export const load = async ({ params, fetch }: { params: { id: string }; fetch: typeof globalThis.fetch }) => {
+export const load = async ({
+	params,
+	fetch
+}: {
+	params: { id: string };
+	fetch: typeof globalThis.fetch;
+}) => {
 	const orderId = params.id;
 
 	// Load order details
@@ -22,14 +28,14 @@ export const load = async ({ params, fetch }: { params: { id: string }; fetch: t
 			account_username: account.username || '',
 			account_email: account.email || '',
 			account_password: account.password || '',
-				account_email_password: account.emailPassword || '',
-				account_two_fa: account.twoFa || '',
-				account_link_url: account.linkUrl || '',
-				account_credential_extras:
-					account.credentialExtras && typeof account.credentialExtras === 'object'
-						? account.credentialExtras
-						: {},
-				account_status: account.status || '',
+			account_email_password: account.emailPassword || '',
+			account_two_fa: account.twoFa || '',
+			account_link_url: account.linkUrl || '',
+			account_credential_extras:
+				account.credentialExtras && typeof account.credentialExtras === 'object'
+					? account.credentialExtras
+					: {},
+			account_status: account.status || '',
 			account_delivery_notes: account.deliveryNotes || null,
 			account_created_at: account.createdAt || null,
 			account_delivered_at: account.deliveredAt || null,
@@ -47,6 +53,7 @@ export const load = async ({ params, fetch }: { params: { id: string }; fetch: t
 	}));
 
 	const orderTotal = Number(rawOrder.totalAmount || 0);
+	const refundedAmount = Number(rawOrder.refundedAmount || 0);
 	const itemCount = orderItems.reduce(
 		(sum: number, item: any) => sum + Number(item.quantity || 0),
 		0
@@ -62,6 +69,8 @@ export const load = async ({ params, fetch }: { params: { id: string }; fetch: t
 		...rawOrder,
 		created_at: rawOrder.createdAt,
 		total_amount: orderTotal,
+		net_sale_amount: Math.max(0, orderTotal - refundedAmount),
+		refunded_amount: refundedAmount,
 		item_count: itemCount,
 		payment_id: rawOrder.paymentReference || '',
 		customer_name: customerName,

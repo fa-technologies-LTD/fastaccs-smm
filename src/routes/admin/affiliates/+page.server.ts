@@ -1,5 +1,8 @@
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
+import { buildRevenueOrderWhere } from '$lib/helpers/order-revenue.server';
+import { toNetSales } from '$lib/helpers/order-revenue';
+import { SC_AFFILIATE_ADJUSTMENT, SC_REDEEM_EARNED } from '$lib/services/store-credit';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	try {
@@ -51,10 +54,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 						by: ['affiliateUserId'],
 						where: {
 							affiliateUserId: { in: userIds },
-							OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
+							...buildRevenueOrderWhere()
 						},
 						_count: { _all: true },
-						_sum: { totalAmount: true }
+						_sum: { totalAmount: true, refundedAmount: true }
 					})
 				: Promise.resolve([]),
 			userIds.length
@@ -62,7 +65,14 @@ export const load: PageServerLoad = async ({ locals }) => {
 						by: ['userId', 'type', 'status'],
 						where: {
 							userId: { in: userIds },
-							type: { in: ['affiliate_credit', 'affiliate_payout'] }
+							type: {
+								in: [
+									'affiliate_credit',
+									'affiliate_payout',
+									SC_REDEEM_EARNED,
+									SC_AFFILIATE_ADJUSTMENT
+								]
+							}
 						},
 						_sum: { amount: true }
 					})
@@ -82,7 +92,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				String(row.affiliateUserId),
 				{
 					count: Number(row._count._all || 0),
-					totalSales: Number(row._sum.totalAmount || 0)
+					totalSales: toNetSales(row._sum.totalAmount, row._sum.refundedAmount)
 				}
 			])
 		);
@@ -92,22 +102,37 @@ export const load: PageServerLoad = async ({ locals }) => {
 			{
 				credit: number;
 				payout: number;
+				redeemed: number;
+				adjustment: number;
 			}
 		>;
 		const ledgerByUser = new Map<string, LedgerBucket>();
 
 		for (const row of ledgerGrouped) {
 			const userId = String(row.userId);
-			const status = String(row.status || '').trim().toLowerCase();
-			const type = String(row.type || '').trim().toLowerCase();
+			const status = String(row.status || '')
+				.trim()
+				.toLowerCase();
+			const type = String(row.type || '')
+				.trim()
+				.toLowerCase();
 			const amount = Math.max(0, Number(row._sum.amount || 0));
 
 			const userBucket = ledgerByUser.get(userId) || {};
-			const statusBucket = userBucket[status] || { credit: 0, payout: 0 };
+			const statusBucket = userBucket[status] || {
+				credit: 0,
+				payout: 0,
+				redeemed: 0,
+				adjustment: 0
+			};
 			if (type === 'affiliate_credit') {
 				statusBucket.credit += amount;
 			} else if (type === 'affiliate_payout') {
 				statusBucket.payout += amount;
+			} else if (type === SC_REDEEM_EARNED) {
+				statusBucket.redeemed += amount;
+			} else if (type === SC_AFFILIATE_ADJUSTMENT) {
+				statusBucket.adjustment += amount;
 			}
 			userBucket[status] = statusBucket;
 			ledgerByUser.set(userId, userBucket);
@@ -119,13 +144,18 @@ export const load: PageServerLoad = async ({ locals }) => {
 			const ledger = ledgerByUser.get(row.id) || {};
 			const getCredit = (status: string) => Math.max(0, Number(ledger[status]?.credit || 0));
 			const getPayout = (status: string) => Math.max(0, Number(ledger[status]?.payout || 0));
+			const getRedeemed = (status: string) => Math.max(0, Number(ledger[status]?.redeemed || 0));
+			const getAdjustment = (status: string) =>
+				Math.max(0, Number(ledger[status]?.adjustment || 0));
 
 			const availableStoreCredit = Math.max(
 				0,
 				getCredit('available') -
 					getPayout('requested') -
 					getPayout('under_review') -
-					getPayout('paid')
+					getPayout('paid') -
+					getRedeemed('available') -
+					getAdjustment('available')
 			);
 			const pendingStoreCredit = getCredit('pending');
 			const underReviewStoreCredit = getCredit('under_review');
@@ -134,12 +164,15 @@ export const load: PageServerLoad = async ({ locals }) => {
 			const requestedStoreCredit = getPayout('requested') + getPayout('under_review');
 			const paidStoreCredit = getPayout('paid');
 			const reversedStoreCredit = getCredit('reversed') + getPayout('reversed');
-			const totalStoreCreditEarned =
+			const totalStoreCreditEarned = Math.max(
+				0,
 				getCredit('available') +
-				getCredit('pending') +
-				getCredit('under_review') +
-				getCredit('requested') +
-				getCredit('paid');
+					getCredit('pending') +
+					getCredit('under_review') +
+					getCredit('requested') +
+					getCredit('paid') -
+					getAdjustment('available')
+			);
 
 			return {
 				id: row.id,

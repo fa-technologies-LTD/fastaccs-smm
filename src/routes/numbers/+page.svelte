@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { slide } from 'svelte/transition';
 	import { cart } from '$lib/stores/cart.svelte';
+	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { showWarning, showSuccess, showError } from '$lib/stores/toasts';
 	import {
 		Zap,
@@ -38,12 +39,13 @@
 		}
 	});
 
-	// Accordion: first service open by default; the rest collapsed.
-	let openId = $state<number | null>(data.services[0]?.serviceId ?? null);
+	// Start neutral: the buyer chooses a service rather than the page assuming WhatsApp.
+	let openId = $state<number | null>(null);
 	let buyingTierId = $state<string | null>(null);
 	let serviceQuery = $state('');
 	let notifyingTierId = $state<string | null>(null);
 	const notifiedTiers = new SvelteSet<string>();
+	const measuredServiceOpens = new Set<number>();
 	const visibleServices = $derived(
 		data.services.filter((service) =>
 			service.serviceName.toLowerCase().includes(serviceQuery.trim().toLowerCase())
@@ -78,7 +80,12 @@
 	}
 
 	function toggle(id: number) {
-		openId = openId === id ? null : id;
+		const opening = openId !== id;
+		openId = opening ? id : null;
+		if (opening && !measuredServiceOpens.has(id)) {
+			measuredServiceOpens.add(id);
+			recordAnalyticsEvent('numbers_service_open', `/numbers/service/${id}`);
+		}
 	}
 
 	// Expectation-setting FAQ — factual and calm, kept below the buy flow (see markup).

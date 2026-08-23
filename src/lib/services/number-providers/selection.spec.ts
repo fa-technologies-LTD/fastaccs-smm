@@ -10,11 +10,14 @@ import type { ReliabilityStat } from './reliability';
 
 const c = (over: Partial<Candidate>): Candidate => ({
 	provider: 'pvapins',
+	serviceId: 1,
+	countryId: 58,
 	providerServiceRef: 'Whatsapp24',
 	providerCountryRef: 'USA',
 	label: 'pvapins:Whatsapp24',
 	costCents: 66,
 	available: 5,
+	stockConfidence: 'listed',
 	reliability: null,
 	sampleSize: 0,
 	...over
@@ -22,7 +25,10 @@ const c = (over: Partial<Candidate>): Candidate => ({
 
 describe('rankCandidates', () => {
 	it('drops out-of-stock candidates entirely', () => {
-		const ranked = rankCandidates([c({ label: 'a', available: 0 }), c({ label: 'b', available: 3 })]);
+		const ranked = rankCandidates([
+			c({ label: 'a', available: 0 }),
+			c({ label: 'b', available: 3 })
+		]);
 		expect(ranked.map((x) => x.label)).toEqual(['b']);
 	});
 
@@ -36,6 +42,12 @@ describe('rankCandidates', () => {
 		const cheap = c({ label: 'cheap', reliability: 0.9, sampleSize: 20, costCents: 40 });
 		const pricey = c({ label: 'pricey', reliability: 0.9, sampleSize: 20, costCents: 90 });
 		expect(rankCandidates([pricey, cheap])[0].label).toBe('cheap');
+	});
+
+	it('prefers confirmed live stock when reliability evidence is comparable', () => {
+		const listed = c({ label: 'listed', costCents: 30, stockConfidence: 'listed' });
+		const confirmed = c({ label: 'confirmed', costCents: 60, stockConfidence: 'confirmed' });
+		expect(rankCandidates([listed, confirmed])[0].label).toBe('confirmed');
 	});
 
 	it('gives unproven candidates a fair shot — below proven-excellent, above proven-poor', () => {
@@ -79,8 +91,8 @@ describe('rankCandidates', () => {
 });
 
 describe('effectiveReliability', () => {
-	it('falls back to the cold-start score below the sample threshold', () => {
-		expect(effectiveReliability({ reliability: 1, sampleSize: 3 })).toBe(0.75);
+	it('smooths low-sample evidence toward the cold-start score', () => {
+		expect(effectiveReliability({ reliability: 1, sampleSize: 3 })).toBeCloseTo(0.84375);
 		expect(effectiveReliability({ reliability: null, sampleSize: 0 })).toBe(0.75);
 	});
 	it('uses the measured value once trusted', () => {
@@ -93,9 +105,11 @@ describe('buildCandidatePool', () => {
 		const reliability = new Map<string, ReliabilityStat>([
 			['pvapins:Whatsapp24', { received: 18, total: 20, reliability: 0.9 }],
 			['pvapins:Whatsapp46', { received: 1, total: 20, reliability: 0.05 }],
-			['hubman:1', { received: 5, total: 20, reliability: 0.25 }]
+			['hubman:market:1:58', { received: 5, total: 20, reliability: 0.25 }]
 		]);
 		const pool = buildCandidatePool({
+			serviceId: 1,
+			countryId: 58,
 			hub: { serviceRef: '1', countryRef: '58', costCents: 50, available: 3 },
 			pvapins: [
 				{ app: 'Whatsapp24', countryName: 'USA', costCents: 66, available: 5 },
@@ -104,14 +118,20 @@ describe('buildCandidatePool', () => {
 			reliability
 		});
 		// Whatsapp24 (0.9) first; the rate-limited Whatsapp46 (0.05) last despite being cheapest.
-		expect(pool.map((c) => c.label)).toEqual(['pvapins:Whatsapp24', 'hubman:1', 'pvapins:Whatsapp46']);
+		expect(pool.map((c) => c.label)).toEqual([
+			'pvapins:Whatsapp24',
+			'hubman:1',
+			'pvapins:Whatsapp46'
+		]);
 	});
 
 	it('lists an unproven pvapins supplier ahead of a proven-poor hub-man one', () => {
 		const pool = buildCandidatePool({
+			serviceId: 1,
+			countryId: 58,
 			hub: { serviceRef: '1', countryRef: '58', costCents: 50, available: 3 },
 			pvapins: [{ app: 'Whatsapp99', countryName: 'USA', costCents: 66, available: 5 }],
-			reliability: new Map([['hubman:1', { received: 2, total: 20, reliability: 0.1 }]])
+			reliability: new Map([['hubman:market:1:58', { received: 2, total: 20, reliability: 0.1 }]])
 		});
 		expect(pool[0].label).toBe('pvapins:Whatsapp99');
 	});
@@ -119,7 +139,13 @@ describe('buildCandidatePool', () => {
 
 describe('poolFloorCostCents', () => {
 	it('is the cheapest in-stock cost (for pricing)', () => {
-		expect(poolFloorCostCents([c({ costCents: 90 }), c({ costCents: 40 }), c({ costCents: 0, available: 0 })])).toBe(40);
+		expect(
+			poolFloorCostCents([
+				c({ costCents: 90 }),
+				c({ costCents: 40 }),
+				c({ costCents: 0, available: 0 })
+			])
+		).toBe(40);
 	});
 	it('is null when nothing is in stock', () => {
 		expect(poolFloorCostCents([c({ available: 0 })])).toBeNull();

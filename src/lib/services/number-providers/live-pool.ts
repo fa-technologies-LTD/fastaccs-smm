@@ -18,10 +18,12 @@ export async function buildLiveCandidatePool(input: {
 	reliability?: Map<string, ReliabilityStat>;
 }): Promise<Candidate[]> {
 	const service = serviceByHubId(input.hubServiceId);
-	const reliability = input.reliability ?? (await loadCandidateReliability().catch(() => new Map()));
+	const reliability =
+		input.reliability ?? (await loadCandidateReliability().catch(() => new Map()));
 
 	// hub-man: real per-service stock + cheapest cost for this country.
-	let hub: { serviceRef: string; countryRef: string; costCents: number; available: number } | null = null;
+	let hub: { serviceRef: string; countryRef: string; costCents: number; available: number } | null =
+		null;
 	if (hubman.isHubmanConfigured()) {
 		try {
 			const services = await hubman.getAvailableServices(input.hubCountryId);
@@ -40,7 +42,12 @@ export async function buildLiveCandidatePool(input: {
 	}
 
 	// pvapins: every supplier-variant for this service in the matching country (presumed in stock).
-	let pvapinsCands: Array<{ app: string; countryName: string; costCents: number; available: number }> = [];
+	let pvapinsCands: Array<{
+		app: string;
+		countryName: string;
+		costCents: number;
+		available: number;
+	}> = [];
 	if (service && pvapins.isPvapinsConfigured()) {
 		try {
 			const countries = await pvapins.loadCountries();
@@ -59,5 +66,11 @@ export async function buildLiveCandidatePool(input: {
 		}
 	}
 
-	return buildCandidatePool({ hub, pvapins: pvapinsCands, reliability });
+	return buildCandidatePool({
+		serviceId: input.hubServiceId,
+		countryId: input.hubCountryId,
+		hub,
+		pvapins: pvapinsCands,
+		reliability
+	});
 }

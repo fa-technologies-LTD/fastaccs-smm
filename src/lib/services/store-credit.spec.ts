@@ -4,7 +4,8 @@ import {
 	computeOrderRedemption,
 	EARNED_REDEMPTION_CAP_PERCENT,
 	getStoreCreditBuckets,
-	redemptionExceedsAvailable
+	redemptionExceedsAvailable,
+	restoreStoreCreditRedemptionForLatePayment
 } from './store-credit';
 
 describe('computeOrderRedemption', () => {
@@ -218,5 +219,84 @@ describe('store-credit ledger safeguards', () => {
 		await expect(
 			getStoreCreditBuckets('11111111-1111-4111-8111-111111111111', db as never)
 		).resolves.toEqual({ earnedAvailable: 300, refundAvailable: 0, totalAvailable: 300 });
+	});
+
+	it('atomically re-reserves restored credit before a late split payment can fulfil', async () => {
+		const tx = {
+			wallet: {
+				findUnique: vi
+					.fn()
+					.mockResolvedValueOnce({ id: 'wallet-1' })
+					.mockResolvedValueOnce({ balance: 1500 }),
+				update: vi.fn().mockResolvedValue({})
+			},
+			walletTransaction: {
+				findMany: vi.fn().mockResolvedValue([
+					{
+						id: 'refund-row',
+						type: 'store_credit_redemption_refund',
+						amount: 1000,
+						status: 'reversed'
+					},
+					{
+						id: 'earned-row',
+						type: 'store_credit_redemption_earned',
+						amount: 500,
+						status: 'reversed'
+					}
+				]),
+				groupBy: vi.fn().mockResolvedValue([
+					{ type: 'store_credit_refund', status: 'available', _sum: { amount: 1000 } },
+					{ type: 'store_credit_gift', status: 'available', _sum: { amount: 500 } }
+				]),
+				updateMany: vi.fn().mockResolvedValue({ count: 2 })
+			},
+			$queryRaw: vi.fn().mockResolvedValue([])
+		};
+
+		await expect(
+			restoreStoreCreditRedemptionForLatePayment(tx as never, {
+				userId: '11111111-1111-4111-8111-111111111111',
+				orderId: 'order-1',
+				expectedAmount: 1500
+			})
+		).resolves.toEqual({ restoredAmount: 1500, alreadyReserved: false });
+
+		expect(tx.walletTransaction.updateMany).toHaveBeenCalledWith({
+			where: { id: { in: ['refund-row', 'earned-row'] }, status: 'reversed' },
+			data: { status: 'available' }
+		});
+		expect(tx.wallet.update).toHaveBeenCalledWith({
+			where: { id: 'wallet-1' },
+			data: { balance: 0 }
+		});
+	});
+
+	it('freezes late settlement when the buyer already spent the restored credit', async () => {
+		const tx = {
+			wallet: { findUnique: vi.fn().mockResolvedValue({ id: 'wallet-1' }) },
+			walletTransaction: {
+				findMany: vi.fn().mockResolvedValue([
+					{
+						id: 'refund-row',
+						type: 'store_credit_redemption_refund',
+						amount: 1000,
+						status: 'reversed'
+					}
+				]),
+				groupBy: vi.fn().mockResolvedValue([
+					{ type: 'store_credit_refund', status: 'available', _sum: { amount: 200 } }
+				])
+			},
+			$queryRaw: vi.fn().mockResolvedValue([])
+		};
+
+		await expect(
+			restoreStoreCreditRedemptionForLatePayment(tx as never, {
+				userId: '11111111-1111-4111-8111-111111111111',
+				orderId: 'order-1',
+				expectedAmount: 1000
+			})
+		).rejects.toThrow('STORE_CREDIT_LATE_PAYMENT_INSUFFICIENT');
 	});
 });

@@ -45,7 +45,7 @@ vi.mock('$lib/services/exact-preview', () => ({
 }));
 
 vi.mock('$lib/services/admin-alerts', () => ({
-	sendCriticalAdminAlert: vi.fn()
+	sendCriticalAdminAlert: vi.fn(async () => undefined)
 }));
 
 import { reconcilePendingPaymentBacklog, reconcilePendingPayments } from './payment-reconciliation';
@@ -135,6 +135,25 @@ describe('payment reconciliation safety', () => {
 				currency: 'NGN'
 			})
 		);
+		expect(settleFailedPaymentMock).not.toHaveBeenCalled();
+	});
+
+	it('holds a verified payment whose gateway reference conflicts with the order', async () => {
+		prismaMock.order.findMany.mockResolvedValue([pendingOrder()]);
+		verifyPaymentMock.mockResolvedValue({
+			success: true,
+			status: 'PAID',
+			paymentReference: 'ORD-DIFFERENT-REF',
+			amount: 2500,
+			amountPaid: 2500,
+			currency: 'NGN',
+			metaData: { orderId: 'order-1' }
+		});
+
+		const result = await reconcilePendingPayments({ staleMinutes: 0 });
+
+		expect(result.skipped).toBe(1);
+		expect(settleSuccessfulPaymentMock).not.toHaveBeenCalled();
 		expect(settleFailedPaymentMock).not.toHaveBeenCalled();
 	});
 

@@ -14,6 +14,7 @@ export async function getDashboardOrdersPage(input: {
 			id: true,
 			orderNumber: true,
 			totalAmount: true,
+			refundedAmount: true,
 			status: true,
 			paymentStatus: true,
 			paymentReference: true,
@@ -28,6 +29,7 @@ export async function getDashboardOrdersPage(input: {
 					quantity: true,
 					unitPrice: true,
 					totalPrice: true,
+					refundedAmount: true,
 					allocationStatus: true,
 					boostTargetUrl: true,
 					boostQuantity: true,
@@ -44,10 +46,12 @@ export async function getDashboardOrdersPage(input: {
 	const orders = (hasMore ? rows.slice(0, limit) : rows).map((order) => ({
 		...order,
 		totalAmount: Number(order.totalAmount),
+		refundedAmount: Number(order.refundedAmount),
 		orderItems: order.orderItems.map((item) => ({
 			...item,
 			unitPrice: Number(item.unitPrice),
-			totalPrice: Number(item.totalPrice)
+			totalPrice: Number(item.totalPrice),
+			refundedAmount: Number(item.refundedAmount)
 		}))
 	}));
 	return {

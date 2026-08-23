@@ -2,6 +2,9 @@ import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
 import { error } from '@sveltejs/kit';
 import { toSerializableDecimals } from '$lib/helpers/serialize';
+import { buildRevenueOrderWhere } from '$lib/helpers/order-revenue.server';
+import { toNetSales } from '$lib/helpers/order-revenue';
+import { SC_AFFILIATE_ADJUSTMENT, SC_REDEEM_EARNED } from '$lib/services/store-credit';
 
 export const load: PageServerLoad = async ({ locals, params }) => {
 	if (!locals.user || locals.user.userType !== 'ADMIN') {
@@ -53,7 +56,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			prisma.order.findMany({
 				where: {
 					affiliateUserId: affiliate.id,
-					OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
+					...buildRevenueOrderWhere()
 				},
 				include: {
 					user: {
@@ -73,7 +76,9 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			prisma.walletTransaction.findMany({
 				where: {
 					userId: affiliate.id,
-					type: { in: ['affiliate_credit', 'affiliate_payout'] }
+					type: {
+						in: ['affiliate_credit', 'affiliate_payout', SC_REDEEM_EARNED, SC_AFFILIATE_ADJUSTMENT]
+					}
 				},
 				select: {
 					id: true,
@@ -96,26 +101,39 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		const creditByOrder = new Map<string, number>();
 		const creditByStatus: Record<string, number> = {};
 		const payoutByStatus: Record<string, number> = {};
+		const redeemedByStatus: Record<string, number> = {};
+		const adjustmentByStatus: Record<string, number> = {};
 
 		for (const row of ledgerRows) {
-			const status = String(row.status || '').trim().toLowerCase();
+			const status = String(row.status || '')
+				.trim()
+				.toLowerCase();
 			const amount = Math.max(0, Number(row.amount || 0));
+			const metadata =
+				row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+					? (row.metadata as Record<string, unknown>)
+					: null;
+			const orderId =
+				metadata && typeof metadata.orderId === 'string' ? metadata.orderId.trim() : '';
 
 			if (row.type === 'affiliate_credit') {
 				creditByStatus[status] = (creditByStatus[status] || 0) + amount;
-				const metadata =
-					row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
-						? (row.metadata as Record<string, unknown>)
-						: null;
-				const orderId =
-					metadata && typeof metadata.orderId === 'string' ? metadata.orderId.trim() : '';
 				if (orderId) {
 					creditByOrder.set(orderId, (creditByOrder.get(orderId) || 0) + amount);
 				}
 			} else if (row.type === 'affiliate_payout') {
 				payoutByStatus[status] = (payoutByStatus[status] || 0) + amount;
+			} else if (row.type === SC_REDEEM_EARNED) {
+				redeemedByStatus[status] = (redeemedByStatus[status] || 0) + amount;
+			} else if (row.type === SC_AFFILIATE_ADJUSTMENT) {
+				adjustmentByStatus[status] = (adjustmentByStatus[status] || 0) + amount;
+				if (status === 'available' && orderId) {
+					creditByOrder.set(orderId, (creditByOrder.get(orderId) || 0) - amount);
+				}
 			}
 		}
+		const netCreditForOrder = (orderId: string): number =>
+			Math.max(0, Number(creditByOrder.get(orderId) || 0));
 
 		const payouts = ledgerRows
 			.filter((row) => row.type === 'affiliate_payout')
@@ -144,8 +162,8 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 					};
 				}
 
-				const orderTotal = Number(order.totalAmount || 0);
-				const storeCredit = Number(creditByOrder.get(order.id) || 0);
+				const orderTotal = toNetSales(order.totalAmount, order.refundedAmount);
+				const storeCredit = netCreditForOrder(order.id);
 				acc[month].orders += 1;
 				acc[month].sales += orderTotal;
 				acc[month].storeCredit += storeCredit;
@@ -158,9 +176,12 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		const thirtyDaysAgo = new Date();
 		thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 		const recentOrders = orders.filter((order) => new Date(order.createdAt) >= thirtyDaysAgo);
-		const recentSales = recentOrders.reduce((sum, order) => sum + Number(order.totalAmount), 0);
+		const recentSales = recentOrders.reduce(
+			(sum, order) => sum + toNetSales(order.totalAmount, order.refundedAmount),
+			0
+		);
 		const recentStoreCredit = recentOrders.reduce(
-			(sum, order) => sum + Number(creditByOrder.get(order.id) || 0),
+			(sum, order) => sum + netCreditForOrder(order.id),
 			0
 		);
 
@@ -170,7 +191,9 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				Number(creditByStatus.available || 0) -
 					Number(payoutByStatus.requested || 0) -
 					Number(payoutByStatus.under_review || 0) -
-					Number(payoutByStatus.paid || 0)
+					Number(payoutByStatus.paid || 0) -
+					Number(redeemedByStatus.available || 0) -
+					Number(adjustmentByStatus.available || 0)
 			),
 			pendingStoreCredit: Number(creditByStatus.pending || 0),
 			underReviewStoreCredit: Number(creditByStatus.under_review || 0),
@@ -179,12 +202,15 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			paidStoreCredit: Number(payoutByStatus.paid || 0),
 			reversedStoreCredit:
 				Number(creditByStatus.reversed || 0) + Number(payoutByStatus.reversed || 0),
-			totalStoreCreditEarned:
+			totalStoreCreditEarned: Math.max(
+				0,
 				Number(creditByStatus.available || 0) +
-				Number(creditByStatus.pending || 0) +
-				Number(creditByStatus.under_review || 0) +
-				Number(creditByStatus.requested || 0) +
-				Number(creditByStatus.paid || 0)
+					Number(creditByStatus.pending || 0) +
+					Number(creditByStatus.under_review || 0) +
+					Number(creditByStatus.requested || 0) +
+					Number(creditByStatus.paid || 0) -
+					Number(adjustmentByStatus.available || 0)
+			)
 		};
 
 		return toSerializableDecimals({
@@ -207,7 +233,10 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				id: affiliateProgram.id,
 				affiliateCode: affiliateProgram.affiliateCode,
 				totalReferrals: affiliateProgram.totalReferrals,
-				totalSales: orders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0),
+				totalSales: orders.reduce(
+					(sum, order) => sum + toNetSales(order.totalAmount, order.refundedAmount),
+					0
+				),
 				successfulOrders: orders.length,
 				status: affiliateProgram.status,
 				createdAt: affiliateProgram.createdAt
@@ -220,12 +249,12 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				orderNumber: order.orderNumber,
 				customerEmail: order.user?.email || order.guestEmail,
 				customerName: order.user?.fullName || 'Guest',
-				totalAmount: Number(order.totalAmount),
+				totalAmount: toNetSales(order.totalAmount, order.refundedAmount),
 				status: order.status,
 				paymentStatus: order.paymentStatus,
 				createdAt: order.createdAt,
 				itemCount: order.orderItems.length,
-				storeCredit: Number(creditByOrder.get(order.id) || 0)
+				storeCredit: netCreditForOrder(order.id)
 			})),
 			monthlyBreakdown,
 			recentLedger: ledgerRows.slice(0, 20).map((row) => ({

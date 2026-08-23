@@ -72,7 +72,9 @@
 	);
 
 	function getCustomerLabel(item: BoostingOrderItem): string {
-		return item.order.user?.fullName || item.order.user?.email || item.order.guestEmail || 'Unknown';
+		return (
+			item.order.user?.fullName || item.order.user?.email || item.order.guestEmail || 'Unknown'
+		);
 	}
 
 	function copyToClipboard(text: string, message = 'Copied to clipboard!') {
@@ -84,7 +86,10 @@
 
 	function copyAllLinks(serviceItems: BoostingOrderItem[]) {
 		const links = serviceItems.map((item) => item.boostTargetUrl).join('\n');
-		copyToClipboard(links, `${serviceItems.length} link${serviceItems.length === 1 ? '' : 's'} copied!`);
+		copyToClipboard(
+			links,
+			`${serviceItems.length} link${serviceItems.length === 1 ? '' : 's'} copied!`
+		);
 	}
 
 	async function updateItem(itemId: string, status: string) {
@@ -129,8 +134,8 @@
 			Boosting Orders
 		</h1>
 		<p class="mt-1 text-sm" style="color: var(--text-muted);">
-			Copy all links for a service at once, place them with your supplier, then mark each order
-			in progress and completed.
+			Copy all links for a service at once, place them with your supplier, then mark each order in
+			progress and completed.
 		</p>
 		<div class="mt-2">
 			<OrderTypeTabs active="boosting" />
@@ -144,7 +149,8 @@
 		>
 			<div class="flex items-center gap-2">
 				<DollarSign size={16} style="color: var(--fa-blue-300);" />
-				<span class="text-xs font-medium" style="color: var(--text-muted);">Lifetime Revenue</span>
+				<span class="text-xs font-medium" style="color: var(--text-muted);">Lifetime Net Sales</span
+				>
 			</div>
 			<p class="mt-1 text-xl font-bold" style="color: var(--text);">
 				{formatMonetaryAmount(stats.total_revenue)}
@@ -192,7 +198,10 @@
 
 	<div class="space-y-6">
 		{#each groupedByService as [serviceName, serviceItems] (serviceName)}
-			<div class="rounded-[var(--r-md)] border" style="border-color: var(--border); background: var(--bg-elev-1);">
+			<div
+				class="rounded-[var(--r-md)] border"
+				style="border-color: var(--border); background: var(--bg-elev-1);"
+			>
 				<div
 					class="flex flex-wrap items-center justify-between gap-3 border-b p-4"
 					style="border-color: var(--border);"
@@ -228,14 +237,21 @@
 												? 'background: rgba(234,179,8,0.15); color: #eab308;'
 												: 'background: var(--surface); color: var(--text-muted);'}
 									>
-										{status === 'in_progress' ? 'In Progress' : status === 'completed' ? 'Completed' : 'Pending'}
+										{status === 'in_progress'
+											? 'In Progress'
+											: status === 'completed'
+												? 'Completed'
+												: 'Pending'}
 									</span>
 									{#if config.refillAvailable}
-										<span class="text-xs" style="color: var(--text-dim);">{config.refillDays}-day refill</span>
+										<span class="text-xs" style="color: var(--text-dim);"
+											>{config.refillDays}-day refill</span
+										>
 									{/if}
 								</div>
 								<p class="mt-1 text-xs" style="color: var(--text-muted);">
-									{item.boostQuantity?.toLocaleString() ?? '?'} qty · Order {item.order.orderNumber} ·
+									{item.boostQuantity?.toLocaleString() ?? '?'} qty · Order {item.order.orderNumber}
+									·
 									{getCustomerLabel(item)}
 								</p>
 								<div class="mt-2 flex items-center gap-2">
@@ -310,7 +326,9 @@
 				class="rounded-[var(--r-md)] border p-8 text-center"
 				style="border-color: var(--border); background: var(--bg-elev-1);"
 			>
-				<p style="color: var(--text-muted);">No {statusFilter === 'all' ? '' : statusFilter} boosting orders.</p>
+				<p style="color: var(--text-muted);">
+					No {statusFilter === 'all' ? '' : statusFilter} boosting orders.
+				</p>
 			</div>
 		{/if}
 	</div>

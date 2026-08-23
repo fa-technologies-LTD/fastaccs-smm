@@ -45,6 +45,10 @@
 			"schedule": "*/5 * * * *"
 		},
 		{
+			"path": "/api/internal/cron/numbers-catalog-probe",
+			"schedule": "17 */2 * * *"
+		},
+		{
 			"path": "/api/internal/cron/promo-reminder",
 			"schedule": "10 10 * * *"
 		},

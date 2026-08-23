@@ -23,7 +23,14 @@ vi.mock('./hubman', () => ({
 	isHubmanConfigured: () => true,
 	HubmanError: class HubmanError extends Error {}
 }));
-vi.mock('./store-credit', () => ({ creditStoreCredit: vi.fn(), SC_CREDIT_REFUND: 'X' }));
+vi.mock('./store-credit', () => ({
+	creditStoreCredit: vi.fn(),
+	restoreStoreCreditRedemptionForLatePayment: vi.fn().mockResolvedValue({
+		restoredAmount: 0,
+		alreadyReserved: true
+	}),
+	SC_CREDIT_REFUND: 'X'
+}));
 vi.mock('./phone-telemetry', () => ({
 	recordPhoneAttempt: () => Promise.resolve(null),
 	recordAttemptOtpReceived: recordOtpMock,

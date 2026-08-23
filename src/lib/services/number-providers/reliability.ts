@@ -14,6 +14,15 @@ export interface ReliabilityStat {
 	reliability: number; // received / total, 0..1
 }
 
+/** Delivery evidence shared by variants serving the same provider/service/country market. */
+export function serviceCountryReliabilityKey(
+	provider: string,
+	serviceId: number,
+	countryId: number
+): string {
+	return `${provider}:market:${serviceId}:${countryId}`;
+}
+
 export const RESOLVED_ATTEMPT_OUTCOMES = ['otp_received', 'otp_timeout'];
 
 /** Stable key identifying the supplier behind a rental (pvapins app, or hub-man service id). */
@@ -52,7 +61,9 @@ export function summarizeReliability(
  * eligible. This keeps routing provider-neutral and prevents the old race refunds from poisoning
  * pvapins' score merely because it happened to be the last provider stored on an order.
  */
-export async function loadCandidateReliability(windowDays = 14): Promise<Map<string, ReliabilityStat>> {
+export async function loadCandidateReliability(
+	windowDays = 14
+): Promise<Map<string, ReliabilityStat>> {
 	try {
 		const since = new Date(Date.now() - windowDays * 86_400_000);
 		const rows = await prisma.phoneAttempt.findMany({
@@ -60,13 +71,45 @@ export async function loadCandidateReliability(windowDays = 14): Promise<Map<str
 				outcome: { in: RESOLVED_ATTEMPT_OUTCOMES },
 				createdAt: { gte: since }
 			},
-			select: { provider: true, providerServiceRef: true, outcome: true }
+			select: { orderItemId: true, provider: true, providerServiceRef: true, outcome: true }
 		});
+		const rentals = rows.length
+			? await prisma.phoneRental.findMany({
+					where: { orderItemId: { in: [...new Set(rows.map((row) => row.orderItemId))] } },
+					select: { orderItemId: true, serviceId: true, countryId: true }
+				})
+			: [];
+		const marketByOrderItem = new Map(
+			rentals.map((rental) => [
+				rental.orderItemId,
+				{ serviceId: rental.serviceId, countryId: rental.countryId }
+			])
+		);
+		// Exact PVAPins variants choose within a market. Service/country evidence gives a new variant
+		// a locally relevant prior, and provider-wide evidence is the final cold-start fallback.
 		return summarizeReliability(
-			rows.map((r) => ({
-				key: `${r.provider}:${r.providerServiceRef}`,
-				received: r.outcome === 'otp_received'
-			}))
+			rows.flatMap((row) => {
+				const received = row.outcome === 'otp_received';
+				const market = marketByOrderItem.get(row.orderItemId);
+				return [
+					...(row.provider === 'pvapins'
+						? [{ key: `${row.provider}:${row.providerServiceRef}`, received }]
+						: []),
+					...(market
+						? [
+								{
+									key: serviceCountryReliabilityKey(
+										row.provider,
+										market.serviceId,
+										market.countryId
+									),
+									received
+								}
+							]
+						: []),
+					{ key: `${row.provider}:*`, received }
+				];
+			})
 		);
 	} catch {
 		return new Map();

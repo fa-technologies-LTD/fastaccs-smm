@@ -28,6 +28,10 @@ vi.mock('./hubman', () => ({
 }));
 vi.mock('./store-credit', () => ({
 	creditStoreCredit: creditStoreCreditMock,
+	restoreStoreCreditRedemptionForLatePayment: vi.fn().mockResolvedValue({
+		restoredAmount: 0,
+		alreadyReserved: true
+	}),
 	SC_CREDIT_REFUND: 'SC_CREDIT_REFUND'
 }));
 vi.mock('./phone-telemetry', () => ({
@@ -38,6 +42,26 @@ vi.mock('./phone-telemetry', () => ({
 	classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' })
 }));
 vi.mock('./admin-alerts', () => ({ sendCriticalAdminAlert: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('./notifications', () => ({
+	createUserNotification: vi.fn().mockResolvedValue(undefined)
+}));
+vi.mock('./admin-metrics', () => ({ invalidateAdminStatsCache: vi.fn() }));
+vi.mock('./affiliate', () => ({
+	maybeVoidSuperActivationOnRefund: vi.fn().mockResolvedValue(undefined),
+	reconcileAffiliateSales: vi.fn().mockResolvedValue(undefined)
+}));
+vi.mock('./affiliate-vesting', () => ({
+	voidUnvestedRewardsForOrder: vi.fn().mockResolvedValue({ voided: 0 }),
+	reverseVestedRegularRewardForOrder: vi.fn().mockResolvedValue({ reversed: 0 })
+}));
+vi.mock('./spend-milestones', () => ({
+	maybeClawbackSpendMilestones: vi.fn().mockResolvedValue(undefined)
+}));
+vi.mock('./order-events', () => ({
+	recordOrderEvent: vi.fn().mockResolvedValue(undefined),
+	recordOrderEventBestEffort: vi.fn().mockResolvedValue(undefined)
+}));
+
 vi.mock('./phone-pricing', () => ({
 	getPhonePricingConfig: vi.fn(),
 	computeMaxPriceCentsForSale: vi.fn(),
@@ -82,6 +106,8 @@ beforeEach(() => {
 		cb({
 			$queryRaw: vi.fn().mockResolvedValue([]),
 			phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			orderItem: { update: vi.fn().mockResolvedValue({}) },
+			orderEvent: { create: vi.fn().mockResolvedValue({}) },
 			order: { update: vi.fn().mockResolvedValue({}) }
 		})
 	);
@@ -153,6 +179,8 @@ describe('refundPhoneOrderToStoreCredit — idempotent (credit issued at most on
 			cb({
 				$queryRaw: vi.fn().mockResolvedValue([]),
 				phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+				orderItem: { update: vi.fn().mockResolvedValue({}) },
+				orderEvent: { create: vi.fn().mockResolvedValue({}) },
 				order: { update: vi.fn() }
 			})
 		);
@@ -177,6 +205,8 @@ describe('refundPhoneOrderToStoreCredit — idempotent (credit issued at most on
 			cb({
 				$queryRaw: vi.fn().mockResolvedValue([]),
 				phoneRental: { updateMany: rentalClaim },
+				orderItem: { update: vi.fn().mockResolvedValue({}) },
+				orderEvent: { create: vi.fn().mockResolvedValue({}) },
 				order: { update: vi.fn().mockResolvedValue({}) }
 			})
 		);

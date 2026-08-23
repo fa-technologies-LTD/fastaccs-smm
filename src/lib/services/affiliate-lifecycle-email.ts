@@ -1,10 +1,9 @@
 import { prisma } from '$lib/prisma';
 import { sendEmail, sendMarketingEmail } from '$lib/services/email';
-import {
-	maybeSendAffiliateUnlockInvite
-} from '$lib/services/affiliate';
+import { maybeSendAffiliateUnlockInvite } from '$lib/services/affiliate';
 import { recoverFirstStoreCreditEmails } from '$lib/services/affiliate-notification-email';
 import { recoverAffiliatePayoutStatusEmails } from '$lib/services/affiliate-payout-email';
+import { buildRevenueOrderWhere } from '$lib/helpers/order-revenue.server';
 
 function getBaseUrl(): string {
 	return (process.env.PUBLIC_BASE_URL || 'https://smm.fastaccs.com').replace(/\/+$/, '');
@@ -20,7 +19,10 @@ const ACTIVATION_NUDGE_COOLDOWN_DAYS = 14;
 // One-time announcement of the refreshed affiliate program: greets newly-onboarded
 // affiliates ("you're now an affiliate") and reminds existing ones of their code.
 // Excludes owner/test accounts; idempotent via a per-user referenceId.
-const AFFILIATE_ANNOUNCEMENT_EXCLUDE = new Set(['verystrongethan@gmail.com', 'teerex.trx@gmail.com']);
+const AFFILIATE_ANNOUNCEMENT_EXCLUDE = new Set([
+	'verystrongethan@gmail.com',
+	'teerex.trx@gmail.com'
+]);
 // The exact set of silently-onboarded affiliates who get the "you're now an affiliate"
 // greeting; everyone else already knew they were an affiliate and gets the code reminder.
 const AFFILIATE_ANNOUNCEMENT_NEW_ONBOARDS = new Set([
@@ -113,9 +115,7 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 			email: { not: null },
 			userType: { not: 'ADMIN' },
 			orders: {
-				some: {
-					OR: [{ status: 'paid' }, { status: 'completed' }, { paymentStatus: 'paid' }]
-				}
+				some: buildRevenueOrderWhere()
 			}
 		},
 		select: {
@@ -135,10 +135,8 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 				take: 1
 			},
 			orders: {
-				where: {
-					OR: [{ status: 'paid' }, { status: 'completed' }, { paymentStatus: 'paid' }]
-				},
-				select: { totalAmount: true }
+				where: buildRevenueOrderWhere(),
+				select: { id: true }
 			}
 		},
 		orderBy: { registeredAt: 'asc' },
@@ -162,8 +160,12 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 		const eligible = successfulPurchaseCount > 0;
 		const alreadyActive = user.isAffiliateEnabled || user.affiliatePrograms.length > 0;
 		const firstName = getFirstName(user.fullName, user.email);
-		const cooldownStart = new Date(Date.now() - ACTIVATION_NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
-		const cooldownBucket = Math.floor(Date.now() / (ACTIVATION_NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000));
+		const cooldownStart = new Date(
+			Date.now() - ACTIVATION_NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000
+		);
+		const cooldownBucket = Math.floor(
+			Date.now() / (ACTIVATION_NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000)
+		);
 
 		// Eligible but not yet an affiliate -> invite them to claim their code.
 		if (eligible && !alreadyActive) {

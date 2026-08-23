@@ -24,6 +24,7 @@ interface OrderSummary {
 	deliveryStatus: string;
 	totalAmount: number;
 	storeCreditApplied: number;
+	refundedAmount: number;
 	paymentReference: string | null;
 	currency: string;
 	createdAt: Date;
@@ -48,11 +49,13 @@ function buildTimeline(input: {
 		orderNumber: string;
 		status: string;
 		paymentStatus: string;
+		deliveryStatus: string;
 		createdAt: Date;
 		updatedAt: Date;
 		paidAt: Date | null;
 		totalAmount: number;
 		storeCreditApplied: number;
+		refundedAmount: number;
 		paymentReference: string | null;
 	}>;
 	sessionLogins: Date[];
@@ -70,6 +73,16 @@ function buildTimeline(input: {
 			email: string | null;
 			fullName: string | null;
 		} | null;
+	}>;
+	orderEvents: Array<{
+		id: string;
+		orderId: string;
+		type: string;
+		source: string;
+		amount: unknown;
+		description: string | null;
+		occurredAt: Date;
+		order: { orderNumber: string };
 	}>;
 	revenueVisible: boolean;
 }): TimelineEntry[] {
@@ -124,16 +137,25 @@ function buildTimeline(input: {
 		});
 	});
 
+	const durableTypesByOrder = new Map<string, Set<string>>();
+	for (const event of input.orderEvents) {
+		const types = durableTypesByOrder.get(event.orderId) || new Set<string>();
+		types.add(event.type);
+		durableTypesByOrder.set(event.orderId, types);
+	}
 	input.orders.forEach((order) => {
-		events.push({
-			id: `${order.id}-placed`,
-			type: 'order',
-			title: `Order placed (${order.orderNumber})`,
-			description: `Status: ${getOrderStatusLabel(order.status)} • Payment: ${getOrderStatusLabel(order.paymentStatus)}`,
-			at: order.createdAt.toISOString(),
-			orderId: order.id,
-			orderNumber: order.orderNumber
-		});
+		const durableTypes = durableTypesByOrder.get(order.id) || new Set<string>();
+		if (!durableTypes.has('order_placed')) {
+			events.push({
+				id: `${order.id}-placed`,
+				type: 'order',
+				title: `Order placed (${order.orderNumber})`,
+				description: 'Order created.',
+				at: order.createdAt.toISOString(),
+				orderId: order.id,
+				orderNumber: order.orderNumber
+			});
+		}
 
 		// Payment source, amount-free so it's safe to show even when amounts are hidden:
 		// a gateway reference means a card was charged; no reference means pure store credit.
@@ -146,17 +168,19 @@ function buildTimeline(input: {
 				: 'Card';
 
 		if (order.paidAt) {
-			events.push({
-				id: `${order.id}-paid`,
-				type: 'payment',
-				title: `Payment confirmed (${order.orderNumber})`,
-				description: input.revenueVisible
-					? `Amount: ₦${Number(order.totalAmount || 0).toLocaleString()} • via ${source}`
-					: `Payment confirmed • via ${source}`,
-				at: order.paidAt.toISOString(),
-				orderId: order.id,
-				orderNumber: order.orderNumber
-			});
+			if (!durableTypes.has('payment_confirmed')) {
+				events.push({
+					id: `${order.id}-paid`,
+					type: 'payment',
+					title: `Payment confirmed (${order.orderNumber})`,
+					description: input.revenueVisible
+						? `Amount: ₦${Number(order.totalAmount || 0).toLocaleString()} • via ${source}`
+						: `Payment confirmed • via ${source}`,
+					at: order.paidAt.toISOString(),
+					orderId: order.id,
+					orderNumber: order.orderNumber
+				});
+			}
 		} else if (FAILED_ORDER_STATUS_SET.has(order.status)) {
 			events.push({
 				id: `${order.id}-payment-outcome`,
@@ -171,13 +195,20 @@ function buildTimeline(input: {
 
 		// Explicit refund event, so a refunded order doesn't just read as "Payment confirmed"
 		// with no follow-up. Numbers (and our other refunds) return funds to store credit.
-		if (order.status === 'refunded' || order.paymentStatus === 'refunded') {
+		if (
+			!durableTypes.has('item_refunded') &&
+			!durableTypes.has('order_refunded') &&
+			(order.status === 'refunded' ||
+				order.paymentStatus === 'refunded' ||
+				order.deliveryStatus === 'refunded' ||
+				order.refundedAmount > 0)
+		) {
 			events.push({
 				id: `${order.id}-refunded`,
 				type: 'payment',
 				title: `Refunded (${order.orderNumber})`,
 				description: input.revenueVisible
-					? `₦${Number(order.totalAmount || 0).toLocaleString()} refunded to store credit`
+					? `₦${Number(order.refundedAmount || order.totalAmount || 0).toLocaleString()} refunded to store credit`
 					: 'Order refunded to store credit.',
 				at: order.updatedAt.toISOString(),
 				orderId: order.id,
@@ -185,6 +216,33 @@ function buildTimeline(input: {
 			});
 		}
 	});
+
+	const eventTitles: Record<string, string> = {
+		order_placed: 'Order placed',
+		payment_confirmed: 'Payment confirmed',
+		status_changed: 'Order status changed',
+		fulfillment_started: 'Fulfillment started',
+		item_delivered: 'Item delivered',
+		item_refunded: 'Item refunded',
+		order_refunded: 'Order refunded',
+		order_completed: 'Order completed'
+	};
+	for (const event of input.orderEvents) {
+		const amount = Math.max(0, Number(event.amount || 0));
+		events.push({
+			id: event.id,
+			type:
+				event.type === 'payment_confirmed' || event.type.includes('refund') ? 'payment' : 'order',
+			title: `${eventTitles[event.type] || getOrderStatusLabel(event.type)} (${event.order.orderNumber})`,
+			description:
+				input.revenueVisible && amount > 0
+					? `${event.description || event.source} • ₦${amount.toLocaleString()}`
+					: event.description || `Recorded by ${event.source}`,
+			at: event.occurredAt.toISOString(),
+			orderId: event.orderId,
+			orderNumber: event.order.orderNumber
+		});
+	}
 
 	input.adminActionLogs.forEach((log) => {
 		events.push({
@@ -225,7 +283,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.then((b) => b.totalAvailable)
 		.catch(() => 0);
 
-	const [user, adminAuditLogs] = await Promise.all([
+	const [user, adminAuditLogs, orderEvents] = await Promise.all([
 		prisma.user.findUnique({
 			where: { id: params.id },
 			select: {
@@ -273,6 +331,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 						deliveryStatus: true,
 						totalAmount: true,
 						storeCreditApplied: true,
+						refundedAmount: true,
 						paymentReference: true,
 						currency: true,
 						createdAt: true,
@@ -321,6 +380,21 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			},
 			orderBy: { createdAt: 'desc' },
 			take: 40
+		}),
+		prisma.orderEvent.findMany({
+			where: { order: { userId: params.id } },
+			select: {
+				id: true,
+				orderId: true,
+				type: true,
+				source: true,
+				amount: true,
+				description: true,
+				occurredAt: true,
+				order: { select: { orderNumber: true } }
+			},
+			orderBy: { occurredAt: 'desc' },
+			take: 200
 		})
 	]);
 
@@ -336,6 +410,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		deliveryStatus: order.deliveryStatus,
 		totalAmount: orderAmountsVisible ? Number(order.totalAmount || 0) : 0,
 		storeCreditApplied: orderAmountsVisible ? Number(order.storeCreditApplied || 0) : 0,
+		refundedAmount: orderAmountsVisible ? Number(order.refundedAmount || 0) : 0,
 		paymentReference: order.paymentReference ?? null,
 		currency: order.currency,
 		createdAt: order.createdAt,
@@ -359,7 +434,11 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		orderCount: paidOrderSummaries.length,
 		paidOrderCount: paidOrderSummaries.length,
 		totalSpent: revenueVisible
-			? paidOrderSummaries.reduce((sum: number, order: OrderSummary) => sum + order.totalAmount, 0)
+			? paidOrderSummaries.reduce(
+					(sum: number, order: OrderSummary) =>
+						sum + Math.max(0, order.totalAmount - order.refundedAmount),
+					0
+				)
 			: 0
 	};
 	const timeline = buildTimeline({
@@ -375,6 +454,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		sessionLogins: user.sessions.map((session: { createdAt: Date }) => session.createdAt),
 		adminActionLogs: user.emailNotifications,
 		adminAuditLogs,
+		orderEvents,
 		revenueVisible
 	});
 

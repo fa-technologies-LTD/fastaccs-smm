@@ -125,7 +125,8 @@ export function findPvapinsCountry(
 		// cannot be relied on. Resolve the two supplier naming differences explicitly.
 		const aliases: Record<string, string[]> = {
 			US: ['usa', 'united states', 'united states of america'],
-			GB: ['uk', 'united kingdom', 'great britain']
+			GB: ['uk', 'united kingdom', 'great britain'],
+			AE: ['uae', 'united arab emirates']
 		};
 		const names = aliases[iso] || [];
 		const byAlias = countries.find((c) =>

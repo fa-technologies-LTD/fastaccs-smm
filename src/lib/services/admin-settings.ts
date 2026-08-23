@@ -2,6 +2,8 @@ import { env } from '$env/dynamic/private';
 import { getAdminEmails } from '$lib/auth/admin';
 import { prisma } from '$lib/prisma';
 import { serverCache } from '$lib/helpers/cache';
+import { buildRevenueOrderWhere } from '$lib/helpers/order-revenue.server';
+import { toNetSales } from '$lib/helpers/order-revenue';
 
 const SETTINGS_CATEGORY = 'settings';
 const BUSINESS_SETTINGS_CACHE_KEY = 'settings:business';
@@ -624,12 +626,13 @@ export async function countHighSpenders(minTotal: number): Promise<number> {
 		by: ['userId'],
 		where: {
 			userId: { not: null },
-			OR: [{ paymentStatus: 'paid' }, { status: { in: ['paid', 'completed'] } }]
+			...buildRevenueOrderWhere()
 		},
-		_sum: { totalAmount: true }
+		_sum: { totalAmount: true, refundedAmount: true }
 	});
 
-	return rows.filter((row) => Number(row._sum.totalAmount || 0) >= minTotal).length;
+	return rows.filter((row) => toNetSales(row._sum.totalAmount, row._sum.refundedAmount) >= minTotal)
+		.length;
 }
 
 export async function getBusinessTimezoneSetting(): Promise<string> {

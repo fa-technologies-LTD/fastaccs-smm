@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
 	findOrder: vi.fn(),
 	updateOrder: vi.fn(),
+	updateManyOrders: vi.fn(),
 	initializeTransaction: vi.fn(),
 	extendOrderReservations: vi.fn(),
 	releaseOrderReservations: vi.fn()
@@ -12,7 +13,8 @@ vi.mock('$lib/prisma', () => ({
 	prisma: {
 		order: {
 			findUnique: mocks.findOrder,
-			update: mocks.updateOrder
+			update: mocks.updateOrder,
+			updateMany: mocks.updateManyOrders
 		}
 	}
 }));
@@ -55,10 +57,11 @@ function pendingOrder(overrides: Record<string, unknown> = {}) {
 		userId: user.id,
 		status: 'pending_payment',
 		paymentStatus: 'pending',
-		paymentReference: 'ORD_EXISTING',
+		paymentReference: null,
 		paymentCheckoutUrl: null,
 		paymentExpiresAt: null,
 		totalAmount: 2500,
+		storeCreditApplied: 0,
 		currency: 'NGN',
 		...overrides
 	};
@@ -79,6 +82,7 @@ async function callInitialize() {
 describe('approved invariant: emergency checkout initialization control', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		mocks.updateManyOrders.mockResolvedValue({ count: 1 });
 		vi.spyOn(console, 'info').mockImplementation(() => undefined);
 		vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 		vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -111,6 +115,7 @@ describe('approved invariant: emergency checkout initialization control', () => 
 		vi.stubEnv('CHECKOUT_DISABLED', 'true');
 		mocks.findOrder.mockResolvedValue(
 			pendingOrder({
+				paymentReference: 'ORD_EXISTING',
 				paymentCheckoutUrl: 'https://checkout.monnify.test/existing',
 				paymentExpiresAt: new Date(Date.now() + 10 * 60 * 1000)
 			})
@@ -149,8 +154,54 @@ describe('approved invariant: emergency checkout initialization control', () => 
 			traceId: 'test-trace'
 		});
 		expect(mocks.initializeTransaction).toHaveBeenCalledOnce();
-		expect(mocks.updateOrder).toHaveBeenCalledOnce();
+		expect(mocks.updateManyOrders).toHaveBeenCalledTimes(2);
 		expect(mocks.extendOrderReservations).toHaveBeenCalledOnce();
+	});
+
+	it('does not create a second payable session when an existing reference is unresolved', async () => {
+		vi.stubEnv('CHECKOUT_DISABLED', 'false');
+		mocks.findOrder.mockResolvedValue(
+			pendingOrder({ paymentReference: 'ORD_ALREADY_CLAIMED', paymentCheckoutUrl: null })
+		);
+
+		const response = await callInitialize();
+		const body = await response.json();
+
+		expect(response.status).toBe(202);
+		expect(body).toMatchObject({ success: false, pending: true, orderId: 'order-123' });
+		expect(mocks.initializeTransaction).not.toHaveBeenCalled();
+		expect(mocks.updateManyOrders).not.toHaveBeenCalled();
+	});
+
+	it('allows only one concurrent request to claim gateway initialization', async () => {
+		vi.stubEnv('CHECKOUT_DISABLED', 'false');
+		mocks.findOrder.mockResolvedValue(pendingOrder());
+		mocks.updateManyOrders.mockResolvedValueOnce({ count: 0 });
+
+		const response = await callInitialize();
+
+		expect(response.status).toBe(202);
+		expect(mocks.initializeTransaction).not.toHaveBeenCalled();
+	});
+
+	it('charges only the cash remainder of a store-credit split payment', async () => {
+		vi.stubEnv('CHECKOUT_DISABLED', 'false');
+		mocks.findOrder.mockResolvedValue(
+			pendingOrder({ paymentReference: null, totalAmount: 2500, storeCreditApplied: 1000 })
+		);
+		mocks.initializeTransaction.mockResolvedValue({
+			success: true,
+			checkoutUrl: 'https://checkout.monnify.test/split',
+			transactionReference: 'MNFY|SPLIT'
+		});
+		mocks.updateOrder.mockResolvedValue(pendingOrder());
+
+		const response = await callInitialize();
+
+		expect(response.status).toBe(200);
+		expect(mocks.initializeTransaction).toHaveBeenCalledWith(
+			expect.objectContaining({ amount: 1500, currency: 'NGN' })
+		);
 	});
 
 	it.each([

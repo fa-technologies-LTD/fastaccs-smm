@@ -16,7 +16,7 @@ vi.mock('$lib/services/payment', () => ({
 vi.mock('$lib/prisma', () => ({
 	prisma: {
 		order: {
-			findFirst: mocks.findOrder
+			findUnique: mocks.findOrder
 		}
 	}
 }));
@@ -92,6 +92,10 @@ describe('approved invariant: Monnify webhook boundary', () => {
 			channel: 'ACCOUNT_TRANSFER',
 			metaData: { orderId: 'order-123' }
 		});
+		mocks.findOrder.mockResolvedValue({
+			id: 'order-123',
+			paymentReference: 'ORD_SUCCESS'
+		});
 		mocks.settleSuccessfulPayment.mockResolvedValue({
 			success: true,
 			orderId: 'order-123',
@@ -120,6 +124,37 @@ describe('approved invariant: Monnify webhook boundary', () => {
 		);
 	});
 
+	it('holds a verified payment when its reference conflicts with the resolved order', async () => {
+		mocks.verifyWebhookSignature.mockReturnValue(true);
+		mocks.verifyPayment.mockResolvedValue({
+			success: true,
+			status: 'PAID',
+			transactionReference: 'MNFY|OLD',
+			paymentReference: 'ORD_OLD',
+			amount: 2500,
+			amountPaid: 2500,
+			currency: 'NGN',
+			metaData: { orderId: 'order-123' }
+		});
+		mocks.findOrder.mockResolvedValue({
+			id: 'order-123',
+			paymentReference: 'ORD_CURRENT'
+		});
+
+		const response = await callWebhook(
+			webhookRequest({
+				transactionReference: 'MNFY|OLD',
+				paymentReference: 'ORD_OLD',
+				paymentStatus: 'PAID'
+			})
+		);
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({ success: false });
+		expect(mocks.settleSuccessfulPayment).not.toHaveBeenCalled();
+		expect(mocks.settleFailedPayment).not.toHaveBeenCalled();
+	});
+
 	it('does not settle a success event that server verification cannot confirm', async () => {
 		mocks.verifyWebhookSignature.mockReturnValue(true);
 		mocks.verifyPayment.mockResolvedValue({
@@ -146,4 +181,3 @@ describe('approved invariant: Monnify webhook boundary', () => {
 		expect(mocks.settleFailedPayment).not.toHaveBeenCalled();
 	});
 });
-
