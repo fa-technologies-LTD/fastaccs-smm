@@ -11,7 +11,10 @@ import { buildRevenueOrderWhere } from '$lib/helpers/order-revenue.server';
 const DEFAULT_TZ_OFFSET_HOURS = 1;
 
 /** Local day-of-week (0=Sun) and hour (0–23) for a UTC timestamp at a given tz offset. */
-export function localDayHour(date: Date, tzOffsetHours = DEFAULT_TZ_OFFSET_HOURS): {
+export function localDayHour(
+	date: Date,
+	tzOffsetHours = DEFAULT_TZ_OFFSET_HOURS
+): {
 	day: number;
 	hour: number;
 } {
@@ -98,6 +101,8 @@ export async function getLeakAnalysis(windowDays = 90): Promise<LeakAnalysis> {
 			select: {
 				status: true,
 				paymentStatus: true,
+				deliveryStatus: true,
+				refundedAmount: true,
 				orderType: true,
 				cancellationReason: true
 			}
@@ -139,7 +144,11 @@ export async function getLeakAnalysis(windowDays = 90): Promise<LeakAnalysis> {
 	}
 	const worst = [...combo.entries()]
 		.filter(([, c]) => c.total >= MIN_SAMPLE)
-		.map(([label, c]) => ({ label, successPct: Math.round((c.received / c.total) * 100), total: c.total }))
+		.map(([label, c]) => ({
+			label,
+			successPct: Math.round((c.received / c.total) * 100),
+			total: c.total
+		}))
 		.sort((a, b) => a.successPct - b.successPct)
 		.slice(0, 6);
 	const numbers = {
@@ -155,9 +164,15 @@ export async function getLeakAnalysis(windowDays = 90): Promise<LeakAnalysis> {
 	let cancelled = 0;
 	for (const o of orders) {
 		const s = (o.status || '').toLowerCase();
-		const t = o.orderType === 'phone' ? 'Numbers' : o.orderType === 'boosting' ? 'Boosting' : 'Accounts';
+		const refundedOrder =
+			s === 'refunded' ||
+			(o.paymentStatus || '').toLowerCase() === 'refunded' ||
+			(o.deliveryStatus || '').toLowerCase() === 'refunded' ||
+			Number(o.refundedAmount || 0) > 0;
+		const t =
+			o.orderType === 'phone' ? 'Numbers' : o.orderType === 'boosting' ? 'Boosting' : 'Accounts';
 		const a = typeAgg.get(t) ?? { refunded: 0, cancelled: 0 };
-		if (s === 'refunded') {
+		if (refundedOrder) {
 			a.refunded += 1;
 			refunded += 1;
 		} else if (s === 'cancelled' || s === 'canceled') {

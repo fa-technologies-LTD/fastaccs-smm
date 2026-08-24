@@ -22,9 +22,9 @@
 	let { data }: { data: PageData } = $props();
 	const canViewRevenue = Boolean(data.canViewRevenue);
 	// Suspending users is owner-only; the assistant lacks users:manage.
-	const canManageUsers = ((data as { adminPermissions?: string[] }).adminPermissions ?? []).includes(
-		'admin:users:manage'
-	);
+	const canManageUsers = (
+		(data as { adminPermissions?: string[] }).adminPermissions ?? []
+	).includes('admin:users:manage');
 	let hideMonetaryAmounts = $state(false);
 
 	let searchQuery = $state('');
@@ -362,7 +362,7 @@
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted)">
-						Total Revenue
+						Net Sales
 					</p>
 					<p class="mt-1 text-xl font-bold" style="color: var(--status-success);">
 						{formatAdminAmount(stats.totalRevenue)}
@@ -588,8 +588,9 @@
 										<Wallet class="h-4 w-4" style="color: var(--text-dim);" />
 										<span
 											class="text-sm"
-											style="color: {user.storeCreditBalance > 0 ? 'var(--text)' : 'var(--text-dim)'};"
-											>{formatPrice(user.storeCreditBalance || 0)}</span
+											style="color: {user.storeCreditBalance > 0
+												? 'var(--text)'
+												: 'var(--text-dim)'};">{formatPrice(user.storeCreditBalance || 0)}</span
 										>
 									</div>
 								</td>

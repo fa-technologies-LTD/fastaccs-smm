@@ -24,6 +24,7 @@ import { releaseExpiredOrderReservations } from '$lib/services/order-reservation
 import { releaseExpiredExactPreviewReservations } from '$lib/services/exact-preview';
 import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 import { createPaymentTraceId, logPaymentEvent } from '$lib/server/payment-observability';
+import { isVerifiedPaymentBoundToOrder } from '$lib/helpers/payment-binding';
 
 interface ReconcileOptions {
 	limit?: number;
@@ -50,6 +51,12 @@ interface ReconcileBacklogSummary extends ReconcileSummary {
 const DEFAULT_LIMIT = 100;
 const DEFAULT_STALE_MINUTES = 10;
 const DEFAULT_EXPIRE_MINUTES = getPendingPaymentExpireMinutes();
+
+function pickString(value: unknown): string | null {
+	if (typeof value !== 'string') return null;
+	const trimmed = value.trim();
+	return trimmed || null;
+}
 
 function hasMonnifyConfig(): boolean {
 	return Boolean(env.MONNIFY_API_KEY && env.MONNIFY_SECRET_KEY && env.MONNIFY_BASE_URL);
@@ -205,6 +212,34 @@ export async function reconcilePendingPayments(
 		});
 
 		if (verificationResult.success || isSuccessPaymentStatus(gatewayStatus)) {
+			const verifiedPaymentReference =
+				pickString(verificationResult.paymentReference) || order.paymentReference;
+			const metadataOrderId = pickString(verificationResult.metaData?.orderId);
+			if (
+				!isVerifiedPaymentBoundToOrder({
+					orderId: order.id,
+					metadataOrderId,
+					storedPaymentReference: order.paymentReference,
+					verifiedPaymentReference
+				})
+			) {
+				logPaymentEvent('error', 'reconcile.payment_order_binding_mismatch', {
+					traceId,
+					orderId: order.id,
+					paymentReference: verifiedPaymentReference,
+					errorCode: 'PAYMENT_ORDER_BINDING_MISMATCH'
+				});
+				if (!dryRun) {
+					void sendCriticalAdminAlert({
+						title: 'Payment reconciliation held a mismatched payment',
+						message: `Order ${order.orderNumber} verified a payment reference that did not match its stored payment. No settlement or fulfilment was released.`,
+						source: 'payments.reconcile',
+						dedupeKey: `payment-reconcile-binding:${order.id}`
+					}).catch(() => {});
+				}
+				summary.skipped += 1;
+				continue;
+			}
 			if (dryRun) {
 				summary.paid += 1;
 			} else {

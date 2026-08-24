@@ -4,6 +4,8 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { QUEUED_MARKETING_STALE_MS, sendQueuedMarketingEmail } from './email';
 import { getHighSpenderMinTotalSetting } from './admin-settings';
+import { buildRevenueOrderWhere } from '$lib/helpers/order-revenue.server';
+import { toNetSales } from '$lib/helpers/order-revenue';
 
 export type BroadcastAudience =
 	| 'all_verified'
@@ -67,9 +69,7 @@ export interface BroadcastDetails extends BroadcastProgress {
 }
 
 const BROADCAST_TYPE = 'admin_broadcast';
-const SUCCESSFUL_ORDER_FILTER: Prisma.OrderWhereInput = {
-	OR: [{ paymentStatus: 'paid' }, { status: { in: ['paid', 'completed'] } }]
-};
+const SUCCESSFUL_ORDER_FILTER: Prisma.OrderWhereInput = buildRevenueOrderWhere();
 const FAILED_ORDER_FILTER: Prisma.OrderWhereInput = {
 	OR: [
 		{ paymentStatus: { in: ['failed', 'cancelled'] } },
@@ -247,7 +247,7 @@ async function getSuccessfulOrderStatsByUser(): Promise<
 			...SUCCESSFUL_ORDER_FILTER
 		},
 		_count: { _all: true },
-		_sum: { totalAmount: true }
+		_sum: { totalAmount: true, refundedAmount: true }
 	});
 
 	return rows
@@ -255,7 +255,7 @@ async function getSuccessfulOrderStatsByUser(): Promise<
 		.map((row) => ({
 			userId: row.userId,
 			count: row._count._all,
-			totalAmount: Number(row._sum.totalAmount || 0)
+			totalAmount: toNetSales(row._sum.totalAmount, row._sum.refundedAmount)
 		}));
 }
 

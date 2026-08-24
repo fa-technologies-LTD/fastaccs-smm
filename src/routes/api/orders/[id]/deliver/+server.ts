@@ -8,6 +8,7 @@ import type { Decimal } from '@prisma/client/runtime/library';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { getCanonicalCredentialEntries } from '$lib/helpers/credential-contract';
 import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
+import { recordOrderEventBestEffort } from '$lib/services/order-events';
 
 // Type definitions for email generation
 interface OrderForEmail {
@@ -146,6 +147,15 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		});
 
 		invalidateAdminStatsCache();
+		recordOrderEventBestEffort({
+			orderId,
+			type: 'item_delivered',
+			source: 'admin.delivery',
+			actorUserId: locals.user.id,
+			description: `${totalAllocated} account${totalAllocated === 1 ? '' : 's'} delivered`,
+			idempotencyKey: `delivery:accounts:${orderId}`,
+			metadata: { accountsDelivered: totalAllocated, deliveryMethod: requestedDeliveryMethod }
+		});
 
 		return json({
 			success: true,

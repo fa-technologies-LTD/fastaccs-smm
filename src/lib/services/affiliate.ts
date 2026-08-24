@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type { Cookies } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
-import { SC_REDEEM_EARNED } from '$lib/services/store-credit';
+import { SC_AFFILIATE_ADJUSTMENT, SC_REDEEM_EARNED } from '$lib/services/store-credit';
 import {
 	sendAffiliateUnlockEmailIfNeeded,
 	sendFirstStoreCreditEmailIfNeeded
@@ -16,6 +16,8 @@ import {
 	computeVestsAt,
 	detectSharedPayoutBank
 } from '$lib/services/affiliate-vesting';
+import { buildRevenueOrderWhere, toNetSales } from '$lib/helpers/order-revenue.server';
+import { isRevenueOrder } from '$lib/helpers/order-revenue';
 
 export const AFFILIATE_REFERRAL_COOKIE = 'fa_aff_ref';
 
@@ -297,10 +299,11 @@ export function getPendingAffiliatePopup(input: {
 	// Payout-progress milestones (repurposed from the retired spend milestones): show
 	// how close the affiliate is to the ₦-payout minimum, at 80% and 30%. We reuse the
 	// existing progress_80 / progress_50 popup slots; the 95% slot is retired.
-	const payoutMilestones: Array<{ percent: number; type: AffiliatePopupType; seen: Date | null }> = [
-		{ percent: 80, type: 'progress_80', seen: input.seenAt.progress80 },
-		{ percent: 30, type: 'progress_50', seen: input.seenAt.progress50 }
-	];
+	const payoutMilestones: Array<{ percent: number; type: AffiliatePopupType; seen: Date | null }> =
+		[
+			{ percent: 80, type: 'progress_80', seen: input.seenAt.progress80 },
+			{ percent: 30, type: 'progress_50', seen: input.seenAt.progress50 }
+		];
 	const milestone = payoutMilestones.find(
 		(candidate) => input.payoutProgressPercent >= candidate.percent && !candidate.seen
 	);
@@ -455,6 +458,16 @@ function mapStoreCreditTitle(type: string, status: string): string {
 	const normalizedStatus = String(status || '')
 		.trim()
 		.toLowerCase();
+	if (normalizedType === SC_AFFILIATE_ADJUSTMENT) {
+		return normalizedStatus === AFFILIATE_LEDGER_STATUS.reversed
+			? 'Commission adjustment reversed'
+			: 'Commission adjusted after refund';
+	}
+	if (normalizedType === SC_REDEEM_EARNED) {
+		return normalizedStatus === AFFILIATE_LEDGER_STATUS.reversed
+			? 'Store credit restored'
+			: 'Store credit used on an order';
+	}
 
 	if (normalizedType === AFFILIATE_LEDGER_PAYOUT_TYPE) {
 		if (normalizedStatus === AFFILIATE_LEDGER_STATUS.requested) return 'Payout requested';
@@ -485,7 +498,12 @@ async function getAffiliateLedgerSummary(
 		where: {
 			userId,
 			type: {
-				in: [AFFILIATE_LEDGER_CREDIT_TYPE, AFFILIATE_LEDGER_PAYOUT_TYPE, SC_REDEEM_EARNED]
+				in: [
+					AFFILIATE_LEDGER_CREDIT_TYPE,
+					AFFILIATE_LEDGER_PAYOUT_TYPE,
+					SC_REDEEM_EARNED,
+					SC_AFFILIATE_ADJUSTMENT
+				]
 			}
 		},
 		_sum: {
@@ -525,7 +543,10 @@ async function getAffiliateLedgerSummary(
 			creditByStatus[status] += amount;
 		} else if (String(row.type) === AFFILIATE_LEDGER_PAYOUT_TYPE) {
 			payoutByStatus[status] += amount;
-		} else if (String(row.type) === SC_REDEEM_EARNED && status === 'available') {
+		} else if (
+			(String(row.type) === SC_REDEEM_EARNED || String(row.type) === SC_AFFILIATE_ADJUSTMENT) &&
+			status === 'available'
+		) {
 			earnedRedeemedOnSite += amount;
 		}
 	}
@@ -567,34 +588,25 @@ async function countSuccessfulOrdersForAffiliatePair(
 	affiliateUserId: string
 ): Promise<number> {
 	return prisma.order.count({
-		where: {
-			userId: buyerUserId,
-			affiliateUserId,
-			OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
-		}
+		where: { AND: [buildRevenueOrderWhere(), { userId: buyerUserId, affiliateUserId }] }
 	});
 }
 
 async function countLifetimeCompletedSpend(userId: string): Promise<number> {
 	const aggregate = await prisma.order.aggregate({
-		where: {
-			userId,
-			OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
-		},
+		where: { AND: [buildRevenueOrderWhere(), { userId }] },
 		_sum: {
-			totalAmount: true
+			totalAmount: true,
+			refundedAmount: true
 		}
 	});
 
-	return Number(aggregate._sum.totalAmount || 0);
+	return toNetSales(aggregate._sum.totalAmount, aggregate._sum.refundedAmount);
 }
 
 async function countCompletedOrders(userId: string): Promise<number> {
 	return prisma.order.count({
-		where: {
-			userId,
-			OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
-		}
+		where: { AND: [buildRevenueOrderWhere(), { userId }] }
 	});
 }
 
@@ -1291,10 +1303,7 @@ export async function lockReferralAttributionForUser(params: {
 
 	if (params.source !== 'signup' && params.source !== 'google_signup') {
 		const priorPaidOrders = await prisma.order.count({
-			where: {
-				userId: params.referredUserId,
-				OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
-			}
+			where: { AND: [buildRevenueOrderWhere(), { userId: params.referredUserId }] }
 		});
 		if (priorPaidOrders > 0) {
 			return { locked: false, alreadyLocked: false, reason: 'buyer_has_prior_paid_orders' };
@@ -1350,8 +1359,7 @@ export async function lockReferralAttributionForUser(params: {
 				userId: attribution.referrerUserId,
 				type: 'affiliate_referral_signup',
 				title: 'New referral joined',
-				message:
-					'A new user signed up through your affiliate code. Keep sharing to grow your Cash.'
+				message: 'A new user signed up through your affiliate code. Keep sharing to grow your Cash.'
 			}
 		})
 		.catch((error) => {
@@ -1641,16 +1649,13 @@ export async function getSuperReferralProgress(
 ): Promise<{ orderCount: number; cumulativeSpend: number; activated: boolean }> {
 	const paidOrders = await prisma.order.findMany({
 		where: {
-			userId: referredUserId,
-			affiliateUserId: superUserId,
-			OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }],
-			NOT: { OR: [{ status: 'refunded' }, { paymentStatus: 'refunded' }] }
+			AND: [buildRevenueOrderWhere(), { userId: referredUserId, affiliateUserId: superUserId }]
 		},
-		select: { totalAmount: true }
+		select: { totalAmount: true, refundedAmount: true }
 	});
 	const orderCount = paidOrders.length;
 	const cumulativeSpend = paidOrders.reduce(
-		(sum, o) => sum + Math.max(0, Number(o.totalAmount || 0)),
+		(sum, o) => sum + toNetSales(o.totalAmount, o.refundedAmount),
 		0
 	);
 	const activated =
@@ -1880,6 +1885,8 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 				totalAmount: true,
 				status: true,
 				paymentStatus: true,
+				deliveryStatus: true,
+				refundedAmount: true,
 				orderItems: {
 					select: {
 						quantity: true,
@@ -1907,9 +1914,7 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 			return { success: true, storeCreditAwarded: 0 };
 		}
 
-		if (
-			!(order.status === 'paid' || order.status === 'completed' || order.paymentStatus === 'paid')
-		) {
+		if (!isRevenueOrder(order)) {
 			return { success: true, storeCreditAwarded: 0 };
 		}
 
@@ -2015,6 +2020,8 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 						buyerUserId: order.userId,
 						affiliateCode: order.affiliateCode,
 						awardedFrom: 'referral_order',
+						originalAwardAmount: creditAmount,
+						orderRefundedAmount: Number(order.refundedAmount || 0),
 						vestsAt: rewardVestsAt.toISOString(),
 						lifecycleStatus: AFFILIATE_LEDGER_STATUS.pending,
 						...(suspectedSelfReferral ? { suspectedSelfReferral: true } : {})
@@ -2030,7 +2037,7 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 				},
 				data: {
 					totalReferrals: { increment: 1 },
-					totalSales: { increment: Number(order.totalAmount || 0) }
+					totalSales: { increment: toNetSales(order.totalAmount, order.refundedAmount) }
 				}
 			});
 
@@ -2061,6 +2068,29 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 			success: false,
 			error: 'Failed to record affiliate store credit.'
 		};
+	}
+}
+
+/** Rebuild the cached sales total for one affiliate from canonical net retained orders. */
+export async function reconcileAffiliateSales(
+	affiliateUserId: string | null | undefined
+): Promise<void> {
+	if (!affiliateUserId) return;
+	const programs = await prisma.affiliateProgram.findMany({
+		where: { userId: affiliateUserId },
+		select: { id: true, affiliateCode: true }
+	});
+	for (const program of programs) {
+		const aggregate = await prisma.order.aggregate({
+			where: {
+				AND: [buildRevenueOrderWhere(), { affiliateUserId, affiliateCode: program.affiliateCode }]
+			},
+			_sum: { totalAmount: true, refundedAmount: true }
+		});
+		await prisma.affiliateProgram.update({
+			where: { id: program.id },
+			data: { totalSales: toNetSales(aggregate._sum.totalAmount, aggregate._sum.refundedAmount) }
+		});
 	}
 }
 
@@ -2168,16 +2198,12 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 		await Promise.all([
 			prisma.order.count({
 				where: {
-					affiliateUserId: userId,
-					userId: { not: null },
-					OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
+					AND: [buildRevenueOrderWhere(), { affiliateUserId: userId, userId: { not: null } }]
 				}
 			}),
 			prisma.order.findMany({
 				where: {
-					affiliateUserId: userId,
-					userId: { not: null },
-					OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
+					AND: [buildRevenueOrderWhere(), { affiliateUserId: userId, userId: { not: null } }]
 				},
 				select: {
 					userId: true
@@ -2241,11 +2267,10 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 			referredUserIdList.length
 				? prisma.order.findMany({
 						where: {
-							affiliateUserId: userId,
-							userId: {
-								in: referredUserIdList
-							},
-							OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }]
+							AND: [
+								buildRevenueOrderWhere(),
+								{ affiliateUserId: userId, userId: { in: referredUserIdList } }
+							]
 						},
 						select: {
 							userId: true,
@@ -2257,9 +2282,11 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 				? prisma.walletTransaction.findMany({
 						where: {
 							userId,
-							type: AFFILIATE_LEDGER_CREDIT_TYPE
+							type: { in: [AFFILIATE_LEDGER_CREDIT_TYPE, SC_AFFILIATE_ADJUSTMENT] },
+							status: { notIn: ['reversed', 'failed', 'cancelled'] }
 						},
 						select: {
+							type: true,
 							amount: true,
 							createdAt: true,
 							metadata: true
@@ -2270,7 +2297,12 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 				where: {
 					userId,
 					type: {
-						in: [AFFILIATE_LEDGER_CREDIT_TYPE, AFFILIATE_LEDGER_PAYOUT_TYPE]
+						in: [
+							AFFILIATE_LEDGER_CREDIT_TYPE,
+							AFFILIATE_LEDGER_PAYOUT_TYPE,
+							SC_REDEEM_EARNED,
+							SC_AFFILIATE_ADJUSTMENT
+						]
 					}
 				},
 				select: {
@@ -2320,7 +2352,8 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 		if (!buyerUserId || !referredUserIds.has(buyerUserId)) continue;
 
 		const current = creditByUser.get(buyerUserId) || { total: 0, lastCreditAt: null };
-		current.total += Math.max(0, Number(tx.amount || 0));
+		const amount = Math.max(0, Number(tx.amount || 0));
+		current.total += tx.type === SC_AFFILIATE_ADJUSTMENT ? -amount : amount;
 		if (!current.lastCreditAt || tx.createdAt > current.lastCreditAt) {
 			current.lastCreditAt = tx.createdAt;
 		}
@@ -2362,7 +2395,12 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 	const recentStoreCreditActivity: AffiliateRecentStoreCreditActivity[] = recentLedgerRows.map(
 		(row) => {
 			const amount = Math.max(0, Number(row.amount || 0));
-			const isCredit = row.type === AFFILIATE_LEDGER_CREDIT_TYPE;
+			const status = String(row.status || '')
+				.trim()
+				.toLowerCase();
+			const isCredit =
+				(row.type === AFFILIATE_LEDGER_CREDIT_TYPE && status !== 'reversed') ||
+				(row.type !== AFFILIATE_LEDGER_CREDIT_TYPE && status === 'reversed');
 			return {
 				id: row.id,
 				title: mapStoreCreditTitle(row.type, row.status),
@@ -2386,13 +2424,13 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 				? prisma.order.groupBy({
 						by: ['userId'],
 						where: {
-							userId: { in: referredUserIdList },
-							affiliateUserId: userId,
-							OR: [{ status: { in: ['paid', 'completed'] } }, { paymentStatus: 'paid' }],
-							NOT: { OR: [{ status: 'refunded' }, { paymentStatus: 'refunded' }] }
+							AND: [
+								buildRevenueOrderWhere(),
+								{ userId: { in: referredUserIdList }, affiliateUserId: userId }
+							]
 						},
 						_count: { _all: true },
-						_sum: { totalAmount: true }
+						_sum: { totalAmount: true, refundedAmount: true }
 					})
 				: Promise.resolve([]),
 			prisma.walletTransaction.findMany({
@@ -2406,7 +2444,7 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 			if (!row.userId) continue;
 			orderAggByUser.set(row.userId, {
 				orderCount: row._count._all,
-				cumulativeSpend: Math.max(0, Number(row._sum.totalAmount || 0))
+				cumulativeSpend: toNetSales(row._sum.totalAmount, row._sum.refundedAmount)
 			});
 		}
 

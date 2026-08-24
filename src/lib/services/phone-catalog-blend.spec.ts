@@ -24,6 +24,7 @@ vi.mock('$lib/helpers/phone-tier-config', () => ({
 
 import {
 	blendedBasisCents,
+	hasPublishablePvapinsEvidence,
 	isThinTier,
 	MAJOR_SERVICES,
 	PVAPINS_ONLY_MARKET_CODES,
@@ -37,11 +38,51 @@ describe('curated catalog boundaries', () => {
 	});
 
 	it('keeps pvapins-only origination narrower than the storefront market set', () => {
-		expect([...PVAPINS_ONLY_MARKET_CODES].sort()).toEqual(['CA', 'GB', 'US']);
+		expect([...PVAPINS_ONLY_MARKET_CODES].sort()).toEqual([
+			'AE',
+			'AU',
+			'BR',
+			'CA',
+			'DE',
+			'FR',
+			'GB',
+			'GH',
+			'IN',
+			'NG',
+			'PH',
+			'US',
+			'ZA'
+		]);
 		for (const code of PVAPINS_ONLY_MARKET_CODES) {
 			expect(STOREFRONT_MARKET_CODES.has(code)).toBe(true);
 		}
-		expect(STOREFRONT_MARKET_CODES.size).toBe(9);
+		expect(STOREFRONT_MARKET_CODES.size).toBe(19);
+	});
+
+	it('requires real rent or delivery evidence before a PVAPins-only tier can publish', () => {
+		const discovered = {
+			serviceId: 507,
+			status: 'discovered',
+			releaseConfirmed: null,
+			metadata: { countryCode: 'NG' }
+		};
+		const unresolvedRent = {
+			...discovered,
+			status: 'rentable',
+			releaseConfirmed: false
+		};
+		const releasedRent = {
+			...discovered,
+			status: 'rentable',
+			releaseConfirmed: true
+		};
+
+		expect(hasPublishablePvapinsEvidence(507, 'NG', [discovered, unresolvedRent])).toBe(false);
+		expect(hasPublishablePvapinsEvidence(507, 'ng', [releasedRent])).toBe(true);
+		expect(
+			hasPublishablePvapinsEvidence(507, 'NG', [{ ...discovered, status: 'delivery_proven' }])
+		).toBe(true);
+		expect(hasPublishablePvapinsEvidence(507, 'GH', [releasedRent])).toBe(false);
 	});
 });
 

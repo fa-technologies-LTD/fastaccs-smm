@@ -131,6 +131,14 @@ export const AUTOMATION_JOBS = {
 		lockTimeoutMinutes: 10,
 		expectedIntervalMinutes: 5
 	},
+	'numbers-catalog-probe': {
+		name: 'numbers-catalog-probe',
+		path: '/api/internal/cron/numbers-catalog-probe',
+		schedule: 'every 2 hours',
+		risk: 'financial',
+		lockTimeoutMinutes: 10,
+		expectedIntervalMinutes: 120
+	},
 	'promo-reminder': {
 		name: 'promo-reminder',
 		path: '/api/internal/cron/promo-reminder',

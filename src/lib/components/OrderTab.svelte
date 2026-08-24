@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { normalizePaymentStatus } from '$lib/helpers/payment-status';
+	import { toNetSales } from '$lib/helpers/order-revenue';
 	import {
 		getTierDeliveryModeLabel,
 		normalizeTierDeliveryMode,
@@ -31,6 +32,7 @@
 		id: string;
 		orderNumber?: string | null;
 		totalAmount?: number | string | null;
+		refundedAmount?: number | string | null;
 		status?: string | null;
 		paymentStatus?: string | null;
 		paymentReference?: string | null;
@@ -102,6 +104,19 @@
 	} {
 		const orderStatus = normalizeLower(order.status);
 		const paymentStatus = normalizeLower(order.paymentStatus);
+		const deliveryStatus = normalizeLower(order.deliveryStatus);
+
+		// Refund evidence is terminal and wins over stale paid/completed markers.
+		if (
+			orderStatus === 'refunded' ||
+			paymentStatus === 'refunded' ||
+			deliveryStatus === 'refunded'
+		) {
+			return { label: 'Refunded to store credit', tone: 'failure' };
+		}
+		if (Number(order.refundedAmount || 0) > 0) {
+			return { label: 'Partially refunded', tone: 'pending' };
+		}
 
 		if (
 			['paid', 'completed'].includes(orderStatus) ||
@@ -117,7 +132,10 @@
 			return { label: 'Payment Failed', tone: 'failure' };
 		}
 
-		if (['expired', 'abandoned'].includes(orderStatus) || ['expired', 'abandoned'].includes(paymentStatus)) {
+		if (
+			['expired', 'abandoned'].includes(orderStatus) ||
+			['expired', 'abandoned'].includes(paymentStatus)
+		) {
 			return { label: 'Payment Expired', tone: 'failure' };
 		}
 
@@ -130,10 +148,6 @@
 
 		// A refunded order is terminal — it must NOT read as "Awaiting Payment" (which would
 		// wrongly show Resume/Refresh). Numbers auto-refund to store credit on a failed rent.
-		if (['refunded'].includes(orderStatus) || ['refunded', 'refund'].includes(paymentStatus)) {
-			return { label: 'Refunded to store credit', tone: 'failure' };
-		}
-
 		if (orderStatus === 'pending_payment') {
 			if (paymentStatus === 'processing') {
 				return { label: 'Confirming with Monnify', tone: 'pending' };
@@ -527,115 +541,123 @@
 				<p class="text-sm" style="color: var(--text-muted);">No orders match this filter.</p>
 			</div>
 		{:else}
-		<div class="divide-y divide-[var(--border)]">
-			{#each filteredOrders as order (order.id)}
-				<div
-					id={`order-${order.id}`}
-					class="p-4 sm:p-6 {focusOrderId === order.id ? 'rounded-[var(--r-sm)]' : ''}"
-					style={focusOrderId === order.id
-						? 'border: 1px solid rgba(5,212,113,0.35); background: rgba(5,212,113,0.06);'
-						: undefined}
-				>
-					<div class="mb-3 flex items-center justify-between gap-4">
-						<div class="flex min-w-0 flex-1 items-center">
-							{#if getPaymentState(order).tone === 'success'}
-								<CheckCircle class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--primary);" />
-							{:else if getPaymentState(order).label === 'Confirming with Monnify'}
-								<RefreshCw class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--link);" />
-							{:else}
-								<Clock class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--status-warning);" />
-							{/if}
-							<div class="min-w-0 flex-1">
+			<div class="divide-y divide-[var(--border)]">
+				{#each filteredOrders as order (order.id)}
+					<div
+						id={`order-${order.id}`}
+						class="p-4 sm:p-6 {focusOrderId === order.id ? 'rounded-[var(--r-sm)]' : ''}"
+						style={focusOrderId === order.id
+							? 'border: 1px solid rgba(5,212,113,0.35); background: rgba(5,212,113,0.06);'
+							: undefined}
+					>
+						<div class="mb-3 flex items-center justify-between gap-4">
+							<div class="flex min-w-0 flex-1 items-center">
+								{#if getPaymentState(order).tone === 'success'}
+									<CheckCircle class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--primary);" />
+								{:else if getPaymentState(order).label === 'Confirming with Monnify'}
+									<RefreshCw class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--link);" />
+								{:else}
+									<Clock class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--status-warning);" />
+								{/if}
+								<div class="min-w-0 flex-1">
+									<div
+										class="flex items-center gap-1.5 truncate font-semibold"
+										style="color: var(--text); font-family: var(--font-head);"
+									>
+										{#if isNumbersOrder(order)}
+											<Phone class="h-3.5 w-3.5 flex-shrink-0" style="color: #38bdf8;" />
+										{:else if isBoostingOrder(order)}
+											<Zap class="h-3.5 w-3.5 flex-shrink-0" style="color: #a78bfa;" />
+										{/if}
+										<span class="truncate">{getDisplayOrderNumber(order)}</span>
+									</div>
+									<div class="text-xs sm:text-sm" style="color: var(--text-dim);">
+										{formatOrderDate(order)}
+									</div>
+								</div>
+							</div>
+							<div class="flex-shrink-0 text-right">
 								<div
-									class="flex items-center gap-1.5 truncate font-semibold"
+									class="font-semibold"
 									style="color: var(--text); font-family: var(--font-head);"
 								>
-									{#if isNumbersOrder(order)}
-										<Phone class="h-3.5 w-3.5 flex-shrink-0" style="color: #38bdf8;" />
-									{:else if isBoostingOrder(order)}
-										<Zap class="h-3.5 w-3.5 flex-shrink-0" style="color: #a78bfa;" />
-									{/if}
-									<span class="truncate">{getDisplayOrderNumber(order)}</span>
+									₦{toNetSales(order.totalAmount, order.refundedAmount).toLocaleString()}
 								</div>
-								<div class="text-xs sm:text-sm" style="color: var(--text-dim);">
-									{formatOrderDate(order)}
+								{#if Number(order.refundedAmount || 0) > 0}
+									<div class="text-xs" style="color: var(--text-dim);">
+										₦{Number(order.refundedAmount || 0).toLocaleString()} refunded
+									</div>
+								{/if}
+								<div class="text-xs sm:text-sm" style="color: var(--text-muted);">
+									{getPaymentState(order).label}
 								</div>
 							</div>
 						</div>
-						<div class="flex-shrink-0 text-right">
-							<div class="font-semibold" style="color: var(--text); font-family: var(--font-head);">
-								₦{Number(order.totalAmount || 0).toLocaleString()}
-							</div>
-							<div class="text-xs sm:text-sm" style="color: var(--text-muted);">
-								{getPaymentState(order).label}
-							</div>
-						</div>
-					</div>
 
-					<div class="mb-4 space-y-2">
-						{#each getOrderItems(order) as item, index (item.id || item.categoryId || `${order.id}-${index}`)}
-							<div
-								class="flex items-start justify-between gap-3 text-sm"
-								style="color: var(--text-muted);"
-							>
-								<span class="font-medium">{item.productName || item.type || 'Order item'}</span>
-								<span class="text-right text-xs sm:text-sm" style="color: var(--text-dim);">
-									Qty {item.quantity || 1}
-								</span>
-							</div>
-						{/each}
-					</div>
-
-					<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-						<div class="text-xs sm:text-sm" style="color: var(--text-dim);">
-							Fulfillment: {getFulfillmentState(order)}
-						</div>
-						<div class="grid grid-cols-2 gap-2 text-sm sm:flex sm:flex-row sm:text-base">
-							{#if isPaymentRecheckable(order)}
-								<button
-									type="button"
-									onclick={() => resumePayment(order)}
-									disabled={resumingPaymentByOrderId[order.id]}
-									class="col-span-2 cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-1 sm:px-4 sm:text-sm"
-									style="background: var(--btn-primary-gradient); border: 1px solid var(--btn-primary-border); color: var(--btn-primary-text);"
+						<div class="mb-4 space-y-2">
+							{#each getOrderItems(order) as item, index (item.id || item.categoryId || `${order.id}-${index}`)}
+								<div
+									class="flex items-start justify-between gap-3 text-sm"
+									style="color: var(--text-muted);"
 								>
-									{resumingPaymentByOrderId[order.id] ? 'Opening...' : 'Resume payment'}
+									<span class="font-medium">{item.productName || item.type || 'Order item'}</span>
+									<span class="text-right text-xs sm:text-sm" style="color: var(--text-dim);">
+										Qty {item.quantity || 1}
+									</span>
+								</div>
+							{/each}
+						</div>
+
+						<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+							<div class="text-xs sm:text-sm" style="color: var(--text-dim);">
+								Fulfillment: {getFulfillmentState(order)}
+							</div>
+							<div class="grid grid-cols-2 gap-2 text-sm sm:flex sm:flex-row sm:text-base">
+								{#if isPaymentRecheckable(order)}
+									<button
+										type="button"
+										onclick={() => resumePayment(order)}
+										disabled={resumingPaymentByOrderId[order.id]}
+										class="col-span-2 cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-1 sm:px-4 sm:text-sm"
+										style="background: var(--btn-primary-gradient); border: 1px solid var(--btn-primary-border); color: var(--btn-primary-text);"
+									>
+										{resumingPaymentByOrderId[order.id] ? 'Opening...' : 'Resume payment'}
+									</button>
+									<button
+										type="button"
+										onclick={() => checkPaymentStatus(order)}
+										disabled={checkingPaymentByOrderId[order.id]}
+										class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
+										style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);"
+									>
+										{checkingPaymentByOrderId[order.id] ? 'Checking...' : 'Refresh payment'}
+									</button>
+								{/if}
+								<!-- Order Again is the primary action only when there's no Resume payment. -->
+								<button
+									onclick={() =>
+										isBoostingOrder(order) ? reorderBoostingOrder(order) : reorderItems(order)}
+									data-sveltekit-preload-data="hover"
+									class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 sm:px-4 sm:text-sm"
+									style={isPaymentRecheckable(order)
+										? 'background: var(--surface-2); border: 1px solid var(--border); color: var(--text);'
+										: 'background: var(--btn-primary-gradient); border: 1px solid var(--btn-primary-border); color: var(--btn-primary-text);'}
+								>
+									Order Again
 								</button>
 								<button
-									type="button"
-									onclick={() => checkPaymentStatus(order)}
-									disabled={checkingPaymentByOrderId[order.id]}
-									class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
+									onclick={() => viewOrderDetails(order.id)}
+									data-sveltekit-preload-data="hover"
+									class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 sm:px-4 sm:text-sm"
 									style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);"
 								>
-									{checkingPaymentByOrderId[order.id] ? 'Checking...' : 'Refresh payment'}
+									View Details
 								</button>
-							{/if}
-							<!-- Order Again is the primary action only when there's no Resume payment. -->
-							<button
-								onclick={() =>
-									isBoostingOrder(order) ? reorderBoostingOrder(order) : reorderItems(order)}
-								data-sveltekit-preload-data="hover"
-								class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 sm:px-4 sm:text-sm"
-								style={isPaymentRecheckable(order)
-									? 'background: var(--surface-2); border: 1px solid var(--border); color: var(--text);'
-									: 'background: var(--btn-primary-gradient); border: 1px solid var(--btn-primary-border); color: var(--btn-primary-text);'}
-							>
-								Order Again
-							</button>
-							<button
-								onclick={() => viewOrderDetails(order.id)}
-								data-sveltekit-preload-data="hover"
-								class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 sm:px-4 sm:text-sm"
-								style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);"
-							>
-								View Details
-							</button>
+							</div>
 						</div>
 					</div>
-				</div>
-			{/each}
-		</div>
+				{/each}
+			</div>
 		{/if}
 		{#if nextCursor || loadMoreError}
 			<div class="border-t border-[var(--border)] p-4 text-center">

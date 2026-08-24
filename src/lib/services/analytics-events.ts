@@ -11,9 +11,13 @@ export const ANALYTICS_FUNNEL_STEPS = [
 	{ type: 'purchase', label: 'Purchase' }
 ] as const;
 
-export const ANALYTICS_EVENT_TYPES = ANALYTICS_FUNNEL_STEPS.map((step) => step.type);
+export const ANALYTICS_PRODUCT_EVENT_TYPES = ['numbers_service_open'] as const;
+export const ANALYTICS_EVENT_TYPES = [
+	...ANALYTICS_FUNNEL_STEPS.map((step) => step.type),
+	...ANALYTICS_PRODUCT_EVENT_TYPES
+] as const;
 
-export type AnalyticsEventType = (typeof ANALYTICS_FUNNEL_STEPS)[number]['type'];
+export type AnalyticsEventType = (typeof ANALYTICS_EVENT_TYPES)[number];
 
 const MAX_PATH_LENGTH = 300;
 

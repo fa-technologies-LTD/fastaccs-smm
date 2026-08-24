@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { REVENUE_ORDER_STATUSES, REFUNDED_MARKER } from './order-revenue';
+import { toExternalCash, toNetSales } from './order-revenue';
 
 // Orders an owner admin releases to a profile (self-offload of specific logs)
 // carry this payment channel so they are excluded from ALL revenue/analytics —
@@ -10,14 +11,18 @@ function buildDateWindow(gte: Date, lte?: Date): { gte: Date; lte?: Date } {
 	return lte ? { gte, lte } : { gte };
 }
 
-// Cash revenue = order value MINUS store credit applied. Store credit (refunds,
-// affiliate earnings, gifts) is not new cash, so it must not count as revenue.
+// External cash received = order value MINUS store credit applied. Store credit
+// (refunds, affiliate earnings, gifts) is not new cash intake.
 // Callers add `storeCreditApplied: true` alongside `totalAmount: true` in the
 // aggregate's `_sum`. All legacy orders have storeCreditApplied = 0, so this is a
 // no-op on historical data and only affects credit-paid orders going forward.
 export function toCashRevenue(totalAmount: unknown, storeCreditApplied: unknown): number {
-	return Number(totalAmount || 0) - Number(storeCreditApplied || 0);
+	return toExternalCash(totalAmount, storeCreditApplied);
 }
+
+// Keep the legacy name above for callers that truly need payment intake. New sales reporting
+// must use this function so a store-credit purchase remains a sale and a partial refund is netted.
+export { toNetSales };
 
 export function buildRevenueOrderWhere(): Prisma.OrderWhereInput {
 	return {
@@ -32,6 +37,27 @@ export function buildRevenueOrderWhere(): Prisma.OrderWhereInput {
 			// Exclude owner self-offloads (manual_release) but KEEP orders with a NULL
 			// paymentChannel — `NOT: { paymentChannel: 'x' }` drops NULLs in SQL, which
 			// was silently excluding legitimate revenue.
+			{ OR: [{ paymentChannel: null }, { paymentChannel: { not: MANUAL_RELEASE_CHANNEL } }] }
+		]
+	};
+}
+
+/**
+ * Orders whose payment was accepted at least once, including orders later refunded
+ * to store credit. This is deliberately broader than revenue: it is used only for
+ * payment-intake reporting, where a store-credit refund remains cash still held by
+ * the business and a liability owed to the customer.
+ */
+export function buildSettledOrderWhere(): Prisma.OrderWhereInput {
+	return {
+		AND: [
+			{
+				OR: [
+					{ paidAt: { not: null } },
+					{ paymentStatus: { in: ['paid', REFUNDED_MARKER] } },
+					{ status: { in: [...REVENUE_ORDER_STATUSES, REFUNDED_MARKER] } }
+				]
+			},
 			{ OR: [{ paymentChannel: null }, { paymentChannel: { not: MANUAL_RELEASE_CHANNEL } }] }
 		]
 	};

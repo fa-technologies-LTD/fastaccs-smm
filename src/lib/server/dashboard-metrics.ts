@@ -1,6 +1,7 @@
 import { prisma } from '$lib/prisma';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { REFUNDED_MARKER } from '$lib/helpers/order-revenue';
+import { toNetSales } from '$lib/helpers/order-revenue';
 import type { Prisma } from '@prisma/client';
 
 export async function getDashboardMetrics(userId: string) {
@@ -19,31 +20,23 @@ export async function getDashboardMetrics(userId: string) {
 		]
 	};
 
-	const [completedOrders, spending, purchasedItems] = await Promise.all([
+	const [completedOrders, spending, ownedAccounts] = await Promise.all([
 		prisma.order.count({ where: revenueWhere }),
 		prisma.order.aggregate({
 			where: revenueWhere,
-			_sum: { totalAmount: true }
+			_sum: { totalAmount: true, refundedAmount: true }
 		}),
-		prisma.orderItem.aggregate({
+		prisma.account.count({
 			where: {
-				productCategory: { not: 'boosting_service' },
-				order: {
-					userId,
-					OR: [{ status: { in: ['paid', 'processing', 'completed'] } }, { paymentStatus: 'paid' }]
-				},
-				OR: [
-					{ accounts: { some: { status: { in: [...getAllocatedLikeAccountStatuses(), 'delivered'] } } } },
-					{ order: { deliveryMethod: 'whatsapp' } }
-				]
-			},
-			_sum: { quantity: true }
+				status: { in: [...getAllocatedLikeAccountStatuses(), 'delivered'] },
+				orderItem: { order: revenueWhere }
+			}
 		})
 	]);
 
 	return {
 		completedOrders,
-		totalSpent: Number(spending._sum.totalAmount || 0),
-		accountsOwned: Number(purchasedItems._sum.quantity || 0)
+		totalSpent: toNetSales(spending._sum.totalAmount, spending._sum.refundedAmount),
+		accountsOwned: ownedAccounts
 	};
 }

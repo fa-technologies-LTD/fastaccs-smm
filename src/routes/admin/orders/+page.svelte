@@ -7,7 +7,7 @@
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
 	import { getOrderStatusLabel, isOrderStatusInGroup } from '$lib/helpers/order-status';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
-	import { isRevenueOrder } from '$lib/helpers/order-revenue';
+	import { isRevenueOrder, toNetSales } from '$lib/helpers/order-revenue';
 
 	// Props from page data
 	let { data } = $props<{
@@ -134,7 +134,7 @@
 		);
 		const cancelledOrders = filteredOrders.filter(isCancelledOrder).length;
 		const totalRevenue = paidOrders.reduce(
-			(sum: number, o: any) => sum + Number(o.totalAmount || 0),
+			(sum: number, o: any) => sum + toNetSales(o.totalAmount, o.refundedAmount),
 			0
 		);
 		const unitsSold = paidOrders.reduce((sum: number, order: any) => sum + getOrderUnits(order), 0);
@@ -287,7 +287,7 @@
 			class="rounded-lg p-3 sm:p-4"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 		>
-			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Revenue</div>
+			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Net Sales</div>
 			<div class="text-lg font-bold sm:text-2xl" style="color: var(--primary);">
 				{formatAdminAmount(summaryStats.total_revenue)}
 			</div>
@@ -375,8 +375,12 @@
 			class="mb-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs sm:text-sm"
 			style="background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border);"
 		>
-			<span class="font-semibold">{needsActionCount} manual handover{needsActionCount === 1 ? '' : 's'} awaiting delivery</span>
-			<span style="opacity: 0.85;">— pinned to the top; they return to date order once delivered.</span>
+			<span class="font-semibold"
+				>{needsActionCount} manual handover{needsActionCount === 1 ? '' : 's'} awaiting delivery</span
+			>
+			<span style="opacity: 0.85;"
+				>— pinned to the top; they return to date order once delivered.</span
+			>
 		</div>
 	{/if}
 
@@ -418,10 +422,17 @@
 
 				<div class="mb-3 grid grid-cols-2 gap-2 text-xs">
 					<div>
-						<div style="color: var(--text-dim);">Total</div>
-						<div class="font-semibold" style="color: var(--text);">
-							{formatOrderAmount(Number(order.totalAmount || 0))}
+						<div style="color: var(--text-dim);">
+							{Number(order.refundedAmount || 0) > 0 ? 'Net retained' : 'Total'}
 						</div>
+						<div class="font-semibold" style="color: var(--text);">
+							{formatOrderAmount(toNetSales(order.totalAmount, order.refundedAmount))}
+						</div>
+						{#if Number(order.refundedAmount || 0) > 0}
+							<div class="text-[10px]" style="color: var(--status-warning);">
+								{formatOrderAmount(Number(order.refundedAmount || 0))} refunded
+							</div>
+						{/if}
 					</div>
 					<div>
 						<div style="color: var(--text-dim);">Date</div>
@@ -512,7 +523,10 @@
 							onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
 						>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<div class="flex items-center gap-1.5 text-sm font-medium" style="color: var(--text)">
+								<div
+									class="flex items-center gap-1.5 text-sm font-medium"
+									style="color: var(--text)"
+								>
 									<OrderTypeIcon {order} />
 									<span>#{order.id}</span>
 								</div>
@@ -557,7 +571,7 @@
 								{/if}
 							</td>
 							<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
-								{formatOrderAmount(Number(order.totalAmount || 0))}
+								{formatOrderAmount(toNetSales(order.totalAmount, order.refundedAmount))}
 							</td>
 							<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
 								{formatDate(order.createdAt)}

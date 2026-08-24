@@ -22,12 +22,26 @@ const getPhonePricingConfigMock = vi.hoisted(() => vi.fn());
 
 vi.mock('$lib/prisma', () => ({ prisma: prismaMock }));
 vi.mock('./number-providers', () => ({
-	getProvider: () => ({ rent: rentMock, cancel: cancelMock, pollSms: pollSmsMock }),
+	getProvider: () => ({
+		rent: rentMock,
+		cancel: cancelMock,
+		pollSms: pollSmsMock,
+		billing: 'pay-on-success'
+	}),
 	buildLiveCandidatePool: buildLiveCandidatePoolMock,
-	providerForRental: () => ({ pollSms: pollSmsMock, cancel: cancelMock, rent: rentMock }),
-	refForRental: (r: { providerRef: string | null; hubOrderUuid: string | null; provider: string }) =>
-		r.provider === 'pvapins' ? r.providerRef : r.hubOrderUuid,
-	candidateKeyFromRental: (r: { provider: string; serviceId: number }) => `${r.provider}:${r.serviceId}`
+	providerForRental: () => ({
+		pollSms: pollSmsMock,
+		cancel: cancelMock,
+		rent: rentMock,
+		billing: 'pay-on-success'
+	}),
+	refForRental: (r: {
+		providerRef: string | null;
+		hubOrderUuid: string | null;
+		provider: string;
+	}) => (r.provider === 'pvapins' ? r.providerRef : r.hubOrderUuid),
+	candidateKeyFromRental: (r: { provider: string; serviceId: number }) =>
+		`${r.provider}:${r.serviceId}`
 }));
 vi.mock('./hubman', () => ({
 	isHubmanConfigured: () => true,
@@ -37,9 +51,42 @@ vi.mock('./hubman', () => ({
 	rentActivationNumber: vi.fn(),
 	HubmanError: class HubmanError extends Error {}
 }));
-vi.mock('./store-credit', () => ({ creditStoreCredit: creditStoreCreditMock, SC_CREDIT_REFUND: 'X' }));
-vi.mock('./phone-telemetry', () => ({ recordPhoneAttempt: () => Promise.resolve(null), recordAttemptOtpReceived: () => Promise.resolve(), recordAttemptOtpTimeout: () => Promise.resolve(), recordAttemptRejection: () => Promise.resolve(), classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' }) }));
+vi.mock('./store-credit', () => ({
+	creditStoreCredit: creditStoreCreditMock,
+	restoreStoreCreditRedemptionForLatePayment: vi.fn().mockResolvedValue({
+		restoredAmount: 0,
+		alreadyReserved: true
+	}),
+	SC_CREDIT_REFUND: 'X'
+}));
+vi.mock('./phone-telemetry', () => ({
+	recordPhoneAttempt: () => Promise.resolve(null),
+	recordAttemptOtpReceived: () => Promise.resolve(),
+	recordAttemptOtpTimeout: () => Promise.resolve(),
+	recordAttemptRejection: () => Promise.resolve(),
+	classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' })
+}));
 vi.mock('./admin-alerts', () => ({ sendCriticalAdminAlert: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('./notifications', () => ({
+	createUserNotification: vi.fn().mockResolvedValue(undefined)
+}));
+vi.mock('./admin-metrics', () => ({ invalidateAdminStatsCache: vi.fn() }));
+vi.mock('./affiliate', () => ({
+	maybeVoidSuperActivationOnRefund: vi.fn().mockResolvedValue(undefined),
+	reconcileAffiliateSales: vi.fn().mockResolvedValue(undefined)
+}));
+vi.mock('./affiliate-vesting', () => ({
+	voidUnvestedRewardsForOrder: vi.fn().mockResolvedValue({ voided: 0 }),
+	reverseVestedRegularRewardForOrder: vi.fn().mockResolvedValue({ reversed: 0 })
+}));
+vi.mock('./spend-milestones', () => ({
+	maybeClawbackSpendMilestones: vi.fn().mockResolvedValue(undefined)
+}));
+vi.mock('./order-events', () => ({
+	recordOrderEvent: vi.fn().mockResolvedValue(undefined),
+	recordOrderEventBestEffort: vi.fn().mockResolvedValue(undefined)
+}));
+
 vi.mock('./phone-pricing', () => ({
 	getPhonePricingConfig: getPhonePricingConfigMock,
 	computeMaxPriceCentsForSale: () => 100000,
@@ -80,7 +127,12 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	pollSmsMock.mockResolvedValue({ status: 'waiting' });
 	cancelMock.mockResolvedValue(true);
-	rentMock.mockResolvedValue({ providerRef: 'new|USA|Whatsapp24', phoneNumber: '15551112222', costCents: 66, expiresAt: null });
+	rentMock.mockResolvedValue({
+		providerRef: 'new|USA|Whatsapp24',
+		phoneNumber: '15551112222',
+		costCents: 66,
+		expiresAt: null
+	});
 	buildLiveCandidatePoolMock.mockResolvedValue([]);
 	prismaMock.phoneRental.updateMany.mockResolvedValue({ count: 1 });
 	prismaMock.phoneRental.upsert.mockResolvedValue({});
@@ -93,17 +145,37 @@ beforeEach(() => {
 		id: 'item-1',
 		totalPrice: 4800,
 		category: { metadata: {} },
-		order: { userId: 'user-1', orderNumber: 'ORD-1', status: 'paid', paymentStatus: 'paid', deliveryStatus: 'processing' }
+		order: {
+			userId: 'user-1',
+			orderNumber: 'ORD-1',
+			status: 'paid',
+			paymentStatus: 'paid',
+			deliveryStatus: 'processing'
+		}
 	});
 	getPhoneTierConfigMock.mockReturnValue({
-		serviceId: 1, countryId: 58, serviceName: 'WhatsApp', countryName: 'USA', countryCode: 'US',
-		expectedCostCents: 66, availableCount: 5, autoHidden: false, hideReason: null
+		serviceId: 1,
+		countryId: 58,
+		serviceName: 'WhatsApp',
+		countryName: 'USA',
+		countryCode: 'US',
+		expectedCostCents: 66,
+		availableCount: 5,
+		autoHidden: false,
+		hideReason: null
 	});
-	getPhonePricingConfigMock.mockResolvedValue({ usdNgnRate: 1500, marginPercent: 120, activationTimeoutMinutes: 20, minFulfillmentProfitNgn: 500 });
+	getPhonePricingConfigMock.mockResolvedValue({
+		usdNgnRate: 1500,
+		marginPercent: 120,
+		activationTimeoutMinutes: 20,
+		minFulfillmentProfitNgn: 500
+	});
 	prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => unknown) =>
 		cb({
 			$queryRaw: vi.fn().mockResolvedValue([]),
 			phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			orderItem: { update: vi.fn().mockResolvedValue({}) },
+			orderEvent: { create: vi.fn().mockResolvedValue({}) },
 			order: { update: vi.fn() }
 		})
 	);
@@ -152,9 +224,23 @@ describe('customerRetryPhoneRental', () => {
 		pollSmsMock.mockResolvedValue({ status: 'waiting' }); // no code
 		cancelMock.mockResolvedValue(true);
 		buildLiveCandidatePoolMock.mockResolvedValue([
-			{ provider: 'pvapins', providerServiceRef: 'Whatsapp24', providerCountryRef: 'USA', label: 'pvapins:Whatsapp24', costCents: 66, available: 1, reliability: null, sampleSize: 0 }
+			{
+				provider: 'pvapins',
+				providerServiceRef: 'Whatsapp24',
+				providerCountryRef: 'USA',
+				label: 'pvapins:Whatsapp24',
+				costCents: 66,
+				available: 1,
+				reliability: null,
+				sampleSize: 0
+			}
 		]);
-		rentMock.mockResolvedValue({ providerRef: 'new|USA|Whatsapp24', phoneNumber: '15551112222', costCents: 66, expiresAt: null });
+		rentMock.mockResolvedValue({
+			providerRef: 'new|USA|Whatsapp24',
+			phoneNumber: '15551112222',
+			costCents: 66,
+			expiresAt: null
+		});
 
 		const res = await customerRetryPhoneRental('item-1');
 
@@ -171,12 +257,16 @@ describe('customerRetryPhoneRental', () => {
 		cancelMock.mockResolvedValue(true); // provider confirmed the number is released
 		await customerRetryPhoneRental('item-1');
 		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
-			expect.objectContaining({ data: expect.objectContaining({ reservedLiabilityCents: { increment: 0 } }) })
+			expect.objectContaining({
+				data: expect.objectContaining({ reservedLiabilityCents: { increment: 0 } })
+			})
 		);
 	});
 
 	it('stale pvapins + unconfirmed release → reopens headroom (reserve 0) and records a shadow', async () => {
-		prismaMock.phoneRental.findUnique.mockResolvedValue(rental({ costCents: 66, provider: 'pvapins' }));
+		prismaMock.phoneRental.findUnique.mockResolvedValue(
+			rental({ costCents: 66, provider: 'pvapins' })
+		);
 		cancelMock.mockResolvedValue(false); // "Not able to reject." — contingent, likely dead after 120s
 		await customerRetryPhoneRental('item-1');
 		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
@@ -197,18 +287,22 @@ describe('customerRetryPhoneRental', () => {
 		cancelMock.mockResolvedValue(false);
 		await customerRetryPhoneRental('item-1');
 		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
-			expect.objectContaining({ data: expect.objectContaining({ reservedLiabilityCents: { increment: 66 } }) })
+			expect.objectContaining({
+				data: expect.objectContaining({ reservedLiabilityCents: { increment: 66 } })
+			})
 		);
 	});
 
-	it('hub-man unconfirmed cancel reserves the committed cost (pay-on-rent, no shadow)', async () => {
+	it('hub-man unconfirmed no-code cancel does not book or reserve a cost before SMS', async () => {
 		prismaMock.phoneRental.findUnique.mockResolvedValue(
 			rental({ provider: 'hubman', hubOrderUuid: 'hub-uuid-1', providerRef: null, costCents: 80 })
 		);
 		cancelMock.mockResolvedValue(false);
 		await customerRetryPhoneRental('item-1');
 		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
-			expect.objectContaining({ data: expect.objectContaining({ reservedLiabilityCents: { increment: 80 } }) })
+			expect.objectContaining({
+				data: expect.objectContaining({ reservedLiabilityCents: { increment: 0 } })
+			})
 		);
 	});
 
@@ -218,7 +312,8 @@ describe('customerRetryPhoneRental', () => {
 		prismaMock.phoneRental.updateMany.mockImplementation(async ({ where, data }) => {
 			if (where.status && where.status !== state.status) return { count: 0 };
 			if (where.generation != null && where.generation !== state.generation) return { count: 0 };
-			if (where.operationToken && where.operationToken !== state.operationToken) return { count: 0 };
+			if (where.operationToken && where.operationToken !== state.operationToken)
+				return { count: 0 };
 			Object.assign(state, data);
 			return { count: 1 };
 		});

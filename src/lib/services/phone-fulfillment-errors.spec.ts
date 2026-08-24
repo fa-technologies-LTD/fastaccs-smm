@@ -34,10 +34,47 @@ vi.mock('./hubman', () => ({
 	isHubmanConfigured: () => true,
 	HubmanError
 }));
-vi.mock('./store-credit', () => ({ creditStoreCredit: creditStoreCreditMock, SC_CREDIT_REFUND: 'X' }));
-vi.mock('./phone-telemetry', () => ({ recordPhoneAttempt: () => Promise.resolve(null), recordAttemptOtpReceived: () => Promise.resolve(), recordAttemptOtpTimeout: () => Promise.resolve(), recordAttemptRejection: () => Promise.resolve(), classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' }) }));
+vi.mock('./store-credit', () => ({
+	creditStoreCredit: creditStoreCreditMock,
+	restoreStoreCreditRedemptionForLatePayment: vi.fn().mockResolvedValue({
+		restoredAmount: 0,
+		alreadyReserved: true
+	}),
+	SC_CREDIT_REFUND: 'X'
+}));
+vi.mock('./phone-telemetry', () => ({
+	recordPhoneAttempt: () => Promise.resolve(null),
+	recordAttemptOtpReceived: () => Promise.resolve(),
+	recordAttemptOtpTimeout: () => Promise.resolve(),
+	recordAttemptRejection: () => Promise.resolve(),
+	classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' })
+}));
 vi.mock('./admin-alerts', () => ({ sendCriticalAdminAlert: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('./phone-pricing', () => ({ getPhonePricingConfig: vi.fn(), computeMaxPriceCentsForSale: vi.fn(), computeProcurementCeilingCents: () => 100000 }));
+vi.mock('./notifications', () => ({
+	createUserNotification: vi.fn().mockResolvedValue(undefined)
+}));
+vi.mock('./admin-metrics', () => ({ invalidateAdminStatsCache: vi.fn() }));
+vi.mock('./affiliate', () => ({
+	maybeVoidSuperActivationOnRefund: vi.fn().mockResolvedValue(undefined),
+	reconcileAffiliateSales: vi.fn().mockResolvedValue(undefined)
+}));
+vi.mock('./affiliate-vesting', () => ({
+	voidUnvestedRewardsForOrder: vi.fn().mockResolvedValue({ voided: 0 }),
+	reverseVestedRegularRewardForOrder: vi.fn().mockResolvedValue({ reversed: 0 })
+}));
+vi.mock('./spend-milestones', () => ({
+	maybeClawbackSpendMilestones: vi.fn().mockResolvedValue(undefined)
+}));
+vi.mock('./order-events', () => ({
+	recordOrderEvent: vi.fn().mockResolvedValue(undefined),
+	recordOrderEventBestEffort: vi.fn().mockResolvedValue(undefined)
+}));
+
+vi.mock('./phone-pricing', () => ({
+	getPhonePricingConfig: vi.fn(),
+	computeMaxPriceCentsForSale: vi.fn(),
+	computeProcurementCeilingCents: () => 100000
+}));
 vi.mock('$lib/helpers/phone-tier-config', () => ({ getPhoneTierConfig: getPhoneTierConfigMock }));
 
 import { cancelAndRefundRental } from './phone-fulfillment';
@@ -62,13 +99,26 @@ beforeEach(() => {
 		id: 'item-1',
 		totalPrice: 1200,
 		category: { metadata: {} },
-		order: { userId: 'user-1', orderNumber: 'ORD-1', status: 'paid', paymentStatus: 'paid', deliveryStatus: 'processing' }
+		order: {
+			userId: 'user-1',
+			orderNumber: 'ORD-1',
+			status: 'paid',
+			paymentStatus: 'paid',
+			deliveryStatus: 'processing'
+		}
 	});
-	getPhoneTierConfigMock.mockReturnValue({ serviceId: 1, countryId: 2, serviceName: 'WA', countryName: 'US' });
+	getPhoneTierConfigMock.mockReturnValue({
+		serviceId: 1,
+		countryId: 2,
+		serviceName: 'WA',
+		countryName: 'US'
+	});
 	prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => unknown) =>
 		cb({
 			$queryRaw: vi.fn().mockResolvedValue([]),
 			phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			orderItem: { update: vi.fn().mockResolvedValue({}) },
+			orderEvent: { create: vi.fn().mockResolvedValue({}) },
 			order: { update: vi.fn().mockResolvedValue({}) }
 		})
 	);

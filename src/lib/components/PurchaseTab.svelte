@@ -114,13 +114,19 @@
 		const itemLine = [
 			purchase.categoryName,
 			purchase.quantity > 1 ? `x${purchase.quantity}` : null,
-			purchase.platform && purchase.platform !== purchase.categoryName ? `(${purchase.platform})` : null
-		].filter(Boolean).join(' ');
+			purchase.platform && purchase.platform !== purchase.categoryName
+				? `(${purchase.platform})`
+				: null
+		]
+			.filter(Boolean)
+			.join(' ');
 		const msg = [
 			`Hi FastAccs, I'm sending my payment receipt for order #${orderLabel}.`,
 			itemLine ? `Item: ${itemLine}` : null,
 			`Please complete my manual handover. Thank you.`
-		].filter(Boolean).join('\n');
+		]
+			.filter(Boolean)
+			.join('\n');
 		return buildWhatsAppSupportLink(whatsappNumber, msg);
 	}
 
@@ -134,6 +140,7 @@
 	}
 
 	function getPurchaseStatusLabel(purchase: any): string {
+		if (Number(purchase.refundedAmount || 0) > 0) return 'Partially refunded';
 		if (purchase.deliveryMode === 'manual_handover') {
 			return isManualHandoverFulfilled(purchase) ? 'Handover complete' : 'Manual handover';
 		}
@@ -164,8 +171,8 @@
 					<Lock class="h-3.5 w-3.5" style="color: var(--primary);" />
 				</div>
 				<p class="mt-1 text-xs" style="color: var(--text-muted);">
-					Your details appear in your dashboard. Vetted support admins may also access them when
-					an order needs troubleshooting. Need login guidance? See the
+					Your details appear in your dashboard. Vetted support admins may also access them when an
+					order needs troubleshooting. Need login guidance? See the
 					<a href="/support#faq" class="font-medium underline" style="color: var(--link);">
 						quick account care guide
 					</a>
@@ -215,7 +222,9 @@
 								class="flex flex-wrap items-center gap-2 text-xs sm:gap-3 sm:text-sm"
 								style="color: var(--text-muted);"
 							>
-								<span class="min-w-0 truncate font-medium">{formatOrderRef(purchase.orderNumber)}</span>
+								<span class="min-w-0 truncate font-medium"
+									>{formatOrderRef(purchase.orderNumber)}</span
+								>
 								<span class="text-[color:var(--text-dim)]">•</span>
 								<div class="flex items-center gap-1.5">
 									<Clock class="h-3.5 w-3.5" style="color: var(--text-dim);" />
@@ -407,7 +416,10 @@
 							class="flex flex-wrap items-center justify-between gap-2 rounded-[var(--r-sm)] border p-3 text-sm"
 							style="border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--text);"
 						>
-							<span class="inline-flex items-center gap-1.5 font-semibold" style="color: var(--status-success);">
+							<span
+								class="inline-flex items-center gap-1.5 font-semibold"
+								style="color: var(--status-success);"
+							>
 								✓ Handover complete
 							</span>
 							{#if getManualHandoverLink(purchase)}

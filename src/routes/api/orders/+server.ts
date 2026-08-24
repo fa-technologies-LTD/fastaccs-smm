@@ -47,8 +47,9 @@ import {
 	redeemStoreCreditForOrder,
 	reverseStoreCreditRedemption
 } from '$lib/services/store-credit';
-import { recoverPaidOrder } from '$lib/services/payment-settlement';
+import { recoverPaidOrder, settleFailedPayment } from '$lib/services/payment-settlement';
 import { logOrderStatusTransition } from '$lib/services/order-audit';
+import { recordOrderEvent } from '$lib/services/order-events';
 import {
 	getPaymentReservationExpiresAt,
 	getPendingPaymentExpiresAt
@@ -377,21 +378,39 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					status: existingCheckout.status,
 					source: 'checkout_retry'
 				});
-			}
-			await releaseOrderReservations(existingCheckout.id);
-			await prisma.order.update({
-				where: { id: existingCheckout.id },
-				data: {
-					checkoutKey: null,
-					...(supersedes
-						? {
-								status: 'cancelled',
-								paymentStatus: 'cancelled',
-								cancellationReason: 'superseded_retry'
-							}
-						: {})
+				const cancellation = await settleFailedPayment({
+					orderId: existingCheckout.id,
+					failureKind: 'cancelled',
+					source: 'verify',
+					clearCheckoutKey: true,
+					cancellationReason: 'superseded_retry'
+				});
+				if (cancellation.status === 'PAID' || cancellation.status === 'COMPLETED') {
+					const paidWithStoreCredit = existingCheckout.paymentMethod === 'store_credit';
+					return json({
+						data: existingCheckout,
+						success: true,
+						resumed: true,
+						orderId: existingCheckout.id,
+						paidWithStoreCredit,
+						redirectUrl: `${url.origin}/checkout/verify?orderId=${encodeURIComponent(existingCheckout.id)}${paidWithStoreCredit ? '&method=store_credit' : ''}`,
+						deliveryMode:
+							existingCheckout.orderType === 'phone'
+								? 'auto_sms'
+								: existingCheckout.deliveryMethod === 'whatsapp'
+									? 'manual_handover'
+									: 'instant_auto',
+						traceId,
+						error: null
+					});
 				}
-			});
+			} else {
+				await releaseOrderReservations(existingCheckout.id);
+				await prisma.order.update({
+					where: { id: existingCheckout.id },
+					data: { checkoutKey: null }
+				});
+			}
 		}
 
 		if (isNewCheckoutInitializationDisabled()) {
@@ -998,6 +1017,39 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 								}
 							}
 						});
+
+						await recordOrderEvent(
+							{
+								orderId: createdOrder.id,
+								type: 'order_placed',
+								source: 'checkout',
+								actorUserId: checkoutUserId,
+								amount: finalOrderTotal,
+								description: `Order ${createdOrder.orderNumber} placed`,
+								idempotencyKey: `order:placed:${createdOrder.id}`,
+								occurredAt: createdOrder.createdAt,
+								metadata: {
+									orderType: createdOrder.orderType,
+									storeCreditApplied: storeCreditRedemption.totalApplied
+								}
+							},
+							tx
+						);
+						if (isFullyCreditPaid) {
+							await recordOrderEvent(
+								{
+									orderId: createdOrder.id,
+									type: 'payment_confirmed',
+									source: 'store_credit',
+									actorUserId: checkoutUserId,
+									amount: finalOrderTotal,
+									description: 'Paid with store credit',
+									idempotencyKey: `payment:confirmed:${createdOrder.id}`,
+									occurredAt: storeCreditPaidAt || new Date()
+								},
+								tx
+							);
+						}
 
 						await reserveStandardAccountsForOrder({
 							client: tx,

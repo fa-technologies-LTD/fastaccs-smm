@@ -25,7 +25,7 @@ beforeEach(() => {
 });
 
 describe('buildLiveCandidatePool', () => {
-	it('merges hub-man stock + only the matching pvapins variants, ranked (unproven → cost tiebreak)', async () => {
+	it('merges live hub-man stock + matching listed pvapins variants', async () => {
 		getAvailableServicesMock.mockResolvedValue({
 			'58': { '1': { min_price_cents: 50, max_price_cents: 70, available_numbers_count: 3 } }
 		});
@@ -44,13 +44,15 @@ describe('buildLiveCandidatePool', () => {
 
 		const labels = pool.map((c) => c.label);
 		expect(labels).not.toContain('pvapins:Anyother15');
-		// All unproven → same cold-start score → cheapest first: wa46(40) < hub(50) < wa24(66).
-		expect(labels).toEqual(['pvapins:Whatsapp46', 'hubman:1', 'pvapins:Whatsapp24']);
+		// Reliability is equal, so confirmed live stock leads; listed variants then sort by cost.
+		expect(labels).toEqual(['hubman:1', 'pvapins:Whatsapp46', 'pvapins:Whatsapp24']);
 	});
 
 	it('is pvapins-only when hub-man has no stock for that service (fills the gap)', async () => {
 		getAvailableServicesMock.mockResolvedValue({ '58': {} });
-		loadAppsMock.mockResolvedValue([{ id: 1, full_name: 'Whatsapp24', deduct: '0.66', trending: 0 }]);
+		loadAppsMock.mockResolvedValue([
+			{ id: 1, full_name: 'Whatsapp24', deduct: '0.66', trending: 0 }
+		]);
 
 		const pool = await buildLiveCandidatePool({
 			hubServiceId: 1,

@@ -9,6 +9,93 @@ const REVENUE_STATUS_SET = new Set<string>(REVENUE_ORDER_STATUSES);
  */
 export const REFUNDED_MARKER = 'refunded';
 
+export function moneyAmount(value: unknown): number {
+	const amount = Number(value || 0);
+	return Number.isFinite(amount) ? Math.max(0, amount) : 0;
+}
+
+/** Original sale value minus money returned. Tender (card/store credit) does not change sales. */
+export function toNetSales(totalAmount: unknown, refundedAmount: unknown): number {
+	return Math.max(0, moneyAmount(totalAmount) - moneyAmount(refundedAmount));
+}
+
+/** New external payment received at checkout. This is cash intake, not revenue/sales. */
+export function toExternalCash(totalAmount: unknown, storeCreditApplied: unknown): number {
+	return Math.max(0, moneyAmount(totalAmount) - moneyAmount(storeCreditApplied));
+}
+
+type RefundableOrderItem = {
+	id: string;
+	totalPrice: unknown;
+	refundedAmount?: unknown;
+};
+
+/**
+ * Build exact item-level targets for a full refund without reducing an earlier item refund.
+ * Working in kobo keeps the sum equal to the order total even when discounts make the
+ * proportional line values fractional.
+ */
+export function allocateFullRefundToItems(
+	totalAmount: unknown,
+	items: RefundableOrderItem[]
+): { targets: Array<{ id: string; refundedAmount: number }>; allocatedAmount: number } {
+	const totalKobo = Math.round(moneyAmount(totalAmount) * 100);
+	const grossKobo = items.reduce(
+		(sum, item) => sum + Math.round(moneyAmount(item.totalPrice) * 100),
+		0
+	);
+	let capacityLeft = totalKobo;
+	const capacities = items.map((item, index) => {
+		const itemGrossKobo = Math.round(moneyAmount(item.totalPrice) * 100);
+		const capacity =
+			index === items.length - 1
+				? capacityLeft
+				: Math.min(
+						capacityLeft,
+						grossKobo > 0 ? Math.round((totalKobo * itemGrossKobo) / grossKobo) : 0
+					);
+		capacityLeft -= capacity;
+		return capacity;
+	});
+
+	const targetsKobo = items.map((item) => Math.round(moneyAmount(item.refundedAmount) * 100));
+	const alreadyAttributed = targetsKobo.reduce((sum, value) => sum + value, 0);
+	if (alreadyAttributed > totalKobo) {
+		throw new Error('ITEM_REFUNDS_EXCEED_ORDER_TOTAL');
+	}
+
+	let remaining = totalKobo - alreadyAttributed;
+	for (let index = 0; index < items.length && remaining > 0; index += 1) {
+		const available = Math.max(0, capacities[index] - targetsKobo[index]);
+		const increment = Math.min(remaining, available);
+		targetsKobo[index] += increment;
+		remaining -= increment;
+	}
+
+	const allocatedKobo = targetsKobo.reduce((sum, value) => sum + value, 0);
+	return {
+		targets: items.map((item, index) => ({
+			id: item.id,
+			refundedAmount: targetsKobo[index] / 100
+		})),
+		allocatedAmount: allocatedKobo / 100
+	};
+}
+
+export function isRefundedOrder(input: {
+	status?: string | null;
+	paymentStatus?: string | null;
+	deliveryStatus?: string | null;
+	refundedAmount?: unknown;
+}): boolean {
+	return (
+		normalize(input.status) === REFUNDED_MARKER ||
+		normalize(input.paymentStatus) === REFUNDED_MARKER ||
+		normalize(input.deliveryStatus) === REFUNDED_MARKER ||
+		moneyAmount(input.refundedAmount) > 0
+	);
+}
+
 function normalize(value: string | null | undefined): string {
 	return String(value || '')
 		.trim()
@@ -24,10 +111,8 @@ function normalize(value: string | null | undefined): string {
  * read as "1 paid" while their money sat in store credit. The three refund fields are
  * checked independently because different refund paths write different ones.
  *
- * NOTE: a PARTIAL (per-account) refund deliberately still counts. Those orders keep
- * `paymentStatus: 'paid'` and only flip once the last good account is refunded, so the
- * remaining value stays revenue. The partial's refunded portion is not netted off here —
- * that is a separate, pre-existing accounting gap, not something this predicate decides.
+ * NOTE: a PARTIAL (per-account) refund deliberately still counts as a sale. Callers use
+ * `toNetSales(totalAmount, refundedAmount)` to retain only the unrefunded portion.
  */
 export function isRevenueOrder(input: {
 	status?: string | null;

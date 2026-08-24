@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { isRevenueOrder, REFUNDED_MARKER } from './order-revenue';
+import {
+	isRevenueOrder,
+	isRefundedOrder,
+	allocateFullRefundToItems,
+	REFUNDED_MARKER,
+	toExternalCash,
+	toNetSales
+} from './order-revenue';
 
 /**
  * These cases are taken from real production rows. Each "refunded" shape below is one a live
@@ -67,5 +74,49 @@ describe('isRevenueOrder', () => {
 
 	it('exports the marker the SQL builder mirrors', () => {
 		expect(REFUNDED_MARKER).toBe('refunded');
+	});
+});
+
+describe('canonical order money', () => {
+	it('keeps store-credit-funded value in net sales', () => {
+		expect(toNetSales(5800, 0)).toBe(5800);
+		expect(toExternalCash(5800, 5800)).toBe(0);
+	});
+
+	it('nets a partial refund without rewriting the original total', () => {
+		expect(toNetSales(22500, 7500)).toBe(15000);
+	});
+
+	it('recognises either a durable amount or any legacy refund marker', () => {
+		expect(isRefundedOrder({ status: 'completed', refundedAmount: 7500 })).toBe(true);
+		expect(isRefundedOrder({ deliveryStatus: REFUNDED_MARKER })).toBe(true);
+	});
+
+	it('attributes a discounted full refund exactly across items', () => {
+		const result = allocateFullRefundToItems(15_000, [
+			{ id: 'first', totalPrice: 15_000, refundedAmount: 5_000 },
+			{ id: 'second', totalPrice: 7_500, refundedAmount: 0 }
+		]);
+
+		expect(result).toEqual({
+			targets: [
+				{ id: 'first', refundedAmount: 10_000 },
+				{ id: 'second', refundedAmount: 5_000 }
+			],
+			allocatedAmount: 15_000
+		});
+	});
+
+	it('preserves an earlier over-proportional item refund while reconciling the total', () => {
+		const result = allocateFullRefundToItems(20, [
+			{ id: 'first', totalPrice: 10, refundedAmount: 15 },
+			{ id: 'second', totalPrice: 10, refundedAmount: 0 }
+		]);
+
+		expect(result.allocatedAmount).toBe(20);
+		expect(result.targets).toEqual([
+			{ id: 'first', refundedAmount: 15 },
+			{ id: 'second', refundedAmount: 5 }
+		]);
 	});
 });

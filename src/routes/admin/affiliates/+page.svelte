@@ -85,7 +85,7 @@
 			'Affiliate Promo Code',
 			'Referrals',
 			'Successful Orders',
-			'Total Sales',
+			'Net Sales',
 			'Available Store Credit',
 			'Store Credit Earned',
 			'Open Payouts',
@@ -194,10 +194,7 @@
 			<h1 class="text-2xl font-bold text-gray-900">Affiliate Management</h1>
 			<p class="mt-1 text-gray-600">Monitor and manage affiliate programs</p>
 		</div>
-		<button
-			onclick={exportData}
-			class="btn-fa btn-fa--primary cursor-pointer"
-		>
+		<button onclick={exportData} class="btn-fa btn-fa--primary cursor-pointer">
 			<Download class="h-4 w-4" />
 			Export Data
 		</button>
@@ -257,9 +254,7 @@
 		>
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium" style="color: var(--text-muted);">
-						Store Credit Earned
-					</p>
+					<p class="text-sm font-medium" style="color: var(--text-muted);">Store Credit Earned</p>
 					<p class="mt-2 text-3xl font-bold" style="color: #a855f7;">
 						{formatPrice(stats.totalStoreCreditEarned)}
 					</p>
@@ -347,7 +342,7 @@
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
-							Total Sales
+							Net Sales
 						</th>
 						<th
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
@@ -404,7 +399,10 @@
 							>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<div>
-										<div class="flex items-center gap-2 text-sm font-medium" style="color: var(--text);">
+										<div
+											class="flex items-center gap-2 text-sm font-medium"
+											style="color: var(--text);"
+										>
 											{affiliate.fullName || 'N/A'}
 											{#if affiliate.hasPendingBankDetails}
 												<span
@@ -438,16 +436,10 @@
 								>
 									{formatPrice(Number(affiliate.availableStoreCredit || 0))}
 								</td>
-								<td
-									class="px-6 py-4 text-sm font-medium whitespace-nowrap"
-									style="color: #a855f7;"
-								>
+								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap" style="color: #a855f7;">
 									{formatPrice(Number(affiliate.totalStoreCreditEarned || 0))}
 								</td>
-								<td
-									class="px-6 py-4 text-sm font-medium whitespace-nowrap"
-									style="color: #f97316;"
-								>
+								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap" style="color: #f97316;">
 									{formatPrice(Number(affiliate.requestedStoreCredit || 0))}
 								</td>
 								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text-muted);">

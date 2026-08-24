@@ -27,6 +27,7 @@ export async function getDashboardPurchasesPage(input: {
 					status: { in: ['paid', 'processing', 'completed'] },
 					paymentStatus: { in: [...CONFIRMED_PAYMENT_STATUSES] }
 				},
+				{ deliveryStatus: { not: 'refunded' } },
 				{
 					OR: [
 						{
@@ -53,6 +54,7 @@ export async function getDashboardPurchasesPage(input: {
 					productName: true,
 					productCategory: true,
 					quantity: true,
+					refundedAmount: true,
 					category: { select: { name: true, metadata: true } },
 					accounts: {
 						where: { status: { in: purchasedAccountStatuses } },
@@ -88,6 +90,7 @@ export async function getDashboardPurchasesPage(input: {
 			.filter((item) => item.productCategory !== 'boosting_service')
 			.map((item) => {
 				const deliveryConfig = getTierDeliveryConfig(item.category.metadata);
+				const visibleAccounts = getBuyerVisibleAccounts(order, item);
 				return {
 					orderId: order.id,
 					orderNumber: order.orderNumber,
@@ -98,8 +101,11 @@ export async function getDashboardPurchasesPage(input: {
 					deliveredAt: order.deliveredAt,
 					categoryName: item.category.name,
 					platform: item.productCategory || item.category.name,
-					quantity: item.quantity,
-					accounts: getBuyerVisibleAccounts(order, item),
+					quantity:
+						deliveryConfig.mode === 'manual_handover' ? item.quantity : visibleAccounts.length,
+					originalQuantity: item.quantity,
+					refundedAmount: Number(item.refundedAmount || 0),
+					accounts: visibleAccounts,
 					deliveryMode: deliveryConfig.mode,
 					loginGuideUrl: deliveryConfig.loginGuideUrl || DEFAULT_LOGIN_GUIDE_URL,
 					loginGuideLabel: deliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL

@@ -1,9 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { getBusinessDateKey, getStartOfBusinessDayUtc } from '$lib/helpers/business-timezone';
-import {
-	buildRevenueOrderWindowWhere,
-	toCashRevenue
-} from '$lib/helpers/order-revenue.server';
+import { buildRevenueOrderWindowWhere, toNetSales } from '$lib/helpers/order-revenue.server';
 import {
 	getBusinessTimezoneSetting,
 	getLowStockThresholdSetting,
@@ -11,9 +8,11 @@ import {
 } from '$lib/services/admin-settings';
 import { sendEmail } from '$lib/services/email';
 import { EMAIL_FAILURE_NOISE_FILTER } from '$lib/services/email-failure-filters';
+import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TOP_ROW_LIMIT = 5;
+const RETAINED_ACCOUNT_STATUSES = [...getAllocatedLikeAccountStatuses(), 'delivered'];
 
 type DigestOrder = Awaited<ReturnType<typeof getRevenueOrders>>[number];
 
@@ -89,14 +88,21 @@ function getRevenueOrders(start: Date, end: Date) {
 			id: true,
 			userId: true,
 			guestEmail: true,
+			orderType: true,
 			totalAmount: true,
-			storeCreditApplied: true,
+			refundedAmount: true,
 			affiliateUserId: true,
 			deliveryMethod: true,
 			orderItems: {
 				select: {
 					quantity: true,
 					totalPrice: true,
+					refundedAmount: true,
+					_count: {
+						select: {
+							accounts: { where: { status: { in: RETAINED_ACCOUNT_STATUSES } } }
+						}
+					},
 					category: {
 						select: {
 							name: true,
@@ -123,9 +129,20 @@ function buildCatalogLeaders(orders: DigestOrder[]): {
 	let units = 0;
 
 	for (const order of orders) {
+		const grossItemTotal = order.orderItems.reduce(
+			(sum, item) => sum + Math.max(0, Number(item.totalPrice || 0)),
+			0
+		);
 		for (const item of order.orderItems) {
-			const quantity = Number(item.quantity || 0);
-			const revenue = Number(item.totalPrice || 0);
+			const quantity =
+				order.orderType === 'account'
+					? Number(item._count.accounts || 0)
+					: Number(item.quantity || 0);
+			const lineBeforeRefund =
+				grossItemTotal > 0
+					? (Number(order.totalAmount || 0) * Number(item.totalPrice || 0)) / grossItemTotal
+					: 0;
+			const revenue = Math.max(0, lineBeforeRefund - Number(item.refundedAmount || 0));
 			const platform = item.category.parent?.name || 'Unknown platform';
 			const tier = `${platform} / ${item.category.name}`;
 			units += quantity;
@@ -359,18 +376,18 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 	]);
 
 	const currentRevenue = currentOrders.reduce(
-		(sum, order) => sum + toCashRevenue(order.totalAmount, order.storeCreditApplied),
+		(sum, order) => sum + toNetSales(order.totalAmount, order.refundedAmount),
 		0
 	);
 	const previousRevenue = previousOrders.reduce(
-		(sum, order) => sum + toCashRevenue(order.totalAmount, order.storeCreditApplied),
+		(sum, order) => sum + toNetSales(order.totalAmount, order.refundedAmount),
 		0
 	);
 	const buyerStats = getBuyerStats(currentOrders);
 	const catalog = buildCatalogLeaders(currentOrders);
 	const affiliateOrders = currentOrders.filter((order) => order.affiliateUserId);
 	const affiliateRevenue = affiliateOrders.reduce(
-		(sum, order) => sum + toCashRevenue(order.totalAmount, order.storeCreditApplied),
+		(sum, order) => sum + toNetSales(order.totalAmount, order.refundedAmount),
 		0
 	);
 	const manualHandoverOrders = currentOrders.filter(
@@ -415,7 +432,7 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 		`Reporting window: ${formatWindowDate(start, timezone)} to ${formatWindowDate(reportingEnd, timezone)} (${timezone})`,
 		'',
 		'**Executive snapshot**',
-		`- Revenue: ${formatAmount(currentRevenue)} (${formatPercentChange(currentRevenue, previousRevenue)} vs previous week)`,
+		`- Net sales: ${formatAmount(currentRevenue)} (${formatPercentChange(currentRevenue, previousRevenue)} vs previous week)`,
 		`- Successful paid orders: ${currentOrders.length} (${formatPercentChange(currentOrders.length, previousOrders.length)})`,
 		`- Order attempts: ${currentAttempts} (${formatPercentChange(currentAttempts, previousAttempts)})`,
 		`- Units sold: ${catalog.units}`,

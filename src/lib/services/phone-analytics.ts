@@ -171,6 +171,55 @@ export interface NumbersServiceStat {
 	needsAttention: boolean;
 }
 
+export interface NumbersDemandStat {
+	serviceId: number;
+	serviceName: string;
+	opens: number;
+	purchases: number;
+	deliveries: number;
+}
+
+export function summarizeNumbersDemand(
+	rentals: Array<{ serviceId: number; serviceName: string; status: string }>,
+	openEvents: Array<{ path: string }>
+): NumbersDemandStat[] {
+	const byService = new Map<number, NumbersDemandStat>();
+	for (const rental of rentals) {
+		const current = byService.get(rental.serviceId) ?? {
+			serviceId: rental.serviceId,
+			serviceName: rental.serviceName,
+			opens: 0,
+			purchases: 0,
+			deliveries: 0
+		};
+		current.purchases += 1;
+		if (rental.status === RECEIVED) current.deliveries += 1;
+		byService.set(rental.serviceId, current);
+	}
+	for (const event of openEvents) {
+		const match = /^\/numbers\/service\/(\d+)$/.exec(event.path);
+		if (!match) continue;
+		const serviceId = Number(match[1]);
+		if (!Number.isInteger(serviceId) || serviceId <= 0) continue;
+		const current = byService.get(serviceId) ?? {
+			serviceId,
+			serviceName: `Service ${serviceId}`,
+			opens: 0,
+			purchases: 0,
+			deliveries: 0
+		};
+		current.opens += 1;
+		byService.set(serviceId, current);
+	}
+	return [...byService.values()].sort(
+		(a, b) =>
+			b.deliveries - a.deliveries ||
+			b.purchases - a.purchases ||
+			b.opens - a.opens ||
+			a.serviceId - b.serviceId
+	);
+}
+
 export interface NumbersAnalytics {
 	overall: {
 		total: number;
@@ -183,6 +232,7 @@ export interface NumbersAnalytics {
 		marginNgn: number;
 	};
 	byService: NumbersServiceStat[];
+	demand30d: NumbersDemandStat[];
 	recent: Array<{
 		createdAt: string;
 		serviceName: string;
@@ -199,14 +249,38 @@ export interface NumbersAnalytics {
 
 export async function getNumbersAnalytics(): Promise<NumbersAnalytics> {
 	const { usdNgnRate } = await getPhonePricingConfig();
-	const rentals = await prisma.phoneRental.findMany({
-		orderBy: { createdAt: 'desc' },
-		include: {
-			orderItem: {
-				select: { order: { select: { user: { select: { id: true, email: true, fullName: true } } } } }
+	const demandSince = new Date(Date.now() - 30 * 86_400_000);
+	const [rentals, serviceOpenEvents] = await Promise.all([
+		prisma.phoneRental.findMany({
+			orderBy: { createdAt: 'desc' },
+			include: {
+				orderItem: {
+					select: {
+						refundedAmount: true,
+						order: { select: { user: { select: { id: true, email: true, fullName: true } } } }
+					}
+				}
 			}
-		}
-	});
+		}),
+		prisma.analyticsEvent.findMany({
+			where: {
+				type: 'numbers_service_open',
+				path: { startsWith: '/numbers/service/' },
+				createdAt: { gte: demandSince }
+			},
+			select: { path: true }
+		})
+	]);
+	const demand30d = summarizeNumbersDemand(
+		rentals
+			.filter((rental) => rental.createdAt >= demandSince)
+			.map((rental) => ({
+				serviceId: rental.serviceId,
+				serviceName: rental.serviceName,
+				status: rental.status
+			})),
+		serviceOpenEvents
+	);
 	const attempts = rentals.length
 		? await prisma.phoneAttempt.findMany({
 				where: {
@@ -263,7 +337,10 @@ export async function getNumbersAnalytics(): Promise<NumbersAnalytics> {
 		if (r.status === RECEIVED) {
 			g.received += 1;
 			overall.received += 1;
-			const sale = Number(r.saleAmountNgn ?? 0);
+			const sale = Math.max(
+				0,
+				Number(r.saleAmountNgn ?? 0) - Number(r.orderItem?.refundedAmount ?? 0)
+			);
 			g.revenueNgn += sale;
 			overall.revenueNgn += sale;
 			if (r.receivedAt) {
@@ -298,10 +375,12 @@ export async function getNumbersAnalytics(): Promise<NumbersAnalytics> {
 	return {
 		overall: {
 			...overall,
-			successRatePct: resolvedOverall > 0 ? Math.round((overall.received / resolvedOverall) * 100) : null,
+			successRatePct:
+				resolvedOverall > 0 ? Math.round((overall.received / resolvedOverall) * 100) : null,
 			marginNgn: overall.revenueNgn - overall.costNgn
 		},
 		byService,
+		demand30d,
 		recent: rentals.slice(0, 25).map((r) => {
 			const u = r.orderItem?.order?.user ?? null;
 			return {
@@ -311,7 +390,10 @@ export async function getNumbersAnalytics(): Promise<NumbersAnalytics> {
 				phoneNumber: r.phoneNumber,
 				status: r.status,
 				provider: r.provider,
-				saleNgn: Number(r.saleAmountNgn ?? 0),
+				saleNgn: Math.max(
+					0,
+					Number(r.saleAmountNgn ?? 0) - Number(r.orderItem?.refundedAmount ?? 0)
+				),
 				costUsd: actualCostByOrderItem.has(r.orderItemId)
 					? actualCostByOrderItem.get(r.orderItemId)! / 100
 					: r.costCents != null

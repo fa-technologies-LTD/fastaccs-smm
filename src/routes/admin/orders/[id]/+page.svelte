@@ -55,7 +55,9 @@
 	let items = $state<OrderItemWithDetails[]>(data.items);
 	const orderedItems = $derived(data.orderedItems || []);
 	const isBoostingOrder = $derived(
-		Array.isArray((order as unknown as { orderItems?: Array<{ boostTargetUrl?: string | null }> }).orderItems) &&
+		Array.isArray(
+			(order as unknown as { orderItems?: Array<{ boostTargetUrl?: string | null }> }).orderItems
+		) &&
 			(
 				order as unknown as { orderItems: Array<{ boostTargetUrl?: string | null }> }
 			).orderItems.some((item) => Boolean(item.boostTargetUrl))
@@ -353,9 +355,7 @@
 			});
 			// Optimistically reflect the refund so the button hides immediately (the local
 			// `items`/`order` are $state copies that invalidateAll can't refresh in place).
-			items = items.map((it) =>
-				it.id === accountId ? { ...it, account_status: 'faulty' } : it
-			);
+			items = items.map((it) => (it.id === accountId ? { ...it, account_status: 'faulty' } : it));
 			if (result.orderFullyRefunded) {
 				order = { ...order, status: 'refunded', paymentStatus: 'refunded' };
 			}
@@ -630,18 +630,23 @@
 								<span class="text-sm font-medium text-[var(--text-muted)]">Items</span>
 							</div>
 							<p class="text-2xl font-bold text-[var(--text)]">{order.item_count}</p>
-							<p class="text-sm text-[var(--text-muted)]">{isBoostingOrder ? 'boost quantity' : 'accounts ordered'}</p>
+							<p class="text-sm text-[var(--text-muted)]">
+								{isBoostingOrder ? 'boost quantity' : 'accounts ordered'}
+							</p>
 						</div>
 						<div>
 							<div class="mb-2 flex items-center">
 								<CreditCard class="mr-2 h-4 w-4 text-[var(--text-dim)]" />
-								<span class="text-sm font-medium text-[var(--text-muted)]">Total Amount</span>
+								<span class="text-sm font-medium text-[var(--text-muted)]">Net Sale</span>
 							</div>
 							<p class="text-2xl font-bold" style="color: var(--text);">
-								{formatAdminAmount(Number(order.total_amount || 0))}
+								{formatAdminAmount(Number(order.net_sale_amount || 0))}
 							</p>
 							<p class="text-sm text-[var(--text-muted)]">
-								{#if order.payment_id}
+								{#if Number(order.refunded_amount || 0) > 0}
+									{formatAdminAmount(Number(order.refunded_amount))} refunded from
+									{formatAdminAmount(Number(order.total_amount || 0))}
+								{:else if order.payment_id}
 									Payment ID: {order.payment_id}
 								{:else}
 									No payment ID
@@ -673,12 +678,18 @@
 							{#each orderedItems as ordered}
 								<div class="flex items-center justify-between px-6 py-3">
 									<div class="min-w-0">
-										<div class="truncate text-sm font-semibold text-[var(--text)]">{ordered.tierName}</div>
+										<div class="truncate text-sm font-semibold text-[var(--text)]">
+											{ordered.tierName}
+										</div>
 										{#if ordered.platformName}
-											<div class="truncate text-xs text-[var(--text-muted)]">{ordered.platformName}</div>
+											<div class="truncate text-xs text-[var(--text-muted)]">
+												{ordered.platformName}
+											</div>
 										{/if}
 									</div>
-									<div class="text-sm font-medium text-[var(--text-muted)]">×{ordered.quantity}</div>
+									<div class="text-sm font-medium text-[var(--text-muted)]">
+										×{ordered.quantity}
+									</div>
 								</div>
 							{/each}
 						</div>
@@ -712,119 +723,135 @@
 						</div>
 					</div>
 
-						{#if isBoostingOrder}
-							<div class="p-12 text-center">
-								<Package class="mx-auto mb-4 h-12 w-12 text-[var(--text-dim)]" />
-								<h3 class="mb-2 text-lg font-medium text-[var(--text)]">This is a boosting order</h3>
-								<p class="mb-4 text-[var(--text-muted)]">
-									No accounts to allocate — manage the link and fulfillment status from the
-									Boosting Orders queue.
-								</p>
-								<a
-									href="/admin/boosting-orders"
-									class="inline-flex items-center gap-2 rounded-full bg-[var(--bg-elev-2)] px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
-								>
-									Go to Boosting Orders
-								</a>
-							</div>
-						{:else if items.length === 0}
-							<div class="p-12 text-center">
-								<Package class="mx-auto mb-4 h-12 w-12 text-[var(--text-dim)]" />
-								<h3 class="mb-2 text-lg font-medium text-[var(--text)]">No accounts allocated</h3>
-								<p class="text-[var(--text-muted)]">Accounts will be allocated when the order is processed.</p>
-							</div>
-						{:else}
-									<div class="space-y-3 p-3 lg:hidden">
-										{#each items as item}
-											{@const accountStatus = getAccountStatus(item)}
-											{@const credentialEntries = getCanonicalCredentialEntries({
-												username: item.account_username,
-												password: item.account_password,
-												email: item.account_email,
-												emailPassword: item.account_email_password,
-												twoFa: item.account_two_fa,
-												linkUrl: item.account_link_url,
-												deliveryNotes: item.account_delivery_notes,
-												credentialExtras: item.account_credential_extras || {}
-											})}
-											<div class="rounded-lg border border-[var(--border)] p-3">
-										<div class="mb-2 flex items-start justify-between gap-2">
-											<div class="min-w-0">
-												<div class="truncate text-sm font-semibold text-[var(--text)]">
-													@{item.account_username || 'N/A'}
-												</div>
-												<div class="truncate text-xs text-[var(--text-muted)]">
-													{item.account_email || 'No email'}
-												</div>
+					{#if isBoostingOrder}
+						<div class="p-12 text-center">
+							<Package class="mx-auto mb-4 h-12 w-12 text-[var(--text-dim)]" />
+							<h3 class="mb-2 text-lg font-medium text-[var(--text)]">This is a boosting order</h3>
+							<p class="mb-4 text-[var(--text-muted)]">
+								No accounts to allocate — manage the link and fulfillment status from the Boosting
+								Orders queue.
+							</p>
+							<a
+								href="/admin/boosting-orders"
+								class="inline-flex items-center gap-2 rounded-full bg-[var(--bg-elev-2)] px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+							>
+								Go to Boosting Orders
+							</a>
+						</div>
+					{:else if items.length === 0}
+						<div class="p-12 text-center">
+							<Package class="mx-auto mb-4 h-12 w-12 text-[var(--text-dim)]" />
+							<h3 class="mb-2 text-lg font-medium text-[var(--text)]">No accounts allocated</h3>
+							<p class="text-[var(--text-muted)]">
+								Accounts will be allocated when the order is processed.
+							</p>
+						</div>
+					{:else}
+						<div class="space-y-3 p-3 lg:hidden">
+							{#each items as item}
+								{@const accountStatus = getAccountStatus(item)}
+								{@const credentialEntries = getCanonicalCredentialEntries({
+									username: item.account_username,
+									password: item.account_password,
+									email: item.account_email,
+									emailPassword: item.account_email_password,
+									twoFa: item.account_two_fa,
+									linkUrl: item.account_link_url,
+									deliveryNotes: item.account_delivery_notes,
+									credentialExtras: item.account_credential_extras || {}
+								})}
+								<div class="rounded-lg border border-[var(--border)] p-3">
+									<div class="mb-2 flex items-start justify-between gap-2">
+										<div class="min-w-0">
+											<div class="truncate text-sm font-semibold text-[var(--text)]">
+												@{item.account_username || 'N/A'}
 											</div>
-											<span
-												class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium {getAccountStatusColor(
-													accountStatus
-												)}"
-											>
-												{formatStatusLabel(accountStatus)}
-											</span>
+											<div class="truncate text-xs text-[var(--text-muted)]">
+												{item.account_email || 'No email'}
+											</div>
 										</div>
-										<div class="mb-3 flex items-center justify-between gap-2 text-xs text-[var(--text-muted)]">
-											<span>{item.platform_name} · {item.tier_name}</span>
-											{#if getAccountStatus(item) === 'faulty'}
-												<span class="text-[11px] font-medium text-amber-500">Refunded (faulty)</span>
+										<span
+											class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium {getAccountStatusColor(
+												accountStatus
+											)}"
+										>
+											{formatStatusLabel(accountStatus)}
+										</span>
+									</div>
+									<div
+										class="mb-3 flex items-center justify-between gap-2 text-xs text-[var(--text-muted)]"
+									>
+										<span>{item.platform_name} · {item.tier_name}</span>
+										{#if getAccountStatus(item) === 'faulty'}
+											<span class="text-[11px] font-medium text-amber-500">Refunded (faulty)</span>
+										{:else}
+											<button
+												onclick={() => refundFaultyAccount(item.id, item.account_username)}
+												disabled={refundingAccountId === item.id}
+												class="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-50"
+											>
+												{refundingAccountId === item.id ? 'Refunding…' : 'Mark faulty & refund'}
+											</button>
+										{/if}
+									</div>
+
+									{#if showCredentials}
+										<div
+											class="mb-3 space-y-1 rounded border border-[var(--border)] bg-[var(--bg-elev-2)] p-2 font-mono text-xs"
+										>
+											{#if credentialEntries.length === 0}
+												<div class="text-[11px] text-[var(--text-muted)]">
+													No credential fields found.
+												</div>
 											{:else}
-												<button
-													onclick={() => refundFaultyAccount(item.id, item.account_username)}
-													disabled={refundingAccountId === item.id}
-													class="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-50"
-												>
-													{refundingAccountId === item.id ? 'Refunding…' : 'Mark faulty & refund'}
-												</button>
+												{#each credentialEntries as entry}
+													<div>
+														<span class="font-semibold">{entry.label}:</span>
+														{#if entry.isUrl && entry.href}
+															<a
+																href={entry.href}
+																target="_blank"
+																rel="noopener noreferrer"
+																class="ml-1 inline-flex items-center gap-1 underline"
+																style="color: var(--link);"
+															>
+																{entry.value}
+																<ExternalLink class="h-3 w-3" />
+															</a>
+														{:else}
+															<span>{entry.value}</span>
+														{/if}
+													</div>
+												{/each}
+											{/if}
+											<div>
+												<span class="font-semibold">Added:</span>
+												{formatDateTime(item.account_created_at)}
+											</div>
+											{#if item.account_delivered_at}
+												<div>
+													<span class="font-semibold">Delivered:</span>
+													{formatDateTime(item.account_delivered_at)}
+												</div>
 											{/if}
 										</div>
-
-											{#if showCredentials}
-												<div class="mb-3 space-y-1 rounded border border-[var(--border)] bg-[var(--bg-elev-2)] p-2 font-mono text-xs">
-													{#if credentialEntries.length === 0}
-														<div class="text-[11px] text-[var(--text-muted)]">No credential fields found.</div>
-													{:else}
-														{#each credentialEntries as entry}
-															<div>
-																<span class="font-semibold">{entry.label}:</span>
-																{#if entry.isUrl && entry.href}
-																	<a
-																		href={entry.href}
-																		target="_blank"
-																		rel="noopener noreferrer"
-																		class="ml-1 inline-flex items-center gap-1 underline"
-																		style="color: var(--link);"
-																	>
-																		{entry.value}
-																		<ExternalLink class="h-3 w-3" />
-																	</a>
-																{:else}
-																	<span>{entry.value}</span>
-																{/if}
-															</div>
-														{/each}
-													{/if}
-													<div><span class="font-semibold">Added:</span> {formatDateTime(item.account_created_at)}</div>
-													{#if item.account_delivered_at}
-														<div><span class="font-semibold">Delivered:</span> {formatDateTime(item.account_delivered_at)}</div>
-												{/if}
-											</div>
-										{:else}
-											<div class="mb-3 rounded border border-[var(--border)] bg-[var(--bg-elev-2)] p-2">
-												<div class="text-[11px] text-[var(--text-muted)]">Password</div>
-												<div class="font-mono text-xs break-all text-[var(--text)]">
-													{item.account_password || 'No password'}
-												</div>
-											</div>
-										{/if}
-
-										<button
-											onclick={() => copyToClipboard(buildAccountLogText(item))}
-											class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-elev-2)] px-3 py-1 text-xs font-semibold text-[var(--link)]"
-											title="Copy account details"
+									{:else}
+										<div
+											class="mb-3 rounded border border-[var(--border)] bg-[var(--bg-elev-2)] p-2"
 										>
-											<Copy class="h-3.5 w-3.5" />
+											<div class="text-[11px] text-[var(--text-muted)]">Password</div>
+											<div class="font-mono text-xs break-all text-[var(--text)]">
+												{item.account_password || 'No password'}
+											</div>
+										</div>
+									{/if}
+
+									<button
+										onclick={() => copyToClipboard(buildAccountLogText(item))}
+										class="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-elev-2)] px-3 py-1 text-xs font-semibold text-[var(--link)]"
+										title="Copy account details"
+									>
+										<Copy class="h-3.5 w-3.5" />
 										Copy
 									</button>
 								</div>
@@ -871,20 +898,20 @@
 										</th>
 									</tr>
 								</thead>
-										<tbody class="divide-y divide-[var(--border)] bg-[var(--bg-elev-1)]">
-											{#each items as item}
-												{@const accountStatus = getAccountStatus(item)}
-												{@const credentialEntries = getCanonicalCredentialEntries({
-													username: item.account_username,
-													password: item.account_password,
-													email: item.account_email,
-													emailPassword: item.account_email_password,
-													twoFa: item.account_two_fa,
-													linkUrl: item.account_link_url,
-													deliveryNotes: item.account_delivery_notes,
-													credentialExtras: item.account_credential_extras || {}
-												})}
-												<tr class="hover:bg-[var(--bg-elev-2)]">
+								<tbody class="divide-y divide-[var(--border)] bg-[var(--bg-elev-1)]">
+									{#each items as item}
+										{@const accountStatus = getAccountStatus(item)}
+										{@const credentialEntries = getCanonicalCredentialEntries({
+											username: item.account_username,
+											password: item.account_password,
+											email: item.account_email,
+											emailPassword: item.account_email_password,
+											twoFa: item.account_two_fa,
+											linkUrl: item.account_link_url,
+											deliveryNotes: item.account_delivery_notes,
+											credentialExtras: item.account_credential_extras || {}
+										})}
+										<tr class="hover:bg-[var(--bg-elev-2)]">
 											<td class="px-6 py-4 whitespace-nowrap">
 												<div>
 													<div class="text-sm font-medium text-[var(--text)]">
@@ -905,35 +932,39 @@
 													</div>
 												</div>
 											</td>
-												{#if showCredentials}
-													<td class="px-6 py-4 align-top">
-														<div class="space-y-1 rounded border border-[var(--border)] bg-[var(--bg-elev-2)] p-2 font-mono text-xs">
-															{#if credentialEntries.length === 0}
-																<div class="text-[11px] text-[var(--text-muted)]">No credential fields found.</div>
-															{:else}
-																{#each credentialEntries as entry}
-																	<div>
-																		<span class="font-semibold">{entry.label}:</span>
-																		{#if entry.isUrl && entry.href}
-																			<a
-																				href={entry.href}
-																				target="_blank"
-																				rel="noopener noreferrer"
-																				class="inline-flex items-center gap-1 underline"
-																				style="color: var(--link);"
-																			>
-																				{entry.value}
-																				<ExternalLink class="h-3 w-3" />
-																			</a>
-																		{:else}
-																			<span>{entry.value}</span>
-																		{/if}
-																	</div>
-																{/each}
-															{/if}
-														</div>
-													</td>
-												{/if}
+											{#if showCredentials}
+												<td class="px-6 py-4 align-top">
+													<div
+														class="space-y-1 rounded border border-[var(--border)] bg-[var(--bg-elev-2)] p-2 font-mono text-xs"
+													>
+														{#if credentialEntries.length === 0}
+															<div class="text-[11px] text-[var(--text-muted)]">
+																No credential fields found.
+															</div>
+														{:else}
+															{#each credentialEntries as entry}
+																<div>
+																	<span class="font-semibold">{entry.label}:</span>
+																	{#if entry.isUrl && entry.href}
+																		<a
+																			href={entry.href}
+																			target="_blank"
+																			rel="noopener noreferrer"
+																			class="inline-flex items-center gap-1 underline"
+																			style="color: var(--link);"
+																		>
+																			{entry.value}
+																			<ExternalLink class="h-3 w-3" />
+																		</a>
+																	{:else}
+																		<span>{entry.value}</span>
+																	{/if}
+																</div>
+															{/each}
+														{/if}
+													</div>
+												</td>
+											{/if}
 											<td class="px-6 py-4 align-top whitespace-nowrap">
 												<span
 													class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {getAccountStatusColor(
@@ -947,7 +978,9 @@
 												<td class="px-6 py-4 align-top text-xs text-[var(--text-muted)]">
 													<div>Added: {formatDateTime(item.account_created_at)}</div>
 													{#if item.account_delivered_at}
-														<div class="mt-1">Delivered: {formatDateTime(item.account_delivered_at)}</div>
+														<div class="mt-1">
+															Delivered: {formatDateTime(item.account_delivered_at)}
+														</div>
 													{/if}
 												</td>
 											{/if}
@@ -1009,7 +1042,9 @@
 							<div class="flex items-center">
 								<Phone class="mr-3 h-4 w-4 text-[var(--text-dim)]" />
 								<div>
-									<p class="text-sm font-medium text-[var(--text)]">{order.metadata.customer_phone}</p>
+									<p class="text-sm font-medium text-[var(--text)]">
+										{order.metadata.customer_phone}
+									</p>
 									<p class="text-xs text-[var(--text-muted)]">Phone Number</p>
 								</div>
 							</div>
@@ -1023,7 +1058,9 @@
 						<h3 class="mb-4 text-lg font-semibold text-[var(--text)]">Affiliate Information</h3>
 						<div class="space-y-4">
 							<div class="flex items-center justify-between rounded-lg bg-[var(--bg-elev-2)] p-3">
-								<span class="text-sm font-medium text-[var(--text-muted)]">Affiliate Promo Code</span>
+								<span class="text-sm font-medium text-[var(--text-muted)]"
+									>Affiliate Promo Code</span
+								>
 								<a
 									href="/admin/affiliates?code={order.affiliateCode}"
 									class="font-mono text-sm font-semibold text-[var(--link)] transition-colors hover:text-[var(--link)]"
@@ -1044,9 +1081,7 @@
 							{/if}
 							<div class="flex items-center justify-between rounded-lg bg-green-50 p-3">
 								<span class="text-sm font-medium text-[var(--text-muted)]">Store Credit Award</span>
-								<span class="text-sm font-bold text-green-600">
-									Tracked in affiliate ledger
-								</span>
+								<span class="text-sm font-bold text-green-600"> Tracked in affiliate ledger </span>
 							</div>
 						</div>
 					</div>
@@ -1058,7 +1093,10 @@
 
 					<div class="space-y-4">
 						<div>
-							<label for="delivery-method" class="mb-2 block text-sm font-medium text-[var(--text-muted)]">
+							<label
+								for="delivery-method"
+								class="mb-2 block text-sm font-medium text-[var(--text-muted)]"
+							>
 								Delivery Method
 							</label>
 							<select
@@ -1157,7 +1195,9 @@
 									<p class="text-sm text-[var(--text)]">
 										{typeof note === 'string' ? note : note.note}
 									</p>
-									<div class="mt-2 flex items-center justify-between text-xs text-[var(--text-muted)]">
+									<div
+										class="mt-2 flex items-center justify-between text-xs text-[var(--text-muted)]"
+									>
 										<span>{typeof note === 'string' ? 'Admin' : note.author || 'Admin'}</span>
 										<span>
 											{typeof note === 'string'

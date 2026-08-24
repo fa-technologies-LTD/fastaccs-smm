@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
 import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
-import { isRevenueOrder } from '$lib/helpers/order-revenue';
+import { isRevenueOrder, toNetSales } from '$lib/helpers/order-revenue';
 import { getStoreCreditTotalsForUsers } from '$lib/services/store-credit';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -19,7 +19,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 						// Needed by isRevenueOrder: the Numbers auto-refund marks deliveryStatus, so
 						// without it a refunded number order still counted as a paid sale.
 						deliveryStatus: true,
-						totalAmount: true
+						totalAmount: true,
+						refundedAmount: true
 					}
 				},
 				wallet: true
@@ -62,7 +63,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 				orderCount: user.orders.length,
 				successfulOrderCount: successfulOrders.length,
 				totalSpent: revenueVisible
-					? successfulOrders.reduce((sum, order) => sum + Number(order.totalAmount), 0)
+					? successfulOrders.reduce(
+							(sum, order) => sum + toNetSales(order.totalAmount, order.refundedAmount),
+							0
+						)
 					: 0,
 				storeCreditBalance: storeCreditByUser.get(user.id) ?? 0,
 				walletBalance: user.wallet ? Number(user.wallet.balance) : 0

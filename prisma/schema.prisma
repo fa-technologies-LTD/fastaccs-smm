@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   // Runtime queries go through the Neon pooler (pgbouncer=true disables prepared
   // statements, which transaction-pooling requires). Migrations use the direct,
   // non-pooled connection — running DDL through pgbouncer is unreliable.
@@ -12,71 +12,71 @@ datasource db {
 }
 
 model User {
-  id                      String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email                   String?             @unique
-  googleId                String?             @unique @map("google_id")
-  passwordHash            String?             @map("password_hash")
-  fullName                String?             @map("full_name")
-  avatarUrl               String?             @map("avatar_url")
-  phone                   String?
-  guestSessionId          String?             @unique @map("guest_session_id")
-  dailyPurchaseLimit      Int                 @default(100) @map("daily_purchase_limit")
-  totalPurchaseLimit      Int                 @default(1000) @map("total_purchase_limit")
-  restrictedCategories    String[]            @map("restricted_categories")
-  isActive                Boolean             @default(true) @map("is_active")
-  emailVerified           Boolean             @default(false) @map("email_verified")
-  emailVerifiedAt         DateTime?           @map("email_verified_at")
-  registeredAt            DateTime            @default(now()) @map("registered_at")
+  id                              String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                           String?                   @unique
+  googleId                        String?                   @unique @map("google_id")
+  passwordHash                    String?                   @map("password_hash")
+  fullName                        String?                   @map("full_name")
+  avatarUrl                       String?                   @map("avatar_url")
+  phone                           String?
+  guestSessionId                  String?                   @unique @map("guest_session_id")
+  dailyPurchaseLimit              Int                       @default(100) @map("daily_purchase_limit")
+  totalPurchaseLimit              Int                       @default(1000) @map("total_purchase_limit")
+  restrictedCategories            String[]                  @map("restricted_categories")
+  isActive                        Boolean                   @default(true) @map("is_active")
+  emailVerified                   Boolean                   @default(false) @map("email_verified")
+  emailVerifiedAt                 DateTime?                 @map("email_verified_at")
+  registeredAt                    DateTime                  @default(now()) @map("registered_at")
   // First-touch acquisition attribution (where this user originally came from).
-  acquisitionSource       String?             @map("acquisition_source")
-  acquisitionMedium       String?             @map("acquisition_medium")
-  acquisitionCampaign     String?             @map("acquisition_campaign")
-  acquisitionReferrer     String?             @map("acquisition_referrer")
-  acquisitionLanding      String?             @map("acquisition_landing")
-  lastLogin               DateTime?           @map("last_login")
-  lastSeenAt              DateTime?           @map("last_seen_at")
-  marketingEmailEnabled   Boolean             @default(true) @map("marketing_email_enabled")
-  marketingUnsubscribedAt DateTime?           @map("marketing_unsubscribed_at")
-  marketingSuppressedAt   DateTime?           @map("marketing_suppressed_at")
-  marketingSuppressReason String?             @map("marketing_suppress_reason")
-  marketingPreferenceToken String             @unique @default(dbgenerated("gen_random_uuid()")) @map("marketing_preference_token") @db.Uuid
-  createdAt               DateTime            @default(now()) @map("created_at")
-  updatedAt               DateTime            @default(now()) @map("updated_at")
-  userType                UserType            @default(REGISTERED) @map("user_type")
-  preferredDeliveryMethod DeliveryMethod      @default(EMAIL) @map("preferred_delivery_method")
-  isAffiliateEnabled      Boolean             @default(false) @map("is_affiliate_enabled")
-  affiliateWelcomePopupSeenAt    DateTime?     @map("affiliate_welcome_popup_seen_at")
-  affiliateProgress50PopupSeenAt DateTime?     @map("affiliate_progress_50_popup_seen_at")
-  affiliateProgress80PopupSeenAt DateTime?     @map("affiliate_progress_80_popup_seen_at")
-  affiliateProgress95PopupSeenAt DateTime?     @map("affiliate_progress_95_popup_seen_at")
-  affiliateUnlockedPopupSeenAt   DateTime?     @map("affiliate_unlocked_popup_seen_at")
-  affiliateShareCodePopupSeenAt  DateTime?     @map("affiliate_share_code_popup_seen_at")
-  firstPurchasePopupSeenAt DateTime?           @map("first_purchase_popup_seen_at")
-  catalogUpdatesLastSeenAt DateTime?           @map("catalog_updates_last_seen_at")
-  boostingLaunchPopupSeenAt DateTime?          @map("boosting_launch_popup_seen_at")
-  numbersLaunchPopupSeenAt DateTime?           @map("numbers_launch_popup_seen_at")
-  boostingCrossSellPopupSeenCount Int   @default(0) @map("boosting_cross_sell_popup_seen_count")
-  affiliateRefreshPopupSeenAt DateTime?       @map("affiliate_refresh_popup_seen_at")
-  bankDetailsPopupSeenAt  DateTime?           @map("bank_details_popup_seen_at")
-  affiliatePrograms       AffiliateProgram[]
-  cartItems               CartItem[]
-  notifications           Notification[]
-  affiliateOrders         Order[]             @relation("AffiliateOrders")
-  orders                  Order[]
-  reviews                 Review[]
-  restockSubscriptions    RestockSubscription[]
-  boostingServiceWaitlistEntries BoostingServiceWaitlist[]
-  affiliatePayoutDetails  AffiliatePayoutDetails?
-  pushSubscriptions       PushSubscription[]
-  sessions                Session[]
-  verificationCodes       VerificationCode[]
-  walletTransactions      WalletTransaction[]
-  wallet                  Wallet?
-  emailNotifications      EmailNotification[]
-  adminRoleAssignment     AdminRoleAssignment?
-  adminAuditActions       AdminAuditLog[]     @relation("AdminAuditActor")
-  adminAuditTargets       AdminAuditLog[]     @relation("AdminAuditTarget")
-  promotionRedemptions    PromotionRedemption[]
+  acquisitionSource               String?                   @map("acquisition_source")
+  acquisitionMedium               String?                   @map("acquisition_medium")
+  acquisitionCampaign             String?                   @map("acquisition_campaign")
+  acquisitionReferrer             String?                   @map("acquisition_referrer")
+  acquisitionLanding              String?                   @map("acquisition_landing")
+  lastLogin                       DateTime?                 @map("last_login")
+  lastSeenAt                      DateTime?                 @map("last_seen_at")
+  marketingEmailEnabled           Boolean                   @default(true) @map("marketing_email_enabled")
+  marketingUnsubscribedAt         DateTime?                 @map("marketing_unsubscribed_at")
+  marketingSuppressedAt           DateTime?                 @map("marketing_suppressed_at")
+  marketingSuppressReason         String?                   @map("marketing_suppress_reason")
+  marketingPreferenceToken        String                    @unique @default(dbgenerated("gen_random_uuid()")) @map("marketing_preference_token") @db.Uuid
+  createdAt                       DateTime                  @default(now()) @map("created_at")
+  updatedAt                       DateTime                  @default(now()) @map("updated_at")
+  userType                        UserType                  @default(REGISTERED) @map("user_type")
+  preferredDeliveryMethod         DeliveryMethod            @default(EMAIL) @map("preferred_delivery_method")
+  isAffiliateEnabled              Boolean                   @default(false) @map("is_affiliate_enabled")
+  affiliateWelcomePopupSeenAt     DateTime?                 @map("affiliate_welcome_popup_seen_at")
+  affiliateProgress50PopupSeenAt  DateTime?                 @map("affiliate_progress_50_popup_seen_at")
+  affiliateProgress80PopupSeenAt  DateTime?                 @map("affiliate_progress_80_popup_seen_at")
+  affiliateProgress95PopupSeenAt  DateTime?                 @map("affiliate_progress_95_popup_seen_at")
+  affiliateUnlockedPopupSeenAt    DateTime?                 @map("affiliate_unlocked_popup_seen_at")
+  affiliateShareCodePopupSeenAt   DateTime?                 @map("affiliate_share_code_popup_seen_at")
+  firstPurchasePopupSeenAt        DateTime?                 @map("first_purchase_popup_seen_at")
+  catalogUpdatesLastSeenAt        DateTime?                 @map("catalog_updates_last_seen_at")
+  boostingLaunchPopupSeenAt       DateTime?                 @map("boosting_launch_popup_seen_at")
+  numbersLaunchPopupSeenAt        DateTime?                 @map("numbers_launch_popup_seen_at")
+  boostingCrossSellPopupSeenCount Int                       @default(0) @map("boosting_cross_sell_popup_seen_count")
+  affiliateRefreshPopupSeenAt     DateTime?                 @map("affiliate_refresh_popup_seen_at")
+  bankDetailsPopupSeenAt          DateTime?                 @map("bank_details_popup_seen_at")
+  affiliatePrograms               AffiliateProgram[]
+  cartItems                       CartItem[]
+  notifications                   Notification[]
+  affiliateOrders                 Order[]                   @relation("AffiliateOrders")
+  orders                          Order[]
+  reviews                         Review[]
+  restockSubscriptions            RestockSubscription[]
+  boostingServiceWaitlistEntries  BoostingServiceWaitlist[]
+  affiliatePayoutDetails          AffiliatePayoutDetails?
+  pushSubscriptions               PushSubscription[]
+  sessions                        Session[]
+  verificationCodes               VerificationCode[]
+  walletTransactions              WalletTransaction[]
+  wallet                          Wallet?
+  emailNotifications              EmailNotification[]
+  adminRoleAssignment             AdminRoleAssignment?
+  adminAuditActions               AdminAuditLog[]           @relation("AdminAuditActor")
+  adminAuditTargets               AdminAuditLog[]           @relation("AdminAuditTarget")
+  promotionRedemptions            PromotionRedemption[]
 
   @@index([lastSeenAt])
   @@map("users")
@@ -175,53 +175,60 @@ model Account {
 }
 
 model Order {
-  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orderNumber        String         @unique @map("order_number")
-  userId             String?        @map("user_id") @db.Uuid
-  guestEmail         String?        @map("guest_email")
-  guestPhone         String?        @map("guest_phone")
-  emailVerified      Boolean        @default(false) @map("email_verified")
-  verificationToken  String?        @map("verification_token")
-  verificationSentAt DateTime?      @map("verification_sent_at")
-  subtotal           Decimal
-  taxAmount          Decimal        @default(0) @map("tax_amount")
-  discountAmount     Decimal        @default(0) @map("discount_amount")
-  storeCreditApplied Decimal        @default(0) @map("store_credit_applied")
-  totalAmount        Decimal        @map("total_amount")
-  currency           String         @default("NGN")
-  paymentMethod      String?        @map("payment_method")
-  paymentReference   String?        @map("payment_reference")
-  paymentCheckoutUrl String?        @map("payment_checkout_url")
-  paymentExpiresAt   DateTime?      @map("payment_expires_at")
-  paymentStatus      String         @default("pending") @map("payment_status")
-  paidAt             DateTime?      @map("paid_at")
-  deliveryMethod     String         @map("delivery_method")
-  deliveryContact    String         @map("delivery_contact")
-  deliveryStatus     String         @default("pending") @map("delivery_status")
-  deliveredAt        DateTime?      @map("delivered_at")
-  status             String         @default("pending")
-  orderType          String         @default("account") @map("order_type")
-  affiliateCode      String?        @map("affiliate_code")
-  affiliateUserId    String?        @map("affiliate_user_id") @db.Uuid
-  createdAt          DateTime       @default(now()) @map("created_at")
-  updatedAt          DateTime       @default(now()) @map("updated_at")
-  paymentChannel     String?        @map("payment_channel")
-  cancellationReason String?        @map("cancellation_reason")
-  promotionId        String?        @map("promotion_id") @db.Uuid
-  promotionCode      String?        @map("promotion_code")
-  checkoutKey        String?        @unique @map("checkout_key")
-  analyticsMetadata  Json           @default("{}") @map("analytics_metadata")
-  notifications      Notification[]
-  orderItems         OrderItem[]
-  affiliateUser      User?          @relation("AffiliateOrders", fields: [affiliateUserId], references: [id])
-  promotion          PromotionCode? @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderNumber         String               @unique @map("order_number")
+  userId              String?              @map("user_id") @db.Uuid
+  guestEmail          String?              @map("guest_email")
+  guestPhone          String?              @map("guest_phone")
+  emailVerified       Boolean              @default(false) @map("email_verified")
+  verificationToken   String?              @map("verification_token")
+  verificationSentAt  DateTime?            @map("verification_sent_at")
+  subtotal            Decimal
+  taxAmount           Decimal              @default(0) @map("tax_amount")
+  discountAmount      Decimal              @default(0) @map("discount_amount")
+  storeCreditApplied  Decimal              @default(0) @map("store_credit_applied")
+  // Money returned after payment. The original totalAmount never changes; net sales are
+  // totalAmount - refundedAmount. Wallet transactions remain the monetary audit ledger.
+  refundedAmount      Decimal              @default(0) @map("refunded_amount") @db.Decimal(10, 2)
+  totalAmount         Decimal              @map("total_amount")
+  currency            String               @default("NGN")
+  paymentMethod       String?              @map("payment_method")
+  paymentReference    String?              @unique @map("payment_reference")
+  paymentCheckoutUrl  String?              @map("payment_checkout_url")
+  paymentExpiresAt    DateTime?            @map("payment_expires_at")
+  paymentStatus       String               @default("pending") @map("payment_status")
+  paidAt              DateTime?            @map("paid_at")
+  deliveryMethod      String               @map("delivery_method")
+  deliveryContact     String               @map("delivery_contact")
+  deliveryStatus      String               @default("pending") @map("delivery_status")
+  deliveredAt         DateTime?            @map("delivered_at")
+  status              String               @default("pending")
+  orderType           String               @default("account") @map("order_type")
+  affiliateCode       String?              @map("affiliate_code")
+  affiliateUserId     String?              @map("affiliate_user_id") @db.Uuid
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @default(now()) @map("updated_at")
+  paymentChannel      String?              @map("payment_channel")
+  cancellationReason  String?              @map("cancellation_reason")
+  promotionId         String?              @map("promotion_id") @db.Uuid
+  promotionCode       String?              @map("promotion_code")
+  checkoutKey         String?              @unique @map("checkout_key")
+  analyticsMetadata   Json                 @default("{}") @map("analytics_metadata")
+  notifications       Notification[]
+  events              OrderEvent[]
+  orderItems          OrderItem[]
+  affiliateUser       User?                @relation("AffiliateOrders", fields: [affiliateUserId], references: [id])
+  promotion           PromotionCode?       @relation(fields: [promotionId], references: [id], onDelete: SetNull)
   promotionRedemption PromotionRedemption?
-  user               User?          @relation(fields: [userId], references: [id])
+  user                User?                @relation(fields: [userId], references: [id])
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@index([orderType, createdAt])
   @@index([paymentStatus])
+  @@index([paidAt])
+  @@index([paymentStatus, paidAt])
+  @@index([deliveryStatus, updatedAt])
   @@index([paymentExpiresAt])
   @@index([affiliateUserId])
   @@index([affiliateCode])
@@ -231,28 +238,31 @@ model Order {
 }
 
 model OrderItem {
-  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orderId          String    @map("order_id") @db.Uuid
-  quantity         Int
-  unitPrice        Decimal   @map("unit_price")
-  totalPrice       Decimal   @map("total_price")
-  productName      String    @map("product_name")
-  productCategory  String    @map("product_category")
-  allocationStatus String    @default("pending") @map("allocation_status")
-  allocatedCount   Int       @default(0) @map("allocated_count")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @default(now()) @map("updated_at")
-  categoryId       String    @map("category_id") @db.Uuid
-  boostTargetUrl         String?   @map("boost_target_url")
-  boostQuantity          Int?      @map("boost_quantity")
-  boostFulfillmentStatus String?   @map("boost_fulfillment_status")
-  boostProviderReference String?   @map("boost_provider_reference")
-  boostCompletedAt       DateTime? @map("boost_completed_at")
-  accounts         Account[]
-  category         Category  @relation(fields: [categoryId], references: [id])
-  order            Order     @relation(fields: [orderId], references: [id])
-  reviews          Review[]
-  phoneRental      PhoneRental?
+  id                     String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId                String       @map("order_id") @db.Uuid
+  quantity               Int
+  unitPrice              Decimal      @map("unit_price")
+  totalPrice             Decimal      @map("total_price")
+  // Item-attributed portion of Order.refundedAmount. Used for honest tier/product
+  // analytics and partial-item purchase history; it never rewrites totalPrice.
+  refundedAmount         Decimal      @default(0) @map("refunded_amount") @db.Decimal(10, 2)
+  productName            String       @map("product_name")
+  productCategory        String       @map("product_category")
+  allocationStatus       String       @default("pending") @map("allocation_status")
+  allocatedCount         Int          @default(0) @map("allocated_count")
+  createdAt              DateTime     @default(now()) @map("created_at")
+  updatedAt              DateTime     @default(now()) @map("updated_at")
+  categoryId             String       @map("category_id") @db.Uuid
+  boostTargetUrl         String?      @map("boost_target_url")
+  boostQuantity          Int?         @map("boost_quantity")
+  boostFulfillmentStatus String?      @map("boost_fulfillment_status")
+  boostProviderReference String?      @map("boost_provider_reference")
+  boostCompletedAt       DateTime?    @map("boost_completed_at")
+  accounts               Account[]
+  category               Category     @relation(fields: [categoryId], references: [id])
+  order                  Order        @relation(fields: [orderId], references: [id])
+  reviews                Review[]
+  phoneRental            PhoneRental?
 
   @@index([orderId])
   @@index([categoryId])
@@ -261,76 +271,151 @@ model OrderItem {
   @@map("order_items")
 }
 
+// Append-only business history. Orders remain the current-state snapshot; this table records
+// what actually happened, when, and from which money/fulfilment path.
+model OrderEvent {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId        String   @map("order_id") @db.Uuid
+  type           String
+  source         String
+  actorUserId    String?  @map("actor_user_id") @db.Uuid
+  orderItemId    String?  @map("order_item_id") @db.Uuid
+  accountId      String?  @map("account_id") @db.Uuid
+  amount         Decimal? @db.Decimal(10, 2)
+  description    String?
+  idempotencyKey String?  @unique @map("idempotency_key")
+  metadata       Json     @default("{}")
+  occurredAt     DateTime @default(now()) @map("occurred_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, occurredAt])
+  @@index([type, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("order_events")
+}
+
 // Automated verification-number (SMS/OTP) rental fulfilled via hub-man.
 // One per phone-type OrderItem; orderItemId is the idempotency key.
 model PhoneRental {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orderItemId   String    @unique @map("order_item_id") @db.Uuid
+  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderItemId             String    @unique @map("order_item_id") @db.Uuid
   // Which source supplied this number. hub-man keeps using hubOrderUuid as its handle;
   // pvapins (and any future source) stores its opaque handle in providerRef.
-  provider      String    @default("hubman")
-  providerRef   String?   @map("provider_ref")
+  provider                String    @default("hubman")
+  providerRef             String?   @map("provider_ref")
   // Supplier keys already tried on this order (so "try another" climbs without repeating one).
-  triedSuppliers String[]  @default([]) @map("tried_suppliers")
-  retryCount    Int       @default(0) @map("retry_count") // customer 'try another' attempts used
-  hubOrderUuid  String?   @map("hub_order_uuid")
-  serviceId     Int       @map("service_id")
-  serviceName   String    @map("service_name")
-  countryId     Int       @map("country_id")
-  countryName   String    @map("country_name")
-  phoneNumber   String?   @map("phone_number")
+  triedSuppliers          String[]  @default([]) @map("tried_suppliers")
+  retryCount              Int       @default(0) @map("retry_count") // customer 'try another' attempts used
+  hubOrderUuid            String?   @map("hub_order_uuid")
+  serviceId               Int       @map("service_id")
+  serviceName             String    @map("service_name")
+  countryId               Int       @map("country_id")
+  countryName             String    @map("country_name")
+  phoneNumber             String?   @map("phone_number")
   // pending | renting | awaiting_sms | cancelling | replacing | received | expired | cancelled | refunded | failed
-  status        String    @default("pending")
+  status                  String    @default("pending")
   // Monotonic ownership fence for replacement generations. Every pending -> renting claim
   // increments this value; a late worker may only persist/cancel results for the generation it owns.
-  generation    Int       @default(0)
+  generation              Int       @default(0)
   // Per-rental (never global) rent lease. Different order items can rent concurrently, while
   // duplicate drivers for the same generation are reduced to one upstream rent caller.
-  rentLeaseToken      String?   @map("rent_lease_token")
-  rentLeaseExpiresAt  DateTime? @map("rent_lease_expires_at")
-  rentingAt           DateTime? @map("renting_at")
+  rentLeaseToken          String?   @map("rent_lease_token")
+  rentLeaseExpiresAt      DateTime? @map("rent_lease_expires_at")
+  rentingAt               DateTime? @map("renting_at")
   rentCandidateProvider   String?   @map("rent_candidate_provider")
   rentCandidateServiceRef String?   @map("rent_candidate_service_ref")
   rentCallStartedAt       DateTime? @map("rent_call_started_at")
+  // Durable supplier backoff. Browser polls and cron runs may observe the rental, but must
+  // not rescan providers until this time after a global supplier limit/cooldown.
+  nextRentAttemptAt       DateTime? @map("next_rent_attempt_at")
   // Short lease for cancel/replacement operations. It serializes actions on one active number
   // without blocking unrelated buyers and lets the cron safely recover an interrupted operation.
   operationToken          String?   @map("operation_token")
   operationLeaseExpiresAt DateTime? @map("operation_lease_expires_at")
-  otp           String?
-  smsMessage    String?   @map("sms_message")
-  senderName    String?   @map("sender_name")
-  costCents     Int?      @map("cost_cents") // actual hub-man price_cents charged (USD cents)
-  maxPriceCents Int?      @map("max_price_cents") // ceiling we sent (USD cents)
+  otp                     String?
+  smsMessage              String?   @map("sms_message")
+  senderName              String?   @map("sender_name")
+  costCents               Int?      @map("cost_cents") // actual hub-man price_cents charged (USD cents)
+  maxPriceCents           Int?      @map("max_price_cents") // ceiling we sent (USD cents)
   // KNOWN committed liability from earlier attempts (USD cents) reserved out of the procurement
-  // budget so a replacement can never push total spend past the hard profit floor — e.g. a hub-man
-  // rent (pay-on-rent, already debited) whose cancel isn't confirmed, or a 2nd overlapping stale
-  // pvapins hold. Accumulates across retries; conservative (released when the order terminally resolves).
-  reservedLiabilityCents Int @default(0) @map("reserved_liability_cents")
+  // budget so a replacement can never push total spend past the hard profit floor. Current
+  // suppliers are pay-on-success; this remains for a future pay-on-rent source or the capped second
+  // overlapping PVAPins shadow. Accumulates across retries.
+  reservedLiabilityCents  Int       @default(0) @map("reserved_liability_cents")
   // When the customer confirmed "I've requested the code" — the authoritative server clock the
   // ~120s replacement wait runs from (not rent time). Cleared on each fresh number.
-  otpRequestedAt DateTime? @map("otp_requested_at")
+  otpRequestedAt          DateTime? @map("otp_requested_at")
   // The single "shadow": a stale pvapins predecessor that timed out the 120s wait with release
   // unconfirmed. Pay-on-success + likely-dead, so it's CONTINGENT (not reserved 1:1) — kept durable
   // for background reconciliation + late-charge (leakage) accounting. Overlap capped at one shadow.
-  shadowProviderRef String?   @map("shadow_provider_ref")
-  shadowCostCents   Int?      @map("shadow_cost_cents")
-  shadowStaleAt     DateTime? @map("shadow_stale_at")
-  saleAmountNgn Decimal?  @map("sale_amount_ngn") // what the customer paid, NGN
-  rentedAt      DateTime? @map("rented_at") // when the number was actually rented (drives the 2-min cancel window)
-  expiresAt     DateTime? @map("expires_at")
-  receivedAt    DateTime? @map("received_at")
-  refundedAt    DateTime? @map("refunded_at")
-  failureReason String?   @map("failure_reason")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @default(now()) @map("updated_at")
-  orderItem     OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  shadowProviderRef       String?   @map("shadow_provider_ref")
+  shadowCostCents         Int?      @map("shadow_cost_cents")
+  shadowStaleAt           DateTime? @map("shadow_stale_at")
+  saleAmountNgn           Decimal?  @map("sale_amount_ngn") // what the customer paid, NGN
+  rentedAt                DateTime? @map("rented_at") // when the number was actually rented (drives the 2-min cancel window)
+  expiresAt               DateTime? @map("expires_at")
+  receivedAt              DateTime? @map("received_at")
+  refundedAt              DateTime? @map("refunded_at")
+  failureReason           String?   @map("failure_reason")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @default(now()) @map("updated_at")
+  orderItem               OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@index([status, rentLeaseExpiresAt])
+  @@index([status, nextRentAttemptAt])
   @@index([status, operationLeaseExpiresAt])
   @@index([hubOrderUuid])
   @@index([createdAt])
   @@map("phone_rentals")
+}
+
+// Controlled idle-time catalogue discovery. A successful rent proves only that the combination
+// was rentable; buyer OTP outcomes remain the stronger delivery-quality evidence.
+model PhoneCatalogProbe {
+  id                 String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider           String                     @default("pvapins")
+  serviceId          Int                        @map("service_id")
+  serviceName        String                     @map("service_name")
+  providerServiceRef String                     @map("provider_service_ref")
+  countryId          Int                        @map("country_id")
+  countryName        String                     @map("country_name")
+  status             String                     @default("discovered")
+  successCount       Int                        @default(0) @map("success_count")
+  failureCount       Int                        @default(0) @map("failure_count")
+  lastProbedAt       DateTime?                  @map("last_probed_at")
+  lastRentableAt     DateTime?                  @map("last_rentable_at")
+  lastFailureAt      DateTime?                  @map("last_failure_at")
+  nextProbeAt        DateTime?                  @map("next_probe_at")
+  lastProviderRef    String?                    @map("last_provider_ref")
+  releaseConfirmed   Boolean?                   @map("release_confirmed")
+  metadata           Json                       @default("{}")
+  createdAt          DateTime                   @default(now()) @map("created_at")
+  updatedAt          DateTime                   @updatedAt @map("updated_at")
+  attempts           PhoneCatalogProbeAttempt[]
+
+  @@unique([provider, providerServiceRef, countryName])
+  @@index([status, nextProbeAt])
+  @@index([lastProbedAt])
+  @@map("phone_catalog_probes")
+}
+
+// Append-only record of each controlled idle probe. This makes the daily cap and release audit
+// exact even when the same service/country combination is revisited later.
+model PhoneCatalogProbeAttempt {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  probeId          String            @map("probe_id") @db.Uuid
+  outcome          String
+  providerRef      String?           @map("provider_ref")
+  releaseConfirmed Boolean?          @map("release_confirmed")
+  errorMessage     String?           @map("error_message")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  probe            PhoneCatalogProbe @relation(fields: [probeId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([probeId, createdAt])
+  @@map("phone_catalog_probe_attempts")
 }
 
 model CartItem {
@@ -368,14 +453,14 @@ model Notification {
 }
 
 model PushSubscription {
-  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String    @map("user_id") @db.Uuid
-  endpoint  String    @unique
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  endpoint  String   @unique
   p256dh    String
   auth      String
-  userAgent String?   @map("user_agent")
-  createdAt DateTime  @default(now()) @map("created_at")
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("push_subscriptions")
@@ -512,24 +597,24 @@ model Microcopy {
 }
 
 model EmailNotification {
-  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId           String?   @map("user_id") @db.Uuid
-  email            String
-  notificationType String    @map("notification_type")
-  classification   String    @default("transactional")
-  campaignKey      String?   @map("campaign_key")
-  referenceId      String?   @map("reference_id")
-  subject          String?
-  body             String?
-  status           String    @default("pending")
-  processingAt     DateTime? @map("processing_at")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  sentAt           DateTime? @map("sent_at")
-  failedAt         DateTime? @map("failed_at")
-  errorMessage     String?   @map("error_message")
-  suppressionReason String?  @map("suppression_reason")
-  broadcastId      String?   @map("broadcast_id") @db.Uuid
-  user             User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String?   @map("user_id") @db.Uuid
+  email             String
+  notificationType  String    @map("notification_type")
+  classification    String    @default("transactional")
+  campaignKey       String?   @map("campaign_key")
+  referenceId       String?   @map("reference_id")
+  subject           String?
+  body              String?
+  status            String    @default("pending")
+  processingAt      DateTime? @map("processing_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  sentAt            DateTime? @map("sent_at")
+  failedAt          DateTime? @map("failed_at")
+  errorMessage      String?   @map("error_message")
+  suppressionReason String?   @map("suppression_reason")
+  broadcastId       String?   @map("broadcast_id") @db.Uuid
+  user              User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([notificationType])
   @@index([classification, status, sentAt])
@@ -659,24 +744,24 @@ model AdminAuditLog {
 }
 
 model PromotionCode {
-  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  code             String               @unique
+  id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code             String                @unique
   type             PromotionType
-  value            Decimal              @db.Decimal(10, 2)
-  currency         String               @default("NGN")
-  minOrderValue    Decimal              @default(0) @map("min_order_value") @db.Decimal(10, 2)
-  usageCap         Int?                 @map("usage_cap")
-  usageCount       Int                  @default(0) @map("usage_count")
-  singleUsePerUser Boolean              @default(false) @map("single_use_per_user")
-  platformIds      String[]             @map("platform_ids")
-  startsAt         DateTime?            @map("starts_at")
-  endsAt           DateTime?            @map("ends_at")
-  isActive         Boolean              @default(true) @map("is_active")
-  createdBy        String?              @map("created_by") @db.Uuid
+  value            Decimal               @db.Decimal(10, 2)
+  currency         String                @default("NGN")
+  minOrderValue    Decimal               @default(0) @map("min_order_value") @db.Decimal(10, 2)
+  usageCap         Int?                  @map("usage_cap")
+  usageCount       Int                   @default(0) @map("usage_count")
+  singleUsePerUser Boolean               @default(false) @map("single_use_per_user")
+  platformIds      String[]              @map("platform_ids")
+  startsAt         DateTime?             @map("starts_at")
+  endsAt           DateTime?             @map("ends_at")
+  isActive         Boolean               @default(true) @map("is_active")
+  createdBy        String?               @map("created_by") @db.Uuid
   // When set, only this user may redeem the code (e.g. spend-milestone rewards).
-  issuedToUserId   String?              @map("issued_to_user_id") @db.Uuid
-  createdAt        DateTime             @default(now()) @map("created_at")
-  updatedAt        DateTime             @default(now()) @map("updated_at")
+  issuedToUserId   String?               @map("issued_to_user_id") @db.Uuid
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @default(now()) @map("updated_at")
   orders           Order[]
   redemptions      PromotionRedemption[]
 

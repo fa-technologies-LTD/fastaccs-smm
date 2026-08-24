@@ -1,3 +1,5 @@
+import { recordOrderEventBestEffort } from '$lib/services/order-events';
+
 type StatusTransitionSource =
 	| 'verify'
 	| 'webhook'
@@ -33,5 +35,17 @@ export function logOrderStatusTransition(input: StatusTransitionLogInput): void 
 		fromPaymentStatus,
 		toPaymentStatus,
 		at: new Date().toISOString()
+	});
+
+	const paymentConfirmed = toPaymentStatus === 'paid' && fromPaymentStatus !== 'paid';
+	recordOrderEventBestEffort({
+		orderId: input.orderId,
+		type: paymentConfirmed ? 'payment_confirmed' : 'status_changed',
+		source: input.source,
+		description: paymentConfirmed
+			? 'Payment confirmed'
+			: `Order ${fromStatus || 'unknown'} → ${toStatus || 'unknown'}`,
+		idempotencyKey: paymentConfirmed ? `payment:confirmed:${input.orderId}` : null,
+		metadata: { fromStatus, toStatus, fromPaymentStatus, toPaymentStatus }
 	});
 }

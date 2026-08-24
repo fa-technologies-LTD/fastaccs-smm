@@ -1,5 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { buildRevenueOrderWhere } from '$lib/helpers/order-revenue.server';
+import { toNetSales } from '$lib/helpers/order-revenue';
 
 /**
  * Customer intelligence: RFM segmentation (who to reward / win back), lifetime value (incl. by the
@@ -11,7 +12,11 @@ export type RfmSegment = 'VIP' | 'Loyal' | 'New' | 'Casual' | 'At-risk' | 'Churn
 export const RFM_SEGMENTS: RfmSegment[] = ['VIP', 'Loyal', 'New', 'Casual', 'At-risk', 'Churned'];
 
 /** Rule-based RFM bucket (interpretable, robust at modest volume). Evaluated top-down. */
-export function rfmSegment(recencyDays: number, frequency: number, topSpender: boolean): RfmSegment {
+export function rfmSegment(
+	recencyDays: number,
+	frequency: number,
+	topSpender: boolean
+): RfmSegment {
 	if (recencyDays > 180) return 'Churned'; // no purchase in 6 months
 	if (frequency >= 3 && recencyDays <= 60) return topSpender ? 'VIP' : 'Loyal';
 	if (frequency >= 2 && recencyDays <= 90) return 'Loyal';
@@ -62,7 +67,13 @@ export async function getCustomerAnalytics(cohortMonths = 6): Promise<CustomerAn
 	const [orders, users] = await Promise.all([
 		prisma.order.findMany({
 			where: { AND: [buildRevenueOrderWhere(), { userId: { not: null } }] },
-			select: { userId: true, totalAmount: true, orderType: true, createdAt: true },
+			select: {
+				userId: true,
+				totalAmount: true,
+				refundedAmount: true,
+				orderType: true,
+				createdAt: true
+			},
 			orderBy: { createdAt: 'asc' }
 		}),
 		prisma.user.findMany({
@@ -84,11 +95,17 @@ export async function getCustomerAnalytics(cohortMonths = 6): Promise<CustomerAn
 	const byUser = new Map<string, Buyer>();
 	for (const o of orders) {
 		const uid = o.userId as string;
-		const amt = Number(o.totalAmount || 0);
+		const amt = toNetSales(o.totalAmount, o.refundedAmount);
 		const type = o.orderType || 'account';
 		const b = byUser.get(uid);
 		if (!b) {
-			byUser.set(uid, { count: 1, spend: amt, first: o.createdAt, last: o.createdAt, firstType: type });
+			byUser.set(uid, {
+				count: 1,
+				spend: amt,
+				first: o.createdAt,
+				last: o.createdAt,
+				firstType: type
+			});
 		} else {
 			b.count += 1;
 			b.spend += amt;
@@ -140,7 +157,11 @@ export async function getCustomerAnalytics(cohortMonths = 6): Promise<CustomerAn
 		ltvAgg.set(p, a);
 	}
 	const ltvByFirstProduct: LtvByFirstProduct[] = [...ltvAgg.entries()]
-		.map(([product, a]) => ({ product, buyers: a.buyers, avgLtvNgn: Math.round(a.spend / a.buyers) }))
+		.map(([product, a]) => ({
+			product,
+			buyers: a.buyers,
+			avgLtvNgn: Math.round(a.spend / a.buyers)
+		}))
 		.sort((x, y) => y.avgLtvNgn - x.avgLtvNgn);
 
 	// Signup-month cohort retention: of everyone who signed up in month M, what % placed a revenue

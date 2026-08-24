@@ -381,7 +381,7 @@
 				</div>
 			</div>
 
-			<!-- Total Revenue -->
+			<!-- Net Sales -->
 			<div
 				class="group rounded-lg p-3 sm:p-4"
 				style="background: var(--bg-elev-1); border: 1px solid var(--border)"
@@ -394,9 +394,7 @@
 						/>
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
-						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
-							Paid Revenue
-						</p>
+						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Net Sales</p>
 						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
 							{formatMonetaryAmount(orderStats.total_revenue)}
 						</p>
@@ -638,7 +636,7 @@
 						</div>
 						<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 							<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
-								Boosting Revenue
+								Boosting Net Sales
 							</p>
 							<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
 								{formatMonetaryAmount(boostingStats.total_revenue)}
@@ -685,10 +683,7 @@
 		<!-- Numbers (automated verification numbers) -->
 		<div class="mb-4 sm:mb-6">
 			<div class="mb-2 flex items-center justify-between sm:mb-3">
-				<p
-					class="text-xs font-semibold tracking-[0.1em] uppercase"
-					style="color: #38bdf8;"
-				>
+				<p class="text-xs font-semibold tracking-[0.1em] uppercase" style="color: #38bdf8;">
 					Numbers
 				</p>
 				<a
@@ -709,7 +704,9 @@
 							<Phone class="size-5 sm:size-6" style="color: #38bdf8;" />
 						</div>
 						<div class="ml-3 min-w-0 flex-1 sm:ml-4">
-							<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Numbers Sold</p>
+							<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+								Numbers Sold
+							</p>
 							<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
 								{data.numbersSummary?.totalRents ?? 0}
 							</p>
@@ -731,7 +728,7 @@
 						</div>
 						<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 							<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
-								Numbers Revenue
+								Numbers Net Sales
 							</p>
 							<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
 								{formatMonetaryAmount(data.numbersSummary?.revenueNgn ?? 0)}

@@ -1,5 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { buildRevenueOrderWhere } from '$lib/helpers/order-revenue.server';
+import { toNetSales } from '$lib/helpers/order-revenue';
 
 /**
  * Signup & customer-behaviour analytics — the "who are our users and how do they
@@ -44,7 +45,13 @@ export async function getUserAnalytics(): Promise<UserAnalytics> {
 		}),
 		prisma.order.findMany({
 			where: { AND: [buildRevenueOrderWhere(), { userId: { not: null } }] },
-			select: { userId: true, totalAmount: true, createdAt: true, orderType: true },
+			select: {
+				userId: true,
+				totalAmount: true,
+				refundedAmount: true,
+				createdAt: true,
+				orderType: true
+			},
 			orderBy: { createdAt: 'asc' }
 		})
 	]);
@@ -76,8 +83,9 @@ export async function getUserAnalytics(): Promise<UserAnalytics> {
 
 	for (const o of paidOrders) {
 		const uid = o.userId!;
-		const amount = Number(o.totalAmount || 0);
-		const type = o.orderType === 'phone' ? 'numbers' : o.orderType === 'boosting' ? 'boosting' : 'account';
+		const amount = toNetSales(o.totalAmount, o.refundedAmount);
+		const type =
+			o.orderType === 'phone' ? 'numbers' : o.orderType === 'boosting' ? 'boosting' : 'account';
 		revenueByType[type] += amount;
 
 		const existing = byUser.get(uid);
@@ -106,12 +114,17 @@ export async function getUserAnalytics(): Promise<UserAnalytics> {
 		}
 	}
 	const avgDaysToFirstPurchase =
-		ttfpDays.length > 0 ? Math.round((ttfpDays.reduce((a, b) => a + b, 0) / ttfpDays.length) * 10) / 10 : null;
+		ttfpDays.length > 0
+			? Math.round((ttfpDays.reduce((a, b) => a + b, 0) / ttfpDays.length) * 10) / 10
+			: null;
 
 	// Cohorts (signup month → conversion), last 6 months.
 	const cohortMap = new Map<string, { signups: number; converted: number }>();
 	for (let i = 0; i < 6; i++) {
-		cohortMap.set(monthKey(new Date(now.getFullYear(), now.getMonth() - i, 1)), { signups: 0, converted: 0 });
+		cohortMap.set(monthKey(new Date(now.getFullYear(), now.getMonth() - i, 1)), {
+			signups: 0,
+			converted: 0
+		});
 	}
 	for (const u of users) {
 		if (u.createdAt < start6mo) continue;

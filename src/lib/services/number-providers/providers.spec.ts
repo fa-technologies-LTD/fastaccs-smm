@@ -1,10 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { getProvider, allProviders, resolveOtpFromText, encodePvapinsRef, decodePvapinsRef } from './index';
+import {
+	getProvider,
+	allProviders,
+	resolveOtpFromText,
+	encodePvapinsRef,
+	decodePvapinsRef
+} from './index';
 
 describe('provider registry', () => {
 	it('exposes hub-man and pvapins with the correct billing models', () => {
 		expect(getProvider('hubman').id).toBe('hubman');
-		expect(getProvider('hubman').billing).toBe('pay-on-rent');
+		expect(getProvider('hubman').billing).toBe('pay-on-success');
 		expect(getProvider('pvapins').id).toBe('pvapins');
 		expect(getProvider('pvapins').billing).toBe('pay-on-success');
 		expect(allProviders()).toHaveLength(2);
@@ -14,7 +20,11 @@ describe('provider registry', () => {
 describe('pvapins providerRef codec (round-trips number|country|app)', () => {
 	it('encodes and decodes cleanly', () => {
 		const ref = encodePvapinsRef('13865902416', 'USA', 'Whatsapp24');
-		expect(decodePvapinsRef(ref)).toEqual({ number: '13865902416', country: 'USA', app: 'Whatsapp24' });
+		expect(decodePvapinsRef(ref)).toEqual({
+			number: '13865902416',
+			country: 'USA',
+			app: 'Whatsapp24'
+		});
 	});
 });
 

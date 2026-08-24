@@ -14,7 +14,8 @@ const mocks = vi.hoisted(() => ({
 	getStoreCreditBuckets: vi.fn(),
 	computeOrderRedemption: vi.fn(),
 	redeemStoreCreditForOrder: vi.fn(),
-	logOrderStatusTransition: vi.fn()
+	logOrderStatusTransition: vi.fn(),
+	settleFailedPayment: vi.fn()
 }));
 
 vi.mock('$lib/prisma', () => ({
@@ -71,6 +72,10 @@ vi.mock('$lib/services/store-credit', () => ({
 }));
 vi.mock('$lib/services/order-audit', () => ({
 	logOrderStatusTransition: mocks.logOrderStatusTransition
+}));
+vi.mock('$lib/services/payment-settlement', () => ({
+	recoverPaidOrder: vi.fn(),
+	settleFailedPayment: mocks.settleFailedPayment
 }));
 vi.mock('$lib/helpers/payment-expiry.server', () => ({
 	getPendingPaymentExpiresAt: vi.fn(() => new Date('2026-06-06T19:40:00.000Z')),
@@ -278,7 +283,8 @@ describe('approved invariant: emergency checkout order control', () => {
 		mocks.createTransaction.mockImplementation(async (callback) =>
 			callback({
 				order: { create: orderCreate },
-				phoneRental: { create: phoneRentalCreate }
+				phoneRental: { create: phoneRentalCreate },
+				orderEvent: { create: vi.fn().mockResolvedValue({}) }
 			})
 		);
 
