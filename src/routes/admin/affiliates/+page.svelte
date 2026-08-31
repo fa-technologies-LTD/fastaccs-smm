@@ -86,9 +86,10 @@
 			'Referrals',
 			'Successful Orders',
 			'Net Sales',
-			'Available Store Credit',
-			'Store Credit Earned',
+			'Available Affiliate Cash',
+			'Affiliate Cash Earned',
 			'Open Payouts',
+			'Affiliate Type',
 			'Status',
 			'Joined Date'
 		];
@@ -103,6 +104,7 @@
 			Number(affiliate.availableStoreCredit || 0).toFixed(2),
 			Number(affiliate.totalStoreCreditEarned || 0).toFixed(2),
 			Number(affiliate.requestedStoreCredit || 0).toFixed(2),
+			affiliate.isSuperAffiliate ? 'Super' : 'Regular',
 			affiliate.isAffiliateEnabled && affiliate.programStatus === 'active' ? 'Active' : 'Inactive',
 			formatDate(affiliate.joinedAt || affiliate.createdAt)
 		]);
@@ -139,7 +141,11 @@
 		document.body.removeChild(link);
 	}
 
-	async function toggleAffiliateStatus(userId: string, currentStatus: boolean) {
+	async function toggleAffiliateStatus(
+		userId: string,
+		currentStatus: boolean,
+		isSuperAffiliate: boolean
+	) {
 		if (isBusy(userId)) return;
 		busyAffiliateIds = [...busyAffiliateIds, userId];
 		const nextStatus = !currentStatus;
@@ -157,7 +163,10 @@
 			const response = await fetch(`/api/admin/affiliates/${userId}/toggle`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ isAffiliateEnabled: nextStatus })
+				body: JSON.stringify({
+					isAffiliateEnabled: nextStatus,
+					affiliateType: isSuperAffiliate ? 'super' : 'regular'
+				})
 			});
 
 			if (response.ok) {
@@ -179,6 +188,44 @@
 			addToast({
 				type: 'error',
 				title: 'Error updating affiliate status',
+				duration: 3000
+			});
+		} finally {
+			busyAffiliateIds = busyAffiliateIds.filter((id) => id !== userId);
+		}
+	}
+
+	async function toggleAffiliateType(userId: string, currentIsSuper: boolean) {
+		if (isBusy(userId)) return;
+		busyAffiliateIds = [...busyAffiliateIds, userId];
+		const previous = [...allAffiliates];
+		const nextIsSuper = !currentIsSuper;
+		allAffiliates = allAffiliates.map((row) =>
+			row.id === userId ? { ...row, isSuperAffiliate: nextIsSuper } : row
+		);
+		try {
+			const response = await fetch(`/api/admin/affiliates/${userId}/toggle`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					isAffiliateEnabled: true,
+					affiliateType: nextIsSuper ? 'super' : 'regular'
+				})
+			});
+			const payload = await response.json().catch(() => ({}));
+			if (!response.ok || !payload?.success) {
+				throw new Error(payload?.error || 'Failed to update affiliate type');
+			}
+			addToast({
+				type: 'success',
+				title: nextIsSuper ? 'Affiliate upgraded to Super' : 'Affiliate changed to Regular',
+				duration: 3000
+			});
+		} catch (error) {
+			allAffiliates = previous;
+			addToast({
+				type: 'error',
+				title: error instanceof Error ? error.message : 'Update failed',
 				duration: 3000
 			});
 		} finally {
@@ -214,7 +261,7 @@
 		</div>
 	{/if}
 
-	<!-- Stats Cards -->
+	<!-- Core business outcome -->
 	<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
 		<div
 			class="rounded-lg p-6"
@@ -222,8 +269,13 @@
 		>
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium" style="color: var(--text-muted);">Total Affiliates</p>
-					<p class="mt-2 text-3xl font-bold" style="color: var(--text);">{stats.totalAffiliates}</p>
+					<p class="text-sm font-medium" style="color: var(--text-muted);">Active Affiliates</p>
+					<p class="mt-2 text-3xl font-bold" style="color: var(--text);">
+						{stats.activeAffiliates}
+					</p>
+					<p class="mt-1 text-xs" style="color: var(--text-dim);">
+						{stats.totalAffiliates} profiles in total
+					</p>
 				</div>
 				<div class="rounded-full p-3" style="background: rgba(105,109,250,0.12);">
 					<Users class="h-6 w-6" style="color: var(--link);" />
@@ -237,9 +289,9 @@
 		>
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium" style="color: var(--text-muted);">Active Affiliates</p>
+					<p class="text-sm font-medium" style="color: var(--text-muted);">Referred Buyers</p>
 					<p class="mt-2 text-3xl font-bold" style="color: var(--status-success);">
-						{stats.activeAffiliates}
+						{data.stats.referredBuyers || 0}
 					</p>
 				</div>
 				<div class="rounded-full p-3" style="background: rgba(5,212,113,0.12);">
@@ -254,9 +306,9 @@
 		>
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium" style="color: var(--text-muted);">Store Credit Earned</p>
+					<p class="text-sm font-medium" style="color: var(--text-muted);">Net Referred Sales</p>
 					<p class="mt-2 text-3xl font-bold" style="color: #a855f7;">
-						{formatPrice(stats.totalStoreCreditEarned)}
+						{formatPrice(data.stats.netReferredSales || 0)}
 					</p>
 				</div>
 				<div class="rounded-full p-3" style="background: rgba(168,85,247,0.12);">
@@ -271,17 +323,62 @@
 		>
 			<div class="flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium" style="color: var(--text-muted);">
-						Available Store Credit
-					</p>
+					<p class="text-sm font-medium" style="color: var(--text-muted);">Still Owed</p>
 					<p class="mt-2 text-3xl font-bold" style="color: #f97316;">
-						{formatPrice(stats.totalAvailableStoreCredit)}
+						{formatPrice(data.stats.outstandingAffiliateLiability || 0)}
+					</p>
+					<p class="mt-1 text-xs" style="color: var(--text-dim);">
+						Pending, available, or requested affiliate Cash
 					</p>
 				</div>
 				<div class="rounded-full p-3" style="background: rgba(249,115,22,0.12);">
 					<TrendingUp class="h-6 w-6" style="color: #f97316;" />
 				</div>
 			</div>
+		</div>
+	</div>
+
+	<div
+		class="rounded-lg p-4"
+		style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+	>
+		<h2 class="text-base font-semibold" style="color: var(--text);">Programme cost</h2>
+		<p class="mt-1 text-xs" style="color: var(--text-muted);">
+			Retained acquisition cost only. Refund reversals and commission adjustments are already
+			removed.
+		</p>
+		<div class="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-5">
+			{#each [{ label: 'Buyer discounts', value: data.stats.buyerDiscountCost || 0 }, { label: 'Regular rewards', value: data.stats.regularRewardCost || 0 }, { label: 'Super rewards', value: data.stats.superRewardCost || 0 }, { label: 'Total affiliate rewards', value: data.stats.totalRewardCost || 0 }, { label: 'Cash paid out', value: data.stats.paidAffiliateCash || 0 }] as item}
+				<div class="rounded-lg p-3" style="border: 1px solid var(--border); background: var(--bg);">
+					<p class="text-xs" style="color: var(--text-muted);">{item.label}</p>
+					<p class="mt-1 text-lg font-bold" style="color: var(--text);">
+						{formatPrice(item.value)}
+					</p>
+				</div>
+			{/each}
+		</div>
+	</div>
+
+	<div
+		class="rounded-lg p-4"
+		style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+	>
+		<div class="flex flex-wrap items-start justify-between gap-2">
+			<div>
+				<h2 class="text-base font-semibold" style="color: var(--text);">Affiliate funnel</h2>
+				<p class="mt-1 text-xs" style="color: var(--text-muted);">
+					Link opens are counted from the new event tracker; the other totals include reconciled
+					history. Rates will become meaningful once enough new traffic has passed through it.
+				</p>
+			</div>
+		</div>
+		<div class="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-3">
+			{#each [{ label: 'Dashboard views', value: data.stats.dashboardViews || 0 }, { label: 'Share actions', value: data.stats.shareActions || 0 }, { label: 'Tracked link opens', value: data.stats.trackedLinkOpens || 0 }, { label: 'Users linked', value: data.stats.linkedUsers || 0 }, { label: 'Referred buyers', value: data.stats.referredBuyers || 0 }, { label: 'Productive affiliates', value: data.stats.productiveAffiliates || 0 }] as step}
+				<div class="rounded-lg p-3" style="border: 1px solid var(--border); background: var(--bg);">
+					<p class="text-xs" style="color: var(--text-muted);">{step.label}</p>
+					<p class="mt-1 text-xl font-bold" style="color: var(--text);">{step.value}</p>
+				</div>
+			{/each}
 		</div>
 	</div>
 
@@ -404,6 +501,14 @@
 											style="color: var(--text);"
 										>
 											{affiliate.fullName || 'N/A'}
+											{#if affiliate.isSuperAffiliate}
+												<span
+													class="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+													style="background: var(--status-info-bg); border: 1px solid var(--status-info-border); color: var(--status-info);"
+												>
+													Super
+												</span>
+											{/if}
 											{#if affiliate.hasPendingBankDetails}
 												<span
 													class="rounded-full px-2 py-0.5 text-[10px] font-semibold"
@@ -473,7 +578,11 @@
 										</button>
 										<button
 											onclick={() =>
-												toggleAffiliateStatus(affiliate.id, affiliate.isAffiliateEnabled)}
+												toggleAffiliateStatus(
+													affiliate.id,
+													affiliate.isAffiliateEnabled,
+													affiliate.isSuperAffiliate
+												)}
 											disabled={isBusy(affiliate.id)}
 											class="group cursor-pointer text-gray-600 hover:text-gray-900"
 											title={affiliate.isAffiliateEnabled ? 'Disable' : 'Enable'}
@@ -486,6 +595,20 @@
 												/>
 											{/if}
 										</button>
+										{#if affiliate.isAffiliateEnabled && affiliate.programStatus === 'active'}
+											<button
+												onclick={() =>
+													toggleAffiliateType(affiliate.id, affiliate.isSuperAffiliate)}
+												disabled={isBusy(affiliate.id)}
+												class="rounded-md px-2 py-1 text-xs font-semibold disabled:opacity-50"
+												style="border: 1px solid var(--border); color: var(--text);"
+												title={affiliate.isSuperAffiliate
+													? 'Change to regular affiliate'
+													: 'Upgrade to super affiliate'}
+											>
+												{affiliate.isSuperAffiliate ? 'Set regular' : 'Make super'}
+											</button>
+										{/if}
 									</div>
 								</td>
 							</tr>

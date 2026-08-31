@@ -55,7 +55,7 @@ export async function POST({ request, locals }) {
 		const category = await request.json();
 		const { parentId, ...rest } = category;
 		const rawMetadata = JSON.parse(JSON.stringify(rest.metadata || {}));
-		const metadata =
+		const sanitizedMetadata =
 			rest.categoryType === 'tier'
 				? applyTierExactPreviewSanitization(
 						applyTierMerchandisingSanitization(
@@ -65,6 +65,13 @@ export async function POST({ request, locals }) {
 						)
 					)
 				: rawMetadata;
+		// New account tiers are margin-unknown until the owner deliberately includes
+		// them in the affiliate offer. Enforce the safe default at the API boundary too,
+		// so an older admin client or direct request cannot bypass the UI checkbox.
+		const metadata =
+			rest.categoryType === 'tier' && rawMetadata.affiliate_excluded === undefined
+				? { ...sanitizedMetadata, affiliate_excluded: true }
+				: sanitizedMetadata;
 
 		const data = await prisma.category.create({
 			data: {

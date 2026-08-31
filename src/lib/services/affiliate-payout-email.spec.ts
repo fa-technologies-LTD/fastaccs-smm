@@ -77,7 +77,8 @@ describe('affiliate payout status emails', () => {
 		expect(sendEmailMock).toHaveBeenCalledTimes(1);
 		expect(sendEmailMock).toHaveBeenCalledWith(
 			expect.objectContaining({
-				subject: 'Your Store Credit payout request was received',
+				subject: 'Your affiliate cash payout request was received',
+				body: expect.stringContaining('next Saturday payout cycle'),
 				referenceId: 'affiliate_payout:11111111-1111-1111-1111-111111111111:requested'
 			})
 		);

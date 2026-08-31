@@ -1,7 +1,11 @@
 import { prisma } from '$lib/prisma';
-import { sendEmail, sendMarketingEmail } from '$lib/services/email';
-import { maybeSendAffiliateUnlockInvite } from '$lib/services/affiliate';
-import { recoverFirstStoreCreditEmails } from '$lib/services/affiliate-notification-email';
+import { sendMarketingEmail } from '$lib/services/email';
+import { getAffiliateConfig, maybeSendAffiliateUnlockInvite } from '$lib/services/affiliate';
+import {
+	recoverAffiliateBankReadyEmails,
+	recoverFirstStoreCreditEmails,
+	sendAffiliateUnlockEmailIfNeeded
+} from '$lib/services/affiliate-notification-email';
 import { recoverAffiliatePayoutStatusEmails } from '$lib/services/affiliate-payout-email';
 import { buildRevenueOrderWhere } from '$lib/helpers/order-revenue.server';
 
@@ -13,27 +17,9 @@ function getFirstName(fullName: string | null, email: string): string {
 	return fullName?.trim().split(/\s+/)[0] || email.split('@')[0] || 'there';
 }
 
-const ACTIVATION_NUDGE_MIN_PROGRAM_AGE_DAYS = 3;
-const ACTIVATION_NUDGE_COOLDOWN_DAYS = 14;
-
-// One-time announcement of the refreshed affiliate program: greets newly-onboarded
-// affiliates ("you're now an affiliate") and reminds existing ones of their code.
-// Excludes owner/test accounts; idempotent via a per-user referenceId.
-const AFFILIATE_ANNOUNCEMENT_EXCLUDE = new Set([
-	'verystrongethan@gmail.com',
-	'teerex.trx@gmail.com'
-]);
-// The exact set of silently-onboarded affiliates who get the "you're now an affiliate"
-// greeting; everyone else already knew they were an affiliate and gets the code reminder.
-const AFFILIATE_ANNOUNCEMENT_NEW_ONBOARDS = new Set([
-	'elonmusk52781@gmail.com',
-	'okoriev99@gmail.com',
-	'verifyright68@gmail.com',
-	'omerejeffrey@gmail.com',
-	'samuelokobia2@gmail.com',
-	'paulhelen1177@gmail.com',
-	'fameomovo@gmail.com'
-]);
+// One-time, consent-aware announcement of the refreshed affiliate program. Every
+// active affiliate receives the same truthful contract; business logic must never
+// depend on a hard-coded list of personal email addresses.
 
 export async function sendAffiliateAnnouncementEmails(): Promise<{
 	sent: number;
@@ -41,20 +27,24 @@ export async function sendAffiliateAnnouncementEmails(): Promise<{
 	failed: number;
 }> {
 	const baseUrl = getBaseUrl();
-	const programs = await prisma.affiliateProgram.findMany({
-		where: { status: 'active' },
-		select: {
-			affiliateCode: true,
-			createdAt: true,
-			user: { select: { id: true, email: true, fullName: true, isActive: true } }
-		}
-	});
+	const [programs, config] = await Promise.all([
+		prisma.affiliateProgram.findMany({
+			where: { status: 'active' },
+			select: {
+				affiliateCode: true,
+				createdAt: true,
+				user: { select: { id: true, email: true, fullName: true, isActive: true } }
+			}
+		}),
+		getAffiliateConfig()
+	]);
+	const payoutMinimum = `₦${config.payoutMinimum.toLocaleString()}`;
 	let sent = 0;
 	let skipped = 0;
 	let failed = 0;
 	for (const p of programs) {
 		const u = p.user;
-		if (!u?.email || !u.isActive || AFFILIATE_ANNOUNCEMENT_EXCLUDE.has(u.email.toLowerCase())) {
+		if (!u?.email || !u.isActive) {
 			skipped += 1;
 			continue;
 		}
@@ -70,19 +60,12 @@ export async function sendAffiliateAnnouncementEmails(): Promise<{
 		const firstName = getFirstName(u.fullName, u.email);
 		const link = `${baseUrl}/ref/${p.affiliateCode}`;
 		const dash = `${baseUrl}/dashboard?tab=affiliate`;
-		const isNew = AFFILIATE_ANNOUNCEMENT_NEW_ONBOARDS.has(u.email.toLowerCase());
-		const content = isNew
-			? {
-					subject: "You're now a FastAccounts affiliate 🎉 (here's your code)",
-					body: `Hi ${firstName},\n\nYou're now a FastAccounts affiliate 🎉\n\nYour code: **${p.affiliateCode}**\n\nFriends get a discount, you earn cash on every order they make. Withdraw to your bank at ₦10,000.\n\nYour link: ${link}\n\nThanks for being one of our best 🙌 — FastAccs`,
-					ctaText: 'View my affiliate dashboard'
-				}
-			: {
-					subject: 'Your affiliate code is ready — start sharing',
-					body: `Hi ${firstName},\n\nYour affiliate code: **${p.affiliateCode}**\n\nFriends get a discount, you earn cash on every order. Withdraw to your bank at ₦10,000.\n\nYour link: ${link}\n\n— FastAccs`,
-					ctaText: 'Share my code'
-				};
-		const result = await sendEmail({
+		const content = {
+			subject: 'Your Fast Accounts affiliate code is ready',
+			body: `Hi ${firstName},\n\nYour affiliate code: **${p.affiliateCode}**\n\nFriends save 5% on their first two eligible account orders, and you earn 5% too — up to ₦1,000 per order. Cleared earnings can go toward Fast Accounts purchases or be withdrawn from ${payoutMinimum}; payouts are processed on Saturdays.\n\nYour link: ${link}`,
+			ctaText: 'View and share my code'
+		};
+		const result = await sendMarketingEmail({
 			to: u.email,
 			subject: content.subject,
 			body: content.body,
@@ -91,10 +74,11 @@ export async function sendAffiliateAnnouncementEmails(): Promise<{
 			showCta: true,
 			userId: u.id,
 			notificationType: 'affiliate_unlock',
-			classification: 'transactional',
+			campaignKey: 'affiliate_program_2026_announcement',
 			referenceId
 		});
 		if (result.success) sent += 1;
+		else if (result.suppressed) skipped += 1;
 		else failed += 1;
 	}
 	return { sent, skipped, failed };
@@ -106,6 +90,7 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 	skipped: number;
 	failed: number;
 	firstCredit: Awaited<ReturnType<typeof recoverFirstStoreCreditEmails>>;
+	bankReady: Awaited<ReturnType<typeof recoverAffiliateBankReadyEmails>>;
 	payoutStatus: Awaited<ReturnType<typeof recoverAffiliatePayoutStatusEmails>>;
 }> {
 	const users = await prisma.user.findMany({
@@ -121,17 +106,9 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 		select: {
 			id: true,
 			email: true,
-			fullName: true,
 			isAffiliateEnabled: true,
-			affiliatePayoutDetails: { select: { id: true } },
 			affiliatePrograms: {
-				select: {
-					id: true,
-					affiliateCode: true,
-					totalReferrals: true,
-					status: true,
-					createdAt: true
-				},
+				select: { id: true },
 				take: 1
 			},
 			orders: {
@@ -146,7 +123,6 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 	let sent = 0;
 	let skipped = 0;
 	let failed = 0;
-	const baseUrl = getBaseUrl();
 
 	for (const user of users) {
 		if (!user.email) {
@@ -159,120 +135,34 @@ export async function runAffiliateLifecycleEmailRecovery(limit = 300): Promise<{
 		// already has >=1 paid order, so all are eligible.
 		const eligible = successfulPurchaseCount > 0;
 		const alreadyActive = user.isAffiliateEnabled || user.affiliatePrograms.length > 0;
-		const firstName = getFirstName(user.fullName, user.email);
-		const cooldownStart = new Date(
-			Date.now() - ACTIVATION_NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000
-		);
-		const cooldownBucket = Math.floor(
-			Date.now() / (ACTIVATION_NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000)
-		);
-
-		// Eligible but not yet an affiliate -> invite them to claim their code.
+		// Affiliate access is created automatically after the first retained purchase.
+		// Recovery only heals missed activation/unlock messages; it deliberately does
+		// not send recurring generic marketing nudges.
 		if (eligible && !alreadyActive) {
 			await maybeSendAffiliateUnlockInvite(user.id);
 			skipped += 1;
 			continue;
 		}
-		if (!alreadyActive) {
-			skipped += 1;
+		if (alreadyActive) {
+			if (await sendAffiliateUnlockEmailIfNeeded(user.id)) sent += 1;
+			else skipped += 1;
 			continue;
 		}
-
-		const program = user.affiliatePrograms[0];
-		const agedEnough = Boolean(
-			program &&
-				program.status === 'active' &&
-				program.affiliateCode &&
-				Date.now() - program.createdAt.getTime() >=
-					ACTIVATION_NUDGE_MIN_PROGRAM_AGE_DAYS * 24 * 60 * 60 * 1000
-		);
-		if (!program || !agedEnough) {
-			skipped += 1;
-			continue;
-		}
-
-		const hasBankDetails = Boolean(user.affiliatePayoutDetails);
-		const hasStartedEarning = program.totalReferrals > 0;
-		const referralLink = `${baseUrl}/ref/${program.affiliateCode}`;
-
-		// Earning but no bank details yet -> nudge them to get payout-ready.
-		if (hasStartedEarning && !hasBankDetails) {
-			const recentlyNudged = await prisma.emailNotification.findFirst({
-				where: {
-					userId: user.id,
-					notificationType: 'affiliate_bank_details_nudge',
-					status: 'sent',
-					createdAt: { gte: cooldownStart }
-				},
-				select: { id: true }
-			});
-			if (recentlyNudged) {
-				skipped += 1;
-				continue;
-			}
-			const bank = await sendMarketingEmail({
-				to: user.email,
-				userId: user.id,
-				subject: "You're earning — add your bank details to get paid",
-				body: `Hi ${firstName},\n\nYour referrals are earning 🎉\n\nAdd your bank details so you're ready to withdraw at ₦10,000. Takes a minute.\n\nYour link: ${referralLink}`,
-				ctaText: 'Add bank details',
-				ctaUrl: `${baseUrl}/dashboard?tab=affiliate`,
-				notificationType: 'affiliate_bank_details_nudge',
-				referenceId: `affiliate_bank_details_nudge:${user.id}`,
-				campaignKey: `affiliate_bank_details_nudge:${user.id}:${cooldownBucket}`
-			});
-			if (bank.success) sent += 1;
-			else if (bank.suppressed) skipped += 1;
-			else failed += 1;
-			continue;
-		}
-
-		// Active but not sharing yet (no referrals) -> nudge to share the code.
-		if (!hasStartedEarning) {
-			const recentlyNudged = await prisma.emailNotification.findFirst({
-				where: {
-					userId: user.id,
-					notificationType: 'affiliate_activation_nudge',
-					status: 'sent',
-					createdAt: { gte: cooldownStart }
-				},
-				select: { id: true }
-			});
-			if (recentlyNudged) {
-				skipped += 1;
-				continue;
-			}
-			const activation = await sendMarketingEmail({
-				to: user.email,
-				userId: user.id,
-				subject: 'Your affiliate code is ready — start earning',
-				body: `Hi ${firstName},\n\nYou have an affiliate code, but you haven't shared it yet.\n\nShare code ${program.affiliateCode} with friends and followers. They get a discount at checkout, and you earn real, withdrawable cash on their order.\n\nYour referral link: ${referralLink}`,
-				ctaText: 'Share your code',
-				ctaUrl: `${baseUrl}/dashboard?tab=affiliate`,
-				notificationType: 'affiliate_activation_nudge',
-				referenceId: `affiliate_activation_nudge:${user.id}`,
-				campaignKey: `affiliate_activation_nudge:${user.id}:${cooldownBucket}`
-			});
-			if (activation.success) sent += 1;
-			else if (activation.suppressed) skipped += 1;
-			else failed += 1;
-			continue;
-		}
-
-		// Active, earning, and payout-ready -> nothing to nudge.
 		skipped += 1;
 	}
 
-	const [firstCredit, payoutStatus] = await Promise.all([
+	const [firstCredit, bankReady, payoutStatus] = await Promise.all([
 		recoverFirstStoreCreditEmails(limit),
+		recoverAffiliateBankReadyEmails(limit),
 		recoverAffiliatePayoutStatusEmails(limit)
 	]);
 	return {
-		processed: users.length + firstCredit.processed + payoutStatus.processed,
-		sent: sent + firstCredit.sent + payoutStatus.sent,
+		processed: users.length + firstCredit.processed + bankReady.processed + payoutStatus.processed,
+		sent: sent + firstCredit.sent + bankReady.sent + payoutStatus.sent,
 		skipped,
-		failed: failed + firstCredit.failed + payoutStatus.failed,
+		failed: failed + firstCredit.failed + bankReady.failed + payoutStatus.failed,
 		firstCredit,
+		bankReady,
 		payoutStatus
 	};
 }

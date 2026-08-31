@@ -7,7 +7,7 @@
 	<title>Affiliate Terms - FastAccs</title>
 	<meta
 		name="description"
-		content="Terms for FastAccs affiliate participation and Store Credit earnings."
+		content="Terms for FastAccs affiliate participation and Affiliate Cash earnings."
 	/>
 </svelte:head>
 
@@ -38,11 +38,14 @@
 					class="mb-2 text-2xl font-semibold"
 					style="color: var(--text); font-family: var(--font-head);"
 				>
-					Store Credit Earnings
+					Affiliate Cash Earnings
 				</h2>
 				<p>
-					Store Credit earning rules, qualification requirements, and payout timing are shown in
-					your affiliate dashboard and may be updated from time to time.
+					For regular affiliates, friends receive 5% off and you earn 5% on their first two retained
+					eligible account orders, up to ₦1,000 per order. Numbers and Boosting are excluded.
+					Earnings remain pending through the return window and may be adjusted for refunds. Payout
+					requests start at the current minimum shown in your dashboard and are processed on
+					Saturdays after eligibility and bank-detail checks.
 				</p>
 			</section>
 
@@ -81,7 +84,7 @@
 					Enforcement
 				</h2>
 				<p>
-					We may suspend payouts, reverse affected Store Credit, or restrict affiliate access for
+					We may suspend payouts, reverse affected Affiliate Cash, or restrict affiliate access for
 					policy violations, suspicious activity signals, or unresolved verification issues.
 				</p>
 			</section>

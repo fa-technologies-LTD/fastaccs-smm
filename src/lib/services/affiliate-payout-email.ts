@@ -28,25 +28,25 @@ function getPayoutEmailContent(params: {
 
 	if (params.status === 'requested') {
 		return {
-			subject: 'Your Store Credit payout request was received',
+			subject: 'Your affiliate cash payout request was received',
 			body: `Hi ${params.firstName},
 
-We received your Store Credit payout request.
+We received your affiliate cash payout request.
 
 Requested amount: ${amount}
 Request reference: ${params.reference}
 
-We will review it and update the status in your affiliate dashboard.`,
+We will review it for the next Saturday payout cycle and update the status in your affiliate dashboard.`,
 			ctaText: 'View payout status'
 		};
 	}
 
 	if (params.status === 'paid') {
 		return {
-			subject: 'Your Store Credit payout is complete',
+			subject: 'Your affiliate cash payout is complete',
 			body: `Hi ${params.firstName},
 
-Your Store Credit payout has been completed.
+Your affiliate cash payout has been completed.
 
 Amount paid: ${amount}
 Request reference: ${params.reference}
@@ -57,10 +57,10 @@ Thank you for growing with Fast Accounts.`,
 	}
 
 	return {
-		subject: 'Update on your Store Credit payout request',
+		subject: 'Update on your affiliate cash payout request',
 		body: `Hi ${params.firstName},
 
-Your Store Credit payout request could not be approved.
+Your affiliate cash payout request could not be approved.
 
 Requested amount: ${amount}
 Request reference: ${params.reference}

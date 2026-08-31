@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import {
 		Share2,
 		Copy,
@@ -9,14 +10,13 @@
 		Lock,
 		Clock,
 		MessageSquare,
-		TrendingUp,
 		ArrowRight,
 		RefreshCw
 	} from '$lib/icons';
 	import { addToast } from '$lib/stores/toasts';
 	import { copyToClipboard } from '$lib/helpers/utils';
 	import AffiliatePopupModal from '$lib/components/AffiliatePopupModal.svelte';
-	import { AFFILIATE_POPUP_CONTENT } from '$lib/helpers/affiliate-popup-content';
+	import { getAffiliatePopupContent } from '$lib/helpers/affiliate-popup-content';
 	import type { AffiliatePopupType } from '$lib/services/affiliate';
 
 	interface AffiliateRecentReferralActivity {
@@ -45,8 +45,20 @@
 		lifetimeCompletedSpend?: number;
 		unlockThreshold?: number;
 		payoutEligible?: boolean;
+		payoutHasOpenRequest?: boolean;
+		payoutBlockers?: Array<
+			| 'minimum_balance'
+			| 'account_age'
+			| 'bank_details_missing'
+			| 'bank_details_pending'
+			| 'bank_details_rejected'
+			| 'payout_pending'
+		>;
 		payoutMinimum?: number;
 		payoutMinAccountAgeDays?: number;
+		accountAgeDays?: number;
+		hasBankDetails?: boolean;
+		bankDetailsStatus?: string | null;
 		availableStoreCredit?: number;
 		pendingStoreCredit?: number;
 		underReviewStoreCredit?: number;
@@ -67,6 +79,19 @@
 		isSuperAffiliate?: boolean;
 		superReferrals?: SuperReferralItem[];
 		superActivationsThisMonth?: number;
+		regularPolicy?: {
+			buyerDiscountPercent: number;
+			affiliateRewardPercent: number;
+			orderLimit: number;
+			perOrderCap: number;
+		};
+		superPolicy?: {
+			enabledForNewReferrals: boolean;
+			activationSpendThreshold: number;
+			activationOrderThreshold: number;
+			activationReward: number;
+			monthlyTiers: Array<{ count: number; totalAmount: number }>;
+		};
 	}
 
 	interface SuperReferralItem {
@@ -77,6 +102,8 @@
 		cumulativeSpend: number;
 		orderTarget: number;
 		spendTarget: number;
+		activationReward: number;
+		termsFrozen: boolean;
 		activatedAt: string | null;
 	}
 
@@ -132,8 +159,12 @@
 	function isPopupDismissedInSession(type: string): boolean {
 		if (typeof sessionStorage === 'undefined') return false;
 		try {
-			return (JSON.parse(sessionStorage.getItem(DISMISSED_POPUPS_KEY) || '[]') as string[]).includes(type);
-		} catch { return false; }
+			return (
+				JSON.parse(sessionStorage.getItem(DISMISSED_POPUPS_KEY) || '[]') as string[]
+			).includes(type);
+		} catch {
+			return false;
+		}
 	}
 	function markPopupDismissedInSession(type: string): void {
 		if (typeof sessionStorage === 'undefined') return;
@@ -143,7 +174,9 @@
 				list.push(type);
 				sessionStorage.setItem(DISMISSED_POPUPS_KEY, JSON.stringify(list));
 			}
-		} catch { /* noop */ }
+		} catch {
+			/* noop */
+		}
 	}
 
 	const pendingPopupType = affiliateData?.pendingPopup ?? null;
@@ -175,9 +208,17 @@
 			? `${REFERRAL_BASE_URL}/ref/${affiliateCode}`
 			: String(affiliateData?.referralLink || '')
 	);
+	const buyerDiscountPercent = $derived(
+		toNumber(affiliateData?.regularPolicy?.buyerDiscountPercent)
+	);
+	const affiliateRewardPercent = $derived(
+		toNumber(affiliateData?.regularPolicy?.affiliateRewardPercent)
+	);
+	const regularOrderLimit = $derived(toNumber(affiliateData?.regularPolicy?.orderLimit));
+	const regularPerOrderCap = $derived(toNumber(affiliateData?.regularPolicy?.perOrderCap));
 	const shareMessage = $derived(
 		referralLink && affiliateCode
-			? `Use code *${affiliateCode}* at checkout to save on your *FastAccs* order 🛒\n\nOr register with my link and get discounts on your first orders:\n${referralLink}`
+			? `Use code *${affiliateCode}* to save ${buyerDiscountPercent}% on your first ${regularOrderLimit} eligible FastAccs account orders — up to ₦${regularPerOrderCap.toLocaleString()} per order. I earn ${affiliateRewardPercent}% too.\n\nRegister with my link:\n${referralLink}`
 			: ''
 	);
 
@@ -190,6 +231,24 @@
 		payoutMinimum > 0 ? Math.min(100, Math.round((availableForPayout / payoutMinimum) * 100)) : 0
 	);
 	const remainingToPayout = $derived(Math.max(0, payoutMinimum - availableForPayout));
+	const payoutBlockerMessages = $derived(
+		(affiliateData?.payoutBlockers || []).map((blocker) => {
+			switch (blocker) {
+				case 'minimum_balance':
+					return `Earn ₦${remainingToPayout.toLocaleString()} more to reach the ₦${payoutMinimum.toLocaleString()} minimum.`;
+				case 'account_age':
+					return `Your account must be ${toNumber(affiliateData?.payoutMinAccountAgeDays)} days old (${Math.max(0, toNumber(affiliateData?.payoutMinAccountAgeDays) - toNumber(affiliateData?.accountAgeDays))} days remaining).`;
+				case 'bank_details_missing':
+					return 'Add your Nigerian bank details.';
+				case 'bank_details_pending':
+					return 'Your bank details are awaiting approval.';
+				case 'bank_details_rejected':
+					return 'Update your rejected bank details.';
+				case 'payout_pending':
+					return 'Your current payout request is already being reviewed.';
+			}
+		})
+	);
 	const isUnlocked = $derived(Boolean(affiliateData?.unlocked || affiliateData?.isActive));
 	const isActiveAffiliate = $derived(Boolean(affiliateData?.isActive));
 
@@ -197,19 +256,34 @@
 		Array.isArray(affiliateData?.recentReferralActivity) ? affiliateData.recentReferralActivity : []
 	);
 
-	// Super affiliate: per-referral progress + monthly activations/tier (display only).
+	// Super affiliate: per-referral progress + monthly activations/tier.
 	const isSuperAffiliate = $derived(Boolean(affiliateData?.isSuperAffiliate));
 	const superReferrals = $derived<SuperReferralItem[]>(
 		Array.isArray(affiliateData?.superReferrals) ? affiliateData.superReferrals : []
 	);
 	const superActivationsThisMonth = $derived(toNumber(affiliateData?.superActivationsThisMonth));
+	const superEnabledForNewReferrals = $derived(
+		Boolean(affiliateData?.superPolicy?.enabledForNewReferrals)
+	);
+	const superActivationReward = $derived(toNumber(affiliateData?.superPolicy?.activationReward));
+	const superMonthlyTiers = $derived(
+		Array.isArray(affiliateData?.superPolicy?.monthlyTiers)
+			? affiliateData.superPolicy.monthlyTiers
+					.map((tier) => ({
+						count: toNumber(tier.count),
+						totalAmount: toNumber(tier.totalAmount)
+					}))
+					.filter((tier) => tier.count > 0)
+					.sort((a, b) => a.count - b.count)
+			: []
+	);
 	const superBonusTier = $derived.by(() => {
-		const n = superActivationsThisMonth;
-		if (n >= 30) return { count: 30, amount: 15000 };
-		if (n >= 20) return { count: 20, amount: 8000 };
-		if (n >= 10) return { count: 10, amount: 3000 };
-		return null;
+		return (
+			[...superMonthlyTiers].reverse().find((tier) => superActivationsThisMonth >= tier.count) ||
+			null
+		);
 	});
+	const firstSuperBonusTier = $derived(superMonthlyTiers[0] || null);
 	function superProgressPct(value: number, target: number): number {
 		if (target <= 0) return 0;
 		return Math.min(100, Math.round((value / target) * 100));
@@ -309,19 +383,49 @@
 
 	function shareToWhatsApp() {
 		if (!shareMessage) return;
+		trackAffiliateInteraction('affiliate_whatsapp_share_started');
 		const shareUrl = `https://wa.me/?text=${encodeURIComponent(shareMessage)}`;
 		if (typeof window !== 'undefined') {
 			window.open(shareUrl, '_blank', 'noopener,noreferrer');
 		}
 	}
 
-	function copyShareMessage() {
+	async function copyShareMessage() {
 		if (!shareMessage) return;
-		copyToClipboard(shareMessage, {
+		const copied = await copyToClipboard(shareMessage, {
 			label: 'Share message',
 			showToast: addToast
 		});
+		if (copied) trackAffiliateInteraction('affiliate_message_copied');
 	}
+
+	async function copyAffiliateValue(
+		value: string,
+		label: string,
+		type: 'affiliate_code_copied' | 'affiliate_link_copied'
+	) {
+		const copied = await copyToClipboard(value, { label, showToast: addToast });
+		if (copied) trackAffiliateInteraction(type);
+	}
+
+	function trackAffiliateInteraction(type: string) {
+		if (typeof window === 'undefined' || !isActiveAffiliate) return;
+		const eventId =
+			type === 'affiliate_dashboard_viewed'
+				? `view_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+				: globalThis.crypto?.randomUUID?.() ||
+					`action_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+		void fetch('/api/affiliate/events', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ type, eventId }),
+			keepalive: true
+		}).catch(() => undefined);
+	}
+
+	onMount(() => {
+		trackAffiliateInteraction('affiliate_dashboard_viewed');
+	});
 </script>
 
 <div
@@ -344,9 +448,7 @@
 					>
 						Affiliate Program
 					</h2>
-					<p class="text-sm" style="color: var(--text-muted);">
-						Share your code. Earn real Cash.
-					</p>
+					<p class="text-sm" style="color: var(--text-muted);">Share your code. Earn real Cash.</p>
 				</div>
 			</div>
 			<div class="flex items-center gap-2">
@@ -385,8 +487,10 @@
 					</h3>
 				</div>
 				<p class="mb-4 text-sm" style="color: var(--text-muted);">
-					Refer friends and earn real, withdrawable cash on every order they make.
-					<strong style="color: var(--text);">Make your first purchase to unlock your referral code</strong>
+					Refer friends and earn real, withdrawable cash from retained eligible account orders.
+					<strong style="color: var(--text);"
+						>Make your first purchase to unlock your referral code</strong
+					>
 					— that's all it takes.
 				</p>
 				<div class="flex flex-wrap items-center gap-3">
@@ -419,8 +523,8 @@
 					Affiliate Access Unlocked
 				</h3>
 				<p class="mx-auto mb-5 max-w-md text-sm" style="color: var(--text-muted);">
-					Activate your profile, get your code, and start earning real Cash from successful
-					referred orders.
+					Activate your profile, get your code, and start earning real Cash from successful referred
+					orders.
 				</p>
 				<button
 					onclick={enableAffiliate}
@@ -535,10 +639,11 @@
 							<button
 								type="button"
 								onclick={() =>
-									copyToClipboard(affiliateCode, {
-										label: 'Affiliate promo code',
-										showToast: addToast
-									})}
+									void copyAffiliateValue(
+										affiliateCode,
+										'Affiliate promo code',
+										'affiliate_code_copied'
+									)}
 								class="rounded-full px-3 py-2 transition-all hover:-translate-y-0.5"
 								style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.35); color: var(--primary);"
 							>
@@ -565,10 +670,7 @@
 							<button
 								type="button"
 								onclick={() =>
-									copyToClipboard(referralLink, {
-										label: 'Referral link',
-										showToast: addToast
-									})}
+									void copyAffiliateValue(referralLink, 'Referral link', 'affiliate_link_copied')}
 								class="rounded-full px-3 py-2 transition-all hover:-translate-y-0.5"
 								style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.35); color: var(--primary);"
 							>
@@ -589,7 +691,7 @@
 						</button>
 						<button
 							type="button"
-							onclick={copyShareMessage}
+							onclick={() => void copyShareMessage()}
 							disabled={!shareMessage}
 							class="inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-55"
 							style="background: rgba(105,109,250,0.12); border: 1px solid rgba(105,109,250,0.3); color: var(--text);"
@@ -612,46 +714,53 @@
 						₦{toNumber(affiliateData?.totalStoreCreditEarned).toLocaleString()}
 					</strong>
 				</p>
-				<div class="mt-3">
-					<div
-						class="mb-1 flex items-center justify-between text-xs"
-						style="color: var(--text-muted);"
-					>
-						<span>Progress to payout</span>
-						<span>₦{availableForPayout.toLocaleString()} / ₦{payoutMinimum.toLocaleString()}</span>
-					</div>
-					<div
-						class="h-2 overflow-hidden rounded-full"
-						style="background: rgba(255,255,255,0.08);"
-					>
+				{#if !affiliateData?.payoutHasOpenRequest}
+					<div class="mt-3">
 						<div
-							class="h-full rounded-full"
-							style="width: {payoutProgressPercent}%; background: linear-gradient(90deg, rgba(5,212,113,0.9), rgba(13,145,82,0.9));"
-						></div>
+							class="mb-1 flex items-center justify-between text-xs"
+							style="color: var(--text-muted);"
+						>
+							<span>Progress to payout</span>
+							<span>₦{availableForPayout.toLocaleString()} / ₦{payoutMinimum.toLocaleString()}</span
+							>
+						</div>
+						<div
+							class="h-2 overflow-hidden rounded-full"
+							style="background: rgba(255,255,255,0.08);"
+						>
+							<div
+								class="h-full rounded-full"
+								style="width: {payoutProgressPercent}%; background: linear-gradient(90deg, rgba(5,212,113,0.9), rgba(13,145,82,0.9));"
+							></div>
+						</div>
 					</div>
-					<p class="mt-1 text-xs" style="color: var(--text-muted);">
-						{#if payoutProgressPercent >= 100}
-							You've reached the ₦{payoutMinimum.toLocaleString()} payout minimum 🎉
-						{:else}
-							₦{remainingToPayout.toLocaleString()} more in cash to reach your first payout.
-						{/if}
+				{/if}
+				{#if affiliateData?.payoutEligible}
+					<p class="mt-2 text-sm" style="color: var(--primary);">
+						You can request a payout now. Requests are processed on Saturdays.
 					</p>
-				</div>
-				<p
-					class="mt-2 text-sm"
-					style="color: {affiliateData?.payoutEligible ? 'var(--primary)' : 'var(--text-muted)'};"
-				>
-					{affiliateData?.payoutEligible
-						? 'Payout is available. Add your bank details, then request payout.'
-						: 'Keep earning from referrals to unlock withdrawals.'}
-				</p>
+				{:else if payoutBlockerMessages.length > 0}
+					<div class="mt-2 text-sm" style="color: var(--text-muted);">
+						<p class="font-semibold" style="color: var(--text);">Before you can withdraw:</p>
+						<ul class="mt-1 space-y-1 pl-4">
+							{#each payoutBlockerMessages as message}
+								<li class="list-disc">{message}</li>
+							{/each}
+						</ul>
+						<p class="mt-2 text-xs">Approved requests are processed on Saturdays.</p>
+					</div>
+				{/if}
 				<div class="mt-3 flex flex-wrap gap-2">
 					<a
 						href="/affiliate/bank-details"
 						class="rounded-full px-4 py-2 text-sm font-semibold transition-all hover:-translate-y-0.5"
 						style="background: rgba(105,109,250,0.18); border: 1px solid rgba(105,109,250,0.35); color: var(--text);"
 					>
-						Add bank details
+						{affiliateData?.bankDetailsStatus === 'approved'
+							? 'View bank details'
+							: affiliateData?.hasBankDetails
+								? 'Update bank details'
+								: 'Add bank details'}
 					</a>
 					{#if affiliateData?.payoutEligible && toNumber(affiliateData?.availableStoreCredit) > 0}
 						<button
@@ -711,11 +820,14 @@
 						</h4>
 						<span
 							class="rounded-full px-2 py-0.5 text-xs font-semibold"
-							style="background: rgba(105,109,250,0.12); color: var(--link);">₦700 / activation</span
+							style="background: rgba(105,109,250,0.12); color: var(--link);"
+							>{superEnabledForNewReferrals
+								? `Current · ₦${superActivationReward.toLocaleString()} / activation`
+								: 'Existing agreements'}</span
 						>
 					</div>
 
-					<!-- Monthly activations + bonus tier (display only — bonus is paid separately) -->
+					<!-- Monthly activations + non-additive total bonus tier. -->
 					<div class="mb-4 grid grid-cols-2 gap-2">
 						<div class="rounded-[var(--r-sm)] border border-[var(--border)] p-3">
 							<div class="text-xs" style="color: var(--text-muted);">Activations this month</div>
@@ -727,14 +839,19 @@
 							<div class="text-xs" style="color: var(--text-muted);">Monthly bonus</div>
 							{#if superBonusTier}
 								<div class="text-lg font-bold" style="color: var(--primary);">
-									₦{superBonusTier.amount.toLocaleString()}
+									₦{superBonusTier.totalAmount.toLocaleString()}
 								</div>
 								<div class="text-[10px]" style="color: var(--text-muted);">
 									{superBonusTier.count}+ activations this month
 								</div>
 							{:else}
 								<div class="text-sm" style="color: var(--text-muted);">
-									— <span class="text-[10px]">(10+ unlocks ₦3k)</span>
+									—
+									{#if firstSuperBonusTier}
+										<span class="text-[10px]">
+											({firstSuperBonusTier.count}+ unlocks ₦{firstSuperBonusTier.totalAmount.toLocaleString()})
+										</span>
+									{/if}
 								</div>
 							{/if}
 						</div>
@@ -771,6 +888,10 @@
 									</div>
 									{#if ref.status === 'pending'}
 										<div class="space-y-1.5">
+											<div class="text-[11px]" style="color: var(--text-muted);">
+												Earn ₦{toNumber(ref.activationReward).toLocaleString()} when either target is
+												reached.
+											</div>
 											<div>
 												<div
 													class="mb-0.5 flex justify-between text-[11px]"
@@ -816,7 +937,10 @@
 										</div>
 									{:else}
 										<div class="text-[11px]" style="color: var(--text-muted);">
-											Earned ₦700 · {ref.orderCount} order{ref.orderCount === 1 ? '' : 's'}, ₦{ref.cumulativeSpend.toLocaleString()}
+											Earned ₦{toNumber(ref.activationReward).toLocaleString()} · {ref.orderCount} order{ref.orderCount ===
+											1
+												? ''
+												: 's'}, ₦{ref.cumulativeSpend.toLocaleString()}
 											spent
 										</div>
 									{/if}
@@ -841,32 +965,32 @@
 						</h4>
 					</summary>
 					<div class="mt-3">
-					{#if recentReferralActivity.length === 0}
-						<p class="text-sm" style="color: var(--text-muted);">No referral activity yet.</p>
-					{:else}
-						<div class="space-y-2">
-							{#each recentReferralActivity as item (item.userId)}
-								<div
-									class="flex items-center justify-between gap-3 rounded-[10px] border border-[var(--border)] px-3 py-2"
-								>
-									<div class="min-w-0">
-										<p class="truncate text-sm font-semibold" style="color: var(--text);">
-											{item.displayName}
-										</p>
-										<p class="truncate text-xs" style="color: var(--text-muted);">
-											{referralStatusLabel(item.status)} • {item.ordersCount} order{item.ordersCount ===
-											1
-												? ''
-												: 's'} • {formatTimeAgo(item.lastActivityAt)}
-										</p>
+						{#if recentReferralActivity.length === 0}
+							<p class="text-sm" style="color: var(--text-muted);">No referral activity yet.</p>
+						{:else}
+							<div class="space-y-2">
+								{#each recentReferralActivity as item (item.userId)}
+									<div
+										class="flex items-center justify-between gap-3 rounded-[10px] border border-[var(--border)] px-3 py-2"
+									>
+										<div class="min-w-0">
+											<p class="truncate text-sm font-semibold" style="color: var(--text);">
+												{item.displayName}
+											</p>
+											<p class="truncate text-xs" style="color: var(--text-muted);">
+												{referralStatusLabel(item.status)} • {item.ordersCount} order{item.ordersCount ===
+												1
+													? ''
+													: 's'} • {formatTimeAgo(item.lastActivityAt)}
+											</p>
+										</div>
+										<div class="shrink-0 text-sm font-semibold" style="color: var(--primary);">
+											+₦{toNumber(item.storeCreditEarned).toLocaleString()}
+										</div>
 									</div>
-									<div class="shrink-0 text-sm font-semibold" style="color: var(--primary);">
-										+₦{toNumber(item.storeCreditEarned).toLocaleString()}
-									</div>
-								</div>
-							{/each}
-						</div>
-					{/if}
+								{/each}
+							</div>
+						{/if}
 					</div>
 				</details>
 
@@ -883,94 +1007,50 @@
 						</h4>
 					</summary>
 					<div class="mt-3">
-					{#if recentStoreCreditActivity.length === 0}
-						<p class="text-sm" style="color: var(--text-muted);">No Cash activity yet.</p>
-					{:else}
-						<div class="space-y-2">
-							{#each recentStoreCreditActivity as item (item.id)}
-								<div
-									class="flex items-center justify-between gap-3 rounded-[10px] border border-[var(--border)] px-3 py-2"
-								>
-									<div class="min-w-0">
-										<p class="truncate text-sm font-semibold" style="color: var(--text);">
-											{item.title}
-										</p>
-										<p class="text-xs" style="color: var(--text-muted);">
-											{item.statusLabel} • {formatTimeAgo(item.createdAt)}
-										</p>
-									</div>
+						{#if recentStoreCreditActivity.length === 0}
+							<p class="text-sm" style="color: var(--text-muted);">No Cash activity yet.</p>
+						{:else}
+							<div class="space-y-2">
+								{#each recentStoreCreditActivity as item (item.id)}
 									<div
-										class="shrink-0 text-sm font-semibold"
-										style="color: {item.amount >= 0 ? 'var(--primary)' : 'var(--status-danger)'};"
+										class="flex items-center justify-between gap-3 rounded-[10px] border border-[var(--border)] px-3 py-2"
 									>
-										{item.amount >= 0 ? '+' : '-'}₦{Math.abs(
-											toNumber(item.amount)
-										).toLocaleString()}
+										<div class="min-w-0">
+											<p class="truncate text-sm font-semibold" style="color: var(--text);">
+												{item.title}
+											</p>
+											<p class="text-xs" style="color: var(--text-muted);">
+												{item.statusLabel} • {formatTimeAgo(item.createdAt)}
+											</p>
+										</div>
+										<div
+											class="shrink-0 text-sm font-semibold"
+											style="color: {item.amount >= 0 ? 'var(--primary)' : 'var(--status-danger)'};"
+										>
+											{item.amount >= 0 ? '+' : '-'}₦{Math.abs(
+												toNumber(item.amount)
+											).toLocaleString()}
+										</div>
 									</div>
-								</div>
-							{/each}
-						</div>
-					{/if}
-				</div>
-			</details>
-			</div>
-
-			<div
-				class="rounded-[var(--r-sm)] border border-[var(--border)] p-4"
-				style="background: var(--surface);"
-			>
-				<div class="grid grid-cols-3 gap-1.5 sm:gap-2">
-					<div class="rounded-[10px] border border-[var(--border)] p-2 sm:p-3">
-						<div
-							class="mb-1 flex items-center gap-1 text-[9px] font-semibold uppercase sm:text-xs"
-							style="color: var(--primary);"
-						>
-							<TrendingUp size={12} />
-							<span class="truncate">Code Uses</span>
-						</div>
-						<p
-							class="text-base font-semibold sm:text-2xl"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							{toNumber(affiliateData?.codeUsesThisMonth)}
-						</p>
+								{/each}
+							</div>
+						{/if}
 					</div>
-					<div class="rounded-[10px] border border-[var(--border)] p-2 sm:p-3">
-						<div
-							class="mb-1 flex items-center gap-1 text-[9px] font-semibold uppercase sm:text-xs"
-							style="color: var(--link);"
-						>
-							<Users size={12} />
-							<span class="truncate">Paid Referrals</span>
-						</div>
-						<p
-							class="text-base font-semibold sm:text-2xl"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							{toNumber(affiliateData?.paidReferredUsers)}
-						</p>
-					</div>
-					<div class="rounded-[10px] border border-[var(--border)] p-2 sm:p-3">
-						<div
-							class="mb-1 flex items-center gap-1 text-[9px] font-semibold uppercase sm:text-xs"
-							style="color: var(--primary-strong);"
-						>
-							<Wallet size={12} />
-							<span class="truncate">Cash Earned</span>
-						</div>
-						<p
-							class="text-base font-semibold sm:text-2xl"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							₦{toNumber(affiliateData?.totalStoreCreditEarned).toLocaleString()}
-						</p>
-					</div>
-				</div>
+				</details>
 			</div>
 		{/if}
 	</div>
 </div>
 
 {#if activePopup}
-	<AffiliatePopupModal isOpen={true} onClose={dismissPopup} {...AFFILIATE_POPUP_CONTENT[activePopup]} />
+	<AffiliatePopupModal
+		isOpen={true}
+		onClose={dismissPopup}
+		{...getAffiliatePopupContent(activePopup, payoutMinimum, {
+			buyerDiscountPercent,
+			affiliateRewardPercent,
+			orderLimit: regularOrderLimit,
+			perOrderCap: regularPerOrderCap
+		})}
+	/>
 {/if}

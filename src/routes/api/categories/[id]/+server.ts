@@ -72,13 +72,30 @@ export async function PUT({ params, request, locals }) {
 					metadata && typeof metadata === 'object' && !Array.isArray(metadata)
 						? (metadata as Record<string, unknown>)
 						: {};
-				nextMetadata = applyTierExactPreviewSanitization(
+				const existingMetadata =
+					existingCategory.metadata &&
+					typeof existingCategory.metadata === 'object' &&
+					!Array.isArray(existingCategory.metadata)
+						? (existingCategory.metadata as Record<string, unknown>)
+						: {};
+				const sanitized = applyTierExactPreviewSanitization(
 					applyTierMerchandisingSanitization(
 						applyTierSampleScreenshotSanitization(
 							applyTierDeliveryConfigSanitization(metadataObject)
 						)
 					)
 				);
+				// Preserve an existing explicit eligibility decision when a partial/older
+				// admin payload does not know about the affiliate field. Legacy tiers with
+				// no field remain eligible until the owner changes them.
+				nextMetadata =
+					metadataObject.affiliate_excluded === undefined &&
+					existingMetadata.affiliate_excluded !== undefined
+						? {
+							...sanitized,
+							affiliate_excluded: existingMetadata.affiliate_excluded
+						}
+						: sanitized;
 			}
 		}
 

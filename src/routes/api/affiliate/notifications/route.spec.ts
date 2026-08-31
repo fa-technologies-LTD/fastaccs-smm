@@ -47,9 +47,24 @@ describe('notification inbox pagination', () => {
 
 	it('returns a bounded page and an opaque cursor for older notifications', async () => {
 		mocks.findMany.mockResolvedValue([
-			{ id: 'note-3', createdAt: new Date('2026-08-16T10:00:00Z') },
-			{ id: 'note-2', createdAt: new Date('2026-08-16T09:00:00Z') },
-			{ id: 'note-1', createdAt: new Date('2026-08-16T08:00:00Z') }
+			{
+				id: 'note-3',
+				type: 'order_delivered',
+				orderId: 'order-3',
+				createdAt: new Date('2026-08-16T10:00:00Z')
+			},
+			{
+				id: 'note-2',
+				type: 'affiliate_store_credit',
+				orderId: null,
+				createdAt: new Date('2026-08-16T09:00:00Z')
+			},
+			{
+				id: 'note-1',
+				type: 'new_login',
+				orderId: null,
+				createdAt: new Date('2026-08-16T08:00:00Z')
+			}
 		]);
 
 		const response = await callNotifications(
@@ -69,6 +84,9 @@ describe('notification inbox pagination', () => {
 			'note-3',
 			'note-2'
 		]);
+		expect(
+			body.data.notifications.map((notification: { actionUrl: string }) => notification.actionUrl)
+		).toEqual(['/order/order-3', '/dashboard?tab=affiliate']);
 		expect(body.data.nextCursor).toBe('note-2');
 	});
 });

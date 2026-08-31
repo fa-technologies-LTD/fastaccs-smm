@@ -11,8 +11,10 @@ import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { validatePromotionCode } from '$lib/services/promotions';
 import {
 	getAffiliateDiscountForOrder,
+	getAffiliateConfig,
 	maybeSendAffiliateUnlockInvite,
 	recordAffiliateStoreCreditForOrder,
+	resolveAffiliatePolicyForOrder,
 	resolveOrderAffiliateAttribution,
 	validateAffiliateCode
 } from '$lib/services/affiliate';
@@ -758,18 +760,17 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			.trim()
 			.toUpperCase();
 
-		// Promo/affiliate pricing applies to ACCOUNTS only. Blocked on boosting and on
-		// numbers (a ₦1,000 code on a ₦1,000-floor number would be a guaranteed loss).
-		if (
-			(isBoostingCheckout || isPhoneCheckout) &&
-			(requestedPromotionCode || requestedAffiliateCode)
-		) {
+		// Promo/affiliate pricing applies to ACCOUNTS only. A stale referral cookie is
+		// harmlessly ignored for Numbers/Boosting so it cannot break checkout; an
+		// explicitly submitted promotion remains a validation error because it changes
+		// the price the buyer expects to pay.
+		if ((isBoostingCheckout || isPhoneCheckout) && requestedPromotionCode) {
 			return json(
 				{
 					success: false,
 					error: isPhoneCheckout
-						? 'Promo and affiliate codes do not apply to Numbers.'
-						: 'Promo codes and affiliate pricing do not apply to boosting services.'
+						? 'Promo codes do not apply to Numbers.'
+						: 'Promo codes do not apply to boosting services.'
 				},
 				{ status: 400 }
 			);
@@ -779,17 +780,21 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			affiliateCode: string | null;
 			affiliateUserId: string | null;
 			affiliateProgramId: string | null;
+			policySnapshot: Record<string, unknown> | null;
 			source: 'locked' | 'manual' | 'none';
 			error?: string;
 		} = {
 			affiliateCode: null,
 			affiliateUserId: null,
 			affiliateProgramId: null,
+			policySnapshot: null,
 			source: 'none'
 		};
 		let promotionId: string | null = null;
 		let appliedPromotionCode: string | null = null;
 		let discountAmount = 0;
+		let affiliateBenefitLimit = 0;
+		let affiliateConfigSnapshot: Awaited<ReturnType<typeof getAffiliateConfig>> | null = null;
 		let finalOrderTotal = Math.round(subtotalAmount * 100) / 100;
 
 		if (!isBoostingCheckout && !isPhoneCheckout) {
@@ -866,7 +871,12 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					}))
 				});
 				discountAmount = affiliateDiscount.discountAmount;
+				affiliateBenefitLimit = affiliateDiscount.maxRewardedOrders;
 				finalOrderTotal = Math.max(0, Math.round((subtotalAmount - discountAmount) * 100) / 100);
+			}
+
+			if (hasAffiliateAttribution) {
+				affiliateConfigSnapshot = await getAffiliateConfig();
 			}
 		}
 
@@ -962,6 +972,61 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			data = await runWithDbRetry(() =>
 				prisma.$transaction(
 					async (tx) => {
+						// Serialize the buyer's referral-benefit reservations. Without this,
+						// three parallel checkouts can all observe zero prior retained orders
+						// and all receive a benefit intended for only the first two.
+						if (
+							checkoutUserId &&
+							attribution.affiliateUserId &&
+							discountAmount > 0 &&
+							!isBoostingCheckout &&
+							!isPhoneCheckout
+						) {
+							await tx.$queryRaw`SELECT id FROM users WHERE id = ${checkoutUserId}::uuid FOR UPDATE`;
+							const reservedBenefits = await tx.order.count({
+								where: {
+									userId: checkoutUserId,
+									affiliateUserId: attribution.affiliateUserId,
+									orderType: 'account',
+									discountAmount: { gt: 0 },
+									status: { notIn: ['failed', 'refunded', 'cancelled', 'expired'] },
+									paymentStatus: { notIn: ['failed', 'refunded', 'cancelled', 'expired'] }
+								}
+							});
+							if (affiliateBenefitLimit <= 0 || reservedBenefits >= affiliateBenefitLimit) {
+								throw new Error('AFFILIATE_BENEFIT_LIMIT_REACHED');
+							}
+						}
+
+						let orderAnalyticsMetadata = buildOrderAnalyticsMetadata(orderData.analytics);
+						if (attribution.affiliateProgramId && attribution.affiliateUserId) {
+							// Revalidate that the attributed program is still active, then copy
+							// the relationship's immutable commercial agreement onto this order.
+							// A later promotion, demotion, or settings edit cannot move its goalposts.
+							await tx.$queryRaw`SELECT id FROM affiliate_programs WHERE id = ${attribution.affiliateProgramId}::uuid FOR SHARE`;
+							const liveAffiliateProgram = await tx.affiliateProgram.findFirst({
+								where: {
+									id: attribution.affiliateProgramId,
+									userId: attribution.affiliateUserId,
+									status: 'active',
+									user: { isActive: true, isAffiliateEnabled: true }
+								},
+								select: { id: true, isSuperAffiliate: true }
+							});
+							if (!liveAffiliateProgram) throw new Error('AFFILIATE_ATTRIBUTION_CHANGED');
+							if (!affiliateConfigSnapshot) throw new Error('AFFILIATE_POLICY_SNAPSHOT_MISSING');
+							const affiliatePolicy = resolveAffiliatePolicyForOrder({
+								storedPolicySnapshot: attribution.policySnapshot,
+								programId: liveAffiliateProgram.id,
+								liveIsSuperAffiliate: liveAffiliateProgram.isSuperAffiliate,
+								liveConfig: affiliateConfigSnapshot
+							});
+							orderAnalyticsMetadata = {
+								...orderAnalyticsMetadata,
+								affiliatePolicy
+							} as Prisma.InputJsonObject;
+						}
+
 						const createdOrder = await tx.order.create({
 							data: {
 								userId: checkoutUserId,
@@ -992,7 +1057,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 								affiliateUserId: attribution.affiliateUserId || null,
 								promotionId,
 								promotionCode: appliedPromotionCode,
-								analyticsMetadata: buildOrderAnalyticsMetadata(orderData.analytics),
+								analyticsMetadata: orderAnalyticsMetadata,
 								orderItems: {
 									create: reservationItems.map((item) => ({
 										id: item.orderItemId,
@@ -1127,6 +1192,26 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					{
 						success: false,
 						error: 'Your store credit balance changed — please refresh and try again.'
+					},
+					{ status: 409 }
+				);
+			}
+			if (message === 'AFFILIATE_BENEFIT_LIMIT_REACHED') {
+				return json(
+					{
+						success: false,
+						error:
+							'Your discounted referral-order slots are already in use. Refresh checkout to continue with the current price.'
+					},
+					{ status: 409 }
+				);
+			}
+			if (message === 'AFFILIATE_ATTRIBUTION_CHANGED') {
+				return json(
+					{
+						success: false,
+						error:
+							'This affiliate offer changed while checkout was open. Refresh to confirm the current price.'
 					},
 					{ status: 409 }
 				);

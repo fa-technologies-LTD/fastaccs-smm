@@ -8,7 +8,10 @@ const mocks = vi.hoisted(() => ({
 	initializeTransaction: vi.fn(),
 	releaseOrderReservations: vi.fn(),
 	reserveStandardAccountsForOrder: vi.fn(),
+	resolveAffiliatePolicyForOrder: vi.fn(),
 	resolveOrderAffiliateAttribution: vi.fn(),
+	getAffiliateDiscountForOrder: vi.fn(),
+	getAffiliateConfig: vi.fn(),
 	validateAffiliateCode: vi.fn(),
 	validatePromotionCode: vi.fn(),
 	getStoreCreditBuckets: vi.fn(),
@@ -41,9 +44,11 @@ vi.mock('$lib/services/monnify', () => ({
 vi.mock('$lib/services/admin-metrics', () => ({ invalidateAdminStatsCache: vi.fn() }));
 vi.mock('$lib/services/promotions', () => ({ validatePromotionCode: mocks.validatePromotionCode }));
 vi.mock('$lib/services/affiliate', () => ({
-	getAffiliateDiscountForOrder: vi.fn(),
+	getAffiliateDiscountForOrder: mocks.getAffiliateDiscountForOrder,
+	getAffiliateConfig: mocks.getAffiliateConfig,
 	maybeSendAffiliateUnlockInvite: vi.fn(),
 	recordAffiliateStoreCreditForOrder: vi.fn(),
+	resolveAffiliatePolicyForOrder: mocks.resolveAffiliatePolicyForOrder,
 	resolveOrderAffiliateAttribution: mocks.resolveOrderAffiliateAttribution,
 	validateAffiliateCode: mocks.validateAffiliateCode
 }));
@@ -97,7 +102,8 @@ function orderRequest(
 	checkoutKey = 'checkout_key_1234567890',
 	currency?: string,
 	promotionCode?: string,
-	useStoreCredit = false
+	useStoreCredit = false,
+	affiliateCode?: string
 ) {
 	return new Request('https://smm.fastaccs.com/api/orders', {
 		method: 'POST',
@@ -108,7 +114,8 @@ function orderRequest(
 			checkoutKey,
 			currency,
 			promotionCode,
-			useStoreCredit
+			useStoreCredit,
+			affiliateCode
 		})
 	});
 }
@@ -127,6 +134,40 @@ describe('approved invariant: emergency checkout order control', () => {
 		vi.spyOn(console, 'info').mockImplementation(() => undefined);
 		vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 		vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		mocks.getAffiliateConfig.mockResolvedValue({
+			superAffiliateEnabled: true,
+			superActivationSpendThreshold: 3_500,
+			superActivationOrderThreshold: 3,
+			superActivationReward: 700,
+			superTier1Count: 10,
+			superTier1Amount: 3_000,
+			superTier2Count: 20,
+			superTier2Amount: 8_000,
+			superTier3Count: 30,
+			superTier3Amount: 15_000
+		});
+		mocks.resolveAffiliatePolicyForOrder.mockImplementation(
+			({ programId, liveIsSuperAffiliate, liveConfig }) => ({
+				version: 3,
+				programId,
+				programType: liveIsSuperAffiliate ? 'super' : 'regular',
+				...(liveIsSuperAffiliate
+					? {
+							superTerms: {
+								enabled: liveConfig.superAffiliateEnabled,
+								activationSpendThreshold: liveConfig.superActivationSpendThreshold,
+								activationOrderThreshold: liveConfig.superActivationOrderThreshold,
+								activationReward: liveConfig.superActivationReward,
+								monthlyTiers: [
+									{ count: liveConfig.superTier1Count, amount: liveConfig.superTier1Amount },
+									{ count: liveConfig.superTier2Count, amount: liveConfig.superTier2Amount },
+									{ count: liveConfig.superTier3Count, amount: liveConfig.superTier3Amount }
+								]
+							}
+						}
+					: {})
+			})
+		);
 	});
 
 	afterEach(() => {
@@ -289,7 +330,7 @@ describe('approved invariant: emergency checkout order control', () => {
 		);
 
 		const response = await POST({
-			request: orderRequest('checkout_key_credit_phone', 'NGN', undefined, true),
+			request: orderRequest('checkout_key_credit_phone', 'NGN', undefined, true, 'STALEAFF'),
 			locals: { user },
 			url: new URL('https://smm.fastaccs.com/api/orders')
 		} as never);
@@ -312,7 +353,9 @@ describe('approved invariant: emergency checkout order control', () => {
 					paymentStatus: 'paid',
 					paymentMethod: 'store_credit',
 					deliveryStatus: 'processing',
-					orderType: 'phone'
+					orderType: 'phone',
+					affiliateCode: null,
+					affiliateUserId: null
 				})
 			})
 		);
@@ -335,5 +378,102 @@ describe('approved invariant: emergency checkout order control', () => {
 			})
 		);
 		expect(mocks.initializeTransaction).not.toHaveBeenCalled();
+	});
+
+	it('snapshots regular-versus-Super treatment on an attributed account order', async () => {
+		vi.stubEnv('CHECKOUT_DISABLED', 'false');
+		mocks.findOrder.mockResolvedValue(null);
+		mocks.findCategories.mockResolvedValue([
+			{
+				id: 'tier-123',
+				name: 'Instagram Account',
+				categoryType: 'tier',
+				parent: { name: 'Instagram' },
+				metadata: { pricing: { base_price: 10_000 }, delivery_mode: 'instant_auto' }
+			}
+		]);
+		mocks.groupAccounts.mockResolvedValue([{ categoryId: 'tier-123', _count: { _all: 1 } }]);
+		mocks.resolveOrderAffiliateAttribution.mockResolvedValue({
+			affiliateCode: 'SUPER1',
+			affiliateUserId: '11111111-1111-4111-8111-111111111111',
+			affiliateProgramId: '22222222-2222-4222-8222-222222222222',
+			source: 'locked'
+		});
+		mocks.getAffiliateDiscountForOrder.mockResolvedValue({
+			discountAmount: 500,
+			maxRewardedOrders: 2
+		});
+		mocks.initializeTransaction.mockResolvedValue({
+			success: true,
+			checkoutUrl: 'https://checkout.monnify.test/new',
+			transactionReference: 'TX-1'
+		});
+
+		const orderCreate = vi.fn().mockResolvedValue({
+			id: 'order-affiliate',
+			orderNumber: 'ORD-AFFILIATE',
+			status: 'pending',
+			paymentStatus: 'pending',
+			totalAmount: 9_500,
+			currency: 'NGN',
+			orderItems: []
+		});
+		const tx = {
+			$queryRaw: vi.fn().mockResolvedValue([]),
+			order: { count: vi.fn().mockResolvedValue(0), create: orderCreate },
+			affiliateProgram: {
+				findFirst: vi.fn().mockResolvedValue({
+					id: '22222222-2222-4222-8222-222222222222',
+					isSuperAffiliate: true
+				})
+			},
+			orderEvent: { create: vi.fn().mockResolvedValue({}) }
+		};
+		mocks.createTransaction.mockImplementation(async (callback) => callback(tx));
+
+		const request = new Request('https://smm.fastaccs.com/api/orders', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				items: [{ categoryId: 'tier-123', quantity: 1 }],
+				paymentMethod: 'monnify',
+				checkoutKey: 'checkout_key_affiliate_snapshot',
+				affiliateCode: 'SUPER1'
+			})
+		});
+		const response = await POST({
+			request,
+			locals: { user },
+			url: new URL('https://smm.fastaccs.com/api/orders')
+		} as never);
+
+		expect(response.status).toBe(200);
+		expect(tx.$queryRaw).toHaveBeenCalled();
+		expect(orderCreate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({
+					affiliateCode: 'SUPER1',
+					affiliateUserId: '11111111-1111-4111-8111-111111111111',
+					analyticsMetadata: expect.objectContaining({
+						affiliatePolicy: expect.objectContaining({
+							version: 3,
+							programId: '22222222-2222-4222-8222-222222222222',
+							programType: 'super',
+							superTerms: {
+								enabled: true,
+								activationSpendThreshold: 3_500,
+								activationOrderThreshold: 3,
+								activationReward: 700,
+								monthlyTiers: [
+									{ count: 10, amount: 3_000 },
+									{ count: 20, amount: 8_000 },
+									{ count: 30, amount: 15_000 }
+								]
+							}
+						})
+					})
+				})
+			})
+		);
 	});
 });

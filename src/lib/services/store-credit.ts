@@ -29,12 +29,12 @@ export const SC_PAYOUT = 'affiliate_payout';
 
 // Human category per transaction type, for the customer-facing ledger.
 const SC_CATEGORY: Record<string, string> = {
-	[SC_CREDIT_AFFILIATE]: 'Affiliate commission',
+	[SC_CREDIT_AFFILIATE]: 'Affiliate Cash',
 	[SC_CREDIT_GIFT]: 'Gift',
 	[SC_CREDIT_REFUND]: 'Refund',
 	[SC_REDEEM_EARNED]: 'Spent',
 	[SC_REDEEM_REFUND]: 'Spent',
-	[SC_AFFILIATE_ADJUSTMENT]: 'Commission adjustment',
+	[SC_AFFILIATE_ADJUSTMENT]: 'Affiliate Cash adjustment',
 	[SC_PAYOUT]: 'Payout'
 };
 
@@ -44,36 +44,62 @@ export interface StoreCreditEntry {
 	delta: number; // + credit, − debit (whole naira)
 	kind: 'credit' | 'debit';
 	category: string;
+	status: string;
 }
 
+const STORE_CREDIT_HISTORY_TYPES = [
+	SC_CREDIT_AFFILIATE,
+	SC_CREDIT_GIFT,
+	SC_CREDIT_REFUND,
+	SC_REDEEM_EARNED,
+	SC_REDEEM_REFUND,
+	SC_AFFILIATE_ADJUSTMENT,
+	SC_PAYOUT
+] as const;
+
+const STORE_CREDIT_DEBIT_TYPES = new Set<string>([
+	SC_REDEEM_EARNED,
+	SC_REDEEM_REFUND,
+	SC_AFFILIATE_ADJUSTMENT,
+	SC_PAYOUT
+]);
+
 /**
- * A user's store-credit ledger for the dashboard (most recent first). Sign is derived from the
- * stored balanceBefore/After so it's always correct regardless of how the row was written.
+ * A user's store-credit ledger for the dashboard (most recent first). Transaction
+ * type and amount are authoritative: payout reservations and pending rewards do not
+ * mutate the cached wallet balance, so balanceBefore/After can legitimately be equal.
  */
 export async function getStoreCreditHistory(
 	userId: string,
 	limit = 50
 ): Promise<StoreCreditEntry[]> {
 	const rows = await prisma.walletTransaction.findMany({
-		where: { userId, status: { notIn: ['failed', 'reversed', 'cancelled'] } },
+		where: {
+			userId,
+			type: { in: [...STORE_CREDIT_HISTORY_TYPES] },
+			status: { notIn: ['failed', 'reversed', 'cancelled'] }
+		},
 		orderBy: { createdAt: 'desc' },
 		take: limit,
 		select: {
 			type: true,
-			balanceBefore: true,
-			balanceAfter: true,
+			amount: true,
+			status: true,
 			description: true,
 			createdAt: true
 		}
 	});
 	return rows.map((r) => {
-		const delta = Math.round(Number(r.balanceAfter) - Number(r.balanceBefore));
+		const kind = STORE_CREDIT_DEBIT_TYPES.has(r.type) ? ('debit' as const) : ('credit' as const);
+		const amount = Math.max(0, Math.round(Number(r.amount || 0)));
+		const delta = kind === 'debit' ? -amount : amount;
 		return {
 			at: r.createdAt.toISOString(),
 			description: r.description,
 			delta,
-			kind: delta >= 0 ? ('credit' as const) : ('debit' as const),
-			category: SC_CATEGORY[r.type] ?? (delta >= 0 ? 'Credit' : 'Spent')
+			kind,
+			category: SC_CATEGORY[r.type] ?? (kind === 'credit' ? 'Credit' : 'Spent'),
+			status: String(r.status || '')
 		};
 	});
 }

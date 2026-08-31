@@ -510,8 +510,10 @@
 							currency: 'NGN',
 							paymentMethod: 'monnify',
 							checkoutKey: getOrCreateCheckoutKey(),
-							affiliateCode: hasBoostingOrder ? undefined : affiliateCode || undefined,
-							promotionCode: hasBoostingOrder ? undefined : promoAppliedCode || undefined,
+							affiliateCode:
+								hasBoostingOrder || hasNumbersOrder ? undefined : affiliateCode || undefined,
+							promotionCode:
+								hasBoostingOrder || hasNumbersOrder ? undefined : promoAppliedCode || undefined,
 							useStoreCredit: applyStoreCredit && storeCreditAvailable > 0,
 							analytics: {
 								ga4ClientId: getGa4ClientId()

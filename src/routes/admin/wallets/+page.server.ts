@@ -8,7 +8,7 @@ export const load: PageServerLoad = async () => {
 		const walletsRaw = await prisma.wallet.findMany({
 			where: {
 				user: {
-					isAffiliateEnabled: true
+					OR: [{ isAffiliateEnabled: true }, { affiliatePrograms: { some: {} } }]
 				}
 			},
 			include: {
@@ -30,7 +30,7 @@ export const load: PageServerLoad = async () => {
 		const transactionsRaw = await prisma.walletTransaction.findMany({
 			where: {
 				user: {
-					isAffiliateEnabled: true
+					OR: [{ isAffiliateEnabled: true }, { affiliatePrograms: { some: {} } }]
 				}
 			},
 			take: 100,
@@ -64,22 +64,44 @@ export const load: PageServerLoad = async () => {
 		const transactions = transactionsRaw.map((txn) => ({
 			...txn,
 			amount: Number(txn.amount),
-			balanceBefore: txn.balanceBefore ? Number(txn.balanceBefore) : null,
-			balanceAfter: txn.balanceAfter ? Number(txn.balanceAfter) : null
+			balanceBefore: txn.balanceBefore == null ? null : Number(txn.balanceBefore),
+			balanceAfter: txn.balanceAfter == null ? null : Number(txn.balanceAfter)
 		}));
 
 		// Calculate total balance
 		const totalBalance = wallets.reduce((sum, wallet) => sum + wallet.balance, 0);
 
-		const deposits = await prisma.walletTransaction.aggregate({
-			where: { type: 'deposit', status: 'completed', user: { isAffiliateEnabled: true } },
-			_sum: { amount: true }
-		});
-
-		const debits = await prisma.walletTransaction.aggregate({
-			where: { type: 'debit', status: 'completed', user: { isAffiliateEnabled: true } },
-			_sum: { amount: true }
-		});
+		const affiliateUserWhere = {
+			OR: [{ isAffiliateEnabled: true }, { affiliatePrograms: { some: {} } }]
+		};
+		const [affiliateCredits, affiliateAdjustments, affiliateUsed] = await Promise.all([
+			prisma.walletTransaction.aggregate({
+				where: {
+					type: 'affiliate_credit',
+					status: { in: ['pending', 'available', 'under_review', 'requested', 'paid'] },
+					user: affiliateUserWhere
+				},
+				_sum: { amount: true }
+			}),
+			prisma.walletTransaction.aggregate({
+				where: {
+					type: 'affiliate_credit_adjustment',
+					status: 'available',
+					user: affiliateUserWhere
+				},
+				_sum: { amount: true }
+			}),
+			prisma.walletTransaction.aggregate({
+				where: {
+					OR: [
+						{ type: 'store_credit_redemption_earned', status: 'available' },
+						{ type: 'affiliate_payout', status: 'paid' }
+					],
+					user: affiliateUserWhere
+				},
+				_sum: { amount: true }
+			})
+		]);
 
 		return {
 			wallets,
@@ -87,8 +109,11 @@ export const load: PageServerLoad = async () => {
 			stats: {
 				totalWallets: wallets.length,
 				totalBalance,
-				totalDeposits: Number(deposits._sum.amount || 0),
-				totalWithdrawals: Number(debits._sum.amount || 0)
+				totalDeposits: Math.max(
+					0,
+					Number(affiliateCredits._sum.amount || 0) - Number(affiliateAdjustments._sum.amount || 0)
+				),
+				totalWithdrawals: Number(affiliateUsed._sum.amount || 0)
 			},
 			error: null
 		};

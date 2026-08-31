@@ -59,6 +59,8 @@ model User {
   affiliateRefreshPopupSeenAt     DateTime?                 @map("affiliate_refresh_popup_seen_at")
   bankDetailsPopupSeenAt          DateTime?                 @map("bank_details_popup_seen_at")
   affiliatePrograms               AffiliateProgram[]
+  affiliateReferralsSent          AffiliateReferral[]       @relation("AffiliateReferralReferrer")
+  affiliateReferralReceived       AffiliateReferral?        @relation("AffiliateReferralBuyer")
   cartItems                       CartItem[]
   notifications                   Notification[]
   affiliateOrders                 Order[]                   @relation("AffiliateOrders")
@@ -490,23 +492,27 @@ model Review {
 }
 
 model AffiliateProgram {
-  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId            String             @map("user_id") @db.Uuid
-  affiliateCode     String             @unique @map("affiliate_code")
-  commissionRate    Decimal            @default(10.00) @map("commission_rate")
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String              @map("user_id") @db.Uuid
+  affiliateCode     String              @unique @map("affiliate_code")
+  // Legacy cache/config columns are retained for compatibility. Canonical policy,
+  // referral counts, sales and rewards are derived from settings + immutable records.
+  commissionRate    Decimal             @default(5.00) @map("commission_rate")
   // Super affiliate: flat ₦700 per activated referral (replaces the per-order
   // reward). Regular affiliates stay false — their path is unchanged.
-  isSuperAffiliate  Boolean            @default(false) @map("is_super_affiliate")
-  totalReferrals    Int                @default(0) @map("total_referrals")
-  totalSales        Decimal            @default(0) @map("total_sales")
-  totalCommission   Decimal            @default(0) @map("total_commission")
-  status            String             @default("active")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @default(now()) @map("updated_at")
-  totalPaid         Decimal            @default(0) @map("total_paid")
-  user              User               @relation(fields: [userId], references: [id])
+  isSuperAffiliate  Boolean             @default(false) @map("is_super_affiliate")
+  totalReferrals    Int                 @default(0) @map("total_referrals")
+  totalSales        Decimal             @default(0) @map("total_sales")
+  totalCommission   Decimal             @default(0) @map("total_commission")
+  status            String              @default("active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @default(now()) @map("updated_at")
+  totalPaid         Decimal             @default(0) @map("total_paid")
+  user              User                @relation(fields: [userId], references: [id])
   commissionPayouts CommissionPayout[]
+  referrals         AffiliateReferral[]
 
+  @@unique([userId])
   @@index([userId])
   @@index([status])
   @@map("affiliate_programs")
@@ -690,23 +696,70 @@ model BoostingServiceWaitlist {
 }
 
 model AffiliatePayoutDetails {
-  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId          String    @unique @map("user_id") @db.Uuid
-  bankName        String    @map("bank_name")
-  accountNumber   String    @map("account_number")
-  accountName     String    @map("account_name")
-  phone           String
-  feedback        String?
-  status          String    @default("pending")
-  rejectionReason String?   @map("rejection_reason")
-  reviewedAt      DateTime? @map("reviewed_at")
-  reviewedBy      String?   @map("reviewed_by") @db.Uuid
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String    @unique @map("user_id") @db.Uuid
+  bankName           String?   @map("bank_name")
+  accountNumber      String?   @map("account_number")
+  accountName        String?   @map("account_name")
+  phone              String?
+  encryptedPayload   String?   @map("encrypted_payload")
+  encryptionKeyId    String?   @map("encryption_key_id")
+  accountNumberLast4 String?   @map("account_number_last_4")
+  feedback           String?
+  status             String    @default("pending")
+  rejectionReason    String?   @map("rejection_reason")
+  reviewedAt         DateTime? @map("reviewed_at")
+  reviewedBy         String?   @map("reviewed_by") @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@map("affiliate_payout_details")
+}
+
+model AffiliateReferral {
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  affiliateProgramId String           @map("affiliate_program_id") @db.Uuid
+  referrerUserId     String           @map("referrer_user_id") @db.Uuid
+  referredUserId     String           @unique @map("referred_user_id") @db.Uuid
+  affiliateCode      String           @map("affiliate_code")
+  source             String
+  status             String           @default("active")
+  // Immutable commercial terms accepted when first-touch attribution is locked.
+  // Later admin changes apply to new relationships, never silently to this one.
+  policySnapshot     Json             @default("{}") @map("policy_snapshot")
+  lockedAt           DateTime         @default(now()) @map("locked_at")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+  program            AffiliateProgram @relation(fields: [affiliateProgramId], references: [id], onDelete: Restrict)
+  referrer           User             @relation("AffiliateReferralReferrer", fields: [referrerUserId], references: [id], onDelete: Restrict)
+  referredUser       User             @relation("AffiliateReferralBuyer", fields: [referredUserId], references: [id], onDelete: Restrict)
+
+  @@index([affiliateProgramId, lockedAt])
+  @@index([referrerUserId, lockedAt])
+  @@index([status, lockedAt])
+  @@map("affiliate_referrals")
+}
+
+model AffiliateEvent {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  affiliateProgramId String?  @map("affiliate_program_id") @db.Uuid
+  affiliateUserId    String?  @map("affiliate_user_id") @db.Uuid
+  referredUserId     String?  @map("referred_user_id") @db.Uuid
+  orderId            String?  @map("order_id") @db.Uuid
+  type               String
+  source             String?
+  dedupeKey          String?  @unique @map("dedupe_key")
+  metadata           Json     @default("{}")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([type, createdAt])
+  @@index([affiliateProgramId, createdAt])
+  @@index([affiliateUserId, createdAt])
+  @@index([referredUserId, createdAt])
+  @@index([orderId])
+  @@map("affiliate_events")
 }
 
 model AdminRoleAssignment {

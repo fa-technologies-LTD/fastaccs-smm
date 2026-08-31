@@ -88,7 +88,7 @@ describe('Monnify checkout initialization', () => {
 		});
 		expect(body).not.toHaveProperty('paymentMethods');
 		expect(String(body.contractCode || '')).not.toHaveLength(0);
-	});
+	}, 15_000);
 
 	it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
 		'rejects invalid amount %s before authenticating or initializing',

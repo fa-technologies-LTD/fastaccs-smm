@@ -21,6 +21,7 @@ import { invalidateSession } from '$lib/auth/session';
 import { prisma } from '$lib/prisma';
 import { sendEmail } from '$lib/services/email';
 import { getAffiliateConfig, saveAffiliateConfig } from '$lib/services/affiliate';
+import { createAdminAuditLog } from '$lib/services/admin-audit';
 
 function maskSecret(value: string): string {
 	const trimmed = value.trim();
@@ -70,7 +71,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 			getAnnouncementBannerConfig(),
 			getAffiliateConfig()
 		]);
-	const highSpenderQualifyingCount = await countHighSpenders(settings.notifications.highSpenderMinTotal);
+	const highSpenderQualifyingCount = await countHighSpenders(
+		settings.notifications.highSpenderMinTotal
+	);
 	const canManageSettings = Boolean(
 		locals.adminContext && hasAdminPermission(locals.adminContext, 'admin:settings:manage')
 	);
@@ -238,22 +241,61 @@ export const actions: Actions = {
 		}
 
 		const formData = await request.formData();
-
-		await saveAffiliateConfig({
-			unlockThreshold: String(formData.get('unlockThreshold') || ''),
-			discountStage1Percent: String(formData.get('discountStage1Percent') || ''),
-			discountStage1Cap: String(formData.get('discountStage1Cap') || ''),
-			discountStage2Percent: String(formData.get('discountStage2Percent') || ''),
-			discountStage2Cap: String(formData.get('discountStage2Cap') || ''),
-			maxRewardedOrdersPerBuyer: String(formData.get('maxRewardedOrdersPerBuyer') || ''),
-			storeCreditMin: String(formData.get('storeCreditMin') || ''),
-			storeCreditMax: String(formData.get('storeCreditMax') || ''),
-			storeCreditFallbackPercent: String(formData.get('storeCreditFallbackPercent') || ''),
-			excludedTierKeywords: String(formData.get('excludedTierKeywords') || ''),
-			payoutMinimum: String(formData.get('payoutMinimum') || ''),
-			payoutMinAccountAgeDays: String(formData.get('payoutMinAccountAgeDays') || ''),
-			dashboardPopupsEnabled: formData.get('dashboardPopupsEnabled') === 'on' ? 'true' : 'false'
-		});
+		const before = await getAffiliateConfig();
+		let after;
+		try {
+			after = await saveAffiliateConfig(
+				{
+					discountStage1Percent: '5',
+					discountStage1Cap: '1000',
+					buyerDiscountOrderLimit: '2',
+					maxRewardedOrdersPerBuyer: '2',
+					storeCreditMax: '1000',
+					storeCreditFallbackPercent: '5',
+					// Legacy keyword exclusions remain stable for compatibility. Product-by-product
+					// eligibility is controlled on the tier itself, which is safer and clearer.
+					excludedTierKeywords: before.excludedTierKeywords.join(', '),
+					payoutMinimum: String(formData.get('payoutMinimum') || ''),
+					payoutMinAccountAgeDays: String(formData.get('payoutMinAccountAgeDays') || ''),
+					dashboardPopupsEnabled:
+						formData.get('dashboardPopupsEnabled') === 'on' ? 'true' : 'false',
+					superAffiliateEnabled: formData.get('superAffiliateEnabled') === 'on' ? 'true' : 'false',
+					superActivationSpendThreshold: String(
+						formData.get('superActivationSpendThreshold') || ''
+					),
+					superActivationOrderThreshold: String(
+						formData.get('superActivationOrderThreshold') || ''
+					),
+					superActivationReward: String(formData.get('superActivationReward') || ''),
+					superTier1Count: String(formData.get('superTier1Count') || ''),
+					superTier1Amount: String(formData.get('superTier1Amount') || ''),
+					superTier2Count: String(formData.get('superTier2Count') || ''),
+					superTier2Amount: String(formData.get('superTier2Amount') || ''),
+					superTier3Count: String(formData.get('superTier3Count') || ''),
+					superTier3Amount: String(formData.get('superTier3Amount') || '')
+				},
+				{
+					onBeforeCommit: async (savedConfig, tx) => {
+						await createAdminAuditLog(
+							{
+								actorUserId: locals.user?.id || null,
+								action: 'affiliate_settings_changed',
+								resourceType: 'affiliate_settings',
+								description: 'Affiliate and super-affiliate settings updated',
+								metadata: { before, after: savedConfig },
+								required: true
+							},
+							tx
+						);
+					}
+				}
+			);
+		} catch (error) {
+			return fail(400, {
+				success: false,
+				error: error instanceof Error ? error.message : 'Invalid affiliate settings.'
+			});
+		}
 
 		return {
 			success: true,

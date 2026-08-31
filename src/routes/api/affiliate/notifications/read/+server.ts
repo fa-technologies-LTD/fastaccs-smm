@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
+import { recordAffiliateEvent } from '$lib/services/affiliate-events';
 
 // Mark notifications read for the bell (all types — the feed is universal now).
 export const POST: RequestHandler = async ({ locals, request }) => {
@@ -24,14 +25,27 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	if (!notificationId) {
 		return json({ success: false, error: 'notificationId is required' }, { status: 400 });
 	}
+	const notification = await prisma.notification.findFirst({
+		where: { id: notificationId, userId: locals.user.id },
+		select: { id: true, type: true }
+	});
+	if (!notification) {
+		return json({ success: false, error: 'Notification not found' }, { status: 404 });
+	}
 
 	const result = await prisma.notification.updateMany({
 		where: { id: notificationId, userId: locals.user.id },
 		data: { read: true, readAt: now }
 	});
 
-	if (result.count === 0) {
-		return json({ success: false, error: 'Notification not found' }, { status: 404 });
+	if (result.count > 0 && notification.type.startsWith('affiliate_')) {
+		await recordAffiliateEvent({
+			type: 'affiliate_notification_opened',
+			dedupeKey: `affiliate:notification_opened:${notification.id}`,
+			affiliateUserId: locals.user.id,
+			source: 'notification_bell',
+			metadata: { notificationType: notification.type }
+		});
 	}
 
 	return json({ success: true });

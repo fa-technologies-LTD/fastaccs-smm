@@ -9,6 +9,9 @@ const txMock = vi.hoisted(() => ({
 	},
 	user: {
 		findUnique: vi.fn()
+	},
+	microcopy: {
+		findUnique: vi.fn()
 	}
 }));
 const prismaMock = vi.hoisted(() => ({
@@ -45,8 +48,11 @@ describe('first Store Credit email', () => {
 			email: 'affiliate@example.com',
 			fullName: 'Ada Affiliate',
 			isActive: true,
-			wallet: { balance: 350 }
+			wallet: { balance: 350 },
+			affiliatePrograms: [{ affiliateCode: 'AFF001' }],
+			affiliatePayoutDetails: null
 		});
+		txMock.microcopy.findUnique.mockResolvedValue({ value: '5000' });
 		sendEmailMock.mockResolvedValue({ success: true, messageId: 'message-1' });
 	});
 
@@ -74,7 +80,8 @@ describe('first Store Credit email', () => {
 			expect.objectContaining({
 				notificationType: 'affiliate_store_credit',
 				referenceId: 'affiliate_first_credit:11111111-1111-1111-1111-111111111111',
-				body: expect.stringContaining('You earned your first referral reward')
+				subject: 'Your first referral reward is pending 🎉',
+				body: expect.stringContaining('after the 14-day return window')
 			})
 		);
 	});

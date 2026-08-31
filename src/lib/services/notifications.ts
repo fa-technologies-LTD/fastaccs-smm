@@ -17,6 +17,13 @@ export type NotificationType =
 	| 'affiliate_referral_signup'
 	| 'affiliate_payout';
 
+export function getNotificationActionUrl(type: string, orderId?: string | null): string | null {
+	if (orderId) return `/order/${encodeURIComponent(orderId)}`;
+	if (String(type || '').startsWith('affiliate_')) return '/dashboard?tab=affiliate';
+	if (type === 'store_credit') return '/dashboard';
+	return null;
+}
+
 export async function createUserNotification(input: {
 	userId: string;
 	type: NotificationType;

@@ -5,6 +5,9 @@ import type { Prisma } from '@prisma/client';
 import { sendAffiliatePayoutStatusEmailIfNeeded } from '$lib/services/affiliate-payout-email';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { createAdminAuditLog } from '$lib/services/admin-audit';
+import { getAffiliateMaximumPayable } from '$lib/services/affiliate';
+import { recordAffiliateEvent } from '$lib/services/affiliate-events';
+import { decryptAffiliateBankDetails } from '$lib/services/affiliate-payout-details';
 
 function isUuid(value: string): boolean {
 	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -78,6 +81,40 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 			if (!['requested', 'under_review'].includes(previousStatus)) {
 				return { outcome: 'conflict' as const, previousStatus };
 			}
+			if (nextStatus === 'paid') {
+				await tx.$queryRaw`SELECT id FROM wallets WHERE user_id = ${id}::uuid FOR UPDATE`;
+				const approvedBankDetails = await tx.affiliatePayoutDetails.findFirst({
+					where: { userId: id, status: 'approved' },
+					select: {
+						userId: true,
+						bankName: true,
+						accountNumber: true,
+						accountName: true,
+						phone: true,
+						feedback: true,
+						encryptedPayload: true,
+						encryptionKeyId: true,
+						accountNumberLast4: true
+					}
+				});
+				if (!approvedBankDetails) {
+					return { outcome: 'bank_not_approved' as const, previousStatus };
+				}
+				try {
+					decryptAffiliateBankDetails(approvedBankDetails);
+				} catch {
+					return { outcome: 'bank_unavailable' as const, previousStatus };
+				}
+				const maximumPayable = await getAffiliateMaximumPayable(id, tx);
+				if (Number(target.amount || 0) > maximumPayable + 0.01) {
+					return {
+						outcome: 'stale_entitlement' as const,
+						previousStatus,
+						requestedAmount: Number(target.amount || 0),
+						maximumPayable
+					};
+				}
+			}
 
 			const existingMeta =
 				target.metadata && typeof target.metadata === 'object' && !Array.isArray(target.metadata)
@@ -101,6 +138,39 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 				},
 				select: { id: true, status: true, amount: true, updatedAt: true }
 			});
+			await recordAffiliateEvent(
+				{
+					type: `payout_${nextStatus}`,
+					dedupeKey: `affiliate:payout:${target.id}:${nextStatus}`,
+					affiliateUserId: id,
+					source: 'admin',
+					metadata: {
+						payoutTransactionId: target.id,
+						amount: Number(target.amount || 0),
+						actorUserId
+					}
+				},
+				tx
+			);
+			await createAdminAuditLog(
+				{
+					actorUserId,
+					targetUserId: id,
+					action: 'affiliate_payout_status_changed',
+					resourceType: 'affiliate_payout',
+					resourceId: updated.id,
+					description: `Affiliate payout changed from ${previousStatus} to ${updated.status}`,
+					metadata: {
+						amount: Number(updated.amount || 0),
+						previousStatus,
+						nextStatus: updated.status,
+						payoutReference: payoutReference || null,
+						notes: notes || null
+					},
+					required: true
+				},
+				tx
+			);
 			return { outcome: 'ok' as const, changed: true, previousStatus, updated };
 		});
 
@@ -116,30 +186,40 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 				{ status: 409 }
 			);
 		}
+		if (transition.outcome === 'bank_not_approved') {
+			return json(
+				{
+					success: false,
+					error: 'Approved bank details are required before a payout can be marked paid.'
+				},
+				{ status: 409 }
+			);
+		}
+		if (transition.outcome === 'bank_unavailable') {
+			return json(
+				{
+					success: false,
+					error: 'The approved bank details cannot be verified securely. Review them before paying.'
+				},
+				{ status: 409 }
+			);
+		}
+		if (transition.outcome === 'stale_entitlement') {
+			return json(
+				{
+					success: false,
+					error: `This request is now higher than the affiliate's available earnings (₦${transition.maximumPayable.toLocaleString()}). Reverse it and ask the affiliate to submit a new request.`
+				},
+				{ status: 409 }
+			);
+		}
 
 		const updated = transition.updated;
 		if (transition.changed) {
-			await Promise.allSettled([
-				sendAffiliatePayoutStatusEmailIfNeeded({
-					payoutTransactionId: updated.id,
-					expectedStatus: updated.status
-				}),
-				createAdminAuditLog({
-					actorUserId,
-					targetUserId: id,
-					action: 'affiliate_payout_status_changed',
-					resourceType: 'affiliate_payout',
-					resourceId: updated.id,
-					description: `Affiliate payout changed from ${transition.previousStatus} to ${updated.status}`,
-					metadata: {
-						amount: Number(updated.amount || 0),
-						previousStatus: transition.previousStatus,
-						nextStatus: updated.status,
-						payoutReference: payoutReference || null,
-						notes: notes || null
-					}
-				})
-			]);
+			await sendAffiliatePayoutStatusEmailIfNeeded({
+				payoutTransactionId: updated.id,
+				expectedStatus: updated.status
+			}).catch((error) => console.error('Failed to send affiliate payout status email:', error));
 		}
 
 		return json({

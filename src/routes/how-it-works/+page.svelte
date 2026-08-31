@@ -11,7 +11,6 @@
 		Package,
 		Share2,
 		TrendingUp,
-		Lock,
 		Clock,
 		Eye,
 		Copy,
@@ -71,8 +70,8 @@
 		class="sticky top-16 z-10 shadow-sm"
 		style="background: var(--bg-elev-1); border-bottom: 1px solid var(--border);"
 	>
-		<div class="mx-auto max-w-6xl px-4">
-			<div class="flex justify-center space-x-8">
+		<div class="mx-auto max-w-6xl overflow-x-auto px-4">
+			<div class="flex min-w-max justify-start gap-2 sm:justify-center sm:gap-6">
 				<button
 					onclick={() => (selectedTab = 'buyer')}
 					class="px-4 py-4 text-sm font-semibold transition-colors md:text-base"
@@ -390,12 +389,12 @@
 								</div>
 								<div class="flex justify-between">
 									<span style="color: var(--text-muted);">Discount:</span>
-									<span class="font-bold" style="color: var(--status-success);">-₦1,500</span>
+									<span class="font-bold" style="color: var(--status-success);">-₦750</span>
 								</div>
 								<div class="pt-2" style="border-top: 1px solid var(--border);">
 									<div class="flex justify-between">
 										<span class="font-semibold" style="color: var(--text);">Total:</span>
-										<span class="font-bold" style="color: var(--brand-blue);">₦13,500</span>
+										<span class="font-bold" style="color: var(--brand-blue);">₦14,250</span>
 									</div>
 								</div>
 							</div>
@@ -580,15 +579,19 @@
 					Verify any account in seconds
 				</h2>
 				<p class="mx-auto mb-12 max-w-2xl text-center" style="color: var(--text-muted);">
-					Instant phone numbers for WhatsApp, Telegram, Google and more. Buy a number, receive
-					your one-time code automatically — no waiting, no chat.
+					Instant phone numbers for WhatsApp, Telegram, Google and more. Buy a number, receive your
+					one-time code automatically — no waiting, no chat.
 				</p>
 
 				<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
 					{#each [{ n: 1, icon: Phone, title: 'Pick a service', body: 'Choose from 20+ apps and a country, each with a clear Naira price.' }, { n: 2, icon: CreditCard, title: 'Pay', body: 'Checkout with Monnify or your store credit — the same fast flow as everything else.' }, { n: 3, icon: Eye, title: 'Get your number', body: 'Your number appears on the order page instantly, ready to use.' }, { n: 4, icon: RefreshCw, title: 'Code arrives', body: 'Your one-time code shows automatically in seconds. No code? Instant refund to store credit.' }] as step (step.n)}
 						{@const StepIcon = step.icon}
 						<div
-							class="rounded-2xl p-6 text-center transition-all duration-500 {animatedSteps.includes(step.n) ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}"
+							class="rounded-2xl p-6 text-center transition-all duration-500 {animatedSteps.includes(
+								step.n
+							)
+								? 'translate-y-0 opacity-100'
+								: 'translate-y-4 opacity-0'}"
 							style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 						>
 							<div
@@ -598,7 +601,10 @@
 								<StepIcon class="h-8 w-8" />
 							</div>
 							<div class="mb-1 text-sm font-bold" style="color: #0ea5e9;">Step {step.n}</div>
-							<h3 class="mb-2 text-lg font-bold" style="color: var(--text); font-family: var(--font-head);">
+							<h3
+								class="mb-2 text-lg font-bold"
+								style="color: var(--text); font-family: var(--font-head);"
+							>
 								{step.title}
 							</h3>
 							<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
@@ -617,8 +623,12 @@
 						Get a verification number
 					</button>
 					<div class="flex items-center gap-4 text-sm" style="color: var(--text-muted);">
-						<span class="inline-flex items-center gap-1.5"><Zap class="h-4 w-4" style="color:#fbbf24;" /> Instant</span>
-						<span class="inline-flex items-center gap-1.5"><Shield class="h-4 w-4" style="color:#34d399;" /> No-code refund</span>
+						<span class="inline-flex items-center gap-1.5"
+							><Zap class="h-4 w-4" style="color:#fbbf24;" /> Instant</span
+						>
+						<span class="inline-flex items-center gap-1.5"
+							><Shield class="h-4 w-4" style="color:#34d399;" /> No-code refund</span
+						>
 					</div>
 				</div>
 			</div>
@@ -655,8 +665,8 @@
 								Pick a Platform
 							</h3>
 							<p style="color: var(--text-muted); font-family: var(--font-body);">
-								Head to Boosting Services and choose Instagram, TikTok, X, or Facebook —
-								whichever platform your existing account is on.
+								Head to Boosting Services and choose Instagram, TikTok, X, or Facebook — whichever
+								platform your existing account is on.
 							</p>
 						</div>
 					</div>
@@ -685,8 +695,8 @@
 								Pick a Service & Quantity
 							</h3>
 							<p style="color: var(--text-muted); font-family: var(--font-body);">
-								Choose followers, likes, views, comments, or reposts and select how many you
-								want. Pricing updates live as you adjust the quantity.
+								Choose followers, likes, views, comments, or reposts and select how many you want.
+								Pricing updates live as you adjust the quantity.
 							</p>
 						</div>
 					</div>
@@ -764,412 +774,122 @@
 			</div>
 		</section>
 	{:else}
-		<!-- Affiliate Flow Section -->
-		<section class="px-4 py-16">
-			<div class="mx-auto max-w-6xl">
-				<h2
-					class="mb-4 text-center text-3xl font-bold"
-					style="color: var(--text); font-family: var(--font-head);"
-				>
-					Turn Your Referrals Into Real Cash
-				</h2>
-				<p
-					class="mx-auto mb-12 max-w-2xl text-center"
-					style="color: var(--text-muted); font-family: var(--font-body);"
-				>
-					Every friend you bring earns you withdrawable Naira, no cap, no catch. Share your code,
-					they save, you get paid.
-				</p>
+		<section class="px-4 py-12 sm:py-16">
+			<div class="mx-auto max-w-5xl">
+				<div class="mx-auto mb-8 max-w-2xl text-center">
+					<h2
+						class="mb-3 text-3xl font-bold"
+						style="color: var(--text); font-family: var(--font-head);"
+					>
+						Share FastAccs. Both of You Earn.
+					</h2>
+					<p style="color: var(--text-muted); font-family: var(--font-body);">
+						Friends save 5%, and you earn 5%, on each of their first two eligible account orders—up
+						to ₦1,000 each per order.
+					</p>
+				</div>
 
-				<!-- Affiliate Steps -->
-				<div class="space-y-12">
-					<!-- Step 1: Enable Affiliate -->
-					<div class="flex flex-col items-center gap-8 md:flex-row">
-						<div class="flex-shrink-0">
-							<div
-								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-600 text-white shadow-lg"
-							>
-								<UserPlus class="h-12 w-12" />
-							</div>
-						</div>
-						<div class="flex-1 text-center md:text-left">
-							<div class="mb-2 flex items-center justify-center gap-2 md:justify-start">
-								<span class="text-2xl font-bold text-purple-600">Step 1</span>
-							</div>
-							<h3
-								class="mb-3 text-2xl font-bold"
-								style="color: var(--text); font-family: var(--font-head);"
-							>
-								Unlock Affiliate Access
-							</h3>
-							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Make your first purchase and affiliate access unlocks automatically — your unique referral code is generated on the spot. No forms, no approval wait.
-							</p>
-							<ul class="space-y-2">
-								<li class="flex items-start gap-2" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Unlocks the moment your first order completes</span>
-								</li>
-								<li class="flex items-start gap-2" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Your code is created instantly — nothing to apply for</span>
-								</li>
-								<li class="flex items-start gap-2" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Full access to your affiliate dashboard</span>
-								</li>
-							</ul>
-						</div>
+				<div class="grid gap-4 md:grid-cols-3">
+					<div
+						class="rounded-xl p-5"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+					>
 						<div
-							class="w-full rounded-xl p-6 shadow-lg md:w-80"
-							style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+							class="mb-4 flex h-11 w-11 items-center justify-center rounded-lg"
+							style="background: var(--status-success-bg); color: var(--status-success);"
 						>
-							<div class="mb-4 text-center">
-								<div class="mb-2 text-sm" style="color: var(--text-muted);">
-									Your Affiliate Promo Code
-								</div>
-								<div
-									class="rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4 text-3xl font-bold text-white"
-								>
-									JD001
-								</div>
-							</div>
-							<div class="space-y-2 text-sm" style="color: var(--text-muted);">
-								<div class="flex items-center justify-between">
-									<span>Earnings Model:</span>
-									<span class="font-bold" style="color: var(--status-success);">Cash</span>
-								</div>
-								<div class="flex items-center justify-between">
-									<span>Status:</span>
-									<span class="font-bold" style="color: var(--status-success);">Active</span>
-								</div>
-							</div>
+							<UserPlus class="h-5 w-5" />
 						</div>
+						<p
+							class="mb-2 text-xs font-semibold tracking-wide uppercase"
+							style="color: var(--primary);"
+						>
+							Step 1
+						</p>
+						<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">Unlock access</h3>
+						<p class="text-sm" style="color: var(--text-muted);">
+							Complete your first purchase. Your referral code and link appear automatically—no
+							application form.
+						</p>
 					</div>
 
-					<div class="flex justify-center">
-						<div class="h-12 w-0.5 bg-gradient-to-b from-purple-600 to-blue-600"></div>
-					</div>
-
-					<!-- Step 2: Share Code -->
-					<div class="flex flex-col items-center gap-8 md:flex-row-reverse">
-						<div class="flex-shrink-0">
-							<div
-								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 text-white shadow-lg"
-							>
-								<Share2 class="h-12 w-12" />
-							</div>
-						</div>
-						<div class="flex-1 text-center md:text-right">
-							<div class="mb-2 flex items-center justify-center gap-2 md:justify-end">
-								<span class="text-2xl font-bold text-blue-600">Step 2</span>
-							</div>
-							<h3
-								class="mb-3 text-2xl font-bold"
-								style="color: var(--text); font-family: var(--font-head);"
-							>
-								Share Your Code
-							</h3>
-							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Drop your code or referral link anywhere — WhatsApp, your status, your customers, your followers. Every person who uses it saves money at checkout, and every order they place puts Cash in your pocket.
-							</p>
-							<ul class="space-y-2">
-								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>New buyers get a real discount on checkout</span>
-								</li>
-								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Copy, paste, share, done</span>
-								</li>
-								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Your own referral link, ready to go</span>
-								</li>
-							</ul>
-						</div>
+					<div
+						class="rounded-xl p-5"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+					>
 						<div
-							class="w-full rounded-xl p-6 shadow-lg md:w-80"
-							style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+							class="mb-4 flex h-11 w-11 items-center justify-center rounded-lg"
+							style="background: var(--status-success-bg); color: var(--status-success);"
 						>
-							<div class="mb-4">
-								<div class="mb-2 text-sm font-medium" style="color: var(--text);">
-									Referral Link
-								</div>
-								<div class="flex items-center gap-2 rounded-lg p-3" style="background: var(--bg);">
-									<code
-										class="flex-1 overflow-hidden text-xs text-ellipsis"
-										style="color: var(--text);">smm.fastaccs.com/ref/JD001</code
-									>
-									<Copy
-										class="h-4 w-4 flex-shrink-0 cursor-pointer"
-										style="color: var(--text-dim);"
-									/>
-								</div>
-							</div>
-							<div class="grid grid-cols-3 gap-2">
-								<button
-									class="rounded-lg p-2 text-xs font-medium transition-colors"
-									style="border: 1px solid var(--border); color: var(--text);"
-								>
-									WhatsApp
-								</button>
-								<button
-									class="rounded-lg p-2 text-xs font-medium transition-colors"
-									style="border: 1px solid var(--border); color: var(--text);"
-								>
-									Twitter
-								</button>
-								<button
-									class="rounded-lg p-2 text-xs font-medium transition-colors"
-									style="border: 1px solid var(--border); color: var(--text);"
-								>
-									Facebook
-								</button>
-							</div>
+							<Share2 class="h-5 w-5" />
 						</div>
-					</div>
-					<div class="flex justify-center">
-						<div class="h-12 w-0.5 bg-gradient-to-b from-blue-600 to-green-600"></div>
+						<p
+							class="mb-2 text-xs font-semibold tracking-wide uppercase"
+							style="color: var(--primary);"
+						>
+							Step 2
+						</p>
+						<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">Share your link</h3>
+						<p class="text-sm" style="color: var(--text-muted);">
+							Send it directly or share it on WhatsApp. New buyers get the discount when they use
+							your code on eligible account orders.
+						</p>
 					</div>
 
-					<!-- Step 3: Track Earnings -->
-					<div class="flex flex-col items-center gap-8 md:flex-row">
-						<div class="flex-shrink-0">
-							<div
-								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg"
-							>
-								<DollarSign class="h-12 w-12" />
-							</div>
+					<div
+						class="rounded-xl p-5"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+					>
+						<div
+							class="mb-4 flex h-11 w-11 items-center justify-center rounded-lg"
+							style="background: var(--status-success-bg); color: var(--status-success);"
+						>
+							<DollarSign class="h-5 w-5" />
 						</div>
-						<div class="flex-1 text-center md:text-left">
-							<div class="mb-2 flex items-center justify-center gap-2 md:justify-start">
-								<span class="text-2xl font-bold text-green-600">Step 3</span>
-							</div>
-							<h3
-								class="mb-3 text-2xl font-bold"
-								style="color: var(--text); font-family: var(--font-head);"
-							>
-								Track Your Earnings
-							</h3>
-							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Watch it add up in real time — who you referred, which orders landed, and how much withdrawable Cash you've banked, all in one dashboard.
-							</p>
-							<p
-								class="mb-4 text-sm"
-								style="color: var(--text-muted); font-family: var(--font-body);"
-							>
-								Cash is real Naira and fully withdrawable once you meet the payout minimums.
-									New rewards show as <strong style="color: var(--text);">Pending</strong> while the
-									order clears its return window, then move to
-									<strong style="color: var(--text);">Available</strong> to spend or withdraw.
-							</p>
-							<ul class="space-y-2">
-								<li class="flex items-start gap-2" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Earn Cash on every successful referred order</span>
-								</li>
-								<li class="flex items-start gap-2" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Live tracking, no refreshing, no waiting</span>
-								</li>
-								<li class="flex items-start gap-2" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>See exactly when you can cash out</span>
-								</li>
-							</ul>
-						</div>
-						<div class="w-full rounded-xl bg-[var(--bg-elev-1)] p-6 shadow-lg md:w-80">
-							<div class="mb-4">
-								<h4 class="font-semibold text-[var(--text)]">Affiliate Stats</h4>
-							</div>
-							<div class="space-y-4">
-								<div class="rounded-lg bg-[var(--status-success-bg)] p-4">
-									<div class="mb-1 text-sm text-[var(--text-muted)]">Total Earned</div>
-									<div class="text-2xl font-bold text-green-600">₦125,000</div>
-								</div>
-								<div class="grid grid-cols-2 gap-3">
-									<div class="rounded-lg bg-[var(--bg-elev-2)] p-3">
-										<div class="mb-1 text-xs text-[var(--text-muted)]">Referrals</div>
-										<div class="text-xl font-bold text-[var(--text)]">45</div>
-									</div>
-									<div class="rounded-lg bg-[var(--bg-elev-2)] p-3">
-										<div class="mb-1 text-xs text-[var(--text-muted)]">Total Sales</div>
-										<div class="text-xl font-bold text-[var(--text)]">₦1.25M</div>
-									</div>
-								</div>
-							</div>
-						</div>
+						<p
+							class="mb-2 text-xs font-semibold tracking-wide uppercase"
+							style="color: var(--primary);"
+						>
+							Step 3
+						</p>
+						<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">Track your cash</h3>
+						<p class="text-sm" style="color: var(--text-muted);">
+							Your dashboard separates pending and available Affiliate Cash, and shows exactly when
+							you can request a payout.
+						</p>
 					</div>
 				</div>
 
-				<!-- Affiliate CTA -->
-				<div class="mt-16 text-center">
+				<div
+					class="mt-6 grid gap-3 rounded-xl p-5 sm:grid-cols-3"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
+					<div class="flex items-start gap-2 text-sm" style="color: var(--text-muted);">
+						<Check class="mt-0.5 h-4 w-4 flex-shrink-0" style="color: var(--status-success);" />
+						<span>Accounts only; Numbers and Boosting are excluded.</span>
+					</div>
+					<div class="flex items-start gap-2 text-sm" style="color: var(--text-muted);">
+						<Clock class="mt-0.5 h-4 w-4 flex-shrink-0" style="color: var(--status-success);" />
+						<span>Rewards become available after the return window.</span>
+					</div>
+					<div class="flex items-start gap-2 text-sm" style="color: var(--text-muted);">
+						<DollarSign
+							class="mt-0.5 h-4 w-4 flex-shrink-0"
+							style="color: var(--status-success);"
+						/>
+						<span
+							>Available cash can go toward purchases or be withdrawn; payouts run on Saturdays.</span
+						>
+					</div>
+				</div>
+
+				<div class="mt-8 text-center">
 					<button
 						onclick={() => goto('/dashboard?tab=affiliate')}
-						class="rounded-full bg-gradient-to-r from-purple-600 to-pink-600 px-8 py-4 text-lg font-semibold text-white shadow-lg transition-transform hover:scale-105"
+						class="btn-fa btn-fa--primary px-6"
 					>
 						Open Affiliate Dashboard
 					</button>
-				</div>
-			</div>
-		</section>
-
-		<!-- Affiliate Benefits -->
-		<section class="px-4 py-16" style="background: var(--bg-elev-1);">
-			<div class="mx-auto max-w-6xl">
-				<h2
-					class="mb-12 text-center text-3xl font-bold"
-					style="color: var(--text); font-family: var(--font-head);"
-				>
-					Affiliate Benefits
-				</h2>
-				<div class="grid gap-8 md:grid-cols-4">
-					<div class="text-center">
-						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
-							style="background: var(--bg-elev-2); border: 1px solid var(--border);"
-						>
-							<DollarSign class="h-8 w-8" style="color: var(--primary);" />
-						</div>
-						<h3
-							class="mb-2 text-lg font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Real Cash, Not Points
-						</h3>
-						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Withdrawable Naira lands in your dashboard every time someone you referred completes an order. No store credit, no gimmicks.
-						</p>
-					</div>
-					<div class="text-center">
-						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
-							style="background: var(--bg-elev-2); border: 1px solid var(--border);"
-						>
-							<Clock class="h-8 w-8" style="color: var(--fa-blue-500);" />
-						</div>
-						<h3
-							class="mb-2 text-lg font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Live Tracking
-						</h3>
-						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Referrals and earnings update the second they happen. You always know where you stand.
-						</p>
-					</div>
-					<div class="text-center">
-						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
-							style="background: var(--bg-elev-2); border: 1px solid var(--border);"
-						>
-							<TrendingUp class="h-8 w-8" style="color: var(--fa-lime-700);" />
-						</div>
-						<h3
-							class="mb-2 text-lg font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Zero Ceiling
-						</h3>
-						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							No cap on referrals or earnings. The more people you bring, the more you make, simple as that.
-						</p>
-					</div>
-					<div class="text-center">
-						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
-							style="background: var(--bg-elev-2); border: 1px solid var(--border);"
-						>
-							<Lock class="h-8 w-8" style="color: var(--status-warning);" />
-						</div>
-						<h3
-							class="mb-2 text-lg font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Free to Join
-						</h3>
-						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							No sign-up fee, no hidden charges. Shop your way in and start earning.
-						</p>
-					</div>
-				</div>
-			</div>
-		</section>
-
-		<!-- Affiliate Glossary -->
-		<section class="px-4 py-16">
-			<div class="mx-auto max-w-6xl">
-				<h2
-					class="mb-4 text-center text-3xl font-bold"
-					style="color: var(--text); font-family: var(--font-head);"
-				>
-					Key Terms, Explained
-				</h2>
-				<p
-					class="mx-auto mb-12 max-w-2xl text-center"
-					style="color: var(--text-muted); font-family: var(--font-body);"
-				>
-					A quick glossary so you always know what's happening with your earnings.
-				</p>
-				<div class="grid gap-6 md:grid-cols-2">
-					<div
-						class="rounded-xl p-6"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
-						<h3
-							class="mb-2 text-lg font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Affiliate Promo Code
-						</h3>
-						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Your unique code, front and center on your dashboard. It's a discount code and an earning code — anyone who uses it saves at checkout, and you earn Cash on their order.
-						</p>
-					</div>
-					<div
-						class="rounded-xl p-6"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
-						<h3
-							class="mb-2 text-lg font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Cash
-						</h3>
-						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Real, withdrawable Naira from your referred orders. It stacks up in your dashboard and pays out once you clear the minimums below.
-						</p>
-					</div>
-					<div
-						class="rounded-xl p-6"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
-						<h3
-							class="mb-2 text-lg font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Discount Stages
-						</h3>
-						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Your referrals get a bigger discount on their first couple of orders, then a smaller ongoing one for several more. Your dashboard shows exactly which stage each referral is at.
-						</p>
-					</div>
-					<div
-						class="rounded-xl p-6"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
-						<h3
-							class="mb-2 text-lg font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Payout
-						</h3>
-						<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-							Once your available Cash and account age both clear the minimums shown on
-							your dashboard, you can request a withdrawal and we'll take it from there.
-						</p>
-					</div>
 				</div>
 			</div>
 		</section>
@@ -1182,43 +902,45 @@
 				class="mb-12 text-center text-3xl font-bold"
 				style="color: var(--text); font-family: var(--font-head);"
 			>
-				Frequently Asked Questions
+				{selectedTab === 'affiliate' ? 'Affiliate Questions' : 'Frequently Asked Questions'}
 			</h2>
 			<div class="space-y-6">
-				<details
-					class="group rounded-lg p-6 shadow"
-					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-				>
-					<summary
-						class="flex cursor-pointer items-center justify-between font-semibold"
-						style="color: var(--text); font-family: var(--font-head);"
+				{#if selectedTab !== 'affiliate'}
+					<details
+						class="group rounded-lg p-6 shadow"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 					>
-						How long does delivery take?
-						<span class="ml-4" style="color: var(--text-dim);">+</span>
-					</summary>
-					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						Delivery is instant! Once your payment is confirmed, accounts are automatically
-						allocated and delivered to your dashboard within seconds. You'll also receive an email
-						notification with a link to access your purchases.
-					</p>
-				</details>
+						<summary
+							class="flex cursor-pointer items-center justify-between font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							How long does delivery take?
+							<span class="ml-4" style="color: var(--text-dim);">+</span>
+						</summary>
+						<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
+							Delivery is instant! Once your payment is confirmed, accounts are automatically
+							allocated and delivered to your dashboard within seconds. You'll also receive an email
+							notification with a link to access your purchases.
+						</p>
+					</details>
 
-				<details
-					class="group rounded-lg p-6 shadow"
-					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-				>
-					<summary
-						class="flex cursor-pointer items-center justify-between font-semibold"
-						style="color: var(--text); font-family: var(--font-head);"
+					<details
+						class="group rounded-lg p-6 shadow"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 					>
-						What payment methods do you accept?
-						<span class="ml-4" style="color: var(--text-dim);">+</span>
-					</summary>
-					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						We use Monnify for secure payments. Supported channels can include card, bank transfer,
-						and USSD based on your current Monnify configuration.
-					</p>
-				</details>
+						<summary
+							class="flex cursor-pointer items-center justify-between font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							What payment methods do you accept?
+							<span class="ml-4" style="color: var(--text-dim);">+</span>
+						</summary>
+						<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
+							We use Monnify for secure payments. Supported channels can include card, bank
+							transfer, and USSD based on your current Monnify configuration.
+						</p>
+					</details>
+				{/if}
 
 				<details
 					class="group rounded-lg p-6 shadow"
@@ -1232,9 +954,10 @@
 						<span class="ml-4" style="color: var(--text-dim);">+</span>
 					</summary>
 					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						When you become an affiliate, you get a unique code and referral link. When someone uses
-						your code at checkout, they get referral discounts and you earn Cash on eligible
-						successful referred orders. Earnings are tracked automatically in your dashboard.
+						After your first successful purchase, you receive a unique code and referral link.
+						Friends save 5% and you earn 5% on their first two retained eligible account orders, up
+						to ₦1,000 per order. Numbers and Boosting are excluded. Earnings are tracked
+						automatically.
 					</p>
 				</details>
 
@@ -1251,8 +974,8 @@
 					</summary>
 					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
 						It's the unique code on your affiliate dashboard. Share it (or your referral link) with
-						friends and followers, anyone who uses it gets a discount at checkout, and you earn
-						Cash on their order.
+						friends and followers. Eligible new buyers save on their first two account orders, and
+						you earn Cash on those same retained orders.
 					</p>
 				</details>
 
@@ -1268,9 +991,8 @@
 						<span class="ml-4" style="color: var(--text-dim);">+</span>
 					</summary>
 					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						Buyers you refer get a bigger discount on their first couple of orders, then a smaller
-						ongoing discount for several more after that. Your dashboard shows the current stage
-						for each referral.
+						Eligible new buyers get 5% off their first two account orders, up to ₦1,000 per order.
+						The affiliate earns 5% on those same retained orders. Numbers and Boosting are excluded.
 					</p>
 				</details>
 
@@ -1286,67 +1008,68 @@
 						<span class="ml-4" style="color: var(--text-dim);">+</span>
 					</summary>
 					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						Once your available Cash and account age both clear the minimums shown on your
-						dashboard, you can request a payout from your affiliate dashboard and we'll process it
-						from there.
+						Once your available Cash, account age, and approved bank details meet the requirements
+						shown on your dashboard, you can request a payout. Payouts are processed on Saturdays.
 					</p>
 				</details>
 
-				<details
-					class="group rounded-lg p-6 shadow"
-					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-				>
-					<summary
-						class="flex cursor-pointer items-center justify-between font-semibold"
-						style="color: var(--text); font-family: var(--font-head);"
+				{#if selectedTab !== 'affiliate'}
+					<details
+						class="group rounded-lg p-6 shadow"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 					>
-						Can I get a refund if I'm not satisfied?
-						<span class="ml-4" style="color: var(--text-dim);">+</span>
-					</summary>
-					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						If an order does not match its listing details or has issues, contact support for review
-						and resolution.
-					</p>
-				</details>
+						<summary
+							class="flex cursor-pointer items-center justify-between font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							Can I get a refund if I'm not satisfied?
+							<span class="ml-4" style="color: var(--text-dim);">+</span>
+						</summary>
+						<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
+							If an order does not match its listing details or has issues, contact support for
+							review and resolution.
+						</p>
+					</details>
 
-				<details
-					class="group rounded-lg p-6 shadow"
-					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-				>
-					<summary
-						class="flex cursor-pointer items-center justify-between font-semibold"
-						style="color: var(--text); font-family: var(--font-head);"
+					<details
+						class="group rounded-lg p-6 shadow"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 					>
-						Best first 24 hours after delivery
-						<span class="ml-4" style="color: var(--text-dim);">+</span>
-					</summary>
-					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						Test login as soon as possible, keep early activity natural, and make security/profile
-						changes gradually. If anything looks off, contact support quickly for help (ideally
-						within 2 hours). For the full quick-care guide, visit <a
-							href="/support#faq"
-							style="color: var(--link);"
-							class="hover:underline">Support FAQ</a
-						>.
-					</p>
-				</details>
+						<summary
+							class="flex cursor-pointer items-center justify-between font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							Best first 24 hours after delivery
+							<span class="ml-4" style="color: var(--text-dim);">+</span>
+						</summary>
+						<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
+							Test login as soon as possible, keep early activity natural, and make security/profile
+							changes gradually. If anything looks off, contact support quickly for help (ideally
+							within 2 hours). For the full quick-care guide, visit <a
+								href="/support#faq"
+								style="color: var(--link);"
+								class="hover:underline">Support FAQ</a
+							>.
+						</p>
+					</details>
 
-				<details
-					class="group rounded-lg p-6 shadow"
-					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-				>
-					<summary
-						class="flex cursor-pointer items-center justify-between font-semibold"
-						style="color: var(--text); font-family: var(--font-head);"
+					<details
+						class="group rounded-lg p-6 shadow"
+						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 					>
-						What happens if payment is cancelled?
-						<span class="ml-4" style="color: var(--text-dim);">+</span>
-					</summary>
-					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						If you cancel at checkout, your order is marked as cancelled and no account is
-						delivered. You can safely return to checkout and try again.
-					</p>
-				</details>
+						<summary
+							class="flex cursor-pointer items-center justify-between font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
+							What happens if payment is cancelled?
+							<span class="ml-4" style="color: var(--text-dim);">+</span>
+						</summary>
+						<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
+							If you cancel at checkout, your order is marked as cancelled and no account is
+							delivered. You can safely return to checkout and try again.
+						</p>
+					</details>
+				{/if}
 			</div>
 		</div>
 	</section>

@@ -117,7 +117,17 @@ function escapeHtml(value: string): string {
 		.replace(/'/g, '&#39;');
 }
 
-function toBodyHtml(content: string): string {
+function normalizeEmailActionUrl(candidate: string | null | undefined): string | null {
+	if (!candidate) return null;
+	try {
+		const url = new URL(candidate.trim());
+		return url.protocol === 'https:' ? url.toString() : null;
+	} catch {
+		return null;
+	}
+}
+
+export function renderEmailBody(content: string): string {
 	const withEscaped = escapeHtml(content);
 
 	const withLinks = withEscaped.replace(
@@ -133,15 +143,37 @@ function toBodyHtml(content: string): string {
 			if (!trimmed) return '';
 
 			const lines = trimmed.split('\n').map((line) => line.trim());
-			const bulletLines = lines.filter((line) => line.startsWith('- '));
-			if (bulletLines.length === lines.length) {
+			const blocks: string[] = [];
+			let paragraphLines: string[] = [];
+			let bulletLines: string[] = [];
+			const flushParagraph = () => {
+				if (paragraphLines.length === 0) return;
+				blocks.push(
+					`<p style="margin:0 0 16px 0;line-height:1.6;color:#CCCCCC;">${paragraphLines.join('<br>')}</p>`
+				);
+				paragraphLines = [];
+			};
+			const flushBullets = () => {
+				if (bulletLines.length === 0) return;
 				const items = bulletLines
 					.map((line) => `<li style="margin:0 0 8px 0;">${line.slice(2)}</li>`)
 					.join('');
-				return `<ul style="margin:0 0 16px 20px;padding:0;color:#CCCCCC;">${items}</ul>`;
-			}
+				blocks.push(`<ul style="margin:0 0 16px 20px;padding:0;color:#CCCCCC;">${items}</ul>`);
+				bulletLines = [];
+			};
 
-			return `<p style="margin:0 0 16px 0;line-height:1.6;color:#CCCCCC;">${lines.join('<br>')}</p>`;
+			for (const line of lines) {
+				if (line.startsWith('- ')) {
+					flushParagraph();
+					bulletLines.push(line);
+				} else {
+					flushBullets();
+					paragraphLines.push(line);
+				}
+			}
+			flushParagraph();
+			flushBullets();
+			return blocks.join('');
 		})
 		.join('');
 }
@@ -180,18 +212,30 @@ function appendInboxReminderIfMissing(body: string): string {
 export function renderEmailTemplate(params: {
 	firstName?: string | null;
 	body: string;
+	preheader?: string | null;
 	ctaText?: string | null;
 	ctaUrl?: string | null;
 	showCta?: boolean;
 	marketingPreferenceUrl?: string | null;
 }): string {
-	const showCta = Boolean(params.showCta && params.ctaText && params.ctaUrl);
+	const safeCtaUrl = normalizeEmailActionUrl(params.ctaUrl);
+	const showCta = Boolean(params.showCta && params.ctaText && safeCtaUrl);
 	const baseUrl = getBaseUrl();
 	const supportEmail = env.SMTP_FROM_EMAIL || env.GMAIL_USER || 'support@fastaccs.com';
+	const preheader = String(params.preheader || '')
+		.replace(/\s+/g, ' ')
+		.trim()
+		.slice(0, 160);
 
 	return `<!doctype html>
-<html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+  </head>
   <body style="margin:0;padding:0;background:#080A0B;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+    ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(preheader)}</div>` : ''}
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 12px;background:#080A0B;">
       <tr>
         <td align="center">
@@ -203,15 +247,18 @@ export function renderEmailTemplate(params: {
             </tr>
             <tr>
               <td>
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#141414;border-radius:14px;border:1px solid #2B2F33;overflow:hidden;">
-                  <tr>
+				<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#141414;border-radius:14px;border:1px solid #2B2F33;overflow:hidden;">
+				  <tr>
+				    <td style="height:4px;background:#25B570;font-size:0;line-height:0;">&nbsp;</td>
+				  </tr>
+				  <tr>
                     <td style="padding:28px;">
                       ${params.firstName ? `<p style="margin:0 0 14px 0;color:#CCCCCC;">Hi ${escapeHtml(params.firstName)},</p>` : ''}
                       ${params.body}
                       ${
 												showCta
 													? `<div style="margin-top:20px;">
-                        <a href="${params.ctaUrl}" style="display:inline-block;background:#25B570;color:#ffffff;border-radius:6px;padding:12px 24px;font-weight:600;text-decoration:none;">${escapeHtml(params.ctaText || '')}</a>
+						<a href="${escapeHtml(safeCtaUrl || '')}" style="display:inline-block;background:#25B570;color:#04140C;border-radius:8px;padding:12px 22px;font-weight:700;text-decoration:none;">${escapeHtml(params.ctaText || '')}</a>
                       </div>`
 													: ''
 											}
@@ -357,9 +404,10 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 	const rawBody = params.body.trim();
 	const body = shouldShowInboxReminder(params) ? appendInboxReminderIfMissing(rawBody) : rawBody;
 
-	const bodyHtml = toBodyHtml(body);
+	const bodyHtml = renderEmailBody(body);
 	const html = renderEmailTemplate({
 		body: bodyHtml,
+		preheader: subject,
 		ctaText: params.ctaText || null,
 		ctaUrl: params.ctaUrl || null,
 		showCta: params.showCta !== false,
@@ -1005,7 +1053,7 @@ export async function sendOrderConfirmationEmailIfNeeded(orderId: string): Promi
 
 	const itemLines = order.orderItems.map(
 		(item) =>
-			`- ${item.productName} x${item.quantity} (${Number(item.totalPrice).toLocaleString('en-US')})`
+			`- ${item.productName} x${item.quantity} (₦${Number(item.totalPrice).toLocaleString('en-US')})`
 	);
 	const normalizedOrderSuffix = order.orderNumber.replace(/^ORD-?/i, '');
 	const humanOrderNumber = `FA-${normalizedOrderSuffix}`;

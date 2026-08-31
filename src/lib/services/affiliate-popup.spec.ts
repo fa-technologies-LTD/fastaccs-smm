@@ -51,7 +51,7 @@ describe('getPendingAffiliatePopup', () => {
 		expect(result).toBeNull();
 	});
 
-	it('shows the bank-details (KYC) unlock pop-up first when no payout details are saved', () => {
+	it('shows the sharing prompt before asking for bank details', () => {
 		const result = getPendingAffiliatePopup({
 			unlocked: true,
 			hasBankDetails: false,
@@ -60,19 +60,19 @@ describe('getPendingAffiliatePopup', () => {
 			seenAt: NO_POPUPS_SEEN
 		});
 
-		expect(result).toBe('unlocked');
+		expect(result).toBe('share_code');
 	});
 
-	it('shows the share-code pop-up once bank details are saved', () => {
+	it('asks for bank details after sharing and only once earnings exist', () => {
 		const result = getPendingAffiliatePopup({
 			unlocked: true,
-			hasBankDetails: true,
+			hasBankDetails: false,
 			payoutProgressPercent: 100,
 			popupsEnabled: true,
-			seenAt: { ...NO_POPUPS_SEEN, unlocked: SEEN }
+			seenAt: { ...NO_POPUPS_SEEN, shareCode: SEEN }
 		});
 
-		expect(result).toBe('share_code');
+		expect(result).toBe('unlocked');
 	});
 
 	it('does not repeat the share-code pop-up once it has been seen', () => {
@@ -101,11 +101,11 @@ describe('getPendingAffiliatePopup', () => {
 
 	it('shows the highest applicable milestone, skipping a stale lower milestone', () => {
 		const result = getPendingAffiliatePopup({
-			unlocked: false,
-			hasBankDetails: false,
+			unlocked: true,
+			hasBankDetails: true,
 			payoutProgressPercent: 96,
 			popupsEnabled: true,
-			seenAt: { ...NO_POPUPS_SEEN, progress50: SEEN }
+			seenAt: { ...NO_POPUPS_SEEN, progress50: SEEN, shareCode: SEEN }
 		});
 
 		expect(result).toBe('progress_80');
@@ -113,11 +113,11 @@ describe('getPendingAffiliatePopup', () => {
 
 	it('falls back to a lower milestone once the higher one has been seen', () => {
 		const result = getPendingAffiliatePopup({
-			unlocked: false,
-			hasBankDetails: false,
+			unlocked: true,
+			hasBankDetails: true,
 			payoutProgressPercent: 85,
 			popupsEnabled: true,
-			seenAt: { ...NO_POPUPS_SEEN, progress80: SEEN }
+			seenAt: { ...NO_POPUPS_SEEN, progress80: SEEN, shareCode: SEEN }
 		});
 
 		expect(result).toBe('progress_50');
@@ -129,7 +129,7 @@ describe('getPendingAffiliatePopup', () => {
 			hasBankDetails: false,
 			payoutProgressPercent: 100,
 			popupsEnabled: true,
-			seenAt: { ...NO_POPUPS_SEEN, unlocked: SEEN }
+			seenAt: { ...NO_POPUPS_SEEN, unlocked: SEEN, shareCode: SEEN }
 		});
 
 		expect(result).toBe('progress_80');

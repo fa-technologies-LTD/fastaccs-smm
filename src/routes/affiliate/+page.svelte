@@ -1,20 +1,22 @@
 <script lang="ts">
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import { page } from '$app/state';
 	import { Share2, DollarSign, CheckCircle, Wallet, Users } from '$lib/icons';
+	import type { PageData } from './$types';
 
-	const isLoggedIn = $derived(Boolean(page.data.user));
+	let { data }: { data: PageData } = $props();
+	const isLoggedIn = $derived(Boolean(data.user));
 	const isActiveAffiliate = $derived(
-		Boolean((page.data.user as { isAffiliateEnabled?: boolean } | null)?.isAffiliateEnabled)
+		Boolean((data.user as { isAffiliateEnabled?: boolean } | null)?.isAffiliateEnabled)
 	);
+	const payoutMinimum = $derived(`₦${Number(data.payoutMinimum || 5_000).toLocaleString()}`);
 </script>
 
 <svelte:head>
 	<title>FastAccs Affiliate Program</title>
 	<meta
 		name="description"
-		content="Unlock affiliate access, share your Fast Accounts code, and earn withdrawable Store Credit from successful referrals."
+		content="Give friends 5% off their first two eligible FastAccs account orders and earn 5% in withdrawable Cash, up to ₦1,000 per order."
 	/>
 </svelte:head>
 
@@ -30,7 +32,7 @@
 			style="background: rgba(5,212,113,0.16); border: 1px solid rgba(5,212,113,0.35); color: var(--primary);"
 		>
 			<Share2 size={14} />
-			Store Credit
+			Affiliate Program
 		</p>
 		<h1
 			class="mb-3 text-2xl font-semibold sm:text-3xl"
@@ -39,9 +41,9 @@
 			Earn real cash with FastAccs referrals
 		</h1>
 		<p class="max-w-3xl text-sm sm:text-base" style="color: var(--text-muted);">
-			Earn real cash with FastAccs on every successful referral. Real. Withdrawable. Naira.
-			Qualified buyers can unlock affiliate access, activate a unique code, and track earnings from
-			their dashboard.
+			Give friends 5% off their first two eligible account orders and earn 5% too—up to ₦1,000 per
+			order. Track everything from your dashboard, put earned Cash toward FastAccs purchases, or
+			withdraw it when eligible.
 		</p>
 	</section>
 
@@ -55,7 +57,7 @@
 				<span class="text-xs font-semibold uppercase">Unlock</span>
 			</div>
 			<p class="text-sm" style="color: var(--text-muted);">
-				Reach the spending threshold shown in your dashboard.
+				Complete your first successful purchase and your referral code is created automatically.
 			</p>
 		</div>
 		<div
@@ -79,7 +81,8 @@
 				<span class="text-xs font-semibold uppercase">Earn</span>
 			</div>
 			<p class="text-sm" style="color: var(--text-muted);">
-				Earn Store Credit on successful referred orders and track it from your dashboard.
+				Earn on each friend's first two retained eligible account orders and track it in your
+				dashboard.
 			</p>
 		</div>
 	</section>
@@ -97,22 +100,24 @@
 		<div class="space-y-3 text-sm" style="color: var(--text-muted);">
 			<p>
 				<DollarSign class="mr-1 inline h-4 w-4" style="color: var(--primary);" />
-				Buyer discounts are applied by fixed order-stage rules, up to 10 successful referred purchases
-				per buyer.
+				Friends save 5% on their first two eligible account orders, up to ₦1,000 per order.
 			</p>
 			<p>
-				Affiliate earnings are credited as Store Credit from successful referred orders.
+				You earn 5% on those same two orders, up to ₦1,000 per order, after refunds and the return
+				window are accounted for.
 			</p>
+			<p>Numbers and Boosting are not part of this affiliate offer.</p>
 			<p>
 				No stacking: affiliate referral pricing and separate promo codes cannot be combined on the
 				same checkout.
 			</p>
 			<p>
-				Store Credit can be withdrawn once payout requirements are met in your affiliate dashboard.
+				Payout requests start at {payoutMinimum}, require approved bank details and a
+				{data.payoutMinAccountAgeDays}-day-old account, and are processed on Saturdays.
 			</p>
 			<p>
-				Store Credit is real, withdrawable cash. The affiliate program is currently available only
-				to customers in Nigeria.
+				Affiliate Cash is real Naira. Once available, it can be put toward FastAccs purchases or
+				withdrawn. The program is currently available only to customers in Nigeria.
 			</p>
 		</div>
 
@@ -125,10 +130,10 @@
 						? 'background: linear-gradient(180deg, rgba(5,212,113,0.95), rgba(13,145,82,0.95)); border: 1px solid rgba(5,212,113,0.40); color: #04140C;'
 						: 'background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text-muted);'}
 				>
-					{isActiveAffiliate ? 'Open Affiliate Dashboard' : 'View Affiliate Progress'}
+					{isActiveAffiliate ? 'Open Affiliate Dashboard' : 'View Affiliate Access'}
 				</a>
 			{/if}
-			{#if isLoggedIn}
+			{#if isActiveAffiliate}
 				<a
 					href="/affiliate/bank-details"
 					class="rounded-full px-5 py-2 text-sm font-semibold"
@@ -142,14 +147,7 @@
 				class="rounded-full px-5 py-2 text-sm font-semibold"
 				style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.35); color: var(--primary);"
 			>
-				See more
-			</a>
-			<a
-				href="/services"
-				class="rounded-full px-5 py-2 text-sm font-semibold"
-				style="background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text-muted);"
-			>
-				View boosting services
+				Browse accounts
 			</a>
 		</div>
 	</section>

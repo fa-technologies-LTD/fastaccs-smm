@@ -17,7 +17,35 @@
 	let { data }: { data: PageData } = $props();
 
 	let searchQuery = $state('');
-	let filterType = $state('all'); // all, deposit, debit, refund
+	let filterType = $state('all');
+
+	const creditTypes = new Set(['affiliate_credit', 'store_credit_gift']);
+	const debitTypes = new Set([
+		'store_credit_redemption_earned',
+		'store_credit_redemption_refund',
+		'affiliate_credit_adjustment'
+	]);
+
+	function getTypeGroup(type: string): 'credit' | 'refund' | 'used' | 'payout' | 'other' {
+		if (creditTypes.has(type)) return 'credit';
+		if (type === 'store_credit_refund') return 'refund';
+		if (debitTypes.has(type)) return 'used';
+		if (type === 'affiliate_payout') return 'payout';
+		return 'other';
+	}
+
+	function getTypeLabel(type: string): string {
+		const labels: Record<string, string> = {
+			affiliate_credit: 'Affiliate earning',
+			store_credit_gift: 'Credit gift',
+			store_credit_refund: 'Order refund',
+			store_credit_redemption_earned: 'Earned credit spent',
+			store_credit_redemption_refund: 'Refund credit spent',
+			affiliate_credit_adjustment: 'Earning adjustment',
+			affiliate_payout: 'Affiliate payout'
+		};
+		return labels[type] || type.replaceAll('_', ' ');
+	}
 
 	let stats = $derived({
 		totalWallets: data.stats?.totalWallets || 0,
@@ -43,7 +71,7 @@
 		let filtered = transactions;
 
 		if (filterType !== 'all') {
-			filtered = filtered.filter((txn: any) => txn.type === filterType);
+			filtered = filtered.filter((txn: any) => getTypeGroup(txn.type) === filterType);
 		}
 
 		if (searchQuery.trim()) {
@@ -60,29 +88,28 @@
 	});
 
 	function getTypeIcon(type: string) {
-		switch (type) {
-			case 'deposit':
-				return ArrowDownLeft;
-			case 'debit':
-				return ArrowUpRight;
-			case 'refund':
-				return RefreshCw;
-			default:
-				return DollarSign;
-		}
+		const group = getTypeGroup(type);
+		if (group === 'credit') return ArrowDownLeft;
+		if (group === 'refund') return RefreshCw;
+		if (group === 'used' || group === 'payout') return ArrowUpRight;
+		return DollarSign;
 	}
 
 	function getTypeColor(type: string): string {
-		switch (type) {
-			case 'deposit':
-				return 'text-green-600';
-			case 'debit':
-				return 'text-red-600';
-			case 'refund':
-				return 'text-blue-600';
-			default:
-				return 'style="color: var(--text-muted);"';
+		const group = getTypeGroup(type);
+		if (group === 'credit') return 'text-green-600';
+		if (group === 'refund') return 'text-blue-600';
+		if (group === 'used' || group === 'payout') return 'text-red-600';
+		return 'text-gray-500';
+	}
+
+	function getStatusClass(status: string): string {
+		if (['available', 'paid', 'completed'].includes(status)) return 'bg-green-100 text-green-800';
+		if (['pending', 'requested', 'under_review'].includes(status)) {
+			return 'bg-yellow-100 text-yellow-800';
 		}
+		if (['reversed', 'cancelled', 'canceled'].includes(status)) return 'bg-gray-100 text-gray-700';
+		return 'bg-red-100 text-red-800';
 	}
 
 	function exportData() {
@@ -92,8 +119,8 @@
 			Email: txn.user?.email || 'N/A',
 			Type: txn.type,
 			Amount: Number(txn.amount),
-			'Balance Before': Number(txn.balanceBefore),
-			'Balance After': Number(txn.balanceAfter),
+			'Cached Balance Before': Number(txn.balanceBefore),
+			'Cached Balance After': Number(txn.balanceAfter),
 			Description: txn.description,
 			Reference: txn.reference || 'N/A',
 			Status: txn.status,
@@ -114,9 +141,9 @@
 	<!-- Header -->
 	<div class="flex items-center justify-between">
 		<div>
-			<h1 class="text-2xl font-bold" style="color: var(--text)">Store Credit Oversight</h1>
+			<h1 class="text-2xl font-bold" style="color: var(--text)">Affiliate Wallet Oversight</h1>
 			<p class="mt-1" style="color: var(--text-muted)">
-				Affiliate-only store credit monitoring and transaction history.
+				Affiliate Cash, refunds, spending, and payout history for affiliate users.
 			</p>
 		</div>
 		<button
@@ -176,7 +203,7 @@
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted);">
-						Total Store Credit
+						Total Wallet Balance
 					</p>
 					<p class="mt-1 text-xl font-bold" style="color: var(--text);">
 						{formatPrice(stats.totalBalance)}
@@ -198,7 +225,7 @@
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted);">
-						Credit Added
+						Affiliate Earnings
 					</p>
 					<p class="mt-1 text-xl font-bold" style="color: var(--status-success);">
 						{formatPrice(stats.totalDeposits)}
@@ -220,7 +247,7 @@
 			<div class="flex items-center justify-between">
 				<div class="flex-1">
 					<p class="text-xs font-medium tracking-wide uppercase" style="color: var(--text-muted);">
-						Credit Used
+						Earned Credit Used / Paid
 					</p>
 					<p class="mt-1 text-xl font-bold" style="color: var(--status-error);">
 						{formatPrice(stats.totalWithdrawals)}
@@ -264,9 +291,10 @@
 					style="border: 1px solid var(--border); color: var(--text); background: var(--bg);"
 				>
 					<option value="all">All Types</option>
-					<option value="deposit">Deposits</option>
-					<option value="debit">Debits</option>
-					<option value="refund">Refunds</option>
+					<option value="credit">Affiliate earnings & gifts</option>
+					<option value="refund">Order refunds</option>
+					<option value="used">Credit used & adjusted</option>
+					<option value="payout">Affiliate payouts</option>
 				</select>
 			</div>
 		</div>
@@ -362,12 +390,6 @@
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
-							Credit Balance
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-muted);"
-						>
 							Description
 						</th>
 						<th
@@ -387,7 +409,7 @@
 				<tbody class="divide-y" style="border-color: var(--border); background: var(--bg-elev-1);">
 					{#if filteredTransactions.length === 0}
 						<tr>
-							<td colspan="7" class="px-6 py-12 text-center" style="color: var(--text-muted);">
+							<td colspan="6" class="px-6 py-12 text-center" style="color: var(--text-muted);">
 								{searchQuery || filterType !== 'all'
 									? 'No transactions match your filters'
 									: 'No transactions found'}
@@ -417,20 +439,14 @@
 								<td class="px-6 py-4 whitespace-nowrap">
 									<div class="flex items-center gap-2">
 										<TypeIcon class="h-4 w-4 {getTypeColor(transaction.type)}" />
-										<span class="capitalize {getTypeColor(transaction.type)}">
-											{transaction.type}
+										<span class={getTypeColor(transaction.type)}>
+											{getTypeLabel(transaction.type)}
 										</span>
 									</div>
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<div class="text-sm font-medium {getTypeColor(transaction.type)}">
-										{transaction.type === 'debit' ? '-' : '+'}
 										{formatPrice(Number(transaction.amount))}
-									</div>
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap">
-									<div class="text-sm" style="color: var(--text);">
-										{formatPrice(Number(transaction.balanceAfter))}
 									</div>
 								</td>
 								<td class="max-w-xs truncate px-6 py-4">
@@ -446,14 +462,11 @@
 								</td>
 								<td class="px-6 py-4 whitespace-nowrap">
 									<span
-										class="inline-flex rounded-full px-2 py-1 text-xs font-semibold
-										{transaction.status === 'completed'
-											? 'bg-green-100 text-green-800'
-											: transaction.status === 'pending'
-												? 'bg-yellow-100 text-yellow-800'
-												: 'bg-red-100 text-red-800'}"
+										class="inline-flex rounded-full px-2 py-1 text-xs font-semibold {getStatusClass(
+											transaction.status
+										)}"
 									>
-										{transaction.status}
+										{transaction.status.replaceAll('_', ' ')}
 									</span>
 								</td>
 							</tr>

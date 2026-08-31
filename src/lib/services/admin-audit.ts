@@ -1,5 +1,5 @@
 import { prisma } from '$lib/prisma';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 
 interface AdminAuditLogInput {
 	actorUserId?: string | null;
@@ -11,6 +11,8 @@ interface AdminAuditLogInput {
 	metadata?: Record<string, unknown>;
 	ipAddress?: string | null;
 	userAgent?: string | null;
+	/** Fail the caller when an operation must not proceed without a durable audit record. */
+	required?: boolean;
 }
 
 function sanitizeNullableString(value: unknown, maxLength = 500): string | null {
@@ -21,11 +23,7 @@ function sanitizeNullableString(value: unknown, maxLength = 500): string | null 
 }
 
 function toJsonValue(value: unknown): Prisma.InputJsonValue {
-	if (
-		typeof value === 'string' ||
-		typeof value === 'number' ||
-		typeof value === 'boolean'
-	) {
+	if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
 		return value;
 	}
 
@@ -40,7 +38,9 @@ function toJsonValue(value: unknown): Prisma.InputJsonValue {
 	if (typeof value === 'object') {
 		const objectValue = value as Record<string, unknown>;
 		return Object.fromEntries(
-			Object.entries(objectValue).slice(0, 50).map(([key, nested]) => [key, toJsonValue(nested)])
+			Object.entries(objectValue)
+				.slice(0, 50)
+				.map(([key, nested]) => [key, toJsonValue(nested)])
 		);
 	}
 
@@ -50,23 +50,28 @@ function toJsonValue(value: unknown): Prisma.InputJsonValue {
 function safeMetadata(metadata: Record<string, unknown> | undefined): Prisma.InputJsonObject {
 	if (!metadata) return {};
 	return Object.fromEntries(
-		Object.entries(metadata).slice(0, 50).map(([key, value]) => [key, toJsonValue(value)])
+		Object.entries(metadata)
+			.slice(0, 50)
+			.map(([key, value]) => [key, toJsonValue(value)])
 	);
 }
 
 function sanitizeUuid(value: unknown): string | null {
 	const parsed = sanitizeNullableString(value, 120);
 	if (!parsed) return null;
-	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-		parsed
-	)
+	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(parsed)
 		? parsed
 		: null;
 }
 
-export async function createAdminAuditLog(input: AdminAuditLogInput): Promise<void> {
+type AdminAuditDb = PrismaClient | Prisma.TransactionClient;
+
+export async function createAdminAuditLog(
+	input: AdminAuditLogInput,
+	db: AdminAuditDb = prisma
+): Promise<void> {
 	try {
-		await prisma.adminAuditLog.create({
+		await db.adminAuditLog.create({
 			data: {
 				actorUserId: sanitizeUuid(input.actorUserId),
 				targetUserId: sanitizeUuid(input.targetUserId),
@@ -80,13 +85,19 @@ export async function createAdminAuditLog(input: AdminAuditLogInput): Promise<vo
 			}
 		});
 	} catch (error) {
+		if (input.required) throw error;
 		console.warn('Failed to write admin audit log:', error);
 	}
 }
 
 function isWriteMethod(method: string): boolean {
 	const normalized = method.toUpperCase();
-	return normalized === 'POST' || normalized === 'PUT' || normalized === 'PATCH' || normalized === 'DELETE';
+	return (
+		normalized === 'POST' ||
+		normalized === 'PUT' ||
+		normalized === 'PATCH' ||
+		normalized === 'DELETE'
+	);
 }
 
 const SENSITIVE_PATH_PREFIXES = [
@@ -111,7 +122,10 @@ function normalizePathPart(value: string | undefined): string {
 	return value.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
 }
 
-export function buildAdminAuditAction(pathname: string, method: string): {
+export function buildAdminAuditAction(
+	pathname: string,
+	method: string
+): {
 	action: string;
 	resourceType: string;
 	resourceId: string | null;

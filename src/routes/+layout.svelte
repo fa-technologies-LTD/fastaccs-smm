@@ -8,7 +8,6 @@
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import PageLoadingBar from '$lib/components/PageLoadingBar.svelte';
 	import CookieConsentBar from '$lib/components/CookieConsentBar.svelte';
-	import AffiliateAccessNudge from '$lib/components/AffiliateAccessNudge.svelte';
 	import SitePopupHost from '$lib/components/SitePopupHost.svelte';
 	import PushNotificationPrompt from '$lib/components/PushNotificationPrompt.svelte';
 	import { trackSnapPageView, trackSnapConfirmedVisit } from '$lib/services/snap-pixel';
@@ -282,7 +281,6 @@
 
 	{@render children?.()}
 
-	<AffiliateAccessNudge user={data.user} currentPath={data.currentPath} />
 	<SitePopupHost isLoggedIn={Boolean(data.user)} />
 	<PushNotificationPrompt isLoggedIn={Boolean(data.user)} />
 	<CookieConsentBar />

@@ -16,11 +16,16 @@
 	let status = $state(data.submission?.status || null);
 	let rejectionReason = $state(data.submission?.rejectionReason || null);
 	let submitting = $state(false);
+	const submissionUnavailable = Boolean(data.submissionError);
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
+		if (submissionUnavailable) return;
 		if (!bankName.trim() || !accountNumber.trim() || !accountName.trim() || !phone.trim()) {
-			showError('Missing details', 'Bank name, account number, account name, and phone are required.');
+			showError(
+				'Missing details',
+				'Bank name, account number, account name, and phone are required.'
+			);
 			return;
 		}
 
@@ -46,7 +51,10 @@
 
 			status = 'pending';
 			rejectionReason = null;
-			showSuccess('Submitted', result.message || 'Your bank details have been submitted for review.');
+			showSuccess(
+				'Submitted',
+				result.message || 'Your bank details have been submitted for review.'
+			);
 		} catch (error) {
 			console.error('Failed to submit bank details:', error);
 			showError('Submission failed', 'Unable to submit right now. Please try again.');
@@ -74,13 +82,24 @@
 			Back to affiliate dashboard
 		</button>
 
-		<h1 class="mb-2 text-2xl font-bold sm:text-3xl" style="color: var(--text); font-family: var(--font-head);">
+		<h1
+			class="mb-2 text-2xl font-bold sm:text-3xl"
+			style="color: var(--text); font-family: var(--font-head);"
+		>
 			Add Bank Details
 		</h1>
 		<p class="mb-6 text-sm" style="color: var(--text-muted);">
-			We use these details to send your affiliate Cash payouts. This is reviewed by our team
-			before it's used.
+			We use these details to send your affiliate Cash payouts. This is reviewed by our team before
+			it's used.
 		</p>
+		{#if data.submissionError}
+			<div
+				class="mb-6 rounded-[var(--r-md)] border p-4 text-sm"
+				style="border-color: rgba(239,68,68,0.35); background: rgba(239,68,68,0.08); color: var(--text);"
+			>
+				{data.submissionError}
+			</div>
+		{/if}
 
 		{#if status === 'pending'}
 			<div
@@ -102,8 +121,8 @@
 				class="mb-6 rounded-[var(--r-md)] border p-4 text-sm"
 				style="border-color: rgba(239,68,68,0.35); background: rgba(239,68,68,0.08); color: var(--text);"
 			>
-				Your last submission was rejected{rejectionReason ? `: ${rejectionReason}` : '.'} Please
-				update the details below and resubmit.
+				Your last submission was rejected{rejectionReason ? `: ${rejectionReason}` : '.'} Please update
+				the details below and resubmit.
 			</div>
 		{/if}
 
@@ -128,13 +147,20 @@
 			</div>
 
 			<div>
-				<label for="accountNumber" class="mb-1 block text-xs font-medium" style="color: var(--text);">
+				<label
+					for="accountNumber"
+					class="mb-1 block text-xs font-medium"
+					style="color: var(--text);"
+				>
 					Account number
 				</label>
 				<input
 					id="accountNumber"
 					type="text"
 					inputmode="numeric"
+					pattern="[0-9]{10}"
+					minlength="10"
+					maxlength="10"
 					bind:value={accountNumber}
 					required
 					placeholder="0123456789"
@@ -189,7 +215,7 @@
 
 			<button
 				type="submit"
-				disabled={submitting}
+				disabled={submitting || submissionUnavailable}
 				class="w-full rounded-full px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
 				style="background: var(--btn-primary-gradient); color: #04140C;"
 			>

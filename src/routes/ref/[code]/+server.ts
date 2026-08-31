@@ -7,6 +7,8 @@ import {
 	validateAffiliateCode
 } from '$lib/services/affiliate';
 import { sanitizeInternalRedirectPath } from '$lib/auth/redirect';
+import { recordAffiliateEvent } from '$lib/services/affiliate-events';
+import { randomUUID } from 'crypto';
 
 export const GET: RequestHandler = async ({ params, cookies, url, locals }) => {
 	const normalizedCode = String(params.code || '')
@@ -31,6 +33,16 @@ export const GET: RequestHandler = async ({ params, cookies, url, locals }) => {
 	if (locals.user?.id && locals.user.id === validation.userId) {
 		throw redirect(302, '/dashboard?tab=affiliate');
 	}
+
+	await recordAffiliateEvent({
+		type: 'referral_link_opened',
+		dedupeKey: `affiliate:link_opened:${validation.affiliateProgramId}:${locals.user?.id || randomUUID()}:${new Date().toISOString().slice(0, 10)}`,
+		affiliateProgramId: validation.affiliateProgramId,
+		affiliateUserId: validation.userId,
+		referredUserId: locals.user?.id || null,
+		source: 'referral_link',
+		metadata: { destination: next, authenticated: Boolean(locals.user?.id) }
+	}).catch((error) => console.error('Failed to record affiliate link-open event:', error));
 
 	if (locals.user?.id) {
 		await lockReferralAttributionForUser({

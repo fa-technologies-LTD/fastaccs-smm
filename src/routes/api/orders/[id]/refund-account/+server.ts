@@ -258,11 +258,13 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	await maybeClawbackSpendMilestones(order.userId).catch((e) =>
 		console.error('spend-milestone clawback failed:', e)
 	);
+	// A partial refund can remove a Super referral's spend qualification even when the
+	// order itself remains partially retained. Re-evaluate against all retained orders.
+	await maybeVoidSuperActivationOnRefund({
+		userId: order.userId,
+		affiliateUserId: order.affiliateUserId
+	}).catch((e) => console.error('super activation void failed:', e));
 	if (orderFullyRefunded) {
-		await maybeVoidSuperActivationOnRefund({
-			userId: order.userId,
-			affiliateUserId: order.affiliateUserId
-		}).catch((e) => console.error('super activation void failed:', e));
 		await voidUnvestedRewardsForOrder(order.id).catch((e) =>
 			console.error('void unvested affiliate reward failed:', e)
 		);

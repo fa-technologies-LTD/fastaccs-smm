@@ -39,6 +39,7 @@
 				login_guide_url: string;
 				login_guide_label: string;
 				exact_preview_enabled: boolean;
+				affiliate_excluded: boolean;
 			};
 		};
 		loading?: boolean;
@@ -184,6 +185,25 @@
 										aria-label="Enable exact account preview"
 									/>
 								</div>
+							</div>
+
+							<div
+								class="md:col-span-2 rounded-lg p-3"
+								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+							>
+								<label class="flex items-start justify-between gap-4">
+									<span>
+										<span class="text-sm font-semibold" style="color: var(--text);">Exclude from affiliate offer</span>
+										<span class="mt-1 block text-xs leading-relaxed" style="color: var(--text-muted);">
+											New tiers start excluded. Uncheck this only after confirming its margin can safely support both sides of the offer.
+										</span>
+									</span>
+									<input
+										type="checkbox"
+										bind:checked={tierForm.metadata.affiliate_excluded}
+										aria-label="Exclude this tier from the affiliate offer"
+									/>
+								</label>
 							</div>
 
 							<div

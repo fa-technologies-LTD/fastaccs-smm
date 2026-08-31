@@ -32,6 +32,7 @@ import { getUserAnalytics } from '$lib/services/user-analytics';
 import { toSerializableDecimals } from '$lib/helpers/serialize';
 import { getFinancialReconciliation } from '$lib/services/financial-reconciliation';
 import { getTotalStoreCreditLiability } from '$lib/services/store-credit';
+import { getTotalCanonicalReferralCount } from '$lib/services/affiliate';
 
 type IntegrityCheckResult = {
 	key: string;
@@ -264,12 +265,15 @@ export const load: PageServerLoad = async ({ locals }) => {
 				}
 			}),
 			prisma.affiliateProgram.aggregate({
-				_sum: { totalReferrals: true },
+				where: {
+					status: 'active',
+					user: { isActive: true, isAffiliateEnabled: true }
+				},
 				_count: { id: true }
 			}),
 			prisma.order.aggregate({
 				where: {
-					AND: [buildRevenueOrderWhere(), { affiliateUserId: { not: null } }]
+					AND: [buildRevenueOrderWhere(), { affiliateUserId: { not: null }, orderType: 'account' }]
 				},
 				_sum: { totalAmount: true, storeCreditApplied: true, refundedAmount: true }
 			}),
@@ -828,6 +832,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 		).length;
 		const firstTimeBuyerCount = firstTimeRegisteredCount + guestPaidOrderCount;
 
+		const totalCanonicalReferrals = await getTotalCanonicalReferralCount();
+
 		const stats = {
 			timezone: businessTimezone,
 			metricDefinitions: {
@@ -854,7 +860,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			accountsSold,
 			accountsChange: growthPct(thisMonthAccounts, lastMonthAccounts),
 			activeAffiliates: affiliateProgramStats._count.id || 0,
-			totalReferrals: affiliateProgramStats._sum.totalReferrals || 0,
+			totalReferrals: totalCanonicalReferrals,
 			affiliateSales: revenueVisible
 				? toNetSales(
 						affiliateSalesAggregate._sum.totalAmount,

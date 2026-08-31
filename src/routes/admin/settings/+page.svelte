@@ -27,7 +27,11 @@
 			pushPermission = getPushPermissionState();
 			addToast({ type: 'success', title: 'Push alerts enabled on this device', duration: 2500 });
 		} else {
-			addToast({ type: 'error', title: result.error || 'Could not enable push alerts', duration: 4000 });
+			addToast({
+				type: 'error',
+				title: result.error || 'Could not enable push alerts',
+				duration: 4000
+			});
 		}
 	}
 
@@ -639,140 +643,19 @@
 		>
 			<h2 class="text-lg font-semibold" style="color: var(--text)">Affiliate Controls</h2>
 			<p class="mt-1 text-sm" style="color: var(--text-muted);">
-				Qualification, buyer-discount stages, Store Credit rules, payout requirements, and excluded
-				account types.
+				Account-sale discounts, affiliate earnings, payout safeguards, and the private super plan.
 			</p>
 			<form method="POST" action="?/saveAffiliateConfig" class="mt-4 space-y-4">
-				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<label class="block text-sm" style="color: var(--text-muted);">
-						Unlock threshold (₦)
-						<input
-							type="number"
-							name="unlockThreshold"
-							value={affiliateConfig.unlockThreshold}
-							min="5000"
-							step="1000"
-							class="mt-1 w-full rounded-lg px-3 py-2"
-							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
-							disabled={!canManageSettings}
-						/>
-					</label>
-					<label class="block text-sm" style="color: var(--text-muted);">
-						Max rewarded orders / buyer
-						<input
-							type="number"
-							name="maxRewardedOrdersPerBuyer"
-							value={affiliateConfig.maxRewardedOrdersPerBuyer}
-							min="1"
-							max="100"
-							class="mt-1 w-full rounded-lg px-3 py-2"
-							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
-							disabled={!canManageSettings}
-						/>
-					</label>
-				</div>
-
 				<div class="rounded-lg p-3" style="border: 1px solid var(--border); background: var(--bg);">
-					<p class="text-sm font-semibold" style="color: var(--text);">Buyer discount stages</p>
-					<div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-						<label class="block text-sm" style="color: var(--text-muted);">
-							Stage 1 percent
-							<input
-								type="number"
-								name="discountStage1Percent"
-								value={affiliateConfig.discountStage1Percent}
-								min="0"
-								max="50"
-								step="0.1"
-								class="mt-1 w-full rounded-lg px-3 py-2"
-								style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
-								disabled={!canManageSettings}
-							/>
-						</label>
-						<label class="block text-sm" style="color: var(--text-muted);">
-							Stage 1 cap (₦)
-							<input
-								type="number"
-								name="discountStage1Cap"
-								value={affiliateConfig.discountStage1Cap}
-								min="0"
-								step="100"
-								class="mt-1 w-full rounded-lg px-3 py-2"
-								style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
-								disabled={!canManageSettings}
-							/>
-						</label>
-						<label class="block text-sm" style="color: var(--text-muted);">
-							Stage 2 percent
-							<input
-								type="number"
-								name="discountStage2Percent"
-								value={affiliateConfig.discountStage2Percent}
-								min="0"
-								max="50"
-								step="0.1"
-								class="mt-1 w-full rounded-lg px-3 py-2"
-								style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
-								disabled={!canManageSettings}
-							/>
-						</label>
-						<label class="block text-sm" style="color: var(--text-muted);">
-							Stage 2 cap (₦)
-							<input
-								type="number"
-								name="discountStage2Cap"
-								value={affiliateConfig.discountStage2Cap}
-								min="0"
-								step="100"
-								class="mt-1 w-full rounded-lg px-3 py-2"
-								style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
-								disabled={!canManageSettings}
-							/>
-						</label>
-					</div>
+					<p class="text-sm font-semibold" style="color: var(--text);">Regular offer · fixed</p>
+					<p class="mt-1 text-xs" style="color: var(--text-muted);">
+						Friends receive 5% off and affiliates earn 5% on the first two eligible account orders,
+						capped at ₦1,000 per side, per order. This matches the public promise and is locked to
+						prevent accidental drift.
+					</p>
 				</div>
 
 				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<label class="block text-sm" style="color: var(--text-muted);">
-						Store Credit minimum (₦)
-						<input
-							type="number"
-							name="storeCreditMin"
-							value={affiliateConfig.storeCreditMin}
-							min="0"
-							step="50"
-							class="mt-1 w-full rounded-lg px-3 py-2"
-							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
-							disabled={!canManageSettings}
-						/>
-					</label>
-					<label class="block text-sm" style="color: var(--text-muted);">
-						Store Credit maximum (₦)
-						<input
-							type="number"
-							name="storeCreditMax"
-							value={affiliateConfig.storeCreditMax}
-							min="0"
-							step="100"
-							class="mt-1 w-full rounded-lg px-3 py-2"
-							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
-							disabled={!canManageSettings}
-						/>
-					</label>
-					<label class="block text-sm" style="color: var(--text-muted);">
-						Fallback Store Credit %
-						<input
-							type="number"
-							name="storeCreditFallbackPercent"
-							value={affiliateConfig.storeCreditFallbackPercent}
-							min="0"
-							max="50"
-							step="0.1"
-							class="mt-1 w-full rounded-lg px-3 py-2"
-							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
-							disabled={!canManageSettings}
-						/>
-					</label>
 					<label class="block text-sm" style="color: var(--text-muted);">
 						Payout minimum (₦)
 						<input
@@ -801,18 +684,107 @@
 					</label>
 				</div>
 
-				<label class="block text-sm" style="color: var(--text-muted);">
-					Excluded tier keywords
-					<textarea
-						name="excludedTierKeywords"
-						rows="3"
-						class="mt-1 w-full rounded-lg px-3 py-2"
-						style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
-						placeholder="0f, empty-f, empty f"
-						disabled={!canManageSettings}
-						>{affiliateConfig.excludedTierKeywords.join(', ')}</textarea
+				<div class="rounded-lg p-3" style="border: 1px solid var(--border); background: var(--bg);">
+					<label
+						class="flex items-center justify-between gap-3 text-sm"
+						style="color: var(--text);"
 					>
-				</label>
+						<span>
+							<strong>Super-affiliate plan</strong>
+							<span class="mt-1 block text-xs" style="color: var(--text-muted);">
+								Private plan for affiliates you explicitly upgrade.
+							</span>
+						</span>
+						<input
+							type="checkbox"
+							name="superAffiliateEnabled"
+							checked={affiliateConfig.superAffiliateEnabled}
+							disabled={!canManageSettings}
+						/>
+					</label>
+
+					<div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+						<label class="block text-sm" style="color: var(--text-muted);">
+							Activation spend (₦)
+							<input
+								type="number"
+								name="superActivationSpendThreshold"
+								value={affiliateConfig.superActivationSpendThreshold}
+								min="1"
+								step="100"
+								class="mt-1 w-full rounded-lg px-3 py-2"
+								style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
+								disabled={!canManageSettings}
+							/>
+						</label>
+						<label class="block text-sm" style="color: var(--text-muted);">
+							Or activation orders
+							<input
+								type="number"
+								name="superActivationOrderThreshold"
+								value={affiliateConfig.superActivationOrderThreshold}
+								min="1"
+								max="100"
+								class="mt-1 w-full rounded-lg px-3 py-2"
+								style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
+								disabled={!canManageSettings}
+							/>
+						</label>
+						<label class="block text-sm" style="color: var(--text-muted);">
+							Reward / activation (₦)
+							<input
+								type="number"
+								name="superActivationReward"
+								value={affiliateConfig.superActivationReward}
+								min="0"
+								step="100"
+								class="mt-1 w-full rounded-lg px-3 py-2"
+								style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
+								disabled={!canManageSettings}
+							/>
+						</label>
+					</div>
+
+					<p class="mt-4 text-xs font-semibold" style="color: var(--text);">Monthly bonus totals</p>
+					<p class="mt-1 text-xs" style="color: var(--text-muted);">
+						Higher tiers replace lower totals; they do not stack.
+					</p>
+					<div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+						{#each [{ label: 'Tier 1', countName: 'superTier1Count', amountName: 'superTier1Amount', count: affiliateConfig.superTier1Count, amount: affiliateConfig.superTier1Amount }, { label: 'Tier 2', countName: 'superTier2Count', amountName: 'superTier2Amount', count: affiliateConfig.superTier2Count, amount: affiliateConfig.superTier2Amount }, { label: 'Tier 3', countName: 'superTier3Count', amountName: 'superTier3Amount', count: affiliateConfig.superTier3Count, amount: affiliateConfig.superTier3Amount }] as tier}
+							<div
+								class="rounded-lg p-3"
+								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+							>
+								<p class="text-xs font-semibold" style="color: var(--text);">{tier.label}</p>
+								<label class="mt-2 block text-xs" style="color: var(--text-muted);">
+									Activations
+									<input
+										type="number"
+										name={tier.countName}
+										value={tier.count}
+										min="1"
+										class="mt-1 w-full rounded-lg px-2 py-2"
+										style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+										disabled={!canManageSettings}
+									/>
+								</label>
+								<label class="mt-2 block text-xs" style="color: var(--text-muted);">
+									Total bonus (₦)
+									<input
+										type="number"
+										name={tier.amountName}
+										value={tier.amount}
+										min="0"
+										step="100"
+										class="mt-1 w-full rounded-lg px-2 py-2"
+										style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+										disabled={!canManageSettings}
+									/>
+								</label>
+							</div>
+						{/each}
+					</div>
+				</div>
 
 				<label
 					class="flex items-center justify-between rounded-lg p-3 text-sm"
@@ -850,14 +822,18 @@
 				style="border: 1px solid var(--border); background: var(--bg);"
 			>
 				<div>
-					<p class="text-sm font-semibold" style="color: var(--text);">Push alerts on this device</p>
+					<p class="text-sm font-semibold" style="color: var(--text);">
+						Push alerts on this device
+					</p>
 					<p class="mt-1 text-xs" style="color: var(--text-muted);">
 						Critical alerts and low-stock digests already go to your admin recipient emails below.
 						Enable push to also get them as browser notifications on this device.
 					</p>
 				</div>
 				{#if !pushSupported}
-					<span class="text-xs" style="color: var(--text-muted);">Not supported on this browser</span>
+					<span class="text-xs" style="color: var(--text-muted);"
+						>Not supported on this browser</span
+					>
 				{:else if pushPermission === 'granted'}
 					<button
 						type="button"
@@ -1009,8 +985,8 @@
 			<h2 class="text-lg font-semibold" style="color: var(--text)">Admin Roles</h2>
 			<p class="mt-1 text-sm" style="color: var(--text-muted);">
 				Role split is enforced server-side: FULL_ADMIN, ORDER_MANAGER, ASSISTANT, READ_ONLY.
-				ASSISTANT can run orders &amp; inventory but never sees revenue/analytics and can't
-				create tiers, offload accounts, or manage users.
+				ASSISTANT can run orders &amp; inventory but never sees revenue/analytics and can't create
+				tiers, offload accounts, or manage users.
 			</p>
 			{#if !roleManagementEnabled}
 				<p class="mt-3 text-sm" style="color: var(--text-muted);">
@@ -1075,8 +1051,8 @@
 						</button>
 					</div>
 					<p class="mt-3 text-xs" style="color: var(--text-muted);">
-						For full admins, add their email to the <code>ADMIN_EMAILS</code> environment variable
-						in Vercel — they'll get FULL_ADMIN automatically on next login.
+						For full admins, add their email to the <code>ADMIN_EMAILS</code> environment variable in
+						Vercel — they'll get FULL_ADMIN automatically on next login.
 					</p>
 				</div>
 			{/if}

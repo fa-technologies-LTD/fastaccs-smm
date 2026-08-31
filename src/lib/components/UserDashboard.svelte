@@ -71,7 +71,14 @@
 	const storeCreditBalance = $derived(Math.max(0, Number(storeCredit?.totalAvailable || 0)));
 
 	// Store-credit history (lazy-loaded when the card is tapped).
-	type CreditEntry = { at: string; description: string; delta: number; kind: string; category: string };
+	type CreditEntry = {
+		at: string;
+		description: string;
+		delta: number;
+		kind: string;
+		category: string;
+		status: string;
+	};
 	let showCreditHistory = $state(false);
 	let creditHistory = $state<CreditEntry[] | null>(null);
 	let creditHistoryLoading = $state(false);
@@ -89,12 +96,18 @@
 		}
 	}
 	function creditDate(iso: string): string {
-		return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+		return new Date(iso).toLocaleDateString(undefined, {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric'
+		});
 	}
 
 	let affiliateData = $state<unknown>(initialAffiliateData);
 	let affiliateDataLoaded = $state(initialAffiliateLoaded);
+	let affiliateSummaryLoaded = $state(initialAffiliateLoaded);
 	let affiliateDataLoading = $state(false);
+	let affiliateSummaryLoading = $state(false);
 	let affiliateDataError = $state('');
 
 	const affiliateState = $derived(
@@ -136,12 +149,35 @@
 			affiliateDataLoaded = true;
 			const state = affiliateData as AffiliateStateFlags | null;
 			showAffiliateAccessNudge =
-				Boolean(state?.unlocked || state?.eligible) && !state?.isActive && !affiliateNudgeDismissed();
+				Boolean(state?.unlocked || state?.eligible) &&
+				!state?.isActive &&
+				!affiliateNudgeDismissed();
 		} catch (error) {
 			affiliateDataError =
 				error instanceof Error ? error.message : 'Could not load affiliate details.';
 		} finally {
 			affiliateDataLoading = false;
+		}
+	}
+
+	async function ensureAffiliateSummary(): Promise<void> {
+		if (affiliateSummaryLoaded || affiliateSummaryLoading || affiliateDataLoaded) return;
+		affiliateSummaryLoading = true;
+		try {
+			const response = await fetch('/api/affiliate/stats?summary=1');
+			const result = await response.json().catch(() => ({}));
+			if (!response.ok || !result?.success) return;
+			affiliateData = result.data?.summary || null;
+			affiliateSummaryLoaded = true;
+			const state = affiliateData as AffiliateStateFlags | null;
+			showAffiliateAccessNudge =
+				Boolean(state?.unlocked || state?.eligible) &&
+				!state?.isActive &&
+				!affiliateNudgeDismissed();
+		} catch {
+			// This optional check must never disturb the main dashboard.
+		} finally {
+			affiliateSummaryLoading = false;
 		}
 	}
 
@@ -205,12 +241,14 @@
 	onMount(() => {
 		applyRouteContext(new URL(window.location.href));
 		showAffiliateAccessNudge = affiliateEligibleNotActive && !affiliateNudgeDismissed();
-		// This no longer blocks the dashboard route. Load it after the orders have rendered,
-		// and immediately when a deep link opens the affiliate tab.
-		void ensureAffiliateData();
+		// Ordinary dashboard visits need only the access flags used by the small nudge.
+		// The full ledger/referral report is reserved for the Affiliate tab.
+		if (activeTab === 'affiliate') void ensureAffiliateData();
+		else void ensureAffiliateSummary();
 
 		const handlePopState = () => {
 			applyRouteContext(new URL(window.location.href));
+			if (activeTab === 'affiliate') void ensureAffiliateData();
 		};
 
 		window.addEventListener('popstate', handlePopState);
@@ -332,7 +370,7 @@
 						Affiliate access unlocked 🎉
 					</p>
 					<p class="text-xs sm:text-sm" style="color: var(--text-muted);">
-						Claim your referral code and earn real cash whenever a friend orders.
+						Claim your referral code and earn real cash from retained eligible account orders.
 					</p>
 					<div class="mt-2 flex flex-wrap gap-2">
 						<button
@@ -404,9 +442,14 @@
 			>
 				₦{storeCreditBalance.toLocaleString()}
 			</div>
-			<div class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs" style="color: var(--text-muted);">
+			<div
+				class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs"
+				style="color: var(--text-muted);"
+			>
 				<span>Store Credit</span>
-				<span class="text-[10px] font-semibold" style="color: var(--primary);">· view history →</span>
+				<span class="text-[10px] font-semibold" style="color: var(--primary);"
+					>· view history →</span
+				>
 			</div>
 		</button>
 	</div>
@@ -466,29 +509,29 @@
 			initialLoaded={purchasesLoaded}
 			{whatsappNumber}
 		/>
+	{:else if affiliateDataLoaded}
+		<AffiliateTab initialAffiliateData={affiliateData} />
 	{:else}
-		{#if affiliateDataLoaded}
-			<AffiliateTab initialAffiliateData={affiliateData} />
-		{:else}
-			<div
-				class="rounded-[var(--r-md)] border border-[var(--border)] p-10 text-center"
-				style="background: var(--surface-2);"
-			>
-				<p class="text-sm" style="color: var(--text-muted);">
-					{affiliateDataLoading ? 'Loading affiliate details…' : affiliateDataError || 'Affiliate details are not available yet.'}
-				</p>
-				{#if !affiliateDataLoading}
-					<button
-						type="button"
-						onclick={() => ensureAffiliateData()}
-						class="mt-3 rounded-full px-4 py-2 text-xs font-semibold"
-						style="background: var(--primary); color: #04140c;"
-					>
-						Try again
-					</button>
-				{/if}
-			</div>
-		{/if}
+		<div
+			class="rounded-[var(--r-md)] border border-[var(--border)] p-10 text-center"
+			style="background: var(--surface-2);"
+		>
+			<p class="text-sm" style="color: var(--text-muted);">
+				{affiliateDataLoading
+					? 'Loading affiliate details…'
+					: affiliateDataError || 'Affiliate details are not available yet.'}
+			</p>
+			{#if !affiliateDataLoading}
+				<button
+					type="button"
+					onclick={() => ensureAffiliateData()}
+					class="mt-3 rounded-full px-4 py-2 text-xs font-semibold"
+					style="background: var(--primary); color: #04140c;"
+				>
+					Try again
+				</button>
+			{/if}
+		</div>
 	{/if}
 
 	<div class="mt-5 grid grid-cols-3 gap-2 sm:gap-3">
@@ -546,7 +589,10 @@
 		>
 			<div class="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
 				<div>
-					<h3 class="text-base font-semibold" style="color: var(--text); font-family: var(--font-head);">
+					<h3
+						class="text-base font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
+					>
 						Store Credit
 					</h3>
 					<p class="text-xs" style="color: var(--text-muted);">
@@ -575,7 +621,7 @@
 							<div class="min-w-0">
 								<p class="truncate text-sm" style="color: var(--text);">{e.description}</p>
 								<p class="text-[11px]" style="color: var(--text-dim);">
-									{e.category} · {creditDate(e.at)}
+									{e.category} · {e.status.replaceAll('_', ' ')} · {creditDate(e.at)}
 								</p>
 							</div>
 							<span
@@ -589,7 +635,11 @@
 				{/if}
 			</div>
 			<div class="border-t border-[var(--border)] px-4 py-2.5 text-center">
-				<a href="/how-it-works?tab=affiliate" class="text-xs font-semibold" style="color: var(--primary);">
+				<a
+					href="/how-it-works?tab=affiliate"
+					class="text-xs font-semibold"
+					style="color: var(--primary);"
+				>
 					earn more from referrals →
 				</a>
 			</div>

@@ -477,7 +477,7 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 		`- Active affiliate profiles: ${activeAffiliates}`,
 		`- Affiliate-referred paid orders: ${affiliateOrders.length}`,
 		`- Affiliate-referred sales: ${formatAmount(affiliateRevenue)}`,
-		`- Affiliate Store Credit earned this week: ${formatAmount(Number(affiliateCredits._sum.amount || 0))}`,
+		`- Affiliate Cash credited this week: ${formatAmount(Number(affiliateCredits._sum.amount || 0))}`,
 		`- New payout requests: ${payoutRequests}`,
 		'',
 		'**Email performance**',
@@ -513,7 +513,9 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 			notificationType: 'admin_broadcast',
 			classification: 'operational',
 			referenceId,
-			showCta: false
+			ctaText: 'Open analytics',
+			ctaUrl: 'https://smm.fastaccs.com/admin/analytics',
+			showCta: true
 		});
 		if (result.success) recipientsSent += 1;
 	}

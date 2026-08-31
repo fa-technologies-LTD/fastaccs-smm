@@ -81,7 +81,7 @@ function getAffiliateRefreshPopup(isActiveAffiliate: boolean): PendingSitePopup 
 			type: 'affiliate_refresh',
 			icon: '⚡',
 			title: 'Your affiliate program just leveled up',
-			body: 'Your referral code is ready to share — and you now earn real, withdrawable cash on every friend’s order. Spend it on-site or cash it out to your bank.',
+			body: 'Your referral code is ready to share. Friends save 5% and you earn 5% on their first two eligible account orders, up to ₦1,000 per order. Spend earned Cash on-site or withdraw it.',
 			ctaText: 'Got it',
 			secondaryHref: '/dashboard?tab=affiliate',
 			secondaryText: 'View my code →'
@@ -91,7 +91,7 @@ function getAffiliateRefreshPopup(isActiveAffiliate: boolean): PendingSitePopup 
 		type: 'affiliate_refresh',
 		icon: '🎉',
 		title: 'Earn cash by referring friends',
-		body: 'Our affiliate program is better than ever: make your first purchase to unlock your own referral code, then earn real, withdrawable cash every time a friend buys with it.',
+		body: 'Complete your first purchase to unlock a referral code. Friends save 5% and you earn 5% on their first two eligible account orders, up to ₦1,000 per order.',
 		ctaText: 'Got it',
 		secondaryHref: '/how-it-works?tab=affiliate',
 		secondaryText: 'See how it works →'
@@ -161,7 +161,8 @@ async function getCatalogUpdatesPopup(since: Date): Promise<PendingSitePopup | n
 	// A restocked tier deep-links to its tier page; a new platform to its platform page.
 	const tierHref = (r: { slug: string | null; parent: { slug: string | null } | null }) =>
 		r.parent?.slug && r.slug ? `/platforms/${r.parent.slug}/tiers/${r.slug}` : undefined;
-	const platformHref = (p: { slug: string | null }) => (p.slug ? `/platforms/${p.slug}` : undefined);
+	const platformHref = (p: { slug: string | null }) =>
+		p.slug ? `/platforms/${p.slug}` : undefined;
 
 	let body: string;
 	let bodyItems: SitePopupBodyItem[];

@@ -20,15 +20,18 @@
 	let payoutActionById = $state<Record<string, boolean>>({});
 	let bankDetails = $state<any>(data.bankDetails || null);
 	let bankDetailsActionLoading = $state(false);
+	let bankDetailsRevealLoading = $state(false);
+	let flaggedRewards = $state<any[]>([...(data.flaggedRewards || [])]);
+	let rewardReviewLoading = $state<Record<string, boolean>>({});
 
 	const referralBaseUrl = 'https://smm.fastaccs.com';
 
 	const popupEngagement = [
-		{ label: 'Welcome', seenAt: data.affiliate.popupsSeen.welcome },
-		{ label: 'Progress 50%', seenAt: data.affiliate.popupsSeen.progress50 },
-		{ label: 'Progress 80%', seenAt: data.affiliate.popupsSeen.progress80 },
-		{ label: 'Progress 95%', seenAt: data.affiliate.popupsSeen.progress95 },
-		{ label: 'Unlocked', seenAt: data.affiliate.popupsSeen.unlocked }
+		{ label: 'Access intro', seenAt: data.affiliate.popupsSeen.welcome },
+		{ label: 'Share prompt', seenAt: data.affiliate.popupsSeen.shareCode },
+		{ label: 'Bank prompt', seenAt: data.affiliate.popupsSeen.unlocked },
+		{ label: 'Payout 30%', seenAt: data.affiliate.popupsSeen.progress50 },
+		{ label: 'Payout 80%', seenAt: data.affiliate.popupsSeen.progress80 }
 	];
 
 	const payoutRequests = $derived(
@@ -143,7 +146,7 @@
 			if (!response.ok || !result.success) {
 				throw new Error(result.error || 'Failed to update bank details submission');
 			}
-			bankDetails = result.submission;
+			bankDetails = { ...bankDetails, ...result.submission };
 			addToast({
 				type: 'success',
 				title: action === 'approve' ? 'Bank details approved' : 'Bank details rejected',
@@ -157,6 +160,63 @@
 			});
 		} finally {
 			bankDetailsActionLoading = false;
+		}
+	}
+
+	async function revealBankDetails() {
+		if (bankDetailsRevealLoading || bankDetails?.revealed) return;
+		bankDetailsRevealLoading = true;
+		try {
+			const response = await fetch(`/api/admin/affiliates/${data.affiliate.id}/bank-details`);
+			const result = await response.json();
+			if (!response.ok || !result.success || !result.submission) {
+				throw new Error(result.error || 'Bank details could not be revealed');
+			}
+			bankDetails = { ...result.submission, revealed: true };
+		} catch (error) {
+			addToast({
+				type: 'error',
+				title: error instanceof Error ? error.message : 'Bank details could not be revealed',
+				duration: 3600
+			});
+		} finally {
+			bankDetailsRevealLoading = false;
+		}
+	}
+
+	async function reviewFlaggedReward(
+		transactionId: string,
+		action: 'approve' | 'reject',
+		reason?: string
+	) {
+		if (rewardReviewLoading[transactionId]) return;
+		rewardReviewLoading = { ...rewardReviewLoading, [transactionId]: true };
+		try {
+			const response = await fetch(`/api/admin/affiliates/${data.affiliate.id}/rewards`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ transactionId, action, ...(reason ? { reason } : {}) })
+			});
+			const result = await response.json();
+			if (!response.ok || !result.success) {
+				throw new Error(result.error || 'Reward review failed');
+			}
+			flaggedRewards = flaggedRewards.filter((row) => row.id !== transactionId);
+			addToast({
+				type: 'success',
+				title: action === 'approve' ? 'Reward approved for normal vesting' : 'Reward rejected',
+				duration: 3000
+			});
+		} catch (error) {
+			addToast({
+				type: 'error',
+				title: error instanceof Error ? error.message : 'Reward review failed',
+				duration: 3600
+			});
+		} finally {
+			const next = { ...rewardReviewLoading };
+			delete next[transactionId];
+			rewardReviewLoading = next;
 		}
 	}
 </script>
@@ -415,6 +475,77 @@
 		</div>
 	</div>
 
+	{#if data.program.isSuperAffiliate || data.superContracts.length > 0}
+		<div
+			class="mb-6 rounded-lg border p-6"
+			style="border-color: var(--border); background: var(--bg-elev-1);"
+		>
+			<div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+				<div>
+					<h2
+						class="text-lg font-semibold"
+						style="color: var(--text); font-family: var(--font-head);"
+					>
+						Super Affiliate Agreements
+					</h2>
+					<p class="mt-1 text-sm" style="color: var(--text-dim);">
+						Each referral keeps the targets and reward promised when the relationship began.
+					</p>
+				</div>
+				<span
+					class="rounded-full px-2.5 py-1 text-xs font-semibold"
+					style={data.superPolicy.enabledForNewReferrals
+						? 'background: var(--status-success-bg); color: var(--status-success);'
+						: 'background: var(--status-warning-bg); color: var(--status-warning);'}
+				>
+					{data.superPolicy.enabledForNewReferrals
+						? 'New agreements enabled'
+						: 'New agreements disabled'}
+				</span>
+			</div>
+
+			{#if data.superContracts.length === 0}
+				<p class="text-sm" style="color: var(--text-dim);">No Super referral agreements yet.</p>
+			{:else}
+				<div class="space-y-3">
+					{#each data.superContracts as contract}
+						<div
+							class="grid gap-3 rounded-lg border p-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto]"
+							style="border-color: var(--border); background: var(--bg-elev-2);"
+						>
+							<div>
+								<div class="flex flex-wrap items-center gap-2">
+									<p class="font-semibold" style="color: var(--text);">
+										{contract.displayName}
+									</p>
+									<span
+										class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+										style={statusBadgeStyle(contract.status)}
+									>
+										{contract.status}
+									</span>
+								</div>
+								<p class="mt-1" style="color: var(--text-dim);">
+									{contract.orderCount} of {contract.orderTarget} retained orders ·
+									{formatPrice(contract.cumulativeSpend)} of {formatPrice(contract.spendTarget)}
+									retained spend
+								</p>
+								<p class="mt-1 text-xs" style="color: var(--text-dim);">
+									Qualifies through either target · {contract.termsFrozen
+										? 'terms frozen at referral'
+										: 'legacy terms resolved from order history'}
+								</p>
+							</div>
+							<p class="font-semibold" style="color: var(--status-success);">
+								{formatPrice(contract.activationReward)} reward
+							</p>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	{/if}
+
 	<div
 		class="mb-6 rounded-lg border p-6"
 		style="border-color: var(--border); background: var(--bg-elev-1);"
@@ -441,6 +572,68 @@
 				</div>
 			{/each}
 		</div>
+	</div>
+
+	<div
+		class="mb-6 rounded-lg border p-6"
+		style="border-color: var(--border); background: var(--bg-elev-1);"
+	>
+		<div class="mb-4 flex items-center justify-between">
+			<h2 class="text-lg font-semibold" style="color: var(--text); font-family: var(--font-head);">
+				Reward Reviews
+			</h2>
+			<span class="text-sm" style="color: var(--text-dim);">Open: {flaggedRewards.length}</span>
+		</div>
+		{#if flaggedRewards.length === 0}
+			<p class="text-sm" style="color: var(--text-dim);">
+				No rewards are held for identity review.
+			</p>
+		{:else}
+			<div class="space-y-3">
+				{#each flaggedRewards as reward}
+					<div
+						class="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
+						style="border-color: var(--status-warning-border); background: var(--status-warning-bg);"
+					>
+						<div>
+							<p class="text-sm font-semibold" style="color: var(--text);">
+								{formatPrice(reward.amount)} pending review
+							</p>
+							<p class="mt-1 text-xs" style="color: var(--text-dim);">
+								Order {reward.orderId || 'unknown'} · {formatDate(reward.createdAt)}
+							</p>
+							{#if reward.riskSignals?.length}
+								<p class="mt-1 text-xs" style="color: var(--status-warning);">
+									Signals: {reward.riskSignals
+										.map((signal: string) => signal.replaceAll('_', ' '))
+										.join(', ')}
+								</p>
+							{/if}
+						</div>
+						<div class="flex gap-2">
+							<button
+								type="button"
+								disabled={rewardReviewLoading[reward.id]}
+								onclick={() => reviewFlaggedReward(reward.id, 'approve')}
+								class="rounded px-3 py-1.5 text-sm disabled:opacity-60"
+								style="background: var(--status-success); color: var(--bg);">Approve</button
+							>
+							<button
+								type="button"
+								disabled={rewardReviewLoading[reward.id]}
+								onclick={() => {
+									const reason = window.prompt('Reason for rejecting this pending reward:');
+									if (reason === null || !reason.trim()) return;
+									reviewFlaggedReward(reward.id, 'reject', reason.trim());
+								}}
+								class="rounded px-3 py-1.5 text-sm disabled:opacity-60"
+								style="background: var(--status-danger); color: var(--bg);">Reject</button
+							>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
 	</div>
 
 	<div
@@ -587,38 +780,63 @@
 		{#if !bankDetails}
 			<p class="text-sm" style="color: var(--text-dim);">No bank details submitted yet.</p>
 		{:else}
-			<div class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-				<div>
-					<p style="color: var(--text-dim);">Bank name</p>
-					<p class="font-medium" style="color: var(--text);">{bankDetails.bankName}</p>
-				</div>
-				<div>
-					<p style="color: var(--text-dim);">Account number</p>
-					<p class="font-medium" style="color: var(--text);">{bankDetails.accountNumber}</p>
-				</div>
-				<div>
-					<p style="color: var(--text-dim);">Account name</p>
-					<p class="font-medium" style="color: var(--text);">{bankDetails.accountName}</p>
-				</div>
-				<div>
-					<p style="color: var(--text-dim);">Phone</p>
-					<p class="font-medium" style="color: var(--text);">{bankDetails.phone}</p>
-				</div>
-				{#if bankDetails.feedback}
-					<div class="sm:col-span-2">
-						<p style="color: var(--text-dim);">Customer feedback</p>
-						<p class="font-medium" style="color: var(--text);">{bankDetails.feedback}</p>
+			{#if !bankDetails.revealed}
+				<div
+					class="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
+					style="border-color: var(--border); background: var(--bg);"
+				>
+					<div>
+						<p class="text-sm font-medium" style="color: var(--text);">
+							Account ending {bankDetails.accountNumberLast4 || '—'}
+						</p>
+						<p class="mt-1 text-xs" style="color: var(--text-dim);">
+							Sensitive details are hidden until an authorised admin reveals them.
+						</p>
 					</div>
-				{/if}
-				{#if bankDetails.rejectionReason}
-					<div class="sm:col-span-2">
-						<p style="color: var(--text-dim);">Last rejection reason</p>
-						<p class="font-medium" style="color: var(--text);">{bankDetails.rejectionReason}</p>
+					<button
+						type="button"
+						onclick={revealBankDetails}
+						disabled={bankDetailsRevealLoading}
+						class="rounded px-3 py-1.5 text-sm disabled:opacity-60"
+						style="border: 1px solid var(--border); color: var(--text);"
+					>
+						{bankDetailsRevealLoading ? 'Revealing…' : 'Reveal bank details'}
+					</button>
+				</div>
+			{:else}
+				<div class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+					<div>
+						<p style="color: var(--text-dim);">Bank name</p>
+						<p class="font-medium" style="color: var(--text);">{bankDetails.bankName}</p>
 					</div>
-				{/if}
-			</div>
+					<div>
+						<p style="color: var(--text-dim);">Account number</p>
+						<p class="font-medium" style="color: var(--text);">{bankDetails.accountNumber}</p>
+					</div>
+					<div>
+						<p style="color: var(--text-dim);">Account name</p>
+						<p class="font-medium" style="color: var(--text);">{bankDetails.accountName}</p>
+					</div>
+					<div>
+						<p style="color: var(--text-dim);">Phone</p>
+						<p class="font-medium" style="color: var(--text);">{bankDetails.phone}</p>
+					</div>
+					{#if bankDetails.feedback}
+						<div class="sm:col-span-2">
+							<p style="color: var(--text-dim);">Customer feedback</p>
+							<p class="font-medium" style="color: var(--text);">{bankDetails.feedback}</p>
+						</div>
+					{/if}
+					{#if bankDetails.rejectionReason}
+						<div class="sm:col-span-2">
+							<p style="color: var(--text-dim);">Last rejection reason</p>
+							<p class="font-medium" style="color: var(--text);">{bankDetails.rejectionReason}</p>
+						</div>
+					{/if}
+				</div>
+			{/if}
 
-			{#if bankDetails.status === 'pending'}
+			{#if bankDetails.status === 'pending' && bankDetails.revealed}
 				<div class="mt-4 flex gap-2">
 					<button
 						onclick={() => updateBankDetailsStatus('approve')}

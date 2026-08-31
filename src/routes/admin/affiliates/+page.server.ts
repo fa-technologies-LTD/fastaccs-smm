@@ -3,10 +3,17 @@ import { prisma } from '$lib/prisma';
 import { buildRevenueOrderWhere } from '$lib/helpers/order-revenue.server';
 import { toNetSales } from '$lib/helpers/order-revenue';
 import { SC_AFFILIATE_ADJUSTMENT, SC_REDEEM_EARNED } from '$lib/services/store-credit';
+import {
+	calculateAffiliateLedgerSummary,
+	calculateAffiliateRewardCostSummary,
+	getCanonicalReferralCounts
+} from '$lib/services/affiliate';
+import { calculateRetainedAffiliateBuyerDiscount } from '$lib/services/affiliate-policy';
+import { hasAdminPermission } from '$lib/auth/admin-roles';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	try {
-		if (!locals.user || locals.user.userType !== 'ADMIN') {
+		if (!locals.user || !hasAdminPermission(locals.adminContext, 'admin:affiliates:manage')) {
 			return {
 				affiliates: [],
 				stats: {
@@ -16,7 +23,20 @@ export const load: PageServerLoad = async ({ locals }) => {
 					totalAvailableStoreCredit: 0,
 					totalSuccessfulOrders: 0,
 					totalPayoutRequested: 0,
-					pendingBankDetailsReviews: 0
+					pendingBankDetailsReviews: 0,
+					trackedLinkOpens: 0,
+					dashboardViews: 0,
+					shareActions: 0,
+					linkedUsers: 0,
+					referredBuyers: 0,
+					productiveAffiliates: 0,
+					netReferredSales: 0,
+					buyerDiscountCost: 0,
+					regularRewardCost: 0,
+					superRewardCost: 0,
+					totalRewardCost: 0,
+					outstandingAffiliateLiability: 0,
+					paidAffiliateCash: 0
 				}
 			};
 		}
@@ -37,7 +57,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 						affiliateCode: true,
 						status: true,
 						createdAt: true,
-						totalReferrals: true
+						isSuperAffiliate: true
 					},
 					orderBy: { createdAt: 'asc' },
 					take: 1
@@ -48,16 +68,38 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 		const userIds = affiliatesRaw.map((row) => row.id);
 
-		const [successfulOrdersAgg, ledgerGrouped, pendingBankDetailsRows] = await Promise.all([
+		const [
+			successfulOrdersAgg,
+			payingBuyerPairs,
+			ledgerGrouped,
+			pendingBankDetailsRows,
+			referralCounts,
+			affiliateEventCounts,
+			rewardCostRows,
+			referredOrderEconomics
+		] = await Promise.all([
 			userIds.length
 				? prisma.order.groupBy({
 						by: ['affiliateUserId'],
 						where: {
 							affiliateUserId: { in: userIds },
+							orderType: 'account',
 							...buildRevenueOrderWhere()
 						},
 						_count: { _all: true },
 						_sum: { totalAmount: true, refundedAmount: true }
+					})
+				: Promise.resolve([]),
+			userIds.length
+				? prisma.order.findMany({
+						where: {
+							affiliateUserId: { in: userIds },
+							userId: { not: null },
+							orderType: 'account',
+							...buildRevenueOrderWhere()
+						},
+						select: { affiliateUserId: true, userId: true },
+						distinct: ['affiliateUserId', 'userId']
 					})
 				: Promise.resolve([]),
 			userIds.length
@@ -82,10 +124,78 @@ export const load: PageServerLoad = async ({ locals }) => {
 						where: { userId: { in: userIds }, status: 'pending' },
 						select: { userId: true }
 					})
+				: Promise.resolve([]),
+			getCanonicalReferralCounts(userIds),
+			prisma.affiliateEvent
+				.groupBy({
+					by: ['type'],
+					where: {
+						type: {
+							in: [
+								'referral_link_opened',
+								'affiliate_dashboard_viewed',
+								'affiliate_code_copied',
+								'affiliate_link_copied',
+								'affiliate_whatsapp_share_started',
+								'affiliate_message_copied'
+							]
+						}
+					},
+					_count: { _all: true }
+				})
+				.catch((error) => {
+					if ((error as { code?: string })?.code === 'P2021') return [];
+					throw error;
+				}),
+			userIds.length
+				? prisma.walletTransaction.findMany({
+						where: {
+							userId: { in: userIds },
+							type: { in: ['affiliate_credit', SC_AFFILIATE_ADJUSTMENT] }
+						},
+						select: {
+							type: true,
+							status: true,
+							amount: true,
+							reference: true,
+							metadata: true
+						}
+					})
+				: Promise.resolve([]),
+			userIds.length
+				? prisma.order.findMany({
+						where: {
+							affiliateUserId: { in: userIds },
+							orderType: 'account',
+							...buildRevenueOrderWhere()
+						},
+						select: {
+							totalAmount: true,
+							refundedAmount: true,
+							discountAmount: true
+						}
+					})
 				: Promise.resolve([])
 		]);
+		const eventCountByType = new Map(
+			affiliateEventCounts.map((row) => [row.type, Number(row._count._all || 0)])
+		);
+		const shareActions = [
+			'affiliate_code_copied',
+			'affiliate_link_copied',
+			'affiliate_whatsapp_share_started',
+			'affiliate_message_copied'
+		].reduce((sum, type) => sum + (eventCountByType.get(type) || 0), 0);
 
 		const pendingBankDetailsUserIds = new Set(pendingBankDetailsRows.map((row) => row.userId));
+		const paidBuyersByAffiliate = new Map<string, number>();
+		for (const pair of payingBuyerPairs) {
+			if (!pair.affiliateUserId) continue;
+			paidBuyersByAffiliate.set(
+				pair.affiliateUserId,
+				(paidBuyersByAffiliate.get(pair.affiliateUserId) || 0) + 1
+			);
+		}
 
 		const successfulOrdersByUser = new Map(
 			successfulOrdersAgg.map((row) => [
@@ -97,82 +207,18 @@ export const load: PageServerLoad = async ({ locals }) => {
 			])
 		);
 
-		type LedgerBucket = Record<
-			string,
-			{
-				credit: number;
-				payout: number;
-				redeemed: number;
-				adjustment: number;
-			}
-		>;
-		const ledgerByUser = new Map<string, LedgerBucket>();
-
+		const ledgerByUser = new Map<string, typeof ledgerGrouped>();
 		for (const row of ledgerGrouped) {
 			const userId = String(row.userId);
-			const status = String(row.status || '')
-				.trim()
-				.toLowerCase();
-			const type = String(row.type || '')
-				.trim()
-				.toLowerCase();
-			const amount = Math.max(0, Number(row._sum.amount || 0));
-
-			const userBucket = ledgerByUser.get(userId) || {};
-			const statusBucket = userBucket[status] || {
-				credit: 0,
-				payout: 0,
-				redeemed: 0,
-				adjustment: 0
-			};
-			if (type === 'affiliate_credit') {
-				statusBucket.credit += amount;
-			} else if (type === 'affiliate_payout') {
-				statusBucket.payout += amount;
-			} else if (type === SC_REDEEM_EARNED) {
-				statusBucket.redeemed += amount;
-			} else if (type === SC_AFFILIATE_ADJUSTMENT) {
-				statusBucket.adjustment += amount;
-			}
-			userBucket[status] = statusBucket;
-			ledgerByUser.set(userId, userBucket);
+			const userRows = ledgerByUser.get(userId) || [];
+			userRows.push(row);
+			ledgerByUser.set(userId, userRows);
 		}
 
 		const affiliates = affiliatesRaw.map((row) => {
 			const program = row.affiliatePrograms[0] || null;
 			const orderAgg = successfulOrdersByUser.get(row.id) || { count: 0, totalSales: 0 };
-			const ledger = ledgerByUser.get(row.id) || {};
-			const getCredit = (status: string) => Math.max(0, Number(ledger[status]?.credit || 0));
-			const getPayout = (status: string) => Math.max(0, Number(ledger[status]?.payout || 0));
-			const getRedeemed = (status: string) => Math.max(0, Number(ledger[status]?.redeemed || 0));
-			const getAdjustment = (status: string) =>
-				Math.max(0, Number(ledger[status]?.adjustment || 0));
-
-			const availableStoreCredit = Math.max(
-				0,
-				getCredit('available') -
-					getPayout('requested') -
-					getPayout('under_review') -
-					getPayout('paid') -
-					getRedeemed('available') -
-					getAdjustment('available')
-			);
-			const pendingStoreCredit = getCredit('pending');
-			const underReviewStoreCredit = getCredit('under_review');
-			// Both requested and under-review payouts are still open liabilities. Keep
-			// them reserved and visible after an admin begins reviewing the request.
-			const requestedStoreCredit = getPayout('requested') + getPayout('under_review');
-			const paidStoreCredit = getPayout('paid');
-			const reversedStoreCredit = getCredit('reversed') + getPayout('reversed');
-			const totalStoreCreditEarned = Math.max(
-				0,
-				getCredit('available') +
-					getCredit('pending') +
-					getCredit('under_review') +
-					getCredit('requested') +
-					getCredit('paid') -
-					getAdjustment('available')
-			);
+			const ledger = calculateAffiliateLedgerSummary(ledgerByUser.get(row.id) || []);
 
 			return {
 				id: row.id,
@@ -182,21 +228,18 @@ export const load: PageServerLoad = async ({ locals }) => {
 				isAffiliateEnabled: row.isAffiliateEnabled,
 				affiliateCode: program?.affiliateCode || null,
 				programStatus: program?.status || 'inactive',
-				totalReferrals: Number(program?.totalReferrals || 0),
+				totalReferrals: referralCounts.get(row.id) || 0,
+				paidReferredUsers: paidBuyersByAffiliate.get(row.id) || 0,
+				isSuperAffiliate: Boolean(program?.isSuperAffiliate),
 				successfulOrders: orderAgg.count,
 				totalSales: orderAgg.totalSales,
-				availableStoreCredit,
-				pendingStoreCredit,
-				underReviewStoreCredit,
-				requestedStoreCredit,
-				paidStoreCredit,
-				reversedStoreCredit,
-				totalStoreCreditEarned,
+				...ledger,
 				joinedAt: program?.createdAt || row.createdAt,
 				hasPendingBankDetails: pendingBankDetailsUserIds.has(row.id)
 			};
 		});
 
+		const rewardCosts = calculateAffiliateRewardCostSummary(rewardCostRows);
 		const stats = {
 			totalAffiliates: affiliates.length,
 			activeAffiliates: affiliates.filter(
@@ -206,7 +249,29 @@ export const load: PageServerLoad = async ({ locals }) => {
 			totalAvailableStoreCredit: affiliates.reduce((sum, row) => sum + row.availableStoreCredit, 0),
 			totalSuccessfulOrders: affiliates.reduce((sum, row) => sum + row.successfulOrders, 0),
 			totalPayoutRequested: affiliates.reduce((sum, row) => sum + row.requestedStoreCredit, 0),
-			pendingBankDetailsReviews: pendingBankDetailsUserIds.size
+			pendingBankDetailsReviews: pendingBankDetailsUserIds.size,
+			trackedLinkOpens: eventCountByType.get('referral_link_opened') || 0,
+			dashboardViews: eventCountByType.get('affiliate_dashboard_viewed') || 0,
+			shareActions,
+			linkedUsers: [...referralCounts.values()].reduce((sum, count) => sum + count, 0),
+			referredBuyers: [...paidBuyersByAffiliate.values()].reduce((sum, count) => sum + count, 0),
+			productiveAffiliates: affiliates.filter((row) => row.successfulOrders > 0).length,
+			netReferredSales: affiliates.reduce((sum, row) => sum + row.totalSales, 0),
+			buyerDiscountCost: referredOrderEconomics.reduce(
+				(sum, order) => sum + calculateRetainedAffiliateBuyerDiscount(order),
+				0
+			),
+			...rewardCosts,
+			outstandingAffiliateLiability: affiliates.reduce(
+				(sum, row) =>
+					sum +
+					row.pendingStoreCredit +
+					row.underReviewStoreCredit +
+					row.availableStoreCredit +
+					row.requestedStoreCredit,
+				0
+			),
+			paidAffiliateCash: affiliates.reduce((sum, row) => sum + row.paidStoreCredit, 0)
 		};
 
 		return {
@@ -224,7 +289,20 @@ export const load: PageServerLoad = async ({ locals }) => {
 				totalAvailableStoreCredit: 0,
 				totalSuccessfulOrders: 0,
 				totalPayoutRequested: 0,
-				pendingBankDetailsReviews: 0
+				pendingBankDetailsReviews: 0,
+				trackedLinkOpens: 0,
+				dashboardViews: 0,
+				shareActions: 0,
+				linkedUsers: 0,
+				referredBuyers: 0,
+				productiveAffiliates: 0,
+				netReferredSales: 0,
+				buyerDiscountCost: 0,
+				regularRewardCost: 0,
+				superRewardCost: 0,
+				totalRewardCost: 0,
+				outstandingAffiliateLiability: 0,
+				paidAffiliateCash: 0
 			}
 		};
 	}

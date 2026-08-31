@@ -137,7 +137,8 @@
 			manual_handover_promise: DEFAULT_MANUAL_HANDOVER_PROMISE,
 			login_guide_url: '',
 			login_guide_label: DEFAULT_LOGIN_GUIDE_LABEL,
-			exact_preview_enabled: false
+			exact_preview_enabled: false,
+			affiliate_excluded: true
 		}
 	});
 
@@ -203,7 +204,8 @@
 					deliveryConfig.manualHandoverPromise || DEFAULT_MANUAL_HANDOVER_PROMISE,
 				login_guide_url: deliveryConfig.loginGuideUrl || '',
 				login_guide_label: deliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL,
-				exact_preview_enabled: exactPreviewConfig.enabled
+				exact_preview_enabled: exactPreviewConfig.enabled,
+				affiliate_excluded: metadata?.affiliate_excluded === true
 			}
 		};
 		showEditModal = true;
@@ -240,7 +242,8 @@
 				manual_handover_promise: DEFAULT_MANUAL_HANDOVER_PROMISE,
 				login_guide_url: '',
 				login_guide_label: DEFAULT_LOGIN_GUIDE_LABEL,
-				exact_preview_enabled: false
+				exact_preview_enabled: false,
+				affiliate_excluded: true
 			}
 		};
 	}

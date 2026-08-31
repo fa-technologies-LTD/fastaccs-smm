@@ -1,9 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
+
+const { prismaMock } = vi.hoisted(() => ({
+	prismaMock: {
+		walletTransaction: {
+			findMany: vi.fn()
+		}
+	}
+}));
+
+vi.mock('$lib/prisma', () => ({ prisma: prismaMock }));
+
 import {
 	creditStoreCredit,
 	computeOrderRedemption,
 	EARNED_REDEMPTION_CAP_PERCENT,
 	getStoreCreditBuckets,
+	getStoreCreditHistory,
 	redemptionExceedsAvailable,
 	restoreStoreCreditRedemptionForLatePayment
 } from './store-credit';
@@ -11,7 +23,9 @@ import {
 describe('computeOrderRedemption', () => {
 	it('applies refund credit first, uncapped up to the order total', () => {
 		// ₦10k order, ₦10k refund credit → refund covers it all, no earned needed.
-		expect(computeOrderRedemption(10000, { refundAvailable: 10000, earnedAvailable: 5000 })).toEqual({
+		expect(
+			computeOrderRedemption(10000, { refundAvailable: 10000, earnedAvailable: 5000 })
+		).toEqual({
 			refundApplied: 10000,
 			earnedApplied: 0,
 			totalApplied: 10000
@@ -29,11 +43,13 @@ describe('computeOrderRedemption', () => {
 
 	it('combines refund (free) then earned (capped) without exceeding the order', () => {
 		// ₦10k order, ₦4k refund + ₦5k earned → refund ₦4k, remaining ₦6k, earned capped ₦3k.
-		expect(computeOrderRedemption(10000, { refundAvailable: 4000, earnedAvailable: 5000 })).toEqual({
-			refundApplied: 4000,
-			earnedApplied: 3000,
-			totalApplied: 7000
-		});
+		expect(computeOrderRedemption(10000, { refundAvailable: 4000, earnedAvailable: 5000 })).toEqual(
+			{
+				refundApplied: 4000,
+				earnedApplied: 3000,
+				totalApplied: 7000
+			}
+		);
 	});
 
 	it('never applies more than the order total (refund covers everything)', () => {
@@ -47,11 +63,13 @@ describe('computeOrderRedemption', () => {
 
 	it('earned is bounded by the remainder after refund, not just the 30% cap', () => {
 		// ₦10k order, ₦8k refund → remaining ₦2k; earned cap is ₦3k but only ₦2k remains.
-		expect(computeOrderRedemption(10000, { refundAvailable: 8000, earnedAvailable: 9000 })).toEqual({
-			refundApplied: 8000,
-			earnedApplied: 2000,
-			totalApplied: 10000
-		});
+		expect(computeOrderRedemption(10000, { refundAvailable: 8000, earnedAvailable: 9000 })).toEqual(
+			{
+				refundApplied: 8000,
+				earnedApplied: 2000,
+				totalApplied: 10000
+			}
+		);
 	});
 
 	it('uses only what earned credit the user actually has (under the cap)', () => {
@@ -85,7 +103,11 @@ describe('computeOrderRedemption', () => {
 
 	it('respects a custom cap percent', () => {
 		expect(
-			computeOrderRedemption(10000, { refundAvailable: 0, earnedAvailable: 9000 }, { earnedCapPercent: 0.5 })
+			computeOrderRedemption(
+				10000,
+				{ refundAvailable: 0, earnedAvailable: 9000 },
+				{ earnedCapPercent: 0.5 }
+			)
 		).toEqual({ refundApplied: 0, earnedApplied: 5000, totalApplied: 5000 });
 	});
 });
@@ -142,6 +164,44 @@ describe('redemptionExceedsAvailable', () => {
 });
 
 describe('store-credit ledger safeguards', () => {
+	it('uses ledger type and amount for history when cached balances do not move', async () => {
+		prismaMock.walletTransaction.findMany.mockResolvedValueOnce([
+			{
+				type: 'affiliate_credit',
+				amount: 500,
+				status: 'pending',
+				description: 'Referral reward',
+				createdAt: new Date('2026-08-25T12:00:00.000Z')
+			},
+			{
+				type: 'affiliate_payout',
+				amount: 5_000,
+				status: 'requested',
+				description: 'Payout request',
+				createdAt: new Date('2026-08-25T11:00:00.000Z')
+			}
+		]);
+
+		await expect(getStoreCreditHistory('11111111-1111-4111-8111-111111111111')).resolves.toEqual([
+			{
+				at: '2026-08-25T12:00:00.000Z',
+				description: 'Referral reward',
+				delta: 500,
+				kind: 'credit',
+				category: 'Affiliate Cash',
+				status: 'pending'
+			},
+			{
+				at: '2026-08-25T11:00:00.000Z',
+				description: 'Payout request',
+				delta: -5_000,
+				kind: 'debit',
+				category: 'Payout',
+				status: 'requested'
+			}
+		]);
+	});
+
 	it('re-reads the wallet balance after acquiring the row lock before crediting', async () => {
 		const tx = {
 			wallet: {
@@ -221,6 +281,25 @@ describe('store-credit ledger safeguards', () => {
 		).resolves.toEqual({ earnedAvailable: 300, refundAvailable: 0, totalAvailable: 300 });
 	});
 
+	it('carries an unrecovered affiliate adjustment forward against future earnings', async () => {
+		const db = {
+			walletTransaction: {
+				groupBy: vi.fn().mockResolvedValue([
+					{ type: 'affiliate_credit', status: 'available', _sum: { amount: 2_000 } },
+					{
+						type: 'affiliate_credit_adjustment',
+						status: 'available',
+						_sum: { amount: 1_500 }
+					}
+				])
+			}
+		};
+
+		await expect(
+			getStoreCreditBuckets('11111111-1111-4111-8111-111111111111', db as never)
+		).resolves.toEqual({ earnedAvailable: 500, refundAvailable: 0, totalAvailable: 500 });
+	});
+
 	it('atomically re-reserves restored credit before a late split payment can fulfil', async () => {
 		const tx = {
 			wallet: {
@@ -284,9 +363,11 @@ describe('store-credit ledger safeguards', () => {
 						status: 'reversed'
 					}
 				]),
-				groupBy: vi.fn().mockResolvedValue([
-					{ type: 'store_credit_refund', status: 'available', _sum: { amount: 200 } }
-				])
+				groupBy: vi
+					.fn()
+					.mockResolvedValue([
+						{ type: 'store_credit_refund', status: 'available', _sum: { amount: 200 } }
+					])
 			},
 			$queryRaw: vi.fn().mockResolvedValue([])
 		};

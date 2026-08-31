@@ -19,6 +19,7 @@
 		read: boolean;
 		createdAt: string;
 		orderId: string | null;
+		actionUrl: string | null;
 	}
 
 	let affiliateCanShowBell = $state(false);
@@ -145,7 +146,8 @@
 							message: String(item.message || ''),
 							read: Boolean(item.read),
 							createdAt: String(item.createdAt || new Date().toISOString()),
-							orderId: item.orderId ? String(item.orderId) : null
+							orderId: item.orderId ? String(item.orderId) : null,
+							actionUrl: item.actionUrl ? String(item.actionUrl) : null
 						};
 					})
 				: [];
@@ -184,9 +186,9 @@
 
 	function handleNoteClick(note: AffiliateNotificationItem): void {
 		if (!note.read) void markAffiliateNotificationRead(note.id);
-		if (note.orderId) {
+		if (note.actionUrl) {
 			affiliateInboxOpen = false;
-			void goto(`/order/${note.orderId}`);
+			void goto(note.actionUrl);
 		}
 	}
 
@@ -399,7 +401,7 @@
 										type="button"
 										onclick={toggleAffiliateInbox}
 										class="cart-btn relative p-2"
-										aria-label="Affiliate notifications"
+										aria-label="Notifications"
 										aria-expanded={affiliateInboxOpen}
 									>
 										<BellRing size={22} />
@@ -559,7 +561,7 @@
 							type="button"
 							onclick={toggleAffiliateInbox}
 							class="cart-btn relative p-2"
-							aria-label="Affiliate notifications"
+							aria-label="Notifications"
 						>
 							<BellRing size={22} />
 							{#if affiliateUnreadCount > 0}

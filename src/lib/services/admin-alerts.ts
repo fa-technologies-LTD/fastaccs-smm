@@ -228,7 +228,9 @@ export async function sendLowStockAdminAlertIfNeeded(
 			notificationType: 'admin_broadcast',
 			classification: 'operational',
 			referenceId: alertEventReferenceId,
-			showCta: false
+			ctaText: 'Open inventory',
+			ctaUrl: 'https://smm.fastaccs.com/admin/inventory',
+			showCta: true
 		});
 
 		if (result.success) {
@@ -319,7 +321,9 @@ export async function sendCriticalAdminAlert(params: {
 			notificationType: 'admin_broadcast',
 			classification: 'operational',
 			referenceId,
-			showCta: false
+			ctaText: 'Open admin',
+			ctaUrl: 'https://smm.fastaccs.com/admin',
+			showCta: true
 		});
 
 		if (result.success) {

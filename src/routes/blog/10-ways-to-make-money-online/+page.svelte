@@ -191,7 +191,7 @@
 	</p>
 	<p class="mb-4 leading-relaxed" style="color: var(--text-muted);">
 		If you already have an audience in the digital marketing, social media, or online business
-		space, the <a href="/affiliate" style="color: var(--fa-green-500); text-decoration: underline; text-underline-offset: 3px;">FastAccs affiliate programme</a> is worth considering. FastAccs sells aged social media accounts and VPN services to creators, marketers, and agencies — a product with clear demand and a self-explanatory use case. Affiliates earn commission on every order their referrals place, starting from the first sale, with no cap on earnings.
+		space, the <a href="/affiliate" style="color: var(--fa-green-500); text-decoration: underline; text-underline-offset: 3px;">FastAccs affiliate programme</a> is worth considering. Friends save 5% and affiliates earn 5% on each friend's first two eligible account orders, up to ₦1,000 per order. The offer is designed for people who can genuinely recommend FastAccs accounts to buyers who need them.
 	</p>
 	<p class="mb-6 leading-relaxed" style="color: var(--text-muted);">
 		The honest downside of affiliate marketing broadly: most programmes convert poorly without
@@ -481,7 +481,7 @@
 	<!-- Affiliate CTA -->
 	<BlogCta
 		heading="Already in the digital marketing or social media space?"
-		body="The FastAccs affiliate programme lets you earn commission by recommending aged social media accounts and VPN services to your audience. No cap on earnings, commission from the first sale, and a product your audience can actually use."
+		body="Recommend FastAccs accounts to the right buyers: friends save 5% and you earn 5% on their first two eligible account orders, up to ₦1,000 per order."
 		primaryHref="/affiliate"
 		primaryLabel="Join the affiliate programme"
 		secondaryHref="/blog/is-it-safe-to-buy-social-media-accounts"

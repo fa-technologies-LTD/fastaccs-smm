@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
+import { getNotificationActionUrl } from '$lib/services/notifications';
 
 // The universal activity feed behind the bell — every signed-in user, ALL notification types
 // (code arrived, order ready, store credit, affiliate, new login…). (Kept at this path for the
@@ -43,7 +44,12 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		})
 	]);
 	const hasMore = notificationRows.length > limit;
-	const notifications = hasMore ? notificationRows.slice(0, limit) : notificationRows;
+	const notifications = (hasMore ? notificationRows.slice(0, limit) : notificationRows).map(
+		(notification) => ({
+			...notification,
+			actionUrl: getNotificationActionUrl(notification.type, notification.orderId)
+		})
+	);
 
 	return json({
 		success: true,
