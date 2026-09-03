@@ -1,1101 +1,474 @@
 <script lang="ts">
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import {
-		UserPlus,
-		ShoppingBag,
-		Zap,
-		Shield,
-		Check,
-		CreditCard,
-		Package,
-		Share2,
-		TrendingUp,
-		Clock,
-		Eye,
-		Copy,
-		DollarSign,
-		Phone,
-		RefreshCw
-	} from '$lib/icons';
+	import { Phone, Share2, ShoppingBag, Zap } from '$lib/icons';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 
-	let selectedTab = $state<'buyer' | 'numbers' | 'boosting' | 'affiliate'>(
-		page.url.searchParams.get('tab') === 'affiliate'
-			? 'affiliate'
-			: page.url.searchParams.get('tab') === 'boosting'
-				? 'boosting'
-				: page.url.searchParams.get('tab') === 'numbers'
-					? 'numbers'
-					: 'buyer'
+	type TabId = 'buyer' | 'numbers' | 'boosting' | 'affiliate';
+	type Step = {
+		title: string;
+		description: string;
+		details: string[];
+		panelTitle: string;
+		panelItems: string[];
+	};
+	type Faq = { question: string; answer: string };
+	type Flow = {
+		label: string;
+		intro: string;
+		heading: string;
+		subheading: string;
+		accent: string;
+		tint: string;
+		steps: Step[];
+		ctaLabel: string;
+		ctaHref: string;
+		faqs: Faq[];
+	};
+
+	const tabs: Array<{ id: TabId; label: string }> = [
+		{ id: 'buyer', label: 'Buying Accounts' },
+		{ id: 'numbers', label: 'Verification Numbers' },
+		{ id: 'boosting', label: 'Boosting Services' },
+		{ id: 'affiliate', label: 'Affiliate Programme' }
+	];
+
+	const flows: Record<TabId, Flow> = {
+		buyer: {
+			label: 'Buying accounts',
+			intro:
+				'See how to choose an account, pay securely, and find the login details in your dashboard.',
+			heading: 'Get the account you need in 3 steps',
+			subheading: '',
+			accent: '#6366f1',
+			tint: 'rgba(99, 102, 241, 0.14)',
+			steps: [
+				{
+					title: 'Choose an account',
+					description:
+						'Browse by platform, then choose the account type and exact profile that fit your need.',
+					details: ['Review the listing details', 'Choose one item or buy in bulk'],
+					panelTitle: 'Before you buy',
+					panelItems: [
+						'Platform and account type',
+						'Price and available quantity',
+						'Included account features'
+					]
+				},
+				{
+					title: 'Pay securely',
+					description:
+						'Add the account to your cart and complete checkout using the payment options shown.',
+					details: ['Your order is saved to your account', 'Payment is confirmed before delivery'],
+					panelTitle: 'At checkout',
+					panelItems: [
+						'Review your order',
+						'Apply eligible store credit',
+						'Complete payment securely'
+					]
+				},
+				{
+					title: 'Receive it in your dashboard',
+					description:
+						'Once payment is confirmed, open the order to see the allocated login details.',
+					details: [
+						'Your purchase stays in order history',
+						'Support is available if something is wrong'
+					],
+					panelTitle: 'Your order page',
+					panelItems: [
+						'Account credentials',
+						'Order and delivery status',
+						'Relevant support guidance'
+					]
+				}
+			],
+			ctaLabel: 'Browse accounts',
+			ctaHref: '/platforms',
+			faqs: [
+				{
+					question: 'How long does account delivery take?',
+					answer:
+						'After payment is confirmed, available accounts are allocated and delivered to your order page automatically.'
+				},
+				{
+					question: 'What should I check before buying?',
+					answer:
+						'Review the platform, account type, included features, price and quantity on the listing before adding it to your cart.'
+				},
+				{
+					question: 'What should I do after delivery?',
+					answer:
+						'Test the login promptly, keep early activity natural, and make profile or security changes gradually. Contact support quickly if anything looks wrong.'
+				},
+				{
+					question: 'What if an account has a problem?',
+					answer:
+						'Open the order and contact support with the issue. The team will review it against the listing and refund policy.'
+				}
+			]
+		},
+		numbers: {
+			label: 'Verification numbers',
+			intro:
+				'See how to choose a service and country, receive a number, and collect the verification code.',
+			heading: 'Receive your verification code in 3 steps',
+			subheading:
+				'The supplier work stays in the background while your order page shows what to do next.',
+			accent: '#0ea5e9',
+			tint: 'rgba(14, 165, 233, 0.14)',
+			steps: [
+				{
+					title: 'Choose a service and country',
+					description:
+						'Open the service you need, such as WhatsApp or Signal, then choose a supported country.',
+					details: [
+						'Each service stays collapsed until you open it',
+						'The current price is shown before checkout'
+					],
+					panelTitle: 'Your selection',
+					panelItems: ['App or website', 'Country', 'Current price']
+				},
+				{
+					title: 'Pay and receive a number',
+					description:
+						'Complete checkout, then stay on the order page while FastAccs secures a suitable number.',
+					details: [
+						'The page updates as fulfillment progresses',
+						'Copy the newest active number shown'
+					],
+					panelTitle: 'Getting your number',
+					panelItems: [
+						'Payment confirmation',
+						'Clear progress status',
+						'The active number when ready'
+					]
+				},
+				{
+					title: 'Request and receive the code',
+					description:
+						'Enter the number in the selected app, request the code there, and return to the order page.',
+					details: [
+						'FastAccs checks for the code automatically',
+						'Follow any replacement instruction shown'
+					],
+					panelTitle: 'Code check',
+					panelItems: [
+						'Request the code in the app',
+						'Keep the order page open',
+						'Use the code when it appears'
+					]
+				}
+			],
+			ctaLabel: 'Get a verification number',
+			ctaHref: '/numbers',
+			faqs: [
+				{
+					question: 'What exactly am I buying?',
+					answer:
+						'You receive temporary access to one number for the selected service and country so you can request one verification code.'
+				},
+				{
+					question: 'Where will my code appear?',
+					answer:
+						'The order page checks automatically and displays the code when the supplier receives it.'
+				},
+				{
+					question: 'What if the first number does not work?',
+					answer:
+						'Follow the status and controls on the order page. When a replacement is available, the newest active number is clearly shown there.'
+				}
+			]
+		},
+		boosting: {
+			label: 'Boosting services',
+			intro:
+				'See how to choose an engagement service, submit the right public link, and follow delivery.',
+			heading: 'Grow an existing account in 3 steps',
+			subheading:
+				'Choose the result you want, provide the correct link, and track the order from your dashboard.',
+			accent: '#8b5cf6',
+			tint: 'rgba(139, 92, 246, 0.14)',
+			steps: [
+				{
+					title: 'Choose a service',
+					description:
+						'Pick the platform, engagement type, and quantity that match the account or post you want to grow.',
+					details: ['Pricing updates with your selection', 'Read any service-specific notes'],
+					panelTitle: 'Build your order',
+					panelItems: [
+						'Platform',
+						'Followers, likes, views or another service',
+						'Quantity and price'
+					]
+				},
+				{
+					title: 'Add the link and pay',
+					description:
+						'Paste the public profile or post link requested, check it carefully, then complete payment.',
+					details: [
+						'Private or incorrect links can delay delivery',
+						'Your order is saved before fulfillment'
+					],
+					panelTitle: 'Quick link check',
+					panelItems: [
+						'The profile or post is public',
+						'The link opens correctly',
+						'The service matches the link'
+					]
+				},
+				{
+					title: 'Track delivery',
+					description:
+						'Open the order from your dashboard to follow its progress until the service is completed.',
+					details: [
+						'Delivery timing depends on the selected service',
+						'Support can review a stalled order'
+					],
+					panelTitle: 'Order progress',
+					panelItems: ['Payment status', 'Fulfillment status', 'Completion update']
+				}
+			],
+			ctaLabel: 'Browse boosting services',
+			ctaHref: '/boosting',
+			faqs: [
+				{
+					question: 'Which link should I submit?',
+					answer:
+						'Use the public profile or post link requested by that service. Open it in a private browser window first to confirm that it works.'
+				},
+				{
+					question: 'How long does delivery take?',
+					answer:
+						'Timing varies by service and quantity. Your order page shows the current fulfillment status while delivery is in progress.'
+				},
+				{
+					question: 'What if delivery appears to stop?',
+					answer:
+						'Check the order status first. If it remains stalled beyond the expected window, contact support from the order or help page.'
+				}
+			]
+		},
+		affiliate: {
+			label: 'Affiliate programme',
+			intro:
+				'See how to unlock your referral link, help new buyers save, and track eligible Affiliate Cash.',
+			heading: 'Share FastAccs. Both of you earn.',
+			subheading:
+				'Friends save 5% and you earn 5% on each of their first two eligible account orders, up to ₦1,000 per order.',
+			accent: '#05d471',
+			tint: 'rgba(5, 212, 113, 0.14)',
+			steps: [
+				{
+					title: 'Unlock access',
+					description:
+						'Complete your first successful purchase. Your referral code and link then appear automatically.',
+					details: [
+						'No application form for the regular programme',
+						'Your link stays in your dashboard'
+					],
+					panelTitle: 'Your affiliate tools',
+					panelItems: ['Personal promo code', 'Referral link', 'Ready-to-share message']
+				},
+				{
+					title: 'Share your link',
+					description:
+						'Send the link directly or share it on WhatsApp. Eligible new buyers receive the discount automatically.',
+					details: [
+						'Accounts only; Numbers and Boosting are excluded',
+						'The first-touch referral is protected'
+					],
+					panelTitle: 'The regular offer',
+					panelItems: [
+						'5% buyer discount',
+						'5% affiliate reward',
+						'First two eligible account orders'
+					]
+				},
+				{
+					title: 'Track and withdraw',
+					description:
+						'Your dashboard separates pending and available Affiliate Cash and explains what is needed for payout.',
+					details: [
+						'Rewards become available after the return window',
+						'Payout requests are processed on Saturdays'
+					],
+					panelTitle: 'Your dashboard',
+					panelItems: ['Pending and available Cash', 'Referral activity', 'Payout status']
+				}
+			],
+			ctaLabel: 'Open affiliate dashboard',
+			ctaHref: '/dashboard?tab=affiliate',
+			faqs: [
+				{
+					question: 'How do affiliate earnings work?',
+					answer:
+						'Friends save 5% and you earn 5% on their first two retained eligible account orders, up to ₦1,000 per order. Numbers and Boosting are excluded.'
+				},
+				{
+					question: 'When does pending Cash become available?',
+					answer:
+						'A reward remains pending during the return window. It becomes available after the order remains eligible and retained.'
+				},
+				{
+					question: 'How do I request a payout?',
+					answer:
+						'Your dashboard shows the current minimum, account-age requirement and bank-detail status. Eligible payout requests are processed on Saturdays.'
+				},
+				{
+					question: 'What happens when an order is refunded?',
+					answer:
+						'Affiliate Cash is based on retained eligible value. A refund can reduce or reverse the related pending or available reward.'
+				}
+			]
+		}
+	};
+
+	const requestedTab = page.url.searchParams.get('tab');
+	let selectedTab = $state<TabId>(
+		requestedTab === 'numbers' || requestedTab === 'boosting' || requestedTab === 'affiliate'
+			? requestedTab
+			: 'buyer'
 	);
-	let animatedSteps = $state<number[]>([]);
+	let flow = $derived(flows[selectedTab]);
+
+	async function selectTab(tab: TabId, smooth = true): Promise<void> {
+		selectedTab = tab;
+		const url = new URL(page.url);
+		url.searchParams.set('tab', tab);
+		void goto(`${url.pathname}?${url.searchParams.toString()}`, {
+			replaceState: true,
+			noScroll: true,
+			keepFocus: true
+		});
+
+		await tick();
+		document.querySelector(`[data-how-tab="${tab}"]`)?.scrollIntoView({
+			behavior: smooth ? 'smooth' : 'auto',
+			block: 'nearest',
+			inline: 'center'
+		});
+	}
 
 	onMount(() => {
-		// Animate steps one by one
-		[1, 2, 3, 4].forEach((step, index) => {
-			setTimeout(() => {
-				animatedSteps = [...animatedSteps, step];
-			}, index * 200);
-		});
+		void selectTab(selectedTab, false);
 	});
 </script>
 
 <svelte:head>
-	<title>How It Works - FastAccs</title>
+	<title>How FastAccs Works</title>
 	<meta
 		name="description"
-		content="Learn how to buy premium social media accounts through secure Monnify checkout and earn as an affiliate on FastAccs."
+		content="Learn how to buy accounts, receive verification numbers, order boosting services, and earn as a FastAccs affiliate."
 	/>
 </svelte:head>
 
 <Navigation />
 
 <main class="min-h-screen" style="background: var(--bg);">
-	<!-- Hero Section -->
-	<section class="px-4 py-16 text-white" style="background: var(--btn-primary-gradient);">
-		<div class="mx-auto max-w-6xl text-center">
-			<h1 class="mb-4 text-4xl font-bold md:text-5xl">How FastAccs Works</h1>
-			<p class="mx-auto max-w-2xl text-lg text-green-100 md:text-xl">
-				Follow a simple flow to purchase accounts, complete checkout, and receive your details in
-				your dashboard.
-			</p>
-		</div>
-	</section>
-
-	<!-- Tab Navigation -->
-	<section
-		class="sticky top-16 z-10 shadow-sm"
-		style="background: var(--bg-elev-1); border-bottom: 1px solid var(--border);"
-	>
-		<div class="mx-auto max-w-6xl overflow-x-auto px-4">
-			<div class="flex min-w-max justify-start gap-2 sm:justify-center sm:gap-6">
-				<button
-					onclick={() => (selectedTab = 'buyer')}
-					class="px-4 py-4 text-sm font-semibold transition-colors md:text-base"
-					style="border-bottom: 2px solid {selectedTab === 'buyer'
-						? 'var(--brand-blue)'
-						: 'transparent'}; color: {selectedTab === 'buyer'
-						? 'var(--brand-blue)'
-						: 'var(--text-muted)'}; font-family: var(--font-head);"
-				>
-					<ShoppingBag class="mr-2 inline h-5 w-5" />
-					Buying Accounts
-				</button>
-				<button
-					onclick={() => (selectedTab = 'numbers')}
-					class="px-4 py-4 text-sm font-semibold transition-colors md:text-base"
-					style="border-bottom: 2px solid {selectedTab === 'numbers'
-						? '#0ea5e9'
-						: 'transparent'}; color: {selectedTab === 'numbers'
-						? '#0ea5e9'
-						: 'var(--text-muted)'}; font-family: var(--font-head);"
-				>
-					<Phone class="mr-2 inline h-5 w-5" />
-					Verification Numbers
-				</button>
-				<button
-					onclick={() => (selectedTab = 'boosting')}
-					class="px-4 py-4 text-sm font-semibold transition-colors md:text-base"
-					style="border-bottom: 2px solid {selectedTab === 'boosting'
-						? 'var(--brand-blue)'
-						: 'transparent'}; color: {selectedTab === 'boosting'
-						? 'var(--brand-blue)'
-						: 'var(--text-muted)'}; font-family: var(--font-head);"
-				>
-					<Zap class="mr-2 inline h-5 w-5" />
-					Boosting Services
-				</button>
-				<button
-					onclick={() => (selectedTab = 'affiliate')}
-					class="px-4 py-4 text-sm font-semibold transition-colors md:text-base"
-					style="border-bottom: 2px solid {selectedTab === 'affiliate'
-						? 'var(--brand-blue)'
-						: 'transparent'}; color: {selectedTab === 'affiliate'
-						? 'var(--brand-blue)'
-						: 'var(--text-muted)'}; font-family: var(--font-head);"
-				>
-					<Share2 class="mr-2 inline h-5 w-5" />
-					Affiliate Program
-				</button>
-			</div>
-		</div>
-	</section>
-
-	{#if selectedTab === 'buyer'}
-		<!-- Buyer Flow Section -->
-		<section class="px-4 py-16">
-			<div class="mx-auto max-w-6xl">
-				<h2
-					class="mb-12 text-center text-3xl font-bold"
-					style="color: var(--text); font-family: var(--font-head);"
-				>
-					4 Simple Steps to Get Your Account
-				</h2>
-
-				<!-- Steps -->
-				<div class="space-y-12">
-					<!-- Step 1: Sign Up -->
-					<div
-						class="flex flex-col items-center gap-8 md:flex-row {animatedSteps.includes(1)
-							? 'translate-y-0 opacity-100'
-							: 'translate-y-4 opacity-0'} transition-all duration-500"
-					>
-						<div class="flex-shrink-0">
-							<div
-								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white shadow-lg"
-							>
-								<UserPlus class="h-12 w-12" />
-							</div>
-						</div>
-						<div class="flex-1 text-center md:text-left">
-							<div class="mb-2 flex items-center justify-center gap-2 md:justify-start">
-								<span class="text-2xl font-bold text-blue-600">Step 1</span>
-								<span
-									class="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700"
-									>Quick & Easy</span
-								>
-							</div>
-							<h3
-								class="mb-3 text-2xl font-bold"
-								style="color: var(--text); font-family: var(--font-head);"
-							>
-								Create Your Account
-							</h3>
-							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Sign up with your email or use Google OAuth for instant access. No lengthy forms,
-								just the essentials to get you started.
-							</p>
-							<ul class="space-y-2">
-								<li class="flex items-start gap-2" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Email + password or Google sign-in</span>
-								</li>
-								<li class="flex items-start gap-2" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Free to join, no hidden fees</span>
-								</li>
-								<li class="flex items-start gap-2" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Instant dashboard access</span>
-								</li>
-							</ul>
-						</div>
-						<div
-							class="w-full rounded-xl p-6 shadow-lg md:w-80"
-							style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-						>
-							<div class="mb-4 flex items-center justify-between">
-								<h4
-									class="font-semibold"
-									style="color: var(--text); font-family: var(--font-head);"
-								>
-									Account Created!
-								</h4>
-								<UserPlus class="h-5 w-5" style="color: var(--status-success);" />
-							</div>
-							<div
-								class="space-y-3 text-sm"
-								style="color: var(--text-muted); font-family: var(--font-body);"
-							>
-								<div class="flex items-center gap-2">
-									<div
-										class="h-2 w-2 rounded-full"
-										style="background: var(--status-success);"
-									></div>
-									<span>Email verified</span>
-								</div>
-								<div class="flex items-center gap-2">
-									<div
-										class="h-2 w-2 rounded-full"
-										style="background: var(--status-success);"
-									></div>
-									<span>Dashboard ready</span>
-								</div>
-								<div class="flex items-center gap-2">
-									<div
-										class="h-2 w-2 rounded-full"
-										style="background: var(--status-success);"
-									></div>
-									<span>Profile initialized</span>
-								</div>
-							</div>
-						</div>
-					</div>
-
-					<div class="flex justify-center">
-						<div class="h-12 w-0.5 bg-gradient-to-b from-blue-600 to-purple-600"></div>
-					</div>
-
-					<!-- Step 2: Secure Checkout -->
-					<div
-						class="flex flex-col items-center gap-8 md:flex-row-reverse {animatedSteps.includes(2)
-							? 'translate-y-0 opacity-100'
-							: 'translate-y-4 opacity-0'} transition-all duration-500"
-					>
-						<div class="flex-shrink-0">
-							<div
-								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-teal-600 text-white shadow-lg"
-							>
-								<CreditCard class="h-12 w-12" />
-							</div>
-						</div>
-						<div class="flex-1 text-center md:text-right">
-							<div class="mb-2 flex items-center justify-center gap-2 md:justify-end">
-								<span class="text-2xl font-bold text-green-600">Step 2</span>
-								<span class="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700"
-									>Secure Payment</span
-								>
-							</div>
-							<h3
-								class="mb-3 text-2xl font-bold"
-								style="color: var(--text); font-family: var(--font-head);"
-							>
-								Complete Secure Checkout
-							</h3>
-							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Pay securely through Monnify using card, bank transfer, or USSD. You are redirected
-								to Monnify checkout and returned automatically for verification.
-							</p>
-							<ul class="space-y-2">
-								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Multiple payment methods</span>
-								</li>
-								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Hosted Monnify checkout flow</span>
-								</li>
-								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Server-side payment verification before fulfillment</span>
-								</li>
-							</ul>
-						</div>
-						<div
-							class="w-full rounded-xl p-6 shadow-lg md:w-80"
-							style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-						>
-							<div class="mb-4 flex items-center justify-between">
-								<h4
-									class="font-semibold"
-									style="color: var(--text); font-family: var(--font-head);"
-								>
-									Payment Options
-								</h4>
-								<CreditCard class="h-5 w-5" style="color: var(--brand-blue);" />
-							</div>
-							<div class="space-y-3">
-								<div
-									class="flex items-center justify-between rounded-lg p-3"
-									style="border: 1px solid var(--border);"
-								>
-									<span class="text-sm font-medium" style="color: var(--text);">Debit Card</span>
-									<Check class="h-5 w-5" style="color: var(--status-success);" />
-								</div>
-								<div
-									class="flex items-center justify-between rounded-lg p-3"
-									style="border: 1px solid var(--border);"
-								>
-									<span class="text-sm font-medium" style="color: var(--text);">Bank Transfer</span>
-									<Check class="h-5 w-5" style="color: var(--status-success);" />
-								</div>
-								<div
-									class="flex items-center justify-between rounded-lg p-3"
-									style="border: 1px solid var(--border);"
-								>
-									<span class="text-sm font-medium" style="color: var(--text);">Mobile Money</span>
-									<Check class="h-5 w-5" style="color: var(--status-success);" />
-								</div>
-							</div>
-						</div>
-					</div>
-
-					<div class="flex justify-center">
-						<div class="h-12 w-0.5 bg-gradient-to-b from-green-600 to-yellow-600"></div>
-					</div>
-
-					<!-- Step 3: Browse & Purchase -->
-					<div
-						class="flex flex-col items-center gap-8 md:flex-row {animatedSteps.includes(3)
-							? 'translate-y-0 opacity-100'
-							: 'translate-y-4 opacity-0'} transition-all duration-500"
-					>
-						<div class="flex-shrink-0">
-							<div
-								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-yellow-500 to-orange-600 text-white shadow-lg"
-							>
-								<ShoppingBag class="h-12 w-12" />
-							</div>
-						</div>
-						<div class="flex-1 text-center md:text-left">
-							<div class="mb-2 flex items-center justify-center gap-2 md:justify-start">
-								<span class="text-2xl font-bold text-yellow-600">Step 3</span>
-								<span
-									class="rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-700"
-									>Wide Selection</span
-								>
-							</div>
-							<h3
-								class="mb-3 text-2xl font-bold"
-								style="color: var(--text); font-family: var(--font-head);"
-							>
-								Browse & Buy Accounts
-							</h3>
-							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Browse currently active platforms and available account tiers. Filter by category,
-								price, and features, then complete checkout securely.
-							</p>
-							<ul class="space-y-2">
-								<li class="flex items-start gap-2" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Multiple platforms available</span>
-								</li>
-								<li class="flex items-start gap-2" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Apply affiliate discount codes</span>
-								</li>
-								<li class="flex items-start gap-2" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Order auto-completion after confirmed payment</span>
-								</li>
-							</ul>
-						</div>
-						<div
-							class="w-full rounded-xl p-6 shadow-lg md:w-80"
-							style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-						>
-							<div class="mb-4 flex items-center justify-between">
-								<h4
-									class="font-semibold"
-									style="color: var(--text); font-family: var(--font-head);"
-								>
-									Sample Account
-								</h4>
-								<Package class="h-5 w-5" style="color: var(--status-warning);" />
-							</div>
-							<div
-								class="mb-3 rounded-lg bg-gradient-to-br from-pink-500 to-purple-600 p-4 text-white"
-							>
-								<div class="mb-2 text-sm font-medium">Instagram Account</div>
-								<div class="text-2xl font-bold">50K Followers</div>
-							</div>
-							<div class="space-y-2 text-sm">
-								<div class="flex justify-between">
-									<span style="color: var(--text-muted);">Price:</span>
-									<span class="font-bold" style="color: var(--text);">₦15,000</span>
-								</div>
-								<div class="flex justify-between">
-									<span style="color: var(--text-muted);">Discount:</span>
-									<span class="font-bold" style="color: var(--status-success);">-₦750</span>
-								</div>
-								<div class="pt-2" style="border-top: 1px solid var(--border);">
-									<div class="flex justify-between">
-										<span class="font-semibold" style="color: var(--text);">Total:</span>
-										<span class="font-bold" style="color: var(--brand-blue);">₦14,250</span>
-									</div>
-								</div>
-							</div>
-						</div>
-					</div>
-
-					<div class="flex justify-center">
-						<div class="h-12 w-0.5 bg-gradient-to-b from-yellow-600 to-green-600"></div>
-					</div>
-
-					<!-- Step 4: Get Accounts -->
-					<div
-						class="flex flex-col items-center gap-8 md:flex-row-reverse {animatedSteps.includes(4)
-							? 'translate-y-0 opacity-100'
-							: 'translate-y-4 opacity-0'} transition-all duration-500"
-					>
-						<div class="flex-shrink-0">
-							<div
-								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-blue-600 text-white shadow-lg"
-							>
-								<Zap class="h-12 w-12" />
-							</div>
-						</div>
-						<div class="flex-1 text-center md:text-right">
-							<div class="mb-2 flex items-center justify-center gap-2 md:justify-end">
-								<span class="text-2xl font-bold text-green-600">Step 4</span>
-								<span
-									class="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700"
-									>Instant Access</span
-								>
-							</div>
-							<h3
-								class="mb-3 text-2xl font-bold"
-								style="color: var(--text); font-family: var(--font-head);"
-							>
-								Instant Account Delivery
-							</h3>
-							<p class="mb-4" style="color: var(--text-muted); font-family: var(--font-body);">
-								Accounts are delivered instantly to your dashboard. View credentials, copy details,
-								and start using your new account right away. Email notification sent automatically.
-							</p>
-							<ul class="space-y-2">
-								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Immediate delivery to dashboard</span>
-								</li>
-								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>Mask/unmask sensitive credentials</span>
-								</li>
-								<li class="flex items-start gap-2 md:justify-end" style="color: var(--text);">
-									<Check class="mt-1 h-5 w-5 flex-shrink-0" style="color: var(--status-success);" />
-									<span>One-click copy to clipboard</span>
-								</li>
-							</ul>
-						</div>
-						<div
-							class="w-full rounded-xl p-6 shadow-lg md:w-80"
-							style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-						>
-							<div class="mb-4 flex items-center justify-between">
-								<h4
-									class="font-semibold"
-									style="color: var(--text); font-family: var(--font-head);"
-								>
-									Your Purchase
-								</h4>
-								<Check class="h-5 w-5" style="color: var(--status-success);" />
-							</div>
-							<div class="space-y-3">
-								<div class="rounded-lg p-3" style="background: var(--bg);">
-									<div class="mb-1 text-xs" style="color: var(--text-dim);">Username</div>
-									<div class="flex items-center justify-between">
-										<code class="font-mono text-sm" style="color: var(--text);">@premium_acc</code>
-										<Copy class="h-4 w-4 cursor-pointer" style="color: var(--text-dim);" />
-									</div>
-								</div>
-								<div class="rounded-lg p-3" style="background: var(--bg);">
-									<div class="mb-1 text-xs" style="color: var(--text-dim);">Password</div>
-									<div class="flex items-center justify-between">
-										<code class="font-mono text-sm" style="color: var(--text);">••••••••</code>
-										<Eye class="h-4 w-4 cursor-pointer" style="color: var(--text-dim);" />
-									</div>
-								</div>
-								<div class="rounded-lg p-3" style="background: var(--bg);">
-									<div class="mb-1 text-xs" style="color: var(--text-dim);">Email</div>
-									<div class="flex items-center justify-between">
-										<code class="font-mono text-sm" style="color: var(--text);"
-											>acc@example.com</code
-										>
-										<Copy class="h-4 w-4 cursor-pointer" style="color: var(--text-dim);" />
-									</div>
-								</div>
-							</div>
-						</div>
-					</div>
-				</div>
-
-				<!-- CTA -->
-				<div class="mt-16 text-center">
-					<button
-						onclick={() => goto('/auth/login')}
-						class="rounded-full bg-gradient-to-r from-blue-600 to-purple-600 px-8 py-4 text-lg font-semibold text-white shadow-lg transition-transform hover:scale-105"
-					>
-						Get Started Now
-					</button>
-				</div>
-			</div>
-		</section>
-
-		<!-- Why Choose Us Section -->
-		<section class="px-4 py-16" style="background: var(--bg-elev-1);">
-			<div class="mx-auto max-w-6xl">
-				<h2
-					class="mb-12 text-center text-3xl font-bold"
-					style="color: var(--text); font-family: var(--font-head);"
-				>
-					Why Choose FastAccs?
-				</h2>
-				<div class="grid gap-8 md:grid-cols-3">
-					<div class="text-center">
-						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100"
-						>
-							<Shield class="h-8 w-8 text-blue-600" />
-						</div>
-						<h3
-							class="mb-2 text-xl font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Secure checkout
-						</h3>
-						<p style="color: var(--text-muted); font-family: var(--font-body);">
-							Checkout uses an encrypted connection. Card and bank credentials are handled by our
-							payment provider, not stored by FastAccs.
-						</p>
-					</div>
-					<div class="text-center">
-						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100"
-						>
-							<Clock class="h-8 w-8 text-green-600" />
-						</div>
-						<h3
-							class="mb-2 text-xl font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Instant Delivery
-						</h3>
-						<p style="color: var(--text-muted); font-family: var(--font-body);">
-							Automated system delivers accounts immediately after payment. No waiting required.
-						</p>
-					</div>
-					<div class="text-center">
-						<div
-							class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-purple-100"
-						>
-							<TrendingUp class="h-8 w-8 text-purple-600" />
-						</div>
-						<h3
-							class="mb-2 text-xl font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Premium Quality
-						</h3>
-						<p style="color: var(--text-muted); font-family: var(--font-body);">
-							Account listings are organized by tier details so you can choose what best matches
-							your goals.
-						</p>
-					</div>
-				</div>
-			</div>
-		</section>
-	{:else if selectedTab === 'numbers'}
-		<!-- Numbers (verification) Flow Section -->
-		<section class="px-4 py-16">
-			<div class="mx-auto max-w-6xl">
-				<h2
-					class="mb-3 text-center text-3xl font-bold"
-					style="color: var(--text); font-family: var(--font-head);"
-				>
-					Verify any account in seconds
-				</h2>
-				<p class="mx-auto mb-12 max-w-2xl text-center" style="color: var(--text-muted);">
-					Instant phone numbers for WhatsApp, Telegram, Google and more. Buy a number, receive your
-					one-time code automatically — no waiting, no chat.
-				</p>
-
-				<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-					{#each [{ n: 1, icon: Phone, title: 'Pick a service', body: 'Choose from 20+ apps and a country, each with a clear Naira price.' }, { n: 2, icon: CreditCard, title: 'Pay', body: 'Checkout with Monnify or your store credit — the same fast flow as everything else.' }, { n: 3, icon: Eye, title: 'Get your number', body: 'Your number appears on the order page instantly, ready to use.' }, { n: 4, icon: RefreshCw, title: 'Code arrives', body: 'Your one-time code shows automatically in seconds. No code? Instant refund to store credit.' }] as step (step.n)}
-						{@const StepIcon = step.icon}
-						<div
-							class="rounded-2xl p-6 text-center transition-all duration-500 {animatedSteps.includes(
-								step.n
-							)
-								? 'translate-y-0 opacity-100'
-								: 'translate-y-4 opacity-0'}"
-							style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-						>
-							<div
-								class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full text-white"
-								style="background: linear-gradient(135deg, #0ea5e9, #0284c7);"
-							>
-								<StepIcon class="h-8 w-8" />
-							</div>
-							<div class="mb-1 text-sm font-bold" style="color: #0ea5e9;">Step {step.n}</div>
-							<h3
-								class="mb-2 text-lg font-bold"
-								style="color: var(--text); font-family: var(--font-head);"
-							>
-								{step.title}
-							</h3>
-							<p class="text-sm" style="color: var(--text-muted); font-family: var(--font-body);">
-								{step.body}
-							</p>
-						</div>
-					{/each}
-				</div>
-
-				<div class="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-					<button
-						onclick={() => goto('/numbers')}
-						class="rounded-full px-6 py-3 font-semibold text-white transition-transform active:scale-95"
-						style="background: #0ea5e9;"
-					>
-						Get a verification number
-					</button>
-					<div class="flex items-center gap-4 text-sm" style="color: var(--text-muted);">
-						<span class="inline-flex items-center gap-1.5"
-							><Zap class="h-4 w-4" style="color:#fbbf24;" /> Instant</span
-						>
-						<span class="inline-flex items-center gap-1.5"
-							><Shield class="h-4 w-4" style="color:#34d399;" /> No-code refund</span
-						>
-					</div>
-				</div>
-			</div>
-		</section>
-	{:else if selectedTab === 'boosting'}
-		<!-- Boosting Flow Section -->
-		<section class="px-4 py-16">
-			<div class="mx-auto max-w-6xl">
-				<h2
-					class="mb-12 text-center text-3xl font-bold"
-					style="color: var(--text); font-family: var(--font-head);"
-				>
-					Grow Existing Accounts in 4 Steps
-				</h2>
-
-				<div class="space-y-12">
-					<!-- Step 1: Pick a Platform -->
-					<div class="flex flex-col items-center gap-8 md:flex-row">
-						<div class="flex-shrink-0">
-							<div
-								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white shadow-lg"
-							>
-								<ShoppingBag class="h-12 w-12" />
-							</div>
-						</div>
-						<div class="flex-1 text-center md:text-left">
-							<div class="mb-2 flex items-center justify-center gap-2 md:justify-start">
-								<span class="text-2xl font-bold text-blue-600">Step 1</span>
-							</div>
-							<h3
-								class="mb-3 text-2xl font-bold"
-								style="color: var(--text); font-family: var(--font-head);"
-							>
-								Pick a Platform
-							</h3>
-							<p style="color: var(--text-muted); font-family: var(--font-body);">
-								Head to Boosting Services and choose Instagram, TikTok, X, or Facebook — whichever
-								platform your existing account is on.
-							</p>
-						</div>
-					</div>
-
-					<div class="flex justify-center">
-						<div class="h-12 w-0.5 bg-gradient-to-b from-blue-600 to-green-600"></div>
-					</div>
-
-					<!-- Step 2: Pick a Service -->
-					<div class="flex flex-col items-center gap-8 md:flex-row-reverse">
-						<div class="flex-shrink-0">
-							<div
-								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-teal-600 text-white shadow-lg"
-							>
-								<Zap class="h-12 w-12" />
-							</div>
-						</div>
-						<div class="flex-1 text-center md:text-right">
-							<div class="mb-2 flex items-center justify-center gap-2 md:justify-end">
-								<span class="text-2xl font-bold text-green-600">Step 2</span>
-							</div>
-							<h3
-								class="mb-3 text-2xl font-bold"
-								style="color: var(--text); font-family: var(--font-head);"
-							>
-								Pick a Service & Quantity
-							</h3>
-							<p style="color: var(--text-muted); font-family: var(--font-body);">
-								Choose followers, likes, views, comments, or reposts and select how many you want.
-								Pricing updates live as you adjust the quantity.
-							</p>
-						</div>
-					</div>
-
-					<div class="flex justify-center">
-						<div class="h-12 w-0.5 bg-gradient-to-b from-green-600 to-purple-600"></div>
-					</div>
-
-					<!-- Step 3: Paste Your Link -->
-					<div class="flex flex-col items-center gap-8 md:flex-row">
-						<div class="flex-shrink-0">
-							<div
-								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-600 text-white shadow-lg"
-							>
-								<Copy class="h-12 w-12" />
-							</div>
-						</div>
-						<div class="flex-1 text-center md:text-left">
-							<div class="mb-2 flex items-center justify-center gap-2 md:justify-start">
-								<span class="text-2xl font-bold text-purple-600">Step 3</span>
-							</div>
-							<h3
-								class="mb-3 text-2xl font-bold"
-								style="color: var(--text); font-family: var(--font-head);"
-							>
-								Paste Your Link & Pay
-							</h3>
-							<p style="color: var(--text-muted); font-family: var(--font-body);">
-								Paste the public profile or post link you want boosted, then pay securely through
-								Monnify. No password or login access is ever needed.
-							</p>
-						</div>
-					</div>
-
-					<div class="flex justify-center">
-						<div class="h-12 w-0.5 bg-gradient-to-b from-purple-600 to-orange-600"></div>
-					</div>
-
-					<!-- Step 4: Track Progress -->
-					<div class="flex flex-col items-center gap-8 md:flex-row-reverse">
-						<div class="flex-shrink-0">
-							<div
-								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-red-600 text-white shadow-lg"
-							>
-								<Eye class="h-12 w-12" />
-							</div>
-						</div>
-						<div class="flex-1 text-center md:text-right">
-							<div class="mb-2 flex items-center justify-center gap-2 md:justify-end">
-								<span class="text-2xl font-bold text-orange-600">Step 4</span>
-							</div>
-							<h3
-								class="mb-3 text-2xl font-bold"
-								style="color: var(--text); font-family: var(--font-head);"
-							>
-								Delivered & Tracked
-							</h3>
-							<p style="color: var(--text-muted); font-family: var(--font-body);">
-								Most orders start within a few hours of payment. Track status anytime from your
-								order page until it's complete.
-							</p>
-						</div>
-					</div>
-				</div>
-
-				<div class="mt-12 text-center">
-					<button
-						onclick={() => goto('/services')}
-						class="rounded-lg px-8 py-4 font-semibold text-white shadow-lg transition-transform hover:scale-105"
-						style="background: var(--btn-primary-gradient);"
-					>
-						Browse Boosting Services
-					</button>
-				</div>
-			</div>
-		</section>
-	{:else}
-		<section class="px-4 py-12 sm:py-16">
-			<div class="mx-auto max-w-5xl">
-				<div class="mx-auto mb-8 max-w-2xl text-center">
-					<h2
-						class="mb-3 text-3xl font-bold"
-						style="color: var(--text); font-family: var(--font-head);"
-					>
-						Share FastAccs. Both of You Earn.
-					</h2>
-					<p style="color: var(--text-muted); font-family: var(--font-body);">
-						Friends save 5%, and you earn 5%, on each of their first two eligible account orders—up
-						to ₦1,000 each per order.
-					</p>
-				</div>
-
-				<div class="grid gap-4 md:grid-cols-3">
-					<div
-						class="rounded-xl p-5"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
-						<div
-							class="mb-4 flex h-11 w-11 items-center justify-center rounded-lg"
-							style="background: var(--status-success-bg); color: var(--status-success);"
-						>
-							<UserPlus class="h-5 w-5" />
-						</div>
-						<p
-							class="mb-2 text-xs font-semibold tracking-wide uppercase"
-							style="color: var(--primary);"
-						>
-							Step 1
-						</p>
-						<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">Unlock access</h3>
-						<p class="text-sm" style="color: var(--text-muted);">
-							Complete your first purchase. Your referral code and link appear automatically—no
-							application form.
-						</p>
-					</div>
-
-					<div
-						class="rounded-xl p-5"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
-						<div
-							class="mb-4 flex h-11 w-11 items-center justify-center rounded-lg"
-							style="background: var(--status-success-bg); color: var(--status-success);"
-						>
-							<Share2 class="h-5 w-5" />
-						</div>
-						<p
-							class="mb-2 text-xs font-semibold tracking-wide uppercase"
-							style="color: var(--primary);"
-						>
-							Step 2
-						</p>
-						<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">Share your link</h3>
-						<p class="text-sm" style="color: var(--text-muted);">
-							Send it directly or share it on WhatsApp. New buyers get the discount when they use
-							your code on eligible account orders.
-						</p>
-					</div>
-
-					<div
-						class="rounded-xl p-5"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
-						<div
-							class="mb-4 flex h-11 w-11 items-center justify-center rounded-lg"
-							style="background: var(--status-success-bg); color: var(--status-success);"
-						>
-							<DollarSign class="h-5 w-5" />
-						</div>
-						<p
-							class="mb-2 text-xs font-semibold tracking-wide uppercase"
-							style="color: var(--primary);"
-						>
-							Step 3
-						</p>
-						<h3 class="mb-2 text-lg font-semibold" style="color: var(--text);">Track your cash</h3>
-						<p class="text-sm" style="color: var(--text-muted);">
-							Your dashboard separates pending and available Affiliate Cash, and shows exactly when
-							you can request a payout.
-						</p>
-					</div>
-				</div>
-
-				<div
-					class="mt-6 grid gap-3 rounded-xl p-5 sm:grid-cols-3"
-					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-				>
-					<div class="flex items-start gap-2 text-sm" style="color: var(--text-muted);">
-						<Check class="mt-0.5 h-4 w-4 flex-shrink-0" style="color: var(--status-success);" />
-						<span>Accounts only; Numbers and Boosting are excluded.</span>
-					</div>
-					<div class="flex items-start gap-2 text-sm" style="color: var(--text-muted);">
-						<Clock class="mt-0.5 h-4 w-4 flex-shrink-0" style="color: var(--status-success);" />
-						<span>Rewards become available after the return window.</span>
-					</div>
-					<div class="flex items-start gap-2 text-sm" style="color: var(--text-muted);">
-						<DollarSign
-							class="mt-0.5 h-4 w-4 flex-shrink-0"
-							style="color: var(--status-success);"
-						/>
-						<span
-							>Available cash can go toward purchases or be withdrawn; payouts run on Saturdays.</span
-						>
-					</div>
-				</div>
-
-				<div class="mt-8 text-center">
-					<button
-						onclick={() => goto('/dashboard?tab=affiliate')}
-						class="btn-fa btn-fa--primary px-6"
-					>
-						Open Affiliate Dashboard
-					</button>
-				</div>
-			</div>
-		</section>
-	{/if}
-
-	<!-- FAQ Section -->
-	<section class="px-4 py-16" style="background: var(--bg-elev-2);">
-		<div class="mx-auto max-w-4xl">
-			<h2
-				class="mb-12 text-center text-3xl font-bold"
-				style="color: var(--text); font-family: var(--font-head);"
-			>
-				{selectedTab === 'affiliate' ? 'Affiliate Questions' : 'Frequently Asked Questions'}
-			</h2>
-			<div class="space-y-6">
-				{#if selectedTab !== 'affiliate'}
-					<details
-						class="group rounded-lg p-6 shadow"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
-						<summary
-							class="flex cursor-pointer items-center justify-between font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							How long does delivery take?
-							<span class="ml-4" style="color: var(--text-dim);">+</span>
-						</summary>
-						<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-							Delivery is instant! Once your payment is confirmed, accounts are automatically
-							allocated and delivered to your dashboard within seconds. You'll also receive an email
-							notification with a link to access your purchases.
-						</p>
-					</details>
-
-					<details
-						class="group rounded-lg p-6 shadow"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
-						<summary
-							class="flex cursor-pointer items-center justify-between font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							What payment methods do you accept?
-							<span class="ml-4" style="color: var(--text-dim);">+</span>
-						</summary>
-						<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-							We use Monnify for secure payments. Supported channels can include card, bank
-							transfer, and USSD based on your current Monnify configuration.
-						</p>
-					</details>
-				{/if}
-
-				<details
-					class="group rounded-lg p-6 shadow"
-					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-				>
-					<summary
-						class="flex cursor-pointer items-center justify-between font-semibold"
-						style="color: var(--text); font-family: var(--font-head);"
-					>
-						How do affiliate earnings work?
-						<span class="ml-4" style="color: var(--text-dim);">+</span>
-					</summary>
-					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						After your first successful purchase, you receive a unique code and referral link.
-						Friends save 5% and you earn 5% on their first two retained eligible account orders, up
-						to ₦1,000 per order. Numbers and Boosting are excluded. Earnings are tracked
-						automatically.
-					</p>
-				</details>
-
-				<details
-					class="group rounded-lg p-6 shadow"
-					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-				>
-					<summary
-						class="flex cursor-pointer items-center justify-between font-semibold"
-						style="color: var(--text); font-family: var(--font-head);"
-					>
-						What is an Affiliate Promo Code?
-						<span class="ml-4" style="color: var(--text-dim);">+</span>
-					</summary>
-					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						It's the unique code on your affiliate dashboard. Share it (or your referral link) with
-						friends and followers. Eligible new buyers save on their first two account orders, and
-						you earn Cash on those same retained orders.
-					</p>
-				</details>
-
-				<details
-					class="group rounded-lg p-6 shadow"
-					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-				>
-					<summary
-						class="flex cursor-pointer items-center justify-between font-semibold"
-						style="color: var(--text); font-family: var(--font-head);"
-					>
-						How do referral discounts work?
-						<span class="ml-4" style="color: var(--text-dim);">+</span>
-					</summary>
-					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						Eligible new buyers get 5% off their first two account orders, up to ₦1,000 per order.
-						The affiliate earns 5% on those same retained orders. Numbers and Boosting are excluded.
-					</p>
-				</details>
-
-				<details
-					class="group rounded-lg p-6 shadow"
-					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-				>
-					<summary
-						class="flex cursor-pointer items-center justify-between font-semibold"
-						style="color: var(--text); font-family: var(--font-head);"
-					>
-						How do I withdraw my Cash?
-						<span class="ml-4" style="color: var(--text-dim);">+</span>
-					</summary>
-					<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-						Once your available Cash, account age, and approved bank details meet the requirements
-						shown on your dashboard, you can request a payout. Payouts are processed on Saturdays.
-					</p>
-				</details>
-
-				{#if selectedTab !== 'affiliate'}
-					<details
-						class="group rounded-lg p-6 shadow"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
-						<summary
-							class="flex cursor-pointer items-center justify-between font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Can I get a refund if I'm not satisfied?
-							<span class="ml-4" style="color: var(--text-dim);">+</span>
-						</summary>
-						<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-							If an order does not match its listing details or has issues, contact support for
-							review and resolution.
-						</p>
-					</details>
-
-					<details
-						class="group rounded-lg p-6 shadow"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
-						<summary
-							class="flex cursor-pointer items-center justify-between font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Best first 24 hours after delivery
-							<span class="ml-4" style="color: var(--text-dim);">+</span>
-						</summary>
-						<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-							Test login as soon as possible, keep early activity natural, and make security/profile
-							changes gradually. If anything looks off, contact support quickly for help (ideally
-							within 2 hours). For the full quick-care guide, visit <a
-								href="/support#faq"
-								style="color: var(--link);"
-								class="hover:underline">Support FAQ</a
-							>.
-						</p>
-					</details>
-
-					<details
-						class="group rounded-lg p-6 shadow"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
-						<summary
-							class="flex cursor-pointer items-center justify-between font-semibold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							What happens if payment is cancelled?
-							<span class="ml-4" style="color: var(--text-dim);">+</span>
-						</summary>
-						<p class="mt-4" style="color: var(--text-muted); font-family: var(--font-body);">
-							If you cancel at checkout, your order is marked as cancelled and no account is
-							delivered. You can safely return to checkout and try again.
-						</p>
-					</details>
-				{/if}
-			</div>
-		</div>
-	</section>
-
-	<!-- Final CTA -->
-	<section class="px-4 py-16 text-white" style="background: var(--btn-primary-gradient);">
+	<section class="hero px-4 py-12 text-white md:py-16">
 		<div class="mx-auto max-w-4xl text-center">
-			<h2 class="mb-4 text-3xl font-bold md:text-4xl">Ready to Get Started?</h2>
-			<p class="mb-8 text-lg text-green-100">
-				Buy accounts or join the affiliate program in a few quick steps.
+			<p class="eyebrow">HOW IT WORKS</p>
+			<h1 class="mt-3 text-4xl font-bold md:text-5xl">How FastAccs Works</h1>
+			<p class="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-green-50 md:text-lg">
+				{flow.intro}
 			</p>
-			<div class="flex flex-col items-center justify-center gap-4 sm:flex-row">
+		</div>
+	</section>
+
+	<nav class="tab-shell sticky top-16 z-10" aria-label="How FastAccs works sections">
+		<div class="tab-scroll mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4">
+			{#each tabs as tab}
 				<button
-					onclick={() => goto('/auth/login')}
-					class="w-full rounded-full px-8 py-4 font-semibold shadow-lg transition-transform hover:scale-105 sm:w-auto"
-					style="background: var(--bg-elev-1); color: var(--brand-blue); font-family: var(--font-head);"
+					type="button"
+					data-how-tab={tab.id}
+					onclick={() => selectTab(tab.id)}
+					class:active-tab={selectedTab === tab.id}
+					class="tab-button"
+					aria-current={selectedTab === tab.id ? 'page' : undefined}
 				>
-					Create Free Account
+					{#if tab.id === 'buyer'}
+						<ShoppingBag size={18} />
+					{:else if tab.id === 'numbers'}
+						<Phone size={18} />
+					{:else if tab.id === 'boosting'}
+						<Zap size={18} />
+					{:else}
+						<Share2 size={18} />
+					{/if}
+					<span>{tab.label}</span>
 				</button>
-				<button
-					onclick={() => goto('/platforms')}
-					class="w-full rounded-full px-8 py-4 font-semibold text-white transition-all sm:w-auto"
-					style="border: 2px solid white; background: transparent; font-family: var(--font-head);"
-				>
-					Browse Accounts
-				</button>
+			{/each}
+		</div>
+	</nav>
+
+	<section
+		class="flow-section px-4 py-12 md:py-16"
+		style:--flow-accent={flow.accent}
+		style:--flow-tint={flow.tint}
+	>
+		<div class="mx-auto max-w-5xl">
+			<header class="mx-auto mb-9 max-w-3xl text-center md:mb-12">
+				<p class="flow-label">{flow.label}</p>
+				<h2 class="mt-2 text-3xl font-bold md:text-4xl">{flow.heading}</h2>
+				{#if flow.subheading}
+					<p class="mx-auto mt-3 max-w-2xl leading-relaxed">{flow.subheading}</p>
+				{/if}
+			</header>
+
+			<div class="step-list">
+				{#each flow.steps as step, index}
+					<article class:reverse={index % 2 === 1} class="step-row">
+						<div class="step-copy">
+							<div class="step-number">{index + 1}</div>
+							<div>
+								<p class="step-kicker">Step {index + 1}</p>
+								<h3>{step.title}</h3>
+								<p class="step-description">{step.description}</p>
+							</div>
+						</div>
+
+						<div class="outcome-card">
+							<p class="outcome-label">{step.panelTitle}</p>
+							<div class="outcome-list">
+								{#each step.panelItems as item, itemIndex}
+									<div>
+										<span>{itemIndex + 1}</span>
+										<p>{item}</p>
+									</div>
+								{/each}
+							</div>
+						</div>
+					</article>
+				{/each}
+			</div>
+
+			<div class="flow-actions">
+				<a class="btn-fa btn-fa--primary" href={flow.ctaHref}>{flow.ctaLabel}</a>
+				<a class="support-link" href="/support">Need help first?</a>
+			</div>
+		</div>
+	</section>
+
+	<section class="faq-section px-4 py-12 md:py-16">
+		<div class="mx-auto max-w-3xl">
+			<header class="mb-8 text-center">
+				<p class="faq-label">{flow.label}</p>
+				<h2 class="mt-2 text-3xl font-bold">Common questions</h2>
+			</header>
+
+			<div class="faq-list">
+				{#each flow.faqs as faq}
+					<details>
+						<summary>
+							<span>{faq.question}</span>
+							<span class="plus" aria-hidden="true">+</span>
+						</summary>
+						<p>{faq.answer}</p>
+					</details>
+				{/each}
 			</div>
 		</div>
 	</section>
@@ -1104,15 +477,241 @@
 <Footer />
 
 <style>
-	details summary::-webkit-details-marker {
+	.hero {
+		background: var(--btn-primary-gradient);
+	}
+	.eyebrow,
+	.flow-label,
+	.faq-label,
+	.step-kicker,
+	.outcome-label {
+		font-family: var(--font-head);
+		font-size: 0.75rem;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+	}
+	.eyebrow {
+		color: rgba(255, 255, 255, 0.76);
+	}
+	.tab-shell {
+		background: rgba(8, 13, 16, 0.96);
+		border-bottom: 1px solid var(--border);
+		backdrop-filter: blur(12px);
+	}
+	.tab-scroll {
+		scrollbar-width: none;
+	}
+	.tab-scroll::-webkit-scrollbar {
 		display: none;
 	}
-
-	details[open] summary span {
+	.tab-button {
+		display: inline-flex;
+		min-height: 56px;
+		flex: 0 0 auto;
+		align-items: center;
+		gap: 0.55rem;
+		border-bottom: 2px solid transparent;
+		padding: 0 1rem;
+		color: var(--text-muted);
+		font-family: var(--font-head);
+		font-size: 0.92rem;
+		font-weight: 650;
+		transition:
+			color 160ms ease,
+			border-color 160ms ease;
+	}
+	.tab-button:hover,
+	.tab-button.active-tab {
+		border-color: var(--primary);
+		color: var(--text);
+	}
+	.flow-section {
+		color: var(--text);
+	}
+	.flow-section header > p:last-child,
+	.faq-section {
+		color: var(--text-muted);
+	}
+	.flow-label,
+	.faq-label,
+	.step-kicker,
+	.outcome-label {
+		color: var(--flow-accent, var(--primary));
+	}
+	.step-list {
+		display: grid;
+		gap: 1rem;
+	}
+	.step-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+		align-items: center;
+		gap: 2rem;
+		border: 1px solid var(--border);
+		border-radius: 20px;
+		padding: clamp(1.25rem, 3vw, 2.25rem);
+		background: var(--bg-elev-1);
+	}
+	.step-row.reverse .step-copy {
+		order: 2;
+	}
+	.step-row.reverse .outcome-card {
+		order: 1;
+	}
+	.step-copy {
+		display: grid;
+		grid-template-columns: 42px minmax(0, 1fr);
+		gap: 1rem;
+	}
+	.step-number {
+		display: grid;
+		height: 42px;
+		place-items: center;
+		border: 1px solid var(--flow-accent);
+		border-radius: 13px;
+		background: var(--flow-tint);
+		color: var(--flow-accent);
+		font-family: var(--font-head);
+		font-weight: 800;
+	}
+	.step-copy h3 {
+		margin-top: 0.3rem;
+		font-family: var(--font-head);
+		font-size: clamp(1.35rem, 3vw, 1.75rem);
+		font-weight: 750;
+	}
+	.step-description {
+		margin-top: 0.7rem;
+		color: var(--text-muted);
+		line-height: 1.65;
+	}
+	.outcome-card {
+		border: 1px solid color-mix(in srgb, var(--flow-accent) 32%, var(--border));
+		border-radius: 16px;
+		padding: 1.2rem;
+		background: linear-gradient(145deg, var(--flow-tint), rgba(255, 255, 255, 0.018));
+	}
+	.outcome-list {
+		display: grid;
+		gap: 0.65rem;
+		margin-top: 0.9rem;
+	}
+	.outcome-list > div {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		border: 1px solid rgba(255, 255, 255, 0.07);
+		border-radius: 11px;
+		padding: 0.7rem 0.8rem;
+		background: rgba(4, 9, 12, 0.48);
+	}
+	.outcome-list span {
+		display: grid;
+		height: 25px;
+		width: 25px;
+		flex: 0 0 auto;
+		place-items: center;
+		border-radius: 8px;
+		background: var(--flow-tint);
+		color: var(--flow-accent);
+		font-size: 0.72rem;
+		font-weight: 750;
+	}
+	.outcome-list p {
+		color: var(--text);
+		font-size: 0.88rem;
+		font-weight: 550;
+	}
+	.flow-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: center;
+		gap: 1rem;
+		margin-top: 2rem;
+	}
+	.flow-actions :global(.btn-fa) {
+		min-width: 220px;
+	}
+	.support-link {
+		padding: 0.8rem 0.4rem;
+		color: var(--text-muted);
+		font-weight: 650;
+	}
+	.support-link:hover {
+		color: var(--text);
+	}
+	.faq-section {
+		border-top: 1px solid var(--border);
+		background: var(--bg-elev-2);
+	}
+	.faq-list {
+		display: grid;
+		gap: 0.75rem;
+	}
+	details {
+		border: 1px solid var(--border);
+		border-radius: 14px;
+		background: var(--bg-elev-1);
+	}
+	summary {
+		display: flex;
+		cursor: pointer;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 1rem 1.1rem;
+		color: var(--text);
+		font-family: var(--font-head);
+		font-weight: 650;
+		list-style: none;
+	}
+	summary::-webkit-details-marker {
+		display: none;
+	}
+	details > p {
+		padding: 0 1.1rem 1.1rem;
+		line-height: 1.65;
+	}
+	.plus {
+		color: var(--text-dim);
+		font-size: 1.25rem;
+		transition: transform 160ms ease;
+	}
+	details[open] .plus {
 		transform: rotate(45deg);
 	}
-
-	details summary span {
-		transition: transform 0.2s;
+	@media (min-width: 640px) {
+		.tab-scroll {
+			justify-content: center;
+		}
+	}
+	@media (max-width: 700px) {
+		.step-row {
+			grid-template-columns: 1fr;
+			gap: 1.2rem;
+			border-radius: 16px;
+		}
+		.step-row.reverse .step-copy,
+		.step-row.reverse .outcome-card {
+			order: initial;
+		}
+		.step-copy {
+			grid-template-columns: 36px minmax(0, 1fr);
+			gap: 0.8rem;
+		}
+		.step-number {
+			height: 36px;
+			border-radius: 11px;
+		}
+		.flow-actions {
+			align-items: stretch;
+			flex-direction: column;
+			text-align: center;
+		}
+		.flow-actions :global(.btn-fa) {
+			width: 100%;
+		}
 	}
 </style>

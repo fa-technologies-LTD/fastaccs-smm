@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { initializeTransaction, verifyTransaction } from '$lib/services/monnify';
+import { getPaymentReturnOrigin } from '$lib/helpers/site-url';
 import { isCheckoutEnabledSetting } from '$lib/services/admin-settings';
 import {
 	getPaymentReservationExpiresAt,
@@ -236,7 +237,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		const shortOrderId = orderId.substring(0, 8);
 		const paymentReference = `ORD_${shortOrderId}_${Date.now()}`;
 		const paymentExpiresAt = getPendingPaymentExpiresAt();
-		const redirectUrl = `${url.origin}/checkout/verify?orderId=${encodeURIComponent(orderId)}`;
+		const redirectUrl = `${getPaymentReturnOrigin(url)}/checkout/verify?orderId=${encodeURIComponent(orderId)}`;
 		const claimed = await prisma.order.updateMany({
 			where: {
 				id: orderId,

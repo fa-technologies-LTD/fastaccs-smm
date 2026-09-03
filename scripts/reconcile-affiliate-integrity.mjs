@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { createHash } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 
@@ -16,7 +17,7 @@ const APPROVED_POLICY = {
 	'config.affiliate.max_rewarded_orders_per_buyer': '2',
 	'config.affiliate.store_credit_max': '1000',
 	'config.affiliate.store_credit_fallback_percent': '5',
-	'config.affiliate.payout_minimum': '5000',
+	'config.affiliate.payout_minimum': '10000',
 	'config.affiliate.payout_min_account_age_days': '15',
 	'config.affiliate.super.enabled': 'true',
 	'config.affiliate.super.activation_spend_threshold': '3500',

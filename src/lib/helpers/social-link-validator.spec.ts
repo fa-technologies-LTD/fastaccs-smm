@@ -44,6 +44,16 @@ describe('social link validator', () => {
 		);
 	});
 
+	it.each([
+		'https://vm.tiktok.com/ZMabc123/',
+		'https://vt.tiktok.com/ZSabc123/',
+		'https://www.tiktok.com/t/ZT8abc123/'
+	])('accepts official TikTok share links for manual review: %s', (url) => {
+		const result = validateLinkForAction('tiktok', 'views', url);
+		expect(result.valid).toBe(true);
+		expect(result.needsManualReview).toBe(true);
+	});
+
 	it('accepts a TikTok video link for views', () => {
 		expect(
 			validateLinkForAction('tiktok', 'views', 'https://www.tiktok.com/@fastaccs/video/1234567890123')
@@ -63,6 +73,14 @@ describe('social link validator', () => {
 		).toBe(true);
 	});
 
+	it.each([
+		'https://youtu.be/dQw4w9WgXcQ?si=abc',
+		'https://www.youtube.com/shorts/dQw4w9WgXcQ?feature=share',
+		'https://m.youtube.com/watch?v=dQw4w9WgXcQ'
+	])('accepts common YouTube video/share formats: %s', (url) => {
+		expect(validateLinkForAction('youtube', 'views', url).valid).toBe(true);
+	});
+
 	it('rejects a YouTube channel link for views', () => {
 		const result = validateLinkForAction('youtube', 'views', 'https://www.youtube.com/@fastaccs');
 		expect(result.valid).toBe(false);
@@ -72,6 +90,36 @@ describe('social link validator', () => {
 		expect(validateLinkForAction('facebook', 'followers', 'https://www.facebook.com/fastaccs').valid).toBe(
 			true
 		);
+	});
+
+	it.each([
+		'https://www.facebook.com/share/1DS9YYbpNP/?mibextid=wwXIfr',
+		'https://m.facebook.com/share/1DS9YYbpNP/?mibextid=wwXIfr',
+		'https://web.facebook.com/share/1DS9YYbpNP/'
+	])('accepts Facebook share links for profile services: %s', (url) => {
+		const result = validateLinkForAction('facebook', 'followers', url);
+		expect(result.valid).toBe(true);
+		expect(result.needsManualReview).toBe(true);
+	});
+
+	it('accepts a Facebook share link for post engagement services', () => {
+		expect(
+			validateLinkForAction(
+				'facebook',
+				'likes',
+				'https://www.facebook.com/share/p/1AbCdEfGhI/'
+			).valid
+		).toBe(true);
+	});
+
+	it('accepts Facebook mobile post and reel links', () => {
+		expect(
+			validateLinkForAction('facebook', 'likes', 'https://m.facebook.com/fastaccs/posts/12345')
+				.valid
+		).toBe(true);
+		expect(
+			validateLinkForAction('facebook', 'views', 'https://facebook.com/reel/123456789').valid
+		).toBe(true);
 	});
 
 	it('accepts a Facebook post link for likes', () => {
@@ -93,6 +141,32 @@ describe('social link validator', () => {
 	it('rejects malformed URLs outright', () => {
 		const result = validateLinkForAction('instagram', 'followers', 'not a url');
 		expect(result.valid).toBe(false);
+	});
+
+	it('normalizes a platform link pasted without https', () => {
+		const result = validateLinkForAction('facebook', 'followers', 'facebook.com/fastaccs');
+		expect(result.valid).toBe(true);
+		expect(result.normalizedUrl).toBe('https://facebook.com/fastaccs');
+	});
+
+	it('rejects a lookalike or wrong-platform domain', () => {
+		expect(
+			validateLinkForAction('facebook', 'followers', 'https://facebook.com.evil.example/share/abc')
+				.valid
+		).toBe(false);
+		expect(validateLinkForAction('tiktok', 'followers', 'https://instagram.com/fastaccs').valid).toBe(
+			false
+		);
+	});
+
+	it('rejects Facebook link-shim URLs because they can redirect off-platform', () => {
+		expect(
+			validateLinkForAction(
+				'facebook',
+				'followers',
+				'https://l.facebook.com/l.php?u=https%3A%2F%2Fevil.example'
+			).valid
+		).toBe(false);
 	});
 
 	it('rejects an empty link', () => {

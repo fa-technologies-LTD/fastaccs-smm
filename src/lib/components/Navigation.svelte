@@ -411,10 +411,7 @@
 									</button>
 
 									{#if affiliateInboxOpen}
-										<div
-											class="absolute right-0 z-50 mt-2 w-[320px] rounded-[var(--r-sm)] border border-[var(--border)] p-2 shadow-xl"
-											style="background: linear-gradient(180deg, var(--surface-2), var(--surface));"
-										>
+										<div class="notification-panel absolute right-0 z-50 mt-2 w-[320px] p-2">
 											<div class="mb-2 flex items-center justify-between px-2 py-1">
 												<div class="text-sm font-semibold" style="color: var(--text);">Updates</div>
 												{#if affiliateUnreadCount > 0}
@@ -569,10 +566,7 @@
 							{/if}
 						</button>
 						{#if affiliateInboxOpen}
-							<div
-								class="absolute right-0 z-50 mt-2 w-[88vw] max-w-[340px] rounded-[var(--r-sm)] border border-[var(--border)] p-2 shadow-xl"
-								style="background: linear-gradient(180deg, var(--surface-2), var(--surface));"
-							>
+							<div class="notification-panel absolute right-0 z-50 mt-2 w-[88vw] max-w-[340px] p-2">
 								<div class="mb-2 flex items-center justify-between px-2 py-1">
 									<div class="text-sm font-semibold" style="color: var(--text);">Updates</div>
 									{#if affiliateUnreadCount > 0}
@@ -883,6 +877,16 @@
 			0 0 0 3px rgba(5, 212, 113, 0.17),
 			0 0 12px rgba(5, 212, 113, 0.44);
 		animation: bellGlow 1.8s ease-in-out infinite;
+	}
+	.notification-panel {
+		max-height: calc(100vh - 5.25rem);
+		overflow: hidden;
+		border: 1px solid rgba(132, 154, 149, 0.28);
+		border-radius: var(--r-sm);
+		background: linear-gradient(180deg, rgba(11, 24, 23, 0.94), rgba(7, 14, 16, 0.91));
+		box-shadow: 0 20px 54px rgba(0, 0, 0, 0.5);
+		backdrop-filter: blur(18px) saturate(135%);
+		-webkit-backdrop-filter: blur(18px) saturate(135%);
 	}
 	@keyframes bellGlow {
 		0%,

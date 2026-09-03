@@ -334,7 +334,14 @@
 			}
 		}
 
-		cart.updateBoostingLink(getCartLineKey(item), value);
+		const normalizedValue = config
+			? validateLinkForAction(
+					config.platform as BoostingPlatform,
+					config.actionType as BoostingActionType,
+					value
+				).normalizedUrl || value
+			: value;
+		cart.updateBoostingLink(getCartLineKey(item), normalizedValue);
 		editingBoostingLineKey = null;
 		editLinkError = null;
 		await loadCartData();
@@ -489,9 +496,9 @@
 
 			const finalTotal = checkoutTotal;
 
-			const createCheckoutOrder = async () => {
+			const createCheckoutOrder = async (timeoutMs = 30_000) => {
 				const controller = new AbortController();
-				const timeout = window.setTimeout(() => controller.abort(), 30_000);
+				const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 				try {
 					return await createOrder(
 						{
@@ -526,12 +533,37 @@
 				}
 			};
 
+			const waitForCheckoutInitialization = async (
+				initialResult: Awaited<ReturnType<typeof createCheckoutOrder>>
+			) => {
+				let currentResult = initialResult;
+				const deadline = Date.now() + 20_000;
+
+				while (
+					Date.now() < deadline &&
+					(currentResult.unknownOutcome ||
+						/checkout is still initializing/i.test(String(currentResult.error || '')))
+				) {
+					await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+					const remainingMs = deadline - Date.now();
+					if (remainingMs <= 0) break;
+					currentResult = await createCheckoutOrder(Math.min(5_000, remainingMs));
+				}
+
+				return currentResult;
+			};
+
 			// A shared browser can retain another account's checkout key. Rotate it once and retry.
 			let orderResult = await createCheckoutOrder();
 			// The POST is idempotent by checkout key. If the browser lost the response,
-			// replay once to retrieve the durable order instead of declaring failure.
-			if (orderResult.unknownOutcome) {
-				orderResult = await createCheckoutOrder();
+			// poll the same durable order until its hosted checkout URL is ready. This avoids
+			// sending a buyer to order history just because provider initialization finished
+			// a few seconds after the browser's first request timed out.
+			if (
+				orderResult.unknownOutcome ||
+				/checkout is still initializing/i.test(String(orderResult.error || ''))
+			) {
+				orderResult = await waitForCheckoutInitialization(orderResult);
 			}
 			if (!orderResult.success && shouldRotateCheckoutSession(orderResult.error)) {
 				resetCheckoutSession();
@@ -556,7 +588,7 @@
 					if (savedOrderId) sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, savedOrderId);
 					showWarning(
 						'Your order is saved',
-						'We’re finishing the checkout setup. Open My Orders to continue from the saved order.'
+						'Payment setup is taking longer than expected. Open My Orders to continue safely.'
 					);
 					goto(
 						savedOrderId

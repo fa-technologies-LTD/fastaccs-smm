@@ -14,10 +14,10 @@ export const AUTOMATION_JOBS = {
 	'payments-reconcile': {
 		name: 'payments-reconcile',
 		path: '/api/internal/cron/payments-reconcile',
-		schedule: 'every 15 minutes',
+		schedule: 'every 10 minutes',
 		risk: 'financial',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 15
+		expectedIntervalMinutes: 10
 	},
 	'abandoned-orders': {
 		name: 'abandoned-orders',
@@ -110,10 +110,10 @@ export const AUTOMATION_JOBS = {
 	'phone-rentals-sweep': {
 		name: 'phone-rentals-sweep',
 		path: '/api/internal/cron/phone-rentals-sweep',
-		schedule: 'every 5 minutes',
+		schedule: 'every 10 minutes',
 		risk: 'financial',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 5
+		expectedIntervalMinutes: 10
 	},
 	'numbers-campaign': {
 		name: 'numbers-campaign',
@@ -126,10 +126,10 @@ export const AUTOMATION_JOBS = {
 	'numbers-catalog-sync': {
 		name: 'numbers-catalog-sync',
 		path: '/api/internal/cron/numbers-catalog-sync',
-		schedule: 'every 5 minutes',
+		schedule: 'every 30 minutes',
 		risk: 'operational',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 5
+		expectedIntervalMinutes: 30
 	},
 	'numbers-catalog-probe': {
 		name: 'numbers-catalog-probe',

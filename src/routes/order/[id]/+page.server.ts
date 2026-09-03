@@ -54,6 +54,22 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		order.orderType === 'phone' ? getPhonePricingConfig().catch(() => null) : Promise.resolve(null)
 	]);
 	const buyerOrder = sanitizeBuyerOrderAccounts(order);
+	const boostingIssueEvents = order.orderItems.some((item) => Boolean(item.boostTargetUrl))
+		? await prisma.orderEvent.findMany({
+				where: {
+					orderId: order.id,
+					orderItemId: { not: null },
+					type: { in: ['boosting_link_review_requested', 'boosting_rejected'] }
+				},
+				select: { orderItemId: true, description: true, occurredAt: true },
+				orderBy: { occurredAt: 'desc' }
+			})
+		: [];
+	const latestBoostingIssueByItem = new Map<string, string | null>();
+	for (const event of boostingIssueEvents) {
+		if (!event.orderItemId || latestBoostingIssueByItem.has(event.orderItemId)) continue;
+		latestBoostingIssueByItem.set(event.orderItemId, event.description);
+	}
 
 	// Phone (Numbers) orders: expose the rented number + OTP state for the live view.
 	const phoneItem =
@@ -124,7 +140,8 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 				...item,
 				unitPrice: Number(item.unitPrice),
 				totalPrice: Number(item.totalPrice),
-				allocatedCount: item.accounts.length
+				allocatedCount: item.accounts.length,
+				boostIssueReason: latestBoostingIssueByItem.get(item.id) || null
 			}))
 		})
 	};

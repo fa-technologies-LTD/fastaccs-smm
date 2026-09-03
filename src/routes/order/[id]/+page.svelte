@@ -24,6 +24,10 @@
 	import { BOOSTING_TURNAROUND_MESSAGE } from '$lib/helpers/boosting-service-config';
 
 	let { data }: { data: PageData } = $props();
+	let boostLinkDraftByItemId = $state<Record<string, string>>({});
+	let boostLinkOverrideByItemId = $state<Record<string, string>>({});
+	let boostStatusOverrideByItemId = $state<Record<string, string>>({});
+	let savingBoostLinkItemId = $state<string | null>(null);
 
 	function normalizeLower(value: string | null | undefined): string {
 		return String(value || '')
@@ -128,11 +132,64 @@
 		return data.order.orderItems.some(isBoostingItem);
 	}
 
+	function getBoostingStatus(item: (typeof data.order.orderItems)[number]): string {
+		return boostStatusOverrideByItemId[item.id] || item.boostFulfillmentStatus || 'pending';
+	}
+
+	function getBoostingTargetUrl(item: (typeof data.order.orderItems)[number]): string {
+		return boostLinkOverrideByItemId[item.id] || item.boostTargetUrl || '';
+	}
+
 	function getBoostingStatusLabel(item: (typeof data.order.orderItems)[number]): string {
-		const status = item.boostFulfillmentStatus || 'pending';
+		const status = getBoostingStatus(item);
 		if (status === 'completed') return 'Completed';
 		if (status === 'in_progress') return 'In Progress';
+		if (status === 'needs_link') return 'Update Link';
+		if (status === 'rejected') return 'Needs Support';
 		return 'Pending';
+	}
+
+	async function saveBoostingLink(item: (typeof data.order.orderItems)[number]) {
+		if (savingBoostLinkItemId) return;
+		const targetUrl = (boostLinkDraftByItemId[item.id] || getBoostingTargetUrl(item)).trim();
+		if (!targetUrl) {
+			addToast({ type: 'error', title: 'Enter the new link', message: '', duration: 3000 });
+			return;
+		}
+
+		savingBoostLinkItemId = item.id;
+		try {
+			const response = await fetch(
+				`/api/orders/${encodeURIComponent(data.order.id)}/boosting-link/${encodeURIComponent(item.id)}`,
+				{
+					method: 'PATCH',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ targetUrl })
+				}
+			);
+			const result = await response.json();
+			if (!response.ok || !result.success) throw new Error(result.error || 'Could not update link');
+			boostLinkOverrideByItemId = {
+				...boostLinkOverrideByItemId,
+				[item.id]: result.data.targetUrl
+			};
+			boostStatusOverrideByItemId = { ...boostStatusOverrideByItemId, [item.id]: 'pending' };
+			addToast({
+				type: 'success',
+				title: 'Link updated',
+				message: 'Your boost is back in the queue.',
+				duration: 3500
+			});
+		} catch (error) {
+			addToast({
+				type: 'error',
+				title: 'Could not update link',
+				message: error instanceof Error ? error.message : 'Please try again.',
+				duration: 4000
+			});
+		} finally {
+			savingBoostLinkItemId = null;
+		}
 	}
 
 	function getItemLoginGuide(item: (typeof data.order.orderItems)[number]): {
@@ -219,11 +276,15 @@
 								</h2>
 								<p style="color: var(--text-muted);">
 									{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && isBoostingOrder()}
-										{data.order.orderItems.every(
-											(item) => item.boostFulfillmentStatus === 'completed'
-										)
-											? 'Your boost has been completed.'
-											: `Payment confirmed. Your boost is being processed. ${BOOSTING_TURNAROUND_MESSAGE}`}
+										{data.order.orderItems.some((item) => getBoostingStatus(item) === 'needs_link')
+											? 'Update the link below so we can continue.'
+											: data.order.orderItems.some((item) => getBoostingStatus(item) === 'rejected')
+												? 'Support is reviewing an issue with this boost.'
+												: data.order.orderItems.every(
+															(item) => getBoostingStatus(item) === 'completed'
+													  )
+													? 'Your boost has been completed.'
+													: `Payment confirmed. Your boost is being processed. ${BOOSTING_TURNAROUND_MESSAGE}`}
 									{:else if isPhoneOrder}
 										Your payment is safe. We’re preparing your verification number now.
 									{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.status === 'completed'}
@@ -295,11 +356,13 @@
 											{#if isBoostingItem(item)}
 												<span
 													class={`status-badge ${
-														item.boostFulfillmentStatus === 'completed'
+														getBoostingStatus(item) === 'completed'
 															? 'status-success'
-															: item.boostFulfillmentStatus === 'in_progress'
-																? 'status-warning'
-																: 'status-inactive'
+															: getBoostingStatus(item) === 'rejected'
+																? 'status-error'
+																: ['in_progress', 'needs_link'].includes(getBoostingStatus(item))
+																	? 'status-warning'
+																	: 'status-inactive'
 													}`}
 												>
 													{getBoostingStatusLabel(item)}
@@ -330,18 +393,60 @@
 												<p class="mb-2 text-xs font-medium" style="color: var(--text);">
 													Boost details
 												</p>
+												{#if getBoostingStatus(item) === 'needs_link'}
+													<div
+														class="mb-3 rounded-lg border p-3"
+														style="border-color: rgba(234,179,8,0.35); background: rgba(234,179,8,0.08);"
+													>
+														<p class="text-xs font-semibold" style="color: #facc15;">
+															Please update this link
+														</p>
+														{#if item.boostIssueReason}
+															<p class="mt-1 text-xs" style="color: var(--text-muted);">
+																{item.boostIssueReason}
+															</p>
+														{/if}
+														<div class="mt-2 flex flex-col gap-2 sm:flex-row">
+															<input
+																type="url"
+																value={boostLinkDraftByItemId[item.id] ||
+																	getBoostingTargetUrl(item)}
+																oninput={(event) =>
+																	(boostLinkDraftByItemId[item.id] = event.currentTarget.value)}
+																class="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm"
+																style="background: var(--bg); border-color: var(--border); color: var(--text);"
+															/>
+															<button
+																type="button"
+																onclick={() => saveBoostingLink(item)}
+																disabled={savingBoostLinkItemId === item.id}
+																class="rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+																style="background: var(--primary); color: #00150b;"
+															>
+																{savingBoostLinkItemId === item.id ? 'Saving…' : 'Update link'}
+															</button>
+														</div>
+													</div>
+												{:else if getBoostingStatus(item) === 'rejected' && item.boostIssueReason}
+													<p
+														class="mb-3 rounded-lg border p-3 text-xs"
+														style="border-color: rgba(248,113,113,0.35); background: rgba(248,113,113,0.08); color: var(--text-muted);"
+													>
+														{item.boostIssueReason}
+													</p>
+												{/if}
 												<p class="text-xs" style="color: var(--text-muted);">
 													{item.boostQuantity?.toLocaleString() ?? '?'}
 													{item.category.name} for:
 												</p>
 												<a
-													href={item.boostTargetUrl}
+													href={getBoostingTargetUrl(item)}
 													target="_blank"
 													rel="noopener noreferrer"
 													class="mt-1 inline-block text-xs break-all underline"
 													style="color: var(--link);"
 												>
-													{item.boostTargetUrl}
+													{getBoostingTargetUrl(item)}
 												</a>
 											</div>
 										{:else if !isManualHandoverItem(item) && !isPhoneOrder && orderDelivered}

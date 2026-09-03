@@ -4,8 +4,6 @@
 	import { page } from '$app/state';
 	import {
 		ShoppingCart,
-		Star,
-		Users,
 		Package,
 		ChevronRight,
 		X,
@@ -74,7 +72,6 @@
 	let quickAddSubmitting = $state(false);
 	let restockLoadingByTier = $state<Record<string, boolean>>({});
 	let restockSubscribedByTier = $state<Record<string, boolean>>({});
-	let exactQuickAddLoadingByTier = $state<Record<string, boolean>>({});
 	let autoNotifyHandled = $state(false);
 	const lowStockThreshold = $derived(Math.max(1, Number(data.lowStockThreshold || 10)));
 	const currentUser = $derived((page.data as { user?: { id: string } | null }).user || null);
@@ -84,7 +81,6 @@
 	let previousActiveElement: HTMLElement | null = null;
 	let mobileQuickFilter = $state<MobileQuickFilter | null>('popular');
 	let mobileSortKey = $state<MobileSortKey>('default');
-	let expandedTierDetailsById = $state<Record<string, boolean>>({});
 	let isMobileViewport = $state(false);
 
 	// Format follower count
@@ -342,17 +338,6 @@
 		return { label, tone };
 	}
 
-	function isTierDetailsExpanded(tierId: string): boolean {
-		return Boolean(expandedTierDetailsById[tierId]);
-	}
-
-	function toggleTierDetails(tierId: string): void {
-		expandedTierDetailsById = {
-			...expandedTierDetailsById,
-			[tierId]: !expandedTierDetailsById[tierId]
-		};
-	}
-
 	const tierPrices = $derived(
 		data.tiers
 			.map((tier) => Number(tier.price))
@@ -483,11 +468,6 @@
 		return getDeliveryModeLabel(config.mode);
 	}
 
-	function getTierManualHandoverPromise(tier: TierCard): string | null {
-		const config = getTierDeliveryConfig(tier.metadata);
-		return config.mode === 'manual_handover' ? config.manualHandoverPromise : null;
-	}
-
 	async function ensureAddModeCompatibility(tier: TierCard): Promise<boolean> {
 		const mode = getTierDeliveryConfig(tier.metadata).mode;
 		let compatibility: { compatible: boolean; existingMode: TierDeliveryMode | null };
@@ -544,10 +524,6 @@
 
 	async function openQuickAddModal(tier: TierCard): Promise<void> {
 		if (tier.visible_available <= 0) return;
-		if (isExactPreviewTier(tier)) {
-			void goto(getTierRoute(tier.tier_slug));
-			return;
-		}
 		if (!(await ensureAddModeCompatibility(tier))) return;
 
 		const currentCartQuantity = getCurrentCartQuantity(tier);
@@ -571,108 +547,6 @@
 
 		await tick();
 		quickAddCloseButton?.focus();
-	}
-
-	async function addFirstExactProfileToCart(tier: TierCard): Promise<void> {
-		if (tier.visible_available <= 0) return;
-		if (!currentUser) {
-			const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
-			void goto(`/auth/login?returnUrl=${returnUrl}`);
-			return;
-		}
-
-		const tierId = String(tier.category_id || '').trim();
-		if (!tierId) {
-			void goto(getTierRoute(tier.tier_slug));
-			return;
-		}
-
-		if (exactQuickAddLoadingByTier[tierId]) return;
-		exactQuickAddLoadingByTier = { ...exactQuickAddLoadingByTier, [tierId]: true };
-
-		try {
-			if (!(await ensureAddModeCompatibility(tier))) return;
-
-			const listResponse = await fetch(`/api/exact-preview/tiers/${encodeURIComponent(tierId)}`);
-			const listResult = await listResponse.json();
-			if (!listResponse.ok || !listResult.success) {
-				throw new Error(listResult.error || 'Could not load exact profiles.');
-			}
-
-			const accounts: Array<{
-				accountId: string;
-				displayLabel: string;
-				profileUrl: string;
-				screenshotUrl?: string | null;
-				tags?: string[];
-				reservedUntil?: string | null;
-				isReservedByCurrentUser?: boolean;
-			}> = Array.isArray(listResult.data?.accounts) ? listResult.data.accounts : [];
-			if (accounts.length === 0) {
-				showWarning('No exact profiles available', 'Choose from the full profile page instead.');
-				void goto(getTierRoute(tier.tier_slug));
-				return;
-			}
-
-			const firstAccount =
-				accounts.find(
-					(account) =>
-						!cart.items.some((item) => item.exactAccount?.accountId === account.accountId)
-				) || accounts[0];
-
-			if (firstAccount.isReservedByCurrentUser && firstAccount.reservedUntil) {
-				cart.addExactTier(tierId, {
-					accountId: firstAccount.accountId,
-					displayLabel: firstAccount.displayLabel,
-					profileUrl: firstAccount.profileUrl,
-					screenshotUrl: firstAccount.screenshotUrl || null,
-					reservedUntil: firstAccount.reservedUntil
-				});
-				trackGa4AddToCart(getGa4TierPayload(tier, 1, 'exact_profile'));
-				showSuccess(`${firstAccount.displayLabel} added`, 'Added to cart.', 5000, '/checkout');
-				return;
-			}
-
-			const reserveResponse = await fetch('/api/exact-preview/reserve', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					tierId,
-					accountId: firstAccount.accountId
-				})
-			});
-			const reserveResult = await reserveResponse.json();
-			if (!reserveResponse.ok || !reserveResult.success) {
-				throw new Error(reserveResult.error || 'Could not reserve an exact profile.');
-			}
-
-			cart.addExactTier(tierId, {
-				accountId: reserveResult.data.accountId,
-				displayLabel: reserveResult.data.displayLabel,
-				profileUrl: reserveResult.data.profileUrl,
-				screenshotUrl: reserveResult.data.screenshotUrl || null,
-				reservedUntil: reserveResult.data.reservedUntil
-			});
-
-			trackGa4AddToCart(getGa4TierPayload(tier, 1, 'exact_profile'));
-			showSuccess(`${reserveResult.data.displayLabel} added`, 'Added to cart.', 5000, '/checkout');
-		} catch (error) {
-			console.error('Failed to add first exact profile to cart:', error);
-			showError(
-				'Could not add profile',
-				error instanceof Error ? error.message : 'Please try again.'
-			);
-		} finally {
-			exactQuickAddLoadingByTier = { ...exactQuickAddLoadingByTier, [tierId]: false };
-		}
-	}
-
-	async function handlePrimaryTierCta(tier: TierCard): Promise<void> {
-		if (isExactPreviewTier(tier)) {
-			await addFirstExactProfileToCart(tier);
-			return;
-		}
-		await openQuickAddModal(tier);
 	}
 
 	function closeQuickAddModal(): void {
@@ -755,11 +629,6 @@
 	async function addQuickAddToCart(): Promise<void> {
 		const tier = quickAddTier;
 		if (!tier || quickAddSubmitting) return;
-		if (isExactPreviewTier(tier)) {
-			closeQuickAddModal();
-			void goto(getTierRoute(tier.tier_slug));
-			return;
-		}
 		if (!(await ensureAddModeCompatibility(tier))) return;
 
 		quickAddSubmitting = true;
@@ -1153,46 +1022,33 @@
 							{@const tierStatus = getTierStatus(tier.visible_available)}
 							{@const tierFeatures = getTierFeatures(tier.metadata)}
 							{@const primaryBadge = getPrimaryTierBadge(tier)}
-							{@const hasExpandableDetails = Boolean(
-								tierFeatures.length > 0 ||
-									tier.description ||
-									tier.metadata?.age_hint ||
-									getTierManualHandoverPromise(tier)
-							)}
-							{@const exactQuickAddLoading = exactQuickAddLoadingByTier[tier.category_id] || false}
-							{@const isExpanded = isTierDetailsExpanded(tier.category_id)}
 							<div
-								class={`tier-card group relative flex cursor-pointer flex-col overflow-visible rounded-xl shadow transition-all duration-300 ${
-									primaryBadge ? 'tier-card--with-badge' : ''
-								} ${tier.visible_available > 0 ? 'hover:-translate-y-1 hover:shadow-md' : ''}`}
+								class={`tier-card group relative flex cursor-pointer flex-col overflow-hidden rounded-xl shadow transition-all duration-300 ${
+									tier.visible_available > 0 ? 'hover:-translate-y-1 hover:shadow-md' : ''
+								}`}
 								style="background: var(--bg-elev-2); border: 1px solid var(--border);"
 								role="link"
 								tabindex="0"
-								aria-label={`View samples for ${tier.tier_name}`}
+								aria-label={`View details for ${tier.tier_name}`}
 								onclick={(event) => handleTierCardClick(event, tier)}
 								onkeydown={(event) => handleTierCardKeydown(event, tier)}
 							>
-								{#if primaryBadge}
-									<div class="card-merch-tags">
-										<span
-											class={`card-border-chip card-border-chip--gloss ${
-												primaryBadge.tone === 'warning'
-													? 'card-border-chip--warning'
-													: primaryBadge.tone === 'hot'
-														? 'card-border-chip--hot'
-														: 'card-border-chip--featured'
-											}`}
-										>
-											{primaryBadge.label}
-										</span>
-									</div>
-								{/if}
-
-								<div
-									class={`tier-card-body flex flex-1 flex-col p-4 sm:p-5 ${
-										primaryBadge ? 'pt-9 sm:pt-10' : ''
-									}`}
-								>
+								<div class="tier-card-body flex flex-1 flex-col p-4 sm:p-5">
+									{#if primaryBadge}
+										<div class="card-merch-tags">
+											<span
+												class={`card-border-chip ${
+													primaryBadge.tone === 'warning'
+														? 'card-border-chip--warning'
+														: primaryBadge.tone === 'hot'
+															? 'card-border-chip--hot'
+															: 'card-border-chip--featured'
+												}`}
+											>
+												{primaryBadge.label}
+											</span>
+										</div>
+									{/if}
 									<div
 										class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
 									>
@@ -1236,59 +1092,22 @@
 										{/if}
 									</div>
 
-									{#if hasExpandableDetails}
-										<button
-											type="button"
-											data-card-action
-											onclick={() => toggleTierDetails(tier.category_id)}
-											class="mb-3 inline-flex items-center gap-1 text-xs font-semibold"
-											style="color: var(--link);"
-										>
-											{isExpanded ? 'Hide features' : 'Features'}
-											<ChevronRight
-												class={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-											/>
-										</button>
-									{/if}
-
-									{#if isExpanded}
-										<div
-											class="mb-4 space-y-2 rounded-lg p-3"
-											style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-										>
-											{#if tierFeatures.length > 0}
-												<div class="space-y-1.5">
-													{#each tierFeatures as feature, featureIndex (featureIndex)}
-														<div
-															class="flex items-start gap-2 text-sm"
-															style="color: var(--text-muted);"
-														>
-															<Star class="mt-0.5 h-3 w-3 flex-shrink-0 text-green-500" />
-															<span>{feature}</span>
-														</div>
-													{/each}
-												</div>
-											{/if}
-											{#if tier.description}
-												<p class="text-sm leading-relaxed" style="color: var(--text-muted);">
-													{tier.description}
-												</p>
-											{/if}
-											{#if tier.metadata?.age_hint}
-												<div
-													class="flex items-center gap-2 text-sm"
-													style="color: var(--text-muted);"
-												>
-													<Users class="h-4 w-4" />
-													<span class="font-medium">Account Age:</span>
-													<span>{tier.metadata.age_hint}</span>
-												</div>
-											{/if}
-											{#if getTierManualHandoverPromise(tier)}
-												<p class="text-xs" style="color: var(--text-muted);">
-													{getTierManualHandoverPromise(tier)}
-												</p>
-											{/if}
+									{#if tierFeatures.length > 0}
+										<div class="mb-4">
+											<p
+												class="mb-2 text-[11px] font-semibold uppercase"
+												style="color: var(--text-muted);"
+											>
+												Features
+											</p>
+											<div class="flex flex-wrap gap-1.5">
+												{#each tierFeatures.slice(0, 3) as feature, featureIndex (featureIndex)}
+													<span class="mobile-feature-pill">
+														<CheckCircle class="h-3.5 w-3.5" />
+														{feature}
+													</span>
+												{/each}
+											</div>
 										</div>
 									{/if}
 								</div>
@@ -1315,52 +1134,53 @@
 												<span>Notify me</span>
 											{/if}
 										</button>
+									{:else if isExactPreviewTier(tier)}
+										<button
+											type="button"
+											onclick={() => openQuickAddModal(tier)}
+											data-card-action
+											aria-label={`Quick add ${tier.tier_name}`}
+											class="flex w-full items-center justify-center gap-2 rounded-lg border border-transparent py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-[#7CFFC0] focus-visible:ring-offset-2 focus-visible:outline-none active:scale-[0.99] disabled:cursor-wait disabled:opacity-85"
+											style="background: var(--primary); color: #04140c;"
+										>
+											<ShoppingCart class="h-4 w-4" />
+											<span>Add to Cart</span>
+										</button>
+										<a
+											href={getTierRoute(tier.tier_slug)}
+											data-card-action
+											class="flex w-full items-center justify-center gap-2 rounded-lg border py-2.5 text-center text-sm font-semibold transition-colors hover:opacity-90"
+											style="border-color: var(--border); background: var(--bg-elev-1); color: var(--text-muted);"
+										>
+											<span>Choose a profile</span>
+											<ChevronRight class="h-4 w-4" />
+										</a>
 									{:else}
 										<button
 											type="button"
-											onclick={() => handlePrimaryTierCta(tier)}
+											onclick={() => openQuickAddModal(tier)}
 											data-card-action
 											aria-label={`Quick add ${tier.tier_name}`}
-											disabled={exactQuickAddLoading}
 											class="flex w-full items-center justify-center gap-2 rounded-lg border border-transparent py-3 text-center font-semibold transition-all focus-visible:ring-2 focus-visible:ring-[#7CFFC0] focus-visible:ring-offset-2 focus-visible:outline-none active:scale-[0.99] active:border-[#7CFFC0] disabled:cursor-wait disabled:opacity-85 disabled:active:scale-100"
 											style="background: var(--primary); color: #04140c;"
 										>
-											{#if exactQuickAddLoading}
-												<span>Adding...</span>
-											{:else if isExactPreviewTier(tier)}
-												<ShoppingCart class="h-4 w-4" />
-												<span>Add to Cart</span>
-											{:else}
-												<ShoppingCart class="h-4 w-4" />
-												<span>Add to Cart</span>
-											{/if}
+											<ShoppingCart class="h-4 w-4" />
+											<span>Add to Cart</span>
 										</button>
 									{/if}
 
-									<a
-										href={getTierRoute(tier.tier_slug)}
-										data-card-action
-										class="hidden w-full items-center justify-center gap-1 rounded-lg py-3 text-center text-sm font-semibold transition-colors hover:opacity-90 sm:inline-flex"
-										style="border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text);"
-										aria-label={isExactPreviewTier(tier)
-											? `Choose exact profile for ${tier.tier_name}`
-											: `View samples for ${tier.tier_name}`}
-									>
-										{isExactPreviewTier(tier) ? 'Choose your exact profile' : 'View Samples'}
-										<ChevronRight class="h-4 w-4" />
-									</a>
-									<a
-										href={getTierRoute(tier.tier_slug)}
-										data-card-action
-										class="inline-flex w-full items-center justify-center gap-1 py-1 text-center text-sm font-semibold sm:hidden"
-										style="color: var(--text-muted);"
-										aria-label={isExactPreviewTier(tier)
-											? `Choose exact profile for ${tier.tier_name}`
-											: `View samples for ${tier.tier_name}`}
-									>
-										{isExactPreviewTier(tier) ? 'Choose your exact profile' : 'View Samples'}
-										<ChevronRight class="h-4 w-4" />
-									</a>
+									{#if !isExactPreviewTier(tier)}
+										<a
+											href={getTierRoute(tier.tier_slug)}
+											data-card-action
+											class="inline-flex w-full items-center justify-center gap-1 rounded-lg border py-2.5 text-center text-sm font-semibold transition-colors hover:opacity-90"
+											style="border-color: var(--border); background: var(--bg-elev-1); color: var(--text-muted);"
+											aria-label={`View details for ${tier.tier_name}`}
+										>
+											View details
+											<ChevronRight class="h-4 w-4" />
+										</a>
+									{/if}
 								</div>
 							</div>
 						{/each}
@@ -1529,7 +1349,7 @@
 									<div
 										class="h-4 w-4 animate-spin rounded-full border-2 border-[#04140C] border-t-transparent"
 									></div>
-									Adding to Cart...
+									Adding to cart...
 								</div>
 							{:else}
 								<div class="flex items-center justify-center gap-2">
@@ -1634,37 +1454,28 @@
 	}
 
 	.card-merch-tags {
-		position: absolute;
-		top: 0;
-		z-index: 20;
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.4rem;
-		pointer-events: none;
-		max-width: calc(100% - 2rem);
-	}
-
-	.card-merch-tags {
-		left: 0.95rem;
-		transform: translateY(-52%);
+		margin-bottom: 0.75rem;
 	}
 
 	.card-border-chip {
 		position: relative;
 		display: inline-flex;
 		align-items: center;
-		overflow: hidden;
 		white-space: nowrap;
 		max-width: 100%;
 		text-overflow: ellipsis;
-		border-radius: 9999px;
+		border-radius: 0.45rem;
 		border: 1px solid rgba(251, 191, 36, 0.35);
 		background: rgba(251, 191, 36, 0.18);
 		color: rgb(251, 191, 36);
-		padding: 0.3rem 0.7rem;
+		padding: 0.25rem 0.55rem;
 		font-size: 0.68rem;
 		font-weight: 700;
-		letter-spacing: 0.01em;
+		letter-spacing: 0.025em;
+		text-transform: uppercase;
 	}
 
 	.card-border-chip--featured {
@@ -1683,33 +1494,6 @@
 		border-color: rgba(248, 113, 113, 0.45);
 		background: rgba(248, 113, 113, 0.14);
 		color: rgb(254, 202, 202);
-	}
-
-	.card-border-chip--gloss::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		background: linear-gradient(
-			120deg,
-			rgba(255, 255, 255, 0) 20%,
-			rgba(255, 255, 255, 0.35) 45%,
-			rgba(255, 255, 255, 0) 70%
-		);
-		transform: translateX(-130%);
-		animation: chipGlossSweep 4.2s ease-in-out infinite;
-	}
-
-	@keyframes chipGlossSweep {
-		0%,
-		18% {
-			transform: translateX(-130%);
-		}
-		45% {
-			transform: translateX(130%);
-		}
-		100% {
-			transform: translateX(130%);
-		}
 	}
 
 	@media (min-width: 640px) {

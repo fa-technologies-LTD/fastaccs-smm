@@ -196,8 +196,8 @@
 				keepWaiting = false;
 				numberShownAt = null; // re-mute the request button for the fresh number
 				showSuccess('Fresh number ready', data.message);
-				if (!pollTimer) pollTimer = setInterval(poll, 3000);
-				poll();
+				startPolling();
+				void poll();
 			} else if (data.status === 'received') {
 				status = 'received';
 				await poll();
@@ -253,6 +253,12 @@
 		pollTimer = null;
 	}
 
+	function startPolling() {
+		if (!ACTIVE.includes(status)) return;
+		if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+		if (!pollTimer) pollTimer = setInterval(poll, 3000);
+	}
+
 	async function confirmCancel() {
 		if (cancelling) return;
 		cancelling = true;
@@ -294,15 +300,21 @@
 
 	onMount(() => {
 		const handleVisibility = () => {
-			if (document.visibilityState === 'hidden' && isWaiting && !requestedAt) {
-				leftToRequestCode = true;
+			if (document.visibilityState === 'hidden') {
+				if (isWaiting && !requestedAt) leftToRequestCode = true;
+				stopPolling();
+				return;
+			}
+			if (ACTIVE.includes(status)) {
+				void poll();
+				startPolling();
 			}
 		};
 		document.addEventListener('visibilitychange', handleVisibility);
 		clockTimer = setInterval(() => (now = Date.now()), 1000);
 		if (ACTIVE.includes(status)) {
-			poll();
-			pollTimer = setInterval(poll, 3000);
+			void poll();
+			startPolling();
 		}
 		if (cardEl && typeof IntersectionObserver !== 'undefined') {
 			observer = new IntersectionObserver(([entry]) => (cardVisible = entry.isIntersecting), {

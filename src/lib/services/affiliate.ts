@@ -76,7 +76,7 @@ const DEFAULT_AFFILIATE_CONFIG = {
 	storeCreditMax: 1_000,
 	storeCreditFallbackPercent: 5,
 	excludedTierKeywords: ['0f', 'empty-f', 'empty f'],
-	payoutMinimum: 5_000,
+	payoutMinimum: 10_000,
 	payoutMinAccountAgeDays: 15,
 	dashboardPopupsEnabled: true,
 	superAffiliateEnabled: true,

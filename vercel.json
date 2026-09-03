@@ -2,39 +2,39 @@
 	"crons": [
 		{
 			"path": "/api/internal/cron/payments-reconcile",
-			"schedule": "*/15 * * * *"
+			"schedule": "1,11,21,31,41,51 * * * *"
 		},
 		{
 			"path": "/api/internal/cron/abandoned-orders",
-			"schedule": "*/20 * * * *"
+			"schedule": "3,23,43 * * * *"
 		},
 		{
 			"path": "/api/internal/cron/exact-preview-thumbnails",
-			"schedule": "7 * * * *"
+			"schedule": "0 * * * *"
 		},
 		{
 			"path": "/api/internal/cron/low-stock-alerts",
-			"schedule": "17 * * * *"
+			"schedule": "1 * * * *"
 		},
 		{
 			"path": "/api/internal/cron/automation-health",
-			"schedule": "27 * * * *"
+			"schedule": "4 * * * *"
 		},
 		{
 			"path": "/api/internal/cron/onboarding",
-			"schedule": "35 */4 * * *"
+			"schedule": "2 */4 * * *"
 		},
 		{
 			"path": "/api/internal/cron/affiliate-lifecycle",
-			"schedule": "50 */4 * * *"
+			"schedule": "3 */4 * * *"
 		},
 		{
 			"path": "/api/internal/cron/affiliate-vesting",
-			"schedule": "45 */3 * * *"
+			"schedule": "4 */3 * * *"
 		},
 		{
 			"path": "/api/internal/cron/phone-rentals-sweep",
-			"schedule": "*/5 * * * *"
+			"schedule": "0,10,20,30,40,50 * * * *"
 		},
 		{
 			"path": "/api/internal/cron/numbers-campaign",
@@ -42,11 +42,11 @@
 		},
 		{
 			"path": "/api/internal/cron/numbers-catalog-sync",
-			"schedule": "*/5 * * * *"
+			"schedule": "2,32 * * * *"
 		},
 		{
 			"path": "/api/internal/cron/numbers-catalog-probe",
-			"schedule": "17 */2 * * *"
+			"schedule": "4 */2 * * *"
 		},
 		{
 			"path": "/api/internal/cron/promo-reminder",

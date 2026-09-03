@@ -3,7 +3,10 @@ import { prisma } from '$lib/prisma';
 import { getCacheHeaders } from '$lib/helpers/cache';
 import { getInventoryStatsSnapshot } from '$lib/services/admin-metrics';
 import { getLowStockPolicyState, getLowStockThresholdSetting } from '$lib/services/admin-settings';
-import { getAllocatedLikeAccountStatuses, normalizeAccountStatus } from '$lib/helpers/account-status';
+import {
+	getAllocatedLikeAccountStatuses,
+	normalizeAccountStatus
+} from '$lib/helpers/account-status';
 import { getTierExactPreviewConfig } from '$lib/helpers/tier-exact-preview';
 import { getTierDeliveryConfig } from '$lib/helpers/tier-delivery-config';
 import {
@@ -100,18 +103,24 @@ export async function GET({ url, locals }) {
 			);
 		}
 
-			if (type === 'batches') {
-				// Get PLATFORM/TIER inventory by grouping accounts by category hierarchy
-				const categories = await prisma.category.findMany({
-					where: {
-						parentId: { not: null }, // Get child categories (tiers)
-						categoryType: 'tier',
-						isActive: true,
-						// Numbers (auto-SMS) tiers have no account inventory — exclude from account inventory.
-						NOT: { metadata: { path: ['delivery_mode'], equals: 'auto_sms' } },
-					},
+		if (type === 'batches') {
+			// Get PLATFORM/TIER inventory by grouping accounts by category hierarchy
+			const categories = await prisma.category.findMany({
+				where: {
+					parentId: { not: null }, // Get child categories (tiers)
+					categoryType: 'tier',
+					isActive: true,
+					// Numbers (auto-SMS) tiers have no account inventory — exclude from account inventory.
+					NOT: { metadata: { path: ['delivery_mode'], equals: 'auto_sms' } }
+				},
 				include: {
 					parent: true, // Get parent category (platform)
+					accountBatches: {
+						where: { importStatus: 'completed', totalUnits: { gt: 0 } },
+						select: { createdAt: true },
+						orderBy: { createdAt: 'desc' },
+						take: 1
+					},
 					accounts: {
 						select: {
 							id: true,
@@ -124,35 +133,36 @@ export async function GET({ url, locals }) {
 				}
 			});
 
-				const tierInventory = categories.map((tier) => {
-					const accounts = tier.accounts;
-					const availableCount = accounts.filter((a) => a.status === 'available').length;
-					const reservedCount = accounts.filter((a) => a.status === 'reserved').length;
-					const soldCount = accounts.filter((a) => isSoldAccountStatus(a.status)).length;
-					const tierPrice = extractTierPrice(tier.metadata);
-					const exactPreviewMetrics = getExactPreviewInventoryMetrics(tier);
+			const tierInventory = categories.map((tier) => {
+				const accounts = tier.accounts;
+				const availableCount = accounts.filter((a) => a.status === 'available').length;
+				const reservedCount = accounts.filter((a) => a.status === 'reserved').length;
+				const soldCount = accounts.filter((a) => isSoldAccountStatus(a.status)).length;
+				const tierPrice = extractTierPrice(tier.metadata);
+				const exactPreviewMetrics = getExactPreviewInventoryMetrics(tier);
 
-					return {
-						id: tier.id,
-						tier_name: tier.name, // This is the actual tier name
+				return {
+					id: tier.id,
+					tier_name: tier.name, // This is the actual tier name
 					platform_name: tier.parent?.name || 'Unknown Platform', // This is the actual platform name
 					category_name: tier.name,
 					platform: tier.parent?.name || 'Unknown', // Keep for backwards compatibility
 					lifetime_total_accounts: accounts.length,
 					total_accounts: accounts.length,
-						available_accounts: availableCount,
-						accounts_available: availableCount, // UI expects this field name
-						reserved_accounts: reservedCount,
-						reservations_active: reservedCount, // UI expects this field name
-						allocated_accounts: soldCount, // Backward compatibility (now treated as delivered/sold)
-						assigned_accounts: soldCount, // Backward compatibility
-						delivered_accounts: soldCount,
-						sold_accounts: soldCount,
-						tier_price: tierPrice,
-						...exactPreviewMetrics,
-						visible_available: availableCount, // UI expects this field name
-						created_at: tier.createdAt,
-						updated_at: tier.updatedAt,
+					available_accounts: availableCount,
+					accounts_available: availableCount, // UI expects this field name
+					reserved_accounts: reservedCount,
+					reservations_active: reservedCount, // UI expects this field name
+					allocated_accounts: soldCount, // Backward compatibility (now treated as delivered/sold)
+					assigned_accounts: soldCount, // Backward compatibility
+					delivered_accounts: soldCount,
+					sold_accounts: soldCount,
+					tier_price: tierPrice,
+					...exactPreviewMetrics,
+					visible_available: availableCount, // UI expects this field name
+					created_at: tier.createdAt,
+					last_restocked_at: tier.accountBatches[0]?.createdAt ?? null,
+					updated_at: tier.updatedAt,
 					last_updated: tier.updatedAt // UI expects this field name
 				};
 			});
@@ -168,34 +178,40 @@ export async function GET({ url, locals }) {
 				prisma.account.count(),
 				prisma.account.count({ where: { status: 'available' } }),
 				prisma.account.count({ where: { status: 'reserved' } })
-				]).then(([totalBatches, totalAccounts, availableAccounts, reservedAccounts]) => ({
-					total_batches: totalBatches,
-					total_accounts: totalAccounts, // Lifetime stock currently tracked in account rows
-					lifetime_total_accounts: totalAccounts,
-					available_accounts: availableAccounts,
-					reserved_accounts: reservedAccounts,
-					allocated_accounts: 0, // Will be filled below
-					assigned_accounts: 0, // Backward compatibility
-					delivered_accounts: 0,
-					sold_accounts: 0,
-					out_of_stock: 0, // Will be filled below
-					outOfStockTiersCount: 0, // Real out-of-stock account-tier count (filled below)
-					low_stock: 0, // Will be filled below
-					low_stock_threshold: 0,
-					platforms: 0 // Will be filled below
-				})),
+			]).then(([totalBatches, totalAccounts, availableAccounts, reservedAccounts]) => ({
+				total_batches: totalBatches,
+				total_accounts: totalAccounts, // Lifetime stock currently tracked in account rows
+				lifetime_total_accounts: totalAccounts,
+				available_accounts: availableAccounts,
+				reserved_accounts: reservedAccounts,
+				allocated_accounts: 0, // Will be filled below
+				assigned_accounts: 0, // Backward compatibility
+				delivered_accounts: 0,
+				sold_accounts: 0,
+				out_of_stock: 0, // Will be filled below
+				outOfStockTiersCount: 0, // Real out-of-stock account-tier count (filled below)
+				low_stock: 0, // Will be filled below
+				low_stock_threshold: 0,
+				platforms: 0 // Will be filled below
+			})),
 
 			// Get PLATFORM/TIER data from categories
-				prisma.category.findMany({
-					where: {
-						parentId: { not: null }, // Get child categories (tiers)
-						categoryType: 'tier',
-						isActive: true,
-						// Numbers (auto-SMS) tiers have no account inventory — exclude from account inventory.
-						NOT: { metadata: { path: ['delivery_mode'], equals: 'auto_sms' } },
-					},
+			prisma.category.findMany({
+				where: {
+					parentId: { not: null }, // Get child categories (tiers)
+					categoryType: 'tier',
+					isActive: true,
+					// Numbers (auto-SMS) tiers have no account inventory — exclude from account inventory.
+					NOT: { metadata: { path: ['delivery_mode'], equals: 'auto_sms' } }
+				},
 				include: {
 					parent: true, // Get parent category (platform)
+					accountBatches: {
+						where: { importStatus: 'completed', totalUnits: { gt: 0 } },
+						select: { createdAt: true },
+						orderBy: { createdAt: 'desc' },
+						take: 1
+					},
 					accounts: {
 						select: {
 							id: true,
@@ -212,10 +228,10 @@ export async function GET({ url, locals }) {
 		]);
 
 		// Complete stats calculation
-			const soldStatuses = [...new Set([...getAllocatedLikeAccountStatuses(), 'delivered'])];
-			const soldCount = await prisma.account.count({
-				where: { status: { in: soldStatuses } }
-			});
+		const soldStatuses = [...new Set([...getAllocatedLikeAccountStatuses(), 'delivered'])];
+		const soldCount = await prisma.account.count({
+			where: { status: { in: soldStatuses } }
+		});
 
 		// Calculate missing stats
 		const outOfStockBatches = await prisma.accountBatch.count({
@@ -242,8 +258,7 @@ export async function GET({ url, locals }) {
 
 		const lowStockThreshold = await getLowStockThresholdSetting().catch(() => 10);
 		const lowStockBatches = batchesWithCounts.filter(
-			(batch) =>
-				batch._count.accounts > 0 && batch._count.accounts < Math.max(1, lowStockThreshold)
+			(batch) => batch._count.accounts > 0 && batch._count.accounts < Math.max(1, lowStockThreshold)
 		).length;
 
 		const platformsCount = await prisma.account.groupBy({
@@ -251,11 +266,11 @@ export async function GET({ url, locals }) {
 			where: { platform: { not: '' } }
 		});
 
-			stats.allocated_accounts = soldCount;
-			stats.assigned_accounts = soldCount;
-			stats.delivered_accounts = soldCount;
-			stats.sold_accounts = soldCount;
-			stats.low_stock_threshold = Math.max(1, lowStockThreshold);
+		stats.allocated_accounts = soldCount;
+		stats.assigned_accounts = soldCount;
+		stats.delivered_accounts = soldCount;
+		stats.sold_accounts = soldCount;
+		stats.low_stock_threshold = Math.max(1, lowStockThreshold);
 		stats.out_of_stock = outOfStockBatches;
 		stats.low_stock = lowStockBatches;
 		stats.platforms = platformsCount.length;
@@ -269,15 +284,15 @@ export async function GET({ url, locals }) {
 		}).length;
 
 		// Transform categories to show PLATFORM/TIER inventory
-			const tierInventoryData = categories.map((tier) => {
-				const accounts = tier.accounts;
-				const availableCount = accounts.filter((a) => a.status === 'available').length;
-				const reservedCount = accounts.filter((a) => a.status === 'reserved').length;
-				const soldCount = accounts.filter((a) => isSoldAccountStatus(a.status)).length;
-				const tierPrice = extractTierPrice(tier.metadata);
-				const exactPreviewMetrics = getExactPreviewInventoryMetrics(tier);
+		const tierInventoryData = categories.map((tier) => {
+			const accounts = tier.accounts;
+			const availableCount = accounts.filter((a) => a.status === 'available').length;
+			const reservedCount = accounts.filter((a) => a.status === 'reserved').length;
+			const soldCount = accounts.filter((a) => isSoldAccountStatus(a.status)).length;
+			const tierPrice = extractTierPrice(tier.metadata);
+			const exactPreviewMetrics = getExactPreviewInventoryMetrics(tier);
 
-				return {
+			return {
 				id: tier.id,
 				tier_name: tier.name, // This is the actual tier name
 				platform_name: tier.parent?.name || 'Unknown Platform', // This is the actual platform name
@@ -285,18 +300,19 @@ export async function GET({ url, locals }) {
 				platform: tier.parent?.name || 'Unknown', // Keep for backwards compatibility
 				lifetime_total_accounts: accounts.length,
 				total_accounts: accounts.length,
-					available_accounts: availableCount,
-					accounts_available: availableCount, // UI expects this field name
-					reserved_accounts: reservedCount,
-					reservations_active: reservedCount, // UI expects this field name
-					allocated_accounts: soldCount, // Backward compatibility (now treated as delivered/sold)
-					assigned_accounts: soldCount, // Backward compatibility
-					delivered_accounts: soldCount,
-					sold_accounts: soldCount,
-					tier_price: tierPrice,
-					...exactPreviewMetrics,
+				available_accounts: availableCount,
+				accounts_available: availableCount, // UI expects this field name
+				reserved_accounts: reservedCount,
+				reservations_active: reservedCount, // UI expects this field name
+				allocated_accounts: soldCount, // Backward compatibility (now treated as delivered/sold)
+				assigned_accounts: soldCount, // Backward compatibility
+				delivered_accounts: soldCount,
+				sold_accounts: soldCount,
+				tier_price: tierPrice,
+				...exactPreviewMetrics,
 				visible_available: availableCount, // UI expects this field name
 				created_at: tier.createdAt,
+				last_restocked_at: tier.accountBatches[0]?.createdAt ?? null,
 				updated_at: tier.updatedAt,
 				last_updated: tier.updatedAt // UI expects this field name
 			};

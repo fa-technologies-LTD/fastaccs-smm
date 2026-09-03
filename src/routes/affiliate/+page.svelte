@@ -9,7 +9,7 @@
 	const isActiveAffiliate = $derived(
 		Boolean((data.user as { isAffiliateEnabled?: boolean } | null)?.isAffiliateEnabled)
 	);
-	const payoutMinimum = $derived(`₦${Number(data.payoutMinimum || 5_000).toLocaleString()}`);
+	const payoutMinimum = $derived(`₦${Number(data.payoutMinimum || 10_000).toLocaleString()}`);
 </script>
 
 <svelte:head>

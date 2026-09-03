@@ -36,6 +36,7 @@ class CartStore {
 	private refreshRevision = -1;
 	private refreshPromise: Promise<CartItemWithTier[]> | null = null;
 	private lastItemsWithTiers: CartItemWithTier[] = [];
+	private tierDeliveryModes = new Map<string, TierDeliveryMode>();
 
 	constructor() {
 		if (browser) {
@@ -245,6 +246,8 @@ class CartStore {
 	removeTier(tierId: string): void {
 		this.state.items = this.state.items.filter((item) => item.tierId !== tierId);
 		this.markCartChanged();
+		this.lastItemsWithTiers = this.lastItemsWithTiers.filter((item) => item.tierId !== tierId);
+		this.refreshRevision = this.revision;
 		this.saveToStorage();
 	}
 
@@ -253,6 +256,10 @@ class CartStore {
 			(item) => (item.cartItemId || getCartItemId(item)) !== cartItemId
 		);
 		this.markCartChanged();
+		this.lastItemsWithTiers = this.lastItemsWithTiers.filter(
+			(item) => (item.cartItemId || getCartItemId(item)) !== cartItemId
+		);
+		this.refreshRevision = this.revision;
 		this.saveToStorage();
 	}
 
@@ -336,6 +343,15 @@ class CartStore {
 			return [];
 		}
 
+		const cachedItems = this.getCachedItemsForCurrentCart();
+		if (
+			!this.state.error &&
+			this.refreshRevision === this.revision &&
+			cachedItems.length === this.state.items.length
+		) {
+			return cachedItems;
+		}
+
 		if (this.refreshPromise) {
 			const activePromise = this.refreshPromise;
 			const activeRevision = this.refreshRevision;
@@ -410,6 +426,11 @@ class CartStore {
 				boosting: item.boosting
 			}));
 			this.lastItemsWithTiers = itemsWithTiers;
+			for (const item of itemsWithTiers) {
+				if (item.tier.deliveryMode) {
+					this.tierDeliveryModes.set(item.tierId, item.tier.deliveryMode);
+				}
+			}
 			this.saveToStorage();
 
 			const messages = Array.isArray(result.data?.messages) ? result.data.messages : [];
@@ -455,11 +476,19 @@ class CartStore {
 	private async fetchTierDeliveryModesById(ids: string[]): Promise<Map<string, TierDeliveryMode>> {
 		if (ids.length === 0) return new Map();
 
-		const response = await fetch('/api/categories/tiers/batch', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ ids })
-		});
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), 8_000);
+		let response: Response;
+		try {
+			response = await fetch('/api/categories/tiers/batch', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ ids }),
+				signal: controller.signal
+			});
+		} finally {
+			clearTimeout(timeout);
+		}
 
 		if (!response.ok) {
 			throw new Error('Failed to resolve tier delivery modes');
@@ -479,6 +508,7 @@ class CartStore {
 		compatible: boolean;
 		existingMode: TierDeliveryMode | null;
 	}> {
+		this.tierDeliveryModes.set(targetTierId, targetMode);
 		const existingTierIds = Array.from(
 			new Set(
 				this.state.items
@@ -491,9 +521,17 @@ class CartStore {
 			return { compatible: true, existingMode: null };
 		}
 
-		const modeMap = await this.fetchTierDeliveryModesById(existingTierIds);
+		const unresolvedTierIds = existingTierIds.filter((id) => !this.tierDeliveryModes.has(id));
+		if (unresolvedTierIds.length > 0) {
+			const resolvedModes = await this.fetchTierDeliveryModesById(unresolvedTierIds);
+			for (const [tierId, mode] of resolvedModes) {
+				this.tierDeliveryModes.set(tierId, mode);
+			}
+		}
 		const existingModes = new Set<TierDeliveryMode>(
-			Array.from(modeMap.values()).filter((mode): mode is TierDeliveryMode => Boolean(mode))
+			existingTierIds
+				.map((id) => this.tierDeliveryModes.get(id))
+				.filter((mode): mode is TierDeliveryMode => Boolean(mode))
 		);
 
 		if (existingModes.size === 0) {

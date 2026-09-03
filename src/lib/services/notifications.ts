@@ -12,6 +12,8 @@ export type NotificationType =
 	| 'order_delivered'
 	| 'store_credit'
 	| 'new_login'
+	| 'boosting_link_review'
+	| 'boosting_issue'
 	| 'affiliate_unlock'
 	| 'affiliate_store_credit'
 	| 'affiliate_referral_signup'

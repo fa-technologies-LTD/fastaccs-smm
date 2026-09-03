@@ -1,21 +1,12 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { slide } from 'svelte/transition';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { showWarning, showSuccess, showError } from '$lib/stores/toasts';
-	import {
-		Zap,
-		ShieldCheck,
-		RefreshCw,
-		ChevronDown,
-		Phone,
-		BellRing,
-		Check,
-		Search
-	} from '$lib/icons';
+	import { RefreshCw, ChevronDown, Phone, BellRing, Check, Search } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
@@ -37,6 +28,7 @@
 		} catch {
 			/* ignore */
 		}
+		void openRequestedService();
 	});
 
 	// Start neutral: the buyer chooses a service rather than the page assuming WhatsApp.
@@ -51,6 +43,33 @@
 			service.serviceName.toLowerCase().includes(serviceQuery.trim().toLowerCase())
 		)
 	);
+
+	function normaliseServiceKey(value: string): string {
+		return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+	}
+
+	async function openRequestedService(): Promise<void> {
+		const requestedService = new URLSearchParams(window.location.search).get('service');
+		if (!requestedService) return;
+
+		const requestedKey = normaliseServiceKey(requestedService);
+		const service = data.services.find(
+			(item) =>
+				normaliseServiceKey(item.serviceName) === requestedKey ||
+				String(item.serviceId) === requestedService
+		);
+		if (!service) return;
+
+		openId = service.serviceId;
+		if (!measuredServiceOpens.has(service.serviceId)) {
+			measuredServiceOpens.add(service.serviceId);
+			recordAnalyticsEvent('numbers_service_open', `/numbers/service/${service.serviceId}`);
+		}
+		await tick();
+		document
+			.getElementById(`numbers-service-${service.serviceId}`)
+			?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
 
 	// "Notify me" for an out-of-stock number — records a restock subscription (fires once).
 	async function notifyMe(tierId: string, label: string) {
@@ -140,10 +159,10 @@
 </script>
 
 <svelte:head>
-	<title>Verification Numbers — Instant OTP | FastAccs</title>
+	<title>Verification Numbers | FastAccs</title>
 	<meta
 		name="description"
-		content="Buy an instant phone number and receive your one-time verification code in seconds."
+		content="Choose a verification service and country, then receive your code on FastAccs."
 	/>
 </svelte:head>
 
@@ -157,28 +176,14 @@
 				class="mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold"
 				style="background: rgba(14,165,233,0.20); color: #38bdf8;"
 			>
-				<Zap class="h-3.5 w-3.5" /> Instant OTP · one code per number
+				One number · one code
 			</div>
 			<h1 class="text-3xl font-bold sm:text-4xl" style="color: var(--text);">
 				Verification Numbers
 			</h1>
 			<p class="mx-auto mt-2 max-w-md" style="color: var(--text-muted);">
-				Pick a service, grab a number, get your code in seconds. No code arrives? Instant refund.
+				Choose an app and country. Your code appears here.
 			</p>
-			<div
-				class="mt-4 flex items-center justify-center gap-5 text-sm"
-				style="color: var(--text-muted);"
-			>
-				<span class="inline-flex items-center gap-1.5"
-					><Zap class="h-4 w-4" style="color:#fbbf24;" /> Instant</span
-				>
-				<span class="inline-flex items-center gap-1.5"
-					><ShieldCheck class="h-4 w-4" style="color:#34d399;" /> No-code refund</span
-				>
-				<span class="inline-flex items-center gap-1.5"
-					><RefreshCw class="h-4 w-4" style="color: #38bdf8;" /> Auto-delivered</span
-				>
-			</div>
 		</div>
 
 		{#if data.catalogueUnavailable}
@@ -212,6 +217,7 @@
 				{#each visibleServices as service (service.serviceId)}
 					{@const isOpen = openId === service.serviceId}
 					<div
+						id={`numbers-service-${service.serviceId}`}
 						class="overflow-hidden rounded-2xl transition-shadow"
 						style="border: 1px solid {isOpen
 							? '#0ea5e9'

@@ -442,9 +442,12 @@
 		if (!exactPreviewConfig.enabled || !currentUser || !data.tierCategory) return;
 		exactPreviewLoading = true;
 		exactPreviewError = null;
+		const controller = new AbortController();
+		const timeout = window.setTimeout(() => controller.abort(), 12_000);
 		try {
 			const response = await fetch(
-				`/api/exact-preview/tiers/${encodeURIComponent(data.tierCategory.id)}`
+				`/api/exact-preview/tiers/${encodeURIComponent(data.tierCategory.id)}`,
+				{ signal: controller.signal }
 			);
 			const result = await response.json();
 			if (!response.ok || !result.success) {
@@ -456,8 +459,13 @@
 		} catch (error) {
 			console.error('Failed to load exact preview accounts:', error);
 			exactPreviewError =
-				error instanceof Error ? error.message : 'Could not load exact accounts right now.';
+				error instanceof DOMException && error.name === 'AbortError'
+					? 'Loading took too long. Please try again.'
+					: error instanceof Error
+						? error.message
+						: 'Could not load exact accounts right now.';
 		} finally {
+			window.clearTimeout(timeout);
 			exactPreviewLoading = false;
 		}
 	}
@@ -497,6 +505,7 @@
 		}
 
 		exactPreviewReserving = account.accountId;
+		let reserveTimeout: number | null = null;
 		try {
 			const compatibility = await cart.ensureDeliveryModeCompatibility(
 				data.tierCategory.id,
@@ -508,24 +517,27 @@
 					? getTierDeliveryModeLabel(compatibility.existingMode)
 					: getTierDeliveryModeLabel('instant_auto');
 				const shouldReplace = window.confirm(
-					`You already have ${existingLabel} item(s) in your cart.\n\n${incomingLabel} items must be checked out separately.\n\nPress OK to clear your cart and reserve this exact account, or Cancel to keep your current cart.`
+					`You already have ${existingLabel} item(s) in your cart.\n\n${incomingLabel} items must be checked out separately.\n\nPress OK to clear your cart and add this exact account, or Cancel to keep your current cart.`
 				);
 				if (!shouldReplace) return;
 				cart.clear();
 				showWarning('Cart cleared', `Previous ${existingLabel} items were removed.`);
 			}
 
+			const controller = new AbortController();
+			reserveTimeout = window.setTimeout(() => controller.abort(), 12_000);
 			const response = await fetch('/api/exact-preview/reserve', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					tierId: data.tierCategory.id,
 					accountId: account.accountId
-				})
+				}),
+				signal: controller.signal
 			});
 			const result = await response.json();
 			if (!response.ok || !result.success) {
-				throw new Error(result.error || 'Could not reserve this account.');
+				throw new Error(result.error || 'Could not add this account.');
 			}
 
 			cart.addExactTier(data.tierCategory.id, {
@@ -553,14 +565,19 @@
 				6000,
 				'/checkout'
 			);
-			await loadExactPreviewAccounts();
+			void loadExactPreviewAccounts();
 		} catch (error) {
 			console.error('Failed to reserve exact account:', error);
 			showError(
-				'Could not reserve account',
-				error instanceof Error ? error.message : 'Please choose another account.'
+				'Could not add account',
+				error instanceof DOMException && error.name === 'AbortError'
+					? 'This is taking too long. Please try again.'
+					: error instanceof Error
+						? error.message
+						: 'Please choose another account.'
 			);
 		} finally {
+			if (reserveTimeout !== null) window.clearTimeout(reserveTimeout);
 			exactPreviewReserving = null;
 		}
 	}
@@ -617,9 +634,12 @@
 			const fc = Number(data.tier?.metadata?.follower_count || 0);
 			const display = String(fr?.display || '').trim();
 			const hasRange = fr && ((fr.min || 0) !== 0 || (fr.max || 0) !== 0);
-			if (display) return `Buy ${data.platform?.name} accounts with ${display}. Premium quality accounts with instant delivery and full access.`;
-			if (hasRange) return `Buy ${data.platform?.name} accounts with ${formatFollowers(fr.min || 0)} - ${formatFollowers(fr.max || 0)} followers. Premium quality accounts with instant delivery and full access.`;
-			if (fc > 0) return `Buy ${data.platform?.name} accounts with ${formatFollowers(fc)} followers. Premium quality accounts with instant delivery and full access.`;
+			if (display)
+				return `Buy ${data.platform?.name} accounts with ${display}. Premium quality accounts with instant delivery and full access.`;
+			if (hasRange)
+				return `Buy ${data.platform?.name} accounts with ${formatFollowers(fr.min || 0)} - ${formatFollowers(fr.max || 0)} followers. Premium quality accounts with instant delivery and full access.`;
+			if (fc > 0)
+				return `Buy ${data.platform?.name} accounts with ${formatFollowers(fc)} followers. Premium quality accounts with instant delivery and full access.`;
 			return `Buy premium ${data.platform?.name} accounts. Instant delivery and full access.`;
 		})()}
 	/>
@@ -693,7 +713,7 @@
 								<div class="mt-2 flex flex-wrap gap-1.5">
 									{#if data.tier.is_pinned}
 										<span
-											class="tag-chip inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
+											class="tag-chip inline-flex items-center rounded-md px-2.5 py-1 text-[10px] font-bold tracking-wide uppercase"
 											style="background: rgba(251, 191, 36, 0.22); color: rgb(251, 191, 36); border: 1px solid rgba(251, 191, 36, 0.4);"
 										>
 											Pinned{data.tier.pin_priority ? ` #${data.tier.pin_priority}` : ''}
@@ -701,7 +721,7 @@
 									{/if}
 									{#if data.tier.is_featured}
 										<span
-											class="tag-chip inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
+											class="tag-chip inline-flex items-center rounded-md px-2.5 py-1 text-[10px] font-bold tracking-wide uppercase"
 											style="background: rgba(34, 197, 94, 0.24); color: rgb(187, 247, 208); border: 1px solid rgba(34, 197, 94, 0.35);"
 										>
 											{getFeaturedBadgeLabel()}
@@ -714,10 +734,18 @@
 									{@const range = data.tier.metadata.follower_range}
 									{@const hasDisplay = String(range.display || '').trim()}
 									{@const hasRange = (range.min || 0) !== 0 || (range.max || 0) !== 0}
-									{data.platform.name} accounts{#if hasDisplay} with {hasDisplay}{:else if hasRange} with {formatFollowers(range.min || 0)} - {formatFollowers(range.max || 0)} followers{/if}
+									{#if hasDisplay}
+										{data.platform.name} accounts · {hasDisplay}
+									{:else if hasRange}
+										{data.platform.name} accounts · {formatFollowers(
+											range.min || 0
+										)}–{formatFollowers(range.max || 0)} followers
+									{:else}
+										{data.platform.name} accounts
+									{/if}
 								{:else if (data.tier.metadata?.follower_count as number) > 0}
 									{data.platform.name} accounts with {formatFollowers(
-										(data.tier.metadata?.follower_count as number)
+										data.tier.metadata?.follower_count as number
 									)} followers
 								{:else}
 									{data.platform.name} accounts
@@ -729,7 +757,11 @@
 								>
 									{formatPrice(data.tier.price)}
 								</span>
-								<span>{data.tier.is_manual ? 'Available' : `${data.tier.visible_available} available`}</span>
+								<span
+									>{data.tier.is_manual
+										? 'Available'
+										: `${data.tier.visible_available} available`}</span
+								>
 								<span
 									class="rounded-full border px-2 py-0.5 font-semibold"
 									style={tierDeliveryConfig.mode === 'manual_handover'
@@ -756,6 +788,39 @@
 			<div class="mx-auto max-w-6xl px-4">
 				<div class="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
 					<div class="order-1 space-y-4 lg:col-span-2">
+						{#if data.tier.description || getTierFeatures(data.tier.metadata).length > 0 || data.tier.metadata?.age_hint}
+							<div class="rounded-xl bg-[var(--color-card)] p-4 shadow sm:p-5">
+								<h2 class="text-lg font-bold text-[var(--color-text-primary)] sm:text-xl">
+									Features
+								</h2>
+								{#if data.tier.description}
+									<p class="mt-1 text-sm leading-relaxed text-[var(--color-text-muted)]">
+										{data.tier.description}
+									</p>
+								{/if}
+								{#if getTierFeatures(data.tier.metadata).length > 0 || data.tier.metadata?.age_hint}
+									<div class="mt-3 flex flex-wrap gap-2">
+										{#each getTierFeatures(data.tier.metadata) as feature, index (`${feature}-${index}`)}
+											<span
+												class="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text-secondary)]"
+											>
+												<CheckCircle class="h-4 w-4 text-green-500" />
+												{feature}
+											</span>
+										{/each}
+										{#if data.tier.metadata?.age_hint}
+											<span
+												class="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text-secondary)]"
+											>
+												<Users class="h-4 w-4 text-[var(--color-accent)]" />
+												{data.tier.metadata.age_hint}
+											</span>
+										{/if}
+									</div>
+								{/if}
+							</div>
+						{/if}
+
 						{#if tierSampleScreenshots.length > 0}
 							<div class="rounded-xl bg-[var(--color-card)] p-4 shadow sm:p-5">
 								<div class="mb-2 flex items-center justify-between gap-2">
@@ -797,10 +862,10 @@
 								<div class="mb-3 flex items-start justify-between gap-3">
 									<div>
 										<h2 class="text-lg font-bold text-[var(--color-text-primary)] sm:text-xl">
-											Exact Accounts Available
+											Choose your profile
 										</h2>
 										<p class="mt-1 text-sm text-[var(--color-text-muted)]">
-											Open a live profile link, then choose the exact account you want.
+											See the public profile before adding it.
 										</p>
 									</div>
 								</div>
@@ -814,8 +879,8 @@
 										</p>
 										<button
 											type="button"
-											class="mt-3 rounded-full px-4 py-2 text-sm font-semibold transition-all active:scale-95"
-											style="background: var(--btn-primary-gradient); color: #04140C;"
+											class="mt-3 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all active:scale-95"
+											style="background: var(--primary); color: #04140C;"
 											onclick={() => {
 												const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
 												goto(`/auth/login?returnUrl=${returnUrl}`);
@@ -927,7 +992,7 @@
 														href={account.profileUrl}
 														target="_blank"
 														rel="noopener noreferrer"
-														class="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-[var(--color-border)] px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)] transition-all hover:bg-[var(--color-surface-hover)] active:scale-95"
+														class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2.5 text-sm font-semibold text-[var(--color-text-primary)] transition-all hover:bg-[var(--color-surface-hover)] active:scale-95"
 													>
 														<ExternalLink class="h-4 w-4" />
 														View live profile
@@ -936,11 +1001,11 @@
 														type="button"
 														onclick={() => chooseExactAccount(account)}
 														disabled={exactPreviewReserving === account.accountId || accountInCart}
-														class="inline-flex flex-1 items-center justify-center rounded-full px-3 py-2 text-sm font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-80"
-														style="background: var(--btn-primary-gradient); color: #04140C;"
+														class="inline-flex flex-1 items-center justify-center rounded-lg px-3 py-2.5 text-sm font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-80"
+														style="background: var(--primary); color: #04140C;"
 													>
 														{#if exactPreviewReserving === account.accountId}
-															Reserving...
+															Adding to cart...
 														{:else if accountInCart}
 															In Cart
 														{:else}
@@ -951,52 +1016,23 @@
 											</div>
 										{/each}
 									</div>
-									<p class="mt-3 text-xs leading-relaxed text-[var(--color-text-muted)]">
-										Only the public profile link is shown before payment. Login details are
-										delivered after successful checkout.
+									<p class="mt-3 text-xs text-[var(--color-text-muted)]">
+										Login details appear after payment.
 									</p>
 								{/if}
 							</div>
 						{/if}
-
-						<div class="rounded-xl bg-[var(--color-card)] p-4 shadow sm:p-5">
-							<h2 class="mb-3 text-lg font-bold text-[var(--color-text-primary)] sm:text-xl">
-								Included
-							</h2>
-							{#if getTierFeatures(data.tier.metadata).length > 0 || data.tier.metadata?.age_hint}
-								<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-									{#each getTierFeatures(data.tier.metadata) as feature, index (`${feature}-${index}`)}
-										<div
-											class="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text-secondary)]"
-										>
-											<CheckCircle class="h-4 w-4 text-green-500" />
-											<span>{feature}</span>
-										</div>
-									{/each}
-									{#if data.tier.metadata?.age_hint}
-										<div
-											class="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text-secondary)]"
-										>
-											<Users class="h-4 w-4 text-[var(--color-accent)]" />
-											<span>{data.tier.metadata.age_hint}</span>
-										</div>
-									{/if}
-								</div>
-							{:else}
-								<p class="text-sm text-[var(--color-text-muted)]">
-									No additional feature tags available for this account type yet.
-								</p>
-							{/if}
-						</div>
 					</div>
 
 					<div class="order-2 lg:col-span-1">
 						<div class="rounded-xl bg-[var(--color-card)] p-4 shadow sm:p-5 lg:sticky lg:top-24">
 							<h3 class="text-lg font-bold text-[var(--color-text-primary)] sm:text-xl">
-								Buy This Type
+								{exactPreviewConfig.enabled ? 'Quick buy' : 'Buy this account type'}
 							</h3>
 							<p class="mt-1 text-sm text-[var(--color-text-muted)]">
-								How many accounts do you need?
+								{exactPreviewConfig.enabled
+									? 'We’ll choose an available profile for you.'
+									: 'How many accounts do you need?'}
 							</p>
 
 							<div
@@ -1081,7 +1117,7 @@
 									style="background: var(--primary); color: #04140c;"
 								>
 									{#if addingToCart}
-										Adding to Cart...
+										Adding to cart...
 									{:else}
 										Add to Cart - {formatPrice(totalPrice)}
 									{/if}
@@ -1089,13 +1125,14 @@
 							{/if}
 
 							<p class="mt-3 text-center text-xs leading-relaxed" style="color: var(--text-dim);">
-								Full Details handover included. Questions?
+								Login details are included. Questions?
 								<a
 									href="https://wa.link/fast_accounts"
 									target="_blank"
 									rel="noopener noreferrer"
 									style="color: var(--primary); text-decoration: underline; text-underline-offset: 2px;"
-								>Chat us on WhatsApp.</a>
+									>Chat us on WhatsApp.</a
+								>
 							</p>
 
 							{#if data.tier.visible_available <= lowStockThreshold && data.tier.visible_available > 0}

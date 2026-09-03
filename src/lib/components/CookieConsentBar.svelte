@@ -18,21 +18,19 @@
 
 {#if visible}
 	<div
-		class="fixed inset-x-0 bottom-0 z-[80] border-t p-3 sm:p-4"
-		style="background: rgba(7, 9, 12, 0.96); border-color: var(--border); backdrop-filter: blur(8px);"
+		class="cookie-notice fixed right-3 bottom-3 left-3 z-[80] sm:right-5 sm:bottom-5 sm:left-auto"
+		style="background: rgba(7, 9, 12, 0.94); border-color: var(--border); backdrop-filter: blur(12px);"
+		role="status"
 	>
-		<div
-			class="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-		>
-			<p class="text-sm" style="color: var(--text-muted);">
-				We use cookies to keep FastAccs secure and to improve your experience. By continuing to
-				browse, you agree to our
-				<a href="/cookies" class="underline" style="color: var(--link);">Cookie Policy</a>.
+		<div class="flex items-center justify-between gap-3">
+			<p class="text-xs sm:text-sm" style="color: var(--text-muted);">
+				Cookies keep FastAccs secure.
+				<a href="/cookies" class="underline" style="color: var(--link);">Details</a>
 			</p>
 			<button
 				type="button"
 				onclick={dismiss}
-				class="self-end rounded-full px-4 py-2 text-xs font-semibold sm:self-auto sm:text-sm"
+				class="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold sm:px-4 sm:py-2"
 				style="background: var(--btn-primary-gradient); color: #04140C;"
 			>
 				Got it
@@ -40,3 +38,13 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	.cookie-notice {
+		max-width: 25rem;
+		border-width: 1px;
+		border-radius: 0.9rem;
+		padding: 0.65rem 0.75rem;
+		box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
+	}
+</style>

@@ -69,6 +69,8 @@ import {
 } from '$lib/helpers/monnify-initialization.server';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
+import { getPaymentReturnOrigin } from '$lib/helpers/site-url';
+import { CONFIRMED_PAYMENT_STATUSES } from '$lib/helpers/buyer-order-visibility';
 
 interface CreateOrderItemInput {
 	categoryId: string;
@@ -119,7 +121,9 @@ function isActiveCheckoutOrder(order: {
 }): boolean {
 	return (
 		['pending', 'pending_payment'].includes(order.status) &&
-		order.paymentStatus !== 'paid' &&
+		!CONFIRMED_PAYMENT_STATUSES.includes(
+			order.paymentStatus as (typeof CONFIRMED_PAYMENT_STATUSES)[number]
+		) &&
 		Boolean(order.paymentCheckoutUrl) &&
 		Boolean(order.paymentExpiresAt && order.paymentExpiresAt.getTime() > Date.now())
 	);
@@ -324,7 +328,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 			if (
 				['paid', 'completed'].includes(existingCheckout.status) ||
-				existingCheckout.paymentStatus === 'paid'
+				CONFIRMED_PAYMENT_STATUSES.includes(
+					existingCheckout.paymentStatus as (typeof CONFIRMED_PAYMENT_STATUSES)[number]
+				)
 			) {
 				// The browser may have lost the original success response after the durable
 				// payment commit. Replaying the same checkout key must resume that paid order,
@@ -336,7 +342,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					resumed: true,
 					orderId: existingCheckout.id,
 					paidWithStoreCredit,
-					redirectUrl: `${url.origin}/checkout/verify?orderId=${encodeURIComponent(existingCheckout.id)}${paidWithStoreCredit ? '&method=store_credit' : ''}`,
+					redirectUrl: `${getPaymentReturnOrigin(url)}/checkout/verify?orderId=${encodeURIComponent(existingCheckout.id)}${paidWithStoreCredit ? '&method=store_credit' : ''}`,
 					deliveryMode:
 						existingCheckout.orderType === 'phone'
 							? 'auto_sms'
@@ -395,7 +401,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						resumed: true,
 						orderId: existingCheckout.id,
 						paidWithStoreCredit,
-						redirectUrl: `${url.origin}/checkout/verify?orderId=${encodeURIComponent(existingCheckout.id)}${paidWithStoreCredit ? '&method=store_credit' : ''}`,
+						redirectUrl: `${getPaymentReturnOrigin(url)}/checkout/verify?orderId=${encodeURIComponent(existingCheckout.id)}${paidWithStoreCredit ? '&method=store_credit' : ''}`,
 						deliveryMode:
 							existingCheckout.orderType === 'phone'
 								? 'auto_sms'
@@ -595,7 +601,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					deliveryMode: 'boosting_manual',
 					exactAccountId: null,
 					exactAccountLabel: null,
-					boostTargetUrl: item.boostTargetUrl,
+					boostTargetUrl: linkCheck.normalizedUrl || item.boostTargetUrl,
 					boostQuantity: item.boostQuantity
 				});
 				deliveryModes.add('boosting_manual');
@@ -659,7 +665,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		// Keep it only on paths that actually consume account inventory; the scheduled
 		// reconciliation job remains the broad safety net.
 		if (stockCheckCategoryIds.length > 0) {
-			await releaseExpiredOrderReservations();
+			await releaseExpiredOrderReservations(prisma, stockCheckCategoryIds);
 		}
 		if (exactSelectionItems.length > 0) {
 			await releaseExpiredExactPreviewReservations();
@@ -1260,7 +1266,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						return null;
 					});
 
-			const verifyUrl = `${url.origin}/checkout/verify?orderId=${encodeURIComponent(data.id)}&method=store_credit`;
+			const verifyUrl = `${getPaymentReturnOrigin(url)}/checkout/verify?orderId=${encodeURIComponent(data.id)}&method=store_credit`;
 			return json({
 				data,
 				success: true,
@@ -1276,7 +1282,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		if (paymentMethod === 'monnify') {
 			const shortOrderId = data.id.substring(0, 8);
 			const paymentReference = `ORD_${shortOrderId}_${Date.now()}`;
-			const redirectUrl = `${url.origin}/checkout/verify?orderId=${encodeURIComponent(data.id)}`;
+			const redirectUrl = `${getPaymentReturnOrigin(url)}/checkout/verify?orderId=${encodeURIComponent(data.id)}`;
 
 			logPaymentEvent('info', 'checkout.initialize.started', {
 				traceId,

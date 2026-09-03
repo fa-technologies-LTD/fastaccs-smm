@@ -17,3 +17,16 @@ export function getSiteBaseUrl(): string {
 		return FALLBACK_BASE_URL;
 	}
 }
+
+/**
+ * Payment providers must return production buyers to the public storefront,
+ * even when the app is behind an internal proxy. Explicit localhost payment
+ * testing keeps its local origin so the browser can complete the same flow.
+ */
+export function getPaymentReturnOrigin(requestUrl: URL): string {
+	const hostname = requestUrl.hostname.toLowerCase();
+	if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+		return requestUrl.origin;
+	}
+	return getSiteBaseUrl();
+}

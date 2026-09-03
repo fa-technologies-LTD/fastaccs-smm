@@ -14,13 +14,15 @@ import {
 	getExactPreviewScreenshotUrl,
 	releaseExpiredExactPreviewReservations
 } from '$lib/services/exact-preview';
-import { releaseExpiredOrderReservations } from '$lib/services/order-reservations';
 import {
 	getBoostingServiceConfig,
 	isValidBoostingQuantity,
 	BOOSTING_PLATFORM_LABELS
 } from '$lib/helpers/boosting-service-config';
 import { validateLinkForAction } from '$lib/helpers/social-link-validator';
+import { env } from '$env/dynamic/private';
+import { dev } from '$app/environment';
+import { isLocalDataReadOnly } from '$lib/server/local-data-safety';
 
 interface CartRefreshItemInput {
 	cartItemId?: string;
@@ -120,8 +122,13 @@ function buildLineKey(input: { tierId: string; exactAccountId?: string | null })
 	return input.exactAccountId ? `exact:${input.exactAccountId}` : `tier:${input.tierId}`;
 }
 
-export const POST: RequestHandler = async ({ request, locals }) => {
+export const POST: RequestHandler = async ({ request, locals, url }) => {
 	try {
+		const suppressMaintenanceWrites = isLocalDataReadOnly({
+			dev,
+			configuredMode: env.FASTACCS_LOCAL_DATA_MODE,
+			hostname: url.hostname
+		});
 		const payload = (await request.json().catch(() => ({}))) as {
 			items?: unknown;
 			checkoutKey?: unknown;
@@ -204,27 +211,25 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const requestedExactAccountIds = inputItems
 			.map((item) => normalizeText(item.exactAccount?.accountId))
 			.filter((value) => value.length > 0 && isUuid(value));
-		// Avoid putting global inventory maintenance in the Numbers/boosting cart hot path.
-		// Account carts still clean the reservation class they rely on before counting stock.
-		if (inventoryTierIds.length > 0) await releaseExpiredOrderReservations();
-		if (requestedExactAccountIds.length > 0) await releaseExpiredExactPreviewReservations();
+		// Checkout performs the authoritative reservation cleanup before taking a stock hold.
+		// Keeping that global write out of this read path makes opening a cart fast and cheap.
+		if (!suppressMaintenanceWrites && requestedExactAccountIds.length > 0) {
+			await releaseExpiredExactPreviewReservations();
+		}
 
-		const stockRows = inventoryTierIds.length
-			? await prisma.account.groupBy({
-					by: ['categoryId'],
-					where: {
-						categoryId: { in: inventoryTierIds },
-						status: 'available'
-					},
-					_count: { _all: true }
-				})
-			: [];
-		const availableByTierId = new Map(
-			stockRows.map((row) => [row.categoryId, Number(row._count._all || 0)])
-		);
-		const activeCheckout =
+		const [stockRows, activeCheckout, exactAccounts] = await Promise.all([
+			inventoryTierIds.length
+				? prisma.account.groupBy({
+						by: ['categoryId'],
+						where: {
+							categoryId: { in: inventoryTierIds },
+							status: 'available'
+						},
+						_count: { _all: true }
+					})
+				: Promise.resolve([]),
 			checkoutKey && locals.user?.id
-				? await prisma.order.findUnique({
+				? prisma.order.findUnique({
 						where: { checkoutKey },
 						select: {
 							userId: true,
@@ -246,7 +251,28 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 							}
 						}
 					})
-				: null;
+				: Promise.resolve(null),
+			requestedExactAccountIds.length
+				? prisma.account.findMany({
+						where: { id: { in: requestedExactAccountIds } },
+						select: {
+							id: true,
+							categoryId: true,
+							linkUrl: true,
+							status: true,
+							reservedUntil: true,
+							followers: true,
+							ageMonths: true,
+							niche: true,
+							qualityScore: true,
+							credentialExtras: true
+						}
+					})
+				: Promise.resolve([])
+		]);
+		const availableByTierId = new Map(
+			stockRows.map((row) => [row.categoryId, Number(row._count._all || 0)])
+		);
 		const heldByTierId = new Map<string, number>();
 		if (
 			activeCheckout &&
@@ -264,23 +290,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 		}
 
-		const exactAccounts = requestedExactAccountIds.length
-			? await prisma.account.findMany({
-					where: { id: { in: requestedExactAccountIds } },
-					select: {
-						id: true,
-						categoryId: true,
-						linkUrl: true,
-						status: true,
-						reservedUntil: true,
-						followers: true,
-						ageMonths: true,
-						niche: true,
-						qualityScore: true,
-						credentialExtras: true
-					}
-				})
-			: [];
 		const exactAccountById = new Map(exactAccounts.map((account) => [account.id, account]));
 
 		const messages: string[] = [];
@@ -343,7 +352,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					tierId: tier.id,
 					quantity: 1,
 					addedAt: Number(input.addedAt || Date.now()),
-					boosting: { targetUrl, boostQuantity },
+					boosting: { targetUrl: linkCheck.normalizedUrl || targetUrl, boostQuantity },
 					tier: boostingTierPayload
 				});
 				continue;

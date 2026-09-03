@@ -14,6 +14,7 @@
 	const canViewRevenue = Boolean(data.canViewRevenue);
 	let hideMonetaryAmounts = $state(false);
 	const stats = $derived((data.stats || {}) as Record<string, any>);
+	const postPurchaseUpsell = $derived(stats.trafficFunnel?.postPurchaseUpsell);
 	const integrity = $derived(
 		(data.integrity || {
 			ok: true,
@@ -995,6 +996,31 @@
 					<h2 class="text-base font-semibold" style="color: var(--text)">
 						Traffic & Funnel (Last 30 Days)
 					</h2>
+					{#if postPurchaseUpsell?.views > 0}
+						<div
+							class="mt-3 grid grid-cols-3 gap-2 rounded-lg p-3"
+							style="background: rgba(5,212,113,0.08); border: 1px solid rgba(5,212,113,0.25);"
+						>
+							<div>
+								<p class="text-[11px]" style="color: var(--text-muted);">Upsell views</p>
+								<p class="mt-1 text-lg font-bold" style="color: var(--text);">
+									{postPurchaseUpsell.views}
+								</p>
+							</div>
+							<div>
+								<p class="text-[11px]" style="color: var(--text-muted);">Clicks</p>
+								<p class="mt-1 text-lg font-bold" style="color: var(--text);">
+									{postPurchaseUpsell.clicks}
+								</p>
+							</div>
+							<div>
+								<p class="text-[11px]" style="color: var(--text-muted);">Click rate</p>
+								<p class="mt-1 text-lg font-bold" style="color: var(--primary);">
+									{formatPct(postPurchaseUpsell.clickRate)}
+								</p>
+							</div>
+						</div>
+					{/if}
 					{#if stats.trafficFunnel?.funnel?.length}
 						<div class="mt-3 space-y-2">
 							{#each stats.trafficFunnel.funnel as step}

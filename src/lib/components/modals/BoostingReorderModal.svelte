@@ -160,7 +160,11 @@
 
 			for (const item of items) {
 				const value = (linkDrafts[item.categoryId] || '').trim();
-				cart.addBoostingService(item.categoryId, value, getQuantity(item));
+				const config = configByCategoryId[item.categoryId];
+				const normalizedValue = config
+					? validateLinkForAction(config.platform, config.actionType, value).normalizedUrl || value
+					: value;
+				cart.addBoostingService(item.categoryId, normalizedValue, getQuantity(item));
 			}
 
 			showSuccess('Added to cart', 'Redirecting to checkout...');

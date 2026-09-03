@@ -11,7 +11,11 @@ export const ANALYTICS_FUNNEL_STEPS = [
 	{ type: 'purchase', label: 'Purchase' }
 ] as const;
 
-export const ANALYTICS_PRODUCT_EVENT_TYPES = ['numbers_service_open'] as const;
+export const ANALYTICS_PRODUCT_EVENT_TYPES = [
+	'numbers_service_open',
+	'post_purchase_upsell_view',
+	'post_purchase_upsell_click'
+] as const;
 export const ANALYTICS_EVENT_TYPES = [
 	...ANALYTICS_FUNNEL_STEPS.map((step) => step.type),
 	...ANALYTICS_PRODUCT_EVENT_TYPES

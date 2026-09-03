@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { Check, X, Loader2, Clock3 } from '$lib/icons';
+	import { ArrowRight, Check, X, Loader2, Clock3, Zap } from '$lib/icons';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import {
@@ -39,6 +39,7 @@
 	// Post-purchase boosting upsell (shown on the success screen for account orders).
 	let showBoostUpsell = $state(false);
 	let purchasesRedirectPath = $state('/dashboard?tab=purchases');
+	let boostUpsellPath = $state('/services?source=post_purchase');
 
 	let isDisposed = false;
 	let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -112,6 +113,34 @@
 		return targetOrderId
 			? `/dashboard?tab=purchases&orderId=${encodeURIComponent(targetOrderId)}`
 			: '/dashboard?tab=purchases';
+	}
+
+	function getBoostingUpsellPath(platformName: unknown): string {
+		const slug = String(platformName || '')
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-');
+		const supportedPlatforms = new Set(['facebook', 'instagram', 'tiktok', 'youtube', 'x']);
+		const basePath = supportedPlatforms.has(slug) ? `/services/${slug}` : '/services';
+		return `${basePath}?source=post_purchase`;
+	}
+
+	function clearUpsellRedirect(): void {
+		if (upsellRedirectTimer) {
+			clearTimeout(upsellRedirectTimer);
+			upsellRedirectTimer = null;
+		}
+	}
+
+	function openBoostingUpsell(): void {
+		clearUpsellRedirect();
+		recordAnalyticsEvent('post_purchase_upsell_click', boostUpsellPath);
+		goto(boostUpsellPath);
+	}
+
+	function continueToPurchases(): void {
+		clearUpsellRedirect();
+		goto(purchasesRedirectPath);
 	}
 
 	function goToOrdersDashboard(showPendingBanner = false): void {
@@ -268,13 +297,16 @@
 							goto(getOrdersDashboardPath(resolvedOrderId));
 						} else {
 							showSuccess('Payment successful!', 'Your order has been completed.');
-							// Hold on the success screen with a boosting upsell instead of bouncing
-							// straight to purchases; a fallback still redirects passive buyers.
 							purchasesRedirectPath = getPurchasesDashboardPath(resolvedOrderId);
+							const purchasedPlatform = checkoutSnapshot?.items?.find(
+								(item) => item.item_category2
+							)?.item_category2;
+							boostUpsellPath = getBoostingUpsellPath(purchasedPlatform);
 							showBoostUpsell = true;
+							recordAnalyticsEvent('post_purchase_upsell_view', '/checkout/verify?upsell=boosting');
 							upsellRedirectTimer = setTimeout(() => {
 								if (!isDisposed) goto(purchasesRedirectPath);
-							}, 10000);
+							}, 12_000);
 						}
 						return;
 					}
@@ -395,10 +427,7 @@
 		return () => {
 			isDisposed = true;
 			clearRetryTimer();
-			if (upsellRedirectTimer) {
-				clearTimeout(upsellRedirectTimer);
-				upsellRedirectTimer = null;
-			}
+			clearUpsellRedirect();
 		};
 	});
 </script>
@@ -492,35 +521,44 @@
 				{/if}
 				{#if showBoostUpsell}
 					<div
-						class="mb-2 rounded-xl p-4 text-left"
-						style="background: var(--bg); border: 1px solid var(--primary);"
+						class="mb-2 overflow-hidden rounded-xl text-left"
+						style="background: linear-gradient(145deg, rgba(5,212,113,0.11), rgba(124,92,255,0.08)); border: 1px solid rgba(5,212,113,0.42);"
 					>
-						<p
-							class="mb-1 text-sm font-bold"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Make your new account look established ⚡
-						</p>
-						<p
-							class="mb-3 text-xs sm:text-sm"
-							style="color: var(--text-muted); font-family: var(--font-body);"
-						>
-							Add real followers, likes &amp; views from our Boosting Services — grow it in minutes.
-						</p>
-						<button
-							onclick={() => goto('/services')}
-							class="mb-2 w-full rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
-							style="background: var(--btn-primary-gradient); color: #04140C; font-family: var(--font-head);"
-						>
-							Boost my account →
-						</button>
-						<button
-							onclick={() => goto(purchasesRedirectPath)}
-							class="w-full rounded-full px-6 py-2 text-xs sm:text-sm"
-							style="color: var(--text-muted); font-family: var(--font-body);"
-						>
-							Continue to my purchases →
-						</button>
+						<div class="flex items-center gap-3 p-4">
+							<span
+								class="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
+								style="background: rgba(167,139,250,0.16); color: #c4b5fd;"
+							>
+								<Zap size={22} />
+							</span>
+							<div class="min-w-0">
+								<p
+									class="text-sm font-bold"
+									style="color: var(--text); font-family: var(--font-head);"
+								>
+									Grow this account
+								</p>
+								<p class="mt-0.5 text-xs" style="color: var(--text-muted);">
+									Add followers, likes or views.
+								</p>
+							</div>
+						</div>
+						<div class="space-y-2 px-4 pb-4">
+							<button
+								onclick={openBoostingUpsell}
+								class="flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-all hover:opacity-90 active:scale-[.98] sm:text-base"
+								style="background: var(--btn-primary-gradient); color: #04140C; font-family: var(--font-head);"
+							>
+								Boost it now <ArrowRight size={16} />
+							</button>
+							<button
+								onclick={continueToPurchases}
+								class="w-full rounded-full px-6 py-2 text-xs sm:text-sm"
+								style="color: var(--text-muted); font-family: var(--font-body);"
+							>
+								View my purchase
+							</button>
+						</div>
 					</div>
 				{:else}
 					<p

@@ -313,6 +313,15 @@ export function getRequiredAdminPermission(
 		return null;
 	}
 
+	// Customers may correct the target link on their own paid boosting item. The
+	// endpoint itself enforces owner/admin access plus paid + not-started status.
+	if (
+		normalizedMethod === 'PATCH' &&
+		/^\/api\/orders\/[^/]+\/boosting-link\/[^/]+$/.test(pathname)
+	) {
+		return null;
+	}
+
 	if (pathname.startsWith('/api/orders/')) {
 		if (pathname.startsWith('/api/orders/stats')) {
 			return 'admin:access';

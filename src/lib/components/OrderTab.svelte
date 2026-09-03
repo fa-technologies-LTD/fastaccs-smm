@@ -196,6 +196,12 @@
 
 		if (isBoostingOrder(order)) {
 			const boostingItems = getBoostingItems(order);
+			if (boostingItems.some((item) => item.boostFulfillmentStatus === 'needs_link')) {
+				return 'Action Needed — Update Link';
+			}
+			if (boostingItems.some((item) => item.boostFulfillmentStatus === 'rejected')) {
+				return 'Needs Support';
+			}
 			if (boostingItems.every((item) => item.boostFulfillmentStatus === 'completed')) {
 				return 'Boost Completed';
 			}

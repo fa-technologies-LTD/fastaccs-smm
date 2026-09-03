@@ -1,8 +1,8 @@
 # FastAccs Affiliate Sprint — Living Checklist
 
-Last updated: 2026-08-31
+Last updated: 2026-09-04
 
-Status: `[x]` implemented and verified · `[~]` final review in progress · `[ ]` rollout action requiring separate approval · `[LATER]` separately scoped work
+Status: `[x]` implemented and verified · `[~]` rollout in progress · `[ ]` rollout action not yet completed · `[LATER]` separately scoped work
 
 This is the durable source of truth for the affiliate sprint. Code completion and production rollout are kept separate so a green implementation cannot silently mutate production data.
 
@@ -14,7 +14,7 @@ This is the durable source of truth for the affiliate sprint. Code completion an
 - [x] Fail closed and protect business money when a financial state is ambiguous.
 - [x] Preserve `.probe/` and unrelated user files.
 - [x] Use one local checkpoint for the sprint after final verification.
-- [~] Complete the final file-by-file scope review before creating that checkpoint.
+- [x] Complete the final file-by-file scope review before creating that checkpoint.
 
 ## Locked business policy
 
@@ -27,7 +27,7 @@ This is the durable source of truth for the affiliate sprint. Code completion an
 - [x] The affiliate earns 5% on those same first two retained eligible orders, capped at ₦1,000 per order.
 - [x] Referral pricing and separate promotion codes do not stack.
 - [x] Affiliate Cash may go toward FastAccs purchases or be withdrawn, but cannot be spent and withdrawn twice.
-- [x] The approved payout minimum is ₦5,000 and remains adjustable in admin.
+- [x] The approved payout minimum remains ₦10,000 and is adjustable in admin.
 - [x] Payout requires a 15-day-old account and approved Nigerian bank details; processing day is Saturday.
 - [x] Super Affiliate contract: ₦700 after a referred buyer retains ₦3,500 of account spend or three retained account orders.
 - [x] Super monthly bonuses are total, non-additive targets: ₦3,000 at 10 activations, ₦8,000 total at 20, and ₦15,000 total at 30.
@@ -118,6 +118,36 @@ This is the durable source of truth for the affiliate sprint. Code completion an
 - [x] Keep the public payout figure live from backend configuration rather than hard-coding a promise.
 - [ ] Owner review of the authenticated regular and Super dashboards on the local `test` server.
 
+## Extended storefront and operations review
+
+- [x] Keep local production-data preview explicit and fail closed by default; the owner-approved `production-e2e` mode is the only localhost mode allowed to write to live systems.
+- [x] Repair guest and signed-in cart refresh/recovery so saved items remain usable when the live refresh endpoint has a transient failure.
+- [x] Prevent browser-notification opt-in from remaining stuck and make denied, unsupported, and failed states actionable.
+- [x] Make admin attention badges refresh after relevant actions, focus/visibility changes, and a quiet two-minute visible-page interval rather than requiring a full reload.
+- [x] Make bank-detail failures render an actionable screen instead of a raw 500 response.
+- [x] Remove the misleading `Instant` and `No-code refund` promises from the Numbers explanation.
+- [x] Unify all four How It Works tabs around the same compact side-by-side journey, with tab-specific introductions and questions.
+- [x] Hide the native mobile tab scrollbar and automatically bring the selected tab into view.
+- [x] Build three complete homepage concepts for comparison and move the approved Option C catalogue treatment onto the real homepage.
+- [x] Keep the real homepage catalogue short, add the existing app icon set, show live account stock/prices, and deep-link Numbers and Boosting shortcuts into the selected expanded service.
+- [x] Keep the notification menu readable over the hero with a visible translucent glass surface rather than an opaque block.
+- [x] Simplify the account-buying catalogue on every platform, not only X: Features are visible, promotional badges are contained, quick Add to Cart remains primary, and exact-profile selection is optional and consistent.
+- [x] Replace customer-facing reservation jargon with Add to Cart language throughout exact-profile selection.
+- [x] Make cart removal optimistic and confirm it visibly, cache hydrated cart rows, and remove global reservation maintenance from the cart-read hot path.
+- [x] Keep checkout on the same idempotent order while Monnify initializes so partially store-credit-funded payments do not bounce to order history prematurely.
+- [x] Supply Monnify with the canonical production return URL while preserving localhost callbacks for explicit local payment tests.
+- [x] Replace the post-purchase boosting copy with a short platform-aware upsell and measure its views, clicks, and click-through rate in admin Analytics.
+- [x] Keep the mobile cookie notice compact so it does not cover a primary product action.
+- [x] Accept legitimate Facebook, Instagram, TikTok, YouTube, and X profile/post/share/short-link formats while rejecting off-platform lookalikes.
+- [x] Turn the manual Boosting admin page into a chronological, searchable, paginated queue with order dates, provider references, copy actions, status transitions, and a customer link-correction workflow.
+- [x] Redesign Inventory around actionable stock states, quick filters, useful sorting, truthful restock dates, and a mobile card layout.
+- [x] Keep visible Numbers-order feedback at three seconds while pausing hidden-tab polling and resuming immediately when the customer returns.
+- [x] Reduce wake-heavy background schedules without removing live purchase-time supplier checks or payment recovery.
+- [x] Keep the approved service/country expansion list in the controlled Numbers catalogue; PVAPins discovery cannot publish a product until a real rent/release or delivery proves it.
+- [x] Owner manual review and final smoke test of the release-critical storefront and operations flows.
+- [ ] Observe Neon compute for 24–48 hours after deployment and compare active compute hours and invoice trend with the previous five-minute wake pattern.
+- [ ] Confirm the controlled probe has produced enough successful evidence for the specific new services/countries intended for promotion; unsupported or unproven shortcuts must remain off the storefront.
+
 ## Tests and validation
 
 - [x] Regular 5%/5%, first-two-order rules, per-order caps, and account-only direct-API enforcement.
@@ -130,26 +160,33 @@ This is the durable source of truth for the affiliate sprint. Code completion an
 - [x] Canonical ledger, analytics, event deduplication, notification pagination, and lazy stats loading coverage.
 - [x] All four affiliate migration/repair scripts pass Node syntax validation.
 - [x] Prisma schema validation passes.
-- [x] Static analysis passes with 0 errors; 126 existing advisory Svelte warnings remain across 40 files.
+- [x] Static analysis passes with 0 errors; 121 existing advisory Svelte warnings remain across 39 files.
 - [x] Production build passes.
-- [x] Complete test suite passes: 98 files, 567 tests.
+- [x] Complete test suite passes: 104 files, 601 tests.
+- [x] Browser regression suite passes: 4 tests, including homepage, navigation, and cart recovery.
 - [x] `git diff --check` passes.
 
-## Production rollout — not executed
+## Production rollout — in progress
 
 - [ ] Configure `AFFILIATE_PAYOUT_ENCRYPTION_KEYS` with a new current key and retained rotation policy.
-- [ ] Run the read-only migration preflight against production and review duplicate programmes, open payouts, and incomplete bank rows.
-- [ ] Deploy only the additive affiliate migration after explicit approval.
-- [ ] Run the full affiliate integrity report in dry-run mode and review its exact fingerprinted record list.
-- [ ] Confirm the existing production payout setting currently reported as ₦10,000 and approve changing it to the locked ₦5,000 policy.
+- [x] Run the read-only migration preflight against production and review duplicate programmes, open payouts, and incomplete bank rows.
+- [x] Confirm the additive affiliate migration is already present in production; no migration write is needed for this release.
+- [x] Run the full affiliate integrity report in dry-run mode and record its exact fingerprinted result without applying repairs.
+  - 2026-09-04 fingerprint: `c4c0c932bc79adff7cfad0de2c85b7ee662f7566578a24b4e8f35e32bcd2778c`; 13 ambiguous legacy contracts remain blocked from automatic repair, and no production rows were changed.
+- [x] Keep the existing production affiliate payout minimum at ₦10,000.
 - [ ] Review every proposed legacy referral/policy snapshot, cached total, missing programme, missing reward, payout anomaly, and bank row before any write.
 - [ ] Apply only the owner-approved non-ambiguous repairs; do not grant money for ambiguous records.
 - [ ] Encrypt the exact fingerprint-approved legacy bank rows, then verify plaintext is cleared.
 - [ ] Verify referral ownership, frozen contracts, ledger totals, payout reservations, available cash, and admin funnel values after rollout.
-- [ ] Obtain explicit approval before pushing, merging to `main`, or deploying.
+- [x] Obtain explicit approval before pushing, merging to `main`, or deploying.
 
 ## Separately scoped future work
 
 - [LATER] Design a separate internal incentive system for Numbers and Boosting instead of forcing them into account-sale economics.
 - [LATER] Run the organic discovery/sales sprint covering search discovery, useful content, catalogue landing pages, lifecycle loops, referrals, and conversion measurement without paid social dependence.
 - [LATER] Add provider delivery/open-event monitoring for email deliverability beyond application-level render and send records.
+- [LATER] Plan and integrate a boosting-service provider API so fulfilment can be automated with idempotency, status reconciliation, retries, refunds, supplier failover, margins, and an admin override path.
+- [LATER] Review live Numbers performance: availability, OTP success, supplier quality, failover, refund rate, response time, and cost per successful rental.
+- [LATER] Audit every transactional, lifecycle, support, security, admin, and marketing email for accuracy, tone, clarity, and duplicated or outdated promises.
+- [LATER] Upgrade the shared email design system and verify responsive rendering across common inboxes.
+- [LATER] Finish with a complete customer/admin site sweep covering copy, navigation, responsive UI, accessibility, loading/error states, conversion friction, operational controls, and dead or inconsistent paths.

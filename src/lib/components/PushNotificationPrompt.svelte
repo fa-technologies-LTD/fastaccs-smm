@@ -37,15 +37,20 @@
 	async function enable(): Promise<void> {
 		busy = true;
 		errorMessage = '';
-		const result = await subscribeToPush();
-		busy = false;
 
-		if (!result.success) {
-			errorMessage = result.error || 'Could not enable notifications.';
-			return;
+		try {
+			const result = await subscribeToPush();
+			if (!result.success) {
+				errorMessage = result.error || 'Could not enable notifications.';
+				return;
+			}
+
+			dismiss();
+		} catch {
+			errorMessage = 'Could not enable notifications. Please try again.';
+		} finally {
+			busy = false;
 		}
-
-		dismiss();
 	}
 </script>
 
@@ -94,7 +99,7 @@
 							class="rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
 							style="background: rgba(5,212,113,0.16); border: 1px solid rgba(5,212,113,0.35); color: var(--primary);"
 						>
-							{busy ? 'Enabling…' : 'Enable notifications'}
+							{busy ? 'Check your browser…' : 'Enable notifications'}
 						</button>
 						<button
 							type="button"

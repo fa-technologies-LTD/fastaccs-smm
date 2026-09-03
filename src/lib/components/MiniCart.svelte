@@ -7,6 +7,7 @@
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
 	import { brandKey } from '$lib/components/BrandIcon.svelte';
+	import { showSuccess } from '$lib/stores/toasts';
 
 	// Reactive state
 	const isOpen = $derived(cart.isOpen);
@@ -97,7 +98,12 @@
 	}
 
 	function removeItem(item: CartItemWithTier) {
-		cart.removeItem(getCartLineKey(item));
+		const lineKey = getCartLineKey(item);
+		cartItems = cartItems.filter((candidate) => getCartLineKey(candidate) !== lineKey);
+		total = cartItems.reduce((sum, candidate) => sum + getItemPrice(candidate), 0);
+		cart.removeItem(lineKey);
+		lastLoadedCartKey = getCartSnapshotKey(cart.items);
+		showSuccess('Removed from cart', item.tier.name);
 	}
 
 	function goToCheckout() {

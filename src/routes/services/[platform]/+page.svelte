@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import Navigation from '$lib/components/Navigation.svelte';
@@ -19,7 +19,10 @@
 	import { validateLinkForAction, getRequiredLinkType } from '$lib/helpers/social-link-validator';
 	import type { BoostingPlatform, BoostingActionType } from '$lib/helpers/social-link-validator';
 	import { getPlatformIcon } from '$lib/helpers/platformColors';
-	import { getTierDeliveryModeLabel, type TierDeliveryMode } from '$lib/helpers/tier-delivery-config';
+	import {
+		getTierDeliveryModeLabel,
+		type TierDeliveryMode
+	} from '$lib/helpers/tier-delivery-config';
 	import type { BoostingServiceConfig } from '$lib/helpers/boosting-service-config';
 	import type { PageData } from './$types';
 
@@ -73,11 +76,40 @@
 		expandedServiceId = expandedServiceId === serviceId ? null : serviceId;
 	}
 
+	function normaliseServiceKey(value: string): string {
+		return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+	}
+
+	async function openRequestedService(): Promise<void> {
+		const requestedService = page.url.searchParams.get('service');
+		if (!requestedService) return;
+
+		const requestedKey = normaliseServiceKey(requestedService);
+		const service = services.find(
+			(item) =>
+				normaliseServiceKey(item.config.actionType) === requestedKey ||
+				normaliseServiceKey(item.name) === requestedKey ||
+				item.id === requestedService
+		);
+		if (!service || service.config.pricePerStep <= 0) return;
+
+		expandedServiceId = service.id;
+		await tick();
+		document
+			.getElementById(`boosting-service-${service.id}`)
+			?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+	}
+
 	function getQuantity(serviceId: string, minQuantity: number): number {
 		return quantityByServiceId[serviceId] ?? minQuantity;
 	}
 
-	function adjustQuantity(serviceId: string, minQuantity: number, stepQuantity: number, delta: number) {
+	function adjustQuantity(
+		serviceId: string,
+		minQuantity: number,
+		stepQuantity: number,
+		delta: number
+	) {
 		const current = getQuantity(serviceId, minQuantity);
 		const next = current + delta * stepQuantity;
 		quantityByServiceId[serviceId] = Math.max(minQuantity, next);
@@ -111,7 +143,11 @@
 			return;
 		}
 
-		const linkCheck = validateLinkForAction(service.config.platform, service.config.actionType, targetUrl);
+		const linkCheck = validateLinkForAction(
+			service.config.platform,
+			service.config.actionType,
+			targetUrl
+		);
 		if (!linkCheck.valid) {
 			linkErrorByServiceId[service.id] = linkCheck.reason || 'Invalid link';
 			return;
@@ -145,7 +181,7 @@
 				showWarning('Cart cleared', `Previous ${existingLabel} items were removed.`);
 			}
 
-			cart.addBoostingService(service.id, targetUrl, quantity);
+			cart.addBoostingService(service.id, linkCheck.normalizedUrl || targetUrl, quantity);
 			showSuccess(
 				'Added to cart!',
 				`${quantity.toLocaleString()} ${service.name} added successfully. Click to view cart.`,
@@ -228,6 +264,7 @@
 
 	onMount(() => {
 		void loadWaitlistStatusForComingSoonServices();
+		void openRequestedService();
 	});
 </script>
 
@@ -278,7 +315,10 @@
 					<PlatformIcon class="h-6 w-6 text-white" />
 				{/if}
 			</div>
-			<h1 class="text-2xl font-bold sm:text-3xl" style="color: var(--text); font-family: var(--font-head);">
+			<h1
+				class="text-2xl font-bold sm:text-3xl"
+				style="color: var(--text); font-family: var(--font-head);"
+			>
 				{data.label}
 			</h1>
 		</div>
@@ -304,6 +344,7 @@
 				{@const requiredLinkType = getRequiredLinkType(service.config.actionType)}
 				{@const startingPrice = computeBoostingPrice(service.config, service.config.minQuantity)}
 				<div
+					id={`boosting-service-${service.id}`}
 					class="rounded-[var(--r-md)] border"
 					style="border-color: var(--border); background: var(--bg-elev-1);"
 				>
@@ -338,7 +379,7 @@
 					</button>
 
 					{#if isComingSoon}
-						<div class="border-t px-4 pb-4 pt-3" style="border-color: var(--border);">
+						<div class="border-t px-4 pt-3 pb-4" style="border-color: var(--border);">
 							<button
 								type="button"
 								onclick={() => subscribeToWaitlist(service)}
@@ -358,7 +399,7 @@
 					{/if}
 
 					{#if isExpanded}
-						<div class="border-t px-4 pb-4 pt-4" style="border-color: var(--border);">
+						<div class="border-t px-4 pt-4 pb-4" style="border-color: var(--border);">
 							{#if service.description}
 								<p class="mb-3 text-sm" style="color: var(--text-muted);">{service.description}</p>
 							{/if}
@@ -423,7 +464,12 @@
 									<button
 										type="button"
 										onclick={() =>
-											adjustQuantity(service.id, service.config.minQuantity, service.config.stepQuantity, -1)}
+											adjustQuantity(
+												service.id,
+												service.config.minQuantity,
+												service.config.stepQuantity,
+												-1
+											)}
 										disabled={quantity <= service.config.minQuantity}
 										class="flex h-7 w-7 items-center justify-center rounded-full disabled:opacity-40"
 										style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
@@ -431,13 +477,21 @@
 									>
 										<Minus size={14} />
 									</button>
-									<span class="min-w-[4.5rem] text-center text-sm font-semibold" style="color: var(--text);">
+									<span
+										class="min-w-[4.5rem] text-center text-sm font-semibold"
+										style="color: var(--text);"
+									>
 										{quantity.toLocaleString()}
 									</span>
 									<button
 										type="button"
 										onclick={() =>
-											adjustQuantity(service.id, service.config.minQuantity, service.config.stepQuantity, 1)}
+											adjustQuantity(
+												service.id,
+												service.config.minQuantity,
+												service.config.stepQuantity,
+												1
+											)}
 										class="flex h-7 w-7 items-center justify-center rounded-full"
 										style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
 										aria-label="Increase quantity"

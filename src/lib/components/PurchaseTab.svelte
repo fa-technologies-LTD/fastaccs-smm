@@ -166,17 +166,15 @@
 			<div class="flex-1">
 				<div class="flex items-center gap-2">
 					<p class="text-sm font-semibold" style="color: var(--text);">
-						Access to your credentials is limited
+						Your credentials are private
 					</p>
 					<Lock class="h-3.5 w-3.5" style="color: var(--primary);" />
 				</div>
 				<p class="mt-1 text-xs" style="color: var(--text-muted);">
-					Your details appear in your dashboard. Vetted support admins may also access them when an
-					order needs troubleshooting. Need login guidance? See the
+					Only approved support admins can access them when helping with your order.
 					<a href="/support#faq" class="font-medium underline" style="color: var(--link);">
-						quick account care guide
+						Account care guide
 					</a>
-					and report issues within 2 hours for the fastest support response.
 				</p>
 			</div>
 		</div>

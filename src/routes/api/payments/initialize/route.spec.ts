@@ -200,7 +200,11 @@ describe('approved invariant: emergency checkout initialization control', () => 
 
 		expect(response.status).toBe(200);
 		expect(mocks.initializeTransaction).toHaveBeenCalledWith(
-			expect.objectContaining({ amount: 1500, currency: 'NGN' })
+			expect.objectContaining({
+				amount: 1500,
+				currency: 'NGN',
+				redirectUrl: 'https://smm.fastaccs.com/checkout/verify?orderId=order-123'
+			})
 		);
 	});
 

@@ -45,6 +45,42 @@ describe('local data safety', () => {
 		expect(normalizeLocalDataMode('production-write')).toBe('production-readonly');
 	});
 
+	it('allows only the narrow interaction set in production-preview mode', () => {
+		expect(isLocalDataReadOnly({ dev: true, configuredMode: 'production-preview' })).toBe(true);
+		expect(
+			shouldBlockLocalRequest({
+				dev: true,
+				configuredMode: 'production-preview',
+				method: 'POST',
+				pathname: '/api/cart/refresh'
+			})
+		).toBe(false);
+		expect(
+			shouldBlockLocalRequest({
+				dev: true,
+				configuredMode: 'production-preview',
+				method: 'POST',
+				pathname: '/api/push/subscribe'
+			})
+		).toBe(false);
+		expect(
+			shouldBlockLocalRequest({
+				dev: true,
+				configuredMode: 'production-preview',
+				method: 'POST',
+				pathname: '/api/orders'
+			})
+		).toBe(true);
+		expect(
+			shouldBlockLocalRequest({
+				dev: true,
+				configuredMode: 'production-preview',
+				method: 'POST',
+				pathname: '/api/admin/orders/refund'
+			})
+		).toBe(true);
+	});
+
 	it('does not affect deployed production requests', () => {
 		expect(
 			shouldBlockLocalRequest({

@@ -8,8 +8,8 @@
 			class="mx-auto max-w-4xl text-3xl leading-tight font-bold sm:text-4xl md:text-5xl"
 			style="font-family: var(--font-head); color: #ffffff; letter-spacing: -0.03em;"
 		>
-			Real social media accounts.
-			<span style="color: var(--fa-lime-400);">Delivered fast.</span>
+			<span class="block">ALL SOCIALS.</span>
+			<span class="block" style="color: var(--fa-lime-400);">ONE PLUG.</span>
 		</h1>
 		<p
 			class="mx-auto mt-4 max-w-2xl text-base sm:text-lg"

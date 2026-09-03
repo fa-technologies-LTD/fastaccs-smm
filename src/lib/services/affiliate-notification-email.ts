@@ -5,7 +5,7 @@ import { getRewardVestingDays } from '$lib/services/affiliate-vesting';
 const FIRST_CREDIT_PENDING_STALE_MS = 10 * 60 * 1000;
 const AFFILIATE_UNLOCK_PENDING_STALE_MS = 10 * 60 * 1000;
 const PAYOUT_MINIMUM_KEY = 'config.affiliate.payout_minimum';
-const DEFAULT_PAYOUT_MINIMUM = 5_000;
+const DEFAULT_PAYOUT_MINIMUM = 10_000;
 
 function parsePayoutMinimum(value: string | null | undefined): number {
 	const parsed = Number(value);

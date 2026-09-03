@@ -747,6 +747,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 				conversionRate: previousCount > 0 ? Math.round((count / previousCount) * 1000) / 10 : 0
 			};
 		});
+		const upsellViews = funnelCountsByType.get('post_purchase_upsell_view') || 0;
+		const upsellClicks = funnelCountsByType.get('post_purchase_upsell_click') || 0;
+		const postPurchaseUpsell = {
+			views: upsellViews,
+			clicks: upsellClicks,
+			clickRate: upsellViews > 0 ? Math.round((upsellClicks / upsellViews) * 1000) / 10 : 0
+		};
 		const topPages = topPageRows.map((row) => ({ path: row.path, views: row._count.path }));
 
 		const topCategories = revenueByTier.slice(0, 5).map((row) => ({
@@ -928,7 +935,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 			trafficFunnel: {
 				windowDays: 30,
 				funnel: featureFlags.adminAdvancedAnalytics ? funnel : [],
-				topPages: featureFlags.adminAdvancedAnalytics ? topPages : []
+				topPages: featureFlags.adminAdvancedAnalytics ? topPages : [],
+				postPurchaseUpsell: featureFlags.adminAdvancedAnalytics
+					? postPurchaseUpsell
+					: { views: 0, clicks: 0, clickRate: 0 }
 			},
 			insights: featureFlags.adminAdvancedAnalytics
 				? {

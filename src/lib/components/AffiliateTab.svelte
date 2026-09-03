@@ -951,59 +951,58 @@
 				</div>
 			{/if}
 
-			<div class="grid grid-cols-2 gap-2 sm:gap-3">
-				<details
-					class="rounded-[var(--r-sm)] border border-[var(--border)] p-3 sm:p-4"
-					style="background: var(--surface);"
-				>
-					<summary class="flex cursor-pointer items-center justify-between gap-2">
-						<h4
-							class="truncate text-xs font-semibold sm:text-sm"
-							style="color: var(--text); font-family: var(--font-head);"
-						>
-							Recent Referral Activity
-						</h4>
-					</summary>
-					<div class="mt-3">
-						{#if recentReferralActivity.length === 0}
-							<p class="text-sm" style="color: var(--text-muted);">No referral activity yet.</p>
-						{:else}
-							<div class="space-y-2">
-								{#each recentReferralActivity as item (item.userId)}
-									<div
-										class="flex items-center justify-between gap-3 rounded-[10px] border border-[var(--border)] px-3 py-2"
-									>
-										<div class="min-w-0">
-											<p class="truncate text-sm font-semibold" style="color: var(--text);">
-												{item.displayName}
-											</p>
-											<p class="truncate text-xs" style="color: var(--text-muted);">
-												{referralStatusLabel(item.status)} • {item.ordersCount} order{item.ordersCount ===
-												1
-													? ''
-													: 's'} • {formatTimeAgo(item.lastActivityAt)}
-											</p>
-										</div>
-										<div class="shrink-0 text-sm font-semibold" style="color: var(--primary);">
-											+₦{toNumber(item.storeCreditEarned).toLocaleString()}
-										</div>
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+				{#if recentReferralActivity.length > 0}
+					<details
+						class="rounded-[var(--r-sm)] border border-[var(--border)] p-3 sm:p-4"
+						style="background: var(--surface);"
+					>
+						<summary class="flex cursor-pointer items-center justify-between gap-2">
+							<h4
+								class="text-xs font-semibold sm:text-sm"
+								style="color: var(--text); font-family: var(--font-head);"
+							>
+								Recent referrals
+							</h4>
+						</summary>
+						<div class="mt-3 space-y-2">
+							{#each recentReferralActivity as item (item.userId)}
+								<div
+									class="flex items-center justify-between gap-3 rounded-[10px] border border-[var(--border)] px-3 py-2"
+								>
+									<div class="min-w-0">
+										<p class="truncate text-sm font-semibold" style="color: var(--text);">
+											{item.displayName}
+										</p>
+										<p class="text-xs" style="color: var(--text-muted);">
+											{referralStatusLabel(item.status)} · {item.ordersCount} order{item.ordersCount ===
+											1
+												? ''
+												: 's'} · {formatTimeAgo(item.lastActivityAt)}
+										</p>
 									</div>
-								{/each}
-							</div>
-						{/if}
-					</div>
-				</details>
+									<div class="shrink-0 text-sm font-semibold" style="color: var(--primary);">
+										+₦{toNumber(item.storeCreditEarned).toLocaleString()}
+									</div>
+								</div>
+							{/each}
+						</div>
+					</details>
+				{/if}
 
 				<details
-					class="rounded-[var(--r-sm)] border border-[var(--border)] p-3 sm:p-4"
+					class="rounded-[var(--r-sm)] border border-[var(--border)] p-3 sm:p-4 {recentReferralActivity.length ===
+					0
+						? 'sm:col-span-2'
+						: ''}"
 					style="background: var(--surface);"
 				>
 					<summary class="flex cursor-pointer items-center justify-between gap-2">
 						<h4
-							class="truncate text-xs font-semibold sm:text-sm"
+							class="text-xs font-semibold sm:text-sm"
 							style="color: var(--text); font-family: var(--font-head);"
 						>
-							Recent Cash Activity
+							Recent cash
 						</h4>
 					</summary>
 					<div class="mt-3">

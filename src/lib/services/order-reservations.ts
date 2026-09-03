@@ -13,8 +13,17 @@ interface StandardReservationItem {
 }
 
 export async function releaseExpiredOrderReservations(
-	client: PrismaClientLike = prisma
+	client: PrismaClientLike = prisma,
+	categoryIds?: string[]
 ): Promise<number> {
+	const normalizedCategoryIds = Array.from(
+		new Set((categoryIds || []).map((id) => id.trim()).filter(Boolean))
+	);
+	const categoryFilter = normalizedCategoryIds.length
+		? Prisma.sql`AND oi.category_id IN (${Prisma.join(
+				normalizedCategoryIds.map((id) => Prisma.sql`${id}::uuid`)
+			)})`
+		: Prisma.empty;
 	const affected = await client.$executeRaw`
 		UPDATE accounts AS a
 		SET
@@ -30,7 +39,8 @@ export async function releaseExpiredOrderReservations(
 			AND a.reserved_until IS NOT NULL
 			AND a.reserved_until <= NOW()
 			AND o.status NOT IN ('paid', 'completed')
-			AND o.payment_status <> 'paid';
+			AND o.payment_status NOT IN ('paid', 'success', 'overpaid', 'refunded')
+			${categoryFilter};
 	`;
 	return Number(affected || 0);
 }

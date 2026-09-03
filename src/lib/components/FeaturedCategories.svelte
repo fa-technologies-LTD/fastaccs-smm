@@ -1,369 +1,392 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { ArrowRight, MessageCircle } from '$lib/icons';
-	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
+	import { ArrowRight, Phone, ShoppingBag, Zap } from '$lib/icons';
+	import BrandIcon from '$lib/components/BrandIcon.svelte';
+	import { getPlatformIcon } from '$lib/helpers/platformColors';
 
 	interface PlatformData {
 		id: string;
 		name: string;
 		slug: string;
-		description?: string | null;
-		metadata?: Record<string, unknown>;
-		tierCount: number;
 		totalAccounts: number;
 		minPrice: number | null;
 	}
 
-	interface PlatformMetadata {
-		icon?: unknown;
-		color?: unknown;
-	}
+	type Shortcut = { label: string; href: string; iconKey: string };
 
 	let { platforms = [] }: { platforms?: PlatformData[] } = $props();
-	let failedPlatformIcons = $state<Record<string, boolean>>({});
-
-	function getPlatformSubLabel(platform: PlatformData): string {
-		const text = platform.description?.trim();
-		if (text) return text;
-		return `${platform.name} accounts`;
-	}
-
-	function getPlatformMetadata(platform: PlatformData): PlatformMetadata {
-		return (platform.metadata as PlatformMetadata | undefined) || {};
-	}
-
-	function shouldRenderCustomIcon(platform: PlatformData, metadata: PlatformMetadata): boolean {
-		return isPlatformImageUrl(metadata.icon) && !failedPlatformIcons[platform.id];
-	}
-
-	function markPlatformIconFailed(platformId: string) {
-		failedPlatformIcons = {
-			...failedPlatformIcons,
-			[platformId]: true
-		};
-	}
-
-	function getPlatformIconColor(platform: PlatformData): string {
-		const color = (platform.metadata as { color?: unknown } | undefined)?.color;
-		if (typeof color === 'string' && color.trim()) {
-			return color;
-		}
-
-		return 'var(--link)';
-	}
 
 	let featuredPlatforms = $derived.by(() =>
 		[...platforms]
-			.filter((platform) => platform?.slug && platform?.name)
-			.sort((a, b) => a.name.localeCompare(b.name))
+			.filter((platform) => platform?.slug && platform?.name && platform.totalAccounts > 0)
+			.sort((a, b) => b.totalAccounts - a.totalAccounts || a.name.localeCompare(b.name))
 			.slice(0, 4)
 	);
 
+	const numberShortcuts: Shortcut[] = [
+		{ label: 'WhatsApp', href: '/numbers?service=1', iconKey: 'whatsapp' },
+		{ label: 'Telegram', href: '/numbers?service=2', iconKey: 'telegram' },
+		{ label: 'Google', href: '/numbers?service=3', iconKey: 'google' },
+		{ label: 'Instagram', href: '/numbers?service=7', iconKey: 'instagram' },
+		{ label: 'Facebook', href: '/numbers?service=11', iconKey: 'facebook' }
+	];
+
+	const boostingShortcuts: Shortcut[] = [
+		{
+			label: 'Instagram followers',
+			href: '/services/instagram?service=followers',
+			iconKey: 'instagram'
+		},
+		{ label: 'TikTok views', href: '/services/tiktok?service=views', iconKey: 'tiktok' },
+		{
+			label: 'YouTube subscribers',
+			href: '/services/youtube?service=subscribers',
+			iconKey: 'youtube'
+		},
+		{ label: 'Facebook likes', href: '/services/facebook?service=likes', iconKey: 'facebook' }
+	];
+
+	function formatPrice(price: number | null): string {
+		if (!price) return 'View options';
+		return `From ₦${Math.round(price).toLocaleString('en-NG')}`;
+	}
 </script>
 
-<section style="background: var(--bg); padding: var(--space-4xl) var(--space-md);">
-	<div class="mx-auto max-w-6xl">
-		<h2
-			style="margin-bottom: var(--space-3xl); text-align: center; font-size: 2rem; font-weight: 700; color: var(--text); font-family: var(--font-head);"
-		>
-			Featured Categories
-		</h2>
+<section class="catalogue-section" aria-labelledby="catalogue-heading">
+	<div class="catalogue-inner">
+		<header class="catalogue-heading">
+			<p>Browse FastAccs</p>
+			<h2 id="catalogue-heading">What do you need?</h2>
+		</header>
 
-		<div class="grid grid-cols-1 gap-6 sm:gap-8 lg:grid-cols-2">
-			<!-- Social Media Accounts -->
-			<div class="category-card flex flex-col overflow-hidden">
-				<div
-					style="background: var(--btn-primary-gradient); padding: var(--space-lg); color: #04140C;"
-				>
-					<h3
-						style="margin-bottom: var(--space-xs); font-size: 1.25rem; font-weight: 700; font-family: var(--font-head);"
-					>
-						Social Media Accounts
-					</h3>
-					<p style="font-size: 0.9rem; opacity: 0.8; font-family: var(--font-body);">
-						Curated social media accounts across multiple platforms and account types
-					</p>
-				</div>
-
-				<div class="flex flex-1 flex-col" style="padding: var(--space-lg);">
-					<div class="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 sm:gap-4">
-						{#if featuredPlatforms.length === 0}
-							<div
-								class="platform-btn col-span-full"
-								style="padding: var(--space-lg); text-align: center; color: var(--text-muted);"
-							>
-								No active platforms available yet.
-							</div>
-						{:else}
-							{#each featuredPlatforms as platform (platform.id)}
-								{@const PlatformIcon = getPlatformIcon(platform.slug)}
-								{@const platformMeta = getPlatformMetadata(platform)}
-								<button
-									onclick={() => goto(`/platforms/${platform.slug}`)}
-									class={`platform-btn platform-entry flex w-full cursor-pointer items-start ${
-										platform.totalAccounts > 0 ? 'clickable' : ''
-									}`}
-								>
-									{#if shouldRenderCustomIcon(platform, platformMeta)}
-										<img
-											src={platformMeta.icon as string}
-											alt={platform.name}
-											class="mt-0.5 mr-3 h-6 w-6 rounded sm:h-8 sm:w-8"
-											onerror={() => markPlatformIconFailed(platform.id)}
-										/>
-									{:else}
-										<PlatformIcon
-											class="mt-0.5 mr-3 h-6 w-6 sm:h-8 sm:w-8"
-											style={`color: ${getPlatformIconColor(platform)};`}
-										/>
-									{/if}
-
-									<div class="min-w-0 flex-1 text-left">
-										<div class="flex items-center gap-2">
-											<span
-												style="font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: var(--font-body);"
-											>
-												{platform.name}
-											</span>
-											{#if platform.totalAccounts > 0}
-												<span
-													style="font-size: 0.7rem; font-weight: 600; font-family: var(--font-head); color: var(--primary); background: rgba(5,212,113,0.1); border: 1px solid rgba(5,212,113,0.25); border-radius: var(--r-full); padding: 1px 7px; white-space: nowrap;"
-												>
-													{platform.totalAccounts} in stock
-												</span>
-											{/if}
-										</div>
-										<div
-											style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-body);"
-										>
-											{getPlatformSubLabel(platform)}
-										</div>
-									</div>
-									{#if platform.totalAccounts > 0}
-										<span class="hover-arrow">
-											<ArrowRight size={16} />
-										</span>
-									{/if}
-								</button>
-							{/each}
-						{/if}
-					</div>
-
-					<div class="mt-auto">
-						<button
-							onclick={() => goto('/platforms')}
-							class="btn-fa btn-fa--primary w-full"
-						>
-							See more
-						</button>
+		<div class="catalogue-grid">
+			<article class="catalogue-card accounts-card">
+				<div class="card-title">
+					<span class="card-icon"><ShoppingBag size={20} /></span>
+					<div>
+						<h3>Accounts</h3>
+						<p>Available now</p>
 					</div>
 				</div>
-			</div>
 
-			<!-- Boosting Services -->
-			<div class="category-card flex flex-col overflow-hidden">
-				<div
-					style="background: var(--btn-secondary-gradient); padding: var(--space-lg); color: var(--text);"
-				>
-					<h3
-						style="margin-bottom: var(--space-xs); font-size: 1.25rem; font-weight: 700; font-family: var(--font-head);"
-					>
-						Boosting Services
-					</h3>
-					<p style="font-size: 0.9rem; color: var(--text-muted); font-family: var(--font-body);">
-						Get affordable engagements, followers, likes, views and more. Available for all major
-						platforms.
-					</p>
-				</div>
-
-				<div class="flex flex-1 flex-col" style="padding: var(--space-lg);">
-					<div class="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:grid-cols-2 sm:gap-4">
-						<div class="growth-preview-list">
-							<a class="platform-btn growth-service-btn" href="/services/instagram">Instagram Followers</a>
-							<a class="platform-btn growth-service-btn" href="/services/tiktok">TikTok Views</a>
-							<a class="platform-btn growth-service-btn" href="/services/youtube">YouTube Subscribers</a>
-							<a class="platform-btn growth-service-btn" href="/services/facebook">Facebook Likes</a>
-						</div>
-						<div class="growth-callout growth-callout--secondary">
-							<p
-								class="text-sm font-semibold uppercase"
-								style="letter-spacing: 0.06em; color: var(--fa-blue-300); font-family: var(--font-head);"
-							>
-								Boost any link
-							</p>
-							<p
-								class="mt-2"
-								style="font-size: 0.95rem; font-weight: 500; color: var(--text); line-height: 1.45; font-family: var(--font-body);"
-							>
-								Pick a service, paste your link, and pay securely. We handle delivery from there.
-							</p>
-							<a href="/services" class="chat-btn chat-btn--secondary mt-4">
-								<MessageCircle size={16} />
-								<span>Browse boosting services</span>
+				<div class="item-list">
+					{#if featuredPlatforms.length > 0}
+						{#each featuredPlatforms as platform (platform.id)}
+							{@const PlatformIcon = getPlatformIcon(platform.slug)}
+							<a href={`/platforms/${platform.slug}`}>
+								<div class="item-identity">
+									<span class="app-icon account-app-icon"><PlatformIcon size={18} /></span>
+									<span>
+										<strong>{platform.name}</strong>
+										<small>{platform.totalAccounts} in stock</small>
+									</span>
+								</div>
+								<span>{formatPrice(platform.minPrice)}</span>
 							</a>
-						</div>
+						{/each}
+					{:else}
+						<p class="empty-note">View the current account catalogue.</p>
+					{/if}
+				</div>
+
+				<a class="card-cta" href="/platforms">View all accounts <ArrowRight size={16} /></a>
+			</article>
+
+			<article class="catalogue-card numbers-card">
+				<div class="card-title">
+					<span class="card-icon"><Phone size={20} /></span>
+					<div>
+						<h3>Verification numbers</h3>
+						<p>Choose an app and country</p>
 					</div>
 				</div>
-			</div>
+
+				<div class="chip-list" aria-label="Popular verification services">
+					{#each numberShortcuts as shortcut}
+						<a href={shortcut.href}>
+							<BrandIcon service={shortcut.iconKey} size={15} />
+							{shortcut.label}
+						</a>
+					{/each}
+					<a href="/numbers">More services</a>
+				</div>
+
+				<a class="card-cta" href="/numbers">Browse numbers <ArrowRight size={16} /></a>
+			</article>
+
+			<article class="catalogue-card boosting-card">
+				<div class="card-title">
+					<span class="card-icon"><Zap size={20} /></span>
+					<div>
+						<h3>Boosting</h3>
+						<p>For profiles and posts</p>
+					</div>
+				</div>
+
+				<div class="item-list compact">
+					{#each boostingShortcuts as shortcut}
+						{@const PlatformIcon = getPlatformIcon(shortcut.iconKey)}
+						<a href={shortcut.href}>
+							<div class="item-identity">
+								<span class="app-icon boosting-app-icon"><PlatformIcon size={17} /></span>
+								<strong>{shortcut.label}</strong>
+							</div>
+							<span>View service</span>
+						</a>
+					{/each}
+				</div>
+
+				<a class="card-cta" href="/services">View all boosting <ArrowRight size={16} /></a>
+			</article>
 		</div>
 	</div>
 </section>
 
 <style>
-	.category-card {
+	.catalogue-section {
+		padding: clamp(2.75rem, 6vw, 4.75rem) 1rem;
+		background: var(--bg);
+		color: var(--text);
+	}
+
+	.catalogue-inner {
+		max-width: 72rem;
+		margin: 0 auto;
+	}
+
+	.catalogue-heading {
+		margin-bottom: 1.6rem;
+		text-align: center;
+	}
+
+	.catalogue-heading p {
+		color: var(--primary);
+		font-family: var(--font-head);
+		font-size: 0.72rem;
+		font-weight: 750;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+	}
+
+	.catalogue-heading h2 {
+		margin-top: 0.45rem;
+		font-family: var(--font-head);
+		font-size: clamp(1.85rem, 4vw, 2.55rem);
+		font-weight: 760;
+		letter-spacing: -0.025em;
+	}
+
+	.catalogue-grid {
+		display: grid;
+		grid-template-columns: 1.15fr 0.925fr 0.925fr;
+		gap: 1rem;
+	}
+
+	.catalogue-card {
+		display: flex;
+		min-height: 390px;
+		flex-direction: column;
+		border: 1px solid var(--border);
+		border-radius: 17px;
+		padding: 1.25rem;
 		background: var(--bg-elev-1);
-		border: 1px solid var(--border);
-		border-radius: var(--r-md);
-		transition: all 0.3s ease;
+		transition:
+			border-color 160ms ease,
+			transform 160ms ease;
 	}
 
-	.category-card:hover {
-		transform: translateY(-2px);
-		box-shadow: var(--shadow-1);
-		border-color: var(--primary);
-	}
-
-	.platform-btn {
-		background: var(--bg-elev-2);
-		border: 1px solid var(--border);
-		border-radius: var(--r-sm);
-		transition: all 0.2s ease;
-		padding: var(--space-md);
-	}
-
-	.platform-btn:hover {
-		background: var(--surface);
-		border-color: var(--primary);
-		transform: scale(1.02);
-	}
-
-	.platform-btn:active {
-		transform: scale(0.98);
-	}
-
-	.platform-entry {
-		position: relative;
-	}
-
-	.platform-entry.clickable:hover {
-		border-color: var(--primary);
-	}
-
-	.hover-arrow {
-		position: absolute;
-		right: 12px;
-		bottom: 12px;
-		opacity: 0;
-		color: var(--text-dim);
-		transition: opacity 180ms ease;
-	}
-
-	.platform-entry.clickable:hover .hover-arrow {
-		opacity: 1;
-	}
-
-	.btn-primary-cta {
-		background: var(--btn-primary-gradient);
-		border: none;
-		border-radius: var(--r-sm);
-		padding: var(--space-md) var(--space-lg);
-		font-family: var(--font-body);
-		font-weight: 600;
-		color: #04140c;
-		transition: all 0.2s ease;
-	}
-
-	.btn-primary-cta:hover {
-		background: var(--btn-primary-gradient-hover);
-		box-shadow: var(--glow-primary);
+	.catalogue-card:hover {
+		border-color: rgba(5, 212, 113, 0.36);
 		transform: translateY(-1px);
 	}
 
-	.btn-primary-cta:active {
-		transform: scale(0.98);
-	}
-
-	.growth-preview-list {
+	.card-title {
 		display: flex;
-		flex-direction: column;
-		gap: var(--space-md);
-	}
-
-	.growth-service-btn {
-		display: block;
-		width: 100%;
-		text-align: left;
-		color: var(--text);
-		font-family: var(--font-body);
-		font-size: 1.05rem;
-		font-weight: 600;
-		text-decoration: none;
-		cursor: pointer;
-	}
-
-	.growth-service-btn:hover {
-		border-color: var(--fa-blue-500);
-	}
-
-	.growth-callout {
-		display: flex;
-		flex-direction: column;
-		align-self: start;
-		min-width: 0;
-		width: 100%;
-		border-radius: var(--r-sm);
-		border: 1px solid rgba(5, 212, 113, 0.35);
-		background: rgba(7, 9, 12, 0.55);
-		padding: var(--space-md);
-	}
-
-	.growth-callout--secondary {
-		border-color: rgba(105, 109, 250, 0.4);
-	}
-
-	.chat-btn {
-		display: inline-flex;
 		align-items: center;
-		justify-content: center;
-		gap: 0.5rem;
-		width: 100%;
-		border-radius: var(--r-sm);
-		padding: 0.65rem 1rem;
-		border: 1px solid rgba(5, 212, 113, 0.35);
+		gap: 0.75rem;
+	}
+
+	.card-icon {
+		display: grid;
+		height: 40px;
+		width: 40px;
+		flex: 0 0 auto;
+		place-items: center;
+		border-radius: 11px;
 		background: rgba(5, 212, 113, 0.12);
 		color: var(--primary);
-		font-family: var(--font-body);
-		font-size: 0.88rem;
-		font-weight: 600;
-		text-decoration: none;
-		text-align: center;
-		line-height: 1.25;
-		transition:
-			transform 0.2s ease,
-			opacity 0.2s ease,
-			border-color 0.2s ease;
-		flex-wrap: wrap;
-		max-width: 100%;
+	}
+
+	.numbers-card .card-icon {
+		background: rgba(56, 189, 248, 0.12);
+		color: #38bdf8;
+	}
+
+	.boosting-card .card-icon {
+		background: rgba(167, 139, 250, 0.12);
+		color: #a78bfa;
+	}
+
+	.card-title h3 {
+		font-family: var(--font-head);
+		font-size: 1rem;
+		font-weight: 720;
+	}
+
+	.card-title p {
+		margin-top: 0.15rem;
+		color: var(--text-muted);
+		font-size: 0.8rem;
+	}
+
+	.item-list {
+		display: grid;
+		gap: 0.55rem;
+		margin-top: 1rem;
+	}
+
+	.item-list > a {
+		display: flex;
 		min-width: 0;
-		word-break: break-word;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.7rem;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		padding: 0.72rem;
+		transition:
+			background 150ms ease,
+			border-color 150ms ease;
 	}
 
-	.chat-btn:hover {
-		border-color: rgba(5, 212, 113, 0.5);
-		transform: translateY(-1px);
+	.item-list > a:hover {
+		border-color: rgba(5, 212, 113, 0.48);
+		background: var(--bg-elev-2);
 	}
 
-	.chat-btn:active {
-		transform: scale(0.98);
+	.item-list a div {
+		min-width: 0;
 	}
 
-	.chat-btn--secondary {
-		border-color: rgba(105, 109, 250, 0.4);
-		background: rgba(105, 109, 250, 0.14);
-		color: var(--fa-blue-300);
+	.item-identity {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
 	}
 
-	.chat-btn--secondary:hover {
-		border-color: rgba(105, 109, 250, 0.55);
+	.app-icon {
+		display: grid;
+		height: 30px;
+		width: 30px;
+		flex: 0 0 auto;
+		place-items: center;
+		border-radius: 8px;
+	}
+
+	.account-app-icon {
+		background: rgba(5, 212, 113, 0.1);
+		color: var(--primary);
+	}
+
+	.boosting-app-icon {
+		background: rgba(167, 139, 250, 0.12);
+		color: #c4b5fd;
+	}
+
+	.item-list strong {
+		display: block;
+		font-size: 0.86rem;
+	}
+
+	.item-list small {
+		display: block;
+		margin-top: 0.15rem;
+		color: var(--primary);
+		font-size: 0.72rem;
+	}
+
+	.item-list a > span {
+		color: var(--text-muted);
+		font-size: 0.74rem;
+		text-align: right;
+	}
+
+	.item-list.compact a > span {
+		color: #c4b5fd;
+	}
+
+	.empty-note {
+		color: var(--text-muted);
+		font-size: 0.85rem;
+	}
+
+	.chip-list {
+		display: flex;
+		align-content: flex-start;
+		flex: 1;
+		flex-wrap: wrap;
+		gap: 0.45rem;
+		margin-top: 1.2rem;
+	}
+
+	.chip-list a {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		align-self: flex-start;
+		border: 1px solid rgba(56, 189, 248, 0.32);
+		border-radius: 999px;
+		padding: 0.46rem 0.68rem;
+		background: rgba(56, 189, 248, 0.08);
+		color: #7dd3fc;
+		font-size: 0.76rem;
+		font-weight: 650;
+		transition:
+			background 150ms ease,
+			border-color 150ms ease;
+	}
+
+	.chip-list a:hover {
+		border-color: rgba(56, 189, 248, 0.7);
+		background: rgba(56, 189, 248, 0.16);
+	}
+
+	.card-cta {
+		display: flex;
+		margin-top: auto;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.6rem;
+		padding-top: 1rem;
+		color: var(--primary);
+		font-size: 0.88rem;
+		font-weight: 700;
+	}
+
+	@media (max-width: 820px) {
+		.catalogue-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.catalogue-card {
+			min-height: 0;
+		}
+
+		.chip-list {
+			margin-bottom: 1.2rem;
+		}
+	}
+
+	@media (max-width: 480px) {
+		.catalogue-section {
+			padding-inline: 0.9rem;
+		}
+
+		.catalogue-card {
+			padding: 1.05rem;
+		}
+
+		.item-list > a {
+			padding: 0.68rem;
+		}
 	}
 </style>

@@ -15,12 +15,15 @@ export const GET: RequestHandler = async () => {
 				deliveryStatus: 'pending'
 			}
 		}),
-		// Paid boosting line-items still pending fulfillment.
+		// Paid boosting line-items that need an admin decision or customer follow-up.
 		prisma.orderItem.count({
 			where: {
 				boostTargetUrl: { not: null },
-				boostFulfillmentStatus: 'pending',
-				order: { paymentStatus: 'paid' }
+				OR: [
+					{ boostFulfillmentStatus: null },
+					{ boostFulfillmentStatus: { in: ['pending', 'needs_link', 'rejected'] } }
+				],
+				order: { paymentStatus: { in: ['paid', 'success', 'overpaid'] } }
 			}
 		}),
 		// Active tiers with zero available accounts — out of stock (needs restock).

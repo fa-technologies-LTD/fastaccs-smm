@@ -8,7 +8,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json(
 				{
 					success: false,
-					error: 'Login required to reserve exact accounts.'
+					error: 'Log in to add an exact account.'
 				},
 				{ status: 401 }
 			);
@@ -37,7 +37,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		return json(
 			{
 				success: false,
-				error: error instanceof Error ? error.message : 'Failed to reserve exact account.'
+				error: error instanceof Error ? error.message : 'Failed to add exact account.'
 			},
 			{ status: 400 }
 		);

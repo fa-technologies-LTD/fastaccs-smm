@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { invalidateAll } from '$app/navigation';
+	import { onMount } from 'svelte';
+	import { afterNavigate, goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { AdminPermission } from '$lib/auth/admin-roles';
 	import {
@@ -46,13 +46,41 @@
 
 	// "Needs attention" counts for sidebar badges, keyed by nav href.
 	let attentionCounts = $state<Record<string, number>>({});
-	$effect(() => {
-		fetch('/api/admin/attention-counts')
-			.then((r) => (r.ok ? r.json() : null))
-			.then((counts) => {
-				if (counts) attentionCounts = counts;
-			})
-			.catch(() => {});
+	let attentionRefreshInFlight = false;
+
+	async function refreshAttentionCounts(): Promise<void> {
+		if (attentionRefreshInFlight || document.visibilityState === 'hidden') return;
+		attentionRefreshInFlight = true;
+		try {
+			const response = await fetch('/api/admin/attention-counts');
+			if (!response.ok) return;
+			const counts = await response.json();
+			if (counts) attentionCounts = counts;
+		} catch {
+			// A stale badge is safer than interrupting admin work for a non-critical count.
+		} finally {
+			attentionRefreshInFlight = false;
+		}
+	}
+
+	afterNavigate(() => void refreshAttentionCounts());
+
+	onMount(() => {
+		const refreshWhenVisible = () => {
+			if (document.visibilityState === 'visible') void refreshAttentionCounts();
+		};
+		const refreshAfterAdminAction = () => void refreshAttentionCounts();
+		const timer = window.setInterval(() => void refreshAttentionCounts(), 120_000);
+		window.addEventListener('focus', refreshWhenVisible);
+		document.addEventListener('visibilitychange', refreshWhenVisible);
+		window.addEventListener('fastaccs:admin-attention-refresh', refreshAfterAdminAction);
+
+		return () => {
+			window.clearInterval(timer);
+			window.removeEventListener('focus', refreshWhenVisible);
+			document.removeEventListener('visibilitychange', refreshWhenVisible);
+			window.removeEventListener('fastaccs:admin-attention-refresh', refreshAfterAdminAction);
+		};
 	});
 
 	const adminNavItems = $derived.by(() => {
@@ -209,7 +237,7 @@
 							{item.label}
 							{#if attentionCounts[item.href] > 0}
 								<span
-									class="ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none"
+									class="ml-auto rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold"
 									style="background: var(--fa-lime-700); color: #0a0a0a;"
 									title="Needs attention"
 								>
@@ -268,7 +296,7 @@
 									{item.label}
 									{#if attentionCounts[item.href] > 0}
 										<span
-											class="ml-auto rounded-full px-2 py-0.5 text-xs font-bold leading-none"
+											class="ml-auto rounded-full px-2 py-0.5 text-xs leading-none font-bold"
 											style="background: var(--fa-lime-700); color: #0a0a0a;"
 											title="Needs attention"
 										>

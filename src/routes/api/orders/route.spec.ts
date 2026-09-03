@@ -380,6 +380,84 @@ describe('approved invariant: emergency checkout order control', () => {
 		expect(mocks.initializeTransaction).not.toHaveBeenCalled();
 	});
 
+	it('routes a partially credit-funded order straight to Monnify for the remaining balance', async () => {
+		vi.stubEnv('CHECKOUT_DISABLED', 'false');
+		mocks.findOrder.mockResolvedValue(null);
+		mocks.findCategories.mockResolvedValue([
+			{
+				id: 'tier-123',
+				name: 'Instagram Account',
+				categoryType: 'tier',
+				parent: { name: 'Instagram' },
+				metadata: { pricing: { base_price: 5_800 }, delivery_mode: 'instant_auto' }
+			}
+		]);
+		mocks.groupAccounts.mockResolvedValue([{ categoryId: 'tier-123', _count: { _all: 1 } }]);
+		mocks.resolveOrderAffiliateAttribution.mockResolvedValue({
+			affiliateCode: null,
+			affiliateUserId: null,
+			error: null
+		});
+		mocks.getStoreCreditBuckets.mockResolvedValue({ refundAvailable: 1_000, earnedAvailable: 0 });
+		mocks.computeOrderRedemption.mockReturnValue({
+			refundApplied: 1_000,
+			earnedApplied: 0,
+			totalApplied: 1_000
+		});
+		mocks.initializeTransaction.mockResolvedValue({
+			success: true,
+			checkoutUrl: 'https://checkout.monnify.test/partial-credit',
+			transactionReference: 'TX-PARTIAL'
+		});
+
+		const orderCreate = vi.fn().mockResolvedValue({
+			id: 'order-partial-credit',
+			orderNumber: 'ORD-PARTIAL-CREDIT',
+			status: 'pending',
+			paymentStatus: 'pending',
+			totalAmount: 5_800,
+			currency: 'NGN',
+			orderItems: []
+		});
+		mocks.createTransaction.mockImplementation(async (callback) =>
+			callback({
+				order: { create: orderCreate },
+				orderEvent: { create: vi.fn().mockResolvedValue({}) }
+			})
+		);
+
+		const response = await POST({
+			request: orderRequest('checkout_key_partial_credit', 'NGN', undefined, true),
+			locals: { user },
+			url: new URL('https://smm.fastaccs.com/api/orders')
+		} as never);
+		const body = await response.json();
+
+		expect(response.status).toBe(200);
+		expect(body).toMatchObject({
+			success: true,
+			orderId: 'order-partial-credit',
+			checkoutUrl: 'https://checkout.monnify.test/partial-credit'
+		});
+		expect(body.paidWithStoreCredit).toBeUndefined();
+		expect(mocks.initializeTransaction).toHaveBeenCalledWith(
+			expect.objectContaining({
+				amount: 4_800,
+				orderId: 'order-partial-credit',
+				redirectUrl: 'https://smm.fastaccs.com/checkout/verify?orderId=order-partial-credit'
+			})
+		);
+		expect(orderCreate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({
+					storeCreditApplied: 1_000,
+					paymentMethod: 'monnify',
+					paymentStatus: 'pending'
+				})
+			})
+		);
+	});
+
 	it('snapshots regular-versus-Super treatment on an attributed account order', async () => {
 		vi.stubEnv('CHECKOUT_DISABLED', 'false');
 		mocks.findOrder.mockResolvedValue(null);

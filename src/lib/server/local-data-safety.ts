@@ -1,12 +1,30 @@
-export type LocalDataMode = 'production-readonly' | 'production-e2e' | 'staging';
+export type LocalDataMode =
+	| 'production-readonly'
+	| 'production-preview'
+	| 'production-e2e'
+	| 'staging';
 
 const SAFE_HTTP_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const PRODUCTION_PREVIEW_POST_PATHS = new Set([
+	'/api/auth/login',
+	'/auth/logout',
+	'/api/cart/refresh',
+	'/api/push/subscribe',
+	'/api/push/unsubscribe',
+	'/api/affiliate/notifications/read'
+]);
 
 export function normalizeLocalDataMode(value: unknown): LocalDataMode {
 	const normalized = String(value || '')
 		.trim()
 		.toLowerCase();
-	if (normalized === 'staging' || normalized === 'production-e2e') return normalized;
+	if (
+		normalized === 'staging' ||
+		normalized === 'production-preview' ||
+		normalized === 'production-e2e'
+	) {
+		return normalized;
+	}
 	return 'production-readonly';
 }
 
@@ -29,7 +47,8 @@ export function isLocalDataReadOnly(input: {
 	hostname?: string;
 }): boolean {
 	const runningLocally = input.dev || isLoopbackHostname(input.hostname);
-	return runningLocally && normalizeLocalDataMode(input.configuredMode) === 'production-readonly';
+	const mode = normalizeLocalDataMode(input.configuredMode);
+	return runningLocally && (mode === 'production-readonly' || mode === 'production-preview');
 }
 
 export function shouldBlockLocalRequest(input: {
@@ -41,6 +60,10 @@ export function shouldBlockLocalRequest(input: {
 }): boolean {
 	if (!isLocalDataReadOnly(input)) return false;
 	const method = String(input.method || '').toUpperCase();
+	const mode = normalizeLocalDataMode(input.configuredMode);
+	if (mode === 'production-preview' && method === 'POST') {
+		return !PRODUCTION_PREVIEW_POST_PATHS.has(input.pathname);
+	}
 	if (!SAFE_HTTP_METHODS.has(method)) return true;
 
 	// Several cron routes intentionally mutate state despite using GET. Never let a local browser,
