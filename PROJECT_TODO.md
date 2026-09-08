@@ -14,6 +14,7 @@ Last updated: 8 September 2026
 - [x] Add the reusable audience and email-copy guide
 - [x] Draft the safe boosting-provider automation architecture
 - [x] Draft the simple Numbers/Boosting store-credit incentive model
+- [x] Triage dependency alerts and apply all safe, non-breaking security updates
 
 ## Active
 
@@ -31,7 +32,7 @@ Last updated: 8 September 2026
 ## Operational follow-up
 
 - [ ] Encrypt the 17 legacy affiliate bank-detail records using the approved dry-run fingerprint
-- [ ] Review existing Dependabot alerts in a separate dependency-upgrade release (low priority)
+- [ ] Recheck the two held upstream dependency chains when compatible SvelteKit and Prisma fixes ship
 
 ## Later
 
