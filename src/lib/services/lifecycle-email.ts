@@ -20,25 +20,24 @@ function getAbandonedReminderContent(
 	ctx: { firstName: string; orderLabel: string; currency: string; amountText: string }
 ): { subject: string; body: string; ctaText: string } {
 	const { firstName, orderLabel, currency, amountText } = ctx;
-	const support = `If you need help, contact support:\n- WhatsApp: https://wa.link/fast_accounts\n- Email: support@fastaccs.com\n\n**Important:** If this email lands in Spam or Promotions, mark it as Not Spam and move it to Primary.`;
 	if (step === 2) {
 		return {
 			subject: `Still want these? Your order is held (${orderLabel})`,
 			ctaText: 'Complete my order',
-			body: `Hi ${firstName},\n\nYour order is still waiting \u2014 payment hasn't come through yet.\n\nOrder: ${orderLabel}\nAmount: ${currency} ${amountText}\n\nWe're holding your items, but stock moves fast. Tap below to finish and we'll deliver right away.\n\n${support}`
+			body: `Hi ${firstName},\n\nPayment has not come through yet.\n\nOrder: ${orderLabel}\nAmount: ${currency} ${amountText}\n\nYour items are still held, but stock moves fast. Complete payment when you are ready.`
 		};
 	}
 	if (step === 3) {
 		return {
 			subject: `Last call \u2014 your held order is about to be released (${orderLabel})`,
 			ctaText: 'Finish before it expires',
-			body: `Hi ${firstName},\n\nThis is the last reminder for your order \u2014 we can only hold your items a little longer.\n\nOrder: ${orderLabel}\nAmount: ${currency} ${amountText}\n\nIf you still want them, complete your payment now before they're released to other buyers.\n\n${support}`
+			body: `Hi ${firstName},\n\nWe can only hold your items a little longer.\n\nOrder: ${orderLabel}\nAmount: ${currency} ${amountText}\n\nComplete payment now if you still want them.`
 		};
 	}
 	return {
-		subject: `Complete your FastAccs order (${orderLabel})`,
+		subject: `Complete your Fast Accounts order (${orderLabel})`,
 		ctaText: 'Resume payment',
-		body: `Hi ${firstName},\n\nYou started an order a few minutes ago, but payment hasn't gone through yet.\n\nOrder: ${orderLabel}\nAmount: ${currency} ${amountText}\n\nYour items are still being held for you, but not for much longer. Tap the button below to finish your payment now.\n\n${support}`
+		body: `Hi ${firstName},\n\nYou started an order, but payment has not gone through yet.\n\nOrder: ${orderLabel}\nAmount: ${currency} ${amountText}\n\nYour items are still held for you. Tap below to finish payment.`
 	};
 }
 
@@ -133,10 +132,10 @@ Everything shows on your dashboard.`
 
 function getOnboardingStepBContent(): { subject: string; body: string } {
 	return {
-		subject: 'Need help picking an account?',
-		body: `Not sure what to get? Every account page shows exactly what you receive, the price, and how delivery works.
+		subject: 'Need help choosing?',
+		body: `Not sure where to start? Choose accounts, verification numbers, or boosting from the homepage.
 
-Reselling or growing a page? Message us and we'll point you to the right one.`
+Every page shows the price and what you receive. Message us if you need help.`
 	};
 }
 
@@ -447,14 +446,14 @@ Verified accounts, instant delivery, from small tiers to bulk. See what's availa
 	}
 	if (step === 1) {
 		return {
-			subject: 'What people are buying right now',
-			body: `Still deciding? Today's fast movers:
+			subject: 'What do you need today?',
+			body: `Still deciding? Start with what you need:
 
-• Instagram followers — from ₦2,500
-• X (Twitter) accounts — from ₦1,800
-• 1,000 IG followers — ₦4,500
+- Ready social accounts
+- Verification numbers
+- Followers, likes, and views
 
-Real accounts, sent the second your payment lands. Your 10% code ${promoCode} still works.`
+See live prices on the site. Your 10% code ${promoCode} still works.`
 		};
 	}
 	return {

@@ -103,7 +103,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 		// ✅ FIXED: Generate email content with allocated account details
 		const baseUrl = getBaseUrl();
-		const emailContent = generateAccountDeliveryEmail(order, baseUrl);
+		const emailContent = generateAccountDeliveryEmail(order);
 		const customerEmail = order.guestEmail;
 
 		if (!customerEmail) {
@@ -113,7 +113,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		// Send email with account details
 		const emailResult = await sendEmail({
 			to: customerEmail,
-			subject: `Your FastAccs Order ${order.orderNumber} - Account Details`,
+			subject: `Your Fast Accounts order ${order.orderNumber} is ready`,
 			body: emailContent,
 			ctaText: 'Open your dashboard',
 			ctaUrl: `${baseUrl}/dashboard?tab=purchases`,
@@ -177,18 +177,16 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 /**
  * Generate formatted email content with account details
  */
-function generateAccountDeliveryEmail(order: OrderForEmail, baseUrl: string): string {
+function generateAccountDeliveryEmail(order: OrderForEmail): string {
 	const orderItems = order.orderItems;
-	let content = `**Dear Customer,**
+	let content = `Your account details are ready.
 
-Thank you for your order with FastAccs! Your accounts are ready.
-
-**Order Details:**
+**Order details**
 - Order Number: ${order.orderNumber}
 - Order Date: ${new Date(order.createdAt).toLocaleDateString()}
 - Total Amount: ₦${order.totalAmount}
 
-**Your Account Details:**
+**Account details**
 
 `;
 
@@ -222,24 +220,12 @@ Thank you for your order with FastAccs! Your accounts are ready.
 		}
 	});
 
-	content += `**Important Security Information:**
-- **Account passwords are available in your dashboard for security reasons**
-- Please log into your dashboard to access full account credentials
-- Change passwords immediately after accessing your accounts
-- Keep your account details secure and private  
-- Contact support if you face any issues
+	content += `**Keep your account secure**
+- Passwords are available only in your dashboard
+- Change each password after your first login
+- Do not share your credentials
 
-**Quick Links:**
-- Access Passwords & Full Details: ${baseUrl}/dashboard?tab=purchases
-- Browse More Accounts: ${baseUrl}/platforms
-- Contact Support: ${baseUrl}/support
-
-**Support:**
-For any questions or issues, please contact our support team.
-
-Thank you for choosing FastAccs!
-
-**The FastAccs Team**`;
+Open your dashboard for passwords and complete details. Contact support if anything looks wrong.`;
 
 	return content;
 }

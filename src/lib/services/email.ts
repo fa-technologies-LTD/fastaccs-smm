@@ -39,6 +39,8 @@ interface SendEmailParams {
 	to: string;
 	subject: string;
 	body: string;
+	highlight?: string | null;
+	highlightLabel?: string | null;
 	ctaText?: string | null;
 	ctaUrl?: string | null;
 	showCta?: boolean;
@@ -146,40 +148,74 @@ export function renderEmailBody(content: string): string {
 			const blocks: string[] = [];
 			let paragraphLines: string[] = [];
 			let bulletLines: string[] = [];
+			let detailLines: Array<{ label: string; value: string }> = [];
 			const flushParagraph = () => {
 				if (paragraphLines.length === 0) return;
 				blocks.push(
-					`<p style="margin:0 0 16px 0;line-height:1.6;color:#CCCCCC;">${paragraphLines.join('<br>')}</p>`
+					`<p style="margin:0 0 16px 0;font-size:15px;line-height:1.65;color:#cbd6d0;">${paragraphLines.join('<br>')}</p>`
 				);
 				paragraphLines = [];
 			};
 			const flushBullets = () => {
 				if (bulletLines.length === 0) return;
 				const items = bulletLines
-					.map((line) => `<li style="margin:0 0 8px 0;">${line.slice(2)}</li>`)
+					.map((line) => `<li style="margin:0 0 9px 0;padding-left:2px;">${line}</li>`)
 					.join('');
-				blocks.push(`<ul style="margin:0 0 16px 20px;padding:0;color:#CCCCCC;">${items}</ul>`);
+				blocks.push(
+					`<ul style="margin:0 0 18px 20px;padding:0;color:#cbd6d0;font-size:15px;line-height:1.55;">${items}</ul>`
+				);
 				bulletLines = [];
+			};
+			const flushDetails = () => {
+				if (detailLines.length === 0) return;
+				const rows = detailLines
+					.map(
+						({ label, value }, index) =>
+							`<tr><td style="padding:${index === 0 ? '14px 14px 8px' : '8px 14px'};color:#8fa198;font-size:12px;line-height:1.4;">${label}</td><td align="right" style="padding:${index === 0 ? '14px 14px 8px' : '8px 14px'};color:#f4f7f5;font-size:13px;line-height:1.4;font-weight:700;">${value}</td></tr>`
+					)
+					.join('');
+				blocks.push(
+					`<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 18px 0;border:1px solid #21362d;border-radius:10px;background:#09130e;">${rows}<tr><td colspan="2" style="height:6px;font-size:0;line-height:0;">&nbsp;</td></tr></table>`
+				);
+				detailLines = [];
 			};
 
 			for (const line of lines) {
-				if (line.startsWith('- ')) {
+				const bullet = line.match(/^(?:-|•)\s+(.+)$/);
+				const detail = line.match(
+					/^(Order|Amount|Amount paid|Requested amount|Request reference|Your code):\s+(.+)$/i
+				);
+				if (bullet) {
 					flushParagraph();
-					bulletLines.push(line);
+					flushDetails();
+					bulletLines.push(bullet[1]);
+				} else if (detail) {
+					flushParagraph();
+					flushBullets();
+					detailLines.push({ label: detail[1], value: detail[2] });
+				} else if (/^<strong>.+<\/strong>$/.test(line)) {
+					flushParagraph();
+					flushBullets();
+					flushDetails();
+					blocks.push(
+						`<p style="margin:4px 0 10px 0;color:#ffffff;font-size:15px;line-height:1.45;font-weight:700;">${line}</p>`
+					);
 				} else {
 					flushBullets();
+					flushDetails();
 					paragraphLines.push(line);
 				}
 			}
 			flushParagraph();
 			flushBullets();
+			flushDetails();
 			return blocks.join('');
 		})
 		.join('');
 }
 
 const INBOX_REMINDER_LINE =
-	'**Important:** To avoid missing future updates, mark this email as Not Spam and move it to your Primary inbox.';
+	'**Inbox tip:** Move Fast Accounts to Primary so you do not miss important updates.';
 
 export function resolveEmailLogoUrl(baseUrl: string): string {
 	const normalizedBaseUrl = normalizePublicBaseUrl(baseUrl) || CANONICAL_PUBLIC_BASE_URL;
@@ -200,8 +236,9 @@ function isOperationalAdminAlert(params: SendEmailParams): boolean {
 
 function shouldShowInboxReminder(params: SendEmailParams): boolean {
 	if (isOperationalAdminAlert(params)) return false;
-	if (params.notificationType !== 'admin_broadcast') return true;
-	return Boolean(params.broadcastId);
+	if (params.notificationType === 'verification') return true;
+	if (params.classification === 'marketing') return true;
+	return params.notificationType === 'admin_broadcast' && Boolean(params.broadcastId);
 }
 
 function appendInboxReminderIfMissing(body: string): string {
@@ -209,9 +246,48 @@ function appendInboxReminderIfMissing(body: string): string {
 	return `${body}\n\n${INBOX_REMINDER_LINE}`;
 }
 
+function getEmailEyebrow(params: SendEmailParams): string {
+	if (params.classification === 'operational') return 'OPERATIONS';
+
+	switch (params.notificationType) {
+		case 'verification':
+			return 'SECURITY';
+		case 'order_confirmation':
+		case 'order_delivery':
+		case 'abandoned_order':
+			return 'ORDER UPDATE';
+		case 'affiliate_unlock':
+		case 'affiliate_introduction':
+		case 'affiliate_activation_nudge':
+		case 'affiliate_bank_details_nudge':
+		case 'affiliate_progress':
+		case 'affiliate_store_credit':
+		case 'affiliate_payout':
+			return 'AFFILIATE';
+		case 'restock_alert':
+			return 'BACK IN STOCK';
+		case 'boosting_service_live':
+			return 'BOOSTING';
+		case 'numbers_launch':
+			return 'NUMBERS';
+		case 'promo_reminder':
+			return 'YOUR REWARD';
+		case 'welcome':
+		case 'onboarding_step':
+		case 'nurture_step':
+			return 'GET STARTED';
+		default:
+			return params.classification === 'marketing' ? 'FAST ACCOUNTS' : 'UPDATE';
+	}
+}
+
 export function renderEmailTemplate(params: {
 	firstName?: string | null;
 	body: string;
+	title?: string | null;
+	eyebrow?: string | null;
+	highlight?: string | null;
+	highlightLabel?: string | null;
 	preheader?: string | null;
 	ctaText?: string | null;
 	ctaUrl?: string | null;
@@ -226,72 +302,83 @@ export function renderEmailTemplate(params: {
 		.replace(/\s+/g, ' ')
 		.trim()
 		.slice(0, 160);
+	const title = String(params.title || '').trim();
+	const eyebrow = String(params.eyebrow || '').trim();
+	const highlight = String(params.highlight || '').trim();
+	const highlightLabel = String(params.highlightLabel || '').trim();
+	const currentYear = new Date().getUTCFullYear();
 
 	return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
+	<meta name="color-scheme" content="dark light" />
+	<meta name="supported-color-schemes" content="dark light" />
+	<style>
+	  @media only screen and (max-width: 620px) {
+		.fa-shell { padding: 16px 10px !important; }
+		.fa-card-cell { padding: 24px 20px !important; }
+		.fa-title { font-size: 25px !important; line-height: 1.2 !important; }
+		.fa-cta { display: block !important; text-align: center !important; }
+	  }
+	</style>
   </head>
-  <body style="margin:0;padding:0;background:#080A0B;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-    ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(preheader)}</div>` : ''}
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 12px;background:#080A0B;">
+	<body style="margin:0;padding:0;background:#07100c;color:#f4f7f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+	${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">${escapeHtml(preheader)}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>` : ''}
+	<table class="fa-shell" role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:28px 12px;background:#07100c;">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;">
+		  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;">
             <tr>
-              <td align="center" style="padding:0 0 18px 0;line-height:1;">
-                <img src="cid:${EMAIL_HEADER_CID}" alt="FAST ACCOUNTS" width="640" style="display:block;width:100%;max-width:640px;height:auto;border:0;outline:none;text-decoration:none;color:#25B570;font-size:22px;font-weight:800;line-height:1.2;letter-spacing:0.6px;" />
+			  <td align="center" style="padding:0 0 16px 0;line-height:1;">
+				<img src="cid:${EMAIL_HEADER_CID}" alt="FAST ACCOUNTS — ALL SOCIALS. ONE PLUG." width="620" style="display:block;width:100%;max-width:620px;height:auto;border:1px solid #18382a;border-radius:16px;outline:none;text-decoration:none;color:#25B570;font-size:22px;font-weight:800;line-height:1.2;letter-spacing:0.6px;" />
               </td>
             </tr>
             <tr>
               <td>
-				<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#141414;border-radius:14px;border:1px solid #2B2F33;overflow:hidden;">
+				<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0e1713;border-radius:16px;border:1px solid #234435;overflow:hidden;box-shadow:0 14px 36px rgba(0,0,0,0.24);">
 				  <tr>
-				    <td style="height:4px;background:#25B570;font-size:0;line-height:0;">&nbsp;</td>
-				  </tr>
-				  <tr>
-                    <td style="padding:28px;">
-                      ${params.firstName ? `<p style="margin:0 0 14px 0;color:#CCCCCC;">Hi ${escapeHtml(params.firstName)},</p>` : ''}
+					<td class="fa-card-cell" style="padding:32px;">
+					  ${eyebrow ? `<div style="display:inline-block;margin:0 0 14px 0;padding:6px 10px;border:1px solid #246f4b;border-radius:999px;background:#102a1e;color:#55d996;font-size:11px;font-weight:800;line-height:1;letter-spacing:1.1px;">${escapeHtml(eyebrow)}</div>` : ''}
+					  ${title ? `<h1 class="fa-title" style="margin:0 0 20px 0;color:#ffffff;font-size:29px;line-height:1.22;font-weight:800;letter-spacing:-0.5px;">${escapeHtml(title)}</h1>` : ''}
+					  ${highlight ? `<div style="margin:0 0 20px 0;padding:18px;border:1px solid #246f4b;border-radius:12px;background:#09130e;text-align:center;">${highlightLabel ? `<div style="margin:0 0 8px 0;color:#8fa198;font-size:10px;font-weight:800;line-height:1;letter-spacing:1.2px;">${escapeHtml(highlightLabel)}</div>` : ''}<div style="color:#55d996;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:30px;font-weight:800;line-height:1.15;letter-spacing:5px;">${escapeHtml(highlight)}</div></div>` : ''}
+					  ${params.firstName ? `<p style="margin:0 0 14px 0;color:#cbd6d0;font-size:15px;line-height:1.65;">Hi ${escapeHtml(params.firstName)},</p>` : ''}
                       ${params.body}
                       ${
 												showCta
-													? `<div style="margin-top:20px;">
-						<a href="${escapeHtml(safeCtaUrl || '')}" style="display:inline-block;background:#25B570;color:#04140C;border-radius:8px;padding:12px 22px;font-weight:700;text-decoration:none;">${escapeHtml(params.ctaText || '')}</a>
-                      </div>`
+													? `<table role="presentation" cellspacing="0" cellpadding="0" style="margin-top:24px;"><tr><td style="border-radius:10px;background:#25b570;">
+						<a class="fa-cta" href="${escapeHtml(safeCtaUrl || '')}" style="display:inline-block;border-radius:10px;background:#25b570;color:#04140c;padding:14px 24px;font-size:15px;font-weight:800;line-height:1.2;text-decoration:none;">${escapeHtml(params.ctaText || '')} &rarr;</a>
+					  </td></tr></table>`
 													: ''
 											}
                     </td>
                   </tr>
                   <tr>
-                    <td style="padding:20px 28px;border-top:1px solid #2B2F33;color:#9A9A9A;font-size:12px;line-height:1.6;background:#101213;">
-                      <div style="color:#E4E4E4;font-weight:600;">Fast Accounts</div>
-                      <div style="margin-top:6px;">
-                        <a href="https://wa.link/fast_accounts" style="color:#9A9A9A;text-decoration:underline;">WhatsApp Support</a>
-                        &nbsp;|&nbsp;
-                        <a href="mailto:${escapeHtml(supportEmail)}" style="color:#9A9A9A;text-decoration:underline;">Support Email</a>
-                      </div>
-                      <div style="margin-top:6px;">© 2026 FA Technologies LTD</div>
-                      <div style="margin-top:10px;">You received this because you have an account on Fast Accounts.</div>
-                      ${
-												params.marketingPreferenceUrl
-													? `<div style="margin-top:8px;">You are receiving this because you may be interested in relevant Fast Accounts updates.</div>
-                      <div style="margin-top:6px;">
-                        <a href="${escapeHtml(params.marketingPreferenceUrl)}" style="color:#9A9A9A;text-decoration:underline;">Manage email preferences</a>
-                        &nbsp;|&nbsp;
-                        <a href="${escapeHtml(params.marketingPreferenceUrl)}" style="color:#9A9A9A;text-decoration:underline;">Unsubscribe</a>
-                      </div>`
-													: ''
-											}
-                      <div style="margin-top:8px;">
-                        <a href="${baseUrl}" style="color:#9A9A9A;text-decoration:underline;">${baseUrl}</a>
-                      </div>
+					<td style="padding:20px 32px;border-top:1px solid #21362d;color:#8fa198;font-size:12px;line-height:1.65;background:#0a120f;">
+					  <div style="color:#dce8e1;font-weight:700;">Need help?</div>
+					  <div style="margin-top:5px;">
+						<a href="https://wa.link/fast_accounts" style="color:#55d996;text-decoration:none;">WhatsApp</a>
+						&nbsp;&nbsp;&middot;&nbsp;&nbsp;
+						<a href="mailto:${escapeHtml(supportEmail)}" style="color:#55d996;text-decoration:none;">Email support</a>
+					  </div>
+					  ${
+							params.marketingPreferenceUrl
+								? `<div style="margin-top:12px;">You can stop optional emails at any time.</div>
+					  <div style="margin-top:4px;"><a href="${escapeHtml(params.marketingPreferenceUrl)}" style="color:#aebcb5;text-decoration:underline;">Manage preferences or unsubscribe</a></div>`
+								: ''
+						}
+					  <div style="margin-top:14px;color:#6f8178;">ALL SOCIALS. ONE PLUG.</div>
                     </td>
                   </tr>
                 </table>
               </td>
             </tr>
+			<tr>
+			  <td align="center" style="padding:16px 12px 0;color:#62736a;font-size:11px;line-height:1.5;">
+				&copy; ${currentYear} FA Technologies LTD &nbsp;&middot;&nbsp; <a href="${baseUrl}" style="color:#7f9389;text-decoration:none;">smm.fastaccs.com</a>
+			  </td>
+			</tr>
           </table>
         </td>
       </tr>
@@ -407,6 +494,10 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 	const bodyHtml = renderEmailBody(body);
 	const html = renderEmailTemplate({
 		body: bodyHtml,
+		title: subject,
+		eyebrow: getEmailEyebrow(params),
+		highlight: params.highlight || null,
+		highlightLabel: params.highlightLabel || null,
 		preheader: subject,
 		ctaText: params.ctaText || null,
 		ctaUrl: params.ctaUrl || null,
@@ -895,21 +986,18 @@ export async function sendWelcomeEmailIfNeeded(params: {
 
 	const result = await sendEmail({
 		to: params.email,
-		subject: 'Welcome to Fast Accounts',
+		subject: 'Welcome — your account is ready',
 		body: `Hi ${firstName},
 
-Welcome to Fast Accounts. Your account is ready.
+Welcome to Fast Accounts.
 
-You can now:
-- See available accounts
-- Buy followers, likes, and views for accounts you already own
-- Complete secure checkout
-- View orders and purchases from your dashboard
-- Get help quickly whenever you need it
+- Buy ready-to-use social accounts
+- Get verification numbers
+- Add followers, likes, and views
 
-Start with any account that fits what you need.`,
-		ctaText: 'See available accounts',
-		ctaUrl: `${getBaseUrl()}/platforms`,
+Everything stays in one dashboard.`,
+		ctaText: 'Explore Fast Accounts',
+		ctaUrl: getBaseUrl(),
 		userId: params.userId,
 		notificationType: 'welcome',
 		referenceId: `welcome:${params.userId}`,

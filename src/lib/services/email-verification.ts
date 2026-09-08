@@ -179,14 +179,12 @@ export async function ensureVerificationCode(
 
 	const sendResult = await sendEmail({
 		to: user.email,
-		subject: 'Your Fast Accounts verification code',
-		body: `Use this verification code to confirm your email: ${code}
+		subject: 'Confirm your email',
+		body: `Enter this code on Fast Accounts. It expires in ${VERIFICATION_CODE_EXPIRY_MINUTES} minutes.
 
-This code expires in ${VERIFICATION_CODE_EXPIRY_MINUTES} minutes.
-
-Do not share this code with anyone.
-
-If this email lands in Spam or Promotions, mark it as Not Spam so future messages reach your inbox.`,
+Do not share this code with anyone.`,
+		highlight: code,
+		highlightLabel: 'YOUR CODE',
 		userId: user.id,
 		notificationType: 'verification',
 		referenceId: 'code_request',

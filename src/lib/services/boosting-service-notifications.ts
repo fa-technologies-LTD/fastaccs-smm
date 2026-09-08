@@ -30,7 +30,7 @@ export async function triggerBoostingWaitlistNotifications(
 					to: subscriber.email,
 					subject: `${serviceName} is now live`,
 					body: `${serviceName} is now available. Paste your link, pay, we deliver.`,
-					ctaText: 'Browse Boosting Services',
+					ctaText: 'View boosting services',
 					ctaUrl: servicesUrl,
 					userId: subscriber.userId,
 					notificationType: 'boosting_service_live',
