@@ -7,9 +7,15 @@ import { getUserFromGoogleId, createUserFromGoogle, updateUserFromGoogle } from 
 import { isAdminEmail } from '$lib/auth/admin';
 import { sanitizeInternalRedirectPath } from '$lib/auth/redirect';
 import { maybeLockReferralFromCookie } from '$lib/services/affiliate';
-import { ATTRIBUTION_COOKIE, parseAttribution, attributionToUserFields } from '$lib/services/attribution';
+import {
+	ATTRIBUTION_COOKIE,
+	parseAttribution,
+	attributionToUserFields
+} from '$lib/services/attribution';
 import type { RequestHandler } from './$types';
 import type { OAuth2Tokens } from 'arctic';
+
+const SNAP_SIGNUP_COOKIE = 'fa_snap_signup';
 
 export const GET: RequestHandler = async (event) => {
 	const { url, cookies } = event;
@@ -93,6 +99,15 @@ export const GET: RequestHandler = async (event) => {
 				referredUserId: user.id,
 				source: 'google_signup'
 			});
+			// The browser consumes this after the OAuth redirect and records SIGN_UP.
+			// It contains no customer data and expires quickly.
+			cookies.set(SNAP_SIGNUP_COOKIE, 'google', {
+				path: '/',
+				maxAge: 300,
+				httpOnly: false,
+				sameSite: 'lax',
+				secure: url.protocol === 'https:'
+			});
 		}
 
 		// Create session
@@ -111,7 +126,14 @@ export const GET: RequestHandler = async (event) => {
 		let finalRedirectTo = redirectTo;
 
 		// Don't send users back to policy/auth pages after login — redirect to dashboard instead
-		const NON_PRODUCTIVE_PREFIXES = ['/privacy', '/terms', '/refund-policy', '/acceptable-use', '/affiliate-terms', '/auth/'];
+		const NON_PRODUCTIVE_PREFIXES = [
+			'/privacy',
+			'/terms',
+			'/refund-policy',
+			'/acceptable-use',
+			'/affiliate-terms',
+			'/auth/'
+		];
 		if (NON_PRODUCTIVE_PREFIXES.some((p) => finalRedirectTo.startsWith(p))) {
 			finalRedirectTo = '/dashboard';
 		}

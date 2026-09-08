@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { UserPlus, ArrowLeft } from '$lib/icons';
 	import { isValidPhone } from '$lib/helpers/phone';
+	import { trackSnapEvent } from '$lib/services/snap-pixel';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
@@ -64,13 +65,14 @@
 				})
 			});
 			const result = await response.json();
-				if (!response.ok || !result.success) {
-					error = result.error || 'Failed to create account.';
-					return;
-				}
+			if (!response.ok || !result.success) {
+				error = result.error || 'Failed to create account.';
+				return;
+			}
 
-				await goto(result.redirectTo || `/verify-email?next=${encodeURIComponent(redirectTo)}`);
-			} catch (signupError) {
+			trackSnapEvent('SIGN_UP', { sign_up_method: 'email' });
+			await goto(result.redirectTo || `/verify-email?next=${encodeURIComponent(redirectTo)}`);
+		} catch (signupError) {
 			console.error('Signup failed:', signupError);
 			error = 'Unable to create account right now. Please try again.';
 		} finally {
@@ -130,7 +132,11 @@
 
 				<form class="space-y-4" onsubmit={submitSignup}>
 					<div>
-						<label for="signup-name" class="mb-1 block text-sm font-medium" style="color: var(--text);">
+						<label
+							for="signup-name"
+							class="mb-1 block text-sm font-medium"
+							style="color: var(--text);"
+						>
 							Full name
 						</label>
 						<input
@@ -145,7 +151,11 @@
 					</div>
 
 					<div>
-						<label for="signup-phone" class="mb-1 block text-sm font-medium" style="color: var(--text);">
+						<label
+							for="signup-phone"
+							class="mb-1 block text-sm font-medium"
+							style="color: var(--text);"
+						>
 							WhatsApp number <span style="color: var(--text-muted);">(optional)</span>
 						</label>
 						<input
@@ -163,7 +173,11 @@
 					</div>
 
 					<div>
-						<label for="signup-email" class="mb-1 block text-sm font-medium" style="color: var(--text);">
+						<label
+							for="signup-email"
+							class="mb-1 block text-sm font-medium"
+							style="color: var(--text);"
+						>
 							Email
 						</label>
 						<input

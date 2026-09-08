@@ -10,7 +10,7 @@
 		isPendingPaymentStatus,
 		normalizePaymentStatus
 	} from '$lib/helpers/payment-status';
-	import { trackSnapEvent } from '$lib/services/snap-pixel';
+	import { trackSnapPurchase } from '$lib/services/snap-pixel';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import {
 		clearGa4CheckoutSnapshot,
@@ -260,13 +260,38 @@
 					if (result.success) {
 						const resolvedOrderId = result.orderId || orderIdParam;
 						const checkoutSnapshot = readGa4CheckoutSnapshot(resolvedOrderId);
-						trackSnapEvent('PURCHASE', {
+						const snapshotItems = checkoutSnapshot?.items || [];
+						const verifiedAmount = Number(result.amount);
+						const purchaseValue = Number.isFinite(verifiedAmount)
+							? verifiedAmount
+							: isStoreCredit
+								? 0
+								: Number(checkoutSnapshot?.value || 0);
+						const snapPurchaseTracked = trackSnapPurchase({
 							transaction_id: resolvedOrderId,
-							price: Number(result.amount || 0) || undefined,
+							price: purchaseValue,
 							currency: result.currency || 'NGN',
-							description: 'FastAccs order'
+							item_ids: snapshotItems
+								.map((item) => item.item_id)
+								.filter((item): item is string => Boolean(item)),
+							item_category:
+								Array.from(
+									new Set(
+										snapshotItems
+											.map((item) => item.item_category)
+											.filter((item): item is string => Boolean(item))
+									)
+								).join(', ') || 'FastAccs SMM',
+							description:
+								snapshotItems
+									.map((item) => item.item_name)
+									.filter(Boolean)
+									.join(', ') || 'FastAccs order',
+							number_items: snapshotItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
 						});
-						recordAnalyticsEvent('purchase', `${$page.url.pathname}${$page.url.search}`);
+						if (snapPurchaseTracked) {
+							recordAnalyticsEvent('purchase', `${$page.url.pathname}${$page.url.search}`);
+						}
 						if (resolvedOrderId) {
 							trackGa4Purchase({
 								transaction_id: resolvedOrderId,

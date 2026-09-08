@@ -10,7 +10,11 @@
 	import CookieConsentBar from '$lib/components/CookieConsentBar.svelte';
 	import SitePopupHost from '$lib/components/SitePopupHost.svelte';
 	import PushNotificationPrompt from '$lib/components/PushNotificationPrompt.svelte';
-	import { trackSnapPageView, trackSnapConfirmedVisit } from '$lib/services/snap-pixel';
+	import {
+		trackSnapPageView,
+		trackSnapConfirmedVisit,
+		trackPendingSnapSignup
+	} from '$lib/services/snap-pixel';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { syncGa4Consent, trackGa4PageView } from '$lib/services/ga4';
 	import { PRIVACY_CONSENT_CHANGED_EVENT } from '$lib/helpers/privacyConsent';
@@ -181,6 +185,7 @@
 		hydrated = true;
 		trackCurrentSnapPageView();
 		trackCurrentSnapConfirmedVisit();
+		trackPendingSnapSignup();
 		syncGa4Consent();
 		trackCurrentGa4PageView();
 

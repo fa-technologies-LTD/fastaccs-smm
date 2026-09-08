@@ -56,6 +56,7 @@
 	let checkoutSlow = $state(false);
 	let lastCartNotice = $state('');
 	let lastGa4CartKey = $state('');
+	let lastSnapCheckoutKey = $state('');
 	let cartLoadPromise: Promise<void> | null = null;
 	const PENDING_ORDER_STORAGE_KEY = 'fastaccs_pending_order_id';
 	const CHECKOUT_SESSION_STORAGE_KEY = 'fastaccs_checkout_session';
@@ -349,14 +350,25 @@
 	}
 
 	function getCheckoutSnapPayload(orderId?: string) {
+		const itemCategories = Array.from(
+			new Set(
+				cartItems.map((item) =>
+					item.boosting
+						? 'Boosting services'
+						: item.tier.deliveryMode === 'auto_sms'
+							? 'Verification numbers'
+							: 'Social media accounts'
+				)
+			)
+		);
 		return {
 			item_ids: cartItems.map((item) => item.tierId),
-			item_category: 'FastAccs SMM',
+			item_category: itemCategories.join(', '),
 			description: cartItems.map((item) => item.tier.name).join(', '),
 			price: checkoutTotal,
 			currency: 'NGN',
 			number_items: cartItems.reduce((sum, item) => sum + item.quantity, 0),
-			transaction_id: orderId
+			client_dedup_id: orderId ? `checkout-${orderId}` : undefined
 		};
 	}
 
@@ -365,7 +377,11 @@
 			item_id: item.tierId,
 			item_name: item.tier.name,
 			item_brand: 'FastAccs',
-			item_category: item.boosting ? 'Boosting Services' : 'SMM accounts',
+			item_category: item.boosting
+				? 'Boosting Services'
+				: item.tier.deliveryMode === 'auto_sms'
+					? 'Verification Numbers'
+					: 'SMM accounts',
 			item_category2: item.tier.platformName,
 			item_variant: item.boosting
 				? 'boosting_service'
@@ -450,6 +466,12 @@
 			.join('|')}`;
 
 		if (!cartKey || cartKey === lastGa4CartKey) return;
+		if (cartKey !== lastSnapCheckoutKey) {
+			if (trackSnapEvent('START_CHECKOUT', getCheckoutSnapPayload())) {
+				lastSnapCheckoutKey = cartKey;
+				recordAnalyticsEvent('start_checkout', `${page.url.pathname}${page.url.search}`);
+			}
+		}
 
 		if (
 			trackGa4ViewCart({
@@ -625,32 +647,10 @@
 				throw new Error(orderResult.error || 'Failed to create order');
 			}
 
-			// Store credit covered the full total — no gateway payment. Route to the
-			// verify page, which settles/fulfils the already-paid order and shows the
-			// standard success UI.
-			if (orderResult.paidWithStoreCredit && orderResult.redirectUrl) {
-				const paidOrderId = String(orderResult.orderId || '');
-				if (paidOrderId) {
-					sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, paidOrderId);
-				}
-				window.location.href = orderResult.redirectUrl;
-				return;
-			}
-
-			if (!orderResult.checkoutUrl) {
-				throw new Error(orderResult.error || 'Failed to initialize payment');
-			}
-
 			const resolvedOrderId = String(orderResult.orderId || '');
 			const ga4CheckoutPayload = getCheckoutGa4Payload(resolvedOrderId);
-
-			trackSnapEvent('START_CHECKOUT', getCheckoutSnapPayload(resolvedOrderId));
-			recordAnalyticsEvent('start_checkout', `${page.url.pathname}${page.url.search}`);
+			trackSnapEvent('ADD_BILLING', getCheckoutSnapPayload(resolvedOrderId));
 			trackGa4BeginCheckout(ga4CheckoutPayload);
-			trackGa4AddPaymentInfo({
-				...ga4CheckoutPayload,
-				payment_type: 'Monnify'
-			});
 			if (resolvedOrderId) {
 				saveGa4CheckoutSnapshot({
 					orderId: resolvedOrderId,
@@ -662,6 +662,27 @@
 					createdAt: Date.now()
 				});
 			}
+
+			// Store credit covered the full total — no gateway payment. Route to the
+			// verify page, which settles/fulfils the already-paid order and shows the
+			// standard success UI.
+			if (orderResult.paidWithStoreCredit && orderResult.redirectUrl) {
+				if (resolvedOrderId) {
+					sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, resolvedOrderId);
+				}
+				trackGa4AddPaymentInfo({ ...ga4CheckoutPayload, payment_type: 'Store credit' });
+				window.location.href = orderResult.redirectUrl;
+				return;
+			}
+
+			if (!orderResult.checkoutUrl) {
+				throw new Error(orderResult.error || 'Failed to initialize payment');
+			}
+
+			trackGa4AddPaymentInfo({
+				...ga4CheckoutPayload,
+				payment_type: 'Monnify'
+			});
 			sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, resolvedOrderId);
 			window.location.href = orderResult.checkoutUrl;
 		} catch (error) {

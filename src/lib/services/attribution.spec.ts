@@ -36,22 +36,45 @@ describe('buildFirstTouch', () => {
 		expect(a).toMatchObject({ source: 'snapchat', medium: 'cpc', campaign: 'aug' });
 	});
 	it('derives from referrer when no utm, defaulting medium to referral', () => {
-		const a = buildFirstTouch({ ...base, searchParams: new URLSearchParams(), referrer: 'https://snapchat.com/' });
+		const a = buildFirstTouch({
+			...base,
+			searchParams: new URLSearchParams(),
+			referrer: 'https://snapchat.com/'
+		});
 		expect(a).toMatchObject({ source: 'snapchat', medium: 'referral' });
+	});
+	it('recognizes Snap ad click IDs even when the in-app browser sends no referrer', () => {
+		const a = buildFirstTouch({
+			...base,
+			searchParams: new URLSearchParams('ScCid=example-click-id')
+		});
+		expect(a).toMatchObject({ source: 'snapchat', medium: 'paid_social' });
 	});
 	it('returns null for internal navigation with no utm (nothing to attribute)', () => {
 		expect(
-			buildFirstTouch({ ...base, searchParams: new URLSearchParams(), referrer: 'https://smm.fastaccs.com/' })
+			buildFirstTouch({
+				...base,
+				searchParams: new URLSearchParams(),
+				referrer: 'https://smm.fastaccs.com/'
+			})
 		).toBeNull();
 	});
 	it('captures direct (no referrer, no utm)', () => {
-		expect(buildFirstTouch({ ...base, searchParams: new URLSearchParams() })?.source).toBe('direct');
+		expect(buildFirstTouch({ ...base, searchParams: new URLSearchParams() })?.source).toBe(
+			'direct'
+		);
 	});
 });
 
 describe('parseAttribution + attributionToUserFields', () => {
 	it('round-trips a stored cookie', () => {
-		const a = { source: 'snapchat', medium: 'cpc', campaign: 'aug', referrer: 'r', landing: '/numbers' };
+		const a = {
+			source: 'snapchat',
+			medium: 'cpc',
+			campaign: 'aug',
+			referrer: 'r',
+			landing: '/numbers'
+		};
 		expect(parseAttribution(JSON.stringify(a))).toEqual(a);
 	});
 	it('returns null for missing/corrupt cookies', () => {
@@ -62,7 +85,13 @@ describe('parseAttribution + attributionToUserFields', () => {
 	it('maps to user columns, empty object when null', () => {
 		expect(attributionToUserFields(null)).toEqual({});
 		expect(
-			attributionToUserFields({ source: 'google', medium: '', campaign: '', referrer: '', landing: '/' })
+			attributionToUserFields({
+				source: 'google',
+				medium: '',
+				campaign: '',
+				referrer: '',
+				landing: '/'
+			})
 		).toMatchObject({ acquisitionSource: 'google', acquisitionMedium: null });
 	});
 });

@@ -5,6 +5,7 @@
 	import { slide } from 'svelte/transition';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
+	import { trackSnapEvent } from '$lib/services/snap-pixel';
 	import { showWarning, showSuccess, showError } from '$lib/stores/toasts';
 	import { RefreshCw, ChevronDown, Phone, BellRing, Check, Search } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
@@ -61,10 +62,7 @@
 		if (!service) return;
 
 		openId = service.serviceId;
-		if (!measuredServiceOpens.has(service.serviceId)) {
-			measuredServiceOpens.add(service.serviceId);
-			recordAnalyticsEvent('numbers_service_open', `/numbers/service/${service.serviceId}`);
-		}
+		measureServiceOpen(service);
 		await tick();
 		document
 			.getElementById(`numbers-service-${service.serviceId}`)
@@ -101,10 +99,25 @@
 	function toggle(id: number) {
 		const opening = openId !== id;
 		openId = opening ? id : null;
-		if (opening && !measuredServiceOpens.has(id)) {
-			measuredServiceOpens.add(id);
-			recordAnalyticsEvent('numbers_service_open', `/numbers/service/${id}`);
-		}
+		const service = data.services.find((item) => item.serviceId === id);
+		if (opening && service) measureServiceOpen(service);
+	}
+
+	function measureServiceOpen(service: PageData['services'][number]): void {
+		if (measuredServiceOpens.has(service.serviceId)) return;
+		measuredServiceOpens.add(service.serviceId);
+
+		const path = `/numbers/service/${service.serviceId}`;
+		trackSnapEvent('VIEW_CONTENT', {
+			item_ids: [`numbers-service-${service.serviceId}`],
+			item_category: 'Verification numbers',
+			description: service.serviceName,
+			price: cheapest(service.tiers),
+			currency: 'NGN',
+			number_items: 1
+		});
+		recordAnalyticsEvent('view_content', path);
+		recordAnalyticsEvent('numbers_service_open', path);
 	}
 
 	// Expectation-setting FAQ — factual and calm, kept below the buy flow (see markup).
@@ -135,10 +148,13 @@
 		return live.length ? Math.min(...live.map((t) => t.priceNgn)) : 0;
 	}
 
-	async function buy(tierId: string, label: string) {
-		buyingTierId = tierId;
+	async function buy(
+		service: PageData['services'][number],
+		tier: PageData['services'][number]['tiers'][number]
+	) {
+		buyingTierId = tier.tierId;
 		try {
-			const compat = await cart.ensureDeliveryModeCompatibility(tierId, 'auto_sms');
+			const compat = await cart.ensureDeliveryModeCompatibility(tier.tierId, 'auto_sms');
 			if (!compat.compatible) {
 				showWarning(
 					'Numbers check out on their own',
@@ -149,8 +165,16 @@
 			// One number per order, by construction: reset the cart to exactly this number
 			// (clears any leftover), then go straight to checkout — no accumulation possible.
 			cart.clear();
-			cart.addTier(tierId, 1);
-			void label;
+			cart.addTier(tier.tierId, 1);
+			trackSnapEvent('ADD_CART', {
+				item_ids: [tier.tierId],
+				item_category: 'Verification numbers',
+				description: `${service.serviceName} — ${tier.countryName}`,
+				price: tier.priceNgn,
+				currency: 'NGN',
+				number_items: 1
+			});
+			recordAnalyticsEvent('add_cart', `/numbers/service/${service.serviceId}`);
 			goto('/checkout');
 		} finally {
 			buyingTierId = null;
@@ -279,8 +303,7 @@
 													₦{tier.priceNgn.toLocaleString()}
 												</span>
 												<button
-													onclick={() =>
-														buy(tier.tierId, `${service.serviceName} — ${tier.countryName}`)}
+													onclick={() => buy(service, tier)}
 													disabled={buyingTierId === tier.tierId}
 													class="rounded-lg px-4 py-1.5 text-sm font-semibold transition-transform hover:brightness-110 active:scale-95 disabled:opacity-60"
 													style="background: #0ea5e9; color: #ffffff;"

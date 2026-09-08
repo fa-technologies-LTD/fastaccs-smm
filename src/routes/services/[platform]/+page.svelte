@@ -6,6 +6,8 @@
 	import Footer from '$lib/components/Footer.svelte';
 	import { ArrowLeft, Eye, Heart, Minus, MessageCircle, Plus, Repeat, UserPlus } from '$lib/icons';
 	import { cart } from '$lib/stores/cart.svelte';
+	import { trackSnapEvent } from '$lib/services/snap-pixel';
+	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { showError, showSuccess, showWarning } from '$lib/stores/toasts';
 	import { formatPrice } from '$lib/helpers/utils';
 	import {
@@ -69,11 +71,35 @@
 	let platformIconFailed = $state(false);
 	let waitlistLoadingByServiceId = $state<Record<string, boolean>>({});
 	let waitlistSubscribedByServiceId = $state<Record<string, boolean>>({});
+	const measuredServiceViews = new Set<string>();
 
 	const currentUser = $derived((page.data as { user?: { id: string } | null }).user || null);
 
 	function toggleExpanded(serviceId: string) {
-		expandedServiceId = expandedServiceId === serviceId ? null : serviceId;
+		const opening = expandedServiceId !== serviceId;
+		expandedServiceId = opening ? serviceId : null;
+		const service = services.find((item) => item.id === serviceId);
+		if (opening && service) measureServiceView(service);
+	}
+
+	function getSnapServicePayload(service: BoostingServiceDisplay, quantity: number) {
+		return {
+			item_ids: [service.id],
+			item_category: 'Boosting services',
+			description: `${data.label} ${service.name}`,
+			price: computeBoostingPrice(service.config, quantity),
+			currency: 'NGN',
+			number_items: quantity
+		};
+	}
+
+	function measureServiceView(service: BoostingServiceDisplay): void {
+		if (measuredServiceViews.has(service.id)) return;
+		measuredServiceViews.add(service.id);
+
+		const path = `/services/${data.platform}?service=${encodeURIComponent(service.id)}`;
+		trackSnapEvent('VIEW_CONTENT', getSnapServicePayload(service, service.config.minQuantity));
+		recordAnalyticsEvent('view_content', path);
 	}
 
 	function normaliseServiceKey(value: string): string {
@@ -94,6 +120,7 @@
 		if (!service || service.config.pricePerStep <= 0) return;
 
 		expandedServiceId = service.id;
+		measureServiceView(service);
 		await tick();
 		document
 			.getElementById(`boosting-service-${service.id}`)
@@ -182,6 +209,11 @@
 			}
 
 			cart.addBoostingService(service.id, linkCheck.normalizedUrl || targetUrl, quantity);
+			trackSnapEvent('ADD_CART', getSnapServicePayload(service, quantity));
+			recordAnalyticsEvent(
+				'add_cart',
+				`/services/${data.platform}?service=${encodeURIComponent(service.id)}`
+			);
 			showSuccess(
 				'Added to cart!',
 				`${quantity.toLocaleString()} ${service.name} added successfully. Click to view cart.`,

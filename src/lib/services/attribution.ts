@@ -65,11 +65,17 @@ export function buildFirstTouch(input: {
 	ownHost: string;
 }): Attribution | null {
 	const utmSource = clip(input.searchParams.get('utm_source'), 60);
-	const source = utmSource || deriveSource(input.referrer, input.ownHost);
+	const hasSnapClickId = Array.from(input.searchParams.entries()).some(
+		([key, value]) => key.toLowerCase() === 'sccid' && value.trim().length > 0
+	);
+	const source =
+		utmSource || (hasSnapClickId ? 'snapchat' : deriveSource(input.referrer, input.ownHost));
 	if (!source) return null; // internal nav, no utm → not attributable
 	return {
 		source: source.toLowerCase(),
-		medium: clip(input.searchParams.get('utm_medium'), 60) || (utmSource ? '' : 'referral'),
+		medium:
+			clip(input.searchParams.get('utm_medium'), 60) ||
+			(utmSource ? '' : hasSnapClickId ? 'paid_social' : 'referral'),
 		campaign: clip(input.searchParams.get('utm_campaign'), 80),
 		referrer: clip(input.referrer, 200),
 		landing: clip(input.pathname, 200)

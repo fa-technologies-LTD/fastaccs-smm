@@ -15,6 +15,9 @@ Last updated: 8 September 2026
 - [x] Draft the safe boosting-provider automation architecture
 - [x] Draft the simple Numbers/Boosting store-credit incentive model
 - [x] Triage dependency alerts and apply all safe, non-breaking security updates
+- [x] Replace the old Snap Pixel with the approved pixel ID
+- [x] Track Snap page views, signups, product views, cart adds, checkout, billing, and verified purchases
+- [x] Add order-level Snap purchase deduplication and Snapchat click-ID attribution
 
 ## Active
 
@@ -28,6 +31,7 @@ Last updated: 8 September 2026
 
 - [ ] Choose a boosting supplier and provide its official API documentation and test credentials
 - [ ] Analyse Numbers and Boosting margins before choosing a cashback percentage and caps
+- [ ] Provide a Snap Conversions API access token if server-side ad-blocker-resistant tracking is desired
 
 ## Operational follow-up
 
@@ -39,6 +43,7 @@ Last updated: 8 September 2026
 - [ ] Implement and pilot boosting-provider automation
 - [ ] Implement and measure the Numbers/Boosting incentive pilot
 - [ ] Review live Numbers-service performance after more production usage
+- [ ] Add Snap Conversions API tracking and deduplicate it against the browser Pixel
 - [ ] Run one final full-site code, UX, security, and operations sweep
 
 ## Working principles

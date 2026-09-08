@@ -494,6 +494,11 @@
 				screenshotUrl: account.screenshotUrl || null,
 				reservedUntil: account.reservedUntil
 			});
+			trackSnapEvent('ADD_CART', {
+				...getSnapTierPayload(1),
+				delivery_method: 'exact_profile'
+			});
+			recordAnalyticsEvent('add_cart', `${page.url.pathname}${page.url.search}`);
 			trackGa4AddToCart(getGa4TierPayload(1, 'exact_profile'));
 			showSuccess(
 				`${account.displayLabel} added`,
@@ -558,6 +563,11 @@
 				isReservedByCurrentUser: true
 			};
 			selectedQuantity = 1;
+			trackSnapEvent('ADD_CART', {
+				...getSnapTierPayload(1),
+				delivery_method: 'exact_profile'
+			});
+			recordAnalyticsEvent('add_cart', `${page.url.pathname}${page.url.search}`);
 			trackGa4AddToCart(getGa4TierPayload(1, 'exact_profile'));
 			showSuccess(
 				`${result.data.displayLabel} added`,
