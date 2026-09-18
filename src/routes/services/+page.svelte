@@ -2,8 +2,8 @@
 	import { goto } from '$app/navigation';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import BrandIcon from '$lib/components/BrandIcon.svelte';
 	import { showError } from '$lib/stores/toasts';
-	import { getPlatformIcon } from '$lib/helpers/platformColors';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -17,14 +17,10 @@
 		tiktok: 'var(--gradient-tiktok)',
 		youtube: 'var(--gradient-youtube)',
 		facebook: 'var(--gradient-facebook)',
-		x: 'var(--gradient-twitter)'
+		x: 'var(--gradient-twitter)',
+		spotify: 'linear-gradient(135deg, #1ed760, #0f7a3b)',
+		telegram: 'linear-gradient(135deg, #2aabee, #1474b8)'
 	};
-
-	let failedIcons = $state<Record<string, boolean>>({});
-
-	function markIconFailed(platform: string) {
-		failedIcons = { ...failedIcons, [platform]: true };
-	}
 </script>
 
 <svelte:head>
@@ -40,7 +36,10 @@
 <main class="min-h-screen" style="background-color: var(--bg);">
 	<section class="mx-auto max-w-4xl px-4 py-12 sm:py-16">
 		<div class="mb-10 text-center">
-			<p class="text-xs font-semibold tracking-[0.18em] uppercase" style="color: var(--fa-blue-300);">
+			<p
+				class="text-xs font-semibold tracking-[0.18em] uppercase"
+				style="color: var(--fa-blue-300);"
+			>
 				Boosting Services
 			</p>
 			<p class="mx-auto mt-3 max-w-md text-sm" style="color: var(--text-muted);">
@@ -59,12 +58,13 @@
 				class="mx-auto max-w-xl rounded-[var(--r-md)] border p-10 text-center"
 				style="border-color: var(--border); background: var(--bg-elev-1);"
 			>
-				<p style="color: var(--text-muted);">No boosting services are available right now. Check back soon.</p>
+				<p style="color: var(--text-muted);">
+					No boosting services are available right now. Check back soon.
+				</p>
 			</div>
 		{:else}
 			<div class="grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-6">
 				{#each data.platformTiles as tile (tile.platform)}
-					{@const PlatformIcon = getPlatformIcon(tile.platform)}
 					<button
 						type="button"
 						onclick={() => goto(`/services/${tile.platform}`)}
@@ -73,7 +73,7 @@
 					>
 						{#if tile.allComingSoon}
 							<span
-								class="absolute top-2 right-2 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+								class="absolute top-2 right-2 rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase"
 								style="background: rgba(234,179,8,0.15); color: #eab308;"
 							>
 								Coming soon
@@ -83,18 +83,12 @@
 							class="flex h-16 w-16 items-center justify-center rounded-full sm:h-20 sm:w-20"
 							style={`background: ${platformGradients[tile.platform]}; ${tile.allComingSoon ? 'filter: grayscale(0.6);' : ''}`}
 						>
-							{#if tile.iconUrl && !failedIcons[tile.platform]}
-								<img
-									src={tile.iconUrl}
-									alt={tile.label}
-									class="h-9 w-9 rounded-full object-cover sm:h-11 sm:w-11"
-									onerror={() => markIconFailed(tile.platform)}
-								/>
-							{:else}
-								<PlatformIcon class="h-8 w-8 text-white sm:h-10 sm:w-10" />
-							{/if}
+							<BrandIcon service={tile.label} size={38} mono={true} />
 						</div>
-						<span class="text-sm font-semibold" style="color: var(--text); font-family: var(--font-head);">
+						<span
+							class="text-sm font-semibold"
+							style="color: var(--text); font-family: var(--font-head);"
+						>
 							{tile.label}
 						</span>
 					</button>

@@ -14,6 +14,7 @@ import { normalizeAccountDataForPersistence } from '$lib/helpers/account-credent
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { sendLowStockAdminAlertIfNeeded } from '$lib/services/admin-alerts';
 import { generateMissingExactPreviewThumbnails } from '$lib/services/exact-preview-thumbnails';
+import { triggerRestockNotificationsForTier } from '$lib/services/restock-notifications';
 
 function asText(value: FormDataEntryValue | null): string {
 	return typeof value === 'string' ? value.trim() : '';
@@ -66,6 +67,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (!tier || !tier.parent) {
 			return json({ data: null, error: 'Invalid tier selected for import' }, { status: 400 });
 		}
+		const availableBefore = await prisma.account.count({
+			where: { categoryId: tierId, status: 'available' }
+		});
 
 		const csvText = await fileEntry.text();
 		const importFingerprint = buildImportFingerprint(tierId, csvText);
@@ -290,6 +294,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		});
 
 		invalidateAdminStatsCache();
+		if (availableBefore === 0) {
+			// Batch import is the normal restock path. Await this so serverless teardown
+			// cannot discard notifications requested by customers.
+			await triggerRestockNotificationsForTier(tierId).catch((error) => {
+				console.error('Failed to notify restock subscribers after batch import:', error);
+			});
+		}
 		void sendLowStockAdminAlertIfNeeded('batch_import').catch((error) => {
 			console.error('Failed to evaluate low-stock alert after batch import:', error);
 		});

@@ -6,24 +6,18 @@ import { getNumbersPlatformId } from '$lib/services/phone-catalog';
 import { getSiteBaseUrl } from '$lib/helpers/site-url';
 
 /**
- * "Numbers are live" launch campaign — a tapered 3-touch announcement gated behind an
- * admin switch. NOTHING fires until an admin clicks Launch (post-prod). Touches:
- *   T0    banner + in-app popup + email + push
- *   T+3d  email + popup (reminder)
- *   T+7d  email + banner (last call)
- * A buyer who has already bought a number is suppressed from all remaining touches.
+ * Numbers discovery campaign. The owner switch enables a paced three-message
+ * sequence for opted-in customers who have not bought a number. New customers
+ * become eligible after five days; later messages wait seven and fourteen days.
+ * A Numbers purchase immediately stops the remaining sequence.
  */
 
 const CAMPAIGN_KEY = 'config.numbers_launch_campaign';
 const ANNOUNCEMENT_FLAG_KEY = 'feature.admin_announcement_banner.enabled';
 const MANUAL_PHONE_PLATFORM = 'Foreign Phone Numbers';
 
-// Touch windows (days since launch): [start, endExclusive)
-const TOUCH_WINDOWS: Record<number, [number, number]> = {
-	1: [0, 3],
-	2: [3, 7],
-	3: [7, 10]
-};
+const FIRST_TOUCH_ACCOUNT_AGE_DAYS = 5;
+const TOUCH_GAPS_DAYS = [0, 7, 14] as const;
 
 export interface NumbersCampaignState {
 	enabled: boolean;
@@ -58,31 +52,24 @@ interface TouchCopy {
 
 const TOUCH_COPY: Record<number, TouchCopy> = {
 	1: {
-		subject: 'New: get a verification code in seconds ⚡',
-		body: `Verifying an account used to mean waiting on us. Not anymore.
+		subject: 'Verification numbers for the apps you use ⚡',
+		body: `Get verification numbers for WhatsApp and Telegram across the USA, UK, and more countries. Pick what you need and your one-time code appears on your order page.
 
-Numbers are now fully automated. Pick a service, grab a number, and your one-time code appears on your order page in seconds — no chat, no waiting.
-
-WhatsApp, Telegram, Google, Instagram, Facebook and more.
-No code within the window? You're instantly refunded to store credit.`,
+No code within the activation window? You are refunded automatically.`,
 		ctaText: 'Get a number'
 	},
 	2: {
-		subject: 'Verify WhatsApp, Telegram & Google — instantly',
-		body: `Need to verify a new account? Do it in seconds, any time.
+		subject: 'WhatsApp and Telegram numbers, ready when you need them',
+		body: `Choose WhatsApp or Telegram, select the USA, UK, or another available country, and receive your code automatically.
 
-Buy an instant number for the platform you need, receive the code automatically, done. It's self-serve and available 24/7 — and if no code arrives, you're refunded on the spot.
-
-A quick reminder that it's live and ready whenever you are.`,
+It is self-serve and available 24/7. If no code arrives, you are refunded automatically.`,
 		ctaText: 'See available numbers'
 	},
 	3: {
-		subject: 'Your account, verified in seconds',
-		body: `Last nudge — our instant Numbers are live and they're the fastest way to verify.
+		subject: 'Need a number for WhatsApp or Telegram?',
+		body: `USA and UK options are available alongside other countries. Pick a number, request your code, done.
 
-One number, one code, seconds — for WhatsApp, Telegram, Google and more. Risk-free: no code, instant refund.
-
-Give it a try next time you set up an account.`,
+No code within the activation window? You are refunded automatically.`,
 		ctaText: 'Try Numbers'
 	}
 };
@@ -108,31 +95,26 @@ async function setCampaignState(state: NumbersCampaignState): Promise<void> {
 			key: CAMPAIGN_KEY,
 			value: JSON.stringify(state),
 			category: 'settings',
-			description: 'Numbers launch campaign state (enabled, launchedAt).',
+			description: 'Numbers discovery campaign state (enabled, launchedAt).',
 			isActive: true
 		}
 	});
 }
 
-/** Days elapsed since launch, or null if not launched. */
+/** Days elapsed since launch, retained for the short-lived launch popup only. */
 export function daysSinceLaunch(state: NumbersCampaignState, now = Date.now()): number | null {
 	if (!state.launchedAt) return null;
 	return Math.floor((now - new Date(state.launchedAt).getTime()) / 86_400_000);
-}
-
-/** The touch (1/2/3) whose window currently covers `day`, or null. */
-function currentTouch(day: number): number | null {
-	for (const [touch, [start, end]] of Object.entries(TOUCH_WINDOWS)) {
-		if (day >= start && day < end) return Number(touch);
-	}
-	return null;
 }
 
 // ---- Cutover (retire manual phone tiers) -----------------------------------
 
 async function setManualPhoneTiersActive(active: boolean): Promise<number> {
 	const platform = await prisma.category.findFirst({
-		where: { name: { contains: MANUAL_PHONE_PLATFORM, mode: 'insensitive' }, categoryType: 'platform' },
+		where: {
+			name: { contains: MANUAL_PHONE_PLATFORM, mode: 'insensitive' },
+			categoryType: 'platform'
+		},
 		select: { id: true }
 	});
 	if (!platform) return 0;
@@ -169,7 +151,10 @@ function touchReference(touch: number, userId: string): string {
 }
 
 /** Send one touch's email to eligible users who haven't received it yet. */
-async function sendTouchEmails(touch: number, limit: number): Promise<{ sent: number; skipped: number }> {
+async function sendTouchEmails(
+	touch: number,
+	limit: number
+): Promise<{ sent: number; skipped: number }> {
 	const copy = TOUCH_COPY[touch];
 	if (!copy) return { sent: 0, skipped: 0 };
 	const baseUrl = getSiteBaseUrl();
@@ -225,22 +210,111 @@ async function sendTouchEmails(touch: number, limit: number): Promise<{ sent: nu
 	return { sent, skipped };
 }
 
-/** Cron worker: send whichever touch is currently due. Safe no-op when disabled. */
+async function sendDueDiscoveryEmails(limit: number): Promise<{
+	sent: number;
+	skipped: number;
+	touches: Record<number, number>;
+}> {
+	const baseUrl = getSiteBaseUrl();
+	const firstTouchReadyAt = new Date(
+		Date.now() - FIRST_TOUCH_ACCOUNT_AGE_DAYS * 24 * 60 * 60 * 1000
+	);
+	const candidates = await prisma.user.findMany({
+		where: {
+			userType: 'REGISTERED',
+			isActive: true,
+			emailVerified: true,
+			marketingUnsubscribedAt: null,
+			email: { not: '' },
+			registeredAt: { lte: firstTouchReadyAt }
+		},
+		select: { id: true, email: true, fullName: true },
+		orderBy: { registeredAt: 'asc' },
+		take: Math.max(limit * 6, limit)
+	});
+	if (candidates.length === 0) return { sent: 0, skipped: 0, touches: {} };
+
+	const ids = candidates.map((candidate) => candidate.id);
+	const [sentRows, buyers] = await Promise.all([
+		prisma.emailNotification.findMany({
+			where: {
+				notificationType: 'numbers_launch',
+				status: 'sent',
+				referenceId: {
+					in: ids.flatMap((id) => [1, 2, 3].map((touch) => touchReference(touch, id)))
+				}
+			},
+			select: { referenceId: true, sentAt: true }
+		}),
+		numberBuyerIds(ids)
+	]);
+	const sentAtByReference = new Map(
+		sentRows.map((row) => [row.referenceId || '', row.sentAt || new Date(0)])
+	);
+
+	let sent = 0;
+	let skipped = 0;
+	const touches: Record<number, number> = {};
+	for (const user of candidates) {
+		if (sent >= limit) break;
+		if (!user.email || buyers.has(user.id)) {
+			skipped += 1;
+			continue;
+		}
+
+		let dueTouch: number | null = null;
+		for (let touch = 1; touch <= 3; touch += 1) {
+			if (sentAtByReference.has(touchReference(touch, user.id))) continue;
+			if (touch === 1) {
+				dueTouch = touch;
+				break;
+			}
+			const priorSentAt = sentAtByReference.get(touchReference(touch - 1, user.id));
+			const gapMs = TOUCH_GAPS_DAYS[touch - 1] * 24 * 60 * 60 * 1000;
+			if (priorSentAt && Date.now() - priorSentAt.getTime() >= gapMs) dueTouch = touch;
+			break;
+		}
+		if (!dueTouch) {
+			skipped += 1;
+			continue;
+		}
+
+		const copy = TOUCH_COPY[dueTouch];
+		const firstName = (user.fullName || '').trim().split(/\s+/)[0] || 'there';
+		const result = await sendMarketingEmail({
+			to: user.email,
+			subject: copy.subject,
+			body: `Hi ${firstName},\n\n${copy.body}`,
+			ctaText: copy.ctaText,
+			ctaUrl: `${baseUrl}/numbers`,
+			userId: user.id,
+			notificationType: 'numbers_launch',
+			referenceId: touchReference(dueTouch, user.id),
+			campaignKey: `numbers-discovery:t${dueTouch}:${user.id}`
+		});
+		if (result.success) {
+			sent += 1;
+			touches[dueTouch] = (touches[dueTouch] || 0) + 1;
+		} else {
+			skipped += 1;
+		}
+	}
+	return { sent, skipped, touches };
+}
+
+/** Daily worker for the evergreen sequence. Safe no-op when the owner switch is off. */
 export async function runNumbersCampaignTouches(limit = 400): Promise<{
 	ran: boolean;
 	touch: number | null;
 	sent: number;
 	skipped: number;
+	touches?: Record<number, number>;
 }> {
 	const state = await getNumbersCampaignState();
-	const day = daysSinceLaunch(state);
-	if (!state.enabled || day === null) return { ran: false, touch: null, sent: 0, skipped: 0 };
+	if (!state.enabled) return { ran: false, touch: null, sent: 0, skipped: 0 };
 
-	const touch = currentTouch(day);
-	if (touch === null) return { ran: true, touch: null, sent: 0, skipped: 0 };
-
-	const { sent, skipped } = await sendTouchEmails(touch, limit);
-	return { ran: true, touch, sent, skipped };
+	const { sent, skipped, touches } = await sendDueDiscoveryEmails(limit);
+	return { ran: true, touch: null, sent, skipped, touches };
 }
 
 // ---- Launch / stop ---------------------------------------------------------

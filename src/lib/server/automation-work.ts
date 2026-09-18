@@ -4,10 +4,12 @@ import { generateMissingExactPreviewThumbnails } from '$lib/services/exact-previ
 import { runOnboardingAutomation } from '$lib/services/lifecycle-email';
 import { runWinBackCampaign } from '$lib/services/winback';
 import type { AutomationJobName } from '$lib/server/automation-jobs';
+import { runBoostingShadowRouter } from '$lib/server/boosting-providers/shadow-router';
 
 const MANUAL_AUTOMATION_WORK = {
 	'exact-preview-thumbnails': () => generateMissingExactPreviewThumbnails({ limit: 6 }),
 	'low-stock-alerts': () => sendLowStockAdminAlertIfNeeded('admin_manual_low_stock'),
+	'boosting-shadow-route': () => runBoostingShadowRouter(),
 	onboarding: () => runOnboardingAutomation({ limit: 300 }),
 	'affiliate-lifecycle': () => runAffiliateLifecycleEmailRecovery(300),
 	winback: runWinBackCampaign

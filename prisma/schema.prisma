@@ -68,6 +68,7 @@ model User {
   reviews                         Review[]
   restockSubscriptions            RestockSubscription[]
   boostingServiceWaitlistEntries  BoostingServiceWaitlist[]
+  reviewedBoostServiceRoutes      BoostServiceRoute[]       @relation("BoostRouteReviewer")
   affiliatePayoutDetails          AffiliatePayoutDetails?
   pushSubscriptions               PushSubscription[]
   sessions                        Session[]
@@ -85,24 +86,25 @@ model User {
 }
 
 model Category {
-  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  parentId       String?        @map("parent_id") @db.Uuid
-  name           String
-  slug           String
-  description    String?
-  categoryType   String         @map("category_type")
-  metadata       Json           @default("{}")
-  sortOrder      Int            @default(0) @map("sort_order")
-  isActive       Boolean        @default(true) @map("is_active")
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @default(now()) @map("updated_at")
-  accountBatches AccountBatch[]
-  accounts       Account[]
-  cartItems      CartItem[]
-  parent         Category?      @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children       Category[]     @relation("CategoryHierarchy")
-  orderItems     OrderItem[]
-  reviews        Review[]
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parentId           String?             @map("parent_id") @db.Uuid
+  name               String
+  slug               String
+  description        String?
+  categoryType       String              @map("category_type")
+  metadata           Json                @default("{}")
+  sortOrder          Int                 @default(0) @map("sort_order")
+  isActive           Boolean             @default(true) @map("is_active")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @default(now()) @map("updated_at")
+  accountBatches     AccountBatch[]
+  accounts           Account[]
+  cartItems          CartItem[]
+  parent             Category?           @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children           Category[]          @relation("CategoryHierarchy")
+  orderItems         OrderItem[]
+  reviews            Review[]
+  boostCustomerOffer BoostCustomerOffer?
 
   @@index([parentId])
   @@index([slug, isActive])
@@ -240,31 +242,32 @@ model Order {
 }
 
 model OrderItem {
-  id                     String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orderId                String       @map("order_id") @db.Uuid
+  id                     String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId                String            @map("order_id") @db.Uuid
   quantity               Int
-  unitPrice              Decimal      @map("unit_price")
-  totalPrice             Decimal      @map("total_price")
+  unitPrice              Decimal           @map("unit_price")
+  totalPrice             Decimal           @map("total_price")
   // Item-attributed portion of Order.refundedAmount. Used for honest tier/product
   // analytics and partial-item purchase history; it never rewrites totalPrice.
-  refundedAmount         Decimal      @default(0) @map("refunded_amount") @db.Decimal(10, 2)
-  productName            String       @map("product_name")
-  productCategory        String       @map("product_category")
-  allocationStatus       String       @default("pending") @map("allocation_status")
-  allocatedCount         Int          @default(0) @map("allocated_count")
-  createdAt              DateTime     @default(now()) @map("created_at")
-  updatedAt              DateTime     @default(now()) @map("updated_at")
-  categoryId             String       @map("category_id") @db.Uuid
-  boostTargetUrl         String?      @map("boost_target_url")
-  boostQuantity          Int?         @map("boost_quantity")
-  boostFulfillmentStatus String?      @map("boost_fulfillment_status")
-  boostProviderReference String?      @map("boost_provider_reference")
-  boostCompletedAt       DateTime?    @map("boost_completed_at")
+  refundedAmount         Decimal           @default(0) @map("refunded_amount") @db.Decimal(10, 2)
+  productName            String            @map("product_name")
+  productCategory        String            @map("product_category")
+  allocationStatus       String            @default("pending") @map("allocation_status")
+  allocatedCount         Int               @default(0) @map("allocated_count")
+  createdAt              DateTime          @default(now()) @map("created_at")
+  updatedAt              DateTime          @default(now()) @map("updated_at")
+  categoryId             String            @map("category_id") @db.Uuid
+  boostTargetUrl         String?           @map("boost_target_url")
+  boostQuantity          Int?              @map("boost_quantity")
+  boostFulfillmentStatus String?           @map("boost_fulfillment_status")
+  boostProviderReference String?           @map("boost_provider_reference")
+  boostCompletedAt       DateTime?         @map("boost_completed_at")
   accounts               Account[]
-  category               Category     @relation(fields: [categoryId], references: [id])
-  order                  Order        @relation(fields: [orderId], references: [id])
+  category               Category          @relation(fields: [categoryId], references: [id])
+  order                  Order             @relation(fields: [orderId], references: [id])
   reviews                Review[]
   phoneRental            PhoneRental?
+  boostFulfillment       BoostFulfillment?
 
   @@index([orderId])
   @@index([categoryId])
@@ -693,6 +696,231 @@ model BoostingServiceWaitlist {
   @@index([serviceId, notifiedAt])
   @@index([email])
   @@map("boosting_service_waitlist")
+}
+
+// Read-only supplier account health. Supplier secrets never enter the database; only safe
+// operational state and balances are retained here.
+model BoostProviderState {
+  provider               String                 @id
+  label                  String
+  enabled                Boolean                @default(true)
+  circuitOpen            Boolean                @default(false) @map("circuit_open")
+  pauseReason            String?                @map("pause_reason")
+  balance                Decimal?               @db.Decimal(18, 6)
+  projectedBalance       Decimal?               @map("projected_balance") @db.Decimal(18, 6)
+  currency               String?
+  catalogueServiceCount  Int                    @default(0) @map("catalogue_service_count")
+  catalogueFingerprint   String?                @map("catalogue_fingerprint")
+  consecutiveFailures    Int                    @default(0) @map("consecutive_failures")
+  lastCatalogueSuccessAt DateTime?              @map("last_catalogue_success_at")
+  lastBalanceSuccessAt   DateTime?              @map("last_balance_success_at")
+  lastApiSuccessAt       DateTime?              @map("last_api_success_at")
+  createdAt              DateTime               @default(now()) @map("created_at")
+  updatedAt              DateTime               @updatedAt @map("updated_at")
+  services               BoostProviderService[]
+
+  @@index([enabled, circuitOpen])
+  @@map("boost_provider_states")
+}
+
+// Latest normalized supplier catalogue row. Raw supplier wording is kept internal and a
+// fingerprint makes rate/limit changes auditable without copying API secrets or request logs.
+model BoostProviderService {
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider           String
+  serviceId          String              @map("service_id")
+  name               String
+  category           String
+  description        String?
+  providerType       String?             @map("provider_type")
+  ratePerThousand    Decimal?            @map("rate_per_thousand") @db.Decimal(18, 6)
+  minQuantity        Int?                @map("min_quantity")
+  maxQuantity        Int?                @map("max_quantity")
+  refillAdvertised   Boolean?            @map("refill_advertised")
+  cancelAdvertised   Boolean?            @map("cancel_advertised")
+  dripfeedAdvertised Boolean?            @map("dripfeed_advertised")
+  platforms          String[]
+  outcomes           String[]
+  targetType         String              @map("target_type")
+  qualitySignals     String[]            @map("quality_signals")
+  anomalies          String[]
+  catalogueStatus    String              @map("catalogue_status")
+  fingerprint        String
+  firstSeenAt        DateTime            @default(now()) @map("first_seen_at")
+  lastSeenAt         DateTime            @default(now()) @map("last_seen_at")
+  lastChangedAt      DateTime            @default(now()) @map("last_changed_at")
+  unavailableAt      DateTime?           @map("unavailable_at")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  providerState      BoostProviderState  @relation(fields: [provider], references: [provider], onDelete: Restrict)
+  routes             BoostServiceRoute[]
+
+  @@unique([provider, serviceId])
+  @@index([provider, catalogueStatus])
+  @@index([platforms], type: Gin)
+  @@index([outcomes], type: Gin)
+  @@index([lastSeenAt])
+  @@map("boost_provider_services")
+}
+
+// Stable customer-facing SKU. It snapshots the simple promise and commercial guardrails while
+// allowing multiple reviewed supplier routes to sit behind it.
+model BoostCustomerOffer {
+  id                      String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId              String              @unique @map("category_id") @db.Uuid
+  platform                String
+  outcome                 String
+  targetType              String              @map("target_type")
+  audienceTag             String?             @map("audience_tag")
+  qualityTier             String              @map("quality_tier")
+  customerName            String              @map("customer_name")
+  shortPromise            String              @map("short_promise")
+  expectationChips        String[]            @map("expectation_chips")
+  minQuantity             Int                 @map("min_quantity")
+  stepQuantity            Int                 @map("step_quantity")
+  quantityPresets         Int[]               @map("quantity_presets")
+  pricePerStepNgn         Decimal             @map("price_per_step_ngn") @db.Decimal(10, 2)
+  requiredVerifiedSignals String[]            @map("required_verified_signals")
+  refillDays              Int?                @map("refill_days")
+  minimumMarginPercent    Decimal             @map("minimum_margin_percent") @db.Decimal(5, 2)
+  normalCostTargetNgn     Decimal             @map("normal_cost_target_ngn") @db.Decimal(10, 2)
+  maximumSupplierCostNgn  Decimal             @map("maximum_supplier_cost_ngn") @db.Decimal(10, 2)
+  attemptCap              Int                 @default(1) @map("attempt_cap")
+  recoveryModes           String[]            @map("recovery_modes")
+  status                  String              @default("hidden")
+  displayOrder            Int                 @default(0) @map("display_order")
+  routingPolicy           String              @default("automatic") @map("routing_policy")
+  preferredRouteId        String?             @map("preferred_route_id") @db.Uuid
+  lockedRouteId           String?             @map("locked_route_id") @db.Uuid
+  createdAt               DateTime            @default(now()) @map("created_at")
+  updatedAt               DateTime            @updatedAt @map("updated_at")
+  category                Category            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  routes                  BoostServiceRoute[] @relation("BoostOfferRoutes")
+  preferredRoute          BoostServiceRoute?  @relation("PreferredBoostRoute", fields: [preferredRouteId], references: [id], onDelete: SetNull)
+  lockedRoute             BoostServiceRoute?  @relation("LockedBoostRoute", fields: [lockedRouteId], references: [id], onDelete: SetNull)
+  fulfillments            BoostFulfillment[]
+
+  @@index([platform, outcome, status, displayOrder])
+  @@index([routingPolicy])
+  @@map("boost_customer_offers")
+}
+
+// Explicitly reviewed equivalence mapping. The live router is never allowed to infer a route from
+// supplier names; only enabled rows from this table can become eligible.
+model BoostServiceRoute {
+  id                          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  offerId                     String               @map("offer_id") @db.Uuid
+  providerServiceId           String               @map("provider_service_id") @db.Uuid
+  state                       String               @default("shadow")
+  equivalenceApproved         Boolean              @default(false) @map("equivalence_approved")
+  equivalenceLabel            String?              @map("equivalence_label")
+  targetType                  String               @map("target_type")
+  verifiedSignals             String[]             @map("verified_signals")
+  audienceTags                String[]             @map("audience_tags")
+  verifiedRefillDays          Int?                 @map("verified_refill_days")
+  minimumQuantity             Int                  @map("minimum_quantity")
+  maximumQuantity             Int                  @map("maximum_quantity")
+  quantityStep                Int?                 @map("quantity_step")
+  maximumPilotQuantity        Int?                 @map("maximum_pilot_quantity")
+  expectedRecoveryCostPercent Decimal              @default(0) @map("expected_recovery_cost_percent") @db.Decimal(5, 2)
+  reliabilityScore            Decimal              @default(0) @map("reliability_score") @db.Decimal(5, 4)
+  reliabilityObservations     Int                  @default(0) @map("reliability_observations")
+  consecutiveFailures         Int                  @default(0) @map("consecutive_failures")
+  reviewedByUserId            String?              @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt                  DateTime?            @map("reviewed_at")
+  createdAt                   DateTime             @default(now()) @map("created_at")
+  updatedAt                   DateTime             @updatedAt @map("updated_at")
+  offer                       BoostCustomerOffer   @relation("BoostOfferRoutes", fields: [offerId], references: [id], onDelete: Cascade)
+  providerService             BoostProviderService @relation(fields: [providerServiceId], references: [id], onDelete: Restrict)
+  reviewedByUser              User?                @relation("BoostRouteReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  preferredForOffers          BoostCustomerOffer[] @relation("PreferredBoostRoute")
+  lockedForOffers             BoostCustomerOffer[] @relation("LockedBoostRoute")
+  fulfillments                BoostFulfillment[]
+  attempts                    BoostAttempt[]
+
+  @@unique([offerId, providerServiceId])
+  @@index([offerId, state])
+  @@index([providerServiceId])
+  @@index([reviewedByUserId])
+  @@map("boost_service_routes")
+}
+
+// Durable one-to-one fulfilment state for a paid Boosting order item. The customer promise, price
+// and safety limits are immutable snapshots so later catalogue edits cannot rewrite the purchase.
+model BoostFulfillment {
+  id                      String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderItemId             String              @unique @map("order_item_id") @db.Uuid
+  offerId                 String?             @map("offer_id") @db.Uuid
+  selectedRouteId         String?             @map("selected_route_id") @db.Uuid
+  offerSnapshot           Json                @map("offer_snapshot")
+  targetUrl               String              @map("target_url")
+  targetKey               String              @map("target_key")
+  platform                String
+  outcome                 String
+  targetType              String              @map("target_type")
+  quantity                Int
+  customerPriceNgn        Decimal             @map("customer_price_ngn") @db.Decimal(10, 2)
+  status                  String              @default("queued")
+  customerStatus          String              @default("processing") @map("customer_status")
+  fulfillmentMode         String              @default("manual") @map("fulfillment_mode")
+  provider                String?
+  providerServiceSnapshot Json?               @map("provider_service_snapshot")
+  supplierOrderId         String?             @map("supplier_order_id")
+  quotedSupplierCostUsd   Decimal?            @map("quoted_supplier_cost_usd") @db.Decimal(18, 6)
+  finalSupplierCostUsd    Decimal?            @map("final_supplier_cost_usd") @db.Decimal(18, 6)
+  fxNgnPerUsd             Decimal?            @map("fx_ngn_per_usd") @db.Decimal(18, 6)
+  maximumSupplierCostNgn  Decimal             @map("maximum_supplier_cost_ngn") @db.Decimal(10, 2)
+  projectedMarginNgn      Decimal?            @map("projected_margin_ngn") @db.Decimal(10, 2)
+  finalMarginNgn          Decimal?            @map("final_margin_ngn") @db.Decimal(10, 2)
+  startCount              Int?                @map("start_count")
+  remains                 Int?
+  rawProviderStatus       String?             @map("raw_provider_status")
+  attemptCount            Int                 @default(0) @map("attempt_count")
+  attemptCap              Int                 @default(1) @map("attempt_cap")
+  leaseToken              String?             @map("lease_token")
+  leaseExpiresAt          DateTime?           @map("lease_expires_at")
+  nextActionAt            DateTime?           @map("next_action_at")
+  lastSafeErrorCategory   String?             @map("last_safe_error_category")
+  queuedAt                DateTime            @default(now()) @map("queued_at")
+  submittedAt             DateTime?           @map("submitted_at")
+  startedAt               DateTime?           @map("started_at")
+  completedAt             DateTime?           @map("completed_at")
+  lastCheckedAt           DateTime?           @map("last_checked_at")
+  createdAt               DateTime            @default(now()) @map("created_at")
+  updatedAt               DateTime            @updatedAt @map("updated_at")
+  orderItem               OrderItem           @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  offer                   BoostCustomerOffer? @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  selectedRoute           BoostServiceRoute?  @relation(fields: [selectedRouteId], references: [id], onDelete: SetNull)
+  attempts                BoostAttempt[]
+
+  @@index([status, nextActionAt])
+  @@index([provider, status])
+  @@index([offerId])
+  @@index([selectedRouteId])
+  @@index([targetKey, outcome])
+  @@map("boost_fulfillments")
+}
+
+// Append-only supplier/router history. Safe summaries and request fingerprints are retained;
+// API keys and unrestricted raw responses are forbidden.
+model BoostAttempt {
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fulfillmentId      String             @map("fulfillment_id") @db.Uuid
+  routeId            String?            @map("route_id") @db.Uuid
+  type               String
+  outcome            String
+  requestFingerprint String?            @map("request_fingerprint")
+  supplierOrderId    String?            @map("supplier_order_id")
+  supplierCostUsd    Decimal?           @map("supplier_cost_usd") @db.Decimal(18, 6)
+  safeSummary        Json               @default("{}") @map("safe_summary")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  fulfillment        BoostFulfillment   @relation(fields: [fulfillmentId], references: [id], onDelete: Cascade)
+  route              BoostServiceRoute? @relation(fields: [routeId], references: [id], onDelete: SetNull)
+
+  @@index([fulfillmentId, createdAt])
+  @@index([routeId, createdAt])
+  @@index([type, createdAt])
+  @@map("boost_attempts")
 }
 
 model AffiliatePayoutDetails {

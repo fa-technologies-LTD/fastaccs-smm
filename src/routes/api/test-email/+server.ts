@@ -22,14 +22,11 @@ export const GET: RequestHandler = async () => {
 		const result = await sendEmail({
 			to: recipient,
 			subject: 'Fast Accounts email header preview',
-			body: `This is a live preview of the updated Fast Accounts email header.
-
-The supplied Fast Accounts banner now sits cleanly above the email card.
-
-It is embedded directly in the email so Gmail does not need to fetch it from the website.`,
+			body: 'The email header and shared layout are rendering correctly.',
 			ctaText: 'Open Fast Accounts',
-			ctaUrl: 'https://fastaccs.com',
+			ctaUrl: 'https://smm.fastaccs.com',
 			notificationType: 'admin_broadcast',
+			classification: 'operational',
 			referenceId: `email_header_preview:${new Date().toISOString()}`
 		});
 

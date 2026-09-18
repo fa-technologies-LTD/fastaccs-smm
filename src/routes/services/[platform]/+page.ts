@@ -13,6 +13,13 @@ export interface PlatformBoostingService {
 	name: string;
 	description: string;
 	metadata: unknown;
+	customerOffer?: {
+		customerName: string;
+		shortPromise: string;
+		expectationChips: string[];
+		qualityTier: string;
+		displayOrder: number;
+	};
 }
 
 interface LoadedPlatformServices {
@@ -26,26 +33,58 @@ async function fetchPlatformServices(
 	platform: BoostingPlatform
 ): Promise<LoadedPlatformServices> {
 	try {
-		const [servicesResponse, platformsResponse] = await Promise.all([
+		const [servicesResponse, platformsResponse, offerCopyResponse] = await Promise.all([
 			fetch('/api/categories?type=boosting_service'),
-			fetch('/api/categories?type=platform')
+			fetch('/api/categories?type=platform'),
+			fetch('/api/boosting-offers')
 		]);
 		const servicesResult = await servicesResponse.json();
 
 		if (!servicesResponse.ok) {
-			return { services: [], iconUrl: null, error: servicesResult.error || 'Failed to load boosting services' };
+			return {
+				services: [],
+				iconUrl: null,
+				error: servicesResult.error || 'Failed to load boosting services'
+			};
 		}
 
+		const reviewedOfferCopy = offerCopyResponse.ok
+			? (((await offerCopyResponse.json()).data || []) as Array<{
+					categoryId: string;
+					customerName: string;
+					shortPromise: string;
+					expectationChips: string[];
+					qualityTier: string;
+					displayOrder: number;
+				}>)
+			: [];
+		const copyByCategoryId = new Map(reviewedOfferCopy.map((offer) => [offer.categoryId, offer]));
 		const allServices = (servicesResult.data || []) as PlatformBoostingService[];
-		const services = allServices.filter(
-			(service) => getBoostingServiceConfig(service.metadata).platform === platform
-		);
+		const services = allServices
+			.filter((service) => getBoostingServiceConfig(service.metadata).platform === platform)
+			.map((service) => {
+				const offer = copyByCategoryId.get(service.id);
+				return offer
+					? {
+							...service,
+							customerOffer: {
+								customerName: offer.customerName,
+								shortPromise: offer.shortPromise,
+								expectationChips: offer.expectationChips,
+								qualityTier: offer.qualityTier,
+								displayOrder: offer.displayOrder
+							}
+						}
+					: service;
+			});
 
 		const realPlatforms = platformsResponse.ok
-			? ((await platformsResponse.json()).data as Array<{
-					slug: string;
-					metadata?: { icon?: unknown };
-				}> | undefined) || []
+			? ((await platformsResponse.json()).data as
+					| Array<{
+							slug: string;
+							metadata?: { icon?: unknown };
+					  }>
+					| undefined) || []
 			: [];
 		const matchingPlatform = realPlatforms.find(
 			(row) => canonicalizePlatformKey(row.slug) === canonicalizePlatformKey(platform)
@@ -80,8 +119,8 @@ export const load: PageLoad = async ({ fetch, params }) => {
 		services,
 		error,
 		seo: {
-			title: `Buy ${BOOSTING_PLATFORM_LABELS[platform]} Followers, Likes & Views | FastAccs`,
-			description: `Grow your ${BOOSTING_PLATFORM_LABELS[platform]} account with real followers, likes, and views. Paste your link, pay, we deliver — no passwords needed.`,
+			title: `${BOOSTING_PLATFORM_LABELS[platform]} Boosting Services | FastAccs`,
+			description: `Grow on ${BOOSTING_PLATFORM_LABELS[platform]} with simple, clearly priced services. Paste your link, pay, and track delivery — no password needed.`,
 			type: 'website'
 		}
 	};

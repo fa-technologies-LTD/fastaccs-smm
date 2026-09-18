@@ -5,6 +5,7 @@ export type LocalDataMode =
 	| 'staging';
 
 const SAFE_HTTP_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const DEVELOPMENT_FILE_POST_PATHS = new Set(['/api/dev/planning-comments']);
 const PRODUCTION_PREVIEW_POST_PATHS = new Set([
 	'/api/auth/login',
 	'/auth/logout',
@@ -58,6 +59,14 @@ export function shouldBlockLocalRequest(input: {
 	method: string;
 	pathname: string;
 }): boolean {
+	// These development-only endpoints write workspace files, never application data.
+	if (
+		input.dev &&
+		String(input.method || '').toUpperCase() === 'POST' &&
+		DEVELOPMENT_FILE_POST_PATHS.has(input.pathname)
+	) {
+		return false;
+	}
 	if (!isLocalDataReadOnly(input)) return false;
 	const method = String(input.method || '').toUpperCase();
 	const mode = normalizeLocalDataMode(input.configuredMode);

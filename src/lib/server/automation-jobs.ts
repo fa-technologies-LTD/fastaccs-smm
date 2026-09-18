@@ -139,6 +139,14 @@ export const AUTOMATION_JOBS = {
 		lockTimeoutMinutes: 10,
 		expectedIntervalMinutes: 120
 	},
+	'boosting-shadow-route': {
+		name: 'boosting-shadow-route',
+		path: '/api/internal/cron/boosting-shadow-route',
+		schedule: 'manual (no supplier orders)',
+		risk: 'operational',
+		lockTimeoutMinutes: 10,
+		expectedIntervalMinutes: 0
+	},
 	'promo-reminder': {
 		name: 'promo-reminder',
 		path: '/api/internal/cron/promo-reminder',

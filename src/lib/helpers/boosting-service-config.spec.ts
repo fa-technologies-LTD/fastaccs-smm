@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	computeBoostingPrice,
+	getBoostingActionTypesForPlatform,
 	getBoostingServiceConfig,
 	getQuantityChips,
 	isValidBoostingQuantity
@@ -32,6 +33,17 @@ describe('boosting service config', () => {
 		expect(computeBoostingPrice(baseConfig, 1500)).toBe(3000);
 	});
 
+	it('keeps Boosting catalogue rates and customer totals on the nearest ₦50', () => {
+		const roundedConfig = getBoostingServiceConfig({
+			boosting_min_quantity: 150,
+			boosting_step_quantity: 100,
+			boosting_price_per_step: 1725
+		});
+
+		expect(roundedConfig.pricePerStep).toBe(1750);
+		expect(computeBoostingPrice(roundedConfig, 150)).toBe(2650);
+	});
+
 	it('returns NaN for an invalid quantity so callers never silently charge the wrong price', () => {
 		expect(Number.isNaN(computeBoostingPrice(baseConfig, 750))).toBe(true);
 	});
@@ -45,7 +57,10 @@ describe('boosting service config', () => {
 	});
 
 	it('only carries a refillDays value when refillAvailable is true', () => {
-		const withRefill = getBoostingServiceConfig({ boosting_refill_available: true, boosting_refill_days: 14 });
+		const withRefill = getBoostingServiceConfig({
+			boosting_refill_available: true,
+			boosting_refill_days: 14
+		});
 		expect(withRefill.refillDays).toBe(14);
 
 		const withoutRefill = getBoostingServiceConfig({ boosting_refill_days: 14 });
@@ -68,5 +83,39 @@ describe('boosting service config', () => {
 		});
 		const chips = getQuantityChips(tightConfig);
 		expect(new Set(chips).size).toBe(chips.length);
+	});
+
+	it('keeps every suggested quantity on the configured increment when minimum and step differ', () => {
+		const offsetConfig = getBoostingServiceConfig({
+			boosting_min_quantity: 150,
+			boosting_step_quantity: 100
+		});
+		const chips = getQuantityChips(offsetConfig);
+
+		expect(chips[0]).toBe(150);
+		for (const chip of chips) {
+			expect(isValidBoostingQuantity(offsetConfig, chip)).toBe(true);
+		}
+	});
+
+	it('accepts the expanded platform and outcome vocabulary', () => {
+		const spotify = getBoostingServiceConfig({
+			boosting_platform: 'spotify',
+			boosting_action_type: 'streams'
+		});
+		const telegram = getBoostingServiceConfig({
+			boosting_platform: 'telegram',
+			boosting_action_type: 'members'
+		});
+
+		expect(spotify).toMatchObject({ platform: 'spotify', actionType: 'streams' });
+		expect(telegram).toMatchObject({ platform: 'telegram', actionType: 'members' });
+	});
+
+	it('offers only relevant actions for each platform in the admin form', () => {
+		expect(getBoostingActionTypesForPlatform('youtube')).toContain('subscribers');
+		expect(getBoostingActionTypesForPlatform('youtube')).not.toContain('members');
+		expect(getBoostingActionTypesForPlatform('spotify')).toContain('streams');
+		expect(getBoostingActionTypesForPlatform('telegram')).toContain('members');
 	});
 });

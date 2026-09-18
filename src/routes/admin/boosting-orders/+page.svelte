@@ -39,6 +39,15 @@
 		boostCompletedAt: string | null;
 		createdAt: string;
 		latestIssue: { type: string; reason: string | null; occurredAt: string } | null;
+		shadowDecision: {
+			provider: string | null;
+			providerServiceId: string | null;
+			providerServiceName: string | null;
+			quotedSupplierCostUsd: number | null;
+			projectedMarginNgn: number | null;
+			attention: string | null;
+			checkedAt: string | null;
+		} | null;
 		order: {
 			id: string;
 			orderNumber: string;
@@ -59,6 +68,7 @@
 		status: string;
 		search: string;
 		statusCounts: Record<string, number>;
+		canRunShadowRouting: boolean;
 	}
 
 	let { data }: { data: PageData } = $props();
@@ -84,6 +94,7 @@
 	let appliedSearch = $state('');
 	let loading = $state(false);
 	let busyItemId = $state<string | null>(null);
+	let shadowRunning = $state(false);
 
 	const activeCount = $derived(
 		(meta.statusCounts.pending || 0) +
@@ -174,6 +185,18 @@
 		return `${days}d ago`;
 	}
 
+	function supplierLabel(provider: string | null): string {
+		if (provider === 'smm_raja') return 'SMM Raja';
+		if (provider === 'bulk_follows') return 'BulkFollows';
+		return 'No route';
+	}
+
+	function shadowAttentionLabel(attention: string | null): string {
+		if (attention === 'target_review_needed') return 'Review this official share link first.';
+		if (attention === 'invalid_target') return 'The link does not match this service.';
+		return 'No mapped route passes every safety check yet.';
+	}
+
 	function copyToClipboard(text: string, message = 'Copied') {
 		navigator.clipboard
 			.writeText(text)
@@ -219,6 +242,38 @@
 		event.preventDefault();
 		appliedSearch = searchDraft.trim();
 		await loadItems(1);
+	}
+
+	async function runShadowChecks(): Promise<void> {
+		if (shadowRunning) return;
+		shadowRunning = true;
+		try {
+			const response = await fetch('/api/admin/automation/boosting-shadow-route/run', {
+				method: 'POST'
+			});
+			const payload = await response.json();
+			if (!response.ok || !payload?.success) {
+				throw new Error(payload?.error || 'The route check could not run.');
+			}
+			if (payload.data?.status === 'skipped_overlap') {
+				showError('Route check already running', 'Wait a moment, then refresh.');
+				return;
+			}
+			const result = payload.data?.result || {};
+			if (result.skipped === 'foundation_not_migrated') {
+				showError('Boosting foundation not ready', 'Apply the approved migration first.');
+				return;
+			}
+			showSuccess(
+				'Route check complete',
+				`${result.selected || 0} safe suggestion${result.selected === 1 ? '' : 's'} recorded. No supplier orders were placed.`
+			);
+			await loadItems(meta.page);
+		} catch (error) {
+			showError('Route check failed', error instanceof Error ? error.message : 'Try again.');
+		} finally {
+			shadowRunning = false;
+		}
 	}
 
 	async function selectStatus(value: StatusFilter) {
@@ -310,7 +365,20 @@
 		<p class="mt-1 text-sm" style="color: var(--text-muted);">
 			Newest work first. Review the link, place it with your supplier, and record progress.
 		</p>
-		<div class="mt-2"><OrderTypeTabs active="boosting" /></div>
+		<div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+			<OrderTypeTabs active="boosting" />
+			{#if meta.canRunShadowRouting}
+				<button
+					type="button"
+					onclick={runShadowChecks}
+					disabled={shadowRunning}
+					class="rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50"
+					style="border-color: rgba(5,212,113,0.35); color: var(--primary);"
+				>
+					{shadowRunning ? 'Checking routes…' : 'Preview supplier routes'}
+				</button>
+			{/if}
+		</div>
 	</header>
 
 	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -475,6 +543,39 @@
 									Payment remains paid. Reopen it or refund from the order page.
 								</p>{/if}
 						</div>
+					</div>
+				{/if}
+
+				{#if item.shadowDecision}
+					<div
+						class="mt-3 rounded-lg border p-3"
+						style={item.shadowDecision.provider
+							? 'border-color: rgba(5,212,113,0.28); background: rgba(5,212,113,0.06);'
+							: 'border-color: rgba(234,179,8,0.28); background: rgba(234,179,8,0.06);'}
+					>
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<p class="text-xs font-bold" style="color: var(--text);">Shadow suggestion</p>
+							<span class="text-[10px] font-semibold" style="color: var(--text-dim);"
+								>No supplier order placed</span
+							>
+						</div>
+						{#if item.shadowDecision.provider}
+							<p class="mt-1 text-sm" style="color: var(--text-muted);">
+								{supplierLabel(item.shadowDecision.provider)} #{item.shadowDecision
+									.providerServiceId} ·
+								{item.shadowDecision.providerServiceName}
+							</p>
+							{#if canViewRevenue}
+								<p class="mt-1 text-xs" style="color: var(--text-dim);">
+									${item.shadowDecision.quotedSupplierCostUsd?.toFixed(4) ?? '—'} estimated cost ·
+									{formatMonetaryAmount(item.shadowDecision.projectedMarginNgn ?? 0)} projected margin
+								</p>
+							{/if}
+						{:else}
+							<p class="mt-1 text-sm" style="color: #facc15;">
+								{shadowAttentionLabel(item.shadowDecision.attention)}
+							</p>
+						{/if}
 					</div>
 				{/if}
 

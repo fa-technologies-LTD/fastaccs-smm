@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
@@ -132,6 +132,45 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			})
 		: [];
 
+	let shadowDecisions: Array<{
+		orderItemId: string;
+		provider: string | null;
+		quotedSupplierCostUsd: Prisma.Decimal | null;
+		projectedMarginNgn: Prisma.Decimal | null;
+		lastSafeErrorCategory: string | null;
+		lastCheckedAt: Date | null;
+		selectedRoute: {
+			providerService: { serviceId: string; name: string };
+		} | null;
+	}> = [];
+	if (items.length) {
+		try {
+			shadowDecisions = await prisma.boostFulfillment.findMany({
+				where: {
+					orderItemId: { in: items.map((item) => item.id) },
+					fulfillmentMode: 'shadow'
+				},
+				select: {
+					orderItemId: true,
+					provider: true,
+					quotedSupplierCostUsd: true,
+					projectedMarginNgn: true,
+					lastSafeErrorCategory: true,
+					lastCheckedAt: true,
+					selectedRoute: {
+						select: { providerService: { select: { serviceId: true, name: true } } }
+					}
+				}
+			});
+		} catch (error) {
+			const migrationMissing =
+				error instanceof Prisma.PrismaClientKnownRequestError &&
+				(error.code === 'P2021' || error.code === 'P2022');
+			if (!migrationMissing) throw error;
+		}
+	}
+	const shadowByItem = new Map(shadowDecisions.map((decision) => [decision.orderItemId, decision]));
+
 	const latestIssueByItem = new Map<
 		string,
 		{ type: string; reason: string | null; occurredAt: Date }
@@ -159,7 +198,26 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 
 	return json({
 		success: true,
-		data: items.map((item) => ({ ...item, latestIssue: latestIssueByItem.get(item.id) || null })),
+		data: items.map((item) => {
+			const shadow = shadowByItem.get(item.id);
+			return {
+				...item,
+				latestIssue: latestIssueByItem.get(item.id) || null,
+				shadowDecision: shadow
+					? {
+							provider: shadow.provider,
+							providerServiceId: shadow.selectedRoute?.providerService.serviceId || null,
+							providerServiceName: shadow.selectedRoute?.providerService.name || null,
+							quotedSupplierCostUsd:
+								shadow.quotedSupplierCostUsd === null ? null : Number(shadow.quotedSupplierCostUsd),
+							projectedMarginNgn:
+								shadow.projectedMarginNgn === null ? null : Number(shadow.projectedMarginNgn),
+							attention: shadow.lastSafeErrorCategory,
+							checkedAt: shadow.lastCheckedAt
+						}
+					: null
+			};
+		}),
 		meta: {
 			page,
 			pageSize,
@@ -168,7 +226,8 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			sort,
 			status: statusFilter,
 			search,
-			statusCounts
+			statusCounts,
+			canRunShadowRouting: hasAdminPermission(locals.adminContext, 'admin:settings:manage')
 		},
 		error: null
 	});

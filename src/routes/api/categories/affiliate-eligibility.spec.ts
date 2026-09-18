@@ -47,6 +47,25 @@ beforeEach(() => {
 });
 
 describe('private affiliate eligibility on account tiers', () => {
+	it('rounds a newly saved account catalogue price to the nearest ₦50', async () => {
+		await POST({
+			locals: adminLocals(),
+			request: new Request('https://smm.fastaccs.com/api/categories', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(tierPayload({ pricing: { base_price: 1725 } }))
+			})
+		} as never);
+
+		expect(mocks.create).toHaveBeenCalledWith({
+			data: expect.objectContaining({
+				metadata: expect.objectContaining({
+					pricing: expect.objectContaining({ base_price: 1750 })
+				})
+			})
+		});
+	});
+
 	it('defaults a newly created tier to excluded when no eligibility decision was supplied', async () => {
 		const response = await POST({
 			locals: adminLocals(),

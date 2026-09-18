@@ -3,9 +3,9 @@
 	import { Zap } from '$lib/icons';
 	import {
 		BOOSTING_PLATFORMS,
-		BOOSTING_ACTION_TYPES,
 		BOOSTING_PLATFORM_LABELS,
-		BOOSTING_ACTION_LABELS
+		BOOSTING_ACTION_LABELS,
+		getBoostingActionTypesForPlatform
 	} from '$lib/helpers/boosting-service-config';
 	import { getRequiredLinkType } from '$lib/helpers/social-link-validator';
 	import type { BoostingPlatform, BoostingActionType } from '$lib/helpers/social-link-validator';
@@ -34,6 +34,23 @@
 	let { open, serviceForm = $bindable(), loading = false, onClose, onCreate }: Props = $props();
 
 	const requiredLinkType = $derived(getRequiredLinkType(serviceForm.metadata.boosting_action_type));
+	const availableActions = $derived(
+		getBoostingActionTypesForPlatform(serviceForm.metadata.boosting_platform)
+	);
+
+	function selectPlatform(platform: BoostingPlatform): void {
+		serviceForm.metadata.boosting_platform = platform;
+		const actions = getBoostingActionTypesForPlatform(platform);
+		if (!actions.includes(serviceForm.metadata.boosting_action_type)) {
+			serviceForm.metadata.boosting_action_type = actions[0];
+		}
+	}
+
+	function requiredTargetLabel(): string {
+		if (requiredLinkType === 'channel') return 'channel or group link';
+		if (requiredLinkType === 'profile') return 'profile or channel link';
+		return 'post, video, or content link';
+	}
 </script>
 
 {#if open}
@@ -71,8 +88,10 @@
 
 						<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 							<div class="md:col-span-2">
-								<label for="service-name" class="block text-sm font-medium" style="color: var(--text);"
-									>Service Name *</label
+								<label
+									for="service-name"
+									class="block text-sm font-medium"
+									style="color: var(--text);">Service Name *</label
 								>
 								<input
 									id="service-name"
@@ -86,13 +105,21 @@
 							</div>
 
 							<div>
-								<label for="service-platform" class="block text-sm font-medium" style="color: var(--text);">
+								<label
+									for="service-platform"
+									class="block text-sm font-medium"
+									style="color: var(--text);"
+								>
 									Platform *
 								</label>
 								<select
 									id="service-platform"
 									required
-									bind:value={serviceForm.metadata.boosting_platform}
+									value={serviceForm.metadata.boosting_platform}
+									onchange={(event) =>
+										selectPlatform(
+											(event.currentTarget as HTMLSelectElement).value as BoostingPlatform
+										)}
 									class="mt-1 block w-full rounded-md px-4 py-2"
 									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 								>
@@ -103,7 +130,11 @@
 							</div>
 
 							<div>
-								<label for="service-action" class="block text-sm font-medium" style="color: var(--text);">
+								<label
+									for="service-action"
+									class="block text-sm font-medium"
+									style="color: var(--text);"
+								>
 									Action *
 								</label>
 								<select
@@ -113,14 +144,12 @@
 									class="mt-1 block w-full rounded-md px-4 py-2"
 									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 								>
-									{#each BOOSTING_ACTION_TYPES as action}
+									{#each availableActions as action}
 										<option value={action}>{BOOSTING_ACTION_LABELS[action]}</option>
 									{/each}
 								</select>
 								<p class="mt-1 text-xs" style="color: var(--text-muted);">
-									Customers will need to submit a {requiredLinkType === 'profile'
-										? 'profile/channel link'
-										: 'post/video link'}.
+									Customer submits a {requiredTargetLabel()}.
 								</p>
 							</div>
 
@@ -143,7 +172,11 @@
 							</div>
 
 							<div>
-								<label for="service-min-qty" class="block text-sm font-medium" style="color: var(--text);">
+								<label
+									for="service-min-qty"
+									class="block text-sm font-medium"
+									style="color: var(--text);"
+								>
 									Minimum Quantity *
 								</label>
 								<input
@@ -158,7 +191,11 @@
 							</div>
 
 							<div>
-								<label for="service-step-qty" class="block text-sm font-medium" style="color: var(--text);">
+								<label
+									for="service-step-qty"
+									class="block text-sm font-medium"
+									style="color: var(--text);"
+								>
 									Step / Increment *
 								</label>
 								<input
@@ -172,34 +209,39 @@
 								/>
 								<p class="mt-1 text-xs" style="color: var(--text-muted);">
 									Customers can order {serviceForm.metadata.boosting_min_quantity},
-									{serviceForm.metadata.boosting_min_quantity + serviceForm.metadata.boosting_step_quantity},
+									{serviceForm.metadata.boosting_min_quantity +
+										serviceForm.metadata.boosting_step_quantity},
 									{serviceForm.metadata.boosting_min_quantity +
 										serviceForm.metadata.boosting_step_quantity * 2}... and so on.
 								</p>
 							</div>
 
 							<div class="md:col-span-2">
-								<label for="service-price" class="block text-sm font-medium" style="color: var(--text);">
+								<label
+									for="service-price"
+									class="block text-sm font-medium"
+									style="color: var(--text);"
+								>
 									Price per Step (₦) *
 								</label>
 								<input
 									id="service-price"
 									type="number"
 									required
-									step="0.01"
+									step="50"
 									min="0"
 									bind:value={serviceForm.metadata.boosting_price_per_step}
 									class="mt-1 block w-full rounded-md px-4 py-2 sm:max-w-xs"
 									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 								/>
 								<p class="mt-1 text-xs" style="color: var(--text-muted);">
-									Price for {serviceForm.metadata.boosting_step_quantity} units. Larger orders scale
-									automatically.
+									Price for {serviceForm.metadata.boosting_step_quantity} units, saved to the nearest
+									₦50. Larger orders scale automatically.
 								</p>
 							</div>
 
 							<div
-								class="md:col-span-2 rounded-lg p-3"
+								class="rounded-lg p-3 md:col-span-2"
 								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
 							>
 								<label

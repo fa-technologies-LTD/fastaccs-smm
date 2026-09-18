@@ -53,7 +53,9 @@
 	const liveCount = $derived(
 		rows.filter((r) => r.active && r.priceNgn > 0 && !r.autoHidden).length
 	);
-	const flaggedCount = $derived(rows.filter((r) => r.autoHidden || profitOf(r) < minProfitNgn).length);
+	const flaggedCount = $derived(
+		rows.filter((r) => r.autoHidden || profitOf(r) < minProfitNgn).length
+	);
 
 	// Distinct apps for the sort/filter dropdown, in the order they appear.
 	const apps = $derived.by(() => {
@@ -177,7 +179,7 @@
 		}
 	}
 
-	// --- Launch campaign (announce + retire manual tiers). Fires ONLY on click. ---
+	// --- Numbers discovery sequence + one-time launch cutover. ---
 	let campaignBusy = $state(false);
 	async function launchCampaign() {
 		if (
@@ -200,7 +202,11 @@
 		}
 	}
 	async function stopCampaign() {
-		if (!confirm('Stop the campaign and take the banner down? (Reminders stop; manual tiers stay retired.)'))
+		if (
+			!confirm(
+				'Stop the automated Numbers emails and take the banner down? Manual tiers stay retired.'
+			)
+		)
 			return;
 		campaignBusy = true;
 		try {
@@ -215,21 +221,22 @@
 	}
 </script>
 
-<div class="p-6 max-w-6xl mx-auto" style="color: var(--text);">
-	<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+<div class="mx-auto max-w-6xl p-6" style="color: var(--text);">
+	<div class="mb-6 flex flex-wrap items-center justify-between gap-3">
 		<div class="flex items-center gap-3">
-			<Phone class="w-6 h-6" style="color: #38bdf8;" />
+			<Phone class="h-6 w-6" style="color: #38bdf8;" />
 			<div>
 				<h1 class="text-2xl font-bold" style="color: var(--text);">Numbers — Pricing</h1>
 				<p class="text-sm" style="color: var(--text-muted);">
-					Prices are fully automatic. Set your dollar rate + margin; every price recalculates itself.
+					Prices are fully automatic. Set your dollar rate + margin; every price recalculates
+					itself.
 				</p>
 			</div>
 		</div>
 		<div class="flex items-center gap-2">
 			<a
 				href="/admin/numbers/analytics"
-				class="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg"
+				class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
 				style="border: 1px solid var(--border); color: var(--text);"
 			>
 				Analytics
@@ -237,7 +244,7 @@
 			<button
 				onclick={expandCatalog}
 				disabled={expanding}
-				class="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg disabled:opacity-50"
+				class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm disabled:opacity-50"
 				style="border: 1px solid var(--border); color: var(--text);"
 				title="Add any newly-available countries/apps (never removes)"
 			>
@@ -246,10 +253,10 @@
 			<button
 				onclick={saveAll}
 				disabled={saving}
-				class="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg font-medium disabled:opacity-50"
+				class="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
 				style="background: #0ea5e9; color: #ffffff;"
 			>
-				<Save class="w-4 h-4" />
+				<Save class="h-4 w-4" />
 				{saving ? 'Saving…' : 'Save'}
 			</button>
 		</div>
@@ -257,27 +264,33 @@
 
 	{#if !data.hubmanConfigured}
 		<div
-			class="mb-4 p-3 rounded-lg text-sm flex items-center gap-2"
+			class="mb-4 flex items-center gap-2 rounded-lg p-3 text-sm"
 			style="background: rgba(245,158,11,0.12); color: #fbbf24;"
 		>
-			<AlertTriangle class="w-4 h-4" /> hub-man API token not configured — set HUBMAN_API_TOKEN.
+			<AlertTriangle class="h-4 w-4" /> hub-man API token not configured — set HUBMAN_API_TOKEN.
 		</div>
 	{/if}
 
 	<!-- Pricing rules -->
-	<div class="mb-6 rounded-xl p-5" style="border: 1px solid var(--border); background: var(--surface);">
-		<div class="flex items-center gap-2 mb-3">
-			<DollarSign class="w-5 h-5" style="color: #38bdf8;" />
+	<div
+		class="mb-6 rounded-xl p-5"
+		style="border: 1px solid var(--border); background: var(--surface);"
+	>
+		<div class="mb-3 flex items-center gap-2">
+			<DollarSign class="h-5 w-5" style="color: #38bdf8;" />
 			<h2 class="font-semibold" style="color: var(--text);">Pricing rules</h2>
 		</div>
-		<p class="text-sm mb-4" style="color: var(--text-muted);">
+		<p class="mb-4 text-sm" style="color: var(--text-muted);">
 			Customer price = <span class="font-mono">hub-man cost ($) × your rate × (1 + margin%)</span>,
-			rounded up to the nearest ₦100, and never less than <span class="font-mono">cost + ₦1,000</span>.
-			Prices update themselves on every refresh — you never set one by hand.
+			rounded up to the nearest ₦100, and never less than
+			<span class="font-mono">cost + ₦1,000</span>. Prices update themselves on every refresh — you
+			never set one by hand.
 		</p>
-		<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+		<div class="grid grid-cols-1 items-end gap-4 sm:grid-cols-3">
 			<label class="block">
-				<span class="text-xs font-medium" style="color: var(--text-muted);">Dollar rate (₦ per $1)</span>
+				<span class="text-xs font-medium" style="color: var(--text-muted);"
+					>Dollar rate (₦ per $1)</span
+				>
 				<input
 					type="number"
 					bind:value={usdNgnRate}
@@ -297,7 +310,9 @@
 				/>
 			</label>
 			<label class="block">
-				<span class="text-xs font-medium" style="color: var(--text-muted);">Pricing profit target (₦)</span>
+				<span class="text-xs font-medium" style="color: var(--text-muted);"
+					>Pricing profit target (₦)</span
+				>
 				<input
 					type="number"
 					bind:value={minProfitNgn}
@@ -306,7 +321,8 @@
 					class="mt-1 w-full rounded-lg px-3 py-2"
 					style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
 				/>
-				<span class="text-[11px]" style="color: var(--text-dim);">Profit the sticker AIMS for.</span>
+				<span class="text-[11px]" style="color: var(--text-dim);">Profit the sticker AIMS for.</span
+				>
 			</label>
 		</div>
 
@@ -329,7 +345,7 @@
 						style="background: var(--bg-elev-1); color: var(--text); border: 1px solid rgba(52,211,153,0.4);"
 					/>
 				</label>
-				<p class="text-xs flex-1 min-w-[220px]" style="color: var(--text-muted);">
+				<p class="min-w-[220px] flex-1 text-xs" style="color: var(--text-muted);">
 					FastAccs may use more expensive stock to <em>save</em> an order, but
 					<strong>will not intentionally procure below this profit floor</strong>. (Rare supplier
 					anomalies — a stale number that charges late, a failed cancellation — can still cause
@@ -350,9 +366,11 @@
 				{showAdvanced ? '▾' : '▸'} Advanced pricing & supplier dials
 			</button>
 			{#if showAdvanced}
-				<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end mt-3">
+				<div class="mt-3 grid grid-cols-1 items-end gap-4 sm:grid-cols-3">
 					<label class="block">
-						<span class="text-xs font-medium" style="color: var(--text-muted);">Max price multiple (×cost)</span>
+						<span class="text-xs font-medium" style="color: var(--text-muted);"
+							>Max price multiple (×cost)</span
+						>
 						<input
 							type="number"
 							bind:value={maxPriceMultiple}
@@ -361,10 +379,14 @@
 							class="mt-1 w-full rounded-lg px-3 py-2"
 							style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
 						/>
-						<span class="text-[11px]" style="color: var(--text-dim);">Competitive cap (floor still wins).</span>
+						<span class="text-[11px]" style="color: var(--text-dim);"
+							>Competitive cap (floor still wins).</span
+						>
 					</label>
 					<label class="block">
-						<span class="text-xs font-medium" style="color: var(--text-muted);">Replacement wait (sec)</span>
+						<span class="text-xs font-medium" style="color: var(--text-muted);"
+							>Replacement wait (sec)</span
+						>
 						<input
 							type="number"
 							bind:value={otpReplacementWaitSeconds}
@@ -373,10 +395,14 @@
 							class="mt-1 w-full rounded-lg px-3 py-2"
 							style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
 						/>
-						<span class="text-[11px]" style="color: var(--text-dim);">After "I've requested the code".</span>
+						<span class="text-[11px]" style="color: var(--text-dim);"
+							>After "I've requested the code".</span
+						>
 					</label>
 					<label class="block">
-						<span class="text-xs font-medium" style="color: var(--text-muted);">pvapins calls / min</span>
+						<span class="text-xs font-medium" style="color: var(--text-muted);"
+							>pvapins calls / min</span
+						>
 						<input
 							type="number"
 							bind:value={pvapinsRateLimitPerMin}
@@ -385,30 +411,36 @@
 							class="mt-1 w-full rounded-lg px-3 py-2"
 							style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
 						/>
-						<span class="text-[11px]" style="color: var(--text-dim);">Global get_number rate cap.</span>
+						<span class="text-[11px]" style="color: var(--text-dim);"
+							>Global get_number rate cap.</span
+						>
 					</label>
 				</div>
 			{/if}
 		</div>
-		<p class="text-xs mt-3" style="color: var(--text-dim);">
-			Hit <strong>Save</strong> to apply — unlocked prices recalculate instantly; locked prices stay put.
+		<p class="mt-3 text-xs" style="color: var(--text-dim);">
+			Hit <strong>Save</strong> to apply — unlocked prices recalculate instantly; locked prices stay
+			put.
 		</p>
 	</div>
 
-	<!-- Launch announcement campaign -->
+	<!-- Numbers discovery campaign -->
 	{#if data.canManageCampaign}
-		<div class="mb-6 rounded-xl p-5" style="border: 1px solid var(--border); background: var(--surface);">
+		<div
+			class="mb-6 rounded-xl p-5"
+			style="border: 1px solid var(--border); background: var(--surface);"
+		>
 			<div class="flex flex-wrap items-center justify-between gap-3">
 				<div>
-					<h2 class="font-semibold" style="color: var(--text);">Launch announcement</h2>
-					<p class="text-sm mt-1" style="color: var(--text-muted);">
+					<h2 class="font-semibold" style="color: var(--text);">Numbers customer emails</h2>
+					<p class="mt-1 text-sm" style="color: var(--text-muted);">
 						{#if data.campaign?.enabled && data.campaign?.launchedAt}
-							🟢 Live since {new Date(data.campaign.launchedAt).toLocaleString()} — 3 reminders
-							over ~7 days (email · popup · banner · push), auto-suppressed for number-buyers.
+							🟢 Automated — up to 3 paced discovery emails for opted-in customers. They stop as
+							soon as someone buys a number.
 						{:else}
-							Announces Numbers across email, in-app popup, banner + push (3 tapered reminders),
-							and <strong>retires the manual phone tiers</strong>. Do this only after merging to
-							production.
+							Starts the automated three-email discovery sequence, announces Numbers in the app, and <strong
+								>retires the manual phone tiers</strong
+							>.
 						{/if}
 					</p>
 				</div>
@@ -416,7 +448,7 @@
 					<button
 						onclick={stopCampaign}
 						disabled={campaignBusy}
-						class="px-4 py-2 text-sm rounded-lg font-medium disabled:opacity-50"
+						class="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
 						style="border: 1px solid var(--border); color: var(--text);"
 					>
 						{campaignBusy ? 'Working…' : 'Stop campaign'}
@@ -425,7 +457,7 @@
 					<button
 						onclick={launchCampaign}
 						disabled={campaignBusy}
-						class="px-4 py-2 text-sm rounded-lg font-semibold disabled:opacity-50"
+						class="rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
 						style="background: #0ea5e9; color: #ffffff;"
 					>
 						{campaignBusy ? 'Launching…' : '🚀 Launch announcement'}
@@ -438,7 +470,7 @@
 	<!-- Balance -->
 	<div class="mb-6 flex flex-wrap items-center gap-3">
 		<div
-			class="inline-flex items-center gap-3 px-4 py-3 rounded-lg"
+			class="inline-flex items-center gap-3 rounded-lg px-4 py-3"
 			style="border: 1px solid {lowBalance ? '#dc2626' : 'var(--border)'}; background: {lowBalance
 				? 'rgba(220,38,38,0.10)'
 				: 'var(--surface)'};"
@@ -451,7 +483,7 @@
 		</div>
 		{#if pvapinsBalance != null}
 			<div
-				class="inline-flex items-center gap-3 px-4 py-3 rounded-lg"
+				class="inline-flex items-center gap-3 rounded-lg px-4 py-3"
 				style="border: 1px solid rgba(167,139,250,0.3); background: rgba(167,139,250,0.08);"
 			>
 				<span class="text-xs" style="color: var(--text-muted);">pvapins balance</span>
@@ -460,7 +492,7 @@
 		{/if}
 	</div>
 
-	<div class="flex items-center justify-between flex-wrap gap-3 mb-2">
+	<div class="mb-2 flex flex-wrap items-center justify-between gap-3">
 		<div class="text-sm" style="color: var(--text-muted);">
 			{liveCount} numbers live · {rows.length} tiers
 			{#if flaggedCount > 0}
@@ -492,8 +524,16 @@
 					<th class="px-4 py-3">Cost</th>
 					<th class="px-4 py-3">Price ₦</th>
 					<th class="px-4 py-3">Profit ₦</th>
-					<th class="px-4 py-3" title="Max supplier spend for a NEW order at this price while keeping its hard floor (price − floor). A live order's remaining headroom can be less after prior costs.">New-order budget</th>
-					<th class="px-4 py-3" title="Hard minimum profit for this tier. A per-tier value can only RAISE it above the global floor, never below.">Fulfil. floor</th>
+					<th
+						class="px-4 py-3"
+						title="Max supplier spend for a NEW order at this price while keeping its hard floor (price − floor). A live order's remaining headroom can be less after prior costs."
+						>New-order budget</th
+					>
+					<th
+						class="px-4 py-3"
+						title="Hard minimum profit for this tier. A per-tier value can only RAISE it above the global floor, never below."
+						>Fulfil. floor</th
+					>
 					<th class="px-4 py-3">Stock</th>
 					<th class="px-4 py-3">Status</th>
 					<th class="px-4 py-3 text-center">Live</th>
@@ -521,7 +561,9 @@
 								>
 							{/if}
 						</td>
-						<td class="px-4 py-2 whitespace-nowrap" style="color: var(--text-muted);">{costLabel(row)}</td>
+						<td class="px-4 py-2 whitespace-nowrap" style="color: var(--text-muted);"
+							>{costLabel(row)}</td
+						>
 						<td class="px-4 py-2 whitespace-nowrap">
 							<div class="flex items-center gap-1.5">
 								<span style="color: var(--text-muted);">₦</span>
@@ -537,7 +579,7 @@
 								/>
 								<button
 									onclick={() => (row.priceLocked = !row.priceLocked)}
-									class="flex items-center justify-center w-7 h-7 rounded-md transition-colors"
+									class="flex h-7 w-7 items-center justify-center rounded-md transition-colors"
 									style="background: {row.priceLocked
 										? 'rgba(251,191,36,0.15)'
 										: 'var(--bg-elev-1)'}; border: 1px solid {row.priceLocked
@@ -549,15 +591,15 @@
 									aria-label={row.priceLocked ? 'Unlock price' : 'Lock price'}
 								>
 									{#if row.priceLocked}
-										<Lock class="w-3.5 h-3.5" style="color: #fbbf24;" />
+										<Lock class="h-3.5 w-3.5" style="color: #fbbf24;" />
 									{:else}
-										<Unlock class="w-3.5 h-3.5" style="color: var(--text-dim);" />
+										<Unlock class="h-3.5 w-3.5" style="color: var(--text-dim);" />
 									{/if}
 								</button>
 							</div>
 						</td>
 						<td
-							class="px-4 py-2 whitespace-nowrap font-medium"
+							class="px-4 py-2 font-medium whitespace-nowrap"
 							style="color: {profitOf(row) < minProfitNgn ? '#f87171' : '#34d399'};"
 						>
 							₦{profitOf(row).toLocaleString()}
@@ -567,52 +609,55 @@
 						</td>
 						<td class="px-4 py-2 whitespace-nowrap">
 							{#if row.floorOverridden}
-							<div class="flex items-center gap-1.5">
-								<span style="color: var(--text-dim);">₦</span>
-								<input
-									type="number"
-									min={minFulfillmentProfitNgn}
-									step="50"
-									bind:value={row.minFulfillmentProfitNgn}
-									class="w-20 rounded-md px-2 py-1 text-right"
-									style="background: var(--bg-elev-1); border: 1px solid #a78bfa; color: var(--text);"
-									title="Per-tier hard floor — can only RAISE above the global, never below. Click the badge to revert."
-								/>
+								<div class="flex items-center gap-1.5">
+									<span style="color: var(--text-dim);">₦</span>
+									<input
+										type="number"
+										min={minFulfillmentProfitNgn}
+										step="50"
+										bind:value={row.minFulfillmentProfitNgn}
+										class="w-20 rounded-md px-2 py-1 text-right"
+										style="background: var(--bg-elev-1); border: 1px solid #a78bfa; color: var(--text);"
+										title="Per-tier hard floor — can only RAISE above the global, never below. Click the badge to revert."
+									/>
+									<button
+										onclick={() => toggleFloorOverride(row)}
+										class="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+										style="background: rgba(167,139,250,0.15); border: 1px solid #a78bfa; color: #a78bfa;"
+										title="Revert to the global floor"
+									>
+										tier
+									</button>
+								</div>
+							{:else}
 								<button
 									onclick={() => toggleFloorOverride(row)}
-									class="text-[10px] px-1.5 py-0.5 rounded font-semibold"
-									style="background: rgba(167,139,250,0.15); border: 1px solid #a78bfa; color: #a78bfa;"
-									title="Revert to the global floor"
+									class="rounded px-2 py-0.5 text-[11px]"
+									style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text-dim);"
+									title="Using the global hard floor (₦{minFulfillmentProfitNgn.toLocaleString()}). Click to set a higher per-tier value."
 								>
-									tier
+									Global
 								</button>
-							</div>
-						{:else}
-							<button
-								onclick={() => toggleFloorOverride(row)}
-								class="text-[11px] px-2 py-0.5 rounded"
-								style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text-dim);"
-								title="Using the global hard floor (₦{minFulfillmentProfitNgn.toLocaleString()}). Click to set a higher per-tier value."
-							>
-								Global
-							</button>
-						{/if}
+							{/if}
 						</td>
-						<td class="px-4 py-2" style="color: {row.available <= 0 ? '#f87171' : 'var(--text-muted)'};">
+						<td
+							class="px-4 py-2"
+							style="color: {row.available <= 0 ? '#f87171' : 'var(--text-muted)'};"
+						>
 							{row.available.toLocaleString()}
 						</td>
 						<td class="px-4 py-2">
 							<div class="flex flex-wrap items-center gap-1">
 								{#if f}
 									<span
-										class="inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
+										class="inline-block rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap"
 										style="background: {f.color}20; color: {f.color};"
 									>
 										⚑ {f.text}
 									</span>
 								{:else}
 									<span
-										class="inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
+										class="inline-block rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap"
 										style="background: {h.color}20; color: {h.color};"
 									>
 										{h.text}
@@ -620,7 +665,7 @@
 								{/if}
 								{#if row.thin}
 									<span
-										class="inline-block px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap"
+										class="inline-block rounded px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
 										style="background: rgba(56,189,248,0.12); color: #38bdf8;"
 										title="Thin headroom — cheap stock going dry tends to refund here; the durable fix is a higher price (self-tunes as costs rise), not a lower floor"
 									>

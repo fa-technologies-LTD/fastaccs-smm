@@ -31,12 +31,10 @@ function getPayoutEmailContent(params: {
 			subject: 'Your affiliate cash payout request was received',
 			body: `Hi ${params.firstName},
 
-We received your affiliate cash payout request.
-
 Requested amount: ${amount}
 Request reference: ${params.reference}
 
-We will review it for the next Saturday payout cycle and update the status in your affiliate dashboard.`,
+We will review it for the next Saturday payout cycle. You can follow its status from your affiliate dashboard.`,
 			ctaText: 'View payout status'
 		};
 	}
@@ -46,12 +44,10 @@ We will review it for the next Saturday payout cycle and update the status in yo
 			subject: 'Your affiliate cash payout is complete',
 			body: `Hi ${params.firstName},
 
-Your affiliate cash payout has been completed.
-
 Amount paid: ${amount}
 Request reference: ${params.reference}
 
-Thank you for growing with Fast Accounts.`,
+Your payout is complete. Thank you for growing with Fast Accounts.`,
 			ctaText: 'View affiliate dashboard'
 		};
 	}
@@ -60,13 +56,11 @@ Thank you for growing with Fast Accounts.`,
 		subject: 'Update on your affiliate cash payout request',
 		body: `Hi ${params.firstName},
 
-Your affiliate cash payout request could not be approved.
-
 Requested amount: ${amount}
 Request reference: ${params.reference}
 Reason: ${params.adminNotes || 'The request did not pass review.'}
 
-Your affiliate dashboard shows the latest status. Contact support if you need help.`,
+Update your details or contact support if you need help.`,
 		ctaText: 'View payout status'
 	};
 }

@@ -1,4 +1,7 @@
-import { getBoostingServiceConfig, BOOSTING_PLATFORM_LABELS } from '$lib/helpers/boosting-service-config';
+import {
+	getBoostingServiceConfig,
+	BOOSTING_PLATFORM_LABELS
+} from '$lib/helpers/boosting-service-config';
 import { canonicalizePlatformKey, isPlatformImageUrl } from '$lib/helpers/platformColors';
 import type { BoostingPlatform } from '$lib/helpers/social-link-validator';
 import type { PageLoad } from './$types';
@@ -28,10 +31,12 @@ export const load: PageLoad = async ({ fetch }) => {
 
 		const boostingServices = (servicesResult.data || []) as Array<{ metadata: unknown }>;
 		const realPlatforms = platformsResponse.ok
-			? ((await platformsResponse.json()).data as Array<{
-					slug: string;
-					metadata?: { icon?: unknown };
-				}> | undefined) || []
+			? ((await platformsResponse.json()).data as
+					| Array<{
+							slug: string;
+							metadata?: { icon?: unknown };
+					  }>
+					| undefined) || []
 			: [];
 
 		const iconByPlatformKey = new Map<string, string>();
@@ -48,7 +53,10 @@ export const load: PageLoad = async ({ fetch }) => {
 			const config = getBoostingServiceConfig(service.metadata);
 			countByPlatform.set(config.platform, (countByPlatform.get(config.platform) || 0) + 1);
 			if (config.pricePerStep > 0) {
-				liveCountByPlatform.set(config.platform, (liveCountByPlatform.get(config.platform) || 0) + 1);
+				liveCountByPlatform.set(
+					config.platform,
+					(liveCountByPlatform.get(config.platform) || 0) + 1
+				);
 			}
 		}
 
@@ -66,9 +74,9 @@ export const load: PageLoad = async ({ fetch }) => {
 			platformTiles,
 			error: null,
 			seo: {
-				title: 'Boosting Services — Followers, Likes & Views | FastAccs',
+				title: 'Social Media Boosting Services | FastAccs',
 				description:
-					'Buy followers, likes, views, and more for Instagram, TikTok, X, and Facebook. Paste your link, we deliver — no passwords needed.',
+					'Grow across major social and streaming platforms with simple, clearly priced services. Paste your link, pay, and track delivery — no password needed.',
 				type: 'website'
 			}
 		};

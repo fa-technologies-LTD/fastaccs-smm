@@ -2,18 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { getRequiredLinkType, validateLinkForAction } from './social-link-validator';
 
 describe('social link validator', () => {
-	it('maps followers/subscribers to profile links and the rest to content links', () => {
+	it('maps account, community, and content outcomes to the right link type', () => {
 		expect(getRequiredLinkType('followers')).toBe('profile');
 		expect(getRequiredLinkType('subscribers')).toBe('profile');
+		expect(getRequiredLinkType('monthly_listeners')).toBe('profile');
+		expect(getRequiredLinkType('members')).toBe('channel');
 		expect(getRequiredLinkType('likes')).toBe('content');
 		expect(getRequiredLinkType('views')).toBe('content');
 		expect(getRequiredLinkType('comments')).toBe('content');
+		expect(getRequiredLinkType('streams')).toBe('content');
 	});
 
 	it('accepts a valid Instagram profile link for a followers order', () => {
-		expect(validateLinkForAction('instagram', 'followers', 'https://instagram.com/fastaccs').valid).toBe(
-			true
-		);
+		expect(
+			validateLinkForAction('instagram', 'followers', 'https://instagram.com/fastaccs').valid
+		).toBe(true);
 	});
 
 	it('rejects an Instagram post link for a followers order', () => {
@@ -39,9 +42,9 @@ describe('social link validator', () => {
 	});
 
 	it('accepts a TikTok profile link for followers', () => {
-		expect(validateLinkForAction('tiktok', 'followers', 'https://www.tiktok.com/@fastaccs').valid).toBe(
-			true
-		);
+		expect(
+			validateLinkForAction('tiktok', 'followers', 'https://www.tiktok.com/@fastaccs').valid
+		).toBe(true);
 	});
 
 	it.each([
@@ -56,8 +59,11 @@ describe('social link validator', () => {
 
 	it('accepts a TikTok video link for views', () => {
 		expect(
-			validateLinkForAction('tiktok', 'views', 'https://www.tiktok.com/@fastaccs/video/1234567890123')
-				.valid
+			validateLinkForAction(
+				'tiktok',
+				'views',
+				'https://www.tiktok.com/@fastaccs/video/1234567890123'
+			).valid
 		).toBe(true);
 	});
 
@@ -87,9 +93,9 @@ describe('social link validator', () => {
 	});
 
 	it('accepts a Facebook profile link for followers', () => {
-		expect(validateLinkForAction('facebook', 'followers', 'https://www.facebook.com/fastaccs').valid).toBe(
-			true
-		);
+		expect(
+			validateLinkForAction('facebook', 'followers', 'https://www.facebook.com/fastaccs').valid
+		).toBe(true);
 	});
 
 	it.each([
@@ -104,11 +110,8 @@ describe('social link validator', () => {
 
 	it('accepts a Facebook share link for post engagement services', () => {
 		expect(
-			validateLinkForAction(
-				'facebook',
-				'likes',
-				'https://www.facebook.com/share/p/1AbCdEfGhI/'
-			).valid
+			validateLinkForAction('facebook', 'likes', 'https://www.facebook.com/share/p/1AbCdEfGhI/')
+				.valid
 		).toBe(true);
 	});
 
@@ -124,7 +127,8 @@ describe('social link validator', () => {
 
 	it('accepts a Facebook post link for likes', () => {
 		expect(
-			validateLinkForAction('facebook', 'likes', 'https://www.facebook.com/fastaccs/posts/12345').valid
+			validateLinkForAction('facebook', 'likes', 'https://www.facebook.com/fastaccs/posts/12345')
+				.valid
 		).toBe(true);
 	});
 
@@ -133,9 +137,62 @@ describe('social link validator', () => {
 	});
 
 	it('accepts an X status link for likes', () => {
-		expect(validateLinkForAction('x', 'likes', 'https://x.com/fastaccs/status/1234567890').valid).toBe(
-			true
-		);
+		expect(
+			validateLinkForAction('x', 'likes', 'https://x.com/fastaccs/status/1234567890').valid
+		).toBe(true);
+	});
+
+	it.each([
+		'https://open.spotify.com/artist/0TnOYISbd1XYRBk9myaseg',
+		'https://open.spotify.com/intl-de/artist/0TnOYISbd1XYRBk9myaseg?si=abc'
+	])('accepts Spotify artist formats for profile outcomes: %s', (url) => {
+		expect(validateLinkForAction('spotify', 'followers', url).valid).toBe(true);
+		expect(validateLinkForAction('spotify', 'monthly_listeners', url).valid).toBe(true);
+	});
+
+	it.each([
+		'https://open.spotify.com/track/3n3Ppam7vgaVa1iaRUc9Lp',
+		'https://open.spotify.com/album/6TJmQnO44YE5BtTxH8pop1',
+		'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M'
+	])('accepts Spotify content formats for streams: %s', (url) => {
+		expect(validateLinkForAction('spotify', 'streams', url).valid).toBe(true);
+	});
+
+	it('accepts a Spotify short link for manual review', () => {
+		const result = validateLinkForAction('spotify', 'streams', 'https://spotify.link/AbCdEf123');
+		expect(result.valid).toBe(true);
+		expect(result.needsManualReview).toBe(true);
+	});
+
+	it('does not accept a Spotify artist link for stream delivery', () => {
+		expect(
+			validateLinkForAction(
+				'spotify',
+				'streams',
+				'https://open.spotify.com/artist/0TnOYISbd1XYRBk9myaseg'
+			).valid
+		).toBe(false);
+	});
+
+	it.each([
+		'https://t.me/fastaccs',
+		'https://telegram.me/fastaccs',
+		'https://telegram.dog/fastaccs'
+	])('accepts Telegram channel formats for members: %s', (url) => {
+		expect(validateLinkForAction('telegram', 'members', url).valid).toBe(true);
+	});
+
+	it.each(['https://t.me/fastaccs/123', 'https://t.me/s/fastaccs/123'])(
+		'accepts Telegram post formats for views: %s',
+		(url) => {
+			expect(validateLinkForAction('telegram', 'views', url).valid).toBe(true);
+		}
+	);
+
+	it('accepts Telegram invite links for manual review', () => {
+		const result = validateLinkForAction('telegram', 'members', 'https://t.me/+AbCdEf123');
+		expect(result.valid).toBe(true);
+		expect(result.needsManualReview).toBe(true);
 	});
 
 	it('rejects malformed URLs outright', () => {
@@ -154,9 +211,9 @@ describe('social link validator', () => {
 			validateLinkForAction('facebook', 'followers', 'https://facebook.com.evil.example/share/abc')
 				.valid
 		).toBe(false);
-		expect(validateLinkForAction('tiktok', 'followers', 'https://instagram.com/fastaccs').valid).toBe(
-			false
-		);
+		expect(
+			validateLinkForAction('tiktok', 'followers', 'https://instagram.com/fastaccs').valid
+		).toBe(false);
 	});
 
 	it('rejects Facebook link-shim URLs because they can redirect off-platform', () => {
@@ -177,9 +234,9 @@ describe('social link validator', () => {
 
 	it('treats reposts like other content-link actions (requires a post link, not a profile link)', () => {
 		expect(getRequiredLinkType('reposts')).toBe('content');
-		expect(validateLinkForAction('x', 'reposts', 'https://x.com/fastaccs/status/1234567890').valid).toBe(
-			true
-		);
+		expect(
+			validateLinkForAction('x', 'reposts', 'https://x.com/fastaccs/status/1234567890').valid
+		).toBe(true);
 		expect(validateLinkForAction('x', 'reposts', 'https://x.com/fastaccs').valid).toBe(false);
 	});
 });

@@ -98,7 +98,7 @@ describe('affiliate lifecycle email recovery', () => {
 				campaignKey: 'affiliate_program_2026_announcement',
 				notificationType: 'affiliate_unlock',
 				subject: 'Your Fast Accounts affiliate code is ready',
-				body: expect.stringContaining('payouts are processed on Saturdays')
+				body: expect.stringContaining('payouts run on Saturdays')
 			})
 		);
 	});

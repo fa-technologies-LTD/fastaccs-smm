@@ -4469,9 +4469,10 @@ export async function requestAffiliatePayout(userId: string): Promise<{
 			payoutRecipients.map((recipientEmail) =>
 				sendEmail({
 					to: recipientEmail,
-					subject: `[FastAccs Ops] Affiliate payout request (${affiliateName})`,
-					body: `A new affiliate payout request was submitted.\n\nAffiliate: ${user.fullName || 'N/A'}\nEmail: ${user.email || 'N/A'}\nRequested amount: ₦${amount.toLocaleString()}\nAvailable Affiliate Cash at request time: ₦${amount.toLocaleString()}\nRequested at: ${new Date().toISOString()}\n\nReview affiliate details in admin to approve or follow up.`,
-					ctaText: 'Open admin affiliates',
+					subject: `New affiliate payout — ₦${amount.toLocaleString()}`,
+					preheader: `${affiliateName} requested ₦${amount.toLocaleString()}`,
+					body: `Affiliate: ${user.fullName || affiliateName}\nEmail: ${user.email || 'Not available'}\nRequested amount: ₦${amount.toLocaleString()}\nRequest reference: ${reference}`,
+					ctaText: 'Review payout',
 					ctaUrl: `${baseUrl}/admin/affiliates/${user.id}`,
 					notificationType: 'affiliate_payout',
 					referenceId: `affiliate_payout_request:${reference}`,

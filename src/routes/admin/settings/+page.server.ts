@@ -389,9 +389,11 @@ export const actions: Actions = {
 
 		const result = await sendEmail({
 			to: candidate,
-			subject: 'FastAccs SMTP Test',
-			body: `SMTP test sent from Admin Settings.\n\nTime: ${new Date().toISOString()}`,
+			subject: 'Fast Accounts email test',
+			body: 'Email delivery is working. This message was sent from the admin settings page.',
 			notificationType: 'admin_broadcast',
+			classification: 'operational',
+			showCta: false,
 			userId: locals.user?.id || null
 		});
 

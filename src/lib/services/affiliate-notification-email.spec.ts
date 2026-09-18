@@ -81,7 +81,7 @@ describe('first Store Credit email', () => {
 				notificationType: 'affiliate_store_credit',
 				referenceId: 'affiliate_first_credit:11111111-1111-1111-1111-111111111111',
 				subject: 'Your first referral reward is pending 🎉',
-				body: expect.stringContaining('after the 14-day return window')
+				body: expect.stringContaining("will be available in 14 days if the order isn't refunded")
 			})
 		);
 	});

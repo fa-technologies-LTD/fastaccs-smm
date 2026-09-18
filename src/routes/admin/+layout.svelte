@@ -106,6 +106,12 @@
 				permission: 'admin:catalog:manage'
 			},
 			{
+				href: '/admin/boosting-mappings',
+				label: 'Boosting Route Map',
+				icon: Target,
+				permission: 'admin:catalog:manage'
+			},
+			{
 				href: '/admin/numbers',
 				label: 'Numbers',
 				icon: Phone,

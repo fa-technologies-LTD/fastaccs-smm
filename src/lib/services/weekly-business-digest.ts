@@ -202,7 +202,7 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 	const pendingRecipients = recipients.filter((email) => !alreadySent.has(email.toLowerCase()));
 	if (pendingRecipients.length === 0) return { sent: false, reason: 'already_sent' };
 
-	const inactiveCutoff = new Date(end.getTime() - 60 * DAY_MS);
+	const inactiveCutoff = new Date(end.getTime() - 20 * DAY_MS);
 	const [
 		currentOrders,
 		previousOrders,
@@ -428,7 +428,6 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 	].filter((line): line is string => Boolean(line));
 
 	const body = [
-		'**FastAccs weekly business digest**',
 		`Reporting window: ${formatWindowDate(start, timezone)} to ${formatWindowDate(reportingEnd, timezone)} (${timezone})`,
 		'',
 		'**Executive snapshot**',
@@ -453,7 +452,7 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 		`- Unique buyers this week: ${buyerStats.unique}`,
 		`- Repeat buyers within the week: ${buyerStats.repeat}`,
 		`- New user accounts: ${newUsers} (${formatPercentChange(newUsers, previousNewUsers)})`,
-		`- Users inactive for 60+ days: ${inactiveUsers}`,
+		`- Users inactive for 20+ days: ${inactiveUsers}`,
 		`- New restock requests: ${newRestockInterest}`,
 		`- Restock requests notified: ${notifiedRestockInterest}`,
 		'',
@@ -496,26 +495,20 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 		'**Recommended operator actions**',
 		...(recommendedActions.length > 0
 			? recommendedActions
-			: ['- No urgent operator action detected from this weekly summary.']),
-		'',
-		'Open the full admin views:',
-		'- Analytics: /admin/analytics',
-		'- Inventory: /admin/inventory',
-		'- Users: /admin/users'
+			: ['- No urgent operator action detected from this weekly summary.'])
 	].join('\n');
 
 	let recipientsSent = 0;
 	for (const email of pendingRecipients) {
 		const result = await sendEmail({
 			to: email,
-			subject: `[FastAccs Ops] Weekly business digest (${getBusinessDateKey(start, timezone)})`,
+			subject: `Weekly business summary — ${getBusinessDateKey(start, timezone)}`,
 			body,
+			preheader: `${formatAmount(currentRevenue)} net sales · ${currentOrders.length} paid orders · ${zeroStockRows.length} out of stock`,
 			notificationType: 'admin_broadcast',
 			classification: 'operational',
 			referenceId,
-			ctaText: 'Open analytics',
-			ctaUrl: 'https://smm.fastaccs.com/admin/analytics',
-			showCta: true
+			showCta: false
 		});
 		if (result.success) recipientsSent += 1;
 	}

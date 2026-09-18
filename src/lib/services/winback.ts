@@ -2,8 +2,8 @@ import { env } from '$env/dynamic/private';
 import { prisma } from '$lib/prisma';
 import { sendMarketingEmail } from './email';
 import { pickVariantIndex, WINBACK_VARIANTS } from './email-variants';
+import { getAdminSettingsSnapshot } from './admin-settings';
 
-const WINBACK_DAYS = Math.max(Number(env.WINBACK_DAYS_THRESHOLD || 60), 1);
 const WINBACK_COOLDOWN_DAYS = 60;
 
 function getBaseUrl(): string {
@@ -82,7 +82,10 @@ export async function runWinBackCampaign(): Promise<{
 	sent: number;
 	skipped: number;
 }> {
-	const inactiveThreshold = new Date(Date.now() - WINBACK_DAYS * 24 * 60 * 60 * 1000);
+	const winbackDays = await getAdminSettingsSnapshot()
+		.then((settings) => settings.notifications.winbackDaysThreshold)
+		.catch(() => 20);
+	const inactiveThreshold = new Date(Date.now() - winbackDays * 24 * 60 * 60 * 1000);
 	const users = await prisma.user.findMany({
 		where: {
 			emailVerified: true,
@@ -148,7 +151,8 @@ export async function runWinBackCampaign(): Promise<{
 			userId: user.id,
 			notificationType: 'win_back',
 			referenceId: `winback:${user.id}`,
-			campaignKey: `winback:${user.id}:${Math.floor(Date.now() / (WINBACK_COOLDOWN_DAYS * 24 * 60 * 60 * 1000))}`
+			campaignKey: `winback:${user.id}:${Math.floor(Date.now() / (WINBACK_COOLDOWN_DAYS * 24 * 60 * 60 * 1000))}`,
+			bypassMarketingCooldown: true
 		});
 
 		if (result.success) {

@@ -6,6 +6,7 @@ import { normalizeTierDeliveryMode } from '$lib/helpers/tier-delivery-config';
 import { BOOSTING_TURNAROUND_MESSAGE } from '$lib/helpers/boosting-service-config';
 import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
 import { getAdminSettingsSnapshot } from '$lib/services/admin-settings';
+import { getCanonicalCredentialEntries } from '$lib/helpers/credential-contract';
 import emailHeaderDataUrl from '$lib/assets/fa-email-header.png?inline';
 import { randomInt } from 'crypto';
 
@@ -39,6 +40,7 @@ interface SendEmailParams {
 	to: string;
 	subject: string;
 	body: string;
+	preheader?: string | null;
 	highlight?: string | null;
 	highlightLabel?: string | null;
 	ctaText?: string | null;
@@ -52,6 +54,9 @@ interface SendEmailParams {
 	classification?: EmailClassification;
 	campaignKey?: string | null;
 	marketingPreferenceToken?: string | null;
+	/** Requested alerts and deliberately targeted lifecycle messages may ignore the
+	 * cross-campaign pacing window while still enforcing consent and suppression. */
+	bypassMarketingCooldown?: boolean;
 }
 
 interface SendEmailResult {
@@ -83,6 +88,9 @@ const CANONICAL_PUBLIC_BASE_URL = 'https://smm.fastaccs.com';
 const EMAIL_HEADER_CID = 'fastaccounts-email-header';
 const EMAIL_HEADER_CONTENT = Buffer.from(emailHeaderDataUrl.split(',')[1] || '', 'base64');
 const MARKETING_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+export const CUSTOMER_INBOX_TIP =
+	'Inbox tip: Move Fast Accounts to Primary so you do not miss important updates.';
+export const CUSTOMER_INBOX_TIP_EMAIL_LIMIT = 3;
 export const QUEUED_MARKETING_STALE_MS = 15 * 60 * 1000;
 
 function normalizePublicBaseUrl(candidate: string): string | null {
@@ -214,36 +222,36 @@ export function renderEmailBody(content: string): string {
 		.join('');
 }
 
-const INBOX_REMINDER_LINE =
-	'**Inbox tip:** Move Fast Accounts to Primary so you do not miss important updates.';
+export function deriveEmailPreheader(body: string, subject: string): string {
+	const normalizedSubject = subject
+		.replace(/^\[FastAccs Ops\]\s*/i, '')
+		.replace(/[^a-z0-9]+/gi, ' ')
+		.trim()
+		.toLowerCase();
+
+	for (const rawLine of body.split('\n')) {
+		const line = rawLine
+			.trim()
+			.replace(/^(?:-|•)\s+/, '')
+			.replace(/\*\*/g, '')
+			.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+			.trim();
+		if (!line || /^hi(?:\s|,|$)/i.test(line)) continue;
+
+		const normalizedLine = line
+			.replace(/[^a-z0-9]+/gi, ' ')
+			.trim()
+			.toLowerCase();
+		if (normalizedLine === normalizedSubject) continue;
+		return line.slice(0, 160);
+	}
+
+	return 'A quick update from Fast Accounts.';
+}
 
 export function resolveEmailLogoUrl(baseUrl: string): string {
 	const normalizedBaseUrl = normalizePublicBaseUrl(baseUrl) || CANONICAL_PUBLIC_BASE_URL;
 	return `${normalizedBaseUrl}/fa-email-logo.png`;
-}
-
-function isOperationalAdminAlert(params: SendEmailParams): boolean {
-	if (params.notificationType !== 'admin_broadcast') return false;
-	const referenceId = String(params.referenceId || '')
-		.trim()
-		.toLowerCase();
-	return (
-		referenceId.startsWith('critical:') ||
-		referenceId.startsWith('low_stock_alert:') ||
-		referenceId.startsWith('weekly_business_digest:')
-	);
-}
-
-function shouldShowInboxReminder(params: SendEmailParams): boolean {
-	if (isOperationalAdminAlert(params)) return false;
-	if (params.notificationType === 'verification') return true;
-	if (params.classification === 'marketing') return true;
-	return params.notificationType === 'admin_broadcast' && Boolean(params.broadcastId);
-}
-
-function appendInboxReminderIfMissing(body: string): string {
-	if (/not spam/i.test(body) && /primary/i.test(body)) return body;
-	return `${body}\n\n${INBOX_REMINDER_LINE}`;
 }
 
 function getEmailEyebrow(params: SendEmailParams): string {
@@ -292,6 +300,7 @@ export function renderEmailTemplate(params: {
 	ctaText?: string | null;
 	ctaUrl?: string | null;
 	showCta?: boolean;
+	showInboxTip?: boolean;
 	marketingPreferenceUrl?: string | null;
 }): string {
 	const safeCtaUrl = normalizeEmailActionUrl(params.ctaUrl);
@@ -345,6 +354,11 @@ export function renderEmailTemplate(params: {
 					  ${highlight ? `<div style="margin:0 0 20px 0;padding:18px;border:1px solid #246f4b;border-radius:12px;background:#09130e;text-align:center;">${highlightLabel ? `<div style="margin:0 0 8px 0;color:#8fa198;font-size:10px;font-weight:800;line-height:1;letter-spacing:1.2px;">${escapeHtml(highlightLabel)}</div>` : ''}<div style="color:#55d996;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:30px;font-weight:800;line-height:1.15;letter-spacing:5px;">${escapeHtml(highlight)}</div></div>` : ''}
 					  ${params.firstName ? `<p style="margin:0 0 14px 0;color:#cbd6d0;font-size:15px;line-height:1.65;">Hi ${escapeHtml(params.firstName)},</p>` : ''}
                       ${params.body}
+					  ${
+							params.showInboxTip
+								? `<div style="margin:20px 0 0;padding:12px 14px;border:1px solid #28483a;border-radius:10px;background:#0a1510;color:#9eb0a7;font-size:12px;line-height:1.55;">${escapeHtml(CUSTOMER_INBOX_TIP)}</div>`
+								: ''
+						}
                       ${
 												showCta
 													? `<table role="presentation" cellspacing="0" cellpadding="0" style="margin-top:24px;"><tr><td style="border-radius:10px;background:#25b570;">
@@ -485,11 +499,48 @@ export async function logEmailNotification(params: EmailLogParams): Promise<stri
 	return createEmailLog(params);
 }
 
+async function shouldShowCustomerInboxTip(
+	params: SendEmailParams,
+	recipient: string
+): Promise<boolean> {
+	if (params.classification === 'operational' || params.notificationType === 'admin_broadcast') {
+		return false;
+	}
+
+	try {
+		const sentCustomerEmails = await prisma.emailNotification.count({
+			where: {
+				status: 'sent',
+				classification: { not: 'operational' },
+				notificationType: { not: 'admin_broadcast' },
+				...(params.userId
+					? {
+							OR: [
+								{ userId: params.userId },
+								{ userId: null, email: { equals: recipient, mode: 'insensitive' as const } }
+							]
+						}
+					: { email: { equals: recipient, mode: 'insensitive' as const } })
+			}
+		});
+		return sentCustomerEmails < CUSTOMER_INBOX_TIP_EMAIL_LIMIT;
+	} catch (error) {
+		// The tip is helpful, never delivery-critical. If its history lookup is unavailable,
+		// omit it instead of delaying or failing the customer's actual email.
+		console.warn(
+			'Inbox-tip history lookup failed:',
+			error instanceof Error ? error.message : 'Unknown error'
+		);
+		return false;
+	}
+}
+
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
 	const recipient = params.to.trim().toLowerCase();
 	const subject = params.subject.trim();
-	const rawBody = params.body.trim();
-	const body = shouldShowInboxReminder(params) ? appendInboxReminderIfMissing(rawBody) : rawBody;
+	const body = params.body.trim();
+	const showInboxTip = await shouldShowCustomerInboxTip(params, recipient);
+	const textBody = showInboxTip ? `${body}\n\n${CUSTOMER_INBOX_TIP}` : body;
 
 	const bodyHtml = renderEmailBody(body);
 	const html = renderEmailTemplate({
@@ -498,10 +549,11 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 		eyebrow: getEmailEyebrow(params),
 		highlight: params.highlight || null,
 		highlightLabel: params.highlightLabel || null,
-		preheader: subject,
+		preheader: params.preheader || deriveEmailPreheader(body, subject),
 		ctaText: params.ctaText || null,
 		ctaUrl: params.ctaUrl || null,
 		showCta: params.showCta !== false,
+		showInboxTip,
 		marketingPreferenceUrl: params.marketingPreferenceToken
 			? `${getBaseUrl()}/email/preferences/${params.marketingPreferenceToken}`
 			: null
@@ -513,7 +565,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 			from: getFromAddress(),
 			to: recipient,
 			subject,
-			text: body,
+			text: textBody,
 			html,
 			attachments: [
 				{
@@ -641,7 +693,7 @@ async function reserveMarketingEmail(params: SendEmailParams & { campaignKey: st
 		else if (!user.marketingEmailEnabled) suppressionReason = 'unsubscribed';
 		else if (user.marketingSuppressedAt) suppressionReason = 'suppressed_address';
 
-		if (!suppressionReason) {
+		if (!suppressionReason && !params.bypassMarketingCooldown) {
 			const recentMarketing = await tx.emailNotification.findFirst({
 				where: {
 					userId: params.userId,
@@ -653,7 +705,7 @@ async function reserveMarketingEmail(params: SendEmailParams & { campaignKey: st
 				},
 				select: { id: true }
 			});
-			if (recentMarketing) suppressionReason = 'seven_day_marketing_limit';
+			if (recentMarketing) suppressionReason = 'one_day_marketing_limit';
 		}
 
 		if (suppressionReason) {
@@ -992,11 +1044,11 @@ export async function sendWelcomeEmailIfNeeded(params: {
 Welcome to Fast Accounts.
 
 - Buy ready-to-use social accounts
-- Get verification numbers
-- Add followers, likes, and views
+- Get verification numbers for multiple sites, apps, and countries
+- Grow your followers, likes, views, and more
 
-Everything stays in one dashboard.`,
-		ctaText: 'Explore Fast Accounts',
+Everything in one place.`,
+		ctaText: 'Explore FastAccs',
 		ctaUrl: getBaseUrl(),
 		userId: params.userId,
 		notificationType: 'welcome',
@@ -1014,6 +1066,8 @@ interface ReservedOrderConfirmation {
 	order: {
 		id: string;
 		orderNumber: string;
+		status: string;
+		createdAt: Date;
 		totalAmount: unknown;
 		userId: string | null;
 		guestEmail: string | null;
@@ -1023,6 +1077,17 @@ interface ReservedOrderConfirmation {
 			totalPrice: unknown;
 			category: { metadata: unknown } | null;
 			boostTargetUrl: string | null;
+			accounts: Array<{
+				username: string | null;
+				password: string | null;
+				email: string | null;
+				emailPassword: string | null;
+				twoFa: string | null;
+				linkUrl: string | null;
+				followers: number | null;
+				ageMonths: number | null;
+				credentialExtras: unknown;
+			}>;
 		}>;
 		user: {
 			email: string | null;
@@ -1073,6 +1138,9 @@ async function reserveOrderConfirmationNotification(
 					include: {
 						category: {
 							select: { metadata: true }
+						},
+						accounts: {
+							where: { status: { in: ['allocated', 'delivered'] } }
 						}
 					}
 				},
@@ -1080,6 +1148,31 @@ async function reserveOrderConfirmationNotification(
 			}
 		});
 		if (!order) {
+			return null;
+		}
+
+		const isBoosting = order.orderItems.some((item) => Boolean(item.boostTargetUrl));
+		const isPhone =
+			!isBoosting &&
+			order.orderItems.some(
+				(item) =>
+					normalizeTierDeliveryMode(
+						(item.category?.metadata as Record<string, unknown> | null)?.delivery_mode
+					) === 'auto_sms'
+			);
+		const isManualHandover =
+			!isBoosting &&
+			!isPhone &&
+			order.orderItems.some(
+				(item) =>
+					normalizeTierDeliveryMode(
+						(item.category?.metadata as Record<string, unknown> | null)?.delivery_mode
+					) === 'manual_handover'
+			);
+
+		// Instant account orders should send one useful "details ready" email after
+		// allocation, not a premature confirmation followed by a near-duplicate.
+		if (!isBoosting && !isPhone && !isManualHandover && order.status !== 'completed') {
 			return null;
 		}
 
@@ -1133,6 +1226,46 @@ async function reserveOrderConfirmationNotification(
 	});
 }
 
+function buildAccountReadyBody(
+	order: ReservedOrderConfirmation['order'],
+	humanOrderNumber: string
+): string {
+	const lines = [
+		'Your account details are ready.',
+		'',
+		`Order: ${humanOrderNumber}`,
+		`Amount paid: ₦${Number(order.totalAmount).toLocaleString('en-US')}`,
+		'',
+		'**Account details**'
+	];
+
+	for (const item of order.orderItems) {
+		if (item.accounts.length === 0) continue;
+		lines.push(
+			'',
+			`**${item.productName}** (${item.accounts.length} account${item.accounts.length === 1 ? '' : 's'})`
+		);
+		item.accounts.forEach((account, index) => {
+			if (item.accounts.length > 1) lines.push('', `Account ${index + 1}`);
+			const entries = getCanonicalCredentialEntries(account).filter(
+				(credential) => credential.key !== 'password'
+			);
+			for (const credential of entries) {
+				lines.push(`- ${credential.label}: ${credential.value}`);
+			}
+			lines.push('- Password: View securely in your dashboard');
+		});
+	}
+
+	lines.push(
+		'',
+		'**Keep it secure**',
+		'- Change the password after your first login',
+		'- Do not share your login details'
+	);
+	return lines.join('\n');
+}
+
 export async function sendOrderConfirmationEmailIfNeeded(orderId: string): Promise<void> {
 	const reservation = await reserveOrderConfirmationNotification(orderId);
 	if (!reservation?.order) return;
@@ -1182,18 +1315,16 @@ ${itemLines.join('\n')}`;
 	const body = isBoosting
 		? `${orderSummary}
 
-Your boost is now queued and will begin processing shortly. ${BOOSTING_TURNAROUND_MESSAGE} Track its status anytime from your order page.`
+Your boost is queued and will begin shortly. ${BOOSTING_TURNAROUND_MESSAGE} Track its status from your order page.`
 		: isPhone
 			? `${orderSummary}
 
-Open your order page to see your number and get your one-time code — it appears automatically once it arrives. If no code comes through within the activation window, you're automatically refunded to your store credit.`
+Open your order page to see your number and get your one-time code — it appears automatically once it arrives. If no code comes through within the activation window, you're automatically refunded.`
 			: isManualHandover
 				? `${orderSummary}
 
-This is a manual handover order. To receive your full account login details, send your payment receipt to our team on WhatsApp. Tap the button below — your order number is pre-filled.`
-				: `${orderSummary}
-
-Your account details are ready. Open your dashboard to view your login. Anything off? Message support and we'll sort it fast.`;
+Send your payment receipt on WhatsApp to receive the complete login details. Your order number is already included.`
+				: buildAccountReadyBody(order, humanOrderNumber);
 
 	const ctaText = isBoosting
 		? 'View order status'
@@ -1210,17 +1341,26 @@ Your account details are ready. Open your dashboard to view your login. Anything
 				? waLink
 				: `${getBaseUrl()}/dashboard?tab=purchases`;
 
+	const subject =
+		!isBoosting && !isPhone && !isManualHandover
+			? `Your Fast Accounts order ${humanOrderNumber} is ready`
+			: `Order confirmed — ${humanOrderNumber}`;
+
 	await prisma.emailNotification.update({
 		where: { id: notificationId },
 		data: {
-			subject: `Order confirmed — ${humanOrderNumber}`,
+			subject,
 			body
 		}
 	});
 
 	await sendEmail({
 		to: targetEmail,
-		subject: `Order confirmed — ${humanOrderNumber}`,
+		subject,
+		preheader:
+			!isBoosting && !isPhone && !isManualHandover
+				? 'Your account details are ready in your dashboard.'
+				: undefined,
 		body,
 		ctaText,
 		ctaUrl,

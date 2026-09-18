@@ -16,6 +16,7 @@ const txMock = vi.hoisted(() => ({
 const prismaMock = vi.hoisted(() => ({
 	$transaction: vi.fn(),
 	emailNotification: {
+		count: vi.fn(),
 		update: vi.fn(),
 		create: vi.fn()
 	}
@@ -43,7 +44,12 @@ vi.mock('$lib/prisma', () => ({
 	prisma: prismaMock
 }));
 
-import { sendMarketingEmail, sendQueuedMarketingEmail } from './email';
+import {
+	CUSTOMER_INBOX_TIP,
+	sendEmail,
+	sendMarketingEmail,
+	sendQueuedMarketingEmail
+} from './email';
 
 describe('marketing email controls', () => {
 	beforeEach(() => {
@@ -65,6 +71,7 @@ describe('marketing email controls', () => {
 		txMock.emailNotification.create.mockResolvedValue({ id: 'notification-1' });
 		txMock.emailNotification.update.mockResolvedValue({ id: 'notification-1' });
 		prismaMock.emailNotification.update.mockResolvedValue({ id: 'notification-1' });
+		prismaMock.emailNotification.count.mockResolvedValue(0);
 		sendMailMock.mockResolvedValue({ messageId: 'message-1' });
 	});
 
@@ -93,6 +100,53 @@ describe('marketing email controls', () => {
 				html: expect.stringContaining('/email/preferences/11111111-1111-1111-1111-111111111111')
 			})
 		);
+	});
+
+	it('shows the inbox tip on only the first three successfully sent customer emails', async () => {
+		prismaMock.emailNotification.count.mockResolvedValueOnce(2).mockResolvedValueOnce(3);
+
+		await sendEmail({
+			to: 'buyer@example.com',
+			userId: '11111111-1111-4111-8111-111111111111',
+			subject: 'Your first update',
+			body: 'Welcome to Fast Accounts.',
+			notificationType: 'welcome'
+		});
+		await sendEmail({
+			to: 'buyer@example.com',
+			userId: '11111111-1111-4111-8111-111111111111',
+			subject: 'A later update',
+			body: 'Your order is ready.',
+			notificationType: 'order_delivery'
+		});
+
+		const firstSend = sendMailMock.mock.calls[0][0];
+		const laterSend = sendMailMock.mock.calls[1][0];
+		expect(firstSend.html).toContain(CUSTOMER_INBOX_TIP);
+		expect(firstSend.text).toContain(CUSTOMER_INBOX_TIP);
+		expect(laterSend.html).not.toContain(CUSTOMER_INBOX_TIP);
+		expect(laterSend.text).not.toContain(CUSTOMER_INBOX_TIP);
+		expect(prismaMock.emailNotification.count).toHaveBeenCalledWith({
+			where: expect.objectContaining({ status: 'sent' })
+		});
+	});
+
+	it('never adds the customer inbox tip to operational email', async () => {
+		await sendEmail({
+			to: 'owner@example.com',
+			subject: 'Operations alert',
+			body: 'A queue needs attention.',
+			notificationType: 'admin_broadcast',
+			classification: 'operational'
+		});
+
+		expect(sendMailMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				html: expect.not.stringContaining(CUSTOMER_INBOX_TIP),
+				text: expect.not.stringContaining(CUSTOMER_INBOX_TIP)
+			})
+		);
+		expect(prismaMock.emailNotification.count).not.toHaveBeenCalled();
 	});
 
 	it('suppresses optional email after unsubscribe without touching transactional delivery', async () => {
@@ -130,7 +184,7 @@ describe('marketing email controls', () => {
 		);
 	});
 
-	it('enforces the rolling seven-day marketing limit across campaigns', async () => {
+	it('enforces the rolling one-day marketing limit across ordinary campaigns', async () => {
 		txMock.emailNotification.findFirst.mockImplementation(
 			async ({ where }: { where: Record<string, unknown> }) =>
 				where.classification === 'marketing' ? { id: 'recent-marketing-email' } : null
@@ -145,8 +199,28 @@ describe('marketing email controls', () => {
 			campaignKey: 'affiliate-progress:50:user-1'
 		});
 
-		expect(result.suppressionReason).toBe('seven_day_marketing_limit');
+		expect(result.suppressionReason).toBe('one_day_marketing_limit');
 		expect(sendMailMock).not.toHaveBeenCalled();
+	});
+
+	it('lets a requested alert bypass cross-campaign pacing without bypassing consent', async () => {
+		txMock.emailNotification.findFirst.mockImplementation(
+			async ({ where }: { where: Record<string, unknown> }) =>
+				where.classification === 'marketing' ? { id: 'recent-marketing-email' } : null
+		);
+
+		const result = await sendMarketingEmail({
+			to: 'buyer@example.com',
+			userId: '11111111-1111-1111-1111-111111111111',
+			subject: 'The item you requested is available',
+			body: 'It is ready now.',
+			notificationType: 'restock_alert',
+			campaignKey: 'restock:subscription-1',
+			bypassMarketingCooldown: true
+		});
+
+		expect(result.success).toBe(true);
+		expect(sendMailMock).toHaveBeenCalledTimes(1);
 	});
 
 	it('atomically claims and sends an eligible queued marketing email', async () => {

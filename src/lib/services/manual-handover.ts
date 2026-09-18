@@ -15,7 +15,10 @@ function fallbackOrderLabel(orderNumber: string | null, orderId: string): string
 	return `ORD-${orderId.slice(0, 8).toUpperCase()}`;
 }
 
-export async function notifyManualHandoverOrderPaid(orderId: string, source: string): Promise<void> {
+export async function notifyManualHandoverOrderPaid(
+	orderId: string,
+	source: string
+): Promise<void> {
 	const order = await prisma.order.findUnique({
 		where: { id: orderId },
 		select: {
@@ -26,12 +29,7 @@ export async function notifyManualHandoverOrderPaid(orderId: string, source: str
 			guestEmail: true,
 			guestPhone: true,
 			deliveryContact: true,
-			user: {
-				select: {
-					email: true,
-					fullName: true
-				}
-			}
+			user: { select: { email: true, fullName: true } }
 		}
 	});
 
@@ -46,22 +44,20 @@ export async function notifyManualHandoverOrderPaid(orderId: string, source: str
 	const handoverLink = buildWhatsAppSupportLink(supportWhatsApp, handoverMessage);
 
 	const bodyLines = [
-		'Manual handover payment confirmed.',
 		`Order: ${orderLabel}`,
-		`Order ID: ${order.id}`,
 		`Amount: ₦${Number(order.totalAmount || 0).toLocaleString()}`,
-		`Payment reference: ${order.paymentReference || 'N/A'}`,
-		`Buyer: ${buyerName}`,
-		`Buyer email: ${customerEmail}`,
-		`Buyer phone: ${order.guestPhone || 'N/A'}`,
-		`Delivery contact: ${order.deliveryContact || 'N/A'}`,
-		handoverLink ? `Open WhatsApp handover: ${handoverLink}` : 'Support WhatsApp link unavailable'
+		`Customer: ${buyerName}`,
+		`Contact: ${order.deliveryContact || order.guestPhone || customerEmail}`,
+		handoverLink ? `[Open WhatsApp handover](${handoverLink})` : ''
 	];
 
 	await sendCriticalAdminAlert({
-		title: 'Manual handover order paid',
+		title: 'New manual-handover order',
 		message: bodyLines.join('\n'),
 		source,
+		preheader: `${orderLabel} · ₦${Number(order.totalAmount || 0).toLocaleString()} · ${buyerName}`,
+		ctaText: 'Open order',
+		ctaUrl: `https://smm.fastaccs.com/admin/orders/${order.id}`,
 		dedupeKey: `manual-handover-paid:${order.id}`,
 		cooldownMs: NOTIFY_ONCE_PER_ORDER_MS
 	});
@@ -74,14 +70,7 @@ export async function notifyBoostingOrderPaid(orderId: string, source: string): 
 			id: true,
 			orderNumber: true,
 			totalAmount: true,
-			paymentReference: true,
-			guestEmail: true,
-			user: {
-				select: {
-					email: true,
-					fullName: true
-				}
-			},
+			user: { select: { fullName: true } },
 			orderItems: {
 				where: { boostTargetUrl: { not: null } },
 				select: {
@@ -96,29 +85,27 @@ export async function notifyBoostingOrderPaid(orderId: string, source: string): 
 	if (!order || order.orderItems.length === 0) return;
 
 	const orderLabel = fallbackOrderLabel(order.orderNumber, order.id);
-	const customerEmail = order.guestEmail || order.user?.email || 'unknown';
 	const buyerName = String(order.user?.fullName || '').trim() || 'Unknown buyer';
 
 	const bodyLines = [
-		'Boosting order paid.',
 		`Order: ${orderLabel}`,
-		`Order ID: ${order.id}`,
 		`Amount: ₦${Number(order.totalAmount || 0).toLocaleString()}`,
-		`Payment reference: ${order.paymentReference || 'N/A'}`,
-		`Buyer: ${buyerName}`,
-		`Buyer email: ${customerEmail}`,
+		`Customer: ${buyerName}`,
 		'',
-		'Services:',
+		'**Services**',
 		...order.orderItems.map(
 			(item) =>
-				`- ${item.productName}: ${item.boostQuantity?.toLocaleString() ?? '?'} — ${item.boostTargetUrl}`
+				`- ${item.productName} · ${item.boostQuantity?.toLocaleString() ?? '?'} · [Open target](${item.boostTargetUrl})`
 		)
 	];
 
 	await sendCriticalAdminAlert({
-		title: 'Boosting order paid',
+		title: 'New boosting order',
 		message: bodyLines.join('\n'),
 		source,
+		preheader: `${orderLabel} · ₦${Number(order.totalAmount || 0).toLocaleString()} · ${order.orderItems.length} service${order.orderItems.length > 1 ? 's' : ''}`,
+		ctaText: 'Open boosting orders',
+		ctaUrl: 'https://smm.fastaccs.com/admin/boosting-orders',
 		dedupeKey: `boosting-paid:${order.id}`,
 		cooldownMs: NOTIFY_ONCE_PER_ORDER_MS
 	});
