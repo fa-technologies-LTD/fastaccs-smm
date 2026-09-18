@@ -94,12 +94,14 @@ Last updated: 18 September 2026
 - [x] Typecheck passed with 0 errors and the unchanged 121-warning baseline
 - [x] Production build passed with affiliate encryption configuration verified
 - [x] Diff whitespace/integrity check passed
+- [x] Pushed release commit `8f2ade1` to `test`; protected Vercel Preview exists and Neon staging smoke routes returned 200
+- [x] Staging launcher now forwards Vite options such as `--host` for repeatable local staging checks
 
 ## Next release
 
 - [x] Owner completed the revised Email Review pass and supplied final comments
 - [x] Commit the complete tested working tree to `test`
-- [ ] Push `test` and smoke-test the permanent Vercel/Neon staging deployment
+- [x] Push `test` and smoke-test the permanent Vercel/Neon staging deployment
 - [ ] Promote the approved commit to `main` and redeploy Production with the latest environment values
 - [ ] Confirm the first production runs of first-order offers, Numbers discovery, 20-day win-back, requested restock alerts and automatic account-ready delivery
 - [x] Round catalogue prices to the nearest ₦50 while preserving exact accounting for checkout discounts, paid totals, refunds and historical orders

@@ -53,7 +53,7 @@ try {
 		action === 'verify'
 			? [fileURLToPath(new URL('./verify-boosting-foundation.mjs', import.meta.url))]
 			: action === 'dev'
-				? [process.env.npm_execpath, 'run', 'dev']
+				? [process.env.npm_execpath, 'run', 'dev', '--', ...process.argv.slice(3)]
 				: ['migrate', action];
 	if (action === 'dev' && !process.env.npm_execpath) {
 		throw new Error('Run staging development through npm run dev:staging.');
