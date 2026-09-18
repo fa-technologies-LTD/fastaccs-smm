@@ -138,6 +138,7 @@ Last updated: 18 September 2026
 ## Operational follow-up
 
 - [ ] Encrypt the 17 legacy affiliate bank-detail records using the approved dry-run fingerprint
+- [ ] Triage GitHub's 10 dependency alerts (2 high, 7 moderate, 1 low), confirm runtime exposure, and upgrade only with regression testing
 - [ ] Recheck the two held upstream dependency chains when compatible SvelteKit and Prisma fixes ship
 
 ## Later
