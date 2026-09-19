@@ -74,6 +74,8 @@ describe('boost supplier catalogue sync', () => {
 		const query = db.executeRaw.mock.calls[0]?.[0] as { sql: string; values: unknown[] };
 		expect(query.sql).toContain('ARRAY[');
 		expect(query.values.some(Array.isArray)).toBe(false);
+		// first_seen_at, last_seen_at, last_changed_at and updated_at must each have a value.
+		expect(query.values.filter((value) => value === syncedAt)).toHaveLength(4);
 		expect(db.markUnavailable).toHaveBeenCalledWith(
 			expect.objectContaining({ where: expect.objectContaining({ provider: 'smm_raja' }) })
 		);
@@ -122,6 +124,30 @@ describe('boost supplier catalogue sync', () => {
 			balanceWarning: 'Balance is temporarily unavailable.'
 		});
 		expect(db.executeRaw).toHaveBeenCalledOnce();
+	});
+
+	it('retries a transient staging database connection failure without refetching the catalogue', async () => {
+		const db = database();
+		const transient = Object.assign(new Error('Database is waking up.'), {
+			name: 'PrismaClientInitializationError',
+			errorCode: 'P1001'
+		});
+		db.transaction.mockRejectedValueOnce(transient);
+		const sleep = vi.fn().mockResolvedValue(undefined);
+		const provider = client();
+		const listServices = vi.spyOn(provider, 'listServices');
+
+		const result = await syncBoostProviderCatalogues({
+			clients: [provider],
+			database: db.client,
+			now: () => syncedAt,
+			sleep
+		});
+
+		expect(result[0]).toMatchObject({ status: 'synced', servicesSeen: 1 });
+		expect(db.transaction).toHaveBeenCalledTimes(2);
+		expect(sleep).toHaveBeenCalledWith(1_000);
+		expect(listServices).toHaveBeenCalledOnce();
 	});
 
 	it('reports an unconfigured supplier without touching the database', async () => {

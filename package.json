@@ -25,6 +25,8 @@
 		"incentives:report": "node ./scripts/report-incentive-margins.mjs",
 		"snap:report": "node ./scripts/report-snap-performance.mjs",
 		"boosting:probe-contracts": "node ./scripts/probe-boosting-provider-contracts.mjs",
+		"boosting:catalogue:review": "node ./scripts/boosting-catalogue.mjs review",
+		"boosting:catalogue:sync-staging": "node ./scripts/boosting-catalogue.mjs sync-staging",
 		"boosting:verify-foundation": "node ./scripts/verify-boosting-foundation.mjs",
 		"seed:boosting-services": "node ./scripts/seed-boosting-services.mjs",
 		"dev": "npm run verify:runtime && npm run prisma:generate && vite dev",

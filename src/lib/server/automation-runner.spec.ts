@@ -49,6 +49,26 @@ describe('automation runner', () => {
 		expect(prismaMock.automationJobRun.create).not.toHaveBeenCalled();
 	});
 
+	it('retries a transient database wake failure before acquiring the lock', async () => {
+		const transient = Object.assign(new Error('Database is waking up.'), {
+			name: 'PrismaClientInitializationError',
+			errorCode: 'P1001'
+		});
+		prismaMock.$queryRaw.mockRejectedValueOnce(transient);
+		const sleep = vi.fn().mockResolvedValue(undefined);
+
+		const result = await runAutomationJob({
+			jobName: 'onboarding',
+			executionId: 'wake-retry',
+			work: async () => ({ processed: 1 }),
+			sleep
+		});
+
+		expect(result.status).toBe('succeeded');
+		expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(2);
+		expect(sleep).toHaveBeenCalledWith(1_000);
+	});
+
 	it('records success and releases the lock', async () => {
 		const result = await runAutomationJob({
 			jobName: 'onboarding',

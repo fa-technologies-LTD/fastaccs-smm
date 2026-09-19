@@ -25,11 +25,51 @@ interface CatalogSyncOptions {
 	clients?: BoostProviderReadClient[];
 	database?: PrismaClient;
 	now?: () => Date;
+	sleep?: (milliseconds: number) => Promise<void>;
 }
+
+const DATABASE_RETRY_DELAYS_MS = [1_000, 3_000] as const;
 
 function safeError(error: unknown): string {
 	if (error instanceof BoostProviderError) return error.message;
+	if (error instanceof Prisma.PrismaClientKnownRequestError) {
+		return `Supplier catalogue database write failed (${error.code}).`;
+	}
+	if (error instanceof Prisma.PrismaClientInitializationError) {
+		return 'Supplier catalogue database connection failed.';
+	}
 	return 'Supplier catalogue sync failed.';
+}
+
+function databaseErrorCode(error: unknown): string | null {
+	if (!error || typeof error !== 'object') return null;
+	const value = error as { code?: unknown; errorCode?: unknown };
+	const code = typeof value.code === 'string' ? value.code : value.errorCode;
+	return typeof code === 'string' ? code : null;
+}
+
+function isRetryableDatabaseError(error: unknown): boolean {
+	if (!error || typeof error !== 'object') return false;
+	const name = 'name' in error ? String(error.name) : '';
+	return (
+		name === 'PrismaClientInitializationError' ||
+		['P1001', 'P1002', 'P2024', 'P2028'].includes(databaseErrorCode(error) || '')
+	);
+}
+
+async function withDatabaseRetry<T>(
+	operation: () => Promise<T>,
+	sleep: (milliseconds: number) => Promise<void>
+): Promise<T> {
+	for (let attempt = 0; ; attempt += 1) {
+		try {
+			return await operation();
+		} catch (error) {
+			const delay = DATABASE_RETRY_DELAYS_MS[attempt];
+			if (delay === undefined || !isRetryableDatabaseError(error)) throw error;
+			await sleep(delay);
+		}
+	}
 }
 
 function catalogueFingerprint(services: BoostProviderService[]): string {
@@ -71,6 +111,7 @@ function serviceRow(service: BoostProviderService, syncedAt: Date): Prisma.Sql {
 		${textArray(service.anomalies)},
 		${service.status},
 		${service.fingerprint},
+		${syncedAt},
 		${syncedAt},
 		${syncedAt},
 		${syncedAt}
@@ -146,7 +187,8 @@ async function recordProviderFailure(
 async function syncProvider(
 	client: BoostProviderReadClient,
 	database: PrismaClient,
-	now: () => Date
+	now: () => Date,
+	sleep: (milliseconds: number) => Promise<void>
 ): Promise<BoostCatalogSyncResult> {
 	if (!client.isConfigured()) {
 		return {
@@ -179,8 +221,10 @@ async function syncProvider(
 			);
 		}
 
-		const missing = await database.$transaction(
-			async (tx) => {
+		const missing = await withDatabaseRetry(
+			() =>
+				database.$transaction(
+					async (tx) => {
 				await tx.boostProviderState.upsert({
 					where: { provider: client.id },
 					create: {
@@ -228,8 +272,10 @@ async function syncProvider(
 					},
 					data: { unavailableAt: syncedAt }
 				});
-			},
-			{ timeout: 60_000 }
+					},
+					{ timeout: 60_000 }
+				),
+			sleep
 		);
 
 		return {
@@ -269,5 +315,12 @@ export async function syncBoostProviderCatalogues(
 	const clients = options.clients ?? DEFAULT_CLIENTS;
 	const database = options.database ?? prisma;
 	const now = options.now ?? (() => new Date());
-	return Promise.all(clients.map((client) => syncProvider(client, database, now)));
+	const sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+	const results: BoostCatalogSyncResult[] = [];
+	for (const client of clients) {
+		// A full provider can exceed 6,000 rows. Keep writes sequential so large first imports and
+		// refreshes do not compete for the same serverless connection and transaction budget.
+		results.push(await syncProvider(client, database, now, sleep));
+	}
+	return results;
 }

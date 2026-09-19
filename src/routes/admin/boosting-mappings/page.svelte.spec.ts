@@ -31,6 +31,7 @@ function workspace(categoryId: string, name: string): BoostMappingWorkspace {
 	return {
 		foundationReady: true,
 		migrationMessage: null,
+		selectedQualityTier: 'value',
 		category: {
 			id: categoryId,
 			name,
@@ -68,7 +69,12 @@ describe('Boosting mapping offer selection', () => {
 		});
 		vi.stubGlobal('fetch', fetchMock);
 
-		render(Page, { data: { offers: [...offers] } } as never);
+		render(Page, {
+			data: {
+				offers: [...offers],
+				mappingSummary: { categories: 2, tiers: 0, reviewedTiers: 0, approvedRoutes: 0 }
+			}
+		} as never);
 		await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
 
 		await page.getByRole('button', { name: /Facebook Page Followers/ }).click();

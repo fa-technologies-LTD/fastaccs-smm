@@ -40,7 +40,8 @@ export const GET: RequestHandler = async ({ locals, params, setHeaders, url }) =
 	setHeaders({ 'cache-control': 'private, no-store' });
 	try {
 		const data = await loadBoostMappingWorkspace(params.categoryId, {
-			search: url.searchParams.get('q') || ''
+			search: url.searchParams.get('q') || '',
+			qualityTier: url.searchParams.get('tier') || 'value'
 		});
 		return json({ success: true, data });
 	} catch (error) {
@@ -64,7 +65,13 @@ export const PUT: RequestHandler = async ({ locals, params, request, setHeaders 
 	}
 	try {
 		await saveBoostMappingWorkspace(params.categoryId, body, locals.user.id);
-		const data = await loadBoostMappingWorkspace(params.categoryId);
+		const offer =
+			body && typeof body === 'object' && 'offer' in body && body.offer && typeof body.offer === 'object'
+				? (body.offer as Record<string, unknown>)
+				: {};
+		const data = await loadBoostMappingWorkspace(params.categoryId, {
+			qualityTier: String(offer.qualityTier || 'value')
+		});
 		return json({ success: true, data });
 	} catch (error) {
 		return errorResponse(error);

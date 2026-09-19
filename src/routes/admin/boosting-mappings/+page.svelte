@@ -22,6 +22,7 @@
 
 	let { data }: { data: PageData } = $props();
 	let selectedCategoryId = $state('');
+	let selectedQualityTier = $state<'value' | 'stable' | 'premium'>('value');
 	let workspace = $state<BoostMappingWorkspace | null>(null);
 	let offerDraft = $state<BoostMappingOfferDraft | null>(null);
 	let routeDrafts = $state<BoostMappingRouteDraft[]>([]);
@@ -37,10 +38,10 @@
 		new Map(routeDrafts.map((route) => [route.providerServiceId, route]))
 	);
 	const minimumCustomerPrice = $derived(
-		workspace
+		workspace && offerDraft
 			? Math.round(
 					(workspace.category.minQuantity / workspace.category.stepQuantity) *
-						workspace.category.pricePerStepNgn *
+						offerDraft.pricePerStepNgn *
 						100
 				) / 100
 			: 0
@@ -101,9 +102,10 @@
 			(next.category.minQuantity / next.category.stepQuantity) * next.category.pricePerStepNgn
 		);
 		return {
-			qualityTier: 'value',
+			qualityTier: next.selectedQualityTier,
 			customerName: next.category.name,
 			shortPromise: 'Clear delivery with simple updates.',
+			pricePerStepNgn: Math.max(50, next.category.pricePerStepNgn),
 			minimumMarginPercent: 30,
 			normalCostTargetNgn: Math.max(0, Math.floor(price * 0.45)),
 			maximumSupplierCostNgn: Math.max(1, Math.floor(price * 0.65)),
@@ -124,6 +126,7 @@
 		try {
 			const params = new URLSearchParams();
 			if (search.trim()) params.set('q', search.trim());
+			params.set('tier', selectedQualityTier);
 			const response = await fetch(
 				`/api/admin/boosting-mappings/${categoryId}?${params.toString()}`
 			);
@@ -153,6 +156,7 @@
 			return;
 		}
 		selectedCategoryId = categoryId;
+		selectedQualityTier = 'value';
 		workspace = null;
 		offerDraft = null;
 		routeDrafts = [];
@@ -236,18 +240,14 @@
 		if (policy !== 'locked') offerDraft.lockedProviderServiceId = null;
 	}
 
-	function changeQualityTier(qualityTier: string): void {
-		if (!offerDraft || offerDraft.qualityTier === qualityTier) return;
-		offerDraft.qualityTier = qualityTier;
-		offerDraft.preferredProviderServiceId = null;
-		offerDraft.lockedProviderServiceId = null;
-		routeDrafts = routeDrafts.map((route) => ({
-			...route,
-			state: 'shadow',
-			equivalenceApproved: false,
-			verifiedSignals: [],
-			verifiedRefillDays: null
-		}));
+	async function changeQualityTier(qualityTier: string): Promise<void> {
+		if (!['value', 'stable', 'premium'].includes(qualityTier)) return;
+		if (selectedQualityTier === qualityTier && workspace) return;
+		selectedQualityTier = qualityTier as 'value' | 'stable' | 'premium';
+		workspace = null;
+		offerDraft = null;
+		routeDrafts = [];
+		await loadWorkspace();
 	}
 
 	async function saveMapping(): Promise<void> {
@@ -312,6 +312,10 @@
 			<p class="mt-1 max-w-2xl text-sm" style="color: var(--text-muted);">
 				Customers see one simple option. You quietly approve the safe supplier choices behind it.
 			</p>
+			<p class="mt-2 text-xs" style="color: var(--text-dim);">
+				{data.mappingSummary.tiers} hidden choices prepared · {data.mappingSummary.reviewedTiers}
+				reviewed · {data.mappingSummary.approvedRoutes} promise-checked routes
+			</p>
 		</div>
 		<a
 			href="/admin/boosting-preview"
@@ -329,7 +333,9 @@
 		>
 			<div class="border-b p-4" style="border-color: var(--border);">
 				<p class="font-semibold" style="color: var(--text);">Customer offers</p>
-				<p class="mt-0.5 text-xs" style="color: var(--text-muted);">Pick one to map</p>
+				<p class="mt-0.5 text-xs" style="color: var(--text-muted);">
+					Pick a result, then review its 2–3 simple choices
+				</p>
 			</div>
 			<div class="max-h-[45vh] overflow-y-auto p-2 xl:max-h-[68vh]">
 				{#each data.offers as item (item.id)}
@@ -346,8 +352,10 @@
 						<div class="flex items-start justify-between gap-2">
 							<span class="text-sm font-semibold" style="color: var(--text);">{item.name}</span>
 							<span class="flex shrink-0 items-center gap-1">
-								{#if !item.isActive}
-									<span class="text-[10px]" style="color: var(--text-dim);">Archived</span>
+								{#if item.isGeneratedDraft}
+									<span class="text-[10px]" style="color: #fbbf24;">Draft</span>
+								{:else if !item.isActive}
+									<span class="text-[10px]" style="color: var(--text-dim);">Inactive</span>
 								{/if}
 								{#if selected && loading}
 									<RefreshCcw class="animate-spin" size={15} style="color: var(--primary);" />
@@ -360,6 +368,10 @@
 						</div>
 						<p class="mt-1 text-xs" style="color: var(--text-muted);">
 							{item.platformLabel} · {item.outcomeLabel}
+						</p>
+						<p class="mt-1 text-[10px]" style="color: var(--text-dim);">
+							{item.reviewedTierCount}/{item.tierCount} choices reviewed · {item.approvedRouteCount}
+							routes checked
 						</p>
 					</button>
 				{/each}
@@ -443,7 +455,7 @@
 								onchange={(event) => changeQualityTier(event.currentTarget.value)}
 								class="field mt-1"
 							>
-								<option value="value">Value</option>
+								<option value="value">Affordable</option>
 								<option value="stable">More stable</option>
 								<option value="premium">Premium</option>
 							</select>
@@ -469,6 +481,16 @@
 								<option value="hidden">Hidden draft</option>
 								<option value="reviewed">Ready for customer-flow connection</option>
 							</select>
+						</label>
+						<label class="text-xs font-semibold" style="color: var(--text-muted);">
+							Price per {workspace.category.stepQuantity.toLocaleString()}
+							<input
+								bind:value={offerDraft.pricePerStepNgn}
+								class="field mt-1"
+								type="number"
+								min="50"
+								step="50"
+							/>
 						</label>
 					</div>
 

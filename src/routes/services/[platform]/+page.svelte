@@ -70,7 +70,7 @@
 	function qualityBadge(qualityTier: string | null): string | null {
 		if (qualityTier === 'premium') return 'Premium';
 		if (qualityTier === 'stable') return 'More stable';
-		if (qualityTier === 'value') return 'Good value';
+		if (qualityTier === 'value') return 'Affordable';
 		return null;
 	}
 

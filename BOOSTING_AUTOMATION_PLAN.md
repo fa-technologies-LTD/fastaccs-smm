@@ -41,6 +41,10 @@ Read-only authenticated calls returned 6,237 SMM Raja services and 5,801 BulkFol
 
 These are discovery counts, not approved routes: keyword matches can overlap or misclassify services. The raw catalogues also contain zero rates, extreme price outliers and provider claims that cannot be treated as measured quality. The normalizer must quarantine malformed/outlier rows, preserve original fields for review, and require explicit equivalence approval. Refill/cancel flags are useful filters but remain untrusted until authenticated behaviour and controlled orders confirm them.
 
+### First isolated staging import — 19 September 2026
+
+The guarded importer persisted 12,007 current rows to the Neon staging branch: 6,230 from SMM Raja and 5,777 from BulkFollows. It then created 101 hidden customer-offer drafts and 390 unapproved shadow-route suggestions across 37 core platform/outcome categories. No generated category was activated, no offer was reviewed or published, and no supplier-order endpoint was called. Re-running the importer produced zero duplicates or overwrites. Forty-four untouched generated drafts that initially had no legacy catalogue price received conservative tier-specific price suggestions rounded to ₦50; a second price pass changed zero rows.
+
 On 10 September 2026, read-only authenticated probes succeeded for both accounts: SMM Raja returned 6,237 services and BulkFollows returned 5,801, and both balance endpoints reported USD. No paid order was submitted. This proves the supplied credentials and basic `services`/`balance` shapes, not the behaviour of submission, status, refill, cancellation or error cases.
 
 On 13 September 2026, authenticated read-only probes using deliberately nonexistent order IDs also confirmed each supplier's single and batch status fields and keyed per-order error shape. SMM Raja accepted a comma-separated `order`; BulkFollows accepted `orders`. BulkFollows returned valid JSON with an inaccurate `text/html` content type, so our adapter validates the body rather than trusting that header. These checks still do not prove successful-order statuses, submission, refill or cancellation. Those remain gated behind the controlled paid canary.
@@ -113,10 +117,12 @@ One customer offer can therefore map to a wide candidate pool across both suppli
 
 Customer-visible variety and backend redundancy are separate:
 
-- Normally show **two meaningful customer choices** for a major outcome: a dependable value option and a more stable/premium option.
+- Normally show **two or three meaningful customer choices** for a major outcome: **Affordable**, **More stable**, and **Premium** when the catalogue and evidence support all three.
 - Show a third only when it expresses a genuinely different tested benefit, such as local audience, faster start or a longer refill window.
 - Behind each visible choice, approve as many equivalent supplier routes as testing and margins support; aim for at least two healthy routes where the catalogues make that possible.
 - If two visible choices are not measurably different, show one. Do not create fake variety from supplier names.
+- Pre-populate hidden draft offers and ranked route suggestions from compatible catalogue rows so the owner does not have to build every mapping by hand. A draft is not a reliability claim and cannot receive live orders until its promise and pilot limits are approved.
+- Supplier catalogues remain internal inventory. Never publish one customer option per supplier service or make customers understand provider terminology.
 
 ### Initial platform coverage target
 
@@ -610,6 +616,8 @@ Structure the workspace around customer offers rather than providers:
 1. Left column: platform and outcome coverage, with missing/one-route/two-route coverage indicators.
 2. Centre: the selected customer offer exactly as the customer will see it, including price and promise.
 3. Right: only compatible candidate subservices, ranked by eligibility, observed reliability and landed cost.
+
+The first catalogue import should automatically create reviewable draft suggestions for the core coverage matrix. Initial ranking may use only factual catalogue signals—target compatibility, quantity limits, price, advertised refill/cancel support, and provider redundancy. Supplier names and marketing words are not reliability ratings. As real canary history grows, measured delivery, drop, recovery and support outcomes replace those provisional signals. The owner can set **Preferred** or **Locked** on a known service at any time; that explicit choice outranks automatic scoring until changed.
 
 An expandable **All supplier services** search remains available for discovery, but it is never the default screen. Adding a candidate requires an equivalence checklist for target type, audience, retention/refill promise, limits and link formats. Show the offer's remaining recovery headroom after each candidate's expected cost. Provide a read-only **Simulate route** action that explains which candidate would win and why without placing an order.
 

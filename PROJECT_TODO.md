@@ -1,6 +1,6 @@
 # Fast Accounts project checklist
 
-Last updated: 18 September 2026
+Last updated: 19 September 2026
 
 ## Completed
 
@@ -109,7 +109,12 @@ Last updated: 18 September 2026
 
 ## Current Boosting build
 
-- [ ] Save the first internal supplier-catalogue snapshot, then map the first reviewed offers
+- [x] Save the first internal supplier-catalogue snapshot in isolated staging: 12,007 normalized services across SMM Raja and BulkFollows
+- [x] Auto-generate hidden Affordable, More stable and Premium draft suggestions for the core platform/outcome matrix; never expose the raw supplier catalogue to customers
+- [x] Keep all 101 generated offers hidden and all 390 suggested routes shadow-only and unapproved until an owner review or controlled canary supplies real evidence
+- [x] Suggest conservative tier-specific prices rounded to ₦50, repair only untouched zero-price generated drafts, and preserve every owner-edited price
+- [x] Let owner Preferred/Locked overrides outrank automatic recommendations
+- [ ] Review and approve the first small set of exact mappings, including the known premium X-followers service
 - [x] Create one persistent Neon development branch and store its pooled/direct URLs locally for future migrations and transaction tests
 - [x] Complete the available authenticated no-order service, balance, single-status, batch-status and error-shape checks
 - [ ] Before live automation, audit both suppliers' current terms, FAQs and how-to guidance; align Fast Accounts' Boosting FAQs, policies and expectation copy for owner review
@@ -119,6 +124,16 @@ Last updated: 18 September 2026
 - [ ] After staging, shadow and canary parity, retire the complete old Boosting customer/admin UI, endpoints and unreachable compatibility code
 - [x] Fund both supplier accounts and verify their credentials with read-only service-list and balance calls
 - [x] Store both supplier credentials in the ignored local environment for authenticated contract testing
+
+## Boosting staging verification — 19 September 2026
+
+- [x] Applied the additive multi-tier offer migration only to the isolated Neon staging branch
+- [x] Imported 6,230 SMM Raja and 5,777 BulkFollows services without submitting any supplier order
+- [x] Quarantined malformed price outliers and preserved ambiguous rows for internal classification
+- [x] Added a secured six-hour catalogue and balance refresh with bounded Neon wake retries
+- [x] Generated the core review matrix without publishing a category, offer or supplier route
+- [x] Re-ran draft generation twice with zero duplicate offers, routes or price changes
+- [x] Focused catalogue, mapping, router, automation and browser-interaction tests pass; typecheck remains at 0 errors and the existing 121-warning baseline
 
 ## Paused until the data is mature
 

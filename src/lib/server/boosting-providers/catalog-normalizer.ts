@@ -12,6 +12,9 @@ import {
 } from './types';
 
 const SUSPICIOUS_RATE_PER_THOUSAND = 100_000;
+// boost_provider_services.rate_per_thousand is DECIMAL(18, 6), so values must stay below 10^12.
+// Keep impossible supplier data reviewable as a quarantined row without letting it abort a sync.
+const MAX_PERSISTABLE_RATE_PER_THOUSAND = 999_999_999_999;
 
 const PLATFORM_PATTERNS: Record<BoostCatalogPlatform, RegExp> = {
 	instagram: /instagram|(^|[^a-z])ig([^a-z]|$)/i,
@@ -154,7 +157,12 @@ export function normalizeBoostProviderService(
 	const category = textValue(raw.category);
 	const description = textValue(raw.description) || null;
 	const providerType = textValue(raw.type) || null;
-	const ratePerThousand = positiveNumber(raw.rate);
+	const parsedRatePerThousand = positiveNumber(raw.rate);
+	const ratePerThousand =
+		parsedRatePerThousand !== null &&
+		parsedRatePerThousand <= MAX_PERSISTABLE_RATE_PER_THOUSAND
+			? parsedRatePerThousand
+			: null;
 	const minQuantity = positiveInteger(raw.min);
 	const maxQuantity = positiveInteger(raw.max);
 	const refillAdvertised = advertisedBoolean(raw.refill);
@@ -167,7 +175,12 @@ export function normalizeBoostProviderService(
 	if (!serviceId) anomalies.push('missing_service_id');
 	if (!name) anomalies.push('missing_name');
 	if (ratePerThousand === null) anomalies.push('invalid_rate');
-	else if (ratePerThousand > SUSPICIOUS_RATE_PER_THOUSAND) anomalies.push('suspicious_rate');
+	if (
+		parsedRatePerThousand !== null &&
+		parsedRatePerThousand > SUSPICIOUS_RATE_PER_THOUSAND
+	) {
+		anomalies.push('suspicious_rate');
+	}
 	if (minQuantity === null) anomalies.push('invalid_minimum');
 	if (maxQuantity === null) anomalies.push('invalid_maximum');
 	if (minQuantity !== null && maxQuantity !== null && minQuantity > maxQuantity) {

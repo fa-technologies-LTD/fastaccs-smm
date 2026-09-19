@@ -62,7 +62,10 @@ describe('boosting mapping endpoint', () => {
 		const input = event('GET');
 		const response = await GET(input);
 		expect(response.status).toBe(200);
-		expect(mocks.load).toHaveBeenCalledWith(categoryId, { search: '' });
+		expect(mocks.load).toHaveBeenCalledWith(categoryId, {
+			search: '',
+			qualityTier: 'value'
+		});
 	});
 
 	it('saves only the internal mapping and reloads its safe view', async () => {
@@ -70,6 +73,6 @@ describe('boosting mapping endpoint', () => {
 		const response = await PUT(event('PUT', categoryId, body));
 		expect(response.status).toBe(200);
 		expect(mocks.save).toHaveBeenCalledWith(categoryId, body, 'admin-1');
-		expect(mocks.load).toHaveBeenCalledWith(categoryId);
+		expect(mocks.load).toHaveBeenCalledWith(categoryId, { qualityTier: 'value' });
 	});
 });

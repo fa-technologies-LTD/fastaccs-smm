@@ -31,6 +31,8 @@ describe('cost-aware production automation schedules', () => {
 	it('syncs the discovery catalogue less often and staggers work inside short wake windows', () => {
 		expect(schedules.get('/api/internal/cron/numbers-catalog-sync')).toBe('2,32 * * * *');
 		expect(AUTOMATION_JOBS['numbers-catalog-sync'].expectedIntervalMinutes).toBe(30);
+		expect(schedules.get('/api/internal/cron/boosting-catalog-sync')).toBe('17 */6 * * *');
+		expect(AUTOMATION_JOBS['boosting-catalog-sync'].expectedIntervalMinutes).toBe(360);
 
 		expect(schedules.get('/api/internal/cron/exact-preview-thumbnails')).toBe('0 * * * *');
 		expect(schedules.get('/api/internal/cron/low-stock-alerts')).toBe('1 * * * *');

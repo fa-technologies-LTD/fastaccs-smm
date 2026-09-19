@@ -1,10 +1,6 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { env } from '$env/dynamic/private';
-import {
-	computeBoostingPrice,
-	getBoostingServiceConfig,
-	getQuantityChips
-} from '$lib/helpers/boosting-service-config';
+import { getBoostingServiceConfig, getQuantityChips } from '$lib/helpers/boosting-service-config';
 import type {
 	BoostMappingCandidate,
 	BoostMappingOfferDraft,
@@ -63,6 +59,7 @@ function offerDto(offer: {
 	qualityTier: string;
 	customerName: string;
 	shortPromise: string;
+	pricePerStepNgn: Prisma.Decimal;
 	minimumMarginPercent: Prisma.Decimal;
 	normalCostTargetNgn: Prisma.Decimal;
 	maximumSupplierCostNgn: Prisma.Decimal;
@@ -77,6 +74,7 @@ function offerDto(offer: {
 		qualityTier: offer.qualityTier,
 		customerName: offer.customerName,
 		shortPromise: offer.shortPromise,
+		pricePerStepNgn: Number(offer.pricePerStepNgn),
 		minimumMarginPercent: Number(offer.minimumMarginPercent),
 		normalCostTargetNgn: Number(offer.normalCostTargetNgn),
 		maximumSupplierCostNgn: Number(offer.maximumSupplierCostNgn),
@@ -117,7 +115,7 @@ function routeDto(route: {
 
 export async function loadBoostMappingWorkspace(
 	categoryId: string,
-	options: { search?: string; database?: PrismaClient } = {}
+	options: { search?: string; qualityTier?: string; database?: PrismaClient } = {}
 ): Promise<BoostMappingWorkspace> {
 	const database = options.database ?? prisma;
 	const category = await database.category.findFirst({
@@ -128,6 +126,9 @@ export async function loadBoostMappingWorkspace(
 
 	const config = getBoostingServiceConfig(category.metadata);
 	const targetType = getRequiredLinkType(config.actionType);
+	const selectedQualityTier = ['value', 'stable', 'premium'].includes(String(options.qualityTier))
+		? (String(options.qualityTier) as 'value' | 'stable' | 'premium')
+		: 'value';
 	const categoryDto: BoostMappingWorkspace['category'] = {
 		id: category.id,
 		name: category.name,
@@ -141,7 +142,13 @@ export async function loadBoostMappingWorkspace(
 
 	try {
 		const offer = await database.boostCustomerOffer.findUnique({
-			where: { categoryId },
+			where: {
+				categoryId_qualityTier_audienceTag: {
+					categoryId,
+					qualityTier: selectedQualityTier,
+					audienceTag: 'general'
+				}
+			},
 			include: {
 				preferredRoute: { select: { providerServiceId: true } },
 				lockedRoute: { select: { providerServiceId: true } },
@@ -231,6 +238,7 @@ export async function loadBoostMappingWorkspace(
 		return {
 			foundationReady: true,
 			migrationMessage: null,
+			selectedQualityTier,
 			category: categoryDto,
 			offer: offer ? offerDto(offer) : null,
 			candidates,
@@ -244,6 +252,7 @@ export async function loadBoostMappingWorkspace(
 			foundationReady: false,
 			migrationMessage:
 				'The Boosting foundation migration must be applied before supplier routes can be mapped.',
+			selectedQualityTier,
 			category: categoryDto,
 			offer: null,
 			candidates: [],
@@ -291,6 +300,10 @@ function parseOffer(value: unknown): BoostMappingOfferDraft {
 		qualityTier,
 		customerName: limitedText(input.customerName, 'Customer name', 2, 80),
 		shortPromise: limitedText(input.shortPromise, 'Short promise', 2, 120),
+		pricePerStepNgn: Math.max(
+			50,
+			Math.round(finiteNumber(input.pricePerStepNgn, 'Customer price', 50, 10_000_000) / 50) * 50
+		),
 		minimumMarginPercent: finiteNumber(input.minimumMarginPercent, 'Minimum margin', 0, 95),
 		normalCostTargetNgn: finiteNumber(
 			input.normalCostTargetNgn,
@@ -371,6 +384,16 @@ function requiredSignalsForOffer(qualityTier: string, refillDays: number | null)
 	];
 }
 
+function expectationChipsForOffer(qualityTier: string, refillDays: number | null): string[] {
+	const qualityLabel =
+		qualityTier === 'premium'
+			? 'Premium quality'
+			: qualityTier === 'stable'
+				? 'Less likely to drop'
+				: 'Affordable';
+	return [qualityLabel, ...(refillDays ? [`${refillDays}-day refill`] : [])];
+}
+
 export async function saveBoostMappingWorkspace(
 	categoryId: string,
 	rawInput: unknown,
@@ -388,11 +411,9 @@ export async function saveBoostMappingWorkspace(
 	});
 	if (!category) throw new BoostMappingError('Boosting offer not found.', 404, 'not_found');
 	const config = getBoostingServiceConfig(category.metadata);
-	if (config.pricePerStep <= 0) {
-		throw new BoostMappingError('Set a customer price before mapping supplier routes.');
-	}
 	const targetType = getRequiredLinkType(config.actionType);
-	const minimumCustomerPrice = computeBoostingPrice(config, config.minQuantity);
+	const minimumCustomerPrice =
+		(config.minQuantity / config.stepQuantity) * offerInput.pricePerStepNgn;
 	if (
 		offerInput.normalCostTargetNgn > offerInput.maximumSupplierCostNgn ||
 		offerInput.maximumSupplierCostNgn >= minimumCustomerPrice
@@ -469,23 +490,27 @@ export async function saveBoostMappingWorkspace(
 
 	await database.$transaction(async (tx) => {
 		const offer = await tx.boostCustomerOffer.upsert({
-			where: { categoryId },
+			where: {
+				categoryId_qualityTier_audienceTag: {
+					categoryId,
+					qualityTier: offerInput.qualityTier,
+					audienceTag: 'general'
+				}
+			},
 			create: {
 				categoryId,
+				audienceTag: 'general',
 				platform: config.platform,
 				outcome: config.actionType,
 				targetType,
 				qualityTier: offerInput.qualityTier,
 				customerName: offerInput.customerName,
 				shortPromise: offerInput.shortPromise,
-				expectationChips: [
-					offerInput.qualityTier === 'value' ? 'Good value' : 'More stable',
-					...(config.refillDays ? [`${config.refillDays}-day refill`] : [])
-				],
+				expectationChips: expectationChipsForOffer(offerInput.qualityTier, config.refillDays),
 				minQuantity: config.minQuantity,
 				stepQuantity: config.stepQuantity,
 				quantityPresets: getQuantityChips(config),
-				pricePerStepNgn: config.pricePerStep,
+				pricePerStepNgn: offerInput.pricePerStepNgn,
 				requiredVerifiedSignals,
 				refillDays: config.refillDays,
 				minimumMarginPercent: offerInput.minimumMarginPercent,
@@ -503,14 +528,11 @@ export async function saveBoostMappingWorkspace(
 				qualityTier: offerInput.qualityTier,
 				customerName: offerInput.customerName,
 				shortPromise: offerInput.shortPromise,
-				expectationChips: [
-					offerInput.qualityTier === 'value' ? 'Good value' : 'More stable',
-					...(config.refillDays ? [`${config.refillDays}-day refill`] : [])
-				],
+				expectationChips: expectationChipsForOffer(offerInput.qualityTier, config.refillDays),
 				minQuantity: config.minQuantity,
 				stepQuantity: config.stepQuantity,
 				quantityPresets: getQuantityChips(config),
-				pricePerStepNgn: config.pricePerStep,
+				pricePerStepNgn: offerInput.pricePerStepNgn,
 				requiredVerifiedSignals,
 				refillDays: config.refillDays,
 				minimumMarginPercent: offerInput.minimumMarginPercent,

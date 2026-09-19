@@ -66,12 +66,12 @@ function candidate(targetUrl = 'https://www.instagram.com/fastaccs') {
 			discountAmount: new Prisma.Decimal(0)
 		},
 		category: {
-			boostCustomerOffer: {
+			boostCustomerOffers: [{
 				id: 'offer-1',
 				platform: 'instagram',
 				outcome: 'followers',
 				targetType: 'profile',
-				audienceTag: null,
+				audienceTag: 'general',
 				qualityTier: 'stable',
 				customerName: 'More stable followers',
 				shortPromise: 'Better tested retention.',
@@ -114,7 +114,7 @@ function candidate(targetUrl = 'https://www.instagram.com/fastaccs') {
 						providerService: providerService('bulk_follows', 1.25, '202')
 					}
 				]
-			}
+			}]
 		}
 	};
 }
@@ -222,7 +222,7 @@ describe('Boosting shadow router', () => {
 
 	it('fails closed if a supplier account stops reporting USD', async () => {
 		const changedCurrency = candidate();
-		for (const route of changedCurrency.category.boostCustomerOffer.routes) {
+		for (const route of changedCurrency.category.boostCustomerOffers[0].routes) {
 			route.providerService.providerState.currency = 'NGN';
 		}
 		mocks.findMany.mockResolvedValue([changedCurrency]);
@@ -234,7 +234,7 @@ describe('Boosting shadow router', () => {
 
 	it('does not choose a route using a stale cached supplier balance', async () => {
 		const staleBalance = candidate();
-		for (const route of staleBalance.category.boostCustomerOffer.routes) {
+		for (const route of staleBalance.category.boostCustomerOffers[0].routes) {
 			route.providerService.providerState.lastBalanceSuccessAt = new Date(
 				'2026-09-12T08:00:00.000Z'
 			);

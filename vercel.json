@@ -49,6 +49,10 @@
 			"schedule": "4 */2 * * *"
 		},
 		{
+			"path": "/api/internal/cron/boosting-catalog-sync",
+			"schedule": "17 */6 * * *"
+		},
+		{
 			"path": "/api/internal/cron/promo-reminder",
 			"schedule": "10 10 * * *"
 		},

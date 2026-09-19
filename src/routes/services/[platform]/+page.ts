@@ -58,7 +58,12 @@ async function fetchPlatformServices(
 					displayOrder: number;
 				}>)
 			: [];
-		const copyByCategoryId = new Map(reviewedOfferCopy.map((offer) => [offer.categoryId, offer]));
+		const copyByCategoryId = new Map<string, (typeof reviewedOfferCopy)[number]>();
+		for (const offer of reviewedOfferCopy) {
+			// The old catalogue card has room for one promise. Keep its first reviewed choice as the
+			// bridge until the replacement flow renders all quality choices beneath the result.
+			if (!copyByCategoryId.has(offer.categoryId)) copyByCategoryId.set(offer.categoryId, offer);
+		}
 		const allServices = (servicesResult.data || []) as PlatformBoostingService[];
 		const services = allServices
 			.filter((service) => getBoostingServiceConfig(service.metadata).platform === platform)

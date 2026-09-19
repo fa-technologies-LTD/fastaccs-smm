@@ -36,7 +36,10 @@ const shadowCandidateInclude = Prisma.validator<Prisma.OrderItemInclude>()({
 	},
 	category: {
 		include: {
-			boostCustomerOffer: {
+			boostCustomerOffers: {
+				where: { status: 'reviewed' },
+				orderBy: [{ displayOrder: 'asc' }, { qualityTier: 'asc' }],
+				take: 1,
 				include: {
 					routes: {
 						where: { state: { not: 'paused' } },
@@ -166,7 +169,9 @@ function toRouteProjectionSummary(projection: BoostRouteProjection) {
 }
 
 function buildSimulationInput(candidate: ShadowCandidate, now: Date) {
-	const offer = candidate.category.boostCustomerOffer;
+	// Legacy manually-created orders do not yet snapshot an offer id, so shadow mode uses the
+	// category's first reviewed choice until the replacement checkout writes the exact offer.
+	const offer = candidate.category.boostCustomerOffers[0];
 	if (
 		!offer ||
 		!isPlatform(offer.platform) ||
@@ -193,7 +198,7 @@ function buildSimulationInput(candidate: ShadowCandidate, now: Date) {
 		minimumMarginPercent: Number(offer.minimumMarginPercent),
 		maximumSupplierCostNgn,
 		requiredVerifiedSignals: offer.requiredVerifiedSignals,
-		audienceTag: offer.audienceTag,
+		audienceTag: offer.audienceTag === 'general' ? null : offer.audienceTag,
 		refillDays: offer.refillDays,
 		routingPolicy:
 			offer.routingPolicy === 'preferred' || offer.routingPolicy === 'locked'
@@ -415,7 +420,7 @@ export async function runBoostingShadowRouter(
 				order: { paymentStatus: 'paid' },
 				category: {
 					categoryType: 'boosting_service',
-					boostCustomerOffer: { is: { status: 'reviewed' } }
+					boostCustomerOffers: { some: { status: 'reviewed' } }
 				}
 			},
 			include: shadowCandidateInclude,

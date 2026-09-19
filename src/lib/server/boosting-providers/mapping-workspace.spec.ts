@@ -12,6 +12,7 @@ function validInput(): BoostMappingSaveInput {
 			qualityTier: 'stable',
 			customerName: 'More stable followers',
 			shortPromise: 'Lower drop risk with a 30-day refill.',
+			pricePerStepNgn: 5000,
 			minimumMarginPercent: 30,
 			normalCostTargetNgn: 1200,
 			maximumSupplierCostNgn: 2500,

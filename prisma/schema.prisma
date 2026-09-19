@@ -104,7 +104,7 @@ model Category {
   children           Category[]          @relation("CategoryHierarchy")
   orderItems         OrderItem[]
   reviews            Review[]
-  boostCustomerOffer BoostCustomerOffer?
+  boostCustomerOffers BoostCustomerOffer[]
 
   @@index([parentId])
   @@index([slug, isActive])
@@ -767,11 +767,11 @@ model BoostProviderService {
 // allowing multiple reviewed supplier routes to sit behind it.
 model BoostCustomerOffer {
   id                      String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  categoryId              String              @unique @map("category_id") @db.Uuid
+  categoryId              String              @map("category_id") @db.Uuid
   platform                String
   outcome                 String
   targetType              String              @map("target_type")
-  audienceTag             String?             @map("audience_tag")
+  audienceTag             String              @default("general") @map("audience_tag")
   qualityTier             String              @map("quality_tier")
   customerName            String              @map("customer_name")
   shortPromise            String              @map("short_promise")
@@ -800,6 +800,7 @@ model BoostCustomerOffer {
   lockedRoute             BoostServiceRoute?  @relation("LockedBoostRoute", fields: [lockedRouteId], references: [id], onDelete: SetNull)
   fulfillments            BoostFulfillment[]
 
+  @@unique([categoryId, qualityTier, audienceTag])
   @@index([platform, outcome, status, displayOrder])
   @@index([routingPolicy])
   @@map("boost_customer_offers")

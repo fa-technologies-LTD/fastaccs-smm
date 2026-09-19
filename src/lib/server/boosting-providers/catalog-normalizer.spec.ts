@@ -69,12 +69,21 @@ describe('boosting provider catalogue normalization', () => {
 			...SMM_RAJA_SERVICE_FIXTURE,
 			rate: '1000000000'
 		});
+		const unpersistable = normalizeBoostProviderService('bulk_follows', {
+			...BULK_FOLLOWS_SERVICE_FIXTURE,
+			rate: '1000000000000000'
+		});
 		expect(malformed.status).toBe('quarantined');
 		expect(malformed.anomalies).toEqual(
 			expect.arrayContaining(['missing_service_id', 'invalid_rate', 'invalid_quantity_range'])
 		);
 		expect(outlier.status).toBe('needs_classification');
 		expect(outlier.anomalies).toContain('suspicious_rate');
+		expect(unpersistable).toMatchObject({
+			ratePerThousand: null,
+			status: 'quarantined',
+			anomalies: expect.arrayContaining(['invalid_rate', 'suspicious_rate'])
+		});
 	});
 
 	it('rejects a non-array services payload', () => {

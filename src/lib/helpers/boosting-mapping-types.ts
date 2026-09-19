@@ -7,6 +7,7 @@ export interface BoostMappingOfferDraft {
 	qualityTier: string;
 	customerName: string;
 	shortPromise: string;
+	pricePerStepNgn: number;
 	minimumMarginPercent: number;
 	normalCostTargetNgn: number;
 	maximumSupplierCostNgn: number;
@@ -51,6 +52,7 @@ export interface BoostMappingCandidate {
 export interface BoostMappingWorkspace {
 	foundationReady: boolean;
 	migrationMessage: string | null;
+	selectedQualityTier: 'value' | 'stable' | 'premium';
 	category: {
 		id: string;
 		name: string;
