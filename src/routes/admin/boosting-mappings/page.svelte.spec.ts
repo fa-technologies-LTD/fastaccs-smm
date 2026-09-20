@@ -27,11 +27,15 @@ const offers = [
 	}
 ] as const;
 
-function workspace(categoryId: string, name: string): BoostMappingWorkspace {
+function workspace(
+	categoryId: string,
+	name: string,
+	qualityTier: 'value' | 'stable' | 'premium' = 'value'
+): BoostMappingWorkspace {
 	return {
 		foundationReady: true,
 		migrationMessage: null,
-		selectedQualityTier: 'value',
+		selectedQualityTier: qualityTier,
 		category: {
 			id: categoryId,
 			name,
@@ -87,5 +91,41 @@ describe('Boosting mapping offer selection', () => {
 		await expect
 			.element(page.getByRole('heading', { name: 'Facebook Page Followers' }))
 			.toBeVisible();
+	});
+
+	it('opens the recommended category and exact tier first', async () => {
+		const fetchMock = vi.fn((input: RequestInfo | URL) => {
+			const url = String(input);
+			return Promise.resolve(
+				Response.json({
+					success: true,
+					data: workspace(offers[1].id, offers[1].name, 'premium')
+				})
+			);
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		render(Page, {
+			data: {
+				offers: [...offers],
+				mappingSummary: { categories: 2, tiers: 3, reviewedTiers: 0, approvedRoutes: 0 },
+				firstReviewQueue: [
+					{
+						categoryId: offers[1].id,
+						categoryName: offers[1].name,
+						qualityTier: 'premium',
+						qualityLabel: 'Premium',
+						platformLabel: 'Facebook',
+						outcomeLabel: 'Followers',
+						routeCount: 4
+					}
+				]
+			}
+		} as never);
+
+		await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
+		expect(String(fetchMock.mock.calls[0]?.[0])).toContain(offers[1].id);
+		expect(String(fetchMock.mock.calls[0]?.[0])).toContain('tier=premium');
+		await expect.element(page.getByText('Premium · 4 routes prepared')).toBeVisible();
 	});
 });

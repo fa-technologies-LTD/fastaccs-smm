@@ -150,13 +150,16 @@
 		}
 	}
 
-	async function chooseCategory(categoryId: string): Promise<void> {
-		if (categoryId === selectedCategoryId && workspace) {
+	async function chooseCategory(
+		categoryId: string,
+		qualityTier: 'value' | 'stable' | 'premium' = 'value'
+	): Promise<void> {
+		if (categoryId === selectedCategoryId && qualityTier === selectedQualityTier && workspace) {
 			await revealWorkspace();
 			return;
 		}
 		selectedCategoryId = categoryId;
-		selectedQualityTier = 'value';
+		selectedQualityTier = qualityTier;
 		workspace = null;
 		offerDraft = null;
 		routeDrafts = [];
@@ -291,7 +294,12 @@
 	}
 
 	onMount(() => {
-		selectedCategoryId = data.offers[0]?.id ?? '';
+		const firstReview = data.firstReviewQueue?.[0];
+		selectedCategoryId = firstReview?.categoryId ?? data.offers[0]?.id ?? '';
+		selectedQualityTier =
+			firstReview?.qualityTier === 'stable' || firstReview?.qualityTier === 'premium'
+				? firstReview.qualityTier
+				: 'value';
 		void loadWorkspace();
 	});
 </script>
@@ -325,6 +333,50 @@
 			Customer preview <ChevronRight size={15} />
 		</a>
 	</header>
+
+	{#if data.firstReviewQueue?.length}
+		<section
+			class="rounded-2xl border p-4 sm:p-5"
+			style="border-color: rgba(16,185,129,.35); background: rgba(16,185,129,.055);"
+		>
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				<div>
+					<p class="text-sm font-bold" style="color: var(--text);">Start with these</p>
+					<p class="mt-0.5 text-xs" style="color: var(--text-muted);">
+						A small first-review queue—approve one choice at a time, not the whole catalogue.
+					</p>
+				</div>
+				<span class="text-[11px]" style="color: var(--text-dim);"
+					>No supplier orders are placed here</span
+				>
+			</div>
+			<div class="mt-3 flex gap-2 overflow-x-auto pb-1">
+				{#each data.firstReviewQueue as item, index (`${item.categoryId}:${item.qualityTier}`)}
+					<button
+						type="button"
+						onclick={() =>
+							chooseCategory(item.categoryId, item.qualityTier as 'value' | 'stable' | 'premium')}
+						class="min-w-[190px] rounded-xl border p-3 text-left"
+						style={selectedCategoryId === item.categoryId &&
+						selectedQualityTier === item.qualityTier
+							? 'border-color: var(--primary); background: rgba(16,185,129,.1);'
+							: 'border-color: var(--border); background: var(--bg-elev-1);'}
+					>
+						<p class="text-[10px] font-bold tracking-wide uppercase" style="color: var(--primary);">
+							{index === 0 ? 'Review first' : `Next ${index + 1}`}
+						</p>
+						<p class="mt-1 text-sm font-semibold" style="color: var(--text);">
+							{item.platformLabel}
+							{item.outcomeLabel}
+						</p>
+						<p class="mt-0.5 text-xs" style="color: var(--text-muted);">
+							{item.qualityLabel} · {item.routeCount} route{item.routeCount === 1 ? '' : 's'} prepared
+						</p>
+					</button>
+				{/each}
+			</div>
+		</section>
+	{/if}
 
 	<div class="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
 		<aside
