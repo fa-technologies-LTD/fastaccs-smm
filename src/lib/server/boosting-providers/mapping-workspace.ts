@@ -479,9 +479,9 @@ export async function saveBoostMappingWorkspace(
 				: null;
 	if (policyServiceId) {
 		const policyRoute = routeByServiceId.get(policyServiceId);
-		if (!policyRoute || policyRoute.state !== 'enabled' || !policyRoute.equivalenceApproved) {
+		if (!policyRoute || policyRoute.state === 'paused' || !policyRoute.equivalenceApproved) {
 			throw new BoostMappingError(
-				'Your preferred or locked service must be enabled and promise-checked.'
+				'Your preferred or locked service must be active for shadow review and promise-checked.'
 			);
 		}
 	} else if (offerInput.routingPolicy !== 'automatic') {

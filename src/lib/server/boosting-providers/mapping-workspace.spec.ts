@@ -142,6 +142,26 @@ describe('boosting mapping workspace persistence', () => {
 		);
 	});
 
+	it('allows a known service to be locked for shadow simulation without pilot-enabling it', async () => {
+		const db = database();
+		const input = validInput();
+		input.offer.routingPolicy = 'locked';
+		input.offer.lockedProviderServiceId = serviceId;
+		input.routes[0].state = 'shadow';
+
+		await saveBoostMappingWorkspace(categoryId, input, 'admin-1', { database: db.client });
+		expect(db.routeUpsert).toHaveBeenCalledWith(
+			expect.objectContaining({
+				create: expect.objectContaining({ state: 'shadow', equivalenceApproved: true })
+			})
+		);
+		expect(db.offerUpdate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({ lockedRouteId: 'route-1' })
+			})
+		);
+	});
+
 	it('requires a quantity cap before a checked route can be pilot enabled', async () => {
 		const input = validInput();
 		input.routes[0].maximumPilotQuantity = null;

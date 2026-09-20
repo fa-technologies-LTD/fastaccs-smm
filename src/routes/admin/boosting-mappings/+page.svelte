@@ -68,7 +68,7 @@
 				const marginPercent = minimumCustomerPrice > 0 ? (margin / minimumCustomerPrice) * 100 : 0;
 				const eligible =
 					route.equivalenceApproved &&
-					route.state === 'enabled' &&
+					route.state !== 'paused' &&
 					currentWorkspace.category.minQuantity >= service.minQuantity &&
 					currentWorkspace.category.minQuantity <= service.maxQuantity &&
 					supplierCost <= currentOffer.maximumSupplierCostNgn &&
@@ -739,7 +739,7 @@
 												checked={(offerDraft.routingPolicy === 'preferred'
 													? offerDraft.preferredProviderServiceId
 													: offerDraft.lockedProviderServiceId) === candidate.id}
-												disabled={!route.equivalenceApproved || route.state !== 'enabled'}
+												disabled={!route.equivalenceApproved || route.state === 'paused'}
 												onchange={() => choosePolicyService(candidate.id)}
 											/>
 											{offerDraft.routingPolicy === 'locked'

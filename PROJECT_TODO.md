@@ -115,6 +115,7 @@ Last updated: 20 September 2026
 - [x] Suggest conservative tier-specific prices rounded to ₦50, repair only untouched zero-price generated drafts, and preserve every owner-edited price
 - [x] Let owner Preferred/Locked overrides outrank automatic recommendations
 - [x] Add a six-item first-review queue that opens the exact recommended category and tier, with Premium X followers deliberately first
+- [x] Allow Preferred/Locked choices to stay shadow-only during review; live routing still rejects every route until it is explicitly pilot-enabled
 - [ ] Review and approve the first small set of exact mappings, including the known premium X-followers service
 - [x] Create one persistent Neon development branch and store its pooled/direct URLs locally for future migrations and transaction tests
 - [x] Complete the available authenticated no-order service, balance, single-status, batch-status and error-shape checks
