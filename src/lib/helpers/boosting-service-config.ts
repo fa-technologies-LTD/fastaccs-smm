@@ -9,7 +9,8 @@ export const BOOSTING_PRICE_PER_STEP_KEY = 'boosting_price_per_step';
 export const BOOSTING_REFILL_AVAILABLE_KEY = 'boosting_refill_available';
 export const BOOSTING_REFILL_DAYS_KEY = 'boosting_refill_days';
 
-export const BOOSTING_TURNAROUND_MESSAGE = 'Most orders start within a few hours.';
+export const BOOSTING_TURNAROUND_MESSAGE =
+	'Delivery timing varies by service, quantity, and platform conditions.';
 
 export const BOOSTING_PLATFORMS: BoostingPlatform[] = [
 	'instagram',

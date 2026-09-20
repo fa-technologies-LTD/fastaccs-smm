@@ -38,11 +38,14 @@
 	<p class="mb-6 text-base leading-relaxed" style="color: var(--text-muted);">
 		Most articles on this topic either say "never do it" with no detail, or "totally safe" with no
 		evidence. Neither is honest. The real answer requires actually reading what platforms say they
-		enforce against — and it turns out their stated policies are more specific, and more
-		narrowly targeted, than the blanket warnings suggest.
+		enforce against — and it turns out their stated policies are more specific, and more narrowly
+		targeted, than the blanket warnings suggest.
 	</p>
 
-	<h2 class="mb-4 mt-10 text-2xl font-bold" style="color: var(--text); font-family: var(--font-head);">
+	<h2
+		class="mt-10 mb-4 text-2xl font-bold"
+		style="color: var(--text); font-family: var(--font-head);"
+	>
 		What the policies actually say
 	</h2>
 	<p class="mb-4 leading-relaxed" style="color: var(--text-muted);">
@@ -58,41 +61,60 @@
 	</p>
 	<p class="mb-6 leading-relaxed" style="color: var(--text-muted);">
 		Notice the consistent pattern across all three: the language targets <strong
-			style="color: var(--text);">automation, bots, and deception about the source of engagement</strong
-		> — not the simple act of paying for marketing exposure. This distinction matters more than
-		almost anything else in this conversation.
+			style="color: var(--text);"
+			>automation, bots, and deception about the source of engagement</strong
+		> — not the simple act of paying for marketing exposure. This distinction matters more than almost
+		anything else in this conversation.
 	</p>
 
-	<h2 class="mb-4 mt-10 text-2xl font-bold" style="color: var(--text); font-family: var(--font-head);">
+	<h2
+		class="mt-10 mb-4 text-2xl font-bold"
+		style="color: var(--text); font-family: var(--font-head);"
+	>
 		Why enforcement targets behavior patterns, not transactions
 	</h2>
 	<p class="mb-4 leading-relaxed" style="color: var(--text-muted);">
-		Platforms don't have visibility into payment records between a buyer and a third-party service
-		— what they detect is the resulting behavior pattern on the account itself. Detection systems
-		flag things like: engagement that spikes with no matching watch-time or comment activity, login
+		Platforms don't have visibility into payment records between a buyer and a third-party service —
+		what they detect is the resulting behavior pattern on the account itself. Detection systems flag
+		things like: engagement that spikes with no matching watch-time or comment activity, login
 		activity from a large number of unrelated devices/IPs in a short window, follower growth with
-		zero corresponding content interaction, or accounts created in bulk with near-identical
-		signup patterns. These are the same red flags that would show up on an account being run by an
+		zero corresponding content interaction, or accounts created in bulk with near-identical signup
+		patterns. These are the same red flags that would show up on an account being run by an
 		automated bot network — which is the actual target of the policy language above.
 	</p>
 	<p class="mb-6 leading-relaxed" style="color: var(--text-muted);">
 		This is also why account-level risk varies enormously by <em>how</em> a service delivers, not
 		just <em>that</em> a service was used. A provider whose delivery pattern looks organic — gradual
-		pacing, plausible geographic distribution, accounts with real activity history — carries a
-		fundamentally different risk profile than one that dumps thousands of followers from clearly
-		bot-like accounts in a single burst.
+		pacing, plausible geographic distribution, accounts with real activity history — carries a fundamentally
+		different risk profile than one that dumps thousands of followers from clearly bot-like accounts
+		in a single burst.
 	</p>
 
-	<h2 class="mb-4 mt-10 text-2xl font-bold" style="color: var(--text); font-family: var(--font-head);">
+	<h2
+		class="mt-10 mb-4 text-2xl font-bold"
+		style="color: var(--text); font-family: var(--font-head);"
+	>
 		A practical risk framework
 	</h2>
-	<div class="mb-6 overflow-x-auto rounded-xl" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
+	<div
+		class="mb-6 overflow-x-auto rounded-xl"
+		style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+	>
 		<table class="w-full text-sm">
 			<thead>
 				<tr style="border-bottom: 1px solid var(--border);">
-					<th class="p-4 text-left font-semibold" style="color: var(--text); font-family: var(--font-head);">Factor</th>
-					<th class="p-4 text-left font-semibold" style="color: var(--text); font-family: var(--font-head);">Lower risk</th>
-					<th class="p-4 text-left font-semibold" style="color: var(--text); font-family: var(--font-head);">Higher risk</th>
+					<th
+						class="p-4 text-left font-semibold"
+						style="color: var(--text); font-family: var(--font-head);">Factor</th
+					>
+					<th
+						class="p-4 text-left font-semibold"
+						style="color: var(--text); font-family: var(--font-head);">Lower risk</th
+					>
+					<th
+						class="p-4 text-left font-semibold"
+						style="color: var(--text); font-family: var(--font-head);">Higher risk</th
+					>
 				</tr>
 			</thead>
 			<tbody style="color: var(--text-muted);">
@@ -120,10 +142,10 @@
 		</table>
 	</div>
 	<p class="mb-6 leading-relaxed" style="color: var(--text-muted);">
-		A service that never asks for your password, paces delivery instead of dumping it instantly,
-		and scales engagement proportionate to your existing audience size is operating in the
-		lower-risk pattern described above — and is the kind of service worth choosing if you decide to
-		use one at all.
+		A service that never asks for your password, paces delivery instead of dumping it instantly, and
+		scales engagement proportionate to your existing audience size is operating in the lower-risk
+		pattern described above — and is the kind of service worth choosing if you decide to use one at
+		all.
 	</p>
 
 	<BlogCta
@@ -135,12 +157,21 @@
 		secondaryLabel="Full delivery process"
 	/>
 
-	<h2 class="mb-4 mt-10 text-2xl font-bold" style="color: var(--text); font-family: var(--font-head);">
+	<h2
+		class="mt-10 mb-4 text-2xl font-bold"
+		style="color: var(--text); font-family: var(--font-head);"
+	>
 		Frequently Asked Questions
 	</h2>
 	<div class="mb-6 space-y-3">
-		<details class="rounded-lg p-5" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
-			<summary class="flex cursor-pointer items-center justify-between font-semibold" style="color: var(--text); font-family: var(--font-head);">
+		<details
+			class="rounded-lg p-5"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+		>
+			<summary
+				class="flex cursor-pointer items-center justify-between font-semibold"
+				style="color: var(--text); font-family: var(--font-head);"
+			>
 				Can I get permanently banned for using a boosting service?
 				<span class="ml-4 shrink-0" style="color: var(--text-dim);">+</span>
 			</summary>
@@ -151,8 +182,14 @@
 				detection for automated networks, not individual transactions.
 			</p>
 		</details>
-		<details class="rounded-lg p-5" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
-			<summary class="flex cursor-pointer items-center justify-between font-semibold" style="color: var(--text); font-family: var(--font-head);">
+		<details
+			class="rounded-lg p-5"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+		>
+			<summary
+				class="flex cursor-pointer items-center justify-between font-semibold"
+				style="color: var(--text); font-family: var(--font-head);"
+			>
 				Does handing over my password increase risk?
 				<span class="ml-4 shrink-0" style="color: var(--text-dim);">+</span>
 			</summary>
@@ -163,8 +200,14 @@
 				flag regardless of platform.
 			</p>
 		</details>
-		<details class="rounded-lg p-5" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
-			<summary class="flex cursor-pointer items-center justify-between font-semibold" style="color: var(--text); font-family: var(--font-head);">
+		<details
+			class="rounded-lg p-5"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+		>
+			<summary
+				class="flex cursor-pointer items-center justify-between font-semibold"
+				style="color: var(--text); font-family: var(--font-head);"
+			>
 				Is it different across Instagram, TikTok, and YouTube?
 				<span class="ml-4 shrink-0" style="color: var(--text-dim);">+</span>
 			</summary>
@@ -185,7 +228,7 @@
 
 	<BlogCta
 		heading="Ready to boost the smart way?"
-		body="FastAccs delivers real, paced engagement across Instagram, TikTok, Facebook and more — no passwords, no shortcuts, instant after payment."
+		body="Choose a clearly described option across Instagram, TikTok, Facebook and more — no password required, with delivery tracked from your order page."
 		primaryHref="/services"
 		primaryLabel="Browse boosting services"
 		secondaryHref="/blog/organic-vs-bought-engagement-what-actually-moves-the-algorithm"

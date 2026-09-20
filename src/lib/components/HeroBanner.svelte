@@ -15,8 +15,8 @@
 			class="mx-auto mt-4 max-w-2xl text-base sm:text-lg"
 			style="font-family: var(--font-body); color: rgba(255,255,255,0.82);"
 		>
-			Social media accounts, instant verification numbers, and real engagement — full login access,
-			instant delivery. Buy one, or in bulk for resale.
+			Ready-to-use social accounts, verification numbers for popular apps, and simple ways to grow
+			followers, likes, and views — all in one place.
 		</p>
 
 		<div class="mx-auto mt-7 grid max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">

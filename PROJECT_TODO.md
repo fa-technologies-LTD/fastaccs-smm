@@ -117,7 +117,8 @@ Last updated: 19 September 2026
 - [ ] Review and approve the first small set of exact mappings, including the known premium X-followers service
 - [x] Create one persistent Neon development branch and store its pooled/direct URLs locally for future migrations and transaction tests
 - [x] Complete the available authenticated no-order service, balance, single-status, batch-status and error-shape checks
-- [ ] Before live automation, audit both suppliers' current terms, FAQs and how-to guidance; align Fast Accounts' Boosting FAQs, policies and expectation copy for owner review
+- [x] Audit both suppliers' current terms, FAQs and how-to guidance; align Fast Accounts' Boosting FAQs, policies and expectation copy into one conservative draft
+- [ ] Owner-review the final Boosting help, Terms, Refund Policy, checkout, order-status and confirmation-email wording before live automation
 - [ ] Map the first reviewed offers, then run and compare shadow decisions against human-fulfilled orders
 - [ ] Make healthy Boosting operations hands-off: scheduled catalogue/balance refresh, automatic safe routing, backoff status checks, customer updates, and an exceptions-only admin queue
 - [ ] Connect the replacement customer flow to cart, checkout, order history, notifications and audited manual recovery
@@ -134,6 +135,16 @@ Last updated: 19 September 2026
 - [x] Generated the core review matrix without publishing a category, offer or supplier route
 - [x] Re-ran draft generation twice with zero duplicate offers, routes or price changes
 - [x] Focused catalogue, mapping, router, automation and browser-interaction tests pass; typecheck remains at 0 errors and the existing 121-warning baseline
+
+## Boosting customer-policy audit — 19 September 2026
+
+- [x] Rechecked SMM Raja and BulkFollows public terms, API guidance, service guidance and refill/refund material
+- [x] Removed the unsupported “starts within a few hours” promise from the shared service, checkout, order-status and confirmation-email paths
+- [x] Clarified public-link, variable-timing, service-specific refill and non-overlapping-order expectations in Help and How It Works
+- [x] Removed unproven “real” and “instant” Boosting claims from live metadata, the post-purchase prompt and Boosting article calls-to-action
+- [x] Added concise Boosting-specific Terms and Refund Policy wording without exposing supplier names or internal routing
+- [x] Complete unit suite passed: 752 tests across 131 files; typecheck passed with 0 errors and the existing 121-warning baseline; production build passed
+- [ ] Receive the owner's word-for-word approval before enabling paid supplier submission
 
 ## Paused until the data is mature
 

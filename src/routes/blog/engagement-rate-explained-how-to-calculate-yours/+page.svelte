@@ -42,44 +42,64 @@
 		audience from a padded one.
 	</p>
 
-	<h2 class="mb-4 mt-10 text-2xl font-bold" style="color: var(--text); font-family: var(--font-head);">
+	<h2
+		class="mt-10 mb-4 text-2xl font-bold"
+		style="color: var(--text); font-family: var(--font-head);"
+	>
 		The standard formula
 	</h2>
 	<p class="mb-4 leading-relaxed" style="color: var(--text-muted);">
 		The most common, platform-agnostic version is:
 	</p>
-	<div class="mb-6 rounded-xl p-5 text-center" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
+	<div
+		class="mb-6 rounded-xl p-5 text-center"
+		style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+	>
 		<p class="text-lg font-bold" style="color: var(--text); font-family: var(--font-head);">
 			Engagement Rate = (Likes + Comments + Saves + Shares) ÷ Followers × 100
 		</p>
 	</div>
 	<p class="mb-6 leading-relaxed" style="color: var(--text-muted);">
-		Some calculators use <em>impressions</em> or <em>reach</em> instead of follower count in the
-		denominator — this is called "engagement rate by reach" and is generally considered more
-		accurate, since it measures performance against people who actually saw the content rather than
-		your total audience size. If you have access to impressions data (Instagram Insights, TikTok
-		Analytics, YouTube Studio all provide it), use reach-based engagement rate when comparing
-		individual post performance; use follower-based engagement rate when getting a quick
-		audience-health snapshot.
+		Some calculators use <em>impressions</em> or <em>reach</em> instead of follower count in the denominator
+		— this is called "engagement rate by reach" and is generally considered more accurate, since it measures
+		performance against people who actually saw the content rather than your total audience size. If
+		you have access to impressions data (Instagram Insights, TikTok Analytics, YouTube Studio all provide
+		it), use reach-based engagement rate when comparing individual post performance; use follower-based
+		engagement rate when getting a quick audience-health snapshot.
 	</p>
 
-	<h2 class="mb-4 mt-10 text-2xl font-bold" style="color: var(--text); font-family: var(--font-head);">
+	<h2
+		class="mt-10 mb-4 text-2xl font-bold"
+		style="color: var(--text); font-family: var(--font-head);"
+	>
 		What counts as "good," by account size
 	</h2>
 	<p class="mb-4 leading-relaxed" style="color: var(--text-muted);">
 		Engagement rate benchmarks aren't fixed numbers — they scale inversely with audience size. This
 		is consistent across every major independent social analytics study (HypeAuditor, Social
 		Insider, and similar industry trackers have published broadly similar bands over the years):
-		smaller accounts post to a more engaged, self-selected audience, while larger accounts
-		naturally see engagement rate compress as their audience grows more passive.
+		smaller accounts post to a more engaged, self-selected audience, while larger accounts naturally
+		see engagement rate compress as their audience grows more passive.
 	</p>
-	<div class="mb-6 overflow-x-auto rounded-xl" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
+	<div
+		class="mb-6 overflow-x-auto rounded-xl"
+		style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+	>
 		<table class="w-full text-sm">
 			<thead>
 				<tr style="border-bottom: 1px solid var(--border);">
-					<th class="p-4 text-left font-semibold" style="color: var(--text); font-family: var(--font-head);">Account size</th>
-					<th class="p-4 text-left font-semibold" style="color: var(--text); font-family: var(--font-head);">Healthy range</th>
-					<th class="p-4 text-left font-semibold" style="color: var(--text); font-family: var(--font-head);">Below this is a flag</th>
+					<th
+						class="p-4 text-left font-semibold"
+						style="color: var(--text); font-family: var(--font-head);">Account size</th
+					>
+					<th
+						class="p-4 text-left font-semibold"
+						style="color: var(--text); font-family: var(--font-head);">Healthy range</th
+					>
+					<th
+						class="p-4 text-left font-semibold"
+						style="color: var(--text); font-family: var(--font-head);">Below this is a flag</th
+					>
 				</tr>
 			</thead>
 			<tbody style="color: var(--text-muted);">
@@ -112,7 +132,10 @@
 		entertainment or news accounts often run below them even when perfectly healthy.
 	</p>
 
-	<h2 class="mb-4 mt-10 text-2xl font-bold" style="color: var(--text); font-family: var(--font-head);">
+	<h2
+		class="mt-10 mb-4 text-2xl font-bold"
+		style="color: var(--text); font-family: var(--font-head);"
+	>
 		How to calculate it in under 5 minutes
 	</h2>
 	<ol class="mb-6 space-y-3 pl-5" style="color: var(--text-muted);">
@@ -124,15 +147,20 @@
 			For each post, add likes + comments + saves + shares (use whichever your platform's analytics
 			actually exposes).
 		</li>
-		<li class="list-decimal leading-relaxed">Divide that total by your follower count, then multiply by 100.</li>
+		<li class="list-decimal leading-relaxed">
+			Divide that total by your follower count, then multiply by 100.
+		</li>
 		<li class="list-decimal leading-relaxed">Average the per-post rates across all 10–12 posts.</li>
 	</ol>
 	<p class="mb-6 leading-relaxed" style="color: var(--text-muted);">
-		Averaging across multiple posts instead of using a single snapshot is the part most people
-		skip — and it's the part that actually makes the number meaningful.
+		Averaging across multiple posts instead of using a single snapshot is the part most people skip
+		— and it's the part that actually makes the number meaningful.
 	</p>
 
-	<h2 class="mb-4 mt-10 text-2xl font-bold" style="color: var(--text); font-family: var(--font-head);">
+	<h2
+		class="mt-10 mb-4 text-2xl font-bold"
+		style="color: var(--text); font-family: var(--font-head);"
+	>
 		Why this number matters more than follower count
 	</h2>
 	<p class="mb-4 leading-relaxed" style="color: var(--text-muted);">
@@ -145,31 +173,46 @@
 
 	<BlogCta
 		heading="Already have a healthy engagement rate? Give it more reach."
-		body="A FastAccs boost adds real, paced engagement on top of content that's already performing — extending its reach without diluting your rate. No password required."
+		body="Choose a clearly priced, paced delivery option for content that's already performing. No password required, and you can track the order from your dashboard."
 		primaryHref="/services"
 		primaryLabel="See boosting services"
 		secondaryHref="/blog/5-proven-ways-to-grow-organic-engagement-before-you-boost"
 		secondaryLabel="5 ways to grow organically first"
 	/>
 
-	<h2 class="mb-4 mt-10 text-2xl font-bold" style="color: var(--text); font-family: var(--font-head);">
+	<h2
+		class="mt-10 mb-4 text-2xl font-bold"
+		style="color: var(--text); font-family: var(--font-head);"
+	>
 		Frequently Asked Questions
 	</h2>
 	<div class="mb-6 space-y-3">
-		<details class="rounded-lg p-5" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
-			<summary class="flex cursor-pointer items-center justify-between font-semibold" style="color: var(--text); font-family: var(--font-head);">
+		<details
+			class="rounded-lg p-5"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+		>
+			<summary
+				class="flex cursor-pointer items-center justify-between font-semibold"
+				style="color: var(--text); font-family: var(--font-head);"
+			>
 				Should I use follower-based or reach-based engagement rate?
 				<span class="ml-4 shrink-0" style="color: var(--text-dim);">+</span>
 			</summary>
 			<p class="mt-4 text-sm leading-relaxed" style="color: var(--text-muted);">
-				Use reach-based when you have impressions data and want to judge individual post
-				performance accurately. Use follower-based when you want a quick, comparable snapshot of
-				overall audience health — it's also the version most third-party tools and brand outreach
-				use by default.
+				Use reach-based when you have impressions data and want to judge individual post performance
+				accurately. Use follower-based when you want a quick, comparable snapshot of overall
+				audience health — it's also the version most third-party tools and brand outreach use by
+				default.
 			</p>
 		</details>
-		<details class="rounded-lg p-5" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
-			<summary class="flex cursor-pointer items-center justify-between font-semibold" style="color: var(--text); font-family: var(--font-head);">
+		<details
+			class="rounded-lg p-5"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+		>
+			<summary
+				class="flex cursor-pointer items-center justify-between font-semibold"
+				style="color: var(--text); font-family: var(--font-head);"
+			>
 				Does boosting engagement lower my engagement rate?
 				<span class="ml-4 shrink-0" style="color: var(--text-dim);">+</span>
 			</summary>
@@ -181,23 +224,29 @@
 				keep the rate healthier.
 			</p>
 		</details>
-		<details class="rounded-lg p-5" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
-			<summary class="flex cursor-pointer items-center justify-between font-semibold" style="color: var(--text); font-family: var(--font-head);">
+		<details
+			class="rounded-lg p-5"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+		>
+			<summary
+				class="flex cursor-pointer items-center justify-between font-semibold"
+				style="color: var(--text); font-family: var(--font-head);"
+			>
 				What's a red flag when evaluating someone else's account?
 				<span class="ml-4 shrink-0" style="color: var(--text-dim);">+</span>
 			</summary>
 			<p class="mt-4 text-sm leading-relaxed" style="color: var(--text-muted);">
 				A follower count well above the healthy engagement-rate range for that size, combined with
 				one or two outlier viral posts dragging the average up artificially, is the classic sign of
-				a padded or partially-inactive audience. Always check the last 10+ posts, not just the
-				best one.
+				a padded or partially-inactive audience. Always check the last 10+ posts, not just the best
+				one.
 			</p>
 		</details>
 	</div>
 
 	<BlogCta
 		heading="Ready to extend your reach?"
-		body="FastAccs delivers real followers, likes, and views across Instagram, TikTok, Facebook, and more — fast, with no password required."
+		body="Choose followers, likes, or views across Instagram, TikTok, Facebook, and more — with clear pricing, no password required, and tracked delivery."
 		primaryHref="/services"
 		primaryLabel="Browse boosting services"
 		secondaryHref="/blog/is-buying-followers-safe-what-platform-policies-actually-say"

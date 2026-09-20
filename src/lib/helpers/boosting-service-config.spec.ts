@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	BOOSTING_TURNAROUND_MESSAGE,
 	computeBoostingPrice,
 	getBoostingActionTypesForPlatform,
 	getBoostingServiceConfig,
@@ -16,6 +17,13 @@ const baseConfig = getBoostingServiceConfig({
 });
 
 describe('boosting service config', () => {
+	it('does not turn variable supplier timing into a fixed customer promise', () => {
+		expect(BOOSTING_TURNAROUND_MESSAGE).toBe(
+			'Delivery timing varies by service, quantity, and platform conditions.'
+		);
+		expect(BOOSTING_TURNAROUND_MESSAGE).not.toMatch(/within|guaranteed|fixed/i);
+	});
+
 	it('accepts quantities at the minimum and at each step beyond it', () => {
 		expect(isValidBoostingQuantity(baseConfig, 500)).toBe(true);
 		expect(isValidBoostingQuantity(baseConfig, 1000)).toBe(true);

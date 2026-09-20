@@ -85,7 +85,7 @@
 	<title>Create account - FastAccs</title>
 	<meta
 		name="description"
-		content="Create a free FastAccs account to buy social media accounts and boosting services with secure checkout and instant delivery."
+		content="Create a free FastAccs account to buy social media accounts and boosting services with secure checkout, clear order tracking, and buyer support."
 	/>
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>

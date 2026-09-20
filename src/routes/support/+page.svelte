@@ -1,14 +1,7 @@
 <script lang="ts">
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import {
-		Mail,
-		MessageCircle,
-		Clock,
-		HelpCircle,
-		ExternalLink,
-		ArrowRight
-	} from '$lib/icons';
+	import { Mail, MessageCircle, Clock, HelpCircle, ExternalLink, ArrowRight } from '$lib/icons';
 
 	const faqs: Array<{ id?: string; question: string; answer: string }> = [
 		{
@@ -28,8 +21,7 @@
 		},
 		{
 			question: 'What if my account has login issues?',
-			answer:
-				'Contact support immediately via WhatsApp or email so we can help quickly.'
+			answer: 'Contact support immediately via WhatsApp or email so we can help quickly.'
 		},
 		{
 			question: 'When should I report login issues?',
@@ -64,22 +56,27 @@
 		{
 			question: 'How long do boosting services (followers, likes, views) take?',
 			answer:
-				'Most orders start within a few hours of payment confirmation. You can track progress anytime from your order page.'
+				'Start and completion times vary by service, quantity, and platform conditions. Your order page shows the latest status, so you never need to guess whether delivery is still in progress.'
 		},
 		{
 			question: 'What does "in progress" mean for a boosting order?',
 			answer:
-				'It means we have started delivering to your link and the count is being topped up gradually. This is normal and helps keep delivery looking natural.'
+				'It means your order is safely being handled. It may be waiting to start, actively delivering, or going through an ordinary refill or recovery check. Your original order remains tracked throughout.'
 		},
 		{
 			question: 'Do boosting services come with a refill or guarantee?',
 			answer:
-				'Some services include a refill guarantee window, shown on the service card before you pay. If you experience drop-off within that window, contact support and we will review a refill.'
+				'Some choices include a specific refill window, shown before you pay. If the delivered amount drops within that window, contact support so we can check whether it qualifies for the included refill. Choices without a refill window may experience normal drop-off.'
 		},
 		{
 			question: 'What link should I submit for a boosting order?',
 			answer:
-				'Submit the public profile or post link for the account you want boosted (e.g. your profile URL or a specific post). No password or login access is ever needed.'
+				'Submit the exact public profile, post, video, song, or channel link requested by the service and keep it public until delivery finishes. No password or login access is ever needed.'
+		},
+		{
+			question: 'Can I run another boosting service on the same link?',
+			answer:
+				'Wait for the active order on that link and result to finish first. Overlapping deliveries make progress and drop-off difficult to measure, so we may safely queue the newer order instead of running both at once.'
 		},
 		{
 			id: 'numbers',
@@ -218,9 +215,7 @@
 					<p class="mb-4 text-sm" style="color: var(--text-muted);">
 						Fastest way to reach us for account and order issues
 					</p>
-					<p class="font-medium" style="color: var(--brand-green);">
-						Chat on WhatsApp
-					</p>
+					<p class="font-medium" style="color: var(--brand-green);">Chat on WhatsApp</p>
 					<p class="mt-2 text-xs" style="color: var(--text-muted);">
 						<Clock class="mr-1 inline h-3 w-3" />
 						Quick-response support channel
@@ -248,9 +243,7 @@
 					<p class="mb-4 text-sm" style="color: var(--text-muted);">
 						Best for detailed reports and follow-ups
 					</p>
-					<p class="font-medium" style="color: var(--brand-blue);">
-						Support Email
-					</p>
+					<p class="font-medium" style="color: var(--brand-blue);">Support Email</p>
 					<p class="mt-2 text-xs" style="color: var(--text-muted);">
 						<Clock class="mr-1 inline h-3 w-3" />
 						Response within 24 hours
@@ -278,9 +271,7 @@
 					<p class="mb-4 text-sm" style="color: var(--text-muted);">
 						Check answers for payments, login, and order flow
 					</p>
-					<p class="font-medium" style="color: var(--brand-purple);">
-						View FAQs
-					</p>
+					<p class="font-medium" style="color: var(--brand-purple);">View FAQs</p>
 					<p class="mt-2 text-xs" style="color: var(--text-muted);">
 						<Clock class="mr-1 inline h-3 w-3" />
 						Always available
@@ -307,8 +298,10 @@
 			</p>
 			<p class="mb-8 text-center text-sm" style="color: var(--text-muted);">
 				Need post-delivery usage tips?
-				<a href="/support#after-purchase-guide" class="font-medium hover:underline" style="color: var(--link);"
-					>Jump to After Purchase Guide</a
+				<a
+					href="/support#after-purchase-guide"
+					class="font-medium hover:underline"
+					style="color: var(--link);">Jump to After Purchase Guide</a
 				>
 			</p>
 
@@ -369,8 +362,8 @@
 				After Purchase Guide
 			</h2>
 			<p class="mx-auto mb-10 max-w-3xl text-center" style="color: var(--text-muted);">
-				These quick tips help keep account access smooth after delivery. If your delivery notes include
-				account-specific instructions, follow those first.
+				These quick tips help keep account access smooth after delivery. If your delivery notes
+				include account-specific instructions, follow those first.
 			</p>
 
 			<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -477,7 +470,6 @@
 			</div>
 		</div>
 	</section>
-
 </main>
 
 <Footer />
@@ -492,7 +484,10 @@
 	.support-contact-card {
 		position: relative;
 		display: block;
-		transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+		transition:
+			transform 0.2s ease,
+			border-color 0.2s ease,
+			box-shadow 0.2s ease;
 	}
 
 	.support-contact-card:hover {
@@ -507,7 +502,9 @@
 		bottom: 1rem;
 		color: var(--text-dim);
 		opacity: 0;
-		transition: opacity 0.2s ease, transform 0.2s ease;
+		transition:
+			opacity 0.2s ease,
+			transform 0.2s ease;
 	}
 
 	.support-contact-card:hover .support-hover-arrow {

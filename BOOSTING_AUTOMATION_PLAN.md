@@ -758,14 +758,25 @@ This profile comes from the owner's customer knowledge, support issues and the e
 
 ## Customer policy and expectation review
 
-Before live automation, review both providers' current terms, FAQs, service guidance, refill/refund rules and practical how-to material. Distil the operational realities that affect customers—without copying supplier wording or exposing supplier identities—then align Fast Accounts' Boosting:
+The public supplier-policy review was completed on 19 September 2026. Both providers' current terms, service guidance and practical API/refill material support the same conservative customer rules:
+
+- delivery times are estimates and vary by service, quantity and platform conditions;
+- the customer must supply the exact requested public link and keep it accessible during delivery;
+- refill is service-specific, applies only when explicitly offered and must be assessed within the stated window;
+- overlapping services for the same target and result make delivery and drop-off unsafe to measure, so Fast Accounts should queue the later order;
+- an undelivered or explicitly cancelled portion can be reconciled, but a completed portion and ordinary drop on a no-refill option do not create a blanket refund promise; and
+- supplier labels such as “premium,” “real,” “non-drop” or a stated speed remain advertising claims until Fast Accounts' own canary outcomes support them.
+
+Those findings are now reflected in Fast Accounts' Boosting help, how-it-works, service-card, checkout, order-status, confirmation-email, marketing CTA, Terms and Refund Policy copy. The wording stays supplier-agnostic and deliberately avoids raw panel rules. The owner still reviews the resulting customer-facing words before live automated fulfilment.
+
+Before live automation, keep these areas aligned whenever a supplier policy or approved offer promise changes:
 
 - FAQs and help centre;
 - terms, refund/refill and acceptable-use wording;
 - service-card promises and **What to expect** disclosures;
 - checkout reminders, order statuses, link-fix messages and support replies.
 
-Keep the result short, accurate and in the Fast Accounts voice. The owner reviews every customer-facing word before release. Supplier wording is evidence to check, not copy to publish, and our promise must never be broader than the routes approved to fulfil it.
+Keep the result short, accurate and in the Fast Accounts voice. Supplier wording is evidence to check, not copy to publish, and our promise must never be broader than the routes approved to fulfil it.
 
 ## Information still required from the providers
 

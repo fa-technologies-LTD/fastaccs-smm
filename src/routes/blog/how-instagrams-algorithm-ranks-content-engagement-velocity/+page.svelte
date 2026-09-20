@@ -36,14 +36,16 @@
 	slug="how-instagrams-algorithm-ranks-content-engagement-velocity"
 >
 	<p class="mb-6 text-base leading-relaxed" style="color: var(--text-muted);">
-		Instagram has been unusually transparent about how its ranking systems work, publishing
-		detailed breakdowns through its "How Instagram Feed Works" and "How Instagram Reels
-		Recommendations Work" resources for creators.<sup>1</sup> Once you understand the actual
-		mechanics, a lot of "algorithm advice" you've heard stops being mysterious — and a few
-		genuinely useful, actionable patterns emerge.
+		Instagram has been unusually transparent about how its ranking systems work, publishing detailed
+		breakdowns through its "How Instagram Feed Works" and "How Instagram Reels Recommendations Work"
+		resources for creators.<sup>1</sup> Once you understand the actual mechanics, a lot of "algorithm
+		advice" you've heard stops being mysterious — and a few genuinely useful, actionable patterns emerge.
 	</p>
 
-	<h2 class="mb-4 mt-10 text-2xl font-bold" style="color: var(--text); font-family: var(--font-head);">
+	<h2
+		class="mt-10 mb-4 text-2xl font-bold"
+		style="color: var(--text); font-family: var(--font-head);"
+	>
 		Ranking is not a single event — it's continuous
 	</h2>
 	<p class="mb-4 leading-relaxed" style="color: var(--text-muted);">
@@ -58,21 +60,25 @@
 	<p class="mb-6 leading-relaxed" style="color: var(--text-muted);">
 		The single most important phrase in that list, for our purposes, is <strong
 			style="color: var(--text);">"how recently it was posted."</strong
-		> Time is baked directly into the ranking input. A post's engagement isn't measured in
-		isolation — it's measured relative to how much time has passed, which is what creates
+		>
+		Time is baked directly into the ranking input. A post's engagement isn't measured in isolation —
+		it's measured relative to how much time has passed, which is what creates
 		<em>engagement velocity</em> as a distinct, measurable signal.
 	</p>
 
-	<h2 class="mb-4 mt-10 text-2xl font-bold" style="color: var(--text); font-family: var(--font-head);">
+	<h2
+		class="mt-10 mb-4 text-2xl font-bold"
+		style="color: var(--text); font-family: var(--font-head);"
+	>
 		What "engagement velocity" actually means
 	</h2>
 	<p class="mb-4 leading-relaxed" style="color: var(--text-muted);">
-		Engagement velocity is the rate at which a post accumulates likes, comments, saves, and shares
-		— not the total count, the <em>speed</em>. Two posts can reach 500 likes; one in 40 minutes,
-		one over 4 days. The ranking system treats those very differently, because rapid early
-		engagement is the strongest available evidence that current viewers find the content worth
-		acting on right now — which is exactly the kind of signal that triggers wider distribution to
-		Explore and non-follower feeds.
+		Engagement velocity is the rate at which a post accumulates likes, comments, saves, and shares —
+		not the total count, the <em>speed</em>. Two posts can reach 500 likes; one in 40 minutes, one
+		over 4 days. The ranking system treats those very differently, because rapid early engagement is
+		the strongest available evidence that current viewers find the content worth acting on right now
+		— which is exactly the kind of signal that triggers wider distribution to Explore and
+		non-follower feeds.
 	</p>
 	<ul class="mb-6 space-y-3 pl-5" style="color: var(--text-muted);">
 		<li class="list-disc leading-relaxed">
@@ -86,13 +92,18 @@
 			they indicate someone valued the content enough to revisit or pass it on.<sup>1</sup>
 		</li>
 		<li class="list-disc leading-relaxed">
-			<strong style="color: var(--text);">Comments with substance outperform short reactions.</strong>
+			<strong style="color: var(--text);"
+				>Comments with substance outperform short reactions.</strong
+			>
 			Sustained comment threads (replies, back-and-forth) read as stronger engagement than a wave of
 			single-word comments.
 		</li>
 	</ul>
 
-	<h2 class="mb-4 mt-10 text-2xl font-bold" style="color: var(--text); font-family: var(--font-head);">
+	<h2
+		class="mt-10 mb-4 text-2xl font-bold"
+		style="color: var(--text); font-family: var(--font-head);"
+	>
 		Why this makes timing a real lever, not folklore
 	</h2>
 	<p class="mb-4 leading-relaxed" style="color: var(--text-muted);">
@@ -105,11 +116,13 @@
 	<p class="mb-6 leading-relaxed" style="color: var(--text-muted);">
 		It's also the mechanism behind why a small engagement boost in the first hour after posting can
 		meaningfully change a post's trajectory — it raises the velocity reading at exactly the moment
-		the system is deciding how far to push the content next, before the natural decay curve sets
-		in.
+		the system is deciding how far to push the content next, before the natural decay curve sets in.
 	</p>
 
-	<h2 class="mb-4 mt-10 text-2xl font-bold" style="color: var(--text); font-family: var(--font-head);">
+	<h2
+		class="mt-10 mb-4 text-2xl font-bold"
+		style="color: var(--text); font-family: var(--font-head);"
+	>
 		The decay curve: why most posts peak fast and fade faster
 	</h2>
 	<p class="mb-4 leading-relaxed" style="color: var(--text-muted);">
@@ -122,18 +135,24 @@
 
 	<BlogCta
 		heading="Give a new post its best shot in the first hour"
-		body="FastAccs Instagram boosting delivers real likes and views fast — exactly the window where velocity matters most. No password needed, instant after payment."
+		body="Choose a clearly priced Instagram likes or views option, paste the public link, and track delivery — no password needed."
 		primaryHref="/services/instagram"
 		primaryLabel="Boost an Instagram post"
 		secondaryHref="/blog/organic-vs-bought-engagement-what-actually-moves-the-algorithm"
 		secondaryLabel="Organic vs. bought, explained"
 	/>
 
-	<h2 class="mb-4 mt-10 text-2xl font-bold" style="color: var(--text); font-family: var(--font-head);">
+	<h2
+		class="mt-10 mb-4 text-2xl font-bold"
+		style="color: var(--text); font-family: var(--font-head);"
+	>
 		Frequently Asked Questions
 	</h2>
 	<div class="mb-6 space-y-3">
-		<details class="rounded-lg p-5" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
+		<details
+			class="rounded-lg p-5"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+		>
 			<summary
 				class="flex cursor-pointer items-center justify-between font-semibold"
 				style="color: var(--text); font-family: var(--font-head);"
@@ -147,7 +166,10 @@
 				with a secondary, lower-leverage window over the following 24–48 hours.
 			</p>
 		</details>
-		<details class="rounded-lg p-5" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
+		<details
+			class="rounded-lg p-5"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+		>
 			<summary
 				class="flex cursor-pointer items-center justify-between font-semibold"
 				style="color: var(--text); font-family: var(--font-head);"
@@ -161,7 +183,10 @@
 				content rather than passively reacting to it.
 			</p>
 		</details>
-		<details class="rounded-lg p-5" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
+		<details
+			class="rounded-lg p-5"
+			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+		>
 			<summary
 				class="flex cursor-pointer items-center justify-between font-semibold"
 				style="color: var(--text); font-family: var(--font-head);"
@@ -184,7 +209,7 @@
 
 	<BlogCta
 		heading="Ready to boost your next Instagram post?"
-		body="Real likes and views, delivered fast, no password required. Pick your package and you're live in minutes."
+		body="Choose a likes or views option, paste the public post link, and track delivery from your order page. No password required."
 		primaryHref="/services/instagram"
 		primaryLabel="See Instagram boosting plans"
 		secondaryHref="/services"

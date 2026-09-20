@@ -523,7 +523,7 @@
 								<p class="text-xs" style="color: var(--text-dim);">
 									From {formatPrice(startingPrice)}
 									{#if service.config.refillAvailable}
-										· {service.config.refillDays}-day guarantee
+										· {service.config.refillDays}-day refill included
 									{/if}
 								</p>
 							{/if}

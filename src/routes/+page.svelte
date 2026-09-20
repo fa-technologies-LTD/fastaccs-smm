@@ -15,7 +15,7 @@
 	<title>Buy Social Media Accounts, Verification Numbers & Boosting | FastAccs</title>
 	<meta
 		name="description"
-		content="Get Instagram, TikTok, X, Facebook accounts, instant verification numbers (WhatsApp, Telegram, Google & more), and boosting services — secure checkout, instant delivery, buyer support."
+		content="Get Instagram, TikTok, X, Facebook accounts, verification numbers (WhatsApp, Telegram, Google & more), and boosting services — secure checkout, clear order tracking, buyer support."
 	/>
 </svelte:head>
 

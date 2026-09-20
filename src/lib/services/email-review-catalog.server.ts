@@ -314,7 +314,7 @@ Open your order page to see your number and get your one-time code — it appear
 			name: 'Order confirmed · boosting',
 			body: `${orderSummary.replace('Instagram account', 'Instagram Followers')}
 
-Your boost is queued and will begin shortly. Most orders start within a few hours. Track its status from your order page.`,
+Your order is confirmed and queued for delivery. Delivery timing varies by service, quantity, and platform conditions. Track the latest status from your order page.`,
 			ctaText: 'View order status',
 			ctaUrl: `${BASE_URL}/order/sample-order`
 		},

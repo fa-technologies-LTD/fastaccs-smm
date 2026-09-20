@@ -39,7 +39,7 @@
 	const announcementBanner = $derived(data.announcementBanner || null);
 	const defaultShareTitle = 'Buy Social Media Accounts & Boosting Services | FastAccs';
 	const defaultShareDescription =
-		'Get Instagram, TikTok, X, Facebook accounts and boosting services with secure checkout, instant delivery, and buyer support.';
+		'Get Instagram, TikTok, X, Facebook accounts and boosting services with secure checkout, clear order tracking, and buyer support.';
 
 	const publicBaseUrl = $derived(getSiteBaseUrl());
 	const shareImagePath = '/og-share-1200x630.png?v=20260428a';
