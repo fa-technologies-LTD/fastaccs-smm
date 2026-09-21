@@ -64,7 +64,7 @@
 	<title>Fast Accounts — All Socials. One Plug.</title>
 	<meta
 		name="description"
-		content="Social growth, ready-to-use accounts, verification numbers and support in one place."
+		content="Social growth, SM accounts, verification numbers and support in one place."
 	/>
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
@@ -77,7 +77,7 @@
 
 		<h1 class="hub-tagline">All Socials. One Plug.</h1>
 		<p class="hub-sub">
-			Social growth, ready-to-use accounts, verification numbers and support in one place.
+			Social growth, SM accounts, verification numbers and support in one place.
 		</p>
 
 		<nav class="hub-links" aria-label="Fast Accounts destinations">
