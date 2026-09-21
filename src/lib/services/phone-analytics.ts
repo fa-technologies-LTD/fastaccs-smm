@@ -1,6 +1,12 @@
 import { prisma } from '$lib/prisma';
 import { getPhonePricingConfig, NUMBERS_CLEAN_EPOCH } from './phone-pricing';
 import { getBalanceCents, isHubmanConfigured } from './hubman';
+import {
+	ROUTE_HEALTH_ATTEMPT_OUTCOMES,
+	routeProtectionState,
+	summarizeRouteHealth,
+	type ReliabilityStat
+} from './number-providers/reliability';
 
 /**
  * Analytics for the Numbers service — how each hub-man service/country performs and
@@ -11,33 +17,32 @@ import { getBalanceCents, isHubmanConfigured } from './hubman';
 const RECEIVED = 'received';
 const FAILED_STATES = new Set(['refunded', 'expired', 'cancelled', 'failed']);
 
-// Auto-hide a service+country from the storefront once it fails too often, but only after
-// enough real attempts that the rate is trustworthy (one unlucky number never hides a tier).
-export const SUCCESS_HIDE_THRESHOLD_PCT = 70;
-export const SUCCESS_HIDE_MIN_SAMPLE = 10;
-// Only recent outcomes count — a bad streak ages out so a tier can recover on its own once the
-// supplier situation improves (matches the reliability ranker's window).
+// Only recent evidence counts. Exact-route cooldowns decide when a cautious canary is allowed.
 export const SUCCESS_HIDE_WINDOW_DAYS = 14;
 
 /**
- * The set of `serviceName||countryName` tiers we should mute on the storefront because delivery
- * is genuinely broken across BOTH suppliers. Keyed to match the catalog sync's tier key.
+ * Tiers to mute for either of two customer-safety reasons:
+ * - the product itself has two consecutive failed customer orders (three extends the cooldown), or
+ * - every exact supplier route with real evidence is currently protected.
  *
- * Provider-aware, and deliberately reluctant: with two suppliers, one bad supplier must NEVER
- * hide a tier the other can serve. We tally each provider (hub-man / pvapins) separately over the
- * recent window and classify it:
- *   - BAD      = enough attempts (≥ MIN_SAMPLE) and delivery below the threshold
- *   - GOOD     = enough attempts and delivery at/above the threshold
- *   - UNTESTED = not enough attempts yet — give it a chance (assume it can work)
- * A tier is muted ONLY when at least one provider is proven BAD and NO provider is GOOD or
- * UNTESTED — i.e. there is no working or unproven supplier left to fall back to. Otherwise the
- * tier stays live and the buy-time candidate pool / reliability ranker routes around the bad one.
+ * The product-level streak catches failures spread across several supplier variants—the real 0/7
+ * pattern that an exact-route-only breaker misses. One successful customer order resets it. A
+ * completely new tier with no evidence still gets a controlled first chance.
  */
 export async function getLowSuccessTierKeys(): Promise<Set<string>> {
 	const since = new Date(Date.now() - SUCCESS_HIDE_WINDOW_DAYS * 86_400_000);
 	const rentals = await prisma.phoneRental.findMany({
 		where: { createdAt: { gte: since } },
-		select: { orderItemId: true, serviceName: true, countryName: true }
+		select: {
+			orderItemId: true,
+			serviceName: true,
+			countryName: true,
+			status: true,
+			createdAt: true,
+			receivedAt: true,
+			refundedAt: true,
+			updatedAt: true
+		}
 	});
 	if (rentals.length === 0) return new Set();
 	const tierByOrderItem = new Map(
@@ -46,48 +51,79 @@ export async function getLowSuccessTierKeys(): Promise<Set<string>> {
 	const attempts = await prisma.phoneAttempt.findMany({
 		where: {
 			orderItemId: { in: [...tierByOrderItem.keys()] },
-			outcome: { in: ['otp_received', 'otp_timeout'] },
+			outcome: { in: ROUTE_HEALTH_ATTEMPT_OUTCOMES },
 			createdAt: { gte: since }
 		},
-		select: { orderItemId: true, provider: true, outcome: true }
-	});
-	// tier key -> provider -> tally
-	type Tally = { received: number; resolved: number };
-	const byTier = new Map<string, Map<string, Tally>>();
-	for (const attempt of attempts) {
-		const tierKey = tierByOrderItem.get(attempt.orderItemId);
-		if (!tierKey) continue;
-		const provider = attempt.provider || 'unknown';
-		let providers = byTier.get(tierKey);
-		if (!providers) byTier.set(tierKey, (providers = new Map()));
-		let t = providers.get(provider);
-		if (!t) providers.set(provider, (t = { received: 0, resolved: 0 }));
-		if (attempt.outcome === 'otp_received') {
-			t.received += 1;
-			t.resolved += 1;
-		} else if (attempt.outcome === 'otp_timeout') {
-			t.resolved += 1;
+		select: {
+			orderItemId: true,
+			provider: true,
+			providerServiceRef: true,
+			outcome: true,
+			createdAt: true,
+			updatedAt: true
 		}
+	});
+	const tierByRoute = new Map<string, string>();
+	const evidence = attempts.flatMap((attempt) => {
+		const tierKey = tierByOrderItem.get(attempt.orderItemId);
+		if (!tierKey) return [];
+		const routeKey = JSON.stringify([
+			tierKey,
+			attempt.provider || 'unknown',
+			attempt.providerServiceRef
+		]);
+		tierByRoute.set(routeKey, tierKey);
+		return [
+			{
+				key: routeKey,
+				outcome: attempt.outcome,
+				createdAt: attempt.createdAt,
+				updatedAt: attempt.updatedAt
+			}
+		];
+	});
+	const routeStats = summarizeRouteHealth(evidence);
+	const routesByTier = new Map<string, ReliabilityStat[]>();
+	for (const [routeKey, stat] of routeStats) {
+		const tierKey = tierByRoute.get(routeKey);
+		if (!tierKey) continue;
+		const routes = routesByTier.get(tierKey) ?? [];
+		routes.push(stat);
+		routesByTier.set(tierKey, routes);
 	}
 	const out = new Set<string>();
-	for (const [tierKey, providers] of byTier) {
-		let anyBad = false;
-		let anyKeepAlive = false; // a GOOD or UNTESTED provider — a reason to keep the tier live
-		for (const provider of ['hubman', 'pvapins']) {
-			const t = providers.get(provider);
-			if (!t) {
-				anyKeepAlive = true; // no resolved attempts for this source: explicitly untested
-				continue;
-			}
-			if (t.resolved < SUCCESS_HIDE_MIN_SAMPLE) {
-				anyKeepAlive = true; // untested: unproven, so give it the benefit of the doubt
-			} else if ((t.received / t.resolved) * 100 < SUCCESS_HIDE_THRESHOLD_PCT) {
-				anyBad = true;
-			} else {
-				anyKeepAlive = true; // proven-good supplier keeps the whole tier live
-			}
+	const resolvedByTier = new Map<
+		string,
+		Array<{ received: boolean; createdAt: Date; resolvedAt: Date }>
+	>();
+	for (const rental of rentals) {
+		const received = rental.status === RECEIVED;
+		if (!received && !FAILED_STATES.has(rental.status)) continue;
+		const tierKey = `${rental.serviceName}||${rental.countryName}`;
+		const rows = resolvedByTier.get(tierKey) ?? [];
+		rows.push({
+			received,
+			createdAt: rental.createdAt,
+			resolvedAt: rental.receivedAt ?? rental.refundedAt ?? rental.updatedAt
+		});
+		resolvedByTier.set(tierKey, rows);
+	}
+	for (const [tierKey, rows] of resolvedByTier) {
+		rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+		let consecutiveFailures = 0;
+		let lastResolvedAt: Date | null = null;
+		for (const row of rows) {
+			consecutiveFailures = row.received ? 0 : consecutiveFailures + 1;
+			lastResolvedAt = row.resolvedAt;
 		}
-		if (anyBad && !anyKeepAlive) out.add(tierKey);
+		if (routeProtectionState({ consecutiveFailures, lastResolvedAt }) !== 'normal') {
+			out.add(tierKey);
+		}
+	}
+	for (const [tierKey, routes] of routesByTier) {
+		if (routes.length > 0 && routes.every((route) => routeProtectionState(route) !== 'normal')) {
+			out.add(tierKey);
+		}
 	}
 	return out;
 }

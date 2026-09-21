@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 	getAffiliateConfig: vi.fn(),
 	validateAffiliateCode: vi.fn(),
 	validatePromotionCode: vi.fn(),
+	getLowSuccessTierKeys: vi.fn(),
 	getStoreCreditBuckets: vi.fn(),
 	computeOrderRedemption: vi.fn(),
 	redeemStoreCreditForOrder: vi.fn(),
@@ -43,6 +44,9 @@ vi.mock('$lib/services/monnify', () => ({
 }));
 vi.mock('$lib/services/admin-metrics', () => ({ invalidateAdminStatsCache: vi.fn() }));
 vi.mock('$lib/services/promotions', () => ({ validatePromotionCode: mocks.validatePromotionCode }));
+vi.mock('$lib/services/phone-analytics', () => ({
+	getLowSuccessTierKeys: mocks.getLowSuccessTierKeys
+}));
 vi.mock('$lib/services/affiliate', () => ({
 	getAffiliateDiscountForOrder: mocks.getAffiliateDiscountForOrder,
 	getAffiliateConfig: mocks.getAffiliateConfig,
@@ -146,6 +150,7 @@ describe('approved invariant: emergency checkout order control', () => {
 			superTier3Count: 30,
 			superTier3Amount: 15_000
 		});
+		mocks.getLowSuccessTierKeys.mockResolvedValue(new Set());
 		mocks.resolveAffiliatePolicyForOrder.mockImplementation(
 			({ programId, liveIsSuperAffiliate, liveConfig }) => ({
 				version: 3,
@@ -377,6 +382,42 @@ describe('approved invariant: emergency checkout order control', () => {
 				redemption: expect.objectContaining({ totalApplied: 5800 })
 			})
 		);
+		expect(mocks.initializeTransaction).not.toHaveBeenCalled();
+	});
+
+	it('blocks an unsafe Numbers route before creating an order or taking payment', async () => {
+		vi.stubEnv('CHECKOUT_DISABLED', 'false');
+		mocks.findOrder.mockResolvedValue(null);
+		mocks.findCategories.mockResolvedValue([
+			{
+				id: 'tier-123',
+				name: 'Facebook — USA',
+				categoryType: 'tier',
+				parent: { name: 'Numbers' },
+				metadata: {
+					delivery_mode: 'auto_sms',
+					hub_service_id: 11,
+					hub_service_name: 'Facebook',
+					hub_country_id: 187,
+					hub_country_name: 'United States',
+					hub_country_code: 'US',
+					hub_expected_cost_cents: 195,
+					hub_available_count: 1,
+					pricing: { base_price: 5800 }
+				}
+			}
+		]);
+		mocks.getLowSuccessTierKeys.mockResolvedValue(new Set(['Facebook||United States']));
+
+		const response = await callCreateOrder();
+		const body = await response.json();
+
+		expect(response.status).toBe(409);
+		expect(body).toMatchObject({
+			success: false,
+			code: 'number_unavailable'
+		});
+		expect(mocks.createTransaction).not.toHaveBeenCalled();
 		expect(mocks.initializeTransaction).not.toHaveBeenCalled();
 	});
 

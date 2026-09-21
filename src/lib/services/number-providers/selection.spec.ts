@@ -68,6 +68,32 @@ describe('rankCandidates', () => {
 		expect(rankCandidates([fewSamples, proven])[0].label).toBe('proven');
 	});
 
+	it('sharply deprioritizes an exact route after two consecutive OTP failures', () => {
+		const recentlyFailing = c({
+			label: 'recently-failing',
+			reliability: 0.95,
+			sampleSize: 20,
+			consecutiveFailures: 2
+		});
+		const unproven = c({ label: 'unproven', reliability: null, sampleSize: 0 });
+		expect(rankCandidates([recentlyFailing, unproven]).map((x) => x.label)).toEqual([
+			'unproven',
+			'recently-failing'
+		]);
+	});
+
+	it('removes an exact route after three consecutive OTP failures', () => {
+		const blocked = c({ label: 'blocked', consecutiveFailures: 3 });
+		const healthy = c({ label: 'healthy' });
+		expect(rankCandidates([blocked, healthy]).map((x) => x.label)).toEqual(['healthy']);
+	});
+
+	it('temporarily removes a supplier listing after repeated OOS responses', () => {
+		const dry = c({ label: 'dry', consecutiveOos: 2 });
+		const healthy = c({ label: 'healthy' });
+		expect(rankCandidates([dry, healthy]).map((x) => x.label)).toEqual(['healthy']);
+	});
+
 	it('returns empty for an empty pool', () => {
 		expect(rankCandidates([])).toEqual([]);
 	});
