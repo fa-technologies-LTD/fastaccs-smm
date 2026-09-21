@@ -27,8 +27,6 @@
 	}
 
 	let { children, data }: Props = $props();
-	let bannerDismissed = $state(false);
-	let lastBannerCookieName = $state<string | null>(null);
 	let tawkLoadRequested = false;
 	// Seed with the page key src/app.html's inline snippet already tracked
 	// (if any), so the post-hydration pass below doesn't double-count it.
@@ -36,7 +34,6 @@
 	let lastSnapConfirmedKey = '';
 	let lastGa4PageKey = '';
 	let hydrated = false;
-	const announcementBanner = $derived(data.announcementBanner || null);
 	const defaultShareTitle = 'Buy Social Media Accounts & Boosting Services | FastAccs';
 	const defaultShareDescription =
 		'Get Instagram, TikTok, X, Facebook accounts and boosting services with secure checkout, clear order tracking, and buyer support.';
@@ -52,14 +49,6 @@
 	const seoTitle = $derived(page.data?.seo?.title ?? defaultShareTitle);
 	const seoDescription = $derived(page.data?.seo?.description ?? defaultShareDescription);
 	const seoType = $derived(page.data?.seo?.type ?? 'website');
-
-	$effect(() => {
-		const nextCookieName = announcementBanner?.dismissCookieName || null;
-		if (nextCookieName !== lastBannerCookieName) {
-			lastBannerCookieName = nextCookieName;
-			bannerDismissed = false;
-		}
-	});
 
 	function loadTawkWidget() {
 		const tawkEmbedUrl = publicEnv.PUBLIC_TAWK_EMBED_URL;
@@ -227,16 +216,6 @@
 			});
 		});
 	});
-
-	function dismissAnnouncementBanner(): void {
-		if (!announcementBanner || !announcementBanner.dismissible || typeof document === 'undefined')
-			return;
-
-		bannerDismissed = true;
-		const maxAgeSeconds = 60 * 60 * 24 * 365;
-		const secureFlag = window.location.protocol === 'https:' ? '; Secure' : '';
-		document.cookie = `${announcementBanner.dismissCookieName}=1; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax${secureFlag}`;
-	}
 </script>
 
 <svelte:head>
@@ -260,30 +239,6 @@
 <PageLoadingBar />
 
 <div class="min-h-screen" style="background: linear-gradient(180deg, #07090C 0%, #050607 100%);">
-	{#if announcementBanner && !bannerDismissed}
-		<div class="announce-bar">
-			<div class="announce-inner mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2">
-				<span class="announce-new"><span class="announce-dot"></span>NEW</span>
-				<span class="announce-text">{announcementBanner.text}</span>
-				<div class="announce-actions">
-					{#if announcementBanner.link}
-						<a href={announcementBanner.link} class="announce-cta">Learn more →</a>
-					{/if}
-					{#if announcementBanner.dismissible}
-						<button
-							type="button"
-							class="announce-x"
-							onclick={dismissAnnouncementBanner}
-							aria-label="Dismiss announcement"
-						>
-							✕
-						</button>
-					{/if}
-				</div>
-			</div>
-		</div>
-	{/if}
-
 	{@render children?.()}
 
 	<SitePopupHost isLoggedIn={Boolean(data.user)} />
@@ -291,134 +246,3 @@
 	<CookieConsentBar />
 	<ToastContainer />
 </div>
-
-<style>
-	/* Numbers-launch announcement bar — sky-blue identity, glow + subtle shine. */
-	.announce-bar {
-		position: relative;
-		overflow: hidden;
-		border-bottom: 1px solid rgba(56, 189, 248, 0.3);
-		background:
-			radial-gradient(130% 200% at 0% 50%, rgba(14, 165, 233, 0.32), transparent 58%),
-			linear-gradient(90deg, rgba(2, 132, 199, 0.22), rgba(2, 6, 23, 0.9));
-		color: #e0f2fe;
-	}
-	.announce-bar::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		background: linear-gradient(
-			100deg,
-			transparent 30%,
-			rgba(125, 211, 252, 0.16) 50%,
-			transparent 70%
-		);
-		transform: translateX(-100%);
-		animation: announce-shine 6s ease-in-out infinite;
-		pointer-events: none;
-	}
-	@keyframes announce-shine {
-		0% {
-			transform: translateX(-100%);
-		}
-		55%,
-		100% {
-			transform: translateX(100%);
-		}
-	}
-	.announce-inner {
-		position: relative;
-		padding: 0.55rem 1rem;
-	}
-	.announce-new {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		flex-shrink: 0;
-		border-radius: 9999px;
-		padding: 0.15rem 0.6rem;
-		font-size: 0.68rem;
-		font-weight: 800;
-		letter-spacing: 0.08em;
-		color: #082f49;
-		background: linear-gradient(180deg, #7dd3fc, #38bdf8);
-		box-shadow: 0 0 14px -2px rgba(56, 189, 248, 0.7);
-	}
-	.announce-dot {
-		width: 6px;
-		height: 6px;
-		border-radius: 9999px;
-		background: #082f49;
-		animation: announce-pulse 1.6s ease-in-out infinite;
-	}
-	@keyframes announce-pulse {
-		0%,
-		100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0.3;
-		}
-	}
-	.announce-text {
-		flex: 1 1 220px;
-		min-width: 0;
-		font-size: 0.875rem;
-		line-height: 1.35;
-	}
-	.announce-actions {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-		flex-shrink: 0;
-		margin-left: auto;
-	}
-	.announce-cta {
-		display: inline-flex;
-		align-items: center;
-		border-radius: 9999px;
-		padding: 0.3rem 0.9rem;
-		font-size: 0.78rem;
-		font-weight: 700;
-		white-space: nowrap;
-		color: #ffffff;
-		background: #0ea5e9;
-		box-shadow: 0 0 16px -3px rgba(14, 165, 233, 0.85);
-		transition:
-			transform 140ms ease,
-			box-shadow 200ms ease,
-			filter 160ms ease;
-	}
-	.announce-cta:hover {
-		transform: translateY(-1px);
-		filter: brightness(1.08);
-		box-shadow: 0 0 22px -1px rgba(14, 165, 233, 0.95);
-	}
-	.announce-x {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 26px;
-		height: 26px;
-		border-radius: 9999px;
-		font-size: 0.8rem;
-		line-height: 1;
-		color: #bae6fd;
-		border: 1px solid rgba(125, 211, 252, 0.3);
-		background: transparent;
-		cursor: pointer;
-		transition:
-			background 160ms ease,
-			color 160ms ease;
-	}
-	.announce-x:hover {
-		background: rgba(56, 189, 248, 0.16);
-		color: #ffffff;
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.announce-bar::after,
-		.announce-dot {
-			animation: none;
-		}
-	}
-</style>
