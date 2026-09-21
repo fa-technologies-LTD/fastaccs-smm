@@ -5,6 +5,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { runWithDbRetry } from '$lib/server/db-retry';
 import { fulfillOrder } from '$lib/services/fulfillment';
+import { getLowSuccessTierKeys } from '$lib/services/phone-analytics';
 import { getPhoneTierConfig } from '$lib/helpers/phone-tier-config';
 import { initializeTransaction } from '$lib/services/monnify';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
@@ -748,7 +749,12 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		if (isPhoneCheckout) {
 			const phoneCategory = categoryById.get(itemsWithNames[0].categoryId);
 			phoneTierConfig = phoneCategory ? getPhoneTierConfig(phoneCategory.metadata) : null;
-			if (!phoneTierConfig) {
+			const routeUnsafe = phoneTierConfig
+				? (await getLowSuccessTierKeys()).has(
+						`${phoneTierConfig.serviceName}||${phoneTierConfig.countryName}`
+					)
+				: true;
+			if (!phoneTierConfig || routeUnsafe) {
 				return json(
 					{
 						success: false,

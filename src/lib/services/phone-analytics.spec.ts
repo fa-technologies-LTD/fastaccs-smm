@@ -32,17 +32,48 @@ function outcomes(
 	countryName: string,
 	provider: string,
 	received: number,
-	failed: number
+	failed: number,
+	providerServiceRef = `${provider}-route`
 ) {
-	const rentals: Array<{ orderItemId: string; serviceName: string; countryName: string }> = [];
-	const attempts: Array<{ orderItemId: string; provider: string; outcome: string }> = [];
+	const rentals: Array<{
+		orderItemId: string;
+		serviceName: string;
+		countryName: string;
+		status: string;
+		createdAt: Date;
+		receivedAt: Date | null;
+		refundedAt: Date | null;
+		updatedAt: Date;
+	}> = [];
+	const attempts: Array<{
+		orderItemId: string;
+		provider: string;
+		providerServiceRef: string;
+		outcome: string;
+		createdAt: Date;
+		updatedAt: Date;
+	}> = [];
 	for (let i = 0; i < received + failed; i++) {
 		const orderItemId = `item-${++rowId}`;
-		rentals.push({ orderItemId, serviceName, countryName });
+		const at = new Date(Date.now() - (received + failed - i) * 1_000);
+		const delivered = i < received;
+		rentals.push({
+			orderItemId,
+			serviceName,
+			countryName,
+			status: delivered ? 'received' : 'refunded',
+			createdAt: at,
+			receivedAt: delivered ? at : null,
+			refundedAt: delivered ? null : at,
+			updatedAt: at
+		});
 		attempts.push({
 			orderItemId,
 			provider,
-			outcome: i < received ? 'otp_received' : 'otp_timeout'
+			providerServiceRef,
+			outcome: delivered ? 'otp_received' : 'otp_timeout',
+			createdAt: at,
+			updatedAt: at
 		});
 	}
 	return { rentals, attempts };
@@ -53,44 +84,81 @@ function mockOutcomes(...sets: ReturnType<typeof outcomes>[]) {
 	prismaMock.phoneAttempt.findMany.mockResolvedValue(sets.flatMap((s) => s.attempts));
 }
 
-describe('getLowSuccessTierKeys — provider-aware, two-supplier safe', () => {
-	it('does NOT hide when failures are split across two under-sampled providers', () => {
-		// The real USA WhatsApp case: hub-man 0/7, pvapins 2/3 — neither hits MIN_SAMPLE (10),
-		// so both are "untested" and the tier stays live (the old code summed them and hid it).
-		mockOutcomes(
-			outcomes('WhatsApp', 'USA', 'hubman', 0, 7),
-			outcomes('WhatsApp', 'USA', 'pvapins', 2, 1)
-		);
-		return getLowSuccessTierKeys().then((set) => expect(set.has('WhatsApp||USA')).toBe(false));
+describe('getLowSuccessTierKeys — low-volume exact-route protection', () => {
+	it('keeps a tier live after only one no-code outcome', async () => {
+		mockOutcomes(outcomes('WhatsApp', 'USA', 'hubman', 0, 1, '1'));
+		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(false);
 	});
 
-	it('does NOT hide when one supplier is proven-bad but the other is proven-good', () => {
-		mockOutcomes(
-			outcomes('WhatsApp', 'USA', 'hubman', 0, 20), // BAD (0%)
-			outcomes('WhatsApp', 'USA', 'pvapins', 18, 2) // GOOD (90%)
-		);
-		return getLowSuccessTierKeys().then((set) => expect(set.has('WhatsApp||USA')).toBe(false));
+	it('hides when its only observed route has two consecutive no-code outcomes', async () => {
+		mockOutcomes(outcomes('WhatsApp', 'USA', 'hubman', 0, 2, '1'));
+		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(true);
 	});
 
-	it('does NOT hide when one supplier is proven-bad but the other is untested', () => {
+	it('hides after two consecutive failed customer orders split across different routes', async () => {
 		mockOutcomes(
-			outcomes('WhatsApp', 'USA', 'hubman', 0, 20), // BAD
-			outcomes('WhatsApp', 'USA', 'pvapins', 3, 1) // untested (< MIN_SAMPLE)
+			outcomes('WhatsApp', 'USA', 'hubman', 0, 1, '1'),
+			outcomes('WhatsApp', 'USA', 'pvapins', 0, 1, 'Whatsapp159')
 		);
-		return getLowSuccessTierKeys().then((set) => expect(set.has('WhatsApp||USA')).toBe(false));
+		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(true);
 	});
 
-	it('does NOT hide when one supplier is proven-bad but the other has no outcomes yet', () => {
-		mockOutcomes(outcomes('WhatsApp', 'USA', 'hubman', 0, 20));
-		return getLowSuccessTierKeys().then((set) => expect(set.has('WhatsApp||USA')).toBe(false));
+	it('keeps a tier live when another exact route is currently healthy', async () => {
+		mockOutcomes(
+			outcomes('WhatsApp', 'USA', 'hubman', 0, 7, '1'),
+			outcomes('WhatsApp', 'USA', 'pvapins', 2, 0, 'Whatsapp60')
+		);
+		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(false);
 	});
 
-	it('hides ONLY when every sampled supplier is proven-bad', () => {
+	it('hides when every observed exact route is cooling down', async () => {
 		mockOutcomes(
-			outcomes('WhatsApp', 'USA', 'hubman', 1, 19), // 5% BAD
-			outcomes('WhatsApp', 'USA', 'pvapins', 2, 18) // 10% BAD
+			outcomes('WhatsApp', 'USA', 'hubman', 0, 2, '1'),
+			outcomes('WhatsApp', 'USA', 'pvapins', 0, 3, 'Whatsapp161')
 		);
-		return getLowSuccessTierKeys().then((set) => expect(set.has('WhatsApp||USA')).toBe(true));
+		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(true);
+	});
+
+	it('does not treat a completely new tier with no outcomes as unsafe', async () => {
+		mockOutcomes();
+		expect((await getLowSuccessTierKeys()).size).toBe(0);
+	});
+
+	it('temporarily hides a tier whose only observed supplier listing is repeatedly OOS', async () => {
+		const now = new Date();
+		prismaMock.phoneRental.findMany.mockResolvedValue([
+			{
+				orderItemId: 'dry-1',
+				serviceName: 'Telegram',
+				countryName: 'USA',
+				status: 'pending'
+			},
+			{
+				orderItemId: 'dry-2',
+				serviceName: 'Telegram',
+				countryName: 'USA',
+				status: 'pending'
+			}
+		]);
+		prismaMock.phoneAttempt.findMany.mockResolvedValue([
+			{
+				orderItemId: 'dry-1',
+				provider: 'pvapins',
+				providerServiceRef: 'Telegram2',
+				outcome: 'oos',
+				createdAt: new Date(now.getTime() - 2_000),
+				updatedAt: new Date(now.getTime() - 2_000)
+			},
+			{
+				orderItemId: 'dry-2',
+				provider: 'pvapins',
+				providerServiceRef: 'Telegram2',
+				outcome: 'oos',
+				createdAt: new Date(now.getTime() - 1_000),
+				updatedAt: new Date(now.getTime() - 1_000)
+			}
+		]);
+		expect((await getLowSuccessTierKeys()).has('Telegram||USA')).toBe(true);
 	});
 
 	it('reads only the recent window (passes a createdAt lower bound)', () => {

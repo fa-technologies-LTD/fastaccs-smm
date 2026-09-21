@@ -12,7 +12,28 @@ export interface ReliabilityStat {
 	received: number;
 	total: number;
 	reliability: number; // received / total, 0..1
+	/** Consecutive authoritative no-code outcomes, reset by a delivered OTP. */
+	consecutiveFailures?: number;
+	/** When the newest OTP success/timeout was resolved. */
+	lastResolvedAt?: Date | null;
+	/** Consecutive rent-time out-of-stock responses, reset by a successful rent. */
+	consecutiveOos?: number;
+	/** When the newest rent/OOS attempt was made. */
+	lastAttemptAt?: Date | null;
 }
+
+export type RouteProtectionState = 'normal' | 'deprioritized' | 'blocked';
+
+// Low-volume safety: two real no-code outcomes are enough to move an exact route to the back.
+// A third opens the circuit completely. Both recover automatically through a cautious canary.
+export const ROUTE_DEPRIORITIZE_FAILURE_STREAK = 2;
+export const ROUTE_BLOCK_FAILURE_STREAK = 3;
+export const ROUTE_DEPRIORITIZE_MS = 24 * 60 * 60 * 1000;
+export const ROUTE_BLOCK_MS = 72 * 60 * 60 * 1000;
+// PVAPins lists variants without live per-variant stock. Stop repeatedly hammering a dry listing;
+// after the cooldown it gets one new chance and a successful rent clears the streak.
+export const ROUTE_OOS_BLOCK_STREAK = 2;
+export const ROUTE_OOS_BLOCK_MS = 2 * 60 * 60 * 1000;
 
 /** Delivery evidence shared by variants serving the same provider/service/country market. */
 export function serviceCountryReliabilityKey(
@@ -23,7 +44,18 @@ export function serviceCountryReliabilityKey(
 	return `${provider}:market:${serviceId}:${countryId}`;
 }
 
+/** Exact provider route inside one service/country market. */
+export function exactRouteReliabilityKey(
+	provider: string,
+	providerServiceRef: string,
+	serviceId: number,
+	countryId: number
+): string {
+	return `${provider}:route:${serviceId}:${countryId}:${providerServiceRef}`;
+}
+
 export const RESOLVED_ATTEMPT_OUTCOMES = ['otp_received', 'otp_timeout'];
+export const ROUTE_HEALTH_ATTEMPT_OUTCOMES = ['otp_received', 'otp_timeout', 'rented', 'oos'];
 
 /** Stable key identifying the supplier behind a rental (pvapins app, or hub-man service id). */
 export function candidateKeyFromRental(r: {
@@ -39,19 +71,144 @@ export function candidateKeyFromRental(r: {
 
 /** Pure: fold resolved rentals into per-supplier success rates. */
 export function summarizeReliability(
-	rows: Array<{ key: string; received: boolean }>
+	rows: Array<{ key: string; received: boolean; resolvedAt?: Date | string | null }>
 ): Map<string, ReliabilityStat> {
+	const grouped = new Map<
+		string,
+		Array<{ received: boolean; resolvedAt: Date | null; sequence: number }>
+	>();
+	rows.forEach((row, sequence) => {
+		const parsed = row.resolvedAt == null ? null : new Date(row.resolvedAt);
+		const resolvedAt = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+		const events = grouped.get(row.key) ?? [];
+		events.push({ received: row.received, resolvedAt, sequence });
+		grouped.set(row.key, events);
+	});
+
 	const map = new Map<string, ReliabilityStat>();
-	for (const row of rows) {
-		const stat = map.get(row.key) ?? { received: 0, total: 0, reliability: 0 };
-		stat.total += 1;
-		if (row.received) stat.received += 1;
-		map.set(row.key, stat);
-	}
-	for (const stat of map.values()) {
-		stat.reliability = stat.total > 0 ? stat.received / stat.total : 0;
+	for (const [key, events] of grouped) {
+		events.sort((a, b) => {
+			if (a.resolvedAt && b.resolvedAt) return a.resolvedAt.getTime() - b.resolvedAt.getTime();
+			if (a.resolvedAt) return 1;
+			if (b.resolvedAt) return -1;
+			return a.sequence - b.sequence;
+		});
+		let received = 0;
+		let consecutiveFailures = 0;
+		let lastResolvedAt: Date | null = null;
+		for (const event of events) {
+			if (event.received) {
+				received += 1;
+				consecutiveFailures = 0;
+			} else {
+				consecutiveFailures += 1;
+			}
+			if (event.resolvedAt) lastResolvedAt = event.resolvedAt;
+		}
+		map.set(key, {
+			received,
+			total: events.length,
+			reliability: events.length > 0 ? received / events.length : 0,
+			consecutiveFailures,
+			lastResolvedAt,
+			consecutiveOos: 0,
+			lastAttemptAt: null
+		});
 	}
 	return map;
+}
+
+/** Fold delivery and rent-time availability evidence into exact-route health. */
+export function summarizeRouteHealth(
+	rows: Array<{
+		key: string;
+		outcome: string;
+		createdAt?: Date | string | null;
+		updatedAt?: Date | string | null;
+	}>
+): Map<string, ReliabilityStat> {
+	const map = summarizeReliability(
+		rows
+			.filter((row) => RESOLVED_ATTEMPT_OUTCOMES.includes(row.outcome))
+			.map((row) => ({
+				key: row.key,
+				received: row.outcome === 'otp_received',
+				resolvedAt: row.updatedAt ?? row.createdAt ?? null
+			}))
+	);
+	const grouped = new Map<
+		string,
+		Array<{ outcome: string; attemptedAt: Date | null; sequence: number }>
+	>();
+	rows.forEach((row, sequence) => {
+		if (!['oos', 'rented', 'otp_received', 'otp_timeout'].includes(row.outcome)) return;
+		const parsed = row.createdAt == null ? null : new Date(row.createdAt);
+		const attemptedAt = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+		const events = grouped.get(row.key) ?? [];
+		events.push({ outcome: row.outcome, attemptedAt, sequence });
+		grouped.set(row.key, events);
+	});
+	for (const [key, events] of grouped) {
+		events.sort((a, b) => {
+			if (a.attemptedAt && b.attemptedAt) return a.attemptedAt.getTime() - b.attemptedAt.getTime();
+			if (a.attemptedAt) return 1;
+			if (b.attemptedAt) return -1;
+			return a.sequence - b.sequence;
+		});
+		const stat = map.get(key) ?? {
+			received: 0,
+			total: 0,
+			reliability: 0,
+			consecutiveFailures: 0,
+			lastResolvedAt: null
+		};
+		let consecutiveOos = 0;
+		let lastAttemptAt: Date | null = null;
+		for (const event of events) {
+			if (event.outcome === 'oos') consecutiveOos += 1;
+			else consecutiveOos = 0; // a rent succeeded, even if its eventual OTP did not
+			if (event.attemptedAt) lastAttemptAt = event.attemptedAt;
+		}
+		map.set(key, { ...stat, consecutiveOos, lastAttemptAt });
+	}
+	return map;
+}
+
+function isWithinCooldown(at: Date | null | undefined, cooldownMs: number, nowMs: number): boolean {
+	// Unit callers and legacy stats may lack timestamps. Treat their evidence as current; production
+	// attempt rows always provide one.
+	if (!at) return true;
+	const age = nowMs - at.getTime();
+	return age >= 0 && age < cooldownMs;
+}
+
+/** Decide whether an exact route may be used now. Aggregate/provider priors must not call this. */
+export function routeProtectionState(
+	stat: Pick<
+		ReliabilityStat,
+		'consecutiveFailures' | 'lastResolvedAt' | 'consecutiveOos' | 'lastAttemptAt'
+	>,
+	now: Date | number = Date.now()
+): RouteProtectionState {
+	const nowMs = now instanceof Date ? now.getTime() : now;
+	const failures = stat.consecutiveFailures ?? 0;
+	const oos = stat.consecutiveOos ?? 0;
+	if (
+		failures >= ROUTE_BLOCK_FAILURE_STREAK &&
+		isWithinCooldown(stat.lastResolvedAt, ROUTE_BLOCK_MS, nowMs)
+	)
+		return 'blocked';
+	if (
+		oos >= ROUTE_OOS_BLOCK_STREAK &&
+		isWithinCooldown(stat.lastAttemptAt, ROUTE_OOS_BLOCK_MS, nowMs)
+	)
+		return 'blocked';
+	if (
+		failures >= ROUTE_DEPRIORITIZE_FAILURE_STREAK &&
+		isWithinCooldown(stat.lastResolvedAt, ROUTE_DEPRIORITIZE_MS, nowMs)
+	)
+		return 'deprioritized';
+	return 'normal';
 }
 
 /** Load recent per-supplier OTP reliability from resolved PhoneAttempt rows.
@@ -68,10 +225,17 @@ export async function loadCandidateReliability(
 		const since = new Date(Date.now() - windowDays * 86_400_000);
 		const rows = await prisma.phoneAttempt.findMany({
 			where: {
-				outcome: { in: RESOLVED_ATTEMPT_OUTCOMES },
+				outcome: { in: ROUTE_HEALTH_ATTEMPT_OUTCOMES },
 				createdAt: { gte: since }
 			},
-			select: { orderItemId: true, provider: true, providerServiceRef: true, outcome: true }
+			select: {
+				orderItemId: true,
+				provider: true,
+				providerServiceRef: true,
+				outcome: true,
+				createdAt: true,
+				updatedAt: true
+			}
 		});
 		const rentals = rows.length
 			? await prisma.phoneRental.findMany({
@@ -87,13 +251,30 @@ export async function loadCandidateReliability(
 		);
 		// Exact PVAPins variants choose within a market. Service/country evidence gives a new variant
 		// a locally relevant prior, and provider-wide evidence is the final cold-start fallback.
-		return summarizeReliability(
+		return summarizeRouteHealth(
 			rows.flatMap((row) => {
-				const received = row.outcome === 'otp_received';
 				const market = marketByOrderItem.get(row.orderItemId);
+				const evidence = {
+					outcome: row.outcome,
+					createdAt: row.createdAt,
+					updatedAt: row.updatedAt
+				};
 				return [
+					...(market
+						? [
+								{
+									key: exactRouteReliabilityKey(
+										row.provider,
+										row.providerServiceRef,
+										market.serviceId,
+										market.countryId
+									),
+									...evidence
+								}
+							]
+						: []),
 					...(row.provider === 'pvapins'
-						? [{ key: `${row.provider}:${row.providerServiceRef}`, received }]
+						? [{ key: `${row.provider}:${row.providerServiceRef}`, ...evidence }]
 						: []),
 					...(market
 						? [
@@ -103,11 +284,11 @@ export async function loadCandidateReliability(
 										market.serviceId,
 										market.countryId
 									),
-									received
+									...evidence
 								}
 							]
 						: []),
-					{ key: `${row.provider}:*`, received }
+					{ key: `${row.provider}:*`, ...evidence }
 				];
 			})
 		);

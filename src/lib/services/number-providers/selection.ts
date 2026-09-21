@@ -1,5 +1,10 @@
 import type { NumberProviderId } from './types';
-import { serviceCountryReliabilityKey, type ReliabilityStat } from './reliability';
+import {
+	exactRouteReliabilityKey,
+	routeProtectionState,
+	serviceCountryReliabilityKey,
+	type ReliabilityStat
+} from './reliability';
 
 /**
  * Candidate-pool selection. A storefront product (service×country) is backed by many candidate
@@ -25,6 +30,11 @@ export interface Candidate {
 	reliability: number | null;
 	/** Number of resolved rents behind `reliability` (drives cold-start handling). */
 	sampleSize: number;
+	/** Exact-route recent failure streak; aggregate priors never populate these fields. */
+	consecutiveFailures?: number;
+	lastResolvedAt?: Date | null;
+	consecutiveOos?: number;
+	lastAttemptAt?: Date | null;
 }
 
 // A candidate needs this many resolved rents before we use its measured reliability at full weight.
@@ -58,11 +68,17 @@ export function rankCandidates(candidates: Candidate[]): Candidate[] {
 		.filter((c) => c.available > 0)
 		.map((c) => ({
 			c,
+			protection: routeProtectionState(c),
 			bucket: Math.round(effectiveReliability(c) / RELIABILITY_BUCKET),
 			stockRank: c.stockConfidence === 'confirmed' ? 1 : 0
 		}))
+		.filter((row) => row.protection !== 'blocked')
 		.sort(
-			(a, b) => b.bucket - a.bucket || b.stockRank - a.stockRank || a.c.costCents - b.c.costCents
+			(a, b) =>
+				Number(a.protection === 'deprioritized') - Number(b.protection === 'deprioritized') ||
+				b.bucket - a.bucket ||
+				b.stockRank - a.stockRank ||
+				a.c.costCents - b.c.costCents
 		)
 		.map((x) => x.c);
 }
@@ -89,10 +105,15 @@ export function buildCandidatePool(input: {
 }): Candidate[] {
 	const candidates: Candidate[] = [];
 	if (input.hub) {
+		const exactStat = input.reliability.get(
+			exactRouteReliabilityKey('hubman', input.hub.serviceRef, input.serviceId, input.countryId)
+		);
 		const stat =
+			exactStat ??
 			input.reliability.get(
 				serviceCountryReliabilityKey('hubman', input.serviceId, input.countryId)
-			) ?? input.reliability.get('hubman:*');
+			) ??
+			input.reliability.get('hubman:*');
 		candidates.push({
 			provider: 'hubman',
 			serviceId: input.serviceId,
@@ -104,11 +125,19 @@ export function buildCandidatePool(input: {
 			available: input.hub.available,
 			stockConfidence: 'confirmed',
 			reliability: stat?.reliability ?? null,
-			sampleSize: stat?.total ?? 0
+			sampleSize: stat?.total ?? 0,
+			consecutiveFailures: exactStat?.consecutiveFailures ?? 0,
+			lastResolvedAt: exactStat?.lastResolvedAt ?? null,
+			consecutiveOos: exactStat?.consecutiveOos ?? 0,
+			lastAttemptAt: exactStat?.lastAttemptAt ?? null
 		});
 	}
 	for (const p of input.pvapins) {
+		const exactStat = input.reliability.get(
+			exactRouteReliabilityKey('pvapins', p.app, input.serviceId, input.countryId)
+		);
 		const stat =
+			exactStat ??
 			input.reliability.get(`pvapins:${p.app}`) ??
 			input.reliability.get(
 				serviceCountryReliabilityKey('pvapins', input.serviceId, input.countryId)
@@ -125,7 +154,11 @@ export function buildCandidatePool(input: {
 			available: p.available,
 			stockConfidence: 'listed',
 			reliability: stat?.reliability ?? null,
-			sampleSize: stat?.total ?? 0
+			sampleSize: stat?.total ?? 0,
+			consecutiveFailures: exactStat?.consecutiveFailures ?? 0,
+			lastResolvedAt: exactStat?.lastResolvedAt ?? null,
+			consecutiveOos: exactStat?.consecutiveOos ?? 0,
+			lastAttemptAt: exactStat?.lastAttemptAt ?? null
 		});
 	}
 	return rankCandidates(candidates);

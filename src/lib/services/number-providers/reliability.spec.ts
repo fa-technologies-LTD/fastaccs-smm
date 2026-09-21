@@ -8,8 +8,14 @@ vi.mock('$lib/prisma', () => ({ prisma: prismaMock }));
 
 import {
 	summarizeReliability,
+	summarizeRouteHealth,
 	candidateKeyFromRental,
-	loadCandidateReliability
+	exactRouteReliabilityKey,
+	loadCandidateReliability,
+	routeProtectionState,
+	ROUTE_BLOCK_MS,
+	ROUTE_DEPRIORITIZE_MS,
+	ROUTE_OOS_BLOCK_MS
 } from './reliability';
 
 beforeEach(() => {
@@ -48,12 +54,76 @@ describe('summarizeReliability', () => {
 			{ key: 'pvapins:Whatsapp46', received: false },
 			{ key: 'pvapins:Whatsapp46', received: false }
 		]);
-		expect(stats.get('pvapins:Whatsapp24')).toEqual({ received: 2, total: 3, reliability: 2 / 3 });
-		expect(stats.get('pvapins:Whatsapp46')).toEqual({ received: 0, total: 2, reliability: 0 });
+		expect(stats.get('pvapins:Whatsapp24')).toMatchObject({
+			received: 2,
+			total: 3,
+			reliability: 2 / 3,
+			consecutiveFailures: 1
+		});
+		expect(stats.get('pvapins:Whatsapp46')).toMatchObject({
+			received: 0,
+			total: 2,
+			reliability: 0,
+			consecutiveFailures: 2
+		});
 	});
 
 	it('is empty for no rows', () => {
 		expect(summarizeReliability([]).size).toBe(0);
+	});
+});
+
+describe('route protection', () => {
+	it('deprioritizes after two consecutive no-code outcomes and blocks after three', () => {
+		expect(routeProtectionState({ consecutiveFailures: 2 })).toBe('deprioritized');
+		expect(routeProtectionState({ consecutiveFailures: 3 })).toBe('blocked');
+	});
+
+	it('lets a route have one cautious chance after its cooldown', () => {
+		const now = new Date('2026-09-21T12:00:00Z');
+		expect(
+			routeProtectionState(
+				{
+					consecutiveFailures: 2,
+					lastResolvedAt: new Date(now.getTime() - ROUTE_DEPRIORITIZE_MS - 1)
+				},
+				now
+			)
+		).toBe('normal');
+		expect(
+			routeProtectionState(
+				{
+					consecutiveFailures: 3,
+					lastResolvedAt: new Date(now.getTime() - ROUTE_BLOCK_MS - 1)
+				},
+				now
+			)
+		).toBe('normal');
+	});
+
+	it('temporarily blocks a supplier listing after two consecutive OOS responses', () => {
+		const now = new Date('2026-09-21T12:00:00Z');
+		expect(
+			routeProtectionState(
+				{ consecutiveOos: 2, lastAttemptAt: new Date(now.getTime() - 1_000) },
+				now
+			)
+		).toBe('blocked');
+		expect(
+			routeProtectionState(
+				{ consecutiveOos: 2, lastAttemptAt: new Date(now.getTime() - ROUTE_OOS_BLOCK_MS - 1) },
+				now
+			)
+		).toBe('normal');
+	});
+
+	it('resets an OOS streak after a successful rent', () => {
+		const stats = summarizeRouteHealth([
+			{ key: 'route', outcome: 'oos', createdAt: '2026-09-21T10:00:00Z' },
+			{ key: 'route', outcome: 'oos', createdAt: '2026-09-21T10:01:00Z' },
+			{ key: 'route', outcome: 'rented', createdAt: '2026-09-21T10:02:00Z' }
+		]);
+		expect(stats.get('route')?.consecutiveOos).toBe(0);
 	});
 });
 
@@ -80,6 +150,10 @@ describe('loadCandidateReliability — OTP delivery only', () => {
 			{ orderItemId: 'pv-2', serviceId: 1, countryId: 58 }
 		]);
 		const stats = await loadCandidateReliability();
+		expect(stats.get(exactRouteReliabilityKey('hubman', '1', 1, 58))?.reliability).toBe(0);
+		expect(stats.get(exactRouteReliabilityKey('pvapins', 'Whatsapp24', 1, 58))?.reliability).toBe(
+			1
+		);
 		expect(stats.get('hubman:market:1:58')?.reliability).toBe(0);
 		expect(stats.get('pvapins:Whatsapp24')?.reliability).toBe(1);
 		expect(stats.get('pvapins:market:1:58')?.reliability).toBe(1);
@@ -87,7 +161,9 @@ describe('loadCandidateReliability — OTP delivery only', () => {
 		expect(stats.get('pvapins:*')?.reliability).toBe(1);
 		expect(prismaMock.phoneAttempt.findMany).toHaveBeenCalledWith(
 			expect.objectContaining({
-				where: expect.objectContaining({ outcome: { in: ['otp_received', 'otp_timeout'] } })
+				where: expect.objectContaining({
+					outcome: { in: ['otp_received', 'otp_timeout', 'rented', 'oos'] }
+				})
 			})
 		);
 	});

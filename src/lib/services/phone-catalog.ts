@@ -399,6 +399,9 @@ export async function syncNumbersCatalog(
 	const wasHiddenBySlug = new Map(
 		existingTiers.map((t) => [t.slug, getPhoneTierConfig(t.metadata)?.autoHidden ?? false])
 	);
+	const wasHideReasonBySlug = new Map(
+		existingTiers.map((t) => [t.slug, getPhoneTierConfig(t.metadata)?.hideReason ?? null])
+	);
 	// Tiers that just came back in stock this sync → notify their "Notify me" subscribers.
 	const becameAvailable: Array<{ tierId: string; name: string; price: number }> = [];
 
@@ -504,7 +507,11 @@ export async function syncNumbersCatalog(
 					refreshed += 1;
 				}
 				// Unavailable → available transition: queue a restock notification for subscribers.
-				if ((wasHiddenBySlug.get(slug) ?? false) && !autoHidden) {
+				if (
+					(wasHiddenBySlug.get(slug) ?? false) &&
+					wasHideReasonBySlug.get(slug) === 'no_stock' &&
+					!autoHidden
+				) {
 					becameAvailable.push({ tierId: existingId, name, price: autoPrice });
 				}
 			} else {
@@ -663,7 +670,7 @@ export async function syncNumbersCatalog(
 				});
 				revivedByPvapins += 1;
 			}
-			if (wasHidden && !lowSuccess) {
+			if (wasHidden && wasHideReasonBySlug.get(t.slug) === 'no_stock' && !lowSuccess) {
 				becameAvailable.push({
 					tierId: t.id,
 					name: `${cfg.serviceName} — ${cfg.countryName}`,
@@ -890,7 +897,6 @@ export async function getNumbersCatalogForAdmin(): Promise<{
 		select: { id: true, isActive: true, metadata: true },
 		orderBy: { sortOrder: 'asc' }
 	});
-
 	// Refresh live costs + stock once per country.
 	const countryIds = [
 		...new Set(
@@ -1058,6 +1064,10 @@ export async function getNumbersStorefront(): Promise<
 		select: { id: true, metadata: true },
 		orderBy: { sortOrder: 'asc' }
 	});
+	// Metadata is refreshed every 30 minutes, but customer protection must react immediately.
+	// Re-evaluate recent exact-route evidence on every storefront load so a newly unsafe tier is
+	// muted before the next catalogue cron persists the same state.
+	const lowSuccessKeys = await getLowSuccessTierKeys();
 
 	const byService = new Map<
 		number,
@@ -1067,15 +1077,10 @@ export async function getNumbersStorefront(): Promise<
 		const cfg = getPhoneTierConfig(tier.metadata);
 		const price = readBasePrice(tier.metadata);
 		if (!cfg || price <= 0) continue;
-		// NOTE: `low_success` is no longer removed here. The sync only sets it when delivery is broken
-		// across BOTH suppliers (see getLowSuccessTierKeys) — a single bad supplier can't hide a tier
-		// the other serves. When it does fire, we mute it (below) like out-of-stock rather than delete
-		// it, so the tier stays visible and the buy-time failover still gets its shot.
-		// Buyable now if the (two-source) sync says it has stock. autoHidden is maintained every
-		// 5 min across BOTH hub-man and pvapins, so a pvapins-only country (e.g. USA when hub-man
-		// is out) correctly shows available. Out-of-stock ones stay muted ("usually offered").
-		// The buy-time candidate pool + failover is the authoritative backstop either way.
-		const available = !cfg.autoHidden;
+		// One healthy exact route keeps the tier buyable; when every observed route is cooling down,
+		// mute it immediately rather than accepting another payment and refunding it later.
+		const available =
+			!cfg.autoHidden && !lowSuccessKeys.has(`${cfg.serviceName}||${cfg.countryName}`);
 		const countryCode = String((tier.metadata as Record<string, unknown>)?.hub_country_code || '');
 		if (!byService.has(cfg.serviceId))
 			byService.set(cfg.serviceId, {
