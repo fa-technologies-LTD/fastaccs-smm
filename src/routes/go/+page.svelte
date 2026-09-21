@@ -10,7 +10,6 @@
 		description: string;
 		href: string;
 		icon: typeof TrendingUp;
-		variant: 'primary' | 'card';
 	}
 
 	const links: HubLink[] = [
@@ -19,32 +18,28 @@
 			title: 'Boosting Services',
 			description: 'Followers, likes and views across multiple platforms.',
 			href: 'https://smm.fastaccs.com/services',
-			icon: TrendingUp,
-			variant: 'primary'
+			icon: TrendingUp
 		},
 		{
 			id: 'browse-accounts',
 			title: 'Browse Accounts',
-			description: 'Ready-to-use social media accounts for different platforms.',
+			description: 'Ready-to-use SM accounts for different platforms.',
 			href: 'https://smm.fastaccs.com/platforms',
-			icon: Users,
-			variant: 'card'
+			icon: Users
 		},
 		{
 			id: 'verification-numbers',
 			title: 'Verification Numbers',
 			description: 'Verification numbers for supported platforms and services.',
 			href: 'https://smm.fastaccs.com/numbers',
-			icon: Phone,
-			variant: 'card'
+			icon: Phone
 		},
 		{
 			id: 'support',
 			title: 'Support',
 			description: 'Help with orders and services.',
 			href: 'https://smm.fastaccs.com/support',
-			icon: LifeBuoy,
-			variant: 'card'
+			icon: LifeBuoy
 		}
 	];
 
@@ -89,7 +84,7 @@
 			{#each links as link (link.id)}
 				<a
 					href={link.href}
-					class="hub-btn hub-btn--{link.variant} hub-btn--{link.id}"
+					class="hub-btn hub-btn--{link.id}"
 					onclick={(event) => handleClick(event, link)}
 				>
 					<span class="hub-btn-icon"><link.icon size={22} /></span>
@@ -271,43 +266,12 @@
 		transform: translateX(3px);
 	}
 
-	/* Boosting Services — first and most prominent */
-	.hub-btn--primary {
-		padding: 20px 18px;
-		background: var(--btn-primary-gradient);
-		border-color: rgba(5, 212, 113, 0.45);
-		box-shadow:
-			0 12px 32px rgba(5, 212, 113, 0.22),
-			0 0 0 1px rgba(5, 212, 113, 0.12);
+	/* All four destinations share one card style — order alone signals priority.
+	   Only the icon accent color varies, per destination. */
+	.hub-btn--boosting-services .hub-btn-icon {
+		color: var(--primary);
 	}
 
-	.hub-btn--primary .hub-btn-icon {
-		background: rgba(4, 21, 13, 0.16);
-		color: #04150d;
-	}
-
-	.hub-btn--primary .hub-btn-title {
-		color: #04150d;
-	}
-
-	.hub-btn--primary .hub-btn-desc {
-		color: rgba(4, 21, 13, 0.72);
-	}
-
-	.hub-btn--primary .hub-btn-arrow {
-		color: rgba(4, 21, 13, 0.55);
-	}
-
-	.hub-btn--primary:hover,
-	.hub-btn--primary:focus-visible {
-		background: var(--btn-primary-gradient-hover);
-		border-color: rgba(5, 212, 113, 0.68);
-		box-shadow:
-			0 16px 38px rgba(5, 212, 113, 0.28),
-			0 0 0 1px rgba(5, 212, 113, 0.2);
-	}
-
-	/* Secondary destinations keep a shared card style, differentiated only by icon accent */
 	.hub-btn--browse-accounts .hub-btn-icon {
 		color: var(--fa-lime-700);
 	}
