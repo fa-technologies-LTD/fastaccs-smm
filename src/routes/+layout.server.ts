@@ -1,34 +1,11 @@
 import type { LayoutServerLoad } from './$types';
-import { getActiveAnnouncementBanner } from '$lib/services/announcement-banner';
-import { getFeatureFlagSnapshot } from '$lib/services/feature-flags';
 import { toBrowserSession, toBrowserUser } from '$lib/auth/browser-session';
 
-export const load: LayoutServerLoad = async ({ locals, url, cookies }) => {
-	const isStorefrontPath = !url.pathname.startsWith('/admin') && !url.pathname.startsWith('/auth');
-	let announcementBanner: Awaited<ReturnType<typeof getActiveAnnouncementBanner>> = null;
-
-	if (isStorefrontPath) {
-		try {
-			const [flags, candidate] = await Promise.all([
-				getFeatureFlagSnapshot(),
-				getActiveAnnouncementBanner()
-			]);
-			if (flags.adminAnnouncementBanner && candidate) {
-				const dismissed = candidate.dismissible && cookies.get(candidate.dismissCookieName) === '1';
-				if (!dismissed) {
-					announcementBanner = candidate;
-				}
-			}
-		} catch (error) {
-			console.error('Failed to resolve announcement banner:', error);
-		}
-	}
-
+export const load: LayoutServerLoad = async ({ locals, url }) => {
 	// Only expose the browser-safe subset of authenticated account data.
 	return {
 		user: toBrowserUser(locals.user),
 		session: toBrowserSession(locals.session),
-		currentPath: url.pathname,
-		announcementBanner
+		currentPath: url.pathname
 	};
 };

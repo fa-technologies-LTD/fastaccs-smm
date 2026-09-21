@@ -21,8 +21,10 @@
 			<div class="step">
 				<span class="step-num">3</span>
 				<div>
-					<p class="step-title">Get your logs</p>
-					<p class="step-body">Your login details are ready on your dashboard within minutes.</p>
+					<p class="step-title">Receive your order</p>
+					<p class="step-body">
+						Your order details are available on your dashboard after fulfilment.
+					</p>
 				</div>
 			</div>
 		</div>
