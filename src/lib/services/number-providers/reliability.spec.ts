@@ -79,7 +79,7 @@ describe('route protection', () => {
 		expect(routeProtectionState({ consecutiveFailures: 3 })).toBe('blocked');
 	});
 
-	it('lets a route have one cautious chance after its cooldown', () => {
+	it('returns a route on bottom-of-queue probation after its cooldown', () => {
 		const now = new Date('2026-09-21T12:00:00Z');
 		expect(
 			routeProtectionState(
@@ -89,7 +89,7 @@ describe('route protection', () => {
 				},
 				now
 			)
-		).toBe('normal');
+		).toBe('probation');
 		expect(
 			routeProtectionState(
 				{
@@ -98,7 +98,7 @@ describe('route protection', () => {
 				},
 				now
 			)
-		).toBe('normal');
+		).toBe('probation');
 	});
 
 	it('temporarily blocks a supplier listing after two consecutive OOS responses', () => {
@@ -114,7 +114,7 @@ describe('route protection', () => {
 				{ consecutiveOos: 2, lastAttemptAt: new Date(now.getTime() - ROUTE_OOS_BLOCK_MS - 1) },
 				now
 			)
-		).toBe('normal');
+		).toBe('probation');
 	});
 
 	it('resets an OOS streak after a successful rent', () => {

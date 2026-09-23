@@ -16,9 +16,15 @@ import {
 } from './phone-analytics';
 import { triggerNumbersRestockForTier } from './restock-notifications';
 import {
+	persistPhoneSupplierCatalogSnapshot,
+	type PhoneSupplierCatalogRouteInput,
+	type PhoneSupplierCatalogScope
+} from './phone-supplier-catalog';
+import {
 	PHONE_TIER_KEYS,
 	PHONE_DELIVERY_MODE,
-	getPhoneTierConfig
+	getPhoneTierConfig,
+	type PhoneTierConfig
 } from '$lib/helpers/phone-tier-config';
 
 /**
@@ -426,6 +432,153 @@ export async function syncNumbersCatalog(
 			syncCountryIds.map(async (cid) => [cid, await fetchCountryServiceCosts(cid)] as const)
 		)
 	);
+
+	// Load PVAPins catalogue data for every existing storefront country, not only Hubman gaps. The
+	// resulting normalized route inventory is durable evidence that an untried alternative exists.
+	// A failed provider/country read is excluded from the replacement scopes so its prior trustworthy
+	// snapshot survives instead of being falsely marked empty.
+	const pvapinsReady = pvapins.isPvapinsConfigured();
+	let pvCountriesKnown = false;
+	let pvCountries: Awaited<ReturnType<typeof pvapins.loadCountries>> = [];
+	if (pvapinsReady) {
+		try {
+			pvCountries = await pvapins.loadCountries();
+			// An empty top-level catalogue is treated as a supplier blip, matching the existing
+			// no-stock guard. It must never become authoritative evidence that every route vanished.
+			pvCountriesKnown = pvCountries.length > 0;
+		} catch {
+			pvCountriesKnown = false;
+		}
+	}
+	type PvApps = Awaited<ReturnType<typeof pvapins.loadApps>>;
+	const pvAppsByCountryId = new Map<number, PvApps | 'failed'>();
+	if (pvapinsReady && pvCountriesKnown) {
+		const pvCountryIds = new Set<number>();
+		for (const tier of existingTiers) {
+			const cfg = getPhoneTierConfig(tier.metadata);
+			if (!cfg) continue;
+			const country = findPvapinsCountry(pvCountries, cfg.countryCode, cfg.countryName);
+			if (country) pvCountryIds.add(country.id);
+		}
+		await Promise.all(
+			[...pvCountryIds].map(async (id) => {
+				pvAppsByCountryId.set(id, await pvapins.loadApps(id).catch(() => 'failed' as const));
+			})
+		);
+	}
+
+	// Returns coverage (revive), null (pvapins genuinely has none → mark no-stock), or
+	// 'fetch_failed' (a transient pvapins error — leave the tier as-is, never flip it to no-stock).
+	async function pvapinsFillFor(
+		hubCode: string,
+		hubName: string,
+		serviceId: number
+	): Promise<{ costCents: number; count: number } | null | 'fetch_failed'> {
+		if (!pvapinsReady) return null;
+		if (!pvCountriesKnown) return 'fetch_failed';
+		const service = serviceByHubId(serviceId);
+		if (!service) return null;
+		const country = findPvapinsCountry(pvCountries, hubCode, hubName);
+		if (!country) return null;
+		let apps = pvAppsByCountryId.get(country.id);
+		if (apps === undefined) {
+			apps = await pvapins.loadApps(country.id).catch(() => 'failed' as const);
+			pvAppsByCountryId.set(country.id, apps);
+		}
+		if (apps === 'failed') return 'fetch_failed';
+		const matched = pvapinsAppsForService(service.pvapinsPrefixes, apps);
+		const costs = matched
+			.map((a) => pvapins.usdStringToCents(a.deduct))
+			.filter((n) => n > 0)
+			.sort((a, b) => a - b);
+		if (costs.length === 0) return null;
+		// PRICING basis = the ~35th-percentile (low/typical) variant cost — the cheap cluster we
+		// actually rent from, not the expensive tail.
+		const idx = Math.max(0, Math.min(costs.length - 1, Math.round(0.35 * (costs.length - 1))));
+		return { costCents: costs[idx], count: matched.length };
+	}
+
+	const snapshotRoutes: PhoneSupplierCatalogRouteInput[] = [];
+	const snapshotScopes: PhoneSupplierCatalogScope[] = [];
+	const configsByCountry = new Map<number, PhoneTierConfig[]>();
+	for (const tier of existingTiers) {
+		const cfg = getPhoneTierConfig(tier.metadata);
+		if (!cfg) continue;
+		const rows = configsByCountry.get(cfg.countryId) ?? [];
+		rows.push(cfg);
+		configsByCountry.set(cfg.countryId, rows);
+	}
+	for (const [countryId, configs] of configsByCountry) {
+		const serviceIds = [...new Set(configs.map((cfg) => cfg.serviceId))];
+		const hubFetch = fetched.get(countryId);
+		const hubCountryCurrentlyListed = countryIds.includes(countryId);
+		const hubScopeKnown =
+			hubman.isHubmanConfigured() &&
+			(hubFetch?.ok === true ||
+				(hubAvailabilityKnown && countryIds.length > 0 && !hubCountryCurrentlyListed));
+		if (hubScopeKnown) {
+			snapshotScopes.push({ provider: 'hubman', countryId, serviceIds });
+			for (const cfg of configs) {
+				const live = hubFetch?.costs.get(cfg.serviceId);
+				if (!live || live.available <= 0 || live.costCents <= 0) continue;
+				snapshotRoutes.push({
+					provider: 'hubman',
+					serviceId: cfg.serviceId,
+					serviceName: cfg.serviceName,
+					countryId,
+					countryName: cfg.countryName,
+					providerServiceRef: String(cfg.serviceId),
+					providerCountryRef: String(countryId),
+					costCents: live.costCents,
+					available: live.available,
+					stockConfidence: 'confirmed'
+				});
+			}
+		}
+
+		if (!pvapinsReady || !pvCountriesKnown) continue;
+		const first = configs[0];
+		if (!first) continue;
+		const pvCountry = findPvapinsCountry(pvCountries, first.countryCode, first.countryName);
+		if (!pvCountry) {
+			snapshotScopes.push({ provider: 'pvapins', countryId, serviceIds });
+			continue;
+		}
+		const apps = pvAppsByCountryId.get(pvCountry.id);
+		if (!apps || apps === 'failed') continue;
+		snapshotScopes.push({ provider: 'pvapins', countryId, serviceIds });
+		for (const cfg of configs) {
+			const service = serviceByHubId(cfg.serviceId);
+			if (!service) continue;
+			for (const app of pvapinsAppsForService(service.pvapinsPrefixes, apps)) {
+				const costCents = pvapins.usdStringToCents(app.deduct);
+				if (costCents <= 0) continue;
+				snapshotRoutes.push({
+					provider: 'pvapins',
+					serviceId: cfg.serviceId,
+					serviceName: cfg.serviceName,
+					countryId,
+					countryName: cfg.countryName,
+					providerServiceRef: app.full_name,
+					providerCountryRef: pvCountry.full_name,
+					costCents,
+					available: 1,
+					stockConfidence: 'listed'
+				});
+			}
+		}
+	}
+	await persistPhoneSupplierCatalogSnapshot({
+		routes: snapshotRoutes,
+		scopes: snapshotScopes,
+		syncedAt: now
+	}).catch((error) => {
+		console.error(
+			'[phone-catalog] failed to persist supplier route snapshot:',
+			(error as Error).message
+		);
+	});
+
 	// Tiers our own delivery data says are failing too often — hidden alongside no-stock ones.
 	const lowSuccessKeys = await getLowSuccessTierKeys().catch(() => new Set<string>());
 	let created = 0;
@@ -544,66 +697,8 @@ export async function syncNumbersCatalog(
 	const hubAvailabilityIsTrustworthy = hubAvailabilityKnown && countryIds.length > 0;
 
 	// pvapins fills hub-man's gaps: a tier hub-man rotated out stays LIVE (priced from pvapins)
-	// if pvapins carries that service+country. Fetched lazily and cached per country. Fail-soft.
-	const pvapinsReady = pvapins.isPvapinsConfigured();
-	const pvCountries = pvapinsReady ? await pvapins.loadCountries().catch(() => []) : [];
-	type PvApps = Awaited<ReturnType<typeof pvapins.loadApps>>;
-	const pvAppsByCountryId = new Map<number, PvApps | 'failed'>();
-	// Returns coverage (revive), null (pvapins genuinely has none → mark no-stock), or
-	// 'fetch_failed' (a transient pvapins error — leave the tier as-is, never flip it to no-stock).
-	async function pvapinsFillFor(
-		hubCode: string,
-		hubName: string,
-		serviceId: number
-	): Promise<{ costCents: number; count: number } | null | 'fetch_failed'> {
-		if (!pvapinsReady) return null;
-		if (pvCountries.length === 0) return 'fetch_failed'; // loadCountries failed/blipped
-		const service = serviceByHubId(serviceId);
-		if (!service) return null;
-		const country = findPvapinsCountry(pvCountries, hubCode, hubName);
-		if (!country) return null;
-		let apps = pvAppsByCountryId.get(country.id);
-		if (apps === undefined) {
-			apps = await pvapins.loadApps(country.id).catch(() => 'failed' as const);
-			pvAppsByCountryId.set(country.id, apps);
-		}
-		if (apps === 'failed') return 'fetch_failed';
-		const matched = pvapinsAppsForService(service.pvapinsPrefixes, apps);
-		const costs = matched
-			.map((a) => pvapins.usdStringToCents(a.deduct))
-			.filter((n) => n > 0)
-			.sort((a, b) => a - b);
-		if (costs.length === 0) return null;
-		// PRICING basis = the ~35th-percentile (low/typical) variant cost — the cheap cluster we
-		// actually rent from, not the expensive tail. Pricing off the tail (old p90) produced
-		// uncompetitive stickers (USA WhatsApp ≈ ₦8,800) and killed sales, even though the sweep
-		// almost always rents a ~$0.50 variant. The wide fulfilment ceiling still lets us climb to
-		// a pricier in-stock variant at a bounded loss, so a low sticker doesn't cost reliability.
-		// Nearest-rank on (length-1); for a handful of variants it lands in the cheap third.
-		const idx = Math.max(0, Math.min(costs.length - 1, Math.round(0.35 * (costs.length - 1))));
-		return { costCents: costs[idx], count: matched.length };
-	}
-
-	// Pre-fetch pvapins app lists for every gap country IN PARALLEL (each is large + slow). Doing
-	// them sequentially blew the time budget and caused slow fetches to fail → tiers flickering
-	// hidden. Parallel + cached makes the gap-fill fast and reliable.
-	if (pvapinsReady && pvCountries.length > 0) {
-		const gapCountryIds = new Set<number>();
-		for (const t of existingTiers) {
-			if (seenSlugs.has(t.slug)) continue;
-			const cfg = getPhoneTierConfig(t.metadata);
-			if (!cfg) continue;
-			const code = String((t.metadata as Record<string, unknown>)?.hub_country_code ?? '');
-			const country = findPvapinsCountry(pvCountries, code, cfg.countryName);
-			if (country) gapCountryIds.add(country.id);
-		}
-		await Promise.all(
-			[...gapCountryIds].map(async (id) => {
-				if (pvAppsByCountryId.has(id)) return;
-				pvAppsByCountryId.set(id, await pvapins.loadApps(id).catch(() => 'failed' as const));
-			})
-		);
-	}
+	// if pvapins carries that service+country. The app lists above are shared with snapshotting so
+	// one catalogue refresh never downloads the same large country payload twice.
 
 	for (const t of existingTiers) {
 		if (seenSlugs.has(t.slug)) continue;
@@ -1077,8 +1172,8 @@ export async function getNumbersStorefront(): Promise<
 		const cfg = getPhoneTierConfig(tier.metadata);
 		const price = readBasePrice(tier.metadata);
 		if (!cfg || price <= 0) continue;
-		// One healthy exact route keeps the tier buyable; when every observed route is cooling down,
-		// mute it immediately rather than accepting another payment and refunding it later.
+		// One healthy, probationary or genuinely unexplored affordable route keeps the tier buyable.
+		// Mute it only when the current sellable supplier set is exhausted or fully blocked.
 		const available =
 			!cfg.autoHidden && !lowSuccessKeys.has(`${cfg.serviceName}||${cfg.countryName}`);
 		const countryCode = String((tier.metadata as Record<string, unknown>)?.hub_country_code || '');
