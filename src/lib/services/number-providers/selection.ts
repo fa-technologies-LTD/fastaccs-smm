@@ -116,7 +116,7 @@ export function buildCandidatePool(input: {
 			exactRouteReliabilityKey('hubman', input.hub.serviceRef, input.serviceId, input.countryId)
 		);
 		const stat =
-			exactStat ??
+			(exactStat && exactStat.total > 0 ? exactStat : null) ??
 			input.reliability.get(
 				serviceCountryReliabilityKey('hubman', input.serviceId, input.countryId)
 			) ??
@@ -144,7 +144,7 @@ export function buildCandidatePool(input: {
 			exactRouteReliabilityKey('pvapins', p.app, input.serviceId, input.countryId)
 		);
 		const stat =
-			exactStat ??
+			(exactStat && exactStat.total > 0 ? exactStat : null) ??
 			input.reliability.get(`pvapins:${p.app}`) ??
 			input.reliability.get(
 				serviceCountryReliabilityKey('pvapins', input.serviceId, input.countryId)
