@@ -167,4 +167,46 @@ describe('loadCandidateReliability — OTP delivery only', () => {
 			})
 		);
 	});
+
+	it('keeps an old failed exact route on probation until positive evidence clears it', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-23T12:00:00Z'));
+		try {
+			prismaMock.phoneAttempt.findMany.mockResolvedValue([
+				{
+					orderItemId: 'old-1',
+					provider: 'hubman',
+					providerServiceRef: '44',
+					outcome: 'otp_timeout',
+					createdAt: new Date('2026-08-20T10:00:00Z'),
+					updatedAt: new Date('2026-08-20T10:20:00Z')
+				},
+				{
+					orderItemId: 'old-2',
+					provider: 'hubman',
+					providerServiceRef: '44',
+					outcome: 'otp_timeout',
+					createdAt: new Date('2026-08-21T10:00:00Z'),
+					updatedAt: new Date('2026-08-21T10:20:00Z')
+				}
+			]);
+			prismaMock.phoneRental.findMany.mockResolvedValue([
+				{ orderItemId: 'old-1', serviceId: 1, countryId: 58 },
+				{ orderItemId: 'old-2', serviceId: 1, countryId: 58 }
+			]);
+
+			const stats = await loadCandidateReliability(14);
+			const route = stats.get(exactRouteReliabilityKey('hubman', '44', 1, 58));
+
+			expect(route).toMatchObject({ total: 0, consecutiveFailures: 2 });
+			expect(routeProtectionState(route!, Date.now())).toBe('probation');
+			expect(prismaMock.phoneAttempt.findMany).toHaveBeenCalledWith(
+				expect.objectContaining({
+					where: expect.objectContaining({ createdAt: { gte: new Date('2026-08-10T00:00:00Z') } })
+				})
+			);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
 });

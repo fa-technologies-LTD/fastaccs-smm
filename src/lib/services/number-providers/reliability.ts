@@ -1,4 +1,5 @@
 import { prisma } from '$lib/prisma';
+import { NUMBERS_CLEAN_EPOCH } from '../phone-pricing';
 import { decodePvapinsRef } from './pvapins-provider';
 
 /**
@@ -222,16 +223,22 @@ export function routeProtectionState(
  * delivery failures. Only a number that actually received an OTP or authoritatively timed out is
  * eligible. This keeps routing provider-neutral and prevents the old race refunds from poisoning
  * pvapins' score merely because it happened to be the last provider stored on an order.
+ *
+ * Reliability rates use the requested rolling window, but exact-route failure/OOS streaks are
+ * retained from the clean learning epoch. A route therefore cannot age back into normal priority;
+ * only a real successful OTP/rent clears the corresponding streak.
  */
 export async function loadCandidateReliability(
 	windowDays = 14
 ): Promise<Map<string, ReliabilityStat>> {
 	try {
-		const since = new Date(Date.now() - windowDays * 86_400_000);
+		const recentSince = new Date(
+			Math.max(Date.now() - windowDays * 86_400_000, NUMBERS_CLEAN_EPOCH.getTime())
+		);
 		const rows = await prisma.phoneAttempt.findMany({
 			where: {
 				outcome: { in: ROUTE_HEALTH_ATTEMPT_OUTCOMES },
-				createdAt: { gte: since }
+				createdAt: { gte: NUMBERS_CLEAN_EPOCH }
 			},
 			select: {
 				orderItemId: true,
@@ -254,30 +261,30 @@ export async function loadCandidateReliability(
 				{ serviceId: rental.serviceId, countryId: rental.countryId }
 			])
 		);
-		// Exact PVAPins variants choose within a market. Service/country evidence gives a new variant
-		// a locally relevant prior, and provider-wide evidence is the final cold-start fallback.
-		return summarizeRouteHealth(
-			rows.flatMap((row) => {
+		const expandEvidence = (inputRows: typeof rows, exactOnly = false) =>
+			inputRows.flatMap((row) => {
 				const market = marketByOrderItem.get(row.orderItemId);
 				const evidence = {
 					outcome: row.outcome,
 					createdAt: row.createdAt,
 					updatedAt: row.updatedAt
 				};
+				const exact = market
+					? [
+							{
+								key: exactRouteReliabilityKey(
+									row.provider,
+									row.providerServiceRef,
+									market.serviceId,
+									market.countryId
+								),
+								...evidence
+							}
+						]
+					: [];
+				if (exactOnly) return exact;
 				return [
-					...(market
-						? [
-								{
-									key: exactRouteReliabilityKey(
-										row.provider,
-										row.providerServiceRef,
-										market.serviceId,
-										market.countryId
-									),
-									...evidence
-								}
-							]
-						: []),
+					...exact,
 					...(row.provider === 'pvapins'
 						? [{ key: `${row.provider}:${row.providerServiceRef}`, ...evidence }]
 						: []),
@@ -295,8 +302,30 @@ export async function loadCandidateReliability(
 						: []),
 					{ key: `${row.provider}:*`, ...evidence }
 				];
-			})
-		);
+			});
+
+		const recentRows = rows.filter((row) => {
+			// Prisma always returns createdAt. Treat absent timestamps as recent for legacy callers/tests.
+			if (!row.createdAt) return true;
+			return new Date(row.createdAt).getTime() >= recentSince.getTime();
+		});
+		// Exact PVAPins variants choose within a market. Service/country evidence gives a new variant
+		// a locally relevant prior, and provider-wide evidence is the final cold-start fallback.
+		const recentStats = summarizeRouteHealth(expandEvidence(recentRows));
+		const durableExactStats = summarizeRouteHealth(expandEvidence(rows, true));
+		for (const [key, durable] of durableExactStats) {
+			const recent = recentStats.get(key);
+			recentStats.set(key, {
+				received: recent?.received ?? 0,
+				total: recent?.total ?? 0,
+				reliability: recent?.reliability ?? 0,
+				consecutiveFailures: durable.consecutiveFailures ?? 0,
+				lastResolvedAt: durable.lastResolvedAt ?? null,
+				consecutiveOos: durable.consecutiveOos ?? 0,
+				lastAttemptAt: durable.lastAttemptAt ?? null
+			});
+		}
+		return recentStats;
 	} catch {
 		return new Map();
 	}
