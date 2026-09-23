@@ -22,10 +22,11 @@ export interface ReliabilityStat {
 	lastAttemptAt?: Date | null;
 }
 
-export type RouteProtectionState = 'normal' | 'deprioritized' | 'blocked';
+export type RouteProtectionState = 'normal' | 'deprioritized' | 'blocked' | 'probation';
 
 // Low-volume safety: two real no-code outcomes are enough to move an exact route to the back.
-// A third opens the circuit completely. Both recover automatically through a cautious canary.
+// A third opens the circuit completely. Time may later allow a cautious canary, but it never
+// restores the route's priority: only a delivered OTP resets the failure streak to normal.
 export const ROUTE_DEPRIORITIZE_FAILURE_STREAK = 2;
 export const ROUTE_BLOCK_FAILURE_STREAK = 3;
 export const ROUTE_DEPRIORITIZE_MS = 24 * 60 * 60 * 1000;
@@ -208,6 +209,10 @@ export function routeProtectionState(
 		isWithinCooldown(stat.lastResolvedAt, ROUTE_DEPRIORITIZE_MS, nowMs)
 	)
 		return 'deprioritized';
+	// A cooldown ending means "eligible for a last-resort canary", not "supplier recovered".
+	// Keep previously failed/dry routes at the bottom until a real rent/OTP clears their streak.
+	if (failures >= ROUTE_DEPRIORITIZE_FAILURE_STREAK || oos >= ROUTE_OOS_BLOCK_STREAK)
+		return 'probation';
 	return 'normal';
 }
 

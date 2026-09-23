@@ -86,24 +86,24 @@ model User {
 }
 
 model Category {
-  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  parentId           String?             @map("parent_id") @db.Uuid
-  name               String
-  slug               String
-  description        String?
-  categoryType       String              @map("category_type")
-  metadata           Json                @default("{}")
-  sortOrder          Int                 @default(0) @map("sort_order")
-  isActive           Boolean             @default(true) @map("is_active")
-  createdAt          DateTime            @default(now()) @map("created_at")
-  updatedAt          DateTime            @default(now()) @map("updated_at")
-  accountBatches     AccountBatch[]
-  accounts           Account[]
-  cartItems          CartItem[]
-  parent             Category?           @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children           Category[]          @relation("CategoryHierarchy")
-  orderItems         OrderItem[]
-  reviews            Review[]
+  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parentId            String?              @map("parent_id") @db.Uuid
+  name                String
+  slug                String
+  description         String?
+  categoryType        String               @map("category_type")
+  metadata            Json                 @default("{}")
+  sortOrder           Int                  @default(0) @map("sort_order")
+  isActive            Boolean              @default(true) @map("is_active")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @default(now()) @map("updated_at")
+  accountBatches      AccountBatch[]
+  accounts            Account[]
+  cartItems           CartItem[]
+  parent              Category?            @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children            Category[]           @relation("CategoryHierarchy")
+  orderItems          OrderItem[]
+  reviews             Review[]
   boostCustomerOffers BoostCustomerOffer[]
 
   @@index([parentId])
@@ -1171,4 +1171,50 @@ model PhoneAttempt {
   @@index([provider, providerServiceRef, createdAt])
   @@index([outcome, createdAt])
   @@map("phone_attempts")
+}
+
+// Latest successfully observed supplier route inventory for each Numbers service/country market.
+// Rows are never deleted when a supplier API blips: a successful catalogue refresh marks missing
+// routes unavailable, while a failed refresh preserves the last trustworthy snapshot. This lets
+// storefront safety distinguish a genuinely exhausted market from an unexplored route.
+model PhoneSupplierCatalogRoute {
+  routeKey           String    @id @map("route_key")
+  provider           String
+  serviceId          Int       @map("service_id")
+  serviceName        String    @map("service_name")
+  countryId          Int       @map("country_id")
+  countryName        String    @map("country_name")
+  providerServiceRef String    @map("provider_service_ref")
+  providerCountryRef String    @map("provider_country_ref")
+  costCents          Int       @map("cost_cents")
+  available          Int
+  stockConfidence    String    @map("stock_confidence")
+  firstSeenAt        DateTime  @default(now()) @map("first_seen_at")
+  lastSeenAt         DateTime  @map("last_seen_at")
+  unavailableAt      DateTime? @map("unavailable_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@index([serviceId, countryId, unavailableAt])
+  @@index([provider, countryId, unavailableAt])
+  @@index([lastSeenAt])
+  @@map("phone_supplier_catalog_routes")
+}
+
+// Records a successful provider/service/country catalogue read even when it returned zero routes.
+// Without this scope row, "empty catalogue" and "catalogue has never been fetched" are
+// indistinguishable, so storefront safety cannot make a conclusive availability decision.
+model PhoneSupplierCatalogScope {
+  scopeKey    String   @id @map("scope_key")
+  provider    String
+  serviceId   Int      @map("service_id")
+  countryId   Int      @map("country_id")
+  routeCount  Int      @map("route_count")
+  refreshedAt DateTime @map("refreshed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([serviceId, countryId, refreshedAt])
+  @@index([provider, countryId, refreshedAt])
+  @@map("phone_supplier_catalog_scopes")
 }

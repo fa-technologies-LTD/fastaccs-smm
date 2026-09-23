@@ -75,12 +75,19 @@ export function rankCandidates(candidates: Candidate[]): Candidate[] {
 		.filter((row) => row.protection !== 'blocked')
 		.sort(
 			(a, b) =>
-				Number(a.protection === 'deprioritized') - Number(b.protection === 'deprioritized') ||
+				protectionRank(a.protection) - protectionRank(b.protection) ||
 				b.bucket - a.bucket ||
 				b.stockRank - a.stockRank ||
 				a.c.costCents - b.c.costCents
 		)
 		.map((x) => x.c);
+}
+
+function protectionRank(state: ReturnType<typeof routeProtectionState>): number {
+	if (state === 'normal') return 0;
+	if (state === 'deprioritized') return 1;
+	if (state === 'probation') return 2;
+	return 3;
 }
 
 /** Cheapest in-stock cost across the pool — used to price the product (cost × margin). */

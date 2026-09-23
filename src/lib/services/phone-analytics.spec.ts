@@ -3,11 +3,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const prismaMock = vi.hoisted(() => ({
 	phoneRental: { findMany: vi.fn() },
 	phoneAttempt: { findMany: vi.fn() },
+	phoneSupplierCatalogScope: { findMany: vi.fn() },
+	phoneSupplierCatalogRoute: { findMany: vi.fn() },
+	category: { findMany: vi.fn() },
 	analyticsEvent: { findMany: vi.fn() }
 }));
+const getPhonePricingConfigMock = vi.hoisted(() => vi.fn());
 vi.mock('$lib/prisma', () => ({ prisma: prismaMock }));
 vi.mock('./phone-pricing', () => ({
-	getPhonePricingConfig: vi.fn(),
+	getPhonePricingConfig: getPhonePricingConfigMock,
+	computeProcurementCeilingCents: (saleNgn: number, floorNgn: number, rate: number) =>
+		Math.max(0, Math.floor(((saleNgn - floorNgn) / rate) * 100)),
 	NUMBERS_CLEAN_EPOCH: new Date('2000-01-01T00:00:00Z')
 }));
 vi.mock('./hubman', () => ({ getBalanceCents: vi.fn(), isHubmanConfigured: () => false }));
@@ -22,7 +28,14 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	rowId = 0;
 	prismaMock.phoneAttempt.findMany.mockResolvedValue([]);
+	prismaMock.phoneSupplierCatalogScope.findMany.mockResolvedValue([]);
+	prismaMock.phoneSupplierCatalogRoute.findMany.mockResolvedValue([]);
+	prismaMock.category.findMany.mockResolvedValue([]);
 	prismaMock.analyticsEvent.findMany.mockResolvedValue([]);
+	getPhonePricingConfigMock.mockResolvedValue({
+		usdNgnRate: 1700,
+		minFulfillmentProfitNgn: 500
+	});
 });
 
 let rowId = 0;
@@ -37,7 +50,9 @@ function outcomes(
 ) {
 	const rentals: Array<{
 		orderItemId: string;
+		serviceId: number;
 		serviceName: string;
+		countryId: number;
 		countryName: string;
 		status: string;
 		createdAt: Date;
@@ -59,7 +74,9 @@ function outcomes(
 		const delivered = i < received;
 		rentals.push({
 			orderItemId,
+			serviceId: 1,
 			serviceName,
+			countryId: 58,
 			countryName,
 			status: delivered ? 'received' : 'refunded',
 			createdAt: at,
@@ -84,23 +101,48 @@ function mockOutcomes(...sets: ReturnType<typeof outcomes>[]) {
 	prismaMock.phoneAttempt.findMany.mockResolvedValue(sets.flatMap((s) => s.attempts));
 }
 
+function mockCurrentSnapshot(
+	routes: Array<{ routeKey: string; costCents: number }>,
+	priceNgn = 1_800
+) {
+	prismaMock.phoneSupplierCatalogScope.findMany.mockResolvedValue([
+		{ serviceId: 1, countryId: 58 }
+	]);
+	prismaMock.phoneSupplierCatalogRoute.findMany.mockResolvedValue(
+		routes.map((route) => ({ ...route, serviceId: 1, countryId: 58 }))
+	);
+	prismaMock.category.findMany.mockResolvedValue([
+		{
+			metadata: {
+				delivery_mode: 'auto_sms',
+				hub_service_id: 1,
+				hub_service_name: 'WhatsApp',
+				hub_country_id: 58,
+				hub_country_name: 'USA',
+				hub_country_code: 'US',
+				pricing: { base_price: priceNgn }
+			}
+		}
+	]);
+}
+
 describe('getLowSuccessTierKeys — low-volume exact-route protection', () => {
 	it('keeps a tier live after only one no-code outcome', async () => {
 		mockOutcomes(outcomes('WhatsApp', 'USA', 'hubman', 0, 1, '1'));
 		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(false);
 	});
 
-	it('hides when its only observed route has two consecutive no-code outcomes', async () => {
+	it('keeps a twice-failed route available only as a deprioritized fallback', async () => {
 		mockOutcomes(outcomes('WhatsApp', 'USA', 'hubman', 0, 2, '1'));
-		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(true);
+		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(false);
 	});
 
-	it('hides after two consecutive failed customer orders split across different routes', async () => {
+	it('stays live when failures are split across alternatives that have not individually tripped', async () => {
 		mockOutcomes(
 			outcomes('WhatsApp', 'USA', 'hubman', 0, 1, '1'),
 			outcomes('WhatsApp', 'USA', 'pvapins', 0, 1, 'Whatsapp159')
 		);
-		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(true);
+		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(false);
 	});
 
 	it('keeps a tier live when another exact route is currently healthy', async () => {
@@ -111,11 +153,48 @@ describe('getLowSuccessTierKeys — low-volume exact-route protection', () => {
 		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(false);
 	});
 
-	it('hides when every observed exact route is cooling down', async () => {
+	it('hides only when every observed exact route is actively blocked', async () => {
 		mockOutcomes(
-			outcomes('WhatsApp', 'USA', 'hubman', 0, 2, '1'),
+			outcomes('WhatsApp', 'USA', 'hubman', 0, 3, '1'),
 			outcomes('WhatsApp', 'USA', 'pvapins', 0, 3, 'Whatsapp161')
 		);
+		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(true);
+	});
+
+	it('keeps a tier live when the persisted catalogue contains an unexplored route', async () => {
+		mockOutcomes(outcomes('WhatsApp', 'USA', 'hubman', 0, 3, '1'));
+		mockCurrentSnapshot([
+			{ routeKey: 'hubman:route:1:58:1', costCents: 50 },
+			{ routeKey: 'pvapins:route:1:58:Whatsapp24', costCents: 66 }
+		]);
+		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(false);
+	});
+
+	it('hides when every route in the current catalogue snapshot is actively blocked', async () => {
+		mockOutcomes(
+			outcomes('WhatsApp', 'USA', 'hubman', 0, 3, '1'),
+			outcomes('WhatsApp', 'USA', 'pvapins', 0, 3, 'Whatsapp24')
+		);
+		mockCurrentSnapshot([
+			{ routeKey: 'hubman:route:1:58:1', costCents: 50 },
+			{ routeKey: 'pvapins:route:1:58:Whatsapp24', costCents: 66 }
+		]);
+		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(true);
+	});
+
+	it('treats a successfully fetched empty supplier scope as no route, not as unknown', async () => {
+		mockOutcomes(outcomes('WhatsApp', 'USA', 'hubman', 0, 3, '1'));
+		mockCurrentSnapshot([]);
+		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(true);
+	});
+
+	it('does not let an unaffordable unexplored listing keep checkout open', async () => {
+		mockOutcomes(outcomes('WhatsApp', 'USA', 'hubman', 0, 3, '1'));
+		// ₦1,800 sale - ₦500 hard floor at ₦1,700/$ gives a 76-cent ceiling.
+		mockCurrentSnapshot([
+			{ routeKey: 'hubman:route:1:58:1', costCents: 50 },
+			{ routeKey: 'pvapins:route:1:58:Whatsapp99', costCents: 100 }
+		]);
 		expect((await getLowSuccessTierKeys()).has('WhatsApp||USA')).toBe(true);
 	});
 
@@ -129,15 +208,27 @@ describe('getLowSuccessTierKeys — low-volume exact-route protection', () => {
 		prismaMock.phoneRental.findMany.mockResolvedValue([
 			{
 				orderItemId: 'dry-1',
+				serviceId: 2,
 				serviceName: 'Telegram',
+				countryId: 58,
 				countryName: 'USA',
-				status: 'pending'
+				status: 'pending',
+				createdAt: now,
+				receivedAt: null,
+				refundedAt: null,
+				updatedAt: now
 			},
 			{
 				orderItemId: 'dry-2',
+				serviceId: 2,
 				serviceName: 'Telegram',
+				countryId: 58,
 				countryName: 'USA',
-				status: 'pending'
+				status: 'pending',
+				createdAt: now,
+				receivedAt: null,
+				refundedAt: null,
+				updatedAt: now
 			}
 		]);
 		prismaMock.phoneAttempt.findMany.mockResolvedValue([

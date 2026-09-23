@@ -1,7 +1,13 @@
 import { prisma } from '$lib/prisma';
-import { getPhonePricingConfig, NUMBERS_CLEAN_EPOCH } from './phone-pricing';
+import { getPhoneTierConfig } from '$lib/helpers/phone-tier-config';
+import {
+	computeProcurementCeilingCents,
+	getPhonePricingConfig,
+	NUMBERS_CLEAN_EPOCH
+} from './phone-pricing';
 import { getBalanceCents, isHubmanConfigured } from './hubman';
 import {
+	exactRouteReliabilityKey,
 	ROUTE_HEALTH_ATTEMPT_OUTCOMES,
 	routeProtectionState,
 	summarizeRouteHealth,
@@ -17,17 +23,24 @@ import {
 const RECEIVED = 'received';
 const FAILED_STATES = new Set(['refunded', 'expired', 'cancelled', 'failed']);
 
+function tierBasePrice(metadata: unknown): number {
+	if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return 0;
+	const raw = metadata as Record<string, unknown>;
+	if (!raw.pricing || typeof raw.pricing !== 'object' || Array.isArray(raw.pricing)) return 0;
+	const value = Number((raw.pricing as Record<string, unknown>).base_price);
+	return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 // Only recent evidence counts. Exact-route cooldowns decide when a cautious canary is allowed.
 export const SUCCESS_HIDE_WINDOW_DAYS = 14;
 
 /**
- * Tiers to mute for either of two customer-safety reasons:
- * - the product itself has two consecutive failed customer orders (three extends the cooldown), or
- * - every exact supplier route with real evidence is currently protected.
+ * Tiers to mute when the current sellable supplier set is empty or every route in it is blocked.
  *
- * The product-level streak catches failures spread across several supplier variants—the real 0/7
- * pattern that an exact-route-only breaker misses. One successful customer order resets it. A
- * completely new tier with no evidence still gets a controlled first chance.
+ * A product-wide failure streak must not suppress healthy or unexplored alternatives. Routes that
+ * have finished their cooldown return only on probation (at the bottom of the fulfilment queue),
+ * so the tier can cautiously recover without pretending that elapsed time proved reliability. A
+ * persisted, affordable route with no history is genuinely unexplored and keeps the product live.
  */
 export async function getLowSuccessTierKeys(): Promise<Set<string>> {
 	const since = new Date(Date.now() - SUCCESS_HIDE_WINDOW_DAYS * 86_400_000);
@@ -35,7 +48,9 @@ export async function getLowSuccessTierKeys(): Promise<Set<string>> {
 		where: { createdAt: { gte: since } },
 		select: {
 			orderItemId: true,
+			serviceId: true,
 			serviceName: true,
+			countryId: true,
 			countryName: true,
 			status: true,
 			createdAt: true,
@@ -45,12 +60,20 @@ export async function getLowSuccessTierKeys(): Promise<Set<string>> {
 		}
 	});
 	if (rentals.length === 0) return new Set();
-	const tierByOrderItem = new Map(
-		rentals.map((r) => [r.orderItemId, `${r.serviceName}||${r.countryName}`])
+	const marketByOrderItem = new Map(
+		rentals.map((r) => [
+			r.orderItemId,
+			{
+				tierKey: `${r.serviceName}||${r.countryName}`,
+				marketKey: `${r.serviceId}||${r.countryId}`,
+				serviceId: r.serviceId,
+				countryId: r.countryId
+			}
+		])
 	);
 	const attempts = await prisma.phoneAttempt.findMany({
 		where: {
-			orderItemId: { in: [...tierByOrderItem.keys()] },
+			orderItemId: { in: [...marketByOrderItem.keys()] },
 			outcome: { in: ROUTE_HEALTH_ATTEMPT_OUTCOMES },
 			createdAt: { gte: since }
 		},
@@ -65,14 +88,15 @@ export async function getLowSuccessTierKeys(): Promise<Set<string>> {
 	});
 	const tierByRoute = new Map<string, string>();
 	const evidence = attempts.flatMap((attempt) => {
-		const tierKey = tierByOrderItem.get(attempt.orderItemId);
-		if (!tierKey) return [];
-		const routeKey = JSON.stringify([
-			tierKey,
+		const market = marketByOrderItem.get(attempt.orderItemId);
+		if (!market) return [];
+		const routeKey = exactRouteReliabilityKey(
 			attempt.provider || 'unknown',
-			attempt.providerServiceRef
-		]);
-		tierByRoute.set(routeKey, tierKey);
+			attempt.providerServiceRef,
+			market.serviceId,
+			market.countryId
+		);
+		tierByRoute.set(routeKey, market.tierKey);
 		return [
 			{
 				key: routeKey,
@@ -83,45 +107,100 @@ export async function getLowSuccessTierKeys(): Promise<Set<string>> {
 		];
 	});
 	const routeStats = summarizeRouteHealth(evidence);
-	const routesByTier = new Map<string, ReliabilityStat[]>();
+	const observedRoutesByTier = new Map<string, ReliabilityStat[]>();
 	for (const [routeKey, stat] of routeStats) {
 		const tierKey = tierByRoute.get(routeKey);
 		if (!tierKey) continue;
-		const routes = routesByTier.get(tierKey) ?? [];
+		const routes = observedRoutesByTier.get(tierKey) ?? [];
 		routes.push(stat);
-		routesByTier.set(tierKey, routes);
+		observedRoutesByTier.set(tierKey, routes);
+	}
+	const tierMarkets = new Map(
+		rentals.map((rental) => [
+			`${rental.serviceName}||${rental.countryName}`,
+			`${rental.serviceId}||${rental.countryId}`
+		])
+	);
+	const markets = [
+		...new Map(
+			rentals.map((rental) => [
+				`${rental.serviceId}||${rental.countryId}`,
+				{ serviceId: rental.serviceId, countryId: rental.countryId }
+			])
+		).values()
+	];
+	const marketFilter = markets.map(({ serviceId, countryId }) => ({ serviceId, countryId }));
+
+	// Snapshot scope rows make a successful empty catalogue distinguishable from an API failure or a
+	// market we have never inspected. Route rows then prove which alternatives are currently listed.
+	// Fail back to observed-only behavior while the migration has not landed or inventory is unreadable.
+	const inventory = await Promise.all([
+		prisma.phoneSupplierCatalogScope.findMany({
+			where: { OR: marketFilter },
+			select: { serviceId: true, countryId: true }
+		}),
+		prisma.phoneSupplierCatalogRoute.findMany({
+			where: { OR: marketFilter, unavailableAt: null, available: { gt: 0 } },
+			select: { routeKey: true, serviceId: true, countryId: true, costCents: true }
+		})
+	])
+		.then(([scopes, routes]) => ({ known: true, scopes, routes }))
+		.catch(() => ({ known: false, scopes: [], routes: [] }));
+
+	const [tierCategories, pricing] = await Promise.all([
+		prisma.category.findMany({
+			where: {
+				slug: {
+					in: markets.map(
+						({ serviceId, countryId }) => `numbers-svc${serviceId}-country${countryId}`
+					)
+				}
+			},
+			select: { metadata: true }
+		}),
+		getPhonePricingConfig()
+	]);
+	const ceilingByMarket = new Map<string, number>();
+	for (const category of tierCategories) {
+		const cfg = getPhoneTierConfig(category.metadata);
+		if (!cfg) continue;
+		const priceNgn = tierBasePrice(category.metadata);
+		const hardProfitFloor = Math.max(
+			pricing.minFulfillmentProfitNgn,
+			cfg.minFulfillmentProfitNgn ?? pricing.minFulfillmentProfitNgn
+		);
+		ceilingByMarket.set(
+			`${cfg.serviceId}||${cfg.countryId}`,
+			computeProcurementCeilingCents(priceNgn, hardProfitFloor, pricing.usdNgnRate)
+		);
+	}
+	const cataloguedMarkets = new Set(
+		inventory.scopes.map((scope) => `${scope.serviceId}||${scope.countryId}`)
+	);
+	const catalogRoutesByMarket = new Map<string, string[]>();
+	for (const route of inventory.routes) {
+		const marketKey = `${route.serviceId}||${route.countryId}`;
+		const ceiling = ceilingByMarket.get(marketKey) ?? 0;
+		// An unaffordable listing cannot fulfil this product without breaking the hard profit floor,
+		// so it must not masquerade as an unexplored fallback that keeps checkout open.
+		if (route.costCents > ceiling) continue;
+		const rows = catalogRoutesByMarket.get(marketKey) ?? [];
+		rows.push(route.routeKey);
+		catalogRoutesByMarket.set(marketKey, rows);
 	}
 	const out = new Set<string>();
-	const resolvedByTier = new Map<
-		string,
-		Array<{ received: boolean; createdAt: Date; resolvedAt: Date }>
-	>();
-	for (const rental of rentals) {
-		const received = rental.status === RECEIVED;
-		if (!received && !FAILED_STATES.has(rental.status)) continue;
-		const tierKey = `${rental.serviceName}||${rental.countryName}`;
-		const rows = resolvedByTier.get(tierKey) ?? [];
-		rows.push({
-			received,
-			createdAt: rental.createdAt,
-			resolvedAt: rental.receivedAt ?? rental.refundedAt ?? rental.updatedAt
-		});
-		resolvedByTier.set(tierKey, rows);
-	}
-	for (const [tierKey, rows] of resolvedByTier) {
-		rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-		let consecutiveFailures = 0;
-		let lastResolvedAt: Date | null = null;
-		for (const row of rows) {
-			consecutiveFailures = row.received ? 0 : consecutiveFailures + 1;
-			lastResolvedAt = row.resolvedAt;
-		}
-		if (routeProtectionState({ consecutiveFailures, lastResolvedAt }) !== 'normal') {
-			out.add(tierKey);
-		}
-	}
-	for (const [tierKey, routes] of routesByTier) {
-		if (routes.length > 0 && routes.every((route) => routeProtectionState(route) !== 'normal')) {
+	for (const [tierKey, observedRoutes] of observedRoutesByTier) {
+		const marketKey = tierMarkets.get(tierKey) ?? '';
+		const snapshotKnown = inventory.known && cataloguedMarkets.has(marketKey);
+		const catalogRouteKeys = catalogRoutesByMarket.get(marketKey) ?? [];
+		const everyCurrentRouteBlocked = snapshotKnown
+			? catalogRouteKeys.length === 0 ||
+				catalogRouteKeys.every((routeKey) => {
+					const stat = routeStats.get(routeKey);
+					return stat ? routeProtectionState(stat) === 'blocked' : false;
+				})
+			: observedRoutes.every((route) => routeProtectionState(route) === 'blocked');
+		if (everyCurrentRouteBlocked) {
 			out.add(tierKey);
 		}
 	}

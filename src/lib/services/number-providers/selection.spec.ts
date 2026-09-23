@@ -94,6 +94,22 @@ describe('rankCandidates', () => {
 		expect(rankCandidates([dry, healthy]).map((x) => x.label)).toEqual(['healthy']);
 	});
 
+	it('keeps a cooled-down failed route at the bottom until a real success resets it', () => {
+		const old = new Date(Date.now() - 10 * 24 * 60 * 60 * 1_000);
+		const probation = c({
+			label: 'probation',
+			reliability: 0.99,
+			sampleSize: 30,
+			consecutiveFailures: 3,
+			lastResolvedAt: old
+		});
+		const unexplored = c({ label: 'unexplored', reliability: null, sampleSize: 0 });
+		expect(rankCandidates([probation, unexplored]).map((x) => x.label)).toEqual([
+			'unexplored',
+			'probation'
+		]);
+	});
+
 	it('returns empty for an empty pool', () => {
 		expect(rankCandidates([])).toEqual([]);
 	});
