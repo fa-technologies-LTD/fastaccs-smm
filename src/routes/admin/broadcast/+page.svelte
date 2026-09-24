@@ -610,8 +610,8 @@
 					style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
 				></textarea>
 				<p class="mt-1 text-xs" style="color: var(--text-dim);">
-					Use `{{ first_name }}` or `{{ full_name }}` to insert each recipient's registered name. If
-					no name is saved, the email uses “there”. Basic markdown is also supported.
+					Use <code>{'{{first_name}}'}</code> or <code>{'{{full_name}}'}</code> to insert each recipient's
+					registered name. If no name is saved, the email uses “there”. Basic markdown is also supported.
 				</p>
 			</div>
 
