@@ -67,10 +67,10 @@ const BOOSTING_CROSSSELL_POPUP: PendingSitePopup = {
 	type: 'boosting_crosssell',
 	icon: '⚡',
 	title: 'Grow the account you just bought',
-	body: 'Add real followers, likes & views with our Boosting Services — pick a platform, paste your link, done.',
+	body: 'Grow with followers, likes & views — pick a platform, paste your link, and track your order.',
 	ctaText: 'Maybe later',
 	secondaryHref: '/services',
-	secondaryText: 'Boost my account →'
+	secondaryText: 'Grow my account →'
 };
 
 // One-time "the affiliate program got better" announcement, adaptive to whether the

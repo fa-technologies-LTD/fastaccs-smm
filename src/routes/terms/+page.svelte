@@ -19,7 +19,7 @@
 			>
 				Terms of Use
 			</h1>
-			<p style="color: var(--text-muted);">Effective date: April 8, 2026</p>
+			<p style="color: var(--text-muted);">Effective date: September 19, 2026</p>
 		</div>
 
 		<div class="space-y-7" style="color: var(--text-muted);">
@@ -35,6 +35,40 @@
 						>Acceptable Use Rules</a
 					>.
 				</p>
+			</section>
+
+			<section>
+				<h2
+					class="mb-2 text-2xl font-semibold"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
+					Boosting Services
+				</h2>
+				<ul class="ml-6 list-disc space-y-1">
+					<li>
+						Submit the exact public link requested and keep the profile, post, video, song, or
+						channel accessible until delivery finishes. FastAccs never needs your social-media
+						password.
+					</li>
+					<li>
+						Start and completion times are estimates. They can change with order size, platform
+						conditions, and the selected service.
+					</li>
+					<li>
+						A refill applies only when a refill window is shown on the selected option and the
+						delivered amount drops within that window. FastAccs will check the order before
+						requesting a refill. Options without a stated refill may experience drop-off.
+					</li>
+					<li>
+						Do not run overlapping services for the same link and result. FastAccs may queue a new
+						order until the earlier one is complete so delivery and any recovery can be measured
+						safely.
+					</li>
+					<li>
+						Purchased engagement supports visibility but does not guarantee organic reach, earnings,
+						audience activity, or permanent counts.
+					</li>
+				</ul>
 			</section>
 
 			<section>
@@ -90,27 +124,30 @@
 				</h2>
 				<ul class="ml-6 list-disc space-y-1">
 					<li>
-						Each verification number is supplied for a <strong>single one-time code</strong> (OTP) on the
-						selected service. Once a code is delivered the order is complete; numbers are not reusable
+						Each verification number is supplied for a <strong>single one-time code</strong> (OTP) on
+						the selected service. Once a code is delivered the order is complete; numbers are not reusable
 						and are not intended for long-term ownership or repeated use across accounts.
 					</li>
 					<li>
-						These are <strong>shared, previously-used SIMs</strong>, so the number is best treated as
-						disposable — for receiving a one-time code, not for anchoring an account you intend to keep.
-						Some platforms (WhatsApp in particular) assess a number's history and may later restrict or
-						<strong>ban an account registered on a reused number</strong>. This is a platform decision
-						outside our control and is not a fault in the number or grounds for a refund once the code has
-						been delivered. For a permanent account, register with a SIM you personally own.
+						These are <strong>shared, previously-used SIMs</strong>, so the number is best treated
+						as disposable — for receiving a one-time code, not for anchoring an account you intend
+						to keep. Some platforms (WhatsApp in particular) assess a number's history and may later
+						restrict or
+						<strong>ban an account registered on a reused number</strong>. This is a platform
+						decision outside our control and is not a fault in the number or grounds for a refund
+						once the code has been delivered. For a permanent account, register with a SIM you
+						personally own.
 					</li>
 					<li>
 						If no code arrives within the activation window, the order is
-						<strong>automatically refunded to your store credit</strong>. Because a delivered code is a
-						completed service, orders where a code was received are not refundable.
+						<strong>automatically refunded to your store credit</strong>. Because a delivered code
+						is a completed service, orders where a code was received are not refundable.
 					</li>
 					<li>
-						Numbers must be used only for <strong>legitimate verification you are authorised to
-						perform</strong> — never for fraud, impersonation, ban evasion, spam, or any service whose
-						terms require a personal carrier number.
+						Numbers must be used only for <strong
+							>legitimate verification you are authorised to perform</strong
+						> — never for fraud, impersonation, ban evasion, spam, or any service whose terms require
+						a personal carrier number.
 					</li>
 					<li>
 						Delivery speed and success depend on the upstream network and the destination platform,

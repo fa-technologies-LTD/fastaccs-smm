@@ -133,7 +133,7 @@
 							<TierSampleScreenshotFields bind:urls={tierForm.metadata.sample_screenshot_urls} />
 
 							<div
-								class="md:col-span-2 rounded-lg p-3"
+								class="rounded-lg p-3 md:col-span-2"
 								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
 							>
 								<div class="flex items-start justify-between gap-4">
@@ -155,14 +155,20 @@
 							</div>
 
 							<div
-								class="md:col-span-2 rounded-lg p-3"
+								class="rounded-lg p-3 md:col-span-2"
 								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
 							>
 								<label class="flex items-start justify-between gap-4">
 									<span>
-										<span class="text-sm font-semibold" style="color: var(--text);">Exclude from affiliate offer</span>
-										<span class="mt-1 block text-xs leading-relaxed" style="color: var(--text-muted);">
-											Keep this checked whenever the tier's margin cannot safely support both sides of the offer.
+										<span class="text-sm font-semibold" style="color: var(--text);"
+											>Exclude from affiliate offer</span
+										>
+										<span
+											class="mt-1 block text-xs leading-relaxed"
+											style="color: var(--text-muted);"
+										>
+											Keep this checked whenever the tier's margin cannot safely support both sides
+											of the offer.
 										</span>
 									</span>
 									<input
@@ -174,7 +180,7 @@
 							</div>
 
 							<div
-								class="md:col-span-2 rounded-lg p-3"
+								class="rounded-lg p-3 md:col-span-2"
 								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
 							>
 								<div class="mb-2">
@@ -270,7 +276,7 @@
 							</div>
 
 							<div
-								class="md:col-span-2 rounded-lg p-3"
+								class="rounded-lg p-3 md:col-span-2"
 								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
 							>
 								<div class="mb-2">
@@ -325,7 +331,7 @@
 											class="block text-sm font-medium"
 											style="color: var(--text);"
 										>
-												Customer Message (Manual Handover (WhatsApp))
+											Customer Message (Manual Handover (WhatsApp))
 										</label>
 										<input
 											id="edit-manual-handover-promise"
@@ -341,7 +347,7 @@
 							</div>
 
 							<div
-								class="md:col-span-2 rounded-lg p-3"
+								class="rounded-lg p-3 md:col-span-2"
 								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
 							>
 								<div class="mb-2">
@@ -352,8 +358,10 @@
 								</div>
 								<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
 									<div class="md:col-span-2">
-										<label for="edit-login-guide-url" class="block text-sm font-medium" style="color: var(--text);"
-											>Guide URL</label
+										<label
+											for="edit-login-guide-url"
+											class="block text-sm font-medium"
+											style="color: var(--text);">Guide URL</label
 										>
 										<input
 											id="edit-login-guide-url"
@@ -365,8 +373,10 @@
 										/>
 									</div>
 									<div class="md:col-span-2">
-										<label for="edit-login-guide-label" class="block text-sm font-medium" style="color: var(--text);"
-											>Guide Label</label
+										<label
+											for="edit-login-guide-label"
+											class="block text-sm font-medium"
+											style="color: var(--text);">Guide Label</label
 										>
 										<input
 											id="edit-login-guide-label"
@@ -426,8 +436,10 @@
 
 							<!-- Follower Range -->
 							<div>
-								<label for="tier-edit-min-followers" class="block text-sm font-medium" style="color: var(--text);"
-									>Min Followers</label
+								<label
+									for="tier-edit-min-followers"
+									class="block text-sm font-medium"
+									style="color: var(--text);">Min Followers</label
 								>
 								<input
 									id="tier-edit-min-followers"
@@ -440,8 +452,10 @@
 							</div>
 
 							<div>
-								<label for="tier-edit-max-followers" class="block text-sm font-medium" style="color: var(--text);"
-									>Max Followers</label
+								<label
+									for="tier-edit-max-followers"
+									class="block text-sm font-medium"
+									style="color: var(--text);">Max Followers</label
 								>
 								<input
 									id="tier-edit-max-followers"
@@ -454,8 +468,10 @@
 							</div>
 
 							<div>
-								<label for="tier-edit-display-text" class="block text-sm font-medium" style="color: var(--text);"
-									>Display Text</label
+								<label
+									for="tier-edit-display-text"
+									class="block text-sm font-medium"
+									style="color: var(--text);">Display Text</label
 								>
 								<input
 									id="tier-edit-display-text"
@@ -468,23 +484,30 @@
 
 							<!-- Pricing -->
 							<div>
-								<label for="tier-edit-base-price" class="block text-sm font-medium" style="color: var(--text);"
-									>Base Price (₦)</label
+								<label
+									for="tier-edit-base-price"
+									class="block text-sm font-medium"
+									style="color: var(--text);">Base Price (₦)</label
 								>
 								<input
 									id="tier-edit-base-price"
 									type="number"
-									step="0.01"
+									step="50"
 									min="0"
 									bind:value={tierForm.metadata.pricing.base_price}
 									class="mt-1 block w-full rounded-md px-4 py-2"
 									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 								/>
+								<p class="mt-1 text-xs" style="color: var(--text-muted);">
+									Saved to the nearest ₦50.
+								</p>
 							</div>
 
 							<div>
-								<label for="tier-edit-quality-score" class="block text-sm font-medium" style="color: var(--text);"
-									>Quality Score (1-5)</label
+								<label
+									for="tier-edit-quality-score"
+									class="block text-sm font-medium"
+									style="color: var(--text);">Quality Score (1-5)</label
 								>
 								<input
 									id="tier-edit-quality-score"
@@ -498,8 +521,10 @@
 							</div>
 
 							<div class="md:col-span-2">
-								<label for="tier-edit-delivery-time" class="block text-sm font-medium" style="color: var(--text);"
-									>Delivery Time</label
+								<label
+									for="tier-edit-delivery-time"
+									class="block text-sm font-medium"
+									style="color: var(--text);">Delivery Time</label
 								>
 								<input
 									id="tier-edit-delivery-time"

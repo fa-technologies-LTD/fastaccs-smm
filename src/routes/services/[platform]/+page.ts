@@ -33,7 +33,11 @@ async function fetchPlatformServices(
 		const servicesResult = await servicesResponse.json();
 
 		if (!servicesResponse.ok) {
-			return { services: [], iconUrl: null, error: servicesResult.error || 'Failed to load boosting services' };
+			return {
+				services: [],
+				iconUrl: null,
+				error: servicesResult.error || 'Failed to load boosting services'
+			};
 		}
 
 		const allServices = (servicesResult.data || []) as PlatformBoostingService[];
@@ -42,10 +46,12 @@ async function fetchPlatformServices(
 		);
 
 		const realPlatforms = platformsResponse.ok
-			? ((await platformsResponse.json()).data as Array<{
-					slug: string;
-					metadata?: { icon?: unknown };
-				}> | undefined) || []
+			? ((await platformsResponse.json()).data as
+					| Array<{
+							slug: string;
+							metadata?: { icon?: unknown };
+					  }>
+					| undefined) || []
 			: [];
 		const matchingPlatform = realPlatforms.find(
 			(row) => canonicalizePlatformKey(row.slug) === canonicalizePlatformKey(platform)
@@ -80,8 +86,8 @@ export const load: PageLoad = async ({ fetch, params }) => {
 		services,
 		error,
 		seo: {
-			title: `Buy ${BOOSTING_PLATFORM_LABELS[platform]} Followers, Likes & Views | FastAccs`,
-			description: `Grow your ${BOOSTING_PLATFORM_LABELS[platform]} account with real followers, likes, and views. Paste your link, pay, we deliver — no passwords needed.`,
+			title: `${BOOSTING_PLATFORM_LABELS[platform]} Boosting Services | FastAccs`,
+			description: `Grow on ${BOOSTING_PLATFORM_LABELS[platform]} with simple, clearly priced services. Paste your link, pay, and track delivery — no password needed.`,
 			type: 'website'
 		}
 	};

@@ -166,7 +166,7 @@
 							<TierSampleScreenshotFields bind:urls={tierForm.metadata.sample_screenshot_urls} />
 
 							<div
-								class="md:col-span-2 rounded-lg p-3"
+								class="rounded-lg p-3 md:col-span-2"
 								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
 							>
 								<div class="flex items-start justify-between gap-4">
@@ -188,14 +188,20 @@
 							</div>
 
 							<div
-								class="md:col-span-2 rounded-lg p-3"
+								class="rounded-lg p-3 md:col-span-2"
 								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
 							>
 								<label class="flex items-start justify-between gap-4">
 									<span>
-										<span class="text-sm font-semibold" style="color: var(--text);">Exclude from affiliate offer</span>
-										<span class="mt-1 block text-xs leading-relaxed" style="color: var(--text-muted);">
-											New tiers start excluded. Uncheck this only after confirming its margin can safely support both sides of the offer.
+										<span class="text-sm font-semibold" style="color: var(--text);"
+											>Exclude from affiliate offer</span
+										>
+										<span
+											class="mt-1 block text-xs leading-relaxed"
+											style="color: var(--text-muted);"
+										>
+											New tiers start excluded. Uncheck this only after confirming its margin can
+											safely support both sides of the offer.
 										</span>
 									</span>
 									<input
@@ -207,7 +213,7 @@
 							</div>
 
 							<div
-								class="md:col-span-2 rounded-lg p-3"
+								class="rounded-lg p-3 md:col-span-2"
 								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
 							>
 								<div class="mb-2">
@@ -303,7 +309,7 @@
 							</div>
 
 							<div
-								class="md:col-span-2 rounded-lg p-3"
+								class="rounded-lg p-3 md:col-span-2"
 								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
 							>
 								<div class="mb-2">
@@ -358,7 +364,7 @@
 											class="block text-sm font-medium"
 											style="color: var(--text);"
 										>
-												Customer Message (Manual Handover (WhatsApp))
+											Customer Message (Manual Handover (WhatsApp))
 										</label>
 										<input
 											id="manual-handover-promise"
@@ -374,7 +380,7 @@
 							</div>
 
 							<div
-								class="md:col-span-2 rounded-lg p-3"
+								class="rounded-lg p-3 md:col-span-2"
 								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
 							>
 								<div class="mb-2">
@@ -385,8 +391,10 @@
 								</div>
 								<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
 									<div class="md:col-span-2">
-										<label for="login-guide-url" class="block text-sm font-medium" style="color: var(--text);"
-											>Guide URL</label
+										<label
+											for="login-guide-url"
+											class="block text-sm font-medium"
+											style="color: var(--text);">Guide URL</label
 										>
 										<input
 											id="login-guide-url"
@@ -398,8 +406,10 @@
 										/>
 									</div>
 									<div class="md:col-span-2">
-										<label for="login-guide-label" class="block text-sm font-medium" style="color: var(--text);"
-											>Guide Label</label
+										<label
+											for="login-guide-label"
+											class="block text-sm font-medium"
+											style="color: var(--text);">Guide Label</label
 										>
 										<input
 											id="login-guide-label"
@@ -519,12 +529,15 @@
 								</label>
 								<input
 									type="number"
-									step="0.01"
+									step="50"
 									min="0"
 									bind:value={tierForm.metadata.pricing.base_price}
 									class="mt-1 block w-full rounded-md px-4 py-2"
 									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 								/>
+								<p class="mt-1 text-xs" style="color: var(--text-muted);">
+									Saved to the nearest ₦50.
+								</p>
 							</div>
 
 							<div>

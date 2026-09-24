@@ -284,6 +284,12 @@
 			.filter(Boolean);
 	}
 
+	function renderPersonalizationPreview(text: string): string {
+		return text
+			.replace(/{{\s*first_name\s*}}/gi, 'Tobi')
+			.replace(/{{\s*full_name\s*}}/gi, 'Tobi Ade');
+	}
+
 	async function refreshAudienceCount(): Promise<void> {
 		const sequenceId = ++audienceCountSeq;
 		const currentAudience = audience;
@@ -604,7 +610,8 @@
 					style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
 				></textarea>
 				<p class="mt-1 text-xs" style="color: var(--text-dim);">
-					Basic markdown supported (`**bold**`, `[link](https://...)`, and line breaks).
+					Use <code>{'{{first_name}}'}</code> or <code>{'{{full_name}}'}</code> to insert each recipient's
+					registered name. If no name is saved, the email uses “there”. Basic markdown is also supported.
 				</p>
 			</div>
 
@@ -747,8 +754,8 @@
 				</p>
 				{#if specificEmailsTruncated}
 					<p class="mt-1 text-xs font-semibold" style="color: var(--status-warning);">
-						Only the first {SPECIFIC_EMAILS_MAX} of {specificEmailsUnique.length} emails will be
-						used — trim the list to send to the rest in a second broadcast.
+						Only the first {SPECIFIC_EMAILS_MAX} of {specificEmailsUnique.length} emails will be used
+						— trim the list to send to the rest in a second broadcast.
 					</p>
 				{/if}
 			</div>
@@ -830,11 +837,11 @@
 						<p class="text-sm font-bold" style="color: #ffffff;">FAST ACCOUNTS</p>
 						<div class="my-3 h-px" style="background: #232323;"></div>
 						<h3 class="text-sm font-semibold" style="color: #ffffff;">
-							{subject || '(No subject yet)'}
+							{subject ? renderPersonalizationPreview(subject) : '(No subject yet)'}
 						</h3>
 						<div class="mt-2 space-y-3 text-sm" style="color: #cccccc;">
 							{#if messageBody.trim()}
-								{#each renderPreviewParagraphs(messageBody) as paragraph}
+								{#each renderPreviewParagraphs(renderPersonalizationPreview(messageBody)) as paragraph}
 									<p>{paragraph}</p>
 								{/each}
 							{:else}

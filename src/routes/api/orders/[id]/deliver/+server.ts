@@ -114,6 +114,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const emailResult = await sendEmail({
 			to: customerEmail,
 			subject: `Your Fast Accounts order ${order.orderNumber} is ready`,
+			preheader: 'Your account details are ready in your dashboard.',
 			body: emailContent,
 			ctaText: 'Open your dashboard',
 			ctaUrl: `${baseUrl}/dashboard?tab=purchases`,
@@ -179,9 +180,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
  */
 function generateAccountDeliveryEmail(order: OrderForEmail): string {
 	const orderItems = order.orderItems;
-	let content = `Your account details are ready.
-
-**Order details**
+	let content = `**Order details**
 - Order Number: ${order.orderNumber}
 - Order Date: ${new Date(order.createdAt).toLocaleDateString()}
 - Total Amount: ₦${order.totalAmount}

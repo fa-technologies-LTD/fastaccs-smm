@@ -1302,8 +1302,8 @@
 						</div>
 						<p class="mb-2 text-center text-xs leading-relaxed" style="color: var(--text-dim);">
 							{#if hasBoostingOrder}
-								Your boost starts after payment is confirmed. {BOOSTING_TURNAROUND_MESSAGE} Track its
-								status on your order page.
+								After payment, your order is queued for delivery. {BOOSTING_TURNAROUND_MESSAGE}
+								Track the latest status on your order page.
 							{:else if hasNumbersOrder}
 								After payment, we’ll take you straight to your number. Your code appears there
 								automatically.

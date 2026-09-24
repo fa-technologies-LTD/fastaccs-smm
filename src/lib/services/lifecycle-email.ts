@@ -43,7 +43,7 @@ function getAbandonedReminderContent(
 
 // Nurture drip for verified users who signed up but never bought — a gentle
 // 3-email sequence (day 3 / day 10 / day 21 after registration), then it stops.
-// Gated behind NURTURE_ENABLED so it never sends until explicitly switched on.
+// Active now that the offer and safeguards have been approved.
 const NURTURE_STEP_DELAYS_HOURS = [72, 240, 504];
 // Minimum spacing between consecutive nurture emails. Keeps the existing backlog
 // (whose registration-age delays are all already passed) gently spaced instead of
@@ -51,13 +51,7 @@ const NURTURE_STEP_DELAYS_HOURS = [72, 240, 504];
 // registration-age delays above, so this rarely binds for them.
 const NURTURE_MIN_STEP_GAP_MS = 7 * 24 * 60 * 60 * 1000;
 
-function isNurtureEnabled(): boolean {
-	return (env.NURTURE_ENABLED || '').trim().toLowerCase() === 'true';
-}
-
-function getNurturePromoCode(): string {
-	return (env.NURTURE_PROMO_CODE || 'WELCOME10').trim().toUpperCase();
-}
+const NURTURE_PROMO_CODE = 'WELCOME10';
 
 const DEFAULT_BATCH_LIMIT = 300;
 const SCAN_CHUNK_MULTIPLIER = 3;
@@ -438,8 +432,8 @@ interface NurtureDispatchCandidate {
 function getNurtureContent(step: number, promoCode: string): { subject: string; body: string } {
 	if (step === 0) {
 		return {
-			subject: '10% off your first order 🎁',
-			body: `You signed up but haven't ordered yet — here's 10% off to start. Use code ${promoCode} at checkout.
+			subject: '10% off your first account order 🎁',
+			body: `You signed up but haven't ordered yet — here's 10% off your first account order. Use code ${promoCode} at checkout.
 
 Verified accounts, instant delivery, from small tiers to bulk. See what's available.`
 		};
@@ -453,35 +447,31 @@ Verified accounts, instant delivery, from small tiers to bulk. See what's availa
 - Verification numbers
 - Followers, likes, and views
 
-See live prices on the site. Your 10% code ${promoCode} still works.`
+See live prices on the site. If you choose an account, code ${promoCode} gives you 10% off.`
 		};
 	}
 	return {
 		subject: 'Last nudge 👋',
 		body: `We won't crowd your inbox — this is the last one.
 
-Your 10% code ${promoCode} is still live: instant delivery, verified accounts, real support. Whenever you're ready.`
+Code ${promoCode} still gives you 10% off your first account order. Instant delivery, verified accounts, real support — whenever you're ready.`
 	};
 }
 
 /**
  * Gentle 3-email drip to verified users who signed up but never completed a
  * purchase. Steps fire at ~day 3 / 10 / 21 after registration, never skip
- * ahead, and stop the moment the user buys. No-op unless NURTURE_ENABLED=true.
+ * ahead, and stop the moment the user buys.
  */
 export async function runNurtureSequence(params?: {
 	limit?: number;
 }): Promise<LifecycleEmailRunSummary> {
-	if (!isNurtureEnabled()) {
-		return { queued: 0, sent: 0, skipped: 0, failed: 0 };
-	}
-
 	const now = new Date();
 	const batchLimit = Math.min(Math.max(Number(params?.limit || DEFAULT_BATCH_LIMIT), 1), 1000);
 	const stepReadyAt = NURTURE_STEP_DELAYS_HOURS.map(
 		(hours) => new Date(now.getTime() - hours * 60 * 60 * 1000)
 	);
-	const promoCode = getNurturePromoCode();
+	const promoCode = NURTURE_PROMO_CODE;
 	const baseUrl = getBaseUrl();
 	const scanChunk = Math.min(1000, Math.max(batchLimit * SCAN_CHUNK_MULTIPLIER, batchLimit));
 	const maxScanRows = Math.max(scanChunk, batchLimit * MAX_SCAN_FACTOR);

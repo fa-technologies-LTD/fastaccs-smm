@@ -19,7 +19,7 @@
 			>
 				Refund Policy
 			</h1>
-			<p style="color: var(--text-muted);">Effective date: April 8, 2026</p>
+			<p style="color: var(--text-muted);">Effective date: September 19, 2026</p>
 		</div>
 
 		<div class="space-y-7" style="color: var(--text-muted);">
@@ -38,8 +38,8 @@
 					Issue Reporting Window
 				</h2>
 				<p>
-					For the fastest review, report login or delivery issues as soon as possible after
-					delivery, ideally within 2 hours of purchase.
+					Report account login issues as soon as possible after delivery, ideally within 2 hours.
+					For a Boosting drop, report it within the refill window shown on the option you bought.
 				</p>
 			</section>
 
@@ -54,6 +54,34 @@
 					<li>Material mismatch between purchased item description and delivered item.</li>
 					<li>Delivery or access failure traceable to our fulfillment process.</li>
 					<li>Order integrity problems confirmed by our records and evidence review.</li>
+				</ul>
+			</section>
+
+			<section>
+				<h2
+					class="mb-2 text-2xl font-semibold"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
+					Boosting Orders
+				</h2>
+				<ul class="ml-6 list-disc space-y-1">
+					<li>
+						If a service cannot be delivered, we will verify the result and may retry, replace,
+						adjust, or refund the undelivered portion as appropriate.
+					</li>
+					<li>
+						A refill applies only when the selected option displays a refill window and the drop is
+						reported within that window.
+					</li>
+					<li>
+						An incorrect, changed, deleted, or private link can prevent delivery. Running another
+						service on the same link and result before the order finishes can also prevent us from
+						measuring what was delivered. These cases may limit the available resolution.
+					</li>
+					<li>
+						A delivered portion does not become refundable merely because completion took longer
+						than an estimate or because an option without a refill later experienced drop-off.
+					</li>
 				</ul>
 			</section>
 

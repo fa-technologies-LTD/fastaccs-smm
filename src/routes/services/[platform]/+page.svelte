@@ -4,7 +4,20 @@
 	import { page } from '$app/state';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import { ArrowLeft, Eye, Heart, Minus, MessageCircle, Plus, Repeat, UserPlus } from '$lib/icons';
+	import BrandIcon from '$lib/components/BrandIcon.svelte';
+	import {
+		ArrowLeft,
+		Eye,
+		Heart,
+		Minus,
+		MessageCircle,
+		Music,
+		Plus,
+		Repeat,
+		Share2,
+		UserPlus,
+		Users
+	} from '$lib/icons';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { trackSnapEvent } from '$lib/services/snap-pixel';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
@@ -20,7 +33,6 @@
 	} from '$lib/helpers/boosting-service-config';
 	import { validateLinkForAction, getRequiredLinkType } from '$lib/helpers/social-link-validator';
 	import type { BoostingPlatform, BoostingActionType } from '$lib/helpers/social-link-validator';
-	import { getPlatformIcon } from '$lib/helpers/platformColors';
 	import {
 		getTierDeliveryModeLabel,
 		type TierDeliveryMode
@@ -53,22 +65,64 @@
 	const ACTION_ICONS: Record<BoostingActionType, typeof Heart> = {
 		followers: UserPlus,
 		subscribers: UserPlus,
+		members: Users,
 		likes: Heart,
 		views: Eye,
 		comments: MessageCircle,
-		reposts: Repeat
+		reposts: Repeat,
+		streams: Music,
+		monthly_listeners: Music,
+		reactions: Heart,
+		shares: Share2,
+		saves: Heart,
+		watch_time: Eye
 	};
 
-	function getProfileLinkLabel(platform: BoostingPlatform): string {
-		return platform === 'youtube' ? 'channel link' : 'profile link';
+	function getTargetLinkLabel(
+		platform: BoostingPlatform,
+		requiredLinkType: ReturnType<typeof getRequiredLinkType>
+	): string {
+		if (requiredLinkType === 'channel') return 'channel or group link';
+		if (requiredLinkType === 'content') {
+			return platform === 'spotify' ? 'song, album, or playlist link' : 'post or video link';
+		}
+		if (platform === 'youtube') return 'channel link';
+		if (platform === 'spotify') return 'artist link';
+		return 'profile link';
+	}
+
+	function getLinkPlaceholder(
+		platform: BoostingPlatform,
+		requiredLinkType: ReturnType<typeof getRequiredLinkType>
+	): string {
+		if (platform === 'spotify') {
+			return requiredLinkType === 'profile'
+				? 'https://open.spotify.com/artist/...'
+				: 'https://open.spotify.com/track/...';
+		}
+		if (platform === 'telegram') return 'https://t.me/yourchannel';
+		if (platform === 'youtube') {
+			return requiredLinkType === 'profile'
+				? 'https://youtube.com/@yourchannel'
+				: 'https://youtube.com/watch?v=...';
+		}
+		if (platform === 'x') {
+			return requiredLinkType === 'profile'
+				? 'https://x.com/yourusername'
+				: 'https://x.com/username/status/...';
+		}
+		return requiredLinkType === 'profile'
+			? `https://${platform}.com/yourusername`
+			: `https://${platform}.com/.../post`;
 	}
 
 	let expandedServiceId = $state<string | null>(null);
 	let quantityByServiceId = $state<Record<string, number>>({});
 	let linkByServiceId = $state<Record<string, string>>({});
 	let linkErrorByServiceId = $state<Record<string, string | null>>({});
+	let resolvingLinkByServiceId = $state<Record<string, boolean>>({});
+	const linkResolutionVersion = new Map<string, number>();
 	let addingServiceId = $state<string | null>(null);
-	let platformIconFailed = $state(false);
 	let waitlistLoadingByServiceId = $state<Record<string, boolean>>({});
 	let waitlistSubscribedByServiceId = $state<Record<string, boolean>>({});
 	const measuredServiceViews = new Set<string>();
@@ -159,6 +213,51 @@
 		}
 		const result = validateLinkForAction(platform, actionType, value);
 		linkErrorByServiceId[serviceId] = result.valid ? null : result.reason || 'Invalid link';
+	}
+
+	async function refineAmbiguousLink(service: (typeof services)[number]): Promise<void> {
+		const rawUrl = getLink(service.id).trim();
+		const initial = validateLinkForAction(
+			service.config.platform,
+			service.config.actionType,
+			rawUrl
+		);
+		if (!initial.valid || !initial.needsManualReview) return;
+
+		const version = (linkResolutionVersion.get(service.id) || 0) + 1;
+		linkResolutionVersion.set(service.id, version);
+		resolvingLinkByServiceId = { ...resolvingLinkByServiceId, [service.id]: true };
+		try {
+			const response = await fetch('/api/boosting-links/resolve', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					platform: service.config.platform,
+					actionType: service.config.actionType,
+					url: rawUrl
+				})
+			});
+			if (!response.ok || linkResolutionVersion.get(service.id) !== version) return;
+			const payload = await response.json();
+			const resolved = payload?.data as
+				| { valid?: boolean; reason?: string; normalizedUrl?: string; needsManualReview?: boolean }
+				| undefined;
+			if (!resolved || getLink(service.id).trim() !== rawUrl) return;
+			if (!resolved.valid) {
+				linkErrorByServiceId[service.id] = resolved.reason || 'Please check this link.';
+				return;
+			}
+			if (resolved.normalizedUrl && !resolved.needsManualReview) {
+				linkByServiceId[service.id] = resolved.normalizedUrl;
+				linkErrorByServiceId[service.id] = null;
+			}
+		} catch {
+			// Keep the official original link valid for the existing manual-review path.
+		} finally {
+			if (linkResolutionVersion.get(service.id) === version) {
+				resolvingLinkByServiceId = { ...resolvingLinkByServiceId, [service.id]: false };
+			}
+		}
 	}
 
 	async function addServiceToCart(service: (typeof services)[number]) {
@@ -331,21 +430,13 @@
 						tiktok: 'var(--gradient-tiktok)',
 						youtube: 'var(--gradient-youtube)',
 						facebook: 'var(--gradient-facebook)',
-						x: 'var(--gradient-twitter)'
+						x: 'var(--gradient-twitter)',
+						spotify: 'linear-gradient(135deg, #1ed760, #0f7a3b)',
+						telegram: 'linear-gradient(135deg, #2aabee, #1474b8)'
 					}[data.platform]
 				};`}
 			>
-				{#if data.iconUrl && !platformIconFailed}
-					<img
-						src={data.iconUrl}
-						alt={data.label}
-						class="h-7 w-7 rounded-full object-cover"
-						onerror={() => (platformIconFailed = true)}
-					/>
-				{:else}
-					{@const PlatformIcon = getPlatformIcon(data.platform)}
-					<PlatformIcon class="h-6 w-6 text-white" />
-				{/if}
+				<BrandIcon service={data.label} size={25} mono={true} />
 			</div>
 			<h1
 				class="text-2xl font-bold sm:text-3xl"
@@ -392,7 +483,7 @@
 						>
 							<ActionIcon size={18} style="color: var(--fa-blue-300);" />
 						</div>
-						<div class="flex-1">
+						<div class="min-w-0 flex-1">
 							<p class="font-semibold" style="color: var(--text);">{service.name}</p>
 							{#if isComingSoon}
 								<p class="text-xs font-medium" style="color: var(--status-pending);">Coming soon</p>
@@ -400,7 +491,7 @@
 								<p class="text-xs" style="color: var(--text-dim);">
 									From {formatPrice(startingPrice)}
 									{#if service.config.refillAvailable}
-										· {service.config.refillDays}-day guarantee
+										· {service.config.refillDays}-day refill included
 									{/if}
 								</p>
 							{/if}
@@ -435,15 +526,12 @@
 							{#if service.description}
 								<p class="mb-3 text-sm" style="color: var(--text-muted);">{service.description}</p>
 							{/if}
-
 							<label
 								for={`link-${service.id}`}
 								class="mb-1 block text-xs font-medium"
 								style="color: var(--text);"
 							>
-								Your {requiredLinkType === 'profile'
-									? getProfileLinkLabel(service.config.platform)
-									: 'post/video link'}
+								Your {getTargetLinkLabel(service.config.platform, requiredLinkType)}
 							</label>
 							<input
 								id={`link-${service.id}`}
@@ -456,16 +544,15 @@
 										service.config.actionType,
 										(e.target as HTMLInputElement).value
 									)}
-								placeholder={requiredLinkType === 'profile'
-									? `https://${service.config.platform}.com/yourusername`
-									: `https://${service.config.platform}.com/.../post`}
+								onblur={() => void refineAmbiguousLink(service)}
+								placeholder={getLinkPlaceholder(service.config.platform, requiredLinkType)}
 								class="mb-1 block w-full rounded-md px-3 py-2 text-sm"
 								style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 							/>
 							<p class="mb-1 text-xs" style="color: var(--text-dim);">
-								{requiredLinkType === 'profile'
-									? 'Copy this from your browser’s address bar while on your profile.'
-									: 'Copy this from your browser’s address bar or the Share button on the post.'}
+								{resolvingLinkByServiceId[service.id]
+									? 'Checking this shared link…'
+									: 'Copy it from the app’s Share button or your browser.'}
 							</p>
 							{#if linkErrorByServiceId[service.id]}
 								<p class="mb-2 text-xs text-red-500">{linkErrorByServiceId[service.id]}</p>

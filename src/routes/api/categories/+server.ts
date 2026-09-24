@@ -5,6 +5,8 @@ import { applyTierSampleScreenshotSanitization } from '$lib/helpers/tierSampleSc
 import { applyTierMerchandisingSanitization } from '$lib/helpers/tier-merchandising';
 import { applyTierDeliveryConfigSanitization } from '$lib/helpers/tier-delivery-config';
 import { applyTierExactPreviewSanitization } from '$lib/helpers/tier-exact-preview';
+import { applyTierCatalogPriceSanitization } from '$lib/helpers/catalog-pricing';
+import { applyBoostingServiceConfigSanitization } from '$lib/helpers/boosting-service-config';
 
 // GET /api/categories - Get categories with optional filtering
 export async function GET({ url, locals }) {
@@ -57,14 +59,18 @@ export async function POST({ request, locals }) {
 		const rawMetadata = JSON.parse(JSON.stringify(rest.metadata || {}));
 		const sanitizedMetadata =
 			rest.categoryType === 'tier'
-				? applyTierExactPreviewSanitization(
-						applyTierMerchandisingSanitization(
-							applyTierSampleScreenshotSanitization(
-								applyTierDeliveryConfigSanitization(rawMetadata as Record<string, unknown>)
+				? applyTierCatalogPriceSanitization(
+						applyTierExactPreviewSanitization(
+							applyTierMerchandisingSanitization(
+								applyTierSampleScreenshotSanitization(
+									applyTierDeliveryConfigSanitization(rawMetadata as Record<string, unknown>)
+								)
 							)
 						)
 					)
-				: rawMetadata;
+				: rest.categoryType === 'boosting_service'
+					? applyBoostingServiceConfigSanitization(rawMetadata)
+					: rawMetadata;
 		// New account tiers are margin-unknown until the owner deliberately includes
 		// them in the affiliate offer. Enforce the safe default at the API boundary too,
 		// so an older admin client or direct request cannot bypass the UI checkbox.

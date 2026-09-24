@@ -4,7 +4,6 @@ import { sendPushToUsers } from '$lib/services/push-notifications';
 import { getAdminUserIds } from '$lib/auth/admin-roles';
 import {
 	getBusinessTimezoneSetting,
-	getLowStockThresholdSetting,
 	getLowStockPolicyState,
 	getOperationalAlertRecipients,
 	setLowStockPolicyState,
@@ -22,7 +21,7 @@ async function pushToAdmins(title: string, body: string, url?: string): Promise<
 
 const LOW_STOCK_DIGEST_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const LOW_STOCK_MAX_EMAILS_PER_DAY = 3;
-const LOW_STOCK_EMAIL_PREVIEW_LIMIT = 20;
+const LOW_STOCK_EMAIL_PREVIEW_LIMIT = 8;
 const CRITICAL_ALERT_COOLDOWN_MS = 30 * 60 * 1000;
 
 const criticalAlertCooldown = new Map<string, number>();
@@ -53,7 +52,6 @@ export async function sendLowStockAdminAlertIfNeeded(
 		return { sent: false, reason: 'no_recipients' };
 	}
 
-	const threshold = await getLowStockThresholdSetting();
 	const timezone = await getBusinessTimezoneSetting().catch(() => 'Africa/Lagos');
 	const now = new Date();
 	const todayDateKey = getBusinessDateKey(now, timezone);
@@ -139,7 +137,8 @@ export async function sendLowStockAdminAlertIfNeeded(
 		: Number.NaN;
 	const digestDue =
 		zeroStockTiers.length > 0 &&
-		(!Number.isFinite(lastDigestAtTs) || now.getTime() - lastDigestAtTs >= LOW_STOCK_DIGEST_INTERVAL_MS);
+		(!Number.isFinite(lastDigestAtTs) ||
+			now.getTime() - lastDigestAtTs >= LOW_STOCK_DIGEST_INTERVAL_MS);
 
 	let mode: 'new_zero_hit' | 'digest' | null = null;
 	if (newZeroStockTiers.length > 0) {
@@ -159,7 +158,10 @@ export async function sendLowStockAdminAlertIfNeeded(
 			suppressedCount: previousSuppressedCount,
 			lastAlertAt: previousState.lastAlertAt
 		});
-		return { sent: false, reason: zeroStockTiers.length === 0 ? 'no_zero_stock' : 'no_action_needed' };
+		return {
+			sent: false,
+			reason: zeroStockTiers.length === 0 ? 'no_zero_stock' : 'no_action_needed'
+		};
 	}
 
 	if (effectiveSentToday >= LOW_STOCK_MAX_EMAILS_PER_DAY) {
@@ -178,44 +180,40 @@ export async function sendLowStockAdminAlertIfNeeded(
 
 	const subject =
 		mode === 'new_zero_hit'
-			? `[FastAccs Ops] Zero-stock hit (${newZeroStockTiers.length} tier${newZeroStockTiers.length > 1 ? 's' : ''})`
-			: `[FastAccs Ops] Zero-stock reminder (${zeroStockTiers.length} tier${zeroStockTiers.length > 1 ? 's' : ''})`;
+			? `Stock needed: ${newZeroStockTiers.length} new tier${newZeroStockTiers.length > 1 ? 's' : ''}`
+			: `Stock needed: ${zeroStockTiers.length} tier${zeroStockTiers.length > 1 ? 's' : ''}`;
 
 	const previewRows = zeroStockTiers.slice(0, LOW_STOCK_EMAIL_PREVIEW_LIMIT);
 	const newHitRows = newZeroStockTiers.slice(0, LOW_STOCK_EMAIL_PREVIEW_LIMIT);
 	const bodyLines = [
 		mode === 'new_zero_hit'
-			? `New zero-stock tier hit detected (${source}).`
-			: `Zero-stock reminder digest (${source}).`,
+			? `${newZeroStockTiers.length} tier${newZeroStockTiers.length > 1 ? 's are' : ' is'} newly out of stock.`
+			: `${zeroStockTiers.length} tier${zeroStockTiers.length > 1 ? 's still need' : ' still needs'} stock.`,
 		'',
-		`Configured low-stock threshold: ${threshold}`,
-		`Unresolved zero-stock tiers: ${zeroStockTiers.length}`,
-		`Alert limit: ${LOW_STOCK_MAX_EMAILS_PER_DAY}/day | Digest window: 12h`,
-		'',
-		mode === 'new_zero_hit' ? `New zero-stock hits: ${newZeroStockTiers.length}` : '',
 		...(mode === 'new_zero_hit'
 			? newHitRows.map((tier) => {
 					const platformName = tier.parent?.name || 'Unknown platform';
-					return `- NEW: ${platformName} / ${tier.name}`;
+					return `- ${platformName} / ${tier.name}`;
 				})
 			: []),
 		newHitRows.length < newZeroStockTiers.length
-			? `- ...and ${newZeroStockTiers.length - newHitRows.length} more new zero-stock tier(s).`
+			? `- And ${newZeroStockTiers.length - newHitRows.length} more`
 			: '',
-		mode === 'new_zero_hit' ? '' : '',
-		'Current unresolved zero-stock tiers:',
-		...previewRows.map((tier) => {
-			const platformName = tier.parent?.name || 'Unknown platform';
-			return `- ${platformName} / ${tier.name}: ${tier._count.accounts} available`;
-		}),
-		previewRows.length < zeroStockTiers.length
-			? `- ...and ${zeroStockTiers.length - previewRows.length} more tier(s).`
+		mode === 'new_zero_hit' && zeroStockTiers.length > newZeroStockTiers.length
+			? `There are ${zeroStockTiers.length} out-of-stock tiers in total. Open inventory to see them all.`
+			: '',
+		...(mode === 'digest'
+			? previewRows.map((tier) => {
+					const platformName = tier.parent?.name || 'Unknown platform';
+					return `- ${platformName} / ${tier.name}`;
+				})
+			: []),
+		mode === 'digest' && previewRows.length < zeroStockTiers.length
+			? `- And ${zeroStockTiers.length - previewRows.length} more`
 			: '',
 		previousSuppressedCount > 0
-			? `Suppressed alerts since last successful send (daily cap): ${previousSuppressedCount}`
-			: '',
-		'',
-		'Open admin inventory for action: /admin/inventory'
+			? `${previousSuppressedCount} repeat alert${previousSuppressedCount > 1 ? 's were' : ' was'} grouped into this update.`
+			: ''
 	].filter(Boolean);
 	const alertEventReferenceId = `low_stock_alert:${mode}:${todayDateKey}:${now.getTime()}`;
 
@@ -225,6 +223,10 @@ export async function sendLowStockAdminAlertIfNeeded(
 			to: email,
 			subject,
 			body: bodyLines.join('\n'),
+			preheader:
+				mode === 'new_zero_hit'
+					? `${newZeroStockTiers.length} newly out of stock · ${zeroStockTiers.length} total`
+					: `${zeroStockTiers.length} out-of-stock tiers need attention`,
 			notificationType: 'admin_broadcast',
 			classification: 'operational',
 			referenceId: alertEventReferenceId,
@@ -279,6 +281,9 @@ export async function sendCriticalAdminAlert(params: {
 	source: string;
 	dedupeKey?: string;
 	cooldownMs?: number;
+	preheader?: string;
+	ctaText?: string;
+	ctaUrl?: string;
 }): Promise<{ sent: boolean; reason?: string }> {
 	pruneCriticalAlertCooldown();
 
@@ -316,13 +321,14 @@ export async function sendCriticalAdminAlert(params: {
 	for (const email of recipients) {
 		const result = await sendEmail({
 			to: email,
-			subject: `[FastAccs Ops] ${params.title}`,
-			body: `${params.message}\n\nSource: ${params.source}`,
+			subject: params.title,
+			body: params.message,
+			preheader: params.preheader,
 			notificationType: 'admin_broadcast',
 			classification: 'operational',
 			referenceId,
-			ctaText: 'Open admin',
-			ctaUrl: 'https://smm.fastaccs.com/admin',
+			ctaText: params.ctaText || 'Open admin',
+			ctaUrl: params.ctaUrl || 'https://smm.fastaccs.com/admin',
 			showCta: true
 		});
 

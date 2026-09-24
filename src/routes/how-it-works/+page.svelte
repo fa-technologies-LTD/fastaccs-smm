@@ -209,7 +209,7 @@
 					description:
 						'Paste the public profile or post link requested, check it carefully, then complete payment.',
 					details: [
-						'Private or incorrect links can delay delivery',
+						'Private or incorrect links can prevent delivery',
 						'Your order is saved before fulfillment'
 					],
 					panelTitle: 'Quick link check',
@@ -224,7 +224,7 @@
 					description:
 						'Open the order from your dashboard to follow its progress until the service is completed.',
 					details: [
-						'Delivery timing depends on the selected service',
+						'Delivery times are estimates, not fixed promises',
 						'Support can review a stalled order'
 					],
 					panelTitle: 'Order progress',
@@ -248,6 +248,11 @@
 					question: 'What if delivery appears to stop?',
 					answer:
 						'Check the order status first. If it remains stalled beyond the expected window, contact support from the order or help page.'
+				},
+				{
+					question: 'Should I place another service on the same link?',
+					answer:
+						'Wait until the active order for that link and result is complete. We may queue overlapping orders so delivery and any refill can be measured correctly.'
 				}
 			]
 		},

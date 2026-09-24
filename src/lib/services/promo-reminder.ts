@@ -22,20 +22,23 @@ interface ReminderCopy {
 	ctaText: string;
 }
 
-function buildCopy(firstName: string, code: string, amountNgn: number, minNgn: number): ReminderCopy {
+function buildCopy(
+	firstName: string,
+	code: string,
+	amountNgn: number,
+	minNgn: number
+): ReminderCopy {
 	const amount = Math.round(amountNgn).toLocaleString();
 	const min = Math.round(minNgn).toLocaleString();
 	return {
 		subject: `Don't let your ₦${amount} expire`,
 		body: `Hi ${firstName},
 
-You unlocked a reward and it's still sitting in your account: ₦${amount} off your next order.
+You still have ₦${amount} off your next account order.
 
 Your code: ${code}
-• ₦${amount} off any account order from ₦${min}
-• One tap at checkout — no fuss
-
-Grab an account while it's live — this one won't stick around.`,
+- Valid on account orders from ₦${min}
+- Apply it at checkout`,
 		ctaText: `Use my ₦${amount}`
 	};
 }
@@ -44,7 +47,9 @@ Grab an account while it's live — this one won't stick around.`,
  * Queue reminder emails to eligible code-holders who haven't been reminded yet.
  * Returns how many were queued vs skipped. Safe to run repeatedly (idempotent per code).
  */
-export async function sendPromoReminderEmails(limit = 300): Promise<{ sent: number; skipped: number }> {
+export async function sendPromoReminderEmails(
+	limit = 300
+): Promise<{ sent: number; skipped: number }> {
 	const now = new Date();
 	const baseUrl = getSiteBaseUrl();
 
@@ -122,7 +127,9 @@ export async function sendPromoReminderEmails(limit = 300): Promise<{ sent: numb
  * recipient's real unlocked code if they have one, otherwise a sample code. A unique
  * referenceId keeps it out of the real per-code dedup.
  */
-export async function sendPromoReminderPreview(email: string): Promise<{ ok: boolean; reason?: string }> {
+export async function sendPromoReminderPreview(
+	email: string
+): Promise<{ ok: boolean; reason?: string }> {
 	const baseUrl = getSiteBaseUrl();
 	const user = await prisma.user.findFirst({
 		where: { email },

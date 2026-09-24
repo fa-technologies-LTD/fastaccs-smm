@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { renderEmailBody, renderEmailTemplate, resolveEmailLogoUrl } from './email';
+import {
+	CUSTOMER_INBOX_TIP,
+	deriveEmailPreheader,
+	renderEmailBody,
+	renderEmailTemplate,
+	resolveEmailLogoUrl
+} from './email';
 
 describe('email template header', () => {
 	it('renders the brand outside the bordered email card', () => {
@@ -77,6 +83,15 @@ describe('email template header', () => {
 		expect(html).toContain('@media only screen and (max-width: 620px)');
 	});
 
+	it('uses useful body copy for inbox previews instead of repeating the subject', () => {
+		expect(
+			deriveEmailPreheader(
+				'Hi Tobi,\n\nNew boosting order\n\nOrder: FA-123\nAmount: ₦5,000',
+				'New boosting order'
+			)
+		).toBe('Order: FA-123');
+	});
+
 	it('does not render a CTA for an unsafe action URL', () => {
 		const html = renderEmailTemplate({
 			body: '<p>Account update.</p>',
@@ -87,6 +102,22 @@ describe('email template header', () => {
 
 		expect(html).not.toContain('javascript:');
 		expect(html).not.toContain('Open account');
+	});
+
+	it('renders the Primary-inbox tip only when explicitly requested', () => {
+		const earlyEmail = renderEmailTemplate({
+			body: '<p>Welcome to Fast Accounts.</p>',
+			showInboxTip: true,
+			showCta: false
+		});
+		const laterEmail = renderEmailTemplate({
+			body: '<p>Your order is ready.</p>',
+			showInboxTip: false,
+			showCta: false
+		});
+
+		expect(earlyEmail).toContain(CUSTOMER_INBOX_TIP);
+		expect(laterEmail).not.toContain(CUSTOMER_INBOX_TIP);
 	});
 
 	it('renders an escaped high-visibility value when an email needs one', () => {

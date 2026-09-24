@@ -62,7 +62,7 @@ export async function sendAffiliateAnnouncementEmails(): Promise<{
 		const dash = `${baseUrl}/dashboard?tab=affiliate`;
 		const content = {
 			subject: 'Your Fast Accounts affiliate code is ready',
-			body: `Hi ${firstName},\n\nYour affiliate code: **${p.affiliateCode}**\n\nFriends save 5% on their first two eligible account orders, and you earn 5% too — up to ₦1,000 per order. Cleared earnings can go toward Fast Accounts purchases or be withdrawn from ${payoutMinimum}; payouts are processed on Saturdays.\n\nYour link: ${link}`,
+			body: `Hi ${firstName},\n\nYour affiliate code: **${p.affiliateCode}**\n\nFriends save 5% on their first two eligible account orders, and you earn 5% too — up to ₦1,000 per order. Cleared earnings can be spent or withdrawn from ${payoutMinimum}; payouts run on Saturdays.\n\nYour link: ${link}`,
 			ctaText: 'View and share my code'
 		};
 		const result = await sendMarketingEmail({

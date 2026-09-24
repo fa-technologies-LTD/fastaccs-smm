@@ -88,9 +88,7 @@ export async function sendFirstStoreCreditEmailIfNeeded(params: {
 		subject: 'Your first referral reward is pending 🎉',
 		body: `Hi ${reservation.firstName},
 
-Your first referral reward has been recorded 🎉
-
-**₦${params.creditAmount.toLocaleString('en-US')}** is pending. If the referred order remains retained, it clears for spending or withdrawal after the ${vestingDays}-day return window.
+**₦${params.creditAmount.toLocaleString('en-US')}** is pending and will be available in ${vestingDays} days if the order isn't refunded.
 
 Keep sharing your link. You earn 5% on each referred friend's first two eligible account orders, up to ₦1,000 per order.`,
 		ctaText: 'View affiliate dashboard',
@@ -177,7 +175,7 @@ export async function sendAffiliateUnlockEmailIfNeeded(userId: string): Promise<
 		subject: 'Your Fast Accounts affiliate code is ready',
 		body: `Hi ${reservation.firstName},
 
-Your affiliate code is ready: **${reservation.affiliateCode}**
+Your code: **${reservation.affiliateCode}**
 
 Share it with people who need social-media accounts. They save 5% on their first two eligible account orders, and you earn 5% too — up to ₦1,000 per order.
 
@@ -312,9 +310,7 @@ export async function sendAffiliateBankReadyEmailIfNeeded(userId: string): Promi
 		subject: 'Your first referral earning is now available',
 		body: `Hi ${reservation.firstName},
 
-Your first referral earning has cleared and is now available.
-
-You can spend cleared earnings on Fast Accounts, or add approved bank details and request a payout once your available balance reaches ₦${reservation.payoutMinimum.toLocaleString()}. Payouts are processed on Saturdays.`,
+Spend it on Fast Accounts, or add bank details and request a payout when your balance reaches ₦${reservation.payoutMinimum.toLocaleString()}. Payouts run on Saturdays.`,
 		ctaText: 'Add bank details',
 		ctaUrl: `${getBaseUrl()}/affiliate/bank-details`,
 		userId,

@@ -29,13 +29,15 @@ export async function triggerBoostingWaitlistNotifications(
 				const emailResult = await sendMarketingEmail({
 					to: subscriber.email,
 					subject: `${serviceName} is now live`,
+					preheader: 'Paste your link, pay, and track delivery from your dashboard.',
 					body: `${serviceName} is now available. Paste your link, pay, we deliver.`,
 					ctaText: 'View boosting services',
 					ctaUrl: servicesUrl,
 					userId: subscriber.userId,
 					notificationType: 'boosting_service_live',
 					referenceId: serviceId,
-					campaignKey: `boosting-waitlist:${subscriber.id}`
+					campaignKey: `boosting-waitlist:${subscriber.id}`,
+					bypassMarketingCooldown: true
 				});
 
 				if (!emailResult.success) return null;

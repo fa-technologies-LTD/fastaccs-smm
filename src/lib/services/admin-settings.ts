@@ -48,7 +48,7 @@ const DEFAULTS = {
 	lowStockThreshold: 10,
 	highSpenderMinTotal: Math.max(1, Number(env.BROADCAST_HIGH_SPENDER_MIN_TOTAL || 100000)),
 	sitePopupsEnabled: true,
-	winbackDaysThreshold: Math.max(1, Number(env.WINBACK_DAYS_THRESHOLD || 30)),
+	winbackDaysThreshold: 20,
 	broadcastBatchSize: Math.max(1, Number(env.BROADCAST_BATCH_SIZE || 10)),
 	broadcastBatchDelayMs: Math.max(100, Number(env.BROADCAST_BATCH_DELAY_MS || 1000))
 } as const;

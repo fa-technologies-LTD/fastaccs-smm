@@ -1,4 +1,5 @@
 import type { BoostingActionType, BoostingPlatform } from '$lib/helpers/social-link-validator';
+import { roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
 
 export const BOOSTING_PLATFORM_KEY = 'boosting_platform';
 export const BOOSTING_ACTION_TYPE_KEY = 'boosting_action_type';
@@ -8,23 +9,33 @@ export const BOOSTING_PRICE_PER_STEP_KEY = 'boosting_price_per_step';
 export const BOOSTING_REFILL_AVAILABLE_KEY = 'boosting_refill_available';
 export const BOOSTING_REFILL_DAYS_KEY = 'boosting_refill_days';
 
-export const BOOSTING_TURNAROUND_MESSAGE = 'Most orders start within a few hours.';
+export const BOOSTING_TURNAROUND_MESSAGE =
+	'Delivery timing varies by service, quantity, and platform conditions.';
 
 export const BOOSTING_PLATFORMS: BoostingPlatform[] = [
 	'instagram',
 	'tiktok',
 	'youtube',
 	'facebook',
-	'x'
+	'x',
+	'spotify',
+	'telegram'
 ];
 
 export const BOOSTING_ACTION_TYPES: BoostingActionType[] = [
 	'followers',
 	'subscribers',
+	'members',
 	'likes',
 	'views',
 	'comments',
-	'reposts'
+	'reposts',
+	'streams',
+	'monthly_listeners',
+	'reactions',
+	'shares',
+	'saves',
+	'watch_time'
 ];
 
 export const BOOSTING_PLATFORM_LABELS: Record<BoostingPlatform, string> = {
@@ -32,17 +43,43 @@ export const BOOSTING_PLATFORM_LABELS: Record<BoostingPlatform, string> = {
 	tiktok: 'TikTok',
 	youtube: 'YouTube',
 	facebook: 'Facebook',
-	x: 'X (Twitter)'
+	x: 'X (Twitter)',
+	spotify: 'Spotify',
+	telegram: 'Telegram'
 };
 
 export const BOOSTING_ACTION_LABELS: Record<BoostingActionType, string> = {
 	followers: 'Followers',
 	subscribers: 'Subscribers',
+	members: 'Members',
 	likes: 'Likes',
 	views: 'Views',
 	comments: 'Comments',
-	reposts: 'Reposts'
+	reposts: 'Reposts',
+	streams: 'Streams',
+	monthly_listeners: 'Monthly listeners',
+	reactions: 'Reactions',
+	shares: 'Shares',
+	saves: 'Saves',
+	watch_time: 'Watch time'
 };
+
+export const BOOSTING_ACTIONS_BY_PLATFORM: Record<BoostingPlatform, readonly BoostingActionType[]> =
+	{
+		instagram: ['followers', 'likes', 'views', 'comments', 'shares', 'saves'],
+		tiktok: ['followers', 'likes', 'views', 'comments', 'shares', 'saves'],
+		youtube: ['subscribers', 'views', 'likes', 'comments', 'watch_time'],
+		facebook: ['followers', 'likes', 'views', 'comments', 'reactions', 'shares'],
+		x: ['followers', 'likes', 'views', 'comments', 'reposts'],
+		spotify: ['followers', 'streams', 'monthly_listeners', 'saves'],
+		telegram: ['members', 'views', 'reactions', 'comments', 'shares']
+	};
+
+export function getBoostingActionTypesForPlatform(
+	platform: BoostingPlatform
+): readonly BoostingActionType[] {
+	return BOOSTING_ACTIONS_BY_PLATFORM[platform];
+}
 
 export interface BoostingServiceConfig {
 	platform: BoostingPlatform;
@@ -95,16 +132,21 @@ export function getBoostingServiceConfig(metadata: unknown): BoostingServiceConf
 		record[BOOSTING_STEP_QUANTITY_KEY],
 		DEFAULT_CONFIG.stepQuantity
 	);
-	const pricePerStep = toNonNegativeNumber(
-		record[BOOSTING_PRICE_PER_STEP_KEY],
-		DEFAULT_CONFIG.pricePerStep
+	const pricePerStep = roundCatalogPriceNgn(
+		toNonNegativeNumber(record[BOOSTING_PRICE_PER_STEP_KEY], DEFAULT_CONFIG.pricePerStep)
 	);
 	const refillAvailable = Boolean(record[BOOSTING_REFILL_AVAILABLE_KEY]);
-	const refillDays = refillAvailable
-		? toPositiveInt(record[BOOSTING_REFILL_DAYS_KEY], 30)
-		: null;
+	const refillDays = refillAvailable ? toPositiveInt(record[BOOSTING_REFILL_DAYS_KEY], 30) : null;
 
-	return { platform, actionType, minQuantity, stepQuantity, pricePerStep, refillAvailable, refillDays };
+	return {
+		platform,
+		actionType,
+		minQuantity,
+		stepQuantity,
+		pricePerStep,
+		refillAvailable,
+		refillDays
+	};
 }
 
 export function applyBoostingServiceConfigSanitization(metadata: unknown): Record<string, unknown> {
@@ -138,7 +180,7 @@ export function isValidBoostingQuantity(config: BoostingServiceConfig, quantity:
 export function computeBoostingPrice(config: BoostingServiceConfig, quantity: number): number {
 	if (!isValidBoostingQuantity(config, quantity)) return NaN;
 	const steps = quantity / config.stepQuantity;
-	return Math.round(steps * config.pricePerStep * 100) / 100;
+	return roundCatalogPriceNgn(steps * config.pricePerStep);
 }
 
 const QUANTITY_CHIP_MULTIPLIERS = [1, 2, 5, 10];
@@ -146,8 +188,11 @@ const QUANTITY_CHIP_MULTIPLIERS = [1, 2, 5, 10];
 export function getQuantityChips(config: BoostingServiceConfig): number[] {
 	const chips = QUANTITY_CHIP_MULTIPLIERS.map((multiplier) => {
 		const raw = config.minQuantity * multiplier;
-		const steps = Math.max(1, Math.round(raw / config.stepQuantity));
-		return Math.max(config.minQuantity, steps * config.stepQuantity);
+		const stepsAfterMinimum = Math.max(
+			0,
+			Math.round((raw - config.minQuantity) / config.stepQuantity)
+		);
+		return config.minQuantity + stepsAfterMinimum * config.stepQuantity;
 	});
 	return Array.from(new Set(chips));
 }

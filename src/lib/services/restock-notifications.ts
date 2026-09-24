@@ -80,7 +80,11 @@ export async function triggerRestockNotificationsForTier(tierId: string): Promis
 	const notifiedSubscriptionIds = (
 		await Promise.all(
 			subscribers.map(async (subscriber) => {
-				const vi = await pickVariantIndex(subscriber.userId, 'restock_alert', RESTOCK_VARIANTS.length);
+				const vi = await pickVariantIndex(
+					subscriber.userId,
+					'restock_alert',
+					RESTOCK_VARIANTS.length
+				);
 				const variant = RESTOCK_VARIANTS[vi];
 				const vars = {
 					tier: tierInfo.name,
@@ -90,13 +94,15 @@ export async function triggerRestockNotificationsForTier(tierId: string): Promis
 				const emailResult = await sendMarketingEmail({
 					to: subscriber.email,
 					subject: variant.subject(vars),
+					preheader: urgencyNote,
 					body: variant.body(vars),
 					ctaText: variant.ctaText,
 					ctaUrl: tierUrl,
 					userId: subscriber.userId,
 					notificationType: 'restock_alert',
 					referenceId: tierInfo.id,
-					campaignKey: `restock:${subscriber.id}`
+					campaignKey: `restock:${subscriber.id}`,
+					bypassMarketingCooldown: true
 				});
 
 				if (!emailResult.success) return null;
@@ -149,13 +155,18 @@ export async function triggerNumbersRestockForTier(
 				const emailResult = await sendMarketingEmail({
 					to: s.email,
 					subject: `${tierName} numbers are back in stock`,
+					preheader:
+						priceNgn > 0
+							? `Available now for ₦${priceNgn.toLocaleString()}`
+							: 'Available again now',
 					body: `Good news — ${tierName} verification numbers are available again${priceLabel}. Grab one before they sell out.`,
 					ctaText: 'Get your number',
 					ctaUrl: url,
 					userId: s.userId,
 					notificationType: 'restock_alert',
 					referenceId: tierId,
-					campaignKey: `restock:${s.id}`
+					campaignKey: `restock:${s.id}`,
+					bypassMarketingCooldown: true
 				});
 				if (!emailResult.success) return null;
 				await sendPushToUser(s.userId, {

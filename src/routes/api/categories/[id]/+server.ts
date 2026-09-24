@@ -5,7 +5,11 @@ import { applyTierSampleScreenshotSanitization } from '$lib/helpers/tierSampleSc
 import { applyTierMerchandisingSanitization } from '$lib/helpers/tier-merchandising';
 import { applyTierDeliveryConfigSanitization } from '$lib/helpers/tier-delivery-config';
 import { applyTierExactPreviewSanitization } from '$lib/helpers/tier-exact-preview';
-import { getBoostingServiceConfig } from '$lib/helpers/boosting-service-config';
+import { applyTierCatalogPriceSanitization } from '$lib/helpers/catalog-pricing';
+import {
+	applyBoostingServiceConfigSanitization,
+	getBoostingServiceConfig
+} from '$lib/helpers/boosting-service-config';
 import { triggerBoostingWaitlistNotifications } from '$lib/services/boosting-service-notifications';
 
 // GET /api/categories/[id] - Get single category
@@ -65,6 +69,7 @@ export async function PUT({ params, request, locals }) {
 			if (targetCategoryType === 'boosting_service') {
 				isBoostingService = true;
 				previousPricePerStep = getBoostingServiceConfig(existingCategory.metadata).pricePerStep;
+				nextMetadata = applyBoostingServiceConfigSanitization(metadata);
 			}
 
 			if (targetCategoryType === 'tier') {
@@ -78,10 +83,12 @@ export async function PUT({ params, request, locals }) {
 					!Array.isArray(existingCategory.metadata)
 						? (existingCategory.metadata as Record<string, unknown>)
 						: {};
-				const sanitized = applyTierExactPreviewSanitization(
-					applyTierMerchandisingSanitization(
-						applyTierSampleScreenshotSanitization(
-							applyTierDeliveryConfigSanitization(metadataObject)
+				const sanitized = applyTierCatalogPriceSanitization(
+					applyTierExactPreviewSanitization(
+						applyTierMerchandisingSanitization(
+							applyTierSampleScreenshotSanitization(
+								applyTierDeliveryConfigSanitization(metadataObject)
+							)
 						)
 					)
 				);
@@ -92,9 +99,9 @@ export async function PUT({ params, request, locals }) {
 					metadataObject.affiliate_excluded === undefined &&
 					existingMetadata.affiliate_excluded !== undefined
 						? {
-							...sanitized,
-							affiliate_excluded: existingMetadata.affiliate_excluded
-						}
+								...sanitized,
+								affiliate_excluded: existingMetadata.affiliate_excluded
+							}
 						: sanitized;
 			}
 		}

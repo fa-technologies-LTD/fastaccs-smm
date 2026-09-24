@@ -1,12 +1,26 @@
-export type BoostingPlatform = 'instagram' | 'tiktok' | 'youtube' | 'facebook' | 'x';
+export type BoostingPlatform =
+	| 'instagram'
+	| 'tiktok'
+	| 'youtube'
+	| 'facebook'
+	| 'x'
+	| 'spotify'
+	| 'telegram';
 export type BoostingActionType =
 	| 'followers'
 	| 'subscribers'
+	| 'members'
 	| 'likes'
 	| 'views'
 	| 'comments'
-	| 'reposts';
-export type RequiredLinkType = 'profile' | 'content';
+	| 'reposts'
+	| 'streams'
+	| 'monthly_listeners'
+	| 'reactions'
+	| 'shares'
+	| 'saves'
+	| 'watch_time';
+export type RequiredLinkType = 'profile' | 'channel' | 'content';
 
 export interface LinkValidationResult {
 	valid: boolean;
@@ -16,14 +30,21 @@ export interface LinkValidationResult {
 	needsManualReview?: boolean;
 }
 
-const PROFILE_ACTIONS: ReadonlySet<BoostingActionType> = new Set(['followers', 'subscribers']);
+const PROFILE_ACTIONS: ReadonlySet<BoostingActionType> = new Set([
+	'followers',
+	'subscribers',
+	'monthly_listeners'
+]);
+const CHANNEL_ACTIONS: ReadonlySet<BoostingActionType> = new Set(['members']);
 
 const PLATFORM_DOMAINS: Record<BoostingPlatform, readonly string[]> = {
 	instagram: ['instagram.com', 'instagr.am'],
 	tiktok: ['tiktok.com'],
 	youtube: ['youtube.com', 'youtu.be', 'youtube-nocookie.com'],
 	facebook: ['facebook.com', 'fb.com', 'fb.watch'],
-	x: ['x.com', 'twitter.com']
+	x: ['x.com', 'twitter.com'],
+	spotify: ['open.spotify.com', 'spotify.link'],
+	telegram: ['t.me', 'telegram.me', 'telegram.dog']
 };
 
 const PLATFORM_LABELS: Record<BoostingPlatform, string> = {
@@ -31,11 +52,14 @@ const PLATFORM_LABELS: Record<BoostingPlatform, string> = {
 	tiktok: 'TikTok',
 	youtube: 'YouTube',
 	facebook: 'Facebook',
-	x: 'X'
+	x: 'X',
+	spotify: 'Spotify',
+	telegram: 'Telegram'
 };
 
 const LINK_TYPE_LABELS: Record<RequiredLinkType, string> = {
 	profile: 'profile',
+	channel: 'channel or group',
 	content: 'post or video'
 };
 
@@ -68,7 +92,17 @@ const RESERVED_PROFILE_SEGMENTS: Partial<Record<BoostingPlatform, ReadonlySet<st
 		'videos',
 		'watch'
 	]),
-	x: new Set(['compose', 'explore', 'hashtag', 'home', 'i', 'intent', 'messages', 'search', 'share'])
+	x: new Set([
+		'compose',
+		'explore',
+		'hashtag',
+		'home',
+		'i',
+		'intent',
+		'messages',
+		'search',
+		'share'
+	])
 };
 
 function hostnameMatches(hostname: string, baseDomain: string): boolean {
@@ -187,6 +221,37 @@ function classifyX(url: URL): RequiredLinkType | 'unknown' {
 	return 'unknown';
 }
 
+function spotifyPathSegments(url: URL): string[] {
+	const segments = pathSegments(url);
+	return /^intl-[a-z]{2,3}$/i.test(segments[0] || '') ? segments.slice(1) : segments;
+}
+
+function classifySpotify(url: URL): RequiredLinkType | 'unknown' {
+	if (hostnameMatches(url.hostname, 'spotify.link')) return 'unknown';
+	const segments = spotifyPathSegments(url);
+	const first = (segments[0] || '').toLowerCase();
+	if (first === 'artist' && segments[1]) return 'profile';
+	if (['album', 'episode', 'playlist', 'show', 'track'].includes(first) && segments[1]) {
+		return 'content';
+	}
+	return 'unknown';
+}
+
+function classifyTelegram(url: URL): RequiredLinkType | 'unknown' {
+	const segments = pathSegments(url);
+	const first = (segments[0] || '').toLowerCase();
+	if (!first) return 'unknown';
+
+	// Invite and share links are official but do not reveal their final target locally.
+	if (first === 'joinchat' || first === 'share' || first.startsWith('+')) return 'unknown';
+	if (first === 's') {
+		if (segments[1] && /^\d+$/.test(segments[2] || '')) return 'content';
+		return segments[1] ? 'channel' : 'unknown';
+	}
+	if (segments.length >= 2 && /^\d+$/.test(segments[1])) return 'content';
+	return segments.length === 1 ? 'channel' : 'unknown';
+}
+
 function classifyTarget(platform: BoostingPlatform, url: URL): RequiredLinkType | 'unknown' {
 	switch (platform) {
 		case 'instagram':
@@ -199,11 +264,17 @@ function classifyTarget(platform: BoostingPlatform, url: URL): RequiredLinkType 
 			return classifyFacebook(url);
 		case 'x':
 			return classifyX(url);
+		case 'spotify':
+			return classifySpotify(url);
+		case 'telegram':
+			return classifyTelegram(url);
 	}
 }
 
 export function getRequiredLinkType(actionType: BoostingActionType): RequiredLinkType {
-	return PROFILE_ACTIONS.has(actionType) ? 'profile' : 'content';
+	if (PROFILE_ACTIONS.has(actionType)) return 'profile';
+	if (CHANNEL_ACTIONS.has(actionType)) return 'channel';
+	return 'content';
 }
 
 export function validateLinkForAction(

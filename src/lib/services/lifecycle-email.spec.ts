@@ -29,7 +29,7 @@ vi.mock('$lib/services/email', () => ({
 	sendWelcomeEmailIfNeeded: sendWelcomeEmailIfNeededMock
 }));
 
-import { runOnboardingSequence, runWelcomeRecovery } from './lifecycle-email';
+import { runNurtureSequence, runOnboardingSequence, runWelcomeRecovery } from './lifecycle-email';
 
 describe('onboarding lifecycle automation', () => {
 	beforeEach(() => {
@@ -75,5 +75,12 @@ describe('onboarding lifecycle automation', () => {
 				})
 			})
 		);
+	});
+
+	it('keeps the approved first-order offer sequence active without an environment switch', async () => {
+		const result = await runNurtureSequence();
+
+		expect(prismaMock.user.findMany).toHaveBeenCalled();
+		expect(result).toEqual({ queued: 0, sent: 0, skipped: 0, failed: 0 });
 	});
 });
