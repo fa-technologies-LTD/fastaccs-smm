@@ -59,6 +59,7 @@ describe('marketing email controls', () => {
 		);
 		txMock.$queryRaw.mockResolvedValue([{ id: 'user-1' }]);
 		txMock.user.findUnique.mockResolvedValue({
+			fullName: 'Tobi Ade',
 			email: 'buyer@example.com',
 			isActive: true,
 			emailVerified: true,
@@ -230,8 +231,8 @@ describe('marketing email controls', () => {
 			email: 'buyer@example.com',
 			notificationType: 'admin_broadcast',
 			referenceId: 'audience=all_verified',
-			subject: 'Relevant update',
-			body: 'A useful update.',
+			subject: 'A note for {{first_name}}',
+			body: 'Hi {{full_name}}, a useful update.',
 			status: 'pending',
 			processingAt: null,
 			broadcastId: '33333333-3333-4333-8333-333333333333',
@@ -252,6 +253,13 @@ describe('marketing email controls', () => {
 			})
 		);
 		expect(sendMailMock).toHaveBeenCalledTimes(1);
+		expect(sendMailMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				subject: 'A note for Tobi',
+				html: expect.stringContaining('Hi Tobi Ade, a useful update.'),
+				text: expect.stringContaining('Hi Tobi Ade, a useful update.')
+			})
+		);
 		expect(prismaMock.emailNotification.update).toHaveBeenCalledWith(
 			expect.objectContaining({
 				data: expect.objectContaining({

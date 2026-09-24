@@ -5,6 +5,7 @@ import { prisma } from '$lib/prisma';
 import { normalizeTierDeliveryMode } from '$lib/helpers/tier-delivery-config';
 import { BOOSTING_TURNAROUND_MESSAGE } from '$lib/helpers/boosting-service-config';
 import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
+import { personalizeEmailTemplate } from '$lib/helpers/email-personalization';
 import { getAdminSettingsSnapshot } from '$lib/services/admin-settings';
 import { getCanonicalCredentialEntries } from '$lib/helpers/credential-contract';
 import emailHeaderDataUrl from '$lib/assets/fa-email-header.png?inline';
@@ -783,6 +784,7 @@ interface QueuedMarketingReservation {
 	campaignKey: string;
 	userId: string;
 	preferenceToken: string;
+	fullName: string | null;
 }
 
 export async function sendQueuedMarketingEmail(notificationId: string): Promise<SendEmailResult> {
@@ -847,6 +849,7 @@ export async function sendQueuedMarketingEmail(notificationId: string): Promise<
 		const user = await tx.user.findUnique({
 			where: { id: notification.userId },
 			select: {
+				fullName: true,
 				email: true,
 				isActive: true,
 				emailVerified: true,
@@ -921,7 +924,8 @@ export async function sendQueuedMarketingEmail(notificationId: string): Promise<
 				broadcastId: notification.broadcastId,
 				campaignKey,
 				userId: notification.userId,
-				preferenceToken: user.marketingPreferenceToken
+				preferenceToken: user.marketingPreferenceToken,
+				fullName: user.fullName
 			} satisfies QueuedMarketingReservation
 		};
 	});
@@ -937,8 +941,8 @@ export async function sendQueuedMarketingEmail(notificationId: string): Promise<
 	const reservation = claim.reservation;
 	return sendEmail({
 		to: reservation.email,
-		subject: reservation.subject,
-		body: reservation.body,
+		subject: personalizeEmailTemplate(reservation.subject, reservation.fullName),
+		body: personalizeEmailTemplate(reservation.body, reservation.fullName),
 		showCta: false,
 		userId: reservation.userId,
 		notificationType: reservation.notificationType,
