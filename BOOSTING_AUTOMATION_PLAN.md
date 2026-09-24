@@ -107,11 +107,11 @@ The supplier selection, supplier price, service ID, retries, balances and techni
 
 A Fast Accounts customer option is a stable **offer envelope**. It describes the result the customer is buying while allowing many approved supplier subservices to fulfil it.
 
-| Layer          | What it contains                                                                                                          | Who sees it        |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| Customer offer | Platform, outcome, audience when relevant, quality choice, quantity, price and concise expectations                       | Customer           |
-| Offer rules    | Required retention/refill/speed attributes, quantity limits, minimum margin, maximum supplier cost and recovery allowance | Fast Accounts only |
-| Candidate pool | Every tested SMM Raja/BulkFollows service currently allowed to satisfy those rules                                        | Admin/router only  |
+| Layer          | What it contains                                                                                                         | Who sees it        |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------ |
+| Customer offer | Platform, outcome, audience when relevant, quality choice, quantity, price and concise expectations                      | Customer           |
+| Offer rules    | Required retention/refill/speed attributes, quantity limits, target margin, derived supplier budget and complaint rights | Fast Accounts only |
+| Candidate pool | Every tested SMM Raja/BulkFollows service currently allowed to satisfy those rules                                       | Admin/router only  |
 
 One customer offer can therefore map to a wide candidate pool across both suppliers. The router retains the freedom to choose and safely recover within that pool, but it may never use a cheaper candidate that falls outside the promise the customer selected. Changing the underlying route must not change the customer's price, displayed expectation or order identity.
 
@@ -119,9 +119,9 @@ Customer-visible variety and backend redundancy are separate:
 
 - Normally show **two or three meaningful customer choices** for a major outcome: **Affordable**, **More stable**, and **Premium** when the catalogue and evidence support all three.
 - Show a third only when it expresses a genuinely different tested benefit, such as local audience, faster start or a longer refill window.
-- Behind each visible choice, approve as many equivalent supplier routes as testing and margins support; aim for at least two healthy routes where the catalogues make that possible.
+- Each choice uses either **My choice** (one exact provider/service code plus an optional fallback) or **Smart Auto** (the router chooses from compatible proven services).
 - If two visible choices are not measurably different, show one. Do not create fake variety from supplier names.
-- Pre-populate hidden draft offers and ranked route suggestions from compatible catalogue rows so the owner does not have to build every mapping by hand. A draft is not a reliability claim and cannot receive live orders until its promise and pilot limits are approved.
+- Pre-populate the standard tier names and customer wording, but do not mark provisional supplier suggestions as selected routes. Smart Auto can recommend compatible services without making the owner review a large generated shortlist.
 - Supplier catalogues remain internal inventory. Never publish one customer option per supplier service or make customers understand provider terminology.
 
 ### Initial platform coverage target
@@ -246,9 +246,25 @@ Do not show alarming red errors for supplier incidents and do not display fake p
 
 For active orders, refresh a tiny indexed status endpoint from Fast Accounts, not the supplier APIs. Poll modestly while the order is visible, back off when unchanged, stop when terminal, pause while the tab is hidden, and refresh immediately when it regains focus. Support `ETag`/`updatedAt` so unchanged checks can return cheaply. Send the existing email/push notification for completion or a required link correction so customers do not have to watch the page. This preserves a live feeling without repeatedly loading order history or wasting Neon compute.
 
+### Context-aware complaints and provider-backed recovery
+
+Every order can report **Nothing was delivered** or **Delivery stopped early** while its support window is open. Drop/refill complaints appear only when the purchased offer snapshot promised refill protection and the complaint is still inside that exact refill period. An Affordable customer must not be invited to claim a drop guarantee they did not buy.
+
+A complaint records the original submitted link, stable platform object ID when one can be resolved, original username, supplier order ID, supplier status, start count, latest observed count and the promise/refill window bought by the customer. A changed username, replaced post, private/deleted target or different resolved object is shown clearly before a refill is attempted because suppliers commonly require the original link to remain unchanged.
+
+The admin review should be one calm case page with **Validate complaint** and **Escalate to provider**. Escalation means:
+
+- call the supplier's refill endpoint when the order is refill-eligible and that provider contract has been verified;
+- otherwise create/send a provider support case containing the supplier order ID, original link, complaint type and safe evidence;
+- track the escalation reference and poll or remind until resolved.
+
+BulkFollows publicly documents a refill endpoint. SMM Raja's public example currently documents add, status, multi-status, services and balance but not a refill or support-ticket endpoint, so its one-click escalation requires controlled contract confirmation or a provider support-channel adapter. Never pretend a local button contacted the supplier when no supported channel exists.
+
+Fast Accounts does not silently fund a second paid order after a supplier has accepted or charged for the first. Free supplier refill/support is the normal recovery. Any exceptional paid replacement is a separate, explicit owner decision rather than an automatic use of margin.
+
 ### Expectations
 
-- Initially keep the honest existing statement: **Most orders start within a few hours.**
+- Initially say that timing varies by platform and service; do not promise a fixed start time without measured evidence.
 - After enough route-level history exists, show plain observed guidance such as **Usually starts within 20 minutes** and **Usually finishes the same day**.
 - Derive that wording from recent median and slower-end delivery times, not supplier marketing.
 - Show **Refill included** only when both our product promise and the chosen supplier route support the same refill window.
@@ -304,8 +320,9 @@ interface BoostProviderAdapter {
 	getBalance(): Promise<ProviderBalance>;
 	submitOrder(input: SubmitBoostOrder): Promise<SubmitResult>;
 	getStatuses(providerOrderIds: string[]): Promise<ProviderOrderStatus[]>;
-	requestRefill(providerOrderId: string): Promise<RefillResult>;
-	cancel(providerOrderIds: string[]): Promise<CancelResult>;
+	requestRefill?(providerOrderId: string): Promise<RefillResult>;
+	cancel?(providerOrderIds: string[]): Promise<CancelResult>;
+	escalateSupportCase?(input: ProviderSupportCase): Promise<SupportCaseResult>;
 }
 ```
 
@@ -321,11 +338,22 @@ Implementation rules:
 
 No additional application encryption key is needed for these API keys; deployment environment secrets are the correct storage layer.
 
-### 2. Explicit offer-to-supplier mapping
+### 2. Simple offer-to-supplier mapping
 
 Every live Fast Accounts customer offer maps to zero or more approved provider service IDs. A platform/outcome category can contain multiple customer offers, but each route must satisfy the exact offer envelope. Never use name similarity during fulfilment.
 
-Each candidate mapping records:
+The normal admin workflow is:
+
+1. Open a customer outcome such as **X Followers**.
+2. Keep two or three useful tiers: **Affordable**, **More stable**, and **Premium**.
+3. Open one tier and choose **My choice** or **Smart Auto**.
+4. For **My choice**, choose SMM Raja or BulkFollows, enter the exact supplier service code, inspect the returned rate/limits/refill facts, and use it as primary or optional fallback.
+5. Set the target margin. The configured USD/NGN rate and currency buffer derive the suggested selling price and maximum supplier budget.
+6. Accept the rounded suggested price or lock a deliberate selling price, then save.
+
+Standard customer names and promises are generated from the tier. Editing wording is an optional advanced action. Normal-cost targets, recovery percentages, pilot limits, shadow state and other engineering controls stay out of the ordinary form.
+
+Each saved mapping still records:
 
 - Fast Accounts `offerId` and parent `categoryId`
 - Provider and provider service ID
@@ -336,7 +364,7 @@ Each candidate mapping records:
 - Quality/speed/region attributes we explicitly promise
 - Enabled, shadow-only or paused state
 - Routing policy: automatic, preferred or admin-locked
-- Maximum pilot quantity
+- Maximum pilot quantity, managed internally during canary
 - Mapping reviewer and approval date
 
 If no approved candidate is currently safe, the item remains in the manual queue. The router must not guess.
@@ -467,42 +495,33 @@ A successful health check may move it to a limited trial state. Full reopening s
 
 ### 5. Failover matrix
 
-| Situation                                                                                      | Automatic action                                                                                                                               |
-| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Provider is paused, unfunded or ineligible before submission                                   | Choose the next eligible candidate                                                                                                             |
-| DNS/connect failure proven to occur before an order body was sent                              | Choose the next eligible candidate                                                                                                             |
-| Provider explicitly rejects the order and returns no order ID                                  | Record the rejection and choose the next eligible candidate                                                                                    |
-| Provider explicitly cancels/refunds with no delivery                                           | Verify terminal state, then route the undelivered quantity or send to review according to product policy                                       |
-| Submission times out, returns malformed data or loses the response after it may have been sent | Set `submission_unknown`; do not retry or fail over                                                                                            |
-| Provider returns an order ID, Pending/Processing/In progress                                   | Keep that provider; poll normally                                                                                                              |
-| Partial delivery                                                                               | Record delivered/remains and supplier credit; attempt eligible refill or review the remaining quantity—never silently duplicate the full order |
-| Link is wrong/private                                                                          | Ask the customer for a corrected link                                                                                                          |
-| Both providers are unavailable                                                                 | Keep the paid order safely queued, alert admin, and use manual handling                                                                        |
+| Situation                                                                                      | Automatic action                                                                                       |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Provider is paused, unfunded or ineligible before submission                                   | Choose the next eligible candidate                                                                     |
+| DNS/connect failure proven to occur before an order body was sent                              | Choose the next eligible candidate                                                                     |
+| Provider explicitly rejects the order and returns no order ID                                  | Record the rejection and choose the next eligible candidate                                            |
+| Provider explicitly cancels/refunds with no delivery                                           | Confirm the supplier credit was restored, then safely submit once elsewhere or send to review          |
+| Submission times out, returns malformed data or loses the response after it may have been sent | Set `submission_unknown`; do not retry or fail over                                                    |
+| Provider returns an order ID, Pending/Processing/In progress                                   | Keep that provider; poll normally                                                                      |
+| Partial delivery                                                                               | Record delivered/remains and escalate to the original provider; do not buy the remainder automatically |
+| Link is wrong/private                                                                          | Ask the customer for a corrected link                                                                  |
+| Both providers are unavailable                                                                 | Keep the paid order safely queued, alert admin, and use manual handling                                |
 
 Automatic failover is for known-safe pre-submission failures, not every error.
 
-#### Margin-funded recovery without duplicate delivery
+#### Provider-backed recovery without duplicate spending
 
-An affordable supplier route may leave enough margin for another fulfilment attempt, but “we can afford to try twice” is a recovery budget—not permission to place overlapping full orders.
+Margin determines whether a supplier service is eligible; it is not permission to keep purchasing until a counter moves. Automatic failover is allowed only before a charge, after an explicit rejection with no supplier order, or after a terminal zero-delivery cancellation/refund whose credit has been confirmed.
 
-Each customer offer stores:
+Once a supplier accepted or charged for an order:
 
-- minimum acceptable contribution margin
-- normal expected supplier cost
-- maximum total supplier cost across all attempts
-- maximum attempt count
-- whether refill, remainder top-up or full safe replacement is permitted
+- Pending, processing, slow, partial, completed or `submission_unknown` states never trigger another paid order automatically.
+- Nothing-delivered and stopped-early complaints are validated and escalated to the original provider.
+- A drop complaint is available only when the purchased offer promised a still-active refill period.
+- Refill uses the original supplier's covered refill/support path and must preserve the submitted target.
+- A second paid order, full replacement or out-of-pocket top-up requires an explicit owner decision and is never presented as routine automation.
 
-The router can use another approved subservice only when the earlier outcome is conclusive:
-
-- A proven pre-submission failure can choose another candidate immediately.
-- An explicit rejection with no supplier order ID can choose another candidate.
-- A terminal cancellation/refund with zero delivery can place a fresh full order within the recovery budget.
-- A confirmed partial order first uses an eligible refill; if that is unavailable or conclusively fails, order only the verified remainder—not the full original quantity.
-- A completed order that later drops can use the promised refill or a measured top-up only when the offer includes that protection and the total cost remains within its cap.
-- Pending, processing, slow or `submission_unknown` orders never trigger a duplicate attempt merely because another route is cheap.
-
-Likes and other low-cost outcomes may qualify for one additional controlled recovery attempt after testing proves the economics. The customer continues to see the same simple **In progress** state. Internally, record every attempt, supplier credit, quantity recovered, total cost and final margin. Crossing the monetary or attempt cap requires an audited admin decision.
+Internally record each complaint, evidence snapshot, provider escalation, refill response, restored supplier credit, manual decision and final outcome. The customer continues to see a calm **In progress** or **We're checking this** state while Fast Accounts handles the supplier.
 
 ### 6. Database-backed worker
 
@@ -586,7 +605,9 @@ Actions:
 - retry a known-safe failure
 - reconcile an unknown submission
 - refresh status
-- request refill or cancel when verified as supported
+- validate a context-appropriate customer complaint
+- escalate to the provider through a verified refill API or support channel
+- request refill or cancel only when verified as supported
 - correct/approve the mapping
 - switch to manual handling
 - ask customer to fix the link with a short reason
@@ -607,19 +628,18 @@ Alerts should cover low balance, stale catalogue, no viable route, `submission_u
 
 ### Mapping workspace
 
-Do not expose thousands of raw supplier rows as the main UI. For each Fast Accounts product, show only searched candidate services side by side with rate, limits, refill/cancel claims, last sync and observed results. An admin explicitly approves each mapping and can leave it shadow-only.
+The main UI follows the provider-code workflow above. It must not begin with thousands of rows or show automatically suggested services as already selected.
 
-Keep the control simple: **Automatic**, **Prefer this**, or **Lock to this service**. When locked, state plainly: “Orders wait for you if this service is unavailable. We will not switch suppliers silently.” Show the recent failure count and one **Review route** action only after the threshold is reached, while surfacing structural incompatibilities immediately.
+- Outcome first: **X Followers**.
+- Tier second: **Affordable**, **More stable**, or **Premium**.
+- Mode third: **My choice** or **Smart Auto**.
+- For **My choice**, provider + exact service code returns one unambiguous service card with rate, converted cost, limits, refill facts and last sync.
+- One action maps it as primary; an optional second action adds a fallback.
+- For **Smart Auto**, show the plain eligibility/reliability rules and the current likely winner, not a long editable route list.
+- Show target margin, suggested rounded selling price and optional **Lock price**. Derive the spend ceiling internally.
+- Put customer wording and engineering diagnostics under **Advanced**.
 
-Structure the workspace around customer offers rather than providers:
-
-1. Left column: platform and outcome coverage, with missing/one-route/two-route coverage indicators.
-2. Centre: the selected customer offer exactly as the customer will see it, including price and promise.
-3. Right: only compatible candidate subservices, ranked by eligibility, observed reliability and landed cost.
-
-The first catalogue import should automatically create reviewable draft suggestions for the core coverage matrix. Initial ranking may use only factual catalogue signals—target compatibility, quantity limits, price, advertised refill/cancel support, and provider redundancy. Supplier names and marketing words are not reliability ratings. As real canary history grows, measured delivery, drop, recovery and support outcomes replace those provisional signals. The owner can set **Preferred** or **Locked** on a known service at any time; that explicit choice outranks automatic scoring until changed.
-
-An expandable **All supplier services** search remains available for discovery, but it is never the default screen. Adding a candidate requires an equivalence checklist for target type, audience, retention/refill promise, limits and link formats. Show the offer's remaining recovery headroom after each candidate's expected cost. Provide a read-only **Simulate route** action that explains which candidate would win and why without placing an order.
+The first catalogue import may classify and rank candidates for Smart Auto, but it must not create visible “selected routes.” Supplier names and marketing words are not reliability ratings. As canary history grows, measured delivery and complaint/refill outcomes replace provisional signals. An exact owner-selected service always outranks automatic scoring until changed.
 
 ## Measuring reliability honestly
 
@@ -633,6 +653,19 @@ Record these from our own orders:
 - refill requests and recovery outcome
 - manual interventions and support incidents
 - final landed cost and contribution margin
+
+Supplier status is evidence, not truth. Where an official platform interface permits it, capture an independent counter snapshot immediately before submission and at sensible intervals afterward. Compare the net change with the ordered quantity and retain timestamped evidence. If a provider says **Complete** while the visible metric did not materially move, flag **delivery unverified** rather than rewarding the route's reliability score. If the visible metric reaches the target while the provider still says **In progress**, show the customer a calm completed result while continuing supplier reconciliation internally.
+
+Independent verification is confidence-based, not universal or indisputable:
+
+- YouTube exposes public video view/like/comment counts, but channel subscriber totals can be hidden or rounded.
+- X exposes public profile metrics through its developer API when Fast Accounts has suitable API access.
+- TikTok exposes video counters through its Display API for an authorized creator; broad public-profile research access is restricted.
+- Spotify exposes artist follower totals, but not a general exact stream/monthly-listener counter suitable for every order.
+- Telegram can expose channel/group member counts through the Bot API when the target is accessible to the bot.
+- Instagram/Meta access depends on account type, app review and authorization; arbitrary consumer-profile verification cannot be assumed.
+
+A net counter increase still cannot prove which supplier caused it because organic activity and removals can happen at the same time. Use independent counters to strengthen or challenge supplier status, validate obvious no-delivery cases and prioritize complaints—not to accuse customers or promise perfect attribution. Do not make fragile page scraping a required fulfilment dependency.
 
 Do not count a private, deleted or wrong customer link as supplier unreliability. Report both recent rolling performance and lifetime sample size. Prefer route-level data; fall back conservatively to provider-level data when a route is new.
 

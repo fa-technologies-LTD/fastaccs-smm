@@ -1,6 +1,34 @@
 # Fast Accounts project checklist
 
-Last updated: 20 September 2026
+Last updated: 24 September 2026
+
+## Active sprint checkpoint
+
+- [x] Preserve the exact paused Boosting-automation state and agreed restart sequence in [`CURRENT_SPRINT_CHECKPOINT.md`](./CURRENT_SPRINT_CHECKPOINT.md)
+- [x] Remove the retired storefront announcement banner and update the homepage copy during the temporary diversion
+- [ ] Resume with the simplified Boosting mapping workflow described in the checkpoint
+- [ ] Keep the Boosting automation foundation and automated paid fulfilment out of Production until the simplified setup flow, staging tests, shadow run and limited canary are complete
+
+## Approved release close-out — 24 September 2026
+
+- [ ] Final-check and release Numbers supplier-route protection
+- [ ] Final-check and release the Email and lifecycle overhaul, including personalized manual broadcasts
+- [ ] Final-check and release catalogue-price rounding to the nearest ₦50
+- [ ] Final-check and release Boosting customer-facing polish only
+- [ ] Remove completed temporary Email/Planning review rooms and stale local release branches after the release is secured
+
+## Numbers reliability containment — 23 September 2026
+
+- [x] Replace the broad product-level failure pause with exact supplier-route protection
+- [x] Keep a product available while a healthy or genuinely unexplored affordable route remains
+- [x] Move twice-failed routes behind healthy/unexplored routes and block a third immediate failure
+- [x] Return cooled-down failed routes only as last-resort probation routes until a real success clears their streak
+- [x] Persist successful Hubman and PVAPins catalogue snapshots, including conclusive empty results
+- [x] Exclude unavailable and over-budget supplier listings from the storefront's “unexplored route” decision
+- [x] Apply and verify the additive snapshot migration on the isolated Neon staging branch
+- [x] Run a real staging catalogue refresh: 96 active Hubman routes and 4,976 active PVAPins variants persisted; 4,941 routes currently have no customer-order history
+- [ ] Deploy the code and additive migration to Production after final owner approval
+- [ ] Confirm the first Production catalogue refresh populates both snapshot tables and inspect the first live routing decisions
 
 ## Completed
 
@@ -116,7 +144,11 @@ Last updated: 20 September 2026
 - [x] Let owner Preferred/Locked overrides outrank automatic recommendations
 - [x] Add a six-item first-review queue that opens the exact recommended category and tier, with Premium X followers deliberately first
 - [x] Allow Preferred/Locked choices to stay shadow-only during review; live routing still rejects every route until it is explicitly pilot-enabled
-- [ ] Review and approve the first small set of exact mappings, including the known premium X-followers service
+- [x] Agree the replacement setup flow: outcome → tier → My choice/Smart Auto → provider/service code → target margin → accept/lock price
+- [ ] Replace the current engineering-heavy mapping screen with the agreed provider-code workflow; keep copy, pilot, shadow and cost internals under Advanced
+- [ ] Remove/reset the 390 provisional staging route selections so suggestions are not presented as configured mappings
+- [ ] Connect the customer preview to saved staging offers instead of hard-coded illustrative fixtures
+- [ ] Review and approve the first small set of exact mappings, including the known premium X-followers service, through the simplified workflow
 - [x] Create one persistent Neon development branch and store its pooled/direct URLs locally for future migrations and transaction tests
 - [x] Complete the available authenticated no-order service, balance, single-status, batch-status and error-shape checks
 - [x] Audit both suppliers' current terms, FAQs and how-to guidance; align Fast Accounts' Boosting FAQs, policies and expectation copy into one conservative draft
@@ -124,6 +156,10 @@ Last updated: 20 September 2026
 - [ ] Map the first reviewed offers, then run and compare shadow decisions against human-fulfilled orders
 - [ ] Make healthy Boosting operations hands-off: scheduled catalogue/balance refresh, automatic safe routing, backoff status checks, customer updates, and an exceptions-only admin queue
 - [ ] Connect the replacement customer flow to cart, checkout, order history, notifications and audited manual recovery
+- [ ] Add context-aware customer complaints: everyone can report no delivery/stopped delivery; drop/refill appears only for an eligible purchased promise and active refill window
+- [ ] Build an admin complaint case with original target evidence and one provider-escalation action; never automatically buy a second order after supplier acceptance/charge
+- [ ] Verify BulkFollows refill behaviour and SMM Raja's refill/support path during canary before enabling one-click escalation
+- [ ] Add best-effort independent metric snapshots only where official platform APIs permit them; treat unsupported targets as provider-reported plus complaint evidence
 - [ ] After staging, shadow and canary parity, retire the complete old Boosting customer/admin UI, endpoints and unreachable compatibility code
 - [x] Fund both supplier accounts and verify their credentials with read-only service-list and balance calls
 - [x] Store both supplier credentials in the ignored local environment for authenticated contract testing
