@@ -168,14 +168,14 @@ function projectRoute(
 		service.ratePerThousand === null || offer.quantity <= 0
 			? Number.POSITIVE_INFINITY
 			: (service.ratePerThousand * offer.quantity) / 1000;
-	const costMultiplier =
-		1 +
-		validPercent(input.currencyBufferPercent) / 100 +
-		validPercent(route.expectedRecoveryCostPercent) / 100;
-	const projectedSupplierCostNgn = rawSupplierCostUsd * input.usdToNgn * costMultiplier;
+	// The configured exchange rate already includes the owner's desired currency headroom.
+	// Keep this identical to the supplier cost shown in the setup screen.
+	const projectedSupplierCostNgn = rawSupplierCostUsd * input.usdToNgn;
 	const projectedMarginNgn = offer.customerPriceNgn - projectedSupplierCostNgn;
 	const projectedMarginPercent =
-		offer.customerPriceNgn > 0 ? (projectedMarginNgn / offer.customerPriceNgn) * 100 : -Infinity;
+		projectedSupplierCostNgn > 0 && Number.isFinite(projectedSupplierCostNgn)
+			? (projectedMarginNgn / projectedSupplierCostNgn) * 100
+			: -Infinity;
 
 	if (
 		!provider ||

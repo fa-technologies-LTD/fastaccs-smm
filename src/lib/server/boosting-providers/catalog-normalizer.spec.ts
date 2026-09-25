@@ -58,6 +58,17 @@ describe('boosting provider catalogue normalization', () => {
 		expect(unrelated.platforms).toEqual([]);
 	});
 
+	it('recognizes a refill period stated in the supplier service name', () => {
+		const service = normalizeBoostProviderService('bulk_follows', {
+			...BULK_FOLLOWS_SERVICE_FIXTURE,
+			name: 'Twitter Followers - REFILL 30D',
+			category: 'Twitter Followers',
+			refill: false
+		});
+		expect(service.refillAdvertised).toBe(true);
+		expect(service.qualitySignals).toContain('refill_claim');
+	});
+
 	it('quarantines malformed commercial data and flags extreme rates', () => {
 		const malformed = normalizeBoostProviderService('smm_raja', {
 			name: 'Instagram Followers',

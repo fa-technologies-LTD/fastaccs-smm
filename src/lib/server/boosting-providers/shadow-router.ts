@@ -301,7 +301,7 @@ async function recordShadowDecision(
 		routes,
 		providers,
 		usdToNgn: configuredNumber('BOOSTING_USD_NGN_RATE', 1700, 1),
-		currencyBufferPercent: configuredNumber('BOOSTING_CURRENCY_BUFFER_PERCENT', 5, 0),
+		currencyBufferPercent: 0,
 		reliabilityFloor: configuredNumber('BOOSTING_RELIABILITY_FLOOR', 0.8, 0),
 		executionMode: 'shadow'
 	});

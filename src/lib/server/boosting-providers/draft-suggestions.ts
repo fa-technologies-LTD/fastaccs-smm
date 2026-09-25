@@ -60,8 +60,7 @@ function configuredFxRate(): number {
 }
 
 function configuredCurrencyBufferPercent(): number {
-	const value = Number(env.BOOSTING_CURRENCY_BUFFER_PERCENT || 5);
-	return Number.isFinite(value) && value >= 0 ? value : 5;
+	return 0;
 }
 
 function signalCount(candidate: DraftSuggestionCandidate, signals: string[]): number {

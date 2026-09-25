@@ -20,7 +20,13 @@ export const GET: RequestHandler = async ({ locals, url, setHeaders }) => {
 	}
 	if (url.searchParams.get('mode') === 'smart') {
 		const qualityTier = String(url.searchParams.get('tier') || 'value');
-		const data = await recommendBoostProviderServices({ categoryId, qualityTier });
+		const maximumRate = Number(url.searchParams.get('maximumRatePerThousand'));
+		const data = await recommendBoostProviderServices({
+			categoryId,
+			qualityTier,
+			maximumRatePerThousand:
+				Number.isFinite(maximumRate) && maximumRate > 0 ? maximumRate : undefined
+		});
 		return json({ success: true, data });
 	}
 	const provider = String(url.searchParams.get('provider') || '') as BoostProviderId;

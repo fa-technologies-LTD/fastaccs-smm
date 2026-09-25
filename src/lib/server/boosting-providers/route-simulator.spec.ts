@@ -199,6 +199,30 @@ describe('boost route simulator', () => {
 		expect(result.selectedRouteId).toBe('pilot');
 	});
 
+	it('uses the protected exchange rate without adding legacy hidden buffers', () => {
+		const result = simulateBoostRoute({
+			offer: {
+				...offer,
+				quantity: 500,
+				customerPriceNgn: 10_000,
+				minimumMarginPercent: 0,
+				maximumSupplierCostNgn: 10_000
+			},
+			routes: [
+				route('exact-cost', 'bulk_follows', 6.5, {
+					expectedRecoveryCostPercent: 99,
+					maximumPilotQuantity: 500
+				})
+			],
+			providers,
+			usdToNgn: 1500,
+			currencyBufferPercent: 99,
+			reliabilityFloor: 0.8
+		});
+
+		expect(result.projections[0].projectedSupplierCostNgn).toBe(4875);
+	});
+
 	it('can evaluate an approved shadow route without making it live-eligible', () => {
 		const shadowRoute = route('shadow-candidate', 'smm_raja', 1, { state: 'shadow' });
 		expect(simulate([shadowRoute]).selectedRouteId).toBeNull();

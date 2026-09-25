@@ -7,6 +7,10 @@ import type {
 } from '$lib/helpers/boosting-mapping-types';
 import { getRequiredLinkType } from '$lib/helpers/social-link-validator';
 import type { BoostProviderId } from './types';
+import {
+	inferAdvertisedRefillDays,
+	supplierTextAdvertisesRefill
+} from './catalog-normalizer';
 
 const LABELS: Record<BoostProviderId, string> = {
 	smm_raja: 'SMM Raja',
@@ -25,6 +29,8 @@ function toCandidate(row: ServiceRow): BoostMappingCandidate | null {
 		return null;
 	}
 	const provider = row.provider as BoostProviderId;
+	const refillText = `${row.name} ${row.category} ${row.description ?? ''}`;
+	const refillDaysClaimed = inferAdvertisedRefillDays(refillText);
 	return {
 		id: row.id,
 		provider,
@@ -36,7 +42,8 @@ function toCandidate(row: ServiceRow): BoostMappingCandidate | null {
 		ratePerThousand: Number(row.ratePerThousand),
 		minQuantity: row.minQuantity,
 		maxQuantity: row.maxQuantity,
-		refillAdvertised: row.refillAdvertised,
+		refillAdvertised: row.refillAdvertised === true || supplierTextAdvertisesRefill(refillText),
+		refillDaysClaimed,
 		cancelAdvertised: row.cancelAdvertised,
 		dripfeedAdvertised: row.dripfeedAdvertised,
 		qualitySignals: row.qualitySignals,
@@ -134,7 +141,12 @@ export function rankSmartBoostCandidates(
 }
 
 export async function recommendBoostProviderServices(
-	input: { categoryId: string; qualityTier: string; limit?: number },
+	input: {
+		categoryId: string;
+		qualityTier: string;
+		limit?: number;
+		maximumRatePerThousand?: number;
+	},
 	database: PrismaClient = prisma
 ): Promise<BoostMappingCandidate[]> {
 	const config = await loadCategory(database, input.categoryId);
@@ -146,7 +158,10 @@ export async function recommendBoostProviderServices(
 			targetType: getRequiredLinkType(config.actionType),
 			unavailableAt: null,
 			catalogueStatus: 'ready_for_review',
-			ratePerThousand: { not: null },
+			ratePerThousand:
+				Number.isFinite(input.maximumRatePerThousand) && input.maximumRatePerThousand! > 0
+					? { not: null, lte: input.maximumRatePerThousand }
+					: { not: null },
 			minQuantity: { lte: config.minQuantity },
 			maxQuantity: { gte: Math.max(...getQuantityChips(config)) }
 		},

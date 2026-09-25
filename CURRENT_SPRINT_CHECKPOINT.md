@@ -2,7 +2,7 @@
 
 Updated: 25 September 2026
 Branch: `test`
-Base before this sprint: `926fb96` (`docs: close release cleanup`)
+Previous test checkpoint: `15e2bba` (`fix: normalize local Google OAuth host`)
 
 This is the handoff point for the replacement Boosting workflow. The implementation is complete on
 `test` and is intentionally safe by default. It must pass owner walkthrough, shadow comparison and a
@@ -11,12 +11,21 @@ small controlled canary before it can replace the existing production Boosting f
 ## Completed in code
 
 - Replaced the engineering-heavy mapping workspace with the agreed setup flow:
-  choose outcome → choose tier → My choice or Smart Auto → exact supplier-code lookup → price/margin
+  choose outcome → choose tier → My choice or Smart Auto → exact supplier-code lookup → price/profit
   review → optional fallback → save.
 - Kept the customer catalogue deliberately small. Supplier identities and thousands of raw services
   stay internal.
-- Added one shared USD/NGN conversion setting and currency buffer, target-margin pricing, prices
-  rounded to ₦50 and an optional locked selling price per offer.
+- Simplified pricing to one protected USD/NGN rate (used directly with no additional buffer), a
+  profit percentage added to supplier cost, prices rounded to ₦50 and an optional locked selling
+  price per offer. The global profit percentage only pre-fills new tiers; each tier can override it.
+- Added explicit fallback choices for a manually selected primary service: no fallback, a compatible
+  automatic fallback shortlist, or one exact manually selected fallback. A fallback must cost the
+  same as the primary route or less.
+- Improved catalogue interpretation so supplier wording such as `REFILL 30D` is shown as a 30-day
+  claim even when the supplier's separate refill flag is inaccurate. The saved customer promise is
+  never silently stronger than the selected service's stated refill period.
+- Removed paid-pilot controls and legacy cost-safety arithmetic from the everyday setup form. Routes
+  still save in Shadow mode; the separate environment rollout gate remains intact.
 - Added a database-backed private customer preview. Reviewed offers can be inspected privately;
   only offers explicitly marked `live` can appear in the public store.
 - Connected live replacement offers to service pages, cart refresh, checkout, paid-order recovery,
@@ -65,8 +74,8 @@ small controlled canary before it can replace the existing production Boosting f
 
 ## Verification completed
 
-- Unit/integration tests: 133 files passed, 779 tests passed.
-- Browser checks: 4 passed against the production preview build.
+- Unit/integration tests: 133 files passed, 783 tests passed.
+- Browser component checks: 3 passed.
 - Svelte/type check: 0 errors; 123 existing warnings remain.
 - Production build: passed under Node 20.19.4.
 - Diff integrity: passed.
@@ -78,12 +87,14 @@ small controlled canary before it can replace the existing production Boosting f
 2. Choose a small outcome such as X Followers and open Premium.
 3. Choose **My choice**, select SMM Raja or BulkFollows and enter a real supplier service code.
 4. Confirm the exact service name, supplier price, quantity limits and refill wording.
-5. Set the target margin; confirm the suggested rounded price, or lock a manual price.
-6. Optionally add one compatible fallback and save.
-7. Open `/admin/boosting-preview` and confirm the customer wording and quantities.
-8. Keep the offer reviewed/private first. When satisfied, mark only that small offer live in staging and
+5. Confirm the supplier cost uses `supplier USD cost × protected USD/NGN rate` with no second buffer.
+6. Set the profit percentage; confirm the suggested rounded price, or lock a manual price.
+7. Choose no fallback, automatic fallback or one exact manual fallback, then save. Automatic and
+   manual fallbacks must be compatible and no more expensive than the primary route.
+8. Open `/admin/boosting-preview` and confirm the customer wording and quantities.
+9. Keep the offer reviewed/private first. When satisfied, mark only that small offer live in staging and
    verify its service page, cart and checkout presentation.
-9. Run a normal manually fulfilled order beside shadow routing and compare the suggested route with the
+10. Run a normal manually fulfilled order beside shadow routing and compare the suggested route with the
    route you would have chosen.
 
 ## Gates that intentionally remain after the localhost walkthrough

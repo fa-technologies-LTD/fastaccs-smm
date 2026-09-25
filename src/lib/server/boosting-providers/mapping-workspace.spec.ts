@@ -5,6 +5,7 @@ import { BoostMappingError, saveBoostMappingWorkspace } from './mapping-workspac
 
 const categoryId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const serviceId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const fallbackServiceId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 function validInput(): BoostMappingSaveInput {
 	return {
@@ -19,6 +20,7 @@ function validInput(): BoostMappingSaveInput {
 			normalCostTargetNgn: 1200,
 			maximumSupplierCostNgn: 2500,
 			attemptCap: 1,
+			fallbackMode: 'none',
 			status: 'reviewed',
 			routingPolicy: 'automatic',
 			preferredProviderServiceId: null,
@@ -39,7 +41,29 @@ function validInput(): BoostMappingSaveInput {
 	};
 }
 
-function database(refillAdvertised = true) {
+function providerService(
+	id = serviceId,
+	ratePerThousand = 1,
+	refillAdvertised = true
+) {
+	return {
+		id,
+		name: 'Instagram Followers - REFILL 30D',
+		category: 'Instagram',
+		description: null,
+		unavailableAt: null,
+		catalogueStatus: 'ready_for_review',
+		platforms: ['instagram'],
+		outcomes: ['followers'],
+		targetType: 'profile',
+		minQuantity: 100,
+		maxQuantity: 100000,
+		ratePerThousand,
+		refillAdvertised
+	};
+}
+
+function database(refillAdvertised = true, services = [providerService(serviceId, 1, refillAdvertised)]) {
 	const offerUpsert = vi.fn().mockResolvedValue({ id: 'offer-1' });
 	const routeUpsert = vi.fn().mockResolvedValue({ id: 'route-1' });
 	const offerUpdate = vi.fn().mockResolvedValue({});
@@ -67,19 +91,7 @@ function database(refillAdvertised = true) {
 				})
 			},
 			boostProviderService: {
-				findMany: vi.fn().mockResolvedValue([
-					{
-						id: serviceId,
-						unavailableAt: null,
-						catalogueStatus: 'ready_for_review',
-						platforms: ['instagram'],
-						outcomes: ['followers'],
-						targetType: 'profile',
-						minQuantity: 100,
-						maxQuantity: 100000,
-						refillAdvertised
-					}
-				])
+				findMany: vi.fn().mockResolvedValue(services)
 			},
 			$transaction: vi.fn(async (callback: (value: typeof tx) => unknown) => callback(tx))
 		} as unknown as PrismaClient,
@@ -99,12 +111,12 @@ describe('boosting mapping workspace persistence', () => {
 		).rejects.toBeInstanceOf(BoostMappingError);
 	});
 
-	it('rejects a cost ceiling that can consume the entire customer price', async () => {
+	it('rejects a cost ceiling above the entire customer price', async () => {
 		const input = validInput();
-		input.offer.maximumSupplierCostNgn = 5000;
+		input.offer.maximumSupplierCostNgn = 5001;
 		await expect(
 			saveBoostMappingWorkspace(categoryId, input, 'admin-1', { database: database().client })
-		).rejects.toThrow('maximum cost must stay below the customer price');
+		).rejects.toThrow('customer price is too low');
 	});
 
 	it('requires a fresh promise check when an approved route is upgraded to premium', async () => {
@@ -118,7 +130,12 @@ describe('boosting mapping workspace persistence', () => {
 	it('rejects a refill offer when the current supplier row no longer supports refill', async () => {
 		await expect(
 			saveBoostMappingWorkspace(categoryId, validInput(), 'admin-1', {
-				database: database(false).client
+				database: database(false, [
+					{
+						...providerService(serviceId, 1, false),
+						name: 'Instagram Followers - NO REFILL'
+					}
+				]).client
 			})
 		).rejects.toThrow('not safely compatible');
 	});
@@ -162,6 +179,43 @@ describe('boosting mapping workspace persistence', () => {
 				data: expect.objectContaining({ lockedRouteId: 'route-1' })
 			})
 		);
+	});
+
+	it('persists a manually chosen fallback and the definitive-rejection retry rule', async () => {
+		const db = database(true, [providerService(serviceId, 2), providerService(fallbackServiceId, 1)]);
+		const input = validInput();
+		input.offer.routingPolicy = 'preferred';
+		input.offer.preferredProviderServiceId = serviceId;
+		input.offer.fallbackMode = 'manual';
+		input.offer.attemptCap = 2;
+		input.routes.push({ ...input.routes[0], providerServiceId: fallbackServiceId });
+
+		await saveBoostMappingWorkspace(categoryId, input, 'admin-1', { database: db.client });
+		expect(db.offerUpsert).toHaveBeenCalledWith(
+			expect.objectContaining({
+				create: expect.objectContaining({
+					recoveryModes: ['retry_definitive_failure', 'fallback_manual']
+				})
+			})
+		);
+	});
+
+	it('rejects a fallback that costs more than its primary service', async () => {
+		const input = validInput();
+		input.offer.routingPolicy = 'preferred';
+		input.offer.preferredProviderServiceId = serviceId;
+		input.offer.fallbackMode = 'manual';
+		input.offer.attemptCap = 2;
+		input.routes.push({ ...input.routes[0], providerServiceId: fallbackServiceId });
+
+		await expect(
+			saveBoostMappingWorkspace(categoryId, input, 'admin-1', {
+				database: database(true, [
+					providerService(serviceId, 1),
+					providerService(fallbackServiceId, 2)
+				]).client
+			})
+		).rejects.toThrow('fallback must cost the same');
 	});
 
 	it('requires a quantity cap before a checked route can be pilot enabled', async () => {

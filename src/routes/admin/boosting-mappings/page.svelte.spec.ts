@@ -131,5 +131,9 @@ describe('Boosting mapping offer selection', () => {
 			.element(page.getByRole('heading', { name: 'Facebook Page Followers' }))
 			.toBeVisible();
 		await expect.element(page.getByRole('button', { name: /Premium/ })).toBeVisible();
+		await expect.element(page.getByText('Default profit added to cost %')).toBeVisible();
+		await expect.element(page.getByText('Profit added to supplier cost %')).toBeVisible();
+		expect(page.getByText(/Paid pilot controls/i).query()).toBeNull();
+		expect(page.getByText(/Currency buffer/i).query()).toBeNull();
 	});
 });

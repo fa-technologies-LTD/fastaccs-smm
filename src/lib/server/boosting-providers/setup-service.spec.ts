@@ -12,6 +12,7 @@ function candidate(input: Partial<BoostMappingCandidate> & Pick<BoostMappingCand
 		minQuantity: 10,
 		maxQuantity: 10000,
 		refillAdvertised: false,
+		refillDaysClaimed: null,
 		cancelAdvertised: false,
 		dripfeedAdvertised: false,
 		qualitySignals: [],

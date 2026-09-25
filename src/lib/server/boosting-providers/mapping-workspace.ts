@@ -10,6 +10,10 @@ import type {
 import { getRequiredLinkType } from '$lib/helpers/social-link-validator';
 import { prisma } from '$lib/prisma';
 import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
+import {
+	inferAdvertisedRefillDays,
+	supplierTextAdvertisesRefill
+} from './catalog-normalizer';
 
 const CANDIDATE_LIMIT = 80;
 const PROVIDER_LABELS = { smm_raja: 'SMM Raja', bulk_follows: 'BulkFollows' } as const;
@@ -56,6 +60,7 @@ function offerDto(offer: {
 	normalCostTargetNgn: Prisma.Decimal;
 	maximumSupplierCostNgn: Prisma.Decimal;
 	attemptCap: number;
+	recoveryModes: string[];
 	status: string;
 	routingPolicy: string;
 	preferredRoute?: { providerServiceId: string } | null;
@@ -73,6 +78,11 @@ function offerDto(offer: {
 		normalCostTargetNgn: Number(offer.normalCostTargetNgn),
 		maximumSupplierCostNgn: Number(offer.maximumSupplierCostNgn),
 		attemptCap: offer.attemptCap,
+		fallbackMode: offer.recoveryModes.includes('fallback_automatic')
+			? 'automatic'
+			: offer.recoveryModes.includes('fallback_manual')
+				? 'manual'
+				: 'none',
 		status: offer.status === 'live' ? 'live' : offer.status === 'reviewed' ? 'reviewed' : 'hidden',
 		routingPolicy:
 			offer.routingPolicy === 'preferred' || offer.routingPolicy === 'locked'
@@ -209,6 +219,7 @@ export async function loadBoostMappingWorkspace(
 				return [];
 			}
 			const provider = service.provider as keyof typeof PROVIDER_LABELS;
+			const refillText = `${service.name} ${service.category} ${service.description ?? ''}`;
 			return [
 				{
 					id: service.id,
@@ -221,7 +232,9 @@ export async function loadBoostMappingWorkspace(
 					ratePerThousand,
 					minQuantity: service.minQuantity,
 					maxQuantity: service.maxQuantity,
-					refillAdvertised: service.refillAdvertised,
+					refillAdvertised:
+						service.refillAdvertised === true || supplierTextAdvertisesRefill(refillText),
+					refillDaysClaimed: inferAdvertisedRefillDays(refillText),
 					cancelAdvertised: service.cancelAdvertised,
 					dripfeedAdvertised: service.dripfeedAdvertised,
 					qualitySignals: service.qualitySignals,
@@ -310,7 +323,7 @@ function parseOffer(value: unknown): BoostMappingOfferDraft {
 			Math.round(finiteNumber(input.pricePerStepNgn, 'Customer price', 50, 10_000_000) / 50) * 50
 		),
 		priceLocked: input.priceLocked === true,
-		minimumMarginPercent: finiteNumber(input.minimumMarginPercent, 'Minimum margin', 0, 95),
+		minimumMarginPercent: finiteNumber(input.minimumMarginPercent, 'Profit percentage', 0, 500),
 		normalCostTargetNgn: finiteNumber(
 			input.normalCostTargetNgn,
 			'Normal cost target',
@@ -324,6 +337,10 @@ function parseOffer(value: unknown): BoostMappingOfferDraft {
 			10_000_000
 		),
 		attemptCap: Math.round(finiteNumber(input.attemptCap, 'Attempt cap', 1, 4)),
+		fallbackMode:
+			input.fallbackMode === 'automatic' || input.fallbackMode === 'manual'
+				? input.fallbackMode
+				: 'none',
 		status,
 		routingPolicy,
 		preferredProviderServiceId: input.preferredProviderServiceId
@@ -422,10 +439,10 @@ export async function saveBoostMappingWorkspace(
 		(config.minQuantity / config.stepQuantity) * offerInput.pricePerStepNgn;
 	if (
 		offerInput.normalCostTargetNgn > offerInput.maximumSupplierCostNgn ||
-		offerInput.maximumSupplierCostNgn >= minimumCustomerPrice
+		offerInput.maximumSupplierCostNgn > minimumCustomerPrice
 	) {
 		throw new BoostMappingError(
-			'The normal cost must stay below the maximum cost, and the maximum cost must stay below the customer price.'
+			'This customer price is too low for the chosen supplier cost and profit percentage. Increase the price or reduce the profit percentage.'
 		);
 	}
 
@@ -438,6 +455,24 @@ export async function saveBoostMappingWorkspace(
 	if (providerServices.length !== providerServiceIds.length) {
 		throw new BoostMappingError('One or more supplier services no longer exist.');
 	}
+	if (offerInput.routingPolicy === 'preferred' && offerInput.preferredProviderServiceId) {
+		const primary = providerServices.find(
+			(service) => service.id === offerInput.preferredProviderServiceId
+		);
+		const primaryRate = Number(primary?.ratePerThousand);
+		if (
+			!primary ||
+			!Number.isFinite(primaryRate) ||
+			providerServices.some(
+				(service) =>
+					service.id !== primary.id && Number(service.ratePerThousand) > primaryRate
+			)
+		) {
+			throw new BoostMappingError(
+				'Every fallback must cost the same as the primary service or less.'
+			);
+		}
+	}
 	for (const service of providerServices) {
 		if (
 			service.unavailableAt ||
@@ -447,7 +482,11 @@ export async function saveBoostMappingWorkspace(
 			service.targetType !== targetType ||
 			service.minQuantity === null ||
 			service.maxQuantity === null ||
-			(offerInput.refillDays !== null && service.refillAdvertised !== true)
+			(offerInput.refillDays !== null &&
+				service.refillAdvertised !== true &&
+				!supplierTextAdvertisesRefill(
+					`${service.name} ${service.category} ${service.description ?? ''}`
+				))
 		) {
 			throw new BoostMappingError('A selected supplier service is not safely compatible.');
 		}
@@ -524,7 +563,15 @@ export async function saveBoostMappingWorkspace(
 				normalCostTargetNgn: offerInput.normalCostTargetNgn,
 				maximumSupplierCostNgn: offerInput.maximumSupplierCostNgn,
 				attemptCap: offerInput.attemptCap,
-				recoveryModes: offerInput.attemptCap > 1 ? ['retry_definitive_failure'] : [],
+				recoveryModes:
+					offerInput.attemptCap > 1
+						? [
+								'retry_definitive_failure',
+								...(offerInput.fallbackMode === 'none'
+									? []
+									: [`fallback_${offerInput.fallbackMode}`])
+							]
+						: [],
 				status: offerInput.status,
 				routingPolicy: offerInput.routingPolicy
 			},
@@ -547,7 +594,15 @@ export async function saveBoostMappingWorkspace(
 				normalCostTargetNgn: offerInput.normalCostTargetNgn,
 				maximumSupplierCostNgn: offerInput.maximumSupplierCostNgn,
 				attemptCap: offerInput.attemptCap,
-				recoveryModes: offerInput.attemptCap > 1 ? ['retry_definitive_failure'] : [],
+				recoveryModes:
+					offerInput.attemptCap > 1
+						? [
+								'retry_definitive_failure',
+								...(offerInput.fallbackMode === 'none'
+									? []
+									: [`fallback_${offerInput.fallbackMode}`])
+							]
+						: [],
 				status: offerInput.status,
 				routingPolicy: offerInput.routingPolicy,
 				preferredRouteId: null,

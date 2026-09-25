@@ -82,6 +82,23 @@ function advertisedBoolean(value: unknown): boolean | null {
 	return null;
 }
 
+export function inferAdvertisedRefillDays(value: string): number | null {
+	const text = String(value || '');
+	if (/\b(?:no|without)\s+(?:refill|refills)\b/i.test(text)) return null;
+	const match =
+		text.match(/\brefills?\s*(?:for\s*)?(\d{1,3})\s*(?:d|days?)\b/i) ||
+		text.match(/\b(\d{1,3})\s*(?:d|days?)\s*refills?\b/i);
+	if (!match) return null;
+	const days = Number(match[1]);
+	return Number.isInteger(days) && days > 0 && days <= 365 ? days : null;
+}
+
+export function supplierTextAdvertisesRefill(value: string): boolean {
+	const text = String(value || '');
+	if (/\b(?:no|without)\s+(?:refill|refills)\b/i.test(text)) return false;
+	return inferAdvertisedRefillDays(text) !== null || /\brefills?\b/i.test(text);
+}
+
 function matchesFrom<T extends string>(
 	text: string,
 	values: readonly T[],
@@ -165,7 +182,12 @@ export function normalizeBoostProviderService(
 			: null;
 	const minQuantity = positiveInteger(raw.min);
 	const maxQuantity = positiveInteger(raw.max);
-	const refillAdvertised = advertisedBoolean(raw.refill);
+	const supplierDescription = `${name} ${category} ${description ?? ''}`;
+	const explicitRefill = advertisedBoolean(raw.refill);
+	const refillAdvertised =
+		explicitRefill === true || supplierTextAdvertisesRefill(supplierDescription)
+			? true
+			: explicitRefill;
 	const cancelAdvertised = advertisedBoolean(raw.cancel);
 	const dripfeedAdvertised = advertisedBoolean(raw.dripfeed);
 	const platforms = inferPlatforms(name, category);
@@ -207,10 +229,7 @@ export function normalizeBoostProviderService(
 		platforms,
 		outcomes,
 		targetType: inferTargetType(outcomes),
-		qualitySignals: inferQualitySignals(
-			`${name} ${category} ${description ?? ''}`,
-			refillAdvertised
-		),
+		qualitySignals: inferQualitySignals(supplierDescription, refillAdvertised),
 		anomalies,
 		status: deriveStatus(anomalies),
 		fingerprint: fingerprint({

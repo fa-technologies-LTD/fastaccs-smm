@@ -14,6 +14,7 @@ export interface BoostMappingOfferDraft {
 	normalCostTargetNgn: number;
 	maximumSupplierCostNgn: number;
 	attemptCap: number;
+	fallbackMode: 'none' | 'automatic' | 'manual';
 	status: 'hidden' | 'reviewed' | 'live';
 	routingPolicy: BoostMappingPolicy;
 	preferredProviderServiceId: string | null;
@@ -43,6 +44,7 @@ export interface BoostMappingCandidate {
 	minQuantity: number;
 	maxQuantity: number;
 	refillAdvertised: boolean | null;
+	refillDaysClaimed: number | null;
 	cancelAdvertised: boolean | null;
 	dripfeedAdvertised: boolean | null;
 	qualitySignals: string[];
