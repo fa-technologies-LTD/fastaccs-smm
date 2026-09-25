@@ -16,7 +16,7 @@ Last updated: 25 September 2026
 - [x] Final-check and release catalogue-price rounding to the nearest ₦50
 - [x] Final-check and release Boosting customer-facing polish only
 - [x] Remove completed temporary Email/Planning/Boosting review rooms after the release is secured
-- [ ] Remove the audited stale local release/feature branches and incorporated stash
+- [x] Remove the audited stale local release/feature branches and incorporated stash
 
 ## Numbers reliability containment — 23 September 2026
 
