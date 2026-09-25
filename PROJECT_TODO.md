@@ -1,6 +1,6 @@
 # Fast Accounts project checklist
 
-Last updated: 24 September 2026
+Last updated: 25 September 2026
 
 ## Active sprint checkpoint
 
@@ -11,11 +11,12 @@ Last updated: 24 September 2026
 
 ## Approved release close-out — 24 September 2026
 
-- [ ] Final-check and release Numbers supplier-route protection
-- [ ] Final-check and release the Email and lifecycle overhaul, including personalized manual broadcasts
-- [ ] Final-check and release catalogue-price rounding to the nearest ₦50
-- [ ] Final-check and release Boosting customer-facing polish only
-- [ ] Remove completed temporary Email/Planning review rooms and stale local release branches after the release is secured
+- [x] Final-check and release Numbers supplier-route protection
+- [x] Final-check and release the Email and lifecycle overhaul, including personalized manual broadcasts
+- [x] Final-check and release catalogue-price rounding to the nearest ₦50
+- [x] Final-check and release Boosting customer-facing polish only
+- [x] Remove completed temporary Email/Planning/Boosting review rooms after the release is secured
+- [ ] Remove the audited stale local release/feature branches and incorporated stash
 
 ## Numbers reliability containment — 23 September 2026
 
@@ -27,8 +28,8 @@ Last updated: 24 September 2026
 - [x] Exclude unavailable and over-budget supplier listings from the storefront's “unexplored route” decision
 - [x] Apply and verify the additive snapshot migration on the isolated Neon staging branch
 - [x] Run a real staging catalogue refresh: 96 active Hubman routes and 4,976 active PVAPins variants persisted; 4,941 routes currently have no customer-order history
-- [ ] Deploy the code and additive migration to Production after final owner approval
-- [ ] Confirm the first Production catalogue refresh populates both snapshot tables and inspect the first live routing decisions
+- [x] Deploy the code and additive migration to Production after final owner approval
+- [x] Confirm the first Production catalogue refresh populates both snapshot tables: 95 active Hubman routes and 4,976 active PVAPins variants
 
 ## Completed
 
@@ -130,10 +131,10 @@ Last updated: 24 September 2026
 - [x] Owner completed the revised Email Review pass and supplied final comments
 - [x] Commit the complete tested working tree to `test`
 - [x] Push `test` and smoke-test the permanent Vercel/Neon staging deployment
-- [ ] Promote the approved commit to `main` and redeploy Production with the latest environment values
+- [x] Promote the approved release to `main` and redeploy Production with the latest environment values
 - [ ] Confirm the first production runs of first-order offers, Numbers discovery, 20-day win-back, requested restock alerts and automatic account-ready delivery
 - [x] Round catalogue prices to the nearest ₦50 while preserving exact accounting for checkout discounts, paid totals, refunds and historical orders
-- [ ] Remove temporary review routes and their review-only supporting code after their final sign-off or replacement flow is complete
+- [x] Remove temporary review routes and their review-only supporting code after final sign-off
 
 ## Current Boosting build
 
@@ -147,7 +148,7 @@ Last updated: 24 September 2026
 - [x] Agree the replacement setup flow: outcome → tier → My choice/Smart Auto → provider/service code → target margin → accept/lock price
 - [ ] Replace the current engineering-heavy mapping screen with the agreed provider-code workflow; keep copy, pilot, shadow and cost internals under Advanced
 - [ ] Remove/reset the 390 provisional staging route selections so suggestions are not presented as configured mappings
-- [ ] Connect the customer preview to saved staging offers instead of hard-coded illustrative fixtures
+- [ ] Build a replacement customer preview from saved staging offers; the misleading hard-coded preview has been removed
 - [ ] Review and approve the first small set of exact mappings, including the known premium X-followers service, through the simplified workflow
 - [x] Create one persistent Neon development branch and store its pooled/direct URLs locally for future migrations and transaction tests
 - [x] Complete the available authenticated no-order service, balance, single-status, batch-status and error-shape checks

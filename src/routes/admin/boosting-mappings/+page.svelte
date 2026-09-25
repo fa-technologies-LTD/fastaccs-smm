@@ -325,13 +325,6 @@
 				reviewed · {data.mappingSummary.approvedRoutes} promise-checked routes
 			</p>
 		</div>
-		<a
-			href="/admin/boosting-preview"
-			class="flex items-center gap-1 text-sm font-semibold"
-			style="color: var(--link);"
-		>
-			Customer preview <ChevronRight size={15} />
-		</a>
 	</header>
 
 	{#if data.firstReviewQueue?.length}

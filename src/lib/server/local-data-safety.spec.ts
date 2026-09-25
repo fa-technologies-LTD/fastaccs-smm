@@ -40,25 +40,6 @@ describe('local data safety', () => {
 		).toBe(true);
 	});
 
-	it('allows the development planning export without opening application-data writes', () => {
-		expect(
-			shouldBlockLocalRequest({
-				dev: true,
-				configuredMode: 'production-readonly',
-				method: 'POST',
-				pathname: '/api/dev/planning-comments'
-			})
-		).toBe(false);
-		expect(
-			shouldBlockLocalRequest({
-				dev: true,
-				configuredMode: 'production-readonly',
-				method: 'POST',
-				pathname: '/api/orders'
-			})
-		).toBe(true);
-	});
-
 	it('recognizes the deliberate live E2E mode without weakening invalid-mode safety', () => {
 		expect(normalizeLocalDataMode('production-e2e')).toBe('production-e2e');
 		expect(normalizeLocalDataMode('production-write')).toBe('production-readonly');

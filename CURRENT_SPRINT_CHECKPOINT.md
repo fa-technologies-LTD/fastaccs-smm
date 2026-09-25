@@ -1,6 +1,6 @@
 # Current sprint checkpoint
 
-Paused on: 24 September 2026  
+Paused on: 25 September 2026
 Branch: `test`  
 Checkpoint base commit: `13b6423` (`fix: keep locked boosting reviews shadow-only`)
 
@@ -16,7 +16,7 @@ This file is the restart point for the Boosting automation sprint. The homepage 
 - Scheduled six-hour catalogue and supplier-balance refresh exists.
 - Supplier service, balance, submission and status adapters exist and are contract-tested, but paid submission is deliberately disconnected from fulfilment.
 - The router can simulate routes and store shadow observations. It cannot place a paid order.
-- The current customer preview is illustrative and hard-coded; it is not yet reading the saved staging offers.
+- The misleading hard-coded customer preview has been removed. Its replacement must read the saved staging offers.
 - The current mapping screen is too engineering-heavy. Its generated suggestions look like configured routes even though they are unapproved. That screen is being replaced, not polished as the final workflow.
 - Production contains only the additive, empty Boosting foundation tables; the unfinished router, mapping workspace and paid supplier submission are not live. The existing Boosting system must remain available until replacement parity is proven.
 
@@ -89,7 +89,7 @@ Independent platform checks may be added only where official APIs provide stable
 
 1. Build the simplified provider-code, My choice/Smart Auto setup flow above as the next active sprint task.
 2. Remove or reset the 390 provisional staging selections so suggestions cannot be mistaken for configured mappings.
-3. Connect the customer preview to persisted staging offers.
+3. Build the customer preview from persisted staging offers.
 4. Use the new flow to map the known Premium X Followers service and a very small first offer set.
 5. Run the router only in shadow mode beside manually fulfilled real orders and compare its choices with the owner's choices.
 6. Finish paid submission and status polling with idempotency, bounded retries and `submission_unknown` protection.
