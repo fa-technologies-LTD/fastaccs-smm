@@ -64,9 +64,10 @@
 				'It means your order is safely being handled. It may be waiting to start, actively delivering, or going through an ordinary refill or recovery check. Your original order remains tracked throughout.'
 		},
 		{
-			question: 'Do boosting services come with a refill or guarantee?',
+			id: 'boosting-refills',
+			question: 'What does 30-day refill protection mean?',
 			answer:
-				'Some choices include a specific refill window, shown before you pay. If the delivered amount drops within that window, contact support so we can check whether it qualifies for the included refill. Choices without a refill window may experience normal drop-off.'
+				'The refill option stays available for 30 days after fulfilment. If the delivered amount drops during that time, you can request the included refill. Keep the original link and username unchanged, or the refill may not work. This does not mean the result can never drop.'
 		},
 		{
 			question: 'What link should I submit for a boosting order?',

@@ -414,7 +414,7 @@ function expectationChipsForOffer(qualityTier: string, refillDays: number | null
 			: qualityTier === 'stable'
 				? 'Less likely to drop'
 				: 'Affordable';
-	return [qualityLabel, ...(refillDays ? [`${refillDays}-day refill`] : [])];
+	return [qualityLabel, ...(refillDays ? [`${refillDays}-day refill protection`] : [])];
 }
 
 export async function saveBoostMappingWorkspace(

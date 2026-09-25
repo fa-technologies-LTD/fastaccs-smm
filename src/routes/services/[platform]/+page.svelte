@@ -79,6 +79,7 @@
 			expectationChips: service.customerOffer?.expectationChips || []
 		}))
 	);
+	const hasRefillOffer = $derived(services.some((service) => service.config.refillAvailable));
 
 	function qualityBadge(qualityTier: string | null): string | null {
 		if (qualityTier === 'premium') return 'Premium';
@@ -488,6 +489,21 @@
 
 		<p class="mb-6 text-xs" style="color: var(--text-dim);">{BOOSTING_TURNAROUND_MESSAGE}</p>
 
+		{#if hasRefillOffer}
+			<details
+				class="mb-6 rounded-[var(--r-md)] border px-4 py-3 text-sm"
+				style="border-color: var(--border); background: var(--bg-elev-1);"
+			>
+				<summary class="cursor-pointer font-semibold" style="color: var(--text);">
+					What does refill protection mean?
+				</summary>
+				<p class="mt-2 text-xs leading-relaxed" style="color: var(--text-muted);">
+					An “X-day refill” means the refill option stays available for that many days after
+					fulfilment. It works only while the original link and username stay unchanged.
+				</p>
+			</details>
+		{/if}
+
 		{#if services.length === 0}
 			<div
 				class="rounded-[var(--r-md)] border p-10 text-center"
@@ -541,7 +557,7 @@
 								<p class="text-xs" style="color: var(--text-dim);">
 									From {formatPrice(startingPrice)}
 									{#if service.config.refillAvailable}
-										· {service.config.refillDays}-day refill included
+										· {service.config.refillDays}-day refill protection included
 									{/if}
 								</p>
 							{/if}

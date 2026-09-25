@@ -82,7 +82,7 @@ describe('Boosting mapping offer selection', () => {
 		} as never);
 		await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
 
-		await page.getByRole('button', { name: /Facebook Page Followers/ }).click();
+		await page.getByRole('combobox', { name: 'Result' }).selectOptions(offers[1].id);
 		await expect
 			.element(page.getByRole('heading', { name: 'Facebook Page Followers' }))
 			.toBeVisible();

@@ -91,7 +91,9 @@ small controlled canary before it can replace the existing production Boosting f
 6. Set the profit percentage; confirm the suggested rounded price, or lock a manual price.
 7. Choose no fallback, automatic fallback or one exact manual fallback, then save. Automatic and
    manual fallbacks must be compatible and no more expensive than the primary route.
-8. Open `/admin/boosting-preview` and confirm the customer wording and quantities.
+8. Open `/admin/boosting-preview` and confirm the customer wording and quantities. Confirm refill is
+   described as a specific protection period, with the plain-English explanation shown once rather
+   than repeated on every choice.
 9. Keep the offer reviewed/private first. When satisfied, mark only that small offer live in staging and
    verify its service page, cart and checkout presentation.
 10. Run a normal manually fulfilled order beside shadow routing and compare the suggested route with the
@@ -106,8 +108,11 @@ These are rollout evidence, not unfinished feature code:
 3. Run one limited, low-value paid canary with an explicitly enabled route and observe submission,
    polling, history, completion notification and complaint recovery.
 4. Confirm the working SMM Raja refill/support contract before automating that provider's escalation.
-5. Merge `test` to production only after the canary passes.
-6. Retire the old Boosting customer/admin system only after replacement parity is proven in production.
+5. Complete a final end-to-end customer journey and copy audit: storefront → choice → link and quantity
+   entry → cart → checkout → order history → status updates → complaints. Replace unexplained jargon
+   and add short plain-English help only where a customer is likely to need it.
+6. Merge `test` to production only after the canary passes.
+7. Retire the old Boosting customer/admin system only after replacement parity is proven in production.
 
 ## Do not weaken these rules
 

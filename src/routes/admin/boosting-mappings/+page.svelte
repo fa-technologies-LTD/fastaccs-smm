@@ -45,6 +45,7 @@
 	};
 
 	let { data }: { data: PageData } = $props();
+	let selectedPlatform = $state('');
 	let selectedCategoryId = $state('');
 	let selectedQualityTier = $state<QualityTier>('value');
 	let workspace = $state<BoostMappingWorkspace | null>(null);
@@ -66,6 +67,14 @@
 	let loadVersion = 0;
 
 	const selectedListItem = $derived(data.offers.find((item) => item.id === selectedCategoryId));
+	const platformOptions = $derived.by(() => {
+		const labels = new Map<string, string>();
+		for (const offer of data.offers) labels.set(offer.platform, offer.platformLabel);
+		return [...labels].map(([value, label]) => ({ value, label }));
+	});
+	const platformOffers = $derived(
+		data.offers.filter((offer) => offer.platform === selectedPlatform)
+	);
 	const routeByServiceId = $derived(
 		new Map(routeDrafts.map((route) => [route.providerServiceId, route]))
 	);
@@ -213,6 +222,8 @@
 	}
 
 	async function chooseCategory(categoryId: string): Promise<void> {
+		const nextCategory = data.offers.find((item) => item.id === categoryId);
+		if (nextCategory) selectedPlatform = nextCategory.platform;
 		selectedCategoryId = categoryId;
 		selectedQualityTier = 'value';
 		workspace = null;
@@ -226,6 +237,12 @@
 		if (window.matchMedia('(max-width: 1279px)').matches) {
 			workspacePanel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 		}
+	}
+
+	async function changePlatform(platform: string): Promise<void> {
+		selectedPlatform = platform;
+		const firstOffer = data.offers.find((offer) => offer.platform === platform);
+		if (firstOffer) await chooseCategory(firstOffer.id);
 	}
 
 	async function changeQualityTier(tier: QualityTier): Promise<void> {
@@ -529,6 +546,10 @@
 
 	onMount(() => {
 		selectedCategoryId = data.firstReviewQueue?.[0]?.categoryId ?? data.offers[0]?.id ?? '';
+		selectedPlatform =
+			data.offers.find((offer) => offer.id === selectedCategoryId)?.platform ??
+			data.offers[0]?.platform ??
+			'';
 		selectedQualityTier = (data.firstReviewQueue?.[0]?.qualityTier as QualityTier) || 'value';
 		void loadWorkspace();
 	});
@@ -547,19 +568,32 @@
 	</header>
 
 	<div class="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
-		<aside class="h-fit overflow-hidden rounded-2xl border" style="border-color: var(--border); background: var(--bg-elev-1);">
+		<aside class="h-fit rounded-2xl border" style="border-color: var(--border); background: var(--bg-elev-1);">
 			<div class="border-b p-4" style="border-color: var(--border);">
 				<p class="font-semibold" style="color: var(--text);">1. Choose a result</p>
 				<p class="mt-0.5 text-xs" style="color: var(--text-muted);">For example, X Followers</p>
 			</div>
-			<div class="max-h-[65vh] overflow-y-auto p-2">
-				{#each data.offers as item (item.id)}
-					<button type="button" onclick={() => chooseCategory(item.id)} class="mb-1 w-full rounded-xl border p-3 text-left" style={selectedCategoryId === item.id ? 'border-color: var(--primary); background: rgba(16,185,129,.09);' : 'border-color: transparent;'}>
-						<div class="flex items-center justify-between gap-2"><span class="text-sm font-semibold" style="color: var(--text);">{item.name}</span>{#if selectedCategoryId === item.id}<Check size={15} style="color: var(--primary);" />{/if}</div>
-						<p class="mt-1 text-xs" style="color: var(--text-muted);">{item.platformLabel} · {item.outcomeLabel}</p>
-						<p class="mt-1 text-[10px]" style="color: var(--text-dim);">{item.reviewedTierCount} customer choice{item.reviewedTierCount === 1 ? '' : 's'} ready</p>
-					</button>
-				{/each}
+			<div class="space-y-4 p-4">
+				<label class="block text-xs font-semibold" style="color: var(--text-muted);">Platform
+					<select value={selectedPlatform} onchange={(event) => void changePlatform(event.currentTarget.value)} class="field mt-1">
+						{#each platformOptions as platform (platform.value)}
+							<option value={platform.value}>{platform.label}</option>
+						{/each}
+					</select>
+				</label>
+				<label class="block text-xs font-semibold" style="color: var(--text-muted);">Result
+					<select value={selectedCategoryId} onchange={(event) => void chooseCategory(event.currentTarget.value)} class="field mt-1">
+						{#each platformOffers as item (item.id)}
+							<option value={item.id}>{item.name}</option>
+						{/each}
+					</select>
+				</label>
+				{#if selectedListItem}
+					<div class="rounded-xl border p-3" style="border-color: rgba(16,185,129,.35); background: rgba(16,185,129,.07);">
+						<div class="flex items-start justify-between gap-2"><div><p class="text-sm font-semibold" style="color: var(--text);">{selectedListItem.name}</p><p class="mt-1 text-xs" style="color: var(--text-muted);">{selectedListItem.platformLabel} · {selectedListItem.outcomeLabel}</p></div><Check size={16} style="color: var(--primary);" /></div>
+						<p class="mt-2 text-[10px]" style="color: var(--text-dim);">{selectedListItem.reviewedTierCount} customer choice{selectedListItem.reviewedTierCount === 1 ? '' : 's'} ready</p>
+					</div>
+				{/if}
 			</div>
 		</aside>
 
