@@ -147,6 +147,14 @@ export const AUTOMATION_JOBS = {
 		lockTimeoutMinutes: 20,
 		expectedIntervalMinutes: 360
 	},
+	'boosting-fulfillment': {
+		name: 'boosting-fulfillment',
+		path: '/api/internal/cron/boosting-fulfillment',
+		schedule: 'every 5 minutes',
+		risk: 'financial',
+		lockTimeoutMinutes: 4,
+		expectedIntervalMinutes: 5
+	},
 	'boosting-draft-suggestions': {
 		name: 'boosting-draft-suggestions',
 		path: '/api/internal/cron/boosting-draft-suggestions',

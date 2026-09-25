@@ -28,6 +28,9 @@
 	let boostLinkOverrideByItemId = $state<Record<string, string>>({});
 	let boostStatusOverrideByItemId = $state<Record<string, string>>({});
 	let savingBoostLinkItemId = $state<string | null>(null);
+	let reportingBoostItemId = $state<string | null>(null);
+	let complaintTypeByItemId = $state<Record<string, string>>({});
+	let complaintOverrideByItemId = $state<Record<string, { type: string; status: string }[]>>({});
 
 	function normalizeLower(value: string | null | undefined): string {
 		return String(value || '')
@@ -192,6 +195,53 @@
 		}
 	}
 
+	function complaintLabel(type: string): string {
+		if (type === 'nothing_delivered') return 'Nothing was delivered';
+		if (type === 'delivery_stopped') return 'Delivery stopped early';
+		if (type === 'dropped') return 'The result dropped';
+		return type;
+	}
+
+	async function reportBoostingIssue(item: (typeof data.order.orderItems)[number]): Promise<void> {
+		const type = complaintTypeByItemId[item.id];
+		if (!type || reportingBoostItemId) return;
+		reportingBoostItemId = item.id;
+		try {
+			const response = await fetch(
+				`/api/orders/${encodeURIComponent(data.order.id)}/boosting-complaints`,
+				{
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ itemId: item.id, type })
+				}
+			);
+			const payload = await response.json();
+			if (!response.ok || !payload?.success) throw new Error(payload?.error || 'Could not report issue.');
+			complaintOverrideByItemId = {
+				...complaintOverrideByItemId,
+				[item.id]: [
+					...(complaintOverrideByItemId[item.id] || item.boostComplaints || []),
+					{ type, status: payload.data.status }
+				]
+			};
+			addToast({
+				type: 'success',
+				title: 'Issue reported',
+				message: 'We’ll validate it against the order and supplier record.',
+				duration: 4000
+			});
+		} catch (error) {
+			addToast({
+				type: 'error',
+				title: 'Could not report issue',
+				message: error instanceof Error ? error.message : 'Please try again.',
+				duration: 4000
+			});
+		} finally {
+			reportingBoostItemId = null;
+		}
+	}
+
 	function getItemLoginGuide(item: (typeof data.order.orderItems)[number]): {
 		url: string;
 		label: string;
@@ -326,7 +376,7 @@
 				{/if}
 
 				{#if getManualHandoverLink()}
-					<a
+								<a
 						href={getManualHandoverLink()}
 						target="_blank"
 						rel="noopener noreferrer"
@@ -446,9 +496,28 @@
 													class="mt-1 inline-block text-xs break-all underline"
 													style="color: var(--link);"
 												>
-													{getBoostingTargetUrl(item)}
-												</a>
+									{getBoostingTargetUrl(item)}
+								</a>
+								{#if item.boostComplaintEligibility?.allowedTypes?.length}
+									<div class="mt-4 border-t pt-3" style="border-color: var(--border);">
+										<p class="text-xs font-semibold" style="color: var(--text);">Something wrong?</p>
+										{#if (complaintOverrideByItemId[item.id] || item.boostComplaints || []).length}
+											{#each complaintOverrideByItemId[item.id] || item.boostComplaints as complaint}
+												<p class="mt-2 text-xs" style="color: var(--text-muted);">{complaintLabel(complaint.type)} · {complaint.status}</p>
+											{/each}
+										{:else}
+											<div class="mt-2 flex flex-col gap-2 sm:flex-row">
+												<select bind:value={complaintTypeByItemId[item.id]} class="min-w-0 flex-1 rounded-lg border px-3 py-2 text-xs" style="background: var(--bg); border-color: var(--border); color: var(--text);">
+													<option value="">Choose the issue</option>
+													{#each item.boostComplaintEligibility.allowedTypes as type}<option value={type}>{complaintLabel(type)}</option>{/each}
+												</select>
+												<button type="button" onclick={() => reportBoostingIssue(item)} disabled={!complaintTypeByItemId[item.id] || reportingBoostItemId === item.id} class="rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50" style="border-color: var(--border); color: var(--text);">{reportingBoostItemId === item.id ? 'Sending…' : 'Report issue'}</button>
 											</div>
+											<p class="mt-2 text-[11px]" style="color: var(--text-dim);">{item.boostComplaintEligibility.note}</p>
+										{/if}
+									</div>
+								{/if}
+							</div>
 										{:else if !isManualHandoverItem(item) && !isPhoneOrder && orderDelivered}
 											<div
 												class="mt-3 rounded-lg border p-3"

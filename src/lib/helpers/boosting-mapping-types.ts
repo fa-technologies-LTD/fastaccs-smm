@@ -7,12 +7,14 @@ export interface BoostMappingOfferDraft {
 	qualityTier: string;
 	customerName: string;
 	shortPromise: string;
+	refillDays: number | null;
 	pricePerStepNgn: number;
+	priceLocked: boolean;
 	minimumMarginPercent: number;
 	normalCostTargetNgn: number;
 	maximumSupplierCostNgn: number;
 	attemptCap: number;
-	status: 'hidden' | 'reviewed';
+	status: 'hidden' | 'reviewed' | 'live';
 	routingPolicy: BoostMappingPolicy;
 	preferredProviderServiceId: string | null;
 	lockedProviderServiceId: string | null;
@@ -49,6 +51,13 @@ export interface BoostMappingCandidate {
 	mappedRoute: (BoostMappingRouteDraft & { id: string }) | null;
 }
 
+export interface BoostServiceLookupResult {
+	found: boolean;
+	compatible: boolean;
+	issues: string[];
+	service: BoostMappingCandidate | null;
+}
+
 export interface BoostMappingWorkspace {
 	foundationReady: boolean;
 	migrationMessage: string | null;
@@ -68,6 +77,7 @@ export interface BoostMappingWorkspace {
 	candidateCount: number;
 	configuredFxNgnPerUsd: number;
 	configuredCurrencyBufferPercent: number;
+	configuredDefaultMarginPercent: number;
 }
 
 export interface BoostMappingSaveInput {

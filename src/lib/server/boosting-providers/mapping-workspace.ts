@@ -1,5 +1,4 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
-import { env } from '$env/dynamic/private';
 import { getBoostingServiceConfig, getQuantityChips } from '$lib/helpers/boosting-service-config';
 import type {
 	BoostMappingCandidate,
@@ -10,6 +9,7 @@ import type {
 } from '$lib/helpers/boosting-mapping-types';
 import { getRequiredLinkType } from '$lib/helpers/social-link-validator';
 import { prisma } from '$lib/prisma';
+import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
 
 const CANDIDATE_LIMIT = 80;
 const PROVIDER_LABELS = { smm_raja: 'SMM Raja', bulk_follows: 'BulkFollows' } as const;
@@ -32,16 +32,6 @@ export function isBoostFoundationMissing(error: unknown): boolean {
 	);
 }
 
-function configuredFxRate(): number {
-	const value = Number(env.BOOSTING_USD_NGN_RATE || env.HUBMAN_USD_NGN_RATE || 1700);
-	return Number.isFinite(value) && value > 0 ? value : 1700;
-}
-
-function configuredCurrencyBufferPercent(): number {
-	const value = Number(env.BOOSTING_CURRENCY_BUFFER_PERCENT || 5);
-	return Number.isFinite(value) && value >= 0 ? value : 5;
-}
-
 function asNumber(value: Prisma.Decimal | number | null): number | null {
 	if (value === null) return null;
 	const parsed = Number(value);
@@ -59,7 +49,9 @@ function offerDto(offer: {
 	qualityTier: string;
 	customerName: string;
 	shortPromise: string;
+	refillDays: number | null;
 	pricePerStepNgn: Prisma.Decimal;
+	priceLocked: boolean;
 	minimumMarginPercent: Prisma.Decimal;
 	normalCostTargetNgn: Prisma.Decimal;
 	maximumSupplierCostNgn: Prisma.Decimal;
@@ -74,12 +66,14 @@ function offerDto(offer: {
 		qualityTier: offer.qualityTier,
 		customerName: offer.customerName,
 		shortPromise: offer.shortPromise,
+		refillDays: offer.refillDays,
 		pricePerStepNgn: Number(offer.pricePerStepNgn),
+		priceLocked: offer.priceLocked,
 		minimumMarginPercent: Number(offer.minimumMarginPercent),
 		normalCostTargetNgn: Number(offer.normalCostTargetNgn),
 		maximumSupplierCostNgn: Number(offer.maximumSupplierCostNgn),
 		attemptCap: offer.attemptCap,
-		status: offer.status === 'reviewed' ? 'reviewed' : 'hidden',
+		status: offer.status === 'live' ? 'live' : offer.status === 'reviewed' ? 'reviewed' : 'hidden',
 		routingPolicy:
 			offer.routingPolicy === 'preferred' || offer.routingPolicy === 'locked'
 				? offer.routingPolicy
@@ -139,6 +133,7 @@ export async function loadBoostMappingWorkspace(
 		pricePerStepNgn: config.pricePerStep,
 		refillDays: config.refillDays
 	};
+	const pricing = await getBoostingPricingConfig(database);
 
 	try {
 		const offer = await database.boostCustomerOffer.findUnique({
@@ -183,11 +178,13 @@ export async function loadBoostMappingWorkspace(
 			database.boostProviderService.count({
 				where: { AND: [baseWhere, ...(searchWhere ? [searchWhere] : [])] }
 			}),
-			database.boostProviderService.findMany({
-				where: { AND: [baseWhere, ...(searchWhere ? [searchWhere] : [])] },
-				orderBy: [{ catalogueStatus: 'asc' }, { ratePerThousand: 'asc' }, { name: 'asc' }],
-				take: CANDIDATE_LIMIT
-			}),
+			search
+				? database.boostProviderService.findMany({
+						where: { AND: [baseWhere, searchWhere!] },
+						orderBy: [{ catalogueStatus: 'asc' }, { ratePerThousand: 'asc' }, { name: 'asc' }],
+						take: CANDIDATE_LIMIT
+					})
+				: Promise.resolve([]),
 			mappedServiceIds.length
 				? database.boostProviderService.findMany({ where: { id: { in: mappedServiceIds } } })
 				: Promise.resolve([])
@@ -243,8 +240,9 @@ export async function loadBoostMappingWorkspace(
 			offer: offer ? offerDto(offer) : null,
 			candidates,
 			candidateCount,
-			configuredFxNgnPerUsd: configuredFxRate(),
-			configuredCurrencyBufferPercent: configuredCurrencyBufferPercent()
+			configuredFxNgnPerUsd: pricing.usdNgnRate,
+			configuredCurrencyBufferPercent: pricing.currencyBufferPercent,
+			configuredDefaultMarginPercent: pricing.defaultMarginPercent
 		};
 	} catch (error) {
 		if (!isBoostFoundationMissing(error)) throw error;
@@ -257,8 +255,9 @@ export async function loadBoostMappingWorkspace(
 			offer: null,
 			candidates: [],
 			candidateCount: 0,
-			configuredFxNgnPerUsd: configuredFxRate(),
-			configuredCurrencyBufferPercent: configuredCurrencyBufferPercent()
+			configuredFxNgnPerUsd: pricing.usdNgnRate,
+			configuredCurrencyBufferPercent: pricing.currencyBufferPercent,
+			configuredDefaultMarginPercent: pricing.defaultMarginPercent
 		};
 	}
 }
@@ -292,7 +291,9 @@ function parseOffer(value: unknown): BoostMappingOfferDraft {
 	if (!['value', 'stable', 'premium'].includes(qualityTier)) {
 		throw new BoostMappingError('Choose a valid customer option.');
 	}
-	const status = input.status === 'reviewed' ? 'reviewed' : 'hidden';
+	const status = ['reviewed', 'live'].includes(String(input.status))
+		? (String(input.status) as 'reviewed' | 'live')
+		: 'hidden';
 	const routingPolicy = ['preferred', 'locked'].includes(String(input.routingPolicy))
 		? (String(input.routingPolicy) as 'preferred' | 'locked')
 		: 'automatic';
@@ -300,10 +301,15 @@ function parseOffer(value: unknown): BoostMappingOfferDraft {
 		qualityTier,
 		customerName: limitedText(input.customerName, 'Customer name', 2, 80),
 		shortPromise: limitedText(input.shortPromise, 'Short promise', 2, 120),
+		refillDays:
+			input.refillDays === null || input.refillDays === '' || input.refillDays === undefined
+				? null
+				: Math.round(finiteNumber(input.refillDays, 'Refill period', 1, 365)),
 		pricePerStepNgn: Math.max(
 			50,
 			Math.round(finiteNumber(input.pricePerStepNgn, 'Customer price', 50, 10_000_000) / 50) * 50
 		),
+		priceLocked: input.priceLocked === true,
 		minimumMarginPercent: finiteNumber(input.minimumMarginPercent, 'Minimum margin', 0, 95),
 		normalCostTargetNgn: finiteNumber(
 			input.normalCostTargetNgn,
@@ -317,7 +323,7 @@ function parseOffer(value: unknown): BoostMappingOfferDraft {
 			1,
 			10_000_000
 		),
-		attemptCap: Math.round(finiteNumber(input.attemptCap, 'Attempt cap', 1, 2)),
+		attemptCap: Math.round(finiteNumber(input.attemptCap, 'Attempt cap', 1, 4)),
 		status,
 		routingPolicy,
 		preferredProviderServiceId: input.preferredProviderServiceId
@@ -441,7 +447,7 @@ export async function saveBoostMappingWorkspace(
 			service.targetType !== targetType ||
 			service.minQuantity === null ||
 			service.maxQuantity === null ||
-			(config.refillDays !== null && service.refillAdvertised !== true)
+			(offerInput.refillDays !== null && service.refillAdvertised !== true)
 		) {
 			throw new BoostMappingError('A selected supplier service is not safely compatible.');
 		}
@@ -449,7 +455,7 @@ export async function saveBoostMappingWorkspace(
 	const routeByServiceId = new Map(routeInputs.map((route) => [route.providerServiceId, route]));
 	const requiredVerifiedSignals = requiredSignalsForOffer(
 		offerInput.qualityTier,
-		config.refillDays
+		offerInput.refillDays
 	);
 	for (const route of routeInputs) {
 		if (!route.equivalenceApproved || route.state === 'paused') continue;
@@ -457,14 +463,14 @@ export async function saveBoostMappingWorkspace(
 			throw new BoostMappingError('Recheck each mapped route after changing the customer promise.');
 		}
 		if (
-			config.refillDays &&
-			(route.verifiedRefillDays === null || route.verifiedRefillDays < config.refillDays)
+			offerInput.refillDays &&
+			(route.verifiedRefillDays === null || route.verifiedRefillDays < offerInput.refillDays)
 		) {
 			throw new BoostMappingError('The verified supplier refill must cover the customer promise.');
 		}
 	}
 	if (
-		offerInput.status === 'reviewed' &&
+		offerInput.status !== 'hidden' &&
 		!routeInputs.some((route) => route.state !== 'paused' && route.equivalenceApproved)
 	) {
 		throw new BoostMappingError(
@@ -506,13 +512,14 @@ export async function saveBoostMappingWorkspace(
 				qualityTier: offerInput.qualityTier,
 				customerName: offerInput.customerName,
 				shortPromise: offerInput.shortPromise,
-				expectationChips: expectationChipsForOffer(offerInput.qualityTier, config.refillDays),
+				expectationChips: expectationChipsForOffer(offerInput.qualityTier, offerInput.refillDays),
 				minQuantity: config.minQuantity,
 				stepQuantity: config.stepQuantity,
 				quantityPresets: getQuantityChips(config),
 				pricePerStepNgn: offerInput.pricePerStepNgn,
+				priceLocked: offerInput.priceLocked,
 				requiredVerifiedSignals,
-				refillDays: config.refillDays,
+				refillDays: offerInput.refillDays,
 				minimumMarginPercent: offerInput.minimumMarginPercent,
 				normalCostTargetNgn: offerInput.normalCostTargetNgn,
 				maximumSupplierCostNgn: offerInput.maximumSupplierCostNgn,
@@ -528,13 +535,14 @@ export async function saveBoostMappingWorkspace(
 				qualityTier: offerInput.qualityTier,
 				customerName: offerInput.customerName,
 				shortPromise: offerInput.shortPromise,
-				expectationChips: expectationChipsForOffer(offerInput.qualityTier, config.refillDays),
+				expectationChips: expectationChipsForOffer(offerInput.qualityTier, offerInput.refillDays),
 				minQuantity: config.minQuantity,
 				stepQuantity: config.stepQuantity,
 				quantityPresets: getQuantityChips(config),
 				pricePerStepNgn: offerInput.pricePerStepNgn,
+				priceLocked: offerInput.priceLocked,
 				requiredVerifiedSignals,
-				refillDays: config.refillDays,
+				refillDays: offerInput.refillDays,
 				minimumMarginPercent: offerInput.minimumMarginPercent,
 				normalCostTargetNgn: offerInput.normalCostTargetNgn,
 				maximumSupplierCostNgn: offerInput.maximumSupplierCostNgn,

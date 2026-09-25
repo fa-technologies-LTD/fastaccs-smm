@@ -44,8 +44,8 @@ interface PanelOrderClientOptions {
 	id: BoostProviderId;
 	getApiKey: () => string | undefined;
 	/**
-	 * Deliberately required. The production clients do not expose order methods yet; a future
-	 * worker must opt into a concrete transport after its lease/idempotency gates are in place.
+	 * Deliberately required so tests can provide a closed transport and production can use the
+	 * worker's lease/idempotency gates around this client.
 	 */
 	fetchImpl: FetchLike;
 	timeoutMs?: number;
@@ -427,6 +427,51 @@ export function createPanelOrderClient(options: PanelOrderClientOptions): BoostP
 				}
 				return parseStatusEntry(options.id, id, statusMap[id], apiKey);
 			});
+		},
+
+		async requestRefill(providerOrderId) {
+			const apiKey = readApiKey();
+			const orderId = validateStatusIds(options.id, [providerOrderId])[0];
+			const body = new URLSearchParams({ key: apiKey, action: 'refill', order: orderId });
+			let response: Response;
+			let text: string;
+			try {
+				({ response, text } = await send(body));
+			} catch (error) {
+				throw new BoostProviderError(
+					error instanceof Error && error.name === 'AbortError'
+						? 'Provider refill request timed out.'
+						: 'Provider refill request failed.',
+					options.id,
+					error instanceof Error && error.name === 'AbortError' ? 'timeout' : 'network_error'
+				);
+			}
+			if (!response.ok) {
+				throw new BoostProviderError(
+					`Provider refill request failed with HTTP ${response.status}.`,
+					options.id,
+					'http_error',
+					response.status
+				);
+			}
+			const payload = parseJson(text);
+			const providerError = safeMessage(payload, apiKey);
+			if (providerError) {
+				throw new BoostProviderError(providerError, options.id, 'provider_error', response.status);
+			}
+			const record =
+				payload && typeof payload === 'object' && !Array.isArray(payload)
+					? (payload as Record<string, unknown>)
+					: null;
+			const refillId = String(record?.refill ?? record?.order ?? '').trim();
+			if (!/^[1-9]\d*$/.test(refillId)) {
+				throw new BoostProviderError(
+					'Provider returned an invalid refill response.',
+					options.id,
+					'invalid_response'
+				);
+			}
+			return { provider: options.id, refillId };
 		}
 	};
 }

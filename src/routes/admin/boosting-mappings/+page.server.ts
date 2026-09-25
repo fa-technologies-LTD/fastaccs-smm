@@ -74,7 +74,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		.flatMap((category) => {
 			const config = getBoostingServiceConfig(category.metadata);
 			return category.boostCustomerOffers
-				.filter((offer) => offer.status !== 'reviewed' && offer.routes.length > 0)
+				.filter((offer) => !['reviewed', 'live'].includes(offer.status) && offer.routes.length > 0)
 				.map((offer) => ({
 					categoryId: category.id,
 					categoryName: category.name,
@@ -98,7 +98,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		mappingSummary: {
 			categories: categories.length,
 			tiers: offerRows.length,
-			reviewedTiers: offerRows.filter((offer) => offer.status === 'reviewed').length,
+			reviewedTiers: offerRows.filter((offer) => ['reviewed', 'live'].includes(offer.status)).length,
 			approvedRoutes: offerRows
 				.flatMap((offer) => offer.routes)
 				.filter((route) => route.equivalenceApproved).length
@@ -123,8 +123,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 				pricePerStepNgn: config.pricePerStep,
 				isGeneratedDraft: metadata.boosting_draft_generated === true,
 				tierCount: category.boostCustomerOffers.length,
-				reviewedTierCount: category.boostCustomerOffers.filter(
-					(offer) => offer.status === 'reviewed'
+				reviewedTierCount: category.boostCustomerOffers.filter((offer) =>
+					['reviewed', 'live'].includes(offer.status)
 				).length,
 				approvedRouteCount: category.boostCustomerOffers
 					.flatMap((offer) => offer.routes)

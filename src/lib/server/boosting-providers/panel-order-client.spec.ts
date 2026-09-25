@@ -189,4 +189,21 @@ describe('boosting panel order contract client', () => {
 		).rejects.toMatchObject({ code: 'invalid_input' });
 		expect(fetchImpl).toHaveBeenCalledTimes(1);
 	});
+
+	it('requests a supplier refill using the standard panel contract', async () => {
+		const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(response({ refill: '88' }));
+		const client = createPanelOrderClient({
+			id: 'bulk_follows',
+			getApiKey: () => 'fixture-secret',
+			fetchImpl
+		});
+
+		await expect(client.requestRefill?.('101')).resolves.toEqual({
+			provider: 'bulk_follows',
+			refillId: '88'
+		});
+		const body = fetchImpl.mock.calls[0][1]?.body as URLSearchParams;
+		expect(body.get('action')).toBe('refill');
+		expect(body.get('order')).toBe('101');
+	});
 });

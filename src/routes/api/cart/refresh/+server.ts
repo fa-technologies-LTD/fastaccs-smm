@@ -39,6 +39,7 @@ interface CartRefreshItemInput {
 	boosting?: {
 		targetUrl?: string;
 		boostQuantity?: number;
+		boostOfferId?: string | null;
 	};
 }
 
@@ -211,13 +212,16 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		const requestedExactAccountIds = inputItems
 			.map((item) => normalizeText(item.exactAccount?.accountId))
 			.filter((value) => value.length > 0 && isUuid(value));
+		const requestedBoostOfferIds = inputItems
+			.map((item) => normalizeText(item.boosting?.boostOfferId))
+			.filter((value) => value.length > 0 && isUuid(value));
 		// Checkout performs the authoritative reservation cleanup before taking a stock hold.
 		// Keeping that global write out of this read path makes opening a cart fast and cheap.
 		if (!suppressMaintenanceWrites && requestedExactAccountIds.length > 0) {
 			await releaseExpiredExactPreviewReservations();
 		}
 
-		const [stockRows, activeCheckout, exactAccounts] = await Promise.all([
+		const [stockRows, activeCheckout, exactAccounts, boostOffers] = await Promise.all([
 			inventoryTierIds.length
 				? prisma.account.groupBy({
 						by: ['categoryId'],
@@ -268,6 +272,21 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 							credentialExtras: true
 						}
 					})
+				: Promise.resolve([]),
+			requestedBoostOfferIds.length
+				? prisma.boostCustomerOffer.findMany({
+						where: { id: { in: requestedBoostOfferIds }, status: 'live' },
+						select: {
+							id: true,
+							categoryId: true,
+							customerName: true,
+							platform: true,
+							outcome: true,
+							minQuantity: true,
+							stepQuantity: true,
+							pricePerStepNgn: true
+						}
+					})
 				: Promise.resolve([])
 		]);
 		const availableByTierId = new Map(
@@ -291,6 +310,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		}
 
 		const exactAccountById = new Map(exactAccounts.map((account) => [account.id, account]));
+		const boostOfferById = new Map(boostOffers.map((offer) => [offer.id, offer]));
 
 		const messages: string[] = [];
 		const mergedItems = new Map<string, CartItemWithTier>();
@@ -305,7 +325,23 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			}
 
 			if (tier.categoryType === 'boosting_service') {
-				const config = getBoostingServiceConfig(tier.metadata);
+				const legacyConfig = getBoostingServiceConfig(tier.metadata);
+				const requestedOfferId = normalizeText(input.boosting?.boostOfferId);
+				const offer = requestedOfferId ? boostOfferById.get(requestedOfferId) : null;
+				if (requestedOfferId && (!offer || offer.categoryId !== tier.id)) {
+					messages.push(`${tier.name} changed and was removed from your cart. Please choose it again.`);
+					continue;
+				}
+				const config = offer
+					? {
+							...legacyConfig,
+							platform: offer.platform as typeof legacyConfig.platform,
+							actionType: offer.outcome as typeof legacyConfig.actionType,
+							minQuantity: offer.minQuantity,
+							stepQuantity: offer.stepQuantity,
+							pricePerStep: Number(offer.pricePerStepNgn)
+						}
+					: legacyConfig;
 				const targetUrl = normalizeText(input.boosting?.targetUrl);
 				const boostQuantity = Math.floor(Number(input.boosting?.boostQuantity || 0));
 
@@ -329,7 +365,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 				const boostingTierPayload: CartRefreshTier = {
 					id: tier.id,
-					name: tier.name,
+					name: offer?.customerName || tier.name,
 					price: 0,
 					slug: tier.slug,
 					platformName: BOOSTING_PLATFORM_LABELS[config.platform],
@@ -352,7 +388,11 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					tierId: tier.id,
 					quantity: 1,
 					addedAt: Number(input.addedAt || Date.now()),
-					boosting: { targetUrl: linkCheck.normalizedUrl || targetUrl, boostQuantity },
+					boosting: {
+						targetUrl: linkCheck.normalizedUrl || targetUrl,
+						boostQuantity,
+						boostOfferId: offer?.id || null
+					},
 					tier: boostingTierPayload
 				});
 				continue;

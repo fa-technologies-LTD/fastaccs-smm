@@ -533,7 +533,8 @@
 								exactAccountId: item.exactAccount?.accountId,
 								exactAccountLabel: item.exactAccount?.displayLabel,
 								boostTargetUrl: item.boosting?.targetUrl,
-								boostQuantity: item.boosting?.boostQuantity
+								boostQuantity: item.boosting?.boostQuantity,
+								boostOfferId: item.boosting?.boostOfferId
 							})),
 							totalAmount: finalTotal,
 							currency: 'NGN',

@@ -37,6 +37,7 @@ import {
 	CONFIRMED_PAYMENT_STATUSES,
 	isOrderPaymentConfirmed
 } from '$lib/helpers/buyer-order-visibility';
+import { queuePaidBoostFulfillments } from '$lib/server/boosting-providers/fulfillment-worker';
 
 export type PaymentSettlementSource =
 	| 'verify'
@@ -521,6 +522,7 @@ export async function recoverPaidOrder(
 				deliveryStatus: 'processing'
 			}
 		});
+		await queuePaidBoostFulfillments(order.id);
 		await notifyBoostingOrderPaid(order.id, `payments.${source}.boosting`);
 		void sendServerPurchaseVerifiedEvent(order.id, 'PAID');
 		invalidateAdminStatsCache();

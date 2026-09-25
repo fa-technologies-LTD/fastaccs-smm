@@ -21,8 +21,8 @@ beforeEach(() => {
 	]);
 });
 
-describe('public reviewed Boosting offer copy', () => {
-	it('returns only explicitly reviewed active customer fields', async () => {
+describe('public live Boosting offer copy', () => {
+	it('returns only explicitly published active customer fields', async () => {
 		const setHeaders = vi.fn();
 		const response = await GET({ setHeaders } as never);
 		const body = await response.json();
@@ -31,7 +31,7 @@ describe('public reviewed Boosting offer copy', () => {
 		expect(mocks.findMany).toHaveBeenCalledWith(
 			expect.objectContaining({
 				where: {
-					status: 'reviewed',
+					status: 'live',
 					category: { categoryType: 'boosting_service', isActive: true }
 				},
 				select: expect.not.objectContaining({

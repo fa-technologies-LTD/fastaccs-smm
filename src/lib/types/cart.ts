@@ -15,6 +15,7 @@ export interface CartItem {
 	boosting?: {
 		targetUrl: string;
 		boostQuantity: number;
+		boostOfferId?: string | null;
 	};
 }
 

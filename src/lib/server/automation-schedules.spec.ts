@@ -33,6 +33,10 @@ describe('cost-aware production automation schedules', () => {
 		expect(AUTOMATION_JOBS['numbers-catalog-sync'].expectedIntervalMinutes).toBe(30);
 		expect(schedules.get('/api/internal/cron/boosting-catalog-sync')).toBe('17 */6 * * *');
 		expect(AUTOMATION_JOBS['boosting-catalog-sync'].expectedIntervalMinutes).toBe(360);
+		expect(schedules.get('/api/internal/cron/boosting-fulfillment')).toBe(
+			'6,11,16,21,26,31,36,41,46,51,56 * * * *'
+		);
+		expect(AUTOMATION_JOBS['boosting-fulfillment'].expectedIntervalMinutes).toBe(5);
 
 		expect(schedules.get('/api/internal/cron/exact-preview-thumbnails')).toBe('0 * * * *');
 		expect(schedules.get('/api/internal/cron/low-stock-alerts')).toBe('1 * * * *');

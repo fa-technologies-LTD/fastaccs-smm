@@ -69,6 +69,8 @@ model User {
   restockSubscriptions            RestockSubscription[]
   boostingServiceWaitlistEntries  BoostingServiceWaitlist[]
   reviewedBoostServiceRoutes      BoostServiceRoute[]       @relation("BoostRouteReviewer")
+  boostComplaints                 BoostComplaint[]          @relation("BoostComplaintCustomer")
+  reviewedBoostComplaints         BoostComplaint[]          @relation("BoostComplaintReviewer")
   affiliatePayoutDetails          AffiliatePayoutDetails?
   pushSubscriptions               PushSubscription[]
   sessions                        Session[]
@@ -780,6 +782,7 @@ model BoostCustomerOffer {
   stepQuantity            Int                 @map("step_quantity")
   quantityPresets         Int[]               @map("quantity_presets")
   pricePerStepNgn         Decimal             @map("price_per_step_ngn") @db.Decimal(10, 2)
+  priceLocked             Boolean             @default(false) @map("price_locked")
   requiredVerifiedSignals String[]            @map("required_verified_signals")
   refillDays              Int?                @map("refill_days")
   minimumMarginPercent    Decimal             @map("minimum_margin_percent") @db.Decimal(5, 2)
@@ -893,6 +896,7 @@ model BoostFulfillment {
   offer                   BoostCustomerOffer? @relation(fields: [offerId], references: [id], onDelete: SetNull)
   selectedRoute           BoostServiceRoute?  @relation(fields: [selectedRouteId], references: [id], onDelete: SetNull)
   attempts                BoostAttempt[]
+  complaints              BoostComplaint[]
 
   @@index([status, nextActionAt])
   @@index([provider, status])
@@ -900,6 +904,36 @@ model BoostFulfillment {
   @@index([selectedRouteId])
   @@index([targetKey, outcome])
   @@map("boost_fulfillments")
+}
+
+// Context-aware customer issue reports. The purchased promise is snapshotted so later catalogue
+// edits cannot create refill rights that were not part of the original order.
+model BoostComplaint {
+  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fulfillmentId       String           @map("fulfillment_id") @db.Uuid
+  userId              String?          @map("user_id") @db.Uuid
+  type                String
+  status              String           @default("open")
+  customerNote        String?          @map("customer_note")
+  eligibilitySnapshot Json             @default("{}") @map("eligibility_snapshot")
+  validationNote      String?          @map("validation_note")
+  providerAction      String?          @map("provider_action")
+  supplierCaseId      String?          @map("supplier_case_id")
+  validatedByUserId   String?          @map("validated_by_user_id") @db.Uuid
+  validatedAt         DateTime?        @map("validated_at")
+  escalatedAt         DateTime?        @map("escalated_at")
+  resolvedAt          DateTime?        @map("resolved_at")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+  fulfillment         BoostFulfillment @relation(fields: [fulfillmentId], references: [id], onDelete: Cascade)
+  customer            User?            @relation("BoostComplaintCustomer", fields: [userId], references: [id], onDelete: SetNull)
+  validatedBy         User?            @relation("BoostComplaintReviewer", fields: [validatedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([fulfillmentId, type])
+  @@index([fulfillmentId, createdAt])
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@map("boost_complaints")
 }
 
 // Append-only supplier/router history. Safe summaries and request fingerprints are retained;

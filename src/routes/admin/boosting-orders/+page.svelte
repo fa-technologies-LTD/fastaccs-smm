@@ -48,6 +48,8 @@
 			attention: string | null;
 			checkedAt: string | null;
 		} | null;
+		complaints: Array<{ id: string; type: string; status: string; createdAt: string }>;
+		fulfillmentState: { status: string; mode: string } | null;
 		order: {
 			id: string;
 			orderNumber: string;
@@ -350,6 +352,51 @@
 			busyItemId = null;
 		}
 	}
+
+	function complaintLabel(type: string): string {
+		if (type === 'nothing_delivered') return 'Nothing delivered';
+		if (type === 'delivery_stopped') return 'Delivery stopped early';
+		if (type === 'dropped') return 'Drop / refill request';
+		return type;
+	}
+
+	async function actOnComplaint(
+		item: BoostingOrderItem,
+		complaint: BoostingOrderItem['complaints'][number],
+		action: 'validate' | 'reject' | 'escalate' | 'resolve'
+	): Promise<void> {
+		let note = '';
+		if (action === 'validate' || action === 'reject') {
+			const value = prompt(
+				action === 'validate' ? 'Optional validation note:' : 'Why is this complaint not valid?'
+			);
+			if (value === null) return;
+			note = value.trim();
+		}
+		if (action === 'escalate' && !confirm('Send the available supplier action now?')) return;
+		busyItemId = item.id;
+		try {
+			const response = await fetch(
+				`/api/admin/boosting-complaints/${encodeURIComponent(complaint.id)}`,
+				{
+					method: 'PATCH',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ action, note })
+				}
+			);
+			const payload = await response.json();
+			if (!response.ok || !payload?.success) throw new Error(payload?.error || 'Action failed.');
+			showSuccess('Complaint updated', payload.message || 'Saved.');
+			await loadItems(meta.page);
+		} catch (error) {
+			showError(
+				'Could not update complaint',
+				error instanceof Error ? error.message : 'Try again.'
+			);
+		} finally {
+			busyItemId = null;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -363,7 +410,8 @@
 			Boosting Orders
 		</h1>
 		<p class="mt-1 text-sm" style="color: var(--text-muted);">
-			Newest work first. Review the link, place it with your supplier, and record progress.
+			Automation handles mapped routes. Review only exceptions, link problems and customer reports
+			here.
 		</p>
 		<div class="mt-2 flex flex-wrap items-center justify-between gap-2">
 			<OrderTypeTabs active="boosting" />
@@ -546,6 +594,59 @@
 					</div>
 				{/if}
 
+				{#if item.complaints?.length}
+					<div class="mt-3 space-y-2">
+						{#each item.complaints as complaint (complaint.id)}
+							<div
+								class="rounded-lg border p-3"
+								style="border-color: rgba(248,113,113,.32); background: rgba(248,113,113,.06);"
+							>
+								<div class="flex flex-wrap items-center justify-between gap-2">
+									<p class="text-sm font-semibold" style="color: var(--text);">
+										Customer report: {complaintLabel(complaint.type)}
+									</p>
+									<span class="text-[11px] uppercase" style="color: #fca5a5;"
+										>{complaint.status}</span
+									>
+								</div>
+								<div class="mt-2 flex flex-wrap gap-2">
+									{#if complaint.status === 'open'}<button
+											type="button"
+											onclick={() => actOnComplaint(item, complaint, 'validate')}
+											class="rounded-md border px-2.5 py-1 text-xs"
+											style="border-color: var(--border); color: var(--text);">Valid</button
+										><button
+											type="button"
+											onclick={() => actOnComplaint(item, complaint, 'reject')}
+											class="rounded-md border px-2.5 py-1 text-xs"
+											style="border-color: var(--border); color: var(--text-muted);"
+											>Not valid</button
+										>{/if}
+									{#if complaint.status === 'validated'}<button
+											type="button"
+											onclick={() => actOnComplaint(item, complaint, 'escalate')}
+											class="rounded-md px-2.5 py-1 text-xs font-semibold"
+											style="background: var(--primary); color: #00150b;"
+											>Escalate to supplier</button
+										>{/if}
+									{#if complaint.status === 'escalation_unknown'}<p
+											class="text-xs"
+											style="color: #fbbf24;"
+										>
+											Supplier response uncertain — check its panel before doing anything else.
+										</p>{/if}
+									{#if complaint.status === 'escalated' || complaint.status === 'escalation_unknown'}<button
+											type="button"
+											onclick={() => actOnComplaint(item, complaint, 'resolve')}
+											class="rounded-md border px-2.5 py-1 text-xs"
+											style="border-color: var(--border); color: var(--text);">Mark resolved</button
+										>{/if}
+								</div>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
 				{#if item.shadowDecision}
 					<div
 						class="mt-3 rounded-lg border p-3"
@@ -554,9 +655,15 @@
 							: 'border-color: rgba(234,179,8,0.28); background: rgba(234,179,8,0.06);'}
 					>
 						<div class="flex flex-wrap items-center justify-between gap-2">
-							<p class="text-xs font-bold" style="color: var(--text);">Shadow suggestion</p>
+							<p class="text-xs font-bold" style="color: var(--text);">
+								{item.fulfillmentState?.mode === 'shadow'
+									? 'Shadow suggestion'
+									: 'Automation route'}
+							</p>
 							<span class="text-[10px] font-semibold" style="color: var(--text-dim);"
-								>No supplier order placed</span
+								>{item.fulfillmentState?.mode === 'shadow'
+									? 'No supplier order placed'
+									: `${item.fulfillmentState?.mode || 'automation'} · ${item.fulfillmentState?.status || 'processing'}`}</span
 							>
 						</div>
 						{#if item.shadowDecision.provider}

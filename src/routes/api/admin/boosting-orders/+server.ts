@@ -139,6 +139,9 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		projectedMarginNgn: Prisma.Decimal | null;
 		lastSafeErrorCategory: string | null;
 		lastCheckedAt: Date | null;
+		status: string;
+		fulfillmentMode: string;
+		complaints: Array<{ id: string; type: string; status: string; createdAt: Date }>;
 		selectedRoute: {
 			providerService: { serviceId: string; name: string };
 		} | null;
@@ -147,8 +150,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		try {
 			shadowDecisions = await prisma.boostFulfillment.findMany({
 				where: {
-					orderItemId: { in: items.map((item) => item.id) },
-					fulfillmentMode: 'shadow'
+					orderItemId: { in: items.map((item) => item.id) }
 				},
 				select: {
 					orderItemId: true,
@@ -157,6 +159,15 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 					projectedMarginNgn: true,
 					lastSafeErrorCategory: true,
 					lastCheckedAt: true,
+					status: true,
+					fulfillmentMode: true,
+					complaints: {
+						where: {
+							status: { in: ['open', 'validated', 'escalated', 'escalation_unknown'] }
+						},
+						select: { id: true, type: true, status: true, createdAt: true },
+						orderBy: { createdAt: 'desc' }
+					},
 					selectedRoute: {
 						select: { providerService: { select: { serviceId: true, name: true } } }
 					}
@@ -215,7 +226,9 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 							attention: shadow.lastSafeErrorCategory,
 							checkedAt: shadow.lastCheckedAt
 						}
-					: null
+					: null,
+				complaints: shadow?.complaints || [],
+				fulfillmentState: shadow ? { status: shadow.status, mode: shadow.fulfillmentMode } : null
 			};
 		}),
 		meta: {

@@ -7,6 +7,8 @@ import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
 import { toSerializableDecimals } from '$lib/helpers/serialize';
 import { getPhonePricingConfig } from '$lib/services/phone-pricing';
+import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
+import { getBoostComplaintEligibility } from '$lib/server/boosting-providers/complaints';
 
 export const load: PageServerLoad = async ({ params, locals, url }) => {
 	if (!locals.user) {
@@ -26,7 +28,15 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 				include: {
 					accounts: true,
 					category: true,
-					phoneRental: true
+					phoneRental: true,
+					boostFulfillment: {
+						include: {
+							complaints: {
+								select: { id: true, type: true, status: true, createdAt: true },
+								orderBy: { createdAt: 'desc' }
+							}
+						}
+					}
 				}
 			},
 			user: {
@@ -141,7 +151,15 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 				unitPrice: Number(item.unitPrice),
 				totalPrice: Number(item.totalPrice),
 				allocatedCount: item.accounts.length,
-				boostIssueReason: latestBoostingIssueByItem.get(item.id) || null
+				boostIssueReason: latestBoostingIssueByItem.get(item.id) || null,
+				boostComplaintEligibility: item.boostFulfillment
+					? getBoostComplaintEligibility({
+							offerSnapshot: item.boostFulfillment.offerSnapshot,
+							completedAt: item.boostFulfillment.completedAt,
+							paymentConfirmed: isOrderPaymentConfirmed(order)
+						})
+					: null,
+				boostComplaints: item.boostFulfillment?.complaints ?? []
 			}))
 		})
 	};

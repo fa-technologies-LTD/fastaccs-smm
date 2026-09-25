@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { recordOrderEvent } from '$lib/services/order-events';
+import { notifyBoostingOrderCompleted } from '$lib/services/boosting-fulfillment-notifications';
 
 const VALID_STATUSES = ['pending', 'in_progress', 'needs_link', 'completed', 'rejected'] as const;
 const CONFIRMED_PAYMENT_STATUSES = new Set(['paid', 'success', 'overpaid']);
@@ -175,6 +176,9 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 
 		return item;
 	});
+	if (data.boostFulfillmentStatus === 'completed') {
+		await notifyBoostingOrderCompleted(existing.orderId);
+	}
 
 	return json({
 		success: true,

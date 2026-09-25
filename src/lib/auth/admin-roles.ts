@@ -168,6 +168,11 @@ const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
 		writePermission: 'admin:catalog:manage'
 	},
 	{
+		prefix: '/admin/boosting-preview',
+		readPermission: 'admin:catalog:manage',
+		writePermission: 'admin:catalog:manage'
+	},
+	{
 		prefix: '/admin/boosting-orders',
 		readPermission: 'admin:access',
 		writePermission: 'admin:orders:manage'
@@ -261,6 +266,11 @@ const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
 	{
 		prefix: '/api/admin/boosting-orders',
 		readPermission: 'admin:access',
+		writePermission: 'admin:orders:manage'
+	},
+	{
+		prefix: '/api/admin/boosting-complaints',
+		readPermission: 'admin:orders:manage',
 		writePermission: 'admin:orders:manage'
 	},
 	{

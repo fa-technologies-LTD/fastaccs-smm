@@ -43,6 +43,8 @@
 
 	interface BoostingServiceDisplay {
 		id: string;
+		categoryId: string;
+		offerId: string | null;
 		name: string;
 		description: string;
 		config: BoostingServiceConfig;
@@ -59,9 +61,20 @@
 	const services = $derived<BoostingServiceDisplay[]>(
 		data.services.map((service) => ({
 			id: service.id,
+			categoryId: service.categoryId,
+			offerId: service.customerOffer?.id || null,
 			name: service.customerOffer?.customerName || service.name,
 			description: service.customerOffer?.shortPromise || service.description || '',
-			config: getBoostingServiceConfig(service.metadata),
+			config: service.customerOffer
+				? {
+						...getBoostingServiceConfig(service.metadata),
+						minQuantity: service.customerOffer.minQuantity,
+						stepQuantity: service.customerOffer.stepQuantity,
+						pricePerStep: service.customerOffer.pricePerStepNgn,
+						refillAvailable: Boolean(service.customerOffer.refillDays),
+						refillDays: service.customerOffer.refillDays
+					}
+				: getBoostingServiceConfig(service.metadata),
 			qualityTier: service.customerOffer?.qualityTier || null,
 			expectationChips: service.customerOffer?.expectationChips || []
 		}))
@@ -310,7 +323,7 @@
 		try {
 			let compatibility: { compatible: boolean; existingMode: TierDeliveryMode | null };
 			try {
-				compatibility = await cart.ensureDeliveryModeCompatibility(service.id, 'boosting_manual');
+				compatibility = await cart.ensureDeliveryModeCompatibility(service.categoryId, 'boosting_manual');
 			} catch (error) {
 				console.error('Failed to validate cart delivery mode compatibility:', error);
 				showError('Could not update cart', 'Please try again.');
@@ -329,7 +342,12 @@
 				showWarning('Cart cleared', `Previous ${existingLabel} items were removed.`);
 			}
 
-			cart.addBoostingService(service.id, linkCheck.normalizedUrl || targetUrl, quantity);
+			cart.addBoostingService(
+				service.categoryId,
+				linkCheck.normalizedUrl || targetUrl,
+				quantity,
+				service.offerId
+			);
 			trackSnapEvent('ADD_CART', getSnapServicePayload(service, quantity));
 			recordAnalyticsEvent(
 				'add_cart',

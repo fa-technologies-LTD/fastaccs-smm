@@ -214,7 +214,12 @@ class CartStore {
 		this.saveToStorage();
 	}
 
-	addBoostingService(serviceId: string, targetUrl: string, boostQuantity: number): void {
+	addBoostingService(
+		serviceId: string,
+		targetUrl: string,
+		boostQuantity: number,
+		boostOfferId: string | null = null
+	): void {
 		if (!serviceId || !targetUrl.trim() || boostQuantity <= 0) return;
 
 		this.state.items.push({
@@ -222,7 +227,7 @@ class CartStore {
 			tierId: serviceId,
 			quantity: 1,
 			addedAt: Date.now(),
-			boosting: { targetUrl: targetUrl.trim(), boostQuantity }
+			boosting: { targetUrl: targetUrl.trim(), boostQuantity, boostOfferId }
 		});
 
 		this.markCartChanged();

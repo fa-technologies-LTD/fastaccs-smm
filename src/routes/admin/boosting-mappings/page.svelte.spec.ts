@@ -50,7 +50,8 @@ function workspace(
 		candidates: [],
 		candidateCount: 0,
 		configuredFxNgnPerUsd: 1700,
-		configuredCurrencyBufferPercent: 5
+		configuredCurrencyBufferPercent: 5,
+		configuredDefaultMarginPercent: 40
 	};
 }
 
@@ -126,6 +127,9 @@ describe('Boosting mapping offer selection', () => {
 		await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
 		expect(String(fetchMock.mock.calls[0]?.[0])).toContain(offers[1].id);
 		expect(String(fetchMock.mock.calls[0]?.[0])).toContain('tier=premium');
-		await expect.element(page.getByText('Premium · 4 routes prepared')).toBeVisible();
+		await expect
+			.element(page.getByRole('heading', { name: 'Facebook Page Followers' }))
+			.toBeVisible();
+		await expect.element(page.getByRole('button', { name: /Premium/ })).toBeVisible();
 	});
 });

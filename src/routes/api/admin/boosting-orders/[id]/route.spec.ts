@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
 	hasPermission: vi.fn(),
 	transaction: vi.fn(),
-	recordOrderEvent: vi.fn()
+	recordOrderEvent: vi.fn(),
+	notifyCompleted: vi.fn()
 }));
 
 const tx = vi.hoisted(() => ({
@@ -32,6 +33,9 @@ vi.mock('$lib/prisma', () => ({
 }));
 vi.mock('$lib/auth/admin-roles', () => ({ hasAdminPermission: mocks.hasPermission }));
 vi.mock('$lib/services/order-events', () => ({ recordOrderEvent: mocks.recordOrderEvent }));
+vi.mock('$lib/services/boosting-fulfillment-notifications', () => ({
+	notifyBoostingOrderCompleted: mocks.notifyCompleted
+}));
 
 import { prisma } from '$lib/prisma';
 import { PATCH } from './+server';
@@ -60,6 +64,7 @@ beforeEach(() => {
 	tx.order.update.mockResolvedValue({});
 	tx.notification.create.mockResolvedValue({ id: 'notice-1' });
 	mocks.recordOrderEvent.mockResolvedValue(undefined);
+	mocks.notifyCompleted.mockResolvedValue(undefined);
 });
 
 describe('manual boosting order workflow', () => {
@@ -143,5 +148,6 @@ describe('manual boosting order workflow', () => {
 				deliveredAt: expect.any(Date)
 			}
 		});
+		expect(mocks.notifyCompleted).toHaveBeenCalledWith(existing.orderId);
 	});
 });

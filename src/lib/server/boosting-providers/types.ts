@@ -110,6 +110,7 @@ export interface BoostProviderOrderClient {
 	readonly id: BoostProviderId;
 	submitOrder(input: SubmitBoostOrder): Promise<SubmitBoostOrderResult>;
 	getStatuses(providerOrderIds: string[]): Promise<BoostProviderOrderStatus[]>;
+	requestRefill?(providerOrderId: string): Promise<{ provider: BoostProviderId; refillId: string }>;
 }
 
 export interface BoostProviderReadClient {

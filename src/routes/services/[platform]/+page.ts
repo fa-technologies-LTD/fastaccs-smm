@@ -10,15 +10,22 @@ import type { PageLoad } from './$types';
 
 export interface PlatformBoostingService {
 	id: string;
+	categoryId: string;
 	name: string;
 	description: string;
 	metadata: unknown;
 	customerOffer?: {
+		id: string;
 		customerName: string;
 		shortPromise: string;
 		expectationChips: string[];
 		qualityTier: string;
 		displayOrder: number;
+		minQuantity: number;
+		stepQuantity: number;
+		quantityPresets: number[];
+		pricePerStepNgn: number;
+		refillDays: number | null;
 	};
 }
 
@@ -48,39 +55,54 @@ async function fetchPlatformServices(
 			};
 		}
 
-		const reviewedOfferCopy = offerCopyResponse.ok
+		const liveOffers = offerCopyResponse.ok
 			? (((await offerCopyResponse.json()).data || []) as Array<{
+					id: string;
 					categoryId: string;
 					customerName: string;
 					shortPromise: string;
 					expectationChips: string[];
 					qualityTier: string;
 					displayOrder: number;
+					minQuantity: number;
+					stepQuantity: number;
+					quantityPresets: number[];
+					pricePerStepNgn: number;
+					refillDays: number | null;
 				}>)
 			: [];
-		const copyByCategoryId = new Map<string, (typeof reviewedOfferCopy)[number]>();
-		for (const offer of reviewedOfferCopy) {
-			// The old catalogue card has room for one promise. Keep its first reviewed choice as the
-			// bridge until the replacement flow renders all quality choices beneath the result.
-			if (!copyByCategoryId.has(offer.categoryId)) copyByCategoryId.set(offer.categoryId, offer);
+		const offersByCategoryId = new Map<string, typeof liveOffers>();
+		for (const offer of liveOffers) {
+			const list = offersByCategoryId.get(offer.categoryId) ?? [];
+			list.push(offer);
+			offersByCategoryId.set(offer.categoryId, list);
 		}
 		const allServices = (servicesResult.data || []) as PlatformBoostingService[];
 		const services = allServices
 			.filter((service) => getBoostingServiceConfig(service.metadata).platform === platform)
-			.map((service) => {
-				const offer = copyByCategoryId.get(service.id);
-				return offer
-					? {
-							...service,
-							customerOffer: {
-								customerName: offer.customerName,
-								shortPromise: offer.shortPromise,
-								expectationChips: offer.expectationChips,
-								qualityTier: offer.qualityTier,
-								displayOrder: offer.displayOrder
-							}
-						}
-					: service;
+			.flatMap((service) => {
+				const offers = (offersByCategoryId.get(service.id) ?? []).sort(
+					(left, right) => left.displayOrder - right.displayOrder
+				);
+				if (!offers.length) return [{ ...service, categoryId: service.id }];
+				return offers.map((offer) => ({
+					...service,
+					id: offer.id,
+					categoryId: service.id,
+					customerOffer: {
+						id: offer.id,
+						customerName: offer.customerName,
+						shortPromise: offer.shortPromise,
+						expectationChips: offer.expectationChips,
+						qualityTier: offer.qualityTier,
+						displayOrder: offer.displayOrder,
+						minQuantity: offer.minQuantity,
+						stepQuantity: offer.stepQuantity,
+						quantityPresets: offer.quantityPresets,
+						pricePerStepNgn: offer.pricePerStepNgn,
+						refillDays: offer.refillDays
+					}
+				}));
 			});
 
 		const realPlatforms = platformsResponse.ok
