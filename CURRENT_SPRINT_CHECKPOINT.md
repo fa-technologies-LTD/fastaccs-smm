@@ -44,7 +44,7 @@ Before the owner walkthrough:
 8. Walk through one small Boosting offer: setup, private preview, staging-only publication, service page, cart and checkout.
 9. Check Verified-X options, Numbers recovery controls and the paid-order CSV in staging.
 
-The staging pooler was intermittently unreachable during startup, so this local walkthrough process uses the same staging branch's verified direct endpoint. Sequential smoke checks returned 200 for Home, Platforms, Numbers, Boosting Services, Support, `/go`, public categories and public Boosting offers. The public catalog response contained none of the private cost, supplier, affiliate or restock keys.
+The staging pooler was intermittently unreachable during startup, so this local walkthrough process uses the same staging branch's verified direct endpoint. Staging admin writes remain available, while checkout, email, push, Monnify, supplier keys and paid Boosting automation are explicitly disabled for this process. Sequential smoke checks returned 200 for Home, Platforms, Numbers, Boosting Services, Support, `/go`, public categories and public Boosting offers. The public catalog response contained none of the private cost, supplier, affiliate or restock keys.
 
 Before production:
 
