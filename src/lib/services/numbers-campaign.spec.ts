@@ -18,7 +18,7 @@ vi.mock('$lib/helpers/site-url', () => ({
 	getSiteBaseUrl: () => 'https://smm.fastaccs.com'
 }));
 
-import { runNumbersCampaignTouches } from './numbers-campaign';
+import { runNumbersCampaignTouches, runNumbersRecoveryEmails } from './numbers-campaign';
 
 describe('automated Numbers discovery emails', () => {
 	beforeEach(() => {
@@ -53,6 +53,103 @@ describe('automated Numbers discovery emails', () => {
 		const result = await runNumbersCampaignTouches(10);
 
 		expect(result.sent).toBe(0);
+		expect(sendMarketingEmailMock).not.toHaveBeenCalled();
+	});
+});
+
+describe('Numbers no-code recovery emails', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		prismaMock.microcopy.findUnique.mockResolvedValue({
+			value: JSON.stringify({
+				enabled: false,
+				launchedAt: null,
+				recoveryEnabled: true
+			})
+		});
+		prismaMock.emailNotification.findMany.mockResolvedValue([]);
+		sendMarketingEmailMock.mockResolvedValue({ success: true });
+	});
+
+	it('emails an opted-in customer once when an old Numbers attempt never delivered an OTP', async () => {
+		prismaMock.order.findMany
+			.mockResolvedValueOnce([
+				{
+					id: 'order-failed',
+					userId: 'user-1',
+					createdAt: new Date('2026-07-01T00:00:00.000Z'),
+					user: { email: 'buyer@example.com', fullName: 'Tobi Customer' },
+					orderItems: [{ phoneRental: { status: 'refunded', otp: null, receivedAt: null } }]
+				}
+			])
+			.mockResolvedValueOnce([]);
+
+		const result = await runNumbersRecoveryEmails(10);
+
+		expect(result).toMatchObject({ ran: true, sent: 1 });
+		expect(sendMarketingEmailMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				notificationType: 'numbers_recovery',
+				referenceId: 'numbers-recovery:order-failed'
+			})
+		);
+	});
+
+	it('does not email when that attempt delivered an OTP', async () => {
+		prismaMock.order.findMany.mockResolvedValueOnce([
+			{
+				id: 'order-success',
+				userId: 'user-1',
+				createdAt: new Date('2026-07-01T00:00:00.000Z'),
+				user: { email: 'buyer@example.com', fullName: 'Tobi Customer' },
+				orderItems: [
+					{
+						phoneRental: {
+							status: 'received',
+							otp: '123456',
+							receivedAt: new Date('2026-07-01T00:02:00.000Z')
+						}
+					}
+				]
+			}
+		]);
+
+		const result = await runNumbersRecoveryEmails(10);
+
+		expect(result).toMatchObject({ ran: true, sent: 0 });
+		expect(sendMarketingEmailMock).not.toHaveBeenCalled();
+	});
+
+	it('suppresses recovery after a later attempt actually delivers a code', async () => {
+		prismaMock.order.findMany
+			.mockResolvedValueOnce([
+				{
+					id: 'order-failed',
+					userId: 'user-1',
+					createdAt: new Date('2026-07-01T00:00:00.000Z'),
+					user: { email: 'buyer@example.com', fullName: 'Tobi Customer' },
+					orderItems: [{ phoneRental: { status: 'refunded', otp: null, receivedAt: null } }]
+				}
+			])
+			.mockResolvedValueOnce([
+				{
+					userId: 'user-1',
+					createdAt: new Date('2026-07-02T00:00:00.000Z'),
+					orderItems: [
+						{
+							phoneRental: {
+								status: 'received',
+								otp: '123456',
+								receivedAt: new Date('2026-07-02T00:02:00.000Z')
+							}
+						}
+					]
+				}
+			]);
+
+		const result = await runNumbersRecoveryEmails(10);
+
+		expect(result).toMatchObject({ ran: true, sent: 0, skipped: 1 });
 		expect(sendMarketingEmailMock).not.toHaveBeenCalled();
 	});
 });

@@ -7,7 +7,11 @@ import {
 	updateNumbersTiers
 } from '$lib/services/phone-catalog';
 import { savePhonePricingConfig } from '$lib/services/phone-pricing';
-import { launchNumbersCampaign, stopNumbersCampaign } from '$lib/services/numbers-campaign';
+import {
+	launchNumbersCampaign,
+	setNumbersRecoveryCampaignEnabled,
+	stopNumbersCampaign
+} from '$lib/services/numbers-campaign';
 
 function guard(locals: App.Locals): boolean {
 	return Boolean(
@@ -73,6 +77,15 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			}
 			await stopNumbersCampaign();
 			return json({ success: true });
+		}
+
+		if (action === 'set-recovery-campaign') {
+			if (!hasAdminPermission(locals.adminContext, 'admin:settings:manage')) {
+				return json({ success: false, error: 'Owner only' }, { status: 403 });
+			}
+			const enabled = body.enabled === true;
+			await setNumbersRecoveryCampaignEnabled(enabled);
+			return json({ success: true, enabled });
 		}
 
 		return json({ success: false, error: 'Unknown action' }, { status: 400 });

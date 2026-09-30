@@ -418,7 +418,8 @@
 				id: getCartLineKey(item),
 				tierId: item.tierId,
 				quantity: item.quantity,
-				exactAccountId: item.exactAccount?.accountId || null
+				exactAccountId: item.exactAccount?.accountId || null,
+				accountAddonKey: item.accountAddon?.key || null
 			})),
 			affiliateCode,
 			promotionCode: promoAppliedCode,
@@ -534,7 +535,8 @@
 								exactAccountLabel: item.exactAccount?.displayLabel,
 								boostTargetUrl: item.boosting?.targetUrl,
 								boostQuantity: item.boosting?.boostQuantity,
-								boostOfferId: item.boosting?.boostOfferId
+								boostOfferId: item.boosting?.boostOfferId,
+								accountAddonKey: item.accountAddon?.key
 							})),
 							totalAmount: finalTotal,
 							currency: 'NGN',
@@ -1000,6 +1002,11 @@
 														<ExternalLink size={12} />
 													</a>
 												{/if}
+												{#if item.accountAddon}
+													<p class="mt-1 text-xs font-semibold" style="color: var(--primary);">
+														{item.accountAddon.label} add-on
+													</p>
+												{/if}
 												{#if item.boosting}
 													{#if editingBoostingLineKey === getCartLineKey(item)}
 														<div class="mt-1 flex items-center gap-1.5">
@@ -1092,7 +1099,7 @@
 													<button
 														onclick={async () => {
 															if (item.quantity > 1) {
-																cart.updateQuantity(item.tier.id, item.quantity - 1);
+																cart.updateItemQuantity(getCartLineKey(item), item.quantity - 1);
 																await loadCartData();
 															}
 														}}
@@ -1110,7 +1117,7 @@
 													</span>
 													<button
 														onclick={async () => {
-															cart.updateQuantity(item.tier.id, item.quantity + 1);
+															cart.updateItemQuantity(getCartLineKey(item), item.quantity + 1);
 															await loadCartData();
 														}}
 														style="color: var(--text-muted); background: transparent;"

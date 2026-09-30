@@ -23,6 +23,11 @@ import { validateLinkForAction } from '$lib/helpers/social-link-validator';
 import { env } from '$env/dynamic/private';
 import { dev } from '$app/environment';
 import { isLocalDataReadOnly } from '$lib/server/local-data-safety';
+import {
+	VERIFIED_X_FOLLOWER_ADDONS,
+	getVerifiedXFollowerAddon,
+	hasVerifiedXFollowerAddons
+} from '$lib/helpers/account-addons';
 
 interface CartRefreshItemInput {
 	cartItemId?: string;
@@ -40,6 +45,9 @@ interface CartRefreshItemInput {
 		targetUrl?: string;
 		boostQuantity?: number;
 		boostOfferId?: string | null;
+	};
+	accountAddon?: {
+		key?: string;
 	};
 }
 
@@ -67,6 +75,12 @@ type CartRefreshTier = {
 		platform: string;
 		actionType: string;
 	};
+	verifiedXFollowerAddons?: Array<{
+		key: string;
+		label: string;
+		followerCount: number;
+		priceDelta: number;
+	}>;
 };
 
 const MAX_CART_REFRESH_ITEMS = 80;
@@ -119,8 +133,15 @@ function getReservationMetadata(value: unknown): ReservationMetadata | null {
 	return raw as ReservationMetadata;
 }
 
-function buildLineKey(input: { tierId: string; exactAccountId?: string | null }): string {
-	return input.exactAccountId ? `exact:${input.exactAccountId}` : `tier:${input.tierId}`;
+function buildLineKey(input: {
+	tierId: string;
+	exactAccountId?: string | null;
+	accountAddonKey?: string | null;
+}): string {
+	if (input.exactAccountId) return `exact:${input.exactAccountId}`;
+	return input.accountAddonKey
+		? `tier:${input.tierId}:addon:${input.accountAddonKey}`
+		: `tier:${input.tierId}`;
 }
 
 export const POST: RequestHandler = async ({ request, locals, url }) => {
@@ -329,7 +350,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				const requestedOfferId = normalizeText(input.boosting?.boostOfferId);
 				const offer = requestedOfferId ? boostOfferById.get(requestedOfferId) : null;
 				if (requestedOfferId && (!offer || offer.categoryId !== tier.id)) {
-					messages.push(`${tier.name} changed and was removed from your cart. Please choose it again.`);
+					messages.push(
+						`${tier.name} changed and was removed from your cart. Please choose it again.`
+					);
 					continue;
 				}
 				const config = offer
@@ -398,18 +421,24 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				continue;
 			}
 
+			const deliveryMode = normalizeTierDeliveryMode(
+				(tier.metadata as Record<string, unknown> | null)?.delivery_mode
+			);
+			const platformSlug = tier.parent?.slug || '';
+			const addonContext = { platformSlug, deliveryMode };
 			const tierPayload: CartRefreshTier = {
 				id: tier.id,
 				name: tier.name,
 				price: getTierPrice(tier.metadata),
 				slug: tier.slug,
 				platformName: tier.parent?.name || 'Unknown',
-				platformSlug: tier.parent?.slug || '',
+				platformSlug,
 				platformIcon: getPlatformIcon(tier.parent?.metadata),
 				isActive: tier.isActive,
-				deliveryMode: normalizeTierDeliveryMode(
-					(tier.metadata as Record<string, unknown> | null)?.delivery_mode
-				)
+				deliveryMode,
+				verifiedXFollowerAddons: hasVerifiedXFollowerAddons(tier.metadata, addonContext)
+					? VERIFIED_X_FOLLOWER_ADDONS.map((option) => ({ ...option }))
+					: undefined
 			};
 
 			const exactAccountId = normalizeText(input.exactAccount?.accountId);
@@ -458,6 +487,15 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				continue;
 			}
 
+			const requestedAddonKey = normalizeText(input.accountAddon?.key);
+			const accountAddon = requestedAddonKey
+				? getVerifiedXFollowerAddon(tier.metadata, requestedAddonKey, addonContext)
+				: null;
+			if (requestedAddonKey && !accountAddon) {
+				messages.push(`${tier.name}'s follower option changed, so it was removed from your cart.`);
+				continue;
+			}
+
 			const requestedQuantity = Math.max(1, Math.floor(Number(input.quantity || 1)));
 			const isManualTier = tierPayload.deliveryMode === 'manual_handover';
 			// Manual-handover and auto-SMS (Numbers) tiers have no account inventory —
@@ -484,7 +522,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				);
 			}
 
-			const key = buildLineKey({ tierId: tier.id });
+			const key = buildLineKey({ tierId: tier.id, accountAddonKey: accountAddon?.key });
 			const existing = mergedItems.get(key);
 			if (existing) {
 				const mergedQuantity = Math.min(existing.quantity + quantity, available);
@@ -501,6 +539,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				tierId: tier.id,
 				quantity,
 				addedAt: Number(input.addedAt || Date.now()),
+				accountAddon: accountAddon ? { ...accountAddon } : undefined,
 				tier: tierPayload
 			});
 		}

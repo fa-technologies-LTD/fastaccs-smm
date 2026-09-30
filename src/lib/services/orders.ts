@@ -25,6 +25,7 @@ export interface CreateOrderData {
 		boostTargetUrl?: string;
 		boostQuantity?: number;
 		boostOfferId?: string | null;
+		accountAddonKey?: string;
 	}[];
 	totalAmount: number;
 	currency: string;

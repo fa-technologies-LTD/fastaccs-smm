@@ -42,6 +42,10 @@
 		type Ga4Item
 	} from '$lib/services/ga4';
 	import { getTierExactPreviewConfig } from '$lib/helpers/tier-exact-preview';
+	import {
+		VERIFIED_X_FOLLOWER_ADDONS,
+		hasVerifiedXFollowerAddons
+	} from '$lib/helpers/account-addons';
 
 	interface Props {
 		data: PageData;
@@ -51,6 +55,7 @@
 
 	// Reactive state for quantity selection
 	let selectedQuantity = $state(1);
+	let selectedFollowerAddonKey = $state('');
 	let addingToCart = $state(false);
 	let notifyLoading = $state(false);
 	let notifySubscribed = $state(false);
@@ -102,6 +107,17 @@
 		isCompactViewport
 			? getCompactTierLabel(data.tier?.tier_name || '')
 			: (data.tier?.tier_name ?? 'Tier')
+	);
+	const followerAddonOptions = $derived(
+		hasVerifiedXFollowerAddons(data.tier?.metadata, {
+			platformSlug: data.platform?.slug,
+			deliveryMode: tierDeliveryConfig.mode
+		})
+			? VERIFIED_X_FOLLOWER_ADDONS
+			: []
+	);
+	const selectedFollowerAddon = $derived(
+		followerAddonOptions.find((option) => option.key === selectedFollowerAddonKey) || null
 	);
 
 	// Format follower count
@@ -161,7 +177,10 @@
 
 		// Check existing normal quantity in cart for this account type.
 		const existingCartItem = cart.items.find(
-			(item) => item.tierId === data.tierCategory.id && !item.exactAccount
+			(item) =>
+				item.tierId === data.tierCategory.id &&
+				!item.exactAccount &&
+				(item.accountAddon?.key || '') === selectedFollowerAddonKey
 		);
 		const currentCartQuantity = existingCartItem ? existingCartItem.quantity : 0;
 		const maxAllowedSelection = data.tier.visible_available - currentCartQuantity;
@@ -172,7 +191,9 @@
 	}
 
 	// Calculate total price
-	const totalPrice = $derived((data.tier?.price || 0) * selectedQuantity);
+	const totalPrice = $derived(
+		((data.tier?.price || 0) + (selectedFollowerAddon?.priceDelta || 0)) * selectedQuantity
+	);
 
 	// Format feature names from snake_case to Title Case
 	function formatFeatureName(feature: string): string {
@@ -219,11 +240,12 @@
 	}
 
 	function getSnapTierPayload(quantity = selectedQuantity) {
+		const unitPrice = Number(data.tier?.price || 0) + (selectedFollowerAddon?.priceDelta || 0);
 		return {
 			item_ids: data.tierCategory?.id ? [data.tierCategory.id] : [],
 			item_category: data.platform?.name || 'FastAccs SMM',
 			description: data.tier?.tier_name || 'FastAccs tier',
-			price: (data.tier?.price || 0) * quantity,
+			price: unitPrice * quantity,
 			currency: 'NGN',
 			number_items: quantity
 		};
@@ -236,8 +258,8 @@
 			item_brand: 'FastAccs',
 			item_category: 'SMM accounts',
 			item_category2: data.platform?.name || undefined,
-			item_variant: variant,
-			price: Number(data.tier?.price || 0),
+			item_variant: selectedFollowerAddon ? `${variant}:${selectedFollowerAddon.key}` : variant,
+			price: Number(data.tier?.price || 0) + (selectedFollowerAddon?.priceDelta || 0),
 			quantity
 		};
 	}
@@ -248,7 +270,7 @@
 	): Ga4EventParams {
 		return {
 			currency: 'NGN',
-			value: Number(data.tier?.price || 0) * quantity,
+			value: (Number(data.tier?.price || 0) + (selectedFollowerAddon?.priceDelta || 0)) * quantity,
 			items: [getGa4TierItem(quantity, variant)],
 			item_list_name: 'Tier detail',
 			number_items: quantity
@@ -292,7 +314,10 @@
 
 			// Check existing normal quantity in cart for this account type.
 			const existingCartItem = cart.items.find(
-				(item) => item.tierId === data.tierCategory.id && !item.exactAccount
+				(item) =>
+					item.tierId === data.tierCategory.id &&
+					!item.exactAccount &&
+					(item.accountAddon?.key || '') === selectedFollowerAddonKey
 			);
 			const currentCartQuantity = existingCartItem ? existingCartItem.quantity : 0;
 			const totalQuantityAfterAdd = currentCartQuantity + selectedQuantity;
@@ -315,7 +340,11 @@
 			}
 
 			// Add to cart using new system
-			cart.addTier(data.tierCategory.id, selectedQuantity);
+			cart.addTier(
+				data.tierCategory.id,
+				selectedQuantity,
+				selectedFollowerAddon ? { ...selectedFollowerAddon } : undefined
+			);
 			trackSnapEvent('ADD_CART', getSnapTierPayload(selectedQuantity));
 			recordAnalyticsEvent('add_cart', `${page.url.pathname}${page.url.search}`);
 			trackGa4AddToCart(getGa4TierPayload(selectedQuantity, 'standard_pool'));
@@ -1082,6 +1111,53 @@
 								</div>
 							{/if}
 
+							{#if followerAddonOptions.length > 0}
+								<fieldset class="mt-4">
+									<legend class="text-sm font-semibold text-[var(--color-text-primary)]">
+										Add followers (optional)
+									</legend>
+									<p class="mt-1 text-xs text-[var(--color-text-muted)]">
+										Delivered with your verified X account during manual handover.
+									</p>
+									<div class="mt-2 grid grid-cols-2 gap-2">
+										<label
+											class="cursor-pointer rounded-lg border p-2 text-sm"
+											style="border-color: {selectedFollowerAddonKey === ''
+												? 'var(--primary)'
+												: 'var(--color-border)'};"
+										>
+											<input
+												class="sr-only"
+												type="radio"
+												bind:group={selectedFollowerAddonKey}
+												value=""
+											/>
+											<span class="block font-semibold">0F</span>
+											<span class="text-xs text-[var(--color-text-muted)]">No add-on</span>
+										</label>
+										{#each followerAddonOptions as option (option.key)}
+											<label
+												class="cursor-pointer rounded-lg border p-2 text-sm"
+												style="border-color: {selectedFollowerAddonKey === option.key
+													? 'var(--primary)'
+													: 'var(--color-border)'};"
+											>
+												<input
+													class="sr-only"
+													type="radio"
+													bind:group={selectedFollowerAddonKey}
+													value={option.key}
+												/>
+												<span class="block font-semibold">{option.label}</span>
+												<span class="text-xs text-[var(--color-text-muted)]"
+													>+{formatPrice(option.priceDelta)}</span
+												>
+											</label>
+										{/each}
+									</div>
+								</fieldset>
+							{/if}
+
 							<div class="mt-4 rounded-lg bg-[var(--color-surface)] p-3">
 								<div
 									class="flex items-center justify-between text-sm text-[var(--color-text-secondary)]"
@@ -1089,6 +1165,14 @@
 									<span>Price per account</span>
 									<span>{formatPrice(data.tier.price)}</span>
 								</div>
+								{#if selectedFollowerAddon}
+									<div
+										class="mt-1 flex items-center justify-between text-sm text-[var(--color-text-secondary)]"
+									>
+										<span>{selectedFollowerAddon.label}</span>
+										<span>+{formatPrice(selectedFollowerAddon.priceDelta)}</span>
+									</div>
+								{/if}
 								<div
 									class="mt-1 flex items-center justify-between text-sm text-[var(--color-text-secondary)]"
 								>

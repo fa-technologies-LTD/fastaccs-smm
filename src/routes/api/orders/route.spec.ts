@@ -107,13 +107,14 @@ function orderRequest(
 	currency?: string,
 	promotionCode?: string,
 	useStoreCredit = false,
-	affiliateCode?: string
+	affiliateCode?: string,
+	items: Array<Record<string, unknown>> = [{ categoryId: 'tier-123', quantity: 1 }]
 ) {
 	return new Request('https://smm.fastaccs.com/api/orders', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json', 'x-request-id': 'test-trace' },
 		body: JSON.stringify({
-			items: [{ categoryId: 'tier-123', quantity: 1 }],
+			items,
 			paymentMethod: 'monnify',
 			checkoutKey,
 			currency,
@@ -419,6 +420,124 @@ describe('approved invariant: emergency checkout order control', () => {
 		});
 		expect(mocks.createTransaction).not.toHaveBeenCalled();
 		expect(mocks.initializeTransaction).not.toHaveBeenCalled();
+	});
+
+	it('rejects a follower add-on outside a manual-handover X tier', async () => {
+		vi.stubEnv('CHECKOUT_DISABLED', 'false');
+		mocks.findOrder.mockResolvedValue(null);
+		mocks.findCategories.mockResolvedValue([
+			{
+				id: 'tier-123',
+				name: 'Verified Account',
+				categoryType: 'tier',
+				parent: { name: 'Instagram', slug: 'instagram' },
+				metadata: {
+					delivery_mode: 'manual_handover',
+					verified_x_follower_addons: true,
+					pricing: { base_price: 10_000 }
+				}
+			}
+		]);
+
+		const response = await POST({
+			request: orderRequest(
+				'checkout_key_wrong_addon_platform',
+				'NGN',
+				undefined,
+				false,
+				undefined,
+				[{ categoryId: 'tier-123', quantity: 1, accountAddonKey: 'followers_100' }]
+			),
+			locals: { user },
+			url: new URL('https://smm.fastaccs.com/api/orders')
+		} as never);
+		const body = await response.json();
+
+		expect(response.status).toBe(409);
+		expect(body.error).toContain('follower add-on is no longer available');
+		expect(mocks.createTransaction).not.toHaveBeenCalled();
+		expect(mocks.initializeTransaction).not.toHaveBeenCalled();
+	});
+
+	it('prices a Verified X follower add-on from the server-owned price table', async () => {
+		vi.stubEnv('CHECKOUT_DISABLED', 'false');
+		mocks.findOrder.mockResolvedValue(null);
+		mocks.findCategories.mockResolvedValue([
+			{
+				id: 'tier-123',
+				name: 'Verified Account',
+				categoryType: 'tier',
+				parent: { name: 'X', slug: 'x' },
+				metadata: {
+					delivery_mode: 'manual_handover',
+					manual_available: true,
+					verified_x_follower_addons: true,
+					pricing: { base_price: 10_000 }
+				}
+			}
+		]);
+		mocks.resolveOrderAffiliateAttribution.mockResolvedValue({
+			affiliateCode: null,
+			affiliateUserId: null,
+			affiliateProgramId: null,
+			source: 'none'
+		});
+		mocks.initializeTransaction.mockResolvedValue({
+			success: true,
+			checkoutUrl: 'https://checkout.monnify.test/verified-x',
+			transactionReference: 'TX-VERIFIED-X'
+		});
+		const orderCreate = vi.fn().mockResolvedValue({
+			id: 'order-verified-x',
+			orderNumber: 'ORD-VERIFIED-X',
+			status: 'pending',
+			paymentStatus: 'pending',
+			totalAmount: 22_000,
+			currency: 'NGN',
+			orderItems: []
+		});
+		mocks.createTransaction.mockImplementation(async (callback) =>
+			callback({
+				order: { create: orderCreate },
+				orderEvent: { create: vi.fn().mockResolvedValue({}) }
+			})
+		);
+
+		const response = await POST({
+			request: orderRequest('checkout_key_verified_x_addon', 'NGN', undefined, false, undefined, [
+				{
+					categoryId: 'tier-123',
+					quantity: 1,
+					price: 1,
+					accountAddonKey: 'followers_500'
+				}
+			]),
+			locals: { user },
+			url: new URL('https://smm.fastaccs.com/api/orders')
+		} as never);
+
+		expect(response.status).toBe(200);
+		expect(orderCreate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({
+					subtotal: 22_000,
+					totalAmount: 22_000,
+					deliveryMethod: 'whatsapp',
+					orderItems: {
+						create: [
+							expect.objectContaining({
+								unitPrice: 22_000,
+								totalPrice: 22_000,
+								productName: 'X Verified Account (+500 followers)'
+							})
+						]
+					}
+				})
+			})
+		);
+		expect(mocks.initializeTransaction).toHaveBeenCalledWith(
+			expect.objectContaining({ amount: 22_000, orderId: 'order-verified-x' })
+		);
 	});
 
 	it('routes a partially credit-funded order straight to Monnify for the remaining balance', async () => {

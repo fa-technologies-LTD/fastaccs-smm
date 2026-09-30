@@ -2,8 +2,8 @@ import type { RequestHandler } from './$types';
 import { runAuthorizedAutomationCron } from '$lib/server/automation-cron';
 import { runNumbersCampaignTouches } from '$lib/services/numbers-campaign';
 
-// Sends the currently-due touch of the Numbers launch campaign. No-op unless an admin
-// has launched the campaign (post-prod), so it's safe to run every day.
+// Sends due Numbers discovery and no-code recovery messages. Each stream is
+// independently owner-controlled and is a safe no-op while disabled.
 export const GET: RequestHandler = async ({ request }) =>
 	runAuthorizedAutomationCron({
 		request,

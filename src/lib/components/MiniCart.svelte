@@ -90,7 +90,7 @@
 			if (!stepQuantity) return 0;
 			return roundCatalogPriceNgn((item.boosting.boostQuantity / stepQuantity) * pricePerStep);
 		}
-		return item.tier.price * item.quantity;
+		return (item.tier.price + (item.accountAddon?.priceDelta || 0)) * item.quantity;
 	}
 
 	function getItemQuantityLabel(item: CartItemWithTier): string {
@@ -316,6 +316,11 @@
 										>
 											{item.tier.platformName}
 										</p>
+										{#if item.accountAddon}
+											<p class="text-xs font-semibold" style="color: var(--primary);">
+												{item.accountAddon.label} add-on
+											</p>
+										{/if}
 										{#if item.exactAccount}
 											<a
 												href={item.exactAccount.profileUrl}

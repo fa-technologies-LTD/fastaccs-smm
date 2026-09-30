@@ -73,6 +73,11 @@ import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
 import { getPaymentReturnOrigin } from '$lib/helpers/site-url';
 import { CONFIRMED_PAYMENT_STATUSES } from '$lib/helpers/buyer-order-visibility';
 import { sanitizeCustomerOrder } from '$lib/helpers/customer-order-visibility';
+import {
+	formatAccountAddonProductName,
+	getVerifiedXFollowerAddon,
+	type AccountFollowerAddon
+} from '$lib/helpers/account-addons';
 
 interface CreateOrderItemInput {
 	categoryId: string;
@@ -83,6 +88,7 @@ interface CreateOrderItemInput {
 	boostTargetUrl?: string;
 	boostQuantity?: number;
 	boostOfferId?: string | null;
+	accountAddonKey?: string;
 }
 
 interface CreateOrderInput {
@@ -464,6 +470,10 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			boostOfferId:
 				typeof item.boostOfferId === 'string' && item.boostOfferId.trim().length > 0
 					? item.boostOfferId.trim()
+					: null,
+			accountAddonKey:
+				typeof item.accountAddonKey === 'string' && item.accountAddonKey.trim().length > 0
+					? item.accountAddonKey.trim()
 					: null
 		}));
 
@@ -566,6 +576,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			boostTargetType: string | null;
 			boostMaximumSupplierCostNgn: number | null;
 			boostAttemptCap: number | null;
+			accountAddon: AccountFollowerAddon | null;
 		}> = [];
 		const deliveryModes = new Set<TierDeliveryMode>();
 
@@ -672,13 +683,30 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					boostMaximumSupplierCostNgn: offer
 						? (Number(offer.maximumSupplierCostNgn) * item.boostQuantity) / offer.minQuantity
 						: null,
-					boostAttemptCap: offer?.attemptCap || null
+					boostAttemptCap: offer?.attemptCap || null,
+					accountAddon: null
 				});
 				deliveryModes.add('boosting_manual');
 				continue;
 			}
 
-			const unitPrice = extractTierUnitPrice(category.metadata);
+			const baseUnitPrice = extractTierUnitPrice(category.metadata);
+			const deliveryMode = normalizeTierDeliveryMode(
+				(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
+			);
+			const accountAddon = item.accountAddonKey
+				? getVerifiedXFollowerAddon(category.metadata, item.accountAddonKey, {
+						platformSlug: category.parent?.slug,
+						deliveryMode
+					})
+				: null;
+			if (item.accountAddonKey && !accountAddon) {
+				return json(
+					{ success: false, error: `${category.name}: follower add-on is no longer available.` },
+					{ status: 409 }
+				);
+			}
+			const unitPrice = baseUnitPrice + (accountAddon?.priceDelta || 0);
 			if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
 				return json(
 					{ success: false, error: `Tier has invalid price: ${category.id}` },
@@ -690,11 +718,14 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				categoryId: item.categoryId,
 				quantity: item.quantity,
 				unitPrice,
-				categoryName: `${category.parent?.name || 'Unknown Platform'} ${category.name}`,
+				categoryName: accountAddon
+					? formatAccountAddonProductName(
+							`${category.parent?.name || 'Unknown Platform'} ${category.name}`,
+							accountAddon
+						)
+					: `${category.parent?.name || 'Unknown Platform'} ${category.name}`,
 				categoryMetadata: (category.metadata as Record<string, unknown> | null | undefined) || {},
-				deliveryMode: normalizeTierDeliveryMode(
-					(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
-				),
+				deliveryMode,
 				exactAccountId: item.exactAccountId,
 				exactAccountLabel: item.exactAccountLabel,
 				boostTargetUrl: null,
@@ -705,13 +736,10 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				boostOutcome: null,
 				boostTargetType: null,
 				boostMaximumSupplierCostNgn: null,
-				boostAttemptCap: null
+				boostAttemptCap: null,
+				accountAddon
 			});
-			deliveryModes.add(
-				normalizeTierDeliveryMode(
-					(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
-				)
-			);
+			deliveryModes.add(deliveryMode);
 		}
 
 		if (deliveryModes.size > 1) {
