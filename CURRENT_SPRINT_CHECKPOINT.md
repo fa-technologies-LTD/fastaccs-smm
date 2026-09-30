@@ -40,9 +40,11 @@ Before the owner walkthrough:
 4. All 139 unit/integration files passed: 804/804 tests.
 5. Production build passed under Node 20.19.4.
 6. All four production-preview Playwright journeys passed.
-7. Start the integration branch against the isolated staging database.
+7. Integration commit `c3dcfc5` is running at `http://localhost:5173` against isolated staging branch `ep-calm-term-a4byqp53`; all seven expected Boosting tables and five safety indexes passed the read-only integrity probe.
 8. Walk through one small Boosting offer: setup, private preview, staging-only publication, service page, cart and checkout.
 9. Check Verified-X options, Numbers recovery controls and the paid-order CSV in staging.
+
+The staging pooler was intermittently unreachable during startup, so this local walkthrough process uses the same staging branch's verified direct endpoint. Sequential smoke checks returned 200 for Home, Platforms, Numbers, Boosting Services, Support, `/go`, public categories and public Boosting offers. The public catalog response contained none of the private cost, supplier, affiliate or restock keys.
 
 Before production:
 

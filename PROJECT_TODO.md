@@ -18,7 +18,7 @@ Last updated: 30 September 2026
 - [x] Preserve production-only `/go` work in the integration branch.
 - [x] Complete the integration branch diff review.
 - [x] Pass diff integrity, typecheck, all 804 unit/integration tests, production build and all four production-preview E2E journeys.
-- [ ] Start the integration branch against isolated staging for the owner walkthrough.
+- [x] Start the integration branch against isolated staging for the owner walkthrough and smoke-check its key public routes.
 - [ ] Owner reviews Boosting setup/preview/store/cart/checkout, Verified-X, Numbers control and CSV.
 - [ ] Obtain a separate explicit approval before pushing or deploying.
 
