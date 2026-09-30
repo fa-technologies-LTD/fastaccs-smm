@@ -3,6 +3,7 @@ export interface CheckoutFingerprintItem {
 	tierId: string;
 	quantity: number;
 	exactAccountId: string | null;
+	accountAddonKey?: string | null;
 }
 
 export interface CheckoutFingerprintInput {

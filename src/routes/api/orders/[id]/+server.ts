@@ -2,14 +2,11 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
-import {
-	canViewOrderAmounts,
-	redactOrderFinancials
-} from '$lib/services/admin-revenue-visibility';
+import { canViewOrderAmounts, redactOrderFinancials } from '$lib/services/admin-revenue-visibility';
 import type { Prisma } from '@prisma/client';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { releaseOrderReservations } from '$lib/services/order-reservations';
-import { sanitizeBuyerOrderAccounts } from '$lib/helpers/buyer-order-visibility';
+import { sanitizeCustomerOrder } from '$lib/helpers/customer-order-visibility';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
 import { isRefundReversal } from '$lib/helpers/order-refund-lock';
@@ -195,10 +192,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 		let responseData: Record<string, unknown> =
 			isAdmin && !canViewOrderAmounts(locals)
 				? (redactOrderFinancials(data) as Record<string, unknown>)
-				: ((isAdmin ? data : sanitizeBuyerOrderAccounts(data)) as unknown as Record<
-						string,
-						unknown
-					>);
+				: ((isAdmin ? data : sanitizeCustomerOrder(data)) as unknown as Record<string, unknown>);
 
 		if (isAdmin) {
 			const notes = await prisma.adminAuditLog.findMany({

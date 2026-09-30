@@ -15,6 +15,13 @@ export interface CartItem {
 	boosting?: {
 		targetUrl: string;
 		boostQuantity: number;
+		boostOfferId?: string | null;
+	};
+	accountAddon?: {
+		key: string;
+		label: string;
+		followerCount: number;
+		priceDelta: number;
 	};
 }
 
@@ -36,6 +43,12 @@ export interface CartItemWithTier extends CartItem {
 			platform: string;
 			actionType: string;
 		};
+		verifiedXFollowerAddons?: Array<{
+			key: string;
+			label: string;
+			followerCount: number;
+			priceDelta: number;
+		}>;
 	};
 }
 

@@ -39,6 +39,7 @@
 				login_guide_url: string;
 				login_guide_label: string;
 				exact_preview_enabled: boolean;
+				verified_x_follower_addons: boolean;
 				affiliate_excluded: boolean;
 			};
 		};
@@ -164,6 +165,28 @@
 							</div>
 
 							<TierSampleScreenshotFields bind:urls={tierForm.metadata.sample_screenshot_urls} />
+
+							<div
+								class="rounded-lg p-3 md:col-span-2"
+								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+							>
+								<label class="flex items-start justify-between gap-4">
+									<span>
+										<span class="text-sm font-semibold" style="color: var(--text);"
+											>Verified X follower add-ons</span
+										>
+										<span class="mt-1 block text-xs" style="color: var(--text-muted);">
+											Offer 0F, +100F (₦4,000), +500F (₦12,000), or +1,000F (₦19,000). Use this only
+											on a manual-handover Verified X tier.
+										</span>
+									</span>
+									<input
+										type="checkbox"
+										bind:checked={tierForm.metadata.verified_x_follower_addons}
+										aria-label="Enable Verified X follower add-ons"
+									/>
+								</label>
+							</div>
 
 							<div
 								class="rounded-lg p-3 md:col-span-2"

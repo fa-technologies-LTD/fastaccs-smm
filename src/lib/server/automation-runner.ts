@@ -12,6 +12,18 @@ export interface AutomationRunResult<T> {
 	result?: T;
 }
 
+const LOCK_RETRY_DELAYS_MS = [1_000, 3_000] as const;
+
+function isRetryableDatabaseError(error: unknown): boolean {
+	if (!error || typeof error !== 'object') return false;
+	const value = error as { name?: unknown; code?: unknown; errorCode?: unknown };
+	const code = typeof value.code === 'string' ? value.code : value.errorCode;
+	return (
+		value.name === 'PrismaClientInitializationError' ||
+		['P1001', 'P1002', 'P2024', 'P2028'].includes(typeof code === 'string' ? code : '')
+	);
+}
+
 function toJsonValue(value: unknown): Prisma.InputJsonValue {
 	return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
 }
@@ -51,9 +63,13 @@ async function acquireAutomationLock(input: {
 	jobName: AutomationJobName;
 	executionId: string;
 	lockTimeoutMinutes: number;
+	sleep: (milliseconds: number) => Promise<void>;
 }): Promise<boolean> {
 	const expiresAt = new Date(Date.now() + input.lockTimeoutMinutes * 60 * 1000);
-	const acquired = await prisma.$queryRaw<Array<{ job_name: string }>>`
+	let acquired: Array<{ job_name: string }> = [];
+	for (let attempt = 0; ; attempt += 1) {
+		try {
+			acquired = await prisma.$queryRaw<Array<{ job_name: string }>>`
 		INSERT INTO "automation_job_locks" (
 			"job_name",
 			"execution_id",
@@ -77,6 +93,13 @@ async function acquireAutomationLock(input: {
 		WHERE "automation_job_locks"."expires_at" <= NOW()
 		RETURNING "job_name"
 	`;
+			break;
+		} catch (error) {
+			const delay = LOCK_RETRY_DELAYS_MS[attempt];
+			if (delay === undefined || !isRetryableDatabaseError(error)) throw error;
+			await input.sleep(delay);
+		}
+	}
 
 	return acquired.length > 0;
 }
@@ -98,13 +121,16 @@ export async function runAutomationJob<T>(input: {
 	work: () => Promise<T>;
 	scheduledAt?: Date | null;
 	executionId?: string;
+	sleep?: (milliseconds: number) => Promise<void>;
 }): Promise<AutomationRunResult<T>> {
 	const job = getAutomationJob(input.jobName);
 	const executionId = input.executionId || randomUUID();
 	const acquired = await acquireAutomationLock({
 		jobName: input.jobName,
 		executionId,
-		lockTimeoutMinutes: job.lockTimeoutMinutes
+		lockTimeoutMinutes: job.lockTimeoutMinutes,
+		sleep:
+			input.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)))
 	});
 
 	if (!acquired) {

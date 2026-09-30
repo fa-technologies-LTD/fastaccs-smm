@@ -219,6 +219,27 @@
 			campaignBusy = false;
 		}
 	}
+
+	async function toggleRecoveryCampaign() {
+		const enabling = !data.campaign?.recoveryEnabled;
+		if (
+			enabling &&
+			!confirm(
+				'Enable Numbers recovery emails?\n\nOnce enabled, the daily worker sends one retry email for each attempt that is at least 24 hours old and never delivered a code. A later successful attempt suppresses an older failure.'
+			)
+		)
+			return;
+		campaignBusy = true;
+		try {
+			const out = await post({ action: 'set-recovery-campaign', enabled: enabling });
+			if (!out.success) throw new Error(out.error || 'Update failed');
+			showSuccess(`Numbers recovery emails ${enabling ? 'enabled' : 'disabled'}. Reloading…`);
+			setTimeout(() => location.reload(), 900);
+		} catch (e) {
+			showError(e instanceof Error ? e.message : 'Update failed');
+			campaignBusy = false;
+		}
+	}
 </script>
 
 <div class="mx-auto max-w-6xl p-6" style="color: var(--text);">
@@ -463,6 +484,32 @@
 						{campaignBusy ? 'Launching…' : '🚀 Launch announcement'}
 					</button>
 				{/if}
+			</div>
+			<div
+				class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg p-3"
+				style="border: 1px solid var(--border); background: var(--bg);"
+			>
+				<div>
+					<p class="text-sm font-semibold" style="color: var(--text);">No-code recovery emails</p>
+					<p class="mt-1 text-xs" style="color: var(--text-muted);">
+						One retry email per Numbers attempt that is 24+ hours old and never delivered a code. A
+						later successful attempt suppresses the older failure.
+					</p>
+				</div>
+				<button
+					onclick={toggleRecoveryCampaign}
+					disabled={campaignBusy}
+					class="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+					style={data.campaign?.recoveryEnabled
+						? 'border: 1px solid var(--border); color: var(--text);'
+						: 'background: #0ea5e9; color: #ffffff;'}
+				>
+					{campaignBusy
+						? 'Working…'
+						: data.campaign?.recoveryEnabled
+							? 'Disable recovery'
+							: 'Enable recovery'}
+				</button>
 			</div>
 		</div>
 	{/if}

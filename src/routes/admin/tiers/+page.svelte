@@ -12,7 +12,12 @@
 		Target,
 		ChevronDown
 	} from '$lib/icons';
-	import { createCategory, updateCategory, deleteCategory, retireCategory } from '$lib/services/categories';
+	import {
+		createCategory,
+		updateCategory,
+		deleteCategory,
+		retireCategory
+	} from '$lib/services/categories';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import type { CategoryMetadata, CategoryInsert, CategoryUpdate } from '$lib/services/categories';
 	import {
@@ -80,8 +85,9 @@
 		if (q) {
 			list = list.filter(
 				(tier) =>
-					String(tier.name || '').toLowerCase().includes(q) ||
-					getTierPlatformName(tier).toLowerCase().includes(q)
+					String(tier.name || '')
+						.toLowerCase()
+						.includes(q) || getTierPlatformName(tier).toLowerCase().includes(q)
 			);
 		}
 		return list;
@@ -94,7 +100,10 @@
 		})
 	);
 	const groupedVisibleTiers = $derived.by(() => {
-		const groups = new Map<string, { platformId: string; platformName: string; tiers: CategoryMetadata[] }>();
+		const groups = new Map<
+			string,
+			{ platformId: string; platformName: string; tiers: CategoryMetadata[] }
+		>();
 		for (const tier of sortedVisibleTiers) {
 			const platform = getTierPlatform(tier);
 			const platformId = String(platform?.id || tier.parentId || 'all-platforms');
@@ -133,11 +142,12 @@
 			is_featured: false,
 			featured_badge: 'Featured',
 			delivery_mode: 'instant_auto' as TierDeliveryMode,
-				manual_available: true,
+			manual_available: true,
 			manual_handover_promise: DEFAULT_MANUAL_HANDOVER_PROMISE,
 			login_guide_url: '',
 			login_guide_label: DEFAULT_LOGIN_GUIDE_LABEL,
 			exact_preview_enabled: false,
+			verified_x_follower_addons: false,
 			affiliate_excluded: true
 		}
 	});
@@ -199,12 +209,13 @@
 				is_featured: merchandising.isFeatured,
 				featured_badge: merchandising.featuredBadge || 'Featured',
 				delivery_mode: deliveryConfig.mode,
-					manual_available: deliveryConfig.manualAvailable,
+				manual_available: deliveryConfig.manualAvailable,
 				manual_handover_promise:
 					deliveryConfig.manualHandoverPromise || DEFAULT_MANUAL_HANDOVER_PROMISE,
 				login_guide_url: deliveryConfig.loginGuideUrl || '',
 				login_guide_label: deliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL,
 				exact_preview_enabled: exactPreviewConfig.enabled,
+				verified_x_follower_addons: metadata?.verified_x_follower_addons === true,
 				affiliate_excluded: metadata?.affiliate_excluded === true
 			}
 		};
@@ -238,11 +249,12 @@
 				is_featured: false,
 				featured_badge: 'Featured',
 				delivery_mode: 'instant_auto',
-					manual_available: true,
+				manual_available: true,
 				manual_handover_promise: DEFAULT_MANUAL_HANDOVER_PROMISE,
 				login_guide_url: '',
 				login_guide_label: DEFAULT_LOGIN_GUIDE_LABEL,
 				exact_preview_enabled: false,
+				verified_x_follower_addons: false,
 				affiliate_excluded: true
 			}
 		};
@@ -423,7 +435,9 @@
 			const blob = await response.blob();
 			const filename = getFilenameFromDisposition(
 				response.headers.get('Content-Disposition'),
-				`fastaccs-offload-${String(tier.name || 'tier').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.txt`
+				`fastaccs-offload-${String(tier.name || 'tier')
+					.toLowerCase()
+					.replace(/[^a-z0-9]+/g, '-')}.txt`
 			);
 			triggerTextDownload(blob, filename);
 			showSuccess('Offload ready', `${tier.name} logs were downloaded as a text file.`);
@@ -519,7 +533,10 @@
 			showSuccess('Tier archived', `${tier.name} has been removed from storefront listings.`);
 		} catch (error) {
 			console.error('Failed to archive tier:', error);
-			showError('Archive failed', error instanceof Error ? error.message : 'Could not archive tier.');
+			showError(
+				'Archive failed',
+				error instanceof Error ? error.message : 'Could not archive tier.'
+			);
 		} finally {
 			busyTierAction = null;
 		}
@@ -613,7 +630,10 @@
 			>
 				All ({tiers.length})
 			</button>
-			<div class="ml-auto flex rounded-full p-1" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
+			<div
+				class="ml-auto flex rounded-full p-1"
+				style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+			>
 				<button
 					type="button"
 					onclick={() => (tierViewMode = 'compact')}
@@ -669,52 +689,54 @@
 				Switch filters above to view the other tier states.
 			</p>
 		</div>
-	{:else}
-		{#if tierViewMode === 'compact'}
-			<div class="space-y-4">
-				{#each groupedVisibleTiers as group (group.platformId)}
-					<section
-						class="overflow-hidden rounded-xl"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+	{:else if tierViewMode === 'compact'}
+		<div class="space-y-4">
+			{#each groupedVisibleTiers as group (group.platformId)}
+				<section
+					class="overflow-hidden rounded-xl"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
+					<button
+						type="button"
+						onclick={() => toggleGroup(group.platformId)}
+						class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors"
+						style="background: var(--bg-elev-2); border-bottom: 1px solid var(--border);"
 					>
-						<button
-							type="button"
-							onclick={() => toggleGroup(group.platformId)}
-							class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors"
-							style="background: var(--bg-elev-2); border-bottom: 1px solid var(--border);"
-						>
-							<div class="flex items-center gap-3">
-								<ChevronDown
-									class="h-4 w-4 shrink-0 transition-transform duration-200 {expandedGroups[
-										group.platformId
-									] || searchActive
-										? 'rotate-180'
-										: ''}"
-									style="color: var(--text-muted);"
-								/>
-								<div>
-									<h2 class="text-sm font-semibold" style="color: var(--text);">
-										{group.platformName}
-									</h2>
-									<p class="text-xs" style="color: var(--text-muted);">
-										{group.tiers.length} {group.tiers.length === 1 ? 'tier' : 'tiers'}
-									</p>
-								</div>
+						<div class="flex items-center gap-3">
+							<ChevronDown
+								class="h-4 w-4 shrink-0 transition-transform duration-200 {expandedGroups[
+									group.platformId
+								] || searchActive
+									? 'rotate-180'
+									: ''}"
+								style="color: var(--text-muted);"
+							/>
+							<div>
+								<h2 class="text-sm font-semibold" style="color: var(--text);">
+									{group.platformName}
+								</h2>
+								<p class="text-xs" style="color: var(--text-muted);">
+									{group.tiers.length}
+									{group.tiers.length === 1 ? 'tier' : 'tiers'}
+								</p>
 							</div>
-							<span
-								class="rounded-full px-2.5 py-1 text-xs font-semibold"
-								style="background: rgba(105,109,250,0.12); color: var(--link); border: 1px solid rgba(105,109,250,0.24);"
-							>
-								{expandedGroups[group.platformId] || searchActive ? 'Hide' : 'Show'}
-							</span>
-						</button>
+						</div>
+						<span
+							class="rounded-full px-2.5 py-1 text-xs font-semibold"
+							style="background: rgba(105,109,250,0.12); color: var(--link); border: 1px solid rgba(105,109,250,0.24);"
+						>
+							{expandedGroups[group.platformId] || searchActive ? 'Hide' : 'Show'}
+						</span>
+					</button>
 
-						{#if expandedGroups[group.platformId] || searchActive}
+					{#if expandedGroups[group.platformId] || searchActive}
 						<div class="divide-y" style="border-color: var(--border);">
 							{#each group.tiers as tier (getTierId(tier))}
 								{@const metadata = tier.metadata as any}
 								{@const merchandising = getTierMerchandisingState(metadata)}
-								<div class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+								<div
+									class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+								>
 									<div class="min-w-0">
 										<div class="flex flex-wrap items-center gap-2">
 											<h3 class="font-semibold" style="color: var(--text);">{tier.name}</h3>
@@ -747,7 +769,9 @@
 											{getTierFollowerDisplay(tier)} • ₦{getTierBasePrice(tier).toLocaleString()} •
 											{getTierDeliveryModeLabel(getTierDeliveryConfig(metadata).mode)}
 											{#if getTierFeatureCount(tier) > 0}
-												• {getTierFeatureCount(tier)} feature{getTierFeatureCount(tier) === 1 ? '' : 's'}
+												• {getTierFeatureCount(tier)} feature{getTierFeatureCount(tier) === 1
+													? ''
+													: 's'}
 											{/if}
 										</p>
 										{#if metadata?.login_guide_url}
@@ -801,13 +825,13 @@
 								</div>
 							{/each}
 						</div>
-						{/if}
-					</section>
-				{/each}
-			</div>
-			{:else}
-				<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-					{#each sortedVisibleTiers as tier (tier.id)}
+					{/if}
+				</section>
+			{/each}
+		</div>
+	{:else}
+		<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+			{#each sortedVisibleTiers as tier (tier.id)}
 				{@const metadata = tier.metadata as any}
 				{@const merchandising = getTierMerchandisingState(metadata)}
 				<div
@@ -820,11 +844,11 @@
 						<div>
 							<h3 class="flex items-center gap-2 font-semibold" style="color: var(--text);">
 								<Target class="h-4 w-4" style="color: #a855f7;" />
-									{tier.name}
-								</h3>
-								<p class="mt-1 text-sm" style="color: var(--text-muted)">
-									Tier • {getTierPlatformName(tier)}
-								</p>
+								{tier.name}
+							</h3>
+							<p class="mt-1 text-sm" style="color: var(--text-muted)">
+								Tier • {getTierPlatformName(tier)}
+							</p>
 							{#if merchandising.isPinned || merchandising.isFeatured}
 								<div class="mt-2 flex flex-wrap gap-1.5">
 									{#if merchandising.isPinned}
@@ -964,11 +988,11 @@
 								<AlertCircle size={16} style="color: var(--text-dim);" />
 								<span class="text-sm" style="color: var(--text-muted)">Mode</span>
 							</div>
-								<span class="text-sm font-medium" style="color: var(--text);">
-									{getTierDeliveryModeLabel(getTierDeliveryConfig(metadata).mode)}
-								</span>
-							</div>
+							<span class="text-sm font-medium" style="color: var(--text);">
+								{getTierDeliveryModeLabel(getTierDeliveryConfig(metadata).mode)}
+							</span>
 						</div>
+					</div>
 
 					<!-- Features -->
 					{#if metadata?.features && metadata.features.length > 0}
@@ -993,14 +1017,16 @@
 					{/if}
 
 					{#if metadata?.login_guide_url}
-						<div class="mt-4 rounded-md p-2 text-xs" style="background: rgba(59,130,246,0.08); color: var(--text-muted); border: 1px solid rgba(59,130,246,0.2);">
+						<div
+							class="mt-4 rounded-md p-2 text-xs"
+							style="background: rgba(59,130,246,0.08); color: var(--text-muted); border: 1px solid rgba(59,130,246,0.2);"
+						>
 							Login guide attached for buyers
 						</div>
 					{/if}
 				</div>
-					{/each}
-				</div>
-			{/if}
+			{/each}
+		</div>
 	{/if}
 </div>
 

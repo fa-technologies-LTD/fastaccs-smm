@@ -2,6 +2,7 @@ import { prisma } from '$lib/prisma';
 import { getTierMerchandisingState } from '$lib/helpers/tier-merchandising';
 import { serverCache } from '$lib/helpers/cache';
 import type { PageServerLoad } from './$types';
+import { sanitizePublicCategoryMetadata } from '$lib/helpers/public-category';
 
 const CATALOG_CACHE_KEY = 'catalog:platforms';
 const CATALOG_CACHE_TTL_MS = 2 * 60 * 1000;
@@ -153,7 +154,7 @@ export const load: PageServerLoad = async (): Promise<PageData> => {
 					name: platform.name,
 					slug: platform.slug,
 					description: platform.description,
-					metadata: platform.metadata as Record<string, unknown>,
+					metadata: sanitizePublicCategoryMetadata('platform', platform.metadata),
 					tier_count: tiers.length,
 					total_accounts: tiers.reduce((sum, tier) => sum + tier._count.accounts, 0),
 					min_price: positiveTierPrices.length > 0 ? Math.min(...positiveTierPrices) : null,

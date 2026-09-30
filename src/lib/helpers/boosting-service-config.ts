@@ -177,6 +177,18 @@ export function isValidBoostingQuantity(config: BoostingServiceConfig, quantity:
 	return (quantity - config.minQuantity) % config.stepQuantity === 0;
 }
 
+export function normalizeBoostingQuantity(
+	quantity: number,
+	minQuantity: number,
+	stepQuantity: number
+): number {
+	const safeMinimum = Math.max(1, Math.round(Number(minQuantity) || 1));
+	const safeStep = Math.max(1, Math.round(Number(stepQuantity) || 1));
+	const parsedQuantity = Number(quantity);
+	if (!Number.isFinite(parsedQuantity) || parsedQuantity <= safeMinimum) return safeMinimum;
+	return safeMinimum + Math.round((parsedQuantity - safeMinimum) / safeStep) * safeStep;
+}
+
 export function computeBoostingPrice(config: BoostingServiceConfig, quantity: number): number {
 	if (!isValidBoostingQuantity(config, quantity)) return NaN;
 	const steps = quantity / config.stepQuantity;

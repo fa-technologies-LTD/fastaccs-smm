@@ -171,7 +171,15 @@
 				<span class="font-semibold">paidAt</span> (legacy fallback to createdAt when paidAt is missing).
 			</p>
 		</div>
-		{#if !canViewRevenue}
+		{#if canViewRevenue}
+			<a
+				href="/api/admin/orders/export"
+				class="inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold"
+				style="background: var(--fa-lime-700); color: #0a0a0a;"
+			>
+				Download paid orders CSV
+			</a>
+		{:else}
 			<span
 				class="rounded-full px-3 py-1 text-xs font-semibold"
 				style="background: var(--bg-elev-2); color: var(--text-dim); border: 1px solid var(--border);"

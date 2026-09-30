@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
 	create: vi.fn(),
+	findMany: vi.fn(),
 	findUnique: vi.fn(),
 	update: vi.fn(),
 	invalidate: vi.fn()
@@ -11,6 +12,7 @@ vi.mock('$lib/prisma', () => ({
 	prisma: {
 		category: {
 			create: mocks.create,
+			findMany: mocks.findMany,
 			findUnique: mocks.findUnique,
 			update: mocks.update
 		}
@@ -21,7 +23,7 @@ vi.mock('$lib/services/boosting-service-notifications', () => ({
 	triggerBoostingWaitlistNotifications: vi.fn()
 }));
 
-import { POST } from './+server';
+import { GET, POST } from './+server';
 import { PUT } from './[id]/+server';
 
 function adminLocals() {
@@ -47,6 +49,52 @@ beforeEach(() => {
 });
 
 describe('private affiliate eligibility on account tiers', () => {
+	it('does not return private tier metadata from the public catalogue', async () => {
+		mocks.findMany.mockResolvedValue([
+			{
+				id: 'tier-1',
+				name: 'Old IG',
+				slug: 'old-ig',
+				categoryType: 'tier',
+				metadata: {
+					pricing: { base_price: 8_200, cost_price: 7_500 },
+					affiliate_excluded: false,
+					supplier: 'private'
+				},
+				isActive: true,
+				sortOrder: 0
+			}
+		]);
+
+		const response = await GET({
+			url: new URL('https://smm.fastaccs.com/api/categories?type=tier'),
+			locals: { user: null }
+		} as never);
+		const body = await response.json();
+
+		expect(body.data[0].metadata).toEqual({ pricing: { base_price: 8_200 } });
+		expect(JSON.stringify(body)).not.toMatch(/cost_price|affiliate_excluded|supplier|private/);
+	});
+
+	it('rounds a newly saved account catalogue price to the nearest ₦50', async () => {
+		await POST({
+			locals: adminLocals(),
+			request: new Request('https://smm.fastaccs.com/api/categories', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(tierPayload({ pricing: { base_price: 1725 } }))
+			})
+		} as never);
+
+		expect(mocks.create).toHaveBeenCalledWith({
+			data: expect.objectContaining({
+				metadata: expect.objectContaining({
+					pricing: expect.objectContaining({ base_price: 1750 })
+				})
+			})
+		});
+	});
+
 	it('defaults a newly created tier to excluded when no eligibility decision was supplied', async () => {
 		const response = await POST({
 			locals: adminLocals(),

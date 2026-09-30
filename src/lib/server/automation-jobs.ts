@@ -139,6 +139,38 @@ export const AUTOMATION_JOBS = {
 		lockTimeoutMinutes: 10,
 		expectedIntervalMinutes: 120
 	},
+	'boosting-catalog-sync': {
+		name: 'boosting-catalog-sync',
+		path: '/api/internal/cron/boosting-catalog-sync',
+		schedule: 'every 6 hours',
+		risk: 'operational',
+		lockTimeoutMinutes: 20,
+		expectedIntervalMinutes: 360
+	},
+	'boosting-fulfillment': {
+		name: 'boosting-fulfillment',
+		path: '/api/internal/cron/boosting-fulfillment',
+		schedule: 'every 5 minutes',
+		risk: 'financial',
+		lockTimeoutMinutes: 4,
+		expectedIntervalMinutes: 5
+	},
+	'boosting-draft-suggestions': {
+		name: 'boosting-draft-suggestions',
+		path: '/api/internal/cron/boosting-draft-suggestions',
+		schedule: 'manual (hidden drafts only)',
+		risk: 'operational',
+		lockTimeoutMinutes: 20,
+		expectedIntervalMinutes: 0
+	},
+	'boosting-shadow-route': {
+		name: 'boosting-shadow-route',
+		path: '/api/internal/cron/boosting-shadow-route',
+		schedule: 'manual (no supplier orders)',
+		risk: 'operational',
+		lockTimeoutMinutes: 10,
+		expectedIntervalMinutes: 0
+	},
 	'promo-reminder': {
 		name: 'promo-reminder',
 		path: '/api/internal/cron/promo-reminder',

@@ -5,7 +5,8 @@ import {
 	getBoostingActionTypesForPlatform,
 	getBoostingServiceConfig,
 	getQuantityChips,
-	isValidBoostingQuantity
+	isValidBoostingQuantity,
+	normalizeBoostingQuantity
 } from './boosting-service-config';
 
 const baseConfig = getBoostingServiceConfig({
@@ -104,6 +105,13 @@ describe('boosting service config', () => {
 		for (const chip of chips) {
 			expect(isValidBoostingQuantity(offsetConfig, chip)).toBe(true);
 		}
+	});
+
+	it('normalizes a typed quantity without forcing the customer to click through every step', () => {
+		expect(normalizeBoostingQuantity(2_000, 50, 50)).toBe(2_000);
+		expect(normalizeBoostingQuantity(2_024, 50, 50)).toBe(2_000);
+		expect(normalizeBoostingQuantity(2_026, 50, 50)).toBe(2_050);
+		expect(normalizeBoostingQuantity(4, 50, 50)).toBe(50);
 	});
 
 	it('accepts the expanded platform and outcome vocabulary', () => {

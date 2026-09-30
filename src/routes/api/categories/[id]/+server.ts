@@ -11,9 +11,10 @@ import {
 	getBoostingServiceConfig
 } from '$lib/helpers/boosting-service-config';
 import { triggerBoostingWaitlistNotifications } from '$lib/services/boosting-service-notifications';
+import { toPublicCategory } from '$lib/helpers/public-category';
 
 // GET /api/categories/[id] - Get single category
-export async function GET({ params }) {
+export async function GET({ params, locals }) {
 	try {
 		const id = params.id;
 
@@ -31,7 +32,7 @@ export async function GET({ params }) {
 
 		return json({
 			success: true,
-			data: category
+			data: locals.user && locals.user.userType === 'ADMIN' ? category : toPublicCategory(category)
 		});
 	} catch (error) {
 		console.error('Error fetching category:', error);

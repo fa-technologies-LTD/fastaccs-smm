@@ -100,8 +100,8 @@
 			},
 			{ href: '/admin/tiers', label: 'Tiers', icon: Target, permission: 'admin:catalog:manage' },
 			{
-				href: '/admin/boosting-services',
-				label: 'Boosting Services',
+				href: '/admin/boosting-mappings',
+				label: 'Boosting Setup',
 				icon: Zap,
 				permission: 'admin:catalog:manage'
 			},

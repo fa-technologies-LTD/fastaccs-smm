@@ -14,3 +14,15 @@ describe('order route permissions', () => {
 		);
 	});
 });
+
+describe('boosting automation route permissions', () => {
+	it.each([
+		['GET', '/admin/boosting-mappings'],
+		['GET', '/api/admin/boosting-suppliers/discovery'],
+		['POST', '/api/admin/boosting-suppliers/sync'],
+		['GET', '/api/admin/boosting-mappings/category-1'],
+		['PUT', '/api/admin/boosting-mappings/category-1']
+	])('uses catalogue permission for %s %s', (method, pathname) => {
+		expect(getRequiredAdminPermission(pathname, method)).toBe('admin:catalog:manage');
+	});
+});

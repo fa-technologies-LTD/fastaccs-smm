@@ -6,6 +6,16 @@ import { sanitizeInternalRedirectPath } from '$lib/auth/redirect';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ cookies, url }) => {
+	// Google matches OAuth callback URLs exactly. Keep local development on the
+	// registered `localhost` host even when someone opened the app via 127.0.0.1.
+	// Redirect before setting PKCE/state cookies so the callback receives them on
+	// the same host that initiated the flow.
+	if (url.hostname === '127.0.0.1' || url.hostname === '[::1]') {
+		const localUrl = new URL(url);
+		localUrl.hostname = 'localhost';
+		throw redirect(307, localUrl.toString());
+	}
+
 	const state = generateState();
 	const codeVerifier = generateCodeVerifier();
 	const google = getGoogleClient(url.origin);

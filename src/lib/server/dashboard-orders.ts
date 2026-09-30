@@ -33,7 +33,8 @@ export async function getDashboardOrdersPage(input: {
 					allocationStatus: true,
 					boostTargetUrl: true,
 					boostQuantity: true,
-					boostFulfillmentStatus: true
+					boostFulfillmentStatus: true,
+					boostFulfillment: { select: { offerId: true } }
 				}
 			}
 		},
@@ -47,8 +48,9 @@ export async function getDashboardOrdersPage(input: {
 		...order,
 		totalAmount: Number(order.totalAmount),
 		refundedAmount: Number(order.refundedAmount),
-		orderItems: order.orderItems.map((item) => ({
+		orderItems: order.orderItems.map(({ boostFulfillment, ...item }) => ({
 			...item,
+			boostOfferId: boostFulfillment?.offerId || null,
 			unitPrice: Number(item.unitPrice),
 			totalPrice: Number(item.totalPrice),
 			refundedAmount: Number(item.refundedAmount)

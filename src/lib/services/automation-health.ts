@@ -178,7 +178,9 @@ export async function getAutomationDashboardSnapshot(): Promise<AutomationDashbo
 		const latestSuccess = jobRuns.find((run) => run.status === 'succeeded') || null;
 		const lock = lockByJob.get(job.name) || null;
 		const activelyRunning = Boolean(lock && lock.expiresAt > now);
-		const overdue = Boolean(latest && latest.startedAt < getOverdueThreshold(job));
+		const overdue = Boolean(
+			job.expectedIntervalMinutes > 0 && latest && latest.startedAt < getOverdueThreshold(job)
+		);
 		const latestFailures = jobRuns.findIndex((run) => run.status === 'succeeded');
 		const consecutiveFailures = latestFailures === -1 ? jobRuns.length : latestFailures;
 		const status: AutomationDashboardJob['status'] =

@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { Prisma } from '@prisma/client';
@@ -72,6 +72,12 @@ import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
 import { getPaymentReturnOrigin } from '$lib/helpers/site-url';
 import { CONFIRMED_PAYMENT_STATUSES } from '$lib/helpers/buyer-order-visibility';
+import { sanitizeCustomerOrder } from '$lib/helpers/customer-order-visibility';
+import {
+	formatAccountAddonProductName,
+	getVerifiedXFollowerAddon,
+	type AccountFollowerAddon
+} from '$lib/helpers/account-addons';
 
 interface CreateOrderItemInput {
 	categoryId: string;
@@ -81,6 +87,8 @@ interface CreateOrderItemInput {
 	exactAccountLabel?: string;
 	boostTargetUrl?: string;
 	boostQuantity?: number;
+	boostOfferId?: string | null;
+	accountAddonKey?: string;
 }
 
 interface CreateOrderInput {
@@ -219,10 +227,11 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			orderBy: { createdAt: 'desc' },
 			...(limit ? { take: limit } : {})
 		});
-		const responseData =
-			admin && !canViewOrderAmounts(locals)
+		const responseData = admin
+			? !canViewOrderAmounts(locals)
 				? data.map((order) => redactOrderFinancials(order))
-				: data;
+				: data
+			: data.map((order) => sanitizeCustomerOrder(order));
 
 		return json({ data: responseData, error: null });
 	} catch (error) {
@@ -298,7 +307,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					currency: existingCheckout.currency
 				});
 				return json({
-					data: existingCheckout,
+					data: sanitizeCustomerOrder(existingCheckout),
 					success: true,
 					resumed: true,
 					orderId: existingCheckout.id,
@@ -338,7 +347,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				// never invite a second charge or claim that payment failed.
 				const paidWithStoreCredit = existingCheckout.paymentMethod === 'store_credit';
 				return json({
-					data: existingCheckout,
+					data: sanitizeCustomerOrder(existingCheckout),
 					success: true,
 					resumed: true,
 					orderId: existingCheckout.id,
@@ -397,7 +406,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				if (cancellation.status === 'PAID' || cancellation.status === 'COMPLETED') {
 					const paidWithStoreCredit = existingCheckout.paymentMethod === 'store_credit';
 					return json({
-						data: existingCheckout,
+						data: sanitizeCustomerOrder(existingCheckout),
 						success: true,
 						resumed: true,
 						orderId: existingCheckout.id,
@@ -457,6 +466,14 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			boostQuantity:
 				typeof item.boostQuantity === 'number' && Number.isFinite(item.boostQuantity)
 					? Math.floor(item.boostQuantity)
+					: null,
+			boostOfferId:
+				typeof item.boostOfferId === 'string' && item.boostOfferId.trim().length > 0
+					? item.boostOfferId.trim()
+					: null,
+			accountAddonKey:
+				typeof item.accountAddonKey === 'string' && item.accountAddonKey.trim().length > 0
+					? item.accountAddonKey.trim()
 					: null
 		}));
 
@@ -529,6 +546,17 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			}
 		});
 		const categoryById = new Map(categories.map((category) => [category.id, category]));
+		const requestedBoostOfferIds = [
+			...new Set(
+				normalizedItems.map((item) => item.boostOfferId).filter((id): id is string => Boolean(id))
+			)
+		];
+		const boostOffers = requestedBoostOfferIds.length
+			? await prisma.boostCustomerOffer.findMany({
+					where: { id: { in: requestedBoostOfferIds }, status: 'live' }
+				})
+			: [];
+		const boostOfferById = new Map(boostOffers.map((offer) => [offer.id, offer]));
 
 		const itemsWithNames: Array<{
 			categoryId: string;
@@ -541,6 +569,14 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			exactAccountLabel: string | null;
 			boostTargetUrl: string | null;
 			boostQuantity: number | null;
+			boostOfferId: string | null;
+			boostOfferSnapshot: Prisma.InputJsonObject | null;
+			boostPlatform: string | null;
+			boostOutcome: string | null;
+			boostTargetType: string | null;
+			boostMaximumSupplierCostNgn: number | null;
+			boostAttemptCap: number | null;
+			accountAddon: AccountFollowerAddon | null;
 		}> = [];
 		const deliveryModes = new Set<TierDeliveryMode>();
 
@@ -554,7 +590,27 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			}
 
 			if (category.categoryType === 'boosting_service') {
-				const config = getBoostingServiceConfig(category.metadata);
+				const legacyConfig = getBoostingServiceConfig(category.metadata);
+				const offer = item.boostOfferId ? boostOfferById.get(item.boostOfferId) : null;
+				if (item.boostOfferId && (!offer || offer.categoryId !== category.id)) {
+					return json(
+						{
+							success: false,
+							error: `${category.name}: this customer option is no longer available.`
+						},
+						{ status: 409 }
+					);
+				}
+				const config = offer
+					? {
+							...legacyConfig,
+							platform: offer.platform as typeof legacyConfig.platform,
+							actionType: offer.outcome as typeof legacyConfig.actionType,
+							minQuantity: offer.minQuantity,
+							stepQuantity: offer.stepQuantity,
+							pricePerStep: Number(offer.pricePerStepNgn)
+						}
+					: legacyConfig;
 
 				if (!item.boostTargetUrl || !item.boostQuantity) {
 					return json(
@@ -597,19 +653,60 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					categoryId: item.categoryId,
 					quantity: 1,
 					unitPrice,
-					categoryName: category.name,
+					categoryName: offer?.customerName || category.name,
 					categoryMetadata: (category.metadata as Record<string, unknown> | null | undefined) || {},
 					deliveryMode: 'boosting_manual',
 					exactAccountId: null,
 					exactAccountLabel: null,
 					boostTargetUrl: linkCheck.normalizedUrl || item.boostTargetUrl,
-					boostQuantity: item.boostQuantity
+					boostQuantity: item.boostQuantity,
+					boostOfferId: offer?.id || null,
+					boostOfferSnapshot: offer
+						? {
+								platform: offer.platform,
+								outcome: offer.outcome,
+								targetType: offer.targetType,
+								qualityTier: offer.qualityTier,
+								customerName: offer.customerName,
+								shortPromise: offer.shortPromise,
+								expectationChips: offer.expectationChips,
+								refillDays: offer.refillDays,
+								minimumMarginPercent: Number(offer.minimumMarginPercent),
+								maximumSupplierCostNgn: Number(offer.maximumSupplierCostNgn),
+								attemptCap: offer.attemptCap,
+								routingPolicy: offer.routingPolicy
+							}
+						: null,
+					boostPlatform: offer?.platform || null,
+					boostOutcome: offer?.outcome || null,
+					boostTargetType: offer?.targetType || null,
+					boostMaximumSupplierCostNgn: offer
+						? (Number(offer.maximumSupplierCostNgn) * item.boostQuantity) / offer.minQuantity
+						: null,
+					boostAttemptCap: offer?.attemptCap || null,
+					accountAddon: null
 				});
 				deliveryModes.add('boosting_manual');
 				continue;
 			}
 
-			const unitPrice = extractTierUnitPrice(category.metadata);
+			const baseUnitPrice = extractTierUnitPrice(category.metadata);
+			const deliveryMode = normalizeTierDeliveryMode(
+				(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
+			);
+			const accountAddon = item.accountAddonKey
+				? getVerifiedXFollowerAddon(category.metadata, item.accountAddonKey, {
+						platformSlug: category.parent?.slug,
+						deliveryMode
+					})
+				: null;
+			if (item.accountAddonKey && !accountAddon) {
+				return json(
+					{ success: false, error: `${category.name}: follower add-on is no longer available.` },
+					{ status: 409 }
+				);
+			}
+			const unitPrice = baseUnitPrice + (accountAddon?.priceDelta || 0);
 			if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
 				return json(
 					{ success: false, error: `Tier has invalid price: ${category.id}` },
@@ -621,21 +718,28 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				categoryId: item.categoryId,
 				quantity: item.quantity,
 				unitPrice,
-				categoryName: `${category.parent?.name || 'Unknown Platform'} ${category.name}`,
+				categoryName: accountAddon
+					? formatAccountAddonProductName(
+							`${category.parent?.name || 'Unknown Platform'} ${category.name}`,
+							accountAddon
+						)
+					: `${category.parent?.name || 'Unknown Platform'} ${category.name}`,
 				categoryMetadata: (category.metadata as Record<string, unknown> | null | undefined) || {},
-				deliveryMode: normalizeTierDeliveryMode(
-					(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
-				),
+				deliveryMode,
 				exactAccountId: item.exactAccountId,
 				exactAccountLabel: item.exactAccountLabel,
 				boostTargetUrl: null,
-				boostQuantity: null
+				boostQuantity: null,
+				boostOfferId: null,
+				boostOfferSnapshot: null,
+				boostPlatform: null,
+				boostOutcome: null,
+				boostTargetType: null,
+				boostMaximumSupplierCostNgn: null,
+				boostAttemptCap: null,
+				accountAddon
 			});
-			deliveryModes.add(
-				normalizeTierDeliveryMode(
-					(category.metadata as Record<string, unknown> | null | undefined)?.delivery_mode
-				)
-			);
+			deliveryModes.add(deliveryMode);
 		}
 
 		if (deliveryModes.size > 1) {
@@ -1095,6 +1199,44 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 							}
 						});
 
+						for (const item of reservationItems) {
+							if (
+								!item.boostOfferId ||
+								!item.boostOfferSnapshot ||
+								!item.boostTargetUrl ||
+								!item.boostQuantity ||
+								!item.boostPlatform ||
+								!item.boostOutcome ||
+								!item.boostTargetType ||
+								!item.boostMaximumSupplierCostNgn ||
+								!item.boostAttemptCap
+							)
+								continue;
+							const targetKey = `${item.boostPlatform}:${createHash('sha256')
+								.update(`${item.boostPlatform}:${item.boostOutcome}:${item.boostTargetUrl}`)
+								.digest('hex')}`;
+							await tx.boostFulfillment.create({
+								data: {
+									orderItemId: item.orderItemId,
+									offerId: item.boostOfferId,
+									offerSnapshot: item.boostOfferSnapshot,
+									targetUrl: item.boostTargetUrl,
+									targetKey,
+									platform: item.boostPlatform,
+									outcome: item.boostOutcome,
+									targetType: item.boostTargetType,
+									quantity: item.boostQuantity,
+									customerPriceNgn: item.unitPrice,
+									maximumSupplierCostNgn: item.boostMaximumSupplierCostNgn,
+									attemptCap: item.boostAttemptCap,
+									status: 'awaiting_payment',
+									customerStatus: 'processing',
+									fulfillmentMode: 'shadow',
+									nextActionAt: null
+								}
+							});
+						}
+
 						await recordOrderEvent(
 							{
 								orderId: createdOrder.id,
@@ -1274,7 +1416,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 			const verifyUrl = `${getPaymentReturnOrigin(url)}/checkout/verify?orderId=${encodeURIComponent(data.id)}&method=store_credit`;
 			return json({
-				data,
+				data: sanitizeCustomerOrder(data),
 				success: true,
 				orderId: data.id,
 				paidWithStoreCredit: true,
@@ -1379,7 +1521,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			});
 
 			return json({
-				data,
+				data: sanitizeCustomerOrder(data),
 				success: true,
 				orderId: data.id,
 				checkoutUrl: initResult.checkoutUrl,
@@ -1421,7 +1563,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			});
 
 			return json({
-				data,
+				data: sanitizeCustomerOrder(data),
 				success: true,
 				orderId: data.id,
 				deliveryMode: orderDeliveryMode,
@@ -1435,7 +1577,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 			if (fulfillmentResult.success) {
 				return json({
-					data,
+					data: sanitizeCustomerOrder(data),
 					success: true,
 					orderId: data.id,
 					allocation: fulfillmentResult.allocation,
@@ -1448,7 +1590,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			}
 
 			return json({
-				data,
+				data: sanitizeCustomerOrder(data),
 				success: true,
 				orderId: data.id,
 				deliveryMode: orderDeliveryMode,
@@ -1458,7 +1600,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		} catch (fulfillmentError) {
 			console.error('Order fulfillment error:', fulfillmentError);
 			return json({
-				data,
+				data: sanitizeCustomerOrder(data),
 				success: true,
 				orderId: data.id,
 				deliveryMode: orderDeliveryMode,

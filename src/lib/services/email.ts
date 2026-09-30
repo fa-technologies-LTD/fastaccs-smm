@@ -31,6 +31,7 @@ export type EmailNotificationType =
 	| 'affiliate_payout'
 	| 'marketing_campaign'
 	| 'numbers_launch'
+	| 'numbers_recovery'
 	| 'promo_reminder'
 	| 'admin_broadcast';
 

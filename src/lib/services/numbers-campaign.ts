@@ -22,6 +22,7 @@ const TOUCH_GAPS_DAYS = [0, 7, 14] as const;
 export interface NumbersCampaignState {
 	enabled: boolean;
 	launchedAt: string | null;
+	recoveryEnabled: boolean;
 }
 
 // ---- Copy (Speed hook) -----------------------------------------------------
@@ -78,12 +79,16 @@ No code within the activation window? You are refunded automatically.`,
 
 export async function getNumbersCampaignState(): Promise<NumbersCampaignState> {
 	const row = await prisma.microcopy.findUnique({ where: { key: CAMPAIGN_KEY } });
-	if (!row?.value) return { enabled: false, launchedAt: null };
+	if (!row?.value) return { enabled: false, launchedAt: null, recoveryEnabled: false };
 	try {
 		const parsed = JSON.parse(row.value) as Partial<NumbersCampaignState>;
-		return { enabled: Boolean(parsed.enabled), launchedAt: parsed.launchedAt ?? null };
+		return {
+			enabled: Boolean(parsed.enabled),
+			launchedAt: parsed.launchedAt ?? null,
+			recoveryEnabled: Boolean(parsed.recoveryEnabled)
+		};
 	} catch {
-		return { enabled: false, launchedAt: null };
+		return { enabled: false, launchedAt: null, recoveryEnabled: false };
 	}
 }
 
@@ -99,6 +104,11 @@ async function setCampaignState(state: NumbersCampaignState): Promise<void> {
 			isActive: true
 		}
 	});
+}
+
+export async function setNumbersRecoveryCampaignEnabled(enabled: boolean): Promise<void> {
+	const state = await getNumbersCampaignState();
+	await setCampaignState({ ...state, recoveryEnabled: enabled });
 }
 
 /** Days elapsed since launch, retained for the short-lived launch popup only. */
@@ -302,6 +312,147 @@ async function sendDueDiscoveryEmails(limit: number): Promise<{
 	return { sent, skipped, touches };
 }
 
+const RECOVERY_WAIT_MS = 24 * 60 * 60 * 1000;
+
+function recoveryReference(orderId: string): string {
+	return `numbers-recovery:${orderId}`;
+}
+
+/**
+ * Sends at most one recovery email for each Numbers attempt that is at least
+ * 24 hours old and never produced a code. A later successful Numbers order
+ * suppresses recovery for an older failed attempt.
+ */
+export async function runNumbersRecoveryEmails(limit = 200): Promise<{
+	ran: boolean;
+	sent: number;
+	skipped: number;
+}> {
+	const state = await getNumbersCampaignState();
+	if (!state.recoveryEnabled) return { ran: false, sent: 0, skipped: 0 };
+
+	const cutoff = new Date(Date.now() - RECOVERY_WAIT_MS);
+	const candidates = await prisma.order.findMany({
+		where: {
+			orderType: 'phone',
+			userId: { not: null },
+			createdAt: { lte: cutoff },
+			user: {
+				is: {
+					userType: 'REGISTERED',
+					isActive: true,
+					emailVerified: true,
+					marketingUnsubscribedAt: null,
+					marketingSuppressedAt: null,
+					email: { not: '' }
+				}
+			}
+		},
+		select: {
+			id: true,
+			userId: true,
+			createdAt: true,
+			user: { select: { email: true, fullName: true } },
+			orderItems: {
+				select: {
+					phoneRental: { select: { status: true, otp: true, receivedAt: true } }
+				}
+			}
+		},
+		orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+		take: Math.max(limit * 5, limit)
+	});
+
+	const failedAttempts = candidates.filter(
+		(order) =>
+			!order.orderItems.some((item) => {
+				const rental = item.phoneRental;
+				return Boolean(
+					rental &&
+						(rental.status === 'received' || rental.receivedAt || String(rental.otp || '').trim())
+				);
+			})
+	);
+	if (failedAttempts.length === 0) return { ran: true, sent: 0, skipped: 0 };
+
+	const userIds = [
+		...new Set(
+			failedAttempts.map((order) => order.userId).filter((id): id is string => Boolean(id))
+		)
+	];
+	const [sentRows, successfulOrders] = await Promise.all([
+		prisma.emailNotification.findMany({
+			where: {
+				notificationType: 'numbers_recovery',
+				status: 'sent',
+				referenceId: { in: failedAttempts.map((order) => recoveryReference(order.id)) }
+			},
+			select: { referenceId: true }
+		}),
+		prisma.order.findMany({
+			where: { orderType: 'phone', userId: { in: userIds } },
+			select: {
+				userId: true,
+				createdAt: true,
+				orderItems: {
+					select: {
+						phoneRental: { select: { status: true, otp: true, receivedAt: true } }
+					}
+				}
+			}
+		})
+	]);
+	const alreadySent = new Set(sentRows.map((row) => row.referenceId));
+	const successfulAtByUser = new Map<string, Date[]>();
+	for (const order of successfulOrders) {
+		if (!order.userId) continue;
+		const deliveredCode = order.orderItems.some((item) => {
+			const rental = item.phoneRental;
+			return Boolean(
+				rental &&
+					(rental.status === 'received' || rental.receivedAt || String(rental.otp || '').trim())
+			);
+		});
+		if (!deliveredCode) continue;
+		const rows = successfulAtByUser.get(order.userId) || [];
+		rows.push(order.createdAt);
+		successfulAtByUser.set(order.userId, rows);
+	}
+
+	const baseUrl = getSiteBaseUrl();
+	let sent = 0;
+	let skipped = 0;
+	for (const order of failedAttempts) {
+		if (sent >= limit) break;
+		const referenceId = recoveryReference(order.id);
+		const laterSuccess = order.userId
+			? (successfulAtByUser.get(order.userId) || []).some(
+					(successfulOrderAt) => successfulOrderAt.getTime() > order.createdAt.getTime()
+				)
+			: false;
+		if (!order.user?.email || alreadySent.has(referenceId) || laterSuccess) {
+			skipped += 1;
+			continue;
+		}
+
+		const firstName = (order.user.fullName || '').trim().split(/\s+/)[0] || 'there';
+		const result = await sendMarketingEmail({
+			to: order.user.email,
+			subject: 'Your verification number did not deliver a code — try again',
+			body: `Hi ${firstName},\n\nYour earlier Numbers attempt did not eventually deliver a verification code. You can try again from the current available routes. If a new attempt does not produce a code within its activation window, it is refunded automatically.`,
+			ctaText: 'Try Numbers again',
+			ctaUrl: `${baseUrl}/numbers`,
+			userId: order.userId as string,
+			notificationType: 'numbers_recovery',
+			referenceId,
+			campaignKey: `numbers-recovery:${order.id}`
+		});
+		if (result.success) sent += 1;
+		else skipped += 1;
+	}
+	return { ran: true, sent, skipped };
+}
+
 /** Daily worker for the evergreen sequence. Safe no-op when the owner switch is off. */
 export async function runNumbersCampaignTouches(limit = 400): Promise<{
 	ran: boolean;
@@ -309,12 +460,27 @@ export async function runNumbersCampaignTouches(limit = 400): Promise<{
 	sent: number;
 	skipped: number;
 	touches?: Record<number, number>;
+	recoverySent?: number;
 }> {
 	const state = await getNumbersCampaignState();
-	if (!state.enabled) return { ran: false, touch: null, sent: 0, skipped: 0 };
+	if (!state.enabled && !state.recoveryEnabled) {
+		return { ran: false, touch: null, sent: 0, skipped: 0, recoverySent: 0 };
+	}
 
-	const { sent, skipped, touches } = await sendDueDiscoveryEmails(limit);
-	return { ran: true, touch: null, sent, skipped, touches };
+	const discovery = state.enabled
+		? await sendDueDiscoveryEmails(limit)
+		: { sent: 0, skipped: 0, touches: {} };
+	const recovery = state.recoveryEnabled
+		? await runNumbersRecoveryEmails(Math.min(limit, 200))
+		: { ran: false, sent: 0, skipped: 0 };
+	return {
+		ran: true,
+		touch: null,
+		sent: discovery.sent + recovery.sent,
+		skipped: discovery.skipped + recovery.skipped,
+		touches: discovery.touches,
+		recoverySent: recovery.sent
+	};
 }
 
 // ---- Launch / stop ---------------------------------------------------------
@@ -352,7 +518,12 @@ export interface LaunchResult {
 /** Fire the campaign: state on, banner up, manual tiers retired, push + first email batch. */
 export async function launchNumbersCampaign(): Promise<LaunchResult> {
 	const launchedAt = new Date().toISOString();
-	await setCampaignState({ enabled: true, launchedAt });
+	const priorState = await getNumbersCampaignState();
+	await setCampaignState({
+		enabled: true,
+		launchedAt,
+		recoveryEnabled: priorState.recoveryEnabled
+	});
 
 	// Cutover: hide the manual phone products.
 	const manualTiersRetired = await retireManualPhoneTiers().catch(() => 0);
@@ -387,7 +558,7 @@ export async function launchNumbersCampaign(): Promise<LaunchResult> {
 /** Stop the campaign: disable state + take the banner down. Leaves the cutover in place. */
 export async function stopNumbersCampaign(): Promise<void> {
 	const state = await getNumbersCampaignState();
-	await setCampaignState({ enabled: false, launchedAt: state.launchedAt });
+	await setCampaignState({ ...state, enabled: false, launchedAt: state.launchedAt });
 	await setAnnouncementBannerForNumbers(false).catch(() => {});
 }
 

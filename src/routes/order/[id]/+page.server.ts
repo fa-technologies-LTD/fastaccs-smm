@@ -2,11 +2,13 @@ import { prisma } from '$lib/prisma';
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { getBusinessSettingsSnapshot } from '$lib/services/admin-settings';
-import { sanitizeBuyerOrderAccounts } from '$lib/helpers/buyer-order-visibility';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
 import { toSerializableDecimals } from '$lib/helpers/serialize';
 import { getPhonePricingConfig } from '$lib/services/phone-pricing';
+import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
+import { getBoostComplaintEligibility } from '$lib/server/boosting-providers/complaints';
+import { sanitizeCustomerOrder } from '$lib/helpers/customer-order-visibility';
 
 export const load: PageServerLoad = async ({ params, locals, url }) => {
 	if (!locals.user) {
@@ -26,7 +28,15 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 				include: {
 					accounts: true,
 					category: true,
-					phoneRental: true
+					phoneRental: true,
+					boostFulfillment: {
+						include: {
+							complaints: {
+								select: { id: true, type: true, status: true, createdAt: true },
+								orderBy: { createdAt: 'desc' }
+							}
+						}
+					}
 				}
 			},
 			user: {
@@ -53,7 +63,6 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		getBusinessSettingsSnapshot().catch(() => null),
 		order.orderType === 'phone' ? getPhonePricingConfig().catch(() => null) : Promise.resolve(null)
 	]);
-	const buyerOrder = sanitizeBuyerOrderAccounts(order);
 	const boostingIssueEvents = order.orderItems.some((item) => Boolean(item.boostTargetUrl))
 		? await prisma.orderEvent.findMany({
 				where: {
@@ -121,7 +130,36 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			}
 		: null;
 
-	// Convert Decimal fields to numbers for serialization
+	const enrichedBuyerOrder = {
+		...order,
+		subtotal: Number(order.subtotal),
+		taxAmount: Number(order.taxAmount),
+		discountAmount: Number(order.discountAmount),
+		storeCreditApplied: Number(order.storeCreditApplied),
+		totalAmount: Number(order.totalAmount),
+		orderItems: order.orderItems.map((item) => ({
+			...item,
+			unitPrice: Number(item.unitPrice),
+			totalPrice: Number(item.totalPrice),
+			allocatedCount: item.accounts.length,
+			boostIssueReason: latestBoostingIssueByItem.get(item.id) || null,
+			boostComplaintEligibility: item.boostFulfillment
+				? getBoostComplaintEligibility({
+						offerSnapshot: item.boostFulfillment.offerSnapshot,
+						completedAt: item.boostFulfillment.completedAt,
+						paymentConfirmed: isOrderPaymentConfirmed(order)
+					})
+				: null,
+			boostComplaints: item.boostFulfillment?.complaints ?? []
+		}))
+	};
+	// Keep the generated page type while the runtime value is rebuilt from the customer
+	// allowlist. Internal fields present on the database result are not serialized.
+	const customerOrder = sanitizeCustomerOrder(
+		enrichedBuyerOrder
+	) as unknown as typeof enrichedBuyerOrder;
+
+	// Convert Decimal fields to numbers for serialization.
 	return {
 		fromTab,
 		phone,
@@ -129,20 +167,6 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			whatsappNumber: business?.whatsappNumber || '',
 			loginGuideFallbackUrl: 'https://smm.fastaccs.com/support#after-purchase-guide'
 		},
-		order: toSerializableDecimals({
-			...buyerOrder,
-			subtotal: Number(buyerOrder.subtotal),
-			taxAmount: Number(buyerOrder.taxAmount),
-			discountAmount: Number(buyerOrder.discountAmount),
-			storeCreditApplied: Number(buyerOrder.storeCreditApplied),
-			totalAmount: Number(buyerOrder.totalAmount),
-			orderItems: buyerOrder.orderItems.map((item) => ({
-				...item,
-				unitPrice: Number(item.unitPrice),
-				totalPrice: Number(item.totalPrice),
-				allocatedCount: item.accounts.length,
-				boostIssueReason: latestBoostingIssueByItem.get(item.id) || null
-			}))
-		})
+		order: toSerializableDecimals(customerOrder)
 	};
 };

@@ -115,4 +115,33 @@ describe('automation health', () => {
 		);
 		expect(sendCriticalAdminAlertMock).not.toHaveBeenCalled();
 	});
+
+	it('never labels a successful manual-only job overdue', async () => {
+		const oldSuccess = new Date('2026-01-01T00:00:00.000Z');
+		prismaMock.automationJobRun.findMany.mockImplementation(
+			async ({ where }: { where: { jobName: string } }) =>
+				where.jobName === 'boosting-shadow-route'
+					? [
+							{
+								jobName: 'boosting-shadow-route',
+								status: 'succeeded',
+								startedAt: oldSuccess,
+								finishedAt: oldSuccess,
+								processedCount: 4,
+								failureCount: 0,
+								errorSummary: null
+							}
+						]
+					: []
+		);
+
+		const jobs = await getAutomationDashboardSnapshot();
+		expect(jobs.find((job) => job.name === 'boosting-shadow-route')).toEqual(
+			expect.objectContaining({
+				status: 'healthy',
+				manualRunAllowed: true,
+				latestProcessedCount: 4
+			})
+		);
+	});
 });

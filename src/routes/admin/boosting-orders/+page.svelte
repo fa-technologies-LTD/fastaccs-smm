@@ -39,6 +39,17 @@
 		boostCompletedAt: string | null;
 		createdAt: string;
 		latestIssue: { type: string; reason: string | null; occurredAt: string } | null;
+		shadowDecision: {
+			provider: string | null;
+			providerServiceId: string | null;
+			providerServiceName: string | null;
+			quotedSupplierCostUsd: number | null;
+			projectedMarginNgn: number | null;
+			attention: string | null;
+			checkedAt: string | null;
+		} | null;
+		complaints: Array<{ id: string; type: string; status: string; createdAt: string }>;
+		fulfillmentState: { status: string; mode: string } | null;
 		order: {
 			id: string;
 			orderNumber: string;
@@ -59,6 +70,7 @@
 		status: string;
 		search: string;
 		statusCounts: Record<string, number>;
+		canRunShadowRouting: boolean;
 	}
 
 	let { data }: { data: PageData } = $props();
@@ -84,6 +96,7 @@
 	let appliedSearch = $state('');
 	let loading = $state(false);
 	let busyItemId = $state<string | null>(null);
+	let shadowRunning = $state(false);
 
 	const activeCount = $derived(
 		(meta.statusCounts.pending || 0) +
@@ -174,6 +187,18 @@
 		return `${days}d ago`;
 	}
 
+	function supplierLabel(provider: string | null): string {
+		if (provider === 'smm_raja') return 'SMM Raja';
+		if (provider === 'bulk_follows') return 'BulkFollows';
+		return 'No route';
+	}
+
+	function shadowAttentionLabel(attention: string | null): string {
+		if (attention === 'target_review_needed') return 'Review this official share link first.';
+		if (attention === 'invalid_target') return 'The link does not match this service.';
+		return 'No mapped route passes every safety check yet.';
+	}
+
 	function copyToClipboard(text: string, message = 'Copied') {
 		navigator.clipboard
 			.writeText(text)
@@ -219,6 +244,38 @@
 		event.preventDefault();
 		appliedSearch = searchDraft.trim();
 		await loadItems(1);
+	}
+
+	async function runShadowChecks(): Promise<void> {
+		if (shadowRunning) return;
+		shadowRunning = true;
+		try {
+			const response = await fetch('/api/admin/automation/boosting-shadow-route/run', {
+				method: 'POST'
+			});
+			const payload = await response.json();
+			if (!response.ok || !payload?.success) {
+				throw new Error(payload?.error || 'The route check could not run.');
+			}
+			if (payload.data?.status === 'skipped_overlap') {
+				showError('Route check already running', 'Wait a moment, then refresh.');
+				return;
+			}
+			const result = payload.data?.result || {};
+			if (result.skipped === 'foundation_not_migrated') {
+				showError('Boosting foundation not ready', 'Apply the approved migration first.');
+				return;
+			}
+			showSuccess(
+				'Route check complete',
+				`${result.selected || 0} safe suggestion${result.selected === 1 ? '' : 's'} recorded. No supplier orders were placed.`
+			);
+			await loadItems(meta.page);
+		} catch (error) {
+			showError('Route check failed', error instanceof Error ? error.message : 'Try again.');
+		} finally {
+			shadowRunning = false;
+		}
 	}
 
 	async function selectStatus(value: StatusFilter) {
@@ -295,6 +352,51 @@
 			busyItemId = null;
 		}
 	}
+
+	function complaintLabel(type: string): string {
+		if (type === 'nothing_delivered') return 'Nothing delivered';
+		if (type === 'delivery_stopped') return 'Delivery stopped early';
+		if (type === 'dropped') return 'Drop / refill request';
+		return type;
+	}
+
+	async function actOnComplaint(
+		item: BoostingOrderItem,
+		complaint: BoostingOrderItem['complaints'][number],
+		action: 'validate' | 'reject' | 'escalate' | 'resolve'
+	): Promise<void> {
+		let note = '';
+		if (action === 'validate' || action === 'reject') {
+			const value = prompt(
+				action === 'validate' ? 'Optional validation note:' : 'Why is this complaint not valid?'
+			);
+			if (value === null) return;
+			note = value.trim();
+		}
+		if (action === 'escalate' && !confirm('Send the available supplier action now?')) return;
+		busyItemId = item.id;
+		try {
+			const response = await fetch(
+				`/api/admin/boosting-complaints/${encodeURIComponent(complaint.id)}`,
+				{
+					method: 'PATCH',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ action, note })
+				}
+			);
+			const payload = await response.json();
+			if (!response.ok || !payload?.success) throw new Error(payload?.error || 'Action failed.');
+			showSuccess('Complaint updated', payload.message || 'Saved.');
+			await loadItems(meta.page);
+		} catch (error) {
+			showError(
+				'Could not update complaint',
+				error instanceof Error ? error.message : 'Try again.'
+			);
+		} finally {
+			busyItemId = null;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -308,9 +410,23 @@
 			Boosting Orders
 		</h1>
 		<p class="mt-1 text-sm" style="color: var(--text-muted);">
-			Newest work first. Review the link, place it with your supplier, and record progress.
+			Automation handles mapped routes. Review only exceptions, link problems and customer reports
+			here.
 		</p>
-		<div class="mt-2"><OrderTypeTabs active="boosting" /></div>
+		<div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+			<OrderTypeTabs active="boosting" />
+			{#if meta.canRunShadowRouting}
+				<button
+					type="button"
+					onclick={runShadowChecks}
+					disabled={shadowRunning}
+					class="rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50"
+					style="border-color: rgba(5,212,113,0.35); color: var(--primary);"
+				>
+					{shadowRunning ? 'Checking routes…' : 'Preview supplier routes'}
+				</button>
+			{/if}
+		</div>
 	</header>
 
 	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -475,6 +591,98 @@
 									Payment remains paid. Reopen it or refund from the order page.
 								</p>{/if}
 						</div>
+					</div>
+				{/if}
+
+				{#if item.complaints?.length}
+					<div class="mt-3 space-y-2">
+						{#each item.complaints as complaint (complaint.id)}
+							<div
+								class="rounded-lg border p-3"
+								style="border-color: rgba(248,113,113,.32); background: rgba(248,113,113,.06);"
+							>
+								<div class="flex flex-wrap items-center justify-between gap-2">
+									<p class="text-sm font-semibold" style="color: var(--text);">
+										Customer report: {complaintLabel(complaint.type)}
+									</p>
+									<span class="text-[11px] uppercase" style="color: #fca5a5;"
+										>{complaint.status}</span
+									>
+								</div>
+								<div class="mt-2 flex flex-wrap gap-2">
+									{#if complaint.status === 'open'}<button
+											type="button"
+											onclick={() => actOnComplaint(item, complaint, 'validate')}
+											class="rounded-md border px-2.5 py-1 text-xs"
+											style="border-color: var(--border); color: var(--text);">Valid</button
+										><button
+											type="button"
+											onclick={() => actOnComplaint(item, complaint, 'reject')}
+											class="rounded-md border px-2.5 py-1 text-xs"
+											style="border-color: var(--border); color: var(--text-muted);"
+											>Not valid</button
+										>{/if}
+									{#if complaint.status === 'validated'}<button
+											type="button"
+											onclick={() => actOnComplaint(item, complaint, 'escalate')}
+											class="rounded-md px-2.5 py-1 text-xs font-semibold"
+											style="background: var(--primary); color: #00150b;"
+											>Escalate to supplier</button
+										>{/if}
+									{#if complaint.status === 'escalation_unknown'}<p
+											class="text-xs"
+											style="color: #fbbf24;"
+										>
+											Supplier response uncertain — check its panel before doing anything else.
+										</p>{/if}
+									{#if complaint.status === 'escalated' || complaint.status === 'escalation_unknown'}<button
+											type="button"
+											onclick={() => actOnComplaint(item, complaint, 'resolve')}
+											class="rounded-md border px-2.5 py-1 text-xs"
+											style="border-color: var(--border); color: var(--text);">Mark resolved</button
+										>{/if}
+								</div>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				{#if item.shadowDecision}
+					<div
+						class="mt-3 rounded-lg border p-3"
+						style={item.shadowDecision.provider
+							? 'border-color: rgba(5,212,113,0.28); background: rgba(5,212,113,0.06);'
+							: 'border-color: rgba(234,179,8,0.28); background: rgba(234,179,8,0.06);'}
+					>
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<p class="text-xs font-bold" style="color: var(--text);">
+								{item.fulfillmentState?.mode === 'shadow'
+									? 'Shadow suggestion'
+									: 'Automation route'}
+							</p>
+							<span class="text-[10px] font-semibold" style="color: var(--text-dim);"
+								>{item.fulfillmentState?.mode === 'shadow'
+									? 'No supplier order placed'
+									: `${item.fulfillmentState?.mode || 'automation'} · ${item.fulfillmentState?.status || 'processing'}`}</span
+							>
+						</div>
+						{#if item.shadowDecision.provider}
+							<p class="mt-1 text-sm" style="color: var(--text-muted);">
+								{supplierLabel(item.shadowDecision.provider)} #{item.shadowDecision
+									.providerServiceId} ·
+								{item.shadowDecision.providerServiceName}
+							</p>
+							{#if canViewRevenue}
+								<p class="mt-1 text-xs" style="color: var(--text-dim);">
+									${item.shadowDecision.quotedSupplierCostUsd?.toFixed(4) ?? '—'} estimated cost ·
+									{formatMonetaryAmount(item.shadowDecision.projectedMarginNgn ?? 0)} projected margin
+								</p>
+							{/if}
+						{:else}
+							<p class="mt-1 text-sm" style="color: #facc15;">
+								{shadowAttentionLabel(item.shadowDecision.attention)}
+							</p>
+						{/if}
 					</div>
 				{/if}
 

@@ -1,18 +1,19 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
+	import BoostingQuantitySelector from '$lib/components/BoostingQuantitySelector.svelte';
 	import {
 		ArrowLeft,
+		Check,
 		Eye,
 		Heart,
-		Minus,
 		MessageCircle,
 		Music,
-		Plus,
 		Repeat,
 		Share2,
 		UserPlus,
@@ -42,9 +43,14 @@
 
 	interface BoostingServiceDisplay {
 		id: string;
+		categoryId: string;
+		offerId: string | null;
 		name: string;
 		description: string;
 		config: BoostingServiceConfig;
+		qualityTier: string | null;
+		expectationChips: string[];
+		quantityPresets: number[];
 	}
 
 	let { data }: { data: PageData } = $props();
@@ -56,11 +62,45 @@
 	const services = $derived<BoostingServiceDisplay[]>(
 		data.services.map((service) => ({
 			id: service.id,
-			name: service.name,
-			description: service.description || '',
-			config: getBoostingServiceConfig(service.metadata)
+			categoryId: service.categoryId,
+			offerId: service.customerOffer?.id || null,
+			name: service.customerOffer?.customerName || service.name,
+			description: service.customerOffer?.shortPromise || service.description || '',
+			config: service.customerOffer
+				? {
+						...getBoostingServiceConfig(service.metadata),
+						minQuantity: service.customerOffer.minQuantity,
+						stepQuantity: service.customerOffer.stepQuantity,
+						pricePerStep: service.customerOffer.pricePerStepNgn,
+						refillAvailable: Boolean(service.customerOffer.refillDays),
+						refillDays: service.customerOffer.refillDays
+					}
+				: getBoostingServiceConfig(service.metadata),
+			qualityTier: service.customerOffer?.qualityTier || null,
+			expectationChips: service.customerOffer?.expectationChips || [],
+			quantityPresets:
+				service.customerOffer?.quantityPresets ||
+				getQuantityChips(getBoostingServiceConfig(service.metadata))
 		}))
 	);
+	const hasRefillOffer = $derived(services.some((service) => service.config.refillAvailable));
+
+	function qualityBadge(qualityTier: string | null): string | null {
+		if (qualityTier === 'premium') return 'Premium';
+		if (qualityTier === 'stable') return 'More stable';
+		if (qualityTier === 'value') return 'Affordable';
+		return null;
+	}
+
+	function qualityBadgeStyle(qualityTier: string | null): string {
+		if (qualityTier === 'premium') {
+			return 'background: rgba(168,85,247,.14); color: #d8b4fe; border-color: rgba(168,85,247,.3);';
+		}
+		if (qualityTier === 'stable') {
+			return 'background: rgba(59,130,246,.13); color: #93c5fd; border-color: rgba(59,130,246,.28);';
+		}
+		return 'background: rgba(16,185,129,.11); color: #6ee7b7; border-color: rgba(16,185,129,.25);';
+	}
 
 	const ACTION_ICONS: Record<BoostingActionType, typeof Heart> = {
 		followers: UserPlus,
@@ -121,11 +161,11 @@
 	let linkByServiceId = $state<Record<string, string>>({});
 	let linkErrorByServiceId = $state<Record<string, string | null>>({});
 	let resolvingLinkByServiceId = $state<Record<string, boolean>>({});
-	const linkResolutionVersion = new Map<string, number>();
+	const linkResolutionVersion = new SvelteMap<string, number>();
 	let addingServiceId = $state<string | null>(null);
 	let waitlistLoadingByServiceId = $state<Record<string, boolean>>({});
 	let waitlistSubscribedByServiceId = $state<Record<string, boolean>>({});
-	const measuredServiceViews = new Set<string>();
+	const measuredServiceViews = new SvelteSet<string>();
 
 	const currentUser = $derived((page.data as { user?: { id: string } | null }).user || null);
 
@@ -183,17 +223,6 @@
 
 	function getQuantity(serviceId: string, minQuantity: number): number {
 		return quantityByServiceId[serviceId] ?? minQuantity;
-	}
-
-	function adjustQuantity(
-		serviceId: string,
-		minQuantity: number,
-		stepQuantity: number,
-		delta: number
-	) {
-		const current = getQuantity(serviceId, minQuantity);
-		const next = current + delta * stepQuantity;
-		quantityByServiceId[serviceId] = Math.max(minQuantity, next);
 	}
 
 	function getLink(serviceId: string): string {
@@ -288,7 +317,10 @@
 		try {
 			let compatibility: { compatible: boolean; existingMode: TierDeliveryMode | null };
 			try {
-				compatibility = await cart.ensureDeliveryModeCompatibility(service.id, 'boosting_manual');
+				compatibility = await cart.ensureDeliveryModeCompatibility(
+					service.categoryId,
+					'boosting_manual'
+				);
 			} catch (error) {
 				console.error('Failed to validate cart delivery mode compatibility:', error);
 				showError('Could not update cart', 'Please try again.');
@@ -307,7 +339,12 @@
 				showWarning('Cart cleared', `Previous ${existingLabel} items were removed.`);
 			}
 
-			cart.addBoostingService(service.id, linkCheck.normalizedUrl || targetUrl, quantity);
+			cart.addBoostingService(
+				service.categoryId,
+				linkCheck.normalizedUrl || targetUrl,
+				quantity,
+				service.offerId
+			);
 			trackSnapEvent('ADD_CART', getSnapServicePayload(service, quantity));
 			recordAnalyticsEvent(
 				'add_cart',
@@ -448,6 +485,21 @@
 
 		<p class="mb-6 text-xs" style="color: var(--text-dim);">{BOOSTING_TURNAROUND_MESSAGE}</p>
 
+		{#if hasRefillOffer}
+			<details
+				class="mb-6 rounded-[var(--r-md)] border px-4 py-3 text-sm"
+				style="border-color: var(--border); background: var(--bg-elev-1);"
+			>
+				<summary class="cursor-pointer font-semibold" style="color: var(--text);">
+					What does refill protection mean?
+				</summary>
+				<p class="mt-2 text-xs leading-relaxed" style="color: var(--text-muted);">
+					An “X-day refill” means the refill option stays available for that many days after
+					fulfilment. It works only while the original link and username stay unchanged.
+				</p>
+			</details>
+		{/if}
+
 		{#if services.length === 0}
 			<div
 				class="rounded-[var(--r-md)] border p-10 text-center"
@@ -484,14 +536,24 @@
 							<ActionIcon size={18} style="color: var(--fa-blue-300);" />
 						</div>
 						<div class="min-w-0 flex-1">
-							<p class="font-semibold" style="color: var(--text);">{service.name}</p>
+							<div class="flex flex-wrap items-center gap-2">
+								<p class="font-semibold" style="color: var(--text);">{service.name}</p>
+								{#if qualityBadge(service.qualityTier)}
+									<span
+										class="rounded-full border px-2 py-0.5 text-[10px] font-bold"
+										style={qualityBadgeStyle(service.qualityTier)}
+									>
+										{qualityBadge(service.qualityTier)}
+									</span>
+								{/if}
+							</div>
 							{#if isComingSoon}
 								<p class="text-xs font-medium" style="color: var(--status-pending);">Coming soon</p>
 							{:else}
 								<p class="text-xs" style="color: var(--text-dim);">
 									From {formatPrice(startingPrice)}
 									{#if service.config.refillAvailable}
-										· {service.config.refillDays}-day refill included
+										· {service.config.refillDays}-day refill protection included
 									{/if}
 								</p>
 							{/if}
@@ -526,6 +588,20 @@
 							{#if service.description}
 								<p class="mb-3 text-sm" style="color: var(--text-muted);">{service.description}</p>
 							{/if}
+							{#if service.expectationChips.length > 0}
+								<div class="mb-4 flex flex-wrap gap-2">
+									{#each service.expectationChips as chip (chip)}
+										<span
+											class="flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px]"
+											style="border-color: rgba(16,185,129,.25); background: rgba(16,185,129,.07); color: var(--text-muted);"
+										>
+											<Check size={12} style="color: var(--primary);" />
+											{chip}
+										</span>
+									{/each}
+								</div>
+							{/if}
+
 							<label
 								for={`link-${service.id}`}
 								class="mb-1 block text-xs font-medium"
@@ -560,64 +636,15 @@
 								<div class="mb-2"></div>
 							{/if}
 
-							<div class="mb-3 flex flex-wrap gap-1.5">
-								{#each getQuantityChips(service.config) as chip}
-									<button
-										type="button"
-										onclick={() => (quantityByServiceId[service.id] = chip)}
-										class="rounded-full px-2.5 py-1 text-xs font-semibold"
-										style={quantity === chip
-											? 'background: var(--fa-blue-500); color: #ffffff;'
-											: 'background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);'}
-									>
-										{chip.toLocaleString()}
-									</button>
-								{/each}
-							</div>
-
-							<div class="mb-4 flex items-center justify-between">
-								<span class="text-xs font-medium" style="color: var(--text);">
-									{BOOSTING_ACTION_LABELS[service.config.actionType]} quantity
-								</span>
-								<div class="flex items-center gap-2">
-									<button
-										type="button"
-										onclick={() =>
-											adjustQuantity(
-												service.id,
-												service.config.minQuantity,
-												service.config.stepQuantity,
-												-1
-											)}
-										disabled={quantity <= service.config.minQuantity}
-										class="flex h-7 w-7 items-center justify-center rounded-full disabled:opacity-40"
-										style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
-										aria-label="Decrease quantity"
-									>
-										<Minus size={14} />
-									</button>
-									<span
-										class="min-w-[4.5rem] text-center text-sm font-semibold"
-										style="color: var(--text);"
-									>
-										{quantity.toLocaleString()}
-									</span>
-									<button
-										type="button"
-										onclick={() =>
-											adjustQuantity(
-												service.id,
-												service.config.minQuantity,
-												service.config.stepQuantity,
-												1
-											)}
-										class="flex h-7 w-7 items-center justify-center rounded-full"
-										style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
-										aria-label="Increase quantity"
-									>
-										<Plus size={14} />
-									</button>
-								</div>
+							<div class="mb-4">
+								<BoostingQuantitySelector
+									value={quantity}
+									minQuantity={service.config.minQuantity}
+									stepQuantity={service.config.stepQuantity}
+									presets={service.quantityPresets}
+									label={`${BOOSTING_ACTION_LABELS[service.config.actionType]} quantity`}
+									onchange={(next) => (quantityByServiceId[service.id] = next)}
+								/>
 							</div>
 
 							<button

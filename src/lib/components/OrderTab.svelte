@@ -26,6 +26,7 @@
 		boostTargetUrl?: string | null;
 		boostQuantity?: number | null;
 		boostFulfillmentStatus?: string | null;
+		boostOfferId?: string | null;
 	}
 
 	interface OrderRecord {
@@ -406,11 +407,13 @@
 
 		reorderModalItems = boostingItems
 			.filter((item) => typeof item.categoryId === 'string' && item.categoryId.trim().length > 0)
-			.map((item) => ({
+			.map((item, index) => ({
+				itemKey: item.id || `${item.categoryId}:${index}`,
 				categoryId: item.categoryId as string,
 				productName: item.productName || 'Boosting service',
 				boostQuantity: Number(item.boostQuantity || 0),
-				targetUrl: item.boostTargetUrl || ''
+				targetUrl: item.boostTargetUrl || '',
+				boostOfferId: item.boostOfferId || null
 			}));
 
 		if (reorderModalItems.length === 0) {
@@ -526,7 +529,7 @@
 	{:else}
 		{#if hasBoostingOrders || hasNumbersOrders}
 			<div class="flex flex-wrap gap-2 border-b border-[var(--border)] p-3 sm:p-4">
-				{#each [{ value: 'all', label: 'All' }, { value: 'account', label: 'Accounts' }, ...(hasBoostingOrders ? [{ value: 'boosting', label: 'Boosting' }] : []), ...(hasNumbersOrders ? [{ value: 'numbers', label: 'Numbers' }] : [])] as option}
+				{#each [{ value: 'all', label: 'All' }, { value: 'account', label: 'Accounts' }, ...(hasBoostingOrders ? [{ value: 'boosting', label: 'Boosting' }] : []), ...(hasNumbersOrders ? [{ value: 'numbers', label: 'Numbers' }] : [])] as option (option.value)}
 					<button
 						type="button"
 						onclick={() => (orderTypeFilter = option.value as typeof orderTypeFilter)}

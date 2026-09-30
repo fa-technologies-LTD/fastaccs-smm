@@ -7,6 +7,7 @@ import { applyTierDeliveryConfigSanitization } from '$lib/helpers/tier-delivery-
 import { applyTierExactPreviewSanitization } from '$lib/helpers/tier-exact-preview';
 import { applyTierCatalogPriceSanitization } from '$lib/helpers/catalog-pricing';
 import { applyBoostingServiceConfigSanitization } from '$lib/helpers/boosting-service-config';
+import { toPublicCategory } from '$lib/helpers/public-category';
 
 // GET /api/categories - Get categories with optional filtering
 export async function GET({ url, locals }) {
@@ -40,7 +41,7 @@ export async function GET({ url, locals }) {
 			}
 		});
 
-		return json({ data: categories, error: null });
+		return json({ data: isAdmin ? categories : categories.map(toPublicCategory), error: null });
 	} catch (error) {
 		console.error('Failed to fetch categories:', error);
 		return json({ data: null, error: 'Failed to fetch categories' }, { status: 500 });

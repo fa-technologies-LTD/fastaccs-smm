@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { goto } from '$app/navigation';
-	import { Minus, Plus } from '$lib/icons';
+	import BoostingQuantitySelector from '$lib/components/BoostingQuantitySelector.svelte';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { showError, showSuccess, showWarning } from '$lib/stores/toasts';
 	import { formatPrice } from '$lib/helpers/utils';
@@ -12,14 +12,32 @@
 		getQuantityChips
 	} from '$lib/helpers/boosting-service-config';
 	import { validateLinkForAction, getRequiredLinkType } from '$lib/helpers/social-link-validator';
-	import { getTierDeliveryModeLabel, type TierDeliveryMode } from '$lib/helpers/tier-delivery-config';
+	import {
+		getTierDeliveryModeLabel,
+		type TierDeliveryMode
+	} from '$lib/helpers/tier-delivery-config';
 	import type { BoostingServiceConfig } from '$lib/helpers/boosting-service-config';
+	import type { BoostingActionType, BoostingPlatform } from '$lib/helpers/social-link-validator';
 
 	export interface ReorderBoostingItem {
+		itemKey: string;
 		categoryId: string;
 		productName: string;
 		boostQuantity: number;
 		targetUrl: string;
+		boostOfferId: string | null;
+	}
+
+	interface PublicBoostingOffer {
+		id: string;
+		categoryId: string;
+		platform: BoostingPlatform;
+		outcome: BoostingActionType;
+		minQuantity: number;
+		stepQuantity: number;
+		quantityPresets: number[];
+		pricePerStepNgn: number;
+		refillDays: number | null;
 	}
 
 	interface Props {
@@ -33,6 +51,7 @@
 	let loading = $state(false);
 	let submitting = $state(false);
 	let configByCategoryId = $state<Record<string, BoostingServiceConfig | null>>({});
+	let presetsByItemKey = $state<Record<string, number[]>>({});
 	let linkDrafts = $state<Record<string, string>>({});
 	let linkErrors = $state<Record<string, string | null>>({});
 	let quantityDrafts = $state<Record<string, number>>({});
@@ -43,15 +62,11 @@
 	});
 
 	function getQuantity(item: ReorderBoostingItem): number {
-		return quantityDrafts[item.categoryId] ?? item.boostQuantity;
+		return quantityDrafts[item.itemKey] ?? item.boostQuantity;
 	}
 
-	function adjustQuantity(item: ReorderBoostingItem, delta: number) {
-		const config = configByCategoryId[item.categoryId];
-		if (!config) return;
-		const current = getQuantity(item);
-		const next = current + delta * config.stepQuantity;
-		quantityDrafts[item.categoryId] = Math.max(config.minQuantity, next);
+	function handleDialogKeydown(event: KeyboardEvent): void {
+		if (open && event.key === 'Escape') onClose();
 	}
 
 	async function loadConfigs() {
@@ -59,24 +74,53 @@
 		linkDrafts = {};
 		linkErrors = {};
 		quantityDrafts = {};
+		presetsByItemKey = {};
 		for (const item of items) {
-			linkDrafts[item.categoryId] = item.targetUrl;
-			linkErrors[item.categoryId] = null;
-			quantityDrafts[item.categoryId] = item.boostQuantity;
+			linkDrafts[item.itemKey] = item.targetUrl;
+			linkErrors[item.itemKey] = null;
+			quantityDrafts[item.itemKey] = item.boostQuantity;
 		}
 
 		try {
-			const response = await fetch('/api/categories?type=boosting_service&include_inactive=true');
-			const result = await response.json();
+			const [categoriesResponse, offersResponse] = await Promise.all([
+				fetch('/api/categories?type=boosting_service'),
+				fetch('/api/boosting-offers')
+			]);
+			if (!categoriesResponse.ok || !offersResponse.ok) throw new Error('Catalogue request failed');
+
+			const result = await categoriesResponse.json();
+			const offerResult = await offersResponse.json();
 			const services = (result.data || []) as Array<{ id: string; metadata: unknown }>;
 			const byId = new Map(services.map((service) => [service.id, service]));
+			const offers = (offerResult.data || []) as PublicBoostingOffer[];
+			const offerById = new Map(offers.map((offer) => [offer.id, offer]));
 
 			const nextConfigs: Record<string, BoostingServiceConfig | null> = {};
+			const nextPresets: Record<string, number[]> = {};
 			for (const item of items) {
 				const service = byId.get(item.categoryId);
-				nextConfigs[item.categoryId] = service ? getBoostingServiceConfig(service.metadata) : null;
+				const offer = item.boostOfferId ? offerById.get(item.boostOfferId) : null;
+				if (item.boostOfferId && (!offer || offer.categoryId !== item.categoryId)) {
+					nextConfigs[item.itemKey] = null;
+					continue;
+				}
+				if (offer) {
+					nextConfigs[item.itemKey] = {
+						platform: offer.platform,
+						actionType: offer.outcome,
+						minQuantity: offer.minQuantity,
+						stepQuantity: offer.stepQuantity,
+						pricePerStep: offer.pricePerStepNgn,
+						refillAvailable: offer.refillDays !== null,
+						refillDays: offer.refillDays
+					};
+					nextPresets[item.itemKey] = offer.quantityPresets;
+				} else {
+					nextConfigs[item.itemKey] = service ? getBoostingServiceConfig(service.metadata) : null;
+				}
 			}
 			configByCategoryId = nextConfigs;
+			presetsByItemKey = nextPresets;
 		} catch (error) {
 			console.error('Failed to load boosting service details for reorder:', error);
 			showError('Could not load service details', 'Please try again.');
@@ -86,14 +130,14 @@
 	}
 
 	function handleLinkInput(item: ReorderBoostingItem, value: string) {
-		linkDrafts[item.categoryId] = value;
-		const config = configByCategoryId[item.categoryId];
+		linkDrafts[item.itemKey] = value;
+		const config = configByCategoryId[item.itemKey];
 		if (!config || !value.trim()) {
-			linkErrors[item.categoryId] = null;
+			linkErrors[item.itemKey] = null;
 			return;
 		}
 		const result = validateLinkForAction(config.platform, config.actionType, value);
-		linkErrors[item.categoryId] = result.valid ? null : result.reason || 'Invalid link';
+		linkErrors[item.itemKey] = result.valid ? null : result.reason || 'Invalid link';
 	}
 
 	function getLinkLabel(config: BoostingServiceConfig | null): string {
@@ -106,21 +150,21 @@
 	async function handleConfirm() {
 		let hasError = false;
 		for (const item of items) {
-			const config = configByCategoryId[item.categoryId];
+			const config = configByCategoryId[item.itemKey];
 			if (!config) {
-				linkErrors[item.categoryId] = 'This service is no longer available.';
+				linkErrors[item.itemKey] = 'This service is no longer available.';
 				hasError = true;
 				continue;
 			}
-			const value = (linkDrafts[item.categoryId] || '').trim();
+			const value = (linkDrafts[item.itemKey] || '').trim();
 			if (!value) {
-				linkErrors[item.categoryId] = 'Please enter a link.';
+				linkErrors[item.itemKey] = 'Please enter a link.';
 				hasError = true;
 				continue;
 			}
 			const result = validateLinkForAction(config.platform, config.actionType, value);
 			if (!result.valid) {
-				linkErrors[item.categoryId] = result.reason || 'Invalid link';
+				linkErrors[item.itemKey] = result.reason || 'Invalid link';
 				hasError = true;
 				continue;
 			}
@@ -159,12 +203,17 @@
 			}
 
 			for (const item of items) {
-				const value = (linkDrafts[item.categoryId] || '').trim();
-				const config = configByCategoryId[item.categoryId];
+				const value = (linkDrafts[item.itemKey] || '').trim();
+				const config = configByCategoryId[item.itemKey];
 				const normalizedValue = config
 					? validateLinkForAction(config.platform, config.actionType, value).normalizedUrl || value
 					: value;
-				cart.addBoostingService(item.categoryId, normalizedValue, getQuantity(item));
+				cart.addBoostingService(
+					item.categoryId,
+					normalizedValue,
+					getQuantity(item),
+					item.boostOfferId
+				);
 			}
 
 			showSuccess('Added to cart', 'Redirecting to checkout...');
@@ -176,25 +225,36 @@
 	}
 </script>
 
+<svelte:window onkeydown={handleDialogKeydown} />
+
 {#if open}
 	<div class="fixed inset-0 z-50 overflow-y-auto">
 		<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-			<div
+			<button
+				type="button"
 				class="fixed inset-0 bg-black/50 transition-opacity"
-				tabindex="-1"
+				aria-label="Close order-again dialog"
 				onclick={onClose}
-				onkeydown={(e) => e.key === 'Escape' && onClose()}
-			></div>
+			></button>
 
 			<div
 				class="relative transform overflow-hidden rounded-lg text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg"
 				style="background: var(--bg-elev-1);"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="boosting-reorder-title"
 				in:fly={{ y: 200, duration: 300 }}
 				out:fade={{ duration: 300 }}
 			>
 				<div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
 					<div class="mb-4">
-						<h3 class="text-lg font-semibold" style="color: var(--text);">Order Again</h3>
+						<h3
+							id="boosting-reorder-title"
+							class="text-lg font-semibold"
+							style="color: var(--text);"
+						>
+							Order Again
+						</h3>
 						<p class="mt-1 text-sm" style="color: var(--text-muted);">
 							Confirm or update the link for each service before checkout.
 						</p>
@@ -204,8 +264,8 @@
 						<p class="py-6 text-center text-sm" style="color: var(--text-muted);">Loading...</p>
 					{:else}
 						<div class="space-y-4">
-							{#each items as item (item.categoryId)}
-								{@const config = configByCategoryId[item.categoryId]}
+							{#each items as item (item.itemKey)}
+								{@const config = configByCategoryId[item.itemKey]}
 								{@const quantity = getQuantity(item)}
 								{@const price = config ? computeBoostingPrice(config, quantity) : NaN}
 								<div
@@ -217,46 +277,15 @@
 									</p>
 
 									{#if config}
-										<div class="mb-2 flex flex-wrap gap-1.5">
-											{#each getQuantityChips(config) as chip}
-												<button
-													type="button"
-													onclick={() => (quantityDrafts[item.categoryId] = chip)}
-													class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
-													style={quantity === chip
-														? 'background: var(--fa-blue-500); color: #ffffff;'
-														: 'background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);'}
-												>
-													{chip.toLocaleString()}
-												</button>
-											{/each}
-										</div>
-										<div class="mb-2 flex items-center justify-between">
-											<span class="text-xs font-medium" style="color: var(--text);">Quantity</span>
-											<div class="flex items-center gap-2">
-												<button
-													type="button"
-													onclick={() => adjustQuantity(item, -1)}
-													disabled={quantity <= config.minQuantity}
-													class="flex h-6 w-6 items-center justify-center rounded-full disabled:opacity-40"
-													style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
-													aria-label="Decrease quantity"
-												>
-													<Minus size={12} />
-												</button>
-												<span class="min-w-[4rem] text-center text-xs font-semibold" style="color: var(--text);">
-													{quantity.toLocaleString()}
-												</span>
-												<button
-													type="button"
-													onclick={() => adjustQuantity(item, 1)}
-													class="flex h-6 w-6 items-center justify-center rounded-full"
-													style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
-													aria-label="Increase quantity"
-												>
-													<Plus size={12} />
-												</button>
-											</div>
+										<div class="mb-2">
+											<BoostingQuantitySelector
+												value={quantity}
+												minQuantity={config.minQuantity}
+												stepQuantity={config.stepQuantity}
+												presets={presetsByItemKey[item.itemKey] || getQuantityChips(config)}
+												compact
+												onchange={(next) => (quantityDrafts[item.itemKey] = next)}
+											/>
 										</div>
 										<p class="mb-2 text-xs" style="color: var(--text-dim);">
 											{Number.isNaN(price) ? '' : formatPrice(price)}
@@ -268,16 +297,16 @@
 									{/if}
 
 									<label
-										for={`reorder-link-${item.categoryId}`}
+										for={`reorder-link-${item.itemKey}`}
 										class="mb-1 block text-xs font-medium"
 										style="color: var(--text);"
 									>
 										Your {getLinkLabel(config)}
 									</label>
 									<input
-										id={`reorder-link-${item.categoryId}`}
+										id={`reorder-link-${item.itemKey}`}
 										type="url"
-										value={linkDrafts[item.categoryId] || ''}
+										value={linkDrafts[item.itemKey] || ''}
 										oninput={(e) => handleLinkInput(item, (e.target as HTMLInputElement).value)}
 										class="block w-full rounded-md px-3 py-2 text-sm"
 										style="border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text);"
@@ -289,8 +318,8 @@
 												: 'Copy this from your browser’s address bar or the Share button on the post.'}
 										</p>
 									{/if}
-									{#if linkErrors[item.categoryId]}
-										<p class="mt-1 text-xs text-red-500">{linkErrors[item.categoryId]}</p>
+									{#if linkErrors[item.itemKey]}
+										<p class="mt-1 text-xs text-red-500">{linkErrors[item.itemKey]}</p>
 									{:else if !config}
 										<p class="mt-1 text-xs text-red-500">This service is no longer available.</p>
 									{/if}

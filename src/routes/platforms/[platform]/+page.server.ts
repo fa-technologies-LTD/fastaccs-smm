@@ -4,6 +4,7 @@ import { prisma } from '$lib/prisma';
 import { getTierMerchandisingState } from '$lib/helpers/tier-merchandising';
 import { getTierStockStatus } from '$lib/helpers/tier-delivery-config';
 import { getLowStockThresholdSetting } from '$lib/services/admin-settings';
+import { sanitizePublicCategoryMetadata } from '$lib/helpers/public-category';
 
 export interface TierInventory {
 	product_id: string;
@@ -108,7 +109,7 @@ export const load: PageServerLoad = async ({ params }) => {
 					category_id: tier.id,
 					category_name: tier.name,
 					description: tier.description,
-					metadata: (tier.metadata || {}) as Record<string, unknown>,
+					metadata: sanitizePublicCategoryMetadata('tier', tier.metadata),
 					accounts_available: tier._count.accounts,
 					reservations_active: 0,
 					visible_available: stock.isManual
@@ -153,7 +154,7 @@ export const load: PageServerLoad = async ({ params }) => {
 				name: platform.name,
 				slug: platform.slug,
 				description: platform.description || '',
-				metadata: (platform.metadata || {}) as Record<string, unknown>
+				metadata: sanitizePublicCategoryMetadata('platform', platform.metadata)
 			},
 			tiers,
 			lowStockThreshold: Math.max(1, Number(lowStockThreshold || 10)),

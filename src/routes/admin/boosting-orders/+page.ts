@@ -18,6 +18,7 @@ const DEFAULT_META = {
 	sort: 'newest',
 	status: 'active',
 	search: '',
+	canRunShadowRouting: false,
 	statusCounts: {
 		pending: 0,
 		in_progress: 0,
@@ -33,7 +34,9 @@ export const load: PageLoad = async ({ fetch }) => {
 	let error: string | null = null;
 
 	try {
-		const response = await fetch('/api/admin/boosting-orders?status=active&sort=newest&page=1&pageSize=25');
+		const response = await fetch(
+			'/api/admin/boosting-orders?status=active&sort=newest&page=1&pageSize=25'
+		);
 		const result = await response.json();
 
 		if (!response.ok) {

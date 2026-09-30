@@ -4,6 +4,7 @@ import {
 	normalizeTierDeliveryMode,
 	type TierDeliveryMode
 } from '$lib/helpers/tier-delivery-config';
+import { roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
 
 interface TierDeliveryLookup {
 	id: string;
@@ -18,9 +19,12 @@ const STORAGE_KEY = 'fastaccs_cart';
 const CHECKOUT_SESSION_STORAGE_KEY = 'fastaccs_checkout_session';
 const STORAGE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 
-function getCartItemId(item: Pick<CartItem, 'tierId' | 'exactAccount' | 'boosting'>): string {
+function getCartItemId(
+	item: Pick<CartItem, 'tierId' | 'exactAccount' | 'boosting' | 'accountAddon'>
+): string {
 	if (item.exactAccount) return `exact:${item.exactAccount.accountId}`;
 	if (item.boosting) return `boosting:${item.tierId}:${Math.random().toString(36).slice(2)}`;
+	if (item.accountAddon) return `tier:${item.tierId}:addon:${item.accountAddon.key}`;
 	return `tier:${item.tierId}`;
 }
 
@@ -122,7 +126,9 @@ class CartStore {
 							(typeof item.boosting.targetUrl === 'string' &&
 								item.boosting.targetUrl.trim().length > 0 &&
 								typeof item.boosting.boostQuantity === 'number' &&
-								item.boosting.boostQuantity > 0))
+								item.boosting.boostQuantity > 0)) &&
+						(!item.accountAddon ||
+							(typeof item.accountAddon.key === 'string' && item.accountAddon.key.length > 0))
 				)
 				.map((item) => ({
 					...item,
@@ -160,21 +166,23 @@ class CartStore {
 		this.state.notice = null;
 	}
 
-	addTier(tierId: string, quantity: number = 1): void {
+	addTier(tierId: string, quantity: number = 1, accountAddon?: CartItem['accountAddon']): void {
 		if (!tierId || quantity <= 0) return;
+		const cartItemId = accountAddon ? `tier:${tierId}:addon:${accountAddon.key}` : `tier:${tierId}`;
 
 		const existingIndex = this.state.items.findIndex(
-			(item) => item.tierId === tierId && !item.exactAccount
+			(item) => (item.cartItemId || getCartItemId(item)) === cartItemId
 		);
 
 		if (existingIndex >= 0) {
 			this.state.items[existingIndex].quantity += quantity;
 		} else {
 			this.state.items.push({
-				cartItemId: `tier:${tierId}`,
+				cartItemId,
 				tierId,
 				quantity,
-				addedAt: Date.now()
+				addedAt: Date.now(),
+				accountAddon
 			});
 		}
 
@@ -214,7 +222,12 @@ class CartStore {
 		this.saveToStorage();
 	}
 
-	addBoostingService(serviceId: string, targetUrl: string, boostQuantity: number): void {
+	addBoostingService(
+		serviceId: string,
+		targetUrl: string,
+		boostQuantity: number,
+		boostOfferId: string | null = null
+	): void {
 		if (!serviceId || !targetUrl.trim() || boostQuantity <= 0) return;
 
 		this.state.items.push({
@@ -222,7 +235,7 @@ class CartStore {
 			tierId: serviceId,
 			quantity: 1,
 			addedAt: Date.now(),
-			boosting: { targetUrl: targetUrl.trim(), boostQuantity }
+			boosting: { targetUrl: targetUrl.trim(), boostQuantity, boostOfferId }
 		});
 
 		this.markCartChanged();
@@ -280,6 +293,20 @@ class CartStore {
 			this.markCartChanged();
 			this.saveToStorage();
 		}
+	}
+
+	updateItemQuantity(cartItemId: string, quantity: number): void {
+		if (quantity <= 0) {
+			this.removeItem(cartItemId);
+			return;
+		}
+		const item = this.state.items.find(
+			(candidate) => (candidate.cartItemId || getCartItemId(candidate)) === cartItemId
+		);
+		if (!item || item.exactAccount || item.boosting) return;
+		item.quantity = quantity;
+		this.markCartChanged();
+		this.saveToStorage();
 	}
 
 	clear(): void {
@@ -374,7 +401,8 @@ class CartStore {
 		const requestItems = this.state.items.map((item) => ({
 			...item,
 			exactAccount: item.exactAccount ? { ...item.exactAccount } : undefined,
-			boosting: item.boosting ? { ...item.boosting } : undefined
+			boosting: item.boosting ? { ...item.boosting } : undefined,
+			accountAddon: item.accountAddon ? { ...item.accountAddon } : undefined
 		}));
 
 		this.refreshPromise = (async () => {
@@ -423,7 +451,8 @@ class CartStore {
 				quantity: item.exactAccount || item.boosting ? 1 : item.quantity,
 				addedAt: item.addedAt,
 				exactAccount: item.exactAccount,
-				boosting: item.boosting
+				boosting: item.boosting,
+				accountAddon: item.accountAddon
 			}));
 			this.lastItemsWithTiers = itemsWithTiers;
 			for (const item of itemsWithTiers) {
@@ -461,11 +490,11 @@ class CartStore {
 		if (item.boosting && item.tier.boostingConfig) {
 			const { stepQuantity, pricePerStep } = item.tier.boostingConfig;
 			if (stepQuantity > 0) {
-				return Math.round((item.boosting.boostQuantity / stepQuantity) * pricePerStep * 100) / 100;
+				return roundCatalogPriceNgn((item.boosting.boostQuantity / stepQuantity) * pricePerStep);
 			}
 			return 0;
 		}
-		return item.tier.price * item.quantity;
+		return (item.tier.price + (item.accountAddon?.priceDelta || 0)) * item.quantity;
 	}
 
 	// Calculate total

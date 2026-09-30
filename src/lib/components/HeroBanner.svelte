@@ -26,7 +26,7 @@
 				onclick={() => goto('/platforms')}
 				data-sveltekit-preload-data="hover"
 			>
-				Browse Accounts
+				Accounts
 			</button>
 			<button
 				class="hero-glow-btn w-full"
