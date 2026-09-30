@@ -14,6 +14,8 @@ function validInput(): BoostMappingSaveInput {
 			customerName: 'More stable followers',
 			shortPromise: 'Lower drop risk with a 30-day refill.',
 			refillDays: 30,
+			minQuantity: 1000,
+			stepQuantity: 1000,
 			pricePerStepNgn: 5000,
 			priceLocked: false,
 			minimumMarginPercent: 30,
@@ -41,11 +43,7 @@ function validInput(): BoostMappingSaveInput {
 	};
 }
 
-function providerService(
-	id = serviceId,
-	ratePerThousand = 1,
-	refillAdvertised = true
-) {
+function providerService(id = serviceId, ratePerThousand = 1, refillAdvertised = true) {
 	return {
 		id,
 		name: 'Instagram Followers - REFILL 30D',
@@ -63,7 +61,10 @@ function providerService(
 	};
 }
 
-function database(refillAdvertised = true, services = [providerService(serviceId, 1, refillAdvertised)]) {
+function database(
+	refillAdvertised = true,
+	services = [providerService(serviceId, 1, refillAdvertised)]
+) {
 	const offerUpsert = vi.fn().mockResolvedValue({ id: 'offer-1' });
 	const routeUpsert = vi.fn().mockResolvedValue({ id: 'route-1' });
 	const offerUpdate = vi.fn().mockResolvedValue({});
@@ -93,6 +94,11 @@ function database(refillAdvertised = true, services = [providerService(serviceId
 			boostProviderService: {
 				findMany: vi.fn().mockResolvedValue(services)
 			},
+			microcopy: {
+				findMany: vi
+					.fn()
+					.mockResolvedValue([{ key: 'config.boosting.usd_ngn_rate', value: '1700' }])
+			},
 			$transaction: vi.fn(async (callback: (value: typeof tx) => unknown) => callback(tx))
 		} as unknown as PrismaClient,
 		offerUpsert,
@@ -111,12 +117,53 @@ describe('boosting mapping workspace persistence', () => {
 		).rejects.toBeInstanceOf(BoostMappingError);
 	});
 
-	it('rejects a cost ceiling above the entire customer price', async () => {
+	it('rejects a customer price that misses the configured profit target', async () => {
 		const input = validInput();
-		input.offer.maximumSupplierCostNgn = 5001;
+		input.offer.pricePerStepNgn = 2000;
 		await expect(
 			saveBoostMappingWorkspace(categoryId, input, 'admin-1', { database: database().client })
 		).rejects.toThrow('customer price is too low');
+	});
+
+	it('checks margin against the same rounded price the customer will actually pay', async () => {
+		const input = validInput();
+		input.offer.minQuantity = 100;
+		input.offer.stepQuantity = 300;
+		input.offer.pricePerStepNgn = 500;
+		input.offer.minimumMarginPercent = 0;
+
+		await expect(
+			saveBoostMappingWorkspace(categoryId, input, 'admin-1', {
+				database: database(true, [providerService(serviceId, 0.941176)]).client
+			})
+		).rejects.toThrow('customer price is too low');
+	});
+
+	it('persists an admin-adjusted per-option starting quantity and increment', async () => {
+		const db = database();
+		const input = validInput();
+		input.offer.minQuantity = 500;
+		input.offer.stepQuantity = 100;
+
+		await saveBoostMappingWorkspace(categoryId, input, 'admin-1', { database: db.client });
+		expect(db.offerUpsert).toHaveBeenCalledWith(
+			expect.objectContaining({
+				create: expect.objectContaining({
+					minQuantity: 500,
+					stepQuantity: 100,
+					quantityPresets: [500, 1000, 2500, 5000]
+				})
+			})
+		);
+	});
+
+	it('rejects an offer starting below a selected supplier minimum', async () => {
+		const input = validInput();
+		input.offer.minQuantity = 50;
+
+		await expect(
+			saveBoostMappingWorkspace(categoryId, input, 'admin-1', { database: database().client })
+		).rejects.toThrow('outside the selected primary supplier range');
 	});
 
 	it('requires a fresh promise check when an approved route is upgraded to premium', async () => {
@@ -182,7 +229,10 @@ describe('boosting mapping workspace persistence', () => {
 	});
 
 	it('persists a manually chosen fallback and the definitive-rejection retry rule', async () => {
-		const db = database(true, [providerService(serviceId, 2), providerService(fallbackServiceId, 1)]);
+		const db = database(true, [
+			providerService(serviceId, 2),
+			providerService(fallbackServiceId, 1)
+		]);
 		const input = validInput();
 		input.offer.routingPolicy = 'preferred';
 		input.offer.preferredProviderServiceId = serviceId;

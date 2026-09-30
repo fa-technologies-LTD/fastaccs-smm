@@ -8,12 +8,10 @@ import type {
 	BoostMappingWorkspace
 } from '$lib/helpers/boosting-mapping-types';
 import { getRequiredLinkType } from '$lib/helpers/social-link-validator';
+import { roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
 import { prisma } from '$lib/prisma';
 import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
-import {
-	inferAdvertisedRefillDays,
-	supplierTextAdvertisesRefill
-} from './catalog-normalizer';
+import { inferAdvertisedRefillDays, supplierTextAdvertisesRefill } from './catalog-normalizer';
 
 const CANDIDATE_LIMIT = 80;
 const PROVIDER_LABELS = { smm_raja: 'SMM Raja', bulk_follows: 'BulkFollows' } as const;
@@ -54,6 +52,8 @@ function offerDto(offer: {
 	customerName: string;
 	shortPromise: string;
 	refillDays: number | null;
+	minQuantity: number;
+	stepQuantity: number;
 	pricePerStepNgn: Prisma.Decimal;
 	priceLocked: boolean;
 	minimumMarginPercent: Prisma.Decimal;
@@ -72,6 +72,8 @@ function offerDto(offer: {
 		customerName: offer.customerName,
 		shortPromise: offer.shortPromise,
 		refillDays: offer.refillDays,
+		minQuantity: offer.minQuantity,
+		stepQuantity: offer.stepQuantity,
 		pricePerStepNgn: Number(offer.pricePerStepNgn),
 		priceLocked: offer.priceLocked,
 		minimumMarginPercent: Number(offer.minimumMarginPercent),
@@ -318,6 +320,8 @@ function parseOffer(value: unknown): BoostMappingOfferDraft {
 			input.refillDays === null || input.refillDays === '' || input.refillDays === undefined
 				? null
 				: Math.round(finiteNumber(input.refillDays, 'Refill period', 1, 365)),
+		minQuantity: Math.round(finiteNumber(input.minQuantity, 'Starting quantity', 1, 10_000_000)),
+		stepQuantity: Math.round(finiteNumber(input.stepQuantity, 'Quantity increment', 1, 10_000_000)),
 		pricePerStepNgn: Math.max(
 			50,
 			Math.round(finiteNumber(input.pricePerStepNgn, 'Customer price', 50, 10_000_000) / 50) * 50
@@ -435,12 +439,10 @@ export async function saveBoostMappingWorkspace(
 	if (!category) throw new BoostMappingError('Boosting offer not found.', 404, 'not_found');
 	const config = getBoostingServiceConfig(category.metadata);
 	const targetType = getRequiredLinkType(config.actionType);
-	const minimumCustomerPrice =
-		(config.minQuantity / config.stepQuantity) * offerInput.pricePerStepNgn;
-	if (
-		offerInput.normalCostTargetNgn > offerInput.maximumSupplierCostNgn ||
-		offerInput.maximumSupplierCostNgn > minimumCustomerPrice
-	) {
+	const minimumCustomerPrice = roundCatalogPriceNgn(
+		(offerInput.minQuantity / offerInput.stepQuantity) * offerInput.pricePerStepNgn
+	);
+	if (offerInput.normalCostTargetNgn > offerInput.maximumSupplierCostNgn) {
 		throw new BoostMappingError(
 			'This customer price is too low for the chosen supplier cost and profit percentage. Increase the price or reduce the profit percentage.'
 		);
@@ -464,8 +466,7 @@ export async function saveBoostMappingWorkspace(
 			!primary ||
 			!Number.isFinite(primaryRate) ||
 			providerServices.some(
-				(service) =>
-					service.id !== primary.id && Number(service.ratePerThousand) > primaryRate
+				(service) => service.id !== primary.id && Number(service.ratePerThousand) > primaryRate
 			)
 		) {
 			throw new BoostMappingError(
@@ -491,7 +492,53 @@ export async function saveBoostMappingWorkspace(
 			throw new BoostMappingError('A selected supplier service is not safely compatible.');
 		}
 	}
+	const supportsStartingQuantity = (service: (typeof providerServices)[number]) =>
+		service.minQuantity !== null &&
+		service.maxQuantity !== null &&
+		offerInput.minQuantity >= service.minQuantity &&
+		offerInput.minQuantity <= service.maxQuantity;
+	const primaryProviderServiceId =
+		offerInput.routingPolicy === 'preferred'
+			? offerInput.preferredProviderServiceId
+			: offerInput.routingPolicy === 'locked'
+				? offerInput.lockedProviderServiceId
+				: null;
+	const startingRoutes = primaryProviderServiceId
+		? providerServices.filter((service) => service.id === primaryProviderServiceId)
+		: providerServices;
+	if (startingRoutes.length && !startingRoutes.some(supportsStartingQuantity)) {
+		throw new BoostMappingError(
+			'The customer starting quantity is outside the selected primary supplier range.'
+		);
+	}
+	if (providerServices.length) {
+		const pricing = await getBoostingPricingConfig(database);
+		const highestSupplierCost = Math.max(
+			...providerServices.map(
+				(service) =>
+					(Number(service.ratePerThousand) * offerInput.minQuantity * pricing.usdNgnRate) / 1000
+			)
+		);
+		const allowedSupplierCost = Math.max(
+			1,
+			Math.floor(minimumCustomerPrice / (1 + Math.max(0, offerInput.minimumMarginPercent) / 100))
+		);
+		if (!Number.isFinite(highestSupplierCost) || highestSupplierCost > allowedSupplierCost) {
+			throw new BoostMappingError(
+				'This customer price is too low for the chosen supplier cost and profit percentage. Increase the price or reduce the profit percentage.'
+			);
+		}
+		// These safety values are derived from the live, reviewed supplier rows. Never trust a
+		// browser-supplied ceiling that could silently weaken the margin guard.
+		offerInput.normalCostTargetNgn = Math.max(1, Math.ceil(highestSupplierCost));
+		offerInput.maximumSupplierCostNgn = allowedSupplierCost;
+	}
 	const routeByServiceId = new Map(routeInputs.map((route) => [route.providerServiceId, route]));
+	const offerQuantityConfig = {
+		...config,
+		minQuantity: offerInput.minQuantity,
+		stepQuantity: offerInput.stepQuantity
+	};
 	const requiredVerifiedSignals = requiredSignalsForOffer(
 		offerInput.qualityTier,
 		offerInput.refillDays
@@ -552,9 +599,9 @@ export async function saveBoostMappingWorkspace(
 				customerName: offerInput.customerName,
 				shortPromise: offerInput.shortPromise,
 				expectationChips: expectationChipsForOffer(offerInput.qualityTier, offerInput.refillDays),
-				minQuantity: config.minQuantity,
-				stepQuantity: config.stepQuantity,
-				quantityPresets: getQuantityChips(config),
+				minQuantity: offerInput.minQuantity,
+				stepQuantity: offerInput.stepQuantity,
+				quantityPresets: getQuantityChips(offerQuantityConfig),
 				pricePerStepNgn: offerInput.pricePerStepNgn,
 				priceLocked: offerInput.priceLocked,
 				requiredVerifiedSignals,
@@ -583,9 +630,9 @@ export async function saveBoostMappingWorkspace(
 				customerName: offerInput.customerName,
 				shortPromise: offerInput.shortPromise,
 				expectationChips: expectationChipsForOffer(offerInput.qualityTier, offerInput.refillDays),
-				minQuantity: config.minQuantity,
-				stepQuantity: config.stepQuantity,
-				quantityPresets: getQuantityChips(config),
+				minQuantity: offerInput.minQuantity,
+				stepQuantity: offerInput.stepQuantity,
+				quantityPresets: getQuantityChips(offerQuantityConfig),
 				pricePerStepNgn: offerInput.pricePerStepNgn,
 				priceLocked: offerInput.priceLocked,
 				requiredVerifiedSignals,

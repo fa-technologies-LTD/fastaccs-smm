@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 import type { RequestHandler } from './$types';
+import { toPublicCategory } from '$lib/helpers/public-category';
 
 const MAX_TIER_BATCH_IDS = 100;
 
@@ -70,7 +71,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		return json({
 			success: true,
-			data: tiers
+			data: tiers.map(toPublicCategory)
 		});
 	} catch (error) {
 		console.error('Error fetching tiers:', error);

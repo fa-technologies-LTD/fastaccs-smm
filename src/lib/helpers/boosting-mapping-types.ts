@@ -8,6 +8,8 @@ export interface BoostMappingOfferDraft {
 	customerName: string;
 	shortPromise: string;
 	refillDays: number | null;
+	minQuantity: number;
+	stepQuantity: number;
 	pricePerStepNgn: number;
 	priceLocked: boolean;
 	minimumMarginPercent: number;

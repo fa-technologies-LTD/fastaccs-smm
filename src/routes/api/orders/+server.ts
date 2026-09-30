@@ -72,6 +72,7 @@ import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
 import { getPaymentReturnOrigin } from '$lib/helpers/site-url';
 import { CONFIRMED_PAYMENT_STATUSES } from '$lib/helpers/buyer-order-visibility';
+import { sanitizeCustomerOrder } from '$lib/helpers/customer-order-visibility';
 
 interface CreateOrderItemInput {
 	categoryId: string;
@@ -220,10 +221,11 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			orderBy: { createdAt: 'desc' },
 			...(limit ? { take: limit } : {})
 		});
-		const responseData =
-			admin && !canViewOrderAmounts(locals)
+		const responseData = admin
+			? !canViewOrderAmounts(locals)
 				? data.map((order) => redactOrderFinancials(order))
-				: data;
+				: data
+			: data.map((order) => sanitizeCustomerOrder(order));
 
 		return json({ data: responseData, error: null });
 	} catch (error) {
@@ -299,7 +301,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					currency: existingCheckout.currency
 				});
 				return json({
-					data: existingCheckout,
+					data: sanitizeCustomerOrder(existingCheckout),
 					success: true,
 					resumed: true,
 					orderId: existingCheckout.id,
@@ -339,7 +341,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				// never invite a second charge or claim that payment failed.
 				const paidWithStoreCredit = existingCheckout.paymentMethod === 'store_credit';
 				return json({
-					data: existingCheckout,
+					data: sanitizeCustomerOrder(existingCheckout),
 					success: true,
 					resumed: true,
 					orderId: existingCheckout.id,
@@ -398,7 +400,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				if (cancellation.status === 'PAID' || cancellation.status === 'COMPLETED') {
 					const paidWithStoreCredit = existingCheckout.paymentMethod === 'store_credit';
 					return json({
-						data: existingCheckout,
+						data: sanitizeCustomerOrder(existingCheckout),
 						success: true,
 						resumed: true,
 						orderId: existingCheckout.id,
@@ -1386,7 +1388,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 			const verifyUrl = `${getPaymentReturnOrigin(url)}/checkout/verify?orderId=${encodeURIComponent(data.id)}&method=store_credit`;
 			return json({
-				data,
+				data: sanitizeCustomerOrder(data),
 				success: true,
 				orderId: data.id,
 				paidWithStoreCredit: true,
@@ -1491,7 +1493,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			});
 
 			return json({
-				data,
+				data: sanitizeCustomerOrder(data),
 				success: true,
 				orderId: data.id,
 				checkoutUrl: initResult.checkoutUrl,
@@ -1533,7 +1535,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			});
 
 			return json({
-				data,
+				data: sanitizeCustomerOrder(data),
 				success: true,
 				orderId: data.id,
 				deliveryMode: orderDeliveryMode,
@@ -1547,7 +1549,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 			if (fulfillmentResult.success) {
 				return json({
-					data,
+					data: sanitizeCustomerOrder(data),
 					success: true,
 					orderId: data.id,
 					allocation: fulfillmentResult.allocation,
@@ -1560,7 +1562,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			}
 
 			return json({
-				data,
+				data: sanitizeCustomerOrder(data),
 				success: true,
 				orderId: data.id,
 				deliveryMode: orderDeliveryMode,
@@ -1570,7 +1572,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		} catch (fulfillmentError) {
 			console.error('Order fulfillment error:', fulfillmentError);
 			return json({
-				data,
+				data: sanitizeCustomerOrder(data),
 				success: true,
 				orderId: data.id,
 				deliveryMode: orderDeliveryMode,

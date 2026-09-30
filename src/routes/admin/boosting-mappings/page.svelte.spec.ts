@@ -96,7 +96,8 @@ describe('Boosting mapping offer selection', () => {
 
 	it('opens the recommended category and exact tier first', async () => {
 		const fetchMock = vi.fn((input: RequestInfo | URL) => {
-			const url = String(input);
+			const requestUrl = String(input);
+			if (!requestUrl) throw new Error('Missing request URL');
 			return Promise.resolve(
 				Response.json({
 					success: true,
@@ -131,8 +132,8 @@ describe('Boosting mapping offer selection', () => {
 			.element(page.getByRole('heading', { name: 'Facebook Page Followers' }))
 			.toBeVisible();
 		await expect.element(page.getByRole('button', { name: /Premium/ })).toBeVisible();
-		await expect.element(page.getByText('Default profit added to cost %')).toBeVisible();
-		await expect.element(page.getByText('Profit added to supplier cost %')).toBeVisible();
+		await expect.element(page.getByText('Default target profit % for new options')).toBeVisible();
+		await expect.element(page.getByText('Target profit on supplier cost %')).toBeVisible();
 		expect(page.getByText(/Paid pilot controls/i).query()).toBeNull();
 		expect(page.getByText(/Currency buffer/i).query()).toBeNull();
 	});

@@ -3,6 +3,7 @@ import { prisma } from '$lib/prisma';
 import { getTierMerchandisingState } from '$lib/helpers/tier-merchandising';
 import { getTierStockStatus } from '$lib/helpers/tier-delivery-config';
 import { getLowStockThresholdSetting } from '$lib/services/admin-settings';
+import { sanitizePublicCategoryMetadata } from '$lib/helpers/public-category';
 
 interface TierMetadata {
 	pricing?: {
@@ -87,7 +88,7 @@ export async function GET({ params }) {
 				slug: tier.slug,
 				description: tier.description,
 				isActive: tier.isActive,
-				metadata: tier.metadata,
+				metadata: sanitizePublicCategoryMetadata(tier.categoryType, tier.metadata),
 				sortOrder: tier.sortOrder,
 				accountCount: tier._count.accounts,
 				price,

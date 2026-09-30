@@ -1,19 +1,19 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
+	import BoostingQuantitySelector from '$lib/components/BoostingQuantitySelector.svelte';
 	import {
 		ArrowLeft,
 		Check,
 		Eye,
 		Heart,
-		Minus,
 		MessageCircle,
 		Music,
-		Plus,
 		Repeat,
 		Share2,
 		UserPlus,
@@ -50,6 +50,7 @@
 		config: BoostingServiceConfig;
 		qualityTier: string | null;
 		expectationChips: string[];
+		quantityPresets: number[];
 	}
 
 	let { data }: { data: PageData } = $props();
@@ -76,7 +77,10 @@
 					}
 				: getBoostingServiceConfig(service.metadata),
 			qualityTier: service.customerOffer?.qualityTier || null,
-			expectationChips: service.customerOffer?.expectationChips || []
+			expectationChips: service.customerOffer?.expectationChips || [],
+			quantityPresets:
+				service.customerOffer?.quantityPresets ||
+				getQuantityChips(getBoostingServiceConfig(service.metadata))
 		}))
 	);
 	const hasRefillOffer = $derived(services.some((service) => service.config.refillAvailable));
@@ -157,11 +161,11 @@
 	let linkByServiceId = $state<Record<string, string>>({});
 	let linkErrorByServiceId = $state<Record<string, string | null>>({});
 	let resolvingLinkByServiceId = $state<Record<string, boolean>>({});
-	const linkResolutionVersion = new Map<string, number>();
+	const linkResolutionVersion = new SvelteMap<string, number>();
 	let addingServiceId = $state<string | null>(null);
 	let waitlistLoadingByServiceId = $state<Record<string, boolean>>({});
 	let waitlistSubscribedByServiceId = $state<Record<string, boolean>>({});
-	const measuredServiceViews = new Set<string>();
+	const measuredServiceViews = new SvelteSet<string>();
 
 	const currentUser = $derived((page.data as { user?: { id: string } | null }).user || null);
 
@@ -219,17 +223,6 @@
 
 	function getQuantity(serviceId: string, minQuantity: number): number {
 		return quantityByServiceId[serviceId] ?? minQuantity;
-	}
-
-	function adjustQuantity(
-		serviceId: string,
-		minQuantity: number,
-		stepQuantity: number,
-		delta: number
-	) {
-		const current = getQuantity(serviceId, minQuantity);
-		const next = current + delta * stepQuantity;
-		quantityByServiceId[serviceId] = Math.max(minQuantity, next);
 	}
 
 	function getLink(serviceId: string): string {
@@ -324,7 +317,10 @@
 		try {
 			let compatibility: { compatible: boolean; existingMode: TierDeliveryMode | null };
 			try {
-				compatibility = await cart.ensureDeliveryModeCompatibility(service.categoryId, 'boosting_manual');
+				compatibility = await cart.ensureDeliveryModeCompatibility(
+					service.categoryId,
+					'boosting_manual'
+				);
 			} catch (error) {
 				console.error('Failed to validate cart delivery mode compatibility:', error);
 				showError('Could not update cart', 'Please try again.');
@@ -640,64 +636,15 @@
 								<div class="mb-2"></div>
 							{/if}
 
-							<div class="mb-3 flex flex-wrap gap-1.5">
-								{#each getQuantityChips(service.config) as chip}
-									<button
-										type="button"
-										onclick={() => (quantityByServiceId[service.id] = chip)}
-										class="rounded-full px-2.5 py-1 text-xs font-semibold"
-										style={quantity === chip
-											? 'background: var(--fa-blue-500); color: #ffffff;'
-											: 'background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);'}
-									>
-										{chip.toLocaleString()}
-									</button>
-								{/each}
-							</div>
-
-							<div class="mb-4 flex items-center justify-between">
-								<span class="text-xs font-medium" style="color: var(--text);">
-									{BOOSTING_ACTION_LABELS[service.config.actionType]} quantity
-								</span>
-								<div class="flex items-center gap-2">
-									<button
-										type="button"
-										onclick={() =>
-											adjustQuantity(
-												service.id,
-												service.config.minQuantity,
-												service.config.stepQuantity,
-												-1
-											)}
-										disabled={quantity <= service.config.minQuantity}
-										class="flex h-7 w-7 items-center justify-center rounded-full disabled:opacity-40"
-										style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
-										aria-label="Decrease quantity"
-									>
-										<Minus size={14} />
-									</button>
-									<span
-										class="min-w-[4.5rem] text-center text-sm font-semibold"
-										style="color: var(--text);"
-									>
-										{quantity.toLocaleString()}
-									</span>
-									<button
-										type="button"
-										onclick={() =>
-											adjustQuantity(
-												service.id,
-												service.config.minQuantity,
-												service.config.stepQuantity,
-												1
-											)}
-										class="flex h-7 w-7 items-center justify-center rounded-full"
-										style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
-										aria-label="Increase quantity"
-									>
-										<Plus size={14} />
-									</button>
-								</div>
+							<div class="mb-4">
+								<BoostingQuantitySelector
+									value={quantity}
+									minQuantity={service.config.minQuantity}
+									stepQuantity={service.config.stepQuantity}
+									presets={service.quantityPresets}
+									label={`${BOOSTING_ACTION_LABELS[service.config.actionType]} quantity`}
+									onchange={(next) => (quantityByServiceId[service.id] = next)}
+								/>
 							</div>
 
 							<button

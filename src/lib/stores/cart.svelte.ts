@@ -4,6 +4,7 @@ import {
 	normalizeTierDeliveryMode,
 	type TierDeliveryMode
 } from '$lib/helpers/tier-delivery-config';
+import { roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
 
 interface TierDeliveryLookup {
 	id: string;
@@ -466,7 +467,7 @@ class CartStore {
 		if (item.boosting && item.tier.boostingConfig) {
 			const { stepQuantity, pricePerStep } = item.tier.boostingConfig;
 			if (stepQuantity > 0) {
-				return Math.round((item.boosting.boostQuantity / stepQuantity) * pricePerStep * 100) / 100;
+				return roundCatalogPriceNgn((item.boosting.boostQuantity / stepQuantity) * pricePerStep);
 			}
 			return 0;
 		}

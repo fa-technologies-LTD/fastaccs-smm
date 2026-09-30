@@ -1,5 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { serverCache } from '$lib/helpers/cache';
+import { sanitizePublicCategoryMetadata } from '$lib/helpers/public-category';
 
 const CACHE_KEY = 'homepage:catalog';
 const CACHE_TTL_MS = 2 * 60 * 1000;
@@ -49,12 +50,7 @@ async function loadHomepageCatalog() {
 
 	return platforms.map((platform) => {
 		const prices = platform.children.map((tier) => readPrice(tier.metadata)).filter((p) => p > 0);
-		const metadata =
-			platform.metadata &&
-			typeof platform.metadata === 'object' &&
-			!Array.isArray(platform.metadata)
-				? (platform.metadata as Record<string, unknown>)
-				: undefined;
+		const metadata = sanitizePublicCategoryMetadata('platform', platform.metadata);
 		return {
 			id: platform.id,
 			name: platform.name,

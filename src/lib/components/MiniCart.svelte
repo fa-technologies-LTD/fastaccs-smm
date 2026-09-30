@@ -8,6 +8,7 @@
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
 	import { brandKey } from '$lib/components/BrandIcon.svelte';
 	import { showSuccess } from '$lib/stores/toasts';
+	import { roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
 
 	// Reactive state
 	const isOpen = $derived(cart.isOpen);
@@ -87,7 +88,7 @@
 		if (item.boosting && item.tier.boostingConfig) {
 			const { stepQuantity, pricePerStep } = item.tier.boostingConfig;
 			if (!stepQuantity) return 0;
-			return Math.round((item.boosting.boostQuantity / stepQuantity) * pricePerStep * 100) / 100;
+			return roundCatalogPriceNgn((item.boosting.boostQuantity / stepQuantity) * pricePerStep);
 		}
 		return item.tier.price * item.quantity;
 	}
