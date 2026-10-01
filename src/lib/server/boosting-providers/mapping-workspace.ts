@@ -323,10 +323,10 @@ function parseOffer(value: unknown): BoostMappingOfferDraft {
 				? null
 				: Math.round(finiteNumber(input.refillDays, 'Refill period', 1, 365)),
 		minQuantity: Math.round(finiteNumber(input.minQuantity, 'Starting quantity', 1, 10_000_000)),
-		maxQuantity:
-			input.maxQuantity === null || input.maxQuantity === '' || input.maxQuantity === undefined
-				? null
-				: Math.round(finiteNumber(input.maxQuantity, 'Maximum quantity', 1, 10_000_000)),
+		// The customer ceiling belongs to the selected supplier routes, not the browser. It is
+		// derived after those routes have been loaded and checked below. Ignoring the echoed value
+		// also prevents a previously saved supplier maximum from failing stale client validation.
+		maxQuantity: null,
 		stepQuantity: Math.round(finiteNumber(input.stepQuantity, 'Quantity increment', 1, 10_000_000)),
 		pricePerStepNgn: Math.max(
 			50,

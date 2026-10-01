@@ -158,6 +158,21 @@ describe('boosting mapping workspace persistence', () => {
 		);
 	});
 
+	it('ignores an echoed browser maximum and derives it from the selected supplier services', async () => {
+		const providerMaximum = 100_000_000;
+		const db = database(true, [{ ...providerService(), maxQuantity: providerMaximum }]);
+		const input = validInput();
+		input.offer.maxQuantity = providerMaximum;
+
+		await saveBoostMappingWorkspace(categoryId, input, 'admin-1', { database: db.client });
+		expect(db.offerUpsert).toHaveBeenCalledWith(
+			expect.objectContaining({
+				create: expect.objectContaining({ maxQuantity: providerMaximum }),
+				update: expect.objectContaining({ maxQuantity: providerMaximum })
+			})
+		);
+	});
+
 	it('rejects an offer starting below a selected supplier minimum', async () => {
 		const input = validInput();
 		input.offer.minQuantity = 50;
