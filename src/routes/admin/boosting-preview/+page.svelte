@@ -241,6 +241,7 @@
 							<BoostingQuantitySelector
 								value={quantity}
 								minQuantity={selectedOffer.minQuantity}
+								maxQuantity={selectedOffer.maxQuantity}
 								stepQuantity={selectedOffer.stepQuantity}
 								presets={selectedOffer.quantityPresets}
 								onchange={(next) => chooseQuantity(selectedGroup!.categoryId, next)}

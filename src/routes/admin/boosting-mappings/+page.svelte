@@ -198,6 +198,7 @@
 			shortPromise: TIER_COPY[tier].promise,
 			refillDays: tier === 'value' ? null : next.category.refillDays,
 			minQuantity: next.category.minQuantity,
+			maxQuantity: null,
 			stepQuantity: next.category.stepQuantity,
 			pricePerStepNgn: Math.max(50, next.category.pricePerStepNgn),
 			priceLocked: false,
@@ -289,23 +290,24 @@
 		await loadWorkspace();
 	}
 
-	function requiredSignals(): string[] {
-		if (!offerDraft) return [];
-		return [
-			...(offerDraft.refillDays ? ['refill_verified'] : []),
-			...(offerDraft.qualityTier === 'stable' || offerDraft.qualityTier === 'premium'
+	function routeFor(candidate: BoostMappingCandidate): BoostMappingRouteDraft {
+		const candidateSignals = new Set(candidate.qualitySignals);
+		const verifiedSignals = [
+			...(offerDraft?.refillDays &&
+			candidate.refillDaysClaimed !== null &&
+			candidate.refillDaysClaimed >= offerDraft.refillDays
+				? ['refill_verified']
+				: []),
+			...(candidateSignals.has('stability_claim') || candidateSignals.has('refill_claim')
 				? ['stability_verified']
 				: []),
-			...(offerDraft.qualityTier === 'premium' ? ['premium_quality_verified'] : [])
+			...(candidateSignals.has('quality_claim') ? ['premium_quality_verified'] : [])
 		];
-	}
-
-	function routeFor(candidate: BoostMappingCandidate): BoostMappingRouteDraft {
 		return {
 			providerServiceId: candidate.id,
 			state: 'shadow',
 			equivalenceApproved: true,
-			verifiedSignals: requiredSignals(),
+			verifiedSignals,
 			audienceTags: [],
 			verifiedRefillDays:
 				offerDraft?.refillDays &&

@@ -1,13 +1,18 @@
 import { json } from '@sveltejs/kit';
+import type { OrderItem } from '@prisma/client';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { recordOrderEvent } from '$lib/services/order-events';
 import { notifyBoostingOrderCompleted } from '$lib/services/boosting-fulfillment-notifications';
+import { queuePaidBoostFulfillments } from '$lib/server/boosting-providers/fulfillment-worker';
+import { supplierSubmissionMayExist } from '$lib/server/boosting-providers/transition-safety';
 
 const VALID_STATUSES = ['pending', 'in_progress', 'needs_link', 'completed', 'rejected'] as const;
 const CONFIRMED_PAYMENT_STATUSES = new Set(['paid', 'success', 'overpaid']);
 type BoostFulfillmentStatus = (typeof VALID_STATUSES)[number];
+
+class UnsafeBoostTransitionError extends Error {}
 
 function isValidStatus(value: unknown): value is BoostFulfillmentStatus {
 	return typeof value === 'string' && VALID_STATUSES.includes(value as BoostFulfillmentStatus);
@@ -89,93 +94,165 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 		return json({ success: false, data: null, error: 'No changes provided' }, { status: 400 });
 	}
 
-	const updated = await prisma.$transaction(async (tx) => {
-		const item = await tx.orderItem.update({ where: { id: orderItemId }, data });
-
-		if (data.boostFulfillmentStatus !== undefined) {
-			const siblingItems = await tx.orderItem.findMany({
-				where: { orderId: existing.orderId, boostTargetUrl: { not: null } },
-				select: { boostFulfillmentStatus: true }
-			});
-			const allCompleted = siblingItems.every(
-				(sibling) => sibling.boostFulfillmentStatus === 'completed'
-			);
-			const allRejected = siblingItems.every(
-				(sibling) => sibling.boostFulfillmentStatus === 'rejected'
-			);
-
-			await tx.order.update({
-				where: { id: existing.orderId },
-				data: allCompleted
-					? { status: 'completed', deliveryStatus: 'delivered', deliveredAt: new Date() }
-					: allRejected
-						? { status: 'paid', deliveryStatus: 'failed', deliveredAt: null }
-						: { status: 'paid', deliveryStatus: 'processing', deliveredAt: null }
-			});
-
-			const eventType =
-				data.boostFulfillmentStatus === 'needs_link'
-					? 'boosting_link_review_requested'
-					: data.boostFulfillmentStatus === 'rejected'
-						? 'boosting_rejected'
-						: 'boosting_status_changed';
-			await recordOrderEvent(
-				{
-					orderId: existing.orderId,
-					orderItemId,
-					type: eventType,
-					source: 'admin.boosting_orders',
-					actorUserId: locals.user!.id,
-					description: reason || null,
-					metadata: {
-						fromStatus: existing.boostFulfillmentStatus || 'pending',
-						toStatus: data.boostFulfillmentStatus
-					}
-				},
-				tx
-			);
-
+	let updated: OrderItem;
+	try {
+		updated = await prisma.$transaction(async (tx) => {
 			if (
-				existing.order.userId &&
-				['needs_link', 'rejected'].includes(data.boostFulfillmentStatus)
+				data.boostFulfillmentStatus === 'pending' ||
+				data.boostFulfillmentStatus === 'needs_link'
 			) {
-				const needsLink = data.boostFulfillmentStatus === 'needs_link';
-				await tx.notification.create({
-					data: {
-						userId: existing.order.userId,
-						type: needsLink ? 'boosting_link_review' : 'boosting_issue',
-						title: needsLink ? 'Update your boosting link' : 'Boosting order needs attention',
-						message: needsLink
-							? reason
-							: `We couldn't process this boost. Support is reviewing your paid order. ${reason}`,
-						orderId: existing.orderId
+				await tx.$queryRaw`SELECT id FROM boost_fulfillments WHERE order_item_id = ${orderItemId}::uuid FOR UPDATE`;
+				const fulfillment = await tx.boostFulfillment.findUnique({
+					where: { orderItemId },
+					select: {
+						status: true,
+						supplierOrderId: true,
+						submittedAt: true,
+						leaseToken: true,
+						leaseExpiresAt: true,
+						attempts: {
+							where: { type: 'submission' },
+							select: { type: true, outcome: true },
+							orderBy: { createdAt: 'desc' },
+							take: 1
+						}
 					}
 				});
+				if (supplierSubmissionMayExist(fulfillment)) throw new UnsafeBoostTransitionError();
 			}
-		}
+			const item = await tx.orderItem.update({ where: { id: orderItemId }, data });
 
-		if (data.boostProviderReference !== undefined) {
-			await recordOrderEvent(
+			if (data.boostFulfillmentStatus !== undefined) {
+				const now = new Date();
+				const fulfillmentData =
+					data.boostFulfillmentStatus === 'completed'
+						? {
+								status: 'completed',
+								customerStatus: 'completed',
+								completedAt: now,
+								nextActionAt: null,
+								lastSafeErrorCategory: null
+							}
+						: data.boostFulfillmentStatus === 'pending'
+							? {
+									status: 'awaiting_payment',
+									customerStatus: 'processing',
+									nextActionAt: null,
+									lastSafeErrorCategory: null,
+									completedAt: null
+								}
+							: {
+									status: 'manual_review',
+									customerStatus:
+										data.boostFulfillmentStatus === 'in_progress' ? 'in_progress' : 'processing',
+									nextActionAt: null,
+									lastSafeErrorCategory: `admin_${data.boostFulfillmentStatus}`,
+									completedAt: null
+								};
+				await tx.boostFulfillment.updateMany({
+					where: { orderItemId },
+					data: fulfillmentData
+				});
+				const siblingItems = await tx.orderItem.findMany({
+					where: { orderId: existing.orderId, boostTargetUrl: { not: null } },
+					select: { boostFulfillmentStatus: true }
+				});
+				const allCompleted = siblingItems.every(
+					(sibling) => sibling.boostFulfillmentStatus === 'completed'
+				);
+				const allRejected = siblingItems.every(
+					(sibling) => sibling.boostFulfillmentStatus === 'rejected'
+				);
+
+				await tx.order.update({
+					where: { id: existing.orderId },
+					data: allCompleted
+						? { status: 'completed', deliveryStatus: 'delivered', deliveredAt: new Date() }
+						: allRejected
+							? { status: 'paid', deliveryStatus: 'failed', deliveredAt: null }
+							: { status: 'paid', deliveryStatus: 'processing', deliveredAt: null }
+				});
+
+				const eventType =
+					data.boostFulfillmentStatus === 'needs_link'
+						? 'boosting_link_review_requested'
+						: data.boostFulfillmentStatus === 'rejected'
+							? 'boosting_rejected'
+							: 'boosting_status_changed';
+				await recordOrderEvent(
+					{
+						orderId: existing.orderId,
+						orderItemId,
+						type: eventType,
+						source: 'admin.boosting_orders',
+						actorUserId: locals.user!.id,
+						description: reason || null,
+						metadata: {
+							fromStatus: existing.boostFulfillmentStatus || 'pending',
+							toStatus: data.boostFulfillmentStatus
+						}
+					},
+					tx
+				);
+
+				if (
+					existing.order.userId &&
+					['needs_link', 'rejected'].includes(data.boostFulfillmentStatus)
+				) {
+					const needsLink = data.boostFulfillmentStatus === 'needs_link';
+					await tx.notification.create({
+						data: {
+							userId: existing.order.userId,
+							type: needsLink ? 'boosting_link_review' : 'boosting_issue',
+							title: needsLink ? 'Update your boosting link' : 'Boosting order needs attention',
+							message: needsLink
+								? reason
+								: `We couldn't process this boost. Support is reviewing your paid order. ${reason}`,
+							orderId: existing.orderId
+						}
+					});
+				}
+			}
+
+			if (data.boostProviderReference !== undefined) {
+				await recordOrderEvent(
+					{
+						orderId: existing.orderId,
+						orderItemId,
+						type: 'boosting_provider_reference_changed',
+						source: 'admin.boosting_orders',
+						actorUserId: locals.user!.id,
+						description: data.boostProviderReference
+							? 'Supplier reference saved'
+							: 'Supplier reference removed',
+						metadata: {
+							previousReference: existing.boostProviderReference,
+							providerReference: data.boostProviderReference
+						}
+					},
+					tx
+				);
+			}
+
+			return item;
+		});
+	} catch (error) {
+		if (error instanceof UnsafeBoostTransitionError) {
+			return json(
 				{
-					orderId: existing.orderId,
-					orderItemId,
-					type: 'boosting_provider_reference_changed',
-					source: 'admin.boosting_orders',
-					actorUserId: locals.user!.id,
-					description: data.boostProviderReference
-						? 'Supplier reference saved'
-						: 'Supplier reference removed',
-					metadata: {
-						previousReference: existing.boostProviderReference,
-						providerReference: data.boostProviderReference
-					}
+					success: false,
+					data: null,
+					error:
+						'This supplier order may already have started. Keep it in manual review to avoid a duplicate charge.'
 				},
-				tx
+				{ status: 409 }
 			);
 		}
-
-		return item;
-	});
+		throw error;
+	}
+	if (data.boostFulfillmentStatus === 'pending') {
+		await queuePaidBoostFulfillments(existing.orderId);
+	}
 	if (data.boostFulfillmentStatus === 'completed') {
 		await notifyBoostingOrderCompleted(existing.orderId);
 	}

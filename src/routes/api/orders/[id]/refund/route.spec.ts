@@ -17,7 +17,8 @@ const mocks = vi.hoisted(() => ({
 const tx = vi.hoisted(() => ({
 	$queryRaw: vi.fn(),
 	order: { findUnique: vi.fn(), update: vi.fn() },
-	orderItem: { update: vi.fn() },
+	orderItem: { update: vi.fn(), updateMany: vi.fn() },
+	boostFulfillment: { updateMany: vi.fn() },
 	walletTransaction: { aggregate: vi.fn() }
 }));
 
@@ -90,6 +91,8 @@ beforeEach(() => {
 	tx.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 7_500 } });
 	tx.order.update.mockResolvedValue({});
 	tx.orderItem.update.mockResolvedValue({});
+	tx.orderItem.updateMany.mockResolvedValue({ count: 0 });
+	tx.boostFulfillment.updateMany.mockResolvedValue({ count: 0 });
 	mocks.creditStoreCredit.mockResolvedValue({});
 	mocks.recordOrderEvent.mockResolvedValue(true);
 	mocks.voidSuper.mockResolvedValue(undefined);

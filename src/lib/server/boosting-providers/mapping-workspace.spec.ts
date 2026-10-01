@@ -15,6 +15,7 @@ function validInput(): BoostMappingSaveInput {
 			shortPromise: 'Lower drop risk with a 30-day refill.',
 			refillDays: 30,
 			minQuantity: 1000,
+			maxQuantity: null,
 			stepQuantity: 1000,
 			pricePerStepNgn: 5000,
 			priceLocked: false,

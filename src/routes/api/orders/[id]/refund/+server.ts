@@ -129,6 +129,34 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 					data: { refundedAmount: item.refundedAmount }
 				});
 			}
+			await tx.boostFulfillment.updateMany({
+				where: {
+					orderItem: { orderId: order.id },
+					status: { in: ['awaiting_payment', 'queued'] }
+				},
+				data: {
+					status: 'cancelled',
+					customerStatus: 'cancelled',
+					lastSafeErrorCategory: 'order_refunded',
+					nextActionAt: null
+				}
+			});
+			await tx.boostFulfillment.updateMany({
+				where: {
+					orderItem: { orderId: order.id },
+					status: { in: ['submitted', 'in_progress'] }
+				},
+				data: {
+					status: 'manual_review',
+					customerStatus: 'cancelled',
+					lastSafeErrorCategory: 'order_refunded_after_submission',
+					nextActionAt: null
+				}
+			});
+			await tx.orderItem.updateMany({
+				where: { orderId: order.id, boostTargetUrl: { not: null } },
+				data: { boostFulfillmentStatus: 'cancelled' }
+			});
 
 			await recordOrderEvent(
 				{

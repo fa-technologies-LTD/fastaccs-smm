@@ -180,13 +180,20 @@ export function isValidBoostingQuantity(config: BoostingServiceConfig, quantity:
 export function normalizeBoostingQuantity(
 	quantity: number,
 	minQuantity: number,
-	stepQuantity: number
+	stepQuantity: number,
+	maxQuantity: number | null = null
 ): number {
 	const safeMinimum = Math.max(1, Math.round(Number(minQuantity) || 1));
 	const safeStep = Math.max(1, Math.round(Number(stepQuantity) || 1));
+	const parsedMaximum = Number(maxQuantity);
+	const safeMaximum =
+		Number.isFinite(parsedMaximum) && parsedMaximum >= safeMinimum
+			? safeMinimum + Math.floor((parsedMaximum - safeMinimum) / safeStep) * safeStep
+			: null;
 	const parsedQuantity = Number(quantity);
 	if (!Number.isFinite(parsedQuantity) || parsedQuantity <= safeMinimum) return safeMinimum;
-	return safeMinimum + Math.round((parsedQuantity - safeMinimum) / safeStep) * safeStep;
+	const normalized = safeMinimum + Math.round((parsedQuantity - safeMinimum) / safeStep) * safeStep;
+	return safeMaximum === null ? normalized : Math.min(normalized, safeMaximum);
 }
 
 export function computeBoostingPrice(config: BoostingServiceConfig, quantity: number): number {
@@ -197,7 +204,10 @@ export function computeBoostingPrice(config: BoostingServiceConfig, quantity: nu
 
 const QUANTITY_CHIP_MULTIPLIERS = [1, 2, 5, 10];
 
-export function getQuantityChips(config: BoostingServiceConfig): number[] {
+export function getQuantityChips(
+	config: BoostingServiceConfig,
+	maxQuantity: number | null = null
+): number[] {
 	const chips = QUANTITY_CHIP_MULTIPLIERS.map((multiplier) => {
 		const raw = config.minQuantity * multiplier;
 		const stepsAfterMinimum = Math.max(
@@ -206,5 +216,8 @@ export function getQuantityChips(config: BoostingServiceConfig): number[] {
 		);
 		return config.minQuantity + stepsAfterMinimum * config.stepQuantity;
 	});
-	return Array.from(new Set(chips));
+	const parsedMaximum = Number(maxQuantity);
+	return Array.from(new Set(chips)).filter(
+		(chip) => maxQuantity === null || !Number.isFinite(parsedMaximum) || chip <= parsedMaximum
+	);
 }

@@ -53,6 +53,7 @@ function offerDto(offer: {
 	shortPromise: string;
 	refillDays: number | null;
 	minQuantity: number;
+	maxQuantity: number | null;
 	stepQuantity: number;
 	pricePerStepNgn: Prisma.Decimal;
 	priceLocked: boolean;
@@ -73,6 +74,7 @@ function offerDto(offer: {
 		shortPromise: offer.shortPromise,
 		refillDays: offer.refillDays,
 		minQuantity: offer.minQuantity,
+		maxQuantity: offer.maxQuantity,
 		stepQuantity: offer.stepQuantity,
 		pricePerStepNgn: Number(offer.pricePerStepNgn),
 		priceLocked: offer.priceLocked,
@@ -321,6 +323,10 @@ function parseOffer(value: unknown): BoostMappingOfferDraft {
 				? null
 				: Math.round(finiteNumber(input.refillDays, 'Refill period', 1, 365)),
 		minQuantity: Math.round(finiteNumber(input.minQuantity, 'Starting quantity', 1, 10_000_000)),
+		maxQuantity:
+			input.maxQuantity === null || input.maxQuantity === '' || input.maxQuantity === undefined
+				? null
+				: Math.round(finiteNumber(input.maxQuantity, 'Maximum quantity', 1, 10_000_000)),
 		stepQuantity: Math.round(finiteNumber(input.stepQuantity, 'Quantity increment', 1, 10_000_000)),
 		pricePerStepNgn: Math.max(
 			50,
@@ -478,6 +484,9 @@ export async function saveBoostMappingWorkspace(
 		if (
 			service.unavailableAt ||
 			service.catalogueStatus === 'quarantined' ||
+			service.ratePerThousand === null ||
+			!Number.isFinite(Number(service.ratePerThousand)) ||
+			Number(service.ratePerThousand) < 0 ||
 			!service.platforms.includes(config.platform) ||
 			!service.outcomes.includes(config.actionType) ||
 			service.targetType !== targetType ||
@@ -511,6 +520,15 @@ export async function saveBoostMappingWorkspace(
 			'The customer starting quantity is outside the selected primary supplier range.'
 		);
 	}
+	if (providerServices.some((service) => !supportsStartingQuantity(service))) {
+		throw new BoostMappingError(
+			'Every selected supplier service must support the customer starting quantity.'
+		);
+	}
+	const maximumCustomerQuantity = providerServices.length
+		? Math.max(...providerServices.map((service) => service.maxQuantity!))
+		: null;
+	offerInput.maxQuantity = maximumCustomerQuantity;
 	if (providerServices.length) {
 		const pricing = await getBoostingPricingConfig(database);
 		const highestSupplierCost = Math.max(
@@ -600,8 +618,9 @@ export async function saveBoostMappingWorkspace(
 				shortPromise: offerInput.shortPromise,
 				expectationChips: expectationChipsForOffer(offerInput.qualityTier, offerInput.refillDays),
 				minQuantity: offerInput.minQuantity,
+				maxQuantity: offerInput.maxQuantity,
 				stepQuantity: offerInput.stepQuantity,
-				quantityPresets: getQuantityChips(offerQuantityConfig),
+				quantityPresets: getQuantityChips(offerQuantityConfig, offerInput.maxQuantity),
 				pricePerStepNgn: offerInput.pricePerStepNgn,
 				priceLocked: offerInput.priceLocked,
 				requiredVerifiedSignals,
@@ -631,8 +650,9 @@ export async function saveBoostMappingWorkspace(
 				shortPromise: offerInput.shortPromise,
 				expectationChips: expectationChipsForOffer(offerInput.qualityTier, offerInput.refillDays),
 				minQuantity: offerInput.minQuantity,
+				maxQuantity: offerInput.maxQuantity,
 				stepQuantity: offerInput.stepQuantity,
-				quantityPresets: getQuantityChips(offerQuantityConfig),
+				quantityPresets: getQuantityChips(offerQuantityConfig, offerInput.maxQuantity),
 				pricePerStepNgn: offerInput.pricePerStepNgn,
 				priceLocked: offerInput.priceLocked,
 				requiredVerifiedSignals,
@@ -684,7 +704,12 @@ export async function saveBoostMappingWorkspace(
 				create: {
 					offerId: offer.id,
 					providerServiceId: providerService.id,
-					state: routeInput.state,
+					state:
+						routeInput.state === 'paused'
+							? 'paused'
+							: offerInput.status === 'live'
+								? 'enabled'
+								: 'shadow',
 					equivalenceApproved: routeInput.equivalenceApproved,
 					targetType,
 					verifiedSignals: routeInput.verifiedSignals,
@@ -698,7 +723,12 @@ export async function saveBoostMappingWorkspace(
 					reviewedAt: routeInput.equivalenceApproved ? new Date() : null
 				},
 				update: {
-					state: routeInput.state,
+					state:
+						routeInput.state === 'paused'
+							? 'paused'
+							: offerInput.status === 'live'
+								? 'enabled'
+								: 'shadow',
 					equivalenceApproved: routeInput.equivalenceApproved,
 					targetType,
 					verifiedSignals: routeInput.verifiedSignals,

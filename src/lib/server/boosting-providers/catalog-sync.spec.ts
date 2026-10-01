@@ -70,7 +70,7 @@ describe('boost supplier catalogue sync', () => {
 			})
 		]);
 		expect(db.transaction).toHaveBeenCalledOnce();
-		expect(db.executeRaw).toHaveBeenCalledOnce();
+		expect(db.executeRaw).toHaveBeenCalledTimes(2);
 		const query = db.executeRaw.mock.calls[0]?.[0] as { sql: string; values: unknown[] };
 		expect(query.sql).toContain('ARRAY[');
 		expect(query.values.some(Array.isArray)).toBe(false);
@@ -123,7 +123,7 @@ describe('boost supplier catalogue sync', () => {
 			balance: null,
 			balanceWarning: 'Balance is temporarily unavailable.'
 		});
-		expect(db.executeRaw).toHaveBeenCalledOnce();
+		expect(db.executeRaw).toHaveBeenCalledTimes(2);
 	});
 
 	it('retries a transient staging database connection failure without refetching the catalogue', async () => {

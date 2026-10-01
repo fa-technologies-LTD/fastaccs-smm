@@ -7,10 +7,7 @@ import type {
 } from '$lib/helpers/boosting-mapping-types';
 import { getRequiredLinkType } from '$lib/helpers/social-link-validator';
 import type { BoostProviderId } from './types';
-import {
-	inferAdvertisedRefillDays,
-	supplierTextAdvertisesRefill
-} from './catalog-normalizer';
+import { inferAdvertisedRefillDays, supplierTextAdvertisesRefill } from './catalog-normalizer';
 
 const LABELS: Record<BoostProviderId, string> = {
 	smm_raja: 'SMM Raja',
@@ -60,7 +57,8 @@ function compatibilityIssues(
 	const issues: string[] = [];
 	const maximumPreset = Math.max(...getQuantityChips(config));
 	if (row.unavailableAt) issues.push('The supplier no longer lists this service.');
-	if (row.catalogueStatus === 'quarantined') issues.push('The supplier row failed catalogue safety checks.');
+	if (row.catalogueStatus === 'quarantined')
+		issues.push('The supplier row failed catalogue safety checks.');
 	if (!row.platforms.includes(config.platform)) issues.push('It is for a different platform.');
 	if (!row.outcomes.includes(config.actionType)) issues.push('It delivers a different result.');
 	if (row.targetType !== getRequiredLinkType(config.actionType)) {
@@ -71,7 +69,9 @@ function compatibilityIssues(
 		issues.push(`Its minimum is above ${config.minQuantity.toLocaleString()}.`);
 	}
 	if (row.maxQuantity === null || row.maxQuantity < maximumPreset) {
-		issues.push(`It cannot cover the normal quantity range up to ${maximumPreset.toLocaleString()}.`);
+		issues.push(
+			`It cannot cover the normal quantity range up to ${maximumPreset.toLocaleString()}.`
+		);
 	}
 	return issues;
 }
@@ -89,10 +89,21 @@ export async function lookupBoostProviderService(
 	database: PrismaClient = prisma
 ): Promise<BoostServiceLookupResult> {
 	const config = await loadCategory(database, input.categoryId);
-	if (!config) return { found: false, compatible: false, issues: ['Customer result not found.'], service: null };
+	if (!config)
+		return {
+			found: false,
+			compatible: false,
+			issues: ['Customer result not found.'],
+			service: null
+		};
 	const code = String(input.serviceCode || '').trim();
 	if (!/^\d{1,20}$/.test(code)) {
-		return { found: false, compatible: false, issues: ['Enter the numeric supplier service code.'], service: null };
+		return {
+			found: false,
+			compatible: false,
+			issues: ['Enter the numeric supplier service code.'],
+			service: null
+		};
 	}
 	const row = await database.boostProviderService.findUnique({
 		where: { provider_serviceId: { provider: input.provider, serviceId: code } }
@@ -124,9 +135,26 @@ export function rankSmartBoostCandidates(
 	qualityTier: string,
 	limit = 4
 ): BoostMappingCandidate[] {
-	const ranked = [...candidates].sort((left, right) => {
+	const eligible = candidates.filter((candidate) => {
+		const signals = new Set(candidate.qualitySignals);
+		if (qualityTier === 'premium') {
+			return (
+				signals.has('quality_claim') &&
+				(signals.has('stability_claim') || signals.has('refill_claim'))
+			);
+		}
+		if (qualityTier === 'stable') {
+			return signals.has('stability_claim') || signals.has('refill_claim');
+		}
+		return true;
+	});
+	const ranked = [...eligible].sort((left, right) => {
 		const signalDifference = tierScore(right, qualityTier) - tierScore(left, qualityTier);
-		return signalDifference || left.ratePerThousand - right.ratePerThousand || left.id.localeCompare(right.id);
+		return (
+			signalDifference ||
+			left.ratePerThousand - right.ratePerThousand ||
+			left.id.localeCompare(right.id)
+		);
 	});
 	const selected: BoostMappingCandidate[] = [];
 	for (const provider of ['smm_raja', 'bulk_follows'] as const) {

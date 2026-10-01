@@ -14,6 +14,7 @@ export interface BoostCatalogSyncResult {
 	status: 'synced' | 'not_configured' | 'failed';
 	servicesSeen: number;
 	servicesMarkedUnavailable: number;
+	routesPausedAsIncompatible: number;
 	balance: number | null;
 	currency: string | null;
 	balanceWarning: string | null;
@@ -196,6 +197,7 @@ async function syncProvider(
 			status: 'not_configured',
 			servicesSeen: 0,
 			servicesMarkedUnavailable: 0,
+			routesPausedAsIncompatible: 0,
 			balance: null,
 			currency: null,
 			balanceWarning: null,
@@ -221,57 +223,80 @@ async function syncProvider(
 			);
 		}
 
-		const missing = await withDatabaseRetry(
+		const { missing, routesPausedAsIncompatible } = await withDatabaseRetry(
 			() =>
 				database.$transaction(
 					async (tx) => {
-				await tx.boostProviderState.upsert({
-					where: { provider: client.id },
-					create: {
-						provider: client.id,
-						label: client.label,
-						balance: balanceRead.balance?.amount,
-						projectedBalance: balanceRead.balance?.amount,
-						currency: balanceRead.balance?.currency,
-						catalogueServiceCount: services.length,
-						catalogueFingerprint: catalogueFingerprint(services),
-						lastCatalogueSuccessAt: syncedAt,
-						lastBalanceSuccessAt: balanceRead.balance ? syncedAt : undefined,
-						lastApiSuccessAt: syncedAt,
-						consecutiveFailures: 0,
-						pauseReason: null
-					},
-					update: {
-						label: client.label,
-						...(balanceRead.balance
-							? {
-									balance: balanceRead.balance.amount,
-									projectedBalance: balanceRead.balance.amount,
-									currency: balanceRead.balance.currency,
-									lastBalanceSuccessAt: syncedAt
-								}
-							: {}),
-						catalogueServiceCount: services.length,
-						catalogueFingerprint: catalogueFingerprint(services),
-						lastCatalogueSuccessAt: syncedAt,
-						lastApiSuccessAt: syncedAt,
-						consecutiveFailures: 0,
-						pauseReason: null
-					}
-				});
+						await tx.boostProviderState.upsert({
+							where: { provider: client.id },
+							create: {
+								provider: client.id,
+								label: client.label,
+								balance: balanceRead.balance?.amount,
+								projectedBalance: balanceRead.balance?.amount,
+								currency: balanceRead.balance?.currency,
+								catalogueServiceCount: services.length,
+								catalogueFingerprint: catalogueFingerprint(services),
+								lastCatalogueSuccessAt: syncedAt,
+								lastBalanceSuccessAt: balanceRead.balance ? syncedAt : undefined,
+								lastApiSuccessAt: syncedAt,
+								consecutiveFailures: 0,
+								pauseReason: null
+							},
+							update: {
+								label: client.label,
+								...(balanceRead.balance
+									? {
+											balance: balanceRead.balance.amount,
+											projectedBalance: balanceRead.balance.amount,
+											currency: balanceRead.balance.currency,
+											lastBalanceSuccessAt: syncedAt
+										}
+									: {}),
+								catalogueServiceCount: services.length,
+								catalogueFingerprint: catalogueFingerprint(services),
+								lastCatalogueSuccessAt: syncedAt,
+								lastApiSuccessAt: syncedAt,
+								consecutiveFailures: 0,
+								pauseReason: null
+							}
+						});
 
-				for (const batch of batches(services, WRITE_BATCH_SIZE)) {
-					await persistServiceBatch(tx, batch, syncedAt);
-				}
+						for (const batch of batches(services, WRITE_BATCH_SIZE)) {
+							await persistServiceBatch(tx, batch, syncedAt);
+						}
 
-				return tx.boostProviderService.updateMany({
-					where: {
-						provider: client.id,
-						lastSeenAt: { lt: syncedAt },
-						unavailableAt: null
-					},
-					data: { unavailableAt: syncedAt }
-				});
+						const missing = await tx.boostProviderService.updateMany({
+							where: {
+								provider: client.id,
+								lastSeenAt: { lt: syncedAt },
+								unavailableAt: null
+							},
+							data: { unavailableAt: syncedAt }
+						});
+						const routesPausedAsIncompatible = await tx.$executeRaw<number>(Prisma.sql`
+					UPDATE "boost_service_routes" AS route
+					SET "state" = 'paused', "updated_at" = ${syncedAt}
+					FROM "boost_provider_services" AS service, "boost_customer_offers" AS offer
+					WHERE route."provider_service_id" = service."id"
+						AND route."offer_id" = offer."id"
+						AND service."provider" = ${client.id}
+						AND route."state" <> 'paused'
+						AND (
+							service."unavailable_at" IS NOT NULL
+							OR service."catalogue_status" = 'quarantined'
+							OR service."rate_per_thousand" IS NULL
+							OR service."rate_per_thousand" < 0
+							OR service."min_quantity" IS NULL
+							OR service."max_quantity" IS NULL
+							OR service."min_quantity" > offer."min_quantity"
+							OR service."max_quantity" < offer."min_quantity"
+							OR NOT (service."platforms" @> ARRAY[offer."platform"]::text[])
+							OR NOT (service."outcomes" @> ARRAY[offer."outcome"]::text[])
+							OR service."target_type" <> offer."target_type"
+						)
+				`);
+						return { missing, routesPausedAsIncompatible };
 					},
 					{ timeout: 60_000 }
 				),
@@ -283,6 +308,7 @@ async function syncProvider(
 			status: 'synced',
 			servicesSeen: services.length,
 			servicesMarkedUnavailable: missing.count,
+			routesPausedAsIncompatible,
 			balance: balanceRead.balance?.amount ?? null,
 			currency: balanceRead.balance?.currency ?? null,
 			balanceWarning: balanceRead.warning,
@@ -300,6 +326,7 @@ async function syncProvider(
 			status: 'failed',
 			servicesSeen: 0,
 			servicesMarkedUnavailable: 0,
+			routesPausedAsIncompatible: 0,
 			balance: null,
 			currency: null,
 			balanceWarning: null,
@@ -315,7 +342,9 @@ export async function syncBoostProviderCatalogues(
 	const clients = options.clients ?? DEFAULT_CLIENTS;
 	const database = options.database ?? prisma;
 	const now = options.now ?? (() => new Date());
-	const sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+	const sleep =
+		options.sleep ??
+		((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
 	const results: BoostCatalogSyncResult[] = [];
 	for (const client of clients) {
 		// A full provider can exceed 6,000 rows. Keep writes sequential so large first imports and

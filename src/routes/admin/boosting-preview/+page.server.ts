@@ -45,6 +45,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			shortPromise: true,
 			expectationChips: true,
 			minQuantity: true,
+			maxQuantity: true,
 			stepQuantity: true,
 			quantityPresets: true,
 			pricePerStepNgn: true,
@@ -73,6 +74,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				shortPromise: string;
 				expectationChips: string[];
 				minQuantity: number;
+				maxQuantity: number | null;
 				stepQuantity: number;
 				quantityPresets: number[];
 				pricePerStepNgn: number;
@@ -88,7 +90,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 			categoryName: row.category.name,
 			platform: row.platform,
 			platformLabel:
-				BOOSTING_PLATFORM_LABELS[row.platform as keyof typeof BOOSTING_PLATFORM_LABELS] ?? row.platform,
+				BOOSTING_PLATFORM_LABELS[row.platform as keyof typeof BOOSTING_PLATFORM_LABELS] ??
+				row.platform,
 			outcome: row.outcome,
 			outcomeLabel:
 				BOOSTING_ACTION_LABELS[row.outcome as keyof typeof BOOSTING_ACTION_LABELS] ?? row.outcome,
@@ -102,6 +105,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			shortPromise: row.shortPromise,
 			expectationChips: row.expectationChips,
 			minQuantity: row.minQuantity,
+			maxQuantity: row.maxQuantity,
 			stepQuantity: row.stepQuantity,
 			quantityPresets: row.quantityPresets,
 			pricePerStepNgn: Number(row.pricePerStepNgn),

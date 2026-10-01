@@ -98,13 +98,8 @@ export interface SimulateBoostRouteInput {
 	usdToNgn: number;
 	currencyBufferPercent: number;
 	reliabilityFloor: number;
-	/** Shadow evaluation may compare approved shadow routes; live routing never may. */
-	executionMode?: 'live' | 'shadow';
-}
-
-function validPercent(value: number): number {
-	if (!Number.isFinite(value)) return 0;
-	return Math.max(0, value);
+	/** Shadow evaluation may compare approved shadow routes; pilot applies its quantity ceiling. */
+	executionMode?: 'live' | 'pilot' | 'shadow';
 }
 
 function uniqueReasons(reasons: BoostRouteExclusionReason[]): BoostRouteExclusionReason[] {
@@ -154,7 +149,11 @@ function projectRoute(
 	) {
 		reasons.push('quantity_out_of_range');
 	}
-	if (route.maximumPilotQuantity !== null && offer.quantity > route.maximumPilotQuantity) {
+	if (
+		input.executionMode === 'pilot' &&
+		route.maximumPilotQuantity !== null &&
+		offer.quantity > route.maximumPilotQuantity
+	) {
 		reasons.push('pilot_limit_exceeded');
 	}
 	if (

@@ -22,6 +22,7 @@ export interface PlatformBoostingService {
 		qualityTier: string;
 		displayOrder: number;
 		minQuantity: number;
+		maxQuantity: number | null;
 		stepQuantity: number;
 		quantityPresets: number[];
 		pricePerStepNgn: number;
@@ -65,6 +66,7 @@ async function fetchPlatformServices(
 					qualityTier: string;
 					displayOrder: number;
 					minQuantity: number;
+					maxQuantity: number | null;
 					stepQuantity: number;
 					quantityPresets: number[];
 					pricePerStepNgn: number;
@@ -97,6 +99,7 @@ async function fetchPlatformServices(
 						qualityTier: offer.qualityTier,
 						displayOrder: offer.displayOrder,
 						minQuantity: offer.minQuantity,
+						maxQuantity: offer.maxQuantity,
 						stepQuantity: offer.stepQuantity,
 						quantityPresets: offer.quantityPresets,
 						pricePerStepNgn: offer.pricePerStepNgn,

@@ -5,6 +5,7 @@
 	interface Props {
 		value: number;
 		minQuantity: number;
+		maxQuantity?: number | null;
 		stepQuantity: number;
 		presets?: number[];
 		label?: string;
@@ -15,6 +16,7 @@
 	let {
 		value,
 		minQuantity,
+		maxQuantity = null,
 		stepQuantity,
 		presets = [],
 		label = 'Quantity',
@@ -31,7 +33,7 @@
 	});
 
 	function commit(rawValue: number): void {
-		const next = normalizeBoostingQuantity(rawValue, minQuantity, stepQuantity);
+		const next = normalizeBoostingQuantity(rawValue, minQuantity, stepQuantity, maxQuantity);
 		lastExternalValue = next;
 		typedValue = String(next);
 		onchange(next);
@@ -85,6 +87,7 @@
 					type="number"
 					inputmode="numeric"
 					min={minQuantity}
+					max={maxQuantity ?? undefined}
 					step={stepQuantity}
 					bind:value={typedValue}
 					onblur={commitTyped}
@@ -100,7 +103,8 @@
 				<button
 					type="button"
 					onclick={() => adjust(1)}
-					class="flex min-w-11 items-center justify-center border-l px-3"
+					disabled={maxQuantity !== null && value >= maxQuantity}
+					class="flex min-w-11 items-center justify-center border-l px-3 disabled:opacity-40"
 					style="border-color: var(--border); color: var(--text);"
 					aria-label={`Increase ${label.toLowerCase()} by ${stepQuantity.toLocaleString()}`}
 				>
@@ -110,6 +114,9 @@
 		</label>
 	</div>
 	<p class="text-[11px]" style="color: var(--text-dim);">
-		Type any amount. It will use the nearest valid {stepQuantity.toLocaleString()} increment.
+		Type any amount. It will use the nearest valid {stepQuantity.toLocaleString()} increment{maxQuantity !==
+		null
+			? `, up to ${maxQuantity.toLocaleString()}`
+			: ''}.
 	</p>
 </div>

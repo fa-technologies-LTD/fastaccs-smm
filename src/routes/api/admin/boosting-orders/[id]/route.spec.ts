@@ -8,8 +8,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 const tx = vi.hoisted(() => ({
+	$queryRaw: vi.fn(),
 	orderItem: { update: vi.fn(), findMany: vi.fn() },
 	order: { update: vi.fn() },
+	boostFulfillment: { findUnique: vi.fn(), updateMany: vi.fn() },
 	notification: { create: vi.fn() }
 }));
 
@@ -62,6 +64,16 @@ beforeEach(() => {
 	tx.orderItem.update.mockResolvedValue({ ...existing, boostFulfillmentStatus: 'needs_link' });
 	tx.orderItem.findMany.mockResolvedValue([{ boostFulfillmentStatus: 'needs_link' }]);
 	tx.order.update.mockResolvedValue({});
+	tx.$queryRaw.mockResolvedValue([]);
+	tx.boostFulfillment.findUnique.mockResolvedValue({
+		status: 'queued',
+		supplierOrderId: null,
+		submittedAt: null,
+		leaseToken: null,
+		leaseExpiresAt: null,
+		attempts: []
+	});
+	tx.boostFulfillment.updateMany.mockResolvedValue({ count: 1 });
 	tx.notification.create.mockResolvedValue({ id: 'notice-1' });
 	mocks.recordOrderEvent.mockResolvedValue(undefined);
 	mocks.notifyCompleted.mockResolvedValue(undefined);
@@ -115,6 +127,25 @@ describe('manual boosting order workflow', () => {
 			}),
 			tx
 		);
+	});
+
+	it('does not request a new link after supplier submission may have started', async () => {
+		tx.boostFulfillment.findUnique.mockResolvedValue({
+			status: 'manual_review',
+			supplierOrderId: null,
+			submittedAt: null,
+			leaseToken: null,
+			leaseExpiresAt: null,
+			attempts: [{ type: 'submission', outcome: 'submission_unknown' }]
+		});
+
+		const response = await callPatch({
+			status: 'needs_link',
+			reason: 'Try another link.'
+		});
+
+		expect(response.status).toBe(409);
+		expect(tx.orderItem.update).not.toHaveBeenCalled();
 	});
 
 	it('marks an unfulfillable paid boost for review without creating a refund path', async () => {

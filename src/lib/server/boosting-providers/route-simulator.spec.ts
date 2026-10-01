@@ -79,7 +79,8 @@ function route(
 function simulate(
 	routes: BoostApprovedRoute[],
 	offerOverrides: Partial<BoostCustomerOfferEnvelope> = {},
-	providerOverrides: BoostProviderRuntimeState[] = providers
+	providerOverrides: BoostProviderRuntimeState[] = providers,
+	executionMode: 'live' | 'pilot' | 'shadow' = 'live'
 ) {
 	return simulateBoostRoute({
 		offer: { ...offer, ...offerOverrides },
@@ -87,7 +88,8 @@ function simulate(
 		providers: providerOverrides,
 		usdToNgn: 1600,
 		currencyBufferPercent: 5,
-		reliabilityFloor: 0.8
+		reliabilityFloor: 0.8,
+		executionMode
 	});
 }
 
@@ -172,7 +174,8 @@ describe('boost route simulator', () => {
 				})
 			],
 			{ maximumSupplierCostNgn: 1000 },
-			lowBalance
+			lowBalance,
+			'pilot'
 		);
 
 		expect(result.selectedRouteId).toBeNull();
@@ -188,13 +191,18 @@ describe('boost route simulator', () => {
 	});
 
 	it('permits a small capped pilot before a new route has enough observations', () => {
-		const result = simulate([
-			route('pilot', 'smm_raja', 1, {
-				reliabilityScore: 0,
-				reliabilityObservations: 0,
-				maximumPilotQuantity: 1000
-			})
-		]);
+		const result = simulate(
+			[
+				route('pilot', 'smm_raja', 1, {
+					reliabilityScore: 0,
+					reliabilityObservations: 0,
+					maximumPilotQuantity: 1000
+				})
+			],
+			{},
+			providers,
+			'pilot'
+		);
 
 		expect(result.selectedRouteId).toBe('pilot');
 	});

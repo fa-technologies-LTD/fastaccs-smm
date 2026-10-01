@@ -24,7 +24,14 @@ import type {
 export type BoostAutomationMode = 'shadow' | 'pilot' | 'live';
 
 const dueFulfillmentInclude = Prisma.validator<Prisma.BoostFulfillmentInclude>()({
-	orderItem: { select: { id: true, orderId: true, boostFulfillmentStatus: true } },
+	orderItem: {
+		select: {
+			id: true,
+			orderId: true,
+			boostFulfillmentStatus: true,
+			order: { select: { status: true, paymentStatus: true } }
+		}
+	},
 	offer: {
 		include: {
 			routes: {
@@ -139,6 +146,18 @@ function projectionSummary(projection: BoostRouteProjection) {
 	};
 }
 
+function jsonObject(value: Prisma.JsonValue): Record<string, Prisma.JsonValue> | null {
+	return value && typeof value === 'object' && !Array.isArray(value)
+		? (value as Record<string, Prisma.JsonValue>)
+		: null;
+}
+
+function jsonStringArray(value: Prisma.JsonValue | undefined): string[] {
+	return Array.isArray(value)
+		? value.filter((item): item is string => typeof item === 'string')
+		: [];
+}
+
 function simulationInput(
 	fulfillment: DueFulfillment,
 	now: Date,
@@ -146,13 +165,38 @@ function simulationInput(
 	mode: BoostAutomationMode
 ) {
 	const offer = fulfillment.offer;
+	const snapshot = jsonObject(fulfillment.offerSnapshot);
 	if (
 		!offer ||
-		!isPlatform(offer.platform) ||
-		!isOutcome(offer.outcome) ||
-		!isTargetType(offer.targetType)
+		!snapshot ||
+		!isPlatform(String(snapshot.platform)) ||
+		!isOutcome(String(snapshot.outcome)) ||
+		!isTargetType(String(snapshot.targetType)) ||
+		!Array.isArray(snapshot.routes) ||
+		!Array.isArray(snapshot.requiredVerifiedSignals)
 	)
 		return null;
+	const snapshotPlatform = String(snapshot.platform) as BoostCatalogPlatform;
+	const snapshotOutcome = String(snapshot.outcome) as BoostCatalogOutcome;
+	const snapshotTargetType = String(snapshot.targetType) as Exclude<BoostTargetType, 'unknown'>;
+	const frozenMinimumMarginPercent = Number(snapshot.minimumMarginPercent);
+	const frozenRefillDays = snapshot.refillDays === null ? null : Number(snapshot.refillDays);
+	if (
+		!Number.isFinite(frozenMinimumMarginPercent) ||
+		frozenMinimumMarginPercent < 0 ||
+		(frozenRefillDays !== null && (!Number.isInteger(frozenRefillDays) || frozenRefillDays < 1)) ||
+		snapshotPlatform !== fulfillment.platform ||
+		snapshotOutcome !== fulfillment.outcome ||
+		snapshotTargetType !== fulfillment.targetType
+	)
+		return null;
+	const routeSnapshots = new Map(
+		snapshot.routes
+			.map(jsonObject)
+			.filter((route): route is Record<string, Prisma.JsonValue> => Boolean(route))
+			.map((route) => [String(route.id), route])
+	);
+	if (!routeSnapshots.size) return null;
 
 	const rejectedRouteIds = new Set(
 		fulfillment.attempts
@@ -166,11 +210,64 @@ function simulationInput(
 	const routes: BoostApprovedRoute[] = offer.routes.flatMap((route) => {
 		const service = route.providerService;
 		const state = service.providerState;
-		if (!isProvider(service.provider) || rejectedRouteIds.has(route.id)) return [];
+		const routeSnapshot = routeSnapshots.get(route.id);
+		const serviceSnapshot = routeSnapshot ? jsonObject(routeSnapshot.service) : null;
+		if (
+			!routeSnapshot ||
+			!serviceSnapshot ||
+			!isProvider(service.provider) ||
+			rejectedRouteIds.has(route.id) ||
+			String(serviceSnapshot.provider) !== service.provider ||
+			String(serviceSnapshot.serviceId) !== service.serviceId
+		)
+			return [];
 		const provider = service.provider;
+		const frozenRate =
+			typeof serviceSnapshot.ratePerThousand === 'number'
+				? serviceSnapshot.ratePerThousand
+				: Number.NaN;
+		const frozenMinimum = Number(serviceSnapshot.minQuantity);
+		const frozenMaximum = Number(serviceSnapshot.maxQuantity);
+		const currentRate =
+			service.ratePerThousand === null ? Number.NaN : Number(service.ratePerThousand);
+		const currentMinimum = service.minQuantity === null ? Number.NaN : service.minQuantity;
+		const currentMaximum = service.maxQuantity === null ? Number.NaN : service.maxQuantity;
+		const frozenVerifiedRefillDays =
+			routeSnapshot.verifiedRefillDays === null ? null : Number(routeSnapshot.verifiedRefillDays);
+		const frozenMaximumPilotQuantity =
+			routeSnapshot.maximumPilotQuantity === null
+				? null
+				: Number(routeSnapshot.maximumPilotQuantity);
+		const frozenRecoveryCostPercent = Number(routeSnapshot.expectedRecoveryCostPercent);
+		if (
+			!Number.isFinite(frozenRate) ||
+			frozenRate < 0 ||
+			!Number.isInteger(frozenMinimum) ||
+			frozenMinimum < 1 ||
+			!Number.isInteger(frozenMaximum) ||
+			frozenMaximum < frozenMinimum ||
+			(frozenVerifiedRefillDays !== null &&
+				(!Number.isInteger(frozenVerifiedRefillDays) || frozenVerifiedRefillDays < 1)) ||
+			(frozenMaximumPilotQuantity !== null &&
+				(!Number.isInteger(frozenMaximumPilotQuantity) || frozenMaximumPilotQuantity < 1)) ||
+			!Number.isFinite(frozenRecoveryCostPercent) ||
+			frozenRecoveryCostPercent < 0 ||
+			!Number.isFinite(currentRate) ||
+			currentRate < 0 ||
+			!Number.isInteger(currentMinimum) ||
+			currentMinimum < 1 ||
+			!Number.isInteger(currentMaximum) ||
+			currentMaximum < currentMinimum ||
+			!route.equivalenceApproved
+		)
+			return [];
 		providerMap.set(provider, {
 			provider,
-			enabled: state.enabled && state.currency?.toUpperCase() === 'USD',
+			enabled:
+				state.enabled &&
+				state.currency?.toUpperCase() === 'USD' &&
+				!service.unavailableAt &&
+				service.catalogueStatus !== 'quarantined',
 			circuitOpen: state.circuitOpen,
 			catalogFresh:
 				Boolean(state.lastCatalogueSuccessAt) &&
@@ -192,10 +289,9 @@ function simulationInput(
 					category: service.category,
 					description: service.description,
 					providerType: service.providerType,
-					ratePerThousand:
-						service.ratePerThousand === null ? null : Number(service.ratePerThousand),
-					minQuantity: service.minQuantity,
-					maxQuantity: service.maxQuantity,
+					ratePerThousand: currentRate,
+					minQuantity: currentMinimum,
+					maxQuantity: currentMaximum,
 					refillAdvertised: service.refillAdvertised,
 					cancelAdvertised: service.cancelAdvertised,
 					dripfeedAdvertised: service.dripfeedAdvertised,
@@ -209,40 +305,55 @@ function simulationInput(
 						service.catalogueStatus === 'needs_classification'
 							? service.catalogueStatus
 							: 'quarantined',
-					fingerprint: service.fingerprint
+					fingerprint: String(serviceSnapshot.fingerprint || '')
 				},
-				state: route.state === 'enabled' || route.state === 'shadow' ? route.state : 'paused',
-				equivalenceApproved: route.equivalenceApproved,
+				state:
+					route.state === 'paused'
+						? 'paused'
+						: routeSnapshot.state === 'enabled' || routeSnapshot.state === 'shadow'
+							? routeSnapshot.state
+							: 'paused',
+				equivalenceApproved: routeSnapshot.equivalenceApproved === true,
 				verifiedSignals: route.verifiedSignals,
 				audienceTags: route.audienceTags,
 				verifiedRefillDays: route.verifiedRefillDays,
 				reliabilityScore: Number(route.reliabilityScore),
 				reliabilityObservations: route.reliabilityObservations,
 				minimumReliabilityObservations: 3,
-				maximumPilotQuantity: route.maximumPilotQuantity,
-				expectedRecoveryCostPercent: Number(route.expectedRecoveryCostPercent)
+				maximumPilotQuantity:
+					route.maximumPilotQuantity === null
+						? frozenMaximumPilotQuantity
+						: frozenMaximumPilotQuantity === null
+							? route.maximumPilotQuantity
+							: Math.min(route.maximumPilotQuantity, frozenMaximumPilotQuantity),
+				expectedRecoveryCostPercent: Math.max(
+					Number(route.expectedRecoveryCostPercent),
+					frozenRecoveryCostPercent
+				)
 			} satisfies BoostApprovedRoute
 		];
 	});
 
 	const offerEnvelope: BoostCustomerOfferEnvelope = {
 		id: offer.id,
-		platform: offer.platform,
-		outcome: offer.outcome,
-		targetType: offer.targetType,
+		platform: snapshotPlatform,
+		outcome: snapshotOutcome,
+		targetType: snapshotTargetType,
 		quantity: fulfillment.quantity,
 		customerPriceNgn: Number(fulfillment.customerPriceNgn),
-		minimumMarginPercent: Number(offer.minimumMarginPercent),
+		minimumMarginPercent: frozenMinimumMarginPercent,
 		maximumSupplierCostNgn: Number(fulfillment.maximumSupplierCostNgn),
-		requiredVerifiedSignals: offer.requiredVerifiedSignals,
-		audienceTag: offer.audienceTag === 'general' ? null : offer.audienceTag,
-		refillDays: offer.refillDays,
+		requiredVerifiedSignals: jsonStringArray(snapshot.requiredVerifiedSignals),
+		audienceTag:
+			snapshot.audienceTag === 'general' ? null : String(snapshot.audienceTag || '') || null,
+		refillDays: frozenRefillDays,
 		routingPolicy:
-			offer.routingPolicy === 'preferred' || offer.routingPolicy === 'locked'
-				? offer.routingPolicy
+			snapshot.routingPolicy === 'preferred' || snapshot.routingPolicy === 'locked'
+				? snapshot.routingPolicy
 				: 'automatic',
-		preferredRouteId: offer.preferredRouteId,
-		lockedRouteId: offer.lockedRouteId
+		preferredRouteId:
+			typeof snapshot.preferredRouteId === 'string' ? snapshot.preferredRouteId : null,
+		lockedRouteId: typeof snapshot.lockedRouteId === 'string' ? snapshot.lockedRouteId : null
 	};
 	return {
 		offerEnvelope,
@@ -255,7 +366,7 @@ function simulationInput(
 			usdToNgn: pricing.usdNgnRate,
 			currencyBufferPercent: pricing.currencyBufferPercent,
 			reliabilityFloor: finite(env.BOOSTING_RELIABILITY_FLOOR, 0.8),
-			executionMode: mode === 'shadow' ? 'shadow' : 'live'
+			executionMode: mode
 		})
 	};
 }
@@ -362,6 +473,10 @@ async function processStatus(
 		startCount: status.startCount,
 		remains: status.remains,
 		finalSupplierCostUsd: status.charge,
+		finalMarginNgn:
+			status.charge === null || fulfillment.fxNgnPerUsd === null
+				? undefined
+				: Number(fulfillment.customerPriceNgn) - status.charge * Number(fulfillment.fxNgnPerUsd),
 		lastCheckedAt: now
 	};
 	if (status.state === 'completed') {
@@ -524,17 +639,41 @@ async function processQueued(
 	const requestFingerprint = createHash('sha256')
 		.update(`${fulfillment.id}:${route.id}:${fulfillment.attemptCount + 1}`)
 		.digest('hex');
-	await database.boostAttempt.create({
-		data: {
-			fulfillmentId: fulfillment.id,
-			routeId: route.id,
-			type: 'submission',
-			outcome: 'started',
-			requestFingerprint,
-			supplierCostUsd: selected.rawSupplierCostUsd,
-			safeSummary: { provider: route.service.provider, serviceId: route.service.serviceId }
-		}
+	const reservationStarted = await database.$transaction(async (tx) => {
+		const reserved = await tx.boostProviderState.updateMany({
+			where: {
+				provider: route.service.provider,
+				projectedBalance: {
+					gte: selected.rawSupplierCostUsd + finite(env.BOOSTING_BALANCE_SAFETY_USD, 5)
+				}
+			},
+			data: { projectedBalance: { decrement: selected.rawSupplierCostUsd } }
+		});
+		if (!reserved.count) return false;
+		await tx.boostAttempt.create({
+			data: {
+				fulfillmentId: fulfillment.id,
+				routeId: route.id,
+				type: 'submission',
+				outcome: 'started',
+				requestFingerprint,
+				supplierCostUsd: selected.rawSupplierCostUsd,
+				safeSummary: { provider: route.service.provider, serviceId: route.service.serviceId }
+			}
+		});
+		return true;
 	});
+	if (!reservationStarted) {
+		await database.boostFulfillment.update({
+			where: { id: fulfillment.id },
+			data: {
+				status: 'manual_review',
+				lastSafeErrorCategory: 'balance_reservation_failed',
+				nextActionAt: null
+			}
+		});
+		return 'manual_review';
+	}
 	try {
 		const result = await orderClients[route.service.provider].submitOrder({
 			serviceId: service.serviceId,
@@ -581,7 +720,7 @@ async function processQueued(
 			error instanceof BoostProviderSubmissionError ? error.certainty : 'submission_unknown';
 		const nextAttemptCount = fulfillment.attemptCount + 1;
 		const retry = canRetryBoostSubmission(error, nextAttemptCount, fulfillment.attemptCap);
-		await database.$transaction([
+		const writes: Prisma.PrismaPromise<unknown>[] = [
 			database.boostAttempt.create({
 				data: {
 					fulfillmentId: fulfillment.id,
@@ -606,7 +745,16 @@ async function processQueued(
 					nextActionAt: retry ? now : null
 				}
 			})
-		]);
+		];
+		if (certainty === 'not_submitted') {
+			writes.push(
+				database.boostProviderState.update({
+					where: { provider: route.service.provider },
+					data: { projectedBalance: { increment: selected.rawSupplierCostUsd } }
+				})
+			);
+		}
+		await database.$transaction(writes);
 		await updateRouteReliability(database, route.id, false);
 		return certainty === 'not_submitted' ? 'definitive_rejection' : 'manual_review';
 	}
@@ -619,11 +767,57 @@ export async function queuePaidBoostFulfillments(
 	const database = options.database ?? prisma;
 	const mode = options.mode ?? getBoostAutomationMode();
 	const now = options.now ?? new Date();
-	const result = await database.boostFulfillment.updateMany({
+	const awaiting = await database.boostFulfillment.findMany({
 		where: { orderItem: { orderId }, status: 'awaiting_payment' },
-		data: { status: 'queued', fulfillmentMode: mode, nextActionAt: now }
+		select: { id: true, targetKey: true, outcome: true }
 	});
-	return result.count;
+	let queued = 0;
+	for (const fulfillment of awaiting) {
+		if (mode !== 'shadow') {
+			const conflict = await database.boostFulfillment.findFirst({
+				where: {
+					id: { not: fulfillment.id },
+					targetKey: fulfillment.targetKey,
+					outcome: fulfillment.outcome,
+					fulfillmentMode: { not: 'shadow' },
+					status: { in: ['queued', 'submitted', 'in_progress', 'manual_review'] }
+				},
+				select: { id: true }
+			});
+			if (conflict) {
+				await database.boostFulfillment.update({
+					where: { id: fulfillment.id },
+					data: {
+						status: 'manual_review',
+						fulfillmentMode: mode,
+						lastSafeErrorCategory: 'target_already_active',
+						nextActionAt: null
+					}
+				});
+				continue;
+			}
+		}
+		try {
+			const result = await database.boostFulfillment.updateMany({
+				where: { id: fulfillment.id, status: 'awaiting_payment' },
+				data: { status: 'queued', fulfillmentMode: mode, nextActionAt: now }
+			});
+			queued += result.count;
+		} catch (error) {
+			if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
+				throw error;
+			await database.boostFulfillment.update({
+				where: { id: fulfillment.id },
+				data: {
+					status: 'manual_review',
+					fulfillmentMode: mode,
+					lastSafeErrorCategory: 'target_already_active',
+					nextActionAt: null
+				}
+			});
+		}
+	}
+	return queued;
 }
 
 export async function runBoostFulfillmentWorker(
@@ -654,6 +848,7 @@ export async function runBoostFulfillmentWorker(
 	const due = await database.boostFulfillment.findMany({
 		where: {
 			status: { in: ['queued', 'submitted', 'in_progress'] },
+			orderItem: { order: { paymentStatus: 'paid', status: { notIn: ['cancelled', 'refunded'] } } },
 			AND: [
 				{ OR: [{ nextActionAt: null }, { nextActionAt: { lte: now } }] },
 				{ OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] }
@@ -671,6 +866,9 @@ export async function runBoostFulfillmentWorker(
 				where: {
 					id: candidate.id,
 					status: candidate.status,
+					orderItem: {
+						order: { paymentStatus: 'paid', status: { notIn: ['cancelled', 'refunded'] } }
+					},
 					OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }]
 				},
 				data: { leaseToken, leaseExpiresAt: new Date(now.getTime() + 2 * 60_000) }

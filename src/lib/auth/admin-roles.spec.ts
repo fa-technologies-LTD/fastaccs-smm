@@ -8,6 +8,19 @@ describe('order route permissions', () => {
 		).toBeNull();
 	});
 
+	it('lets the customer boosting complaint endpoint perform its own owner check', () => {
+		expect(
+			getRequiredAdminPermission('/api/orders/order-1/boosting-complaints', 'POST')
+		).toBeNull();
+	});
+
+	it('lets catalog managers save Boosting and Numbers catalog settings', () => {
+		expect(getRequiredAdminPermission('/api/admin/boosting-settings', 'PUT')).toBe(
+			'admin:catalog:manage'
+		);
+		expect(getRequiredAdminPermission('/api/admin/numbers', 'POST')).toBe('admin:catalog:manage');
+	});
+
 	it('keeps unrelated order mutations admin-gated', () => {
 		expect(getRequiredAdminPermission('/api/orders/order-1/refund', 'POST')).toBe(
 			'admin:orders:manage'

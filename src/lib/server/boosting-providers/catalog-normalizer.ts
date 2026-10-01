@@ -21,7 +21,7 @@ const PLATFORM_PATTERNS: Record<BoostCatalogPlatform, RegExp> = {
 	tiktok: /tik[\s-]?tok/i,
 	youtube: /youtube|youtu\.be/i,
 	facebook: /facebook|(^|[^a-z])fb([^a-z]|$)/i,
-	x: /twitter|(^|[\s([{:])x(?=$|[\s)\]}:\-])/i,
+	x: /twitter|(^|[\s([{:])x(?=$|[\s)\]}:-])/i,
 	spotify: /spotify/i,
 	telegram: /telegram/i
 };
@@ -30,7 +30,7 @@ const OUTCOME_PATTERNS: Record<BoostCatalogOutcome, RegExp> = {
 	followers: /followers?/i,
 	subscribers: /subscribers?/i,
 	members: /members?|joiners?/i,
-	views: /views?/i,
+	views: /views?|impressions?/i,
 	streams: /streams?|plays?/i,
 	monthly_listeners: /monthly\s+listeners?/i,
 	likes: /likes?/i,
@@ -112,6 +112,11 @@ function inferPlatforms(name: string, category: string): BoostCatalogPlatform[] 
 }
 
 function inferOutcomes(name: string, category: string): BoostCatalogOutcome[] {
+	// Supplier labels such as "Twitter - New Followers Impressions" describe
+	// impressions, not follower delivery. Treat the more specific impressions
+	// term as authoritative so the incidental word "followers" cannot route a
+	// content-view service into a profile-follower offer.
+	if (/\bimpressions?\b/i.test(name)) return ['views'];
 	const fromName = matchesFrom(name, BOOST_CATALOG_OUTCOMES, OUTCOME_PATTERNS);
 	return fromName.length
 		? fromName
@@ -176,8 +181,7 @@ export function normalizeBoostProviderService(
 	const providerType = textValue(raw.type) || null;
 	const parsedRatePerThousand = positiveNumber(raw.rate);
 	const ratePerThousand =
-		parsedRatePerThousand !== null &&
-		parsedRatePerThousand <= MAX_PERSISTABLE_RATE_PER_THOUSAND
+		parsedRatePerThousand !== null && parsedRatePerThousand <= MAX_PERSISTABLE_RATE_PER_THOUSAND
 			? parsedRatePerThousand
 			: null;
 	const minQuantity = positiveInteger(raw.min);
@@ -197,10 +201,7 @@ export function normalizeBoostProviderService(
 	if (!serviceId) anomalies.push('missing_service_id');
 	if (!name) anomalies.push('missing_name');
 	if (ratePerThousand === null) anomalies.push('invalid_rate');
-	if (
-		parsedRatePerThousand !== null &&
-		parsedRatePerThousand > SUSPICIOUS_RATE_PER_THOUSAND
-	) {
+	if (parsedRatePerThousand !== null && parsedRatePerThousand > SUSPICIOUS_RATE_PER_THOUSAND) {
 		anomalies.push('suspicious_rate');
 	}
 	if (minQuantity === null) anomalies.push('invalid_minimum');

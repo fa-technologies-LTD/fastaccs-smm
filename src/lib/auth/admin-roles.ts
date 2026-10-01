@@ -284,6 +284,16 @@ const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
 		writePermission: 'admin:catalog:manage'
 	},
 	{
+		prefix: '/api/admin/boosting-settings',
+		readPermission: 'admin:catalog:manage',
+		writePermission: 'admin:catalog:manage'
+	},
+	{
+		prefix: '/api/admin/numbers',
+		readPermission: 'admin:catalog:manage',
+		writePermission: 'admin:catalog:manage'
+	},
+	{
 		prefix: '/api/orders/stats',
 		readPermission: 'admin:access',
 		writePermission: 'admin:orders:manage'
@@ -344,6 +354,12 @@ export function getRequiredAdminPermission(
 		normalizedMethod === 'PATCH' &&
 		/^\/api\/orders\/[^/]+\/boosting-link\/[^/]+$/.test(pathname)
 	) {
+		return null;
+	}
+
+	// The customer complaint route performs its own signed-in owner check. Keeping
+	// it behind admin:orders:manage makes the protection shown on an order unusable.
+	if (normalizedMethod === 'POST' && /^\/api\/orders\/[^/]+\/boosting-complaints$/.test(pathname)) {
 		return null;
 	}
 

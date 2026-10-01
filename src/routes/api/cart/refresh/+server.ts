@@ -296,7 +296,11 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				: Promise.resolve([]),
 			requestedBoostOfferIds.length
 				? prisma.boostCustomerOffer.findMany({
-						where: { id: { in: requestedBoostOfferIds }, status: 'live' },
+						where: {
+							id: { in: requestedBoostOfferIds },
+							status: 'live',
+							routes: { some: { state: 'enabled', equivalenceApproved: true } }
+						},
 						select: {
 							id: true,
 							categoryId: true,
@@ -304,6 +308,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 							platform: true,
 							outcome: true,
 							minQuantity: true,
+							maxQuantity: true,
 							stepQuantity: true,
 							pricePerStepNgn: true
 						}
@@ -376,6 +381,12 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				if (!isValidBoostingQuantity(config, boostQuantity)) {
 					messages.push(
 						`${tier.name} quantity must be at least ${config.minQuantity.toLocaleString()} in steps of ${config.stepQuantity.toLocaleString()}, so it was removed from your cart.`
+					);
+					continue;
+				}
+				if (offer && offer.maxQuantity !== null && boostQuantity > offer.maxQuantity) {
+					messages.push(
+						`${tier.name} is currently available up to ${offer.maxQuantity.toLocaleString()}, so it was removed from your cart.`
 					);
 					continue;
 				}

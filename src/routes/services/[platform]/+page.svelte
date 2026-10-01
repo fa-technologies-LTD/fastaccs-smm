@@ -51,6 +51,7 @@
 		qualityTier: string | null;
 		expectationChips: string[];
 		quantityPresets: number[];
+		maxQuantity: number | null;
 	}
 
 	let { data }: { data: PageData } = $props();
@@ -80,7 +81,8 @@
 			expectationChips: service.customerOffer?.expectationChips || [],
 			quantityPresets:
 				service.customerOffer?.quantityPresets ||
-				getQuantityChips(getBoostingServiceConfig(service.metadata))
+				getQuantityChips(getBoostingServiceConfig(service.metadata)),
+			maxQuantity: service.customerOffer?.maxQuantity ?? null
 		}))
 	);
 	const hasRefillOffer = $derived(services.some((service) => service.config.refillAvailable));
@@ -640,6 +642,7 @@
 								<BoostingQuantitySelector
 									value={quantity}
 									minQuantity={service.config.minQuantity}
+									maxQuantity={service.maxQuantity}
 									stepQuantity={service.config.stepQuantity}
 									presets={service.quantityPresets}
 									label={`${BOOSTING_ACTION_LABELS[service.config.actionType]} quantity`}

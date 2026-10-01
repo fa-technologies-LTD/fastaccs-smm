@@ -30,10 +30,11 @@ describe('public live Boosting offer copy', () => {
 		expect(body).toMatchObject({ success: true, data: [{ categoryId: 'category-1' }] });
 		expect(mocks.findMany).toHaveBeenCalledWith(
 			expect.objectContaining({
-				where: {
+				where: expect.objectContaining({
 					status: 'live',
-					category: { categoryType: 'boosting_service', isActive: true }
-				},
+					category: { categoryType: 'boosting_service', isActive: true },
+					routes: { some: { state: 'enabled', equivalenceApproved: true } }
+				}),
 				select: expect.not.objectContaining({
 					routes: true,
 					minimumMarginPercent: true,
@@ -41,6 +42,7 @@ describe('public live Boosting offer copy', () => {
 				})
 			})
 		);
+		expect(mocks.findMany.mock.calls[0]?.[0]?.select).toMatchObject({ maxQuantity: true });
 		expect(setHeaders).toHaveBeenCalledWith(
 			expect.objectContaining({ 'cache-control': expect.stringContaining('s-maxage=300') })
 		);

@@ -43,6 +43,24 @@ describe('boosting provider catalogue normalization', () => {
 		expect(service.targetType).toBe('content');
 	});
 
+	it('classifies follower impressions as views rather than follower delivery', () => {
+		const service = normalizeBoostProviderService('bulk_follows', {
+			...BULK_FOLLOWS_SERVICE_FIXTURE,
+			service: '14058',
+			name: 'Twitter - New Followers Impressions',
+			category: 'Twitter Followers',
+			rate: '0.0106',
+			min: '100',
+			max: '100000'
+		});
+		expect(service).toMatchObject({
+			platforms: ['x'],
+			outcomes: ['views'],
+			targetType: 'content',
+			status: 'ready_for_review'
+		});
+	});
+
 	it('recognizes X without treating unrelated letter-x words as the platform', () => {
 		const xService = normalizeBoostProviderService('bulk_follows', {
 			...BULK_FOLLOWS_SERVICE_FIXTURE,

@@ -72,7 +72,10 @@ function eligibleForTier(candidate: DraftSuggestionCandidate, tier: SuggestedQua
 	if (tier === 'stable') {
 		return signalCount(candidate, ['stability_claim', 'refill_claim']) > 0;
 	}
-	return candidate.qualitySignals.includes('quality_claim');
+	return (
+		candidate.qualitySignals.includes('quality_claim') &&
+		signalCount(candidate, ['stability_claim', 'refill_claim']) > 0
+	);
 }
 
 /**
@@ -259,7 +262,8 @@ export async function prepopulateBoostingDraftSuggestions(
 				qualityTier: true,
 				audienceTag: true,
 				pricePerStepNgn: true,
-				status: true
+				status: true,
+				_count: { select: { routes: true } }
 			}
 		})
 	]);
@@ -273,6 +277,11 @@ export async function prepopulateBoostingDraftSuggestions(
 	const routeRows: Prisma.BoostServiceRouteCreateManyInput[] = [];
 	const auditRows: Prisma.AdminAuditLogCreateManyInput[] = [];
 	const priceRepairs: Array<{ id: string; pricePerStepNgn: number }> = [];
+	const offerRepairs: Array<{
+		id: string;
+		maxQuantity: number;
+		quantityPresets: number[];
+	}> = [];
 
 	for (const category of categories) {
 		const config = getBoostingServiceConfig(category.metadata);
@@ -305,18 +314,26 @@ export async function prepopulateBoostingDraftSuggestions(
 
 		for (const tier of Object.keys(TIER_DEFINITIONS) as SuggestedQualityTier[]) {
 			const existingOffer = existingOfferByKey.get(`${category.id}:${tier}:general`);
+			const generatedCategory = isGeneratedDraftCategory(category.metadata);
 			const canRepairGeneratedPrice =
 				Boolean(existingOffer) &&
 				existingOffer?.status === 'hidden' &&
 				Number(existingOffer.pricePerStepNgn) <= 0 &&
-				isGeneratedDraftCategory(category.metadata);
-			if (existingOffer && !canRepairGeneratedPrice) continue;
+				generatedCategory;
+			const canRepairEmptyRoutes =
+				Boolean(existingOffer) &&
+				existingOffer?.status === 'hidden' &&
+				existingOffer._count.routes === 0;
+			if (existingOffer && !canRepairGeneratedPrice && !canRepairEmptyRoutes) continue;
 			const suggested = rankDraftSuggestionCandidates(candidates, tier);
 			if (suggested.length < 2) {
 				summary.skippedWithoutCandidates += 1;
 				continue;
 			}
 			const definition = TIER_DEFINITIONS[tier];
+			const maximumCustomerQuantity = Math.max(
+				...suggested.map((candidate) => candidate.maxQuantity)
+			);
 			const costs = suggested.map(
 				(candidate) => (candidate.ratePerThousand * config.minQuantity * fxRate * costBuffer) / 1000
 			);
@@ -329,18 +346,52 @@ export async function prepopulateBoostingDraftSuggestions(
 				existingPricePerStep: config.pricePerStep,
 				priceMultiplier: definition.priceMultiplier
 			});
-			if (existingOffer && canRepairGeneratedPrice) {
-				priceRepairs.push({ id: existingOffer.id, pricePerStepNgn });
+			if (existingOffer) {
+				if (canRepairGeneratedPrice) {
+					priceRepairs.push({ id: existingOffer.id, pricePerStepNgn });
+				}
+				if (canRepairEmptyRoutes) {
+					offerRepairs.push({
+						id: existingOffer.id,
+						maxQuantity: maximumCustomerQuantity,
+						quantityPresets: getQuantityChips(config, maximumCustomerQuantity)
+					});
+					routeRows.push(
+						...suggested.map((candidate) => ({
+							id: randomUUID(),
+							offerId: existingOffer.id,
+							providerServiceId: candidate.id,
+							state: 'shadow',
+							equivalenceApproved: false,
+							equivalenceLabel: 'Automatically suggested; owner review required',
+							targetType,
+							verifiedSignals: [],
+							audienceTags: [],
+							verifiedRefillDays: null,
+							minimumQuantity: candidate.minQuantity,
+							maximumQuantity: candidate.maxQuantity,
+							maximumPilotQuantity: config.minQuantity,
+							expectedRecoveryCostPercent: 10
+						}))
+					);
+				}
 				auditRows.push({
 					id: randomUUID(),
-					action: 'boosting_draft_price_suggested',
+					action: canRepairEmptyRoutes
+						? 'boosting_draft_routes_repaired'
+						: 'boosting_draft_price_suggested',
 					resourceType: 'boost_customer_offer',
 					resourceId: existingOffer.id,
-					description: `Added a rounded customer-price suggestion to the hidden ${tier} draft`,
+					description: canRepairEmptyRoutes
+						? `Added ${suggested.length} provisional route suggestions to the empty hidden ${tier} draft`
+						: `Added a rounded customer-price suggestion to the hidden ${tier} draft`,
 					metadata: {
 						categoryId: category.id,
 						qualityTier: tier,
 						pricePerStepNgn,
+						providerServiceIds: canRepairEmptyRoutes
+							? suggested.map((candidate) => candidate.id)
+							: [],
 						automaticallyPublished: false
 					} satisfies Prisma.InputJsonValue
 				});
@@ -359,8 +410,9 @@ export async function prepopulateBoostingDraftSuggestions(
 				shortPromise: definition.shortPromise,
 				expectationChips: [...definition.expectationChips],
 				minQuantity: config.minQuantity,
+				maxQuantity: maximumCustomerQuantity,
 				stepQuantity: config.stepQuantity,
-				quantityPresets: getQuantityChips(config),
+				quantityPresets: getQuantityChips(config, maximumCustomerQuantity),
 				pricePerStepNgn,
 				requiredVerifiedSignals: [...definition.requiredVerifiedSignals],
 				refillDays: null,
@@ -407,7 +459,12 @@ export async function prepopulateBoostingDraftSuggestions(
 		}
 	}
 
-	if (offerRows.length > 0 || priceRepairs.length > 0) {
+	if (
+		offerRows.length > 0 ||
+		routeRows.length > 0 ||
+		priceRepairs.length > 0 ||
+		offerRepairs.length > 0
+	) {
 		const created = await database.$transaction(async (tx) => {
 			const offers = offerRows.length
 				? await tx.boostCustomerOffer.createMany({ data: offerRows })
@@ -416,6 +473,15 @@ export async function prepopulateBoostingDraftSuggestions(
 				? await tx.boostServiceRoute.createMany({ data: routeRows })
 				: { count: 0 };
 			let repaired = 0;
+			for (const repair of offerRepairs) {
+				await tx.boostCustomerOffer.update({
+					where: { id: repair.id },
+					data: {
+						maxQuantity: repair.maxQuantity,
+						quantityPresets: repair.quantityPresets
+					}
+				});
+			}
 			if (priceRepairs.length > 0) {
 				const values = priceRepairs.map(
 					(item) => Prisma.sql`(${item.id}::uuid, ${item.pricePerStepNgn}::numeric)`

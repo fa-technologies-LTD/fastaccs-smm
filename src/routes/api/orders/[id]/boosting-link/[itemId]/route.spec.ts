@@ -7,8 +7,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 const tx = vi.hoisted(() => ({
+	$queryRaw: vi.fn(),
 	orderItem: { update: vi.fn() },
-	order: { update: vi.fn() }
+	order: { update: vi.fn() },
+	boostFulfillment: { findUnique: vi.fn(), updateMany: vi.fn() }
 }));
 
 const item = {
@@ -25,6 +27,7 @@ const item = {
 vi.mock('$lib/prisma', () => ({
 	prisma: {
 		orderItem: { findFirst: vi.fn() },
+		boostFulfillment: { findMany: vi.fn() },
 		$transaction: mocks.transaction
 	}
 }));
@@ -58,6 +61,17 @@ beforeEach(() => {
 	);
 	tx.orderItem.update.mockResolvedValue({});
 	tx.order.update.mockResolvedValue({});
+	tx.$queryRaw.mockResolvedValue([]);
+	tx.boostFulfillment.findUnique.mockResolvedValue({
+		status: 'manual_review',
+		supplierOrderId: null,
+		submittedAt: null,
+		leaseToken: null,
+		leaseExpiresAt: null,
+		attempts: []
+	});
+	tx.boostFulfillment.updateMany.mockResolvedValue({ count: 1 });
+	vi.mocked(prisma.boostFulfillment.findMany).mockResolvedValue([]);
 	mocks.recordOrderEvent.mockResolvedValue(undefined);
 });
 
@@ -108,5 +122,21 @@ describe('customer boosting-link correction', () => {
 		const response = await callUpdate('https://facebook.com/new-page');
 		expect(response.status).toBe(409);
 		expect(mocks.transaction).not.toHaveBeenCalled();
+	});
+
+	it('does not change the target when an uncertain supplier submission exists', async () => {
+		tx.boostFulfillment.findUnique.mockResolvedValue({
+			status: 'manual_review',
+			supplierOrderId: null,
+			submittedAt: null,
+			leaseToken: null,
+			leaseExpiresAt: null,
+			attempts: [{ type: 'submission', outcome: 'submission_unknown' }]
+		});
+
+		const response = await callUpdate('https://facebook.com/new-page');
+
+		expect(response.status).toBe(409);
+		expect(tx.orderItem.update).not.toHaveBeenCalled();
 	});
 });

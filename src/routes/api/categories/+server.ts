@@ -8,6 +8,7 @@ import { applyTierExactPreviewSanitization } from '$lib/helpers/tier-exact-previ
 import { applyTierCatalogPriceSanitization } from '$lib/helpers/catalog-pricing';
 import { applyBoostingServiceConfigSanitization } from '$lib/helpers/boosting-service-config';
 import { toPublicCategory } from '$lib/helpers/public-category';
+import { hasAdminPermission } from '$lib/auth/admin-roles';
 
 // GET /api/categories - Get categories with optional filtering
 export async function GET({ url, locals }) {
@@ -15,8 +16,9 @@ export async function GET({ url, locals }) {
 		const type = url.searchParams.get('type');
 		const includeParent = url.searchParams.get('include_parent') === 'true';
 		const includeInactiveRequested = url.searchParams.get('include_inactive') === 'true';
-		const isAdmin = Boolean(locals.user && locals.user.userType === 'ADMIN');
-		const includeInactive = includeInactiveRequested && isAdmin;
+		const canManageCatalog = hasAdminPermission(locals.adminContext, 'admin:catalog:manage');
+		const canViewPrivateMetadata = Boolean(locals.adminContext?.canViewRevenue);
+		const includeInactive = includeInactiveRequested && canManageCatalog;
 
 		const where = {
 			...(includeInactive ? {} : { isActive: true }),
@@ -41,7 +43,10 @@ export async function GET({ url, locals }) {
 			}
 		});
 
-		return json({ data: isAdmin ? categories : categories.map(toPublicCategory), error: null });
+		return json({
+			data: canViewPrivateMetadata ? categories : categories.map(toPublicCategory),
+			error: null
+		});
 	} catch (error) {
 		console.error('Failed to fetch categories:', error);
 		return json({ data: null, error: 'Failed to fetch categories' }, { status: 500 });

@@ -264,6 +264,7 @@ model OrderItem {
   boostFulfillmentStatus String?           @map("boost_fulfillment_status")
   boostProviderReference String?           @map("boost_provider_reference")
   boostCompletedAt       DateTime?         @map("boost_completed_at")
+  accountAddonSnapshot   Json?             @map("account_addon_snapshot")
   accounts               Account[]
   category               Category          @relation(fields: [categoryId], references: [id])
   order                  Order             @relation(fields: [orderId], references: [id])
@@ -779,6 +780,7 @@ model BoostCustomerOffer {
   shortPromise            String              @map("short_promise")
   expectationChips        String[]            @map("expectation_chips")
   minQuantity             Int                 @map("min_quantity")
+  maxQuantity             Int?                @map("max_quantity")
   stepQuantity            Int                 @map("step_quantity")
   quantityPresets         Int[]               @map("quantity_presets")
   pricePerStepNgn         Decimal             @map("price_per_step_ngn") @db.Decimal(10, 2)

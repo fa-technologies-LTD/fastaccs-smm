@@ -78,6 +78,7 @@ import {
 	getVerifiedXFollowerAddon,
 	type AccountFollowerAddon
 } from '$lib/helpers/account-addons';
+import { getBoostAutomationMode } from '$lib/server/boosting-providers/fulfillment-worker';
 
 interface CreateOrderItemInput {
 	categoryId: string;
@@ -553,7 +554,17 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		];
 		const boostOffers = requestedBoostOfferIds.length
 			? await prisma.boostCustomerOffer.findMany({
-					where: { id: { in: requestedBoostOfferIds }, status: 'live' }
+					where: {
+						id: { in: requestedBoostOfferIds },
+						status: 'live',
+						routes: { some: { state: 'enabled', equivalenceApproved: true } }
+					},
+					include: {
+						routes: {
+							where: { state: 'enabled', equivalenceApproved: true },
+							include: { providerService: true }
+						}
+					}
 				})
 			: [];
 		const boostOfferById = new Map(boostOffers.map((offer) => [offer.id, offer]));
@@ -579,6 +590,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			accountAddon: AccountFollowerAddon | null;
 		}> = [];
 		const deliveryModes = new Set<TierDeliveryMode>();
+		const boostTargetsInCheckout = new Set<string>();
 
 		for (const item of normalizedItems) {
 			const category = categoryById.get(item.categoryId);
@@ -628,6 +640,15 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						{ status: 400 }
 					);
 				}
+				if (offer && offer.maxQuantity !== null && item.boostQuantity > offer.maxQuantity) {
+					return json(
+						{
+							success: false,
+							error: `${category.name}: the maximum available quantity is ${offer.maxQuantity.toLocaleString()}.`
+						},
+						{ status: 400 }
+					);
+				}
 
 				const linkCheck = validateLinkForAction(
 					config.platform,
@@ -640,11 +661,29 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						{ status: 400 }
 					);
 				}
+				const normalizedTarget = linkCheck.normalizedUrl || item.boostTargetUrl;
+				const checkoutTargetKey = `${config.platform}:${config.actionType}:${normalizedTarget}`;
+				if (boostTargetsInCheckout.has(checkoutTargetKey)) {
+					return json(
+						{
+							success: false,
+							error: `${category.name}: combine duplicate services for the same link into one quantity.`
+						},
+						{ status: 400 }
+					);
+				}
+				boostTargetsInCheckout.add(checkoutTargetKey);
 
 				const unitPrice = computeBoostingPrice(config, item.boostQuantity);
-				if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+				if (!Number.isFinite(unitPrice) || unitPrice <= 0 || unitPrice > 99_999_999.99) {
 					return json(
-						{ success: false, error: `${category.name} has an invalid price configuration.` },
+						{
+							success: false,
+							error:
+								unitPrice > 99_999_999.99
+									? `${category.name}: choose a smaller quantity.`
+									: `${category.name} has an invalid price configuration.`
+						},
 						{ status: 400 }
 					);
 				}
@@ -658,7 +697,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					deliveryMode: 'boosting_manual',
 					exactAccountId: null,
 					exactAccountLabel: null,
-					boostTargetUrl: linkCheck.normalizedUrl || item.boostTargetUrl,
+					boostTargetUrl: normalizedTarget,
 					boostQuantity: item.boostQuantity,
 					boostOfferId: offer?.id || null,
 					boostOfferSnapshot: offer
@@ -674,7 +713,34 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 								minimumMarginPercent: Number(offer.minimumMarginPercent),
 								maximumSupplierCostNgn: Number(offer.maximumSupplierCostNgn),
 								attemptCap: offer.attemptCap,
-								routingPolicy: offer.routingPolicy
+								routingPolicy: offer.routingPolicy,
+								requiredVerifiedSignals: offer.requiredVerifiedSignals,
+								audienceTag: offer.audienceTag,
+								preferredRouteId: offer.preferredRouteId,
+								lockedRouteId: offer.lockedRouteId,
+								routes: offer.routes.map((route) => ({
+									id: route.id,
+									state: route.state,
+									equivalenceApproved: route.equivalenceApproved,
+									verifiedSignals: route.verifiedSignals,
+									audienceTags: route.audienceTags,
+									verifiedRefillDays: route.verifiedRefillDays,
+									maximumPilotQuantity: route.maximumPilotQuantity,
+									expectedRecoveryCostPercent: Number(route.expectedRecoveryCostPercent),
+									service: {
+										provider: route.providerService.provider,
+										serviceId: route.providerService.serviceId,
+										name: route.providerService.name,
+										ratePerThousand:
+											route.providerService.ratePerThousand === null
+												? null
+												: Number(route.providerService.ratePerThousand),
+										minQuantity: route.providerService.minQuantity,
+										maxQuantity: route.providerService.maxQuantity,
+										refillAdvertised: route.providerService.refillAdvertised,
+										fingerprint: route.providerService.fingerprint
+									}
+								}))
 							}
 						: null,
 					boostPlatform: offer?.platform || null,
@@ -740,6 +806,41 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				accountAddon
 			});
 			deliveryModes.add(deliveryMode);
+		}
+
+		if (getBoostAutomationMode() !== 'shadow') {
+			const requestedTargets = itemsWithNames.flatMap((item) =>
+				item.boostTargetUrl && item.boostPlatform && item.boostOutcome
+					? [
+							{
+								targetKey: `${item.boostPlatform}:${createHash('sha256')
+									.update(`${item.boostPlatform}:${item.boostOutcome}:${item.boostTargetUrl}`)
+									.digest('hex')}`,
+								outcome: item.boostOutcome
+							}
+						]
+					: []
+			);
+			if (requestedTargets.length) {
+				const activeTarget = await prisma.boostFulfillment.findFirst({
+					where: {
+						OR: requestedTargets,
+						fulfillmentMode: { not: 'shadow' },
+						status: { in: ['queued', 'submitted', 'in_progress', 'manual_review'] }
+					},
+					select: { id: true }
+				});
+				if (activeTarget) {
+					return json(
+						{
+							success: false,
+							error:
+								'A boost for this same link is still active. Wait for it to finish before ordering the same result again.'
+						},
+						{ status: 409 }
+					);
+				}
+			}
 		}
 
 		if (deliveryModes.size > 1) {
@@ -1185,7 +1286,15 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 										productCategory: item.boostTargetUrl ? 'boosting_service' : 'tier',
 										boostTargetUrl: item.boostTargetUrl,
 										boostQuantity: item.boostQuantity,
-										boostFulfillmentStatus: item.boostTargetUrl ? 'pending' : null
+										boostFulfillmentStatus: item.boostTargetUrl ? 'pending' : null,
+										accountAddonSnapshot: item.accountAddon
+											? {
+													key: item.accountAddon.key,
+													label: item.accountAddon.label,
+													followerCount: item.accountAddon.followerCount,
+													priceDelta: item.accountAddon.priceDelta
+												}
+											: undefined
 									}))
 								}
 							},

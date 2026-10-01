@@ -32,7 +32,7 @@ export async function GET({ params, locals }) {
 
 		return json({
 			success: true,
-			data: locals.user && locals.user.userType === 'ADMIN' ? category : toPublicCategory(category)
+			data: locals.adminContext?.canViewRevenue ? category : toPublicCategory(category)
 		});
 	} catch (error) {
 		console.error('Error fetching category:', error);

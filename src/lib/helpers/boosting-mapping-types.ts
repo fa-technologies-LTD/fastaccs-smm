@@ -9,6 +9,7 @@ export interface BoostMappingOfferDraft {
 	shortPromise: string;
 	refillDays: number | null;
 	minQuantity: number;
+	maxQuantity: number | null;
 	stepQuantity: number;
 	pricePerStepNgn: number;
 	priceLocked: boolean;

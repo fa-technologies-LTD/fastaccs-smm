@@ -34,6 +34,7 @@
 		platform: BoostingPlatform;
 		outcome: BoostingActionType;
 		minQuantity: number;
+		maxQuantity: number | null;
 		stepQuantity: number;
 		quantityPresets: number[];
 		pricePerStepNgn: number;
@@ -52,6 +53,7 @@
 	let submitting = $state(false);
 	let configByCategoryId = $state<Record<string, BoostingServiceConfig | null>>({});
 	let presetsByItemKey = $state<Record<string, number[]>>({});
+	let maximumByItemKey = $state<Record<string, number | null>>({});
 	let linkDrafts = $state<Record<string, string>>({});
 	let linkErrors = $state<Record<string, string | null>>({});
 	let quantityDrafts = $state<Record<string, number>>({});
@@ -75,6 +77,7 @@
 		linkErrors = {};
 		quantityDrafts = {};
 		presetsByItemKey = {};
+		maximumByItemKey = {};
 		for (const item of items) {
 			linkDrafts[item.itemKey] = item.targetUrl;
 			linkErrors[item.itemKey] = null;
@@ -97,6 +100,7 @@
 
 			const nextConfigs: Record<string, BoostingServiceConfig | null> = {};
 			const nextPresets: Record<string, number[]> = {};
+			const nextMaximums: Record<string, number | null> = {};
 			for (const item of items) {
 				const service = byId.get(item.categoryId);
 				const offer = item.boostOfferId ? offerById.get(item.boostOfferId) : null;
@@ -115,12 +119,14 @@
 						refillDays: offer.refillDays
 					};
 					nextPresets[item.itemKey] = offer.quantityPresets;
+					nextMaximums[item.itemKey] = offer.maxQuantity;
 				} else {
 					nextConfigs[item.itemKey] = service ? getBoostingServiceConfig(service.metadata) : null;
 				}
 			}
 			configByCategoryId = nextConfigs;
 			presetsByItemKey = nextPresets;
+			maximumByItemKey = nextMaximums;
 		} catch (error) {
 			console.error('Failed to load boosting service details for reorder:', error);
 			showError('Could not load service details', 'Please try again.');
@@ -281,6 +287,7 @@
 											<BoostingQuantitySelector
 												value={quantity}
 												minQuantity={config.minQuantity}
+												maxQuantity={maximumByItemKey[item.itemKey] ?? null}
 												stepQuantity={config.stepQuantity}
 												presets={presetsByItemKey[item.itemKey] || getQuantityChips(config)}
 												compact

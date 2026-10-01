@@ -286,21 +286,50 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 			if (!current) return { blocked: 'not_found' as const };
 			if (isRefundReversal(current, updateData)) return { blocked: 'refunded' as const };
 
-			return {
-				data: await tx.order.update({
-					where: { id: params.id },
-					data: {
-						...updateData,
-						updatedAt: new Date()
-					},
-					include: {
-						orderItems: true,
-						user: {
-							select: ORDER_CUSTOMER_USER_SELECT
-						}
+			const data = await tx.order.update({
+				where: { id: params.id },
+				data: {
+					...updateData,
+					updatedAt: new Date()
+				},
+				include: {
+					orderItems: true,
+					user: {
+						select: ORDER_CUSTOMER_USER_SELECT
 					}
-				})
-			};
+				}
+			});
+			if (data.status === 'cancelled' || data.status === 'failed') {
+				await tx.boostFulfillment.updateMany({
+					where: {
+						orderItem: { orderId: data.id },
+						status: { in: ['awaiting_payment', 'queued'] }
+					},
+					data: {
+						status: 'cancelled',
+						customerStatus: 'cancelled',
+						lastSafeErrorCategory: 'order_cancelled',
+						nextActionAt: null
+					}
+				});
+				await tx.boostFulfillment.updateMany({
+					where: {
+						orderItem: { orderId: data.id },
+						status: { in: ['submitted', 'in_progress'] }
+					},
+					data: {
+						status: 'manual_review',
+						customerStatus: 'cancelled',
+						lastSafeErrorCategory: 'order_cancelled_after_submission',
+						nextActionAt: null
+					}
+				});
+				await tx.orderItem.updateMany({
+					where: { orderId: data.id, boostTargetUrl: { not: null } },
+					data: { boostFulfillmentStatus: 'cancelled' }
+				});
+			}
+			return { data };
 		});
 
 		if (outcome.blocked === 'not_found') {

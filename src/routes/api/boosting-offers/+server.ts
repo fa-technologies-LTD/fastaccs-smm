@@ -18,7 +18,8 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 		const offers = await prisma.boostCustomerOffer.findMany({
 			where: {
 				status: 'live',
-				category: { categoryType: 'boosting_service', isActive: true }
+				category: { categoryType: 'boosting_service', isActive: true },
+				routes: { some: { state: 'enabled', equivalenceApproved: true } }
 			},
 			select: {
 				id: true,
@@ -31,6 +32,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 				expectationChips: true,
 				qualityTier: true,
 				minQuantity: true,
+				maxQuantity: true,
 				stepQuantity: true,
 				quantityPresets: true,
 				pricePerStepNgn: true,

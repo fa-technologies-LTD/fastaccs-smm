@@ -25,6 +25,24 @@ export interface NumbersCampaignState {
 	recoveryEnabled: boolean;
 }
 
+interface DiscoveryEmailCandidate {
+	id: string;
+	email: string | null;
+	fullName: string | null;
+}
+
+interface RecoveryOrderCandidate {
+	id: string;
+	userId: string | null;
+	createdAt: Date;
+	user: { email: string | null; fullName: string | null } | null;
+	orderItems: Array<{
+		phoneRental: { status: string; otp: string | null; receivedAt: Date | null } | null;
+	}>;
+}
+
+type DeliveredOrderCandidate = Pick<RecoveryOrderCandidate, 'userId' | 'createdAt' | 'orderItems'>;
+
 // ---- Copy (Speed hook) -----------------------------------------------------
 
 export const NUMBERS_LAUNCH_BANNER_TEXT =
@@ -229,86 +247,87 @@ async function sendDueDiscoveryEmails(limit: number): Promise<{
 	const firstTouchReadyAt = new Date(
 		Date.now() - FIRST_TOUCH_ACCOUNT_AGE_DAYS * 24 * 60 * 60 * 1000
 	);
-	const candidates = await prisma.user.findMany({
-		where: {
-			userType: 'REGISTERED',
-			isActive: true,
-			emailVerified: true,
-			marketingUnsubscribedAt: null,
-			email: { not: '' },
-			registeredAt: { lte: firstTouchReadyAt }
-		},
-		select: { id: true, email: true, fullName: true },
-		orderBy: { registeredAt: 'asc' },
-		take: Math.max(limit * 6, limit)
-	});
-	if (candidates.length === 0) return { sent: 0, skipped: 0, touches: {} };
-
-	const ids = candidates.map((candidate) => candidate.id);
-	const [sentRows, buyers] = await Promise.all([
-		prisma.emailNotification.findMany({
-			where: {
-				notificationType: 'numbers_launch',
-				status: 'sent',
-				referenceId: {
-					in: ids.flatMap((id) => [1, 2, 3].map((touch) => touchReference(touch, id)))
-				}
-			},
-			select: { referenceId: true, sentAt: true }
-		}),
-		numberBuyerIds(ids)
-	]);
-	const sentAtByReference = new Map(
-		sentRows.map((row) => [row.referenceId || '', row.sentAt || new Date(0)])
-	);
-
 	let sent = 0;
 	let skipped = 0;
 	const touches: Record<number, number> = {};
-	for (const user of candidates) {
-		if (sent >= limit) break;
-		if (!user.email || buyers.has(user.id)) {
-			skipped += 1;
-			continue;
-		}
-
-		let dueTouch: number | null = null;
-		for (let touch = 1; touch <= 3; touch += 1) {
-			if (sentAtByReference.has(touchReference(touch, user.id))) continue;
-			if (touch === 1) {
-				dueTouch = touch;
+	const pageSize = Math.min(1000, Math.max(limit * 6, 50));
+	let cursor: string | null = null;
+	do {
+		const candidates: DiscoveryEmailCandidate[] = await prisma.user.findMany({
+			where: {
+				userType: 'REGISTERED',
+				isActive: true,
+				emailVerified: true,
+				marketingUnsubscribedAt: null,
+				email: { not: '' },
+				registeredAt: { lte: firstTouchReadyAt }
+			},
+			select: { id: true, email: true, fullName: true },
+			orderBy: [{ registeredAt: 'asc' }, { id: 'asc' }],
+			take: pageSize,
+			...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
+		});
+		if (!candidates.length) break;
+		cursor = candidates.at(-1)!.id;
+		const ids = candidates.map((candidate) => candidate.id);
+		const [sentRows, buyers] = await Promise.all([
+			prisma.emailNotification.findMany({
+				where: {
+					notificationType: 'numbers_launch',
+					status: 'sent',
+					referenceId: {
+						in: ids.flatMap((id) => [1, 2, 3].map((touch) => touchReference(touch, id)))
+					}
+				},
+				select: { referenceId: true, sentAt: true }
+			}),
+			numberBuyerIds(ids)
+		]);
+		const sentAtByReference = new Map(
+			sentRows.map((row) => [row.referenceId || '', row.sentAt || new Date(0)])
+		);
+		for (const user of candidates) {
+			if (sent >= limit) break;
+			if (!user.email || buyers.has(user.id)) {
+				skipped += 1;
+				continue;
+			}
+			let dueTouch: number | null = null;
+			for (let touch = 1; touch <= 3; touch += 1) {
+				if (sentAtByReference.has(touchReference(touch, user.id))) continue;
+				if (touch === 1) {
+					dueTouch = touch;
+					break;
+				}
+				const priorSentAt = sentAtByReference.get(touchReference(touch - 1, user.id));
+				const gapMs = TOUCH_GAPS_DAYS[touch - 1] * 24 * 60 * 60 * 1000;
+				if (priorSentAt && Date.now() - priorSentAt.getTime() >= gapMs) dueTouch = touch;
 				break;
 			}
-			const priorSentAt = sentAtByReference.get(touchReference(touch - 1, user.id));
-			const gapMs = TOUCH_GAPS_DAYS[touch - 1] * 24 * 60 * 60 * 1000;
-			if (priorSentAt && Date.now() - priorSentAt.getTime() >= gapMs) dueTouch = touch;
-			break;
+			if (!dueTouch) {
+				skipped += 1;
+				continue;
+			}
+			const copy = TOUCH_COPY[dueTouch];
+			const firstName = (user.fullName || '').trim().split(/\s+/)[0] || 'there';
+			const result = await sendMarketingEmail({
+				to: user.email,
+				subject: copy.subject,
+				body: `Hi ${firstName},\n\n${copy.body}`,
+				ctaText: copy.ctaText,
+				ctaUrl: `${baseUrl}/numbers`,
+				userId: user.id,
+				notificationType: 'numbers_launch',
+				referenceId: touchReference(dueTouch, user.id),
+				campaignKey: `numbers-discovery:t${dueTouch}:${user.id}`
+			});
+			if (result.success) {
+				sent += 1;
+				touches[dueTouch] = (touches[dueTouch] || 0) + 1;
+			} else skipped += 1;
 		}
-		if (!dueTouch) {
-			skipped += 1;
-			continue;
-		}
-
-		const copy = TOUCH_COPY[dueTouch];
-		const firstName = (user.fullName || '').trim().split(/\s+/)[0] || 'there';
-		const result = await sendMarketingEmail({
-			to: user.email,
-			subject: copy.subject,
-			body: `Hi ${firstName},\n\n${copy.body}`,
-			ctaText: copy.ctaText,
-			ctaUrl: `${baseUrl}/numbers`,
-			userId: user.id,
-			notificationType: 'numbers_launch',
-			referenceId: touchReference(dueTouch, user.id),
-			campaignKey: `numbers-discovery:t${dueTouch}:${user.id}`
-		});
-		if (result.success) {
-			sent += 1;
-			touches[dueTouch] = (touches[dueTouch] || 0) + 1;
-		} else {
-			skipped += 1;
-		}
-	}
+		if (candidates.length < pageSize) break;
+	} while (sent < limit);
 	return { sent, skipped, touches };
 }
 
@@ -332,124 +351,132 @@ export async function runNumbersRecoveryEmails(limit = 200): Promise<{
 	if (!state.recoveryEnabled) return { ran: false, sent: 0, skipped: 0 };
 
 	const cutoff = new Date(Date.now() - RECOVERY_WAIT_MS);
-	const candidates = await prisma.order.findMany({
-		where: {
-			orderType: 'phone',
-			userId: { not: null },
-			createdAt: { lte: cutoff },
-			user: {
-				is: {
-					userType: 'REGISTERED',
-					isActive: true,
-					emailVerified: true,
-					marketingUnsubscribedAt: null,
-					marketingSuppressedAt: null,
-					email: { not: '' }
-				}
-			}
-		},
-		select: {
-			id: true,
-			userId: true,
-			createdAt: true,
-			user: { select: { email: true, fullName: true } },
-			orderItems: {
-				select: {
-					phoneRental: { select: { status: true, otp: true, receivedAt: true } }
-				}
-			}
-		},
-		orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-		take: Math.max(limit * 5, limit)
-	});
-
-	const failedAttempts = candidates.filter(
-		(order) =>
-			!order.orderItems.some((item) => {
-				const rental = item.phoneRental;
-				return Boolean(
-					rental &&
-						(rental.status === 'received' || rental.receivedAt || String(rental.otp || '').trim())
-				);
-			})
-	);
-	if (failedAttempts.length === 0) return { ran: true, sent: 0, skipped: 0 };
-
-	const userIds = [
-		...new Set(
-			failedAttempts.map((order) => order.userId).filter((id): id is string => Boolean(id))
-		)
-	];
-	const [sentRows, successfulOrders] = await Promise.all([
-		prisma.emailNotification.findMany({
+	const baseUrl = getSiteBaseUrl();
+	let sent = 0;
+	let skipped = 0;
+	const pageSize = Math.min(1000, Math.max(limit * 5, 50));
+	let cursor: string | null = null;
+	do {
+		const candidates: RecoveryOrderCandidate[] = await prisma.order.findMany({
 			where: {
-				notificationType: 'numbers_recovery',
-				status: 'sent',
-				referenceId: { in: failedAttempts.map((order) => recoveryReference(order.id)) }
+				orderType: 'phone',
+				userId: { not: null },
+				createdAt: { lte: cutoff },
+				user: {
+					is: {
+						userType: 'REGISTERED',
+						isActive: true,
+						emailVerified: true,
+						marketingUnsubscribedAt: null,
+						marketingSuppressedAt: null,
+						email: { not: '' }
+					}
+				}
 			},
-			select: { referenceId: true }
-		}),
-		prisma.order.findMany({
-			where: { orderType: 'phone', userId: { in: userIds } },
 			select: {
+				id: true,
 				userId: true,
 				createdAt: true,
+				user: { select: { email: true, fullName: true } },
 				orderItems: {
 					select: {
 						phoneRental: { select: { status: true, otp: true, receivedAt: true } }
 					}
 				}
-			}
-		})
-	]);
-	const alreadySent = new Set(sentRows.map((row) => row.referenceId));
-	const successfulAtByUser = new Map<string, Date[]>();
-	for (const order of successfulOrders) {
-		if (!order.userId) continue;
-		const deliveredCode = order.orderItems.some((item) => {
-			const rental = item.phoneRental;
-			return Boolean(
-				rental &&
-					(rental.status === 'received' || rental.receivedAt || String(rental.otp || '').trim())
-			);
+			},
+			orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+			take: pageSize,
+			...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
 		});
-		if (!deliveredCode) continue;
-		const rows = successfulAtByUser.get(order.userId) || [];
-		rows.push(order.createdAt);
-		successfulAtByUser.set(order.userId, rows);
-	}
-
-	const baseUrl = getSiteBaseUrl();
-	let sent = 0;
-	let skipped = 0;
-	for (const order of failedAttempts) {
-		if (sent >= limit) break;
-		const referenceId = recoveryReference(order.id);
-		const laterSuccess = order.userId
-			? (successfulAtByUser.get(order.userId) || []).some(
-					(successfulOrderAt) => successfulOrderAt.getTime() > order.createdAt.getTime()
+		if (!candidates.length) break;
+		cursor = candidates.at(-1)!.id;
+		const failedAttempts = candidates.filter(
+			(order) =>
+				!order.orderItems.some((item) => {
+					const rental = item.phoneRental;
+					return Boolean(
+						rental &&
+							(rental.status === 'received' || rental.receivedAt || String(rental.otp || '').trim())
+					);
+				})
+		);
+		if (failedAttempts.length) {
+			const userIds = [
+				...new Set(
+					failedAttempts.map((order) => order.userId).filter((id): id is string => Boolean(id))
 				)
-			: false;
-		if (!order.user?.email || alreadySent.has(referenceId) || laterSuccess) {
-			skipped += 1;
-			continue;
+			];
+			const [sentRows, successfulOrders]: [
+				Array<{ referenceId: string | null }>,
+				DeliveredOrderCandidate[]
+			] = await Promise.all([
+				prisma.emailNotification.findMany({
+					where: {
+						notificationType: 'numbers_recovery',
+						status: 'sent',
+						referenceId: { in: failedAttempts.map((order) => recoveryReference(order.id)) }
+					},
+					select: { referenceId: true }
+				}),
+				prisma.order.findMany({
+					where: { orderType: 'phone', userId: { in: userIds } },
+					select: {
+						userId: true,
+						createdAt: true,
+						orderItems: {
+							select: {
+								phoneRental: { select: { status: true, otp: true, receivedAt: true } }
+							}
+						}
+					}
+				})
+			]);
+			const alreadySent = new Set(sentRows.map((row) => row.referenceId));
+			const successfulAtByUser = new Map<string, Date[]>();
+			for (const order of successfulOrders) {
+				if (!order.userId) continue;
+				const deliveredCode = order.orderItems.some((item) => {
+					const rental = item.phoneRental;
+					return Boolean(
+						rental &&
+							(rental.status === 'received' || rental.receivedAt || String(rental.otp || '').trim())
+					);
+				});
+				if (!deliveredCode) continue;
+				const rows = successfulAtByUser.get(order.userId) || [];
+				rows.push(order.createdAt);
+				successfulAtByUser.set(order.userId, rows);
+			}
+			for (const order of failedAttempts) {
+				if (sent >= limit) break;
+				const referenceId = recoveryReference(order.id);
+				const laterSuccess = order.userId
+					? (successfulAtByUser.get(order.userId) || []).some(
+							(successfulOrderAt) => successfulOrderAt.getTime() > order.createdAt.getTime()
+						)
+					: false;
+				if (!order.user?.email || alreadySent.has(referenceId) || laterSuccess) {
+					skipped += 1;
+					continue;
+				}
+				const firstName = (order.user.fullName || '').trim().split(/\s+/)[0] || 'there';
+				const result = await sendMarketingEmail({
+					to: order.user.email,
+					subject: 'Your verification number did not deliver a code — try again',
+					body: `Hi ${firstName},\n\nYour earlier Numbers attempt did not eventually deliver a verification code. You can try again from the current available routes. If a new attempt does not produce a code within its activation window, it is refunded automatically.`,
+					ctaText: 'Try Numbers again',
+					ctaUrl: `${baseUrl}/numbers`,
+					userId: order.userId as string,
+					notificationType: 'numbers_recovery',
+					referenceId,
+					campaignKey: `numbers-recovery:${order.id}`
+				});
+				if (result.success) sent += 1;
+				else skipped += 1;
+			}
 		}
-
-		const firstName = (order.user.fullName || '').trim().split(/\s+/)[0] || 'there';
-		const result = await sendMarketingEmail({
-			to: order.user.email,
-			subject: 'Your verification number did not deliver a code — try again',
-			body: `Hi ${firstName},\n\nYour earlier Numbers attempt did not eventually deliver a verification code. You can try again from the current available routes. If a new attempt does not produce a code within its activation window, it is refunded automatically.`,
-			ctaText: 'Try Numbers again',
-			ctaUrl: `${baseUrl}/numbers`,
-			userId: order.userId as string,
-			notificationType: 'numbers_recovery',
-			referenceId,
-			campaignKey: `numbers-recovery:${order.id}`
-		});
-		if (result.success) sent += 1;
-		else skipped += 1;
-	}
+		if (candidates.length < pageSize) break;
+	} while (sent < limit);
 	return { ran: true, sent, skipped };
 }
 
