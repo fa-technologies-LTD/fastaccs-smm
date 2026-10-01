@@ -82,8 +82,15 @@ function advertisedBoolean(value: unknown): boolean | null {
 	return null;
 }
 
+function textForMatching(value: unknown): string {
+	// Supplier catalogues frequently use mathematical-bold Unicode letters for words such as
+	// "REFILL". NFKC turns those presentation characters back into ordinary searchable text
+	// without changing the supplier name we retain for display.
+	return String(value || '').normalize('NFKC');
+}
+
 export function inferAdvertisedRefillDays(value: string): number | null {
-	const text = String(value || '');
+	const text = textForMatching(value);
 	if (/\b(?:no|without)\s+(?:refill|refills)\b/i.test(text)) return null;
 	const match =
 		text.match(/\brefills?\s*(?:for\s*)?(\d{1,3})\s*(?:d|days?)\b/i) ||
@@ -94,7 +101,7 @@ export function inferAdvertisedRefillDays(value: string): number | null {
 }
 
 export function supplierTextAdvertisesRefill(value: string): boolean {
-	const text = String(value || '');
+	const text = textForMatching(value);
 	if (/\b(?:no|without)\s+(?:refill|refills)\b/i.test(text)) return false;
 	return inferAdvertisedRefillDays(text) !== null || /\brefills?\b/i.test(text);
 }
@@ -133,6 +140,7 @@ function inferTargetType(outcomes: BoostCatalogOutcome[]): BoostTargetType {
 }
 
 function inferQualitySignals(text: string, refillAdvertised: boolean | null): string[] {
+	text = textForMatching(text);
 	const signals = new Set<string>();
 	if (refillAdvertised) signals.add('refill_claim');
 	if (/non[\s-]?drop|no\s+drop|stable/i.test(text)) signals.add('stability_claim');

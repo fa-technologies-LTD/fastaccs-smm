@@ -47,6 +47,8 @@ function validInput(): BoostMappingSaveInput {
 function providerService(id = serviceId, ratePerThousand = 1, refillAdvertised = true) {
 	return {
 		id,
+		provider: 'smm_raja',
+		serviceId: id,
 		name: 'Instagram Followers - REFILL 30D',
 		category: 'Instagram',
 		description: null,
@@ -187,7 +189,9 @@ describe('boosting mapping workspace persistence', () => {
 		input.offer.qualityTier = 'premium';
 		await expect(
 			saveBoostMappingWorkspace(categoryId, input, 'admin-1', { database: database().client })
-		).rejects.toThrow('Recheck each mapped route');
+		).rejects.toThrow(
+			'SMM Raja #bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb is missing premium-quality evidence'
+		);
 	});
 
 	it('rejects a refill offer when the current supplier row no longer supports refill', async () => {

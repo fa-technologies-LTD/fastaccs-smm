@@ -427,6 +427,12 @@ function expectationChipsForOffer(qualityTier: string, refillDays: number | null
 	return [qualityLabel, ...(refillDays ? [`${refillDays}-day refill protection`] : [])];
 }
 
+function verifiedSignalLabel(signal: string): string {
+	if (signal === 'refill_verified') return 'the promised refill period';
+	if (signal === 'premium_quality_verified') return 'premium-quality evidence';
+	return 'stability evidence';
+}
+
 export async function saveBoostMappingWorkspace(
 	categoryId: string,
 	rawInput: unknown,
@@ -563,8 +569,21 @@ export async function saveBoostMappingWorkspace(
 	);
 	for (const route of routeInputs) {
 		if (!route.equivalenceApproved || route.state === 'paused') continue;
-		if (requiredVerifiedSignals.some((signal) => !route.verifiedSignals.includes(signal))) {
-			throw new BoostMappingError('Recheck each mapped route after changing the customer promise.');
+		const missingSignals = requiredVerifiedSignals.filter(
+			(signal) => !route.verifiedSignals.includes(signal)
+		);
+		if (missingSignals.length) {
+			const service = providerServices.find(
+				(candidate) => candidate.id === route.providerServiceId
+			);
+			const providerLabel =
+				service && service.provider in PROVIDER_LABELS
+					? PROVIDER_LABELS[service.provider as keyof typeof PROVIDER_LABELS]
+					: 'The selected supplier';
+			const serviceLabel = service ? `${providerLabel} #${service.serviceId}` : providerLabel;
+			throw new BoostMappingError(
+				`${serviceLabel} is missing ${missingSignals.map(verifiedSignalLabel).join(' and ')} for this customer choice. Remove it or choose a compatible service.`
+			);
 		}
 		if (
 			offerInput.refillDays &&

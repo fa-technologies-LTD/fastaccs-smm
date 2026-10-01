@@ -36,7 +36,8 @@ export const GET: RequestHandler = async ({ locals, url, setHeaders }) => {
 	const data = await lookupBoostProviderService({
 		categoryId,
 		provider,
-		serviceCode: String(url.searchParams.get('code') || '')
+		serviceCode: String(url.searchParams.get('code') || ''),
+		qualityTier: String(url.searchParams.get('tier') || 'value')
 	});
 	return json({ success: true, data });
 };

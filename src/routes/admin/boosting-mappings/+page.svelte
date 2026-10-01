@@ -181,6 +181,50 @@
 		return candidate.refillAdvertised ? 'Refill advertised' : 'No refill advertised';
 	}
 
+	function candidatePromiseIssues(
+		candidate: BoostMappingCandidate,
+		refillDays: number | null
+	): string[] {
+		const signals = new Set(candidate.qualitySignals);
+		const issues: string[] = [];
+		const hasStabilityEvidence =
+			candidate.refillAdvertised || signals.has('stability_claim') || signals.has('refill_claim');
+		if (
+			(selectedQualityTier === 'stable' || selectedQualityTier === 'premium') &&
+			!hasStabilityEvidence
+		) {
+			issues.push('stable delivery or refill protection');
+		}
+		if (selectedQualityTier === 'premium' && !signals.has('quality_claim')) {
+			issues.push('premium, high-quality, HQ or real delivery');
+		}
+		if (
+			refillDays !== null &&
+			(candidate.refillDaysClaimed === null || candidate.refillDaysClaimed < refillDays)
+		) {
+			issues.push(`at least ${refillDays} days of stated refill protection`);
+		}
+		return issues;
+	}
+
+	function missingRouteSignals(route: BoostMappingRouteDraft): string[] {
+		if (!offerDraft) return [];
+		const required = [
+			...(offerDraft.refillDays ? ['refill_verified'] : []),
+			...(selectedQualityTier === 'stable' || selectedQualityTier === 'premium'
+				? ['stability_verified']
+				: []),
+			...(selectedQualityTier === 'premium' ? ['premium_quality_verified'] : [])
+		];
+		return required.filter((signal) => !route.verifiedSignals.includes(signal));
+	}
+
+	function signalLabel(signal: string): string {
+		if (signal === 'refill_verified') return 'the promised refill period';
+		if (signal === 'premium_quality_verified') return 'premium-quality evidence';
+		return 'stability evidence';
+	}
+
 	function defaultOffer(next: BoostMappingWorkspace): BoostMappingOfferDraft {
 		const tier = next.selectedQualityTier;
 		const minimumPrice = Math.max(
@@ -196,7 +240,8 @@
 			qualityTier: tier,
 			customerName: TIER_COPY[tier].name,
 			shortPromise: TIER_COPY[tier].promise,
-			refillDays: tier === 'value' ? null : next.category.refillDays,
+			// A refill period becomes a customer promise only after the selected route(s) prove it.
+			refillDays: null,
 			minQuantity: next.category.minQuantity,
 			maxQuantity: null,
 			stepQuantity: next.category.stepQuantity,
@@ -298,7 +343,9 @@
 			candidate.refillDaysClaimed >= offerDraft.refillDays
 				? ['refill_verified']
 				: []),
-			...(candidateSignals.has('stability_claim') || candidateSignals.has('refill_claim')
+			...(candidate.refillAdvertised ||
+			candidateSignals.has('stability_claim') ||
+			candidateSignals.has('refill_claim')
 				? ['stability_verified']
 				: []),
 			...(candidateSignals.has('quality_claim') ? ['premium_quality_verified'] : [])
@@ -322,6 +369,20 @@
 
 	function useCandidate(candidate: BoostMappingCandidate, purpose: 'primary' | 'fallback'): void {
 		if (!offerDraft) return;
+		const nextRefillDays =
+			purpose === 'primary'
+				? selectedQualityTier === 'value'
+					? null
+					: candidate.refillDaysClaimed
+				: offerDraft.refillDays;
+		const promiseIssues = candidatePromiseIssues(candidate, nextRefillDays);
+		if (promiseIssues.length) {
+			showError(
+				`Cannot use ${candidate.providerLabel} #${candidate.serviceId}`,
+				`It does not provide ${promiseIssues.join(' and ')} for the ${TIER_COPY[selectedQualityTier].name} option.`
+			);
+			return;
+		}
 		mergeCandidates([candidate]);
 		if (purpose === 'primary') {
 			// Supplier catalogues expose minimum and maximum quantities, but no separate increment.
@@ -330,7 +391,7 @@
 			offerDraft.minQuantity = candidate.minQuantity;
 			offerDraft.stepQuantity = candidate.minQuantity;
 			// Never promise a refill period that the selected supplier service does not state.
-			offerDraft.refillDays = selectedQualityTier !== 'value' ? candidate.refillDaysClaimed : null;
+			offerDraft.refillDays = nextRefillDays;
 			routeDrafts = [routeFor(candidate)];
 			offerDraft.routingPolicy = 'locked';
 			offerDraft.lockedProviderServiceId = candidate.id;
@@ -469,7 +530,8 @@
 			const params = new URLSearchParams({
 				categoryId: selectedCategoryId,
 				provider,
-				code: serviceCode.trim()
+				code: serviceCode.trim(),
+				tier: selectedQualityTier
 			});
 			const response = await fetch(`/api/admin/boosting-suppliers/service?${params}`);
 			const payload = await response.json();
@@ -504,6 +566,11 @@
 			mergeCandidates(candidates);
 			offerDraft.minQuantity = candidates[0].minQuantity;
 			offerDraft.stepQuantity = candidates[0].minQuantity;
+			const claimedRefillDays = candidates.map((candidate) => candidate.refillDaysClaimed);
+			offerDraft.refillDays =
+				selectedQualityTier !== 'value' && claimedRefillDays.every((days) => days !== null)
+					? Math.min(...(claimedRefillDays as number[]))
+					: null;
 			routeDrafts = candidates.map(routeFor);
 			offerDraft.routingPolicy = 'automatic';
 			offerDraft.preferredProviderServiceId = null;
@@ -598,6 +665,18 @@
 		if (!offerDraft || !workspace?.foundationReady || saving) return;
 		if (offerDraft.status !== 'hidden' && routeDrafts.length === 0) {
 			showError('Choose a supplier route', 'Use an exact service or prepare Smart Auto first.');
+			return;
+		}
+		const mismatchedRoute = routeDrafts.find(
+			(route) => route.equivalenceApproved && missingRouteSignals(route).length > 0
+		);
+		if (mismatchedRoute) {
+			const candidate = candidateById.get(mismatchedRoute.providerServiceId);
+			const missing = missingRouteSignals(mismatchedRoute).map(signalLabel);
+			showError(
+				'One supplier does not match this customer choice',
+				`${candidate ? `${candidate.providerLabel} #${candidate.serviceId}` : 'The selected supplier'} is missing ${missing.join(' and ')}. Remove it or choose a compatible service before saving.`
+			);
 			return;
 		}
 		if (estimatedSupplierCost > hardMaximumSpend) {

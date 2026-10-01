@@ -28,6 +28,11 @@ function toCandidate(row: ServiceRow): BoostMappingCandidate | null {
 	const provider = row.provider as BoostProviderId;
 	const refillText = `${row.name} ${row.category} ${row.description ?? ''}`;
 	const refillDaysClaimed = inferAdvertisedRefillDays(refillText);
+	const refillAdvertised =
+		row.refillAdvertised === true || supplierTextAdvertisesRefill(refillText);
+	const qualitySignals = [
+		...new Set([...row.qualitySignals, ...(refillAdvertised ? ['refill_claim'] : [])])
+	];
 	return {
 		id: row.id,
 		provider,
@@ -39,11 +44,11 @@ function toCandidate(row: ServiceRow): BoostMappingCandidate | null {
 		ratePerThousand: Number(row.ratePerThousand),
 		minQuantity: row.minQuantity,
 		maxQuantity: row.maxQuantity,
-		refillAdvertised: row.refillAdvertised === true || supplierTextAdvertisesRefill(refillText),
+		refillAdvertised,
 		refillDaysClaimed,
 		cancelAdvertised: row.cancelAdvertised,
 		dripfeedAdvertised: row.dripfeedAdvertised,
-		qualitySignals: row.qualitySignals,
+		qualitySignals,
 		catalogueStatus: row.catalogueStatus,
 		lastSeenAt: row.lastSeenAt.toISOString(),
 		mappedRoute: null
@@ -52,7 +57,8 @@ function toCandidate(row: ServiceRow): BoostMappingCandidate | null {
 
 function compatibilityIssues(
 	row: ServiceRow,
-	config: ReturnType<typeof getBoostingServiceConfig>
+	config: ReturnType<typeof getBoostingServiceConfig>,
+	qualityTier: string
 ): string[] {
 	const issues: string[] = [];
 	const maximumPreset = Math.max(...getQuantityChips(config));
@@ -73,6 +79,18 @@ function compatibilityIssues(
 			`It cannot cover the normal quantity range up to ${maximumPreset.toLocaleString()}.`
 		);
 	}
+	const candidate = toCandidate(row);
+	const signals = new Set(candidate?.qualitySignals ?? []);
+	const hasStabilityEvidence =
+		candidate?.refillAdvertised === true ||
+		signals.has('stability_claim') ||
+		signals.has('refill_claim');
+	if ((qualityTier === 'stable' || qualityTier === 'premium') && !hasStabilityEvidence) {
+		issues.push('It does not state stable delivery or refill protection for this customer option.');
+	}
+	if (qualityTier === 'premium' && !signals.has('quality_claim')) {
+		issues.push('It does not state premium, high-quality, HQ or real delivery.');
+	}
 	return issues;
 }
 
@@ -85,7 +103,12 @@ async function loadCategory(database: PrismaClient, categoryId: string) {
 }
 
 export async function lookupBoostProviderService(
-	input: { categoryId: string; provider: BoostProviderId; serviceCode: string },
+	input: {
+		categoryId: string;
+		provider: BoostProviderId;
+		serviceCode: string;
+		qualityTier?: string;
+	},
 	database: PrismaClient = prisma
 ): Promise<BoostServiceLookupResult> {
 	const config = await loadCategory(database, input.categoryId);
@@ -116,7 +139,7 @@ export async function lookupBoostProviderService(
 			service: null
 		};
 	}
-	const issues = compatibilityIssues(row, config);
+	const issues = compatibilityIssues(row, config, input.qualityTier ?? 'value');
 	return { found: true, compatible: issues.length === 0, issues, service: toCandidate(row) };
 }
 
@@ -137,14 +160,13 @@ export function rankSmartBoostCandidates(
 ): BoostMappingCandidate[] {
 	const eligible = candidates.filter((candidate) => {
 		const signals = new Set(candidate.qualitySignals);
+		const hasStabilityEvidence =
+			candidate.refillAdvertised || signals.has('stability_claim') || signals.has('refill_claim');
 		if (qualityTier === 'premium') {
-			return (
-				signals.has('quality_claim') &&
-				(signals.has('stability_claim') || signals.has('refill_claim'))
-			);
+			return signals.has('quality_claim') && hasStabilityEvidence;
 		}
 		if (qualityTier === 'stable') {
-			return signals.has('stability_claim') || signals.has('refill_claim');
+			return hasStabilityEvidence;
 		}
 		return true;
 	});
