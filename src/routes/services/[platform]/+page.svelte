@@ -10,6 +10,7 @@
 	import {
 		ArrowLeft,
 		Check,
+		ChevronDown,
 		Eye,
 		Heart,
 		MessageCircle,
@@ -45,6 +46,7 @@
 		id: string;
 		categoryId: string;
 		offerId: string | null;
+		resultName: string;
 		name: string;
 		description: string;
 		config: BoostingServiceConfig;
@@ -65,6 +67,7 @@
 			id: service.id,
 			categoryId: service.categoryId,
 			offerId: service.customerOffer?.id || null,
+			resultName: service.name,
 			name: service.customerOffer?.customerName || service.name,
 			description: service.customerOffer?.shortPromise || service.description || '',
 			config: service.customerOffer
@@ -168,6 +171,15 @@
 	let waitlistLoadingByServiceId = $state<Record<string, boolean>>({});
 	let waitlistSubscribedByServiceId = $state<Record<string, boolean>>({});
 	const measuredServiceViews = new SvelteSet<string>();
+	const expandedService = $derived(
+		services.find((service) => service.id === expandedServiceId) ?? null
+	);
+	const expandedQuantity = $derived(
+		expandedService ? getQuantity(expandedService.id, expandedService.config.minQuantity) : 0
+	);
+	const expandedPrice = $derived(
+		expandedService ? computeBoostingPrice(expandedService.config, expandedQuantity) : 0
+	);
 
 	const currentUser = $derived((page.data as { user?: { id: string } | null }).user || null);
 
@@ -448,19 +460,22 @@
 
 <Navigation />
 
-<main class="min-h-screen" style="background-color: var(--bg);">
-	<section class="mx-auto max-w-3xl px-4 py-8 sm:py-12">
+<main
+	class={`min-h-screen ${expandedService ? 'pb-24 sm:pb-0' : ''}`}
+	style="background-color: var(--bg);"
+>
+	<section class="mx-auto max-w-3xl px-4 py-6 sm:py-12">
 		<button
 			type="button"
 			onclick={() => goto('/services')}
-			class="mb-6 flex items-center gap-1.5 text-sm font-medium"
+			class="mb-4 -ml-2 flex min-h-11 items-center gap-1.5 px-2 text-sm font-medium sm:mb-6"
 			style="color: var(--text-muted);"
 		>
 			<ArrowLeft size={16} />
 			All platforms
 		</button>
 
-		<div class="mb-8 flex items-center gap-3">
+		<div class="mb-5 flex items-center gap-3 sm:mb-8">
 			<div
 				class="flex h-12 w-12 items-center justify-center rounded-full"
 				style={`background: ${
@@ -485,7 +500,9 @@
 			</h1>
 		</div>
 
-		<p class="mb-6 text-xs" style="color: var(--text-dim);">{BOOSTING_TURNAROUND_MESSAGE}</p>
+		<p class="mb-5 text-xs leading-relaxed" style="color: var(--text-dim);">
+			{BOOSTING_TURNAROUND_MESSAGE}
+		</p>
 
 		{#if hasRefillOffer}
 			<details
@@ -522,14 +539,16 @@
 				{@const startingPrice = computeBoostingPrice(service.config, service.config.minQuantity)}
 				<div
 					id={`boosting-service-${service.id}`}
-					class="rounded-[var(--r-md)] border"
-					style="border-color: var(--border); background: var(--bg-elev-1);"
+					class="scroll-mt-24 rounded-[var(--r-md)] border transition-colors"
+					style={`border-color: ${isExpanded ? 'var(--fa-blue-500)' : 'var(--border)'}; background: var(--bg-elev-1);`}
 				>
 					<button
 						type="button"
 						onclick={() => !isComingSoon && toggleExpanded(service.id)}
 						disabled={isComingSoon}
-						class="flex w-full items-center gap-3 p-4 text-left disabled:cursor-default"
+						aria-expanded={isExpanded}
+						aria-controls={`boosting-service-details-${service.id}`}
+						class="flex min-h-20 w-full items-center gap-3 p-4 text-left disabled:cursor-default"
 					>
 						<div
 							class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full"
@@ -538,6 +557,12 @@
 							<ActionIcon size={18} style="color: var(--fa-blue-300);" />
 						</div>
 						<div class="min-w-0 flex-1">
+							{#if service.offerId}<p
+									class="mb-0.5 text-[10px] font-bold tracking-[0.1em] uppercase"
+									style="color: var(--text-dim);"
+								>
+									{service.resultName}
+								</p>{/if}
 							<div class="flex flex-wrap items-center gap-2">
 								<p class="font-semibold" style="color: var(--text);">{service.name}</p>
 								{#if qualityBadge(service.qualityTier)}
@@ -561,7 +586,12 @@
 							{/if}
 						</div>
 						{#if !isComingSoon}
-							<span class="text-lg" style="color: var(--text-dim);">{isExpanded ? '−' : '+'}</span>
+							<span
+								class={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+								style="color: var(--text-muted); background: var(--surface);"
+							>
+								<ChevronDown size={18} />
+							</span>
 						{/if}
 					</button>
 
@@ -571,7 +601,7 @@
 								type="button"
 								onclick={() => subscribeToWaitlist(service)}
 								disabled={isServiceWaitlistLoading(service.id) || isServiceWaitlisted(service.id)}
-								class="flex w-full items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-70"
+								class="flex min-h-11 w-full items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-70"
 								style={isServiceWaitlisted(service.id)
 									? 'background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);'
 									: 'background: var(--btn-secondary-gradient); color: var(--link); border: 1px solid rgba(170,173,255,0.26);'}
@@ -586,7 +616,11 @@
 					{/if}
 
 					{#if isExpanded}
-						<div class="border-t px-4 pt-4 pb-4" style="border-color: var(--border);">
+						<div
+							id={`boosting-service-details-${service.id}`}
+							class="border-t px-4 pt-4 pb-4"
+							style="border-color: var(--border);"
+						>
 							{#if service.description}
 								<p class="mb-3 text-sm" style="color: var(--text-muted);">{service.description}</p>
 							{/if}
@@ -604,12 +638,14 @@
 								</div>
 							{/if}
 
-							<label
-								for={`link-${service.id}`}
-								class="mb-1 block text-xs font-medium"
-								style="color: var(--text);"
-							>
-								Your {getTargetLinkLabel(service.config.platform, requiredLinkType)}
+							<label for={`link-${service.id}`} class="mb-2 flex items-center gap-2">
+								<span
+									class="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold"
+									style="background: var(--fa-blue-500); color: white;">1</span
+								>
+								<span class="text-xs font-semibold" style="color: var(--text);"
+									>Paste your {getTargetLinkLabel(service.config.platform, requiredLinkType)}</span
+								>
 							</label>
 							<input
 								id={`link-${service.id}`}
@@ -624,7 +660,10 @@
 									)}
 								onblur={() => void refineAmbiguousLink(service)}
 								placeholder={getLinkPlaceholder(service.config.platform, requiredLinkType)}
-								class="mb-1 block w-full rounded-md px-3 py-2 text-sm"
+								autocapitalize="none"
+								autocomplete="off"
+								spellcheck="false"
+								class="mb-1 block min-h-12 w-full rounded-xl px-3 py-2.5 text-base sm:text-sm"
 								style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 							/>
 							<p class="mb-1 text-xs" style="color: var(--text-dim);">
@@ -638,7 +677,16 @@
 								<div class="mb-2"></div>
 							{/if}
 
-							<div class="mb-4">
+							<div class="mt-4 mb-4">
+								<div class="mb-2 flex items-center gap-2">
+									<span
+										class="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold"
+										style="background: var(--fa-blue-500); color: white;">2</span
+									>
+									<span class="text-xs font-semibold" style="color: var(--text);"
+										>Choose amount</span
+									>
+								</div>
 								<BoostingQuantitySelector
 									value={quantity}
 									minQuantity={service.config.minQuantity}
@@ -654,7 +702,7 @@
 								type="button"
 								onclick={() => addServiceToCart(service)}
 								disabled={addingServiceId === service.id || Number.isNaN(price)}
-								class="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+								class="hidden min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50 sm:flex"
 								style="background: var(--fa-blue-500); color: #ffffff;"
 							>
 								{addingServiceId === service.id
@@ -669,4 +717,37 @@
 	</section>
 </main>
 
+{#if expandedService}
+	<div
+		class="mobile-boost-bar fixed right-0 left-0 z-40 border-t p-3 sm:hidden"
+		style="border-color: var(--border); background: color-mix(in srgb, var(--bg-elev-1) 94%, transparent); backdrop-filter: blur(16px);"
+	>
+		<div class="mx-auto flex max-w-3xl items-center gap-3">
+			<div class="min-w-0 flex-1">
+				<p class="truncate text-[11px]" style="color: var(--text-muted);">
+					{expandedService.resultName}{expandedService.offerId ? ` · ${expandedService.name}` : ''}
+				</p>
+				<p class="font-bold" style="color: var(--text);">{formatPrice(expandedPrice)}</p>
+			</div>
+			<button
+				type="button"
+				onclick={() => addServiceToCart(expandedService)}
+				disabled={addingServiceId === expandedService.id || Number.isNaN(expandedPrice)}
+				class="min-h-12 shrink-0 rounded-xl px-5 text-sm font-bold disabled:opacity-50"
+				style="background: var(--fa-blue-500); color: #fff;"
+			>
+				{addingServiceId === expandedService.id ? 'Adding…' : 'Add to cart'}
+			</button>
+		</div>
+	</div>
+{/if}
+
 <Footer />
+
+<style>
+	.mobile-boost-bar {
+		bottom: var(--cookie-notice-mobile-offset, 0px);
+		padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+		transition: bottom 160ms ease;
+	}
+</style>

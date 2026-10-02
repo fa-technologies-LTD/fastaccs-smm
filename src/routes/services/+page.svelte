@@ -34,23 +34,23 @@
 <Navigation />
 
 <main class="min-h-screen" style="background-color: var(--bg);">
-	<section class="mx-auto max-w-4xl px-4 py-12 sm:py-16">
-		<div class="mb-10 text-center">
+	<section class="mx-auto max-w-4xl px-4 py-8 sm:py-16">
+		<div class="mb-7 text-center sm:mb-10">
 			<p
 				class="text-xs font-semibold tracking-[0.18em] uppercase"
 				style="color: var(--fa-blue-300);"
 			>
 				Boosting Services
 			</p>
-			<p class="mx-auto mt-3 max-w-md text-sm" style="color: var(--text-muted);">
-				Buy followers, likes, views, and more. Paste your link, we deliver — no passwords needed.
-			</p>
 			<h1
-				class="mx-auto mt-4 text-2xl font-bold sm:text-3xl"
+				class="mx-auto mt-3 text-2xl font-bold sm:text-3xl"
 				style="color: var(--text); font-family: var(--font-head);"
 			>
-				Pick a platform to get started
+				What would you like to grow?
 			</h1>
+			<p class="mx-auto mt-3 max-w-md text-sm leading-relaxed" style="color: var(--text-muted);">
+				Choose a platform, paste your link and select an amount. No password needed.
+			</p>
 		</div>
 
 		{#if data.platformTiles.length === 0}
@@ -63,12 +63,12 @@
 				</p>
 			</div>
 		{:else}
-			<div class="grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-6">
+			<div class="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-6">
 				{#each data.platformTiles as tile (tile.platform)}
 					<button
 						type="button"
 						onclick={() => goto(`/services/${tile.platform}`)}
-						class="platform-tile relative flex flex-col items-center gap-3 rounded-[var(--r-md)] p-5 transition-transform active:scale-95"
+						class="platform-tile relative flex min-h-40 flex-col items-center justify-center gap-3 rounded-[var(--r-md)] p-4 transition-transform active:scale-95 sm:min-h-0 sm:p-5"
 						style={tile.allComingSoon ? 'opacity: 0.7;' : ''}
 					>
 						{#if tile.allComingSoon}
@@ -90,6 +90,9 @@
 							style="color: var(--text); font-family: var(--font-head);"
 						>
 							{tile.label}
+						</span>
+						<span class="text-[11px]" style="color: var(--text-dim);">
+							{tile.serviceCount} result{tile.serviceCount === 1 ? '' : 's'}
 						</span>
 					</button>
 				{/each}

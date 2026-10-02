@@ -1,19 +1,32 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { readCookieConsent, saveCookieConsent } from '$lib/helpers/privacyConsent';
 
 	let visible = $state(false);
 
+	function setMobileNoticeOffset(show: boolean) {
+		if (typeof document === 'undefined') return;
+		if (show) {
+			document.documentElement.style.setProperty('--cookie-notice-mobile-offset', '4rem');
+			return;
+		}
+		document.documentElement.style.removeProperty('--cookie-notice-mobile-offset');
+	}
+
 	function dismiss() {
 		saveCookieConsent('analytics');
 		visible = false;
+		setMobileNoticeOffset(false);
 	}
 
 	onMount(() => {
 		if (!readCookieConsent()) {
 			visible = true;
+			setMobileNoticeOffset(true);
 		}
 	});
+
+	onDestroy(() => setMobileNoticeOffset(false));
 </script>
 
 {#if visible}

@@ -735,7 +735,7 @@
 
 <svelte:head><title>Boosting Setup | Admin</title></svelte:head>
 
-<div class="space-y-6">
+<div class="space-y-4 pb-24 sm:space-y-6 xl:pb-0">
 	<header class="flex flex-wrap items-end justify-between gap-4">
 		<div>
 			<p class="text-xs font-semibold tracking-[0.14em] uppercase" style="color: var(--primary);">
@@ -764,7 +764,7 @@
 				<p class="font-semibold" style="color: var(--text);">1. Choose a result</p>
 				<p class="mt-0.5 text-xs" style="color: var(--text-muted);">For example, X Followers</p>
 			</div>
-			<div class="space-y-4 p-4">
+			<div class="grid grid-cols-2 gap-3 p-4">
 				<label class="block text-xs font-semibold" style="color: var(--text-muted);"
 					>Platform
 					<select
@@ -791,7 +791,7 @@
 				</label>
 				{#if selectedListItem}
 					<div
-						class="rounded-xl border p-3"
+						class="col-span-2 rounded-xl border p-3"
 						style="border-color: rgba(16,185,129,.35); background: rgba(16,185,129,.07);"
 					>
 						<div class="flex items-start justify-between gap-2">
@@ -834,38 +834,58 @@
 					{loadError}
 				</div>
 			{:else if workspace && offerDraft}
+				<nav
+					class="mobile-step-nav sticky top-2 z-20 -mx-1 flex gap-2 overflow-x-auto rounded-xl border p-2 xl:hidden"
+					style="border-color: var(--border); background: color-mix(in srgb, var(--bg-elev-1) 94%, transparent); backdrop-filter: blur(14px);"
+					aria-label="Boosting setup steps"
+				>
+					<a href="#boost-options">Option</a>
+					<a href="#boost-routing">Supplier</a>
+					<a href="#boost-pricing">Price</a>
+					<a href="#boost-review">Review</a>
+				</nav>
 				<section
-					class="rounded-2xl border p-4 sm:p-5"
+					id="boost-options"
+					class="scroll-mt-20 rounded-2xl border p-4 sm:p-5"
 					style="border-color: var(--border); background: var(--bg-elev-1);"
 				>
 					<h2 class="text-lg font-bold" style="color: var(--text);">{selectedListItem?.name}</h2>
 					<p class="mt-1 text-sm" style="color: var(--text-muted);">
 						2. Choose the customer option you want to configure.
 					</p>
-					<div class="mt-4 grid gap-2 sm:grid-cols-3">
+					<div class="mt-4 grid grid-cols-3 gap-2">
 						{#each ['value', 'stable', 'premium'] as QualityTier[] as tier (tier)}
 							<button
 								type="button"
 								onclick={() => changeQualityTier(tier)}
-								class="rounded-xl border p-3 text-left"
+								class="min-h-16 rounded-xl border p-2 text-center sm:min-h-0 sm:p-3 sm:text-left"
 								style={selectedQualityTier === tier
 									? 'border-color: var(--primary); background: rgba(16,185,129,.08);'
 									: 'border-color: var(--border);'}
 							>
-								<p class="font-semibold" style="color: var(--text);">{TIER_COPY[tier].name}</p>
-								<p class="mt-1 text-xs" style="color: var(--text-muted);">{TIER_COPY[tier].help}</p>
+								<p class="text-xs font-semibold sm:text-base" style="color: var(--text);">
+									{TIER_COPY[tier].name}
+								</p>
+								<p class="mt-1 hidden text-xs sm:block" style="color: var(--text-muted);">
+									{TIER_COPY[tier].help}
+								</p>
 							</button>
 						{/each}
 					</div>
 				</section>
 
-				<section
+				<details
 					class="rounded-2xl border p-4 sm:p-5"
 					style="border-color: var(--border); background: var(--bg-elev-1);"
 				>
-					<div class="flex flex-wrap items-start justify-between gap-3">
+					<summary class="cursor-pointer font-bold" style="color: var(--text);">
+						Global pricing defaults
+						<span class="ml-2 text-xs font-normal" style="color: var(--text-dim);"
+							>Default target profit % for new options</span
+						>
+					</summary>
+					<div class="mt-4 flex flex-wrap items-start justify-between gap-3">
 						<div>
-							<h2 class="font-bold" style="color: var(--text);">Global pricing defaults</h2>
 							<p class="mt-1 text-xs" style="color: var(--text-muted);">
 								The USD → NGN rate prices supplier costs. The default profit only prefills brand-new
 								customer options.
@@ -890,7 +910,7 @@
 								class="field mt-1"
 							/></label
 						><label class="text-xs" style="color: var(--text-muted);"
-							>Default target profit % for new options<input
+							>Starting profit %<input
 								type="number"
 								min="0"
 								max="500"
@@ -902,10 +922,11 @@
 							></label
 						>
 					</div>
-				</section>
+				</details>
 
 				<section
-					class="rounded-2xl border p-4 sm:p-5"
+					id="boost-routing"
+					class="scroll-mt-20 rounded-2xl border p-4 sm:p-5"
 					style="border-color: var(--border); background: var(--bg-elev-1);"
 				>
 					<div class="flex flex-wrap items-center justify-between gap-3">
@@ -920,28 +941,28 @@
 							choice</label
 						>
 					</div>
-					<div class="mt-4 grid gap-3 sm:grid-cols-2">
+					<div class="mt-4 grid grid-cols-2 gap-2 sm:gap-3">
 						<button
 							type="button"
 							onclick={() => (setupMode = 'choice')}
-							class="rounded-xl border p-4 text-left"
+							class="min-h-20 rounded-xl border p-3 text-left sm:p-4"
 							style={setupMode === 'choice'
 								? 'border-color: var(--primary); background: rgba(16,185,129,.07);'
 								: 'border-color: var(--border);'}
 							><p class="font-semibold" style="color: var(--text);">My choice</p>
-							<p class="mt-1 text-xs" style="color: var(--text-muted);">
+							<p class="mt-1 hidden text-xs sm:block" style="color: var(--text-muted);">
 								Enter the exact supplier service code you trust.
 							</p></button
 						>
 						<button
 							type="button"
 							onclick={() => (setupMode = 'smart')}
-							class="rounded-xl border p-4 text-left"
+							class="min-h-20 rounded-xl border p-3 text-left sm:p-4"
 							style={setupMode === 'smart'
 								? 'border-color: var(--primary); background: rgba(16,185,129,.07);'
 								: 'border-color: var(--border);'}
 							><p class="font-semibold" style="color: var(--text);">Smart Auto</p>
-							<p class="mt-1 text-xs" style="color: var(--text-muted);">
+							<p class="mt-1 hidden text-xs sm:block" style="color: var(--text-muted);">
 								Use a small compatible shortlist and choose the safest route at order time.
 							</p></button
 						>
@@ -1122,7 +1143,8 @@
 				{/if}
 
 				<section
-					class="rounded-2xl border p-4 sm:p-5"
+					id="boost-pricing"
+					class="scroll-mt-20 rounded-2xl border p-4 sm:p-5"
 					style="border-color: var(--border); background: var(--bg-elev-1);"
 				>
 					<h2 class="font-bold" style="color: var(--text);">4. Set profit and customer price</h2>
@@ -1130,7 +1152,7 @@
 						The supplier minimum is copied in when you choose a primary service. You can adjust what
 						customers start with and the amount each +/− click changes.
 					</p>
-					<div class="mt-4 grid gap-4 md:grid-cols-2">
+					<div class="mt-4 grid grid-cols-2 gap-3 sm:gap-4">
 						<label class="text-xs font-semibold" style="color: var(--text-muted);"
 							>Customer starting quantity<input
 								type="number"
@@ -1138,7 +1160,7 @@
 								value={offerDraft.minQuantity}
 								oninput={(event) => updateQuantityRule('minQuantity', event.currentTarget.value)}
 								class="field mt-1"
-							/><span class="mt-1 block font-normal" style="color: var(--text-dim);"
+							/><span class="mt-1 hidden font-normal sm:block" style="color: var(--text-dim);"
 								>Cannot be below a selected supplier's minimum.</span
 							></label
 						>
@@ -1149,7 +1171,7 @@
 								value={offerDraft.stepQuantity}
 								oninput={(event) => updateQuantityRule('stepQuantity', event.currentTarget.value)}
 								class="field mt-1"
-							/><span class="mt-1 block font-normal" style="color: var(--text-dim);"
+							/><span class="mt-1 hidden font-normal sm:block" style="color: var(--text-dim);"
 								>Customers can also type a large quantity directly.</span
 							></label
 						>
@@ -1161,7 +1183,7 @@
 								value={offerDraft.minimumMarginPercent}
 								oninput={(event) => updateProfitTarget(event.currentTarget.value)}
 								class="field mt-1"
-							/><span class="mt-1 block font-normal" style="color: var(--text-dim);"
+							/><span class="mt-1 hidden font-normal sm:block" style="color: var(--text-dim);"
 								>Used for this customer option only.</span
 							></label
 						>
@@ -1176,7 +1198,9 @@
 							/></label
 						>
 					</div>
-					<div class="mt-4 grid gap-2 sm:grid-cols-3">
+					<div
+						class="metric-scroll -mx-1 mt-4 flex snap-x gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0"
+					>
 						<div class="metric">
 							<span
 								>{offerDraft.routingPolicy === 'automatic'
@@ -1282,7 +1306,8 @@
 				</details>
 
 				<section
-					class="grid gap-4 rounded-2xl border p-4 sm:grid-cols-[1fr_auto] sm:items-center sm:p-5"
+					id="boost-review"
+					class="grid scroll-mt-20 gap-4 rounded-2xl border p-4 sm:grid-cols-[1fr_auto] sm:items-center sm:p-5"
 					style="border-color: var(--border); background: var(--bg-elev-1);"
 				>
 					<div>
@@ -1313,15 +1338,44 @@
 	</div>
 </div>
 
+{#if workspace && offerDraft}
+	<div
+		class="mobile-save-bar fixed right-0 left-0 z-40 border-t p-3 xl:hidden"
+		style="border-color: var(--border); background: color-mix(in srgb, var(--bg-elev-1) 94%, transparent); backdrop-filter: blur(16px);"
+	>
+		<div class="mx-auto flex max-w-3xl items-center gap-3">
+			<div class="min-w-0 flex-1">
+				<p class="truncate text-[11px]" style="color: var(--text-muted);">
+					{selectedListItem?.name} · {TIER_COPY[selectedQualityTier].name}
+				</p>
+				<p class="text-sm font-bold" style="color: var(--text);">
+					{routeDrafts.length} route{routeDrafts.length === 1 ? '' : 's'} · {money(
+						minimumCustomerPrice
+					)}
+				</p>
+			</div>
+			<button
+				type="button"
+				onclick={saveMapping}
+				disabled={saving}
+				class="flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold disabled:opacity-60"
+				style="background: var(--primary); color: #00150b;"
+			>
+				<Save size={17} />{saving ? 'Saving…' : 'Save'}
+			</button>
+		</div>
+	</div>
+{/if}
+
 <style>
 	.field {
 		width: 100%;
-		min-height: 2.65rem;
+		min-height: 3rem;
 		border: 1px solid var(--border);
 		border-radius: 0.75rem;
 		background: var(--bg);
 		padding: 0.55rem 0.75rem;
-		font-size: 0.875rem;
+		font-size: 1rem;
 		color: var(--text);
 		outline: none;
 	}
@@ -1337,6 +1391,8 @@
 		padding: 0.75rem;
 		color: var(--text-muted);
 		font-size: 0.7rem;
+		min-width: 72%;
+		scroll-snap-align: start;
 	}
 	.metric strong {
 		color: var(--text);
@@ -1347,5 +1403,44 @@
 	}
 	input[type='checkbox'] {
 		accent-color: var(--primary);
+		min-height: 1.1rem;
+		min-width: 1.1rem;
+	}
+	.mobile-step-nav,
+	.metric-scroll {
+		scrollbar-width: none;
+	}
+	.mobile-step-nav::-webkit-scrollbar,
+	.metric-scroll::-webkit-scrollbar {
+		display: none;
+	}
+	.mobile-step-nav a {
+		min-height: 2.5rem;
+		flex: 1 0 auto;
+		border-radius: 0.65rem;
+		padding: 0.7rem 0.9rem;
+		font-size: 0.75rem;
+		font-weight: 700;
+		color: var(--text-muted);
+		text-align: center;
+	}
+	.mobile-step-nav a:focus,
+	.mobile-step-nav a:hover {
+		background: var(--surface);
+		color: var(--text);
+	}
+	.mobile-save-bar {
+		bottom: var(--cookie-notice-mobile-offset, 0px);
+		padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+		transition: bottom 160ms ease;
+	}
+	@media (min-width: 640px) {
+		.field {
+			min-height: 2.65rem;
+			font-size: 0.875rem;
+		}
+		.metric {
+			min-width: 0;
+		}
 	}
 </style>

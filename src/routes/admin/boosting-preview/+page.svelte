@@ -89,7 +89,7 @@
 
 <svelte:head><title>Boosting Customer Preview | Admin</title></svelte:head>
 
-<div class="mx-auto max-w-6xl space-y-5">
+<div class="mx-auto max-w-6xl space-y-4 pb-6 sm:space-y-5">
 	<header class="flex flex-wrap items-end justify-between gap-4">
 		<div>
 			<p class="text-xs font-semibold tracking-[.14em] uppercase" style="color: var(--primary);">
@@ -125,7 +125,7 @@
 			class="overflow-hidden rounded-2xl border"
 			style="border-color: var(--border); background: var(--bg-elev-1);"
 		>
-			<div class="border-b p-5" style="border-color: var(--border);">
+			<div class="border-b p-4 sm:p-5" style="border-color: var(--border);">
 				<p class="text-xs font-semibold tracking-[.16em] uppercase" style="color: var(--primary);">
 					Boosting services
 				</p>
@@ -134,13 +134,13 @@
 				</h2>
 			</div>
 
-			<div class="space-y-6 p-5">
-				<div class="flex gap-3 overflow-x-auto pb-1">
+			<div class="space-y-5 p-4 sm:space-y-6 sm:p-5">
+				<div class="preview-scroll -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-2 sm:gap-3">
 					{#each platforms as [platform, label] (platform)}
 						<button
 							type="button"
 							onclick={() => choosePlatform(platform)}
-							class="min-w-28 rounded-2xl border p-3 text-center"
+							class="min-w-24 snap-start rounded-2xl border p-3 text-center sm:min-w-28"
 							style={platform === selectedPlatform
 								? 'border-color: var(--primary); background: rgba(16,185,129,.08);'
 								: 'border-color: var(--border);'}
@@ -159,13 +159,15 @@
 					<p class="mb-3 text-sm font-semibold" style="color: var(--text-muted);">
 						Choose a result
 					</p>
-					<div class="grid gap-3 sm:grid-cols-2">
+					<div
+						class="preview-scroll -mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0"
+					>
 						{#each visibleGroups as group (group.categoryId)}
 							{@const OutcomeIcon = ICONS[group.outcome] ?? Eye}
 							<button
 								type="button"
 								onclick={() => chooseGroup(group.categoryId)}
-								class="flex min-h-20 items-center gap-3 rounded-xl border p-4 text-left"
+								class="flex min-h-20 min-w-[78%] shrink-0 snap-start items-center gap-3 rounded-xl border p-4 text-left sm:min-w-0"
 								style={selectedGroup?.categoryId === group.categoryId
 									? 'border-color: var(--primary); background: rgba(16,185,129,.07);'
 									: 'border-color: var(--border);'}
@@ -193,7 +195,7 @@
 									type="button"
 									onclick={() =>
 										chooseOffer(selectedGroup!.categoryId, offer.id, offer.minQuantity)}
-									class="rounded-xl border p-4 text-left"
+									class="min-h-24 rounded-xl border p-3 text-left sm:p-4"
 									style={selectedOffer?.id === offer.id
 										? 'border-color: var(--primary); background: rgba(16,185,129,.07);'
 										: 'border-color: var(--border);'}
@@ -250,7 +252,7 @@
 							<button
 								type="button"
 								disabled
-								class="mt-4 w-full rounded-xl py-3.5 text-base font-bold opacity-80"
+								class="mt-4 min-h-12 w-full rounded-xl px-4 py-3 text-base font-bold opacity-80"
 								style="background: var(--primary); color: #00150b;"
 								>Add to Cart — {formatPrice(total)}</button
 							>
@@ -261,3 +263,13 @@
 		</section>
 	{/if}
 </div>
+
+<style>
+	.preview-scroll {
+		scrollbar-width: none;
+	}
+
+	.preview-scroll::-webkit-scrollbar {
+		display: none;
+	}
+</style>

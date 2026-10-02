@@ -244,7 +244,7 @@
 			></button>
 
 			<div
-				class="relative transform overflow-hidden rounded-lg text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg"
+				class="relative flex max-h-[92dvh] w-full transform flex-col overflow-hidden rounded-t-2xl text-left shadow-xl transition-all sm:my-8 sm:max-h-[86vh] sm:max-w-lg sm:rounded-lg"
 				style="background: var(--bg-elev-1);"
 				role="dialog"
 				aria-modal="true"
@@ -252,7 +252,7 @@
 				in:fly={{ y: 200, duration: 300 }}
 				out:fade={{ duration: 300 }}
 			>
-				<div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+				<div class="overflow-y-auto px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
 					<div class="mb-4">
 						<h3
 							id="boosting-reorder-title"
@@ -315,7 +315,7 @@
 										type="url"
 										value={linkDrafts[item.itemKey] || ''}
 										oninput={(e) => handleLinkInput(item, (e.target as HTMLInputElement).value)}
-										class="block w-full rounded-md px-3 py-2 text-sm"
+										class="block min-h-12 w-full rounded-xl px-3 py-2.5 text-base sm:text-sm"
 										style="border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text);"
 									/>
 									{#if config}
@@ -337,14 +337,14 @@
 				</div>
 
 				<div
-					class="px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6"
-					style="background: var(--surface);"
+					class="shrink-0 border-t px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6"
+					style="background: var(--surface); border-color: var(--border); padding-bottom: max(.75rem, env(safe-area-inset-bottom));"
 				>
 					<button
 						type="button"
 						onclick={handleConfirm}
 						disabled={loading || submitting}
-						class="inline-flex w-full justify-center rounded-full px-3 py-2 text-sm font-semibold shadow-sm disabled:opacity-50 sm:ml-3 sm:w-auto"
+						class="inline-flex min-h-12 w-full items-center justify-center rounded-full px-4 py-2 text-sm font-semibold shadow-sm disabled:opacity-50 sm:ml-3 sm:min-h-0 sm:w-auto"
 						style="background: var(--fa-blue-500); color: #ffffff;"
 					>
 						{submitting ? 'Adding...' : 'Continue to Checkout'}
@@ -352,7 +352,7 @@
 					<button
 						type="button"
 						onclick={onClose}
-						class="mt-3 inline-flex w-full justify-center rounded-full px-3 py-2 text-sm font-semibold shadow sm:mt-0 sm:w-auto"
+						class="mt-2 inline-flex min-h-12 w-full items-center justify-center rounded-full px-4 py-2 text-sm font-semibold shadow sm:mt-0 sm:min-h-0 sm:w-auto"
 						style="border: 1px solid var(--border); color: var(--text); background: transparent;"
 					>
 						Cancel

@@ -48,14 +48,17 @@
 	}
 </script>
 
-<div class={compact ? 'space-y-2' : 'space-y-3'}>
+<div class={`boost-quantity ${compact ? 'space-y-2' : 'space-y-3'}`}>
 	{#if presets.length}
-		<div class="flex flex-wrap gap-2" aria-label={`${label} quick choices`}>
+		<div
+			class="preset-scroll -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1"
+			aria-label={`${label} quick choices`}
+		>
 			{#each presets as preset (preset)}
 				<button
 					type="button"
 					onclick={() => commit(preset)}
-					class="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
+					class="min-h-10 shrink-0 snap-start rounded-full border px-4 py-2 text-xs font-semibold transition-colors"
 					style={value === preset
 						? 'border-color: var(--primary); background: var(--primary); color: #00150b;'
 						: 'border-color: var(--border); background: var(--surface); color: var(--text-muted);'}
@@ -68,16 +71,21 @@
 
 	<div class="flex items-end justify-between gap-3">
 		<label class="min-w-0 flex-1">
-			<span class="mb-1 block text-xs font-medium" style="color: var(--text);">{label}</span>
+			<span class="mb-1 flex items-center justify-between gap-3">
+				<span class="block text-xs font-semibold" style="color: var(--text);">{label}</span>
+				<span class="text-[10px]" style="color: var(--text-dim);"
+					>+/− {stepQuantity.toLocaleString()}</span
+				>
+			</span>
 			<span
-				class="flex items-stretch overflow-hidden rounded-xl border"
+				class="flex min-h-12 items-stretch overflow-hidden rounded-xl border"
 				style="border-color: var(--border); background: var(--bg);"
 			>
 				<button
 					type="button"
 					onclick={() => adjust(-1)}
 					disabled={value <= minQuantity}
-					class="flex min-w-11 items-center justify-center border-r px-3 disabled:opacity-40"
+					class="flex min-w-12 items-center justify-center border-r px-3 transition-colors disabled:opacity-40"
 					style="border-color: var(--border); color: var(--text);"
 					aria-label={`Decrease ${label.toLowerCase()} by ${stepQuantity.toLocaleString()}`}
 				>
@@ -90,13 +98,12 @@
 					max={maxQuantity ?? undefined}
 					step={stepQuantity}
 					bind:value={typedValue}
+					onfocus={(event) => event.currentTarget.select()}
 					onblur={commitTyped}
 					onkeydown={(event) => {
 						if (event.key === 'Enter') event.currentTarget.blur();
 					}}
-					class={compact
-						? 'min-w-0 flex-1 bg-transparent px-3 py-2 text-center text-sm font-semibold outline-none'
-						: 'min-w-0 flex-1 bg-transparent px-3 py-2.5 text-center text-base font-semibold outline-none'}
+					class="min-w-0 flex-1 bg-transparent px-2 py-2.5 text-center text-base font-bold outline-none sm:px-3"
 					style="color: var(--text);"
 					aria-label={label}
 				/>
@@ -104,7 +111,7 @@
 					type="button"
 					onclick={() => adjust(1)}
 					disabled={maxQuantity !== null && value >= maxQuantity}
-					class="flex min-w-11 items-center justify-center border-l px-3 disabled:opacity-40"
+					class="flex min-w-12 items-center justify-center border-l px-3 transition-colors disabled:opacity-40"
 					style="border-color: var(--border); color: var(--text);"
 					aria-label={`Increase ${label.toLowerCase()} by ${stepQuantity.toLocaleString()}`}
 				>
@@ -113,10 +120,26 @@
 			</span>
 		</label>
 	</div>
-	<p class="text-[11px]" style="color: var(--text-dim);">
-		Type any amount. It will use the nearest valid {stepQuantity.toLocaleString()} increment{maxQuantity !==
+	<p class={compact ? 'text-[10px]' : 'text-[11px]'} style="color: var(--text-dim);">
+		Type an amount or use +/−. We’ll use the nearest valid {stepQuantity.toLocaleString()} increment{maxQuantity !==
 		null
 			? `, up to ${maxQuantity.toLocaleString()}`
 			: ''}.
 	</p>
 </div>
+
+<style>
+	.preset-scroll {
+		scrollbar-width: none;
+	}
+
+	.preset-scroll::-webkit-scrollbar {
+		display: none;
+	}
+
+	@media (hover: hover) {
+		.boost-quantity button:not(:disabled):hover {
+			border-color: var(--primary);
+		}
+	}
+</style>
