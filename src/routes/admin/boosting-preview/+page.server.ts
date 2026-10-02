@@ -32,7 +32,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 	const rows = await prisma.boostCustomerOffer.findMany({
 		where: {
-			status: { in: ['reviewed', 'live'] },
 			category: { categoryType: 'boosting_service' }
 		},
 		select: {

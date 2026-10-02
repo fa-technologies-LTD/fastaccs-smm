@@ -46,6 +46,10 @@ try {
 
 	console.log(`[staging-db] Target verified: ${stagingDirect.hostname}`);
 	const isNodeAction = action === 'verify' || action === 'dev';
+	const useDirectForDev = action === 'dev' && process.env.STAGING_DEV_USE_DIRECT === 'true';
+	if (useDirectForDev) {
+		console.log('[staging-db] Local dev is using the verified direct endpoint.');
+	}
 	const command = isNodeAction
 		? process.execPath
 		: fileURLToPath(new URL('../node_modules/.bin/prisma', import.meta.url));
@@ -62,9 +66,9 @@ try {
 		cwd: fileURLToPath(new URL('..', import.meta.url)),
 		env: {
 			...process.env,
-			// Short, read-only integrity probes are more reliable through Neon's direct
-			// endpoint. The app/dev server still exercises the pooled endpoint it deploys with.
-			DATABASE_URL: action === 'verify' ? stagingDirect.url : stagingPool.url,
+			// Short integrity probes use Neon's direct endpoint. Dev normally exercises the
+			// deployed pooler, with an explicit local fallback when that pooler is unavailable.
+			DATABASE_URL: action === 'verify' || useDirectForDev ? stagingDirect.url : stagingPool.url,
 			DIRECT_URL: stagingDirect.url,
 			FASTACCS_LOCAL_DATA_MODE: 'staging'
 		},

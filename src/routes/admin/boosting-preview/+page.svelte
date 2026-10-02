@@ -97,7 +97,8 @@
 			</p>
 			<h1 class="mt-1 text-2xl font-bold" style="color: var(--text);">Customer Boosting flow</h1>
 			<p class="mt-1 text-sm" style="color: var(--text-muted);">
-				This reads your saved choices. It cannot add to cart or contact a supplier.
+				This includes generated drafts so you can review the complete customer flow. It cannot add
+				to cart or contact a supplier.
 			</p>
 		</div>
 		<a
@@ -207,7 +208,7 @@
 													>{/if}{#if offer.status !== 'live'}<span
 														class="rounded-full border px-2 py-0.5 text-[10px]"
 														style="border-color: var(--border); color: var(--text-muted);"
-														>Preview</span
+														>{offer.status === 'hidden' ? 'Draft preview' : 'Preview'}</span
 													>{/if}
 											</div>
 											<p class="mt-1 text-sm" style="color: var(--text-muted);">
