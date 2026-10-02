@@ -22,6 +22,14 @@ export interface DraftSuggestionCandidate {
 	qualitySignals: string[];
 }
 
+export interface DraftTierSuggestion {
+	tier: SuggestedQualityTier;
+	candidates: DraftSuggestionCandidate[];
+	normalCost: number;
+	maximumCost: number;
+	pricePerStepNgn: number;
+}
+
 const TIER_DEFINITIONS = {
 	value: {
 		customerName: 'Affordable',
@@ -53,6 +61,7 @@ const DRAFT_TRANSACTION_OPTIONS = {
 	maxWait: 10_000,
 	timeout: 30_000
 } as const;
+const MAX_AUTOMATED_TIER_PRICE_RATIO = 4;
 
 function configuredFxRate(): number {
 	const value = Number(env.BOOSTING_USD_NGN_RATE || env.HUBMAN_USD_NGN_RATE || 1700);
@@ -89,6 +98,8 @@ export function rankDraftSuggestionCandidates(
 ): DraftSuggestionCandidate[] {
 	const eligible = candidates.filter((candidate) => eligibleForTier(candidate, tier));
 	const ranked = [...eligible].sort((left, right) => {
+		const costDifference = left.ratePerThousand - right.ratePerThousand;
+		if (costDifference) return costDifference;
 		if (tier !== 'value') {
 			const wanted =
 				tier === 'premium'
@@ -97,7 +108,7 @@ export function rankDraftSuggestionCandidates(
 			const signalDifference = signalCount(right, wanted) - signalCount(left, wanted);
 			if (signalDifference) return signalDifference;
 		}
-		return left.ratePerThousand - right.ratePerThousand || left.id.localeCompare(right.id);
+		return left.id.localeCompare(right.id);
 	});
 
 	const selected: DraftSuggestionCandidate[] = [];
@@ -183,6 +194,10 @@ function safeMoney(value: number): number {
 	return Math.min(99_999_999, Math.max(1, Math.round(value)));
 }
 
+function roundPriceUp(value: number): number {
+	return Math.min(99_999_950, Math.max(50, Math.ceil((value - 1e-9) / 50) * 50));
+}
+
 export function suggestDraftPricePerStep(input: {
 	maximumCostAtMinimum: number;
 	minimumQuantity: number;
@@ -195,7 +210,82 @@ export function suggestDraftPricePerStep(input: {
 		(safeMinimumPrice * input.stepQuantity) / Math.max(1, input.minimumQuantity);
 	const basePrice = Math.max(input.existingPricePerStep, safePricePerStep);
 	const suggestedPrice = basePrice * input.priceMultiplier;
-	return Math.min(99_999_950, Math.max(50, Math.ceil((suggestedPrice - 1e-9) / 50) * 50));
+	return roundPriceUp(suggestedPrice);
+}
+
+/**
+ * Builds at most three genuinely distinct customer choices. A supplier service may appear in only
+ * one tier, and higher tiers are omitted when no separate qualifying service remains. Every tier
+ * first clears its own cost-safe floor; the customer-facing ladder is then enforced from the
+ * Affordable price so supplier catalogue quirks cannot collapse all three cards to one price.
+ */
+export function buildDraftTierSuggestions(input: {
+	candidates: DraftSuggestionCandidate[];
+	minimumQuantity: number;
+	stepQuantity: number;
+	existingPricePerStep: number;
+	fxRate: number;
+	costBuffer: number;
+	routeLimit?: number;
+}): DraftTierSuggestion[] {
+	const suggestions: DraftTierSuggestion[] = [];
+	const usedServiceIds = new Set<string>();
+	const routeLimit = Math.max(1, Math.min(2, Math.round(input.routeLimit ?? 1)));
+	let affordablePrice: number | null = null;
+	let stablePrice: number | null = null;
+
+	for (const tier of Object.keys(TIER_DEFINITIONS) as SuggestedQualityTier[]) {
+		const available = input.candidates.filter((candidate) => !usedServiceIds.has(candidate.id));
+		const candidates = rankDraftSuggestionCandidates(available, tier, routeLimit);
+		if (candidates.length === 0) continue;
+
+		const costs = candidates
+			.map(
+				(candidate) =>
+					(candidate.ratePerThousand * input.minimumQuantity * input.fxRate * input.costBuffer) /
+					1000
+			)
+			.sort((left, right) => left - right);
+		const normalCost = safeMoney(costs[Math.floor(costs.length / 2)] ?? costs[0]);
+		const maximumCost = safeMoney(Math.max(...costs) * 1.2);
+		const costSafePrice = suggestDraftPricePerStep({
+			maximumCostAtMinimum: maximumCost,
+			minimumQuantity: input.minimumQuantity,
+			stepQuantity: input.stepQuantity,
+			existingPricePerStep: input.existingPricePerStep,
+			priceMultiplier: 1
+		});
+		const lowerTierPrice = tier === 'stable' ? affordablePrice : (stablePrice ?? affordablePrice);
+		if (
+			tier !== 'value' &&
+			lowerTierPrice !== null &&
+			costSafePrice > lowerTierPrice * MAX_AUTOMATED_TIER_PRICE_RATIO
+		) {
+			continue;
+		}
+
+		let pricePerStepNgn = costSafePrice;
+		if (tier === 'value') {
+			affordablePrice = pricePerStepNgn;
+		} else if (tier === 'stable') {
+			pricePerStepNgn = Math.max(
+				costSafePrice,
+				roundPriceUp((affordablePrice ?? costSafePrice) * TIER_DEFINITIONS.stable.priceMultiplier)
+			);
+			stablePrice = pricePerStepNgn;
+		} else {
+			pricePerStepNgn = Math.max(
+				costSafePrice,
+				roundPriceUp((affordablePrice ?? costSafePrice) * TIER_DEFINITIONS.premium.priceMultiplier),
+				stablePrice ? roundPriceUp(stablePrice * 1.2) : 0
+			);
+		}
+
+		for (const candidate of candidates) usedServiceIds.add(candidate.id);
+		suggestions.push({ tier, candidates, normalCost, maximumCost, pricePerStepNgn });
+	}
+
+	return suggestions;
 }
 
 function isGeneratedDraftCategory(metadata: Prisma.JsonValue): boolean {
@@ -311,8 +401,24 @@ export async function prepopulateBoostingDraftSuggestions(
 				}
 			];
 		});
+		const tierSuggestions = buildDraftTierSuggestions({
+			candidates,
+			minimumQuantity: config.minQuantity,
+			stepQuantity: config.stepQuantity,
+			existingPricePerStep: config.pricePerStep,
+			fxRate,
+			costBuffer
+		});
+		const suggestionByTier = new Map(
+			tierSuggestions.map((suggestion) => [suggestion.tier, suggestion])
+		);
 
 		for (const tier of Object.keys(TIER_DEFINITIONS) as SuggestedQualityTier[]) {
+			const tierSuggestion = suggestionByTier.get(tier);
+			if (!tierSuggestion) {
+				summary.skippedWithoutCandidates += 1;
+				continue;
+			}
 			const existingOffer = existingOfferByKey.get(`${category.id}:${tier}:general`);
 			const generatedCategory = isGeneratedDraftCategory(category.metadata);
 			const canRepairGeneratedPrice =
@@ -325,27 +431,12 @@ export async function prepopulateBoostingDraftSuggestions(
 				existingOffer?.status === 'hidden' &&
 				existingOffer._count.routes === 0;
 			if (existingOffer && !canRepairGeneratedPrice && !canRepairEmptyRoutes) continue;
-			const suggested = rankDraftSuggestionCandidates(candidates, tier);
-			if (suggested.length < 2) {
-				summary.skippedWithoutCandidates += 1;
-				continue;
-			}
+			const suggested = tierSuggestion.candidates;
 			const definition = TIER_DEFINITIONS[tier];
 			const maximumCustomerQuantity = Math.max(
 				...suggested.map((candidate) => candidate.maxQuantity)
 			);
-			const costs = suggested.map(
-				(candidate) => (candidate.ratePerThousand * config.minQuantity * fxRate * costBuffer) / 1000
-			);
-			const normalCost = safeMoney(costs[Math.floor(costs.length / 2)] ?? costs[0]);
-			const maximumCost = safeMoney(Math.max(...costs) * 1.2);
-			const pricePerStepNgn = suggestDraftPricePerStep({
-				maximumCostAtMinimum: maximumCost,
-				minimumQuantity: config.minQuantity,
-				stepQuantity: config.stepQuantity,
-				existingPricePerStep: config.pricePerStep,
-				priceMultiplier: definition.priceMultiplier
-			});
+			const { normalCost, maximumCost, pricePerStepNgn } = tierSuggestion;
 			if (existingOffer) {
 				if (canRepairGeneratedPrice) {
 					priceRepairs.push({ id: existingOffer.id, pricePerStepNgn });

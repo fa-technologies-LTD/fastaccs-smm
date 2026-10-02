@@ -1,6 +1,6 @@
 # Fast Accounts unified project checklist
 
-Last updated: 30 September 2026
+Last updated: 2 October 2026
 
 ## Now — non-affiliate release candidate
 
@@ -10,6 +10,8 @@ Last updated: 30 September 2026
 - [x] Add the exception-focused admin queue and customer complaint/refill flow.
 - [x] Clarify global default profit versus per-offer profit and make all displayed price/profit maths consistent.
 - [x] Replace fixed quantity chips with a direct, adjustable quantity selector that respects supplier minimums and increments.
+- [x] Generate no more than three genuinely distinct Boosting tiers per category, with separate supplier services, ascending cost-safe prices and automatic omission of weak or implausibly expensive tiers.
+- [x] Add guarded staging reset and repeatable draft-audit commands; regenerate 82 hidden drafts across 36 covered categories with zero audit errors.
 - [x] Prevent public/customer APIs from exposing supplier, cost, margin, affiliate or internal metadata.
 - [x] Build owner-enabled Verified-X follower options with server-owned prices.
 - [x] Build the owner-controlled Numbers no-code recovery email, off by default.
@@ -17,14 +19,15 @@ Last updated: 30 September 2026
 - [x] Change the homepage call-to-action to “Accounts”.
 - [x] Preserve production-only `/go` work in the integration branch.
 - [x] Complete the integration branch diff review.
-- [x] Pass diff integrity, typecheck, all 804 unit/integration tests, production build and all four production-preview E2E journeys.
+- [x] Pass diff integrity, typecheck, all 818 unit/integration tests, production build and all four production-preview E2E journeys.
 - [x] Start the integration branch against isolated staging for the owner walkthrough and smoke-check its key public routes.
-- [ ] Owner reviews Boosting setup/preview/store/cart/checkout, Verified-X, Numbers control and CSV.
+- [x] Owner reviews and accepts the Boosting admin/customer/mobile flow.
+- [ ] Owner reviews Verified-X, Numbers control and paid-order CSV.
 - [ ] Obtain a separate explicit approval before pushing or deploying.
 
 ## Boosting rollout after code approval
 
-- [ ] Owner configures only the first small offer set in staging.
+- [ ] After deployment, populate hidden production drafts and let the owner review, adjust and publish only the offers she wants.
 - [ ] Compare Shadow route choices with manual fulfilment on real orders.
 - [ ] Choose one reviewed, low-value route for a controlled paid canary.
 - [ ] Verify submit, polling, history, completion notification, complaints and recovery end to end.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	buildDraftTierSuggestions,
 	rankDraftSuggestionCandidates,
 	suggestDraftPricePerStep,
 	type DraftSuggestionCandidate
@@ -55,6 +56,29 @@ describe('Boosting draft suggestion ranking', () => {
 		expect(ranked.map((candidate) => candidate.id)).not.toContain('cheap-b');
 	});
 
+	it('chooses the cheapest service once it meets the tier evidence floor', () => {
+		const ranked = rankDraftSuggestionCandidates(
+			[
+				{
+					...candidates[2],
+					id: 'cheap-stable',
+					ratePerThousand: 1,
+					qualitySignals: ['stability_claim']
+				},
+				{
+					...candidates[2],
+					id: 'expensive-more-signals',
+					ratePerThousand: 20,
+					qualitySignals: ['stability_claim', 'refill_claim']
+				}
+			],
+			'stable',
+			1
+		);
+
+		expect(ranked[0].id).toBe('cheap-stable');
+	});
+
 	it('uses quality claims only as a premium review signal, not an approval', () => {
 		const ranked = rankDraftSuggestionCandidates(candidates, 'premium');
 		expect(ranked.map((candidate) => candidate.id)).toEqual(['premium-b']);
@@ -82,5 +106,68 @@ describe('Boosting draft suggestion ranking', () => {
 				priceMultiplier: 1.5
 			})
 		).toBe(3000);
+	});
+
+	it('uses distinct services and creates a clear cost-safe price ladder', () => {
+		const suggestions = buildDraftTierSuggestions({
+			candidates,
+			minimumQuantity: 100,
+			stepQuantity: 100,
+			existingPricePerStep: 0,
+			fxRate: 1000,
+			costBuffer: 1,
+			routeLimit: 1
+		});
+
+		expect(suggestions.map((suggestion) => suggestion.tier)).toEqual([
+			'value',
+			'stable',
+			'premium'
+		]);
+		const serviceIds = suggestions.flatMap((suggestion) =>
+			suggestion.candidates.map((candidate) => candidate.id)
+		);
+		expect(new Set(serviceIds).size).toBe(serviceIds.length);
+		expect(suggestions[1].pricePerStepNgn).toBeGreaterThanOrEqual(
+			suggestions[0].pricePerStepNgn * 1.25
+		);
+		expect(suggestions[2].pricePerStepNgn).toBeGreaterThanOrEqual(
+			suggestions[0].pricePerStepNgn * 1.5
+		);
+		expect(suggestions[2].pricePerStepNgn).toBeGreaterThan(suggestions[1].pricePerStepNgn);
+	});
+
+	it('omits higher tiers when no distinct qualifying service remains', () => {
+		const suggestions = buildDraftTierSuggestions({
+			candidates: [candidates[3]],
+			minimumQuantity: 100,
+			stepQuantity: 100,
+			existingPricePerStep: 0,
+			fxRate: 1000,
+			costBuffer: 1
+		});
+
+		expect(suggestions).toHaveLength(1);
+		expect(suggestions[0].tier).toBe('value');
+	});
+
+	it('omits a qualifying tier when its supplier cost would create an implausible price jump', () => {
+		const suggestions = buildDraftTierSuggestions({
+			candidates: [
+				candidates[0],
+				{
+					...candidates[2],
+					id: 'extreme-stable',
+					ratePerThousand: 100
+				}
+			],
+			minimumQuantity: 100,
+			stepQuantity: 100,
+			existingPricePerStep: 0,
+			fxRate: 1000,
+			costBuffer: 1
+		});
+
+		expect(suggestions.map((suggestion) => suggestion.tier)).toEqual(['value']);
 	});
 });
