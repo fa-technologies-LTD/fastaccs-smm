@@ -43,9 +43,13 @@ try {
 	);
 	const generatedRoutes = await prisma.boostServiceRoute.count({
 		where: {
-			state: 'shadow',
-			equivalenceApproved: false,
 			equivalenceLabel: 'Automatically suggested; owner review required'
+		}
+	});
+	const unsafeGeneratedRoutes = await prisma.boostServiceRoute.count({
+		where: {
+			equivalenceLabel: 'Automatically suggested; owner review required',
+			OR: [{ state: { not: 'shadow' } }, { equivalenceApproved: true }]
 		}
 	});
 
@@ -84,7 +88,8 @@ try {
 				missingIndexes,
 				activeTargetGuardSafe: guardSafe,
 				priceLockPresent,
-				unapprovedGeneratedRoutes: generatedRoutes
+				unapprovedGeneratedRoutes: generatedRoutes,
+				unsafeGeneratedRoutes
 			},
 			null,
 			2
@@ -97,7 +102,7 @@ try {
 		missingIndexes.length ||
 		!guardSafe ||
 		!priceLockPresent ||
-		generatedRoutes !== 0
+		unsafeGeneratedRoutes !== 0
 	) {
 		process.exitCode = 1;
 	}

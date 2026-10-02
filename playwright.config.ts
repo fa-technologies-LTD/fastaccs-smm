@@ -6,7 +6,7 @@ export default defineConfig({
 		process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1'
 			? undefined
 			: {
-					command: 'npm run build && npm run preview',
+					command: 'npm run build && npm run preview -- --host 127.0.0.1',
 					port: 4173,
 					timeout: 240_000
 				},
