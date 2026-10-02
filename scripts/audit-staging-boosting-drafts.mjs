@@ -2,7 +2,20 @@ import 'dotenv/config';
 
 const TIER_ORDER = ['value', 'stable', 'premium'];
 const AUTO_LABEL = 'Automatically suggested; owner review required';
-const MAX_TIER_PRICE_RATIO = 4;
+const TIER_PRICE_BANDS = {
+	stable: { minimum: 2.5, maximum: 3 },
+	premium: { minimum: 5, maximum: 6 }
+};
+const AUDIENCE_OUTCOMES = new Set(['followers', 'subscribers', 'members']);
+const OUTCOME_MAXIMUM_RATIOS = {
+	likes: 0.75,
+	reactions: 0.75,
+	reposts: 0.75,
+	shares: 0.75,
+	saves: 0.75,
+	views: 0.35,
+	streams: 0.35
+};
 
 function target(name, value) {
 	if (!value?.trim()) throw new Error(`${name} is not configured.`);
@@ -52,6 +65,8 @@ try {
 			select: {
 				id: true,
 				categoryId: true,
+				platform: true,
+				outcome: true,
 				qualityTier: true,
 				displayOrder: true,
 				status: true,
@@ -128,20 +143,18 @@ try {
 					TIER_ORDER.indexOf(left.qualityTier) - TIER_ORDER.indexOf(right.qualityTier)
 			);
 			const usedServiceIds = new Set();
-			let previous = null;
+			const affordable = categoryOffers.find((offer) => offer.qualityTier === 'value');
+			if (!affordable) errors.push(`${categoryOffers[0].category.name}: no Affordable tier`);
 			for (const offer of categoryOffers) {
 				const price = Number(offer.pricePerStepNgn);
-				if (previous) {
-					const previousPrice = Number(previous.pricePerStepNgn);
-					if (price <= previousPrice) {
-						errors.push(
-							`${offer.category.name}: ${offer.qualityTier} is not above ${previous.qualityTier}`
-						);
+				const band = TIER_PRICE_BANDS[offer.qualityTier];
+				if (affordable && band) {
+					const affordablePrice = Number(affordable.pricePerStepNgn);
+					if (price < affordablePrice * band.minimum) {
+						errors.push(`${offer.category.name}: ${offer.qualityTier} is below its price band`);
 					}
-					if (price > previousPrice * MAX_TIER_PRICE_RATIO) {
-						errors.push(
-							`${offer.category.name}: ${offer.qualityTier} exceeds 4x ${previous.qualityTier}`
-						);
+					if (price > affordablePrice * band.maximum) {
+						errors.push(`${offer.category.name}: ${offer.qualityTier} exceeds its price band`);
 					}
 				}
 				for (const route of offer.routes) {
@@ -150,10 +163,12 @@ try {
 					}
 					usedServiceIds.add(route.providerServiceId);
 				}
-				previous = offer;
 			}
 			rows.push({
 				category: categoryOffers[0].category.name,
+				platform: categoryOffers[0].platform,
+				outcome: categoryOffers[0].outcome,
+				stepQuantity: categoryOffers[0].stepQuantity,
 				tiers: categoryOffers.map((offer) => ({
 					tier: offer.qualityTier,
 					price: Number(offer.pricePerStepNgn),
@@ -162,6 +177,33 @@ try {
 						: null
 				}))
 			});
+		}
+		const audiencePricePerThousandByPlatform = new Map();
+		for (const row of rows) {
+			if (!AUDIENCE_OUTCOMES.has(row.outcome)) continue;
+			const affordable = row.tiers.find((tier) => tier.tier === 'value');
+			if (affordable) {
+				audiencePricePerThousandByPlatform.set(
+					row.platform,
+					Math.max(
+						audiencePricePerThousandByPlatform.get(row.platform) ?? 0,
+						(affordable.price * 1000) / row.stepQuantity
+					)
+				);
+			}
+		}
+		for (const row of rows) {
+			const maximumRatio = OUTCOME_MAXIMUM_RATIOS[row.outcome];
+			const audiencePrice = audiencePricePerThousandByPlatform.get(row.platform);
+			const affordable = row.tiers.find((tier) => tier.tier === 'value');
+			if (!maximumRatio || !audiencePrice || !affordable) continue;
+			const roundedCeiling = Math.max(
+				50,
+				Math.floor((audiencePrice * maximumRatio * row.stepQuantity) / 1000 / 50) * 50
+			);
+			if (affordable.price > roundedCeiling) {
+				errors.push(`${row.category}: Affordable exceeds its audience-relative price band`);
+			}
 		}
 		rows.sort((left, right) => left.category.localeCompare(right.category));
 

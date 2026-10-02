@@ -34,26 +34,29 @@ const TIER_DEFINITIONS = {
 	value: {
 		customerName: 'Affordable',
 		shortPromise: 'A lower-cost option for straightforward growth.',
-		expectationChips: ['Affordable'],
+		expectationChips: [],
 		requiredVerifiedSignals: [],
 		displayOrder: 0,
-		priceMultiplier: 1
+		targetMultiplier: 1,
+		maximumMultiplier: 1
 	},
 	stable: {
 		customerName: 'More stable',
 		shortPromise: 'Less likely to drop, with stronger staying power.',
-		expectationChips: ['Less likely to drop'],
+		expectationChips: [],
 		requiredVerifiedSignals: ['stability_verified'],
 		displayOrder: 1,
-		priceMultiplier: 1.25
+		targetMultiplier: 2.5,
+		maximumMultiplier: 3
 	},
 	premium: {
 		customerName: 'Premium',
 		shortPromise: 'Higher-quality delivery when staying power matters most.',
-		expectationChips: ['Premium quality'],
+		expectationChips: [],
 		requiredVerifiedSignals: ['stability_verified', 'premium_quality_verified'],
 		displayOrder: 2,
-		priceMultiplier: 1.5
+		targetMultiplier: 5,
+		maximumMultiplier: 6
 	}
 } as const;
 
@@ -61,7 +64,17 @@ const DRAFT_TRANSACTION_OPTIONS = {
 	maxWait: 10_000,
 	timeout: 30_000
 } as const;
-const MAX_AUTOMATED_TIER_PRICE_RATIO = 4;
+
+const AUDIENCE_OUTCOMES = new Set(['followers', 'subscribers', 'members']);
+const OUTCOME_PRICE_BANDS: Record<string, { targetRatio: number; maximumRatio: number }> = {
+	likes: { targetRatio: 0.4, maximumRatio: 0.75 },
+	reactions: { targetRatio: 0.4, maximumRatio: 0.75 },
+	reposts: { targetRatio: 0.4, maximumRatio: 0.75 },
+	shares: { targetRatio: 0.4, maximumRatio: 0.75 },
+	saves: { targetRatio: 0.4, maximumRatio: 0.75 },
+	views: { targetRatio: 0.15, maximumRatio: 0.35 },
+	streams: { targetRatio: 0.15, maximumRatio: 0.35 }
+};
 
 function configuredFxRate(): number {
 	const value = Number(env.BOOSTING_USD_NGN_RATE || env.HUBMAN_USD_NGN_RATE || 1700);
@@ -198,6 +211,56 @@ function roundPriceUp(value: number): number {
 	return Math.min(99_999_950, Math.max(50, Math.ceil((value - 1e-9) / 50) * 50));
 }
 
+function roundPriceDown(value: number): number {
+	return Math.min(99_999_950, Math.max(50, Math.floor((value + 1e-9) / 50) * 50));
+}
+
+export function suggestDraftOutcomePriceBounds(input: {
+	outcome: string;
+	stepQuantity: number;
+	audiencePricePerThousand: number | null;
+}): { floorPerStep: number; ceilingPerStep: number } | null {
+	const band = OUTCOME_PRICE_BANDS[input.outcome];
+	if (!band || !input.audiencePricePerThousand || input.audiencePricePerThousand <= 0) {
+		return null;
+	}
+	const stepShare = Math.max(1, input.stepQuantity) / 1000;
+	return {
+		floorPerStep: roundPriceUp(input.audiencePricePerThousand * band.targetRatio * stepShare),
+		ceilingPerStep: roundPriceDown(input.audiencePricePerThousand * band.maximumRatio * stepShare)
+	};
+}
+
+export function buildDraftAudiencePriceBenchmarks(
+	prices: Array<{
+		platform: string;
+		outcome: string;
+		stepQuantity: number;
+		pricePerStepNgn: number;
+	}>
+): Map<string, number> {
+	const benchmarks = new Map<string, number>();
+	for (const price of prices) {
+		if (!AUDIENCE_OUTCOMES.has(price.outcome)) continue;
+		benchmarks.set(
+			price.platform,
+			Math.max(
+				benchmarks.get(price.platform) ?? 0,
+				(price.pricePerStepNgn * 1000) / Math.max(1, price.stepQuantity)
+			)
+		);
+	}
+	for (const price of prices) {
+		const band = OUTCOME_PRICE_BANDS[price.outcome];
+		const current = benchmarks.get(price.platform);
+		if (!band || !current) continue;
+		const outcomePricePerThousand =
+			(price.pricePerStepNgn * 1000) / Math.max(1, price.stepQuantity);
+		benchmarks.set(price.platform, Math.max(current, outcomePricePerThousand / band.maximumRatio));
+	}
+	return benchmarks;
+}
+
 export function suggestDraftPricePerStep(input: {
 	maximumCostAtMinimum: number;
 	minimumQuantity: number;
@@ -227,12 +290,12 @@ export function buildDraftTierSuggestions(input: {
 	fxRate: number;
 	costBuffer: number;
 	routeLimit?: number;
+	affordablePriceCeilingPerStep?: number | null;
 }): DraftTierSuggestion[] {
 	const suggestions: DraftTierSuggestion[] = [];
 	const usedServiceIds = new Set<string>();
 	const routeLimit = Math.max(1, Math.min(2, Math.round(input.routeLimit ?? 1)));
 	let affordablePrice: number | null = null;
-	let stablePrice: number | null = null;
 
 	for (const tier of Object.keys(TIER_DEFINITIONS) as SuggestedQualityTier[]) {
 		const available = input.candidates.filter((candidate) => !usedServiceIds.has(candidate.id));
@@ -255,29 +318,22 @@ export function buildDraftTierSuggestions(input: {
 			existingPricePerStep: input.existingPricePerStep,
 			priceMultiplier: 1
 		});
-		const lowerTierPrice = tier === 'stable' ? affordablePrice : (stablePrice ?? affordablePrice);
-		if (
-			tier !== 'value' &&
-			lowerTierPrice !== null &&
-			costSafePrice > lowerTierPrice * MAX_AUTOMATED_TIER_PRICE_RATIO
-		) {
-			continue;
-		}
-
 		let pricePerStepNgn = costSafePrice;
 		if (tier === 'value') {
+			if (
+				input.affordablePriceCeilingPerStep &&
+				costSafePrice > input.affordablePriceCeilingPerStep
+			) {
+				break;
+			}
 			affordablePrice = pricePerStepNgn;
-		} else if (tier === 'stable') {
-			pricePerStepNgn = Math.max(
-				costSafePrice,
-				roundPriceUp((affordablePrice ?? costSafePrice) * TIER_DEFINITIONS.stable.priceMultiplier)
-			);
-			stablePrice = pricePerStepNgn;
 		} else {
+			if (affordablePrice === null) break;
+			const definition = TIER_DEFINITIONS[tier];
+			if (costSafePrice > affordablePrice * definition.maximumMultiplier) continue;
 			pricePerStepNgn = Math.max(
 				costSafePrice,
-				roundPriceUp((affordablePrice ?? costSafePrice) * TIER_DEFINITIONS.premium.priceMultiplier),
-				stablePrice ? roundPriceUp(stablePrice * 1.2) : 0
+				roundPriceUp(affordablePrice * definition.targetMultiplier)
 			);
 		}
 
@@ -372,8 +428,13 @@ export async function prepopulateBoostingDraftSuggestions(
 		maxQuantity: number;
 		quantityPresets: number[];
 	}> = [];
-
-	for (const category of categories) {
+	type DraftCategoryContext = {
+		category: (typeof categories)[number];
+		config: ReturnType<typeof getBoostingServiceConfig>;
+		targetType: ReturnType<typeof getRequiredLinkType>;
+		candidates: DraftSuggestionCandidate[];
+	};
+	const categoryContexts: DraftCategoryContext[] = categories.map((category) => {
 		const config = getBoostingServiceConfig(category.metadata);
 		const targetType = getRequiredLinkType(config.actionType);
 		const maximumPreset = Math.max(...getQuantityChips(config));
@@ -401,13 +462,61 @@ export async function prepopulateBoostingDraftSuggestions(
 				}
 			];
 		});
-		const tierSuggestions = buildDraftTierSuggestions({
+		return { category, config, targetType, candidates };
+	});
+	const rawAffordableByCategoryId = new Map<string, DraftTierSuggestion>();
+	for (const { category, config, candidates } of categoryContexts) {
+		const affordable = buildDraftTierSuggestions({
 			candidates,
 			minimumQuantity: config.minQuantity,
 			stepQuantity: config.stepQuantity,
 			existingPricePerStep: config.pricePerStep,
 			fxRate,
 			costBuffer
+		}).find((suggestion) => suggestion.tier === 'value');
+		if (!affordable) continue;
+		rawAffordableByCategoryId.set(category.id, affordable);
+	}
+	const audiencePricePerThousandByPlatform = buildDraftAudiencePriceBenchmarks(
+		categoryContexts.flatMap(({ category, config }) => {
+			const affordable = rawAffordableByCategoryId.get(category.id);
+			return affordable
+				? [
+						{
+							platform: config.platform,
+							outcome: config.actionType,
+							stepQuantity: config.stepQuantity,
+							pricePerStepNgn: affordable.pricePerStepNgn
+						}
+					]
+				: [];
+		})
+	);
+
+	for (const { category, config, targetType, candidates } of categoryContexts) {
+		const audiencePricePerThousand =
+			audiencePricePerThousandByPlatform.get(config.platform) ?? null;
+		const commercialBounds = suggestDraftOutcomePriceBounds({
+			outcome: config.actionType,
+			stepQuantity: config.stepQuantity,
+			audiencePricePerThousand
+		});
+		const audienceFloorPerStep =
+			audiencePricePerThousand && AUDIENCE_OUTCOMES.has(config.actionType)
+				? roundPriceUp((audiencePricePerThousand * config.stepQuantity) / 1000)
+				: 0;
+		const tierSuggestions = buildDraftTierSuggestions({
+			candidates,
+			minimumQuantity: config.minQuantity,
+			stepQuantity: config.stepQuantity,
+			existingPricePerStep: Math.max(
+				config.pricePerStep,
+				audienceFloorPerStep,
+				commercialBounds?.floorPerStep ?? 0
+			),
+			fxRate,
+			costBuffer,
+			affordablePriceCeilingPerStep: commercialBounds?.ceilingPerStep
 		});
 		const suggestionByTier = new Map(
 			tierSuggestions.map((suggestion) => [suggestion.tier, suggestion])

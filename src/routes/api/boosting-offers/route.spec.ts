@@ -28,6 +28,7 @@ describe('public live Boosting offer copy', () => {
 		const body = await response.json();
 
 		expect(body).toMatchObject({ success: true, data: [{ categoryId: 'category-1' }] });
+		expect(body.data[0].expectationChips).toEqual([]);
 		expect(mocks.findMany).toHaveBeenCalledWith(
 			expect.objectContaining({
 				where: expect.objectContaining({

@@ -12,6 +12,25 @@ export const BOOSTING_REFILL_DAYS_KEY = 'boosting_refill_days';
 export const BOOSTING_TURNAROUND_MESSAGE =
 	'Delivery timing varies by service, quantity, and platform conditions.';
 
+const REDUNDANT_TIER_CHIPS = new Set([
+	'affordable',
+	'more stable',
+	'less likely to drop',
+	'premium',
+	'premium quality'
+]);
+
+export function getBoostingDisplayExpectationChips(chips: readonly string[]): string[] {
+	const seen = new Set<string>();
+	return chips.flatMap((chip) => {
+		const clean = String(chip).trim();
+		const key = clean.toLowerCase();
+		if (!clean || REDUNDANT_TIER_CHIPS.has(key) || seen.has(key)) return [];
+		seen.add(key);
+		return [clean];
+	});
+}
+
 export const BOOSTING_PLATFORMS: BoostingPlatform[] = [
 	'instagram',
 	'tiktok',

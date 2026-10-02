@@ -2,7 +2,8 @@ import { error } from '@sveltejs/kit';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import {
 	BOOSTING_ACTION_LABELS,
-	BOOSTING_PLATFORM_LABELS
+	BOOSTING_PLATFORM_LABELS,
+	getBoostingDisplayExpectationChips
 } from '$lib/helpers/boosting-service-config';
 import { prisma } from '$lib/prisma';
 import type { PageServerLoad } from './$types';
@@ -102,7 +103,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			qualityTier: row.qualityTier,
 			customerName: row.customerName,
 			shortPromise: row.shortPromise,
-			expectationChips: row.expectationChips,
+			expectationChips: getBoostingDisplayExpectationChips(row.expectationChips),
 			minQuantity: row.minQuantity,
 			maxQuantity: row.maxQuantity,
 			stepQuantity: row.stepQuantity,

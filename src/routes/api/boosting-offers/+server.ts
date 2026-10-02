@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { Prisma } from '@prisma/client';
+import { getBoostingDisplayExpectationChips } from '$lib/helpers/boosting-service-config';
 import { prisma } from '$lib/prisma';
 import type { RequestHandler } from './$types';
 
@@ -45,6 +46,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 			success: true,
 			data: offers.map((offer) => ({
 				...offer,
+				expectationChips: getBoostingDisplayExpectationChips(offer.expectationChips),
 				pricePerStepNgn: Number(offer.pricePerStepNgn)
 			}))
 		});

@@ -186,9 +186,19 @@
 
 				{#if selectedGroup}
 					<div>
-						<p class="mb-3 text-sm font-semibold" style="color: var(--text-muted);">
-							Pick what suits you
-						</p>
+						<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+							<p class="text-sm font-semibold" style="color: var(--text-muted);">
+								Pick what suits you
+							</p>
+							{#if selectedGroup.offers.some((offer) => offer.status !== 'live')}
+								<span
+									class="rounded-full border px-2.5 py-1 text-[10px] font-semibold"
+									style="border-color: var(--border); color: var(--text-muted);"
+								>
+									Private draft preview
+								</span>
+							{/if}
+						</div>
 						<div class="grid gap-3">
 							{#each selectedGroup.offers as offer, index (offer.id)}
 								<button
@@ -207,10 +217,6 @@
 												>{#if index === 0}<span
 														class="rounded-full px-2 py-0.5 text-[10px] font-bold"
 														style="background: var(--primary); color: #00150b;">Recommended</span
-													>{/if}{#if offer.status !== 'live'}<span
-														class="rounded-full border px-2 py-0.5 text-[10px]"
-														style="border-color: var(--border); color: var(--text-muted);"
-														>{offer.status === 'hidden' ? 'Draft preview' : 'Preview'}</span
 													>{/if}
 											</div>
 											<p class="mt-1 text-sm" style="color: var(--text-muted);">

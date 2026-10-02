@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+	buildDraftAudiencePriceBenchmarks,
 	buildDraftTierSuggestions,
 	rankDraftSuggestionCandidates,
+	suggestDraftOutcomePriceBounds,
 	suggestDraftPricePerStep,
 	type DraftSuggestionCandidate
 } from './draft-suggestions';
@@ -128,13 +130,43 @@ describe('Boosting draft suggestion ranking', () => {
 			suggestion.candidates.map((candidate) => candidate.id)
 		);
 		expect(new Set(serviceIds).size).toBe(serviceIds.length);
-		expect(suggestions[1].pricePerStepNgn).toBeGreaterThanOrEqual(
-			suggestions[0].pricePerStepNgn * 1.25
-		);
-		expect(suggestions[2].pricePerStepNgn).toBeGreaterThanOrEqual(
-			suggestions[0].pricePerStepNgn * 1.5
-		);
+		expect(suggestions[1].pricePerStepNgn).toBe(300);
+		expect(suggestions[2].pricePerStepNgn).toBe(500);
 		expect(suggestions[2].pricePerStepNgn).toBeGreaterThan(suggestions[1].pricePerStepNgn);
+	});
+
+	it('prices engagement and reach outcomes below the normalized audience benchmark', () => {
+		expect(
+			suggestDraftOutcomePriceBounds({
+				outcome: 'likes',
+				stepQuantity: 500,
+				audiencePricePerThousand: 10_000
+			})
+		).toEqual({ floorPerStep: 2000, ceilingPerStep: 3750 });
+		expect(
+			suggestDraftOutcomePriceBounds({
+				outcome: 'views',
+				stepQuantity: 1000,
+				audiencePricePerThousand: 10_000
+			})
+		).toEqual({ floorPerStep: 1500, ceilingPerStep: 3500 });
+		expect(
+			suggestDraftOutcomePriceBounds({
+				outcome: 'comments',
+				stepQuantity: 100,
+				audiencePricePerThousand: 10_000
+			})
+		).toBeNull();
+	});
+
+	it('raises an audience benchmark enough to keep cost-safe likes and views below it', () => {
+		const benchmarks = buildDraftAudiencePriceBenchmarks([
+			{ platform: 'youtube', outcome: 'subscribers', stepQuantity: 100, pricePerStepNgn: 50 },
+			{ platform: 'youtube', outcome: 'likes', stepQuantity: 1000, pricePerStepNgn: 1300 },
+			{ platform: 'youtube', outcome: 'views', stepQuantity: 1000, pricePerStepNgn: 950 }
+		]);
+
+		expect(benchmarks.get('youtube')).toBeCloseTo(950 / 0.35);
 	});
 
 	it('omits higher tiers when no distinct qualifying service remains', () => {
@@ -169,5 +201,19 @@ describe('Boosting draft suggestion ranking', () => {
 		});
 
 		expect(suggestions.map((suggestion) => suggestion.tier)).toEqual(['value']);
+	});
+
+	it('omits an affordable outcome whose supplier cost exceeds its commercial ceiling', () => {
+		const suggestions = buildDraftTierSuggestions({
+			candidates: [candidates[0]],
+			minimumQuantity: 100,
+			stepQuantity: 100,
+			existingPricePerStep: 0,
+			fxRate: 1000,
+			costBuffer: 1,
+			affordablePriceCeilingPerStep: 50
+		});
+
+		expect(suggestions).toEqual([]);
 	});
 });

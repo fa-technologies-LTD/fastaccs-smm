@@ -10,8 +10,10 @@ Last updated: 2 October 2026
 - [x] Add the exception-focused admin queue and customer complaint/refill flow.
 - [x] Clarify global default profit versus per-offer profit and make all displayed price/profit maths consistent.
 - [x] Replace fixed quantity chips with a direct, adjustable quantity selector that respects supplier minimums and increments.
-- [x] Generate no more than three genuinely distinct Boosting tiers per category, with separate supplier services, ascending cost-safe prices and automatic omission of weak or implausibly expensive tiers.
-- [x] Add guarded staging reset and repeatable draft-audit commands; regenerate 82 hidden drafts across 36 covered categories with zero audit errors.
+- [x] Generate no more than three genuinely distinct Boosting tiers per category, with separate supplier services, a 1x / 2.5x / 5x target price ladder and automatic omission of weak or cost-outlier tiers.
+- [x] Keep likes and related engagement below normalized audience-growth prices, and views/streams lower again, without forcing genuinely different services such as comments into an artificial band.
+- [x] Remove repeated quality copy and per-card draft badges from the customer preview while preserving factual chips such as refill protection.
+- [x] Add guarded staging reset and repeatable draft-audit commands; regenerate 84 hidden drafts across 36 covered categories with zero audit errors while preserving the owner's reviewed X Followers offer.
 - [x] Prevent public/customer APIs from exposing supplier, cost, margin, affiliate or internal metadata.
 - [x] Build owner-enabled Verified-X follower options with server-owned prices.
 - [x] Build the owner-controlled Numbers no-code recovery email, off by default.
@@ -19,7 +21,7 @@ Last updated: 2 October 2026
 - [x] Change the homepage call-to-action to “Accounts”.
 - [x] Preserve production-only `/go` work in the integration branch.
 - [x] Complete the integration branch diff review.
-- [x] Pass diff integrity, typecheck, all 818 unit/integration tests, production build and all four production-preview E2E journeys.
+- [x] Pass diff integrity, typecheck, all 822 unit/integration tests, production build and all four production-preview E2E journeys.
 - [x] Start the integration branch against isolated staging for the owner walkthrough and smoke-check its key public routes.
 - [x] Owner reviews and accepts the Boosting admin/customer/mobile flow.
 - [ ] Owner reviews Verified-X, Numbers control and paid-order CSV.

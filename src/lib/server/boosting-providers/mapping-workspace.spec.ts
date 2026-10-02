@@ -308,7 +308,7 @@ describe('boosting mapping workspace persistence', () => {
 					platform: 'instagram',
 					outcome: 'followers',
 					targetType: 'profile',
-					expectationChips: ['Less likely to drop', '30-day refill protection'],
+					expectationChips: ['30-day refill protection'],
 					requiredVerifiedSignals: ['refill_verified', 'stability_verified'],
 					status: 'reviewed'
 				})

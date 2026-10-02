@@ -3,6 +3,7 @@ import {
 	BOOSTING_TURNAROUND_MESSAGE,
 	computeBoostingPrice,
 	getBoostingActionTypesForPlatform,
+	getBoostingDisplayExpectationChips,
 	getBoostingServiceConfig,
 	getQuantityChips,
 	isValidBoostingQuantity,
@@ -18,6 +19,16 @@ const baseConfig = getBoostingServiceConfig({
 });
 
 describe('boosting service config', () => {
+	it('removes tier labels repeated by the card heading while retaining factual details', () => {
+		expect(
+			getBoostingDisplayExpectationChips([
+				'Premium quality',
+				'30-day refill protection',
+				'30-day refill protection'
+			])
+		).toEqual(['30-day refill protection']);
+	});
+
 	it('does not turn variable supplier timing into a fixed customer promise', () => {
 		expect(BOOSTING_TURNAROUND_MESSAGE).toBe(
 			'Delivery timing varies by service, quantity, and platform conditions.'

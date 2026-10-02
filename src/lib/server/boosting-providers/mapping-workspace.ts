@@ -417,14 +417,8 @@ function requiredSignalsForOffer(qualityTier: string, refillDays: number | null)
 	];
 }
 
-function expectationChipsForOffer(qualityTier: string, refillDays: number | null): string[] {
-	const qualityLabel =
-		qualityTier === 'premium'
-			? 'Premium quality'
-			: qualityTier === 'stable'
-				? 'Less likely to drop'
-				: 'Affordable';
-	return [qualityLabel, ...(refillDays ? [`${refillDays}-day refill protection`] : [])];
+function expectationChipsForOffer(_qualityTier: string, refillDays: number | null): string[] {
+	return refillDays ? [`${refillDays}-day refill protection`] : [];
 }
 
 function verifiedSignalLabel(signal: string): string {
