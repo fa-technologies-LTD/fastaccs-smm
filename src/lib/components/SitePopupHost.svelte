@@ -43,16 +43,9 @@
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ type: popup.type })
-		})
-			.then(() => {
-				// A user can have more than one popup queued (e.g. boosting-launch
-				// announcement and a bank-details review outcome) — recheck so the
-				// next one isn't starved until a brand-new browser session.
-				checkForPopup();
-			})
-			.catch((error) => {
-				console.error('Failed to mark site popup as seen:', error);
-			});
+		}).catch((error) => {
+			console.error('Failed to mark site popup as seen:', error);
+		});
 	}
 
 	// A clicked catalog item marks the popup seen (so it won't reappear) and then
@@ -85,7 +78,11 @@
 		secondaryHref={activePopup.secondaryHref}
 		secondaryText={activePopup.secondaryText}
 		onItemNavigate={handleItemNavigate}
-		accent={activePopup.type === 'numbers_launch' ? '#0ea5e9' : null}
-		iconKind={activePopup.type === 'numbers_launch' ? 'phone' : 'emoji'}
+		accent={activePopup.type === 'numbers_launch' || activePopup.type === 'numbers_improved'
+			? '#0ea5e9'
+			: null}
+		iconKind={activePopup.type === 'numbers_launch' || activePopup.type === 'numbers_improved'
+			? 'phone'
+			: 'emoji'}
 	/>
 {/if}

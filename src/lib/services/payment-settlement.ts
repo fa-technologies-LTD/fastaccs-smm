@@ -305,8 +305,13 @@ async function sendServerPurchaseVerifiedEvent(orderId: string, status: 'PAID' |
 					items: order.orderItems.map((item, index) => ({
 						item_id: item.categoryId,
 						item_name: item.productName,
-						item_category: 'SMM accounts',
-						item_variant: 'server_verified',
+						item_category:
+							order.orderType === 'boosting'
+								? 'Boosting Services'
+								: order.orderType === 'phone'
+									? 'Verification Numbers'
+									: 'SMM accounts',
+						item_variant: `${order.orderType}_server_verified`,
 						price: Number(item.unitPrice),
 						quantity: item.quantity,
 						index

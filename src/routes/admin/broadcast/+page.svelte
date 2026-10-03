@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import {
 		Mail,
 		Send,
@@ -11,6 +12,7 @@
 		AlertTriangle
 	} from '$lib/icons';
 	import { showError, showSuccess, showWarning } from '$lib/stores/toasts';
+	import { PRODUCT_LAUNCH_EMAIL_DRAFTS } from '$lib/content/product-launches';
 	import type { PageData } from './$types';
 
 	interface Props {
@@ -190,7 +192,6 @@
 
 	let previewOpen = $state(false);
 	let sending = $state(false);
-	let activeBroadcastId = $state<string | null>(null);
 	let sendProgress = $state({ total: 0, sent: 0, failed: 0, suppressed: 0, pending: 0 });
 
 	let historyLoading = $state(false);
@@ -198,6 +199,12 @@
 
 	let detailsLoading = $state(false);
 	let selectedDetails = $state<BroadcastDetails | null>(null);
+
+	function applyLaunchDraft(draft: (typeof PRODUCT_LAUNCH_EMAIL_DRAFTS)[number]): void {
+		subject = draft.subject;
+		messageBody = draft.body;
+		previewOpen = true;
+	}
 
 	function isPlatformSelected(platformId: string): boolean {
 		return selectedPlatformIds.includes(platformId);
@@ -312,7 +319,7 @@
 
 		countLoading = true;
 		try {
-			const query = new URLSearchParams({ audience: currentAudience });
+			const query = new SvelteURLSearchParams({ audience: currentAudience });
 			if (currentPlatformIds.length > 0) {
 				query.set('platformIds', currentPlatformIds.join(','));
 			}
@@ -483,7 +490,6 @@
 				throw new Error('Broadcast id was not returned by the server.');
 			}
 
-			activeBroadcastId = broadcastId;
 			sendProgress = {
 				total: Number(result.data?.total || recipientCount),
 				sent: 0,
@@ -519,7 +525,6 @@
 	async function resumeBroadcast(item: BroadcastHistoryItem): Promise<void> {
 		if (sending || item.pending <= 0) return;
 		sending = true;
-		activeBroadcastId = item.broadcastId;
 		sendProgress = {
 			total: item.total,
 			sent: item.sent,
@@ -579,6 +584,26 @@
 			class="space-y-5 rounded-2xl p-5"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 		>
+			<div>
+				<p class="mb-2 text-sm font-semibold" style="color: var(--text);">Quick drafts</p>
+				<div class="flex flex-wrap gap-2">
+					{#each PRODUCT_LAUNCH_EMAIL_DRAFTS as draft (draft.id)}
+						<button
+							type="button"
+							onclick={() => applyLaunchDraft(draft)}
+							class="rounded-full px-3 py-2 text-xs font-semibold transition-colors"
+							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+						>
+							Use {draft.label}
+						</button>
+					{/each}
+				</div>
+				<p class="mt-2 text-xs" style="color: var(--text-dim);">
+					Loads an editable draft only. Nothing is sent until you review, confirm the audience and
+					press Send.
+				</p>
+			</div>
+
 			<div>
 				<label
 					for="broadcast-subject"
@@ -642,7 +667,7 @@
 						class="w-full rounded-lg px-3 py-2.5 text-sm font-medium"
 						style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text);"
 					>
-						{#each audienceOptions as option}
+						{#each audienceOptions as option (option.value)}
 							<option value={option.value}>{option.label}</option>
 						{/each}
 					</select>
@@ -662,7 +687,7 @@
 						{#if data.platforms.length === 0}
 							<p class="text-sm" style="color: var(--text-muted);">No active platforms found.</p>
 						{:else}
-							{#each data.platforms as platform}
+							{#each data.platforms as platform (platform.id)}
 								<label
 									class="flex cursor-pointer items-center gap-2 text-sm"
 									style="color: var(--text);"
@@ -692,7 +717,7 @@
 								No active tiers found for the selected platform(s).
 							</p>
 						{:else}
-							{#each getVisibleTiers() as tier}
+							{#each getVisibleTiers() as tier (tier.id)}
 								<label
 									class="flex cursor-pointer items-center gap-2 text-sm"
 									style="color: var(--text);"
@@ -738,9 +763,9 @@
 				class="rounded-lg px-4 py-3"
 				style="background: var(--bg); border: 1px solid var(--border);"
 			>
-				<label class="mb-2 block text-sm" style="color: var(--text-muted);">
+				<p class="mb-2 block text-sm" style="color: var(--text-muted);">
 					Add specific users by email (optional)
-				</label>
+				</p>
 				<textarea
 					bind:value={specificEmailsInput}
 					rows="2"
@@ -841,7 +866,7 @@
 						</h3>
 						<div class="mt-2 space-y-3 text-sm" style="color: #cccccc;">
 							{#if messageBody.trim()}
-								{#each renderPreviewParagraphs(renderPersonalizationPreview(messageBody)) as paragraph}
+								{#each renderPreviewParagraphs(renderPersonalizationPreview(messageBody)) as paragraph, index (index)}
 									<p>{paragraph}</p>
 								{/each}
 							{:else}
@@ -867,7 +892,7 @@
 					{#if history.length === 0}
 						<p class="text-sm" style="color: var(--text-muted);">No broadcast history yet.</p>
 					{:else}
-						{#each history as item}
+						{#each history as item (item.broadcastId)}
 							<div
 								class="rounded-lg p-3"
 								style="border: 1px solid var(--border); background: var(--bg);"
@@ -1007,7 +1032,7 @@
 						{#if selectedDetails.recipients.length === 0}
 							<p class="text-sm" style="color: var(--text-muted);">No recipients loaded.</p>
 						{:else}
-							{#each selectedDetails.recipients as recipient}
+							{#each selectedDetails.recipients as recipient (recipient.id)}
 								<div
 									class="rounded-lg px-3 py-2 text-xs"
 									style="background: var(--bg-elev-2); border: 1px solid var(--border);"

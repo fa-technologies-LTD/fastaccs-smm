@@ -261,12 +261,13 @@
 						const resolvedOrderId = result.orderId || orderIdParam;
 						const checkoutSnapshot = readGa4CheckoutSnapshot(resolvedOrderId);
 						const snapshotItems = checkoutSnapshot?.items || [];
-						const verifiedAmount = Number(result.amount);
+						const verifiedAmount =
+							result.amount === null || result.amount === undefined || result.amount === ''
+								? Number.NaN
+								: Number(result.amount);
 						const purchaseValue = Number.isFinite(verifiedAmount)
 							? verifiedAmount
-							: isStoreCredit
-								? 0
-								: Number(checkoutSnapshot?.value || 0);
+							: Number(checkoutSnapshot?.value || 0);
 						const snapPurchaseTracked = trackSnapPurchase({
 							transaction_id: resolvedOrderId,
 							price: purchaseValue,
@@ -290,12 +291,12 @@
 							number_items: snapshotItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
 						});
 						if (snapPurchaseTracked) {
-							recordAnalyticsEvent('purchase', `${$page.url.pathname}${$page.url.search}`);
+							recordAnalyticsEvent('purchase', '/checkout/verify');
 						}
 						if (resolvedOrderId) {
 							trackGa4Purchase({
 								transaction_id: resolvedOrderId,
-								value: Number(result.amount || checkoutSnapshot?.value || 0),
+								value: purchaseValue,
 								currency: result.currency || checkoutSnapshot?.currency || 'NGN',
 								affiliation: checkoutSnapshot?.affiliation || 'FastAccs SMM',
 								coupon: checkoutSnapshot?.coupon,

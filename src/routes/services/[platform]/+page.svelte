@@ -90,11 +90,11 @@
 	);
 	const hasRefillOffer = $derived(services.some((service) => service.config.refillAvailable));
 
-	function qualityBadge(qualityTier: string | null): string | null {
-		if (qualityTier === 'premium') return 'Premium';
-		if (qualityTier === 'stable') return 'More stable';
-		if (qualityTier === 'value') return 'Affordable';
-		return null;
+	function qualityBadge(qualityTier: string | null, serviceName: string): string | null {
+		if (qualityTier === 'value') return 'Recommended';
+		const label =
+			qualityTier === 'premium' ? 'Premium' : qualityTier === 'stable' ? 'More stable' : null;
+		return label && label.toLowerCase() !== serviceName.trim().toLowerCase() ? label : null;
 	}
 
 	function qualityBadgeStyle(qualityTier: string | null): string {
@@ -565,12 +565,12 @@
 								</p>{/if}
 							<div class="flex flex-wrap items-center gap-2">
 								<p class="font-semibold" style="color: var(--text);">{service.name}</p>
-								{#if qualityBadge(service.qualityTier)}
+								{#if qualityBadge(service.qualityTier, service.name)}
 									<span
 										class="rounded-full border px-2 py-0.5 text-[10px] font-bold"
 										style={qualityBadgeStyle(service.qualityTier)}
 									>
-										{qualityBadge(service.qualityTier)}
+										{qualityBadge(service.qualityTier, service.name)}
 									</span>
 								{/if}
 							</div>

@@ -194,6 +194,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				status: orderById.status.toUpperCase(),
 				orderId: orderById.id,
 				phone: orderById.orderType === 'phone',
+				amount: Number(orderById.totalAmount),
+				currency: orderById.currency,
 				message: 'Order already processed'
 			});
 		}
@@ -209,6 +211,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					orderId: orderById.id,
 					status: 'PAID',
 					phone: true,
+					amount: Number(orderById.totalAmount),
+					currency: orderById.currency,
 					message: 'Order confirmed. Getting your number…'
 				});
 			}
@@ -219,6 +223,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					state: 'SUCCESS',
 					status: 'COMPLETED',
 					orderId: orderById.id,
+					amount: Number(orderById.totalAmount),
+					currency: orderById.currency,
 					message: 'Order already processed'
 				});
 			}
@@ -228,7 +234,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				state: 'SUCCESS',
 				warning: recovered.warning,
 				orderId: orderById.id,
-				status: 'PAID'
+				status: 'PAID',
+				amount: Number(orderById.totalAmount),
+				currency: orderById.currency
 			});
 		}
 
@@ -417,7 +425,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					settlement.status === 'COMPLETED'
 						? 'Payment verified and order completed'
 						: 'Payment verified and fulfillment is in progress',
-				amount: verificationResult.amountPaid,
+				// Analytics and receipts use the full sale value, including any store credit.
+				// Keep the gateway-paid portion separate for diagnostics.
+				amount: Number(order.totalAmount),
+				gatewayAmount: Number(verificationResult.amountPaid || verificationResult.amount || 0),
 				currency: verificationResult.currency
 			});
 		}

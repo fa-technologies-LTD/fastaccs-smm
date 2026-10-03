@@ -478,21 +478,21 @@ export const load: PageServerLoad = async ({ locals }) => {
 			const dayKey = getBusinessDateKey(settlementDate, businessTimezone);
 			const weekKey = getBusinessWeekKey(settlementDate, businessTimezone);
 			const monthKey = getBusinessMonthKey(settlementDate, businessTimezone);
+			// The main trend is the same all-product net sales shown in the headline card.
+			// Product-specific views below are slices of this total, not replacements for it.
+			pushBucket(byDayMap, dayKey, order.id, orderTotal);
+			pushBucket(byWeekMap, weekKey, order.id, orderTotal);
+			pushBucket(byMonthMap, monthKey, order.id, orderTotal);
 
-			// Boosting orders get their own trend buckets and are excluded from the
-			// account platform/tier breakdown below — boosting services aren't
-			// nested under a platform category, so mixing them in would otherwise
-			// show up as a confusing "Unknown platform" bucket.
+			// Boosting gets its own trend too, while Numbers stays in its dedicated
+			// analytics dashboard. Neither belongs in account platform/tier rankings.
 			if (order.orderType === 'boosting') {
 				pushBucket(boostingByDayMap, dayKey, order.id, orderTotal);
 				pushBucket(boostingByWeekMap, weekKey, order.id, orderTotal);
 				pushBucket(boostingByMonthMap, monthKey, order.id, orderTotal);
 				continue;
 			}
-
-			pushBucket(byDayMap, dayKey, order.id, orderTotal);
-			pushBucket(byWeekMap, weekKey, order.id, orderTotal);
-			pushBucket(byMonthMap, monthKey, order.id, orderTotal);
+			if (order.orderType !== 'account') continue;
 
 			const grossItemTotal = order.orderItems.reduce(
 				(sum, item) => sum + Math.max(0, Number(item.totalPrice || 0)),

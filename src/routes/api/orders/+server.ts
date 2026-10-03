@@ -47,8 +47,7 @@ import {
 import {
 	getStoreCreditBuckets,
 	computeOrderRedemption,
-	redeemStoreCreditForOrder,
-	reverseStoreCreditRedemption
+	redeemStoreCreditForOrder
 } from '$lib/services/store-credit';
 import { recoverPaidOrder, settleFailedPayment } from '$lib/services/payment-settlement';
 import { logOrderStatusTransition } from '$lib/services/order-audit';
@@ -71,7 +70,10 @@ import {
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
 import { getPaymentReturnOrigin } from '$lib/helpers/site-url';
-import { CONFIRMED_PAYMENT_STATUSES } from '$lib/helpers/buyer-order-visibility';
+import {
+	CONFIRMED_PAYMENT_STATUSES,
+	isOrderPaymentConfirmed
+} from '$lib/helpers/buyer-order-visibility';
 import { sanitizeCustomerOrder } from '$lib/helpers/customer-order-visibility';
 import {
 	formatAccountAddonProductName,
@@ -1540,13 +1542,53 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			const shortOrderId = data.id.substring(0, 8);
 			const paymentReference = `ORD_${shortOrderId}_${Date.now()}`;
 			const redirectUrl = `${getPaymentReturnOrigin(url)}/checkout/verify?orderId=${encodeURIComponent(data.id)}`;
+			// Claim the gateway reference before contacting Monnify. This closes the window
+			// where a retry could create a second hosted checkout while the first request was
+			// still waiting for Monnify to respond.
+			const claimed = await prisma.order.updateMany({
+				where: {
+					id: data.id,
+					status: 'pending',
+					paymentStatus: 'pending',
+					paymentReference: null
+				},
+				data: {
+					paymentReference,
+					paymentExpiresAt,
+					status: 'pending_payment'
+				}
+			});
+			if (claimed.count !== 1) {
+				const latest = await prisma.order.findUnique({ where: { id: data.id } });
+				if (latest && isOrderPaymentConfirmed(latest)) {
+					return json({
+						data: sanitizeCustomerOrder(latest),
+						success: true,
+						alreadyPaid: true,
+						orderId: latest.id,
+						redirectUrl,
+						deliveryMode: orderDeliveryMode,
+						traceId,
+						error: null
+					});
+				}
+				return json(
+					{
+						success: false,
+						orderId: data.id,
+						error: 'Checkout is still initializing. Please try again in a moment.',
+						traceId
+					},
+					{ status: 409 }
+				);
+			}
 
 			logPaymentEvent('info', 'checkout.initialize.started', {
 				traceId,
 				orderId: data.id,
 				userId: checkoutUserId,
 				paymentReference,
-				amount: Number(data.totalAmount),
+				amount: amountToCharge,
 				currency: data.currency
 			});
 
@@ -1569,29 +1611,19 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					orderId: data.id,
 					userId: checkoutUserId,
 					paymentReference,
-					amount: Number(data.totalAmount),
+					amount: amountToCharge,
 					currency: data.currency,
 					errorCode: initResult.errorCode,
 					errorMessage: initResult.error || 'Failed to initialize payment'
 				});
 				try {
-					await releaseOrderReservations(data.id);
-					if (storeCreditRedemption.totalApplied > 0 && checkoutUserId) {
-						await prisma.$transaction((tx) =>
-							reverseStoreCreditRedemption(tx, { userId: checkoutUserId, orderId: data.id })
-						);
-					}
-					await prisma.order.update({
-						where: { id: data.id },
-						data: {
-							status: 'failed',
-							paymentStatus: 'failed',
-							checkoutKey: null,
-							paymentCheckoutUrl: null,
-							cancellationReason: 'init_failed'
-						}
+					await settleFailedPayment({
+						orderId: data.id,
+						failureKind: 'failed',
+						source: 'verify',
+						clearCheckoutKey: true,
+						cancellationReason: 'init_failed'
 					});
-					invalidateAdminStatsCache();
 				} catch (markFailedError) {
 					console.error('Failed to mark order failed after Monnify init failure:', markFailedError);
 				}
@@ -1606,16 +1638,43 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				);
 			}
 
-			await prisma.order.update({
-				where: { id: data.id },
-				data: {
+			const finalized = await prisma.order.updateMany({
+				where: {
+					id: data.id,
 					paymentReference,
-					paymentCheckoutUrl: initResult.checkoutUrl,
-					paymentExpiresAt,
 					status: 'pending_payment',
 					paymentStatus: 'pending'
+				},
+				data: {
+					paymentCheckoutUrl: initResult.checkoutUrl,
+					paymentExpiresAt,
+					status: 'pending_payment'
 				}
 			});
+			if (finalized.count !== 1) {
+				const latest = await prisma.order.findUnique({ where: { id: data.id } });
+				if (latest && isOrderPaymentConfirmed(latest)) {
+					return json({
+						data: sanitizeCustomerOrder(latest),
+						success: true,
+						alreadyPaid: true,
+						orderId: latest.id,
+						redirectUrl,
+						deliveryMode: orderDeliveryMode,
+						traceId,
+						error: null
+					});
+				}
+				return json(
+					{
+						success: false,
+						orderId: data.id,
+						error: 'Payment was created, but the order changed. Please check this order.',
+						traceId
+					},
+					{ status: 409 }
+				);
+			}
 			invalidateAdminStatsCache();
 
 			logPaymentEvent('info', 'checkout.initialize.completed', {
@@ -1624,7 +1683,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				userId: checkoutUserId,
 				paymentReference,
 				transactionReference: initResult.transactionReference,
-				amount: Number(data.totalAmount),
+				amount: amountToCharge,
 				currency: data.currency,
 				success: true
 			});

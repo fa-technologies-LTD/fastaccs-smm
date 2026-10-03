@@ -54,7 +54,9 @@ let scriptRequested = false;
 let consentListenerAttached = false;
 
 function getMeasurementId(): string {
-	const measurementId = String(publicEnv.PUBLIC_GA4_MEASUREMENT_ID || DEFAULT_GA4_MEASUREMENT_ID).trim();
+	const measurementId = String(
+		publicEnv.PUBLIC_GA4_MEASUREMENT_ID || DEFAULT_GA4_MEASUREMENT_ID
+	).trim();
 	return /^G-[A-Z0-9]+$/i.test(measurementId) ? measurementId.toUpperCase() : '';
 }
 
@@ -266,7 +268,7 @@ function readTrackedPurchases(): string[] {
 	if (!browser) return [];
 
 	try {
-		const parsed = JSON.parse(sessionStorage.getItem(TRACKED_PURCHASES_KEY) || '[]');
+		const parsed = JSON.parse(localStorage.getItem(TRACKED_PURCHASES_KEY) || '[]');
 		return Array.isArray(parsed)
 			? parsed.filter((item): item is string => typeof item === 'string')
 			: [];
@@ -277,8 +279,12 @@ function readTrackedPurchases(): string[] {
 
 function markPurchaseTracked(transactionId: string): void {
 	if (!browser || !transactionId) return;
-	const tracked = Array.from(new Set([...readTrackedPurchases(), transactionId])).slice(-25);
-	sessionStorage.setItem(TRACKED_PURCHASES_KEY, JSON.stringify(tracked));
+	try {
+		const tracked = Array.from(new Set([...readTrackedPurchases(), transactionId])).slice(-50);
+		localStorage.setItem(TRACKED_PURCHASES_KEY, JSON.stringify(tracked));
+	} catch {
+		// Storage may be unavailable in private browser modes. The event still fires.
+	}
 }
 
 export function trackGa4Purchase(params: Ga4EventParams & { transaction_id?: string }): boolean {

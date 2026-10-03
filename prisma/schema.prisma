@@ -55,6 +55,8 @@ model User {
   catalogUpdatesLastSeenAt        DateTime?                 @map("catalog_updates_last_seen_at")
   boostingLaunchPopupSeenAt       DateTime?                 @map("boosting_launch_popup_seen_at")
   numbersLaunchPopupSeenAt        DateTime?                 @map("numbers_launch_popup_seen_at")
+  boostingRefreshPopupSeenAt      DateTime?                 @map("boosting_refresh_popup_seen_at")
+  numbersImprovedPopupSeenAt      DateTime?                 @map("numbers_improved_popup_seen_at")
   boostingCrossSellPopupSeenCount Int                       @default(0) @map("boosting_cross_sell_popup_seen_count")
   affiliateRefreshPopupSeenAt     DateTime?                 @map("affiliate_refresh_popup_seen_at")
   bankDetailsPopupSeenAt          DateTime?                 @map("bank_details_popup_seen_at")

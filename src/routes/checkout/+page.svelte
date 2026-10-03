@@ -677,6 +677,14 @@
 				window.location.href = orderResult.redirectUrl;
 				return;
 			}
+			if (orderResult.alreadyPaid && orderResult.redirectUrl) {
+				if (resolvedOrderId) {
+					sessionStorage.setItem(PENDING_ORDER_STORAGE_KEY, resolvedOrderId);
+				}
+				trackGa4AddPaymentInfo({ ...ga4CheckoutPayload, payment_type: 'Monnify' });
+				window.location.href = orderResult.redirectUrl;
+				return;
+			}
 
 			if (!orderResult.checkoutUrl) {
 				throw new Error(orderResult.error || 'Failed to initialize payment');

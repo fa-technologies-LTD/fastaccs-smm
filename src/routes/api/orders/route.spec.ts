@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
 	findOrder: vi.fn(),
+	updateOrderMany: vi.fn(),
 	findCategories: vi.fn(),
 	groupAccounts: vi.fn(),
 	createTransaction: vi.fn(),
@@ -26,7 +27,8 @@ vi.mock('$lib/prisma', () => ({
 	prisma: {
 		order: {
 			findUnique: mocks.findOrder,
-			update: vi.fn()
+			update: vi.fn(),
+			updateMany: mocks.updateOrderMany
 		},
 		category: {
 			findMany: mocks.findCategories
@@ -152,6 +154,7 @@ describe('approved invariant: emergency checkout order control', () => {
 			superTier3Amount: 15_000
 		});
 		mocks.getLowSuccessTierKeys.mockResolvedValue(new Set());
+		mocks.updateOrderMany.mockResolvedValue({ count: 1 });
 		mocks.resolveAffiliatePolicyForOrder.mockImplementation(
 			({ programId, liveIsSuperAffiliate, liveConfig }) => ({
 				version: 3,
@@ -600,6 +603,24 @@ describe('approved invariant: emergency checkout order control', () => {
 			checkoutUrl: 'https://checkout.monnify.test/partial-credit'
 		});
 		expect(body.paidWithStoreCredit).toBeUndefined();
+		expect(mocks.updateOrderMany).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				where: expect.objectContaining({
+					id: 'order-partial-credit',
+					paymentReference: null,
+					status: 'pending',
+					paymentStatus: 'pending'
+				}),
+				data: expect.objectContaining({
+					paymentReference: expect.stringMatching(/^ORD_order-pa_/),
+					status: 'pending_payment'
+				})
+			})
+		);
+		expect(mocks.updateOrderMany.mock.invocationCallOrder[0]).toBeLessThan(
+			mocks.initializeTransaction.mock.invocationCallOrder[0]
+		);
 		expect(mocks.initializeTransaction).toHaveBeenCalledWith(
 			expect.objectContaining({
 				amount: 4_800,

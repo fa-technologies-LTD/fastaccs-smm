@@ -2,17 +2,18 @@ import { prisma } from '$lib/prisma';
 import { getSitePopupsEnabledSetting } from './admin-settings';
 import { CONFIRMED_PAYMENT_STATUSES } from '$lib/helpers/buyer-order-visibility';
 import {
-	NUMBERS_LAUNCH_POPUP,
-	isNumbersLaunchPopupWindowOpen,
-	userHasBoughtNumber
-} from './numbers-campaign';
+	BOOSTING_REFRESH_ANNOUNCEMENT,
+	NUMBERS_IMPROVED_ANNOUNCEMENT
+} from '$lib/content/product-launches';
 
 export type SitePopupType =
 	| 'first_purchase'
 	| 'catalog_updates'
 	| 'boosting_launch'
+	| 'boosting_refresh'
 	| 'boosting_crosssell'
 	| 'numbers_launch'
+	| 'numbers_improved'
 	| 'affiliate_refresh'
 	| 'bank_details_outcome';
 
@@ -43,24 +44,14 @@ const FIRST_PURCHASE_POPUP: PendingSitePopup = {
 	ctaText: 'Got it'
 };
 
-const BOOSTING_LAUNCH_POPUP: PendingSitePopup = {
-	type: 'boosting_launch',
-	icon: '🚀',
-	title: 'Boosting services are now live',
-	body: 'Paste your link, pay, we deliver.',
-	ctaText: 'Got it',
-	secondaryHref: '/services',
-	secondaryText: 'Browse Boosting Services'
+const BOOSTING_REFRESH_POPUP: PendingSitePopup = {
+	type: 'boosting_refresh',
+	...BOOSTING_REFRESH_ANNOUNCEMENT
 };
 
-const NUMBERS_LAUNCH_POPUP_DEF: PendingSitePopup = {
-	type: 'numbers_launch',
-	icon: NUMBERS_LAUNCH_POPUP.icon,
-	title: NUMBERS_LAUNCH_POPUP.title,
-	body: NUMBERS_LAUNCH_POPUP.body,
-	ctaText: NUMBERS_LAUNCH_POPUP.ctaText,
-	secondaryHref: NUMBERS_LAUNCH_POPUP.secondaryHref,
-	secondaryText: NUMBERS_LAUNCH_POPUP.secondaryText
+const NUMBERS_IMPROVED_POPUP: PendingSitePopup = {
+	type: 'numbers_improved',
+	...NUMBERS_IMPROVED_ANNOUNCEMENT
 };
 
 const BOOSTING_CROSSSELL_POPUP: PendingSitePopup = {
@@ -125,12 +116,6 @@ function getBankDetailsOutcomePopup(submission: {
 		secondaryHref: '/affiliate/bank-details',
 		secondaryText: 'Update details'
 	};
-}
-
-function joinNames(names: string[]): string {
-	if (names.length <= 1) return names[0] || '';
-	if (names.length === 2) return `${names[0]} and ${names[1]}`;
-	return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
 async function getCatalogUpdatesPopup(since: Date): Promise<PendingSitePopup | null> {
@@ -240,8 +225,8 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 		select: {
 			firstPurchasePopupSeenAt: true,
 			catalogUpdatesLastSeenAt: true,
-			boostingLaunchPopupSeenAt: true,
-			numbersLaunchPopupSeenAt: true,
+			boostingRefreshPopupSeenAt: true,
+			numbersImprovedPopupSeenAt: true,
 			boostingCrossSellPopupSeenCount: true,
 			affiliateRefreshPopupSeenAt: true,
 			isAffiliateEnabled: true,
@@ -260,12 +245,6 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 		if (hasCompletedPurchase) return FIRST_PURCHASE_POPUP;
 	}
 
-	// "Numbers are live" launch announcement — only during the campaign window, once
-	// per user, and never to someone who has already bought a number.
-	if (!user.numbersLaunchPopupSeenAt && (await isNumbersLaunchPopupWindowOpen())) {
-		if (!(await userHasBoughtNumber(userId))) return NUMBERS_LAUNCH_POPUP_DEF;
-	}
-
 	{
 		const submission = user.affiliatePayoutDetails;
 		const hasUnseenOutcome =
@@ -277,6 +256,8 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 		}
 	}
 
+	if (!user.numbersImprovedPopupSeenAt) return NUMBERS_IMPROVED_POPUP;
+
 	// One-time affiliate-program refresh announcement (adaptive to affiliate status).
 	if (!user.affiliateRefreshPopupSeenAt) {
 		const isActiveAffiliate = Boolean(
@@ -285,9 +266,7 @@ export async function getPendingSitePopup(userId: string): Promise<PendingSitePo
 		return getAffiliateRefreshPopup(isActiveAffiliate);
 	}
 
-	if (!user.boostingLaunchPopupSeenAt) {
-		return BOOSTING_LAUNCH_POPUP;
-	}
+	if (!user.boostingRefreshPopupSeenAt) return BOOSTING_REFRESH_POPUP;
 
 	// Boosting cross-sell: nudge buyers who haven't tried boosting, once per order
 	// for their first BOOSTING_CROSSSELL_MAX_ORDERS orders (shown-count < min(orders, cap)).
@@ -327,19 +306,25 @@ export async function markSitePopupSeen(userId: string, type: SitePopupType): Pr
 		| 'catalogUpdatesLastSeenAt'
 		| 'boostingLaunchPopupSeenAt'
 		| 'numbersLaunchPopupSeenAt'
+		| 'boostingRefreshPopupSeenAt'
+		| 'numbersImprovedPopupSeenAt'
 		| 'affiliateRefreshPopupSeenAt'
 		| 'bankDetailsPopupSeenAt' =
 		type === 'first_purchase'
 			? 'firstPurchasePopupSeenAt'
 			: type === 'boosting_launch'
 				? 'boostingLaunchPopupSeenAt'
-				: type === 'numbers_launch'
-					? 'numbersLaunchPopupSeenAt'
-					: type === 'affiliate_refresh'
-						? 'affiliateRefreshPopupSeenAt'
-						: type === 'bank_details_outcome'
-							? 'bankDetailsPopupSeenAt'
-							: 'catalogUpdatesLastSeenAt';
+				: type === 'boosting_refresh'
+					? 'boostingRefreshPopupSeenAt'
+					: type === 'numbers_launch'
+						? 'numbersLaunchPopupSeenAt'
+						: type === 'numbers_improved'
+							? 'numbersImprovedPopupSeenAt'
+							: type === 'affiliate_refresh'
+								? 'affiliateRefreshPopupSeenAt'
+								: type === 'bank_details_outcome'
+									? 'bankDetailsPopupSeenAt'
+									: 'catalogUpdatesLastSeenAt';
 
 	await prisma.user.update({
 		where: { id: userId },

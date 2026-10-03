@@ -50,6 +50,15 @@
 		}
 	}
 
+	function handleActionNavigate(event: MouseEvent, href: string): void {
+		if (onItemNavigate) {
+			event.preventDefault();
+			onItemNavigate(href);
+			return;
+		}
+		onClose();
+	}
+
 	$effect(() => {
 		if (!isOpen) return;
 		lockScroll();
@@ -109,7 +118,7 @@
 
 			{#if bodyItems && bodyItems.length > 0}
 				<ul class="mb-6 space-y-1.5 text-left">
-					{#each bodyItems as item}
+					{#each bodyItems as item, index (index)}
 						<li class="flex items-start gap-2 text-sm" style="color: var(--text);">
 							<span style="color: var(--primary);">•</span>
 							{#if item.href}
@@ -136,7 +145,7 @@
 				<!-- Themed variant: lead with the action, keep dismiss subtle. -->
 				<a
 					href={secondaryHref}
-					onclick={onClose}
+					onclick={(event) => handleActionNavigate(event, secondaryHref)}
 					class="popup-cta block w-full cursor-pointer rounded-full px-4 py-2.5 text-sm font-bold transition-all active:scale-95"
 					style="background: {accent}; color: #ffffff; box-shadow: 0 0 22px -4px {accent};"
 				>
@@ -153,7 +162,7 @@
 				{#if ctaHref}
 					<a
 						href={ctaHref}
-						onclick={onClose}
+						onclick={(event) => handleActionNavigate(event, ctaHref)}
 						class="block w-full cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition-all hover:scale-95"
 						style="background: var(--primary); color: #04140C;"
 					>
@@ -172,6 +181,7 @@
 				{#if secondaryHref && secondaryText}
 					<a
 						href={secondaryHref}
+						onclick={(event) => handleActionNavigate(event, secondaryHref)}
 						class="mt-3 inline-block text-sm font-medium underline-offset-2 hover:underline"
 						style="color: var(--text-muted);"
 					>

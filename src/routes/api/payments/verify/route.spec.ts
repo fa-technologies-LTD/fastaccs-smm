@@ -147,6 +147,32 @@ describe('approved invariant: redirect payment verification boundary', () => {
 		);
 	});
 
+	it('returns the full order value for analytics when gateway cash covers only part', async () => {
+		mocks.findOrderById.mockResolvedValue({
+			...pendingOrder(),
+			totalAmount: 5_800,
+			storeCreditApplied: 1_000
+		});
+		mocks.verifyPayment.mockResolvedValue({
+			...verificationResult(),
+			amount: 4_800,
+			amountPaid: 4_800
+		});
+		mocks.settleSuccessfulPayment.mockResolvedValue({
+			success: true,
+			orderId,
+			status: 'COMPLETED'
+		});
+
+		const response = await callVerify({ orderId, paymentReference: 'ORD_STORED' });
+		const body = await response.json();
+
+		expect(body).toMatchObject({ amount: 5_800, gatewayAmount: 4_800, currency: 'NGN' });
+		expect(mocks.settleSuccessfulPayment).toHaveBeenCalledWith(
+			expect.objectContaining({ amountPaid: 4_800 })
+		);
+	});
+
 	it('returns confirmed Numbers payment immediately without rerunning fulfilment', async () => {
 		mocks.findOrderById.mockResolvedValue(paidPhoneOrder());
 

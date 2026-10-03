@@ -750,7 +750,7 @@
 						Higher tiers replace lower totals; they do not stack.
 					</p>
 					<div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-						{#each [{ label: 'Tier 1', countName: 'superTier1Count', amountName: 'superTier1Amount', count: affiliateConfig.superTier1Count, amount: affiliateConfig.superTier1Amount }, { label: 'Tier 2', countName: 'superTier2Count', amountName: 'superTier2Amount', count: affiliateConfig.superTier2Count, amount: affiliateConfig.superTier2Amount }, { label: 'Tier 3', countName: 'superTier3Count', amountName: 'superTier3Amount', count: affiliateConfig.superTier3Count, amount: affiliateConfig.superTier3Amount }] as tier}
+						{#each [{ label: 'Tier 1', countName: 'superTier1Count', amountName: 'superTier1Amount', count: affiliateConfig.superTier1Count, amount: affiliateConfig.superTier1Amount }, { label: 'Tier 2', countName: 'superTier2Count', amountName: 'superTier2Amount', count: affiliateConfig.superTier2Count, amount: affiliateConfig.superTier2Amount }, { label: 'Tier 3', countName: 'superTier3Count', amountName: 'superTier3Amount', count: affiliateConfig.superTier3Count, amount: affiliateConfig.superTier3Amount }] as tier (tier.countName)}
 							<div
 								class="rounded-lg p-3"
 								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
@@ -878,7 +878,7 @@
 					class="flex items-center justify-between rounded-lg p-3 text-sm"
 					style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 				>
-					<span>Dashboard milestone pop-ups (first purchase, catalog updates)</span>
+					<span>Site pop-ups (product updates and milestones)</span>
 					<input
 						type="checkbox"
 						name="sitePopupsEnabled"
