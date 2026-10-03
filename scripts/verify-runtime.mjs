@@ -1,13 +1,11 @@
-const [major, minor] = process.versions.node.split('.').map((value) => Number.parseInt(value, 10));
+const [major] = process.versions.node.split('.').map((value) => Number.parseInt(value, 10));
 
 const hasStructuredClone = typeof globalThis.structuredClone === 'function';
 const hasCryptoGetRandomValues = typeof globalThis.crypto?.getRandomValues === 'function';
-const isSupportedNode = major === 20 && minor >= 12;
+const isSupportedNode = major === 24;
 
 if (!isSupportedNode) {
-	console.error(
-		`[runtime-check] Unsupported Node.js version ${process.version}. Required: >=20.12.0 <21.`
-	);
+	console.error(`[runtime-check] Unsupported Node.js version ${process.version}. Required: 24.x.`);
 	process.exit(1);
 }
 
