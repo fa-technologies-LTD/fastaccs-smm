@@ -88,7 +88,7 @@
 	};
 
 	export function brandKey(serviceName: string): string {
-		const n = serviceName.toLowerCase();
+		const n = serviceName.trim().toLowerCase();
 		if (n.includes('whatsapp')) return 'whatsapp';
 		if (n.includes('telegram')) return 'telegram';
 		if (n.includes('signal')) return 'signal';

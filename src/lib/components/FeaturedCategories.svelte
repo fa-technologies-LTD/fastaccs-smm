@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ArrowRight, Phone, ShoppingBag, Zap } from '$lib/icons';
+	import { ArrowRight, Mail, Phone, ShoppingBag, Zap } from '$lib/icons';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
 	import { getPlatformIcon } from '$lib/helpers/platformColors';
 
@@ -49,6 +49,10 @@
 		if (!price) return 'View options';
 		return `From ₦${Math.round(price).toLocaleString('en-NG')}`;
 	}
+
+	function isMailPlatform(platform: PlatformData): boolean {
+		return /mail/i.test(`${platform.name} ${platform.slug}`);
+	}
 </script>
 
 <section class="catalogue-section" aria-labelledby="catalogue-heading">
@@ -71,10 +75,15 @@
 				<div class="item-list">
 					{#if featuredPlatforms.length > 0}
 						{#each featuredPlatforms as platform (platform.id)}
-							{@const PlatformIcon = getPlatformIcon(platform.slug)}
 							<a href={`/platforms/${platform.slug}`}>
 								<div class="item-identity">
-									<span class="app-icon account-app-icon"><PlatformIcon size={18} /></span>
+									<span class="app-icon account-app-icon">
+										{#if isMailPlatform(platform)}
+											<Mail size={18} />
+										{:else}
+											<BrandIcon service={platform.name} size={18} />
+										{/if}
+									</span>
 									<span>
 										<strong>{platform.name}</strong>
 										<small>{platform.totalAccounts} in stock</small>
@@ -283,8 +292,9 @@
 	}
 
 	.account-app-icon {
-		background: rgba(5, 212, 113, 0.1);
-		color: var(--primary);
+		border: 1px solid rgba(148, 163, 184, 0.22);
+		background: #f8fafc;
+		color: #2563eb;
 	}
 
 	.boosting-app-icon {

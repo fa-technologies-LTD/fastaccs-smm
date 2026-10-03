@@ -9,6 +9,7 @@ describe('Boosting platform brand icons', () => {
 		['YouTube', 'youtube'],
 		['Facebook', 'facebook'],
 		['X', 'x'],
+		[' X ', 'x'],
 		['Spotify', 'spotify'],
 		['Telegram', 'telegram']
 	])('maps %s to its official icon', (label, expected) => {
