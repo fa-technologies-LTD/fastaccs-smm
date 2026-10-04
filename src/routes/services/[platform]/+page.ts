@@ -56,23 +56,27 @@ async function fetchPlatformServices(
 			};
 		}
 
-		const liveOffers = offerCopyResponse.ok
-			? (((await offerCopyResponse.json()).data || []) as Array<{
-					id: string;
-					categoryId: string;
-					customerName: string;
-					shortPromise: string;
-					expectationChips: string[];
-					qualityTier: string;
-					displayOrder: number;
-					minQuantity: number;
-					maxQuantity: number | null;
-					stepQuantity: number;
-					quantityPresets: number[];
-					pricePerStepNgn: number;
-					refillDays: number | null;
-				}>)
-			: [];
+		const offerPayload = offerCopyResponse.ok
+			? ((await offerCopyResponse.json()) as {
+					managedRolloutActive?: boolean;
+					data?: Array<{
+						id: string;
+						categoryId: string;
+						customerName: string;
+						shortPromise: string;
+						expectationChips: string[];
+						qualityTier: string;
+						displayOrder: number;
+						minQuantity: number;
+						maxQuantity: number | null;
+						stepQuantity: number;
+						quantityPresets: number[];
+						pricePerStepNgn: number;
+						refillDays: number | null;
+					}>;
+				})
+			: null;
+		const liveOffers = offerPayload?.data ?? [];
 		const offersByCategoryId = new Map<string, typeof liveOffers>();
 		for (const offer of liveOffers) {
 			const list = offersByCategoryId.get(offer.categoryId) ?? [];
@@ -86,7 +90,9 @@ async function fetchPlatformServices(
 				const offers = (offersByCategoryId.get(service.id) ?? []).sort(
 					(left, right) => left.displayOrder - right.displayOrder
 				);
-				if (!offers.length) return [{ ...service, categoryId: service.id }];
+				if (!offers.length) {
+					return offerPayload?.managedRolloutActive ? [] : [{ ...service, categoryId: service.id }];
+				}
 				return offers.map((offer) => ({
 					...service,
 					id: offer.id,

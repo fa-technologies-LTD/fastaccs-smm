@@ -3,6 +3,7 @@
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
+	import ManagedBoostingStorefront from '$lib/components/ManagedBoostingStorefront.svelte';
 	import { showError } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 
@@ -53,7 +54,9 @@
 			</p>
 		</div>
 
-		{#if data.platformTiles.length === 0}
+		{#if data.managedRolloutActive}
+			<ManagedBoostingStorefront groups={data.managedGroups} />
+		{:else if data.platformTiles.length === 0}
 			<div
 				class="mx-auto max-w-xl rounded-[var(--r-md)] border p-10 text-center"
 				style="border-color: var(--border); background: var(--bg-elev-1);"

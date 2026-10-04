@@ -28,6 +28,8 @@
 		"boosting:catalogue:review": "node ./scripts/boosting-catalogue.mjs review",
 		"boosting:catalogue:sync-staging": "node ./scripts/boosting-catalogue.mjs sync-staging",
 		"boosting:drafts:populate-staging": "node ./scripts/populate-staging-boosting-drafts.mjs",
+		"boosting:drafts:plan-production": "node ./scripts/populate-production-boosting-drafts.mjs",
+		"boosting:drafts:populate-production": "node ./scripts/populate-production-boosting-drafts.mjs",
 		"boosting:staging:audit-drafts": "node ./scripts/audit-staging-boosting-drafts.mjs",
 		"boosting:staging:reset-drafts": "node ./scripts/reset-staging-boosting-drafts.mjs",
 		"boosting:staging:reset-drafts:apply": "node ./scripts/reset-staging-boosting-drafts.mjs --confirm",

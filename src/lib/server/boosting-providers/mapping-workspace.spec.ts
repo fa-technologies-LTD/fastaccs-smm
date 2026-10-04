@@ -73,10 +73,14 @@ function database(
 	const offerUpdate = vi.fn().mockResolvedValue({});
 	const routeUpdateMany = vi.fn().mockResolvedValue({ count: 0 });
 	const auditCreate = vi.fn().mockResolvedValue({});
+	const categoryUpdate = vi.fn().mockResolvedValue({});
+	const rolloutUpsert = vi.fn().mockResolvedValue({});
 	const tx = {
 		boostCustomerOffer: { upsert: offerUpsert, update: offerUpdate },
 		boostServiceRoute: { upsert: routeUpsert, updateMany: routeUpdateMany },
-		adminAuditLog: { create: auditCreate }
+		adminAuditLog: { create: auditCreate },
+		category: { update: categoryUpdate },
+		microcopy: { upsert: rolloutUpsert }
 	};
 	return {
 		client: {
@@ -107,7 +111,9 @@ function database(
 		offerUpsert,
 		routeUpsert,
 		offerUpdate,
-		auditCreate
+		auditCreate,
+		categoryUpdate,
+		rolloutUpsert
 	};
 }
 
@@ -319,6 +325,7 @@ describe('boosting mapping workspace persistence', () => {
 				create: expect.objectContaining({
 					providerServiceId: serviceId,
 					equivalenceApproved: true,
+					equivalenceLabel: 'Owner reviewed in Boosting Setup',
 					reviewedByUserId: 'admin-1'
 				})
 			})
@@ -326,6 +333,25 @@ describe('boosting mapping workspace persistence', () => {
 		expect(db.auditCreate).toHaveBeenCalledWith(
 			expect.objectContaining({
 				data: expect.objectContaining({ action: 'boosting_mapping_saved' })
+			})
+		);
+	});
+
+	it('activates the category and permanently cuts over only when an offer is made live', async () => {
+		const db = database();
+		const input = validInput();
+		input.offer.status = 'live';
+
+		await saveBoostMappingWorkspace(categoryId, input, 'admin-1', { database: db.client });
+
+		expect(db.categoryUpdate).toHaveBeenCalledWith({
+			where: { id: categoryId },
+			data: { isActive: true }
+		});
+		expect(db.rolloutUpsert).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: { key: 'config.boosting.managed_storefront_enabled' },
+				update: { value: 'true', isActive: true }
 			})
 		);
 	});

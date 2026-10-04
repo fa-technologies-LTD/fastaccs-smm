@@ -10,6 +10,7 @@ import type {
 import { getRequiredLinkType } from '$lib/helpers/social-link-validator';
 import { roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
 import { prisma } from '$lib/prisma';
+import { BOOSTING_MANAGED_STOREFRONT_KEY } from './storefront-rollout';
 import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
 import { inferAdvertisedRefillDays, supplierTextAdvertisesRefill } from './catalog-normalizer';
 
@@ -724,6 +725,9 @@ export async function saveBoostMappingWorkspace(
 								? 'enabled'
 								: 'shadow',
 					equivalenceApproved: routeInput.equivalenceApproved,
+					equivalenceLabel: routeInput.equivalenceApproved
+						? 'Owner reviewed in Boosting Setup'
+						: null,
 					targetType,
 					verifiedSignals: routeInput.verifiedSignals,
 					audienceTags: routeInput.audienceTags,
@@ -743,6 +747,9 @@ export async function saveBoostMappingWorkspace(
 								? 'enabled'
 								: 'shadow',
 					equivalenceApproved: routeInput.equivalenceApproved,
+					equivalenceLabel: routeInput.equivalenceApproved
+						? 'Owner reviewed in Boosting Setup'
+						: null,
 					targetType,
 					verifiedSignals: routeInput.verifiedSignals,
 					audienceTags: routeInput.audienceTags,
@@ -786,5 +793,20 @@ export async function saveBoostMappingWorkspace(
 				}
 			}
 		});
+		if (offerInput.status === 'live') {
+			await tx.category.update({ where: { id: categoryId }, data: { isActive: true } });
+			await tx.microcopy.upsert({
+				where: { key: BOOSTING_MANAGED_STOREFRONT_KEY },
+				create: {
+					key: BOOSTING_MANAGED_STOREFRONT_KEY,
+					value: 'true',
+					description:
+						'Persistent cutover marker for the reviewed Boosting customer-offer storefront.',
+					category: 'boosting_config',
+					isActive: true
+				},
+				update: { value: 'true', isActive: true }
+			});
+		}
 	});
 }

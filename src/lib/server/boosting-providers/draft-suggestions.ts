@@ -147,7 +147,7 @@ function defaultQuantity(outcome: string): number {
 	return ['views', 'streams'].includes(outcome) ? 1000 : 100;
 }
 
-async function ensureCoreDraftCategories(database: PrismaClient) {
+async function ensureCoreDraftCategories(database: PrismaClient, dryRun = false) {
 	const existing = await database.category.findMany({
 		where: { categoryType: 'boosting_service' },
 		orderBy: [{ isActive: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }]
@@ -189,6 +189,31 @@ async function ensureCoreDraftCategories(database: PrismaClient) {
 	}
 
 	if (pending.length === 0) return { categories: [...byKey.values()], created: 0 };
+	if (dryRun) {
+		const now = new Date();
+		return {
+			categories: [
+				...byKey.values(),
+				...pending.map(
+					(category) =>
+						({
+							id: category.id!,
+							parentId: category.parentId ?? null,
+							name: category.name,
+							slug: category.slug,
+							description: category.description ?? null,
+							categoryType: category.categoryType,
+							metadata: category.metadata ?? {},
+							sortOrder: category.sortOrder ?? 0,
+							isActive: category.isActive ?? false,
+							createdAt: now,
+							updatedAt: now
+						}) as (typeof existing)[number]
+				)
+			],
+			created: pending.length
+		};
+	}
 	const created = await database.category.createMany({ data: pending });
 	const all = await database.category.findMany({
 		where: { categoryType: 'boosting_service' },
@@ -364,10 +389,13 @@ export interface BoostDraftSuggestionSummary {
 }
 
 export async function prepopulateBoostingDraftSuggestions(
-	options: { database?: PrismaClient } = {}
+	options: { database?: PrismaClient; dryRun?: boolean } = {}
 ): Promise<BoostDraftSuggestionSummary> {
 	const database = options.database ?? prisma;
-	const { categories, created: categoriesCreated } = await ensureCoreDraftCategories(database);
+	const { categories, created: categoriesCreated } = await ensureCoreDraftCategories(
+		database,
+		options.dryRun
+	);
 	const summary: BoostDraftSuggestionSummary = {
 		processed: categories.length,
 		categoriesCreated,
@@ -657,6 +685,13 @@ export async function prepopulateBoostingDraftSuggestions(
 				} satisfies Prisma.InputJsonValue
 			});
 		}
+	}
+
+	if (options.dryRun) {
+		summary.offersCreated = offerRows.length;
+		summary.routesSuggested = routeRows.length;
+		summary.pricesRepaired = priceRepairs.length;
+		return summary;
 	}
 
 	if (

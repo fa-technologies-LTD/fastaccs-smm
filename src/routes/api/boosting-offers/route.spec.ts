@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ findMany: vi.fn() }));
+const mocks = vi.hoisted(() => ({ findMany: vi.fn(), findRolloutMarker: vi.fn() }));
 vi.mock('$lib/prisma', () => ({
-	prisma: { boostCustomerOffer: { findMany: mocks.findMany } }
+	prisma: {
+		boostCustomerOffer: { findMany: mocks.findMany },
+		microcopy: { findUnique: mocks.findRolloutMarker }
+	}
 }));
 
 import { GET } from './+server';
@@ -19,6 +22,7 @@ beforeEach(() => {
 			displayOrder: 1
 		}
 	]);
+	mocks.findRolloutMarker.mockResolvedValue(null);
 });
 
 describe('public live Boosting offer copy', () => {
@@ -27,7 +31,11 @@ describe('public live Boosting offer copy', () => {
 		const response = await GET({ setHeaders } as never);
 		const body = await response.json();
 
-		expect(body).toMatchObject({ success: true, data: [{ categoryId: 'category-1' }] });
+		expect(body).toMatchObject({
+			success: true,
+			managedRolloutActive: true,
+			data: [{ categoryId: 'category-1' }]
+		});
 		expect(body.data[0].expectationChips).toEqual([]);
 		expect(mocks.findMany).toHaveBeenCalledWith(
 			expect.objectContaining({
