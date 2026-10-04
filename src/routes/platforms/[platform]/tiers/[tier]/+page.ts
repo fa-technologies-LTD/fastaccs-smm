@@ -1,4 +1,4 @@
-import { error } from '@sveltejs/kit';
+import { error, isHttpError } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
 import { getTierStockStatus } from '$lib/helpers/tier-delivery-config';
 
@@ -84,6 +84,7 @@ export const load: PageLoad = async ({ params, fetch }) => {
 			lowStockThreshold
 		};
 	} catch (err) {
+		if (isHttpError(err)) throw err;
 		console.error('Error loading tier data:', err);
 		throw error(500, 'Failed to load tier information');
 	}

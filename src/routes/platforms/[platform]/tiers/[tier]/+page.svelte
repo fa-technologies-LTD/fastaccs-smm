@@ -15,14 +15,11 @@
 	import Footer from '$lib/components/Footer.svelte';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	import ImagePreviewModal from '$lib/components/ImagePreviewModal.svelte';
+	import PlatformIdentityIcon from '$lib/components/PlatformIdentityIcon.svelte';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { showError, showWarning, showSuccess } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
-	import {
-		getPlatformColor,
-		getPlatformIcon,
-		isPlatformImageUrl
-	} from '$lib/helpers/platformColors';
+	import { getPlatformColor, isPlatformImageUrl } from '$lib/helpers/platformColors';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { getTierSampleScreenshotUrls } from '$lib/helpers/tierSampleScreenshots';
 	import { buildCloudinaryOptimizedImageUrl } from '$lib/helpers/cloudinary';
@@ -67,7 +64,6 @@
 	let exactPreviewReserving = $state<string | null>(null);
 	let exactPreviewError = $state<string | null>(null);
 	let exactPreviewPrimaryImageFailedByAccount = $state<Record<string, boolean>>({});
-	let platformIconFailed = $state(false);
 	let exactPreviewAccounts = $state<
 		Array<{
 			accountId: string;
@@ -709,7 +705,6 @@
 			</div>
 		</section>
 	{:else}
-		{@const PlatformIcon = getPlatformIcon(data.platform.slug)}
 		{@const platformImageUrl = getPlatformImageValue(data.platform.metadata)}
 		{@const tierStatus = getTierStatus(data.tier.visible_available)}
 
@@ -735,16 +730,12 @@
 						<div
 							class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/20 p-2.5 sm:h-14 sm:w-14"
 						>
-							{#if platformImageUrl && !platformIconFailed}
-								<img
-									src={platformImageUrl}
-									alt={data.platform.name}
-									class="h-full w-full object-contain"
-									onerror={() => (platformIconFailed = true)}
-								/>
-							{:else}
-								<PlatformIcon class="h-7 w-7 sm:h-9 sm:w-9" />
-							{/if}
+							<PlatformIdentityIcon
+								name={data.platform.name}
+								slug={data.platform.slug}
+								imageUrl={platformImageUrl}
+								size={36}
+							/>
 						</div>
 						<div class="min-w-0 flex-1">
 							<h1 class="text-xl leading-tight font-bold sm:text-2xl">{data.tier.tier_name}</h1>

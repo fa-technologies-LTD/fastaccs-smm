@@ -45,9 +45,9 @@
 						admins when needed to troubleshoot an order.
 					</li>
 					<li>
-						Affiliate payout details (bank name, account number, account name), collected only
-						if you join our affiliate programme and used solely to pay out your affiliate
-						earnings — never to charge or debit your account.
+						Affiliate payout details (bank name, account number, account name), collected only if
+						you join our affiliate programme and used solely to pay out your affiliate earnings —
+						never to charge or debit your account.
 					</li>
 					<li>Security and usage signals used to prevent abuse and improve reliability.</li>
 				</ul>
@@ -157,10 +157,8 @@
 				</h2>
 				<p>
 					Email:
-					<a
-						href="mailto:verystronethan@gmail.com"
-						class="hover:underline"
-						style="color: var(--link);">verystronethan@gmail.com</a
+					<a href="mailto:support@fastaccs.com" class="hover:underline" style="color: var(--link);"
+						>support@fastaccs.com</a
 					>
 				</p>
 			</section>

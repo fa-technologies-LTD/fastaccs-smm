@@ -223,10 +223,8 @@
 				</h2>
 				<p>
 					Questions about these Terms:
-					<a
-						href="mailto:verystronethan@gmail.com"
-						class="hover:underline"
-						style="color: var(--link);">verystronethan@gmail.com</a
+					<a href="mailto:support@fastaccs.com" class="hover:underline" style="color: var(--link);"
+						>support@fastaccs.com</a
 					>
 				</p>
 			</section>

@@ -20,14 +20,11 @@
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
+	import PlatformIdentityIcon from '$lib/components/PlatformIdentityIcon.svelte';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { showError, showSuccess, showWarning } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
-	import {
-		getPlatformColor,
-		getPlatformIcon,
-		isPlatformImageUrl
-	} from '$lib/helpers/platformColors';
+	import { getPlatformColor } from '$lib/helpers/platformColors';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { lockScroll, unlockScroll } from '$lib/helpers/scroll-lock';
 	import {
@@ -65,7 +62,6 @@
 	}
 
 	let { data }: Props = $props();
-	let platformHeaderIconFailed = $state(false);
 	let quickAddOpen = $state(false);
 	let quickAddTier = $state<TierCard | null>(null);
 	let quickAddQuantity = $state(1);
@@ -224,10 +220,6 @@
 
 	function getPlatformMetadata(metadata: Record<string, unknown> | undefined): PlatformMetadata {
 		return (metadata as PlatformMetadata | undefined) || {};
-	}
-
-	function shouldRenderPlatformHeaderImage(metadata: PlatformMetadata): boolean {
-		return isPlatformImageUrl(metadata.icon) && !platformHeaderIconFailed;
 	}
 
 	// Show stock badge only when inventory is low (no "In stock" chip).
@@ -826,7 +818,6 @@
 			</div>
 		</section>
 	{:else}
-		{@const PlatformIcon = getPlatformIcon(data.platform.slug)}
 		{@const platformMeta = getPlatformMetadata(data.platform.metadata)}
 
 		<section class="sticky top-16 z-30 bg-[var(--color-card)] py-1.5 shadow-sm">
@@ -846,23 +837,22 @@
 			class={`py-4 text-white sm:py-8 ${platformMeta?.color ? '' : `bg-gradient-to-r ${getPlatformColor(data.platform.slug)}`}`}
 			style={getPlatformHeaderStyle(platformMeta)}
 		>
+			<h1 class="sr-only">{data.platform.name} Accounts</h1>
 			<div class="mx-auto max-w-6xl px-4">
 				<div class="mt-3 sm:hidden">
 					<div class="flex items-center gap-3">
 						<div class="rounded-full bg-white/18 p-2.5">
-							{#if shouldRenderPlatformHeaderImage(platformMeta)}
-								<img
-									src={platformMeta.icon as string}
-									alt={data.platform.name}
-									class="h-8 w-8"
-									onerror={() => (platformHeaderIconFailed = true)}
-								/>
-							{:else}
-								<PlatformIcon class="h-8 w-8" />
-							{/if}
+							<PlatformIdentityIcon
+								name={data.platform.name}
+								slug={data.platform.slug}
+								imageUrl={platformMeta.icon}
+								size={32}
+							/>
 						</div>
 						<div class="min-w-0 flex-1">
-							<h1 class="text-[2rem] leading-tight font-bold">{data.platform.name} Accounts</h1>
+							<div class="text-[2rem] leading-tight font-bold" aria-hidden="true">
+								{data.platform.name} Accounts
+							</div>
 							<p class="mt-1 text-sm opacity-90">{data.platform.description}</p>
 						</div>
 						<div
@@ -880,16 +870,12 @@
 				<div class="hidden items-start gap-4 sm:flex sm:gap-6">
 					<div class="flex flex-col items-center gap-3">
 						<div class="rounded-full bg-white/20 p-3 sm:p-4">
-							{#if shouldRenderPlatformHeaderImage(platformMeta)}
-								<img
-									src={platformMeta.icon as string}
-									alt={data.platform.name}
-									class="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12"
-									onerror={() => (platformHeaderIconFailed = true)}
-								/>
-							{:else}
-								<PlatformIcon class="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12" />
-							{/if}
+							<PlatformIdentityIcon
+								name={data.platform.name}
+								slug={data.platform.slug}
+								imageUrl={platformMeta.icon}
+								size={44}
+							/>
 						</div>
 						<div class="text-center">
 							<div class="text-2xl font-bold sm:text-3xl">{data.tiers.length}</div>
@@ -899,9 +885,9 @@
 						</div>
 					</div>
 					<div class="flex-1">
-						<h1 class="mb-1 text-2xl font-bold sm:text-3xl md:text-4xl">
+						<div class="mb-1 text-2xl font-bold sm:text-3xl md:text-4xl" aria-hidden="true">
 							{data.platform.name} Accounts
-						</h1>
+						</div>
 						<p class="text-sm opacity-90 sm:text-base md:text-lg">{data.platform.description}</p>
 					</div>
 				</div>

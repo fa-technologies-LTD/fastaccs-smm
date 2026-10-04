@@ -3,13 +3,10 @@
 	import { ArrowRight, Check, Zap, Search, SearchX, Package, ShieldCheck } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import PlatformIdentityIcon from '$lib/components/PlatformIdentityIcon.svelte';
 	import type { PageData } from './$types';
 	import { formatPrice } from '$lib/helpers/utils';
-	import {
-		getPlatformColor,
-		getPlatformIcon,
-		isPlatformImageUrl
-	} from '$lib/helpers/platformColors';
+	import { getPlatformColor, isPlatformImageUrl } from '$lib/helpers/platformColors';
 
 	interface Props {
 		data: PageData;
@@ -37,7 +34,6 @@
 
 	let searchQuery = $state('');
 	let activeFilter = $state<FilterKey>('all');
-	let failedPlatformIcons = $state<Record<string, boolean>>({});
 
 	const filters: FilterConfig[] = [
 		{ key: 'all', label: 'All' },
@@ -54,10 +50,6 @@
 		return (metadata as PlatformMetadata | undefined) || {};
 	}
 
-	function shouldRenderCustomIcon(platformId: string, metadata: PlatformMetadata): boolean {
-		return isPlatformImageUrl(getPlatformImageValue(metadata)) && !failedPlatformIcons[platformId];
-	}
-
 	function getPlatformImageValue(metadata: PlatformMetadata): string | null {
 		const candidates = [
 			metadata.icon,
@@ -70,13 +62,6 @@
 		];
 		const match = candidates.find((value) => isPlatformImageUrl(value));
 		return typeof match === 'string' ? match : null;
-	}
-
-	function markPlatformIconFailed(platformId: string) {
-		failedPlatformIcons = {
-			...failedPlatformIcons,
-			[platformId]: true
-		};
 	}
 
 	function getPlatformHeaderStyle(metadata: PlatformMetadata | undefined): string | undefined {
@@ -178,6 +163,7 @@
 <Navigation />
 
 <main class="min-h-screen" style="background: var(--bg);">
+	<h1 class="sr-only">Browse Social Media Accounts</h1>
 	<section class="mx-auto w-full max-w-6xl px-4 pt-4 pb-3 sm:pt-5">
 		<div class="filter-row">
 			{#each filters as filter (filter.key)}
@@ -235,7 +221,6 @@
 		{:else}
 			<div class="platform-grid">
 				{#each filteredPlatforms as platform, index (platform.id)}
-					{@const PlatformIcon = getPlatformIcon(platform.slug)}
 					{@const platformMeta = getPlatformMetadata(platform.metadata)}
 					<button
 						type="button"
@@ -251,16 +236,12 @@
 							<div class="flex items-center justify-between gap-3">
 								<div class="flex min-w-0 items-center gap-3 sm:gap-4">
 									<div class="icon-shell">
-										{#if shouldRenderCustomIcon(platform.id, platformMeta)}
-											<img
-												src={getPlatformImageValue(platformMeta) as string}
-												alt={platform.name}
-												class="h-8 w-8"
-												onerror={() => markPlatformIconFailed(platform.id)}
-											/>
-										{:else}
-											<PlatformIcon class="h-7 w-7 sm:h-8 sm:w-8" />
-										{/if}
+										<PlatformIdentityIcon
+											name={platform.name}
+											slug={platform.slug}
+											imageUrl={getPlatformImageValue(platformMeta)}
+											size={32}
+										/>
 									</div>
 									<div class="min-w-0 text-left">
 										<h3 class="platform-title">{platform.name}</h3>

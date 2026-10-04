@@ -8,6 +8,7 @@ describe('Boosting platform brand icons', () => {
 		['TikTok', 'tiktok'],
 		['YouTube', 'youtube'],
 		['Facebook', 'facebook'],
+		['LinkedIn', 'linkedin'],
 		['X', 'x'],
 		[' X ', 'x'],
 		['Spotify', 'spotify'],

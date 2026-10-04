@@ -26,6 +26,7 @@ import {
 	localReadOnlyResponse,
 	shouldBlockLocalRequest
 } from '$lib/server/local-data-safety';
+import { applySecurityHeaders } from '$lib/server/security-headers';
 
 const GENERIC_API_ERROR_MESSAGE = 'Internal server error';
 
@@ -187,7 +188,7 @@ function captureFirstTouch(event: RequestEvent): void {
 	}
 }
 
-export const handle: Handle = async ({ event, resolve }) => {
+const handleRequest: Handle = async ({ event, resolve }) => {
 	if (BOT_SCAN_RE.test(event.url.pathname)) {
 		return new Response('Not Found', { status: 404 });
 	}
@@ -345,3 +346,5 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	return sanitizeApiServerErrorResponse(event, response);
 };
+
+export const handle: Handle = async (input) => applySecurityHeaders(await handleRequest(input));

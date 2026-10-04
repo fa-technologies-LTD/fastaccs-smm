@@ -228,7 +228,7 @@
 
 				<!-- Email Support -->
 				<a
-					href="mailto:verystronethan@gmail.com"
+					href="mailto:support@fastaccs.com"
 					class="support-contact-card group rounded-xl p-6"
 					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 				>
@@ -244,7 +244,7 @@
 					<p class="mb-4 text-sm" style="color: var(--text-muted);">
 						Best for detailed reports and follow-ups
 					</p>
-					<p class="font-medium" style="color: var(--brand-blue);">Support Email</p>
+					<p class="font-medium" style="color: var(--brand-blue);">support@fastaccs.com</p>
 					<p class="mt-2 text-xs" style="color: var(--text-muted);">
 						<Clock class="mr-1 inline h-3 w-3" />
 						Response within 24 hours
