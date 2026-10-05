@@ -200,17 +200,19 @@ describe('boosting mapping workspace persistence', () => {
 		);
 	});
 
-	it('rejects a refill offer when the current supplier row no longer supports refill', async () => {
-		await expect(
-			saveBoostMappingWorkspace(categoryId, validInput(), 'admin-1', {
-				database: database(false, [
-					{
-						...providerService(serviceId, 1, false),
-						name: 'Instagram Followers - NO REFILL'
-					}
-				]).client
-			})
-		).rejects.toThrow('not safely compatible');
+	it('accepts owner-tested refill evidence when the supplier listing does not advertise it', async () => {
+		const db = database(false, [
+			{
+				...providerService(serviceId, 1, false),
+				name: 'Instagram Followers'
+			}
+		]);
+
+		await saveBoostMappingWorkspace(categoryId, validInput(), 'admin-1', {
+			database: db.client
+		});
+
+		expect(db.routeUpsert).toHaveBeenCalled();
 	});
 
 	it('does not mark an offer reviewed without one promise-checked route', async () => {

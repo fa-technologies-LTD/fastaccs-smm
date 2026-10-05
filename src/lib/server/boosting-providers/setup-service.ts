@@ -55,29 +55,38 @@ function toCandidate(row: ServiceRow): BoostMappingCandidate | null {
 	};
 }
 
-function compatibilityIssues(
+function manualSelectionIssues(
 	row: ServiceRow,
 	config: ReturnType<typeof getBoostingServiceConfig>,
 	qualityTier: string
-): string[] {
-	const issues: string[] = [];
+): { blocking: string[]; advisory: string[] } {
+	const blocking: string[] = [];
+	const advisory: string[] = [];
 	const maximumPreset = Math.max(...getQuantityChips(config));
-	if (row.unavailableAt) issues.push('The supplier no longer lists this service.');
+	if (row.unavailableAt) blocking.push('The supplier no longer lists this service.');
 	if (row.catalogueStatus === 'quarantined')
-		issues.push('The supplier row failed catalogue safety checks.');
-	if (!row.platforms.includes(config.platform)) issues.push('It is for a different platform.');
-	if (!row.outcomes.includes(config.actionType)) issues.push('It delivers a different result.');
+		blocking.push('The supplier row failed catalogue safety checks.');
+	if (!row.platforms.includes(config.platform)) blocking.push('It is for a different platform.');
+	if (!row.outcomes.includes(config.actionType)) blocking.push('It delivers a different result.');
 	if (row.targetType !== getRequiredLinkType(config.actionType)) {
-		issues.push('It expects a different type of link.');
+		blocking.push('It expects a different type of link.');
 	}
-	if (row.ratePerThousand === null) issues.push('The supplier price is missing.');
+	if (row.ratePerThousand === null) blocking.push('The supplier price is missing.');
+	if (row.minQuantity === null) blocking.push('The supplier minimum is missing.');
+	if (row.maxQuantity === null) blocking.push('The supplier maximum is missing.');
 	if (row.minQuantity === null || row.minQuantity > config.minQuantity) {
-		issues.push(`Its minimum is above ${config.minQuantity.toLocaleString()}.`);
+		if (row.minQuantity !== null) {
+			advisory.push(
+				`Its minimum is ${row.minQuantity.toLocaleString()}; that will become the customer starting quantity.`
+			);
+		}
 	}
 	if (row.maxQuantity === null || row.maxQuantity < maximumPreset) {
-		issues.push(
-			`It cannot cover the normal quantity range up to ${maximumPreset.toLocaleString()}.`
-		);
+		if (row.maxQuantity !== null) {
+			advisory.push(
+				`Its maximum is ${row.maxQuantity.toLocaleString()}; customer quantities will be capped there.`
+			);
+		}
 	}
 	const candidate = toCandidate(row);
 	const signals = new Set(candidate?.qualitySignals ?? []);
@@ -86,12 +95,16 @@ function compatibilityIssues(
 		signals.has('stability_claim') ||
 		signals.has('refill_claim');
 	if ((qualityTier === 'stable' || qualityTier === 'premium') && !hasStabilityEvidence) {
-		issues.push('It does not state stable delivery or refill protection for this customer option.');
+		advisory.push(
+			'The supplier listing does not state stable delivery or refill protection; use your own test result.'
+		);
 	}
 	if (qualityTier === 'premium' && !signals.has('quality_claim')) {
-		issues.push('It does not state premium, high-quality, HQ or real delivery.');
+		advisory.push(
+			'The supplier listing does not state premium, high-quality, HQ or real delivery; use your own test result.'
+		);
 	}
-	return issues;
+	return { blocking, advisory };
 }
 
 async function loadCategory(database: PrismaClient, categoryId: string) {
@@ -139,8 +152,13 @@ export async function lookupBoostProviderService(
 			service: null
 		};
 	}
-	const issues = compatibilityIssues(row, config, input.qualityTier ?? 'value');
-	return { found: true, compatible: issues.length === 0, issues, service: toCandidate(row) };
+	const { blocking, advisory } = manualSelectionIssues(row, config, input.qualityTier ?? 'value');
+	return {
+		found: true,
+		compatible: blocking.length === 0,
+		issues: [...blocking, ...advisory],
+		service: toCandidate(row)
+	};
 }
 
 function tierScore(candidate: BoostMappingCandidate, qualityTier: string): number {

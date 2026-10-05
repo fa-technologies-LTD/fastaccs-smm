@@ -181,32 +181,6 @@
 		return candidate.refillAdvertised ? 'Refill advertised' : 'No refill advertised';
 	}
 
-	function candidatePromiseIssues(
-		candidate: BoostMappingCandidate,
-		refillDays: number | null
-	): string[] {
-		const signals = new Set(candidate.qualitySignals);
-		const issues: string[] = [];
-		const hasStabilityEvidence =
-			candidate.refillAdvertised || signals.has('stability_claim') || signals.has('refill_claim');
-		if (
-			(selectedQualityTier === 'stable' || selectedQualityTier === 'premium') &&
-			!hasStabilityEvidence
-		) {
-			issues.push('stable delivery or refill protection');
-		}
-		if (selectedQualityTier === 'premium' && !signals.has('quality_claim')) {
-			issues.push('premium, high-quality, HQ or real delivery');
-		}
-		if (
-			refillDays !== null &&
-			(candidate.refillDaysClaimed === null || candidate.refillDaysClaimed < refillDays)
-		) {
-			issues.push(`at least ${refillDays} days of stated refill protection`);
-		}
-		return issues;
-	}
-
 	function missingRouteSignals(route: BoostMappingRouteDraft): string[] {
 		if (!offerDraft) return [];
 		const required = [
@@ -335,31 +309,38 @@
 		await loadWorkspace();
 	}
 
-	function routeFor(candidate: BoostMappingCandidate): BoostMappingRouteDraft {
+	function routeFor(candidate: BoostMappingCandidate, ownerTested = false): BoostMappingRouteDraft {
 		const candidateSignals = new Set(candidate.qualitySignals);
-		const verifiedSignals = [
+		const verifiedSignals = new Set([
 			...(offerDraft?.refillDays &&
-			candidate.refillDaysClaimed !== null &&
-			candidate.refillDaysClaimed >= offerDraft.refillDays
+			(ownerTested ||
+				(candidate.refillDaysClaimed !== null &&
+					candidate.refillDaysClaimed >= offerDraft.refillDays))
 				? ['refill_verified']
 				: []),
-			...(candidate.refillAdvertised ||
+			...((ownerTested &&
+				(selectedQualityTier === 'stable' || selectedQualityTier === 'premium')) ||
+			candidate.refillAdvertised ||
 			candidateSignals.has('stability_claim') ||
 			candidateSignals.has('refill_claim')
 				? ['stability_verified']
 				: []),
-			...(candidateSignals.has('quality_claim') ? ['premium_quality_verified'] : [])
-		];
+			...((ownerTested && selectedQualityTier === 'premium') ||
+			candidateSignals.has('quality_claim')
+				? ['premium_quality_verified']
+				: [])
+		]);
 		return {
 			providerServiceId: candidate.id,
 			state: 'shadow',
 			equivalenceApproved: true,
-			verifiedSignals,
+			verifiedSignals: [...verifiedSignals],
 			audienceTags: [],
 			verifiedRefillDays:
 				offerDraft?.refillDays &&
-				candidate.refillDaysClaimed !== null &&
-				candidate.refillDaysClaimed >= offerDraft.refillDays
+				(ownerTested ||
+					(candidate.refillDaysClaimed !== null &&
+						candidate.refillDaysClaimed >= offerDraft.refillDays))
 					? offerDraft.refillDays
 					: null,
 			maximumPilotQuantity: offerDraft?.minQuantity ?? workspace?.category.minQuantity ?? null,
@@ -375,14 +356,6 @@
 					? null
 					: candidate.refillDaysClaimed
 				: offerDraft.refillDays;
-		const promiseIssues = candidatePromiseIssues(candidate, nextRefillDays);
-		if (promiseIssues.length) {
-			showError(
-				`Cannot use ${candidate.providerLabel} #${candidate.serviceId}`,
-				`It does not provide ${promiseIssues.join(' and ')} for the ${TIER_COPY[selectedQualityTier].name} option.`
-			);
-			return;
-		}
 		mergeCandidates([candidate]);
 		if (purpose === 'primary') {
 			// Supplier catalogues expose minimum and maximum quantities, but no separate increment.
@@ -392,7 +365,7 @@
 			offerDraft.stepQuantity = candidate.minQuantity;
 			// Never promise a refill period that the selected supplier service does not state.
 			offerDraft.refillDays = nextRefillDays;
-			routeDrafts = [routeFor(candidate)];
+			routeDrafts = [routeFor(candidate, true)];
 			offerDraft.routingPolicy = 'locked';
 			offerDraft.lockedProviderServiceId = candidate.id;
 			offerDraft.preferredProviderServiceId = null;
@@ -400,17 +373,6 @@
 			fallbackMode = 'none';
 		} else {
 			if (!primaryCandidate) return;
-			if (
-				offerDraft.refillDays &&
-				(candidate.refillDaysClaimed === null ||
-					candidate.refillDaysClaimed < offerDraft.refillDays)
-			) {
-				showError(
-					'Fallback does not cover the promise',
-					`Choose a service that states at least ${offerDraft.refillDays} days of refill protection.`
-				);
-				return;
-			}
 			if (candidate.ratePerThousand > primaryCandidate.ratePerThousand) {
 				showError(
 					'Fallback costs too much',
@@ -419,7 +381,7 @@
 				return;
 			}
 			const primaryRoute = routeByServiceId.get(primaryCandidate.id) ?? routeFor(primaryCandidate);
-			routeDrafts = [primaryRoute, routeFor(candidate)];
+			routeDrafts = [primaryRoute, routeFor(candidate, true)];
 			offerDraft.routingPolicy = 'preferred';
 			offerDraft.preferredProviderServiceId = primaryCandidate.id;
 			offerDraft.lockedProviderServiceId = null;
@@ -472,7 +434,7 @@
 				throw new Error('No compatible fallback at the same supplier price or less is available.');
 			}
 			mergeCandidates(fallbacks);
-			routeDrafts = [primaryRoute, ...fallbacks.map(routeFor)];
+			routeDrafts = [primaryRoute, ...fallbacks.map((candidate) => routeFor(candidate))];
 			offerDraft.routingPolicy = 'preferred';
 			offerDraft.preferredProviderServiceId = primary.id;
 			offerDraft.lockedProviderServiceId = null;
@@ -571,7 +533,7 @@
 				selectedQualityTier !== 'value' && claimedRefillDays.every((days) => days !== null)
 					? Math.min(...(claimedRefillDays as number[]))
 					: null;
-			routeDrafts = candidates.map(routeFor);
+			routeDrafts = candidates.map((candidate) => routeFor(candidate));
 			offerDraft.routingPolicy = 'automatic';
 			offerDraft.preferredProviderServiceId = null;
 			offerDraft.lockedProviderServiceId = null;
@@ -1046,7 +1008,7 @@
 							{#if lookupResult}
 								<div
 									class="mt-4 rounded-xl border p-4"
-									style={lookupResult.compatible
+									style={lookupResult.compatible && lookupResult.issues.length === 0
 										? 'border-color: rgba(16,185,129,.45); background: rgba(16,185,129,.05);'
 										: 'border-color: rgba(245,158,11,.45);'}
 								>
@@ -1062,10 +1024,15 @@
 											· {refillLabel(lookupResult.service)}
 										</p>
 									{/if}
-									{#if lookupResult.issues.length}<ul
-											class="mt-2 list-disc pl-5 text-xs"
+									{#if lookupResult.issues.length}<p
+											class="mt-2 text-xs font-semibold"
 											style="color: #fbbf24;"
 										>
+											{lookupResult.compatible
+												? 'Supplier catalogue note — My choice can still use this based on your own testing.'
+												: 'This service cannot be used for this customer result.'}
+										</p>
+										<ul class="mt-2 list-disc pl-5 text-xs" style="color: #fbbf24;">
 											{#each lookupResult.issues as issue, index (index)}<li>{issue}</li>{/each}
 										</ul>{/if}
 									{#if lookupResult.compatible && lookupResult.service}<button
@@ -1079,7 +1046,9 @@
 											style="background: var(--primary); color: #00150b;"
 											>{primaryCandidate
 												? 'Use as fallback'
-												: `Use for ${TIER_COPY[selectedQualityTier].name}`}</button
+												: lookupResult.issues.length
+													? `Use for ${TIER_COPY[selectedQualityTier].name} based on my test`
+													: `Use for ${TIER_COPY[selectedQualityTier].name}`}</button
 										>{/if}
 								</div>
 							{/if}

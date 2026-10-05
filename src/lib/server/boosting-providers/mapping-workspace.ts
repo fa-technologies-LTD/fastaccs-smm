@@ -464,6 +464,7 @@ export async function saveBoostMappingWorkspace(
 	if (providerServices.length !== providerServiceIds.length) {
 		throw new BoostMappingError('One or more supplier services no longer exist.');
 	}
+	const routeByServiceId = new Map(routeInputs.map((route) => [route.providerServiceId, route]));
 	if (offerInput.routingPolicy === 'preferred' && offerInput.preferredProviderServiceId) {
 		const primary = providerServices.find(
 			(service) => service.id === offerInput.preferredProviderServiceId
@@ -492,14 +493,27 @@ export async function saveBoostMappingWorkspace(
 			!service.outcomes.includes(config.actionType) ||
 			service.targetType !== targetType ||
 			service.minQuantity === null ||
-			service.maxQuantity === null ||
-			(offerInput.refillDays !== null &&
-				service.refillAdvertised !== true &&
-				!supplierTextAdvertisesRefill(
-					`${service.name} ${service.category} ${service.description ?? ''}`
-				))
+			service.maxQuantity === null
 		) {
 			throw new BoostMappingError('A selected supplier service is not safely compatible.');
+		}
+		if (offerInput.refillDays !== null) {
+			const route = routeByServiceId.get(service.id);
+			const supplierStatesRefill =
+				service.refillAdvertised === true ||
+				supplierTextAdvertisesRefill(
+					`${service.name} ${service.category} ${service.description ?? ''}`
+				);
+			const ownerVerifiedRefill =
+				route?.equivalenceApproved === true &&
+				route.verifiedSignals.includes('refill_verified') &&
+				route.verifiedRefillDays !== null &&
+				route.verifiedRefillDays >= offerInput.refillDays;
+			if (!supplierStatesRefill && !ownerVerifiedRefill) {
+				throw new BoostMappingError(
+					'The selected service needs supplier-listed or owner-tested refill protection.'
+				);
+			}
 		}
 	}
 	const supportsStartingQuantity = (service: (typeof providerServices)[number]) =>
@@ -552,7 +566,6 @@ export async function saveBoostMappingWorkspace(
 		offerInput.normalCostTargetNgn = Math.max(1, Math.ceil(highestSupplierCost));
 		offerInput.maximumSupplierCostNgn = allowedSupplierCost;
 	}
-	const routeByServiceId = new Map(routeInputs.map((route) => [route.providerServiceId, route]));
 	const offerQuantityConfig = {
 		...config,
 		minQuantity: offerInput.minQuantity,
