@@ -80,7 +80,9 @@ try {
 			unsafeGeneratedRoutes: await prisma.boostServiceRoute.count({
 				where: {
 					equivalenceLabel: 'Automatically suggested; owner review required',
-					OR: [{ state: { not: 'shadow' } }, { equivalenceApproved: true }]
+					// Paused drafts are deliberately inert and are safe to keep for audit/history.
+					// Only an active/unknown state or an approval can make a generated route unsafe.
+					OR: [{ state: { notIn: ['shadow', 'paused'] } }, { equivalenceApproved: true }]
 				}
 			}),
 			activeGeneratedCategories: await prisma.category.count({
