@@ -61,6 +61,9 @@ const CONTENT_OUTCOMES = new Set<BoostCatalogOutcome>([
 	'watch_time'
 ]);
 
+const TARGETED_AUDIENCE_PATTERN =
+	/\b(?:geo|country|targeted|nigeria|nigerian|usa|united states|uk|united kingdom|canada|canadian|europe|european|africa|african|asia|asian|arab|arabic|latam|latin america|india|indian|brazil|brazilian|japan|japanese|korea|korean|indonesia|indonesian|pakistan|pakistani|bangladesh|bangladeshi|turkey|turkish|germany|german|france|french|italy|italian|spain|spanish|mexico|mexican|netherlands|dutch|australia|australian|philippines|filipino|vietnam|vietnamese|thailand|thai|malaysia|malaysian|singapore|singaporean|bahamas)\b/i;
+
 function textValue(value: unknown): string {
 	return typeof value === 'string' || typeof value === 'number' ? String(value).trim() : '';
 }
@@ -121,6 +124,20 @@ export function isThreadsService(
 	return /\bthreads?\b/i.test(`${service.name} ${service.category}`);
 }
 
+export function isUnsafeAutomaticServiceLabel(
+	service: Pick<BoostProviderService, 'name' | 'category'> &
+		Partial<Pick<BoostProviderService, 'qualitySignals'>>
+): boolean {
+	const label = `${service.name} ${service.category}`;
+	return (
+		/\b(?:test|trial|free)\b/i.test(label) ||
+		TARGETED_AUDIENCE_PATTERN.test(label) ||
+		service.qualitySignals?.includes('audience_claim') === true ||
+		// These deliver engagement on an existing comment; they are not comments on the post.
+		/\bcomment\s+(?:likes?|shares?|reposts?|quotes?)\b/i.test(label)
+	);
+}
+
 function inferPlatforms(name: string, category: string): BoostCatalogPlatform[] {
 	// The category is the strongest platform signal. This prevents labels such as "YouTube likes
 	// from Threads" from becoming cross-platform matches. Some suppliers describe Threads as
@@ -161,7 +178,7 @@ function inferQualitySignals(text: string, refillAdvertised: boolean | null): st
 		signals.add('quality_claim');
 	}
 	if (/instant|fast|speed/i.test(text)) signals.add('speed_claim');
-	if (/geo|country|targeted|nigeria|usa|uk|canada|europe/i.test(text)) {
+	if (TARGETED_AUDIENCE_PATTERN.test(text)) {
 		signals.add('audience_claim');
 	}
 	return [...signals];

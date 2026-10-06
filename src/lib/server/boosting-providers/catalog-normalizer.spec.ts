@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeBoostProviderCatalog, normalizeBoostProviderService } from './catalog-normalizer';
+import {
+	isUnsafeAutomaticServiceLabel,
+	normalizeBoostProviderCatalog,
+	normalizeBoostProviderService
+} from './catalog-normalizer';
 import { BULK_FOLLOWS_SERVICE_FIXTURE, SMM_RAJA_SERVICE_FIXTURE } from './fixtures';
 
 describe('boosting provider catalogue normalization', () => {
@@ -94,6 +98,39 @@ describe('boosting provider catalogue normalization', () => {
 			category: 'YouTube Likes | Referrer from Social Media'
 		});
 		expect(service.platforms).toEqual(['youtube']);
+	});
+
+	it('keeps misleading test and comment-reaction labels out of automatic suggestions', () => {
+		expect(
+			isUnsafeAutomaticServiceLabel({
+				name: 'Instagram Followers Test',
+				category: 'Instagram Followers'
+			})
+		).toBe(true);
+		expect(
+			isUnsafeAutomaticServiceLabel({
+				name: 'Threads - Comment Quotes',
+				category: 'Threads'
+			})
+		).toBe(true);
+		expect(
+			isUnsafeAutomaticServiceLabel({
+				name: 'Threads Custom Comments',
+				category: 'Threads Comments'
+			})
+		).toBe(false);
+		expect(
+			isUnsafeAutomaticServiceLabel({
+				name: 'Instagram Followers India',
+				category: 'Instagram Followers'
+			})
+		).toBe(true);
+		expect(
+			isUnsafeAutomaticServiceLabel({
+				name: 'Instagram Followers Global',
+				category: 'Instagram Followers'
+			})
+		).toBe(false);
 	});
 
 	it('recognizes a refill period stated in the supplier service name', () => {

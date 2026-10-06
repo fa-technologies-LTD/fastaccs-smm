@@ -10,6 +10,7 @@ import type { BoostProviderId } from './types';
 import {
 	inferAdvertisedRefillDays,
 	isThreadsService,
+	isUnsafeAutomaticServiceLabel,
 	supplierTextAdvertisesRefill
 } from './catalog-normalizer';
 
@@ -28,10 +29,7 @@ function isAutomaticOnlyUnsafe(
 	row: Pick<ServiceRow, 'name' | 'category'>,
 	platform: string
 ): boolean {
-	return (
-		(isThreadsService(row) && platform !== 'threads') ||
-		/\b(?:test|trial|free)\b/i.test(`${row.name} ${row.category}`)
-	);
+	return (isThreadsService(row) && platform !== 'threads') || isUnsafeAutomaticServiceLabel(row);
 }
 
 function toCandidate(row: ServiceRow): BoostMappingCandidate | null {

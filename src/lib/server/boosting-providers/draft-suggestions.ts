@@ -10,6 +10,7 @@ import {
 } from '$lib/helpers/boosting-service-config';
 import { getRequiredLinkType } from '$lib/helpers/social-link-validator';
 import { prisma } from '$lib/prisma';
+import { isUnsafeAutomaticServiceLabel } from './catalog-normalizer';
 
 export type SuggestedQualityTier = 'value' | 'stable' | 'premium';
 
@@ -418,6 +419,8 @@ export async function prepopulateBoostingDraftSuggestions(
 			select: {
 				id: true,
 				provider: true,
+				name: true,
+				category: true,
 				platforms: true,
 				outcomes: true,
 				targetType: true,
@@ -437,7 +440,11 @@ export async function prepopulateBoostingDraftSuggestions(
 				audienceTag: true,
 				pricePerStepNgn: true,
 				status: true,
-				_count: { select: { routes: true } }
+				routes: {
+					where: { state: { not: 'paused' } },
+					select: { providerServiceId: true }
+				},
+				_count: { select: { routes: { where: { state: { not: 'paused' } } } } }
 			}
 		})
 	]);
@@ -447,6 +454,12 @@ export async function prepopulateBoostingDraftSuggestions(
 			offer
 		])
 	);
+	const existingServiceIdsByCategory = new Map<string, Set<string>>();
+	for (const offer of existingOffers) {
+		const used = existingServiceIdsByCategory.get(offer.categoryId) ?? new Set<string>();
+		for (const route of offer.routes) used.add(route.providerServiceId);
+		existingServiceIdsByCategory.set(offer.categoryId, used);
+	}
 	const offerRows: Prisma.BoostCustomerOfferCreateManyInput[] = [];
 	const routeRows: Prisma.BoostServiceRouteCreateManyInput[] = [];
 	const auditRows: Prisma.AdminAuditLogCreateManyInput[] = [];
@@ -466,10 +479,13 @@ export async function prepopulateBoostingDraftSuggestions(
 		const config = getBoostingServiceConfig(category.metadata);
 		const targetType = getRequiredLinkType(config.actionType);
 		const maximumPreset = Math.max(...getQuantityChips(config));
+		const existingServiceIds = existingServiceIdsByCategory.get(category.id) ?? new Set<string>();
 		const candidates: DraftSuggestionCandidate[] = services.flatMap((row) => {
 			if (row.ratePerThousand === null || row.minQuantity === null || row.maxQuantity === null) {
 				return [];
 			}
+			if (isUnsafeAutomaticServiceLabel(row)) return [];
+			if (existingServiceIds.has(row.id)) return [];
 			if (
 				!row.platforms.includes(config.platform) ||
 				!row.outcomes.includes(config.actionType) ||

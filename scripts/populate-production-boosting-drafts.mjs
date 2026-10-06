@@ -23,6 +23,15 @@ function databaseTarget(name, value) {
 	};
 }
 
+function boundedAdministrationUrl(value) {
+	const url = new URL(value);
+	// This is a short-lived maintenance job. Keep its local pool small so it cannot compete with
+	// application traffic, and tolerate a brief wait when the managed database is busy.
+	url.searchParams.set('connection_limit', '2');
+	url.searchParams.set('pool_timeout', '30');
+	return url.toString();
+}
+
 async function verifyBackup(path) {
 	if (!path) {
 		throw new Error('A verified backup is required. Pass --backup=/absolute/path/to/backup.dump.');
@@ -53,8 +62,8 @@ for (const [name, value] of [
 const backup = confirmed ? await verifyBackup(backupPath) : null;
 // A bounded one-off administration job should use the direct endpoint. The transaction pooler is
 // reserved for application traffic and can silently drop a long catalogue-planning query.
-process.env.DATABASE_URL = productionDirect.url;
-process.env.DIRECT_URL = productionDirect.url;
+process.env.DATABASE_URL = boundedAdministrationUrl(productionDirect.url);
+process.env.DIRECT_URL = boundedAdministrationUrl(productionDirect.url);
 process.env.FASTACCS_LOCAL_DATA_MODE = 'production';
 
 console.log(
