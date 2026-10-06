@@ -14,7 +14,7 @@ import { BOOSTING_MANAGED_STOREFRONT_KEY } from './storefront-rollout';
 import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
 import {
 	inferAdvertisedRefillDays,
-	isUnsupportedThreadsService,
+	isThreadsService,
 	supplierTextAdvertisesRefill
 } from './catalog-normalizer';
 
@@ -488,7 +488,7 @@ export async function saveBoostMappingWorkspace(
 	}
 	for (const service of providerServices) {
 		if (
-			isUnsupportedThreadsService(service) ||
+			(isThreadsService(service) && config.platform !== 'threads') ||
 			service.unavailableAt ||
 			service.catalogueStatus === 'quarantined' ||
 			service.ratePerThousand === null ||

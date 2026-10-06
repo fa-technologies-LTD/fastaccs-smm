@@ -142,6 +142,21 @@ describe('social link validator', () => {
 		).toBe(true);
 	});
 
+	it('accepts Threads profile links on current and legacy official domains', () => {
+		expect(
+			validateLinkForAction('threads', 'followers', 'https://www.threads.com/@fastaccs').valid
+		).toBe(true);
+		expect(
+			validateLinkForAction('threads', 'followers', 'https://www.threads.net/@fastaccs').valid
+		).toBe(true);
+	});
+
+	it('accepts a Threads post for engagement and rejects it for followers', () => {
+		const post = 'https://www.threads.com/@fastaccs/post/ABC123';
+		expect(validateLinkForAction('threads', 'likes', post).valid).toBe(true);
+		expect(validateLinkForAction('threads', 'followers', post).valid).toBe(false);
+	});
+
 	it.each([
 		'https://open.spotify.com/artist/0TnOYISbd1XYRBk9myaseg',
 		'https://open.spotify.com/intl-de/artist/0TnOYISbd1XYRBk9myaseg?si=abc'

@@ -9,7 +9,7 @@ import { getRequiredLinkType } from '$lib/helpers/social-link-validator';
 import type { BoostProviderId } from './types';
 import {
 	inferAdvertisedRefillDays,
-	isUnsupportedThreadsService,
+	isThreadsService,
 	supplierTextAdvertisesRefill
 } from './catalog-normalizer';
 
@@ -24,9 +24,12 @@ export const SMART_AUTO_MAX_PRICE_RATIO = 1.6;
 
 type ServiceRow = Prisma.BoostProviderServiceGetPayload<Record<string, never>>;
 
-function isAutomaticOnlyUnsafe(row: Pick<ServiceRow, 'name' | 'category'>): boolean {
+function isAutomaticOnlyUnsafe(
+	row: Pick<ServiceRow, 'name' | 'category'>,
+	platform: string
+): boolean {
 	return (
-		isUnsupportedThreadsService(row) ||
+		(isThreadsService(row) && platform !== 'threads') ||
 		/\b(?:test|trial|free)\b/i.test(`${row.name} ${row.category}`)
 	);
 }
@@ -81,7 +84,9 @@ function manualSelectionIssues(
 	if (row.unavailableAt) blocking.push('The supplier no longer lists this service.');
 	if (row.catalogueStatus === 'quarantined')
 		blocking.push('The supplier row failed catalogue safety checks.');
-	if (isUnsupportedThreadsService(row)) blocking.push('It is a Threads service, not Instagram.');
+	if (isThreadsService(row) && config.platform !== 'threads') {
+		blocking.push('It is a Threads service, not this platform.');
+	}
 	if (!row.platforms.includes(config.platform)) blocking.push('It is for a different platform.');
 	if (!row.outcomes.includes(config.actionType)) blocking.push('It delivers a different result.');
 	if (row.targetType !== getRequiredLinkType(config.actionType)) {
@@ -277,7 +282,7 @@ export async function recommendBoostProviderServices(
 	});
 	return rankSmartBoostCandidates(
 		rows
-			.filter((row) => !isAutomaticOnlyUnsafe(row))
+			.filter((row) => !isAutomaticOnlyUnsafe(row, config.platform))
 			.map(toCandidate)
 			.filter((row): row is BoostMappingCandidate => Boolean(row)),
 		input.qualityTier,

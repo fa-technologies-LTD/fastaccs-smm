@@ -42,7 +42,16 @@ export interface ManagedBoostingGroup {
 	offers: ManagedBoostingOffer[];
 }
 
-const PLATFORM_ORDER = ['instagram', 'tiktok', 'youtube', 'facebook', 'x', 'spotify', 'telegram'];
+const PLATFORM_ORDER = [
+	'instagram',
+	'tiktok',
+	'youtube',
+	'facebook',
+	'x',
+	'threads',
+	'spotify',
+	'telegram'
+];
 const OUTCOME_ORDER = [
 	'followers',
 	'subscribers',

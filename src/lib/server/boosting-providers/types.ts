@@ -7,6 +7,7 @@ export const BOOST_CATALOG_PLATFORMS = [
 	'youtube',
 	'facebook',
 	'x',
+	'threads',
 	'spotify',
 	'telegram'
 ] as const;

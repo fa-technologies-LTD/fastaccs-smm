@@ -11,6 +11,7 @@ describe('Boosting platform brand icons', () => {
 		['LinkedIn', 'linkedin'],
 		['X', 'x'],
 		[' X ', 'x'],
+		['Threads', 'threads'],
 		['Spotify', 'spotify'],
 		['Telegram', 'telegram']
 	])('maps %s to its official icon', (label, expected) => {

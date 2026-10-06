@@ -37,6 +37,7 @@ export const BOOSTING_PLATFORMS: BoostingPlatform[] = [
 	'youtube',
 	'facebook',
 	'x',
+	'threads',
 	'spotify',
 	'telegram'
 ];
@@ -63,6 +64,7 @@ export const BOOSTING_PLATFORM_LABELS: Record<BoostingPlatform, string> = {
 	youtube: 'YouTube',
 	facebook: 'Facebook',
 	x: 'X (Twitter)',
+	threads: 'Threads',
 	spotify: 'Spotify',
 	telegram: 'Telegram'
 };
@@ -90,6 +92,7 @@ export const BOOSTING_ACTIONS_BY_PLATFORM: Record<BoostingPlatform, readonly Boo
 		youtube: ['subscribers', 'views', 'likes', 'comments', 'watch_time'],
 		facebook: ['followers', 'likes', 'views', 'comments', 'reactions', 'shares'],
 		x: ['followers', 'likes', 'views', 'comments', 'reposts'],
+		threads: ['followers', 'likes', 'comments', 'reposts', 'shares'],
 		spotify: ['followers', 'streams', 'monthly_listeners', 'saves'],
 		telegram: ['members', 'views', 'reactions', 'comments', 'shares']
 	};

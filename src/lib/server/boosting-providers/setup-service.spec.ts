@@ -202,7 +202,7 @@ describe('manual supplier lookup', () => {
 		);
 
 		expect(result.compatible).toBe(false);
-		expect(result.issues).toContain('It is a Threads service, not Instagram.');
+		expect(result.issues).toContain('It is a Threads service, not this platform.');
 	});
 });
 

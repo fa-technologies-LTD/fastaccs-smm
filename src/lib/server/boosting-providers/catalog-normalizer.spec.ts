@@ -76,15 +76,24 @@ describe('boosting provider catalogue normalization', () => {
 		expect(unrelated.platforms).toEqual([]);
 	});
 
-	it('never classifies a Threads service as Instagram from its supplier category', () => {
+	it('classifies Threads separately even when a supplier mentions Instagram', () => {
 		const service = normalizeBoostProviderService('smm_raja', {
 			...SMM_RAJA_SERVICE_FIXTURE,
 			name: 'S41 Threads Followers (1/100k) [HQ]',
-			category: 'Instagram Followers'
+			category: 'Threads (By Instagram) Followers'
 		});
-		expect(service.platforms).toEqual([]);
-		expect(service.anomalies).toContain('unknown_platform');
-		expect(service.status).toBe('needs_classification');
+		expect(service.platforms).toEqual(['threads']);
+		expect(service.outcomes).toEqual(['followers']);
+		expect(service.status).toBe('ready_for_review');
+	});
+
+	it('does not treat a YouTube referrer label as a Threads service', () => {
+		const service = normalizeBoostProviderService('smm_raja', {
+			...SMM_RAJA_SERVICE_FIXTURE,
+			name: 'YouTube Likes [Referrer from threads.net]',
+			category: 'YouTube Likes | Referrer from Social Media'
+		});
+		expect(service.platforms).toEqual(['youtube']);
 	});
 
 	it('recognizes a refill period stated in the supplier service name', () => {

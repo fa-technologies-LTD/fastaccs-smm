@@ -4,6 +4,7 @@ export type BoostingPlatform =
 	| 'youtube'
 	| 'facebook'
 	| 'x'
+	| 'threads'
 	| 'spotify'
 	| 'telegram';
 export type BoostingActionType =
@@ -43,6 +44,7 @@ const PLATFORM_DOMAINS: Record<BoostingPlatform, readonly string[]> = {
 	youtube: ['youtube.com', 'youtu.be', 'youtube-nocookie.com'],
 	facebook: ['facebook.com', 'fb.com', 'fb.watch'],
 	x: ['x.com', 'twitter.com'],
+	threads: ['threads.com', 'threads.net'],
 	spotify: ['open.spotify.com', 'spotify.link'],
 	telegram: ['t.me', 'telegram.me', 'telegram.dog']
 };
@@ -53,6 +55,7 @@ const PLATFORM_LABELS: Record<BoostingPlatform, string> = {
 	youtube: 'YouTube',
 	facebook: 'Facebook',
 	x: 'X',
+	threads: 'Threads',
 	spotify: 'Spotify',
 	telegram: 'Telegram'
 };
@@ -102,7 +105,8 @@ const RESERVED_PROFILE_SEGMENTS: Partial<Record<BoostingPlatform, ReadonlySet<st
 		'messages',
 		'search',
 		'share'
-	])
+	]),
+	threads: new Set(['activity', 'following', 'for_you', 'login', 'search', 'settings'])
 };
 
 function hostnameMatches(hostname: string, baseDomain: string): boolean {
@@ -221,6 +225,23 @@ function classifyX(url: URL): RequiredLinkType | 'unknown' {
 	return 'unknown';
 }
 
+function classifyThreads(url: URL): RequiredLinkType | 'unknown' {
+	const segments = pathSegments(url);
+	const first = (segments[0] || '').toLowerCase();
+	if (!first) return 'unknown';
+	if (first.startsWith('@') && ['post', 'repost'].includes((segments[1] || '').toLowerCase())) {
+		return segments[2] ? 'content' : 'unknown';
+	}
+	if (
+		segments.length === 1 &&
+		first.startsWith('@') &&
+		!RESERVED_PROFILE_SEGMENTS.threads?.has(first.slice(1))
+	) {
+		return 'profile';
+	}
+	return 'unknown';
+}
+
 function spotifyPathSegments(url: URL): string[] {
 	const segments = pathSegments(url);
 	return /^intl-[a-z]{2,3}$/i.test(segments[0] || '') ? segments.slice(1) : segments;
@@ -264,6 +285,8 @@ function classifyTarget(platform: BoostingPlatform, url: URL): RequiredLinkType 
 			return classifyFacebook(url);
 		case 'x':
 			return classifyX(url);
+		case 'threads':
+			return classifyThreads(url);
 		case 'spotify':
 			return classifySpotify(url);
 		case 'telegram':

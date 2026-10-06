@@ -22,6 +22,7 @@ const PLATFORM_PATTERNS: Record<BoostCatalogPlatform, RegExp> = {
 	youtube: /youtube|youtu\.be/i,
 	facebook: /facebook|(^|[^a-z])fb([^a-z]|$)/i,
 	x: /twitter|(^|[\s([{:])x(?=$|[\s)\]}:-])/i,
+	threads: /threads?/i,
 	spotify: /spotify/i,
 	telegram: /telegram/i
 };
@@ -114,18 +115,20 @@ function matchesFrom<T extends string>(
 	return values.filter((value) => patterns[value].test(text));
 }
 
-export function isUnsupportedThreadsService(
+export function isThreadsService(
 	service: Pick<BoostProviderService, 'name' | 'category'>
 ): boolean {
 	return /\bthreads?\b/i.test(`${service.name} ${service.category}`);
 }
 
 function inferPlatforms(name: string, category: string): BoostCatalogPlatform[] {
-	// Threads is a separate network. Some supplier catalogues place Threads rows inside an
-	// "Instagram" category, so category-only matching would otherwise make those rows eligible
-	// for Instagram fulfilment. Threads is not a supported storefront platform yet: fail closed.
-	if (isUnsupportedThreadsService({ name, category })) return [];
-	return matchesFrom(`${category} ${name}`, BOOST_CATALOG_PLATFORMS, PLATFORM_PATTERNS);
+	// The category is the strongest platform signal. This prevents labels such as "YouTube likes
+	// from Threads" from becoming cross-platform matches. Some suppliers describe Threads as
+	// "Threads by Instagram", so Threads wins whenever it appears in the category.
+	const fromCategory = matchesFrom(category, BOOST_CATALOG_PLATFORMS, PLATFORM_PATTERNS);
+	if (fromCategory.includes('threads')) return ['threads'];
+	if (fromCategory.length) return fromCategory;
+	return matchesFrom(name, BOOST_CATALOG_PLATFORMS, PLATFORM_PATTERNS);
 }
 
 function inferOutcomes(name: string, category: string): BoostCatalogOutcome[] {

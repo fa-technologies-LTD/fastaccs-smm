@@ -160,6 +160,11 @@
 				: 'https://open.spotify.com/track/...';
 		}
 		if (platform === 'telegram') return 'https://t.me/yourchannel';
+		if (platform === 'threads') {
+			return type === 'profile'
+				? 'https://www.threads.com/@yourusername'
+				: 'https://www.threads.com/@username/post/...';
+		}
 		if (platform === 'youtube') {
 			return type === 'profile'
 				? 'https://youtube.com/@yourchannel'

@@ -8,7 +8,16 @@ import {
 import { prisma } from '$lib/prisma';
 import type { PageServerLoad } from './$types';
 
-const PLATFORM_ORDER = ['instagram', 'tiktok', 'youtube', 'facebook', 'x', 'spotify', 'telegram'];
+const PLATFORM_ORDER = [
+	'instagram',
+	'tiktok',
+	'youtube',
+	'facebook',
+	'x',
+	'threads',
+	'spotify',
+	'telegram'
+];
 const OUTCOME_ORDER = [
 	'followers',
 	'subscribers',

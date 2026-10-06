@@ -22,6 +22,7 @@
 		youtube: 'var(--gradient-youtube)',
 		facebook: 'var(--gradient-facebook)',
 		x: 'var(--gradient-twitter)',
+		threads: 'linear-gradient(135deg, #303030, #050505)',
 		spotify: 'linear-gradient(135deg, #1ed760, #0f7a3b)',
 		telegram: 'linear-gradient(135deg, #2aabee, #1474b8)'
 	};

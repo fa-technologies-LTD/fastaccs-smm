@@ -14,6 +14,7 @@ const PLATFORM_REVIEW_ORDER = [
 	'tiktok',
 	'youtube',
 	'facebook',
+	'threads',
 	'spotify',
 	'telegram'
 ];
@@ -98,7 +99,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 		mappingSummary: {
 			categories: categories.length,
 			tiers: offerRows.length,
-			reviewedTiers: offerRows.filter((offer) => ['reviewed', 'live'].includes(offer.status)).length,
+			reviewedTiers: offerRows.filter((offer) => ['reviewed', 'live'].includes(offer.status))
+				.length,
 			approvedRoutes: offerRows
 				.flatMap((offer) => offer.routes)
 				.filter((route) => route.equivalenceApproved).length

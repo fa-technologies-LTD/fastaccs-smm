@@ -146,6 +146,11 @@
 				: 'https://open.spotify.com/track/...';
 		}
 		if (platform === 'telegram') return 'https://t.me/yourchannel';
+		if (platform === 'threads') {
+			return requiredLinkType === 'profile'
+				? 'https://www.threads.com/@yourusername'
+				: 'https://www.threads.com/@username/post/...';
+		}
 		if (platform === 'youtube') {
 			return requiredLinkType === 'profile'
 				? 'https://youtube.com/@yourchannel'
@@ -485,6 +490,7 @@
 						youtube: 'var(--gradient-youtube)',
 						facebook: 'var(--gradient-facebook)',
 						x: 'var(--gradient-twitter)',
+						threads: 'linear-gradient(135deg, #303030, #050505)',
 						spotify: 'linear-gradient(135deg, #1ed760, #0f7a3b)',
 						telegram: 'linear-gradient(135deg, #2aabee, #1474b8)'
 					}[data.platform]
