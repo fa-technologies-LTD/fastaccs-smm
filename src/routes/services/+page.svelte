@@ -8,6 +8,9 @@
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+	const managedStorefrontPaused = $derived(
+		data.managedRolloutActive && data.managedGroups.length === 0
+	);
 
 	if (data.error) {
 		showError('Failed to load boosting services', data.error);
@@ -28,7 +31,9 @@
 	<title>Boosting Services | FastAccs</title>
 	<meta
 		name="description"
-		content="Order followers, likes, and views for your social media. Pick a platform, paste your link, and pay securely."
+		content={managedStorefrontPaused
+			? 'Fast Accounts Boosting is being improved and will be back soon.'
+			: 'Order followers, likes, and views for your social media. Pick a platform, paste your link, and pay securely.'}
 	/>
 </svelte:head>
 
@@ -47,14 +52,18 @@
 				class="mx-auto mt-3 text-2xl font-bold sm:text-3xl"
 				style="color: var(--text); font-family: var(--font-head);"
 			>
-				What would you like to grow?
+				{managedStorefrontPaused ? 'Boosting is getting better' : 'What would you like to grow?'}
 			</h1>
 			<p class="mx-auto mt-3 max-w-md text-sm leading-relaxed" style="color: var(--text-muted);">
-				Choose a platform, paste your link and select an amount. No password needed.
+				{managedStorefrontPaused
+					? 'We’re improving speed, pricing and service quality. Check back soon.'
+					: 'Choose a platform, paste your link and select an amount. No password needed.'}
 			</p>
 		</div>
 
-		{#if data.managedRolloutActive}
+		{#if managedStorefrontPaused}
+			<!-- Keep the managed rollout active so the retired catalogue cannot reappear. -->
+		{:else if data.managedRolloutActive}
 			<ManagedBoostingStorefront groups={data.managedGroups} />
 		{:else if data.platformTiles.length === 0}
 			<div

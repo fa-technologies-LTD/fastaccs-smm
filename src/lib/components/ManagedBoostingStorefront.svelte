@@ -264,7 +264,10 @@
 
 {#if groups.length === 0}
 	<div class="rounded-2xl border p-10 text-center" style="border-color: var(--border);">
-		<p style="color: var(--text-muted);">No boosting services are available right now.</p>
+		<p class="font-semibold" style="color: var(--text);">Boosting is getting better</p>
+		<p class="mt-2 text-sm" style="color: var(--text-muted);">
+			We’re improving speed, pricing and service quality. Check back soon.
+		</p>
 	</div>
 {:else}
 	<div class="space-y-6">

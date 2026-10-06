@@ -25,22 +25,40 @@
 	}: Props = $props();
 	let typedValue = $state<string | number>('');
 	let lastExternalValue = $state<number | null>(null);
+	let softMessage = $state('');
 
 	$effect(() => {
 		if (value === lastExternalValue) return;
 		lastExternalValue = value;
 		typedValue = String(value);
+		softMessage = '';
 	});
 
 	function commit(rawValue: number): void {
 		const next = normalizeBoostingQuantity(rawValue, minQuantity, stepQuantity, maxQuantity);
 		lastExternalValue = next;
 		typedValue = String(next);
+		softMessage = '';
 		onchange(next);
 	}
 
 	function commitTyped(): void {
-		commit(Number(String(typedValue).replaceAll(',', '')));
+		const raw = String(typedValue).replaceAll(',', '').trim();
+		const parsed = Number(raw);
+		const belowMinimum = raw !== '' && Number.isFinite(parsed) && parsed < minQuantity;
+		commit(parsed);
+		if (belowMinimum) {
+			softMessage = `Minimum is ${minQuantity.toLocaleString()}. We adjusted it for you.`;
+		}
+	}
+
+	function updateTyped(raw: string): void {
+		typedValue = raw;
+		const parsed = Number(raw.replaceAll(',', '').trim());
+		softMessage =
+			raw.trim() !== '' && Number.isFinite(parsed) && parsed < minQuantity
+				? `Minimum is ${minQuantity.toLocaleString()}.`
+				: '';
 	}
 
 	function adjust(direction: -1 | 1): void {
@@ -97,7 +115,8 @@
 					min={minQuantity}
 					max={maxQuantity ?? undefined}
 					step={stepQuantity}
-					bind:value={typedValue}
+					value={typedValue}
+					oninput={(event) => updateTyped(event.currentTarget.value)}
 					onfocus={(event) => event.currentTarget.select()}
 					onblur={commitTyped}
 					onkeydown={(event) => {
@@ -120,11 +139,13 @@
 			</span>
 		</label>
 	</div>
+	{#if softMessage}
+		<p aria-live="polite" class={compact ? 'text-[10px]' : 'text-[11px]'} style="color: #fbbf24;">
+			{softMessage}
+		</p>
+	{/if}
 	<p class={compact ? 'text-[10px]' : 'text-[11px]'} style="color: var(--text-dim);">
-		Type an amount or use +/−. We’ll use the nearest valid {stepQuantity.toLocaleString()} increment{maxQuantity !==
-		null
-			? `, up to ${maxQuantity.toLocaleString()}`
-			: ''}.
+		Enter a quantity or use +/−.
 	</p>
 </div>
 
