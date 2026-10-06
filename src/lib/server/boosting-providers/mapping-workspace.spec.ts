@@ -126,6 +126,19 @@ describe('boosting mapping workspace persistence', () => {
 		).rejects.toBeInstanceOf(BoostMappingError);
 	});
 
+	it('rejects a stale Threads route even if its stored platform says Instagram', async () => {
+		const staleThreads = {
+			...providerService(),
+			name: 'S41 Threads Followers (1/100k) [HQ]',
+			category: 'Instagram Followers'
+		};
+		await expect(
+			saveBoostMappingWorkspace(categoryId, validInput(), 'admin-1', {
+				database: database(true, [staleThreads]).client
+			})
+		).rejects.toThrow('not safely compatible');
+	});
+
 	it('rejects a customer price that misses the configured profit target', async () => {
 		const input = validInput();
 		input.offer.pricePerStepNgn = 2000;

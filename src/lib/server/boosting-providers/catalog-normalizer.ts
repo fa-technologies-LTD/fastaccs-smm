@@ -114,7 +114,17 @@ function matchesFrom<T extends string>(
 	return values.filter((value) => patterns[value].test(text));
 }
 
+export function isUnsupportedThreadsService(
+	service: Pick<BoostProviderService, 'name' | 'category'>
+): boolean {
+	return /\bthreads?\b/i.test(`${service.name} ${service.category}`);
+}
+
 function inferPlatforms(name: string, category: string): BoostCatalogPlatform[] {
+	// Threads is a separate network. Some supplier catalogues place Threads rows inside an
+	// "Instagram" category, so category-only matching would otherwise make those rows eligible
+	// for Instagram fulfilment. Threads is not a supported storefront platform yet: fail closed.
+	if (isUnsupportedThreadsService({ name, category })) return [];
 	return matchesFrom(`${category} ${name}`, BOOST_CATALOG_PLATFORMS, PLATFORM_PATTERNS);
 }
 

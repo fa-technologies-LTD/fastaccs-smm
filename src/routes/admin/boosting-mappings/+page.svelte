@@ -61,6 +61,7 @@
 	let loading = $state(false);
 	let lookupLoading = $state(false);
 	let smartLoading = $state(false);
+	let smartSelectionOffset = $state(0);
 	let saving = $state(false);
 	let pricingSaving = $state(false);
 	let loadError = $state('');
@@ -83,6 +84,9 @@
 		new Map(knownCandidates.map((candidate) => [candidate.id, candidate]))
 	);
 	const included = $derived(Boolean(offerDraft && offerDraft.status !== 'hidden'));
+	const smartAutoPrepared = $derived(
+		Boolean(offerDraft?.routingPolicy === 'automatic' && routeDrafts.length > 0)
+	);
 	const minimumCustomerPrice = $derived(
 		offerDraft
 			? roundCatalogPriceNgn(
@@ -283,6 +287,7 @@
 		routeDrafts = [];
 		fallbackMode = 'none';
 		knownCandidates = [];
+		smartSelectionOffset = 0;
 		serviceCode = '';
 		await loadWorkspace();
 		await tick();
@@ -305,6 +310,7 @@
 		routeDrafts = [];
 		fallbackMode = 'none';
 		knownCandidates = [];
+		smartSelectionOffset = 0;
 		serviceCode = '';
 		await loadWorkspace();
 	}
@@ -510,14 +516,16 @@
 		}
 	}
 
-	async function useSmartAuto(): Promise<void> {
+	async function useSmartAuto(refresh = false): Promise<void> {
 		if (!offerDraft || smartLoading) return;
 		smartLoading = true;
 		try {
+			const nextSelectionOffset = refresh ? smartSelectionOffset + 1 : 0;
 			const params = new URLSearchParams({
 				categoryId: selectedCategoryId,
 				mode: 'smart',
-				tier: selectedQualityTier
+				tier: selectedQualityTier,
+				selectionOffset: String(nextSelectionOffset)
 			});
 			const response = await fetch(`/api/admin/boosting-suppliers/service?${params}`);
 			const payload = await response.json();
@@ -541,9 +549,10 @@
 			setupMode = 'smart';
 			fallbackMode = 'none';
 			offerDraft.fallbackMode = 'none';
+			smartSelectionOffset = nextSelectionOffset;
 			if (!offerDraft.priceLocked) queueMicrotask(useSuggestedPrice);
 			showSuccess(
-				'Smart Auto prepared',
+				refresh ? 'Supplier choices refreshed' : 'Smart Auto prepared',
 				`${candidates.length} compatible routes are ready for shadow testing.`
 			);
 		} catch (error) {
@@ -1062,11 +1071,18 @@
 							</p>
 							<button
 								type="button"
-								onclick={useSmartAuto}
+								onclick={() => useSmartAuto(smartAutoPrepared)}
 								disabled={smartLoading}
 								class="mt-3 rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-60"
 								style="background: var(--primary); color: #00150b;"
-								>{smartLoading ? 'Preparing…' : 'Prepare Smart Auto'}</button
+								>{#if smartAutoPrepared}<RefreshCcw
+										size={15}
+										class="mr-1 inline"
+									/>{/if}{smartLoading
+									? 'Preparing…'
+									: smartAutoPrepared
+										? 'Refresh choices'
+										: 'Prepare Smart Auto'}</button
 							>
 						</div>
 					{/if}

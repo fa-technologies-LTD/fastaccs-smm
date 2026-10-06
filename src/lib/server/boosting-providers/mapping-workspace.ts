@@ -12,7 +12,11 @@ import { roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
 import { prisma } from '$lib/prisma';
 import { BOOSTING_MANAGED_STOREFRONT_KEY } from './storefront-rollout';
 import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
-import { inferAdvertisedRefillDays, supplierTextAdvertisesRefill } from './catalog-normalizer';
+import {
+	inferAdvertisedRefillDays,
+	isUnsupportedThreadsService,
+	supplierTextAdvertisesRefill
+} from './catalog-normalizer';
 
 const CANDIDATE_LIMIT = 80;
 const PROVIDER_LABELS = { smm_raja: 'SMM Raja', bulk_follows: 'BulkFollows' } as const;
@@ -484,6 +488,7 @@ export async function saveBoostMappingWorkspace(
 	}
 	for (const service of providerServices) {
 		if (
+			isUnsupportedThreadsService(service) ||
 			service.unavailableAt ||
 			service.catalogueStatus === 'quarantined' ||
 			service.ratePerThousand === null ||

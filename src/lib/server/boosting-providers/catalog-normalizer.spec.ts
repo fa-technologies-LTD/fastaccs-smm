@@ -76,6 +76,17 @@ describe('boosting provider catalogue normalization', () => {
 		expect(unrelated.platforms).toEqual([]);
 	});
 
+	it('never classifies a Threads service as Instagram from its supplier category', () => {
+		const service = normalizeBoostProviderService('smm_raja', {
+			...SMM_RAJA_SERVICE_FIXTURE,
+			name: 'S41 Threads Followers (1/100k) [HQ]',
+			category: 'Instagram Followers'
+		});
+		expect(service.platforms).toEqual([]);
+		expect(service.anomalies).toContain('unknown_platform');
+		expect(service.status).toBe('needs_classification');
+	});
+
 	it('recognizes a refill period stated in the supplier service name', () => {
 		const service = normalizeBoostProviderService('bulk_follows', {
 			...BULK_FOLLOWS_SERVICE_FIXTURE,

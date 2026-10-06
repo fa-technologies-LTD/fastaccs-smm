@@ -5,6 +5,7 @@ import type {
 	BoostProviderService,
 	BoostTargetType
 } from './types';
+import { isUnsupportedThreadsService } from './catalog-normalizer';
 
 export type BoostRouteState = 'enabled' | 'shadow' | 'paused';
 export type BoostRoutingPolicy = 'automatic' | 'preferred' | 'locked';
@@ -123,7 +124,11 @@ function projectRoute(
 	if (!provider?.catalogFresh) reasons.push('catalog_stale');
 	if (!provider?.balanceFresh) reasons.push('balance_stale');
 	if (service.status === 'quarantined') reasons.push('service_quarantined');
-	if (!service.platforms.includes(offer.platform) || !service.outcomes.includes(offer.outcome)) {
+	if (
+		isUnsupportedThreadsService(service) ||
+		!service.platforms.includes(offer.platform) ||
+		!service.outcomes.includes(offer.outcome)
+	) {
 		reasons.push('offer_mismatch');
 	}
 	if (service.targetType !== offer.targetType) reasons.push('target_mismatch');

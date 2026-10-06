@@ -21,11 +21,16 @@ export const GET: RequestHandler = async ({ locals, url, setHeaders }) => {
 	if (url.searchParams.get('mode') === 'smart') {
 		const qualityTier = String(url.searchParams.get('tier') || 'value');
 		const maximumRate = Number(url.searchParams.get('maximumRatePerThousand'));
+		const selectionOffset = Number(url.searchParams.get('selectionOffset'));
 		const data = await recommendBoostProviderServices({
 			categoryId,
 			qualityTier,
 			maximumRatePerThousand:
-				Number.isFinite(maximumRate) && maximumRate > 0 ? maximumRate : undefined
+				Number.isFinite(maximumRate) && maximumRate > 0 ? maximumRate : undefined,
+			selectionOffset:
+				Number.isInteger(selectionOffset) && selectionOffset >= 0
+					? Math.min(selectionOffset, 10_000)
+					: 0
 		});
 		return json({ success: true, data });
 	}

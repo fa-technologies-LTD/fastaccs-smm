@@ -213,4 +213,70 @@ describe('Boosting mapping offer selection', () => {
 		await expect.element(page.getByText('Primary · BulkFollows #14545').first()).toBeVisible();
 		await expect.element(page.getByText('Supplier cost for 200')).toBeVisible();
 	});
+
+	it('refreshes Smart Auto through a new server-ranked supplier cluster', async () => {
+		const smartCandidate = (id: string, serviceId: string, name: string, rate: number) => ({
+			id,
+			provider: 'smm_raja',
+			providerLabel: 'SMM Raja',
+			serviceId,
+			name,
+			category: 'Facebook Followers',
+			providerType: null,
+			ratePerThousand: rate,
+			minQuantity: 1000,
+			maxQuantity: 100_000,
+			refillAdvertised: false,
+			refillDaysClaimed: null,
+			cancelAdvertised: false,
+			dripfeedAdvertised: false,
+			qualitySignals: [],
+			catalogueStatus: 'ready_for_review',
+			lastSeenAt: new Date().toISOString(),
+			mappedRoute: null
+		});
+		const fetchMock = vi.fn((input: RequestInfo | URL) => {
+			const requestUrl = String(input);
+			if (requestUrl.includes('/api/admin/boosting-suppliers/service?')) {
+				const refreshed = requestUrl.includes('selectionOffset=1');
+				return Promise.resolve(
+					Response.json({
+						success: true,
+						data: [
+							refreshed
+								? smartCandidate('cluster-2', '202', 'Facebook Followers B', 1.4)
+								: smartCandidate('cluster-1', '101', 'Facebook Followers A', 1)
+						]
+					})
+				);
+			}
+			return Promise.resolve(
+				Response.json({
+					success: true,
+					data: workspace(offers[1].id, offers[1].name)
+				})
+			);
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		render(Page, {
+			data: {
+				offers: [...offers],
+				mappingSummary: { categories: 2, tiers: 0, reviewedTiers: 0, approvedRoutes: 0 }
+			}
+		} as never);
+
+		await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
+		await page.getByRole('button', { name: /Smart Auto/ }).click();
+		await page.getByRole('button', { name: 'Prepare Smart Auto' }).click();
+		await expect.element(page.getByText('Facebook Followers A')).toBeVisible();
+		await page.getByRole('button', { name: 'Refresh choices' }).click();
+		await expect.element(page.getByText('Facebook Followers B')).toBeVisible();
+
+		const smartRequests = fetchMock.mock.calls
+			.map((call) => String(call[0]))
+			.filter((url) => url.includes('/api/admin/boosting-suppliers/service?'));
+		expect(smartRequests).toHaveLength(2);
+		expect(smartRequests[1]).toContain('selectionOffset=1');
+	});
 });

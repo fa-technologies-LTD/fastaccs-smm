@@ -7,14 +7,29 @@ import type {
 } from '$lib/helpers/boosting-mapping-types';
 import { getRequiredLinkType } from '$lib/helpers/social-link-validator';
 import type { BoostProviderId } from './types';
-import { inferAdvertisedRefillDays, supplierTextAdvertisesRefill } from './catalog-normalizer';
+import {
+	inferAdvertisedRefillDays,
+	isUnsupportedThreadsService,
+	supplierTextAdvertisesRefill
+} from './catalog-normalizer';
 
 const LABELS: Record<BoostProviderId, string> = {
 	smm_raja: 'SMM Raja',
 	bulk_follows: 'BulkFollows'
 };
 
+// Alternatives behind one customer option should have comparable economics. A route that costs
+// several times more than its peers distorts the displayed price and is not a safe fallback.
+export const SMART_AUTO_MAX_PRICE_RATIO = 1.6;
+
 type ServiceRow = Prisma.BoostProviderServiceGetPayload<Record<string, never>>;
+
+function isAutomaticOnlyUnsafe(row: Pick<ServiceRow, 'name' | 'category'>): boolean {
+	return (
+		isUnsupportedThreadsService(row) ||
+		/\b(?:test|trial|free)\b/i.test(`${row.name} ${row.category}`)
+	);
+}
 
 function toCandidate(row: ServiceRow): BoostMappingCandidate | null {
 	if (
@@ -66,6 +81,7 @@ function manualSelectionIssues(
 	if (row.unavailableAt) blocking.push('The supplier no longer lists this service.');
 	if (row.catalogueStatus === 'quarantined')
 		blocking.push('The supplier row failed catalogue safety checks.');
+	if (isUnsupportedThreadsService(row)) blocking.push('It is a Threads service, not Instagram.');
 	if (!row.platforms.includes(config.platform)) blocking.push('It is for a different platform.');
 	if (!row.outcomes.includes(config.actionType)) blocking.push('It delivers a different result.');
 	if (row.targetType !== getRequiredLinkType(config.actionType)) {
@@ -174,9 +190,11 @@ function tierScore(candidate: BoostMappingCandidate, qualityTier: string): numbe
 export function rankSmartBoostCandidates(
 	candidates: BoostMappingCandidate[],
 	qualityTier: string,
-	limit = 4
+	limit = 4,
+	selectionOffset = 0
 ): BoostMappingCandidate[] {
 	const eligible = candidates.filter((candidate) => {
+		if (!Number.isFinite(candidate.ratePerThousand) || candidate.ratePerThousand <= 0) return false;
 		const signals = new Set(candidate.qualitySignals);
 		const hasStabilityEvidence =
 			candidate.refillAdvertised || signals.has('stability_claim') || signals.has('refill_claim');
@@ -196,12 +214,32 @@ export function rankSmartBoostCandidates(
 			left.id.localeCompare(right.id)
 		);
 	});
+	if (ranked.length === 0) return [];
+
+	// Refreshing moves to the next sensible price cluster, rather than randomly mixing cheap and
+	// expensive services. Every returned route remains within 60% of the cluster's lowest rate.
+	const normalizedOffset = Number.isFinite(selectionOffset)
+		? Math.abs(Math.trunc(selectionOffset)) % ranked.length
+		: 0;
+	const anchor = ranked[normalizedOffset];
+	const maximumClusterRate = anchor.ratePerThousand * SMART_AUTO_MAX_PRICE_RATIO;
+	const priceCluster = ranked.filter(
+		(candidate) =>
+			candidate.ratePerThousand >= anchor.ratePerThousand &&
+			candidate.ratePerThousand <= maximumClusterRate
+	);
+	const orderedCluster = [
+		anchor,
+		...priceCluster.filter((candidate) => candidate.id !== anchor.id)
+	];
 	const selected: BoostMappingCandidate[] = [];
+	selected.push(anchor);
 	for (const provider of ['smm_raja', 'bulk_follows'] as const) {
-		const candidate = ranked.find((row) => row.provider === provider);
+		if (provider === anchor.provider) continue;
+		const candidate = orderedCluster.find((row) => row.provider === provider);
 		if (candidate) selected.push(candidate);
 	}
-	for (const candidate of ranked) {
+	for (const candidate of orderedCluster) {
 		if (selected.length >= limit) break;
 		if (!selected.some((row) => row.id === candidate.id)) selected.push(candidate);
 	}
@@ -214,6 +252,7 @@ export async function recommendBoostProviderServices(
 		qualityTier: string;
 		limit?: number;
 		maximumRatePerThousand?: number;
+		selectionOffset?: number;
 	},
 	database: PrismaClient = prisma
 ): Promise<BoostMappingCandidate[]> {
@@ -237,8 +276,12 @@ export async function recommendBoostProviderServices(
 		take: 250
 	});
 	return rankSmartBoostCandidates(
-		rows.map(toCandidate).filter((row): row is BoostMappingCandidate => Boolean(row)),
+		rows
+			.filter((row) => !isAutomaticOnlyUnsafe(row))
+			.map(toCandidate)
+			.filter((row): row is BoostMappingCandidate => Boolean(row)),
 		input.qualityTier,
-		input.limit ?? 4
+		input.limit ?? 4,
+		input.selectionOffset ?? 0
 	);
 }

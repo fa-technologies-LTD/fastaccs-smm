@@ -1,7 +1,11 @@
 import type { PrismaClient } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
 import type { BoostMappingCandidate } from '$lib/helpers/boosting-mapping-types';
-import { lookupBoostProviderService, rankSmartBoostCandidates } from './setup-service';
+import {
+	lookupBoostProviderService,
+	rankSmartBoostCandidates,
+	recommendBoostProviderServices
+} from './setup-service';
 
 function candidate(
 	input: Partial<BoostMappingCandidate> &
@@ -32,13 +36,37 @@ describe('Smart Auto shortlist', () => {
 		const result = rankSmartBoostCandidates(
 			[
 				candidate({ id: 'a', provider: 'smm_raja', ratePerThousand: 1 }),
-				candidate({ id: 'b', provider: 'smm_raja', ratePerThousand: 2 }),
-				candidate({ id: 'c', provider: 'bulk_follows', ratePerThousand: 3 })
+				candidate({ id: 'b', provider: 'smm_raja', ratePerThousand: 1.2 }),
+				candidate({ id: 'c', provider: 'bulk_follows', ratePerThousand: 1.4 })
 			],
 			'value',
 			3
 		);
 		expect(result.map((row) => row.id)).toEqual(['a', 'c', 'b']);
+	});
+
+	it('keeps one Smart Auto shortlist inside a comparable supplier-price band', () => {
+		const result = rankSmartBoostCandidates(
+			[
+				candidate({ id: 'anchor', provider: 'smm_raja', ratePerThousand: 1 }),
+				candidate({ id: 'nearby', provider: 'bulk_follows', ratePerThousand: 1.5 }),
+				candidate({ id: 'far-away', provider: 'bulk_follows', ratePerThousand: 4.8 })
+			],
+			'value',
+			4
+		);
+		expect(result.map((row) => row.id)).toEqual(['anchor', 'nearby']);
+	});
+
+	it('refreshes into the next safe price cluster instead of mixing price extremes', () => {
+		const candidates = [
+			candidate({ id: 'cheap-a', provider: 'smm_raja', ratePerThousand: 1 }),
+			candidate({ id: 'cheap-b', provider: 'bulk_follows', ratePerThousand: 1.4 }),
+			candidate({ id: 'higher-a', provider: 'smm_raja', ratePerThousand: 3 }),
+			candidate({ id: 'higher-b', provider: 'bulk_follows', ratePerThousand: 4 })
+		];
+		const result = rankSmartBoostCandidates(candidates, 'value', 4, 2);
+		expect(result.map((row) => row.id)).toEqual(['higher-a', 'higher-b']);
 	});
 
 	it('prioritizes advertised quality and refill signals for premium', () => {
@@ -77,12 +105,20 @@ describe('Smart Auto shortlist', () => {
 });
 
 describe('manual supplier lookup', () => {
-	function lookupDatabase(outcomes = ['followers']): PrismaClient {
+	function lookupDatabase(
+		overrides: {
+			outcomes?: string[];
+			name?: string;
+			category?: string;
+			platforms?: string[];
+			customerPlatform?: string;
+		} = {}
+	): PrismaClient {
 		return {
 			category: {
 				findFirst: vi.fn().mockResolvedValue({
 					metadata: {
-						boosting_platform: 'x',
+						boosting_platform: overrides.customerPlatform ?? 'x',
 						boosting_action_type: 'followers',
 						boosting_min_quantity: 200,
 						boosting_step_quantity: 200
@@ -94,8 +130,8 @@ describe('manual supplier lookup', () => {
 					id: 'service-1',
 					provider: 'bulk_follows',
 					serviceId: '14545',
-					name: 'Twitter Followers - 30 day refill',
-					category: 'Twitter',
+					name: overrides.name ?? 'Twitter Followers - 30 day refill',
+					category: overrides.category ?? 'Twitter',
 					description: null,
 					providerType: null,
 					ratePerThousand: 6.5,
@@ -108,8 +144,8 @@ describe('manual supplier lookup', () => {
 					catalogueStatus: 'ready_for_review',
 					lastSeenAt: new Date(),
 					unavailableAt: null,
-					platforms: ['x'],
-					outcomes,
+					platforms: overrides.platforms ?? ['x'],
+					outcomes: overrides.outcomes ?? ['followers'],
 					targetType: 'profile'
 				})
 			}
@@ -142,10 +178,88 @@ describe('manual supplier lookup', () => {
 				serviceCode: '14545',
 				qualityTier: 'premium'
 			},
-			lookupDatabase(['views'])
+			lookupDatabase({ outcomes: ['views'] })
 		);
 
 		expect(result.compatible).toBe(false);
 		expect(result.issues).toContain('It delivers a different result.');
+	});
+
+	it('blocks a stale Threads row even if an old sync labelled it as Instagram', async () => {
+		const result = await lookupBoostProviderService(
+			{
+				categoryId: 'category-1',
+				provider: 'smm_raja',
+				serviceCode: '6699',
+				qualityTier: 'premium'
+			},
+			lookupDatabase({
+				name: 'S41 Threads Followers (1/100k) [HQ]',
+				category: 'Instagram Followers',
+				platforms: ['instagram'],
+				customerPlatform: 'instagram'
+			})
+		);
+
+		expect(result.compatible).toBe(false);
+		expect(result.issues).toContain('It is a Threads service, not Instagram.');
+	});
+});
+
+describe('automatic supplier recommendations', () => {
+	function serviceRow(id: string, name: string, rate: number) {
+		return {
+			id,
+			provider: 'smm_raja',
+			serviceId: id,
+			name,
+			category: 'Instagram Followers',
+			description: null,
+			providerType: null,
+			ratePerThousand: rate,
+			minQuantity: 100,
+			maxQuantity: 1_000_000,
+			refillAdvertised: true,
+			cancelAdvertised: false,
+			dripfeedAdvertised: false,
+			qualitySignals: ['quality_claim', 'refill_claim'],
+			catalogueStatus: 'ready_for_review',
+			lastSeenAt: new Date(),
+			unavailableAt: null,
+			platforms: ['instagram'],
+			outcomes: ['followers'],
+			targetType: 'profile'
+		};
+	}
+
+	it('rejects stale Threads and supplier test rows before ranking', async () => {
+		const database = {
+			category: {
+				findFirst: vi.fn().mockResolvedValue({
+					metadata: {
+						boosting_platform: 'instagram',
+						boosting_action_type: 'followers',
+						boosting_min_quantity: 100,
+						boosting_step_quantity: 100
+					}
+				})
+			},
+			boostProviderService: {
+				findMany: vi
+					.fn()
+					.mockResolvedValue([
+						serviceRow('threads', 'S41 Threads Followers [HQ]', 0.9),
+						serviceRow('test', 'Instagram Followers Test', 0.4),
+						serviceRow('valid', 'Instagram Followers Real Refill', 1.1)
+					])
+			}
+		} as unknown as PrismaClient;
+
+		const result = await recommendBoostProviderServices(
+			{ categoryId: 'category-1', qualityTier: 'premium' },
+			database
+		);
+
+		expect(result.map((row) => row.id)).toEqual(['valid']);
 	});
 });

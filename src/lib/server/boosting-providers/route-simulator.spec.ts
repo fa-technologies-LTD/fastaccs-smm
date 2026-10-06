@@ -122,6 +122,20 @@ describe('boost route simulator', () => {
 		);
 	});
 
+	it('fails closed on a stale Threads route whose stored platform says Instagram', () => {
+		const staleThreads = route('stale-threads', 'smm_raja', 0.5);
+		staleThreads.service.name = 'S41 Threads Followers (1/100k) [HQ]';
+		staleThreads.service.category = 'Instagram Followers';
+		staleThreads.service.platforms = ['instagram'];
+		const result = simulate([staleThreads]);
+
+		expect(result.selectedRouteId).toBeNull();
+		expect(result.projections[0]).toMatchObject({
+			eligible: false,
+			reasons: expect.arrayContaining(['offer_mismatch'])
+		});
+	});
+
 	it('pauses selection when a supplier stops advertising the reviewed refill', () => {
 		const changed = route('changed-refill', 'smm_raja', 0.75);
 		changed.service.refillAdvertised = false;
