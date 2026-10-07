@@ -111,6 +111,19 @@ describe('approved invariant: emergency checkout initialization control', () => 
 		expect(mocks.releaseOrderReservations).not.toHaveBeenCalled();
 	});
 
+	it('rejects a Boosting order below ₦500 before contacting the payment provider', async () => {
+		vi.stubEnv('CHECKOUT_DISABLED', 'false');
+		mocks.findOrder.mockResolvedValue(pendingOrder({ orderType: 'boosting', totalAmount: 350 }));
+		const response = await callInitialize();
+		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({
+			code: 'BOOSTING_MINIMUM_CHECKOUT',
+			error: 'Add ₦150 more in Boosting to check out.'
+		});
+		expect(mocks.initializeTransaction).not.toHaveBeenCalled();
+		expect(mocks.updateManyOrders).not.toHaveBeenCalled();
+	});
+
 	it('still resumes an active hosted session while new initialization is disabled', async () => {
 		vi.stubEnv('CHECKOUT_DISABLED', 'true');
 		mocks.findOrder.mockResolvedValue(

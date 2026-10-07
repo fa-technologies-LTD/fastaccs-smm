@@ -9,6 +9,8 @@
 	import { brandKey } from '$lib/components/BrandIcon.svelte';
 	import { showSuccess } from '$lib/stores/toasts';
 	import { roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
+	import { boostingMinimumMessage } from '$lib/helpers/boosting-checkout';
+	import { showWarning } from '$lib/stores/toasts';
 
 	// Reactive state
 	const isOpen = $derived(cart.isOpen);
@@ -37,6 +39,7 @@
 					getCartItemKey(item),
 					item.tierId,
 					item.quantity,
+					item.boosting?.boostQuantity || '',
 					item.exactAccount?.reservedUntil || ''
 				].join(':')
 			)
@@ -108,6 +111,13 @@
 	}
 
 	function goToCheckout() {
+		if (cartItems.some((item) => item.boosting)) {
+			const message = boostingMinimumMessage(total);
+			if (message) {
+				showWarning(message);
+				return;
+			}
+		}
 		cart.close();
 		goto('/checkout');
 	}

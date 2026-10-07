@@ -1,5 +1,6 @@
 <script lang="ts">
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
+	import { boostingStartingQuantity } from '$lib/helpers/boosting-checkout';
 	import BoostingQuantitySelector from '$lib/components/BoostingQuantitySelector.svelte';
 	import {
 		Check,
@@ -67,7 +68,7 @@
 		selectedPlatform = groups[0].platform;
 		selectedCategoryId = groups[0].categoryId;
 		selectedOfferId = groups[0].offers[0]?.id ?? '';
-		quantity = groups[0].offers[0]?.minQuantity ?? 0;
+		quantity = groups[0].offers[0] ? boostingStartingQuantity(groups[0].offers[0]) : 0;
 	});
 
 	const platforms = $derived([
@@ -111,7 +112,7 @@
 	function selectDefaults(group: Group): void {
 		selectedCategoryId = group.categoryId;
 		selectedOfferId = group.offers[0]?.id ?? '';
-		quantity = group.offers[0]?.minQuantity ?? 0;
+		quantity = group.offers[0] ? boostingStartingQuantity(group.offers[0]) : 0;
 		targetUrl = '';
 		linkError = null;
 	}
@@ -128,7 +129,7 @@
 
 	function chooseOffer(offer: Offer): void {
 		selectedOfferId = offer.id;
-		quantity = offer.minQuantity;
+		quantity = boostingStartingQuantity(offer);
 		linkError = null;
 		trackSnapEvent('VIEW_CONTENT', {
 			item_ids: [offer.id],
@@ -348,7 +349,7 @@
 								<strong class="whitespace-nowrap" style="color: var(--text);">
 									{formatPrice(
 										roundCatalogPriceNgn(
-											(offer.minQuantity / offer.stepQuantity) * offer.pricePerStepNgn
+											(boostingStartingQuantity(offer) / offer.stepQuantity) * offer.pricePerStepNgn
 										)
 									)}
 								</strong>

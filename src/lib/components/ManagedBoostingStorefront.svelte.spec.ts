@@ -50,6 +50,22 @@ const groups = [
 ];
 
 describe('Managed Boosting storefront', () => {
+	it('starts a cheap offer at ₦500 and keeps the existing quantity increment', async () => {
+		const cheapGroups = [
+			{
+				...groups[0],
+				offers: [
+					{ ...groups[0].offers[0], minQuantity: 100, stepQuantity: 100, pricePerStepNgn: 50 }
+				]
+			}
+		];
+		render(ManagedBoostingStorefront, { groups: cheapGroups });
+		await expect.element(page.getByRole('button', { name: 'Add to Cart — ₦500' })).toBeVisible();
+		await expect.element(page.getByRole('spinbutton')).toHaveValue(1000);
+		await page.getByRole('button', { name: 'Increase followers quantity by 100' }).click();
+		await expect.element(page.getByRole('spinbutton')).toHaveValue(1100);
+	});
+
 	it('renders the approved platform, result, tier and working purchase controls', async () => {
 		render(ManagedBoostingStorefront, { groups });
 

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
+	import { boostingStartingQuantity } from '$lib/helpers/boosting-checkout';
 	import BoostingQuantitySelector from '$lib/components/BoostingQuantitySelector.svelte';
 	import {
 		ArrowLeft,
@@ -41,7 +42,7 @@
 	});
 	const quantity = $derived(
 		selectedGroup && selectedOffer
-			? (quantityByCategory[selectedGroup.categoryId] ?? selectedOffer.minQuantity)
+			? (quantityByCategory[selectedGroup.categoryId] ?? boostingStartingQuantity(selectedOffer))
 			: 0
 	);
 	const total = $derived(
@@ -79,7 +80,13 @@
 
 	function chooseOffer(categoryId: string, offerId: string, minimum: number): void {
 		selectedOfferByCategory = { ...selectedOfferByCategory, [categoryId]: offerId };
-		quantityByCategory = { ...quantityByCategory, [categoryId]: minimum };
+		const offer = data.groups
+			.find((group) => group.categoryId === categoryId)
+			?.offers.find((item) => item.id === offerId);
+		quantityByCategory = {
+			...quantityByCategory,
+			[categoryId]: offer ? boostingStartingQuantity(offer) : minimum
+		};
 	}
 
 	function chooseQuantity(categoryId: string, value: number): void {
@@ -226,7 +233,8 @@
 										<strong class="whitespace-nowrap" style="color: var(--text);"
 											>{formatPrice(
 												roundCatalogPriceNgn(
-													(offer.minQuantity / offer.stepQuantity) * offer.pricePerStepNgn
+													(boostingStartingQuantity(offer) / offer.stepQuantity) *
+														offer.pricePerStepNgn
 												)
 											)}</strong
 										>

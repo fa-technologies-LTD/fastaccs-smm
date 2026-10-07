@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { boostingMinimumMessage } from '$lib/helpers/boosting-checkout';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import {
@@ -490,6 +491,13 @@
 
 	async function payWithMonnify() {
 		if (loading) return;
+		if (cartItems.some((item) => item.boosting)) {
+			const message = boostingMinimumMessage(checkoutTotal);
+			if (message) {
+				showWarning(message);
+				return;
+			}
+		}
 
 		if (!user) {
 			redirectToLoginWithReturnUrl();

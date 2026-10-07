@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { boostingMinimumMessage } from '$lib/helpers/boosting-checkout';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { initializeTransaction, verifyTransaction } from '$lib/services/monnify';
@@ -182,6 +183,15 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				},
 				{ status: 202 }
 			);
+		}
+
+		if (order.orderType === 'boosting') {
+			const message = boostingMinimumMessage(Number(order.totalAmount));
+			if (message)
+				return json(
+					{ success: false, error: message, code: 'BOOSTING_MINIMUM_CHECKOUT' },
+					{ status: 400 }
+				);
 		}
 
 		if (isNewCheckoutInitializationDisabled()) {

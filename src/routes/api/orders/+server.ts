@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'crypto';
+import { boostingMinimumMessage } from '$lib/helpers/boosting-checkout';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { Prisma } from '@prisma/client';
@@ -1097,6 +1098,15 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			if (hasAffiliateAttribution) {
 				affiliateConfigSnapshot = await getAffiliateConfig();
 			}
+		}
+
+		if (isBoostingCheckout) {
+			const message = boostingMinimumMessage(finalOrderTotal);
+			if (message)
+				return json(
+					{ success: false, error: message, code: 'BOOSTING_MINIMUM_CHECKOUT' },
+					{ status: 400 }
+				);
 		}
 
 		// Store-credit redemption (registered users, opt-in). The credit is
