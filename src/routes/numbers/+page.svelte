@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { goto } from '$app/navigation';
 	import { slide } from 'svelte/transition';
-	import { cart } from '$lib/stores/cart.svelte';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
+	import { buyNumber } from '$lib/services/numbers-buy';
+	import { codeToFlag, listNumbersPages, numbersPagePath } from '$lib/helpers/numbers-slugs';
 	import { trackSnapEvent } from '$lib/services/snap-pixel';
 	import { showWarning, showSuccess, showError } from '$lib/stores/toasts';
 	import { RefreshCw, ChevronDown, Phone, BellRing, Check, Search } from '$lib/icons';
@@ -14,13 +14,6 @@
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
-
-	// 2-letter ISO country code → flag emoji (regional indicator letters).
-	function codeToFlag(code: string): string {
-		const cc = (code || '').trim().toUpperCase().slice(0, 2);
-		if (!/^[A-Z]{2}$/.test(cc)) return '🌍';
-		return String.fromCodePoint(...[...cc].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65));
-	}
 
 	// Remember this section so checkout returns here (not the accounts page) on empty cart.
 	onMount(() => {
@@ -140,6 +133,23 @@
 		}
 	];
 
+	// Every app + country page, grouped by app, for the crawlable "Browse by app" directory.
+	const directory = $derived.by(() => {
+		const groups: Array<{
+			serviceName: string;
+			pages: Array<{ path: string; countryName: string }>;
+		}> = [];
+		for (const page of listNumbersPages(data.services)) {
+			let group = groups.find((item) => item.serviceName === page.serviceName);
+			if (!group) {
+				group = { serviceName: page.serviceName, pages: [] };
+				groups.push(group);
+			}
+			group.pages.push({ path: page.path, countryName: page.countryName });
+		}
+		return groups;
+	});
+
 	function availableTiers(tiers: PageData['services'][number]['tiers']) {
 		return tiers.filter((t) => t.available);
 	}
@@ -154,28 +164,13 @@
 	) {
 		buyingTierId = tier.tierId;
 		try {
-			const compat = await cart.ensureDeliveryModeCompatibility(tier.tierId, 'auto_sms');
-			if (!compat.compatible) {
-				showWarning(
-					'Numbers check out on their own',
-					'Your cart has other item types. Finish that order (or empty your cart) first, then grab your number.'
-				);
-				return;
-			}
-			// One number per order, by construction: reset the cart to exactly this number
-			// (clears any leftover), then go straight to checkout — no accumulation possible.
-			cart.clear();
-			cart.addTier(tier.tierId, 1);
-			trackSnapEvent('ADD_CART', {
-				item_ids: [tier.tierId],
-				item_category: 'Verification numbers',
-				description: `${service.serviceName} — ${tier.countryName}`,
-				price: tier.priceNgn,
-				currency: 'NGN',
-				number_items: 1
+			await buyNumber({
+				tierId: tier.tierId,
+				serviceId: service.serviceId,
+				serviceName: service.serviceName,
+				countryName: tier.countryName,
+				priceNgn: tier.priceNgn
 			});
-			recordAnalyticsEvent('add_cart', `/numbers/service/${service.serviceId}`);
-			goto('/checkout');
 		} finally {
 			buyingTierId = null;
 		}
@@ -287,6 +282,7 @@
 						{#if isOpen}
 							<ul transition:slide={{ duration: 220 }}>
 								{#each service.tiers as tier (tier.tierId)}
+									{@const pagePath = numbersPagePath(service.serviceName, tier.countryName)}
 									<li
 										class="flex items-center justify-between px-4 py-3 sm:px-5"
 										style="border-top: 1px solid var(--border); opacity: {tier.available
@@ -295,7 +291,15 @@
 									>
 										<span class="flex min-w-0 items-center gap-2.5">
 											<span class="shrink-0 text-xl">{codeToFlag(tier.countryCode)}</span>
-											<span class="truncate" style="color: var(--text);">{tier.countryName}</span>
+											{#if pagePath}
+												<a
+													href={pagePath}
+													class="truncate hover:underline"
+													style="color: var(--text);">{tier.countryName}</a
+												>
+											{:else}
+												<span class="truncate" style="color: var(--text);">{tier.countryName}</span>
+											{/if}
 										</span>
 										{#if tier.available}
 											<span class="flex shrink-0 items-center gap-3 pl-3">
@@ -359,6 +363,30 @@
 			<p class="mt-6 text-center text-xs" style="color: var(--text-dim);">
 				Numbers are single-use for one verification. Prices in Naira, all-inclusive.
 			</p>
+		{/if}
+
+		{#if directory.length > 0}
+			<!-- Always rendered (the accordion only renders rows once opened), so every
+			     app + country page is linked in the HTML search engines read. -->
+			<section class="mt-14 border-t pt-8" style="border-color: var(--border);">
+				<h2 class="mb-4 text-lg font-semibold" style="color: var(--text);">Browse by app</h2>
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					{#each directory as group (group.serviceName)}
+						<div>
+							<h3 class="text-sm font-semibold" style="color: var(--text);">
+								{group.serviceName} numbers
+							</h3>
+							<p class="mt-1 text-xs leading-relaxed" style="color: var(--text-muted);">
+								{#each group.pages as page, index (page.path)}
+									<a href={page.path} class="hover:underline" style="color: var(--link);"
+										>{page.countryName}</a
+									>{index < group.pages.length - 1 ? ' · ' : ''}
+								{/each}
+							</p>
+						</div>
+					{/each}
+				</div>
+			</section>
 		{/if}
 
 		<!-- Below-the-fold FAQ: sets expectations (incl. reused-SIM / later-ban risk) calmly, out of

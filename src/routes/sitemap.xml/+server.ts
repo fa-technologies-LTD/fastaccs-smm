@@ -1,6 +1,8 @@
 import { prisma } from '$lib/prisma';
 import { getSiteBaseUrl } from '$lib/helpers/site-url';
 import { blogPosts } from '$lib/blog/posts';
+import { getNumbersStorefront } from '$lib/services/phone-catalog';
+import { listNumbersPages } from '$lib/helpers/numbers-slugs';
 import type { RequestHandler } from './$types';
 
 interface SitemapUrl {
@@ -102,6 +104,14 @@ export const GET: RequestHandler = async () => {
 		}
 	} catch (error) {
 		console.error('Error loading boosting service platforms for sitemap:', error);
+	}
+
+	try {
+		for (const page of listNumbersPages(await getNumbersStorefront())) {
+			urls.push({ path: page.path });
+		}
+	} catch (error) {
+		console.error('Error loading verification number pages for sitemap:', error);
 	}
 
 	const body = `<?xml version="1.0" encoding="UTF-8"?>
