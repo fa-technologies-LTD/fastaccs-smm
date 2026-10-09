@@ -1,7 +1,7 @@
 import { formatPrice } from '$lib/helpers/utils';
 
 /**
- * Search/ad-facing copy for account platform pages. Titles carry the buyer's intent (country +
+ * Search/ad-facing copy for account platform pages. Titles carry the buyer's intent (product +
  * starting price) and the FAQ only restates promises already published on the Support page.
  */
 
@@ -44,8 +44,8 @@ export function buildPlatformSeo(input: {
 	const types =
 		input.typeCount > 1 ? `${input.typeCount} account types` : `${display} accounts ready to use`;
 	return {
-		title: `Buy ${display} Accounts in Nigeria${from ? ` —${from}` : ''} | FastAccs`,
-		description: `Buy ${display} accounts in Nigeria${from}. ${types}, naira checkout via Monnify, and most orders delivered instantly to your dashboard.`,
+		title: `Buy ${display} Accounts${from ? ` —${from}` : ''} | FastAccs`,
+		description: `Buy ${display} accounts${from}. ${types}, naira checkout via Monnify, and most orders delivered instantly to your dashboard.`,
 		type: 'website'
 	};
 }

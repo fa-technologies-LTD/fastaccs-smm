@@ -44,9 +44,9 @@ describe('startingPrice', () => {
 });
 
 describe('buildPlatformSeo', () => {
-	it('puts country and starting price in the title', () => {
+	it('puts the starting price in the title', () => {
 		const seo = buildPlatformSeo({ name: 'X ', slug: 'x', startingPriceNgn: 2500, typeCount: 6 });
-		expect(seo.title).toBe('Buy X (Twitter) Accounts in Nigeria — from ₦2,500 | FastAccs');
+		expect(seo.title).toBe('Buy X (Twitter) Accounts — from ₦2,500 | FastAccs');
 		expect(seo.description).toContain('6 account types');
 		expect(seo.description).toContain('from ₦2,500');
 	});
@@ -57,7 +57,7 @@ describe('buildPlatformSeo', () => {
 			startingPriceNgn: 0,
 			typeCount: 0
 		});
-		expect(seo.title).toBe('Buy LinkedIn Accounts in Nigeria | FastAccs');
+		expect(seo.title).toBe('Buy LinkedIn Accounts | FastAccs');
 		expect(seo.description).not.toContain('from');
 	});
 });

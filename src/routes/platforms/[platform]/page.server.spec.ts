@@ -65,7 +65,7 @@ describe('platform page load', () => {
 
 		const result = await run('x');
 
-		expect(result.seo.title).toBe('Buy X (Twitter) Accounts in Nigeria — from ₦2,500 | FastAccs');
+		expect(result.seo.title).toBe('Buy X (Twitter) Accounts — from ₦2,500 | FastAccs');
 		expect(result.faq.length).toBeGreaterThan(0);
 		expect(result.faq[0].question).toContain('X (Twitter)');
 	});
