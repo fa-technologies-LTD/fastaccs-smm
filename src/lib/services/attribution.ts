@@ -100,6 +100,92 @@ export function attributionToUserFields(a: Attribution | null): {
 	};
 }
 
+/**
+ * Last tagged touch. Unlike first-touch, this is overwritten by every landing that carries a
+ * tracking tag (utm_source, our fa_click, or a Snap ScCid), so a paid click is credited even when
+ * the visitor first arrived some other way. Kept short-lived: a click older than the window should
+ * not claim the sale.
+ */
+export const LAST_TOUCH_COOKIE = 'fa_lt';
+export const LAST_TOUCH_MAX_AGE_S = 60 * 60 * 24 * 7; // 7 days
+
+export interface LastTouch {
+	source: string;
+	medium: string;
+	campaign: string;
+	content: string; // utm_content: the placement / zone / creative
+	clickId: string; // the ad network's click id, echoed back in conversion postbacks
+	landing: string;
+	landedAt: string; // ISO timestamp
+}
+
+export interface RequestAttribution {
+	first: Attribution | null;
+	last: LastTouch | null;
+}
+
+// Network click ids are opaque tokens; keep only URL-safe characters so they can be echoed back
+// into a postback URL verbatim.
+function cleanClickId(v: string | null | undefined): string {
+	return String(v ?? '')
+		.replace(/[^A-Za-z0-9._~:-]/g, '')
+		.slice(0, 128);
+}
+
+function getParamCaseInsensitive(params: URLSearchParams, name: string): string {
+	for (const [key, value] of params.entries()) {
+		if (key.toLowerCase() === name && value.trim()) return value;
+	}
+	return '';
+}
+
+/** Build the last-touch record from a landing request. Null when the landing carries no tag. */
+export function buildLastTouch(input: {
+	searchParams: URLSearchParams;
+	pathname: string;
+	now: Date;
+}): LastTouch | null {
+	const utmSource = clip(input.searchParams.get('utm_source'), 60).toLowerCase();
+	const faClick = cleanClickId(input.searchParams.get('fa_click'));
+	const snapClick = cleanClickId(getParamCaseInsensitive(input.searchParams, 'sccid'));
+	const source = utmSource || (snapClick ? 'snapchat' : '');
+	if (!source) return null; // a bare fa_click with no source can't be credited to a channel
+	return {
+		source,
+		medium:
+			clip(input.searchParams.get('utm_medium'), 60) ||
+			(snapClick && !utmSource ? 'paid_social' : ''),
+		campaign: clip(input.searchParams.get('utm_campaign'), 80),
+		content: clip(input.searchParams.get('utm_content'), 120),
+		clickId: faClick || snapClick,
+		landing: clip(input.pathname, 200),
+		landedAt: input.now.toISOString()
+	};
+}
+
+/** Parse the last-touch cookie; null when missing, corrupt or older than the window. */
+export function parseLastTouch(raw: string | undefined | null, now: Date): LastTouch | null {
+	if (!raw) return null;
+	try {
+		const o = JSON.parse(raw) as Partial<LastTouch>;
+		if (!o || typeof o.source !== 'string' || !o.source) return null;
+		const landedAtMs = Date.parse(String(o.landedAt ?? ''));
+		if (!Number.isFinite(landedAtMs)) return null;
+		if (now.getTime() - landedAtMs > LAST_TOUCH_MAX_AGE_S * 1000) return null;
+		return {
+			source: clip(o.source, 60),
+			medium: clip(o.medium, 60),
+			campaign: clip(o.campaign, 80),
+			content: clip(o.content, 120),
+			clickId: cleanClickId(o.clickId),
+			landing: clip(o.landing, 200),
+			landedAt: new Date(landedAtMs).toISOString()
+		};
+	} catch {
+		return null;
+	}
+}
+
 /** Parse the stored cookie back into an Attribution (null if missing/corrupt). */
 export function parseAttribution(raw: string | undefined | null): Attribution | null {
 	if (!raw) return null;

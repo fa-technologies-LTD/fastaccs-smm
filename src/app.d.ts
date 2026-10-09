@@ -7,6 +7,8 @@ declare global {
 			user: import('@prisma/client').User | null;
 			session: import('@prisma/client').Session | null;
 			adminContext: import('$lib/auth/admin-roles').AdminContext | null;
+			// First- and last-touch acquisition, parsed from first-party cookies in hooks.server.ts.
+			attribution?: import('$lib/services/attribution').RequestAttribution;
 		}
 		interface PageData {
 			seo?: {

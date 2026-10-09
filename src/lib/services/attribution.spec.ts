@@ -2,8 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
 	deriveSource,
 	buildFirstTouch,
+	buildLastTouch,
 	parseAttribution,
-	attributionToUserFields
+	parseLastTouch,
+	attributionToUserFields,
+	LAST_TOUCH_MAX_AGE_S
 } from './attribution';
 
 describe('deriveSource', () => {
@@ -93,5 +96,81 @@ describe('parseAttribution + attributionToUserFields', () => {
 				landing: '/'
 			})
 		).toMatchObject({ acquisitionSource: 'google', acquisitionMedium: null });
+	});
+});
+
+describe('buildLastTouch', () => {
+	const now = new Date('2026-10-09T12:00:00.000Z');
+	const touch = (query: string, pathname = '/numbers/whatsapp/usa') =>
+		buildLastTouch({ searchParams: new URLSearchParams(query), pathname, now });
+
+	it('captures a tagged ad landing with placement and click id', () => {
+		expect(
+			touch(
+				'utm_source=PropellerAds&utm_medium=push&utm_campaign=wa-usa&utm_content=zone-123&fa_click=abc123'
+			)
+		).toEqual({
+			source: 'propellerads',
+			medium: 'push',
+			campaign: 'wa-usa',
+			content: 'zone-123',
+			clickId: 'abc123',
+			landing: '/numbers/whatsapp/usa',
+			landedAt: '2026-10-09T12:00:00.000Z'
+		});
+	});
+	it('treats a utm-tagged direct buy (no click id) as a touch', () => {
+		expect(touch('utm_source=nairaland&utm_medium=forum&utm_content=sports')).toMatchObject({
+			source: 'nairaland',
+			content: 'sports',
+			clickId: ''
+		});
+	});
+	it('credits Snap click ids without utm', () => {
+		expect(touch('ScCid=snap-1')).toMatchObject({
+			source: 'snapchat',
+			medium: 'paid_social',
+			clickId: 'snap-1'
+		});
+	});
+	it('ignores untagged landings and bare click ids with no source', () => {
+		expect(touch('')).toBeNull();
+		expect(touch('fa_click=orphan')).toBeNull();
+	});
+	it('strips unsafe characters from click ids and caps their length', () => {
+		expect(touch('utm_source=x&fa_click=a%20b%22c%3Cd')?.clickId).toBe('abcd');
+		expect(touch(`utm_source=x&fa_click=${'z'.repeat(300)}`)?.clickId).toHaveLength(128);
+	});
+});
+
+describe('parseLastTouch', () => {
+	const now = new Date('2026-10-09T12:00:00.000Z');
+	const stored = {
+		source: 'propellerads',
+		medium: 'push',
+		campaign: 'c',
+		content: 'z',
+		clickId: 'abc',
+		landing: '/numbers',
+		landedAt: '2026-10-08T12:00:00.000Z'
+	};
+
+	it('round-trips a stored cookie inside the window', () => {
+		expect(parseLastTouch(JSON.stringify(stored), now)).toEqual(stored);
+	});
+	it('expires touches older than the window', () => {
+		const old = new Date(now.getTime() - LAST_TOUCH_MAX_AGE_S * 1000 - 1).toISOString();
+		expect(parseLastTouch(JSON.stringify({ ...stored, landedAt: old }), now)).toBeNull();
+	});
+	it('returns null for missing, corrupt, sourceless or undated cookies', () => {
+		expect(parseLastTouch(undefined, now)).toBeNull();
+		expect(parseLastTouch('not json', now)).toBeNull();
+		expect(parseLastTouch(JSON.stringify({ ...stored, source: '' }), now)).toBeNull();
+		expect(parseLastTouch(JSON.stringify({ ...stored, landedAt: 'nope' }), now)).toBeNull();
+	});
+	it('re-sanitizes a tampered click id', () => {
+		expect(
+			parseLastTouch(JSON.stringify({ ...stored, clickId: 'ok"><script>' }), now)?.clickId
+		).toBe('okscript');
 	});
 });
