@@ -678,7 +678,10 @@
 							Signups &amp; Net Sales by Source (Last {acq.windowDays} Days)
 						</h2>
 						<span class="text-xs" style="color: var(--text-muted);"
-							>{acq.attributedSignups}/{acq.totalSignups} attributed</span
+							>{acq.attributedSignups}/{acq.totalSignups} attributed ·
+							<a href="/admin/marketing" class="font-semibold" style="color: var(--brand-blue);"
+								>Campaigns &amp; links →</a
+							></span
 						>
 					</div>
 					{#if acq.rows.length}
