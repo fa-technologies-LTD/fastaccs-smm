@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+vi.mock('$lib/services/refund-recovery', () => ({ enqueueRefundRecovery: vi.fn() }));
 
 /**
  * fulfillPhoneOrder rent path (B.3b): rent the best candidate from the pool, fail over across
@@ -153,7 +154,19 @@ beforeEach(() => {
 		cb({
 			$queryRaw: vi.fn().mockResolvedValue([]),
 			phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-			order: { update: vi.fn() },
+			order: {
+				update: vi.fn(),
+				findUnique: vi
+					.fn()
+					.mockResolvedValue({
+						userId: 'user-1',
+						totalAmount: 2500,
+						refundedAmount: 0,
+						status: 'paid',
+						paymentStatus: 'paid',
+						deliveryStatus: 'processing'
+					})
+			},
 			orderItem: { update: vi.fn() },
 			orderEvent: { create: vi.fn() }
 		})

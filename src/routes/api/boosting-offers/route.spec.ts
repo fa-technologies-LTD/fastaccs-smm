@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ findMany: vi.fn(), findRolloutMarker: vi.fn() }));
+const mocks = vi.hoisted(() => ({ findMany: vi.fn(), findRolloutMarker: vi.fn(), mode: 'live' }));
+vi.mock('$env/dynamic/private', () => ({
+	env: {
+		get BOOSTING_AUTOMATION_MODE() {
+			return mocks.mode;
+		}
+	}
+}));
 vi.mock('$lib/prisma', () => ({
 	prisma: {
 		boostCustomerOffer: { findMany: mocks.findMany },
@@ -12,9 +19,24 @@ import { GET } from './+server';
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	mocks.mode = 'live';
 	mocks.findMany.mockResolvedValue([
 		{
 			categoryId: 'category-1',
+			platform: 'instagram',
+			outcome: 'followers',
+			pricePerStepNgn: 100,
+			routes: [
+				{
+					providerService: {
+						name: 'Instagram Followers',
+						category: 'Followers',
+						providerType: 'Default',
+						platforms: ['instagram'],
+						unavailableAt: null
+					}
+				}
+			],
 			customerName: 'Stable followers',
 			shortPromise: 'Lower drop risk.',
 			expectationChips: ['More stable'],
@@ -26,6 +48,18 @@ beforeEach(() => {
 });
 
 describe('public live Boosting offer copy', () => {
+	it.each(['shadow', 'pilot', ''])(
+		'keeps offers offline when dispatch is not live (%s)',
+		async (mode) => {
+			mocks.mode = mode;
+			const response = await GET({ setHeaders: vi.fn() } as never);
+			expect(await response.json()).toMatchObject({
+				managedRolloutActive: true,
+				automationReady: false,
+				data: []
+			});
+		}
+	);
 	it('returns only explicitly published active customer fields', async () => {
 		const setHeaders = vi.fn();
 		const response = await GET({ setHeaders } as never);
@@ -37,6 +71,7 @@ describe('public live Boosting offer copy', () => {
 			data: [{ categoryId: 'category-1' }]
 		});
 		expect(body.data[0].expectationChips).toEqual([]);
+		expect(body.data[0]).not.toHaveProperty('routes');
 		expect(mocks.findMany).toHaveBeenCalledWith(
 			expect.objectContaining({
 				where: expect.objectContaining({
@@ -53,7 +88,35 @@ describe('public live Boosting offer copy', () => {
 		);
 		expect(mocks.findMany.mock.calls[0]?.[0]?.select).toMatchObject({ maxQuantity: true });
 		expect(setHeaders).toHaveBeenCalledWith(
-			expect.objectContaining({ 'cache-control': expect.stringContaining('s-maxage=300') })
+			expect.objectContaining({ 'cache-control': expect.stringContaining('s-maxage=30') })
 		);
 	});
+	it.each([
+		['likes', 'TikTok Live Likes', 'TikTok Live Likes', 'Default'],
+		['likes', 'TikTok Likes', 'TikTok Likes', 'Subscriptions'],
+		['views', 'TikTok Impressions + Reach', 'TikTok Views', 'Default']
+	])(
+		'hides a stale %s route without falling back to the old storefront',
+		async (outcome, name, category, providerType) => {
+			mocks.findMany.mockResolvedValue([
+				{
+					platform: 'tiktok',
+					outcome,
+					routes: [
+						{
+							providerService: {
+								name,
+								category,
+								providerType,
+								platforms: ['tiktok'],
+								unavailableAt: null
+							}
+						}
+					]
+				}
+			]);
+			const response = await GET({ setHeaders: vi.fn() } as never);
+			expect(await response.json()).toMatchObject({ managedRolloutActive: true, data: [] });
+		}
+	);
 });

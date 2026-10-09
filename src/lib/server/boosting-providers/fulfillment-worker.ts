@@ -1,10 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { parseBoostComments } from '$lib/helpers/boosting-service-input';
 import { env } from '$env/dynamic/private';
 import { prisma } from '$lib/prisma';
 import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
 import { notifyBoostingOrderCompleted } from '$lib/services/boosting-fulfillment-notifications';
 import { BoostProviderSubmissionError, createPanelOrderClient } from './panel-order-client';
+import { commitBoostSupplierOutcome } from './commit-supplier-outcome';
+import { reserveBoostSubmission } from './reserve-submission';
 import {
 	simulateBoostRoute,
 	type BoostApprovedRoute,
@@ -12,6 +15,7 @@ import {
 	type BoostProviderRuntimeState,
 	type BoostRouteProjection
 } from './route-simulator';
+import { BOOST_CATALOG_OUTCOMES, BOOST_CATALOG_PLATFORMS } from './types';
 import type {
 	BoostCatalogOutcome,
 	BoostCatalogPlatform,
@@ -55,6 +59,7 @@ export interface BoostFulfillmentWorkerSummary {
 	definitiveRejections: number;
 	failed: number;
 	mode: BoostAutomationMode;
+	appRevision?: string;
 }
 
 function finite(value: unknown, fallback: number, minimum = 0): number {
@@ -80,8 +85,15 @@ export function canRetryBoostSubmission(
 
 export function customerStatusForProviderState(state: BoostProviderOrderState): string {
 	if (state === 'completed') return 'completed';
-	if (state === 'in_progress' || state === 'partial') return 'in_progress';
+	if (state === 'partial') return 'partial';
+	if (['cancelled', 'refunded', 'failed'].includes(state)) return 'under_review';
+	if (state === 'in_progress') return 'in_progress';
 	return 'processing';
+}
+
+/** Leave one full provider timeout plus a small database margin before the host deadline. */
+export function canStartBoostWork(deadlineMs: number, clockMs = Date.now()): boolean {
+	return clockMs + 22_000 <= deadlineMs;
 }
 
 function isProvider(value: string | null): value is BoostProviderId {
@@ -89,25 +101,11 @@ function isProvider(value: string | null): value is BoostProviderId {
 }
 
 function isPlatform(value: string): value is BoostCatalogPlatform {
-	return ['instagram', 'tiktok', 'youtube', 'facebook', 'x', 'spotify', 'telegram'].includes(value);
+	return BOOST_CATALOG_PLATFORMS.includes(value as BoostCatalogPlatform);
 }
 
 function isOutcome(value: string): value is BoostCatalogOutcome {
-	return [
-		'followers',
-		'subscribers',
-		'members',
-		'views',
-		'streams',
-		'monthly_listeners',
-		'likes',
-		'reactions',
-		'shares',
-		'reposts',
-		'comments',
-		'saves',
-		'watch_time'
-	].includes(value);
+	return BOOST_CATALOG_OUTCOMES.includes(value as BoostCatalogOutcome);
 }
 
 function isTargetType(value: string): value is Exclude<BoostTargetType, 'unknown'> {
@@ -403,7 +401,12 @@ async function completeOrderIfReady(database: PrismaClient, orderId: string): Pr
 	});
 	if (items.length && items.every((item) => item.boostFulfillmentStatus === 'completed')) {
 		const completed = await database.order.updateMany({
-			where: { id: orderId, paymentStatus: 'paid', status: { not: 'completed' } },
+			where: {
+				id: orderId,
+				paymentStatus: 'paid',
+				status: { in: ['paid', 'processing'] },
+				deliveryStatus: { not: 'refunded' }
+			},
 			data: { status: 'completed', deliveryStatus: 'delivered', deliveredAt: new Date() }
 		});
 		return completed.count > 0;
@@ -444,7 +447,6 @@ async function processStatus(
 			database.boostFulfillment.update({
 				where: { id: fulfillment.id },
 				data: {
-					lastCheckedAt: now,
 					lastSafeErrorCategory: 'status_check_failed',
 					nextActionAt: new Date(now.getTime() + 10 * 60_000)
 				}
@@ -469,6 +471,7 @@ async function processStatus(
 		}
 	});
 	const common = {
+		lastSafeErrorCategory: null,
 		rawProviderStatus: status.rawStatus,
 		startCount: status.startCount,
 		remains: status.remains,
@@ -480,22 +483,20 @@ async function processStatus(
 		lastCheckedAt: now
 	};
 	if (status.state === 'completed') {
-		await database.$transaction([
-			database.boostFulfillment.update({
-				where: { id: fulfillment.id },
-				data: {
-					...common,
-					status: 'completed',
-					customerStatus: 'completed',
-					completedAt: now,
-					nextActionAt: null
-				}
-			}),
-			database.orderItem.update({
-				where: { id: fulfillment.orderItemId },
-				data: { boostFulfillmentStatus: 'completed', boostCompletedAt: now }
-			})
-		]);
+		const committed = await commitBoostSupplierOutcome(database, {
+			orderId: fulfillment.orderItem.orderId,
+			fulfillmentId: fulfillment.id,
+			orderItemId: fulfillment.orderItemId,
+			fulfillmentData: {
+				...common,
+				status: 'completed',
+				customerStatus: 'completed',
+				completedAt: now,
+				nextActionAt: null
+			},
+			itemData: { boostFulfillmentStatus: 'completed', boostCompletedAt: now }
+		});
+		if (!committed) return 'manual_review';
 		await updateRouteReliability(database, fulfillment.selectedRouteId, true);
 		if (await completeOrderIfReady(database, fulfillment.orderItem.orderId)) {
 			await notifyBoostingOrderCompleted(fulfillment.orderItem.orderId, database);
@@ -503,43 +504,37 @@ async function processStatus(
 		return 'completed';
 	}
 	if (['partial', 'cancelled', 'refunded', 'failed'].includes(status.state)) {
-		await database.$transaction([
-			database.boostFulfillment.update({
-				where: { id: fulfillment.id },
-				data: {
-					...common,
-					status: 'manual_review',
-					customerStatus: customerStatusForProviderState(status.state),
-					lastSafeErrorCategory: `provider_${status.state}`,
-					nextActionAt: null
-				}
-			}),
-			database.orderItem.update({
-				where: { id: fulfillment.orderItemId },
-				data: { boostFulfillmentStatus: 'in_progress' }
-			})
-		]);
+		await commitBoostSupplierOutcome(database, {
+			orderId: fulfillment.orderItem.orderId,
+			fulfillmentId: fulfillment.id,
+			orderItemId: fulfillment.orderItemId,
+			fulfillmentData: {
+				...common,
+				status: 'manual_review',
+				customerStatus: customerStatusForProviderState(status.state),
+				lastSafeErrorCategory: `provider_${status.state}`,
+				nextActionAt: null
+			},
+			itemData: { boostFulfillmentStatus: status.state === 'partial' ? 'partial' : 'under_review' }
+		});
 		await updateRouteReliability(database, fulfillment.selectedRouteId, false);
 		return 'manual_review';
 	}
-	await database.$transaction([
-		database.boostFulfillment.update({
-			where: { id: fulfillment.id },
-			data: {
-				...common,
-				status: status.state === 'in_progress' ? 'in_progress' : 'submitted',
-				customerStatus: customerStatusForProviderState(status.state),
-				startedAt:
-					status.state === 'in_progress' ? fulfillment.startedAt || now : fulfillment.startedAt,
-				nextActionAt: new Date(now.getTime() + 10 * 60_000)
-			}
-		}),
-		database.orderItem.update({
-			where: { id: fulfillment.orderItemId },
-			data: { boostFulfillmentStatus: status.state === 'in_progress' ? 'in_progress' : 'pending' }
-		})
-	]);
-	return 'polled';
+	const committed = await commitBoostSupplierOutcome(database, {
+		orderId: fulfillment.orderItem.orderId,
+		fulfillmentId: fulfillment.id,
+		orderItemId: fulfillment.orderItemId,
+		fulfillmentData: {
+			...common,
+			status: status.state === 'in_progress' ? 'in_progress' : 'submitted',
+			customerStatus: customerStatusForProviderState(status.state),
+			startedAt:
+				status.state === 'in_progress' ? fulfillment.startedAt || now : fulfillment.startedAt,
+			nextActionAt: new Date(now.getTime() + 10 * 60_000)
+		},
+		itemData: { boostFulfillmentStatus: status.state === 'in_progress' ? 'in_progress' : 'pending' }
+	});
+	return committed ? 'polled' : 'manual_review';
 }
 
 async function processQueued(
@@ -547,9 +542,25 @@ async function processQueued(
 	database: PrismaClient,
 	orderClients: OrderClients,
 	now: Date,
-	configuredMode: BoostAutomationMode
+	configuredMode: BoostAutomationMode,
+	leaseToken: string
 ): Promise<'shadowed' | 'submitted' | 'manual_review' | 'definitive_rejection'> {
 	const pricing = await getBoostingPricingConfig(database);
+	const snapshot = jsonObject(fulfillment.offerSnapshot);
+	const comments =
+		fulfillment.outcome === 'custom_comments' ? parseBoostComments(snapshot?.customComments) : null;
+	if (comments && (comments.error || comments.quantity !== fulfillment.quantity)) {
+		await database.boostFulfillment.update({
+			where: { id: fulfillment.id },
+			data: {
+				status: 'manual_review',
+				customerStatus: 'under_review',
+				lastSafeErrorCategory: 'invalid_custom_comments',
+				nextActionAt: null
+			}
+		});
+		return 'manual_review';
+	}
 	const effectiveMode: BoostAutomationMode =
 		configuredMode === 'shadow' || fulfillment.fulfillmentMode === 'shadow'
 			? 'shadow'
@@ -639,36 +650,28 @@ async function processQueued(
 	const requestFingerprint = createHash('sha256')
 		.update(`${fulfillment.id}:${route.id}:${fulfillment.attemptCount + 1}`)
 		.digest('hex');
-	const reservationStarted = await database.$transaction(async (tx) => {
-		const reserved = await tx.boostProviderState.updateMany({
-			where: {
-				provider: route.service.provider,
-				projectedBalance: {
-					gte: selected.rawSupplierCostUsd + finite(env.BOOSTING_BALANCE_SAFETY_USD, 5)
-				}
-			},
-			data: { projectedBalance: { decrement: selected.rawSupplierCostUsd } }
-		});
-		if (!reserved.count) return false;
-		await tx.boostAttempt.create({
-			data: {
-				fulfillmentId: fulfillment.id,
-				routeId: route.id,
-				type: 'submission',
-				outcome: 'started',
-				requestFingerprint,
-				supplierCostUsd: selected.rawSupplierCostUsd,
-				safeSummary: { provider: route.service.provider, serviceId: route.service.serviceId }
-			}
-		});
-		return true;
+	const reservation = await reserveBoostSubmission(database, {
+		orderId: fulfillment.orderItem.orderId,
+		fulfillmentId: fulfillment.id,
+		routeId: route.id,
+		provider: route.service.provider,
+		serviceId: route.service.serviceId,
+		leaseToken,
+		attemptCount: fulfillment.attemptCount,
+		requestFingerprint,
+		supplierCostUsd: selected.rawSupplierCostUsd,
+		balanceSafetyUsd: finite(env.BOOSTING_BALANCE_SAFETY_USD, 5)
 	});
-	if (!reservationStarted) {
-		await database.boostFulfillment.update({
-			where: { id: fulfillment.id },
+	if (reservation !== 'reserved') {
+		await database.boostFulfillment.updateMany({
+			where: { id: fulfillment.id, status: 'queued', leaseToken },
 			data: {
 				status: 'manual_review',
-				lastSafeErrorCategory: 'balance_reservation_failed',
+				customerStatus: reservation === 'order_hold' ? 'cancelled' : 'under_review',
+				lastSafeErrorCategory:
+					reservation === 'balance_unavailable'
+						? 'balance_reservation_failed'
+						: `submission_${reservation}`,
 				nextActionAt: null
 			}
 		});
@@ -678,43 +681,41 @@ async function processQueued(
 		const result = await orderClients[route.service.provider].submitOrder({
 			serviceId: service.serviceId,
 			targetUrl: fulfillment.targetUrl,
-			quantity: fulfillment.quantity
+			quantity: fulfillment.quantity,
+			...(comments ? { inputMode: 'custom_comments' as const, comments: comments.text } : {})
 		});
-		await database.$transaction([
-			database.boostAttempt.create({
-				data: {
-					fulfillmentId: fulfillment.id,
-					routeId: route.id,
-					type: 'submission',
-					outcome: 'accepted',
-					requestFingerprint,
-					supplierOrderId: result.providerOrderId,
-					supplierCostUsd: selected.rawSupplierCostUsd,
-					safeSummary: { provider: result.provider }
-				}
-			}),
-			database.boostFulfillment.update({
-				where: { id: fulfillment.id },
-				data: {
-					...routeData,
-					status: 'submitted',
-					fulfillmentMode: effectiveMode,
-					supplierOrderId: result.providerOrderId,
-					attemptCount: { increment: 1 },
-					submittedAt: now,
-					nextActionAt: new Date(now.getTime() + 5 * 60_000),
-					lastSafeErrorCategory: null
-				}
-			}),
-			database.orderItem.update({
-				where: { id: fulfillment.orderItemId },
-				data: {
-					boostFulfillmentStatus: 'in_progress',
-					boostProviderReference: `${result.provider}:${result.providerOrderId}`
-				}
-			})
-		]);
-		return 'submitted';
+		await database.boostAttempt.create({
+			data: {
+				fulfillmentId: fulfillment.id,
+				routeId: route.id,
+				type: 'submission',
+				outcome: 'accepted',
+				requestFingerprint,
+				supplierOrderId: result.providerOrderId,
+				supplierCostUsd: selected.rawSupplierCostUsd,
+				safeSummary: { provider: result.provider }
+			}
+		});
+		const committed = await commitBoostSupplierOutcome(database, {
+			orderId: fulfillment.orderItem.orderId,
+			fulfillmentId: fulfillment.id,
+			orderItemId: fulfillment.orderItemId,
+			fulfillmentData: {
+				...routeData,
+				status: 'submitted',
+				fulfillmentMode: effectiveMode,
+				supplierOrderId: result.providerOrderId,
+				attemptCount: { increment: 1 },
+				submittedAt: now,
+				nextActionAt: new Date(now.getTime() + 5 * 60_000),
+				lastSafeErrorCategory: null
+			},
+			itemData: {
+				boostFulfillmentStatus: 'in_progress',
+				boostProviderReference: `${result.provider}:${result.providerOrderId}`
+			}
+		});
+		return committed ? 'submitted' : 'manual_review';
 	} catch (error) {
 		const certainty =
 			error instanceof BoostProviderSubmissionError ? error.certainty : 'submission_unknown';
@@ -733,18 +734,9 @@ async function processQueued(
 						message: error instanceof Error ? error.message.slice(0, 180) : 'Unknown error'
 					}
 				}
-			}),
-			database.boostFulfillment.update({
-				where: { id: fulfillment.id },
-				data: {
-					...routeData,
-					status: retry ? 'queued' : 'manual_review',
-					attemptCount: nextAttemptCount,
-					lastSafeErrorCategory:
-						certainty === 'not_submitted' ? 'provider_rejected' : 'submission_unknown',
-					nextActionAt: retry ? now : null
-				}
 			})
+			// Financial provider balance restoration is committed below; delivery state
+			// is separately guarded against a refund that happened during submission.
 		];
 		if (certainty === 'not_submitted') {
 			writes.push(
@@ -755,6 +747,20 @@ async function processQueued(
 			);
 		}
 		await database.$transaction(writes);
+		await commitBoostSupplierOutcome(database, {
+			orderId: fulfillment.orderItem.orderId,
+			fulfillmentId: fulfillment.id,
+			orderItemId: fulfillment.orderItemId,
+			fulfillmentData: {
+				...routeData,
+				status: retry ? 'queued' : 'manual_review',
+				attemptCount: nextAttemptCount,
+				lastSafeErrorCategory:
+					certainty === 'not_submitted' ? 'provider_rejected' : 'submission_unknown',
+				nextActionAt: retry ? now : null
+			},
+			itemData: {}
+		});
 		await updateRouteReliability(database, route.id, false);
 		return certainty === 'not_submitted' ? 'definitive_rejection' : 'manual_review';
 	}
@@ -799,7 +805,17 @@ export async function queuePaidBoostFulfillments(
 		}
 		try {
 			const result = await database.boostFulfillment.updateMany({
-				where: { id: fulfillment.id, status: 'awaiting_payment' },
+				where: {
+					id: fulfillment.id,
+					status: 'awaiting_payment',
+					orderItem: {
+						order: {
+							paymentStatus: 'paid',
+							status: { in: ['paid', 'processing'] },
+							deliveryStatus: { not: 'refunded' }
+						}
+					}
+				},
 				data: { status: 'queued', fulfillmentMode: mode, nextActionAt: now }
 			});
 			queued += result.count;
@@ -834,6 +850,7 @@ export async function runBoostFulfillmentWorker(
 	const orderClients = options.clients ?? createBoostOrderClients();
 	const now = options.now ?? new Date();
 	const limit = Math.min(50, Math.max(1, Math.floor(options.limit ?? 20)));
+	const deadline = Date.now() + 45_000;
 	const summary: BoostFulfillmentWorkerSummary = {
 		processed: 0,
 		shadowed: 0,
@@ -843,12 +860,21 @@ export async function runBoostFulfillmentWorker(
 		manualReview: 0,
 		definitiveRejections: 0,
 		failed: 0,
-		mode
+		mode,
+		...(/^[a-f0-9]{40}$/i.test(env.VERCEL_GIT_COMMIT_SHA || '')
+			? { appRevision: env.VERCEL_GIT_COMMIT_SHA }
+			: {})
 	};
 	const due = await database.boostFulfillment.findMany({
 		where: {
 			status: { in: ['queued', 'submitted', 'in_progress'] },
-			orderItem: { order: { paymentStatus: 'paid', status: { notIn: ['cancelled', 'refunded'] } } },
+			orderItem: {
+				order: {
+					paymentStatus: 'paid',
+					status: { in: ['paid', 'processing'] },
+					deliveryStatus: { not: 'refunded' }
+				}
+			},
 			AND: [
 				{ OR: [{ nextActionAt: null }, { nextActionAt: { lte: now } }] },
 				{ OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }] }
@@ -860,6 +886,7 @@ export async function runBoostFulfillmentWorker(
 	});
 
 	for (const candidate of due) {
+		if (!canStartBoostWork(deadline)) break;
 		const leaseToken = randomUUID();
 		try {
 			const claimed = await database.boostFulfillment.updateMany({
@@ -867,7 +894,11 @@ export async function runBoostFulfillmentWorker(
 					id: candidate.id,
 					status: candidate.status,
 					orderItem: {
-						order: { paymentStatus: 'paid', status: { notIn: ['cancelled', 'refunded'] } }
+						order: {
+							paymentStatus: 'paid',
+							status: { in: ['paid', 'processing'] },
+							deliveryStatus: { not: 'refunded' }
+						}
 					},
 					OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }]
 				},
@@ -876,7 +907,7 @@ export async function runBoostFulfillmentWorker(
 			if (!claimed.count) continue;
 			let outcome: string;
 			if (candidate.status === 'queued') {
-				outcome = await processQueued(candidate, database, orderClients, now, mode);
+				outcome = await processQueued(candidate, database, orderClients, now, mode, leaseToken);
 			} else {
 				outcome = await processStatus(candidate, database, orderClients, now);
 			}

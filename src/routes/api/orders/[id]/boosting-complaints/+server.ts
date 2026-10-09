@@ -35,7 +35,11 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 					order: { select: { orderNumber: true, status: true, paymentStatus: true } }
 				}
 			},
-			complaints: { where: { status: { in: ['open', 'validated', 'escalated'] } } }
+			complaints: {
+				where: {
+					status: { in: ['open', 'validated', 'escalating', 'escalation_unknown', 'escalated'] }
+				}
+			}
 		}
 	});
 	if (!fulfillment) {
@@ -47,6 +51,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const eligibility = getBoostComplaintEligibility({
 		offerSnapshot: fulfillment.offerSnapshot,
 		completedAt: fulfillment.completedAt,
+		submittedAt: fulfillment.submittedAt,
+		fulfillmentStatus: fulfillment.status,
 		paymentConfirmed: isOrderPaymentConfirmed(fulfillment.orderItem.order)
 	});
 	if (!eligibility.allowedTypes.includes(type)) {
@@ -62,20 +68,41 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		);
 	}
 	try {
-		const complaint = await prisma.boostComplaint.create({
-			data: {
-				fulfillmentId: fulfillment.id,
-				userId: locals.user.id,
-				type,
-				customerNote,
-				eligibilitySnapshot: {
-					allowedTypes: eligibility.allowedTypes,
-					refillEndsAt: eligibility.refillEndsAt,
-					originalTargetUrl: fulfillment.targetUrl,
-					note: eligibility.note
+		const complaint = await prisma.$transaction(async (tx) => {
+			await tx.$queryRaw`SELECT id FROM orders WHERE id = ${fulfillment.orderItem.orderId}::uuid FOR UPDATE`;
+			const current = await tx.boostFulfillment.findUnique({
+				where: { id: fulfillment.id },
+				include: { orderItem: { include: { order: true } } }
+			});
+			if (!current || current.orderItem.order.userId !== locals.user!.id) return null;
+			const currentEligibility = getBoostComplaintEligibility({
+				offerSnapshot: current.offerSnapshot,
+				completedAt: current.completedAt,
+				submittedAt: current.submittedAt,
+				fulfillmentStatus: current.status,
+				paymentConfirmed: isOrderPaymentConfirmed(current.orderItem.order)
+			});
+			if (!currentEligibility.allowedTypes.includes(type)) return null;
+			return tx.boostComplaint.create({
+				data: {
+					fulfillmentId: fulfillment.id,
+					userId: locals.user!.id,
+					type,
+					customerNote,
+					eligibilitySnapshot: {
+						allowedTypes: currentEligibility.allowedTypes,
+						refillEndsAt: currentEligibility.refillEndsAt,
+						originalTargetUrl: current.targetUrl,
+						note: currentEligibility.note
+					}
 				}
-			}
+			});
 		});
+		if (!complaint)
+			return json(
+				{ success: false, error: 'This request is no longer eligible. Refresh your order.' },
+				{ status: 409 }
+			);
 		await recordOrderEvent({
 			orderId: fulfillment.orderItem.orderId,
 			orderItemId: fulfillment.orderItem.id,
@@ -104,7 +131,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	} catch (error) {
 		if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
 			return json(
-				{ success: false, error: 'This issue is already being reviewed.' },
+				{
+					success: false,
+					error: 'A report already exists for this issue. Contact support for more help.'
+				},
 				{ status: 409 }
 			);
 		}

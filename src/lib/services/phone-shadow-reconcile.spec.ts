@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+vi.mock('$lib/services/refund-recovery', () => ({ enqueueRefundRecovery: vi.fn() }));
 
 /**
  * reconcilePhoneShadows (P0): abandoned "shadow" pvapins numbers must reach a terminal financial
@@ -39,7 +40,10 @@ vi.mock('./phone-telemetry', () => ({
 	classifyRentFailure: () => ({ outcome: 'error', category: 'provider_error' })
 }));
 vi.mock('./admin-alerts', () => ({ sendCriticalAdminAlert: alertMock }));
-vi.mock('./phone-pricing', () => ({ getPhonePricingConfig: vi.fn(), computeProcurementCeilingCents: () => 100000 }));
+vi.mock('./phone-pricing', () => ({
+	getPhonePricingConfig: vi.fn(),
+	computeProcurementCeilingCents: () => 100000
+}));
 vi.mock('./rate-limiter', () => ({
 	acquireRateToken: () => Promise.resolve(true),
 	pvapinsRateSpec: () => ({ capacity: 5, refillPerSec: 5 / 60 }),
@@ -104,7 +108,9 @@ describe('reconcilePhoneShadows', () => {
 	});
 
 	it('TOO OLD: a long-waiting shadow is treated as dead and cleared (bounded)', async () => {
-		prismaMock.phoneRental.findMany.mockResolvedValue([shadow({ shadowStaleAt: new Date(Date.now() - 60 * 60_000) })]);
+		prismaMock.phoneRental.findMany.mockResolvedValue([
+			shadow({ shadowStaleAt: new Date(Date.now() - 60 * 60_000) })
+		]);
 		pollSmsMock.mockResolvedValue({ status: 'waiting' });
 		const r = await reconcilePhoneShadows();
 		expect(r.reconciled).toBe(1);

@@ -2,11 +2,41 @@ import { describe, expect, it } from 'vitest';
 import {
 	isUnsafeAutomaticServiceLabel,
 	normalizeBoostProviderCatalog,
-	normalizeBoostProviderService
+	normalizeBoostProviderService,
+	serviceMatchesBoostOutcome
 } from './catalog-normalizer';
 import { BULK_FOLLOWS_SERVICE_FIXTURE, SMM_RAJA_SERVICE_FIXTURE } from './fixtures';
 
 describe('boosting provider catalogue normalization', () => {
+	it.each([
+		['Facebook Comment React (100/20K) [LOVE]', 'Facebook Comments', 'comments'],
+		['Telegram Poll VOTE', 'Telegram Comments', 'comments'],
+		['Telegram Story Reactions', 'Telegram Reactions', 'reactions'],
+		['YouTube Live CONCURRENT Views - 30 Minutes', 'YouTube Views', 'views'],
+		['YouTube Custom Comments', 'YouTube Comments', 'comments']
+	])('rejects specialised %s even with a broad cached category', (name, category, outcome) => {
+		expect(serviceMatchesBoostOutcome({ name, category, providerType: 'Default' }, outcome)).toBe(
+			false
+		);
+	});
+	it.each([
+		'S3 TikTok Live Comments (10/5K)',
+		'TikTok Live-Stream Comments',
+		'TikTok LIVE Custom Comments',
+		'YouTube Live Chat Custom Comments'
+	])('keeps unsupported stream comments out of ordinary post routes (%s)', (name) => {
+		const row = { ...SMM_RAJA_SERVICE_FIXTURE, name, category: 'TikTok Comments', type: 'Default' };
+		const normalized = normalizeBoostProviderService('smm_raja', row);
+		expect(normalized).toMatchObject({
+			outcomes: [],
+			targetType: 'unknown',
+			status: 'needs_classification'
+		});
+		expect(serviceMatchesBoostOutcome({ ...row, providerType: 'Default' }, 'comments')).toBe(false);
+		expect(
+			serviceMatchesBoostOutcome({ ...row, providerType: 'Custom Comments' }, 'custom_comments')
+		).toBe(false);
+	});
 	it('normalizes the scrubbed SMM Raja response shape', () => {
 		const service = normalizeBoostProviderService('smm_raja', SMM_RAJA_SERVICE_FIXTURE);
 		expect(service).toMatchObject({
@@ -47,7 +77,7 @@ describe('boosting provider catalogue normalization', () => {
 		expect(service.targetType).toBe('content');
 	});
 
-	it('classifies follower impressions as views rather than follower delivery', () => {
+	it('classifies follower impressions as impressions rather than views or follower delivery', () => {
 		const service = normalizeBoostProviderService('bulk_follows', {
 			...BULK_FOLLOWS_SERVICE_FIXTURE,
 			service: '14058',
@@ -59,10 +89,25 @@ describe('boosting provider catalogue normalization', () => {
 		});
 		expect(service).toMatchObject({
 			platforms: ['x'],
-			outcomes: ['views'],
+			outcomes: ['impressions'],
 			targetType: 'content',
 			status: 'ready_for_review'
 		});
+	});
+
+	it.each([
+		['TikTok Live Likes', 'TikTok Likes', 'Default', 'live_likes'],
+		['Instagram Impressions + Reach', 'Instagram Views', 'Default', 'impressions'],
+		['Instagram Share', 'Instagram Story Shares From Verified Profiles', 'Default', 'story_shares'],
+		['TikTok Comments', 'TikTok Comments', 'Custom Comments', 'custom_comments']
+	])('keeps %s in its own result', (name, category, type, outcome) => {
+		const service = normalizeBoostProviderService('smm_raja', {
+			...SMM_RAJA_SERVICE_FIXTURE,
+			name,
+			category,
+			type
+		});
+		expect(service.outcomes).toEqual([outcome]);
 	});
 
 	it('recognizes X without treating unrelated letter-x words as the platform', () => {

@@ -1,5 +1,7 @@
 import { prisma } from '$lib/prisma';
+import { enqueueRefundRecovery } from '$lib/services/refund-recovery';
 import { randomUUID } from 'node:crypto';
+import { moneyNgn } from '$lib/helpers/money';
 import * as hubman from './hubman';
 import { getPhoneTierConfig, type PhoneTierConfig } from '$lib/helpers/phone-tier-config';
 import { getPhonePricingConfig, computeProcurementCeilingCents } from './phone-pricing';
@@ -957,6 +959,29 @@ export async function refundPhoneOrderToStoreCredit(
 			// Numbers refunds with manual full/per-account refunds and avoids both overlap
 			// and lock-order deadlocks between concurrent admin and fulfillment workers.
 			await tx.$queryRaw`SELECT id FROM orders WHERE id = ${ctx.orderId}::uuid FOR UPDATE`;
+			const liveOrder = await tx.order.findUnique({
+				where: { id: ctx.orderId },
+				select: {
+					userId: true,
+					totalAmount: true,
+					refundedAmount: true,
+					status: true,
+					paymentStatus: true,
+					deliveryStatus: true
+				}
+			});
+			if (
+				!liveOrder ||
+				liveOrder.userId !== ctx.userId ||
+				!CONFIRMED_PHONE_PAYMENTS.has(liveOrder.paymentStatus) ||
+				TERMINAL_ORDER_STATES.has(liveOrder.status) ||
+				liveOrder.deliveryStatus === 'refunded'
+			)
+				return false;
+			// The pre-lock context can predate a manual refund. Never credit that stale
+			// amount or reduce the cumulative refund after acquiring the shared order lock.
+			const amount = moneyNgn(Number(liveOrder.totalAmount) - Number(liveOrder.refundedAmount));
+			if (amount <= 0) return false;
 			// Claim the refund: only rentals not yet refunded and not received.
 			const claim = await tx.phoneRental.updateMany({
 				where: {
@@ -997,7 +1022,7 @@ export async function refundPhoneOrderToStoreCredit(
 
 			await creditStoreCredit(tx, {
 				userId: ctx.userId!,
-				amount: ctx.saleAmountNgn,
+				amount,
 				type: SC_CREDIT_REFUND,
 				description,
 				reference: ctx.orderId,
@@ -1017,12 +1042,12 @@ export async function refundPhoneOrderToStoreCredit(
 					status: 'refunded',
 					paymentStatus: 'refunded',
 					deliveryStatus: 'refunded',
-					refundedAmount: ctx.saleAmountNgn
+					refundedAmount: moneyNgn(liveOrder.totalAmount)
 				}
 			});
 			await tx.orderItem.update({
 				where: { id: ctx.orderItemId },
-				data: { refundedAmount: { increment: ctx.saleAmountNgn } }
+				data: { refundedAmount: { increment: amount } }
 			});
 			await recordOrderEvent(
 				{
@@ -1030,14 +1055,15 @@ export async function refundPhoneOrderToStoreCredit(
 					orderItemId: ctx.orderItemId,
 					type: 'order_refunded',
 					source: `phone.${source}`,
-					amount: ctx.saleAmountNgn,
+					amount,
 					description,
 					idempotencyKey: `refund:phone:${ctx.orderItemId}`,
 					metadata: { generation: expected?.generation ?? null }
 				},
 				tx
 			);
-			return true;
+			await enqueueRefundRecovery(tx, ctx.orderId, `refund:phone:${ctx.orderItemId}`);
+			return amount;
 		},
 		{ maxWait: 10_000, timeout: 20_000 }
 	);
@@ -1065,11 +1091,11 @@ export async function refundPhoneOrderToStoreCredit(
 			userId: ctx.userId,
 			type: 'store_credit',
 			title: 'Refunded to store credit',
-			message: `₦${Math.round(Number(ctx.saleAmountNgn)).toLocaleString()} is back in your balance.`,
+			message: `₦${Number(refunded).toLocaleString('en-NG', { maximumFractionDigits: 2 })} is back in your balance.`,
 			orderId: ctx.orderId
 		});
 	}
-	return refunded;
+	return Boolean(refunded);
 }
 
 export interface PhonePollResult {

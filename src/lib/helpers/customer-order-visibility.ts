@@ -1,5 +1,7 @@
 import { sanitizeBuyerOrderAccounts } from './buyer-order-visibility';
 import { toPublicCategory } from './public-category';
+import { getBoostingProgress } from './boosting-progress';
+import { ga4PurchaseReporter } from '$lib/server/ga4-order-metadata';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -53,7 +55,14 @@ const CUSTOMER_ORDER_ITEM_FIELDS = [
 	'boostIssueReason'
 ] as const;
 
-const CUSTOMER_BOOST_COMPLAINT_FIELDS = ['id', 'type', 'status', 'createdAt'] as const;
+const CUSTOMER_BOOST_COMPLAINT_FIELDS = [
+	'id',
+	'type',
+	'status',
+	'createdAt',
+	'refillState',
+	'refillCheckedAt'
+] as const;
 
 const CUSTOMER_ACCOUNT_FIELDS = [
 	'id',
@@ -102,10 +111,13 @@ export function sanitizeCustomerOrder(order: unknown): JsonRecord {
 		orderItems: Array.isArray(raw.orderItems) ? raw.orderItems : []
 	} as never) as unknown as JsonRecord;
 	const result = copyAllowed(withVisibleAccounts, CUSTOMER_ORDER_FIELDS);
+	result.ga4PurchaseReporter = ga4PurchaseReporter(raw);
 	const items = Array.isArray(withVisibleAccounts.orderItems) ? withVisibleAccounts.orderItems : [];
 	result.orderItems = items.map((value) => {
 		const item = asRecord(value);
 		const safe = copyAllowed(item, CUSTOMER_ORDER_ITEM_FIELDS);
+		const progress = getBoostingProgress(item, raw);
+		if (progress) safe.boostProgress = progress;
 		if (Array.isArray(item.accounts)) {
 			safe.accounts = item.accounts.map((account) =>
 				copyAllowed(asRecord(account), CUSTOMER_ACCOUNT_FIELDS)

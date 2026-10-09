@@ -1,4 +1,6 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { supportsBoostServiceInput } from '$lib/helpers/boosting-service-input';
+import { serviceMatchesBoostOutcome } from './catalog-normalizer';
 import { getBoostingServiceConfig, getQuantityChips } from '$lib/helpers/boosting-service-config';
 import type {
 	BoostMappingCandidate,
@@ -8,7 +10,7 @@ import type {
 	BoostMappingWorkspace
 } from '$lib/helpers/boosting-mapping-types';
 import { getRequiredLinkType } from '$lib/helpers/social-link-validator';
-import { roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
+import { roundUpCatalogPriceNgn as roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
 import { prisma } from '$lib/prisma';
 import { BOOSTING_MANAGED_STOREFRONT_KEY } from './storefront-rollout';
 import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
@@ -334,8 +336,9 @@ function parseOffer(value: unknown): BoostMappingOfferDraft {
 		maxQuantity: null,
 		stepQuantity: Math.round(finiteNumber(input.stepQuantity, 'Quantity increment', 1, 10_000_000)),
 		pricePerStepNgn: Math.max(
-			50,
-			Math.round(finiteNumber(input.pricePerStepNgn, 'Customer price', 50, 10_000_000) / 50) * 50
+			0.01,
+			Math.round(finiteNumber(input.pricePerStepNgn, 'Customer price', 0.01, 10_000_000) * 100) /
+				100
 		),
 		priceLocked: input.priceLocked === true,
 		minimumMarginPercent: finiteNumber(input.minimumMarginPercent, 'Profit percentage', 0, 500),
@@ -348,7 +351,7 @@ function parseOffer(value: unknown): BoostMappingOfferDraft {
 		maximumSupplierCostNgn: finiteNumber(
 			input.maximumSupplierCostNgn,
 			'Maximum supplier cost',
-			1,
+			0.01,
 			10_000_000
 		),
 		attemptCap: Math.round(finiteNumber(input.attemptCap, 'Attempt cap', 1, 4)),
@@ -487,6 +490,11 @@ export async function saveBoostMappingWorkspace(
 		}
 	}
 	for (const service of providerServices) {
+		if (!supportsBoostServiceInput(service.providerType, config.actionType)) {
+			throw new BoostMappingError(
+				'This supplier service needs extra inputs that Boosting checkout does not support yet. Choose a compatible service.'
+			);
+		}
 		if (
 			(isThreadsService(service) && config.platform !== 'threads') ||
 			service.unavailableAt ||
@@ -496,6 +504,7 @@ export async function saveBoostMappingWorkspace(
 			Number(service.ratePerThousand) < 0 ||
 			!service.platforms.includes(config.platform) ||
 			!service.outcomes.includes(config.actionType) ||
+			!serviceMatchesBoostOutcome(service, config.actionType) ||
 			service.targetType !== targetType ||
 			service.minQuantity === null ||
 			service.maxQuantity === null
@@ -558,8 +567,10 @@ export async function saveBoostMappingWorkspace(
 			)
 		);
 		const allowedSupplierCost = Math.max(
-			1,
-			Math.floor(minimumCustomerPrice / (1 + Math.max(0, offerInput.minimumMarginPercent) / 100))
+			0.01,
+			Math.floor(
+				(minimumCustomerPrice / (1 + Math.max(0, offerInput.minimumMarginPercent) / 100)) * 100
+			) / 100
 		);
 		if (!Number.isFinite(highestSupplierCost) || highestSupplierCost > allowedSupplierCost) {
 			throw new BoostMappingError(
@@ -568,7 +579,10 @@ export async function saveBoostMappingWorkspace(
 		}
 		// These safety values are derived from the live, reviewed supplier rows. Never trust a
 		// browser-supplied ceiling that could silently weaken the margin guard.
-		offerInput.normalCostTargetNgn = Math.max(1, Math.ceil(highestSupplierCost));
+		offerInput.normalCostTargetNgn = Math.max(
+			0.01,
+			Math.ceil((highestSupplierCost - 1e-9) * 100) / 100
+		);
 		offerInput.maximumSupplierCostNgn = allowedSupplierCost;
 	}
 	const offerQuantityConfig = {

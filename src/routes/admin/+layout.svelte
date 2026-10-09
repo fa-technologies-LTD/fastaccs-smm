@@ -124,6 +124,12 @@
 				permission: 'admin:inventory:manage'
 			},
 			{ href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
+			{
+				href: '/admin/payment-recovery',
+				label: 'Payment recovery',
+				icon: ShoppingCart,
+				permission: 'admin:orders:manage'
+			},
 			{ href: '/admin/boosting-orders', label: 'Boosting Orders', icon: Zap },
 			{
 				href: '/admin/numbers/analytics',

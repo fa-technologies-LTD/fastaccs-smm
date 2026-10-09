@@ -10,6 +10,7 @@ import { sanitizeCustomerOrder } from '$lib/helpers/customer-order-visibility';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
 import { isRefundReversal } from '$lib/helpers/order-refund-lock';
+import { canCompleteOrder } from '$lib/helpers/order-completion';
 
 function isUuid(value: string): boolean {
 	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -167,6 +168,16 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 				orderItems: {
 					include: {
 						accounts: true,
+						boostFulfillment: {
+							select: {
+								status: true,
+								lastSafeErrorCategory: true,
+								quantity: true,
+								remains: true,
+								lastCheckedAt: true,
+								nextActionAt: true
+							}
+						},
 						category: {
 							include: {
 								parent: true
@@ -285,6 +296,25 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 			});
 			if (!current) return { blocked: 'not_found' as const };
 			if (isRefundReversal(current, updateData)) return { blocked: 'refunded' as const };
+			const finalPaymentStatus =
+				typeof updateData.paymentStatus === 'string'
+					? updateData.paymentStatus
+					: current.paymentStatus;
+			if (
+				(updateData.status === 'completed' ||
+					(current.status === 'completed' && updateData.status === undefined)) &&
+				!['paid', 'success', 'overpaid'].includes(finalPaymentStatus)
+			)
+				return { blocked: 'completion' as const };
+			if (
+				updateData.status === 'completed' &&
+				!(
+					current.status === 'completed' &&
+					['paid', 'success', 'overpaid'].includes(current.paymentStatus)
+				) &&
+				!canCompleteOrder(current)
+			)
+				return { blocked: 'completion' as const };
 
 			const data = await tx.order.update({
 				where: { id: params.id },
@@ -346,6 +376,12 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 			);
 		}
 
+		if (outcome.blocked === 'completion') {
+			return json(
+				{ data: null, error: 'Only a paid order in progress can be marked complete.' },
+				{ status: 409 }
+			);
+		}
 		const data = outcome.data;
 		if (data.status === 'cancelled' || data.status === 'failed') {
 			await releaseOrderReservations(data.id);

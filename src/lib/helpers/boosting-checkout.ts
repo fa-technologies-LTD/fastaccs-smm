@@ -1,4 +1,4 @@
-import { roundCatalogPriceNgn } from './catalog-pricing';
+import { roundUpCatalogPriceNgn as roundCatalogPriceNgn } from './catalog-pricing';
 import { normalizeBoostingQuantity } from './boosting-service-config';
 
 export const BOOSTING_MINIMUM_CHECKOUT_NGN = 500;
@@ -20,9 +20,12 @@ export function boostingStartingQuantity(offer: {
 }): number {
 	const { minQuantity, stepQuantity, pricePerStepNgn, maxQuantity } = offer;
 	if (!(pricePerStepNgn > 0) || !(stepQuantity > 0)) return minQuantity;
-	// Catalogue totals round to ₦50: ₦475 is the first raw total displayed as ₦500.
-	const rawMinimum = ((BOOSTING_MINIMUM_CHECKOUT_NGN - 25) * stepQuantity) / pricePerStepNgn;
-	const steps = Math.max(0, Math.ceil((rawMinimum - minQuantity) / stepQuantity));
+	// With upward ₦50 rounding, totals strictly above ₦450 display as ₦500.
+	const startingPrice = (minQuantity / stepQuantity) * pricePerStepNgn;
+	const steps = Math.max(
+		0,
+		Math.floor((BOOSTING_MINIMUM_CHECKOUT_NGN - 50 - startingPrice) / pricePerStepNgn) + 1
+	);
 	const candidate = normalizeBoostingQuantity(
 		minQuantity + steps * stepQuantity,
 		minQuantity,

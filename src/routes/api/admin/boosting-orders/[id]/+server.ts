@@ -7,12 +7,14 @@ import { recordOrderEvent } from '$lib/services/order-events';
 import { notifyBoostingOrderCompleted } from '$lib/services/boosting-fulfillment-notifications';
 import { queuePaidBoostFulfillments } from '$lib/server/boosting-providers/fulfillment-worker';
 import { supplierSubmissionMayExist } from '$lib/server/boosting-providers/transition-safety';
+import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 
 const VALID_STATUSES = ['pending', 'in_progress', 'needs_link', 'completed', 'rejected'] as const;
-const CONFIRMED_PAYMENT_STATUSES = new Set(['paid', 'success', 'overpaid']);
 type BoostFulfillmentStatus = (typeof VALID_STATUSES)[number];
 
 class UnsafeBoostTransitionError extends Error {}
+class ChangedBoostOrderError extends Error {}
+class AutomationOwnedBoostError extends Error {}
 
 function isValidStatus(value: unknown): value is BoostFulfillmentStatus {
 	return typeof value === 'string' && VALID_STATUSES.includes(value as BoostFulfillmentStatus);
@@ -40,7 +42,15 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 			boostTargetUrl: true,
 			boostFulfillmentStatus: true,
 			boostProviderReference: true,
-			order: { select: { userId: true, orderNumber: true, paymentStatus: true } }
+			order: {
+				select: {
+					userId: true,
+					orderNumber: true,
+					paymentStatus: true,
+					status: true,
+					deliveryStatus: true
+				}
+			}
 		}
 	});
 	if (!existing || !existing.boostTargetUrl) {
@@ -49,7 +59,7 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 			{ status: 404 }
 		);
 	}
-	if (!CONFIRMED_PAYMENT_STATUSES.has(String(existing.order.paymentStatus || '').toLowerCase())) {
+	if (!isOrderPaymentConfirmed(existing.order) || existing.order.deliveryStatus === 'refunded') {
 		return json(
 			{ success: false, data: null, error: 'Only paid boosting orders can be updated.' },
 			{ status: 409 }
@@ -97,15 +107,29 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 	let updated: OrderItem;
 	try {
 		updated = await prisma.$transaction(async (tx) => {
+			// Same lock order as refunds and supplier-result commits. Preflight may be stale.
+			await tx.$queryRaw`SELECT id FROM orders WHERE id = ${existing.orderId}::uuid FOR UPDATE`;
+			const current = await tx.orderItem.findUnique({
+				where: { id: orderItemId },
+				select: {
+					boostFulfillmentStatus: true,
+					order: { select: { status: true, paymentStatus: true, deliveryStatus: true } }
+				}
+			});
 			if (
-				data.boostFulfillmentStatus === 'pending' ||
-				data.boostFulfillmentStatus === 'needs_link'
-			) {
+				!current ||
+				!isOrderPaymentConfirmed(current.order) ||
+				current.order.deliveryStatus === 'refunded' ||
+				current.boostFulfillmentStatus !== existing.boostFulfillmentStatus
+			)
+				throw new ChangedBoostOrderError();
+			if (data.boostFulfillmentStatus !== undefined) {
 				await tx.$queryRaw`SELECT id FROM boost_fulfillments WHERE order_item_id = ${orderItemId}::uuid FOR UPDATE`;
 				const fulfillment = await tx.boostFulfillment.findUnique({
 					where: { orderItemId },
 					select: {
 						status: true,
+						fulfillmentMode: true,
 						supplierOrderId: true,
 						submittedAt: true,
 						leaseToken: true,
@@ -118,7 +142,29 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 						}
 					}
 				});
-				if (supplierSubmissionMayExist(fulfillment)) throw new UnsafeBoostTransitionError();
+				if (
+					fulfillment &&
+					(!['manual', 'shadow'].includes(fulfillment.fulfillmentMode) ||
+						Boolean(
+							fulfillment.leaseToken &&
+								fulfillment.leaseExpiresAt &&
+								fulfillment.leaseExpiresAt > new Date()
+						) ||
+						['submitted', 'in_progress'].includes(fulfillment.status))
+				)
+					throw new AutomationOwnedBoostError();
+				if (
+					['pending', 'needs_link'].includes(data.boostFulfillmentStatus) &&
+					supplierSubmissionMayExist(fulfillment)
+				)
+					throw new UnsafeBoostTransitionError();
+				if (
+					data.boostFulfillmentStatus === 'completed' &&
+					fulfillment?.attempts.some((attempt) =>
+						['started', 'submission_unknown'].includes(attempt.outcome)
+					)
+				)
+					throw new UnsafeBoostTransitionError();
 			}
 			const item = await tx.orderItem.update({ where: { id: orderItemId }, data });
 
@@ -237,6 +283,19 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 			return item;
 		});
 	} catch (error) {
+		if (error instanceof ChangedBoostOrderError || error instanceof AutomationOwnedBoostError) {
+			return json(
+				{
+					success: false,
+					data: null,
+					error:
+						error instanceof ChangedBoostOrderError
+							? 'This order changed or is no longer paid. Refresh before making changes.'
+							: 'Automation manages this delivery. Review the supplier result or refund from the order page; do not override its status here.'
+				},
+				{ status: 409 }
+			);
+		}
 		if (error instanceof UnsafeBoostTransitionError) {
 			return json(
 				{

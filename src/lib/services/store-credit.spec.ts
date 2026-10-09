@@ -21,6 +21,17 @@ import {
 } from './store-credit';
 
 describe('computeOrderRedemption', () => {
+	it('preserves fractional refund credit and can cover the entire fractional order', () => {
+		expect(computeOrderRedemption(1000.5, { refundAvailable: 1000.5, earnedAvailable: 0 })).toEqual(
+			{ refundApplied: 1000.5, earnedApplied: 0, totalApplied: 1000.5 }
+		);
+		expect(
+			redemptionExceedsAvailable(
+				{ refundApplied: 1000.5, earnedApplied: 0 },
+				{ refundAvailable: 1000.49, earnedAvailable: 0 }
+			)
+		).toBe(true);
+	});
 	it('applies refund credit first, uncapped up to the order total', () => {
 		// ₦10k order, ₦10k refund credit → refund covers it all, no earned needed.
 		expect(
@@ -153,13 +164,13 @@ describe('redemptionExceedsAvailable', () => {
 			)
 		).toBe(true);
 	});
-	it('tolerates a sub-naira rounding difference', () => {
+	it('rejects a forty-kobo overspend rather than treating it as rounding', () => {
 		expect(
 			redemptionExceedsAvailable(
 				{ refundApplied: 1000.4, earnedApplied: 0 },
 				{ refundAvailable: 1000, earnedAvailable: 0 }
 			)
-		).toBe(false);
+		).toBe(true);
 	});
 });
 
@@ -218,20 +229,25 @@ describe('store-credit ledger safeguards', () => {
 
 		await creditStoreCredit(tx as never, {
 			userId: '11111111-1111-4111-8111-111111111111',
-			amount: 100,
+			amount: 100.5,
 			type: 'store_credit_refund',
 			description: 'Refund',
 			reference: 'order-1'
 		});
 
+		expect(tx.wallet.upsert).toHaveBeenCalledWith({
+			where: { userId: '11111111-1111-4111-8111-111111111111' },
+			update: { balance: { increment: 0 } },
+			create: { userId: '11111111-1111-4111-8111-111111111111', balance: 0, currency: 'NGN' }
+		});
 		expect(tx.$queryRaw).toHaveBeenCalledOnce();
 		expect(tx.wallet.update).toHaveBeenCalledWith({
 			where: { id: 'wallet-1' },
-			data: { balance: 350 }
+			data: { balance: 350.5 }
 		});
 		expect(tx.walletTransaction.create).toHaveBeenCalledWith(
 			expect.objectContaining({
-				data: expect.objectContaining({ balanceBefore: 250, balanceAfter: 350 })
+				data: expect.objectContaining({ amount: 100.5, balanceBefore: 250, balanceAfter: 350.5 })
 			})
 		);
 	});

@@ -53,7 +53,7 @@ describe('boosting service config', () => {
 		expect(computeBoostingPrice(baseConfig, 1500)).toBe(3000);
 	});
 
-	it('keeps Boosting catalogue rates and customer totals on the nearest ₦50', () => {
+	it('rounds Boosting catalogue rates and customer totals up to ₦50', () => {
 		const roundedConfig = getBoostingServiceConfig({
 			boosting_min_quantity: 150,
 			boosting_step_quantity: 100,
@@ -62,6 +62,7 @@ describe('boosting service config', () => {
 
 		expect(roundedConfig.pricePerStep).toBe(1750);
 		expect(computeBoostingPrice(roundedConfig, 150)).toBe(2650);
+		expect(getBoostingServiceConfig({ boosting_price_per_step: 913.32 }).pricePerStep).toBe(950);
 	});
 
 	it('returns NaN for an invalid quantity so callers never silently charge the wrong price', () => {

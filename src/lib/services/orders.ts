@@ -36,6 +36,7 @@ export interface CreateOrderData {
 	useStoreCredit?: boolean;
 	analytics?: {
 		ga4ClientId?: string | null;
+		consentGranted?: boolean;
 	};
 }
 

@@ -2,6 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { getRequiredLinkType, validateLinkForAction } from './social-link-validator';
 
 describe('social link validator', () => {
+	it('keeps LIVE likes separate from ordinary post likes in both directions', () => {
+		const live = 'https://www.tiktok.com/@faworldwidegifting/live';
+		const video = 'https://www.tiktok.com/@faworldwidegifting/video/7599586070874918162';
+		expect(validateLinkForAction('tiktok', 'live_likes', live)).toMatchObject({
+			valid: true,
+			needsManualReview: false
+		});
+		expect(validateLinkForAction('tiktok', 'live_likes', video).valid).toBe(false);
+		expect(validateLinkForAction('tiktok', 'likes', live).valid).toBe(false);
+	});
+	it('recognises TikTok photos as content, not profiles or verified video compatibility', () => {
+		const photo = 'https://www.tiktok.com/@faworldwidegifting/photo/7693581309012184340';
+		expect(validateLinkForAction('tiktok', 'likes', photo)).toMatchObject({
+			valid: true,
+			needsManualReview: false
+		});
+		expect(validateLinkForAction('tiktok', 'followers', photo).valid).toBe(false);
+	});
 	it('maps account, community, and content outcomes to the right link type', () => {
 		expect(getRequiredLinkType('followers')).toBe('profile');
 		expect(getRequiredLinkType('subscribers')).toBe('profile');

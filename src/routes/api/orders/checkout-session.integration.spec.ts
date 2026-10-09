@@ -111,6 +111,29 @@ describe('checkout session ownership and resume behavior', () => {
 		});
 	});
 
+	it('retains an uncertain payment reference even after initialization grace expires', async () => {
+		mocks.findUnique.mockResolvedValue({
+			id: 'order-uncertain',
+			userId: verifiedBuyer.id,
+			status: 'pending_payment',
+			paymentStatus: 'processing',
+			paymentMethod: 'monnify',
+			storeCreditApplied: 0,
+			paymentCheckoutUrl: null,
+			paymentReference: 'ORD_UNCERTAIN',
+			paymentExpiresAt: new Date(Date.now() - 60_000),
+			updatedAt: new Date(0),
+			deliveryMethod: 'email'
+		});
+		const response = await POST({
+			request: buildRequest('checkout-key-uncertain'),
+			locals: { user: verifiedBuyer, session: null, adminContext: null },
+			url: new URL('https://smm.fastaccs.com/api/orders')
+		} as never);
+		expect(response.status).toBe(202);
+		expect(await response.json()).toMatchObject({ pending: true, orderId: 'order-uncertain' });
+	});
+
 	it('does not resume a gateway checkout after the buyer switches to store credit', async () => {
 		mocks.findUnique.mockResolvedValue({
 			id: 'order-existing',

@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidate } from '$app/navigation';
+	import { onMount } from 'svelte';
 	import { CheckCircle, Clock, XCircle, Copy, ExternalLink } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -21,7 +22,8 @@
 	} from '$lib/helpers/tier-delivery-config';
 	import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
 	import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
-	import { BOOSTING_TURNAROUND_MESSAGE } from '$lib/helpers/boosting-service-config';
+	import { getBoostingProgress } from '$lib/helpers/boosting-progress';
+	import { getBoostComplaintStatusLabel } from '$lib/helpers/boosting-complaint-progress';
 
 	let { data }: { data: PageData } = $props();
 	let boostLinkDraftByItemId = $state<Record<string, string>>({});
@@ -136,7 +138,12 @@
 	}
 
 	function getBoostingStatus(item: (typeof data.order.orderItems)[number]): string {
-		return boostStatusOverrideByItemId[item.id] || item.boostFulfillmentStatus || 'pending';
+		return (
+			boostStatusOverrideByItemId[item.id] ||
+			item.boostProgress?.status ||
+			item.boostFulfillmentStatus ||
+			'pending'
+		);
 	}
 
 	function getBoostingTargetUrl(item: (typeof data.order.orderItems)[number]): string {
@@ -144,13 +151,56 @@
 	}
 
 	function getBoostingStatusLabel(item: (typeof data.order.orderItems)[number]): string {
-		const status = getBoostingStatus(item);
-		if (status === 'completed') return 'Completed';
-		if (status === 'in_progress') return 'In Progress';
-		if (status === 'needs_link') return 'Update Link';
-		if (status === 'rejected') return 'Needs Support';
-		return 'Pending';
+		return boostStatusOverrideByItemId[item.id]
+			? getBoostingProgress(
+					{
+						...item,
+						boostProgress: undefined,
+						boostFulfillmentStatus: boostStatusOverrideByItemId[item.id]
+					},
+					data.order
+				)?.label || 'Queued'
+			: item.boostProgress?.label || getBoostingProgress(item, data.order)?.label || 'Queued';
 	}
+
+	onMount(() => {
+		let refreshing = false;
+		const timer = setInterval(async () => {
+			if (
+				refreshing ||
+				document.hidden ||
+				savingBoostLinkItemId ||
+				reportingBoostItemId ||
+				!isBoostingOrder()
+			)
+				return;
+			const active = data.order.orderItems.some(
+				(item) =>
+					(isBoostingItem(item) &&
+						['pending', 'queued', 'in_progress', 'under_review', 'partial'].includes(
+							getBoostingStatus(item)
+						)) ||
+					item.boostComplaints?.some((report) =>
+						['open', 'validated', 'escalating', 'escalation_unknown', 'escalated'].includes(
+							report.status
+						)
+					)
+			);
+			if (!active) return;
+			refreshing = true;
+			try {
+				await invalidate('app:order-progress');
+				boostStatusOverrideByItemId = {};
+				boostLinkOverrideByItemId = {};
+				complaintOverrideByItemId = {};
+			} catch {
+				/* Preserve the last known state; transient checks must not restart an order. */
+			} finally {
+				refreshing = false;
+			}
+		}, 30_000);
+		return () => clearInterval(timer);
+	});
 
 	async function saveBoostingLink(item: (typeof data.order.orderItems)[number]) {
 		if (savingBoostLinkItemId) return;
@@ -202,8 +252,11 @@
 		return type;
 	}
 
-	async function reportBoostingIssue(item: (typeof data.order.orderItems)[number]): Promise<void> {
-		const type = complaintTypeByItemId[item.id];
+	async function reportBoostingIssue(
+		item: (typeof data.order.orderItems)[number],
+		selectedType?: string
+	): Promise<void> {
+		const type = selectedType || complaintTypeByItemId[item.id];
 		if (!type || reportingBoostItemId) return;
 		reportingBoostItemId = item.id;
 		try {
@@ -216,7 +269,8 @@
 				}
 			);
 			const payload = await response.json();
-			if (!response.ok || !payload?.success) throw new Error(payload?.error || 'Could not report issue.');
+			if (!response.ok || !payload?.success)
+				throw new Error(payload?.error || 'Could not report issue.');
 			complaintOverrideByItemId = {
 				...complaintOverrideByItemId,
 				[item.id]: [
@@ -227,7 +281,7 @@
 			addToast({
 				type: 'success',
 				title: 'Issue reported',
-				message: 'We’ll validate it against the order and supplier record.',
+				message: 'We’ll review it and update you here.',
 				duration: 4000
 			});
 		} catch (error) {
@@ -334,7 +388,7 @@
 															(item) => getBoostingStatus(item) === 'completed'
 													  )
 													? 'Your boost has been completed.'
-													: `Payment confirmed. Your boost is being processed. ${BOOSTING_TURNAROUND_MESSAGE}`}
+													: 'Follow each boost below. Updates appear here automatically.'}
 									{:else if isPhoneOrder}
 										Your payment is safe. We’re preparing your verification number now.
 									{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.status === 'completed'}
@@ -376,7 +430,7 @@
 				{/if}
 
 				{#if getManualHandoverLink()}
-								<a
+					<a
 						href={getManualHandoverLink()}
 						target="_blank"
 						rel="noopener noreferrer"
@@ -441,8 +495,44 @@
 												style="border-color: rgba(170, 173, 255, 0.25); background: rgba(170, 173, 255, 0.08);"
 											>
 												<p class="mb-2 text-xs font-medium" style="color: var(--text);">
-													Boost details
+													{getBoostingStatusLabel(item)}
 												</p>
+												{#if item.boostProgress && !boostStatusOverrideByItemId[item.id]}
+													<p class="mb-2 text-sm" style="color: var(--text-muted);">
+														{item.boostProgress.message}
+													</p>
+													{#if item.boostProgress.reportedDelivered !== null}<p
+															class="mb-1 text-xs"
+															style="color: var(--text-muted);"
+														>
+															Reported progress: {item.boostProgress.reportedDelivered} / {item
+																.boostProgress.quantity}
+														</p>{/if}
+													{#if item.boostProgress.lastCheckedAt}<p
+															class="mb-2 text-xs"
+															style="color: var(--text-dim);"
+														>
+															Last checked {new Date(
+																item.boostProgress.lastCheckedAt
+															).toLocaleTimeString('en-NG', {
+																hour: 'numeric',
+																minute: '2-digit',
+																timeZone: 'Africa/Lagos'
+															})} WAT
+														</p>{/if}
+													{#if item.boostProgress.nextCheckAt && new Date(item.boostProgress.nextCheckAt).getTime() > Date.now()}<p
+															class="mb-2 text-xs"
+															style="color: var(--text-dim);"
+														>
+															Next check around {new Date(
+																item.boostProgress.nextCheckAt
+															).toLocaleTimeString('en-NG', {
+																hour: 'numeric',
+																minute: '2-digit',
+																timeZone: 'Africa/Lagos'
+															})} WAT
+														</p>{/if}
+												{/if}
 												{#if getBoostingStatus(item) === 'needs_link'}
 													<div
 														class="mb-3 rounded-lg border p-3"
@@ -496,28 +586,70 @@
 													class="mt-1 inline-block text-xs break-all underline"
 													style="color: var(--link);"
 												>
-									{getBoostingTargetUrl(item)}
-								</a>
-								{#if item.boostComplaintEligibility?.allowedTypes?.length}
-									<div class="mt-4 border-t pt-3" style="border-color: var(--border);">
-										<p class="text-xs font-semibold" style="color: var(--text);">Something wrong?</p>
-										{#if (complaintOverrideByItemId[item.id] || item.boostComplaints || []).length}
-											{#each complaintOverrideByItemId[item.id] || item.boostComplaints as complaint}
-												<p class="mt-2 text-xs" style="color: var(--text-muted);">{complaintLabel(complaint.type)} · {complaint.status}</p>
-											{/each}
-										{:else}
-											<div class="mt-2 flex flex-col gap-2 sm:flex-row">
-												<select bind:value={complaintTypeByItemId[item.id]} class="min-w-0 flex-1 rounded-lg border px-3 py-2 text-xs" style="background: var(--bg); border-color: var(--border); color: var(--text);">
-													<option value="">Choose the issue</option>
-													{#each item.boostComplaintEligibility.allowedTypes as type}<option value={type}>{complaintLabel(type)}</option>{/each}
-												</select>
-												<button type="button" onclick={() => reportBoostingIssue(item)} disabled={!complaintTypeByItemId[item.id] || reportingBoostItemId === item.id} class="rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50" style="border-color: var(--border); color: var(--text);">{reportingBoostItemId === item.id ? 'Sending…' : 'Report issue'}</button>
+													{getBoostingTargetUrl(item)}
+												</a>
+												{#if item.boostComplaintEligibility?.allowedTypes?.length}
+													<div class="mt-4 border-t pt-3" style="border-color: var(--border);">
+														<p class="text-xs font-semibold" style="color: var(--text);">
+															Something wrong?
+														</p>
+														{#if (complaintOverrideByItemId[item.id] || item.boostComplaints || []).length}
+															{#each complaintOverrideByItemId[item.id] || item.boostComplaints as complaint}
+																<p class="mt-2 text-xs" style="color: var(--text-muted);">
+																	{complaintLabel(complaint.type)} · {getBoostComplaintStatusLabel(
+																		complaint
+																	)}
+																</p>
+															{/each}
+														{:else}
+															{#if item.boostComplaintEligibility.allowedTypes.includes('dropped')}
+																<button
+																	type="button"
+																	onclick={() => reportBoostingIssue(item, 'dropped')}
+																	disabled={!!reportingBoostItemId}
+																	class="mt-2 min-h-11 rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50"
+																	style="border-color: var(--border); color: var(--text);"
+																	>{reportingBoostItemId === item.id
+																		? 'Sending…'
+																		: 'Request refill'}</button
+																>
+															{/if}
+															<details class="mt-3">
+																<summary
+																	class="cursor-pointer text-xs"
+																	style="color: var(--text-muted);">Report an issue</summary
+																>
+																<div class="mt-2 flex flex-col gap-2 sm:flex-row">
+																	<select
+																		bind:value={complaintTypeByItemId[item.id]}
+																		class="min-w-0 flex-1 rounded-lg border px-3 py-2 text-xs"
+																		style="background: var(--bg); border-color: var(--border); color: var(--text);"
+																	>
+																		<option value="">Choose the issue</option>
+																		{#each item.boostComplaintEligibility.allowedTypes as type}<option
+																				value={type}>{complaintLabel(type)}</option
+																			>{/each}
+																	</select>
+																	<button
+																		type="button"
+																		onclick={() => reportBoostingIssue(item)}
+																		disabled={!complaintTypeByItemId[item.id] ||
+																			reportingBoostItemId === item.id}
+																		class="rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50"
+																		style="border-color: var(--border); color: var(--text);"
+																		>{reportingBoostItemId === item.id
+																			? 'Sending…'
+																			: 'Report issue'}</button
+																	>
+																</div>
+																<p class="mt-2 text-[11px]" style="color: var(--text-dim);">
+																	{item.boostComplaintEligibility.note}
+																</p>
+															</details>
+														{/if}
+													</div>
+												{/if}
 											</div>
-											<p class="mt-2 text-[11px]" style="color: var(--text-dim);">{item.boostComplaintEligibility.note}</p>
-										{/if}
-									</div>
-								{/if}
-							</div>
 										{:else if !isManualHandoverItem(item) && !isPhoneOrder && orderDelivered}
 											<div
 												class="mt-3 rounded-lg border p-3"

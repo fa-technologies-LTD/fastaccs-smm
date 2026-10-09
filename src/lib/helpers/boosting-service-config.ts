@@ -1,5 +1,5 @@
 import type { BoostingActionType, BoostingPlatform } from '$lib/helpers/social-link-validator';
-import { roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
+import { roundUpCatalogPriceNgn as roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
 
 export const BOOSTING_PLATFORM_KEY = 'boosting_platform';
 export const BOOSTING_ACTION_TYPE_KEY = 'boosting_action_type';
@@ -47,6 +47,11 @@ export const BOOSTING_ACTION_TYPES: BoostingActionType[] = [
 	'subscribers',
 	'members',
 	'likes',
+	'live_likes',
+	'impressions',
+	'reach',
+	'story_shares',
+	'custom_comments',
 	'views',
 	'comments',
 	'reposts',
@@ -74,6 +79,11 @@ export const BOOSTING_ACTION_LABELS: Record<BoostingActionType, string> = {
 	subscribers: 'Subscribers',
 	members: 'Members',
 	likes: 'Likes',
+	live_likes: 'LIVE likes',
+	impressions: 'Impressions',
+	reach: 'Reach',
+	story_shares: 'Shares to stories',
+	custom_comments: 'Custom comments',
 	views: 'Views',
 	comments: 'Comments',
 	reposts: 'Reposts',
@@ -87,8 +97,28 @@ export const BOOSTING_ACTION_LABELS: Record<BoostingActionType, string> = {
 
 export const BOOSTING_ACTIONS_BY_PLATFORM: Record<BoostingPlatform, readonly BoostingActionType[]> =
 	{
-		instagram: ['followers', 'likes', 'views', 'comments', 'shares', 'saves'],
-		tiktok: ['followers', 'likes', 'views', 'comments', 'shares', 'saves'],
+		instagram: [
+			'followers',
+			'likes',
+			'views',
+			'comments',
+			'custom_comments',
+			'shares',
+			'story_shares',
+			'saves',
+			'impressions',
+			'reach'
+		],
+		tiktok: [
+			'followers',
+			'likes',
+			'views',
+			'comments',
+			'custom_comments',
+			'shares',
+			'saves',
+			'live_likes'
+		],
 		youtube: ['subscribers', 'views', 'likes', 'comments', 'watch_time'],
 		facebook: ['followers', 'likes', 'views', 'comments', 'reactions', 'shares'],
 		x: ['followers', 'likes', 'views', 'comments', 'reposts'],

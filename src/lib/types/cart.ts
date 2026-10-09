@@ -16,6 +16,7 @@ export interface CartItem {
 		targetUrl: string;
 		boostQuantity: number;
 		boostOfferId?: string | null;
+		comments?: string;
 	};
 	accountAddon?: {
 		key: string;

@@ -283,6 +283,38 @@ model OrderItem {
 
 // Append-only business history. Orders remain the current-state snapshot; this table records
 // what actually happened, when, and from which money/fulfilment path.
+// Authenticated gateway notifications are persisted before acknowledgement.
+model PaymentWebhookInbox {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventKey       String    @unique @map("event_key")
+  payload        Json
+  status         String    @default("pending")
+  attempts       Int       @default(0)
+  nextAttemptAt  DateTime  @default(now()) @map("next_attempt_at")
+  leaseExpiresAt DateTime? @map("lease_expires_at")
+  lastError      String?   @map("last_error")
+  receivedAt     DateTime  @default(now()) @map("received_at")
+  processedAt    DateTime? @map("processed_at")
+
+  @@index([status, nextAttemptAt])
+  @@map("payment_webhook_inbox")
+}
+
+model RefundRecoveryTask {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventKey       String    @unique @map("event_key")
+  orderId        String    @map("order_id") @db.Uuid
+  status         String    @default("pending")
+  attempts       Int       @default(0)
+  nextAttemptAt  DateTime  @default(now()) @map("next_attempt_at")
+  leaseExpiresAt DateTime? @map("lease_expires_at")
+  completedAt    DateTime? @map("completed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@index([status, nextAttemptAt])
+  @@map("refund_recovery_tasks")
+}
+
 model OrderEvent {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orderId        String   @map("order_id") @db.Uuid
@@ -913,29 +945,36 @@ model BoostFulfillment {
 // Context-aware customer issue reports. The purchased promise is snapshotted so later catalogue
 // edits cannot create refill rights that were not part of the original order.
 model BoostComplaint {
-  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  fulfillmentId       String           @map("fulfillment_id") @db.Uuid
-  userId              String?          @map("user_id") @db.Uuid
-  type                String
-  status              String           @default("open")
-  customerNote        String?          @map("customer_note")
-  eligibilitySnapshot Json             @default("{}") @map("eligibility_snapshot")
-  validationNote      String?          @map("validation_note")
-  providerAction      String?          @map("provider_action")
-  supplierCaseId      String?          @map("supplier_case_id")
-  validatedByUserId   String?          @map("validated_by_user_id") @db.Uuid
-  validatedAt         DateTime?        @map("validated_at")
-  escalatedAt         DateTime?        @map("escalated_at")
-  resolvedAt          DateTime?        @map("resolved_at")
-  createdAt           DateTime         @default(now()) @map("created_at")
-  updatedAt           DateTime         @updatedAt @map("updated_at")
-  fulfillment         BoostFulfillment @relation(fields: [fulfillmentId], references: [id], onDelete: Cascade)
-  customer            User?            @relation("BoostComplaintCustomer", fields: [userId], references: [id], onDelete: SetNull)
-  validatedBy         User?            @relation("BoostComplaintReviewer", fields: [validatedByUserId], references: [id], onDelete: SetNull)
+  id                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fulfillmentId        String           @map("fulfillment_id") @db.Uuid
+  userId               String?          @map("user_id") @db.Uuid
+  type                 String
+  status               String           @default("open")
+  customerNote         String?          @map("customer_note")
+  eligibilitySnapshot  Json             @default("{}") @map("eligibility_snapshot")
+  validationNote       String?          @map("validation_note")
+  providerAction       String?          @map("provider_action")
+  supplierCaseId       String?          @map("supplier_case_id")
+  refillState          String?          @map("refill_state")
+  refillCheckedAt      DateTime?        @map("refill_checked_at")
+  refillNextCheckAt    DateTime?        @map("refill_next_check_at")
+  refillPollFailures   Int              @default(0) @map("refill_poll_failures")
+  refillLeaseToken     String?          @map("refill_lease_token") @db.Uuid
+  refillLeaseExpiresAt DateTime?        @map("refill_lease_expires_at")
+  validatedByUserId    String?          @map("validated_by_user_id") @db.Uuid
+  validatedAt          DateTime?        @map("validated_at")
+  escalatedAt          DateTime?        @map("escalated_at")
+  resolvedAt           DateTime?        @map("resolved_at")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+  fulfillment          BoostFulfillment @relation(fields: [fulfillmentId], references: [id], onDelete: Cascade)
+  customer             User?            @relation("BoostComplaintCustomer", fields: [userId], references: [id], onDelete: SetNull)
+  validatedBy          User?            @relation("BoostComplaintReviewer", fields: [validatedByUserId], references: [id], onDelete: SetNull)
 
   @@unique([fulfillmentId, type])
   @@index([fulfillmentId, createdAt])
   @@index([status, createdAt])
+  @@index([status, refillNextCheckAt])
   @@index([userId, createdAt])
   @@map("boost_complaints")
 }

@@ -293,6 +293,8 @@ async function syncProvider(
 							OR service."max_quantity" < offer."min_quantity"
 							OR NOT (service."platforms" @> ARRAY[offer."platform"]::text[])
 							OR NOT (service."outcomes" @> ARRAY[offer."outcome"]::text[])
+							OR (offer."outcome" = 'custom_comments' AND lower(trim(coalesce(service."provider_type", ''))) <> 'custom comments')
+							OR (offer."outcome" <> 'custom_comments' AND lower(trim(coalesce(service."provider_type", ''))) NOT IN ('', 'default'))
 							OR service."target_type" <> offer."target_type"
 						)
 				`);

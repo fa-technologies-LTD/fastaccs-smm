@@ -2,7 +2,15 @@ import { env } from '$env/dynamic/private';
 
 const DEFAULT_PENDING_PAYMENT_EXPIRE_MINUTES = 30;
 const PAYMENT_RESERVATION_BUFFER_MINUTES = 5;
-const NON_EXPIRING_PENDING_STATUSES = new Set(['ERROR']);
+const NON_EXPIRING_PENDING_STATUSES = new Set(['ERROR', 'UNKNOWN']);
+
+export function isPaymentVerificationUnavailable(status: string): boolean {
+	return NON_EXPIRING_PENDING_STATUSES.has(
+		String(status || '')
+			.trim()
+			.toUpperCase()
+	);
+}
 
 function parseExpireMinutes(): number {
 	const parsed = Number(

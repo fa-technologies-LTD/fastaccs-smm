@@ -6,6 +6,8 @@ import {
 	getBoostingDisplayExpectationChips
 } from '$lib/helpers/boosting-service-config';
 import { prisma } from '$lib/prisma';
+import { supportsBoostServiceInput } from '$lib/helpers/boosting-service-input';
+import { serviceMatchesBoostOutcome } from '$lib/server/boosting-providers/catalog-normalizer';
 import type { PageServerLoad } from './$types';
 
 const PLATFORM_ORDER = [
@@ -25,6 +27,11 @@ const OUTCOME_ORDER = [
 	'likes',
 	'views',
 	'comments',
+	'custom_comments',
+	'impressions',
+	'reach',
+	'live_likes',
+	'story_shares',
 	'streams',
 	'monthly_listeners',
 	'reposts',
@@ -61,7 +68,22 @@ export const load: PageServerLoad = async ({ locals }) => {
 			refillDays: true,
 			status: true,
 			displayOrder: true,
-			category: { select: { name: true, isActive: true } }
+			category: { select: { name: true, isActive: true } },
+			routes: {
+				where: { state: { not: 'paused' } },
+				select: {
+					providerService: {
+						select: {
+							name: true,
+							category: true,
+							providerType: true,
+							platforms: true,
+							outcomes: true,
+							unavailableAt: true
+						}
+					}
+				}
+			}
 		},
 		orderBy: [{ displayOrder: 'asc' }, { customerName: 'asc' }]
 	});
@@ -94,6 +116,16 @@ export const load: PageServerLoad = async ({ locals }) => {
 	>();
 
 	for (const row of rows) {
+		if (
+			!row.routes.some(
+				({ providerService: service }) =>
+					!service.unavailableAt &&
+					service.platforms.includes(row.platform) &&
+					supportsBoostServiceInput(service.providerType, row.outcome) &&
+					serviceMatchesBoostOutcome(service, row.outcome)
+			)
+		)
+			continue;
 		const group = groups.get(row.categoryId) ?? {
 			categoryId: row.categoryId,
 			categoryName: row.category.name,

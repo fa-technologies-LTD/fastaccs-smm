@@ -12,6 +12,11 @@ export type BoostingActionType =
 	| 'subscribers'
 	| 'members'
 	| 'likes'
+	| 'live_likes'
+	| 'impressions'
+	| 'reach'
+	| 'story_shares'
+	| 'custom_comments'
 	| 'views'
 	| 'comments'
 	| 'reposts'
@@ -166,7 +171,13 @@ function classifyTikTok(url: URL): RequiredLinkType | 'unknown' {
 	if (hostname.startsWith('vm.') || hostname.startsWith('vt.') || segments[0] === 't') {
 		return 'unknown';
 	}
-	if (segments[0]?.startsWith('@') && segments[1] === 'video' && segments[2]) return 'content';
+	if (
+		segments[0]?.startsWith('@') &&
+		['video', 'photo'].includes(segments[1]) &&
+		/^\d+$/.test(segments[2] || '') &&
+		segments.length === 3
+	)
+		return 'content';
 	if (segments[0]?.startsWith('@') && segments.length === 1) return 'profile';
 	if (['embed', 'v'].includes(segments[0] || '') && segments[1]) return 'content';
 	return 'unknown';
@@ -313,6 +324,15 @@ export function validateLinkForAction(
 
 	if (!isAllowedPlatformHostname(platform, parsed.hostname)) {
 		return { valid: false, reason: `Please enter a ${PLATFORM_LABELS[platform]} link.` };
+	}
+	if (actionType === 'live_likes') {
+		if (platform !== 'tiktok' || !/^\/@[a-z0-9_.]+\/live\/?$/i.test(parsed.pathname)) {
+			return { valid: false, reason: 'Paste your TikTok LIVE link, not a post link.' };
+		}
+		return { valid: true, normalizedUrl: parsed.toString(), needsManualReview: false };
+	}
+	if (platform === 'tiktok' && /^\/@[a-z0-9_.]+\/live\/?$/i.test(parsed.pathname)) {
+		return { valid: false, reason: 'Use a post or video link, not a LIVE link.' };
 	}
 
 	const requiredLinkType = getRequiredLinkType(actionType);

@@ -1,0 +1,279 @@
+import { json } from '@sveltejs/kit';
+import { verifyPayment } from '$lib/services/payment';
+import { prisma } from '$lib/prisma';
+import {
+	getFailureKind,
+	isSuccessPaymentStatus,
+	normalizePaymentStatus
+} from '$lib/helpers/payment-status';
+import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
+import { settleFailedPayment, settleSuccessfulPayment } from '$lib/services/payment-settlement';
+import { logPaymentEvent } from '$lib/server/payment-observability';
+import { isVerifiedPaymentBoundToOrder } from '$lib/helpers/payment-binding';
+
+function pickString(value: unknown): string | null {
+	if (typeof value !== 'string') return null;
+	const trimmed = value.trim();
+	return trimmed || null;
+}
+
+async function findOrderByPaymentReference(paymentReference: string | null) {
+	if (!paymentReference) return null;
+	return prisma.order.findUnique({
+		where: { paymentReference }
+	});
+}
+
+async function resolveVerifiedOrder(input: {
+	metadataOrderId: string | null;
+	verifiedPaymentReference: string | null;
+}): Promise<{ order: Awaited<ReturnType<typeof findOrderByPaymentReference>>; mismatch: boolean }> {
+	const order = input.metadataOrderId
+		? await prisma.order.findUnique({ where: { id: input.metadataOrderId } })
+		: await findOrderByPaymentReference(input.verifiedPaymentReference);
+	if (!order) return { order: null, mismatch: false };
+
+	const bound = isVerifiedPaymentBoundToOrder({
+		orderId: order.id,
+		metadataOrderId: input.metadataOrderId,
+		storedPaymentReference: pickString(order.paymentReference),
+		verifiedPaymentReference: input.verifiedPaymentReference
+	});
+	return { order: bound ? order : null, mismatch: !bound };
+}
+
+function alertBindingMismatch(input: {
+	metadataOrderId: string | null;
+	verifiedPaymentReference: string | null;
+	traceId: string;
+}) {
+	logPaymentEvent('error', 'webhook.payment_order_binding_mismatch', {
+		traceId: input.traceId,
+		orderId: input.metadataOrderId,
+		paymentReference: input.verifiedPaymentReference,
+		errorCode: 'PAYMENT_ORDER_BINDING_MISMATCH'
+	});
+	void sendCriticalAdminAlert({
+		title: 'Payment held: order binding mismatch',
+		message: `A verified Monnify event referenced order ${input.metadataOrderId || 'unknown'}, but payment ${input.verifiedPaymentReference || 'unknown'} did not match the order's stored reference. No settlement or fulfilment was released.`,
+		source: 'api.webhooks.monnify',
+		dedupeKey: `payment-binding-mismatch:${input.verifiedPaymentReference || input.metadataOrderId || 'unknown'}`
+	}).catch((error) => console.error('Failed to alert on payment binding mismatch:', error));
+}
+
+export async function processMonnifyWebhookEvent(
+	body: { eventType?: unknown; eventData?: Record<string, unknown> },
+	traceId: string
+): Promise<Response> {
+	try {
+		const eventType = pickString(body?.eventType) || '';
+		const eventData = body?.eventData || {};
+		const transactionReference = pickString(eventData?.transactionReference);
+		const paymentReference = pickString(eventData?.paymentReference);
+		const eventPaymentStatus = normalizePaymentStatus(eventData?.paymentStatus);
+
+		logPaymentEvent('info', 'webhook.event_received', {
+			traceId,
+			phase: eventType,
+			transactionReference: transactionReference ?? null,
+			paymentReference: paymentReference ?? null,
+			status: eventPaymentStatus || null
+		});
+
+		if (eventType === 'SUCCESSFUL_TRANSACTION') {
+			const referenceForVerification = transactionReference || paymentReference;
+			if (!referenceForVerification) {
+				console.error('Monnify webhook: missing transaction/payment reference for success event');
+				return json({ success: false });
+			}
+
+			const verificationResult = await verifyPayment(referenceForVerification);
+			const gatewayStatus = normalizePaymentStatus(verificationResult.status);
+
+			logPaymentEvent('info', 'webhook.verification_result', {
+				traceId,
+				referenceUsed: referenceForVerification,
+				success: verificationResult.success,
+				status: gatewayStatus || null,
+				paymentReference: verificationResult.paymentReference || null,
+				transactionReference: verificationResult.transactionReference || transactionReference,
+				amount: verificationResult.amount,
+				amountPaid: verificationResult.amountPaid,
+				currency: verificationResult.currency
+			});
+
+			if (!verificationResult.success && !isSuccessPaymentStatus(gatewayStatus)) {
+				console.error(
+					'Monnify webhook: unable to confirm success transaction',
+					referenceForVerification
+				);
+				return json({ success: false, retryable: true }, { status: 503 });
+			}
+
+			const metadataOrderId = pickString(verificationResult.metaData?.orderId);
+			const verifiedPaymentReference = pickString(
+				verificationResult.paymentReference || paymentReference
+			);
+			const resolution = await resolveVerifiedOrder({
+				metadataOrderId,
+				verifiedPaymentReference
+			});
+			if (resolution.mismatch) {
+				alertBindingMismatch({ metadataOrderId, verifiedPaymentReference, traceId });
+				return json({ success: false });
+			}
+			const orderId = resolution.order?.id || null;
+
+			if (!orderId) {
+				console.error('Monnify webhook: no orderId resolved for success event');
+				return json({ success: false, retryable: true }, { status: 503 });
+			}
+
+			const settlement = await settleSuccessfulPayment({
+				orderId,
+				source: 'webhook',
+				paymentReference: verificationResult.paymentReference || paymentReference,
+				channel: verificationResult.channel,
+				paidAt: verificationResult.paidAt,
+				amountPaid: verificationResult.amountPaid || verificationResult.amount,
+				currency: verificationResult.currency
+			});
+
+			logPaymentEvent(settlement.success ? 'info' : 'error', 'webhook.settlement_result', {
+				traceId,
+				orderId,
+				paymentReference: verificationResult.paymentReference || paymentReference,
+				transactionReference: verificationResult.transactionReference || transactionReference,
+				status: settlement.status,
+				success: settlement.success,
+				amountPaid: verificationResult.amountPaid || verificationResult.amount,
+				currency: verificationResult.currency,
+				errorMessage: settlement.error || settlement.warning || null
+			});
+
+			return json({ success: settlement.success });
+		}
+
+		if (eventType === 'REJECTED_PAYMENT' || eventType === 'FAILED_TRANSACTION') {
+			let resolvedFailureKind = getFailureKind(eventPaymentStatus);
+			let resolvedPaymentReference = paymentReference;
+			let resolvedOrderId: string | null = null;
+
+			const referenceForVerification = transactionReference || paymentReference;
+			if (referenceForVerification) {
+				const verificationResult = await verifyPayment(referenceForVerification);
+				const gatewayStatus = normalizePaymentStatus(verificationResult.status);
+
+				if (verificationResult.success || isSuccessPaymentStatus(gatewayStatus)) {
+					const metadataOrderId = pickString(verificationResult.metaData?.orderId);
+					const verifiedPaymentReference = pickString(
+						verificationResult.paymentReference || paymentReference
+					);
+					const resolution = await resolveVerifiedOrder({
+						metadataOrderId,
+						verifiedPaymentReference
+					});
+					if (resolution.mismatch) {
+						alertBindingMismatch({ metadataOrderId, verifiedPaymentReference, traceId });
+						return json({ success: false });
+					}
+					const successfulOrderId = resolution.order?.id || null;
+
+					if (successfulOrderId) {
+						await settleSuccessfulPayment({
+							orderId: successfulOrderId,
+							source: 'webhook',
+							paymentReference: verificationResult.paymentReference || paymentReference,
+							channel: verificationResult.channel,
+							paidAt: verificationResult.paidAt,
+							amountPaid: verificationResult.amountPaid || verificationResult.amount,
+							currency: verificationResult.currency
+						});
+						return json({ success: true });
+					}
+				}
+
+				resolvedFailureKind = resolvedFailureKind || getFailureKind(gatewayStatus);
+				resolvedPaymentReference =
+					verificationResult.paymentReference || resolvedPaymentReference || null;
+				const metadataOrderId = pickString(verificationResult.metaData?.orderId);
+				if (metadataOrderId) {
+					const verifiedPaymentReference = pickString(
+						verificationResult.paymentReference || resolvedPaymentReference
+					);
+					const resolution = await resolveVerifiedOrder({
+						metadataOrderId,
+						verifiedPaymentReference
+					});
+					if (resolution.mismatch) {
+						alertBindingMismatch({ metadataOrderId, verifiedPaymentReference, traceId });
+						return json({ success: false });
+					}
+					resolvedOrderId = resolution.order?.id || null;
+				}
+			}
+
+			if (!resolvedFailureKind) {
+				resolvedFailureKind = 'failed';
+			}
+
+			if (!resolvedOrderId) {
+				const orderByPaymentReference = await findOrderByPaymentReference(resolvedPaymentReference);
+				resolvedOrderId = orderByPaymentReference?.id || null;
+			}
+
+			if (resolvedOrderId) {
+				await settleFailedPayment({
+					orderId: resolvedOrderId,
+					failureKind: resolvedFailureKind,
+					source: 'webhook'
+				});
+			}
+
+			return json({ success: true });
+		}
+
+		const derivedFailureKind = getFailureKind(eventPaymentStatus);
+		if (derivedFailureKind) {
+			const orderByPaymentReference = await findOrderByPaymentReference(paymentReference);
+			if (orderByPaymentReference?.id) {
+				await settleFailedPayment({
+					orderId: orderByPaymentReference.id,
+					failureKind: derivedFailureKind,
+					source: 'webhook'
+				});
+			}
+			return json({ success: true });
+		}
+
+		logPaymentEvent('info', 'webhook.event_unhandled', {
+			traceId,
+			phase: eventType,
+			paymentReference,
+			transactionReference,
+			status: eventPaymentStatus || null
+		});
+		return json({ success: true });
+	} catch (error) {
+		logPaymentEvent('error', 'webhook.exception', {
+			traceId,
+			errorMessage: error instanceof Error ? error.message : 'Webhook processing failed'
+		});
+		void sendCriticalAdminAlert({
+			title: 'Monnify webhook processing error',
+			message: error instanceof Error ? error.message : 'Unknown webhook processing failure.',
+			source: 'api.webhooks.monnify',
+			dedupeKey: 'monnify-webhook-processing-error'
+		}).catch((notifyError) => {
+			console.error('Failed to send admin alert for webhook processing error:', notifyError);
+		});
+		return json(
+			{
+				success: false,
+				error: error instanceof Error ? error.message : 'Webhook processing failed',
+				traceId
+			},
+			{ status: 500 }
+		);
+	}
+}

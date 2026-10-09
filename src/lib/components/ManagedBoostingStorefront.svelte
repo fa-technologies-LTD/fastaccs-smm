@@ -1,6 +1,10 @@
 <script lang="ts">
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
 	import { boostingStartingQuantity } from '$lib/helpers/boosting-checkout';
+	import {
+		parseBoostComments,
+		MAX_BOOST_COMMENT_TEXT_LENGTH
+	} from '$lib/helpers/boosting-service-input';
 	import BoostingQuantitySelector from '$lib/components/BoostingQuantitySelector.svelte';
 	import {
 		Check,
@@ -13,7 +17,7 @@
 		UserPlus,
 		Users
 	} from '$lib/icons';
-	import { roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
+	import { roundUpCatalogPriceNgn as roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
 	import {
 		getRequiredLinkType,
 		validateLinkForAction,
@@ -62,6 +66,8 @@
 	let targetUrl = $state('');
 	let linkError = $state<string | null>(null);
 	let adding = $state(false);
+	let commentText = $state('');
+	let commentError = $state<string | null>(null);
 
 	$effect(() => {
 		if (selectedPlatform || !groups[0]) return;
@@ -92,6 +98,11 @@
 				)
 			: 0
 	);
+	const isCustomComments = $derived(selectedGroup?.outcome === 'custom_comments');
+	const parsedComments = $derived(parseBoostComments(commentText));
+	$effect(() => {
+		if (isCustomComments) quantity = parsedComments.quantity;
+	});
 
 	const ICONS: Record<string, typeof Heart> = {
 		followers: UserPlus,
@@ -100,6 +111,11 @@
 		likes: Heart,
 		views: Eye,
 		comments: MessageCircle,
+		custom_comments: MessageCircle,
+		live_likes: Heart,
+		impressions: Eye,
+		reach: Eye,
+		story_shares: Share2,
 		reposts: Repeat,
 		streams: Music,
 		monthly_listeners: Music,
@@ -115,6 +131,8 @@
 		quantity = group.offers[0] ? boostingStartingQuantity(group.offers[0]) : 0;
 		targetUrl = '';
 		linkError = null;
+		commentText = '';
+		commentError = null;
 	}
 
 	function choosePlatform(platform: BoostingPlatform): void {
@@ -129,20 +147,23 @@
 
 	function chooseOffer(offer: Offer): void {
 		selectedOfferId = offer.id;
-		quantity = boostingStartingQuantity(offer);
+		quantity = isCustomComments ? parsedComments.quantity : boostingStartingQuantity(offer);
 		linkError = null;
 		trackSnapEvent('VIEW_CONTENT', {
 			item_ids: [offer.id],
 			item_category: 'Boosting services',
 			description: `${selectedGroup?.platformLabel ?? offer.platform} ${selectedGroup?.outcomeLabel ?? offer.outcome}`,
-			price: roundCatalogPriceNgn(offer.pricePerStepNgn),
+			price: roundCatalogPriceNgn(
+				(boostingStartingQuantity(offer) / offer.stepQuantity) * offer.pricePerStepNgn
+			),
 			currency: 'NGN',
-			number_items: offer.minQuantity
+			number_items: boostingStartingQuantity(offer)
 		});
 		recordAnalyticsEvent('view_content', `/services?offer=${encodeURIComponent(offer.id)}`);
 	}
 
 	function linkLabel(platform: BoostingPlatform, outcome: BoostingActionType): string {
+		if (outcome === 'live_likes') return 'LIVE link';
 		const type = getRequiredLinkType(outcome);
 		if (type === 'channel') return 'channel or group link';
 		if (type === 'content') {
@@ -154,6 +175,7 @@
 	}
 
 	function linkPlaceholder(platform: BoostingPlatform, outcome: BoostingActionType): string {
+		if (outcome === 'live_likes') return 'https://www.tiktok.com/@yourusername/live';
 		const type = getRequiredLinkType(outcome);
 		if (platform === 'spotify') {
 			return type === 'profile'
@@ -197,6 +219,20 @@
 
 	async function addToCart(): Promise<void> {
 		if (!selectedGroup || !selectedOffer || adding) return;
+		if (
+			isCustomComments &&
+			(parsedComments.error ||
+				quantity < selectedOffer.minQuantity ||
+				quantity > Math.min(selectedOffer.maxQuantity ?? 500, 500) ||
+				(quantity - selectedOffer.minQuantity) % selectedOffer.stepQuantity !== 0)
+		) {
+			commentError =
+				parsedComments.error ||
+				(quantity > Math.min(selectedOffer.maxQuantity ?? 500, 500)
+					? `Use up to ${Math.min(selectedOffer.maxQuantity ?? 500, 500)} comments.`
+					: `Use at least ${selectedOffer.minQuantity} comments, in steps of ${selectedOffer.stepQuantity}.`);
+			return;
+		}
 		const checked = validateLinkForAction(
 			selectedGroup.platform,
 			selectedGroup.outcome as BoostingActionType,
@@ -243,7 +279,8 @@
 				selectedGroup.categoryId,
 				checked.normalizedUrl || targetUrl.trim(),
 				quantity,
-				selectedOffer.id
+				selectedOffer.id,
+				isCustomComments ? parsedComments.text : undefined
 			);
 			trackSnapEvent('ADD_CART', {
 				item_ids: [selectedOffer.id],
@@ -261,6 +298,8 @@
 				'/checkout'
 			);
 			targetUrl = '';
+			commentText = '';
+			commentError = null;
 			linkError = null;
 		} finally {
 			adding = false;
@@ -346,12 +385,16 @@
 									</div>
 									<p class="mt-1 text-sm" style="color: var(--text-muted);">{offer.shortPromise}</p>
 								</div>
-								<strong class="whitespace-nowrap" style="color: var(--text);">
+								<strong class="text-right whitespace-nowrap" style="color: var(--text);">
 									{formatPrice(
 										roundCatalogPriceNgn(
 											(boostingStartingQuantity(offer) / offer.stepQuantity) * offer.pricePerStepNgn
 										)
 									)}
+									<span class="mt-1 block text-xs font-normal" style="color: var(--text-muted);"
+										>{boostingStartingQuantity(offer).toLocaleString()}
+										{selectedGroup.outcomeLabel.toLowerCase()}</span
+									>
 								</strong>
 							</div>
 							{#if offer.expectationChips.length}
@@ -405,15 +448,39 @@
 						</p>
 					{/if}
 
-					<BoostingQuantitySelector
-						value={quantity}
-						minQuantity={selectedOffer.minQuantity}
-						maxQuantity={selectedOffer.maxQuantity}
-						stepQuantity={selectedOffer.stepQuantity}
-						presets={selectedOffer.quantityPresets}
-						label={`${selectedGroup.outcomeLabel} quantity`}
-						onchange={(next) => (quantity = next)}
-					/>
+					{#if isCustomComments}
+						<label for="boosting-comments" class="mb-2 block text-sm font-semibold"
+							>Your comments</label
+						>
+						<textarea
+							id="boosting-comments"
+							bind:value={commentText}
+							oninput={() => (commentError = null)}
+							rows="5"
+							maxlength={MAX_BOOST_COMMENT_TEXT_LENGTH}
+							placeholder="One comment per line"
+							aria-invalid={Boolean(commentError)}
+							aria-describedby="boosting-comment-help"
+							class="min-h-32 w-full rounded-xl border p-3 text-base"
+							style="border-color: var(--border); background: var(--bg); color: var(--text);"
+						></textarea>
+						<p id="boosting-comment-help" class="mt-1 text-xs" style="color: var(--text-muted);">
+							{quantity} comments · One per line
+						</p>
+						{#if commentError}<p role="status" class="mt-2 text-xs text-red-500">
+								{commentError}
+							</p>{/if}
+					{:else}
+						<BoostingQuantitySelector
+							value={quantity}
+							minQuantity={selectedOffer.minQuantity}
+							maxQuantity={selectedOffer.maxQuantity}
+							stepQuantity={selectedOffer.stepQuantity}
+							presets={selectedOffer.quantityPresets}
+							label={`${selectedGroup.outcomeLabel} quantity`}
+							onchange={(next) => (quantity = next)}
+						/>
+					{/if}
 					<button
 						type="button"
 						onclick={addToCart}
@@ -421,7 +488,7 @@
 						class="mt-4 min-h-12 w-full rounded-xl px-4 py-3 text-base font-bold disabled:opacity-60"
 						style="background: var(--primary); color: #00150b;"
 					>
-						{adding ? 'Adding…' : `Add to Cart — ${formatPrice(total)}`}
+						{adding ? 'Adding…' : total > 0 ? `Add to Cart — ${formatPrice(total)}` : 'Add to Cart'}
 					</button>
 				</div>
 			{/if}

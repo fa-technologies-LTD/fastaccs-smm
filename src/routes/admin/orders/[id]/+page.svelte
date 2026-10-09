@@ -31,6 +31,7 @@
 		getCanonicalCredentialEntries
 	} from '$lib/helpers/credential-contract';
 	import { normalizeAccountStatus } from '$lib/helpers/account-status';
+	import { canCompleteOrder } from '$lib/helpers/order-completion';
 
 	// Props from load function
 	interface Props {
@@ -550,7 +551,7 @@
 						</button>
 					{/if}
 
-					{#if order.status !== 'completed' && order.status !== 'cancelled'}
+					{#if canCompleteOrder(order)}
 						<button
 							onclick={() => updateStatus('completed')}
 							disabled={isProcessing}
@@ -1142,7 +1143,7 @@
 							</button>
 						{/if}
 
-						{#if order.status !== 'completed' && order.status !== 'cancelled'}
+						{#if canCompleteOrder(order)}
 							<button
 								onclick={() => updateStatus('completed')}
 								disabled={isProcessing}

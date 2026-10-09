@@ -9,8 +9,10 @@ import { getPhonePricingConfig } from '$lib/services/phone-pricing';
 import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 import { getBoostComplaintEligibility } from '$lib/server/boosting-providers/complaints';
 import { sanitizeCustomerOrder } from '$lib/helpers/customer-order-visibility';
+import { getBoostingProgress } from '$lib/helpers/boosting-progress';
 
-export const load: PageServerLoad = async ({ params, locals, url }) => {
+export const load: PageServerLoad = async ({ params, locals, url, depends }) => {
+	depends('app:order-progress');
 	if (!locals.user) {
 		throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`);
 	}
@@ -32,7 +34,14 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 					boostFulfillment: {
 						include: {
 							complaints: {
-								select: { id: true, type: true, status: true, createdAt: true },
+								select: {
+									id: true,
+									type: true,
+									status: true,
+									createdAt: true,
+									refillState: true,
+									refillCheckedAt: true
+								},
 								orderBy: { createdAt: 'desc' }
 							}
 						}
@@ -143,10 +152,13 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			totalPrice: Number(item.totalPrice),
 			allocatedCount: item.accounts.length,
 			boostIssueReason: latestBoostingIssueByItem.get(item.id) || null,
+			boostProgress: getBoostingProgress(item, order),
 			boostComplaintEligibility: item.boostFulfillment
 				? getBoostComplaintEligibility({
 						offerSnapshot: item.boostFulfillment.offerSnapshot,
 						completedAt: item.boostFulfillment.completedAt,
+						submittedAt: item.boostFulfillment.submittedAt,
+						fulfillmentStatus: item.boostFulfillment.status,
 						paymentConfirmed: isOrderPaymentConfirmed(order)
 					})
 				: null,

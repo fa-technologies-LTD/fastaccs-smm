@@ -12,7 +12,8 @@ import {
 	getPaymentReservationExpiresAt,
 	getPendingPaymentExpireMinutes,
 	getPendingPaymentExpiryThreshold,
-	isPendingPaymentExpired
+	isPendingPaymentExpired,
+	isPaymentVerificationUnavailable
 } from '$lib/helpers/payment-expiry.server';
 import {
 	markPaymentPending,
@@ -27,6 +28,7 @@ import { createPaymentTraceId, logPaymentEvent } from '$lib/server/payment-obser
 import { isVerifiedPaymentBoundToOrder } from '$lib/helpers/payment-binding';
 
 interface ReconcileOptions {
+	deadlineMs?: number;
 	limit?: number;
 	staleMinutes?: number;
 	expireMinutes?: number;
@@ -159,6 +161,7 @@ export async function reconcilePendingPayments(
 	});
 
 	for (const order of candidates) {
+		if (options.deadlineMs !== undefined && Date.now() >= options.deadlineMs) break;
 		summary.checked += 1;
 
 		const orderUpdatedAt = order.updatedAt.getTime();
@@ -283,6 +286,21 @@ export async function reconcilePendingPayments(
 			continue;
 		}
 
+		if (isPaymentVerificationUnavailable(gatewayStatus)) {
+			// Rotate unavailable checks behind other orders without changing payment/expiry state.
+			if (!dryRun)
+				await prisma.order.updateMany({
+					where: {
+						id: order.id,
+						updatedAt: order.updatedAt,
+						status: { in: ['pending', 'pending_payment'] },
+						paymentStatus: { in: ['pending', 'processing'] }
+					},
+					data: { updatedAt: new Date() }
+				});
+			summary.keptPending += 1;
+			continue;
+		}
 		const isOldPending = order.paymentExpiresAt
 			? getPaymentReservationExpiresAt(order.paymentExpiresAt).getTime() <= now
 			: isPendingPaymentExpired(order.createdAt, gatewayStatus, expireMinutes);
@@ -331,6 +349,7 @@ export async function reconcilePendingPaymentBacklog(
 	};
 
 	for (let round = 0; round < maxRounds; round += 1) {
+		if (options.deadlineMs !== undefined && Date.now() >= options.deadlineMs) break;
 		const result = await reconcilePendingPayments({
 			...options,
 			limit: batchSize

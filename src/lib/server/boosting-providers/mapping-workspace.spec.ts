@@ -64,6 +64,26 @@ function providerService(id = serviceId, ratePerThousand = 1, refillAdvertised =
 	};
 }
 
+describe('fractional supplier cost ceilings', () => {
+	it('preserves kobo in a small starting-quantity cost ceiling instead of rejecting a safe price', async () => {
+		const service = { ...providerService(serviceId, 0.9), minQuantity: 10 };
+		const db = database(true, [service]);
+		const input = validInput();
+		Object.assign(input.offer, {
+			minQuantity: 10,
+			stepQuantity: 1,
+			pricePerStepNgn: 5,
+			minimumMarginPercent: 226.79
+		});
+		await saveBoostMappingWorkspace(categoryId, input, 'admin-1', { database: db.client });
+		expect(db.offerUpsert).toHaveBeenCalledWith(
+			expect.objectContaining({
+				create: expect.objectContaining({ normalCostTargetNgn: 15.3, maximumSupplierCostNgn: 15.3 })
+			})
+		);
+	});
+});
+
 function database(
 	refillAdvertised = true,
 	services = [providerService(serviceId, 1, refillAdvertised)]
@@ -118,6 +138,25 @@ function database(
 }
 
 describe('boosting mapping workspace persistence', () => {
+	it('rejects a supplier input contract that checkout cannot submit, regardless of quality approval', async () => {
+		const custom = { ...providerService(), providerType: 'Custom Comments' };
+		await expect(
+			saveBoostMappingWorkspace(categoryId, validInput(), 'admin', {
+				database: database(true, [custom]).client
+			})
+		).rejects.toThrow('extra inputs');
+	});
+	it('preserves a precise small price per increment instead of forcing ₦50 per increment', async () => {
+		const input = validInput();
+		input.offer.pricePerStepNgn = 1.31;
+		input.offer.stepQuantity = 1;
+		input.offer.minimumMarginPercent = 0;
+		const db = database(true, [providerService(serviceId, 0.1)]);
+		await saveBoostMappingWorkspace(categoryId, input, 'admin', { database: db.client });
+		expect(db.offerUpsert).toHaveBeenCalledWith(
+			expect.objectContaining({ create: expect.objectContaining({ pricePerStepNgn: 1.31 }) })
+		);
+	});
 	it('rejects enabling a supplier route before its promise is checked', async () => {
 		const input = validInput();
 		input.routes[0].equivalenceApproved = false;
@@ -156,9 +195,23 @@ describe('boosting mapping workspace persistence', () => {
 
 		await expect(
 			saveBoostMappingWorkspace(categoryId, input, 'admin-1', {
-				database: database(true, [providerService(serviceId, 0.941176)]).client
+				database: database(true, [providerService(serviceId, 1.2)]).client
 			})
 		).rejects.toThrow('customer price is too low');
+	});
+	it('uses the upward-rounded customer total when checking a safe margin', async () => {
+		const input = validInput();
+		Object.assign(input.offer, {
+			minQuantity: 100,
+			stepQuantity: 300,
+			pricePerStepNgn: 500,
+			minimumMarginPercent: 0
+		});
+		const db = database(true, [providerService(serviceId, 0.941176)]);
+		await saveBoostMappingWorkspace(categoryId, input, 'admin-1', { database: db.client });
+		expect(db.offerUpsert).toHaveBeenCalledWith(
+			expect.objectContaining({ create: expect.objectContaining({ maximumSupplierCostNgn: 200 }) })
+		);
 	});
 
 	it('persists an admin-adjusted per-option starting quantity and increment', async () => {

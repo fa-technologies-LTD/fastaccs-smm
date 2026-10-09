@@ -56,6 +56,60 @@ describe('payment settlement integrity', () => {
 		alertMock.mockResolvedValue(undefined);
 	});
 
+	it('keeps a payment review hold when a delayed failure arrives', async () => {
+		const tx = {
+			$queryRaw: vi.fn().mockResolvedValue([]),
+			order: {
+				findUnique: vi
+					.fn()
+					.mockResolvedValue({
+						...pendingSplitOrder,
+						status: 'payment_review',
+						paymentStatus: 'under_review'
+					}),
+				update: vi.fn()
+			}
+		};
+		prismaMock.$transaction.mockImplementation(async (callback) => callback(tx));
+		const result = await settleFailedPayment({
+			orderId: pendingSplitOrder.id,
+			failureKind: 'failed',
+			source: 'webhook'
+		});
+		expect(result.status).toBe('PENDING');
+		expect(tx.order.update).not.toHaveBeenCalled();
+		expect(reverseRedemptionMock).not.toHaveBeenCalled();
+		expect(releaseReservationsMock).not.toHaveBeenCalled();
+	});
+
+	it('holds a cancellation committed between the initial read and the locked read', async () => {
+		const initial = { ...pendingSplitOrder, orderType: 'account', storeCreditApplied: 0 };
+		prismaMock.order.findUnique.mockResolvedValue(initial);
+		const tx = {
+			$queryRaw: vi.fn().mockResolvedValue([]),
+			order: {
+				findUnique: vi
+					.fn()
+					.mockResolvedValue({ ...initial, status: 'cancelled', paymentStatus: 'cancelled' }),
+				update: vi.fn()
+			}
+		};
+		prismaMock.$transaction.mockImplementation(async (callback) => callback(tx));
+		const result = await settleSuccessfulPayment({
+			orderId: initial.id,
+			source: 'webhook',
+			paymentReference: initial.paymentReference,
+			amountPaid: 4800,
+			currency: 'NGN'
+		});
+		expect(result.status).toBe('PENDING');
+		expect(tx.order.update).not.toHaveBeenCalled();
+		expect(restoreRedemptionMock).not.toHaveBeenCalled();
+		expect(prismaMock.order.updateMany).toHaveBeenCalledWith(
+			expect.objectContaining({ data: expect.objectContaining({ status: 'payment_review' }) })
+		);
+	});
+
 	it('commits the failed state and store-credit restoration in the same order-locked transaction', async () => {
 		const tx = {
 			$queryRaw: vi.fn().mockResolvedValue([]),

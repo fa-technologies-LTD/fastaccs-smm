@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+vi.mock('$lib/services/refund-recovery', () => ({ enqueueRefundRecovery: vi.fn() }));
 import { parsePhoneSmsResponse } from './hubman';
 import { hasDeliveredSms, resolveOtp } from './phone-fulfillment';
 

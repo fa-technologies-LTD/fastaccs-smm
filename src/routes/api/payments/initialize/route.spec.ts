@@ -5,6 +5,10 @@ const mocks = vi.hoisted(() => ({
 	updateOrder: vi.fn(),
 	updateManyOrders: vi.fn(),
 	initializeTransaction: vi.fn(),
+	verifyTransaction: vi.fn(),
+	settleSuccessfulPayment: vi.fn(),
+	settleFailedPayment: vi.fn(),
+	isOrderPaymentConfirmed: vi.fn(),
 	extendOrderReservations: vi.fn(),
 	releaseOrderReservations: vi.fn()
 }));
@@ -20,7 +24,13 @@ vi.mock('$lib/prisma', () => ({
 }));
 
 vi.mock('$lib/services/monnify', () => ({
-	initializeTransaction: mocks.initializeTransaction
+	initializeTransaction: mocks.initializeTransaction,
+	verifyTransaction: mocks.verifyTransaction
+}));
+vi.mock('$lib/services/payment-settlement', () => ({
+	settleSuccessfulPayment: mocks.settleSuccessfulPayment,
+	settleFailedPayment: mocks.settleFailedPayment,
+	computeExpectedGatewayAmount: (total: number, credit: number) => Math.max(0, total - credit)
 }));
 
 vi.mock('$lib/services/admin-settings', () => ({
@@ -32,13 +42,14 @@ vi.mock('$lib/services/order-reservations', () => ({
 	releaseOrderReservations: mocks.releaseOrderReservations
 }));
 
-vi.mock('$lib/helpers/payment-expiry.server', () => ({
-	getPendingPaymentExpiresAt: vi.fn(() => new Date('2026-06-06T19:40:00.000Z')),
-	getPaymentReservationExpiresAt: vi.fn(() => new Date('2026-06-06T19:45:00.000Z'))
+vi.mock('$lib/helpers/payment-expiry.server', async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	getPendingPaymentExpiresAt: vi.fn(() => new Date(Date.now() + 15 * 60_000)),
+	getPaymentReservationExpiresAt: vi.fn((expiry: Date) => new Date(expiry.getTime() + 5 * 60_000))
 }));
 
 vi.mock('$lib/helpers/buyer-order-visibility', () => ({
-	isOrderPaymentConfirmed: vi.fn(() => false)
+	isOrderPaymentConfirmed: mocks.isOrderPaymentConfirmed
 }));
 
 import { POST } from './+server';
@@ -83,6 +94,7 @@ describe('approved invariant: emergency checkout initialization control', () => 
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mocks.updateManyOrders.mockResolvedValue({ count: 1 });
+		mocks.isOrderPaymentConfirmed.mockReturnValue(false);
 		vi.spyOn(console, 'info').mockImplementation(() => undefined);
 		vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 		vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -91,6 +103,31 @@ describe('approved invariant: emergency checkout initialization control', () => 
 	afterEach(() => {
 		vi.unstubAllEnvs();
 		vi.restoreAllMocks();
+	});
+
+	it('retains an ambiguous gateway session instead of releasing stock or credit', async () => {
+		mocks.findOrder.mockResolvedValue(pendingOrder());
+		mocks.initializeTransaction.mockResolvedValue({
+			success: false,
+			errorCode: 'provider_initialization_failed',
+			failureCertainty: 'unknown'
+		});
+		const response = await callInitialize();
+		expect(response.status).toBe(202);
+		expect(await response.json()).toMatchObject({
+			success: false,
+			pending: true,
+			orderId: 'order-123'
+		});
+		expect(mocks.updateManyOrders).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({
+					paymentStatus: 'processing',
+					cancellationReason: 'initialization_unknown'
+				})
+			})
+		);
+		expect(mocks.releaseOrderReservations).not.toHaveBeenCalled();
 	});
 
 	it('blocks a new hosted payment session without mutating the order', async () => {
@@ -195,6 +232,79 @@ describe('approved invariant: emergency checkout initialization control', () => 
 
 		expect(response.status).toBe(202);
 		expect(mocks.initializeTransaction).not.toHaveBeenCalled();
+	});
+	it.each(['under_review', 'refunded', 'failed'])(
+		'cannot initialize an inconsistent pending order with payment state %s',
+		async (paymentStatus) => {
+			mocks.findOrder.mockResolvedValue(pendingOrder({ paymentStatus }));
+			expect((await callInitialize()).status).toBe(409);
+			expect(mocks.initializeTransaction).not.toHaveBeenCalled();
+			expect(mocks.updateManyOrders).not.toHaveBeenCalled();
+		}
+	);
+	it('does not expose a checkout link after cancellation wins the initialization finalization', async () => {
+		mocks.findOrder
+			.mockResolvedValueOnce(pendingOrder())
+			.mockResolvedValueOnce(pendingOrder({ status: 'cancelled' }));
+		mocks.initializeTransaction.mockResolvedValue({
+			success: true,
+			checkoutUrl: 'https://checkout.monnify.test/new'
+		});
+		mocks.updateManyOrders.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+		const response = await callInitialize();
+		expect(response.status).toBe(202);
+		expect(await response.json()).not.toHaveProperty('checkoutUrl');
+		expect(mocks.extendOrderReservations).not.toHaveBeenCalled();
+	});
+	it('returns already-paid instead of a payable link when a webhook wins initialization', async () => {
+		mocks.findOrder.mockResolvedValue(pendingOrder());
+		mocks.initializeTransaction.mockResolvedValue({
+			success: true,
+			checkoutUrl: 'https://checkout.monnify.test/new'
+		});
+		mocks.updateManyOrders.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+		mocks.isOrderPaymentConfirmed.mockReturnValueOnce(false).mockReturnValueOnce(true);
+		const response = await callInitialize();
+		expect(await response.json()).toMatchObject({ success: true, alreadyPaid: true });
+		expect(mocks.extendOrderReservations).not.toHaveBeenCalled();
+	});
+	it('does not claim a late verified payment is cleared when settlement puts it under review', async () => {
+		mocks.findOrder.mockResolvedValue(
+			pendingOrder({
+				paymentReference: 'ORD_EXISTING',
+				paymentExpiresAt: new Date(Date.now() - 1000)
+			})
+		);
+		mocks.verifyTransaction.mockResolvedValue({
+			success: true,
+			paymentStatus: 'PAID',
+			amountPaid: 2500,
+			currency: 'NGN'
+		});
+		mocks.settleSuccessfulPayment.mockResolvedValue({
+			success: true,
+			status: 'PENDING',
+			warning: 'Your payment is being reviewed before delivery.'
+		});
+		const response = await callInitialize();
+		expect(response.status).toBe(202);
+		expect(await response.json()).toMatchObject({ success: false, pending: true });
+		expect(mocks.initializeTransaction).not.toHaveBeenCalled();
+	});
+	it('does not resume an expired link when cancellation wins its conditional extension', async () => {
+		mocks.findOrder.mockResolvedValue(
+			pendingOrder({
+				paymentReference: 'ORD_EXISTING',
+				paymentCheckoutUrl: 'https://checkout.monnify.test/existing',
+				paymentExpiresAt: new Date(Date.now() - 1000)
+			})
+		);
+		mocks.verifyTransaction.mockResolvedValue({ success: false, paymentStatus: 'PENDING' });
+		mocks.updateManyOrders.mockResolvedValueOnce({ count: 0 });
+		const response = await callInitialize();
+		expect(response.status).toBe(202);
+		expect(await response.json()).not.toHaveProperty('checkoutUrl');
+		expect(mocks.extendOrderReservations).not.toHaveBeenCalled();
 	});
 
 	it('charges only the cash remainder of a store-credit split payment', async () => {

@@ -3,8 +3,13 @@ import { Prisma } from '@prisma/client';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
+import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
+import {
+	BOOST_ITEM_STATUSES,
+	BOOST_ACTIVE_ITEM_STATUSES,
+	BOOST_OPEN_COMPLAINT_STATUSES
+} from '$lib/helpers/boosting-admin-status';
 
-const ITEM_STATUSES = ['pending', 'in_progress', 'needs_link', 'completed', 'rejected'] as const;
 const ISSUE_EVENT_TYPES = ['boosting_link_review_requested', 'boosting_rejected'] as const;
 const CONFIRMED_PAYMENT_STATUSES = ['paid', 'success', 'overpaid'] as const;
 const DEFAULT_PAGE_SIZE = 25;
@@ -30,6 +35,9 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	}
 
 	const statusFilter = String(url.searchParams.get('status') || 'active').toLowerCase();
+	if (!['active', 'all', ...BOOST_ITEM_STATUSES].includes(statusFilter)) {
+		return json({ success: false, error: 'Choose a valid status.' }, { status: 400 });
+	}
 	const sort = url.searchParams.get('sort') === 'oldest' ? 'oldest' : 'newest';
 	const search = String(url.searchParams.get('q') || '')
 		.trim()
@@ -46,14 +54,20 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		{ order: { paymentStatus: { in: [...CONFIRMED_PAYMENT_STATUSES] } } }
 	];
 
+	const activeCondition: Prisma.OrderItemWhereInput = {
+		OR: [
+			{ boostFulfillmentStatus: null },
+			{ boostFulfillmentStatus: { in: [...BOOST_ACTIVE_ITEM_STATUSES] } },
+			{
+				boostFulfillment: {
+					is: { complaints: { some: { status: { in: [...BOOST_OPEN_COMPLAINT_STATUSES] } } } }
+				}
+			}
+		]
+	};
 	if (statusFilter === 'active') {
-		conditions.push({
-			OR: [
-				{ boostFulfillmentStatus: null },
-				{ boostFulfillmentStatus: { in: ['pending', 'in_progress', 'needs_link'] } }
-			]
-		});
-	} else if (ITEM_STATUSES.includes(statusFilter as (typeof ITEM_STATUSES)[number])) {
+		conditions.push(activeCondition);
+	} else if (BOOST_ITEM_STATUSES.includes(statusFilter as (typeof BOOST_ITEM_STATUSES)[number])) {
 		conditions.push({ boostFulfillmentStatus: statusFilter });
 	}
 
@@ -85,7 +99,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		order: { paymentStatus: { in: [...CONFIRMED_PAYMENT_STATUSES] } }
 	};
 
-	const [total, items, statusGroups] = await Promise.all([
+	const [total, items, statusGroups, activeCount] = await Promise.all([
 		prisma.orderItem.count({ where }),
 		prisma.orderItem.findMany({
 			where,
@@ -118,7 +132,8 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			by: ['boostFulfillmentStatus'],
 			where: baseWhere,
 			_count: { _all: true }
-		})
+		}),
+		prisma.orderItem.count({ where: { AND: [baseWhere, activeCondition] } })
 	]);
 
 	const issueEvents = items.length
@@ -141,7 +156,14 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		lastCheckedAt: Date | null;
 		status: string;
 		fulfillmentMode: string;
-		complaints: Array<{ id: string; type: string; status: string; createdAt: Date }>;
+		complaints: Array<{
+			id: string;
+			type: string;
+			status: string;
+			createdAt: Date;
+			refillState: string | null;
+			refillCheckedAt: Date | null;
+		}>;
 		selectedRoute: {
 			providerService: { serviceId: string; name: string };
 		} | null;
@@ -163,9 +185,16 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 					fulfillmentMode: true,
 					complaints: {
 						where: {
-							status: { in: ['open', 'validated', 'escalated', 'escalation_unknown'] }
+							status: { in: [...BOOST_OPEN_COMPLAINT_STATUSES] }
 						},
-						select: { id: true, type: true, status: true, createdAt: true },
+						select: {
+							id: true,
+							type: true,
+							status: true,
+							createdAt: true,
+							refillState: true,
+							refillCheckedAt: true
+						},
 						orderBy: { createdAt: 'desc' }
 					},
 					selectedRoute: {
@@ -199,6 +228,9 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		pending: 0,
 		in_progress: 0,
 		needs_link: 0,
+		under_review: 0,
+		partial: 0,
+		cancelled: 0,
 		completed: 0,
 		rejected: 0
 	};
@@ -214,19 +246,22 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			return {
 				...item,
 				latestIssue: latestIssueByItem.get(item.id) || null,
-				shadowDecision: shadow
-					? {
-							provider: shadow.provider,
-							providerServiceId: shadow.selectedRoute?.providerService.serviceId || null,
-							providerServiceName: shadow.selectedRoute?.providerService.name || null,
-							quotedSupplierCostUsd:
-								shadow.quotedSupplierCostUsd === null ? null : Number(shadow.quotedSupplierCostUsd),
-							projectedMarginNgn:
-								shadow.projectedMarginNgn === null ? null : Number(shadow.projectedMarginNgn),
-							attention: shadow.lastSafeErrorCategory,
-							checkedAt: shadow.lastCheckedAt
-						}
-					: null,
+				shadowDecision:
+					shadow && canViewRevenue(locals)
+						? {
+								provider: shadow.provider,
+								providerServiceId: shadow.selectedRoute?.providerService.serviceId || null,
+								providerServiceName: shadow.selectedRoute?.providerService.name || null,
+								quotedSupplierCostUsd:
+									shadow.quotedSupplierCostUsd === null
+										? null
+										: Number(shadow.quotedSupplierCostUsd),
+								projectedMarginNgn:
+									shadow.projectedMarginNgn === null ? null : Number(shadow.projectedMarginNgn),
+								attention: shadow.lastSafeErrorCategory,
+								checkedAt: shadow.lastCheckedAt
+							}
+						: null,
 				complaints: shadow?.complaints || [],
 				fulfillmentState: shadow ? { status: shadow.status, mode: shadow.fulfillmentMode } : null
 			};
@@ -240,6 +275,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			status: statusFilter,
 			search,
 			statusCounts,
+			activeCount,
 			canRunShadowRouting: hasAdminPermission(locals.adminContext, 'admin:settings:manage')
 		},
 		error: null

@@ -1,7 +1,10 @@
 import { json } from '@sveltejs/kit';
 import { Prisma } from '@prisma/client';
+import { env } from '$env/dynamic/private';
 import { getBoostingDisplayExpectationChips } from '$lib/helpers/boosting-service-config';
 import { prisma } from '$lib/prisma';
+import { supportsBoostServiceInput } from '$lib/helpers/boosting-service-input';
+import { serviceMatchesBoostOutcome } from '$lib/server/boosting-providers/catalog-normalizer';
 import {
 	BOOSTING_MANAGED_STOREFRONT_KEY,
 	isBoostingManagedStorefrontEnabled
@@ -17,7 +20,10 @@ function isFoundationPending(error: unknown): boolean {
 
 export const GET: RequestHandler = async ({ setHeaders }) => {
 	setHeaders({
-		'cache-control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600'
+		'cache-control': 'public, max-age=15, s-maxage=30',
+		...(/^[a-f0-9]{40}$/i.test(env.VERCEL_GIT_COMMIT_SHA || '')
+			? { 'x-app-revision': env.VERCEL_GIT_COMMIT_SHA }
+			: {})
 	});
 	try {
 		const [offers, rolloutMarker] = await Promise.all([
@@ -43,7 +49,21 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 					quantityPresets: true,
 					pricePerStepNgn: true,
 					refillDays: true,
-					displayOrder: true
+					displayOrder: true,
+					routes: {
+						where: { state: 'enabled', equivalenceApproved: true },
+						select: {
+							providerService: {
+								select: {
+									name: true,
+									category: true,
+									providerType: true,
+									platforms: true,
+									unavailableAt: true
+								}
+							}
+						}
+					}
 				},
 				orderBy: [{ displayOrder: 'asc' }, { customerName: 'asc' }]
 			}),
@@ -52,10 +72,22 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 				select: { value: true, isActive: true }
 			})
 		]);
+		// Published rows alone must not collect money while production dispatch is disabled.
+		const automationReady = env.BOOSTING_AUTOMATION_MODE === 'live';
+		const compatibleOffers = (automationReady ? offers : []).filter((offer) =>
+			offer.routes.some(
+				({ providerService: service }) =>
+					!service.unavailableAt &&
+					service.platforms.includes(offer.platform) &&
+					supportsBoostServiceInput(service.providerType, offer.outcome) &&
+					serviceMatchesBoostOutcome(service, offer.outcome)
+			)
+		);
 		return json({
 			success: true,
+			automationReady,
 			managedRolloutActive: isBoostingManagedStorefrontEnabled(rolloutMarker, offers.length > 0),
-			data: offers.map((offer) => ({
+			data: compatibleOffers.map(({ routes: _privateRoutes, ...offer }) => ({
 				...offer,
 				expectationChips: getBoostingDisplayExpectationChips(offer.expectationChips),
 				pricePerStepNgn: Number(offer.pricePerStepNgn)

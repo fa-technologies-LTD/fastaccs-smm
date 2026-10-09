@@ -1,8 +1,4 @@
-export const BOOST_COMPLAINT_TYPES = [
-	'nothing_delivered',
-	'delivery_stopped',
-	'dropped'
-] as const;
+export const BOOST_COMPLAINT_TYPES = ['nothing_delivered', 'delivery_stopped', 'dropped'] as const;
 export type BoostComplaintType = (typeof BOOST_COMPLAINT_TYPES)[number];
 
 export interface BoostComplaintEligibility {
@@ -20,6 +16,8 @@ function snapshotRecord(value: unknown): Record<string, unknown> {
 export function getBoostComplaintEligibility(input: {
 	offerSnapshot: unknown;
 	completedAt: Date | string | null;
+	submittedAt?: Date | string | null;
+	fulfillmentStatus?: string;
 	paymentConfirmed: boolean;
 	now?: Date;
 }): BoostComplaintEligibility {
@@ -28,23 +26,52 @@ export function getBoostComplaintEligibility(input: {
 	}
 	const allowedTypes: BoostComplaintType[] = ['nothing_delivered', 'delivery_stopped'];
 	const snapshot = snapshotRecord(input.offerSnapshot);
-	const refillDays = Math.max(0, Math.floor(Number(snapshot.refillDays || 0)));
+	const suppliedDays = Number(snapshot.refillDays);
+	const refillDays =
+		Number.isInteger(suppliedDays) && suppliedDays > 0 && suppliedDays <= 365 ? suppliedDays : 0;
 	const completedAt = input.completedAt ? new Date(input.completedAt) : null;
 	const now = input.now ?? new Date();
 	let refillEndsAt: Date | null = null;
-	if (refillDays > 0 && completedAt && !Number.isNaN(completedAt.getTime())) {
-		refillEndsAt = new Date(completedAt.getTime() + refillDays * 24 * 60 * 60 * 1000);
+	const submittedAt = input.submittedAt ? new Date(input.submittedAt) : null;
+	if (
+		refillDays > 0 &&
+		completedAt &&
+		!Number.isNaN(completedAt.getTime()) &&
+		(!input.fulfillmentStatus || input.fulfillmentStatus === 'completed')
+	) {
+		// Until a provider's clock is verified, use the earlier start and never extend protection.
+		const start =
+			submittedAt && !Number.isNaN(submittedAt.getTime())
+				? Math.min(submittedAt.getTime(), completedAt.getTime())
+				: completedAt.getTime();
+		refillEndsAt = new Date(start + refillDays * 24 * 60 * 60 * 1000);
 		if (now <= refillEndsAt) allowedTypes.push('dropped');
 	}
 	return {
 		allowedTypes,
 		refillEndsAt: refillEndsAt?.toISOString() ?? null,
 		note: allowedTypes.includes('dropped')
-			? 'Refill protection applies only while the original link and username remain unchanged.'
+			? 'Keep the original link and username unchanged.'
 			: refillDays > 0
 				? 'The refill window is no longer active. You can still report missing or stopped delivery.'
 				: 'This choice did not include drop/refill protection. You can still report missing or stopped delivery.'
 	};
+}
+
+export function canEscalateBoostRefill(input: {
+	offerSnapshot: unknown;
+	completedAt: Date | string | null;
+	submittedAt?: Date | string | null;
+	fulfillmentStatus: string;
+	paymentConfirmed: boolean;
+	originalTargetUrl: unknown;
+	targetUrl: string;
+	now?: Date;
+}): boolean {
+	return (
+		input.originalTargetUrl === input.targetUrl &&
+		getBoostComplaintEligibility(input).allowedTypes.includes('dropped')
+	);
 }
 
 export function isBoostComplaintType(value: unknown): value is BoostComplaintType {

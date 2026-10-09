@@ -105,6 +105,12 @@ describe('Smart Auto shortlist', () => {
 });
 
 describe('manual supplier lookup', () => {
+	it('passes SMM Raja prefixed service codes to the catalogue lookup unchanged', async () => {
+		const db = lookupDatabase();
+		await lookupBoostProviderService({ categoryId: 'category-1', provider: 'smm_raja', serviceCode: 's4138' }, db);
+		expect(db.boostProviderService.findUnique).toHaveBeenCalledWith({ where: { provider_serviceId: { provider: 'smm_raja', serviceId: 's4138' } } });
+	});
+
 	function lookupDatabase(
 		overrides: {
 			outcomes?: string[];

@@ -41,18 +41,24 @@ function parseConsent(raw: string | null): ConsentRecord | null {
 
 export function readCookieConsent(): CookieConsentLevel | null {
 	if (!isBrowser()) return null;
+	try {
+		const record = parseConsent(window.localStorage.getItem(COOKIE_CONSENT_KEY));
+		if (!record) return null;
 
-	const record = parseConsent(window.localStorage.getItem(COOKIE_CONSENT_KEY));
-	if (!record) return null;
+		const age = Date.now() - record.savedAt;
+		const isExpired = !Number.isFinite(record.savedAt) || age < 0 || age > CONSENT_TTL_MS;
+		const versionMismatch = record.version !== CONSENT_VERSION;
+		if (isExpired || versionMismatch) {
+			window.localStorage.removeItem(COOKIE_CONSENT_KEY);
+			return null;
+		}
 
-	const isExpired = Date.now() - record.savedAt > CONSENT_TTL_MS;
-	const versionMismatch = record.version !== CONSENT_VERSION;
-	if (isExpired || versionMismatch) {
-		window.localStorage.removeItem(COOKIE_CONSENT_KEY);
+		return record.level;
+	} catch {
+		// Storage can be denied in private/embedded browsers. Fail closed without
+		// allowing analytics or interrupting checkout.
 		return null;
 	}
-
-	return record.level;
 }
 
 export function saveCookieConsent(level: CookieConsentLevel): void {

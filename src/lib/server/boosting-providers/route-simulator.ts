@@ -5,7 +5,8 @@ import type {
 	BoostProviderService,
 	BoostTargetType
 } from './types';
-import { isThreadsService } from './catalog-normalizer';
+import { isThreadsService, serviceMatchesBoostOutcome } from './catalog-normalizer';
+import { supportsBoostServiceInput } from '$lib/helpers/boosting-service-input';
 
 export type BoostRouteState = 'enabled' | 'shadow' | 'paused';
 export type BoostRoutingPolicy = 'automatic' | 'preferred' | 'locked';
@@ -19,6 +20,7 @@ export type BoostRouteExclusionReason =
 	| 'service_quarantined'
 	| 'offer_mismatch'
 	| 'target_mismatch'
+	| 'unsupported_service_inputs'
 	| 'missing_verified_promise'
 	| 'audience_mismatch'
 	| 'refill_mismatch'
@@ -127,15 +129,22 @@ function projectRoute(
 	if (
 		(isThreadsService(service) && offer.platform !== 'threads') ||
 		!service.platforms.includes(offer.platform) ||
-		!service.outcomes.includes(offer.outcome)
+		!service.outcomes.includes(offer.outcome) ||
+		!serviceMatchesBoostOutcome(service, offer.outcome)
 	) {
 		reasons.push('offer_mismatch');
 	}
 	if (service.targetType !== offer.targetType) reasons.push('target_mismatch');
+	if (!supportsBoostServiceInput(service.providerType, offer.outcome))
+		reasons.push('unsupported_service_inputs');
 	if (offer.requiredVerifiedSignals.some((signal) => !route.verifiedSignals.includes(signal))) {
 		reasons.push('missing_verified_promise');
 	}
-	if (offer.audienceTag && !route.audienceTags.includes(offer.audienceTag)) {
+	if (
+		offer.audienceTag &&
+		!route.audienceTags.includes(offer.audienceTag) &&
+		!(offer.audienceTag === 'general' && route.audienceTags.length === 0)
+	) {
 		reasons.push('audience_mismatch');
 	}
 	if (
@@ -190,7 +199,10 @@ function projectRoute(
 	}
 	if (
 		!Number.isFinite(projectedSupplierCostNgn) ||
-		projectedSupplierCostNgn > offer.maximumSupplierCostNgn
+		// Ceil supplier cost and floor the saved limit to kobo. Tiny floating-point
+		// noise must not reject an exact ceiling; real fractional-kobo excess stays blocked.
+		Math.ceil((projectedSupplierCostNgn - 1e-9) * 100) >
+			Math.floor((offer.maximumSupplierCostNgn + 1e-9) * 100)
 	) {
 		reasons.push('cost_cap_exceeded');
 	}

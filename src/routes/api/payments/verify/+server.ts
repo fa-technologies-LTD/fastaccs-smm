@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { ga4PurchaseReporter } from '$lib/server/ga4-order-metadata';
 import type { RequestHandler } from './$types';
 import { verifyPayment } from '$lib/services/payment';
 import { prisma } from '$lib/prisma';
@@ -11,7 +12,10 @@ import {
 import type { FailureKind } from '$lib/helpers/payment-status';
 import { isVerifiedPaymentBoundToOrder } from '$lib/helpers/payment-binding';
 import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
-import { isPendingPaymentExpired } from '$lib/helpers/payment-expiry.server';
+import {
+	isPendingPaymentExpired,
+	isPaymentVerificationUnavailable
+} from '$lib/helpers/payment-expiry.server';
 import {
 	markPaymentPending,
 	recoverPaidOrder,
@@ -96,6 +100,7 @@ async function buildExpiredPendingOrderResponse(
 	if (isOrderPaymentConfirmed(order)) {
 		return null;
 	}
+	if (isPaymentVerificationUnavailable(gatewayStatus)) return null;
 	const expired = order.paymentExpiresAt
 		? order.paymentExpiresAt.getTime() <= Date.now()
 		: isPendingPaymentExpired(order.createdAt, gatewayStatus);
@@ -194,6 +199,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				status: orderById.status.toUpperCase(),
 				orderId: orderById.id,
 				phone: orderById.orderType === 'phone',
+				ga4PurchaseReporter: ga4PurchaseReporter(orderById),
 				amount: Number(orderById.totalAmount),
 				currency: orderById.currency,
 				message: 'Order already processed'
@@ -211,6 +217,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					orderId: orderById.id,
 					status: 'PAID',
 					phone: true,
+					ga4PurchaseReporter: ga4PurchaseReporter(orderById),
 					amount: Number(orderById.totalAmount),
 					currency: orderById.currency,
 					message: 'Order confirmed. Getting your number…'
@@ -223,6 +230,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					state: 'SUCCESS',
 					status: 'COMPLETED',
 					orderId: orderById.id,
+					ga4PurchaseReporter: ga4PurchaseReporter(orderById),
 					amount: Number(orderById.totalAmount),
 					currency: orderById.currency,
 					message: 'Order already processed'
@@ -235,6 +243,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				warning: recovered.warning,
 				orderId: orderById.id,
 				status: 'PAID',
+				ga4PurchaseReporter: ga4PurchaseReporter(orderById),
 				amount: Number(orderById.totalAmount),
 				currency: orderById.currency
 			});
@@ -417,6 +426,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				state: 'SUCCESS',
 				status: settlement.status,
 				orderId: settlement.orderId,
+				ga4PurchaseReporter: ga4PurchaseReporter(order),
 				manualHandover: settlement.manualHandover === true,
 				boosting: settlement.boosting === true,
 				phone: settlement.phone === true,

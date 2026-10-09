@@ -1,183 +1,55 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const mocks = vi.hoisted(() => ({
-	verifyWebhookSignature: vi.fn(),
-	verifyPayment: vi.fn(),
-	findOrder: vi.fn(),
-	settleSuccessfulPayment: vi.fn(),
-	settleFailedPayment: vi.fn()
-}));
-
-vi.mock('$lib/services/payment', () => ({
-	verifyWebhookSignature: mocks.verifyWebhookSignature,
-	verifyPayment: mocks.verifyPayment
-}));
-
-vi.mock('$lib/prisma', () => ({
-	prisma: {
-		order: {
-			findUnique: mocks.findOrder
-		}
-	}
-}));
-
-vi.mock('$lib/services/payment-settlement', () => ({
-	settleSuccessfulPayment: mocks.settleSuccessfulPayment,
-	settleFailedPayment: mocks.settleFailedPayment
-}));
-
-vi.mock('$lib/services/admin-alerts', () => ({
-	sendCriticalAdminAlert: vi.fn(async () => undefined)
-}));
-
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+const mocks = vi.hoisted(() => ({ signature: vi.fn(), receive: vi.fn(), drain: vi.fn() }));
+vi.mock('$lib/services/payment', () => ({ verifyWebhookSignature: mocks.signature }));
+vi.mock('$lib/services/payment-webhook-inbox', async (importOriginal) => {
+	const real = await importOriginal<typeof import('$lib/services/payment-webhook-inbox')>();
+	return {
+		normalizeWebhookPayload: real.normalizeWebhookPayload,
+		receivePaymentWebhook: mocks.receive,
+		drainPaymentWebhookInbox: mocks.drain
+	};
+});
 import { POST } from './+server';
-
-function webhookRequest(eventData: Record<string, unknown>, signature = 'valid-signature') {
-	return new Request('https://smm.fastaccs.com/api/webhooks/monnify', {
-		method: 'POST',
-		headers: {
-			'content-type': 'application/json',
-			'monnify-signature': signature,
-			'x-request-id': 'webhook-trace'
-		},
-		body: JSON.stringify({
-			eventType: 'SUCCESSFUL_TRANSACTION',
-			eventData
+function call() {
+	return POST({
+		request: new Request('https://smm.fastaccs.com/api/webhooks/monnify', {
+			method: 'POST',
+			headers: { 'monnify-signature': 'signature' },
+			body: JSON.stringify({
+				eventType: 'SUCCESSFUL_TRANSACTION',
+				eventData: { paymentReference: 'ORD_1', customer: { bank: 'private' } }
+			})
 		})
-	});
+	} as never);
 }
-
-async function callWebhook(request: Request) {
-	return POST({ request } as never);
-}
-
-describe('approved invariant: Monnify webhook boundary', () => {
+describe('durable webhook acknowledgement', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		vi.spyOn(console, 'info').mockImplementation(() => undefined);
-		vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-		vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		mocks.signature.mockReturnValue(true);
+		mocks.receive.mockResolvedValue('event-key');
+		mocks.drain.mockResolvedValue({ processed: 1 });
 	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
+	it('rejects invalid signatures without writing to the inbox', async () => {
+		mocks.signature.mockReturnValue(false);
+		expect((await call()).status).toBe(401);
+		expect(mocks.receive).not.toHaveBeenCalled();
 	});
-
-	it('never verifies or settles an invalidly signed webhook', async () => {
-		mocks.verifyWebhookSignature.mockReturnValue(false);
-
-		const response = await callWebhook(
-			webhookRequest(
-				{ transactionReference: 'MNFY|BAD', paymentReference: 'ORD_BAD' },
-				'invalid-signature'
-			)
-		);
-
-		expect(response.status).toBe(401);
-		expect(mocks.verifyPayment).not.toHaveBeenCalled();
-		expect(mocks.settleSuccessfulPayment).not.toHaveBeenCalled();
-		expect(mocks.settleFailedPayment).not.toHaveBeenCalled();
+	it('acknowledges only after inbox persistence and excludes private payload fields', async () => {
+		expect((await call()).status).toBe(200);
+		expect(mocks.receive).toHaveBeenCalledWith({
+			eventType: 'SUCCESSFUL_TRANSACTION',
+			eventData: { paymentReference: 'ORD_1' }
+		});
+		expect(mocks.drain).toHaveBeenCalledWith(1, 'event-key');
 	});
-
-	it('settles a server-verified successful transaction exactly once', async () => {
-		mocks.verifyWebhookSignature.mockReturnValue(true);
-		mocks.verifyPayment.mockResolvedValue({
-			success: true,
-			status: 'PAID',
-			transactionReference: 'MNFY|SUCCESS',
-			paymentReference: 'ORD_SUCCESS',
-			amount: 2500,
-			amountPaid: 2500,
-			currency: 'NGN',
-			channel: 'ACCOUNT_TRANSFER',
-			metaData: { orderId: 'order-123' }
-		});
-		mocks.findOrder.mockResolvedValue({
-			id: 'order-123',
-			paymentReference: 'ORD_SUCCESS'
-		});
-		mocks.settleSuccessfulPayment.mockResolvedValue({
-			success: true,
-			orderId: 'order-123',
-			status: 'COMPLETED'
-		});
-
-		const response = await callWebhook(
-			webhookRequest({
-				transactionReference: 'MNFY|SUCCESS',
-				paymentReference: 'ORD_SUCCESS',
-				paymentStatus: 'PAID'
-			})
-		);
-
-		expect(response.status).toBe(200);
-		expect(mocks.verifyPayment).toHaveBeenCalledOnce();
-		expect(mocks.settleSuccessfulPayment).toHaveBeenCalledOnce();
-		expect(mocks.settleSuccessfulPayment).toHaveBeenCalledWith(
-			expect.objectContaining({
-				orderId: 'order-123',
-				source: 'webhook',
-				paymentReference: 'ORD_SUCCESS',
-				amountPaid: 2500,
-				currency: 'NGN'
-			})
-		);
+	it('requests redelivery if persistence fails', async () => {
+		mocks.receive.mockRejectedValue(new Error('database unavailable'));
+		expect((await call()).status).toBe(503);
+		expect(mocks.drain).not.toHaveBeenCalled();
 	});
-
-	it('holds a verified payment when its reference conflicts with the resolved order', async () => {
-		mocks.verifyWebhookSignature.mockReturnValue(true);
-		mocks.verifyPayment.mockResolvedValue({
-			success: true,
-			status: 'PAID',
-			transactionReference: 'MNFY|OLD',
-			paymentReference: 'ORD_OLD',
-			amount: 2500,
-			amountPaid: 2500,
-			currency: 'NGN',
-			metaData: { orderId: 'order-123' }
-		});
-		mocks.findOrder.mockResolvedValue({
-			id: 'order-123',
-			paymentReference: 'ORD_CURRENT'
-		});
-
-		const response = await callWebhook(
-			webhookRequest({
-				transactionReference: 'MNFY|OLD',
-				paymentReference: 'ORD_OLD',
-				paymentStatus: 'PAID'
-			})
-		);
-
-		expect(response.status).toBe(200);
-		expect(await response.json()).toEqual({ success: false });
-		expect(mocks.settleSuccessfulPayment).not.toHaveBeenCalled();
-		expect(mocks.settleFailedPayment).not.toHaveBeenCalled();
-	});
-
-	it('does not settle a success event that server verification cannot confirm', async () => {
-		mocks.verifyWebhookSignature.mockReturnValue(true);
-		mocks.verifyPayment.mockResolvedValue({
-			success: false,
-			status: 'PENDING',
-			transactionReference: 'MNFY|PENDING',
-			paymentReference: 'ORD_PENDING',
-			amount: 2500,
-			amountPaid: 0,
-			currency: 'NGN',
-			metaData: { orderId: 'order-123' }
-		});
-
-		const response = await callWebhook(
-			webhookRequest({
-				transactionReference: 'MNFY|PENDING',
-				paymentReference: 'ORD_PENDING',
-				paymentStatus: 'PAID'
-			})
-		);
-
-		expect(response.status).toBe(200);
-		expect(mocks.settleSuccessfulPayment).not.toHaveBeenCalled();
-		expect(mocks.settleFailedPayment).not.toHaveBeenCalled();
+	it('acknowledges a durably saved event when immediate processing fails', async () => {
+		mocks.drain.mockRejectedValue(new Error('worker unavailable'));
+		expect((await call()).status).toBe(200);
+		expect(mocks.receive).toHaveBeenCalledOnce();
 	});
 });

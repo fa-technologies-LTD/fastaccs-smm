@@ -94,6 +94,51 @@ function simulate(
 }
 
 describe('boost route simulator', () => {
+	it('accepts an unrestricted reviewed route for the general audience', () => {
+		expect(
+			simulate([route('general', 'smm_raja', 1)], { audienceTag: 'general' }).selectedRouteId
+		).toBe('general');
+	});
+	it.each([
+		['general', ['nigeria']],
+		['nigeria', []]
+	])('preserves explicit audience restrictions (%s, %j)', (audienceTag, audienceTags) => {
+		const result = simulate([route('restricted', 'smm_raja', 1, { audienceTags })], {
+			audienceTag
+		});
+		expect(result.selectedRouteId).toBeNull();
+		expect(result.projections[0].reasons).toContain('audience_mismatch');
+	});
+	it('permits an exact kobo cost ceiling despite floating-point multiplication noise', () => {
+		const r = route('exact-ceiling', 'smm_raja', 1.02);
+		const result = simulateBoostRoute({
+			offer: { ...offer, quantity: 91, maximumSupplierCostNgn: 139.23 },
+			routes: [r],
+			providers,
+			usdToNgn: 1500,
+			currencyBufferPercent: 0,
+			reliabilityFloor: 0.8
+		});
+		expect(result.projections[0].reasons).not.toContain('cost_cap_exceeded');
+	});
+	it('still rejects a genuine fractional-kobo cost excess', () => {
+		const result = simulate([route('over-ceiling', 'smm_raja', 1.000001)], {
+			maximumSupplierCostNgn: 1600
+		});
+		expect(result.selectedRouteId).toBeNull();
+		expect(result.projections[0].reasons).toContain('cost_cap_exceeded');
+	});
+	it('rejects unsupported supplier inputs even when the route is manually approved', () => {
+		const custom = route('custom-comments', 'smm_raja', 0.75);
+		custom.service.providerType = 'Custom Comments';
+		const result = simulate([custom]);
+		expect(result.selectedRouteId).toBeNull();
+		expect(result.projections[0]).toMatchObject({
+			eligible: false,
+			reasons: expect.arrayContaining(['unsupported_service_inputs'])
+		});
+	});
+
 	it('selects the cheapest eligible equivalent route', () => {
 		const result = simulate([
 			route('trusted-expensive', 'smm_raja', 1.25),

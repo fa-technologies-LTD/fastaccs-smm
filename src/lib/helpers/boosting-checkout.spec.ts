@@ -20,7 +20,7 @@ describe('Boosting minimum checkout', () => {
 				maxQuantity: 10000,
 				pricePerStepNgn: 50
 			})
-		).toBe(2010);
+		).toBe(1810);
 		expect(
 			boostingStartingQuantity({
 				minQuantity: 10,

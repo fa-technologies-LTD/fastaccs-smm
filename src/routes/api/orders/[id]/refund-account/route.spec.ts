@@ -20,6 +20,7 @@ const tx = vi.hoisted(() => ({
 	account: { findUnique: vi.fn(), count: vi.fn(), update: vi.fn() },
 	order: { update: vi.fn() },
 	orderItem: { update: vi.fn() },
+	refundRecoveryTask: { upsert: vi.fn() },
 	walletTransaction: { findUnique: vi.fn() }
 }));
 

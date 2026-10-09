@@ -92,7 +92,7 @@ async function allocateAccounts(orderId: string) {
 				throw new Error('ORDER_NOT_FOUND');
 			}
 
-			if (!isOrderPaymentConfirmed(order)) {
+			if (!isOrderPaymentConfirmed(order) || order.deliveryStatus === 'refunded') {
 				throw new Error('PAYMENT_NOT_CONFIRMED');
 			}
 

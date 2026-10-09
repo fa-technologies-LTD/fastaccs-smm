@@ -47,6 +47,7 @@ export interface Ga4CheckoutSnapshot {
 	coupon?: string;
 	affiliation?: string;
 	createdAt: number;
+	purchaseReporter?: 'server' | 'browser';
 }
 
 let initialized = false;
@@ -64,10 +65,17 @@ function readCookieValue(name: string): string | null {
 	if (!browser) return null;
 	const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
-	return match ? decodeURIComponent(match[1]) : null;
+	try {
+		return match ? decodeURIComponent(match[1]) : null;
+	} catch {
+		return null;
+	}
 }
 
 export function getGa4ClientId(): string | null {
+	// A leftover cookie is not current consent. Do not attach it to a new order
+	// after opt-out or when the consent record has expired/cannot be read.
+	if (!browser || !hasAnalyticsConsent()) return null;
 	const raw = readCookieValue('_ga');
 	if (!raw) return null;
 
@@ -298,6 +306,13 @@ export function trackGa4Purchase(params: Ga4EventParams & { transaction_id?: str
 	return tracked;
 }
 
+export function shouldTrackBrowserGa4Purchase(
+	reporter: unknown,
+	snapshotReporter?: unknown
+): boolean {
+	return reporter !== 'server' && snapshotReporter !== 'server';
+}
+
 export function saveGa4CheckoutSnapshot(snapshot: Ga4CheckoutSnapshot): void {
 	if (!browser || !snapshot.orderId) return;
 
@@ -327,7 +342,8 @@ export function readGa4CheckoutSnapshot(orderId?: string | null): Ga4CheckoutSna
 			items: parsed.items.map(cleanGa4Item),
 			coupon: typeof parsed.coupon === 'string' ? parsed.coupon : undefined,
 			affiliation: typeof parsed.affiliation === 'string' ? parsed.affiliation : undefined,
-			createdAt: Number(parsed.createdAt || Date.now())
+			createdAt: Number(parsed.createdAt || Date.now()),
+			purchaseReporter: parsed.purchaseReporter === 'server' ? 'server' : 'browser'
 		};
 	} catch {
 		return null;

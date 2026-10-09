@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+vi.mock('$lib/services/refund-recovery', () => ({ enqueueRefundRecovery: vi.fn() }));
+import { enqueueRefundRecovery } from '$lib/services/refund-recovery';
 
 // Isolated file: getSms that throws + vitest's unhandled-rejection tracker interact badly when
 // mixed with non-throwing tests. Covers cancelAndRefundRental's two throw branches.
@@ -119,7 +121,19 @@ beforeEach(() => {
 			phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 			orderItem: { update: vi.fn().mockResolvedValue({}) },
 			orderEvent: { create: vi.fn().mockResolvedValue({}) },
-			order: { update: vi.fn().mockResolvedValue({}) }
+			order: {
+				update: vi.fn().mockResolvedValue({}),
+				findUnique: vi
+					.fn()
+					.mockResolvedValue({
+						userId: 'user-1',
+						totalAmount: 1200,
+						refundedAmount: 0,
+						status: 'paid',
+						paymentStatus: 'paid',
+						deliveryStatus: 'processing'
+					})
+			}
 		})
 	);
 });
@@ -153,5 +167,10 @@ describe('cancelAndRefundRental — throw branches', () => {
 		}
 		expect(outcome).toBe('refunded');
 		expect(creditStoreCreditMock).toHaveBeenCalledOnce();
+		expect(enqueueRefundRecovery).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.any(String),
+			expect.stringMatching(/^refund:phone:/)
+		);
 	});
 });

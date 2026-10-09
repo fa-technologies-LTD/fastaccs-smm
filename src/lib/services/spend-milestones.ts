@@ -164,7 +164,8 @@ async function maybeGrantSpendPromo(userId: string): Promise<void> {
  * Never claws back a gift the buyer has already spent, or a redeemed promo.
  */
 export async function maybeClawbackSpendMilestones(
-	userId: string | null | undefined
+	userId: string | null | undefined,
+	options: { throwOnError?: boolean } = {}
 ): Promise<void> {
 	if (!userId) return;
 	try {
@@ -173,6 +174,7 @@ export async function maybeClawbackSpendMilestones(
 		if (spend < PROMO_MILESTONE_SPEND) await deactivateUnusedPromo(userId);
 	} catch (error) {
 		console.error('maybeClawbackSpendMilestones failed:', error);
+		if (options.throwOnError) throw error;
 	}
 }
 

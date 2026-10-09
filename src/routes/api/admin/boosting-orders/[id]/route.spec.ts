@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 
 const tx = vi.hoisted(() => ({
 	$queryRaw: vi.fn(),
-	orderItem: { update: vi.fn(), findMany: vi.fn() },
+	orderItem: { update: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
 	order: { update: vi.fn() },
 	boostFulfillment: { findUnique: vi.fn(), updateMany: vi.fn() },
 	notification: { create: vi.fn() }
@@ -23,7 +23,9 @@ const existing = {
 	order: {
 		userId: '22222222-2222-4222-8222-222222222222',
 		orderNumber: 'ORD-BOOST-1',
-		paymentStatus: 'paid'
+		paymentStatus: 'paid',
+		status: 'paid',
+		deliveryStatus: 'processing'
 	}
 };
 
@@ -62,11 +64,13 @@ beforeEach(() => {
 		callback(tx)
 	);
 	tx.orderItem.update.mockResolvedValue({ ...existing, boostFulfillmentStatus: 'needs_link' });
+	tx.orderItem.findUnique.mockResolvedValue(existing);
 	tx.orderItem.findMany.mockResolvedValue([{ boostFulfillmentStatus: 'needs_link' }]);
 	tx.order.update.mockResolvedValue({});
 	tx.$queryRaw.mockResolvedValue([]);
 	tx.boostFulfillment.findUnique.mockResolvedValue({
 		status: 'queued',
+		fulfillmentMode: 'manual',
 		supplierOrderId: null,
 		submittedAt: null,
 		leaseToken: null,
@@ -80,6 +84,53 @@ beforeEach(() => {
 });
 
 describe('manual boosting order workflow', () => {
+	it.each(['refunded', 'cancelled', 'failed'])(
+		'does not revive a %s order with an old paid flag',
+		async (status) => {
+			vi.mocked(prisma.orderItem.findUnique).mockResolvedValue({
+				...existing,
+				order: { ...existing.order, status }
+			} as never);
+			expect((await callPatch({ status: 'completed' })).status).toBe(409);
+			expect(mocks.transaction).not.toHaveBeenCalled();
+		}
+	);
+	it('rechecks payment under the order lock if a refund happens after preflight', async () => {
+		tx.orderItem.findUnique.mockResolvedValue({
+			...existing,
+			order: { ...existing.order, status: 'refunded', paymentStatus: 'refunded' }
+		});
+		expect((await callPatch({ status: 'completed' })).status).toBe(409);
+		expect(tx.orderItem.update).not.toHaveBeenCalled();
+		expect(tx.order.update).not.toHaveBeenCalled();
+		expect(mocks.notifyCompleted).not.toHaveBeenCalled();
+	});
+	it('does not overwrite a supplier-result state changed after preflight', async () => {
+		tx.orderItem.findUnique.mockResolvedValue({ ...existing, boostFulfillmentStatus: 'partial' });
+		expect((await callPatch({ status: 'completed' })).status).toBe(409);
+		expect(tx.orderItem.update).not.toHaveBeenCalled();
+	});
+	it.each(['pilot', 'live'])(
+		'does not use manual controls to interrupt %s automation',
+		async (fulfillmentMode) => {
+			tx.boostFulfillment.findUnique.mockResolvedValue({
+				status: 'queued',
+				fulfillmentMode,
+				attempts: []
+			});
+			expect((await callPatch({ status: 'in_progress' })).status).toBe(409);
+			expect(tx.orderItem.update).not.toHaveBeenCalled();
+		}
+	);
+	it('does not turn an uncertain supplier submission into a manual completion', async () => {
+		tx.boostFulfillment.findUnique.mockResolvedValue({
+			status: 'manual_review',
+			fulfillmentMode: 'manual',
+			attempts: [{ type: 'submission', outcome: 'submission_unknown' }]
+		});
+		expect((await callPatch({ status: 'completed' })).status).toBe(409);
+		expect(tx.orderItem.update).not.toHaveBeenCalled();
+	});
 	it('requires a customer-facing reason before requesting a replacement link', async () => {
 		const response = await callPatch({ status: 'needs_link', reason: '' });
 		expect(response.status).toBe(400);
@@ -132,6 +183,7 @@ describe('manual boosting order workflow', () => {
 	it('does not request a new link after supplier submission may have started', async () => {
 		tx.boostFulfillment.findUnique.mockResolvedValue({
 			status: 'manual_review',
+			fulfillmentMode: 'manual',
 			supplierOrderId: null,
 			submittedAt: null,
 			leaseToken: null,

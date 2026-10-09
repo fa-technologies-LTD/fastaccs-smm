@@ -15,6 +15,7 @@
 	import {
 		clearGa4CheckoutSnapshot,
 		readGa4CheckoutSnapshot,
+		shouldTrackBrowserGa4Purchase,
 		trackGa4Purchase
 	} from '$lib/services/ga4';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
@@ -293,7 +294,13 @@
 						if (snapPurchaseTracked) {
 							recordAnalyticsEvent('purchase', '/checkout/verify');
 						}
-						if (resolvedOrderId) {
+						if (
+							resolvedOrderId &&
+							shouldTrackBrowserGa4Purchase(
+								result.ga4PurchaseReporter,
+								checkoutSnapshot?.purchaseReporter
+							)
+						) {
 							trackGa4Purchase({
 								transaction_id: resolvedOrderId,
 								value: purchaseValue,

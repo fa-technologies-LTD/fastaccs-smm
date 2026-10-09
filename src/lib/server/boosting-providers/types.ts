@@ -21,6 +21,11 @@ export const BOOST_CATALOG_OUTCOMES = [
 	'streams',
 	'monthly_listeners',
 	'likes',
+	'live_likes',
+	'impressions',
+	'reach',
+	'story_shares',
+	'custom_comments',
 	'reactions',
 	'shares',
 	'reposts',
@@ -78,6 +83,8 @@ export interface SubmitBoostOrder {
 	serviceId: string;
 	targetUrl: string;
 	quantity: number;
+	inputMode?: 'custom_comments';
+	comments?: string;
 }
 
 export interface SubmitBoostOrderResult {
@@ -112,7 +119,10 @@ export interface BoostProviderOrderClient {
 	submitOrder(input: SubmitBoostOrder): Promise<SubmitBoostOrderResult>;
 	getStatuses(providerOrderIds: string[]): Promise<BoostProviderOrderStatus[]>;
 	requestRefill?(providerOrderId: string): Promise<{ provider: BoostProviderId; refillId: string }>;
+	getRefillStatus?(refillId: string): Promise<{ state: BoostRefillState }>;
 }
+
+export type BoostRefillState = 'pending' | 'in_progress' | 'completed' | 'rejected' | 'unknown';
 
 export interface BoostProviderReadClient {
 	readonly id: BoostProviderId;

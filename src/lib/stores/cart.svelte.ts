@@ -4,7 +4,7 @@ import {
 	normalizeTierDeliveryMode,
 	type TierDeliveryMode
 } from '$lib/helpers/tier-delivery-config';
-import { roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
+import { roundUpCatalogPriceNgn as roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
 
 interface TierDeliveryLookup {
 	id: string;
@@ -226,7 +226,8 @@ class CartStore {
 		serviceId: string,
 		targetUrl: string,
 		boostQuantity: number,
-		boostOfferId: string | null = null
+		boostOfferId: string | null = null,
+		comments?: string
 	): void {
 		if (!serviceId || !targetUrl.trim() || boostQuantity <= 0) return;
 
@@ -235,7 +236,12 @@ class CartStore {
 			tierId: serviceId,
 			quantity: 1,
 			addedAt: Date.now(),
-			boosting: { targetUrl: targetUrl.trim(), boostQuantity, boostOfferId }
+			boosting: {
+				targetUrl: targetUrl.trim(),
+				boostQuantity,
+				boostOfferId,
+				...(comments !== undefined ? { comments } : {})
+			}
 		});
 
 		this.markCartChanged();

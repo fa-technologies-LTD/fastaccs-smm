@@ -18,7 +18,11 @@
 		BoostMappingWorkspace,
 		BoostServiceLookupResult
 	} from '$lib/helpers/boosting-mapping-types';
-	import { roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
+	import { roundUpCatalogPriceNgn as roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
+	import {
+		rebaseLockedBoostingPrice,
+		suggestBoostingPricePerStep
+	} from '$lib/helpers/boosting-price-unit';
 	import { showError, showSuccess } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 
@@ -129,17 +133,14 @@
 			? (pricingCandidate.ratePerThousand * offerDraft.minQuantity) / 1000
 			: 0
 	);
-	const rawTargetMinimumPrice = $derived.by(() => {
-		if (!offerDraft || estimatedSupplierCost <= 0) return 0;
-		const profitOnCost = Math.min(500, Math.max(0, Number(offerDraft.minimumMarginPercent)));
-		return estimatedSupplierCost * (1 + profitOnCost / 100);
-	});
-	const roundedTargetMinimumPrice = $derived(
-		rawTargetMinimumPrice > 0 ? round50(rawTargetMinimumPrice) : 0
-	);
 	const suggestedPricePerStep = $derived.by(() => {
-		if (!offerDraft || roundedTargetMinimumPrice <= 0) return 0;
-		return round50((roundedTargetMinimumPrice * offerDraft.stepQuantity) / offerDraft.minQuantity);
+		if (!offerDraft) return 0;
+		return suggestBoostingPricePerStep({
+			supplierCostNgn: estimatedSupplierCost,
+			quantity: offerDraft.minQuantity,
+			stepQuantity: offerDraft.stepQuantity,
+			profitPercent: Number(offerDraft.minimumMarginPercent)
+		});
 	});
 	const suggestedMinimumPrice = $derived(
 		offerDraft && suggestedPricePerStep > 0
@@ -166,10 +167,6 @@
 	const currentPriceMeetsTarget = $derived(
 		estimatedSupplierCost <= 0 || projectedMarginPercent + 0.01 >= targetMarginPercent
 	);
-
-	function round50(value: number): number {
-		return Math.max(50, Math.ceil((Number(value) - 1e-9) / 50) * 50);
-	}
 
 	function money(value: number): string {
 		return new Intl.NumberFormat('en-NG', {
@@ -223,7 +220,7 @@
 			minQuantity: next.category.minQuantity,
 			maxQuantity: null,
 			stepQuantity: next.category.stepQuantity,
-			pricePerStepNgn: Math.max(50, next.category.pricePerStepNgn),
+			pricePerStepNgn: Math.max(0.01, next.category.pricePerStepNgn),
 			priceLocked: false,
 			minimumMarginPercent: margin,
 			normalCostTargetNgn: maximumSupplierCost,
@@ -356,6 +353,7 @@
 
 	function useCandidate(candidate: BoostMappingCandidate, purpose: 'primary' | 'fallback'): void {
 		if (!offerDraft) return;
+		if (purpose === 'primary' && !setQuantityIncrement(candidate.minQuantity)) return;
 		const nextRefillDays =
 			purpose === 'primary'
 				? selectedQualityTier === 'value'
@@ -368,7 +366,6 @@
 			// Start with the supplier minimum as both values; the owner can then choose a smaller
 			// customer-facing increment without weakening the supplier minimum guard.
 			offerDraft.minQuantity = candidate.minQuantity;
-			offerDraft.stepQuantity = candidate.minQuantity;
 			// Never promise a refill period that the selected supplier service does not state.
 			offerDraft.refillDays = nextRefillDays;
 			routeDrafts = [routeFor(candidate, true)];
@@ -533,9 +530,9 @@
 				throw new Error(payload?.error || 'No shortlist found.');
 			const candidates = (payload.data || []) as BoostMappingCandidate[];
 			if (!candidates.length) throw new Error('No compatible supplier services are available.');
+			if (!setQuantityIncrement(candidates[0].minQuantity)) return;
 			mergeCandidates(candidates);
 			offerDraft.minQuantity = candidates[0].minQuantity;
-			offerDraft.stepQuantity = candidates[0].minQuantity;
 			const claimedRefillDays = candidates.map((candidate) => candidate.refillDaysClaimed);
 			offerDraft.refillDays =
 				selectedQualityTier !== 'value' && claimedRefillDays.every((days) => days !== null)
@@ -578,10 +575,33 @@
 		if (!offerDraft.priceLocked) queueMicrotask(useSuggestedPrice);
 	}
 
+	function setQuantityIncrement(nextStep: number): boolean {
+		if (!offerDraft) return false;
+		if (offerDraft.priceLocked && offerDraft.pricePerStepNgn > 0) {
+			const nextPrice = rebaseLockedBoostingPrice(
+				offerDraft.pricePerStepNgn,
+				offerDraft.stepQuantity,
+				nextStep
+			);
+			if (nextPrice === null) {
+				showError(
+					'Price kept unchanged',
+					'This increment cannot keep your exact price. Choose another increment or use the target price first.'
+				);
+				return false;
+			}
+			offerDraft.pricePerStepNgn = nextPrice;
+		}
+		offerDraft.stepQuantity = nextStep;
+		return true;
+	}
+
 	function updateQuantityRule(field: 'minQuantity' | 'stepQuantity', value: string): void {
 		if (!offerDraft) return;
 		const parsed = Math.max(1, Math.round(Number(value) || 1));
-		offerDraft[field] = parsed;
+		if (field === 'stepQuantity') {
+			if (!setQuantityIncrement(parsed)) return;
+		} else offerDraft.minQuantity = parsed;
 		if (!offerDraft.priceLocked) queueMicrotask(useSuggestedPrice);
 	}
 
@@ -1003,7 +1023,7 @@
 								<label class="text-xs font-semibold" style="color: var(--text-muted);"
 									>{primaryCandidate ? 'Fallback service code' : 'Primary service code'}<input
 										bind:value={serviceCode}
-										inputmode="numeric"
+										inputmode={provider === 'smm_raja' ? 'text' : 'numeric'}
 										placeholder="e.g. 3498"
 										class="field mt-1"
 									/></label
@@ -1154,7 +1174,10 @@
 								type="number"
 								min="1"
 								value={offerDraft.stepQuantity}
-								oninput={(event) => updateQuantityRule('stepQuantity', event.currentTarget.value)}
+								oninput={(event) => {
+									updateQuantityRule('stepQuantity', event.currentTarget.value);
+									event.currentTarget.value = String(offerDraft?.stepQuantity ?? 1);
+								}}
 								class="field mt-1"
 							/><span class="mt-1 hidden font-normal sm:block" style="color: var(--text-dim);"
 								>Customers can also type a large quantity directly.</span
@@ -1175,8 +1198,8 @@
 						<label class="text-xs font-semibold" style="color: var(--text-muted);"
 							>Customer price per {offerDraft.stepQuantity.toLocaleString()}<input
 								type="number"
-								min="50"
-								step="50"
+								min="0.01"
+								step="0.01"
 								value={offerDraft.pricePerStepNgn}
 								oninput={(event) => updateCustomerPrice(event.currentTarget.value)}
 								class="field mt-1"

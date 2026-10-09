@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '$lib/prisma';
+import { moneyNgn } from '$lib/helpers/money';
 
 /**
  * Store Credit — spendable-on-site wallet credit, built on the existing
@@ -41,7 +42,7 @@ const SC_CATEGORY: Record<string, string> = {
 export interface StoreCreditEntry {
 	at: string;
 	description: string;
-	delta: number; // + credit, − debit (whole naira)
+	delta: number; // + credit, − debit (NGN including kobo)
 	kind: 'credit' | 'debit';
 	category: string;
 	status: string;
@@ -91,7 +92,7 @@ export async function getStoreCreditHistory(
 	});
 	return rows.map((r) => {
 		const kind = STORE_CREDIT_DEBIT_TYPES.has(r.type) ? ('debit' as const) : ('credit' as const);
-		const amount = Math.max(0, Math.round(Number(r.amount || 0)));
+		const amount = moneyNgn(r.amount);
 		const delta = kind === 'debit' ? -amount : amount;
 		return {
 			at: r.createdAt.toISOString(),
@@ -131,15 +132,15 @@ function naira(value: unknown): number {
  * Pure: given an order total and the user's available buckets, decide how much
  * credit to apply. Refund credit first (uncapped up to the order), then earned
  * credit (capped at EARNED_REDEMPTION_CAP_PERCENT of the ORDER total). Never
- * exceeds the order total. All values are whole naira.
+ * exceeds the order total. Refund credit preserves kobo; earned credit retains its whole-naira rule.
  */
 export function computeOrderRedemption(
 	orderTotal: number,
 	buckets: Pick<StoreCreditBuckets, 'earnedAvailable' | 'refundAvailable'>,
 	options: { earnedCapPercent?: number } = {}
 ): OrderRedemption {
-	const total = naira(orderTotal);
-	const refundAvail = naira(buckets.refundAvailable);
+	const total = moneyNgn(orderTotal);
+	const refundAvail = moneyNgn(buckets.refundAvailable);
 	const earnedAvail = naira(buckets.earnedAvailable);
 	const capPercent = options.earnedCapPercent ?? EARNED_REDEMPTION_CAP_PERCENT;
 
@@ -147,18 +148,18 @@ export function computeOrderRedemption(
 
 	// Refund credit first — uncapped, but never more than the order.
 	const refundApplied = Math.min(refundAvail, total);
-	const remaining = total - refundApplied;
+	const remaining = moneyNgn(total - refundApplied);
 
 	// Earned credit — capped at capPercent of the ORDER total, and the remainder.
 	const earnedCap = Math.floor(total * capPercent);
-	const earnedApplied = Math.max(0, Math.min(earnedAvail, earnedCap, remaining));
+	const earnedApplied = Math.max(0, Math.min(earnedAvail, earnedCap, Math.floor(remaining)));
 
-	const totalApplied = refundApplied + earnedApplied;
+	const totalApplied = moneyNgn(refundApplied + earnedApplied);
 	return { refundApplied, earnedApplied, totalApplied };
 }
 
 /**
- * True if a redemption asks for more than the buckets actually hold (whole-naira tolerance).
+ * True if a redemption asks for more than the buckets actually hold (sub-kobo tolerance).
  * The guard against concurrent store-credit over-spend: checked under a wallet row-lock, so a
  * second simultaneous checkout that would push a bucket negative is refused, not silently leaked.
  */
@@ -167,8 +168,8 @@ export function redemptionExceedsAvailable(
 	buckets: Pick<StoreCreditBuckets, 'refundAvailable' | 'earnedAvailable'>
 ): boolean {
 	return (
-		redemption.refundApplied - buckets.refundAvailable > 0.5 ||
-		redemption.earnedApplied - buckets.earnedAvailable > 0.5
+		redemption.refundApplied - buckets.refundAvailable > 0.005 ||
+		redemption.earnedApplied - buckets.earnedAvailable > 0.005
 	);
 }
 
@@ -350,12 +351,15 @@ export async function creditStoreCredit(
 		metadata?: Prisma.InputJsonValue;
 	}
 ): Promise<void> {
-	const amount = naira(params.amount);
+	const amount = params.type === SC_CREDIT_REFUND ? moneyNgn(params.amount) : naira(params.amount);
 	if (amount <= 0) return;
 
 	const wallet = await tx.wallet.upsert({
 		where: { userId: params.userId },
-		update: {},
+		// A non-empty, balance-neutral update lets Prisma use PostgreSQL's atomic
+		// ON CONFLICT path. Empty update falls back to read/create and can race
+		// when two first-ever credits try to create the same buyer's wallet.
+		update: { balance: { increment: 0 } },
 		create: { userId: params.userId, balance: 0, currency: 'NGN' }
 	});
 
@@ -421,7 +425,7 @@ export async function redeemStoreCreditForOrder(
 
 	const wallet = await tx.wallet.upsert({
 		where: { userId: params.userId },
-		update: {},
+		update: { balance: { increment: 0 } },
 		create: { userId: params.userId, balance: 0, currency: 'NGN' }
 	});
 
@@ -535,7 +539,7 @@ export async function restoreStoreCreditRedemptionForLatePayment(
 	tx: Prisma.TransactionClient,
 	params: { userId: string; orderId: string; expectedAmount: number }
 ): Promise<{ restoredAmount: number; alreadyReserved: boolean }> {
-	const expectedAmount = naira(params.expectedAmount);
+	const expectedAmount = moneyNgn(params.expectedAmount);
 	if (expectedAmount <= 0) return { restoredAmount: 0, alreadyReserved: true };
 
 	const wallet = await tx.wallet.findUnique({
@@ -559,7 +563,7 @@ export async function restoreStoreCreditRedemptionForLatePayment(
 		(sum, row) => sum + Math.max(0, Number(row.amount || 0)),
 		0
 	);
-	if (supported.length !== debits.length || Math.abs(recordedAmount - expectedAmount) > 0.5) {
+	if (supported.length !== debits.length || Math.abs(recordedAmount - expectedAmount) > 0.005) {
 		throw new Error('STORE_CREDIT_LATE_PAYMENT_REDEMPTION_MISMATCH');
 	}
 
@@ -582,7 +586,7 @@ export async function restoreStoreCreditRedemptionForLatePayment(
 		select: { balance: true }
 	});
 	const restoredAmount = refundApplied + earnedApplied;
-	if (!liveWallet || Number(liveWallet.balance || 0) + 0.5 < restoredAmount) {
+	if (!liveWallet || Number(liveWallet.balance || 0) + 0.005 < restoredAmount) {
 		throw new Error('STORE_CREDIT_LATE_PAYMENT_BALANCE_MISMATCH');
 	}
 

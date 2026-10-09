@@ -9,12 +9,14 @@ import {
 	reconcileRegularRewardForOrder
 } from '$lib/services/affiliate-vesting';
 import { maybeClawbackSpendMilestones } from '$lib/services/spend-milestones';
+import { enqueueRefundRecovery } from '$lib/services/refund-recovery';
 import { createAdminAuditLog } from '$lib/services/admin-audit';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { recordOrderEvent } from '$lib/services/order-events';
 import { allocateFullRefundToItems } from '$lib/helpers/order-revenue';
+import { moneyNgn } from '$lib/helpers/money';
 
 const FAULTY_STATUS = 'faulty';
 
@@ -110,8 +112,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				return { outcome: 'order_refunded' as const };
 			}
 			if (!order.userId) return { outcome: 'guest' as const };
-			const wasPaid =
-				order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'completed';
+			const wasPaid = ['paid', 'success', 'overpaid'].includes(order.paymentStatus);
 			if (!wasPaid) return { outcome: 'not_paid' as const };
 
 			// Work out whether this is the final retained account before issuing money. The final
@@ -129,7 +130,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				subtotal > 0
 					? (orderTotal * Math.max(0, Number(orderItem.unitPrice || 0))) / subtotal
 					: Math.max(0, Number(orderItem.unitPrice || 0));
-			const amount = Math.floor(
+			const amount = moneyNgn(
 				Math.min(
 					Math.max(0, orderTotal - alreadyRefunded),
 					orderFullyRefunded ? Math.max(0, orderTotal - alreadyRefunded) : adjustedUnit
@@ -208,6 +209,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				},
 				tx
 			);
+			await enqueueRefundRecovery(tx, order.id, `refund:account:${account.id}`);
 			return { outcome: 'refunded' as const, account, order, amount, orderFullyRefunded };
 		},
 		{ maxWait: 10_000, timeout: 20_000 }

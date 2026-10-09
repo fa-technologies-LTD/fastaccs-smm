@@ -19,6 +19,7 @@ const tx = vi.hoisted(() => ({
 	order: { findUnique: vi.fn(), update: vi.fn() },
 	orderItem: { update: vi.fn(), updateMany: vi.fn() },
 	boostFulfillment: { updateMany: vi.fn() },
+	refundRecoveryTask: { upsert: vi.fn() },
 	walletTransaction: { aggregate: vi.fn() }
 }));
 
@@ -104,6 +105,24 @@ beforeEach(() => {
 });
 
 describe('full-order refund integrity', () => {
+	it('does not issue money just because an unpaid order was labelled completed', async () => {
+		tx.order.findUnique.mockResolvedValue(
+			paidOrder({ status: 'completed', paymentStatus: 'pending' })
+		);
+		expect((await callRefund()).status).toBe(409);
+		expect(mocks.creditStoreCredit).not.toHaveBeenCalled();
+		expect(tx.refundRecoveryTask.upsert).not.toHaveBeenCalled();
+	});
+	it('returns kobo in the unrefunded remainder rather than flooring it', async () => {
+		tx.order.findUnique.mockResolvedValue(paidOrder({ totalAmount: 22500.5 }));
+		const response = await callRefund();
+		expect(response.status).toBe(200);
+		expect(await response.json()).toMatchObject({ refundedAmount: 15000.5 });
+		expect(mocks.creditStoreCredit).toHaveBeenCalledWith(
+			tx,
+			expect.objectContaining({ amount: 15000.5 })
+		);
+	});
 	it('credits only the unrefunded remainder and then reverses every reward layer', async () => {
 		const response = await callRefund();
 		const body = await response.json();
@@ -126,6 +145,11 @@ describe('full-order refund integrity', () => {
 		expect(mocks.voidSuper).toHaveBeenCalledWith({
 			userId: USER_ID,
 			affiliateUserId: AFFILIATE_ID
+		});
+		expect(tx.refundRecoveryTask.upsert).toHaveBeenCalledWith({
+			where: { eventKey: `refund:order:${ORDER_ID}` },
+			update: {},
+			create: { orderId: ORDER_ID, eventKey: `refund:order:${ORDER_ID}` }
 		});
 		expect(mocks.voidPending).toHaveBeenCalledWith(ORDER_ID);
 		expect(mocks.reverseVested).toHaveBeenCalledWith(ORDER_ID);

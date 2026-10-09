@@ -1,4 +1,6 @@
 import { BoostProviderError } from './panel-client';
+import { parseBoostServiceId } from './service-id';
+import { parseBoostComments } from '$lib/helpers/boosting-service-input';
 import type {
 	BoostProviderId,
 	BoostProviderOrderClient,
@@ -100,10 +102,10 @@ function assertProviderOrderId(value: unknown): string | null {
 }
 
 function validateSubmitInput(provider: BoostProviderId, input: SubmitBoostOrder): URLSearchParams {
-	const serviceId = assertProviderOrderId(input.serviceId);
+	const serviceId = parseBoostServiceId(provider, input.serviceId);
 	if (!serviceId) {
 		throw new BoostProviderSubmissionError(
-			'Provider service ID must be a positive integer.',
+			'Provider service code is invalid.',
 			provider,
 			'invalid_input',
 			'not_submitted'
@@ -144,6 +146,31 @@ function validateSubmitInput(provider: BoostProviderId, input: SubmitBoostOrder)
 		);
 	}
 
+	if (input.inputMode === 'custom_comments') {
+		const parsed = parseBoostComments(input.comments);
+		if (parsed.error || parsed.quantity !== input.quantity) {
+			throw new BoostProviderSubmissionError(
+				parsed.error || 'Comment count does not match quantity.',
+				provider,
+				'invalid_input',
+				'not_submitted'
+			);
+		}
+		return new URLSearchParams({
+			action: 'add',
+			service: serviceId,
+			link: target.toString(),
+			comments: parsed.text
+		});
+	}
+	if (input.comments !== undefined) {
+		throw new BoostProviderSubmissionError(
+			'Custom text requires a custom-comment service.',
+			provider,
+			'invalid_input',
+			'not_submitted'
+		);
+	}
 	return new URLSearchParams({
 		action: 'add',
 		service: serviceId,
@@ -203,6 +230,12 @@ function parseStatusEntry(
 	const rawStatus = typeof record.status === 'string' ? record.status.trim() : '';
 	const charge = parseNonNegativeNumber(record.charge);
 	const startCount = parseNonNegativeInteger(record.start_count);
+	// Observed on real BulkFollows Pending orders: the starting count is not known yet.
+	// Preserve null instead of fabricating zero; missing or malformed fields still fail closed.
+	const pendingStartCount =
+		provider === 'bulk_follows' &&
+		typeof record.start_count === 'string' &&
+		record.start_count.trim() === '';
 	const remains = parseNonNegativeInteger(record.remains);
 	const currency = String(record.currency ?? '')
 		.trim()
@@ -210,7 +243,7 @@ function parseStatusEntry(
 	if (
 		!rawStatus ||
 		charge === null ||
-		startCount === null ||
+		(startCount === null && !pendingStartCount) ||
 		remains === null ||
 		!/^[A-Z]{3}$/.test(currency)
 	) {
@@ -228,7 +261,7 @@ function parseStatusEntry(
 		rawStatus,
 		charge,
 		currency,
-		startCount,
+		startCount: pendingStartCount ? null : startCount,
 		remains,
 		error: null
 	};
@@ -429,6 +462,67 @@ export function createPanelOrderClient(options: PanelOrderClientOptions): BoostP
 			});
 		},
 
+		// BulkFollows' single-refill read contract is separate from order status. Do not guess
+		// that SMM Raja supports the same action, or dispatch a refill while polling its state.
+		...(options.id === 'bulk_follows'
+			? {
+					async getRefillStatus(refillId: string) {
+						const apiKey = readApiKey();
+						const id = validateStatusIds(options.id, [refillId])[0];
+						let result: { response: Response; text: string };
+						try {
+							result = await send(
+								new URLSearchParams({ key: apiKey, action: 'refill_status', refill: id })
+							);
+						} catch {
+							throw new BoostProviderError(
+								'Provider refill status is unavailable.',
+								options.id,
+								'network_error'
+							);
+						}
+						if (!result.response.ok)
+							throw new BoostProviderError(
+								'Provider refill status is unavailable.',
+								options.id,
+								'http_error',
+								result.response.status
+							);
+						const payload = parseJson(result.text);
+						const providerError = safeMessage(payload, apiKey);
+						if (providerError)
+							throw new BoostProviderError(providerError, options.id, 'provider_error');
+						if (
+							!payload ||
+							typeof payload !== 'object' ||
+							Array.isArray(payload) ||
+							typeof (payload as Record<string, unknown>).status !== 'string'
+						) {
+							throw new BoostProviderError(
+								'Provider returned an invalid refill status.',
+								options.id,
+								'invalid_response'
+							);
+						}
+						const raw = String((payload as Record<string, unknown>).status)
+							.trim()
+							.toLowerCase()
+							.replace(/\s+/g, ' ');
+						const state =
+							raw === 'completed'
+								? 'completed'
+								: ['processing', 'in progress', 'active'].includes(raw)
+									? 'in_progress'
+									: ['pending', 'queued'].includes(raw)
+										? 'pending'
+										: ['rejected', 'cancelled', 'canceled', 'failed'].includes(raw)
+											? 'rejected'
+											: 'unknown';
+						return { state } as { state: import('./types').BoostRefillState };
+					}
+				}
+			: {}),
+
 		async requestRefill(providerOrderId) {
 			const apiKey = readApiKey();
 			const orderId = validateStatusIds(options.id, [providerOrderId])[0];
@@ -463,7 +557,8 @@ export function createPanelOrderClient(options: PanelOrderClientOptions): BoostP
 				payload && typeof payload === 'object' && !Array.isArray(payload)
 					? (payload as Record<string, unknown>)
 					: null;
-			const refillId = String(record?.refill ?? record?.order ?? '').trim();
+			// An order ID is not proof that a refill was created.
+			const refillId = String(record?.refill ?? '').trim();
 			if (!/^[1-9]\d*$/.test(refillId)) {
 				throw new BoostProviderError(
 					'Provider returned an invalid refill response.',

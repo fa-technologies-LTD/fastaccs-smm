@@ -1,6 +1,7 @@
 <script lang="ts">
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
 	import { boostingStartingQuantity } from '$lib/helpers/boosting-checkout';
+	import { parseBoostComments } from '$lib/helpers/boosting-service-input';
 	import BoostingQuantitySelector from '$lib/components/BoostingQuantitySelector.svelte';
 	import {
 		ArrowLeft,
@@ -15,7 +16,7 @@
 		Users
 	} from '$lib/icons';
 	import { formatPrice } from '$lib/helpers/utils';
-	import { roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
+	import { roundUpCatalogPriceNgn as roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -23,6 +24,8 @@
 	let selectedCategoryId = $state(data.groups[0]?.categoryId ?? '');
 	let selectedOfferByCategory = $state<Record<string, string>>({});
 	let quantityByCategory = $state<Record<string, number>>({});
+	let commentText = $state('');
+	const parsedComments = $derived(parseBoostComments(commentText));
 
 	const platforms = $derived([
 		...new Map(data.groups.map((group) => [group.platform, group.platformLabel])).entries()
@@ -41,9 +44,11 @@
 		return selectedGroup.offers.find((offer) => offer.id === id) ?? selectedGroup.offers[0] ?? null;
 	});
 	const quantity = $derived(
-		selectedGroup && selectedOffer
-			? (quantityByCategory[selectedGroup.categoryId] ?? boostingStartingQuantity(selectedOffer))
-			: 0
+		selectedGroup?.outcome === 'custom_comments'
+			? parsedComments.quantity
+			: selectedGroup && selectedOffer
+				? (quantityByCategory[selectedGroup.categoryId] ?? boostingStartingQuantity(selectedOffer))
+				: 0
 	);
 	const total = $derived(
 		selectedOffer
@@ -60,6 +65,11 @@
 		likes: Heart,
 		views: Eye,
 		comments: MessageCircle,
+		custom_comments: MessageCircle,
+		live_likes: Heart,
+		impressions: Eye,
+		reach: Eye,
+		story_shares: Share2,
 		reposts: Repeat,
 		streams: Music,
 		monthly_listeners: Music,
@@ -255,14 +265,32 @@
 
 					{#if selectedOffer}
 						<div class="rounded-xl border p-4" style="border-color: var(--border);">
-							<BoostingQuantitySelector
-								value={quantity}
-								minQuantity={selectedOffer.minQuantity}
-								maxQuantity={selectedOffer.maxQuantity}
-								stepQuantity={selectedOffer.stepQuantity}
-								presets={selectedOffer.quantityPresets}
-								onchange={(next) => chooseQuantity(selectedGroup!.categoryId, next)}
-							/>
+							{#if selectedGroup?.outcome === 'custom_comments'}
+								<label for="preview-comments" class="mb-2 block text-sm font-semibold"
+									>Your comments</label
+								>
+								<textarea
+									id="preview-comments"
+									bind:value={commentText}
+									rows="4"
+									maxlength="30000"
+									placeholder="One comment per line"
+									class="w-full rounded-xl border p-3 text-sm"
+									style="background: var(--bg); border-color: var(--border); color: var(--text);"
+								></textarea>
+								<p class="mt-2 text-xs" style="color: var(--text-muted);">
+									{quantity} comments · One per line
+								</p>
+							{:else}
+								<BoostingQuantitySelector
+									value={quantity}
+									minQuantity={selectedOffer.minQuantity}
+									maxQuantity={selectedOffer.maxQuantity}
+									stepQuantity={selectedOffer.stepQuantity}
+									presets={selectedOffer.quantityPresets}
+									onchange={(next) => chooseQuantity(selectedGroup!.categoryId, next)}
+								/>
+							{/if}
 							<button
 								type="button"
 								disabled

@@ -26,7 +26,9 @@ export interface SendGa4MeasurementProtocolResult {
 }
 
 function getMeasurementId(): string {
-	const measurementId = String(publicEnv.PUBLIC_GA4_MEASUREMENT_ID || DEFAULT_GA4_MEASUREMENT_ID).trim();
+	const measurementId = String(
+		publicEnv.PUBLIC_GA4_MEASUREMENT_ID || DEFAULT_GA4_MEASUREMENT_ID
+	).trim();
 	return /^G-[A-Z0-9]+$/i.test(measurementId) ? measurementId.toUpperCase() : '';
 }
 
@@ -114,9 +116,11 @@ export async function sendGa4MeasurementProtocolEvents(
 
 	if (input.userId) payload.user_id = input.userId;
 	if (input.timestampMicros) payload.timestamp_micros = input.timestampMicros;
+	if (input.debug) payload.validation_behavior = 'ENFORCE_RECOMMENDATIONS';
 
 	try {
 		const response = await fetch(url, {
+			signal: AbortSignal.timeout(5_000),
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(payload)
@@ -126,10 +130,19 @@ export async function sendGa4MeasurementProtocolEvents(
 			const result = (await response.json().catch(() => null)) as {
 				validationMessages?: unknown[];
 			} | null;
+			const validResponse = Array.isArray(result?.validationMessages);
+			const messages = validResponse ? result!.validationMessages! : [];
+			const success = response.ok && validResponse && messages.length === 0;
 			return {
-				success: response.ok,
-				error: response.ok ? undefined : `GA4 debug endpoint returned ${response.status}.`,
-				validationMessages: result?.validationMessages || []
+				success,
+				error: !response.ok
+					? `GA4 debug endpoint returned ${response.status}.`
+					: !validResponse
+						? 'GA4 debug endpoint returned an invalid validation response.'
+						: messages.length > 0
+							? 'GA4 event failed validation.'
+							: undefined,
+				validationMessages: messages
 			};
 		}
 
@@ -141,10 +154,11 @@ export async function sendGa4MeasurementProtocolEvents(
 		}
 
 		return { success: true };
-	} catch (error) {
+	} catch {
 		return {
 			success: false,
-			error: error instanceof Error ? error.message : 'Failed to send GA4 event.'
+			// Fetch errors may include the request URL, which contains the API secret.
+			error: 'Failed to send GA4 event.'
 		};
 	}
 }

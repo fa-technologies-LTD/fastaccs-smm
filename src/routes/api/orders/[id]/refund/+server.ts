@@ -13,6 +13,8 @@ import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { recordOrderEvent } from '$lib/services/order-events';
 import { allocateFullRefundToItems } from '$lib/helpers/order-revenue';
+import { moneyNgn } from '$lib/helpers/money';
+import { enqueueRefundRecovery } from '$lib/services/refund-recovery';
 
 function isUuid(value: string): boolean {
 	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -55,7 +57,7 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 			});
 			if (!order) return { outcome: 'not_found' as const };
 
-			const totalAmount = Math.floor(Number(order.totalAmount || 0));
+			const totalAmount = moneyNgn(order.totalAmount);
 			if (
 				order.status === 'refunded' ||
 				order.paymentStatus === 'refunded' ||
@@ -68,8 +70,7 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 				};
 			}
 
-			const wasPaid =
-				order.paymentStatus === 'paid' || order.status === 'paid' || order.status === 'completed';
+			const wasPaid = ['paid', 'success', 'overpaid'].includes(order.paymentStatus);
 			if (!wasPaid) return { outcome: 'not_paid' as const };
 			if (!order.userId) return { outcome: 'guest' as const };
 			if (totalAmount <= 0) return { outcome: 'no_amount' as const };
@@ -87,10 +88,10 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 			});
 			const alreadyCredited = Math.max(
 				0,
-				Math.floor(Number(priorRefunds._sum.amount || 0)),
-				Math.floor(Number(order.refundedAmount || 0))
+				moneyNgn(priorRefunds._sum.amount),
+				moneyNgn(order.refundedAmount)
 			);
-			const amount = Math.max(0, totalAmount - alreadyCredited);
+			const amount = moneyNgn(totalAmount - alreadyCredited);
 
 			if (amount > 0) {
 				await creditStoreCredit(tx, {
@@ -171,6 +172,7 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 				},
 				tx
 			);
+			await enqueueRefundRecovery(tx, order.id, `refund:order:${order.id}`);
 			return { outcome: 'refunded' as const, order, amount, alreadyCredited };
 		},
 		{ maxWait: 10_000, timeout: 20_000 }

@@ -29,6 +29,24 @@ describe('Monnify checkout initialization', () => {
 		vi.restoreAllMocks();
 	});
 
+	it('returns error rather than not-found when every verification lookup fails', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input) => {
+				if (String(input).endsWith('/api/v1/auth/login'))
+					return jsonResponse({
+						requestSuccessful: true,
+						responseBody: { accessToken: 'token', expiresIn: 3600 }
+					});
+				throw new Error('Temporary network outage');
+			})
+		);
+		const { verifyTransaction } = await import('./monnify');
+		const result = await verifyTransaction('ORD_OUTAGE');
+		expect(result.success).toBe(false);
+		expect(result.paymentStatus).toBe('error');
+	});
+
 	it('allows every merchant-enabled checkout channel by omitting paymentMethods', async () => {
 		const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
 			const requestUrl = String(input);
@@ -294,7 +312,8 @@ describe('Monnify checkout initialization', () => {
 		expect(result).toEqual({
 			success: false,
 			error: 'Payment setup could not be completed. Please try again.',
-			errorCode: 'provider_initialization_failed'
+			errorCode: 'provider_initialization_failed',
+			failureCertainty: 'unknown'
 		});
 	});
 });

@@ -528,6 +528,7 @@
 			const finalTotal = checkoutTotal;
 
 			const createCheckoutOrder = async (timeoutMs = 30_000) => {
+				const ga4ClientId = getGa4ClientId();
 				const controller = new AbortController();
 				const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 				try {
@@ -544,6 +545,7 @@
 								boostTargetUrl: item.boosting?.targetUrl,
 								boostQuantity: item.boosting?.boostQuantity,
 								boostOfferId: item.boosting?.boostOfferId,
+								boostComments: item.boosting?.comments,
 								accountAddonKey: item.accountAddon?.key
 							})),
 							totalAmount: finalTotal,
@@ -556,7 +558,8 @@
 								hasBoostingOrder || hasNumbersOrder ? undefined : promoAppliedCode || undefined,
 							useStoreCredit: applyStoreCredit && storeCreditAvailable > 0,
 							analytics: {
-								ga4ClientId: getGa4ClientId()
+								ga4ClientId,
+								consentGranted: Boolean(ga4ClientId)
 							}
 						},
 						{ signal: controller.signal }
@@ -670,7 +673,9 @@
 					items: getCheckoutGa4Items(),
 					coupon: promoAppliedCode || undefined,
 					affiliation: affiliateCode ? 'affiliate_referral' : 'FastAccs SMM',
-					createdAt: Date.now()
+					createdAt: Date.now(),
+					purchaseReporter:
+						orderResult.data?.ga4PurchaseReporter === 'server' ? 'server' : 'browser'
 				});
 			}
 

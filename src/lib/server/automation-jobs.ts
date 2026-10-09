@@ -155,6 +155,14 @@ export const AUTOMATION_JOBS = {
 		lockTimeoutMinutes: 4,
 		expectedIntervalMinutes: 5
 	},
+	'boosting-refills': {
+		name: 'boosting-refills',
+		path: '/api/internal/cron/boosting-refills',
+		schedule: 'every 5 minutes',
+		risk: 'operational',
+		lockTimeoutMinutes: 4,
+		expectedIntervalMinutes: 5
+	},
 	'boosting-draft-suggestions': {
 		name: 'boosting-draft-suggestions',
 		path: '/api/internal/cron/boosting-draft-suggestions',

@@ -10,7 +10,8 @@ import {
 } from '$lib/helpers/boosting-service-config';
 import { getRequiredLinkType } from '$lib/helpers/social-link-validator';
 import { prisma } from '$lib/prisma';
-import { isUnsafeAutomaticServiceLabel } from './catalog-normalizer';
+import { supportsBoostServiceInput } from '$lib/helpers/boosting-service-input';
+import { isUnsafeAutomaticServiceLabel, serviceMatchesBoostOutcome } from './catalog-normalizer';
 
 export type SuggestedQualityTier = 'value' | 'stable' | 'premium';
 
@@ -234,10 +235,12 @@ function safeMoney(value: number): number {
 }
 
 function roundPriceUp(value: number): number {
+	if (value > 0 && value < 50) return Math.max(0.01, Math.ceil((value - 1e-9) * 100) / 100);
 	return Math.min(99_999_950, Math.max(50, Math.ceil((value - 1e-9) / 50) * 50));
 }
 
 function roundPriceDown(value: number): number {
+	if (value > 0 && value < 50) return Math.max(0.01, Math.floor((value + 1e-9) * 100) / 100);
 	return Math.min(99_999_950, Math.max(50, Math.floor((value + 1e-9) / 50) * 50));
 }
 
@@ -419,6 +422,7 @@ export async function prepopulateBoostingDraftSuggestions(
 			select: {
 				id: true,
 				provider: true,
+				providerType: true,
 				name: true,
 				category: true,
 				platforms: true,
@@ -485,10 +489,12 @@ export async function prepopulateBoostingDraftSuggestions(
 				return [];
 			}
 			if (isUnsafeAutomaticServiceLabel(row)) return [];
+			if (!supportsBoostServiceInput(row.providerType, config.actionType)) return [];
 			if (existingServiceIds.has(row.id)) return [];
 			if (
 				!row.platforms.includes(config.platform) ||
 				!row.outcomes.includes(config.actionType) ||
+				!serviceMatchesBoostOutcome(row, config.actionType) ||
 				row.targetType !== targetType ||
 				row.minQuantity > config.minQuantity ||
 				row.maxQuantity < maximumPreset
@@ -567,6 +573,14 @@ export async function prepopulateBoostingDraftSuggestions(
 		);
 
 		for (const tier of Object.keys(TIER_DEFINITIONS) as SuggestedQualityTier[]) {
+			// These are distinct results, not an untested retention/quality ladder.
+			if (
+				['live_likes', 'impressions', 'reach', 'story_shares', 'custom_comments'].includes(
+					config.actionType
+				) &&
+				tier !== 'value'
+			)
+				continue;
 			const tierSuggestion = suggestionByTier.get(tier);
 			if (!tierSuggestion) {
 				summary.skippedWithoutCandidates += 1;
@@ -650,9 +664,32 @@ export async function prepopulateBoostingDraftSuggestions(
 				targetType,
 				audienceTag: 'general',
 				qualityTier: tier,
-				customerName: definition.customerName,
-				shortPromise: definition.shortPromise,
-				expectationChips: [...definition.expectationChips],
+				customerName: [
+					'live_likes',
+					'impressions',
+					'reach',
+					'story_shares',
+					'custom_comments'
+				].includes(config.actionType)
+					? BOOSTING_ACTION_LABELS[config.actionType]
+					: definition.customerName,
+				shortPromise:
+					config.actionType === 'custom_comments'
+						? 'Choose exactly what your comments say.'
+						: config.actionType === 'live_likes'
+							? 'Likes for your TikTok LIVE, not a post.'
+							: ['impressions', 'reach', 'story_shares'].includes(config.actionType)
+								? `For ${BOOSTING_ACTION_LABELS[config.actionType].toLowerCase()}, not video views.`
+								: definition.shortPromise,
+				expectationChips: [
+					'live_likes',
+					'impressions',
+					'reach',
+					'story_shares',
+					'custom_comments'
+				].includes(config.actionType)
+					? []
+					: [...definition.expectationChips],
 				minQuantity: config.minQuantity,
 				maxQuantity: maximumCustomerQuantity,
 				stepQuantity: config.stepQuantity,

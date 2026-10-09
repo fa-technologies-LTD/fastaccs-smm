@@ -1,6 +1,5 @@
 import type { FailureKind } from '$lib/helpers/payment-status';
 import { getFailureOrderStatus, getPendingPaymentPhase } from '$lib/helpers/payment-status';
-import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { allocateAccountsForOrder } from '$lib/services/fulfillment';
 import {
@@ -38,6 +37,8 @@ import {
 	isOrderPaymentConfirmed
 } from '$lib/helpers/buyer-order-visibility';
 import { queuePaidBoostFulfillments } from '$lib/server/boosting-providers/fulfillment-worker';
+import { usesManagedGa4Ecommerce } from '$lib/server/ga4-order-metadata';
+import { allocateFullRefundToItems } from '$lib/helpers/order-revenue';
 
 export type PaymentSettlementSource =
 	| 'verify'
@@ -65,6 +66,45 @@ function hasTerminalRefundMarker(order: {
 	return [order.status, order.paymentStatus, order.deliveryStatus].some(
 		(value) => String(value || '').toLowerCase() === 'refunded'
 	);
+}
+
+function isPaymentReview(order: { status: string; paymentStatus: string }): boolean {
+	return order.status === 'payment_review' || order.paymentStatus === 'under_review';
+}
+
+const reviewResult = (orderId: string): PaymentSettlementResult => ({
+	success: true,
+	orderId,
+	status: 'PENDING',
+	warning: 'Your payment is being reviewed before delivery.'
+});
+
+/** Conditional write closes the stale-read window without reopening terminal orders. */
+async function claimPaidRecovery(
+	orderId: string,
+	manual = false
+): Promise<PaymentSettlementResult | null> {
+	const result = await prisma.order.updateMany({
+		where: {
+			id: orderId,
+			status: { in: ['paid', 'processing'] },
+			paymentStatus: { in: [...CONFIRMED_PAYMENT_STATUSES] },
+			deliveryStatus: { not: 'refunded' }
+		},
+		data: {
+			status: 'paid',
+			paymentStatus: 'paid',
+			deliveryStatus: 'processing',
+			...(manual ? { deliveryMethod: 'whatsapp' } : {})
+		}
+	});
+	if (result.count > 0) return null;
+	const live = await prisma.order.findUnique({ where: { id: orderId } });
+	if (live && hasTerminalRefundMarker(live)) return { success: true, orderId, status: 'CANCELLED' };
+	if (live?.status === 'completed' && isOrderPaymentConfirmed(live)) {
+		return { success: true, orderId, status: 'COMPLETED' };
+	}
+	return reviewResult(orderId);
 }
 
 function isLateStoreCreditReservationError(error: unknown): boolean {
@@ -267,77 +307,194 @@ function normalizeGa4ClientId(value: unknown): string | null {
 	return /^\d+\.\d+$/.test(trimmed) ? trimmed : null;
 }
 
-function toJsonObject(value: Record<string, unknown>): Prisma.InputJsonObject {
-	return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonObject;
-}
-
-async function sendServerPurchaseVerifiedEvent(orderId: string, status: 'PAID' | 'COMPLETED') {
+export async function sendServerPurchaseVerifiedEvent(
+	orderId: string,
+	status: 'PAID' | 'COMPLETED'
+) {
 	if (!isGa4MeasurementProtocolConfigured()) return;
 
-	const order = await prisma.order.findUnique({
-		where: { id: orderId },
-		include: { orderItems: { orderBy: { createdAt: 'asc' } } }
-	});
-	if (!order) return;
+	return prisma.$transaction(
+		async (tx) => {
+			// PostgreSQL returns void; cast so Prisma can deserialize the lock result.
+			await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`ga4-purchase:${orderId}`}))::text`;
+			const order = await tx.order.findUnique({
+				where: { id: orderId },
+				include: { orderItems: { orderBy: { createdAt: 'asc' } } }
+			});
+			if (!order) return 'skipped';
+			const metadata = readAnalyticsMetadata(order.analyticsMetadata);
+			const managed = usesManagedGa4Ecommerce(metadata);
+			const paidAtMs = order.paidAt?.getTime();
+			const recentManagedPayment =
+				managed &&
+				typeof paidAtMs === 'number' &&
+				Number.isFinite(paidAtMs) &&
+				paidAtMs <= Date.now() &&
+				Date.now() - paidAtMs < 72 * 60 * 60_000;
+			// A new paid order can be refunded before the first server analytics call.
+			// Report the original sale once, then let refund reporting subtract it.
+			// Never invent revenue for old/unpaid/ambiguous refunded orders.
+			const paidThenRefunded =
+				recentManagedPayment &&
+				hasTerminalRefundMarker(order) &&
+				Number(order.refundedAmount) > 0 &&
+				Number(order.refundedAmount) <= Number(order.totalAmount);
+			if ((!isOrderPaymentConfirmed(order) || hasTerminalRefundMarker(order)) && !paidThenRefunded)
+				return 'skipped';
+			if (managed && !recentManagedPayment) return 'skipped';
+			const clientId = normalizeGa4ClientId(metadata.ga4ClientId);
+			const diagnosticSent = typeof metadata.ga4ServerPurchaseVerifiedSentAt === 'string';
+			const canonicalSent = typeof metadata.ga4CanonicalPurchaseSentAt === 'string';
+			if (!clientId || (diagnosticSent && (!managed || canonicalSent))) return 'skipped';
+			const retryAfter = metadata.ga4ServerPurchaseVerifiedRetryAfter;
+			if (typeof retryAfter === 'string' && Date.parse(retryAfter) > Date.now())
+				return 'retry_pending';
 
-	const metadata = readAnalyticsMetadata(order.analyticsMetadata);
-	const clientId = normalizeGa4ClientId(metadata.ga4ClientId);
-	if (!clientId || typeof metadata.ga4ServerPurchaseVerifiedSentAt === 'string') return;
-
-	const result = await sendGa4MeasurementProtocolEvents({
-		clientId,
-		userId: order.userId,
-		events: [
-			{
-				name: 'purchase_verified_server',
-				params: {
-					transaction_id: order.id,
-					order_number: order.orderNumber,
-					order_status: status,
-					payment_status: order.paymentStatus,
-					delivery_method: order.deliveryMethod,
-					delivery_status: order.deliveryStatus,
-					currency: order.currency,
-					value: Number(order.totalAmount),
-					item_count: order.orderItems.reduce((sum, item) => sum + item.quantity, 0),
-					affiliation: order.affiliateCode ? 'affiliate_referral' : 'FastAccs SMM',
-					coupon: order.promotionCode || undefined,
-					items: order.orderItems.map((item, index) => ({
-						item_id: item.categoryId,
-						item_name: item.productName,
-						item_category:
-							order.orderType === 'boosting'
-								? 'Boosting Services'
-								: order.orderType === 'phone'
-									? 'Verification Numbers'
-									: 'SMM accounts',
-						item_variant: `${order.orderType}_server_verified`,
-						price: Number(item.unitPrice),
-						quantity: item.quantity,
-						index
-					}))
+			const events = [
+				{
+					name: 'purchase_verified_server',
+					params: {
+						transaction_id: order.id,
+						order_number: order.orderNumber,
+						order_status: status,
+						payment_status: order.paymentStatus,
+						delivery_method: order.deliveryMethod,
+						delivery_status: order.deliveryStatus,
+						currency: order.currency,
+						value: Number(order.totalAmount),
+						item_count: order.orderItems.reduce((sum, item) => sum + item.quantity, 0),
+						affiliation: order.affiliateCode ? 'affiliate_referral' : 'FastAccs SMM',
+						coupon: order.promotionCode || undefined,
+						items: order.orderItems.map((item, index) => ({
+							item_id: item.categoryId,
+							item_name: item.productName,
+							item_category:
+								order.orderType === 'boosting'
+									? 'Boosting Services'
+									: order.orderType === 'phone'
+										? 'Verification Numbers'
+										: 'SMM accounts',
+							item_variant: `${order.orderType}_server_verified`,
+							price: Number(item.unitPrice),
+							quantity: item.quantity,
+							index
+						}))
+					}
 				}
+			];
+			if (managed && !canonicalSent) {
+				// A promotion reduces sale/item revenue; store credit is tender and does not.
+				// Allocate the ORIGINAL paid value, ignoring later refunds (reported separately).
+				const allocation = allocateFullRefundToItems(
+					order.totalAmount,
+					order.orderItems.map((item) => ({
+						id: item.id,
+						totalPrice: item.totalPrice ?? Number(item.unitPrice) * item.quantity,
+						refundedAmount: 0
+					}))
+				);
+				events.push({
+					...events[0],
+					name: 'purchase',
+					params: {
+						...events[0].params,
+						items: events[0].params.items.map((item, index) => ({
+							...item,
+							price: allocation.targets[index].refundedAmount / item.quantity
+						}))
+					}
+				});
 			}
-		]
-	});
+			if (diagnosticSent) events.shift();
+			const result = await sendGa4MeasurementProtocolEvents({
+				clientId,
+				// New purchases have one reporting authority (server), and retries keep
+				// the same client identity/order ID for web-stream purchase deduplication.
+				userId: managed ? undefined : order.userId,
+				timestampMicros: managed ? String(paidAtMs! * 1000) : undefined,
+				events
+			});
 
-	if (!result.success) {
-		console.warn('[ga4.measurement_protocol] purchase event skipped:', {
-			orderId,
-			error: result.error || null
-		});
-		return;
-	}
+			if (!result.success) {
+				console.warn('[ga4.measurement_protocol] purchase event skipped:', {
+					orderId,
+					error: result.error || null
+				});
+				const oldAttempts = Number(metadata.ga4ServerPurchaseVerifiedAttempts);
+				const attempts =
+					(Number.isSafeInteger(oldAttempts) && oldAttempts >= 0 ? Math.min(oldAttempts, 20) : 0) +
+					1;
+				const patch = JSON.stringify({
+					ga4ServerPurchaseVerifiedAttempts: attempts,
+					ga4ServerPurchaseVerifiedRetryAfter: new Date(
+						Date.now() + Math.min(360, 5 * 2 ** Math.min(attempts - 1, 7)) * 60_000
+					).toISOString()
+				});
+				// Merge at write time; do not erase metadata updated by another workflow.
+				await tx.$executeRaw`UPDATE orders SET analytics_metadata =
+					COALESCE(analytics_metadata, '{}'::jsonb) || ${patch}::jsonb WHERE id = ${order.id}::uuid`;
+				return 'retry_pending';
+			}
 
-	await prisma.order.update({
-		where: { id: order.id },
-		data: {
-			analyticsMetadata: toJsonObject({
-				...metadata,
-				ga4ServerPurchaseVerifiedSentAt: new Date().toISOString()
-			})
+			const patch = JSON.stringify({
+				ga4ServerPurchaseVerifiedSentAt: new Date().toISOString(),
+				ga4ServerPurchaseVerifiedRetryAfter: null,
+				...(managed && !canonicalSent
+					? { ga4CanonicalPurchaseSentAt: new Date().toISOString() }
+					: {})
+			});
+			await tx.$executeRaw`UPDATE orders SET analytics_metadata =
+				COALESCE(analytics_metadata, '{}'::jsonb) || ${patch}::jsonb WHERE id = ${order.id}::uuid`;
+			return 'sent';
+		},
+		{ maxWait: 10_000, timeout: 15_000 }
+	);
+}
+
+/** The paid order is the durable source: completed orders stay eligible after a restart.
+ * Never re-settle payment or fulfilment, and never replay old historical purchases.
+ */
+export async function drainServerPurchaseAnalytics(limit = 3, deadlineMs = Date.now() + 30_000) {
+	const summary = { sent: 0, pending: 0, skipped: 0, failed: 0 };
+	if (!isGa4MeasurementProtocolConfigured() || deadlineMs - Date.now() < 25_000) return summary;
+	try {
+		const now = new Date().toISOString();
+		const rows = await prisma.$queryRaw<Array<{ id: string; status: string }>>`
+			SELECT id, status FROM orders
+			WHERE ((status IN ('paid', 'processing', 'completed')
+				AND payment_status IN ('paid', 'success', 'overpaid')
+				AND delivery_status <> 'refunded')
+				OR (analytics_metadata->>'ga4EcommerceVersion' = '2'
+					AND analytics_metadata->>'ga4ConsentGranted' = 'true'
+					AND paid_at IS NOT NULL AND refunded_amount > 0
+					AND (status = 'refunded' OR payment_status = 'refunded' OR delivery_status = 'refunded')))
+			AND COALESCE(paid_at, created_at) >= NOW() - INTERVAL '72 hours'
+			AND analytics_metadata->>'ga4ClientId' ~ '^[0-9]+[.][0-9]+$'
+			AND (analytics_metadata->>'ga4ServerPurchaseVerifiedSentAt' IS NULL
+				OR (analytics_metadata->>'ga4EcommerceVersion' = '2'
+					AND analytics_metadata->>'ga4CanonicalPurchaseSentAt' IS NULL))
+			AND (analytics_metadata->>'ga4ServerPurchaseVerifiedRetryAfter' IS NULL
+				OR analytics_metadata->>'ga4ServerPurchaseVerifiedRetryAfter' <= ${now})
+			ORDER BY COALESCE(paid_at, created_at), id
+			LIMIT ${Math.min(10, Math.max(1, Math.trunc(Number(limit) || 3)))}`;
+		for (const row of rows) {
+			if (deadlineMs - Date.now() < 25_000) break;
+			try {
+				const outcome = await sendServerPurchaseVerifiedEvent(
+					row.id,
+					row.status === 'completed' ? 'COMPLETED' : 'PAID'
+				);
+				if (outcome === 'sent') summary.sent++;
+				else if (outcome === 'retry_pending') summary.pending++;
+				else summary.skipped++;
+			} catch {
+				summary.failed++;
+			}
 		}
-	});
+	} catch {
+		summary.failed++;
+	}
+	return summary;
 }
 
 export async function settleFailedPayment(input: {
@@ -369,6 +526,7 @@ export async function settleFailedPayment(input: {
 				}
 				return { kind: 'refunded' as const, order };
 			}
+			if (isPaymentReview(order)) return { kind: 'review' as const, order };
 
 			await tx.order.update({
 				where: { id: order.id },
@@ -404,6 +562,7 @@ export async function settleFailedPayment(input: {
 		};
 	}
 	const order = result.order;
+	if (result.kind === 'review') return reviewResult(order.id);
 	if (result.kind === 'confirmed') {
 		return {
 			success: true,
@@ -507,7 +666,12 @@ export async function recoverPaidOrder(
 	await maybeGrantSpendMilestones(order.userId);
 
 	if (order.status === 'completed') {
-		void sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED');
+		await sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED').catch((error) =>
+			console.warn('[ga4.purchase] dispatch failed', {
+				orderId: order.id,
+				error: error instanceof Error ? error.message : 'unknown'
+			})
+		);
 		return { success: true, orderId: order.id, status: 'COMPLETED' };
 	}
 
@@ -519,17 +683,16 @@ export async function recoverPaidOrder(
 	});
 
 	if (await isBoostingOrder(order.id)) {
-		await prisma.order.update({
-			where: { id: order.id },
-			data: {
-				status: 'paid',
-				paymentStatus: 'paid',
-				deliveryStatus: 'processing'
-			}
-		});
+		const stopped = await claimPaidRecovery(order.id);
+		if (stopped) return stopped;
 		await queuePaidBoostFulfillments(order.id);
 		await notifyBoostingOrderPaid(order.id, `payments.${source}.boosting`);
-		void sendServerPurchaseVerifiedEvent(order.id, 'PAID');
+		await sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) =>
+			console.warn('[ga4.purchase] dispatch failed', {
+				orderId: order.id,
+				error: error instanceof Error ? error.message : 'unknown'
+			})
+		);
 		invalidateAdminStatsCache();
 		return {
 			success: true,
@@ -541,15 +704,8 @@ export async function recoverPaidOrder(
 	}
 
 	if (await isManualHandoverOrder(order.id)) {
-		await prisma.order.update({
-			where: { id: order.id },
-			data: {
-				status: 'paid',
-				paymentStatus: 'paid',
-				deliveryStatus: 'processing',
-				deliveryMethod: 'whatsapp'
-			}
-		});
+		const stopped = await claimPaidRecovery(order.id, true);
+		if (stopped) return stopped;
 		await notifyManualHandoverOrderPaid(order.id, `payments.${source}.manual-handover`);
 		await recordAffiliateStoreCreditForOrder(order.id).catch((error) => {
 			console.error(`[payments.${source}] failed to record affiliate store credit:`, error);
@@ -557,7 +713,12 @@ export async function recoverPaidOrder(
 		if (order.userId) {
 			void maybeSendAffiliateUnlockInvite(order.userId);
 		}
-		void sendServerPurchaseVerifiedEvent(order.id, 'PAID');
+		await sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) =>
+			console.warn('[ga4.purchase] dispatch failed', {
+				orderId: order.id,
+				error: error instanceof Error ? error.message : 'unknown'
+			})
+		);
 		invalidateAdminStatsCache();
 		return {
 			success: true,
@@ -578,7 +739,12 @@ export async function recoverPaidOrder(
 		if (order.userId) {
 			void maybeSendAffiliateUnlockInvite(order.userId);
 		}
-		void sendServerPurchaseVerifiedEvent(order.id, 'PAID');
+		await sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) =>
+			console.warn('[ga4.purchase] dispatch failed', {
+				orderId: order.id,
+				error: error instanceof Error ? error.message : 'unknown'
+			})
+		);
 		invalidateAdminStatsCache();
 		return {
 			success: true,
@@ -590,7 +756,12 @@ export async function recoverPaidOrder(
 	}
 
 	if (await isAutoDeliveryPausedSetting().catch(() => false)) {
-		void sendServerPurchaseVerifiedEvent(order.id, 'PAID');
+		await sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) =>
+			console.warn('[ga4.purchase] dispatch failed', {
+				orderId: order.id,
+				error: error instanceof Error ? error.message : 'unknown'
+			})
+		);
 		return {
 			success: true,
 			orderId: order.id,
@@ -606,10 +777,20 @@ export async function recoverPaidOrder(
 			select: { status: true }
 		});
 		if (latest?.status === 'completed') {
-			void sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED');
+			await sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED').catch((error) =>
+				console.warn('[ga4.purchase] dispatch failed', {
+					orderId: order.id,
+					error: error instanceof Error ? error.message : 'unknown'
+				})
+			);
 			return { success: true, orderId: order.id, status: 'COMPLETED' };
 		}
-		void sendServerPurchaseVerifiedEvent(order.id, 'PAID');
+		await sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) =>
+			console.warn('[ga4.purchase] dispatch failed', {
+				orderId: order.id,
+				error: error instanceof Error ? error.message : 'unknown'
+			})
+		);
 		return {
 			success: true,
 			orderId: order.id,
@@ -618,7 +799,12 @@ export async function recoverPaidOrder(
 		};
 	}
 
-	void sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED');
+	await sendServerPurchaseVerifiedEvent(order.id, 'COMPLETED').catch((error) =>
+		console.warn('[ga4.purchase] dispatch failed', {
+			orderId: order.id,
+			error: error instanceof Error ? error.message : 'unknown'
+		})
+	);
 	return { success: true, orderId: order.id, status: 'COMPLETED' };
 }
 
@@ -643,6 +829,7 @@ export async function settleSuccessfulPayment(input: {
 			warning: 'This order has already been refunded.'
 		};
 	}
+	if (isPaymentReview(order) && input.source !== 'admin_release') return reviewResult(order.id);
 	if (
 		input.source !== 'admin_release' &&
 		order.paymentReference &&
@@ -766,7 +953,12 @@ export async function settleSuccessfulPayment(input: {
 			fromPaymentStatus: order.paymentStatus,
 			toPaymentStatus: 'paid'
 		});
-		void sendServerPurchaseVerifiedEvent(order.id, 'PAID');
+		await sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) =>
+			console.warn('[ga4.purchase] dispatch failed', {
+				orderId: order.id,
+				error: error instanceof Error ? error.message : 'unknown'
+			})
+		);
 		return {
 			success: true,
 			orderId: order.id,
@@ -779,6 +971,9 @@ export async function settleSuccessfulPayment(input: {
 	let transitionResult:
 		| { kind: 'transitioned'; beforeStatus: string; beforePaymentStatus: string }
 		| { kind: 'confirmed' }
+		| { kind: 'closed'; order: typeof order }
+		| { kind: 'conflict'; order: typeof order }
+		| { kind: 'review' }
 		| { kind: 'refunded' };
 	try {
 		transitionResult = await prisma.$transaction(
@@ -788,6 +983,32 @@ export async function settleSuccessfulPayment(input: {
 				if (!live) throw new Error('ORDER_NOT_FOUND_DURING_SETTLEMENT');
 				if (hasTerminalRefundMarker(live)) return { kind: 'refunded' as const };
 				if (isOrderPaymentConfirmed(live)) return { kind: 'confirmed' as const };
+				if (isPaymentReview(live) && input.source !== 'admin_release')
+					return { kind: 'review' as const };
+				if (
+					['failed', 'cancelled', 'canceled'].includes(live.status) ||
+					['failed', 'cancelled', 'canceled'].includes(live.paymentStatus)
+				) {
+					return { kind: 'closed' as const, order: live };
+				}
+				if (
+					input.source !== 'admin_release' &&
+					live.paymentReference &&
+					input.paymentReference &&
+					live.paymentReference !== input.paymentReference
+				) {
+					return { kind: 'conflict' as const, order: live };
+				}
+				if (
+					!isGatewayAmountSufficient(
+						Number(live.totalAmount),
+						Number(live.storeCreditApplied || 0),
+						input.amountPaid
+					) ||
+					!isPaymentCurrencyValid(live.currency, input.currency)
+				) {
+					throw new Error('PAYMENT_AMOUNT_CHANGED_DURING_SETTLEMENT');
+				}
 
 				if (Number(live.storeCreditApplied || 0) > 0) {
 					if (!live.userId) throw new Error('STORE_CREDIT_LATE_PAYMENT_USER_NOT_FOUND');
@@ -832,6 +1053,11 @@ export async function settleSuccessfulPayment(input: {
 			warning: 'This order has already been refunded.'
 		};
 	}
+	if (transitionResult.kind === 'review') return reviewResult(order.id);
+	if (transitionResult.kind === 'conflict')
+		return holdPaymentReferenceConflictForReview(transitionResult.order, input);
+	if (transitionResult.kind === 'closed')
+		return holdLateTerminalPaymentForReview(transitionResult.order, input);
 	if (transitionResult.kind === 'transitioned') {
 		invalidateAdminStatsCache();
 		logOrderStatusTransition({

@@ -1,5 +1,15 @@
 export const CATALOG_PRICE_INCREMENT_NGN = 50;
 
+/** Boosting quotes round upwards; supplier costs, paid orders and refunds stay exact. */
+export function roundUpCatalogPriceNgn(value: unknown): number {
+	const amount = Number(value);
+	if (!Number.isFinite(amount) || amount <= 0) return 0;
+	return Math.max(
+		CATALOG_PRICE_INCREMENT_NGN,
+		Math.ceil((amount - 1e-9) / CATALOG_PRICE_INCREMENT_NGN) * CATALOG_PRICE_INCREMENT_NGN
+	);
+}
+
 /**
  * Keep manually managed customer-facing catalogue prices on a clean ₦50 grid.
  * Zero remains zero for unavailable/coming-soon products. Discounts, historical

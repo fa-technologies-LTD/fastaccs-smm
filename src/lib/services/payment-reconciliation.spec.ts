@@ -9,6 +9,7 @@ const releaseExpiredOrderReservationsMock = vi.hoisted(() => vi.fn());
 const releaseExpiredExactPreviewReservationsMock = vi.hoisted(() => vi.fn());
 const prismaMock = vi.hoisted(() => ({
 	order: {
+		updateMany: vi.fn().mockResolvedValue({ count: 1 }),
 		findMany: vi.fn()
 	}
 }));
@@ -66,6 +67,13 @@ function pendingOrder(overrides: Record<string, unknown> = {}) {
 }
 
 describe('payment reconciliation safety', () => {
+	it('stops at the shared cron deadline without expiring unprocessed orders', async () => {
+		prismaMock.order.findMany.mockResolvedValue([pendingOrder()]);
+		const result = await reconcilePendingPayments({ deadlineMs: Date.now() - 1 });
+		expect(result.checked).toBe(0);
+		expect(verifyPaymentMock).not.toHaveBeenCalled();
+		expect(settleFailedPaymentMock).not.toHaveBeenCalled();
+	});
 	beforeEach(() => {
 		vi.clearAllMocks();
 		releaseExpiredOrderReservationsMock.mockResolvedValue(0);
@@ -86,6 +94,23 @@ describe('payment reconciliation safety', () => {
 			orderId: 'order-1',
 			status: 'COMPLETED'
 		});
+	});
+
+	it('does not cancel an expired reference when verification is unavailable', async () => {
+		prismaMock.order.findMany.mockResolvedValue([
+			pendingOrder({ paymentExpiresAt: new Date(Date.now() - 60 * 60 * 1000) })
+		]);
+		verifyPaymentMock.mockResolvedValue({
+			success: false,
+			status: 'ERROR',
+			amount: 0,
+			amountPaid: 0,
+			currency: 'NGN'
+		});
+		const result = await reconcilePendingPayments({ staleMinutes: 0 });
+		expect(result.keptPending).toBe(1);
+		expect(settleFailedPaymentMock).not.toHaveBeenCalled();
+		expect(settleSuccessfulPaymentMock).not.toHaveBeenCalled();
 	});
 
 	it('keeps an unresolved gateway payment pending without attempting fulfillment', async () => {

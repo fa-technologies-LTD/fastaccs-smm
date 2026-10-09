@@ -19,10 +19,14 @@ const DEFAULT_META = {
 	status: 'active',
 	search: '',
 	canRunShadowRouting: false,
+	activeCount: 0,
 	statusCounts: {
 		pending: 0,
 		in_progress: 0,
 		needs_link: 0,
+		under_review: 0,
+		partial: 0,
+		cancelled: 0,
 		completed: 0,
 		rejected: 0
 	}

@@ -1,6 +1,18 @@
 import { createHash, randomUUID } from 'crypto';
 import { boostingMinimumMessage } from '$lib/helpers/boosting-checkout';
+import { parseBoostComments, supportsBoostServiceInput } from '$lib/helpers/boosting-service-input';
+import { serviceMatchesBoostOutcome } from '$lib/server/boosting-providers/catalog-normalizer';
+import {
+	BOOSTING_MANAGED_STOREFRONT_KEY,
+	isBoostingManagedStorefrontEnabled
+} from '$lib/server/boosting-providers/storefront-rollout';
+import {
+	holdUncertainInitialization,
+	isDefinitiveInitializationFailure
+} from '$lib/services/payment-initialization-recovery';
 import { json } from '@sveltejs/kit';
+import { captureGa4OrderMetadata } from '$lib/server/ga4-order-metadata';
+import { isGa4MeasurementProtocolConfigured } from '$lib/server/ga4-measurement-protocol';
 import type { RequestHandler } from './$types';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
@@ -92,6 +104,7 @@ interface CreateOrderItemInput {
 	boostTargetUrl?: string;
 	boostQuantity?: number;
 	boostOfferId?: string | null;
+	boostComments?: string;
 	accountAddonKey?: string;
 }
 
@@ -108,16 +121,11 @@ interface CreateOrderInput {
 	useStoreCredit?: boolean;
 	analytics?: {
 		ga4ClientId?: string | null;
+		consentGranted?: boolean;
 	};
 }
 
 const CHECKOUT_INITIALIZATION_GRACE_MS = 2 * 60 * 1000;
-
-function normalizeGa4ClientId(value: unknown): string | null {
-	if (typeof value !== 'string') return null;
-	const trimmed = value.trim();
-	return /^\d+\.\d+$/.test(trimmed) ? trimmed : null;
-}
 
 function normalizeCheckoutKey(value: unknown): string {
 	if (typeof value !== 'string') return randomUUID();
@@ -152,16 +160,10 @@ function existingCheckoutUsesStoreCredit(order: {
 function buildOrderAnalyticsMetadata(
 	analytics: CreateOrderInput['analytics']
 ): Prisma.InputJsonObject {
-	const metadata: Record<string, string> = {};
-	const ga4ClientId = normalizeGa4ClientId(analytics?.ga4ClientId);
-
-	if (ga4ClientId) {
-		metadata.ga4ClientId = ga4ClientId;
-		metadata.capturedAt = new Date().toISOString();
-		metadata.source = 'checkout';
-	}
-
-	return metadata as Prisma.InputJsonObject;
+	return captureGa4OrderMetadata(
+		analytics,
+		isGa4MeasurementProtocolConfigured()
+	) as Prisma.InputJsonObject;
 }
 
 function sanitizeLimit(value: string | null): number | undefined {
@@ -326,6 +328,22 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 			if (
 				['pending', 'pending_payment'].includes(existingCheckout.status) &&
+				existingCheckout.paymentReference &&
+				!existingCheckout.paymentCheckoutUrl
+			) {
+				return json(
+					{
+						success: false,
+						pending: true,
+						orderId: existingCheckout.id,
+						error: 'Checkout is still initializing. Please check My Orders before trying again.'
+					},
+					{ status: 202 }
+				);
+			}
+
+			if (
+				['pending', 'pending_payment'].includes(existingCheckout.status) &&
 				existingCheckout.paymentExpiresAt &&
 				existingCheckout.paymentExpiresAt.getTime() > Date.now() &&
 				existingCheckout.updatedAt.getTime() > Date.now() - CHECKOUT_INITIALIZATION_GRACE_MS
@@ -453,6 +471,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		}
 
 		const normalizedItems = items.map((item) => ({
+			boostComments: item.boostComments,
 			categoryId: String(item.categoryId || '').trim(),
 			quantity: Number(item.quantity),
 			exactAccountId:
@@ -468,8 +487,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					? item.boostTargetUrl.trim()
 					: null,
 			boostQuantity:
-				typeof item.boostQuantity === 'number' && Number.isFinite(item.boostQuantity)
-					? Math.floor(item.boostQuantity)
+				typeof item.boostQuantity === 'number' && Number.isSafeInteger(item.boostQuantity)
+					? item.boostQuantity
 					: null,
 			boostOfferId:
 				typeof item.boostOfferId === 'string' && item.boostOfferId.trim().length > 0
@@ -571,6 +590,25 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				})
 			: [];
 		const boostOfferById = new Map(boostOffers.map((offer) => [offer.id, offer]));
+		// Once managed offers replace the legacy catalogue, stale carts must not bypass
+		// publication or create a paid, manual-only order using old category prices.
+		if (
+			normalizedItems.some(
+				(item) =>
+					!item.boostOfferId &&
+					categoryById.get(item.categoryId)?.categoryType === 'boosting_service'
+			)
+		) {
+			const marker = await prisma.microcopy.findUnique({
+				where: { key: BOOSTING_MANAGED_STOREFRONT_KEY },
+				select: { value: true, isActive: true }
+			});
+			if (isBoostingManagedStorefrontEnabled(marker, boostOffers.length > 0))
+				return json(
+					{ success: false, error: 'Choose an available Boosting option again.' },
+					{ status: 409 }
+				);
+		}
 
 		const itemsWithNames: Array<{
 			categoryId: string;
@@ -631,6 +669,47 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					return json(
 						{ success: false, error: `${category.name}: a link and quantity are required.` },
 						{ status: 400 }
+					);
+				}
+				const customComments =
+					config.actionType === 'custom_comments' ? parseBoostComments(item.boostComments) : null;
+				if (
+					customComments?.error ||
+					(customComments && customComments.quantity !== item.boostQuantity) ||
+					(!customComments && item.boostComments !== undefined)
+				) {
+					return json(
+						{
+							success: false,
+							error: customComments?.error || 'Comment count does not match this service.'
+						},
+						{ status: 400 }
+					);
+				}
+				if (customComments && !offer)
+					return json(
+						{ success: false, error: 'Choose an available custom-comment option.' },
+						{ status: 409 }
+					);
+				if (
+					offer &&
+					!offer.routes.some(
+						(route) =>
+							!route.providerService.unavailableAt &&
+							route.providerService.platforms.includes(config.platform) &&
+							supportsBoostServiceInput(route.providerService.providerType, config.actionType) &&
+							serviceMatchesBoostOutcome(route.providerService, config.actionType)
+					)
+				) {
+					return json(
+						{ success: false, error: 'This option is being updated. Choose another.' },
+						{ status: 409 }
+					);
+				}
+				if (offer && getBoostAutomationMode() !== 'live') {
+					return json(
+						{ success: false, error: 'Boosting is being updated. Please try again soon.' },
+						{ status: 409 }
 					);
 				}
 
@@ -706,6 +785,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					boostOfferSnapshot: offer
 						? {
 								platform: offer.platform,
+								...(customComments
+									? { inputMode: 'custom_comments', customComments: customComments.text }
+									: {}),
 								outcome: offer.outcome,
 								targetType: offer.targetType,
 								qualityTier: offer.qualityTier,
@@ -1616,6 +1698,19 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			});
 
 			if (!initResult.success || !initResult.checkoutUrl) {
+				if (!isDefinitiveInitializationFailure(initResult)) {
+					await holdUncertainInitialization(data.id, paymentReference);
+					return json(
+						{
+							success: false,
+							pending: true,
+							orderId: data.id,
+							error: 'Checkout is still initializing. Please check My Orders before trying again.',
+							traceId
+						},
+						{ status: 202 }
+					);
+				}
 				logPaymentEvent('error', 'checkout.initialize.failed', {
 					traceId,
 					orderId: data.id,
@@ -1653,7 +1748,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					id: data.id,
 					paymentReference,
 					status: 'pending_payment',
-					paymentStatus: 'pending'
+					paymentStatus: { in: ['pending', 'processing'] }
 				},
 				data: {
 					paymentCheckoutUrl: initResult.checkoutUrl,

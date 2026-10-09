@@ -86,4 +86,20 @@ describe('credential allocation safety', () => {
 		expect(txMock.account.findMany).not.toHaveBeenCalled();
 		expect(txMock.order.update).not.toHaveBeenCalled();
 	});
+
+	it('refuses allocation when the delivery refund marker survives stale paid flags', async () => {
+		txMock.order.findUnique.mockResolvedValue({
+			id: 'order-1',
+			status: 'paid',
+			paymentStatus: 'paid',
+			deliveryStatus: 'refunded',
+			orderItems: [{ id: 'item-1', quantity: 1 }]
+		});
+		expect(await allocateAccountsForOrder('order-1')).toEqual({
+			success: false,
+			error: 'Payment must be confirmed before account allocation'
+		});
+		expect(txMock.account.findMany).not.toHaveBeenCalled();
+		expect(txMock.order.update).not.toHaveBeenCalled();
+	});
 });

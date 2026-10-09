@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+vi.mock('$lib/services/refund-recovery', () => ({ enqueueRefundRecovery: vi.fn() }));
 
 /**
  * customerRetryPhoneRental (B.3b): the button-gated "try another number". Locks the guards —
@@ -176,7 +177,19 @@ beforeEach(() => {
 			phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 			orderItem: { update: vi.fn().mockResolvedValue({}) },
 			orderEvent: { create: vi.fn().mockResolvedValue({}) },
-			order: { update: vi.fn() }
+			order: {
+				update: vi.fn(),
+				findUnique: vi
+					.fn()
+					.mockResolvedValue({
+						userId: 'user-1',
+						totalAmount: 1200,
+						refundedAmount: 0,
+						status: 'paid',
+						paymentStatus: 'paid',
+						deliveryStatus: 'processing'
+					})
+			}
 		})
 	);
 });

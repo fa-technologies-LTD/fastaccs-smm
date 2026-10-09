@@ -17,6 +17,12 @@
 	import { getBoostingServiceConfig } from '$lib/helpers/boosting-service-config';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { formatAdminMoney } from '$lib/helpers/admin-money';
+	import { getBoostComplaintStatusLabel } from '$lib/helpers/boosting-complaint-progress';
+	import {
+		normalizeBoostItemStatus,
+		canManuallyChangeBoostStatus,
+		type BoostItemStatus
+	} from '$lib/helpers/boosting-admin-status';
 	import type { PageData } from './$types';
 
 	type StatusFilter =
@@ -24,10 +30,13 @@
 		| 'pending'
 		| 'needs_link'
 		| 'in_progress'
+		| 'under_review'
+		| 'partial'
 		| 'completed'
 		| 'rejected'
+		| 'cancelled'
 		| 'all';
-	type ItemStatus = 'pending' | 'needs_link' | 'in_progress' | 'completed' | 'rejected';
+	type ItemStatus = BoostItemStatus;
 
 	interface BoostingOrderItem {
 		id: string;
@@ -48,7 +57,14 @@
 			attention: string | null;
 			checkedAt: string | null;
 		} | null;
-		complaints: Array<{ id: string; type: string; status: string; createdAt: string }>;
+		complaints: Array<{
+			id: string;
+			type: string;
+			status: string;
+			createdAt: string;
+			refillState: string | null;
+			refillCheckedAt: string | null;
+		}>;
 		fulfillmentState: { status: string; mode: string } | null;
 		order: {
 			id: string;
@@ -70,6 +86,7 @@
 		status: string;
 		search: string;
 		statusCounts: Record<string, number>;
+		activeCount: number;
 		canRunShadowRouting: boolean;
 	}
 
@@ -98,15 +115,17 @@
 	let busyItemId = $state<string | null>(null);
 	let shadowRunning = $state(false);
 
-	const activeCount = $derived(
-		(meta.statusCounts.pending || 0) +
-			(meta.statusCounts.needs_link || 0) +
-			(meta.statusCounts.in_progress || 0)
-	);
+	const activeCount = $derived(meta.activeCount || 0);
 
 	const statusOptions = $derived([
 		{ value: 'active' as const, label: 'Active', count: activeCount },
 		{ value: 'pending' as const, label: 'Pending', count: meta.statusCounts.pending || 0 },
+		{
+			value: 'under_review' as const,
+			label: 'Needs review',
+			count: meta.statusCounts.under_review || 0
+		},
+		{ value: 'partial' as const, label: 'Partly delivered', count: meta.statusCounts.partial || 0 },
 		{
 			value: 'needs_link' as const,
 			label: 'Needs link',
@@ -123,14 +142,12 @@
 			count: meta.statusCounts.completed || 0
 		},
 		{ value: 'rejected' as const, label: 'Rejected', count: meta.statusCounts.rejected || 0 },
+		{ value: 'cancelled' as const, label: 'Cancelled', count: meta.statusCounts.cancelled || 0 },
 		{ value: 'all' as const, label: 'All', count: stats.total_orders || 0 }
 	]);
 
 	function getStatus(item: BoostingOrderItem): ItemStatus {
-		const value = item.boostFulfillmentStatus || 'pending';
-		return ['pending', 'needs_link', 'in_progress', 'completed', 'rejected'].includes(value)
-			? (value as ItemStatus)
-			: 'pending';
+		return normalizeBoostItemStatus(item.boostFulfillmentStatus);
 	}
 
 	function getStatusLabel(status: ItemStatus): string {
@@ -138,6 +155,9 @@
 		if (status === 'in_progress') return 'In progress';
 		if (status === 'completed') return 'Completed';
 		if (status === 'rejected') return 'Rejected';
+		if (status === 'cancelled') return 'Cancelled';
+		if (status === 'under_review') return 'Needs review';
+		if (status === 'partial') return 'Partly delivered';
 		return 'Pending';
 	}
 
@@ -148,10 +168,10 @@
 		if (status === 'in_progress') {
 			return 'background: rgba(59,130,246,0.14); color: #93c5fd; border-color: rgba(59,130,246,0.3);';
 		}
-		if (status === 'needs_link') {
+		if (['needs_link', 'under_review', 'partial'].includes(status)) {
 			return 'background: rgba(234,179,8,0.14); color: #facc15; border-color: rgba(234,179,8,0.3);';
 		}
-		if (status === 'rejected') {
+		if (status === 'rejected' || status === 'cancelled') {
 			return 'background: rgba(248,113,113,0.13); color: #fca5a5; border-color: rgba(248,113,113,0.3);';
 		}
 		return 'background: var(--surface); color: var(--text-muted); border-color: var(--border);';
@@ -172,7 +192,8 @@
 			month: 'short',
 			year: 'numeric',
 			hour: '2-digit',
-			minute: '2-digit'
+			minute: '2-digit',
+			timeZone: 'Africa/Lagos'
 		});
 	}
 
@@ -287,7 +308,10 @@
 		window.dispatchEvent(new CustomEvent('fastaccs:admin-attention-refresh'));
 	}
 
-	async function updateItem(item: BoostingOrderItem, status: ItemStatus) {
+	async function updateItem(
+		item: BoostingOrderItem,
+		status: 'pending' | 'in_progress' | 'needs_link' | 'completed' | 'rejected'
+	) {
 		let reason = '';
 		if (status === 'needs_link') {
 			const response = prompt('What should the customer correct about this link?');
@@ -606,7 +630,7 @@
 										Customer report: {complaintLabel(complaint.type)}
 									</p>
 									<span class="text-[11px] uppercase" style="color: #fca5a5;"
-										>{complaint.status}</span
+										>{getBoostComplaintStatusLabel(complaint)}</span
 									>
 								</div>
 								<div class="mt-2 flex flex-wrap gap-2">
@@ -629,7 +653,7 @@
 											style="background: var(--primary); color: #00150b;"
 											>Escalate to supplier</button
 										>{/if}
-									{#if complaint.status === 'escalation_unknown'}<p
+									{#if complaint.status === 'escalating' || complaint.status === 'escalation_unknown'}<p
 											class="text-xs"
 											style="color: #fbbf24;"
 										>
@@ -733,46 +757,50 @@
 							class="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
 							style="border-color: var(--border); color: var(--text);">Supplier ref</button
 						>
-						{#if status === 'pending'}
-							<button
-								type="button"
-								onclick={() => updateItem(item, 'in_progress')}
-								disabled={busyItemId === item.id}
-								class="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-								style="background: var(--primary); color: #00150b;">Start</button
-							>
-						{:else if status === 'in_progress'}
-							<button
-								type="button"
-								onclick={() => updateItem(item, 'completed')}
-								disabled={busyItemId === item.id}
-								class="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-								style="background: var(--primary); color: #00150b;">Complete</button
-							>
-						{:else}
-							<button
-								type="button"
-								onclick={() => updateItem(item, status === 'completed' ? 'in_progress' : 'pending')}
-								disabled={busyItemId === item.id}
-								class="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-								style="border-color: var(--border); color: var(--text);">Reopen</button
-							>
-						{/if}
-						{#if !['completed', 'rejected'].includes(status)}
-							<button
-								type="button"
-								onclick={() => updateItem(item, 'needs_link')}
-								disabled={busyItemId === item.id}
-								class="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-								style="border-color: rgba(234,179,8,0.35); color: #facc15;">Request link</button
-							>
-							<button
-								type="button"
-								onclick={() => updateItem(item, 'rejected')}
-								disabled={busyItemId === item.id}
-								class="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-								style="border-color: rgba(248,113,113,0.35); color: #fca5a5;">Can't fulfill</button
-							>
+						{#if canManuallyChangeBoostStatus(item.fulfillmentState)}
+							{#if status === 'pending'}
+								<button
+									type="button"
+									onclick={() => updateItem(item, 'in_progress')}
+									disabled={busyItemId === item.id}
+									class="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+									style="background: var(--primary); color: #00150b;">Start</button
+								>
+							{:else if status === 'in_progress'}
+								<button
+									type="button"
+									onclick={() => updateItem(item, 'completed')}
+									disabled={busyItemId === item.id}
+									class="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+									style="background: var(--primary); color: #00150b;">Complete</button
+								>
+							{:else if status === 'needs_link' || status === 'rejected' || status === 'completed'}
+								<button
+									type="button"
+									onclick={() =>
+										updateItem(item, status === 'completed' ? 'in_progress' : 'pending')}
+									disabled={busyItemId === item.id}
+									class="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+									style="border-color: var(--border); color: var(--text);">Reopen</button
+								>
+							{/if}
+							{#if !['completed', 'rejected', 'cancelled'].includes(status)}
+								<button
+									type="button"
+									onclick={() => updateItem(item, 'needs_link')}
+									disabled={busyItemId === item.id}
+									class="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+									style="border-color: rgba(234,179,8,0.35); color: #facc15;">Request link</button
+								>
+								<button
+									type="button"
+									onclick={() => updateItem(item, 'rejected')}
+									disabled={busyItemId === item.id}
+									class="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+									style="border-color: rgba(248,113,113,0.35); color: #fca5a5;"
+									>Can't fulfill</button
+								>
+							{/if}
 						{/if}
 					</div>
 				</div>

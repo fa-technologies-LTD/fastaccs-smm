@@ -19,10 +19,10 @@ vi.mock('$lib/auth/admin-roles', () => ({ hasAdminPermission: mocks.hasPermissio
 import { prisma } from '$lib/prisma';
 import { GET } from './+server';
 
-function callGet(query = '') {
+function callGet(query = '', revenueVisible = true) {
 	return GET({
 		url: new URL(`https://smm.fastaccs.com/api/admin/boosting-orders${query}`),
-		locals: { user: { id: 'admin-1' }, adminContext: {} }
+		locals: { user: { id: 'admin-1' }, adminContext: { canViewRevenue: revenueVisible } }
 	} as never);
 }
 
@@ -40,6 +40,54 @@ beforeEach(() => {
 });
 
 describe('boosting admin queue list', () => {
+	it('keeps partial delivery, review and completed orders with open refill reports in the active queue', async () => {
+		vi.mocked(prisma.orderItem.count).mockResolvedValue(4);
+		const response = await callGet();
+		const body = await response.json();
+		expect(body.meta.activeCount).toBe(4);
+		expect(prisma.orderItem.findMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: {
+					AND: expect.arrayContaining([
+						expect.objectContaining({
+							OR: expect.arrayContaining([
+								{
+									boostFulfillmentStatus: {
+										in: expect.arrayContaining(['under_review', 'partial', 'rejected'])
+									}
+								},
+								{
+									boostFulfillment: {
+										is: {
+											complaints: {
+												some: {
+													status: {
+														in: expect.arrayContaining(['escalating', 'escalation_unknown'])
+													}
+												}
+											}
+										}
+									}
+								}
+							])
+						})
+					])
+				}
+			})
+		);
+	});
+	it.each(['partial', 'under_review'])('supports the %s exception filter', async (status) => {
+		await callGet(`?status=${status}`);
+		expect(prisma.orderItem.findMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: { AND: expect.arrayContaining([{ boostFulfillmentStatus: status }]) }
+			})
+		);
+	});
+	it('rejects unknown filters instead of silently showing all orders', async () => {
+		expect((await callGet('?status=nonsense')).status).toBe(400);
+		expect(prisma.orderItem.findMany).not.toHaveBeenCalled();
+	});
 	it('defaults to active work, newest first, with a bounded page size', async () => {
 		const response = await callGet();
 		const body = await response.json();
@@ -157,5 +205,26 @@ describe('boosting admin queue list', () => {
 		const response = await callGet();
 		expect(response.status).toBe(401);
 		expect(prisma.orderItem.findMany).not.toHaveBeenCalled();
+	});
+	it('does not leak supplier costs or projected profit through the API to a non-revenue admin', async () => {
+		vi.mocked(prisma.orderItem.findMany).mockResolvedValue([{ id: 'item-1' }] as never);
+		vi.mocked(prisma.boostFulfillment.findMany).mockResolvedValue([
+			{
+				orderItemId: 'item-1',
+				provider: 'bulk_follows',
+				quotedSupplierCostUsd: 0.75,
+				projectedMarginNgn: 3650,
+				selectedRoute: { providerService: { serviceId: '4215', name: 'Private supplier row' } },
+				complaints: [],
+				status: 'queued',
+				fulfillmentMode: 'live'
+			}
+		] as never);
+		const body = await (await callGet('', false)).json();
+		expect(body.data[0].shadowDecision).toBeNull();
+		expect(JSON.stringify(body)).not.toMatch(
+			/quotedSupplierCostUsd|projectedMarginNgn|Private supplier row/
+		);
+		expect(body.data[0].fulfillmentState).toEqual({ status: 'queued', mode: 'live' });
 	});
 });

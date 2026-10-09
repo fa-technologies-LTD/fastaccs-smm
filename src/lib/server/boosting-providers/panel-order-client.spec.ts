@@ -17,6 +17,120 @@ function input() {
 }
 
 describe('boosting panel order contract client', () => {
+	it.each([
+		['Pending', 'pending'],
+		['In progress', 'in_progress'],
+		['Processing', 'in_progress'],
+		['Completed', 'completed'],
+		['Rejected', 'rejected'],
+		['Cancelled', 'rejected'],
+		['New status', 'unknown']
+	])('reads the separate BulkFollows refill status %s', async (status, state) => {
+		const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(response({ status }));
+		const client = createPanelOrderClient({
+			id: 'bulk_follows',
+			getApiKey: () => 'fixture-secret',
+			fetchImpl
+		});
+		await expect(client.getRefillStatus!('321')).resolves.toEqual({ state });
+		expect(Object.fromEntries(fetchImpl.mock.calls[0][1]?.body as URLSearchParams)).toEqual({
+			key: 'fixture-secret',
+			action: 'refill_status',
+			refill: '321'
+		});
+	});
+	it.each([
+		{ error: 'Refill not found' },
+		{ status: { error: 'not found' } },
+		{},
+		[],
+		'<html>maintenance</html>'
+	])('does not invent refill completion from malformed/error payload %j', async (payload) => {
+		const client = createPanelOrderClient({
+			id: 'bulk_follows',
+			getApiKey: () => 'fixture-secret',
+			fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(response(payload))
+		});
+		await expect(client.getRefillStatus!('321')).rejects.toBeDefined();
+	});
+	it('does not expose the unverified refill-status action for SMM Raja', () => {
+		expect(
+			createPanelOrderClient({
+				id: 'smm_raja',
+				getApiKey: () => 'fixture-secret',
+				fetchImpl: vi.fn<typeof fetch>()
+			}).getRefillStatus
+		).toBeUndefined();
+	});
+	it('does not mistake an order-shaped response for an accepted refill', async () => {
+		const client = createPanelOrderClient({
+			id: 'bulk_follows',
+			getApiKey: () => 'fixture-secret',
+			fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(response({ order: 23501 }))
+		});
+		await expect(client.requestRefill!('23501')).rejects.toMatchObject({
+			code: 'invalid_response'
+		});
+	});
+	it.each(['smm_raja', 'bulk_follows'] as const)(
+		'sends newline comments without an independent quantity to %s',
+		async (id) => {
+			const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(response({ order: 23501 }));
+			const client = createPanelOrderClient({ id, getApiKey: () => 'fixture-secret', fetchImpl });
+			await client.submitOrder({
+				...input(),
+				quantity: 2,
+				inputMode: 'custom_comments',
+				comments: 'Lovely!\r\nGreat work!'
+			});
+			const body = fetchImpl.mock.calls[0][1]?.body as URLSearchParams;
+			expect(body.get('comments')).toBe('Lovely!\nGreat work!');
+			expect(body.has('quantity')).toBe(false);
+		}
+	);
+	it('rejects a conflicting comment count before contacting a supplier', async () => {
+		const fetchImpl = vi.fn<typeof fetch>();
+		const client = createPanelOrderClient({
+			id: 'bulk_follows',
+			getApiKey: () => 'fixture-secret',
+			fetchImpl
+		});
+		await expect(
+			client.submitOrder({
+				...input(),
+				quantity: 2,
+				inputMode: 'custom_comments',
+				comments: 'One comment'
+			})
+		).rejects.toMatchObject({ certainty: 'not_submitted', code: 'invalid_input' });
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+	it('preserves SMM Raja catalogue service prefixes while order IDs remain numeric', async () => {
+		const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(response({ order: 23501 }));
+		const client = createPanelOrderClient({
+			id: 'smm_raja',
+			getApiKey: () => 'fixture-secret',
+			fetchImpl
+		});
+		await client.submitOrder({ ...input(), serviceId: 's4138' });
+		expect((fetchImpl.mock.calls[0][1]?.body as URLSearchParams).get('service')).toBe('s4138');
+		await expect(client.getStatuses(['s4138'])).rejects.toMatchObject({ code: 'invalid_input' });
+		expect(fetchImpl).toHaveBeenCalledOnce();
+	});
+
+	it('does not allow SMM Raja service prefixes at BulkFollows', async () => {
+		const fetchImpl = vi.fn<typeof fetch>();
+		const client = createPanelOrderClient({
+			id: 'bulk_follows',
+			getApiKey: () => 'fixture-secret',
+			fetchImpl
+		});
+		await expect(client.submitOrder({ ...input(), serviceId: 's4138' })).rejects.toMatchObject({
+			code: 'invalid_input'
+		});
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
 	it('encodes a standard order and accepts only a scalar positive order ID', async () => {
 		const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(response({ order: 23501 }));
 		const client = createPanelOrderClient({
@@ -172,6 +286,47 @@ describe('boosting panel order contract client', () => {
 		expect(body.get('order')).toBe('10,11');
 		expect(body.has('orders')).toBe(false);
 	});
+
+	it('accepts the observed BulkFollows blank starting count without fabricating progress', async () => {
+		const client = createPanelOrderClient({
+			id: 'bulk_follows',
+			getApiKey: () => 'fixture-secret',
+			fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(
+				response({
+					status: 'Pending',
+					charge: '0.000588',
+					currency: 'USD',
+					start_count: '',
+					remains: '10'
+				})
+			)
+		});
+		await expect(client.getStatuses(['170675496'])).resolves.toEqual([
+			expect.objectContaining({ state: 'pending', startCount: null, remains: 10, charge: 0.000588 })
+		]);
+	});
+
+	it.each([undefined, null, '-1', 'unknown'])(
+		'still rejects malformed starting counts (%s)',
+		async (startCount) => {
+			const client = createPanelOrderClient({
+				id: 'bulk_follows',
+				getApiKey: () => 'fixture-secret',
+				fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(
+					response({
+						status: 'Pending',
+						charge: '0.000588',
+						currency: 'USD',
+						start_count: startCount,
+						remains: '10'
+					})
+				)
+			});
+			await expect(client.getStatuses(['170675496'])).rejects.toMatchObject({
+				code: 'invalid_response'
+			});
+		}
+	);
 
 	it('requires complete status records and caps batch checks at 100 IDs', async () => {
 		const fetchImpl = vi

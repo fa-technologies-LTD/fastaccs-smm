@@ -1,5 +1,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from '$lib/prisma';
+import { supportsBoostServiceInput } from '$lib/helpers/boosting-service-input';
+import { parseBoostServiceId } from './service-id';
 import { getBoostingServiceConfig, getQuantityChips } from '$lib/helpers/boosting-service-config';
 import type {
 	BoostMappingCandidate,
@@ -11,6 +13,7 @@ import {
 	inferAdvertisedRefillDays,
 	isThreadsService,
 	isUnsafeAutomaticServiceLabel,
+	serviceMatchesBoostOutcome,
 	supplierTextAdvertisesRefill
 } from './catalog-normalizer';
 
@@ -26,10 +29,16 @@ export const SMART_AUTO_MAX_PRICE_RATIO = 1.6;
 type ServiceRow = Prisma.BoostProviderServiceGetPayload<Record<string, never>>;
 
 function isAutomaticOnlyUnsafe(
-	row: Pick<ServiceRow, 'name' | 'category'>,
-	platform: string
+	row: Pick<ServiceRow, 'name' | 'category' | 'providerType'>,
+	platform: string,
+	outcome: string
 ): boolean {
-	return (isThreadsService(row) && platform !== 'threads') || isUnsafeAutomaticServiceLabel(row);
+	return (
+		(isThreadsService(row) && platform !== 'threads') ||
+		isUnsafeAutomaticServiceLabel(row) ||
+		!supportsBoostServiceInput(row.providerType, outcome) ||
+		!serviceMatchesBoostOutcome(row, outcome)
+	);
 }
 
 function toCandidate(row: ServiceRow): BoostMappingCandidate | null {
@@ -80,13 +89,19 @@ function manualSelectionIssues(
 	const advisory: string[] = [];
 	const maximumPreset = Math.max(...getQuantityChips(config));
 	if (row.unavailableAt) blocking.push('The supplier no longer lists this service.');
+	if (!supportsBoostServiceInput(row.providerType, config.actionType))
+		blocking.push('This service needs extra inputs that checkout does not support yet.');
 	if (row.catalogueStatus === 'quarantined')
 		blocking.push('The supplier row failed catalogue safety checks.');
 	if (isThreadsService(row) && config.platform !== 'threads') {
 		blocking.push('It is a Threads service, not this platform.');
 	}
 	if (!row.platforms.includes(config.platform)) blocking.push('It is for a different platform.');
-	if (!row.outcomes.includes(config.actionType)) blocking.push('It delivers a different result.');
+	if (
+		!row.outcomes.includes(config.actionType) ||
+		!serviceMatchesBoostOutcome(row, config.actionType)
+	)
+		blocking.push('It delivers a different result.');
 	if (row.targetType !== getRequiredLinkType(config.actionType)) {
 		blocking.push('It expects a different type of link.');
 	}
@@ -151,12 +166,12 @@ export async function lookupBoostProviderService(
 			issues: ['Customer result not found.'],
 			service: null
 		};
-	const code = String(input.serviceCode || '').trim();
-	if (!/^\d{1,20}$/.test(code)) {
+	const code = parseBoostServiceId(input.provider, input.serviceCode);
+	if (!code) {
 		return {
 			found: false,
 			compatible: false,
-			issues: ['Enter the numeric supplier service code.'],
+			issues: ['Enter the exact supplier service code, including any s prefix.'],
 			service: null
 		};
 	}
@@ -280,7 +295,7 @@ export async function recommendBoostProviderServices(
 	});
 	return rankSmartBoostCandidates(
 		rows
-			.filter((row) => !isAutomaticOnlyUnsafe(row, config.platform))
+			.filter((row) => !isAutomaticOnlyUnsafe(row, config.platform, config.actionType))
 			.map(toCandidate)
 			.filter((row): row is BoostMappingCandidate => Boolean(row)),
 		input.qualityTier,

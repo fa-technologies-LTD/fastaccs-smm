@@ -14,12 +14,20 @@ const prismaMock = vi.hoisted(() => ({
 vi.mock('$lib/prisma', () => ({ prisma: prismaMock }));
 vi.mock('$lib/helpers/order-revenue.server', () => ({
 	buildRevenueOrderWhere: vi.fn(() => ({})),
-	toNetSales: vi.fn((total: unknown, refunded: unknown) => Number(total || 0) - Number(refunded || 0))
+	toNetSales: vi.fn(
+		(total: unknown, refunded: unknown) => Number(total || 0) - Number(refunded || 0)
+	)
 }));
 
-import { maybeGrantSpendMilestones } from './spend-milestones';
+import { maybeGrantSpendMilestones, maybeClawbackSpendMilestones } from './spend-milestones';
 
 describe('spend milestone promo requalification', () => {
+	it('exposes financial failure to durable refund recovery instead of silently finishing', async () => {
+		prismaMock.order.aggregate.mockRejectedValueOnce(new Error('database unavailable'));
+		await expect(maybeClawbackSpendMilestones('buyer', { throwOnError: true })).rejects.toThrow(
+			'database unavailable'
+		);
+	});
 	beforeEach(() => {
 		vi.clearAllMocks();
 		prismaMock.order.aggregate.mockResolvedValue({

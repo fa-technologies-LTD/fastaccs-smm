@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+vi.mock('$lib/services/refund-recovery', () => ({ enqueueRefundRecovery: vi.fn() }));
 
 /**
  * Money-critical invariants for the Numbers fulfillment/refund path. These lock the CURRENT
@@ -108,7 +109,19 @@ beforeEach(() => {
 			phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 			orderItem: { update: vi.fn().mockResolvedValue({}) },
 			orderEvent: { create: vi.fn().mockResolvedValue({}) },
-			order: { update: vi.fn().mockResolvedValue({}) }
+			order: {
+				update: vi.fn().mockResolvedValue({}),
+				findUnique: vi
+					.fn()
+					.mockResolvedValue({
+						userId: 'user-1',
+						totalAmount: 1200,
+						refundedAmount: 0,
+						status: 'paid',
+						paymentStatus: 'paid',
+						deliveryStatus: 'processing'
+					})
+			}
 		})
 	);
 });
@@ -174,6 +187,78 @@ describe('cancelAndRefundRental — terminal states are no-ops', () => {
 });
 
 describe('refundPhoneOrderToStoreCredit — idempotent (credit issued at most once)', () => {
+	it('cannot change refund/item accounting after a concurrent admin refund wins the order lock', async () => {
+		const write = vi.fn();
+		prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => unknown) =>
+			cb({
+				$queryRaw: vi.fn().mockResolvedValue([]),
+				order: {
+					findUnique: vi
+						.fn()
+						.mockResolvedValue({
+							userId: 'user-1',
+							totalAmount: 1000,
+							refundedAmount: 1000,
+							status: 'refunded',
+							paymentStatus: 'refunded',
+							deliveryStatus: 'refunded'
+						}),
+					update: write
+				},
+				phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+				orderItem: { update: write },
+				orderEvent: { create: write }
+			})
+		);
+		expect(await refundPhoneOrderToStoreCredit('order-1', 'late refund', 'test')).toBe(false);
+		expect(creditStoreCreditMock).not.toHaveBeenCalled();
+		expect(write).not.toHaveBeenCalled();
+	});
+	it('uses the locked remaining amount rather than stale pre-lock refund totals', async () => {
+		prismaMock.orderItem.findFirst.mockResolvedValue({
+			id: 'item-1',
+			category: { metadata: {} },
+			order: {
+				userId: 'user-1',
+				orderNumber: 'ORD-1',
+				totalAmount: 1000,
+				refundedAmount: 0,
+				status: 'paid',
+				paymentStatus: 'paid',
+				deliveryStatus: 'processing'
+			}
+		});
+		const updateOrder = vi.fn();
+		prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => unknown) =>
+			cb({
+				$queryRaw: vi.fn().mockResolvedValue([]),
+				order: {
+					findUnique: vi
+						.fn()
+						.mockResolvedValue({
+							userId: 'user-1',
+							totalAmount: 1000,
+							refundedAmount: 200.11,
+							status: 'paid',
+							paymentStatus: 'paid',
+							deliveryStatus: 'processing'
+						}),
+					update: updateOrder
+				},
+				phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+				orderItem: { update: vi.fn() },
+				orderEvent: { create: vi.fn() }
+			})
+		);
+		expect(await refundPhoneOrderToStoreCredit('order-1', 'remainder', 'test')).toBe(true);
+		expect(creditStoreCreditMock).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({ amount: 799.89 })
+		);
+		expect(updateOrder).toHaveBeenCalledWith(
+			expect.objectContaining({ data: expect.objectContaining({ refundedAmount: 1000 }) })
+		);
+	});
 	it('does NOT credit again when the claim finds nothing to refund', async () => {
 		prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => unknown) =>
 			cb({
@@ -181,7 +266,19 @@ describe('refundPhoneOrderToStoreCredit — idempotent (credit issued at most on
 				phoneRental: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
 				orderItem: { update: vi.fn().mockResolvedValue({}) },
 				orderEvent: { create: vi.fn().mockResolvedValue({}) },
-				order: { update: vi.fn() }
+				order: {
+					update: vi.fn(),
+					findUnique: vi
+						.fn()
+						.mockResolvedValue({
+							userId: 'user-1',
+							totalAmount: 1200,
+							refundedAmount: 0,
+							status: 'paid',
+							paymentStatus: 'paid',
+							deliveryStatus: 'processing'
+						})
+				}
 			})
 		);
 		const ok = await refundPhoneOrderToStoreCredit('order-1', 'dup', 'test');
@@ -207,7 +304,19 @@ describe('refundPhoneOrderToStoreCredit — idempotent (credit issued at most on
 				phoneRental: { updateMany: rentalClaim },
 				orderItem: { update: vi.fn().mockResolvedValue({}) },
 				orderEvent: { create: vi.fn().mockResolvedValue({}) },
-				order: { update: vi.fn().mockResolvedValue({}) }
+				order: {
+					update: vi.fn().mockResolvedValue({}),
+					findUnique: vi
+						.fn()
+						.mockResolvedValue({
+							userId: 'user-1',
+							totalAmount: 1200,
+							refundedAmount: 0,
+							status: 'paid',
+							paymentStatus: 'paid',
+							deliveryStatus: 'processing'
+						})
+				}
 			})
 		);
 

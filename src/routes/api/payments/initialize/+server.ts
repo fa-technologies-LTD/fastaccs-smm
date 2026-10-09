@@ -1,5 +1,9 @@
 import { json } from '@sveltejs/kit';
 import { boostingMinimumMessage } from '$lib/helpers/boosting-checkout';
+import {
+	holdUncertainInitialization,
+	isDefinitiveInitializationFailure
+} from '$lib/services/payment-initialization-recovery';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { initializeTransaction, verifyTransaction } from '$lib/services/monnify';
@@ -7,6 +11,7 @@ import { getPaymentReturnOrigin } from '$lib/helpers/site-url';
 import { isCheckoutEnabledSetting } from '$lib/services/admin-settings';
 import {
 	getPaymentReservationExpiresAt,
+	isPaymentVerificationUnavailable,
 	getPendingPaymentExpiresAt
 } from '$lib/helpers/payment-expiry.server';
 import {
@@ -76,7 +81,11 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			return json({ success: false, error: 'Order has already been paid' }, { status: 400 });
 		}
 
-		if (!['pending', 'pending_payment'].includes(order.status)) {
+		if (
+			!['pending', 'pending_payment'].includes(order.status) ||
+			!['pending', 'processing'].includes(order.paymentStatus) ||
+			order.deliveryStatus === 'refunded'
+		) {
 			return json(
 				{ success: false, error: 'This order can no longer accept payment.' },
 				{ status: 409 }
@@ -115,9 +124,20 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			if (order.paymentReference) {
 				const verification = await verifyTransaction(order.paymentReference);
 				const gatewayStatus = normalizePaymentStatus(verification.paymentStatus);
+				if (isPaymentVerificationUnavailable(gatewayStatus)) {
+					return json(
+						{
+							success: false,
+							pending: true,
+							orderId,
+							error: 'Payment verification is temporarily unavailable. Please try again shortly.'
+						},
+						{ status: 503 }
+					);
+				}
 
 				if (verification.success || isSuccessPaymentStatus(gatewayStatus)) {
-					await settleSuccessfulPayment({
+					const settled = await settleSuccessfulPayment({
 						orderId,
 						source: 'verify',
 						paymentReference: verification.paymentReference || order.paymentReference,
@@ -126,7 +146,18 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						amountPaid: Number(verification.amountPaid || verification.amount || 0),
 						currency: verification.currency
 					});
-					return json({ success: true, alreadyPaid: true, orderId });
+					if (settled.status === 'PAID' || settled.status === 'COMPLETED')
+						return json({ success: true, alreadyPaid: true, orderId });
+					return json(
+						{
+							success: false,
+							pending: settled.status === 'PENDING',
+							orderId,
+							error:
+								settled.warning || settled.error || 'Please check this order before paying again.'
+						},
+						{ status: settled.status === 'PENDING' ? 202 : 409 }
+					);
 				}
 
 				const failureKind = getFailureKind(gatewayStatus);
@@ -137,10 +168,27 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						// buffer hasn't lapsed — let the customer keep paying on the
 						// same checkout link instead of cancelling and releasing stock.
 						const refreshedExpiresAt = getPendingPaymentExpiresAt();
-						await prisma.order.update({
-							where: { id: orderId },
+						const resumed = await prisma.order.updateMany({
+							where: {
+								id: orderId,
+								paymentReference: order.paymentReference,
+								paymentCheckoutUrl: order.paymentCheckoutUrl,
+								status: { in: ['pending', 'pending_payment'] },
+								paymentStatus: { in: ['pending', 'processing'] },
+								deliveryStatus: { not: 'refunded' }
+							},
 							data: { paymentExpiresAt: refreshedExpiresAt }
 						});
+						if (resumed.count !== 1)
+							return json(
+								{
+									success: false,
+									pending: true,
+									orderId,
+									error: 'This order changed. Please check its status.'
+								},
+								{ status: 202 }
+							);
 						await extendOrderReservations(
 							orderId,
 							getPaymentReservationExpiresAt(refreshedExpiresAt)
@@ -253,7 +301,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				id: orderId,
 				status: { in: ['pending', 'pending_payment'] },
 				paymentReference: null,
-				paymentStatus: { notIn: ['paid', 'success', 'overpaid', 'refunded'] }
+				paymentStatus: { in: ['pending', 'processing'] },
+				deliveryStatus: { not: 'refunded' }
 			},
 			data: {
 				paymentReference,
@@ -297,6 +346,19 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		});
 
 		if (!result.success || !result.checkoutUrl) {
+			if (!isDefinitiveInitializationFailure(result)) {
+				await holdUncertainInitialization(orderId, paymentReference);
+				return json(
+					{
+						success: false,
+						pending: true,
+						orderId,
+						error: 'Checkout is still initializing. Please check My Orders before trying again.',
+						traceId
+					},
+					{ status: 202 }
+				);
+			}
 			logPaymentEvent('error', 'initialize.failed', {
 				traceId,
 				orderId,
@@ -323,7 +385,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				id: orderId,
 				paymentReference,
 				status: { in: ['pending', 'pending_payment'] },
-				paymentStatus: { notIn: ['paid', 'success', 'overpaid', 'refunded'] }
+				paymentStatus: { in: ['pending', 'processing'] },
+				deliveryStatus: { not: 'refunded' }
 			},
 			data: {
 				paymentCheckoutUrl: result.checkoutUrl,

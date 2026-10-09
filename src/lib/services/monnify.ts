@@ -31,6 +31,7 @@ export async function getAccessToken(): Promise<string> {
 	const credentials = Buffer.from(`${MONNIFY_API_KEY}:${MONNIFY_SECRET_KEY}`).toString('base64');
 
 	const response = await fetch(`${MONNIFY_BASE_URL}/api/v1/auth/login`, {
+		signal: AbortSignal.timeout(10_000),
 		method: 'POST',
 		headers: {
 			Authorization: `Basic ${credentials}`,
@@ -204,9 +205,11 @@ export async function verifyTransaction(reference: string): Promise<TransactionV
 					}
 				];
 
+		let verificationUnavailable = false;
 		for (const attempt of attempts) {
 			try {
 				const response = await fetch(attempt.url, {
+					signal: AbortSignal.timeout(10_000),
 					method: 'GET',
 					headers: {
 						Authorization: `Bearer ${token}`
@@ -219,6 +222,7 @@ export async function verifyTransaction(reference: string): Promise<TransactionV
 				} catch {
 					payload = null;
 				}
+				if (!response.ok || !payload) verificationUnavailable = true;
 
 				const transaction = extractTransactionPayload(payload?.responseBody);
 				const referenceMatches = transaction
@@ -242,6 +246,7 @@ export async function verifyTransaction(reference: string): Promise<TransactionV
 
 				return mapVerificationResult(reference, transaction);
 			} catch (attemptError) {
+				verificationUnavailable = true;
 				console.warn('[monnify.verify] attempt_error', {
 					reference,
 					attempt: attempt.label,
@@ -263,7 +268,7 @@ export async function verifyTransaction(reference: string): Promise<TransactionV
 			amount: 0,
 			amountPaid: 0,
 			currency: 'NGN',
-			paymentStatus: 'not_found'
+			paymentStatus: verificationUnavailable ? 'error' : 'not_found'
 		};
 	} catch (error) {
 		console.error('Monnify verification error:', error);
@@ -318,6 +323,7 @@ export interface InitTransactionResult {
 	transactionReference?: string;
 	error?: string;
 	errorCode?: MonnifyInitializationIssue | ProviderInitializationErrorCode;
+	failureCertainty?: 'rejected' | 'unknown';
 }
 
 type ProviderInitializationErrorCode =
@@ -469,6 +475,7 @@ export async function initializeTransaction(
 		const response = await fetch(
 			`${MONNIFY_BASE_URL}/api/v1/merchant/transactions/init-transaction`,
 			{
+				signal: AbortSignal.timeout(10_000),
 				method: 'POST',
 				headers: {
 					Authorization: `Bearer ${token}`,
@@ -527,7 +534,14 @@ export async function initializeTransaction(
 			return {
 				success: false,
 				error: PAYMENT_SETUP_ERROR,
-				errorCode: responseIssue
+				errorCode: responseIssue,
+				failureCertainty:
+					response.status >= 400 &&
+					response.status < 500 &&
+					![408, 409, 429].includes(response.status) &&
+					data.requestSuccessful === false
+						? 'rejected'
+						: 'unknown'
 			};
 		}
 
@@ -548,7 +562,8 @@ export async function initializeTransaction(
 		return {
 			success: false,
 			error: PAYMENT_SETUP_ERROR,
-			errorCode: 'provider_initialization_failed'
+			errorCode: 'provider_initialization_failed',
+			failureCertainty: 'unknown'
 		};
 	}
 }

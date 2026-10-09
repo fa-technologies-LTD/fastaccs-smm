@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { ORDER_STATUS_GROUPS } from '$lib/helpers/order-status';
+import { BOOST_OPEN_COMPLAINT_STATUSES } from '$lib/helpers/boosting-admin-status';
 
 // Lightweight "needs attention" counts for the admin sidebar badges.
 // Read-only, side-effect free, keyed by nav href so the layout can map directly.
@@ -21,7 +22,16 @@ export const GET: RequestHandler = async () => {
 				boostTargetUrl: { not: null },
 				OR: [
 					{ boostFulfillmentStatus: null },
-					{ boostFulfillmentStatus: { in: ['pending', 'needs_link', 'rejected'] } }
+					{
+						boostFulfillmentStatus: {
+							in: ['pending', 'needs_link', 'rejected', 'under_review', 'partial', 'cancelled']
+						}
+					},
+					{
+						boostFulfillment: {
+							is: { complaints: { some: { status: { in: [...BOOST_OPEN_COMPLAINT_STATUSES] } } } }
+						}
+					}
 				],
 				order: { paymentStatus: { in: ['paid', 'success', 'overpaid'] } }
 			}

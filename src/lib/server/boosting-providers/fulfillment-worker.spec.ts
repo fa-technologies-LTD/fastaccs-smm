@@ -2,11 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { BoostProviderSubmissionError } from './panel-order-client';
 import {
 	canRetryBoostSubmission,
+	canStartBoostWork,
 	customerStatusForProviderState,
 	getBoostAutomationMode
 } from './fulfillment-worker';
 
 describe('Boosting fulfillment safety policy', () => {
+	it('does not start another provider call when the cron is close to its runtime deadline', () => {
+		expect(canStartBoostWork(45000, 20000)).toBe(true);
+		expect(canStartBoostWork(45000, 23001)).toBe(false);
+	});
 	it('fails closed to shadow unless the environment explicitly enables paid routing', () => {
 		expect(getBoostAutomationMode(undefined)).toBe('shadow');
 		expect(getBoostAutomationMode('unexpected')).toBe('shadow');
@@ -36,8 +41,8 @@ describe('Boosting fulfillment safety policy', () => {
 	it('keeps uncertain and terminal failures out of a false completed customer state', () => {
 		expect(customerStatusForProviderState('completed')).toBe('completed');
 		expect(customerStatusForProviderState('in_progress')).toBe('in_progress');
-		expect(customerStatusForProviderState('partial')).toBe('in_progress');
-		expect(customerStatusForProviderState('failed')).toBe('processing');
+		expect(customerStatusForProviderState('partial')).toBe('partial');
+		expect(customerStatusForProviderState('failed')).toBe('under_review');
 		expect(customerStatusForProviderState('unknown')).toBe('processing');
 	});
 });

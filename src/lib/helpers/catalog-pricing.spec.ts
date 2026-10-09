@@ -1,8 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyTierCatalogPriceSanitization, roundCatalogPriceNgn } from './catalog-pricing';
+import {
+	applyTierCatalogPriceSanitization,
+	roundCatalogPriceNgn,
+	roundUpCatalogPriceNgn
+} from './catalog-pricing';
 
 describe('catalogue price rounding', () => {
+	it.each([
+		[913.32, 950],
+		[913, 950],
+		[900, 900],
+		[450, 450],
+		[450.01, 500],
+		[0, 0],
+		[NaN, 0]
+	])('rounds a Boosting quote %s upwards to %s', (input, expected) => {
+		expect(roundUpCatalogPriceNgn(input)).toBe(expected);
+	});
 	it.each([
 		[0, 0],
 		[1_700, 1_700],

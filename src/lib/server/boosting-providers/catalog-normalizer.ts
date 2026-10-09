@@ -31,7 +31,12 @@ const OUTCOME_PATTERNS: Record<BoostCatalogOutcome, RegExp> = {
 	followers: /followers?/i,
 	subscribers: /subscribers?/i,
 	members: /members?|joiners?/i,
-	views: /views?|impressions?/i,
+	views: /views?/i,
+	live_likes: /live\s+likes?/i,
+	impressions: /impressions?/i,
+	reach: /\breach\b/i,
+	story_shares: /stor(?:y|ies)\s+shares?/i,
+	custom_comments: /custom\s+comments?/i,
 	streams: /streams?|plays?/i,
 	monthly_listeners: /monthly\s+listeners?/i,
 	likes: /likes?/i,
@@ -51,6 +56,11 @@ const PROFILE_OUTCOMES = new Set<BoostCatalogOutcome>([
 const CHANNEL_OUTCOMES = new Set<BoostCatalogOutcome>(['members']);
 const CONTENT_OUTCOMES = new Set<BoostCatalogOutcome>([
 	'views',
+	'live_likes',
+	'impressions',
+	'reach',
+	'story_shares',
+	'custom_comments',
 	'streams',
 	'likes',
 	'reactions',
@@ -148,16 +158,58 @@ function inferPlatforms(name: string, category: string): BoostCatalogPlatform[] 
 	return matchesFrom(name, BOOST_CATALOG_PLATFORMS, PLATFORM_PATTERNS);
 }
 
-function inferOutcomes(name: string, category: string): BoostCatalogOutcome[] {
+function inferOutcomes(
+	name: string,
+	category: string,
+	providerType?: string | null
+): BoostCatalogOutcome[] {
+	name = textForMatching(name);
+	category = textForMatching(category);
+	// These require different targets/options, not the ordinary post contract. Never let
+	// a broad supplier category turn a poll, comment reaction or LIVE stream into a post order.
+	if (
+		/\b(?:poll|votes?|voting)\b/i.test(name) ||
+		/\bcomments?\s+react(?:ions?)?\b/i.test(name) ||
+		/\bstor(?:y|ies)\b.*\breactions?\b/i.test(name) ||
+		/\b(?:live|live[\s-]?stream|concurrent)\b.*\bviews?\b/i.test(`${name} ${category}`)
+	)
+		return [];
+	// LIVE comments need a stream-specific contract; never route them to post comments,
+	// including saved classifications that predate this guard.
+	if (
+		/\b(?:live|live[\s-]?stream)(?:[\s_-]+chat)?[\s_-]+(?:custom[\s_-]+)?comments?\b/i.test(
+			`${name} ${category}`
+		)
+	)
+		return [];
+	if (/^custom comments(?: package)?$/i.test(String(providerType ?? '').trim()))
+		return ['custom_comments'];
+	// Some panels incorrectly label custom-text rows as Default. The label still rules out
+	// random comments; checkout must wait for a verified custom-input type on those rows.
+	if (/\bcustom\s+comments?\b/i.test(name)) return ['custom_comments'];
+	if (/\blive\s+likes?\b/i.test(`${name} ${category}`)) return ['live_likes'];
+	if (/\bstor(?:y|ies)\s+shares?\b/i.test(`${name} ${category}`)) return ['story_shares'];
 	// Supplier labels such as "Twitter - New Followers Impressions" describe
 	// impressions, not follower delivery. Treat the more specific impressions
 	// term as authoritative so the incidental word "followers" cannot route a
 	// content-view service into a profile-follower offer.
-	if (/\bimpressions?\b/i.test(name)) return ['views'];
+	if (/\bimpressions?\b/i.test(name)) return ['impressions'];
+	if (/\breach\b/i.test(name) && !/\bviews?\b/i.test(name)) return ['reach'];
 	const fromName = matchesFrom(name, BOOST_CATALOG_OUTCOMES, OUTCOME_PATTERNS);
 	return fromName.length
 		? fromName
 		: matchesFrom(category, BOOST_CATALOG_OUTCOMES, OUTCOME_PATTERNS);
+}
+
+/** Recheck structural labels even when a cached classification predates this classifier. */
+export function serviceMatchesBoostOutcome(
+	service: Pick<BoostProviderService, 'name' | 'category'> &
+		Partial<Pick<BoostProviderService, 'providerType'>>,
+	outcome: string
+): boolean {
+	return inferOutcomes(service.name, service.category, service.providerType).includes(
+		outcome as BoostCatalogOutcome
+	);
 }
 
 function inferTargetType(outcomes: BoostCatalogOutcome[]): BoostTargetType {
@@ -233,7 +285,7 @@ export function normalizeBoostProviderService(
 	const cancelAdvertised = advertisedBoolean(raw.cancel);
 	const dripfeedAdvertised = advertisedBoolean(raw.dripfeed);
 	const platforms = inferPlatforms(name, category);
-	const outcomes = inferOutcomes(name, category);
+	const outcomes = inferOutcomes(name, category, providerType);
 	const anomalies: BoostCatalogAnomaly[] = [];
 
 	if (!serviceId) anomalies.push('missing_service_id');

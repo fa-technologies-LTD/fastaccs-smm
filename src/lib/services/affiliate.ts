@@ -2610,7 +2610,7 @@ async function recordSuperMonthlyTierCrossing(
 		await prisma.$transaction(async (tx) => {
 			const wallet = await tx.wallet.upsert({
 				where: { userId: superUserId },
-				update: {},
+				update: { balance: { increment: 0 } },
 				create: { userId: superUserId, balance: 0, currency: 'NGN' }
 			});
 			// Tier crossings and refund reconciliation serialize on the same wallet row.
@@ -2953,7 +2953,7 @@ async function recordSuperAffiliateActivation(params: {
 		const activationCreatedAt = await prisma.$transaction(async (tx) => {
 			const wallet = await tx.wallet.upsert({
 				where: { userId: superUserId },
-				update: {},
+				update: { balance: { increment: 0 } },
 				create: { userId: superUserId, balance: 0, currency: 'NGN' }
 			});
 			const balanceBefore = Number(wallet.balance || 0);
@@ -3394,7 +3394,7 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 		await prisma.$transaction(async (tx) => {
 			const wallet = await tx.wallet.upsert({
 				where: { userId: order.affiliateUserId as string },
-				update: {},
+				update: { balance: { increment: 0 } },
 				create: {
 					userId: order.affiliateUserId as string,
 					balance: 0,
@@ -4325,7 +4325,7 @@ export async function requestAffiliatePayout(userId: string): Promise<{
 
 		const wallet = await prisma.wallet.upsert({
 			where: { userId },
-			update: {},
+			update: { balance: { increment: 0 } },
 			create: {
 				userId,
 				balance: 0,
