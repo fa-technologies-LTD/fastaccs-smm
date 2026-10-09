@@ -153,10 +153,10 @@
 </script>
 
 <svelte:head>
-	<title>Browse Accounts - FastAccs</title>
+	<title>Buy Social Media Accounts in Nigeria — X, Instagram, TikTok, Facebook | FastAccs</title>
 	<meta
 		name="description"
-		content="Browse available social media platforms and account types with current stock and pricing."
+		content="Aged and organic X (Twitter), Instagram, TikTok and Facebook accounts with live stock and naira prices. Secure checkout via Monnify; most orders delivered instantly."
 	/>
 </svelte:head>
 

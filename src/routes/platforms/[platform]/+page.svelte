@@ -26,6 +26,8 @@
 	import type { PageData } from './$types';
 	import { getPlatformColor } from '$lib/helpers/platformColors';
 	import { formatPrice } from '$lib/helpers/utils';
+	import { platformDisplayName } from '$lib/helpers/platform-seo';
+	import SeoFaq from '$lib/components/SeoFaq.svelte';
 	import { lockScroll, unlockScroll } from '$lib/helpers/scroll-lock';
 	import {
 		getTierDeliveryModeLabel as getDeliveryModeLabel,
@@ -788,12 +790,8 @@
 <svelte:window onkeydown={handleQuickAddWindowKeydown} />
 
 <svelte:head>
-	<title>{data.platform?.name} Accounts - FastAccs</title>
-	<meta
-		name="description"
-		content="Browse available {data.platform
-			?.name} account types and complete checkout securely on FastAccs."
-	/>
+	<title>{data.seo?.title ?? 'Accounts - FastAccs'}</title>
+	<meta name="description" content={data.seo?.description ?? ''} />
 </svelte:head>
 
 <Navigation />
@@ -1348,6 +1346,11 @@
 				</div>
 			</div>
 		{/if}
+
+		<SeoFaq
+			heading={`Buying ${platformDisplayName(data.platform.name, data.platform.slug)} accounts on FastAccs`}
+			items={data.faq ?? []}
+		/>
 	{/if}
 </main>
 

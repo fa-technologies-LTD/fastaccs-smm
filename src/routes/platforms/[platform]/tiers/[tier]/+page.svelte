@@ -12,6 +12,7 @@
 		ExternalLink
 	} from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
+	import { platformDisplayName } from '$lib/helpers/platform-seo';
 	import Footer from '$lib/components/Footer.svelte';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	import ImagePreviewModal from '$lib/components/ImagePreviewModal.svelte';
@@ -658,10 +659,18 @@
 			window.removeEventListener('resize', updateViewportMode);
 		};
 	});
+
+	// Search-facing title: brand spellings, trimmed admin names, and the price buyers compare on.
+	const tierSeoTitle = $derived.by(() => {
+		const platform = platformDisplayName(data.platform?.name ?? '', data.platform?.slug ?? '');
+		const tierName = String(data.tier?.tier_name ?? '').trim();
+		const price = data.tier?.price ? ` — ${formatPrice(data.tier.price)}` : '';
+		return `Buy ${platform} ${tierName} Account${price} | FastAccs`;
+	});
 </script>
 
 <svelte:head>
-	<title>{data.platform?.name} {data.tier?.tier_name} - FastAccs</title>
+	<title>{tierSeoTitle}</title>
 	<meta
 		name="description"
 		content={(() => {
@@ -670,12 +679,12 @@
 			const display = String(fr?.display || '').trim();
 			const hasRange = fr && ((fr.min || 0) !== 0 || (fr.max || 0) !== 0);
 			if (display)
-				return `Buy ${data.platform?.name} accounts with ${display}. Premium quality accounts with instant delivery and full access.`;
+				return `Buy ${platformDisplayName(data.platform?.name ?? '', data.platform?.slug ?? '')} accounts with ${display}. Premium quality accounts with instant delivery and full access.`;
 			if (hasRange)
-				return `Buy ${data.platform?.name} accounts with ${formatFollowers(fr.min || 0)} - ${formatFollowers(fr.max || 0)} followers. Premium quality accounts with instant delivery and full access.`;
+				return `Buy ${platformDisplayName(data.platform?.name ?? '', data.platform?.slug ?? '')} accounts with ${formatFollowers(fr.min || 0)} - ${formatFollowers(fr.max || 0)} followers. Premium quality accounts with instant delivery and full access.`;
 			if (fc > 0)
-				return `Buy ${data.platform?.name} accounts with ${formatFollowers(fc)} followers. Premium quality accounts with instant delivery and full access.`;
-			return `Buy premium ${data.platform?.name} accounts. Instant delivery and full access.`;
+				return `Buy ${platformDisplayName(data.platform?.name ?? '', data.platform?.slug ?? '')} accounts with ${formatFollowers(fc)} followers. Premium quality accounts with instant delivery and full access.`;
+			return `Buy premium ${platformDisplayName(data.platform?.name ?? '', data.platform?.slug ?? '')} accounts. Instant delivery and full access.`;
 		})()}
 	/>
 </svelte:head>

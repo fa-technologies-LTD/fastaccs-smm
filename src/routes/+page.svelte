@@ -12,7 +12,7 @@
 </script>
 
 <svelte:head>
-	<title>Buy Social Media Accounts, Verification Numbers & Boosting | FastAccs</title>
+	<title>Buy Social Media Accounts in Nigeria — X, Instagram, TikTok | FastAccs</title>
 	<meta
 		name="description"
 		content="Get Instagram, TikTok, X, Facebook accounts, verification numbers (WhatsApp, Telegram, Google & more), and boosting services — secure checkout, clear order tracking, buyer support."

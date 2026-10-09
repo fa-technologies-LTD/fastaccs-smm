@@ -1,10 +1,16 @@
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
 import { getTierMerchandisingState } from '$lib/helpers/tier-merchandising';
 import { getTierStockStatus } from '$lib/helpers/tier-delivery-config';
 import { getLowStockThresholdSetting } from '$lib/services/admin-settings';
 import { sanitizePublicCategoryMetadata } from '$lib/helpers/public-category';
+import {
+	buildPlatformFaq,
+	buildPlatformSeo,
+	platformDisplayName,
+	startingPrice
+} from '$lib/helpers/platform-seo';
 
 export interface TierInventory {
 	product_id: string;
@@ -44,7 +50,7 @@ function getPrice(metadata: unknown): number {
 	return Number.isFinite(price) && price > 0 ? price : 0;
 }
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params, url }) => {
 	try {
 		const popularitySince = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
 		const [platform, lowStockThreshold, recentDemand] = await Promise.all([
@@ -93,7 +99,20 @@ export const load: PageServerLoad = async ({ params }) => {
 			})
 		]);
 
-		if (!platform) throw error(404, 'Platform not found');
+		if (!platform) {
+			// Slugs are case-sensitive in the database; send other casings (typed or shared links,
+			// ad URLs) to the canonical page instead of a 404.
+			const canonical = await prisma.category.findFirst({
+				where: {
+					slug: { equals: params.platform, mode: 'insensitive' },
+					categoryType: 'platform',
+					isActive: true
+				},
+				select: { slug: true }
+			});
+			if (canonical) throw redirect(301, `/platforms/${canonical.slug}${url.search}`);
+			throw error(404, 'Platform not found');
+		}
 
 		const demandByTier = new Map(
 			recentDemand.map((row) => [row.categoryId, Number(row._sum.quantity || 0)])
@@ -158,11 +177,13 @@ export const load: PageServerLoad = async ({ params }) => {
 			},
 			tiers,
 			lowStockThreshold: Math.max(1, Number(lowStockThreshold || 10)),
-			seo: {
-				title: `Buy Real ${platform.name} Accounts | FastAccs`,
-				description: `Browse verified, aged ${platform.name} accounts ready to use. Instant delivery, secure checkout, no passwords shared.`,
-				type: 'website'
-			}
+			seo: buildPlatformSeo({
+				name: platform.name,
+				slug: platform.slug,
+				startingPriceNgn: startingPrice(tiers),
+				typeCount: tiers.length
+			}),
+			faq: buildPlatformFaq(platformDisplayName(platform.name, platform.slug))
 		};
 	} catch (cause) {
 		if (cause && typeof cause === 'object' && 'status' in cause) throw cause;

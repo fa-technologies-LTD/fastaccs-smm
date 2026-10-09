@@ -11,6 +11,7 @@ interface SitemapUrl {
 const STATIC_PAGES: string[] = [
 	'/',
 	'/platforms',
+	'/numbers',
 	'/how-it-works',
 	'/services',
 	'/affiliate',
