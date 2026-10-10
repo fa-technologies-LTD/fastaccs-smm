@@ -164,7 +164,7 @@
 		trackCurrentConfirmedVisit();
 		syncGa4Consent();
 		trackCurrentGa4PageView();
-		initAttributionCapture();
+		initAttributionCapture(data.attributionState);
 
 		const handleConsentChanged = () => {
 			trackCurrentPageView();

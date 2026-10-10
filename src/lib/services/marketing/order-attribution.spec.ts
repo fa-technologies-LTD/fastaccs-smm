@@ -15,13 +15,23 @@ const last = {
 describe('buildOrderAttribution', () => {
 	it('snapshots both touches with a capture time', () => {
 		expect(
-			buildOrderAttribution({ first: null, last }, new Date('2026-10-10T12:00:00.000Z'))
-		).toEqual({ first: null, last, capturedAt: '2026-10-10T12:00:00.000Z' });
+			buildOrderAttribution(
+				{ consentLevel: 'marketing', first: null, last },
+				new Date('2026-10-10T12:00:00.000Z')
+			)
+		).toEqual({
+			consentLevel: 'marketing',
+			first: null,
+			last,
+			capturedAt: '2026-10-10T12:00:00.000Z'
+		});
 	});
 
 	it('stores nothing when there is no consented attribution', () => {
 		expect(buildOrderAttribution(undefined)).toBeNull();
-		expect(buildOrderAttribution({ first: null, last: null })).toBeNull();
+		expect(
+			buildOrderAttribution({ consentLevel: 'necessary', first: null, last: null })
+		).toBeNull();
 	});
 });
 
@@ -34,7 +44,7 @@ describe('privacy (payments owner rule C1)', () => {
 			paymentStatus: 'paid',
 			totalAmount: 6000,
 			analyticsMetadata: {
-				attribution: buildOrderAttribution({ first: null, last }),
+				attribution: buildOrderAttribution({ consentLevel: 'marketing', first: null, last }),
 				adPostbackState: 'sent'
 			},
 			orderItems: []

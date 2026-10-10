@@ -6,8 +6,8 @@ const CONSENT_LEVELS: readonly CookieConsentLevel[] = ['necessary', 'analytics',
 export const COOKIE_CONSENT_KEY = 'fa_cookie_consent_v1';
 export const PRIVACY_CONSENT_CHANGED_EVENT = 'fa:privacy-consent-changed';
 
-const CONSENT_VERSION = 1;
-const CONSENT_TTL_MS = 180 * 24 * 60 * 60 * 1000;
+export const CONSENT_VERSION = 1;
+export const CONSENT_TTL_MS = 180 * 24 * 60 * 60 * 1000;
 
 interface ConsentRecord {
 	level: CookieConsentLevel;

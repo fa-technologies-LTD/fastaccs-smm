@@ -15,12 +15,7 @@ import {
 	shouldLogAdminMutation
 } from '$lib/services/admin-audit';
 import { recordUserPresenceIfStale, shouldRecordUserPresence } from '$lib/services/user-presence';
-import {
-	ATTRIBUTION_COOKIE,
-	LAST_TOUCH_COOKIE,
-	parseAttribution,
-	parseLastTouch
-} from '$lib/services/attribution';
+import { readServerAttribution } from '$lib/server/attribution-cookies';
 import type { Handle, RequestEvent } from '@sveltejs/kit';
 import {
 	isLocalDataReadOnly,
@@ -161,14 +156,11 @@ function getCanonicalRedirectTarget(event: RequestEvent): URL | null {
 const BOT_SCAN_RE =
 	/\/\.(git|env|svn|hg|aws|ssh)(\/|$)|\/wp-(admin|login|content|includes)|\/vendor\/|\/phpinfo|\/\.DS_Store/i;
 
-// Acquisition attribution, exposed to every request as locals.attribution. Only READ here:
-// the cookies are written by /api/attribution/touch after the visitor gives consent (Nigeria
-// GAID 2025), so nothing non-essential is stored on landing.
+// Acquisition attribution, exposed to every request as locals.attribution. Only READ here, and
+// only as far as the signed server-side consent record allows; cookies are written by
+// /api/attribution/sync after the visitor's choice (Nigeria GAID 2025).
 function captureAttribution(event: RequestEvent): void {
-	event.locals.attribution = {
-		first: parseAttribution(event.cookies.get(ATTRIBUTION_COOKIE)),
-		last: parseLastTouch(event.cookies.get(LAST_TOUCH_COOKIE), new Date())
-	};
+	event.locals.attribution = readServerAttribution(event.cookies, new Date());
 }
 
 const handleRequest: Handle = async ({ event, resolve }) => {

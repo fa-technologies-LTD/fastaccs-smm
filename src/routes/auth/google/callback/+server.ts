@@ -7,11 +7,7 @@ import { getUserFromGoogleId, createUserFromGoogle, updateUserFromGoogle } from 
 import { isAdminEmail } from '$lib/auth/admin';
 import { sanitizeInternalRedirectPath } from '$lib/auth/redirect';
 import { maybeLockReferralFromCookie } from '$lib/services/affiliate';
-import {
-	ATTRIBUTION_COOKIE,
-	parseAttribution,
-	attributionToUserFields
-} from '$lib/services/attribution';
+import { attributionToUserFields } from '$lib/services/attribution';
 import type { RequestHandler } from './$types';
 import type { OAuth2Tokens } from 'arctic';
 
@@ -76,7 +72,7 @@ export const GET: RequestHandler = async (event) => {
 					name,
 					picture
 				},
-				attributionToUserFields(parseAttribution(cookies.get(ATTRIBUTION_COOKIE)))
+				attributionToUserFields(event.locals.attribution?.first ?? null)
 			);
 		}
 

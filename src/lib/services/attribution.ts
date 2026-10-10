@@ -119,9 +119,23 @@ export interface LastTouch {
 	landedAt: string; // ISO timestamp
 }
 
+export type AttributionConsentLevel = 'necessary' | 'analytics' | 'marketing';
+
+/**
+ * Attribution the server may use for this request. Gated by the signed server-side consent record:
+ * `first` only with analytics (or marketing) consent, `last` (ad click) only with marketing consent.
+ */
 export interface RequestAttribution {
+	consentLevel: AttributionConsentLevel | null;
 	first: Attribution | null;
 	last: LastTouch | null;
+}
+
+/** True when a landing URL carries a tag that creates a last touch. */
+export function hasTrackingTags(searchParams: URLSearchParams): boolean {
+	return Boolean(
+		searchParams.get('utm_source')?.trim() || getParamCaseInsensitive(searchParams, 'sccid')
+	);
 }
 
 // Network click ids are opaque tokens; keep only URL-safe characters so they can be echoed back
@@ -163,43 +177,54 @@ export function buildLastTouch(input: {
 	};
 }
 
-/** Parse the last-touch cookie; null when missing, corrupt or older than the window. */
-export function parseLastTouch(raw: string | undefined | null, now: Date): LastTouch | null {
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Validate and clamp a last-touch payload; null when malformed or older than the window. */
+export function normalizeLastTouch(value: unknown, now: Date): LastTouch | null {
+	if (!isRecord(value) || typeof value.source !== 'string' || !value.source) return null;
+	const landedAtMs = Date.parse(String(value.landedAt ?? ''));
+	if (!Number.isFinite(landedAtMs)) return null;
+	if (now.getTime() - landedAtMs > LAST_TOUCH_MAX_AGE_S * 1000) return null;
+	return {
+		source: clip(String(value.source), 60),
+		medium: clip(String(value.medium ?? ''), 60),
+		campaign: clip(String(value.campaign ?? ''), 80),
+		content: clip(String(value.content ?? ''), 120),
+		clickId: cleanClickId(String(value.clickId ?? '')),
+		landing: clip(String(value.landing ?? ''), 200),
+		landedAt: new Date(landedAtMs).toISOString()
+	};
+}
+
+/** Validate and clamp a first-touch payload; null when malformed. */
+export function normalizeAttribution(value: unknown): Attribution | null {
+	if (!isRecord(value) || typeof value.source !== 'string' || !value.source) return null;
+	return {
+		source: clip(String(value.source), 60),
+		medium: clip(String(value.medium ?? ''), 60),
+		campaign: clip(String(value.campaign ?? ''), 80),
+		referrer: clip(String(value.referrer ?? ''), 200),
+		landing: clip(String(value.landing ?? ''), 200)
+	};
+}
+
+function parseJson(raw: string | undefined | null): unknown {
 	if (!raw) return null;
 	try {
-		const o = JSON.parse(raw) as Partial<LastTouch>;
-		if (!o || typeof o.source !== 'string' || !o.source) return null;
-		const landedAtMs = Date.parse(String(o.landedAt ?? ''));
-		if (!Number.isFinite(landedAtMs)) return null;
-		if (now.getTime() - landedAtMs > LAST_TOUCH_MAX_AGE_S * 1000) return null;
-		return {
-			source: clip(o.source, 60),
-			medium: clip(o.medium, 60),
-			campaign: clip(o.campaign, 80),
-			content: clip(o.content, 120),
-			clickId: cleanClickId(o.clickId),
-			landing: clip(o.landing, 200),
-			landedAt: new Date(landedAtMs).toISOString()
-		};
+		return JSON.parse(raw);
 	} catch {
 		return null;
 	}
 }
 
-/** Parse the stored cookie back into an Attribution (null if missing/corrupt). */
+/** Parse a JSON last-touch value (tests / legacy); see normalizeLastTouch. */
+export function parseLastTouch(raw: string | undefined | null, now: Date): LastTouch | null {
+	return normalizeLastTouch(parseJson(raw), now);
+}
+
+/** Parse a JSON first-touch value (tests / legacy); see normalizeAttribution. */
 export function parseAttribution(raw: string | undefined | null): Attribution | null {
-	if (!raw) return null;
-	try {
-		const o = JSON.parse(raw) as Partial<Attribution>;
-		if (!o || typeof o.source !== 'string' || !o.source) return null;
-		return {
-			source: o.source,
-			medium: o.medium ?? '',
-			campaign: o.campaign ?? '',
-			referrer: o.referrer ?? '',
-			landing: o.landing ?? ''
-		};
-	} catch {
-		return null;
-	}
+	return normalizeAttribution(parseJson(raw));
 }
