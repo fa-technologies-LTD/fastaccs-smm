@@ -1,20 +1,25 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import { readCookieConsent, saveCookieConsent } from '$lib/helpers/privacyConsent';
+	import {
+		readCookieConsent,
+		saveCookieConsent,
+		type CookieConsentLevel
+	} from '$lib/helpers/privacyConsent';
 
 	let visible = $state(false);
 
 	function setMobileNoticeOffset(show: boolean) {
 		if (typeof document === 'undefined') return;
 		if (show) {
-			document.documentElement.style.setProperty('--cookie-notice-mobile-offset', '4rem');
+			document.documentElement.style.setProperty('--cookie-notice-mobile-offset', '6.5rem');
 			return;
 		}
 		document.documentElement.style.removeProperty('--cookie-notice-mobile-offset');
 	}
 
-	function dismiss() {
-		saveCookieConsent('analytics');
+	// An explicit choice either way (Nigeria GAID 2025): optional cookies only after "Accept".
+	function choose(level: CookieConsentLevel) {
+		saveCookieConsent(level);
 		visible = false;
 		setMobileNoticeOffset(false);
 	}
@@ -35,18 +40,27 @@
 		style="background: rgba(7, 9, 12, 0.94); border-color: var(--border); backdrop-filter: blur(12px);"
 		role="status"
 	>
-		<div class="flex items-center justify-between gap-3">
-			<p class="text-xs sm:text-sm" style="color: var(--text-muted);">
-				Cookies keep FastAccs secure.
-				<a href="/cookies" class="underline" style="color: var(--link);">Details</a>
-			</p>
+		<p class="text-xs sm:text-sm" style="color: var(--text-muted);">
+			Cookies keep FastAccs secure. With your OK we also measure visits and which ads bring
+			customers.
+			<a href="/cookies" class="underline" style="color: var(--link);">Details</a>
+		</p>
+		<div class="mt-2 flex justify-end gap-2">
 			<button
 				type="button"
-				onclick={dismiss}
-				class="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold sm:px-4 sm:py-2"
+				onclick={() => choose('necessary')}
+				class="rounded-full px-3 py-1.5 text-xs font-semibold sm:px-4 sm:py-2"
+				style="border: 1px solid var(--border); color: var(--text);"
+			>
+				Necessary only
+			</button>
+			<button
+				type="button"
+				onclick={() => choose('marketing')}
+				class="rounded-full px-3 py-1.5 text-xs font-semibold sm:px-4 sm:py-2"
 				style="background: var(--btn-primary-gradient); color: #04140C;"
 			>
-				Got it
+				Accept
 			</button>
 		</div>
 	</div>
