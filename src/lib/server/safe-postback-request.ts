@@ -19,8 +19,35 @@ function ipv4Parts(ip: string): number[] | null {
 		: null;
 }
 
+/** Expand any valid IPv6 spelling (compressed, expanded, dotted IPv4 tail, zone id) to 8 hextets. */
+function expandIpv6(ip: string): number[] | null {
+	let address = ip.toLowerCase();
+	const zone = address.indexOf('%');
+	if (zone >= 0) address = address.slice(0, zone);
+	const lastColon = address.lastIndexOf(':');
+	const tail = address.slice(lastColon + 1);
+	if (tail.includes('.')) {
+		const v4 = ipv4Parts(tail);
+		if (!v4) return null;
+		address = `${address.slice(0, lastColon + 1)}${((v4[0] << 8) | v4[1]).toString(16)}:${((v4[2] << 8) | v4[3]).toString(16)}`;
+	}
+	const halves = address.split('::');
+	if (halves.length > 2) return null;
+	const left = halves[0] ? halves[0].split(':') : [];
+	const right = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+	const missing = 8 - left.length - right.length;
+	if (halves.length === 1 ? missing !== 0 : missing < 1) return null;
+	const groups = [...left, ...Array(halves.length === 2 ? missing : 0).fill('0'), ...right];
+	if (groups.length !== 8 || groups.some((g) => !/^[0-9a-f]{1,4}$/.test(g))) return null;
+	return groups.map((g) => parseInt(g, 16));
+}
+
+function v4FromHextets(high: number, low: number): string {
+	return `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`;
+}
+
 export function isPublicAddress(ip: string): boolean {
-	const family = isIP(ip);
+	const family = isIP(ip.split('%')[0]);
 	if (family === 4) {
 		const [a, b] = ipv4Parts(ip)!;
 		if (a === 0 || a === 10 || a === 127) return false;
@@ -34,14 +61,29 @@ export function isPublicAddress(ip: string): boolean {
 		return true;
 	}
 	if (family === 6) {
-		const lower = ip.toLowerCase();
-		const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-		if (mapped) return isPublicAddress(mapped[1]);
-		if (lower === '::' || lower === '::1') return false;
-		if (/^f[cd]/.test(lower)) return false; // unique local fc00::/7
-		if (/^fe[89ab]/.test(lower)) return false; // link-local fe80::/10
-		if (lower.startsWith('ff')) return false; // multicast
-		if (lower.startsWith('64:ff9b:') || lower.startsWith('2001:db8')) return false;
+		const h = expandIpv6(ip);
+		if (!h) return false;
+		const zeros = (count: number) => h.slice(0, count).every((part) => part === 0);
+		const embeddedV4 = () => v4FromHextets(h[6], h[7]);
+		if (h.every((part) => part === 0)) return false; // unspecified ::
+		if (zeros(7) && h[7] === 1) return false; // loopback ::1 (any spelling)
+		if (zeros(5) && h[5] === 0xffff) return isPublicAddress(embeddedV4()); // ::ffff:a.b.c.d
+		if (zeros(4) && h[4] === 0xffff && h[5] === 0) return isPublicAddress(embeddedV4()); // ::ffff:0:a.b.c.d
+		if (zeros(6)) return isPublicAddress(embeddedV4()); // deprecated ::a.b.c.d
+		if (h[0] === 0x64 && h[1] === 0xff9b) {
+			// NAT64: well-known prefix embeds an IPv4 address; local-use 64:ff9b:1::/48 is private.
+			return h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0
+				? isPublicAddress(embeddedV4())
+				: false;
+		}
+		if ((h[0] & 0xfe00) === 0xfc00) return false; // unique local fc00::/7
+		if ((h[0] & 0xffc0) === 0xfe80) return false; // link-local fe80::/10
+		if ((h[0] & 0xffc0) === 0xfec0) return false; // site-local fec0::/10 (deprecated)
+		if ((h[0] & 0xff00) === 0xff00) return false; // multicast
+		if (h[0] === 0x2001 && h[1] === 0x0db8) return false; // documentation
+		if (h[0] === 0x2001 && h[1] === 0) return false; // Teredo tunnelling
+		if (h[0] === 0x2002) return false; // 6to4 (embeds IPv4)
+		if (h[0] === 0x0100 && h[1] === 0 && h[2] === 0 && h[3] === 0) return false; // discard
 		return true;
 	}
 	return false;
