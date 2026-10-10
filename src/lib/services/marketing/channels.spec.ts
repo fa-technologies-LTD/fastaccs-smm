@@ -2,22 +2,61 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('$lib/prisma', () => ({ prisma: {} }));
 
-import { normalizeChannelInput, renderPostback, validatePostbackTemplate } from './channels';
+import {
+	assertPostbackUrlAllowed,
+	channelReportsConversions,
+	normalizeChannelInput,
+	renderPostback,
+	validatePostbackTemplate
+} from './channels';
 
 const PROPELLER =
 	'http://ad.propellerads.com/conversion.php?aid=123&pid=&tid=456&visitor_id=${SUBID}&payout=${PAYOUT}';
 
-describe('validatePostbackTemplate', () => {
-	it('accepts a network URL with a click id token', () => {
-		expect(validatePostbackTemplate(`  ${PROPELLER} `)).toBe(PROPELLER);
+describe('validatePostbackTemplate (outbound safety)', () => {
+	it('accepts the network URL and upgrades http to https', () => {
+		expect(validatePostbackTemplate(`  ${PROPELLER} `, 'propellerads')).toBe(
+			PROPELLER.replace('http://', 'https://')
+		);
 	});
 	it('treats an empty template as "no postbacks"', () => {
-		expect(validatePostbackTemplate('   ')).toBeNull();
+		expect(validatePostbackTemplate('   ', 'propellerads')).toBeNull();
 	});
-	it('rejects URLs without a click id token or with odd schemes', () => {
-		expect(() => validatePostbackTemplate('https://example.com/pb?x=1')).toThrow(/click id/);
-		expect(() => validatePostbackTemplate('javascript:alert(1)//${SUBID}')).toThrow();
-		expect(() => validatePostbackTemplate('not a url')).toThrow();
+	it.each([
+		['loopback', 'http://127.0.0.1:3000/internal?click=${SUBID}'],
+		['another host', 'https://evil.example/pb?c=${SUBID}'],
+		['a look-alike host', 'https://ad.propellerads.com.evil.example/pb?c=${SUBID}'],
+		['credentials', 'https://user:pass@ad.propellerads.com/pb?c=${SUBID}'],
+		['an unusual port', 'https://ad.propellerads.com:8443/pb?c=${SUBID}'],
+		['another scheme', 'ftp://ad.propellerads.com/pb?c=${SUBID}'],
+		['no click id token', 'https://ad.propellerads.com/conversion.php?aid=1'],
+		['not a URL', 'not a url']
+	])('rejects %s', (_name, url) => {
+		expect(() => validatePostbackTemplate(url, 'propellerads')).toThrow();
+	});
+	it('refuses channels without a reviewed network host', () => {
+		expect(() =>
+			validatePostbackTemplate('https://ad.propellerads.com/x?c=${SUBID}', 'nairaland')
+		).toThrow(/not supported/);
+	});
+	it('re-checks rendered URLs too', () => {
+		expect(
+			assertPostbackUrlAllowed(
+				'https://ad.propellerads.com/conversion.php?visitor_id=abc',
+				'propellerads'
+			)
+		).toBe('https://ad.propellerads.com/conversion.php?visitor_id=abc');
+	});
+});
+
+describe('channelReportsConversions', () => {
+	it('reports for testing, scaling and paused; never for stopped', () => {
+		expect(['testing', 'scaling', 'paused', 'killed'].map(channelReportsConversions)).toEqual([
+			true,
+			true,
+			true,
+			false
+		]);
 	});
 });
 
@@ -57,7 +96,7 @@ describe('normalizeChannelInput', () => {
 			status: 'testing',
 			targetCacNgn: 2600,
 			dailyCapNgn: 5000,
-			postbackTemplate: PROPELLER,
+			postbackTemplate: PROPELLER.replace('http://', 'https://'),
 			dedupByClickId: false, // only an explicit boolean true turns retries on
 			notes: null
 		});

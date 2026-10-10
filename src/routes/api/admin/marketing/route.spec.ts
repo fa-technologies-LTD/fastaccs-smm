@@ -107,6 +107,13 @@ describe('POST /api/admin/marketing', () => {
 		).toBe(400);
 	});
 
+	it('refuses to send a held report for a stopped channel', async () => {
+		mocks.dispatchAdPostbacks.mockResolvedValueOnce({ examined: 1, sent: 0, stopped: 1 } as never);
+		const result = await call({ action: 'postback_decision', orderId: ORDER, decision: 'send' });
+		expect(result.status).toBe(409);
+		expect(mocks.recordMarketingAction).not.toHaveBeenCalled();
+	});
+
 	it('sends a held postback through the guarded dispatcher', async () => {
 		const result = await call({ action: 'postback_decision', orderId: ORDER, decision: 'send' });
 		expect(result.status).toBe(200);
