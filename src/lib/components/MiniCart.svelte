@@ -8,7 +8,7 @@
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
 	import { brandKey } from '$lib/components/BrandIcon.svelte';
 	import { showSuccess } from '$lib/stores/toasts';
-	import { roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
+	import { roundUpCatalogPriceNgn as roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
 	import { boostingMinimumMessage } from '$lib/helpers/boosting-checkout';
 	import { showWarning } from '$lib/stores/toasts';
 
