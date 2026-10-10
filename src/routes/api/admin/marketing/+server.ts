@@ -100,6 +100,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				}
 				if (body.decision === 'send') {
 					const summary = await dispatchAdPostbacks({ orderIds: [orderId] });
+					if (summary.stopped > 0) {
+						return fail('This channel is stopped, so its sale reports are not sent', 409);
+					}
 					await recordMarketingAction({
 						channelKey: String(body.channelKey ?? ''),
 						action: 'send_held_postback',
