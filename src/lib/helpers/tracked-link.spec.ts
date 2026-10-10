@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { buildTrackedUrl, slugifyUtm } from './tracked-link';
-import { buildFirstTouch } from '$lib/services/attribution';
+import {
+	buildNetworkTemplateUrl,
+	buildTrackedUrl,
+	hasNetworkMacros,
+	slugifyUtm
+} from './tracked-link';
+import { buildFirstTouch, buildLastTouch } from '$lib/services/attribution';
 
 const base = 'https://smm.fastaccs.com';
 
@@ -55,5 +60,51 @@ describe('buildTrackedUrl', () => {
 				ownHost: 'smm.fastaccs.com'
 			})
 		).toMatchObject({ source: 'nairaland', medium: 'forum', campaign: 'sports-oct' });
+	});
+});
+
+describe('buildNetworkTemplateUrl', () => {
+	it('keeps PropellerAds placeholders unencoded for the network to fill', () => {
+		expect(
+			buildNetworkTemplateUrl({
+				baseUrl: base,
+				path: '/platforms/x',
+				source: 'PropellerAds',
+				medium: 'push'
+			})
+		).toBe(
+			'https://smm.fastaccs.com/platforms/x?utm_source=propellerads&utm_medium=push&utm_campaign={campaignid}&utm_content={zoneid}&fa_click=${SUBID}'
+		);
+		expect(hasNetworkMacros('propellerads')).toBe(true);
+	});
+
+	it('returns null for sources without known macros', () => {
+		expect(buildNetworkTemplateUrl({ baseUrl: base, path: '/', source: 'nairaland' })).toBeNull();
+		expect(hasNetworkMacros('nairaland')).toBe(false);
+	});
+
+	it('produces a last touch with the filled click id once the network substitutes it', () => {
+		const filled = buildNetworkTemplateUrl({
+			baseUrl: base,
+			path: '/platforms/x',
+			source: 'propellerads',
+			medium: 'push'
+		})!
+			.replace('{campaignid}', '183788')
+			.replace('{zoneid}', '5551')
+			.replace('${SUBID}', 'abc123');
+		const url = new URL(filled);
+		expect(
+			buildLastTouch({
+				searchParams: url.searchParams,
+				pathname: url.pathname,
+				now: new Date('2026-10-10T00:00:00Z')
+			})
+		).toMatchObject({
+			source: 'propellerads',
+			campaign: '183788',
+			content: '5551',
+			clickId: 'abc123'
+		});
 	});
 });
