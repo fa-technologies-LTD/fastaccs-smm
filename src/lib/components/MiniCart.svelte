@@ -47,6 +47,9 @@
 	}
 
 	const cartSnapshotKey = $derived(getCartSnapshotKey(cart.items));
+	const checkoutRefreshing = $derived(
+		loading || isLoadingCartItems || cartSnapshotKey !== lastLoadedCartKey
+	);
 
 	// Load cart items when cart opens or items change
 	$effect(() => {
@@ -111,6 +114,7 @@
 	}
 
 	function goToCheckout() {
+		if (checkoutRefreshing) return;
 		if (cartItems.some((item) => item.boosting)) {
 			const message = boostingMinimumMessage(total);
 			if (message) {
@@ -389,9 +393,12 @@
 							<div class="space-y-2">
 								<button
 									onclick={goToCheckout}
+									aria-label="Checkout"
+									aria-busy={checkoutRefreshing}
+									disabled={checkoutRefreshing}
 									class="btn-checkout flex w-full items-center justify-center gap-2"
 								>
-									<span>Checkout</span>
+									<span>{checkoutRefreshing ? 'Updating…' : 'Checkout'}</span>
 									<ArrowRight size={16} />
 								</button>
 								<button
@@ -410,6 +417,11 @@
 {/if}
 
 <style>
+	.btn-checkout:disabled {
+		opacity: 0.65;
+		cursor: wait;
+	}
+
 	.btn-checkout {
 		background: var(--btn-primary-gradient);
 		border: none;
