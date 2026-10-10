@@ -8,6 +8,7 @@
 		ShoppingCart,
 		Users,
 		BarChart3,
+		TrendingUp,
 		Settings,
 		Home,
 		Plus,
@@ -148,6 +149,12 @@
 				href: '/admin/analytics',
 				label: 'Analytics',
 				icon: BarChart3,
+				permission: 'admin:revenue:view'
+			},
+			{
+				href: '/admin/marketing',
+				label: 'Marketing',
+				icon: TrendingUp,
 				permission: 'admin:revenue:view'
 			},
 			{
