@@ -186,6 +186,22 @@ export const AUTOMATION_JOBS = {
 		risk: 'marketing',
 		lockTimeoutMinutes: 10,
 		expectedIntervalMinutes: 1440
+	},
+	'marketing-postbacks': {
+		name: 'marketing-postbacks',
+		path: '/api/internal/cron/marketing-postbacks',
+		schedule: 'every 30 minutes (:05, :35)',
+		risk: 'marketing',
+		lockTimeoutMinutes: 10,
+		expectedIntervalMinutes: 30
+	},
+	'marketing-spend-sync': {
+		name: 'marketing-spend-sync',
+		path: '/api/internal/cron/marketing-spend-sync',
+		schedule: 'hourly (:07)',
+		risk: 'marketing',
+		lockTimeoutMinutes: 10,
+		expectedIntervalMinutes: 60
 	}
 } as const satisfies Record<string, AutomationJobDefinition>;
 

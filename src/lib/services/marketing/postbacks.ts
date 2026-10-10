@@ -1,5 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { getChannelsByKey, renderPostback } from './channels';
+import { DEFAULT_USD_NGN_RATE, getMarketingUsdNgnRate } from './fx';
 
 /**
  * Conversion postbacks: tell an ad network "this click bought", so its bidding optimizes toward
@@ -24,7 +25,6 @@ export const POSTBACK_WINDOW_HOURS = 72;
 const MAX_ATTEMPTS = 5;
 const SEND_TIMEOUT_MS = 5_000;
 const STALE_CLAIM_MS = 10 * 60_000;
-const DEFAULT_USD_NGN_RATE = 1500;
 
 // Failures where the request provably never reached the network: safe to retry anywhere.
 const NEVER_SENT_CODES = new Set([
@@ -98,15 +98,6 @@ async function mergeMetadata(
 	const json = JSON.stringify(patch);
 	await db.$executeRaw`UPDATE orders SET analytics_metadata =
 		COALESCE(analytics_metadata, '{}'::jsonb) || ${json}::jsonb WHERE id = ${orderId}::uuid`;
-}
-
-async function getUsdNgnRate(): Promise<number> {
-	const rows = await prisma.$queryRaw<Array<{ key: string; value: string }>>`
-		SELECT key, value FROM microcopy
-		WHERE key IN ('config.marketing.usd_ngn_rate', 'config.phone.usd_ngn_rate')`;
-	const byKey = new Map(rows.map((row) => [row.key, Number(row.value)]));
-	const rate = byKey.get('config.marketing.usd_ngn_rate') || byKey.get('config.phone.usd_ngn_rate');
-	return rate && rate > 0 ? rate : DEFAULT_USD_NGN_RATE;
 }
 
 type Claim = {
@@ -240,7 +231,7 @@ export async function dispatchAdPostbacks(
 			LIMIT ${Math.max(1, Math.min(options.limit ?? 20, 100))}`;
 	if (candidates.length === 0) return summary;
 
-	const rate = await getUsdNgnRate();
+	const rate = await getMarketingUsdNgnRate();
 	for (const { id } of candidates) {
 		summary.examined += 1;
 		const claimed = await claim(id, now, force);
