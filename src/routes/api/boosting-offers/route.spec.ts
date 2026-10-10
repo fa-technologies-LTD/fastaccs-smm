@@ -91,6 +91,41 @@ describe('public live Boosting offer copy', () => {
 			expect.objectContaining({ 'cache-control': expect.stringContaining('s-maxage=30') })
 		);
 	});
+	it('a retained old route cannot keep an unavailable locked selection visible', async () => {
+		const base = (await mocks.findMany())[0];
+		mocks.findMany.mockResolvedValue([
+			{
+				...base,
+				routingPolicy: 'locked',
+				lockedRouteId: 'new',
+				routes: [
+					{ ...base.routes[0], id: 'old' },
+					{
+						...base.routes[0],
+						id: 'new',
+						providerService: { ...base.routes[0].providerService, unavailableAt: new Date() }
+					}
+				]
+			}
+		]);
+		const body = await (await GET({ setHeaders: vi.fn() } as never)).json();
+		expect(body.data).toEqual([]);
+	});
+	it('never exposes the selected internal route identifiers', async () => {
+		const base = (await mocks.findMany())[0];
+		mocks.findMany.mockResolvedValue([
+			{
+				...base,
+				routingPolicy: 'locked',
+				lockedRouteId: 'chosen',
+				routes: [{ ...base.routes[0], id: 'chosen' }]
+			}
+		]);
+		const body = await (await GET({ setHeaders: vi.fn() } as never)).json();
+		expect(body.data).toHaveLength(1);
+		expect(body.data[0]).not.toHaveProperty('lockedRouteId');
+		expect(body.data[0]).not.toHaveProperty('routingPolicy');
+	});
 	it.each([
 		['likes', 'TikTok Live Likes', 'TikTok Live Likes', 'Default'],
 		['likes', 'TikTok Likes', 'TikTok Likes', 'Subscriptions'],

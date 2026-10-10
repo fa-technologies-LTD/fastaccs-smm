@@ -119,7 +119,7 @@ export const BOOSTING_ACTIONS_BY_PLATFORM: Record<BoostingPlatform, readonly Boo
 			'saves',
 			'live_likes'
 		],
-		youtube: ['subscribers', 'views', 'likes', 'comments', 'watch_time'],
+		youtube: ['subscribers', 'views', 'likes', 'comments', 'custom_comments', 'watch_time'],
 		facebook: ['followers', 'likes', 'views', 'comments', 'reactions', 'shares'],
 		x: ['followers', 'likes', 'views', 'comments', 'reposts'],
 		threads: ['followers', 'likes', 'comments', 'reposts', 'shares'],

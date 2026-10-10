@@ -50,9 +50,12 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 					pricePerStepNgn: true,
 					refillDays: true,
 					displayOrder: true,
+					routingPolicy: true,
+					lockedRouteId: true,
 					routes: {
 						where: { state: 'enabled', equivalenceApproved: true },
 						select: {
+							id: true,
 							providerService: {
 								select: {
 									name: true,
@@ -75,7 +78,10 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 		// Published rows alone must not collect money while production dispatch is disabled.
 		const automationReady = env.BOOSTING_AUTOMATION_MODE === 'live';
 		const compatibleOffers = (automationReady ? offers : []).filter((offer) =>
-			offer.routes.some(
+			(offer.routingPolicy === 'locked'
+				? offer.routes.filter((route) => route.id === offer.lockedRouteId)
+				: offer.routes
+			).some(
 				({ providerService: service }) =>
 					!service.unavailableAt &&
 					service.platforms.includes(offer.platform) &&
@@ -87,8 +93,21 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 			success: true,
 			automationReady,
 			managedRolloutActive: isBoostingManagedStorefrontEnabled(rolloutMarker, offers.length > 0),
-			data: compatibleOffers.map(({ routes: _privateRoutes, ...offer }) => ({
-				...offer,
+			data: compatibleOffers.map((offer) => ({
+				id: offer.id,
+				categoryId: offer.categoryId,
+				platform: offer.platform,
+				outcome: offer.outcome,
+				targetType: offer.targetType,
+				customerName: offer.customerName,
+				shortPromise: offer.shortPromise,
+				qualityTier: offer.qualityTier,
+				minQuantity: offer.minQuantity,
+				maxQuantity: offer.maxQuantity,
+				stepQuantity: offer.stepQuantity,
+				quantityPresets: offer.quantityPresets,
+				refillDays: offer.refillDays,
+				displayOrder: offer.displayOrder,
 				expectationChips: getBoostingDisplayExpectationChips(offer.expectationChips),
 				pricePerStepNgn: Number(offer.pricePerStepNgn)
 			}))
