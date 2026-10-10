@@ -2,6 +2,12 @@
 
 Updated: 10 October 2026
 
+## Owner-requested temporary pause — latest operational state
+
+The owner requested Boosting be taken offline while reviewing pricing and catalogue structure. All eight live offers were reversibly returned to reviewed status; zero live offers independently confirmed through the public API. Prices, quantities, margins, supplier routes and already placed orders were preserved. The managed-storefront marker remains active to prevent the retired catalogue from resurfacing. Accounts and Numbers are outside this pause. A lightweight CSS/SVG upgrade screen uses the owner's wording, “We’re upgrading this section…”, and respects reduced-motion preferences. Do not republish without the owner's next instruction; no new supplier tests or pricing changes are approved by this pause.
+
+The release notes below describe the preceding launch, not the current publication state.
+
 ## Release checkpoint — supersedes historical deployment blockers below
 
 Fresh private production backup is validated (archive listing and complete decode; a full separate restore remains untested). Exactly the three safety migrations for the webhook inbox, refund recovery tasks and refill tracking were applied with Prisma and independently verified in production. All five explicitly approved internal supplier-cost limits are saved; customer selling prices are unchanged. Four unreviewed custom-comment drafts now have separate input categories; the provider row ambiguously labelled Default is paused, not assumed usable.

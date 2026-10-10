@@ -4,6 +4,7 @@
 	import Footer from '$lib/components/Footer.svelte';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
 	import ManagedBoostingStorefront from '$lib/components/ManagedBoostingStorefront.svelte';
+	import BoostingUpgradeNotice from '$lib/components/BoostingUpgradeNotice.svelte';
 	import { showError } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 
@@ -53,17 +54,18 @@
 				class="mx-auto mt-3 text-2xl font-bold sm:text-3xl"
 				style="color: var(--text); font-family: var(--font-head);"
 			>
-				{managedStorefrontPaused ? 'Boosting is getting better' : 'What would you like to grow?'}
+				{managedStorefrontPaused ? 'We’re upgrading this section…' : 'What would you like to grow?'}
 			</h1>
 			<p class="mx-auto mt-3 max-w-md text-sm leading-relaxed" style="color: var(--text-muted);">
 				{managedStorefrontPaused
-					? 'We’re improving speed, pricing and service quality. Check back soon.'
+					? 'Better options. Clearer prices.'
 					: 'Choose a platform, paste your link and select an amount. No password needed.'}
 			</p>
 		</div>
 
 		{#if managedStorefrontPaused}
 			<!-- Keep the managed rollout active so the retired catalogue cannot reappear. -->
+			<BoostingUpgradeNotice />
 		{:else if data.managedRolloutActive}
 			<ManagedBoostingStorefront groups={data.managedGroups} />
 		{:else if data.platformTiles.length === 0}
