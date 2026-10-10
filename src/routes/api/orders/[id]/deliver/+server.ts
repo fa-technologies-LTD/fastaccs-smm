@@ -4,36 +4,13 @@ import { env } from '$env/dynamic/private';
 import { prisma } from '$lib/prisma';
 import { sendEmail } from '$lib/services/email';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
-import type { Decimal } from '@prisma/client/runtime/library';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
-import { getCanonicalCredentialEntries } from '$lib/helpers/credential-contract';
+import {
+	ACCOUNT_READY_EMAIL_SUBJECT,
+	buildAccountReadyEmailBody
+} from '$lib/helpers/account-ready-email';
 import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 import { recordOrderEventBestEffort } from '$lib/services/order-events';
-
-// Type definitions for email generation
-interface OrderForEmail {
-	orderNumber: string;
-	createdAt: Date;
-	totalAmount: Decimal;
-	orderItems: OrderItemForEmail[];
-}
-
-interface OrderItemForEmail {
-	productName: string;
-	accounts: AccountForEmail[];
-}
-
-interface AccountForEmail {
-	username?: string | null;
-	password?: string | null;
-	email?: string | null;
-	emailPassword?: string | null;
-	twoFa?: string | null;
-	linkUrl?: string | null;
-	followers?: number | null;
-	ageMonths?: number | null;
-	credentialExtras?: unknown;
-}
 
 interface DeliveryPayload {
 	deliveryMethod?: unknown;
@@ -76,7 +53,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 						accounts: {
 							where: {
 								status: { in: getAllocatedLikeAccountStatuses() }
-							}
+							},
+							select: { id: true }
 						}
 					}
 				}
@@ -101,19 +79,19 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			return json({ error: 'No accounts allocated for this order' }, { status: 400 });
 		}
 
-		// ✅ FIXED: Generate email content with allocated account details
+		// Only the authenticated dashboard exposes account credentials.
 		const baseUrl = getBaseUrl();
-		const emailContent = generateAccountDeliveryEmail(order);
+		const emailContent = buildAccountReadyEmailBody(order);
 		const customerEmail = order.guestEmail;
 
 		if (!customerEmail) {
 			return json({ error: 'No customer email found' }, { status: 400 });
 		}
 
-		// Send email with account details
+		// Notify without fetching or sending any login details.
 		const emailResult = await sendEmail({
 			to: customerEmail,
-			subject: `Your Fast Accounts order ${order.orderNumber} is ready`,
+			subject: ACCOUNT_READY_EMAIL_SUBJECT,
 			preheader: 'Your account details are ready in your dashboard.',
 			body: emailContent,
 			ctaText: 'Open your dashboard',
@@ -174,57 +152,3 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		);
 	}
 };
-
-/**
- * Generate formatted email content with account details
- */
-function generateAccountDeliveryEmail(order: OrderForEmail): string {
-	const orderItems = order.orderItems;
-	let content = `**Order details**
-- Order Number: ${order.orderNumber}
-- Order Date: ${new Date(order.createdAt).toLocaleDateString()}
-- Total Amount: ₦${order.totalAmount}
-
-**Account details**
-
-`;
-
-	orderItems.forEach((item: OrderItemForEmail) => {
-		if (item.accounts.length > 0) {
-			content += `**${item.productName}** (${item.accounts.length} account${item.accounts.length > 1 ? 's' : ''})\n`;
-
-			item.accounts.forEach((account: AccountForEmail, accIndex: number) => {
-				content += `\nAccount ${accIndex + 1}:\n`;
-				const entryRecord = {
-					username: account.username,
-					password: account.password,
-					email: account.email,
-					emailPassword: account.emailPassword,
-					twoFa: account.twoFa,
-					linkUrl: account.linkUrl,
-					followers: account.followers,
-					ageMonths: account.ageMonths,
-					credentialExtras: account.credentialExtras
-				};
-				const entries = getCanonicalCredentialEntries(entryRecord).filter(
-					(entry) => entry.key !== 'password'
-				);
-				for (const entry of entries) {
-					content += `- ${entry.label}: ${entry.value}\n`;
-				}
-				content += `- Password: Available in your dashboard\n`;
-			});
-
-			content += `\n`;
-		}
-	});
-
-	content += `**Keep your account secure**
-- Passwords are available only in your dashboard
-- Change each password after your first login
-- Do not share your credentials
-
-Open your dashboard for passwords and complete details. Contact support if anything looks wrong.`;
-
-	return content;
-}

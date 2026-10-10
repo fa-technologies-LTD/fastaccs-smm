@@ -32,7 +32,7 @@ export const RESTOCK_VARIANTS: Array<{
 	{
 		subject: (v) => `${v.tier} is back in stock`,
 		body: (v) =>
-			`${v.tier} on ${v.platform} is live again. Instant delivery the moment you pay — grab it before it's gone.\n\n${v.urgency}`,
+			`${v.tier} on ${v.platform} is back in stock. Check the price and delivery details before you order.\n\n${v.urgency}`,
 		ctaText: "See what's live"
 	},
 	{
@@ -44,7 +44,7 @@ export const RESTOCK_VARIANTS: Array<{
 	{
 		subject: (v) => `${v.tier} — available now`,
 		body: (v) =>
-			`Restocked: ${v.tier} on ${v.platform}. Real accounts, same-day delivery, support if you need it.\n\n${v.urgency}`,
+			`${v.tier} on ${v.platform} is available again. Support is here if you need help choosing.\n\n${v.urgency}`,
 		ctaText: 'Grab yours'
 	}
 ];
@@ -62,19 +62,19 @@ export const WINBACK_VARIANTS: Array<{
 	{
 		subject: 'Fresh stock just landed',
 		body: (v) =>
-			`Hi ${v.firstName},\n\nNew accounts are in — Instagram, X, TikTok and more, ready for instant delivery. Come see what's live.\n\n${v.platformLine}`,
+			`Hi ${v.firstName},\n\nBrowse the latest accounts in stock and choose what you need.\n\n${v.platformLine}`,
 		ctaText: "See what's live"
 	},
 	{
 		subject: "Been a while — here's what's new",
 		body: (v) =>
-			`Hi ${v.firstName},\n\nWe've restocked accounts, numbers and boosting since your last order. Same fast delivery, same support. Take a look.\n\n${v.platformLine}`,
+			`Hi ${v.firstName},\n\nReady for another order? See what's available now. We're here if you need help.\n\n${v.platformLine}`,
 		ctaText: 'Browse accounts'
 	},
 	{
 		subject: 'Your next order is in stock',
 		body: (v) =>
-			`Hi ${v.firstName},\n\nA quick account, bulk for resale, or a boost — it's all available now. Pick up where you left off.\n\n${v.platformLine}`,
+			`Hi ${v.firstName},\n\nNeed one account or several? Browse the current stock and choose what works for you.\n\n${v.platformLine}`,
 		ctaText: 'See what fits'
 	}
 ];

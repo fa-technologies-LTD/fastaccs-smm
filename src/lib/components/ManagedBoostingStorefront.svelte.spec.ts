@@ -4,6 +4,13 @@ import { render } from 'vitest-browser-svelte';
 import ManagedBoostingStorefront from './ManagedBoostingStorefront.svelte';
 import { cart } from '$lib/stores/cart.svelte';
 
+const notifications = vi.hoisted(() => ({ showSuccess: vi.fn() }));
+vi.mock('$lib/stores/toasts', () => ({
+	showSuccess: notifications.showSuccess,
+	showError: vi.fn(),
+	showWarning: vi.fn()
+}));
+
 const groups = [
 	{
 		categoryId: '11111111-1111-4111-8111-111111111111',
@@ -51,7 +58,11 @@ const groups = [
 ];
 
 describe('Managed Boosting storefront', () => {
-	afterEach(() => vi.restoreAllMocks());
+	afterEach(() => {
+		cart.close();
+		notifications.showSuccess.mockClear();
+		vi.restoreAllMocks();
+	});
 	const customGroups = [
 		{
 			...groups[0],
@@ -93,6 +104,7 @@ describe('Managed Boosting storefront', () => {
 		expect(add).not.toHaveBeenCalled();
 	});
 	it('sends the exact approved comments and their count to the cart', async () => {
+		const open = vi.spyOn(cart, 'open');
 		vi.spyOn(cart, 'ensureDeliveryModeCompatibility').mockResolvedValue({
 			compatible: true,
 			existingMode: null
@@ -111,6 +123,12 @@ describe('Managed Boosting storefront', () => {
 			10,
 			groups[0].offers[0].id,
 			comments
+		);
+		expect(open).toHaveBeenCalled();
+		expect(notifications.showSuccess).toHaveBeenCalledWith(
+			'Added to cart!',
+			expect.any(String),
+			6000
 		);
 	});
 	it('starts a cheap offer at ₦500 and keeps the existing quantity increment', async () => {

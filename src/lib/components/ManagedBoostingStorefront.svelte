@@ -294,9 +294,10 @@
 			showSuccess(
 				'Added to cart!',
 				`${quantity.toLocaleString()} ${selectedGroup.outcomeLabel.toLowerCase()} added successfully.`,
-				6000,
-				'/checkout'
+				6000
 			);
+			// All checkout navigation goes through the cart's combined minimum check.
+			cart.open();
 			targetUrl = '';
 			commentText = '';
 			commentError = null;

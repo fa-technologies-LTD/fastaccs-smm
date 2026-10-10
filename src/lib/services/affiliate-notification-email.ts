@@ -177,9 +177,9 @@ export async function sendAffiliateUnlockEmailIfNeeded(userId: string): Promise<
 
 Your code: **${reservation.affiliateCode}**
 
-Share it with people who need social-media accounts. They save 5% on their first two eligible account orders, and you earn 5% too — up to ₦1,000 per order.
+Share your code. Friends save 5% on their first two eligible account orders. You earn 5% on each of those orders, up to ₦1,000 per order.
 
-Your cleared earnings can be spent on Fast Accounts or withdrawn from ₦${reservation.payoutMinimum.toLocaleString()}. Payouts are processed on Saturdays.`,
+Once your earnings clear, use them to shop or withdraw when your balance reaches ₦${reservation.payoutMinimum.toLocaleString()}. Withdrawals are processed on Saturdays.`,
 		ctaText: 'View and share my code',
 		ctaUrl: `${getBaseUrl()}/dashboard?tab=affiliate`,
 		notificationType: 'affiliate_unlock',

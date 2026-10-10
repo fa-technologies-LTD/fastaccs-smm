@@ -1856,8 +1856,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					allocation: fulfillmentResult.allocation,
 					delivery: fulfillmentResult.delivery,
 					deliveryMode: orderDeliveryMode,
-					message:
-						'Order created and fulfilled successfully! Check your email for account details.',
+					message: 'Your order is ready. View your account details in your dashboard.',
 					error: null
 				});
 			}

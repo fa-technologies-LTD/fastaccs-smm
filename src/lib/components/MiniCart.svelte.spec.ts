@@ -79,4 +79,11 @@ describe('MiniCart Boosting checkout pricing', () => {
 		expect(mocks.goto).toHaveBeenCalledWith('/checkout');
 		expect(mocks.showWarning).not.toHaveBeenCalled();
 	});
+
+	it('keeps Boosting buyers in Boosting when they continue shopping', async () => {
+		openBoostingCart([100]);
+		await page.getByRole('button', { name: 'Continue Shopping', exact: true }).click();
+		expect(mocks.goto).toHaveBeenCalledWith('/services');
+		expect(cart.isOpen).toBe(false);
+	});
 });

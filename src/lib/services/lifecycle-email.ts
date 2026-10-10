@@ -22,20 +22,20 @@ function getAbandonedReminderContent(
 	const { firstName, orderLabel, currency, amountText } = ctx;
 	if (step === 2) {
 		return {
-			subject: `Still want these? Your order is held (${orderLabel})`,
+			subject: 'Still want these? Your order is held',
 			ctaText: 'Complete my order',
 			body: `Hi ${firstName},\n\nPayment has not come through yet.\n\nOrder: ${orderLabel}\nAmount: ${currency} ${amountText}\n\nYour items are still held, but stock moves fast. Complete payment when you are ready.`
 		};
 	}
 	if (step === 3) {
 		return {
-			subject: `Last call \u2014 your held order is about to be released (${orderLabel})`,
+			subject: 'Your held order expires soon',
 			ctaText: 'Finish before it expires',
 			body: `Hi ${firstName},\n\nWe can only hold your items a little longer.\n\nOrder: ${orderLabel}\nAmount: ${currency} ${amountText}\n\nComplete payment now if you still want them.`
 		};
 	}
 	return {
-		subject: `Complete your Fast Accounts order (${orderLabel})`,
+		subject: 'Complete your order',
 		ctaText: 'Resume payment',
 		body: `Hi ${firstName},\n\nYou started an order, but payment has not gone through yet.\n\nOrder: ${orderLabel}\nAmount: ${currency} ${amountText}\n\nYour items are still held for you. Tap below to finish payment.`
 	};
@@ -118,7 +118,7 @@ function toOrderLabel(orderNumber: string): string {
 function getOnboardingStepAContent(): { subject: string; body: string } {
 	return {
 		subject: 'Ready for your first order?',
-		body: `Your account's ready. Browse what's in stock, pick what fits, and check out in a couple of taps — delivery is instant.
+		body: `Your account's ready. Browse what's in stock, choose what you need, and check out.
 
 Everything shows on your dashboard.`
 	};
@@ -435,7 +435,7 @@ function getNurtureContent(step: number, promoCode: string): { subject: string; 
 			subject: '10% off your first account order 🎁',
 			body: `You signed up but haven't ordered yet — here's 10% off your first account order. Use code ${promoCode} at checkout.
 
-Verified accounts, instant delivery, from small tiers to bulk. See what's available.`
+Browse available accounts. Buy one or order in bulk.`
 		};
 	}
 	if (step === 1) {

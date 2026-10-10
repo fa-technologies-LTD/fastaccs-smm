@@ -124,7 +124,7 @@
 
 	function continueShopping() {
 		cart.close();
-		goto('/platforms');
+		goto(cartItems.some((item) => item.boosting) ? '/services' : '/platforms');
 	}
 
 	function shouldRenderPlatformImage(item: CartItemWithTier): boolean {

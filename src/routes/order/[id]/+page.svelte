@@ -453,9 +453,11 @@
 								<div class="flex items-start justify-between">
 									<div class="flex-1">
 										<h4 class="font-medium" style="color: var(--text);">{item.category.name}</h4>
-										<p class="text-sm" style="color: var(--text-muted);">
-											Quantity: {item.quantity} • {formatPrice(item.unitPrice)} each
-										</p>
+										{#if !isBoostingItem(item)}
+											<p class="text-sm" style="color: var(--text-muted);">
+												Quantity: {item.quantity} • {formatPrice(item.unitPrice)} each
+											</p>
+										{/if}
 										<div class="mt-2">
 											{#if isBoostingItem(item)}
 												<span
@@ -494,9 +496,6 @@
 												class="mt-3 rounded-lg border p-3"
 												style="border-color: rgba(170, 173, 255, 0.25); background: rgba(170, 173, 255, 0.08);"
 											>
-												<p class="mb-2 text-xs font-medium" style="color: var(--text);">
-													{getBoostingStatusLabel(item)}
-												</p>
 												{#if item.boostProgress && !boostStatusOverrideByItemId[item.id]}
 													<p class="mb-2 text-sm" style="color: var(--text-muted);">
 														{item.boostProgress.message}

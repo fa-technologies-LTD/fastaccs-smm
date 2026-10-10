@@ -5,9 +5,13 @@ import { prisma } from '$lib/prisma';
 import { normalizeTierDeliveryMode } from '$lib/helpers/tier-delivery-config';
 import { BOOSTING_TURNAROUND_MESSAGE } from '$lib/helpers/boosting-service-config';
 import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
+import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 import { personalizeEmailTemplate } from '$lib/helpers/email-personalization';
 import { getAdminSettingsSnapshot } from '$lib/services/admin-settings';
-import { getCanonicalCredentialEntries } from '$lib/helpers/credential-contract';
+import {
+	ACCOUNT_READY_EMAIL_SUBJECT,
+	buildAccountReadyEmailBody
+} from '$lib/helpers/account-ready-email';
 import emailHeaderDataUrl from '$lib/assets/fa-email-header.png?inline';
 import { randomInt } from 'crypto';
 
@@ -542,7 +546,9 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 	const subject = params.subject.trim();
 	const body = params.body.trim();
 	const showInboxTip = await shouldShowCustomerInboxTip(params, recipient);
-	const textBody = showInboxTip ? `${body}\n\n${CUSTOMER_INBOX_TIP}` : body;
+	const actionUrl = params.showCta !== false ? normalizeEmailActionUrl(params.ctaUrl) : null;
+	const actionBody = actionUrl ? `${body}\n\n${params.ctaText || 'Open'}: ${actionUrl}` : body;
+	const textBody = showInboxTip ? `${actionBody}\n\n${CUSTOMER_INBOX_TIP}` : actionBody;
 
 	const bodyHtml = renderEmailBody(body);
 	const html = renderEmailTemplate({
@@ -1082,17 +1088,7 @@ interface ReservedOrderConfirmation {
 			totalPrice: unknown;
 			category: { metadata: unknown } | null;
 			boostTargetUrl: string | null;
-			accounts: Array<{
-				username: string | null;
-				password: string | null;
-				email: string | null;
-				emailPassword: string | null;
-				twoFa: string | null;
-				linkUrl: string | null;
-				followers: number | null;
-				ageMonths: number | null;
-				credentialExtras: unknown;
-			}>;
+			accounts: Array<{ id: string }>;
 		}>;
 		user: {
 			email: string | null;
@@ -1145,7 +1141,8 @@ async function reserveOrderConfirmationNotification(
 							select: { metadata: true }
 						},
 						accounts: {
-							where: { status: { in: ['allocated', 'delivered'] } }
+							where: { status: { in: ['allocated', 'delivered'] } },
+							select: { id: true }
 						}
 					}
 				},
@@ -1155,6 +1152,7 @@ async function reserveOrderConfirmationNotification(
 		if (!order) {
 			return null;
 		}
+		if (!isOrderPaymentConfirmed(order)) return null;
 
 		const isBoosting = order.orderItems.some((item) => Boolean(item.boostTargetUrl));
 		const isPhone =
@@ -1231,46 +1229,6 @@ async function reserveOrderConfirmationNotification(
 	});
 }
 
-function buildAccountReadyBody(
-	order: ReservedOrderConfirmation['order'],
-	humanOrderNumber: string
-): string {
-	const lines = [
-		'Your account details are ready.',
-		'',
-		`Order: ${humanOrderNumber}`,
-		`Amount paid: ₦${Number(order.totalAmount).toLocaleString('en-US')}`,
-		'',
-		'**Account details**'
-	];
-
-	for (const item of order.orderItems) {
-		if (item.accounts.length === 0) continue;
-		lines.push(
-			'',
-			`**${item.productName}** (${item.accounts.length} account${item.accounts.length === 1 ? '' : 's'})`
-		);
-		item.accounts.forEach((account, index) => {
-			if (item.accounts.length > 1) lines.push('', `Account ${index + 1}`);
-			const entries = getCanonicalCredentialEntries(account).filter(
-				(credential) => credential.key !== 'password'
-			);
-			for (const credential of entries) {
-				lines.push(`- ${credential.label}: ${credential.value}`);
-			}
-			lines.push('- Password: View securely in your dashboard');
-		});
-	}
-
-	lines.push(
-		'',
-		'**Keep it secure**',
-		'- Change the password after your first login',
-		'- Do not share your login details'
-	);
-	return lines.join('\n');
-}
-
 export async function sendOrderConfirmationEmailIfNeeded(orderId: string): Promise<void> {
 	const reservation = await reserveOrderConfirmationNotification(orderId);
 	if (!reservation?.order) return;
@@ -1281,7 +1239,7 @@ export async function sendOrderConfirmationEmailIfNeeded(orderId: string): Promi
 		(item) =>
 			`- ${item.productName} x${item.quantity} (₦${Number(item.totalPrice).toLocaleString('en-US')})`
 	);
-	const normalizedOrderSuffix = order.orderNumber.replace(/^ORD-?/i, '');
+	const normalizedOrderSuffix = order.orderNumber.replace(/^(?:ORD|FA)-?/i, '');
 	const humanOrderNumber = `FA-${normalizedOrderSuffix}`;
 
 	const isBoosting = order.orderItems.some((item) => Boolean(item.boostTargetUrl));
@@ -1329,7 +1287,7 @@ Open your order page to see your number and get your one-time code — it appear
 				? `${orderSummary}
 
 Send your payment receipt on WhatsApp to receive the complete login details. Your order number is already included.`
-				: buildAccountReadyBody(order, humanOrderNumber);
+				: buildAccountReadyEmailBody(order);
 
 	const ctaText = isBoosting
 		? 'View order status'
@@ -1337,7 +1295,7 @@ Send your payment receipt on WhatsApp to receive the complete login details. You
 			? 'View your number'
 			: isManualHandover
 				? 'Send receipt on WhatsApp'
-				: 'View account details';
+				: 'Open your dashboard';
 	const ctaUrl = isBoosting
 		? `${getBaseUrl()}/order/${order.id}`
 		: isPhone
@@ -1347,9 +1305,7 @@ Send your payment receipt on WhatsApp to receive the complete login details. You
 				: `${getBaseUrl()}/dashboard?tab=purchases`;
 
 	const subject =
-		!isBoosting && !isPhone && !isManualHandover
-			? `Your Fast Accounts order ${humanOrderNumber} is ready`
-			: `Order confirmed — ${humanOrderNumber}`;
+		!isBoosting && !isPhone && !isManualHandover ? ACCOUNT_READY_EMAIL_SUBJECT : 'Order confirmed';
 
 	await prisma.emailNotification.update({
 		where: { id: notificationId },
