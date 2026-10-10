@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import {
+	COOKIE_CONSENT_KEY,
 	PRIVACY_CONSENT_CHANGED_EVENT,
 	readCookieConsent,
 	type CookieConsentLevel
@@ -29,7 +30,9 @@ const RETRY_DELAYS_MS = [2_000, 8_000, 20_000];
 
 let landing: { landing: string; referrer: string } | null = null;
 let landingTagged = false;
-let landingDelivered = false;
+// True while the server holds THIS visit's tagged ad click. Cleared whenever the server reports it
+// no longer has a last touch (e.g. after "Necessary only"), so re-accepting restores it.
+let landingClickStored = false;
 let server: ServerAttributionState = { level: null, hasFirst: false, hasLast: false };
 let queue: Promise<void> = Promise.resolve();
 let listening = false;
@@ -38,9 +41,9 @@ let attempt = 0;
 let signingUnavailable = false;
 
 function wantsLanding(level: CookieConsentLevel | null): boolean {
-	if (!landing || landingDelivered) return false;
-	if (level === 'marketing') return landingTagged || !server.hasFirst;
+	if (!landing) return false;
 	if (level === 'analytics') return !server.hasFirst;
+	if (level === 'marketing') return !server.hasFirst || (landingTagged && !landingClickStored);
 	return false;
 }
 
@@ -68,7 +71,8 @@ async function runSync(): Promise<void> {
 			hasFirst: Boolean(result.first),
 			hasLast: Boolean(result.last)
 		};
-		if (includeLanding) landingDelivered = true;
+		if (!server.hasLast) landingClickStored = false;
+		else if (includeLanding && level === 'marketing' && landingTagged) landingClickStored = true;
 		if (result.signing === false) signingUnavailable = true; // server can't store choices
 		attempt = 0;
 		// The choice changed while this request was in flight: converge on the newer one.
@@ -95,6 +99,11 @@ function scheduleRetry(): void {
 	}, delay);
 }
 
+// Another tab changed the choice (localStorage is shared): reconcile this tab's view too.
+function onStorage(event: StorageEvent): void {
+	if (!event || event.key === COOKIE_CONSENT_KEY || event.key === null) onConsentChanged();
+}
+
 function onConsentChanged(): void {
 	attempt = 0;
 	if (retryTimer) {
@@ -118,6 +127,7 @@ export function initAttributionCapture(serverState?: ServerAttributionState | nu
 	}
 	if (!listening) {
 		window.addEventListener(PRIVACY_CONSENT_CHANGED_EVENT, onConsentChanged);
+		window.addEventListener('storage', onStorage as EventListener);
 		listening = true;
 	}
 	schedule();
@@ -131,14 +141,16 @@ export function settleAttributionQueueForTests(): Promise<void> {
 export function resetAttributionCaptureForTests(): void {
 	landing = null;
 	landingTagged = false;
-	landingDelivered = false;
+	landingClickStored = false;
 	server = { level: null, hasFirst: false, hasLast: false };
 	queue = Promise.resolve();
 	attempt = 0;
 	signingUnavailable = false;
 	if (retryTimer) clearTimeout(retryTimer);
 	retryTimer = null;
-	if (listening && browser)
+	if (listening && browser) {
 		window.removeEventListener(PRIVACY_CONSENT_CHANGED_EVENT, onConsentChanged);
+		window.removeEventListener('storage', onStorage as EventListener);
+	}
 	listening = false;
 }

@@ -16,18 +16,29 @@ const listeners = new Map<string, () => void>();
 const sent: Body[] = [];
 let respond: (body: Body) => Promise<Response>;
 
-const ok = (body: Body) =>
-	Promise.resolve(
+// Stateful fake of /api/attribution/sync: mirrors the real server's complete-level enforcement.
+const fake = { first: false, last: false };
+const ok = (body: Body) => {
+	if (body.consent === null || body.consent === 'necessary') {
+		fake.first = false;
+		fake.last = false;
+	} else {
+		if (!fake.first && body.landing) fake.first = true;
+		if (body.consent === 'analytics') fake.last = false;
+		if (body.consent === 'marketing' && body.landing?.includes('utm_source')) fake.last = true;
+	}
+	return Promise.resolve(
 		new Response(
 			JSON.stringify({
 				ok: true,
 				level: body.consent,
-				first: body.consent === 'analytics' || body.consent === 'marketing',
-				last: body.consent === 'marketing' && Boolean(body.landing),
+				first: fake.first,
+				last: fake.last,
 				signing: true
 			})
 		)
 	);
+};
 
 function choose(level: string) {
 	consent = level;
@@ -42,6 +53,8 @@ beforeEach(() => {
 	vi.useFakeTimers();
 	listeners.clear();
 	sent.length = 0;
+	fake.first = false;
+	fake.last = false;
 	consent = null;
 	respond = ok;
 	vi.stubGlobal(
@@ -62,7 +75,8 @@ beforeEach(() => {
 					: null,
 			removeItem: vi.fn()
 		},
-		addEventListener: (type: string, fn: () => void) => listeners.set(type, fn),
+		addEventListener: (type: string, fn: (event?: unknown) => void) =>
+			listeners.set(type, fn as () => void),
 		removeEventListener: (type: string) => listeners.delete(type)
 	});
 });
@@ -161,5 +175,48 @@ describe('attribution sync', () => {
 		await vi.advanceTimersByTimeAsync(60_000);
 		await settle();
 		expect(sent).toHaveLength(1);
+	});
+
+	describe('re-accepting in the same session restores attribution', () => {
+		const landing = '/platforms/x?utm_source=nairaland&utm_campaign=sports';
+		it.each([
+			['marketing', 'necessary', 'marketing'],
+			['analytics', 'necessary', 'analytics'],
+			['marketing', 'analytics', 'marketing']
+		])('%s → %s → %s resends the original landing', async (a, b, c) => {
+			initAttributionCapture({ level: null, hasFirst: false, hasLast: false });
+			for (const level of [a, b, c]) {
+				choose(level);
+				await settle();
+			}
+			expect(sent.map((body) => body.consent)).toEqual([a, b, c]);
+			expect(sent[2].landing).toBe(landing);
+			expect(fake.first).toBe(true);
+			expect(fake.last).toBe(c === 'marketing');
+		});
+	});
+
+	it('does not loop or resend when the choice is unchanged', async () => {
+		initAttributionCapture({ level: null, hasFirst: false, hasLast: false });
+		choose('marketing');
+		await settle();
+		choose('marketing');
+		await settle();
+		await vi.advanceTimersByTimeAsync(60_000);
+		await settle();
+		expect(sent).toHaveLength(1);
+	});
+
+	it('reconciles when another tab changes the choice', async () => {
+		consent = 'marketing';
+		initAttributionCapture({ level: 'marketing', hasFirst: true, hasLast: false });
+		await settle();
+		const before = sent.length;
+		consent = 'necessary'; // changed in another tab (shared localStorage)
+		(listeners.get('storage') as unknown as (event: { key: string }) => void)({
+			key: COOKIE_CONSENT_KEY
+		});
+		await settle();
+		expect(sent.slice(before)).toEqual([{ consent: 'necessary' }]);
 	});
 });
