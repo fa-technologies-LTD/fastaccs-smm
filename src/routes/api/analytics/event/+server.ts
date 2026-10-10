@@ -8,7 +8,7 @@ const MAX_PATH_LENGTH = 300;
 const ANALYTICS_WINDOW_MS = 60_000;
 const ANALYTICS_EVENTS_PER_WINDOW = 60;
 
-export const POST: RequestHandler = async ({ request, getClientAddress }) => {
+export const POST: RequestHandler = async ({ request, getClientAddress, locals }) => {
 	if (
 		!consumeRequestAllowance({
 			namespace: 'analytics-event',
@@ -30,6 +30,23 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 
 	if (!isValidType || !isValidPath) {
 		return json({ success: false }, { status: 400 });
+	}
+
+	// Visit source from consented attribution (last ad click, else first touch). Raw SQL because
+	// the columns ship with the marketing migration; before it, fall back to the plain insert.
+	const attribution = locals.attribution;
+	const source = attribution?.last?.source || attribution?.first?.source || null;
+	if (source) {
+		const campaign = attribution?.last?.campaign || attribution?.first?.campaign || null;
+		const content = attribution?.last?.content || null;
+		try {
+			await prisma.$executeRaw`
+				INSERT INTO analytics_events (type, path, source, campaign, content)
+				VALUES (${type}, ${path}, ${source}, ${campaign}, ${content})`;
+			return json({ success: true });
+		} catch {
+			/* columns not migrated yet: record the visit without its source */
+		}
 	}
 
 	await prisma.analyticsEvent.create({ data: { type, path } }).catch((error) => {
