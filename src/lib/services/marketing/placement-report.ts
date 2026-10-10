@@ -44,7 +44,7 @@ export async function getPlacementReport(window: ReportWindow): Promise<Placemen
 			SELECT channel_key, campaign_key, placement_key, sum(spend_ngn) AS spend_ngn,
 				sum(impressions) AS impressions, sum(clicks) AS clicks
 			FROM marketing_spend_daily
-			WHERE day >= ${window.sinceDay}::date
+			WHERE day >= ${window.sinceDay}::date AND day <= ${window.untilDay}::date
 			GROUP BY channel_key, campaign_key, placement_key`,
 		prisma.$queryRaw<
 			Array<{
@@ -65,6 +65,7 @@ export async function getPlacementReport(window: ReportWindow): Promise<Placemen
 				sum(total_amount - coalesce(refunded_amount, 0)) AS revenue_ngn
 			FROM orders
 			WHERE coalesce(paid_at, created_at) >= ${window.sinceUtc}
+				AND coalesce(paid_at, created_at) < ${window.untilUtc}
 				AND (status IN ('paid', 'completed') OR payment_status = 'paid')
 				AND status <> 'refunded' AND payment_status <> 'refunded' AND delivery_status <> 'refunded'
 				AND (payment_channel IS NULL OR payment_channel <> 'manual_release')

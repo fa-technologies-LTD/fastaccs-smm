@@ -59,6 +59,8 @@ describe('getPlacementReport', () => {
 		const rows = await getPlacementReport({
 			days: 30,
 			sinceDay: '2026-09-11',
+			untilDay: '2026-10-10',
+			untilUtc: new Date('2026-10-10T23:00:00.000Z'),
 			sinceUtc: new Date('2026-09-10T23:00:00.000Z')
 		});
 
@@ -82,11 +84,14 @@ describe('getPlacementReport', () => {
 			buyers: 1
 		});
 		const spendCall = mocks.queryRaw.mock.calls[0] as unknown[];
-		expect(spendCall).toContain('2026-09-11'); // business-day boundary for spend
+		expect(spendCall).toContain('2026-09-11'); // business-day boundaries for spend…
+		expect(spendCall).toContain('2026-10-10'); // …so bookings for future days are excluded
+		expect(sql(spendCall)).toContain('day <=');
 		const salesCall = mocks.queryRaw.mock.calls[1] as unknown[];
 		expect(sql(salesCall)).toContain("status <> 'refunded'");
 		expect(sql(salesCall)).toContain("payment_channel <> 'manual_release'");
 		expect(salesCall).toContainEqual(new Date('2026-09-10T23:00:00.000Z')); // Lagos midnight
+		expect(salesCall).toContainEqual(new Date('2026-10-10T23:00:00.000Z')); // end of today
 	});
 });
 

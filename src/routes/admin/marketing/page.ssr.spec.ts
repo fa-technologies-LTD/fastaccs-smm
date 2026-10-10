@@ -39,7 +39,7 @@ const base = {
 		{ label: 'X (Twitter) accounts', path: '/platforms/x' }
 	],
 	siteUrl: 'https://smm.fastaccs.com',
-	window: { days: 30, sinceDay: '2026-09-11', timeZone: 'Africa/Lagos' },
+	window: { days: 30, sinceDay: '2026-09-11', untilDay: '2026-10-10', timeZone: 'Africa/Lagos' },
 	placements: [
 		{
 			channelKey: 'propellerads',
@@ -98,6 +98,10 @@ describe('admin marketing page (server render)', () => {
 		expect(body).toContain('Cost per buyer by placement');
 		expect(body).toContain('not profit');
 		expect(body).toContain('kill'); // ₦8,000 spent, no buyers
+	});
+
+	it('defaults booking dates to the business day, not UTC', () => {
+		expect(html(base)).toContain('value="2026-10-10"');
 	});
 
 	it('lists held sale reports with send/discard for managers', () => {

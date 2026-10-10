@@ -76,7 +76,7 @@ export async function getCampaignReport(window: ReportWindow): Promise<CampaignR
 	const since = window.sinceUtc;
 
 	const users = await prisma.user.findMany({
-		where: { registeredAt: { gte: since } },
+		where: { registeredAt: { gte: since, lt: window.untilUtc } },
 		select: {
 			id: true,
 			acquisitionSource: true,

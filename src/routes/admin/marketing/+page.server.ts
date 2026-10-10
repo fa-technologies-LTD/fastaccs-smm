@@ -60,7 +60,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 	return {
 		report,
-		window: { days: window.days, sinceDay: window.sinceDay, timeZone },
+		window: { days: window.days, sinceDay: window.sinceDay, untilDay: window.untilDay, timeZone },
 		windows: [...WINDOWS],
 		thresholds: DEFAULT_THRESHOLDS,
 		landingOptions,
