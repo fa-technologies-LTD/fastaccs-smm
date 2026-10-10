@@ -16,6 +16,8 @@ The owner enabled Production live dispatch and redeployed revision `01f37ee`; th
 
 The post-launch cart sweep found a nearest-versus-upwards quote mismatch in MiniCart. Its Boosting-only quote now uses the same upward-rounding helper as the storefront, cart store and server. Four isolated browser regressions pass for 455→500, 91 comments→500, attempt-only under-minimum messaging and two 250-naira lines combining. This does not change supplier costs, accounts pricing or historical financial records. Typecheck remains zero errors / 121 deferred warnings. The small follow-up deployment and its live cart walkthrough must be verified before final handoff.
 
+The same sweep also found that cart refresh dropped custom-comment text. It now preserves normalized text/count and rejects missing, malformed or count-mismatched comments without truncation. Eight cart-refresh regressions and twelve existing order-input checks pass; the full combined server run now passes 176 suites / 1,218 tests. A real anonymous Boosting-only cart refresh is SELECT-only; final live-cart checks must stop before any order/payment/provider write.
+
 Current sprint: production backup/migrations, approved limits, input separation, live-mode worker and eight-offer controlled publication complete; cart rounding follow-up under final verification. Universal follow-ups: owner Spacemail inbox/receipt/reply test; Claude consent-aware marketing integration; separate Super-affiliate private-cost/exclusion setup; launch announcements/email blasts and remaining live-site cleanup; deferred warnings/dev-tool advisories.
 
 ## Current payment/Boosting safety checkpoint

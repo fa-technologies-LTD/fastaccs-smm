@@ -20,6 +20,7 @@ import {
 	BOOSTING_PLATFORM_LABELS
 } from '$lib/helpers/boosting-service-config';
 import { validateLinkForAction } from '$lib/helpers/social-link-validator';
+import { parseBoostComments } from '$lib/helpers/boosting-service-input';
 import { env } from '$env/dynamic/private';
 import { dev } from '$app/environment';
 import { isLocalDataReadOnly } from '$lib/server/local-data-safety';
@@ -45,6 +46,7 @@ interface CartRefreshItemInput {
 		targetUrl?: string;
 		boostQuantity?: number;
 		boostOfferId?: string | null;
+		comments?: string;
 	};
 	accountAddon?: {
 		key?: string;
@@ -372,6 +374,16 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					: legacyConfig;
 				const targetUrl = normalizeText(input.boosting?.targetUrl);
 				const boostQuantity = Math.floor(Number(input.boosting?.boostQuantity || 0));
+				const comments =
+					config.actionType === 'custom_comments'
+						? parseBoostComments(input.boosting?.comments)
+						: null;
+				if (comments && (comments.error || comments.quantity !== boostQuantity)) {
+					messages.push(
+						comments.error || 'Your comment count changed. Please add this option again.'
+					);
+					continue;
+				}
 
 				if (!targetUrl || !boostQuantity) {
 					messages.push(`${tier.name} was removed because no link or quantity was provided.`);
@@ -425,7 +437,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					boosting: {
 						targetUrl: linkCheck.normalizedUrl || targetUrl,
 						boostQuantity,
-						boostOfferId: offer?.id || null
+						boostOfferId: offer?.id || null,
+						...(comments ? { comments: comments.text } : {})
 					},
 					tier: boostingTierPayload
 				});
