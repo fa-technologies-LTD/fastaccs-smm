@@ -1,4 +1,5 @@
 import { prisma } from '$lib/prisma';
+import type { ReportWindow } from './window';
 
 /**
  * Placement-level results: spend per channel / campaign / placement (zone) joined with the orders
@@ -21,7 +22,14 @@ export interface PlacementRow {
 const key = (channel: string, campaign: string, placement: string) =>
 	`${channel}\u0000${campaign}\u0000${placement}`;
 
-export async function getPlacementReport(since: Date): Promise<PlacementRow[]> {
+/**
+ * LAST-TOUCH, PAID-WINDOW view: spend booked/imported on business days in the window vs canonical
+ * sales (paid, not refunded, not owner self-offloads) paid in the same window whose last ad click
+ * came from that placement. Only buyers who accepted ad cookies carry a last touch, so cost per
+ * buyer here is an upper bound. Revenue is net of refunds and BEFORE supplier costs and fees: it is
+ * not profit.
+ */
+export async function getPlacementReport(window: ReportWindow): Promise<PlacementRow[]> {
 	const [spend, sales] = await Promise.all([
 		prisma.$queryRaw<
 			Array<{
@@ -36,7 +44,7 @@ export async function getPlacementReport(since: Date): Promise<PlacementRow[]> {
 			SELECT channel_key, campaign_key, placement_key, sum(spend_ngn) AS spend_ngn,
 				sum(impressions) AS impressions, sum(clicks) AS clicks
 			FROM marketing_spend_daily
-			WHERE day >= ${since}::date
+			WHERE day >= ${window.sinceDay}::date
 			GROUP BY channel_key, campaign_key, placement_key`,
 		prisma.$queryRaw<
 			Array<{
@@ -56,9 +64,10 @@ export async function getPlacementReport(since: Date): Promise<PlacementRow[]> {
 				count(*) AS orders,
 				sum(total_amount - coalesce(refunded_amount, 0)) AS revenue_ngn
 			FROM orders
-			WHERE coalesce(paid_at, created_at) >= ${since}
+			WHERE coalesce(paid_at, created_at) >= ${window.sinceUtc}
 				AND (status IN ('paid', 'completed') OR payment_status = 'paid')
 				AND status <> 'refunded' AND payment_status <> 'refunded' AND delivery_status <> 'refunded'
+				AND (payment_channel IS NULL OR payment_channel <> 'manual_release')
 				AND coalesce(analytics_metadata->'attribution'->'last'->>'source', '') <> ''
 			GROUP BY 1, 2, 3`
 	]);

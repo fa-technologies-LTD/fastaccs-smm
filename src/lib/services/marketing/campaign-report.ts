@@ -1,6 +1,7 @@
 import { prisma } from '$lib/prisma';
 import { buildRevenueOrderWhere } from '$lib/helpers/order-revenue.server';
 import { toNetSales } from '$lib/helpers/order-revenue';
+import type { ReportWindow } from './window';
 
 /**
  * Campaign-level acquisition report: which source + campaign brought signups, buyers and revenue.
@@ -65,8 +66,14 @@ export function resolveChannel(user: {
 	};
 }
 
-export async function getCampaignReport(windowDays = 30): Promise<CampaignReport> {
-	const since = new Date(Date.now() - windowDays * 86_400_000);
+/**
+ * First-touch SIGNUP COHORT: people who signed up in the window, credited to the first tracked
+ * source they used, with everything they have bought since. Not a paid-window figure, so it is not
+ * divided by spend; cost per buyer comes from the placement report (last touch, same window).
+ */
+export async function getCampaignReport(window: ReportWindow): Promise<CampaignReport> {
+	const windowDays = window.days;
+	const since = window.sinceUtc;
 
 	const users = await prisma.user.findMany({
 		where: { registeredAt: { gte: since } },

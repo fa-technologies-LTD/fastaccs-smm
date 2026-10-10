@@ -33,8 +33,6 @@
 			? Math.round((data.report.totals.attributedSignups / data.report.totals.signups) * 100)
 			: 0
 	);
-	const spendFor = (source: string, campaign: string) =>
-		data.spendByCampaign[`${source}|${campaign}`] ?? 0;
 
 	async function act(label: string, body: Record<string, unknown>, success: string) {
 		if (busy) return false;
@@ -261,34 +259,28 @@
 	{/if}
 
 	<section class="rounded-xl p-4" style={card}>
-		<h2 class="text-sm font-bold" style="color: var(--text);">Campaigns</h2>
+		<h2 class="text-sm font-bold" style="color: var(--text);">New signups by first source</h2>
 		<p class="mt-1 text-xs" style="color: var(--text-muted);">
-			Credited to the first tracked link each new customer used. Target {formatPrice(
-				data.thresholds.targetCacNgn
-			)} per buyer, ceiling {formatPrice(data.thresholds.ceilingCacNgn)}, stop after {formatPrice(
-				data.thresholds.killAtNgn
-			)} with no buyers.
+			People who signed up since {data.window.sinceDay}, credited to the first tracked link they
+			used, with everything they have bought since (net of refunds). This is a customer cohort, not
+			a paid window, so cost per buyer is judged in the placement table below.
 		</p>
 		{#if data.report.campaigns.length === 0}
 			<p class="mt-4 text-sm" style="color: var(--text-muted);">No signups in this window.</p>
 		{:else}
 			<div class="mt-3 overflow-x-auto">
-				<table class="w-full min-w-[720px] text-left text-xs">
+				<table class="w-full min-w-[560px] text-left text-xs">
 					<thead style="color: var(--text-dim);">
 						<tr>
 							<th class="py-2 pr-3 font-semibold">Source / campaign</th>
 							<th class="py-2 pr-3 text-right font-semibold">Signups</th>
 							<th class="py-2 pr-3 text-right font-semibold">Buyers</th>
 							<th class="py-2 pr-3 text-right font-semibold">Repeat</th>
-							<th class="py-2 pr-3 text-right font-semibold">Revenue</th>
-							<th class="py-2 pr-3 text-right font-semibold">Spend</th>
-							<th class="py-2 font-semibold">Decision</th>
+							<th class="py-2 text-right font-semibold">Revenue</th>
 						</tr>
 					</thead>
 					<tbody>
 						{#each data.report.campaigns as row (`${row.source}|${row.campaign}`)}
-							{@const spend = spendFor(row.source, row.campaign)}
-							{@const decision = decide({ spendNgn: spend, buyers: row.buyers }, data.thresholds)}
 							<tr style="border-top: 1px solid var(--border); color: var(--text);">
 								<td class="py-2 pr-3">
 									<span class="font-semibold">{row.source}</span>
@@ -302,24 +294,7 @@
 								<td class="py-2 pr-3 text-right">{row.signups}</td>
 								<td class="py-2 pr-3 text-right">{row.buyers}</td>
 								<td class="py-2 pr-3 text-right">{row.repeatBuyers}</td>
-								<td class="py-2 pr-3 text-right">{formatPrice(row.revenueNgn)}</td>
-								<td class="py-2 pr-3 text-right">{spend > 0 ? formatPrice(spend) : '—'}</td>
-								<td class="py-2">
-									{#if spend > 0}
-										<span
-											class="inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase"
-											style={ACTION_STYLE[decision.action]}>{decision.action}</span
-										>
-										{#if decision.cacNgn !== null}
-											<span class="ml-1 font-semibold">{formatPrice(decision.cacNgn)}/buyer</span>
-										{/if}
-										<span class="mt-1 block" style="color: var(--text-muted);"
-											>{decision.reason}</span
-										>
-									{:else}
-										<span style="color: var(--text-dim);">—</span>
-									{/if}
-								</td>
+								<td class="py-2 text-right">{formatPrice(row.revenueNgn)}</td>
 							</tr>
 						{/each}
 					</tbody>
@@ -330,9 +305,16 @@
 
 	{#if data.placements.length > 0}
 		<section class="rounded-xl p-4" style={card}>
-			<h2 class="text-sm font-bold" style="color: var(--text);">Zones and placements</h2>
+			<h2 class="text-sm font-bold" style="color: var(--text);">Cost per buyer by placement</h2>
 			<p class="mt-1 text-xs" style="color: var(--text-muted);">
-				Credited to the last ad click before each purchase (visitors who accepted cookies).
+				Spend on business days since {data.window.sinceDay} ({data.window.timeZone}) against sales
+				paid in the same period, credited to the last ad click before each purchase. Only buyers who
+				accepted ad cookies are counted, so true cost per buyer is likely lower. Revenue is net of
+				refunds and before supplier costs and fees, not profit. Target {formatPrice(
+					data.thresholds.targetCacNgn
+				)} per buyer, ceiling {formatPrice(data.thresholds.ceilingCacNgn)}, stop after {formatPrice(
+					data.thresholds.killAtNgn
+				)} with no buyers.
 			</p>
 			<div class="mt-3 overflow-x-auto">
 				<table class="w-full min-w-[760px] text-left text-xs">
@@ -407,7 +389,9 @@
 		<section class="rounded-xl p-4" style={card}>
 			<h2 class="text-sm font-bold" style="color: var(--text);">Book spend for a direct buy</h2>
 			<p class="mt-1 text-xs" style="color: var(--text-muted);">
-				Nairaland boards, Telegram posts, WhatsApp TVs. Use the same source and campaign as the
+				Nairaland boards, Telegram posts, WhatsApp TVs. Booking again for the same source, campaign,
+				placement and dates replaces the earlier amount (use a different placement for each post);
+				imported network spend never overwrites a booking. Use the same source and campaign as the
 				tracked link. The amount is spread across the dates. Network spend imports automatically.
 			</p>
 			<div class="mt-3 grid grid-cols-2 gap-3 text-xs lg:grid-cols-6">
@@ -576,11 +560,13 @@
 										>{channel.targetCacNgn ? formatPrice(channel.targetCacNgn) : 'default'}</td
 									>
 									<td class="py-2 pr-3"
-										>{channel.postbackTemplate
-											? channel.dedupByClickId
-												? 'on (retries allowed)'
-												: 'on'
-											: 'off'}</td
+										>{channel.status === 'killed'
+											? 'off (stopped)'
+											: channel.postbackConfigured
+												? channel.dedupByClickId
+													? 'on (retries allowed)'
+													: 'on'
+												: 'off'}</td
 									>
 									<td class="py-2 text-right">
 										{#if data.canManage}
