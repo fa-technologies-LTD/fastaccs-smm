@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { TrendingUp, Copy, Target } from '$lib/icons';
 	import { formatPrice } from '$lib/helpers/utils';
@@ -60,7 +61,9 @@
 	}
 
 	// Book spend (direct buys)
-	const today = new Date().toISOString().slice(0, 10);
+	// Business-day "today" from the server (not the browser's or UTC's date); only the form's
+	// starting value, so it's read once on purpose.
+	const today = untrack(() => data.window.untilDay);
 	let bookSource = $state('');
 	let bookCampaign = $state('');
 	let bookPlacement = $state('');
