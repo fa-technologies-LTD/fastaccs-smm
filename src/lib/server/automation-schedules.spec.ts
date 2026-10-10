@@ -47,4 +47,11 @@ describe('cost-aware production automation schedules', () => {
 		expect(schedules.get('/api/internal/cron/automation-health')).toBe('4 * * * *');
 		expect(schedules.get('/api/internal/cron/abandoned-orders')).toBe('3,23,43 * * * *');
 	});
+
+	it('runs marketing jobs inside existing wake windows', () => {
+		expect(schedules.get('/api/internal/cron/marketing-postbacks')).toBe('5,35 * * * *');
+		expect(AUTOMATION_JOBS['marketing-postbacks'].expectedIntervalMinutes).toBe(30);
+		expect(schedules.get('/api/internal/cron/marketing-spend-sync')).toBe('7 * * * *');
+		expect(AUTOMATION_JOBS['marketing-spend-sync'].expectedIntervalMinutes).toBe(60);
+	});
 });
