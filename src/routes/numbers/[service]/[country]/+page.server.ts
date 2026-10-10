@@ -9,6 +9,7 @@ import {
 } from '$lib/helpers/numbers-slugs';
 import { formatPrice } from '$lib/helpers/utils';
 import type { SeoFaqItem } from '$lib/helpers/platform-seo';
+import { productJsonLd } from '$lib/helpers/structured-data';
 
 // Same wording as the /numbers FAQ and Support page: no new promises.
 function buildNumbersFaq(serviceName: string, country: string): SeoFaqItem[] {
@@ -89,7 +90,17 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		})
 		.slice(0, 10);
 
+	const description = `Get a ${country} phone number to receive your ${service.serviceName} verification code${price ? ` for ${price}` : ''}. No code, no charge: refunded automatically to your store credit.`;
+
 	return {
+		product: productJsonLd({
+			name: `${country} number for ${service.serviceName} verification`,
+			description,
+			url: `${url.origin}${canonicalPath ?? url.pathname}`,
+			priceNgn: tier.priceNgn,
+			inStock: tier.available,
+			category: 'Verification numbers'
+		}),
 		service: { serviceId: service.serviceId, serviceName: service.serviceName },
 		tier,
 		country,
@@ -98,7 +109,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		faq: buildNumbersFaq(service.serviceName, country),
 		seo: {
 			title: `${country} Number for ${service.serviceName} Verification${price ? ` — ${price}` : ''} | FastAccs`,
-			description: `Get a ${country} phone number to receive your ${service.serviceName} verification code${price ? ` for ${price}` : ''}. No code, no charge: refunded automatically to your store credit.`,
+			description,
 			type: 'website'
 		}
 	};

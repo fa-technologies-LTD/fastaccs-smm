@@ -13,6 +13,8 @@
 	} from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import { platformDisplayName } from '$lib/helpers/platform-seo';
+	import { productJsonLd } from '$lib/helpers/structured-data';
+	import JsonLd from '$lib/components/JsonLd.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	import ImagePreviewModal from '$lib/components/ImagePreviewModal.svelte';
@@ -667,7 +669,25 @@
 		const price = data.tier?.price ? ` — ${formatPrice(data.tier.price)}` : '';
 		return `Buy ${platform} ${tierName} Account${price} | FastAccs`;
 	});
+
+	// One account type = one product: lets search show price + stock under the listing.
+	const tierProduct = $derived.by(() => {
+		const platform = platformDisplayName(data.platform?.name ?? '', data.platform?.slug ?? '');
+		const tierName = String(data.tier?.tier_name ?? '').trim();
+		return productJsonLd({
+			name: `${platform} ${tierName} account`,
+			description:
+				String(data.tier?.description ?? '').trim() ||
+				`${platform} ${tierName} account, delivered to your dashboard after payment.`,
+			url: `${page.url.origin}${page.url.pathname}`,
+			priceNgn: Number(data.tier?.price ?? 0),
+			inStock: Number(data.tier?.visible_available ?? 0) > 0,
+			category: 'Social media accounts'
+		});
+	});
 </script>
+
+<JsonLd data={tierProduct} />
 
 <svelte:head>
 	<title>{tierSeoTitle}</title>

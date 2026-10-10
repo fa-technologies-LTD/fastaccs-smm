@@ -53,6 +53,16 @@ describe('numbers app + country page load', () => {
 			{ label: 'Telegram', priceNgn: 1500, path: '/numbers/telegram/usa' }
 		]);
 		expect(result.faq.length).toBeGreaterThan(0);
+		expect(result.product).toMatchObject({
+			'@type': 'Product',
+			name: 'USA number for WhatsApp verification',
+			offers: {
+				price: '1800',
+				priceCurrency: 'NGN',
+				availability: 'https://schema.org/InStock',
+				url: 'https://smm.fastaccs.com/numbers/whatsapp/usa'
+			}
+		});
 	});
 
 	it('301-redirects other casings to the canonical lowercase URL', async () => {

@@ -1,4 +1,5 @@
 import { formatPrice } from '$lib/helpers/utils';
+import { serializeJsonLd } from '$lib/helpers/structured-data';
 
 /**
  * Search/ad-facing copy for account platform pages. Titles carry the buyer's intent (product +
@@ -80,9 +81,9 @@ export function buildPlatformFaq(display: string): SeoFaqItem[] {
 	];
 }
 
-/** FAQPage structured data, serialized safely for inlining in a <script> tag. */
-export function faqJsonLd(items: SeoFaqItem[]): string {
-	return JSON.stringify({
+/** FAQPage structured data. */
+export function faqData(items: SeoFaqItem[]): Record<string, unknown> {
+	return {
 		'@context': 'https://schema.org',
 		'@type': 'FAQPage',
 		mainEntity: items.map((item) => ({
@@ -90,5 +91,10 @@ export function faqJsonLd(items: SeoFaqItem[]): string {
 			name: item.question,
 			acceptedAnswer: { '@type': 'Answer', text: item.answer }
 		}))
-	}).replace(/</g, '\\u003c');
+	};
+}
+
+/** FAQPage structured data, serialized safely for inlining in a <script> tag. */
+export function faqJsonLd(items: SeoFaqItem[]): string {
+	return serializeJsonLd(faqData(items));
 }

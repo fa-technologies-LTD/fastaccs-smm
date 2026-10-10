@@ -1,21 +1,14 @@
 <script lang="ts">
 	import { HelpCircle } from '$lib/icons';
-	import { faqJsonLd, type SeoFaqItem } from '$lib/helpers/platform-seo';
+	import JsonLd from '$lib/components/JsonLd.svelte';
+	import { faqData, type SeoFaqItem } from '$lib/helpers/platform-seo';
 
 	let { heading, items }: { heading: string; items: SeoFaqItem[] } = $props();
 
 	// Answers stay in the HTML (native <details>), so search engines read them even when collapsed.
-	// JSON-LD must be raw script content; faqJsonLd escapes "<" so the data cannot break out.
-	// The closing tag is split so it can't end this component's own <script> block.
-	const jsonLdTag = $derived(
-		'<script type="application/ld+json">' + faqJsonLd(items) + '</' + 'script>'
-	);
 </script>
 
-<svelte:head>
-	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-	{@html jsonLdTag}
-</svelte:head>
+<JsonLd data={items.length > 0 ? faqData(items) : null} />
 
 {#if items.length > 0}
 	<section class="pb-10 sm:pb-14" aria-labelledby="seo-faq-heading">

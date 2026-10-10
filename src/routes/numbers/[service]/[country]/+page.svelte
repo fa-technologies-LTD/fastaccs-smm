@@ -3,6 +3,7 @@
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import SeoFaq from '$lib/components/SeoFaq.svelte';
+	import JsonLd from '$lib/components/JsonLd.svelte';
 	import { codeToFlag } from '$lib/helpers/numbers-slugs';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { buyNumber } from '$lib/services/numbers-buy';
@@ -47,6 +48,8 @@
 	<title>{data.seo.title}</title>
 	<meta name="description" content={data.seo.description} />
 </svelte:head>
+
+<JsonLd data={data.product} />
 
 <Navigation />
 
