@@ -17,9 +17,7 @@ import {
 import { recordUserPresenceIfStale, shouldRecordUserPresence } from '$lib/services/user-presence';
 import {
 	ATTRIBUTION_COOKIE,
-	ATTRIBUTION_MAX_AGE_S,
 	LAST_TOUCH_COOKIE,
-	buildFirstTouch,
 	parseAttribution,
 	parseLastTouch
 } from '$lib/services/attribution';
@@ -163,58 +161,14 @@ function getCanonicalRedirectTarget(event: RequestEvent): URL | null {
 const BOT_SCAN_RE =
 	/\/\.(git|env|svn|hg|aws|ssh)(\/|$)|\/wp-(admin|login|content|includes)|\/vendor\/|\/phpinfo|\/\.DS_Store/i;
 
-// Acquisition capture, exposed to every request as locals.attribution.
-// First-touch: on a visitor's first attributable page GET, record where they came from
-// (utm_source, else the referrer domain); never overwritten, persisted at signup.
-// Last-touch (ad click ids) is only READ here. It is written by a consent-gated endpoint once the
-// visitor grants marketing consent, so no advertising cookie is set on landing.
-function isAttributableLanding(event: RequestEvent): boolean {
-	if (event.request.method !== 'GET') return false;
-	if (event.url.pathname.startsWith('/api/')) return false;
-	// Only real page navigations — not asset/data/prefetch fetches, which could otherwise stamp a
-	// bogus "direct" source before the actual landing request.
-	return (event.request.headers.get('accept') || '').includes('text/html');
-}
-
-function setAttributionCookie(
-	event: RequestEvent,
-	name: string,
-	value: unknown,
-	maxAge: number
-): void {
-	try {
-		event.cookies.set(name, JSON.stringify(value), {
-			path: '/',
-			maxAge,
-			httpOnly: true,
-			sameSite: 'lax'
-		});
-	} catch {
-		/* cookie set is best-effort; never block the request */
-	}
-}
-
+// Acquisition attribution, exposed to every request as locals.attribution. Only READ here:
+// the cookies are written by /api/attribution/touch after the visitor gives consent (Nigeria
+// GAID 2025), so nothing non-essential is stored on landing.
 function captureAttribution(event: RequestEvent): void {
-	const now = new Date();
-	let first = parseAttribution(event.cookies.get(ATTRIBUTION_COOKIE));
-	const last = parseLastTouch(event.cookies.get(LAST_TOUCH_COOKIE), now);
-
-	if (isAttributableLanding(event)) {
-		if (!first) {
-			const attr = buildFirstTouch({
-				searchParams: event.url.searchParams,
-				referrer: event.request.headers.get('referer') || '',
-				pathname: event.url.pathname,
-				ownHost: getIncomingHost(event)
-			});
-			if (attr) {
-				first = attr;
-				setAttributionCookie(event, ATTRIBUTION_COOKIE, attr, ATTRIBUTION_MAX_AGE_S);
-			}
-		}
-	}
-
-	event.locals.attribution = { first, last };
+	event.locals.attribution = {
+		first: parseAttribution(event.cookies.get(ATTRIBUTION_COOKIE)),
+		last: parseLastTouch(event.cookies.get(LAST_TOUCH_COOKIE), new Date())
+	};
 }
 
 const handleRequest: Handle = async ({ event, resolve }) => {

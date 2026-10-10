@@ -1,4 +1,7 @@
-export type CookieConsentLevel = 'necessary' | 'analytics';
+// Ordered: each level includes the ones before it. "marketing" = analytics + ad measurement
+// (which ad click led to a purchase, reported back to that ad network).
+export type CookieConsentLevel = 'necessary' | 'analytics' | 'marketing';
+const CONSENT_LEVELS: readonly CookieConsentLevel[] = ['necessary', 'analytics', 'marketing'];
 
 export const COOKIE_CONSENT_KEY = 'fa_cookie_consent_v1';
 export const PRIVACY_CONSENT_CHANGED_EVENT = 'fa:privacy-consent-changed';
@@ -22,7 +25,7 @@ function parseConsent(raw: string | null): ConsentRecord | null {
 	try {
 		const parsed = JSON.parse(raw) as Partial<ConsentRecord>;
 		if (
-			(parsed.level !== 'necessary' && parsed.level !== 'analytics') ||
+			!CONSENT_LEVELS.includes(parsed.level as CookieConsentLevel) ||
 			typeof parsed.savedAt !== 'number' ||
 			typeof parsed.version !== 'number'
 		) {
@@ -30,7 +33,7 @@ function parseConsent(raw: string | null): ConsentRecord | null {
 		}
 
 		return {
-			level: parsed.level,
+			level: parsed.level as CookieConsentLevel,
 			savedAt: parsed.savedAt,
 			version: parsed.version
 		};
@@ -79,5 +82,10 @@ export function saveCookieConsent(level: CookieConsentLevel): void {
 }
 
 export function hasAnalyticsConsent(): boolean {
-	return readCookieConsent() === 'analytics';
+	const level = readCookieConsent();
+	return level === 'analytics' || level === 'marketing';
+}
+
+export function hasMarketingConsent(): boolean {
+	return readCookieConsent() === 'marketing';
 }
