@@ -14,12 +14,7 @@ vi.mock('$lib/prisma', () => ({
 	}
 }));
 
-import {
-	getSpendTotals,
-	recordManualBooking,
-	spreadBooking,
-	upsertSpendRows
-} from './spend-ledger';
+import { recordManualBooking, spreadBooking, upsertSpendRows } from './spend-ledger';
 
 describe('spreadBooking', () => {
 	it('splits a booking across its days and adds back to the exact total', () => {
@@ -73,29 +68,10 @@ describe('upsertSpendRows / recordManualBooking', () => {
 		expect(mocks.executeRaw).toHaveBeenCalledTimes(2);
 		const sql = (mocks.executeRaw.mock.calls[0][0] as TemplateStringsArray).join('?');
 		expect(sql).toContain('ON CONFLICT (channel_key, campaign_key, placement_key, day) DO UPDATE');
+		// Imports can never overwrite a manual booking; manual bookings can correct imports.
+		expect(sql).toContain(
+			"WHERE marketing_spend_daily.source = 'api' OR EXCLUDED.source = 'manual'"
+		);
 		expect(mocks.executeRaw.mock.calls[0]).toContain(5800);
-	});
-});
-
-describe('getSpendTotals', () => {
-	it('converts aggregate strings to numbers', async () => {
-		mocks.queryRaw.mockResolvedValueOnce([
-			{
-				channel_key: 'nairaland',
-				campaign_key: 'sports-oct',
-				spend_ngn: '11600.00',
-				impressions: '0',
-				clicks: null
-			}
-		]);
-		expect(await getSpendTotals(new Date('2026-10-01'))).toEqual([
-			{
-				channelKey: 'nairaland',
-				campaignKey: 'sports-oct',
-				spendNgn: 11600,
-				impressions: 0,
-				clicks: 0
-			}
-		]);
 	});
 });

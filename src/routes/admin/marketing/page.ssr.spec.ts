@@ -39,7 +39,7 @@ const base = {
 		{ label: 'X (Twitter) accounts', path: '/platforms/x' }
 	],
 	siteUrl: 'https://smm.fastaccs.com',
-	spendByCampaign: { 'nairaland|sports-oct': 11600 },
+	window: { days: 30, sinceDay: '2026-09-11', timeZone: 'Africa/Lagos' },
 	placements: [
 		{
 			channelKey: 'propellerads',
@@ -61,7 +61,7 @@ const base = {
 			status: 'testing',
 			targetCacNgn: null,
 			dailyCapNgn: null,
-			postbackTemplate: 'http://ad.propellerads.com/conversion.php?visitor_id=${SUBID}',
+			postbackConfigured: true,
 			dedupByClickId: false,
 			notes: null
 		}
@@ -85,13 +85,19 @@ const base = {
 const html = (data: Record<string, unknown>) => render(Page, { props: { data } as never }).body;
 
 describe('admin marketing page (server render)', () => {
-	it('shows booked spend and its decision on the campaign row', () => {
+	it('shows the signup cohort without dividing it by spend', () => {
 		const body = html(base);
+		expect(body).toContain('New signups by first source');
 		expect(body).toContain('75%');
 		expect(body).toContain('sports-oct');
-		expect(body).toContain('₦11,600');
-		expect(body).toContain('kill'); // ₦11,600 for 1 buyer: above the ceiling and past the kill limit
-		expect(body).toContain('₦11,600/buyer');
+		expect(body).toContain('since 2026-09-11');
+	});
+
+	it('judges cost per buyer on placements, with the not-profit caveat', () => {
+		const body = html(base);
+		expect(body).toContain('Cost per buyer by placement');
+		expect(body).toContain('not profit');
+		expect(body).toContain('kill'); // ₦8,000 spent, no buyers
 	});
 
 	it('lists held sale reports with send/discard for managers', () => {
@@ -99,6 +105,14 @@ describe('admin marketing page (server render)', () => {
 		expect(body).toContain('Sale reports waiting for you (1)');
 		expect(body).toContain('ORD-77');
 		expect(body).toContain('Discard');
+	});
+
+	it('shows stopped channels as not reporting', () => {
+		const body = html({
+			...base,
+			channels: [{ ...base.channels[0], status: 'killed' }]
+		});
+		expect(body).toContain('off (stopped)');
 	});
 
 	it('offers to block a PropellerAds zone that hit the kill limit', () => {

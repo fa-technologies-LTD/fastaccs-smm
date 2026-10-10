@@ -52,7 +52,11 @@ export function spreadBooking(input: {
 	});
 }
 
-/** Insert or replace rows by (channel, campaign, placement, day). Re-importing is idempotent. */
+/**
+ * Insert or replace rows by (channel, campaign, placement, day). Re-importing is idempotent.
+ * Manual rows are authoritative: an API import never overwrites a manual row, while a manual
+ * booking may correct an imported one.
+ */
 export async function upsertSpendRows(rows: SpendRow[]): Promise<number> {
 	if (rows.length === 0) return 0;
 	await prisma.$transaction(
@@ -72,12 +76,18 @@ export async function upsertSpendRows(rows: SpendRow[]): Promise<number> {
 					clicks = EXCLUDED.clicks,
 					conversions = EXCLUDED.conversions,
 					source = EXCLUDED.source,
-					updated_at = now()`
+					updated_at = now()
+				WHERE marketing_spend_daily.source = 'api' OR EXCLUDED.source = 'manual'`
 		)
 	);
 	return rows.length;
 }
 
+/**
+ * Book a direct buy. REPLACES (does not add to) any amount already booked for the same source,
+ * campaign, placement and days, so re-submitting is safe. Book separate posts under separate
+ * placement keys (e.g. post-1, post-2).
+ */
 export async function recordManualBooking(input: {
 	channelKey: string;
 	campaignKey: string;
@@ -97,37 +107,4 @@ export async function recordManualBooking(input: {
 			source: 'manual' as const
 		}))
 	);
-}
-
-export interface SpendTotal {
-	channelKey: string;
-	campaignKey: string;
-	spendNgn: number;
-	impressions: number;
-	clicks: number;
-}
-
-/** Spend per channel + campaign since a date, for joining with the campaign report. */
-export async function getSpendTotals(since: Date): Promise<SpendTotal[]> {
-	const rows = await prisma.$queryRaw<
-		Array<{
-			channel_key: string;
-			campaign_key: string;
-			spend_ngn: unknown;
-			impressions: unknown;
-			clicks: unknown;
-		}>
-	>`
-		SELECT channel_key, campaign_key, sum(spend_ngn) AS spend_ngn,
-			sum(impressions) AS impressions, sum(clicks) AS clicks
-		FROM marketing_spend_daily
-		WHERE day >= ${since}::date
-		GROUP BY channel_key, campaign_key`;
-	return rows.map((row) => ({
-		channelKey: row.channel_key,
-		campaignKey: row.campaign_key,
-		spendNgn: Number(row.spend_ngn) || 0,
-		impressions: Number(row.impressions) || 0,
-		clicks: Number(row.clicks) || 0
-	}));
 }

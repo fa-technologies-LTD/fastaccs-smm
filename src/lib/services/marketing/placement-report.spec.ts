@@ -56,7 +56,11 @@ describe('getPlacementReport', () => {
 			];
 		});
 
-		const rows = await getPlacementReport(new Date('2026-10-01'));
+		const rows = await getPlacementReport({
+			days: 30,
+			sinceDay: '2026-09-11',
+			sinceUtc: new Date('2026-09-10T23:00:00.000Z')
+		});
 
 		expect(rows[0]).toEqual({
 			channelKey: 'propellerads',
@@ -77,8 +81,12 @@ describe('getPlacementReport', () => {
 			spendNgn: 0,
 			buyers: 1
 		});
-		const salesSql = sql(mocks.queryRaw.mock.calls[1]);
-		expect(salesSql).toContain("status <> 'refunded'");
+		const spendCall = mocks.queryRaw.mock.calls[0] as unknown[];
+		expect(spendCall).toContain('2026-09-11'); // business-day boundary for spend
+		const salesCall = mocks.queryRaw.mock.calls[1] as unknown[];
+		expect(sql(salesCall)).toContain("status <> 'refunded'");
+		expect(sql(salesCall)).toContain("payment_channel <> 'manual_release'");
+		expect(salesCall).toContainEqual(new Date('2026-09-10T23:00:00.000Z')); // Lagos midnight
 	});
 });
 
