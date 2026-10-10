@@ -1,76 +1,47 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('$app/environment', () => ({ browser: true, dev: false }));
 
-import { trackSnapEvent, trackSnapPurchase } from './snap-pixel';
+import {
+	initializeSnapPixel,
+	trackPendingSnapSignup,
+	trackSnapEvent,
+	trackSnapPageView,
+	trackSnapPurchase
+} from './snap-pixel';
 
-class MemoryStorage {
-	private values = new Map<string, string>();
+describe('Snap Pixel (removed)', () => {
+	const createElement = vi.fn();
+	let cookie = '';
 
-	getItem(key: string): string | null {
-		return this.values.get(key) ?? null;
-	}
-
-	setItem(key: string, value: string): void {
-		this.values.set(key, value);
-	}
-
-	clear(): void {
-		this.values.clear();
-	}
-}
-
-const snaptr = Object.assign(vi.fn(), { queue: [] as unknown[] });
-const storage = new MemoryStorage();
-
-vi.stubGlobal('window', {
-	location: { hostname: 'smm.fastaccs.com' },
-	snaptr,
-	__snapPixelBootstrapped: true
-});
-vi.stubGlobal('document', {
-	querySelector: () => ({ src: 'https://sc-static.net/scevent.min.js' }),
-	getElementsByTagName: () => [],
-	cookie: ''
-});
-vi.stubGlobal('localStorage', storage);
-
-describe('Snap Pixel events', () => {
 	beforeEach(() => {
-		snaptr.mockClear();
-		storage.clear();
-	});
-
-	it('removes empty payload fields before queueing an event', () => {
-		expect(
-			trackSnapEvent('ADD_CART', {
-				item_ids: ['tier-1', ''],
-				description: ' ',
-				price: 1500,
-				currency: 'NGN'
-			})
-		).toBe(true);
-
-		expect(snaptr).toHaveBeenCalledWith('track', 'ADD_CART', {
-			item_ids: ['tier-1'],
-			price: 1500,
-			currency: 'NGN'
+		createElement.mockClear();
+		cookie = 'fa_snap_signup=google; other=1';
+		vi.stubGlobal('window', { location: { hostname: 'smm.fastaccs.com' } });
+		vi.stubGlobal('document', {
+			createElement,
+			get cookie() {
+				return cookie;
+			},
+			set cookie(value: string) {
+				cookie = value;
+			}
 		});
 	});
 
-	it('records a verified order once and supplies matching deduplication IDs', () => {
-		const payload = {
-			transaction_id: 'order-123',
-			price: 4200,
-			currency: 'NGN'
-		};
+	afterEach(() => vi.unstubAllGlobals());
 
-		expect(trackSnapPurchase(payload)).toBe(true);
-		expect(trackSnapPurchase(payload)).toBe(false);
-		expect(snaptr).toHaveBeenCalledTimes(1);
-		expect(snaptr).toHaveBeenCalledWith('track', 'PURCHASE', {
-			...payload,
-			client_dedup_id: 'order-123'
-		});
+	it('never loads Snap or sends events, even on the production host', () => {
+		expect(initializeSnapPixel()).toBe(false);
+		expect(trackSnapEvent('VIEW_CONTENT', { item_ids: ['x'] })).toBe(false);
+		expect(trackSnapPurchase({ transaction_id: 'ORD-1' })).toBe(false);
+		expect(trackSnapPageView(new URL('https://smm.fastaccs.com/'))).toBe(false);
+		expect(createElement).not.toHaveBeenCalled();
+		expect((globalThis as { window: { snaptr?: unknown } }).window.snaptr).toBeUndefined();
+	});
+
+	it('clears the leftover signup flag cookie without tracking', () => {
+		expect(trackPendingSnapSignup()).toBe(false);
+		expect(cookie).toBe('fa_snap_signup=; Path=/; Max-Age=0; SameSite=Lax');
 	});
 });
