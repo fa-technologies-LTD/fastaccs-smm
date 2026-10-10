@@ -14,9 +14,10 @@ import { DEFAULT_USD_NGN_RATE, getMarketingUsdNgnRate } from './fx';
  *   self-offload (payment_channel 'manual_release'). Checked in selection, under a ROW LOCK
  *   (`FOR UPDATE`, which serializes against refund/cancel writers) when claiming, and once more
  *   right before the HTTP request.
- *   Eligibility point: the last check before sending. A refund that commits after that check but
- *   before the network records the conversion can still be reported; networks have no negative
- *   conversions, so that residual window is accepted and documented.
+ *   Eligibility point: `finalPreSendCheck`, immediately before the HTTP request, which re-reads
+ *   the order AND the channel's current status/URL/dedup setting. Only a refund or channel stop
+ *   that commits AFTER that read (milliseconds before the request) can still be reported; networks
+ *   have no negative conversions, so that residual window is accepted and documented.
  * - Channel must still report conversions (not "Stopped"), and its URL must pass the trusted-host
  *   check at send time; scheduled AND admin sends both enforce this.
  * - A timeout can arrive after the network accepted the conversion. "Uncertain" outcomes are
@@ -143,8 +144,6 @@ type Claim =
 			kind: 'claimed';
 			orderId: string;
 			channelKey: string;
-			template: string;
-			dedupByClickId: boolean;
 			clickId: string;
 			netNgn: number;
 			attempts: number;
@@ -178,9 +177,8 @@ async function claim(orderId: string, now: Date, force: boolean): Promise<Claim>
 			if (!clickId || !channelKey) return { kind: 'ineligible' };
 
 			const channels = await tx.$queryRaw<
-				Array<{ status: string; postback_template: string | null; dedup_by_click_id: boolean }>
-			>`SELECT status, postback_template, dedup_by_click_id FROM marketing_channels
-				WHERE key = ${channelKey}`;
+				Array<{ status: string; postback_template: string | null }>
+			>`SELECT status, postback_template FROM marketing_channels WHERE key = ${channelKey}`;
 			const channel = channels[0];
 			if (!channel || !channelReportsConversions(channel.status)) {
 				await mergeMetadata(tx, orderId, {
@@ -189,9 +187,8 @@ async function claim(orderId: string, now: Date, force: boolean): Promise<Claim>
 				});
 				return { kind: 'stopped' };
 			}
-			let template: string;
 			try {
-				template = assertPostbackUrlAllowed(String(channel.postback_template ?? ''), channelKey);
+				assertPostbackUrlAllowed(String(channel.postback_template ?? ''), channelKey);
 			} catch (error) {
 				const reason = `Postback URL not allowed: ${(error as Error).message}`;
 				await mergeMetadata(tx, orderId, { adPostbackState: 'held', adPostbackLastResult: reason });
@@ -209,8 +206,6 @@ async function claim(orderId: string, now: Date, force: boolean): Promise<Claim>
 				kind: 'claimed',
 				orderId,
 				channelKey,
-				template,
-				dedupByClickId: channel.dedup_by_click_id,
 				clickId,
 				netNgn: Number(order.total_amount),
 				attempts
@@ -220,13 +215,42 @@ async function claim(orderId: string, now: Date, force: boolean): Promise<Claim>
 	);
 }
 
-/** Last check before the HTTP request (no lock; see the eligibility-point note above). */
-async function stillEligible(orderId: string): Promise<boolean> {
-	const rows = await prisma.$queryRaw<OrderRow[]>`
-		SELECT status, payment_status, delivery_status, payment_channel, total_amount,
-			refunded_amount, analytics_metadata
-		FROM orders WHERE id = ${orderId}::uuid`;
-	return Boolean(rows[0] && isConversionEligible(rows[0]));
+type FinalCheck =
+	| { kind: 'ok'; template: string; dedupByClickId: boolean }
+	| { kind: 'ineligible' }
+	| { kind: 'stopped' }
+	| { kind: 'misconfigured'; reason: string };
+
+/**
+ * The eligibility point: last check before the HTTP request, re-reading BOTH the order and the
+ * channel's CURRENT status, URL and dedup setting (nothing cached from the claim is trusted).
+ */
+async function finalPreSendCheck(orderId: string, channelKey: string): Promise<FinalCheck> {
+	const [orders, channels] = await Promise.all([
+		prisma.$queryRaw<OrderRow[]>`
+			SELECT status, payment_status, delivery_status, payment_channel, total_amount,
+				refunded_amount, analytics_metadata
+			FROM orders WHERE id = ${orderId}::uuid`,
+		prisma.$queryRaw<
+			Array<{ status: string; postback_template: string | null; dedup_by_click_id: boolean }>
+		>`SELECT status, postback_template, dedup_by_click_id FROM marketing_channels
+			WHERE key = ${channelKey}`
+	]);
+	if (!orders[0] || !isConversionEligible(orders[0])) return { kind: 'ineligible' };
+	const channel = channels[0];
+	if (!channel || !channelReportsConversions(channel.status)) return { kind: 'stopped' };
+	try {
+		return {
+			kind: 'ok',
+			template: assertPostbackUrlAllowed(String(channel.postback_template ?? ''), channelKey),
+			dedupByClickId: channel.dedup_by_click_id
+		};
+	} catch (error) {
+		return {
+			kind: 'misconfigured',
+			reason: `Postback URL not allowed: ${(error as Error).message}`
+		};
+	}
 }
 
 /** Claims older than the stale window may have been sent: hold them for review. */
@@ -314,7 +338,8 @@ export async function dispatchAdPostbacks(
 		}
 		if (claimed.kind !== 'claimed') continue;
 
-		if (!(await stillEligible(id))) {
+		const final = await finalPreSendCheck(id, claimed.channelKey);
+		if (final.kind === 'ineligible') {
 			await mergeMetadata(prisma, id, {
 				adPostbackState: 'skipped',
 				adPostbackLastResult: 'Refunded or cancelled before sending'
@@ -322,11 +347,27 @@ export async function dispatchAdPostbacks(
 			summary.skipped += 1;
 			continue;
 		}
+		if (final.kind === 'stopped') {
+			await mergeMetadata(prisma, id, {
+				adPostbackState: 'skipped',
+				adPostbackLastResult: 'Channel stopped before sending: conversions are not reported'
+			});
+			summary.stopped += 1;
+			continue;
+		}
+		if (final.kind === 'misconfigured') {
+			await mergeMetadata(prisma, id, {
+				adPostbackState: 'held',
+				adPostbackLastResult: final.reason.slice(0, 160)
+			});
+			summary.held += 1;
+			continue;
+		}
 
 		let url: string;
 		try {
 			url = assertPostbackUrlAllowed(
-				renderPostback(claimed.template, {
+				renderPostback(final.template, {
 					clickId: claimed.clickId,
 					payoutUsd: payoutUsd(claimed.netNgn, rate)
 				}),
@@ -343,7 +384,7 @@ export async function dispatchAdPostbacks(
 		const result = await send(url);
 
 		const outcome = classifyPostbackResult(result, {
-			dedupByClickId: claimed.dedupByClickId,
+			dedupByClickId: final.dedupByClickId,
 			attempts: claimed.attempts
 		});
 		await mergeMetadata(prisma, id, {

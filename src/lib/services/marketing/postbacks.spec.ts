@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
 	orderAfterClaim: null as null | Record<string, unknown>,
 	candidates: [] as Array<{ id: string }>,
 	channel: null as null | Record<string, unknown>,
+	channelAfterClaim: null as null | Record<string, unknown>,
 	merges: [] as Array<Record<string, unknown>>,
 	sql: [] as string[]
 }));
@@ -55,10 +56,13 @@ function paidOrder(meta: Record<string, unknown> = {}, overrides: Record<string,
 }
 
 let orderReads = 0;
+let channelReads = 0;
 
 beforeEach(() => {
 	vi.clearAllMocks();
 	orderReads = 0;
+	channelReads = 0;
+	state.channelAfterClaim = null;
 	state.order = paidOrder();
 	state.orderAfterClaim = null;
 	state.candidates = [{ id: 'order-1' }];
@@ -72,7 +76,12 @@ beforeEach(() => {
 		if (sql.includes('JOIN marketing_channels')) return state.candidates;
 		if (sql.includes('FROM microcopy'))
 			return [{ key: 'config.phone.usd_ngn_rate', value: '1500' }];
-		if (sql.includes('FROM marketing_channels')) return state.channel ? [state.channel] : [];
+		if (sql.includes('FROM marketing_channels')) {
+			channelReads += 1;
+			const channel =
+				channelReads > 1 && state.channelAfterClaim ? state.channelAfterClaim : state.channel;
+			return channel ? [channel] : [];
+		}
 		if (sql.includes('FROM orders WHERE id')) {
 			orderReads += 1;
 			const order = orderReads > 1 && state.orderAfterClaim ? state.orderAfterClaim : state.order;
@@ -208,6 +217,51 @@ describe('dispatchAdPostbacks', () => {
 		expect(send).not.toHaveBeenCalled();
 		expect(summary.skipped).toBe(1);
 		expect(lastMerge()).toMatchObject({ adPostbackState: 'skipped' });
+	});
+
+	it('channel stopped after the claim, before sending: no send (scheduled and admin)', async () => {
+		state.channelAfterClaim = {
+			status: 'killed',
+			postback_template: TEMPLATE,
+			dedup_by_click_id: false
+		};
+		const send = okSend();
+		expect(await dispatchAdPostbacks({ now: NOW, send })).toMatchObject({ stopped: 1, sent: 0 });
+		expect(lastMerge()).toMatchObject({ adPostbackState: 'skipped' });
+
+		channelReads = 0;
+		orderReads = 0;
+		state.order = paidOrder({ adPostbackState: 'held', adPostbackAttempts: 1 });
+		expect(await dispatchAdPostbacks({ now: NOW, send, orderIds: ['order-1'] })).toMatchObject({
+			stopped: 1,
+			sent: 0
+		});
+		expect(send).not.toHaveBeenCalled();
+	});
+
+	it('URL changed to an untrusted one after the claim: held, no send', async () => {
+		state.channelAfterClaim = {
+			status: 'testing',
+			postback_template: 'https://evil.example/pb?c=${SUBID}',
+			dedup_by_click_id: false
+		};
+		const send = okSend();
+		expect(await dispatchAdPostbacks({ now: NOW, send })).toMatchObject({ held: 1, sent: 0 });
+		expect(send).not.toHaveBeenCalled();
+	});
+
+	it('uses the current URL and dedup setting read at the final check', async () => {
+		state.channelAfterClaim = {
+			status: 'testing',
+			postback_template: TEMPLATE.replace('aid=1', 'aid=9'),
+			dedup_by_click_id: true
+		};
+		const send = vi.fn(async () => ({
+			error: Object.assign(new Error('t'), { code: 'ETIMEDOUT' })
+		}));
+		await dispatchAdPostbacks({ now: NOW, send });
+		expect(send).toHaveBeenCalledWith(expect.stringContaining('aid=9'));
+		expect(lastMerge()).toMatchObject({ adPostbackState: 'retry' }); // fresh dedup=true
 	});
 
 	it('owner self-offloads are never conversions', async () => {
