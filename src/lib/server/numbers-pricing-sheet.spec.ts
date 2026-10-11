@@ -181,6 +181,17 @@ it('permits disabling an offer even when its supplier cost is missing/stale', as
 	expect(tiers[0].isActive).toBe(false);
 	expect(tiers[0].metadata.auto_hidden).toBe(false);
 });
+it('permits taking an old invalid manual price offline without requiring a new price', async () => {
+	const db = database();
+	tiers[0].metadata.price_locked = true;
+	(tiers[0].metadata.pricing as any).base_price = 1051;
+	tiers[0].metadata.hub_expected_cost_cents = 0;
+	checkedAt = new Date(0);
+	const s = await draft(db, (s) => (s.rows[0].active = false));
+	await publishNumbersPricingSheet(s.version, 'admin', db as never);
+	expect(tiers[0].isActive).toBe(false);
+	expect(tiers[0].metadata.pricing).toMatchObject({ base_price: 1051 });
+});
 it('rejects live manual edits since the draft, then permits explicit live reset/re-edit', async () => {
 	const db = database();
 	await draft(db, (s) => {

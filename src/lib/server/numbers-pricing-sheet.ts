@@ -233,6 +233,7 @@ export async function publishNumbersPricingSheet(
 					);
 				if (
 					row.mode === 'manual' &&
+					(row.active || row.sale !== row.baseline.sale || row.mode !== row.baseline.mode) &&
 					(row.sale < 1000 || !Number.isInteger(row.sale) || row.sale % 100 !== 0)
 				)
 					throw new NumbersPricingError(

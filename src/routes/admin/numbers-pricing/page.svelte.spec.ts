@@ -48,6 +48,15 @@ it('editing a sale switches to manual and updates estimated profit', async () =>
 	await expect.element(page.getByText('Unsaved changes')).toBeVisible();
 	await expect.poll(() => document.querySelector('.profit')?.textContent).toContain('₦1,750');
 });
+it('switching back to Auto shows the actual current live price, not an abandoned typed price', async () => {
+	render(Page, { data: { pricing: numbersFixture() } } as never);
+	await price().fill('2500');
+	await page
+		.getByRole('combobox', { name: 'Price mode for WhatsApp · United States' })
+		.selectOptions('auto');
+	await expect.element(price()).toHaveValue(2000);
+	await expect.poll(() => document.querySelector('.profit')?.textContent).toContain('₦1,250');
+});
 it('target calculation creates a manual, cost-based price', async () => {
 	render(Page, { data: { pricing: numbersFixture() } } as never);
 	await page

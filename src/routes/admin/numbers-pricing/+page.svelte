@@ -278,6 +278,9 @@
 							><select
 								aria-label={`Price mode for ${title(row)}`}
 								bind:value={row.mode}
+								onchange={(event) => {
+									if (event.currentTarget.value === 'auto') row.sale = q?.live.sale ?? row.sale;
+								}}
 								disabled={busy}
 								><option value="auto">Auto</option><option value="manual">My price</option></select
 							></td
