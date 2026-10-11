@@ -101,13 +101,13 @@
 			{ href: '/admin/tiers', label: 'Tiers', icon: Target, permission: 'admin:catalog:manage' },
 			{
 				href: '/admin/boosting-pricing',
-				label: 'Boosting',
+				label: 'Boosting Pricing',
 				icon: Zap,
 				permission: 'admin:catalog:manage'
 			},
 			{
 				href: '/admin/numbers',
-				label: 'Numbers',
+				label: 'Numbers Pricing',
 				icon: Phone,
 				permission: 'admin:catalog:manage'
 			},
