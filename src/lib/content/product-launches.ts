@@ -1,5 +1,5 @@
 export interface ProductLaunchEmailDraft {
-	id: 'numbers_improved' | 'boosting_refresh';
+	id: 'numbers_improved' | 'boosting_refresh' | 'account_delivery_privacy';
 	label: string;
 	subject: string;
 	body: string;
@@ -24,6 +24,18 @@ export const BOOSTING_REFRESH_ANNOUNCEMENT = {
 } as const;
 
 export const PRODUCT_LAUNCH_EMAIL_DRAFTS: readonly ProductLaunchEmailDraft[] = [
+	{
+		id: 'account_delivery_privacy',
+		label: 'Account delivery update',
+		subject: 'Your account details are now in your dashboard',
+		body: `Hi {{first_name}},
+
+For your privacy, account login details now appear only in your dashboard. Order emails simply let you know when your accounts are ready.
+
+Sign in and open your order to view your details.
+
+[View your orders](https://smm.fastaccs.com/dashboard?tab=purchases)`
+	},
 	{
 		id: 'numbers_improved',
 		label: 'Numbers improved',

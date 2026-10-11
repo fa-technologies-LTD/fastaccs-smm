@@ -1,5 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { Prisma } from '@prisma/client';
+import { updateNumbersCatalogSnapshot } from '$lib/server/numbers-catalog-snapshot';
 import * as hubman from './hubman';
 import * as pvapins from './pvapins';
 import {
@@ -32,9 +33,8 @@ import {
  *
  * A Numbers tier is a Category with categoryType 'numbers_tier' under the single
  * 'numbers_platform' parent, carrying a hub-man service+country mapping in metadata
- * plus a FULLY-AUTOMATIC NGN price (metadata.pricing.base_price = cost × margin, ₦1,000
- * floor). Prices are never set by hand — they recompute on every catalog refresh from
- * the admin's USD rate + margin, so they can never go stale or show a loss.
+ * plus an NGN price, automatic by default. Manual prices remain locked across refreshes;
+ * fulfillment independently checks fresh supplier costs against the profit safeguard.
  */
 
 export const NUMBERS_PLATFORM_SLUG = 'numbers';
@@ -656,7 +656,8 @@ export async function syncNumbersCatalog(
 				// so a frequent (every-few-minutes) sync doesn't rewrite unchanged tiers. Do NOT
 				// flip isActive — that's the admin's manual switch; visibility uses auto_hidden.
 				if (economicsSignature(metaBySlug.get(slug)) !== economicsSignature(metadata)) {
-					await prisma.category.update({ where: { id: existingId }, data: { metadata } });
+					if (!(await updateNumbersCatalogSnapshot(existingId, metaBySlug.get(slug), metadata)))
+						continue;
 					refreshed += 1;
 				}
 				// Unavailable → available transition: queue a restock notification for subscribers.
@@ -665,7 +666,7 @@ export async function syncNumbersCatalog(
 					wasHideReasonBySlug.get(slug) === 'no_stock' &&
 					!autoHidden
 				) {
-					becameAvailable.push({ tierId: existingId, name, price: autoPrice });
+					becameAvailable.push({ tierId: existingId, name, price: finalPrice });
 				}
 			} else {
 				const row = await prisma.category.create({
@@ -728,10 +729,8 @@ export async function syncNumbersCatalog(
 		// A transient pvapins failure must NOT flip a tier to no-stock — leave it exactly as it is.
 		if (fill === 'fetch_failed') {
 			if (repairedCountryCode) {
-				await prisma.category.update({
-					where: { id: t.id },
-					data: { metadata: md as Prisma.InputJsonValue }
-				});
+				if (!(await updateNumbersCatalogSnapshot(t.id, t.metadata, md as Prisma.InputJsonValue)))
+					continue;
 				refreshed += 1;
 			}
 			continue;
@@ -759,10 +758,8 @@ export async function syncNumbersCatalog(
 				...(pvUpdatedAt ? { updated_at: pvUpdatedAt } : {})
 			};
 			if (economicsSignature(t.metadata) !== economicsSignature(md)) {
-				await prisma.category.update({
-					where: { id: t.id },
-					data: { metadata: md as Prisma.InputJsonValue }
-				});
+				if (!(await updateNumbersCatalogSnapshot(t.id, t.metadata, md as Prisma.InputJsonValue)))
+					continue;
 				revivedByPvapins += 1;
 			}
 			if (wasHidden && wasHideReasonBySlug.get(t.slug) === 'no_stock' && !lowSuccess) {
@@ -783,10 +780,8 @@ export async function syncNumbersCatalog(
 			(!hubman.isHubmanConfigured() && pvapinsReady && pvCountries.length > 0);
 		if (!providerStateConclusive) {
 			if (repairedCountryCode) {
-				await prisma.category.update({
-					where: { id: t.id },
-					data: { metadata: md as Prisma.InputJsonValue }
-				});
+				if (!(await updateNumbersCatalogSnapshot(t.id, t.metadata, md as Prisma.InputJsonValue)))
+					continue;
 				refreshed += 1;
 			}
 			continue;
@@ -795,10 +790,8 @@ export async function syncNumbersCatalog(
 		// Already flagged no-stock? Skip the write.
 		if (md[PHONE_TIER_KEYS.autoHidden] === true && md[PHONE_TIER_KEYS.hideReason] === 'no_stock') {
 			if (repairedCountryCode) {
-				await prisma.category.update({
-					where: { id: t.id },
-					data: { metadata: md as Prisma.InputJsonValue }
-				});
+				if (!(await updateNumbersCatalogSnapshot(t.id, t.metadata, md as Prisma.InputJsonValue)))
+					continue;
 				refreshed += 1;
 			}
 			continue;
@@ -806,10 +799,8 @@ export async function syncNumbersCatalog(
 		md[PHONE_TIER_KEYS.availableCount] = 0;
 		md[PHONE_TIER_KEYS.autoHidden] = true;
 		md[PHONE_TIER_KEYS.hideReason] = 'no_stock';
-		await prisma.category.update({
-			where: { id: t.id },
-			data: { metadata: md as Prisma.InputJsonValue }
-		});
+		if (!(await updateNumbersCatalogSnapshot(t.id, t.metadata, md as Prisma.InputJsonValue)))
+			continue;
 		rotatedOut += 1;
 	}
 	if (revivedByPvapins > 0) {

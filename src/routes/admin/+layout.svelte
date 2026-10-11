@@ -112,6 +112,12 @@
 				permission: 'admin:catalog:manage'
 			},
 			{
+				href: '/admin/numbers-pricing',
+				label: 'Numbers Pricing',
+				icon: Phone,
+				permission: 'admin:catalog:manage'
+			},
+			{
 				href: '/admin/numbers',
 				label: 'Numbers',
 				icon: Phone,

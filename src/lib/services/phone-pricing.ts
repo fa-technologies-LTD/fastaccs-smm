@@ -1,5 +1,6 @@
 import { env } from '$env/dynamic/private';
 import { prisma } from '$lib/prisma';
+import type { Prisma, PrismaClient } from '@prisma/client';
 
 /**
  * Pricing for the automated Numbers service.
@@ -90,8 +91,10 @@ function parseNumber(value: string | undefined, fallback: number, min = 0): numb
 	return Math.max(min, parsed);
 }
 
-export async function getPhonePricingConfig(): Promise<PhonePricingConfig> {
-	const rows = await prisma.microcopy.findMany({
+export async function getPhonePricingConfig(
+	database: PrismaClient | Prisma.TransactionClient = prisma
+): Promise<PhonePricingConfig> {
+	const rows = await database.microcopy.findMany({
 		where: { key: { in: Object.values(PHONE_PRICING_KEYS) } },
 		select: { key: true, value: true }
 	});
@@ -99,7 +102,11 @@ export async function getPhonePricingConfig(): Promise<PhonePricingConfig> {
 
 	return {
 		usdNgnRate: parseNumber(map.get(PHONE_PRICING_KEYS.usdNgnRate), DEFAULTS.usdNgnRate, 1),
-		marginPercent: parseNumber(map.get(PHONE_PRICING_KEYS.marginPercent), DEFAULTS.marginPercent, 0),
+		marginPercent: parseNumber(
+			map.get(PHONE_PRICING_KEYS.marginPercent),
+			DEFAULTS.marginPercent,
+			0
+		),
 		minProfitNgn: parseNumber(map.get(PHONE_PRICING_KEYS.minProfitNgn), DEFAULTS.minProfitNgn, 0),
 		ceilingTolerancePercent: parseNumber(
 			map.get(PHONE_PRICING_KEYS.ceilingTolerancePercent),
@@ -116,7 +123,11 @@ export async function getPhonePricingConfig(): Promise<PhonePricingConfig> {
 			DEFAULTS.activationTimeoutMinutes,
 			1
 		),
-		maxPriceMultiple: parseNumber(map.get(PHONE_PRICING_KEYS.maxPriceMultiple), DEFAULTS.maxPriceMultiple, 1),
+		maxPriceMultiple: parseNumber(
+			map.get(PHONE_PRICING_KEYS.maxPriceMultiple),
+			DEFAULTS.maxPriceMultiple,
+			1
+		),
 		minFulfillmentProfitNgn: parseNumber(
 			map.get(PHONE_PRICING_KEYS.minFulfillmentProfitNgn),
 			DEFAULTS.minFulfillmentProfitNgn,
@@ -138,11 +149,23 @@ export async function getPhonePricingConfig(): Promise<PhonePricingConfig> {
 export async function savePhonePricingConfig(input: Partial<PhonePricingConfig>): Promise<void> {
 	const entries: Array<[string, number, string]> = [];
 	if (input.usdNgnRate != null)
-		entries.push([PHONE_PRICING_KEYS.usdNgnRate, Math.max(1, input.usdNgnRate), 'USD→NGN rate for Numbers pricing']);
+		entries.push([
+			PHONE_PRICING_KEYS.usdNgnRate,
+			Math.max(1, input.usdNgnRate),
+			'USD→NGN rate for Numbers pricing'
+		]);
 	if (input.marginPercent != null)
-		entries.push([PHONE_PRICING_KEYS.marginPercent, Math.max(0, input.marginPercent), 'Profit margin % on Numbers']);
+		entries.push([
+			PHONE_PRICING_KEYS.marginPercent,
+			Math.max(0, input.marginPercent),
+			'Profit margin % on Numbers'
+		]);
 	if (input.minProfitNgn != null)
-		entries.push([PHONE_PRICING_KEYS.minProfitNgn, Math.max(0, Math.round(input.minProfitNgn)), 'Minimum profit floor per number (NGN)']);
+		entries.push([
+			PHONE_PRICING_KEYS.minProfitNgn,
+			Math.max(0, Math.round(input.minProfitNgn)),
+			'Minimum profit floor per number (NGN)'
+		]);
 	if (input.ceilingTolerancePercent != null)
 		entries.push([
 			PHONE_PRICING_KEYS.ceilingTolerancePercent,
@@ -190,7 +213,13 @@ export async function savePhonePricingConfig(input: Partial<PhonePricingConfig>)
 		await prisma.microcopy.upsert({
 			where: { key },
 			update: { value: String(value), description, category: SETTINGS_CATEGORY, isActive: true },
-			create: { key, value: String(value), description, category: SETTINGS_CATEGORY, isActive: true }
+			create: {
+				key,
+				value: String(value),
+				description,
+				category: SETTINGS_CATEGORY,
+				isActive: true
+			}
 		});
 	}
 }
@@ -212,10 +241,7 @@ export function computeSaleNgn(
  * The `max_price_cents` ceiling to send to hub-man for this tier.
  * = expected cost + tolerance. Live cost above this → rent fails → customer refunded.
  */
-export function computeMaxPriceCents(
-	expectedCostCents: number,
-	tolerancePercent: number
-): number {
+export function computeMaxPriceCents(expectedCostCents: number, tolerancePercent: number): number {
 	return Math.ceil(Math.max(1, expectedCostCents) * (1 + tolerancePercent / 100));
 }
 
@@ -239,7 +265,10 @@ export const NUMBERS_MIN_PROFIT_NGN = 1000;
  */
 export function computeAutoPrice(
 	basisCostCents: number,
-	config: Pick<PhonePricingConfig, 'usdNgnRate' | 'marginPercent' | 'minProfitNgn' | 'maxPriceMultiple'>
+	config: Pick<
+		PhonePricingConfig,
+		'usdNgnRate' | 'marginPercent' | 'minProfitNgn' | 'maxPriceMultiple'
+	>
 ): number {
 	const minProfit = config.minProfitNgn ?? NUMBERS_MIN_PROFIT_NGN;
 	const multiple = config.maxPriceMultiple ?? NUMBERS_MAX_PRICE_MULTIPLE;
@@ -276,8 +305,11 @@ export function stabilizePrice(
 	const deltaPct = Math.abs(computedNgn - currentNgn) / currentNgn;
 	if (deltaPct < NUMBERS_PRICE_DEADBAND_PCT) return { price: currentNgn, changed: false }; // jiggle
 	if (deltaPct >= NUMBERS_PRICE_BIG_MOVE_PCT) return { price: computedNgn, changed: true }; // react now
-	const sinceMs = lastUpdatedAt ? now.getTime() - lastUpdatedAt.getTime() : Number.POSITIVE_INFINITY;
-	if (sinceMs >= NUMBERS_PRICE_MIN_REPRICE_INTERVAL_MS) return { price: computedNgn, changed: true };
+	const sinceMs = lastUpdatedAt
+		? now.getTime() - lastUpdatedAt.getTime()
+		: Number.POSITIVE_INFINITY;
+	if (sinceMs >= NUMBERS_PRICE_MIN_REPRICE_INTERVAL_MS)
+		return { price: computedNgn, changed: true };
 	return { price: currentNgn, changed: false }; // moderate move, too soon → hold
 }
 
