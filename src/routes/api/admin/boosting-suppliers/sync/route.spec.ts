@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('$lib/auth/admin-roles', () => ({ hasAdminPermission: mocks.hasPermission }));
+vi.mock('$lib/server/boosting-providers/pricing-controls', () => ({ refreshBoostAutoPrices: vi.fn().mockResolvedValue({ applied: 0 }) }));
 vi.mock('$lib/server/boosting-providers/catalog-sync', () => ({
 	syncBoostProviderCatalogues: mocks.sync
 }));

@@ -3,6 +3,7 @@ import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { prisma } from '$lib/prisma';
 import { clearBoostProviderDiscoveryCache } from '$lib/server/boosting-providers/discovery';
 import { syncBoostProviderCatalogues } from '$lib/server/boosting-providers/catalog-sync';
+import { refreshBoostAutoPrices } from '$lib/server/boosting-providers/pricing-controls';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ locals, request, setHeaders }) => {
@@ -14,6 +15,7 @@ export const POST: RequestHandler = async ({ locals, request, setHeaders }) => {
 	const results = await syncBoostProviderCatalogues();
 	clearBoostProviderDiscoveryCache();
 	const synced = results.filter((result) => result.status === 'synced').length;
+	const pricing = synced > 0 ? await refreshBoostAutoPrices() : { applied: 0 };
 
 	await prisma.adminAuditLog.create({
 		data: {
@@ -39,7 +41,7 @@ export const POST: RequestHandler = async ({ locals, request, setHeaders }) => {
 
 	return json({
 		success: synced > 0,
-		data: { synced, total: results.length, results },
+		data: { synced, total: results.length, results, pricing },
 		error: synced > 0 ? null : 'No supplier catalogue could be synced.'
 	});
 };

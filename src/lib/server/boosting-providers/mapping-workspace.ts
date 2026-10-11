@@ -54,6 +54,7 @@ function safeSearch(value: string | null | undefined): string {
 }
 
 function offerDto(offer: {
+	updatedAt?: Date;
 	id: string;
 	qualityTier: string;
 	customerName: string;
@@ -76,6 +77,7 @@ function offerDto(offer: {
 }): BoostMappingWorkspace['offer'] {
 	return {
 		id: offer.id,
+		sourceUpdatedAt: offer.updatedAt?.toISOString(),
 		qualityTier: offer.qualityTier,
 		customerName: offer.customerName,
 		shortPromise: offer.shortPromise,
@@ -645,6 +647,48 @@ export async function saveBoostMappingWorkspace(
 	}
 
 	await database.$transaction(async (tx) => {
+		await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('fastaccs:boosting-pricing-sheet'))`;
+		await tx.$queryRaw`SELECT id FROM boost_customer_offers ORDER BY id FOR UPDATE`;
+		const existing = await tx.boostCustomerOffer.findUnique({
+			where: {
+				categoryId_qualityTier_audienceTag: {
+					categoryId,
+					qualityTier: offerInput.qualityTier,
+					audienceTag: 'general'
+				}
+			}
+		});
+		if (
+			input.offer?.sourceUpdatedAt !== undefined &&
+			input.offer.sourceUpdatedAt !== existing?.updatedAt.toISOString()
+		)
+			throw new BoostMappingError('This offer changed. Reopen supplier setup before saving.', 409);
+		// Supplier editing must not bypass the consolidated page's retained-profit and fee protections.
+		const audit = await tx.adminAuditLog.findFirst({
+			where: { resourceType: 'boosting_pricing_sheet', action: 'boosting_controls_saved' },
+			orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]
+		});
+		const controls = (
+			audit?.metadata as unknown as {
+				sheet?: import('$lib/helpers/boosting-pricing-sheet').BoostPricingSheet;
+			} | null
+		)?.sheet;
+		if (controls && providerServices.length) {
+			const row = controls.rows.find((r) => r.sourceOfferId === existing?.id);
+			const scale = offerInput.minQuantity / (row?.units ?? offerInput.stepQuantity);
+			const retained =
+				Math.max(controls.settings.hardProfitNgn ?? 0, row?.hardProfitNgn ?? 0) * scale;
+			const fees = controls.settings.feeConfirmed
+				? (minimumCustomerPrice * controls.settings.feePercent) / 100 +
+					controls.settings.feeFixed * scale
+				: 0;
+			const ceiling = Math.floor((minimumCustomerPrice - fees - retained) * 100 + 1e-7) / 100;
+			if (ceiling + 1e-8 < offerInput.normalCostTargetNgn)
+				throw new BoostMappingError(
+					'This price does not cover supplier cost, fees and minimum retained profit. Increase the price first.'
+				);
+			offerInput.maximumSupplierCostNgn = Math.min(offerInput.maximumSupplierCostNgn, ceiling);
+		}
 		const offer = await tx.boostCustomerOffer.upsert({
 			where: {
 				categoryId_qualityTier_audienceTag: {

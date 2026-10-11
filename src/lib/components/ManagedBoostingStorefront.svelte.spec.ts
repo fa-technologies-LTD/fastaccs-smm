@@ -162,4 +162,15 @@ describe('Managed Boosting storefront', () => {
 		await expect.element(page.getByLabelText('Paste your profile link')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: /Add to Cart/ })).toBeEnabled();
 	});
+	it('uses the service name without a tier or recommendation when only one option exists', async () => {
+		render(ManagedBoostingStorefront, {
+			groups: [{ ...groups[0], offers: [{ ...groups[0].offers[0], customerName: 'Premium' }] }]
+		});
+		await expect
+			.element(page.getByRole('button', { name: /X \(Twitter\) Followers/ }))
+			.toBeVisible();
+		expect(page.getByText('Premium', { exact: true }).query()).toBeNull();
+		expect(page.getByText('Recommended', { exact: true }).query()).toBeNull();
+		expect(page.getByText('Pick what suits you', { exact: true }).query()).toBeNull();
+	});
 });

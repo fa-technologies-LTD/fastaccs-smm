@@ -24,7 +24,7 @@
 		suggestBoostingPricePerStep
 	} from '$lib/helpers/boosting-price-unit';
 	import { showError, showSuccess } from '$lib/stores/toasts';
-	import type { PageData } from './$types';
+	import type { BoostingSetupData } from '$lib/helpers/boosting-pricing-controls';
 
 	type QualityTier = 'value' | 'stable' | 'premium';
 	type SetupMode = 'choice' | 'smart';
@@ -49,7 +49,19 @@
 		}
 	};
 
-	let { data }: { data: PageData } = $props();
+	let {
+		data,
+		categoryId = '',
+		qualityTier = 'value',
+		embedded = false,
+		onSaved
+	}: {
+		data: BoostingSetupData;
+		categoryId?: string;
+		qualityTier?: QualityTier;
+		embedded?: boolean;
+		onSaved?: () => void | Promise<void>;
+	} = $props();
 	let selectedPlatform = $state('');
 	let selectedCategoryId = $state('');
 	let selectedQualityTier = $state<QualityTier>('value');
@@ -699,6 +711,7 @@
 				.filter((candidate) => candidate.mappedRoute)
 				.map((candidate) => ({ ...candidate.mappedRoute! }));
 			knownCandidates = [...workspace.candidates];
+			await onSaved?.();
 			showSuccess(
 				'Customer choice saved',
 				'It is ready for private preview. No supplier order was placed.'
@@ -714,98 +727,99 @@
 	}
 
 	onMount(() => {
-		selectedCategoryId = data.firstReviewQueue?.[0]?.categoryId ?? data.offers[0]?.id ?? '';
+		selectedCategoryId =
+			categoryId || data.firstReviewQueue?.[0]?.categoryId || data.offers[0]?.id || '';
 		selectedPlatform =
 			data.offers.find((offer) => offer.id === selectedCategoryId)?.platform ??
 			data.offers[0]?.platform ??
 			'';
-		selectedQualityTier = (data.firstReviewQueue?.[0]?.qualityTier as QualityTier) || 'value';
+		selectedQualityTier = categoryId
+			? qualityTier
+			: (data.firstReviewQueue?.[0]?.qualityTier as QualityTier) || 'value';
 		void loadWorkspace();
 	});
 </script>
 
-<svelte:head><title>Boosting Setup | Admin</title></svelte:head>
-
 <div class="space-y-4 pb-24 sm:space-y-6 xl:pb-0">
-	<header class="flex flex-wrap items-end justify-between gap-4">
-		<div>
-			<p class="text-xs font-semibold tracking-[0.14em] uppercase" style="color: var(--primary);">
-				Internal only
-			</p>
-			<h1 class="mt-1 flex items-center gap-2 text-2xl font-bold" style="color: var(--text);">
-				<Zap size={24} /> Set up Boosting
-			</h1>
-			<p class="mt-1 max-w-2xl text-sm" style="color: var(--text-muted);">
-				Choose what customers see, then connect the supplier services quietly behind it.
-			</p>
-		</div>
-		<a
-			href="/admin/boosting-preview"
-			class="flex items-center gap-1 text-sm font-semibold"
-			style="color: var(--link);">Customer preview <ChevronRight size={15} /></a
-		>
-	</header>
+	{#if !embedded}<header class="flex flex-wrap items-end justify-between gap-4">
+			<div>
+				<p class="text-xs font-semibold tracking-[0.14em] uppercase" style="color: var(--primary);">
+					Internal only
+				</p>
+				<h1 class="mt-1 flex items-center gap-2 text-2xl font-bold" style="color: var(--text);">
+					<Zap size={24} /> Set up Boosting
+				</h1>
+				<p class="mt-1 max-w-2xl text-sm" style="color: var(--text-muted);">
+					Choose what customers see, then connect the supplier services quietly behind it.
+				</p>
+			</div>
+			<a
+				href="/admin/boosting-preview"
+				class="flex items-center gap-1 text-sm font-semibold"
+				style="color: var(--link);">Customer preview <ChevronRight size={15} /></a
+			>
+		</header>{/if}
 
-	<div class="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
-		<aside
-			class="h-fit rounded-2xl border"
-			style="border-color: var(--border); background: var(--bg-elev-1);"
-		>
-			<div class="border-b p-4" style="border-color: var(--border);">
-				<p class="font-semibold" style="color: var(--text);">1. Choose a result</p>
-				<p class="mt-0.5 text-xs" style="color: var(--text-muted);">For example, X Followers</p>
-			</div>
-			<div class="grid grid-cols-2 gap-3 p-4">
-				<label class="block text-xs font-semibold" style="color: var(--text-muted);"
-					>Platform
-					<select
-						value={selectedPlatform}
-						onchange={(event) => void changePlatform(event.currentTarget.value)}
-						class="field mt-1"
-					>
-						{#each platformOptions as platform (platform.value)}
-							<option value={platform.value}>{platform.label}</option>
-						{/each}
-					</select>
-				</label>
-				<label class="block text-xs font-semibold" style="color: var(--text-muted);"
-					>Result
-					<select
-						value={selectedCategoryId}
-						onchange={(event) => void chooseCategory(event.currentTarget.value)}
-						class="field mt-1"
-					>
-						{#each platformOffers as item (item.id)}
-							<option value={item.id}>{item.name}</option>
-						{/each}
-					</select>
-				</label>
-				{#if selectedListItem}
-					<div
-						class="col-span-2 rounded-xl border p-3"
-						style="border-color: rgba(16,185,129,.35); background: rgba(16,185,129,.07);"
-					>
-						<div class="flex items-start justify-between gap-2">
-							<div>
-								<p class="text-sm font-semibold" style="color: var(--text);">
-									{selectedListItem.name}
-								</p>
-								<p class="mt-1 text-xs" style="color: var(--text-muted);">
-									{selectedListItem.platformLabel} · {selectedListItem.outcomeLabel}
-								</p>
+	<div class={embedded ? 'min-w-0' : 'grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]'}>
+		{#if !embedded}<aside
+				class="h-fit rounded-2xl border"
+				style="border-color: var(--border); background: var(--bg-elev-1);"
+			>
+				<div class="border-b p-4" style="border-color: var(--border);">
+					<p class="font-semibold" style="color: var(--text);">1. Choose a result</p>
+					<p class="mt-0.5 text-xs" style="color: var(--text-muted);">For example, X Followers</p>
+				</div>
+				<div class="grid grid-cols-2 gap-3 p-4">
+					<label class="block text-xs font-semibold" style="color: var(--text-muted);"
+						>Platform
+						<select
+							value={selectedPlatform}
+							onchange={(event) => void changePlatform(event.currentTarget.value)}
+							class="field mt-1"
+						>
+							{#each platformOptions as platform (platform.value)}
+								<option value={platform.value}>{platform.label}</option>
+							{/each}
+						</select>
+					</label>
+					<label class="block text-xs font-semibold" style="color: var(--text-muted);"
+						>Result
+						<select
+							value={selectedCategoryId}
+							onchange={(event) => void chooseCategory(event.currentTarget.value)}
+							class="field mt-1"
+						>
+							{#each platformOffers as item (item.id)}
+								<option value={item.id}>{item.name}</option>
+							{/each}
+						</select>
+					</label>
+					{#if selectedListItem}
+						<div
+							class="col-span-2 rounded-xl border p-3"
+							style="border-color: rgba(16,185,129,.35); background: rgba(16,185,129,.07);"
+						>
+							<div class="flex items-start justify-between gap-2">
+								<div>
+									<p class="text-sm font-semibold" style="color: var(--text);">
+										{selectedListItem.name}
+									</p>
+									<p class="mt-1 text-xs" style="color: var(--text-muted);">
+										{selectedListItem.platformLabel} · {selectedListItem.outcomeLabel}
+									</p>
+								</div>
+								<Check size={16} style="color: var(--primary);" />
 							</div>
-							<Check size={16} style="color: var(--primary);" />
+							<p class="mt-2 text-[10px]" style="color: var(--text-dim);">
+								{selectedListItem.reviewedTierCount} customer choice{selectedListItem.reviewedTierCount ===
+								1
+									? ''
+									: 's'} ready
+							</p>
 						</div>
-						<p class="mt-2 text-[10px]" style="color: var(--text-dim);">
-							{selectedListItem.reviewedTierCount} customer choice{selectedListItem.reviewedTierCount ===
-							1
-								? ''
-								: 's'} ready
-						</p>
-					</div>
-				{/if}
-			</div>
-		</aside>
+					{/if}
+				</div>
+			</aside>{/if}
 
 		<main
 			bind:this={workspacePanel}
@@ -835,85 +849,85 @@
 					<a href="#boost-pricing">Price</a>
 					<a href="#boost-review">Review</a>
 				</nav>
-				<section
-					id="boost-options"
-					class="scroll-mt-20 rounded-2xl border p-4 sm:p-5"
-					style="border-color: var(--border); background: var(--bg-elev-1);"
-				>
-					<h2 class="text-lg font-bold" style="color: var(--text);">{selectedListItem?.name}</h2>
-					<p class="mt-1 text-sm" style="color: var(--text-muted);">
-						2. Choose the customer option you want to configure.
-					</p>
-					<div class="mt-4 grid grid-cols-3 gap-2">
-						{#each ['value', 'stable', 'premium'] as QualityTier[] as tier (tier)}
+				{#if !embedded}<section
+						id="boost-options"
+						class="scroll-mt-20 rounded-2xl border p-4 sm:p-5"
+						style="border-color: var(--border); background: var(--bg-elev-1);"
+					>
+						<h2 class="text-lg font-bold" style="color: var(--text);">{selectedListItem?.name}</h2>
+						<p class="mt-1 text-sm" style="color: var(--text-muted);">
+							2. Choose the customer option you want to configure.
+						</p>
+						<div class="mt-4 grid grid-cols-3 gap-2">
+							{#each ['value', 'stable', 'premium'] as QualityTier[] as tier (tier)}
+								<button
+									type="button"
+									onclick={() => changeQualityTier(tier)}
+									class="min-h-16 rounded-xl border p-2 text-center sm:min-h-0 sm:p-3 sm:text-left"
+									style={selectedQualityTier === tier
+										? 'border-color: var(--primary); background: rgba(16,185,129,.08);'
+										: 'border-color: var(--border);'}
+								>
+									<p class="text-xs font-semibold sm:text-base" style="color: var(--text);">
+										{TIER_COPY[tier].name}
+									</p>
+									<p class="mt-1 hidden text-xs sm:block" style="color: var(--text-muted);">
+										{TIER_COPY[tier].help}
+									</p>
+								</button>
+							{/each}
+						</div>
+					</section>{/if}
+
+				{#if !embedded}<details
+						class="rounded-2xl border p-4 sm:p-5"
+						style="border-color: var(--border); background: var(--bg-elev-1);"
+					>
+						<summary class="cursor-pointer font-bold" style="color: var(--text);">
+							Global pricing defaults
+							<span class="ml-2 text-xs font-normal" style="color: var(--text-dim);"
+								>Default target profit % for new options</span
+							>
+						</summary>
+						<div class="mt-4 flex flex-wrap items-start justify-between gap-3">
+							<div>
+								<p class="mt-1 text-xs" style="color: var(--text-muted);">
+									The USD → NGN rate prices supplier costs. The default profit only prefills
+									brand-new customer options.
+								</p>
+							</div>
 							<button
 								type="button"
-								onclick={() => changeQualityTier(tier)}
-								class="min-h-16 rounded-xl border p-2 text-center sm:min-h-0 sm:p-3 sm:text-left"
-								style={selectedQualityTier === tier
-									? 'border-color: var(--primary); background: rgba(16,185,129,.08);'
-									: 'border-color: var(--border);'}
+								onclick={savePricing}
+								disabled={pricingSaving}
+								class="rounded-lg border px-3 py-2 text-xs font-bold"
+								style="border-color: var(--border); color: var(--text);"
+								>{pricingSaving ? 'Saving…' : 'Save global defaults'}</button
 							>
-								<p class="text-xs font-semibold sm:text-base" style="color: var(--text);">
-									{TIER_COPY[tier].name}
-								</p>
-								<p class="mt-1 hidden text-xs sm:block" style="color: var(--text-muted);">
-									{TIER_COPY[tier].help}
-								</p>
-							</button>
-						{/each}
-					</div>
-				</section>
-
-				<details
-					class="rounded-2xl border p-4 sm:p-5"
-					style="border-color: var(--border); background: var(--bg-elev-1);"
-				>
-					<summary class="cursor-pointer font-bold" style="color: var(--text);">
-						Global pricing defaults
-						<span class="ml-2 text-xs font-normal" style="color: var(--text-dim);"
-							>Default target profit % for new options</span
-						>
-					</summary>
-					<div class="mt-4 flex flex-wrap items-start justify-between gap-3">
-						<div>
-							<p class="mt-1 text-xs" style="color: var(--text-muted);">
-								The USD → NGN rate prices supplier costs. The default profit only prefills brand-new
-								customer options.
-							</p>
 						</div>
-						<button
-							type="button"
-							onclick={savePricing}
-							disabled={pricingSaving}
-							class="rounded-lg border px-3 py-2 text-xs font-bold"
-							style="border-color: var(--border); color: var(--text);"
-							>{pricingSaving ? 'Saving…' : 'Save global defaults'}</button
-						>
-					</div>
-					<div class="mt-4 grid gap-3 sm:grid-cols-2">
-						<label class="text-xs" style="color: var(--text-muted);"
-							>Protected USD → NGN rate<input
-								type="number"
-								min="1"
-								value={workspace.configuredFxNgnPerUsd}
-								oninput={(event) => updateFxRate(event.currentTarget.value)}
-								class="field mt-1"
-							/></label
-						><label class="text-xs" style="color: var(--text-muted);"
-							>Starting profit %<input
-								type="number"
-								min="0"
-								max="500"
-								bind:value={workspace.configuredDefaultMarginPercent}
-								class="field mt-1"
-							/><span class="mt-1 block" style="color: var(--text-dim);"
-								>Starting value only. It does not override an existing Affordable, More stable or
-								Premium option.</span
-							></label
-						>
-					</div>
-				</details>
+						<div class="mt-4 grid gap-3 sm:grid-cols-2">
+							<label class="text-xs" style="color: var(--text-muted);"
+								>Protected USD → NGN rate<input
+									type="number"
+									min="1"
+									value={workspace.configuredFxNgnPerUsd}
+									oninput={(event) => updateFxRate(event.currentTarget.value)}
+									class="field mt-1"
+								/></label
+							><label class="text-xs" style="color: var(--text-muted);"
+								>Starting profit %<input
+									type="number"
+									min="0"
+									max="500"
+									bind:value={workspace.configuredDefaultMarginPercent}
+									class="field mt-1"
+								/><span class="mt-1 block" style="color: var(--text-dim);"
+									>Starting value only. It does not override an existing Affordable, More stable or
+									Premium option.</span
+								></label
+							>
+						</div>
+					</details>{/if}
 
 				<section
 					id="boost-routing"

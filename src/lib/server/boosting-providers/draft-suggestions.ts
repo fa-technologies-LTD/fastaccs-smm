@@ -15,6 +15,12 @@ import { isUnsafeAutomaticServiceLabel, serviceMatchesBoostOutcome } from './cat
 
 export type SuggestedQualityTier = 'value' | 'stable' | 'premium';
 
+function isDatabaseClient(
+	database: PrismaClient | Prisma.TransactionClient
+): database is PrismaClient {
+	return typeof (database as PrismaClient).$transaction === 'function';
+}
+
 export interface DraftSuggestionCandidate {
 	id: string;
 	provider: string;
@@ -149,7 +155,10 @@ function defaultQuantity(outcome: string): number {
 	return ['views', 'streams'].includes(outcome) ? 1000 : 100;
 }
 
-async function ensureCoreDraftCategories(database: PrismaClient, dryRun = false) {
+async function ensureCoreDraftCategories(
+	database: PrismaClient | Prisma.TransactionClient,
+	dryRun = false
+) {
 	const existing = await database.category.findMany({
 		where: { categoryType: 'boosting_service' },
 		orderBy: [{ isActive: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }]
@@ -393,9 +402,24 @@ export interface BoostDraftSuggestionSummary {
 }
 
 export async function prepopulateBoostingDraftSuggestions(
-	options: { database?: PrismaClient; dryRun?: boolean } = {}
+	options: {
+		database?: PrismaClient | Prisma.TransactionClient;
+		dryRun?: boolean;
+		appendOnly?: boolean;
+		usdNgnRate?: number;
+	} = {}
 ): Promise<BoostDraftSuggestionSummary> {
 	const database = options.database ?? prisma;
+	if (options.appendOnly && !options.dryRun && isDatabaseClient(database)) {
+		return database.$transaction(
+			async (tx) => {
+				await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('fastaccs:boosting-pricing-sheet'))`;
+				await tx.$queryRaw`SELECT id FROM boost_customer_offers ORDER BY id FOR UPDATE`;
+				return prepopulateBoostingDraftSuggestions({ ...options, database: tx });
+			},
+			{ timeout: 60000 }
+		);
+	}
 	const { categories, created: categoriesCreated } = await ensureCoreDraftCategories(
 		database,
 		options.dryRun
@@ -409,7 +433,7 @@ export async function prepopulateBoostingDraftSuggestions(
 		pricesRepaired: 0,
 		skippedWithoutCandidates: 0
 	};
-	const fxRate = configuredFxRate();
+	const fxRate = options.usdNgnRate ?? configuredFxRate();
 	const costBuffer = 1 + configuredCurrencyBufferPercent() / 100;
 	const categoryIds = categories.map((category) => category.id);
 	const [services, existingOffers] = await Promise.all([
@@ -573,6 +597,14 @@ export async function prepopulateBoostingDraftSuggestions(
 		);
 
 		for (const tier of Object.keys(TIER_DEFINITIONS) as SuggestedQualityTier[]) {
+			if (options.appendOnly) {
+				// Expansion is discovery, not a repair or a new three-tier ladder.
+				const siblings = existingOffers.filter((o) => o.categoryId === category.id);
+				if (!['followers', 'subscribers', 'members'].includes(config.actionType)) {
+					if (tier !== 'value' || siblings.length > 0) continue;
+				} else if (tier === 'premium' || siblings.length >= 2) continue;
+				if (existingOfferByKey.has(`${category.id}:${tier}:general`)) continue;
+			}
 			// These are distinct results, not an untested retention/quality ladder.
 			if (
 				['live_likes', 'impressions', 'reach', 'story_shares', 'custom_comments'].includes(
@@ -753,7 +785,7 @@ export async function prepopulateBoostingDraftSuggestions(
 		priceRepairs.length > 0 ||
 		offerRepairs.length > 0
 	) {
-		const created = await database.$transaction(async (tx) => {
+		const write = async (tx: Prisma.TransactionClient) => {
 			const offers = offerRows.length
 				? await tx.boostCustomerOffer.createMany({ data: offerRows })
 				: { count: 0 };
@@ -786,7 +818,10 @@ export async function prepopulateBoostingDraftSuggestions(
 			}
 			if (auditRows.length > 0) await tx.adminAuditLog.createMany({ data: auditRows });
 			return { offers: offers.count, routes: routes.count, repaired };
-		}, DRAFT_TRANSACTION_OPTIONS);
+		};
+		const created = isDatabaseClient(database)
+			? await database.$transaction(write, DRAFT_TRANSACTION_OPTIONS)
+			: await write(database);
 		summary.offersCreated = created.offers;
 		summary.routesSuggested = created.routes;
 		summary.pricesRepaired = created.repaired;

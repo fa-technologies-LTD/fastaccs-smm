@@ -17,6 +17,9 @@ export interface BoostPricingRow {
 	sale: number;
 	targetMarkup: number;
 	priceMode: 'manual' | 'target';
+	useDefaultMarkup?: boolean;
+	profitTargetNgn?: number;
+	hardProfitNgn?: number;
 	increment: number;
 	startingQuantity: number;
 	recoveryMode: 'off' | 'definitive' | 'fallback';
@@ -26,7 +29,18 @@ export interface BoostPricingRow {
 }
 export interface BoostPricingSheet {
 	version: number;
-	settings: { fx: number; feePercent: number; feeFixed: number; feeConfirmed: boolean };
+	/** Read-time concurrency token; never trusted as pricing data or persisted as a rule. */
+	rulesRevision?: string;
+	settings: {
+		fx: number;
+		feePercent: number;
+		feeFixed: number;
+		feeConfirmed: boolean;
+		defaultMarkup?: number;
+		profitTargetNgn?: number;
+		hardProfitNgn?: number;
+		maxPriceMultiple?: number;
+	};
 	rows: BoostPricingRow[];
 }
 export interface BoostPricingQuote {

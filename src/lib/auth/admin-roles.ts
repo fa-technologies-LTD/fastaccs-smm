@@ -133,11 +133,6 @@ const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
 		writePermission: 'admin:catalog:manage'
 	},
 	{
-		prefix: '/api/admin/numbers-pricing',
-		readPermission: 'admin:catalog:manage',
-		writePermission: 'admin:catalog:manage'
-	},
-	{
 		prefix: '/admin/settings',
 		readPermission: 'admin:settings:manage',
 		writePermission: 'admin:settings:manage'

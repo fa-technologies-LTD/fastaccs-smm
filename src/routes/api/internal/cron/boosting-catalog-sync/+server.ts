@@ -1,6 +1,7 @@
 import type { RequestHandler } from './$types';
 import { runAuthorizedAutomationCron } from '$lib/server/automation-cron';
 import { syncBoostProviderCatalogues } from '$lib/server/boosting-providers/catalog-sync';
+import { refreshBoostAutoPrices } from '$lib/server/boosting-providers/pricing-controls';
 
 // Each provider currently returns roughly 6,000 services. The sync validates and persists them
 // sequentially, so retain enough serverless headroom for a cold database and bounded retries.
@@ -19,6 +20,7 @@ export const GET: RequestHandler = async ({ request }) =>
 				);
 			}
 			return {
+				pricing: await refreshBoostAutoPrices(),
 				processed: results.reduce((total, result) => total + result.servicesSeen, 0),
 				failed: 0,
 				results

@@ -1,0 +1,354 @@
+import { Prisma, type PrismaClient } from '@prisma/client';
+import { createHash } from 'node:crypto';
+import { prisma } from '$lib/prisma';
+import { env } from '$env/dynamic/private';
+import { getBoostingPricingConfig, BOOSTING_PRICING_KEYS } from '$lib/services/boosting-pricing';
+import { stabilizePrice } from '$lib/services/phone-pricing';
+import { BoostPricingError, loadBoostPricingView, lock, recordSheet, state } from './pricing-sheet';
+import {
+	sanitizePricingSheet,
+	pricingEconomics,
+	pricingStepPrice,
+	type BoostPricingSheet,
+	type BoostPricingQuote
+} from '$lib/helpers/boosting-pricing-sheet';
+import {
+	boostAutoPrice,
+	boostControlSignature,
+	validateBoostRules,
+	type BoostControlsView
+} from '$lib/helpers/boosting-pricing-controls';
+import { isThreadsService, serviceMatchesBoostOutcome } from './catalog-normalizer';
+import { supportsBoostServiceInput } from '$lib/helpers/boosting-service-input';
+import { getRequiredLinkType, type BoostingActionType } from '$lib/helpers/social-link-validator';
+
+type Database = PrismaClient | Prisma.TransactionClient;
+type Offer = Prisma.BoostCustomerOfferGetPayload<{
+	include: { category: true; routes: { include: { providerService: true } } };
+}>;
+const includes = { category: true, routes: { include: { providerService: true } } } as const;
+
+function routesFor(offer: Offer) {
+	if (offer.routingPolicy === 'locked')
+		return offer.routes.filter((r) => r.id === offer.lockedRouteId);
+	// Automatic quotes use the highest approved route cost, not a cheap route that cannot represent the shortlist.
+	return offer.routes.filter((r) => r.equivalenceApproved && r.state === 'enabled');
+}
+function quoteFor(offer: Offer, route: Offer['routes'][number]): BoostPricingQuote {
+	const service = route.providerService;
+	const issues: string[] = [];
+	if (service.unavailableAt || service.catalogueStatus === 'quarantined')
+		issues.push('Supplier unavailable.');
+	if (
+		!service.platforms.includes(offer.platform) ||
+		(offer.platform !== 'threads' && isThreadsService(service))
+	)
+		issues.push('Different platform.');
+	if (
+		!service.outcomes.includes(offer.outcome) ||
+		!serviceMatchesBoostOutcome(service, offer.outcome)
+	)
+		issues.push('Different result.');
+	if (
+		!supportsBoostServiceInput(service.providerType, offer.outcome) ||
+		service.targetType !== getRequiredLinkType(offer.outcome as BoostingActionType)
+	)
+		issues.push('Unsupported service inputs.');
+	if (service.minQuantity === null || service.maxQuantity === null)
+		issues.push('Supplier limits missing.');
+	return {
+		providerServiceId: service.id,
+		name: service.name,
+		rateUsd: service.ratePerThousand == null ? null : Number(service.ratePerThousand),
+		min: Math.max(service.minQuantity ?? 0, route.minimumQuantity ?? 0),
+		max: Math.min(service.maxQuantity ?? 0, route.maximumQuantity ?? Number.MAX_SAFE_INTEGER),
+		checkedAt: service.lastSeenAt.toISOString(),
+		issues
+	};
+}
+
+/** Live offers are authoritative; historical sheet snapshots remain archived, never silently published. */
+export async function loadBoostControls(database: Database = prisma): Promise<BoostControlsView> {
+	const view = await loadBoostPricingView(database);
+	const config = await getBoostingPricingConfig(database as PrismaClient);
+	const offers = await database.boostCustomerOffer.findMany({
+		where: { category: { categoryType: 'boosting_service' } },
+		include: includes
+	});
+	const setup: BoostControlsView['setup'] = {};
+	let archivedDraft = false;
+	view.sheet.settings.fx = config.usdNgnRate;
+	view.sheet.settings.defaultMarkup = config.defaultMarginPercent;
+	view.sheet.settings.profitTargetNgn ??= 0;
+	view.sheet.settings.hardProfitNgn ??= 0;
+	view.sheet.settings.maxPriceMultiple ??= 0;
+	view.sheet.rulesRevision = createHash('sha256')
+		.update(JSON.stringify(view.sheet.settings))
+		.digest('hex');
+	for (const row of view.sheet.rows) {
+		const offer = offers.find((o) => o.id === row.sourceOfferId);
+		if (!offer) {
+			row.selected = false;
+			view.quotes[row.id] = null;
+			continue;
+		}
+		const liveSale = (Number(offer.pricePerStepNgn) * row.units) / offer.stepQuantity;
+		if (Math.abs(row.sale - liveSale) > 0.005 || row.selected !== (offer.status === 'live'))
+			archivedDraft = true;
+		row.sale = Math.round(liveSale * 100) / 100;
+		row.selected = offer.status === 'live';
+		row.priceMode = offer.priceLocked ? 'manual' : 'target';
+		row.increment = offer.stepQuantity;
+		row.startingQuantity = offer.minQuantity;
+		row.option = offer.customerName === offer.category.name ? '' : offer.customerName;
+		row.sourceUpdatedAt = offer.updatedAt.toISOString();
+		const candidates = routesFor(offer);
+		const route =
+			candidates.reduce<Offer['routes'][number] | undefined>(
+				(highest, r) =>
+					!highest ||
+					Number(r.providerService.ratePerThousand) >
+						Number(highest.providerService.ratePerThousand)
+						? r
+						: highest,
+				undefined
+			) ?? offer.routes[0];
+		if (route) {
+			row.provider = route.providerService.provider === 'smm_raja' ? 'smm_raja' : 'bulk_follows';
+			row.serviceId = route.providerService.serviceId;
+			const quotes = (candidates.length ? candidates : [route]).map((r) => quoteFor(offer, r));
+			const quote = quoteFor(offer, route);
+			quote.min = Math.max(...quotes.map((q) => q.min ?? 0));
+			quote.max = Math.min(...quotes.map((q) => q.max ?? 0));
+			quote.checkedAt = quotes.map((q) => q.checkedAt).sort()[0];
+			quote.issues = [...new Set(quotes.flatMap((q) => q.issues))];
+			view.quotes[row.id] = quote;
+		} else view.quotes[row.id] = null;
+		setup[row.id] = {
+			categoryId: offer.categoryId,
+			routingPolicy: offer.routingPolicy,
+			maximumCostNgn: Number(offer.maximumSupplierCostNgn),
+			reviewed:
+				candidates.length > 0 &&
+				candidates.every((r) => r.equivalenceApproved && r.state === 'enabled')
+		};
+	}
+	view.changedRows = [];
+	return {
+		...view,
+		setup,
+		archivedDraft,
+		catalogMaxAgeMinutes: Math.max(5, Number(env.BOOSTING_CATALOG_MAX_AGE_MINUTES) || 390)
+	};
+}
+
+function clean(input: unknown, current: BoostControlsView): BoostPricingSheet {
+	try {
+		const next = sanitizePricingSheet(input, current.sheet);
+		validateBoostRules(next.settings);
+		const submitted = input as BoostPricingSheet;
+		if (submitted.rulesRevision !== current.sheet.rulesRevision)
+			throw new BoostPricingError('Pricing rules changed. Reload before saving.', 409);
+		for (const row of next.rows) {
+			const original = current.sheet.rows.find((r) => r.id === row.id)!;
+			const raw = submitted.rows.find((r) => r.id === row.id)!;
+			if (raw.sourceUpdatedAt !== original.sourceUpdatedAt)
+				throw new BoostPricingError(`${row.title}: settings changed. Reload before saving.`, 409);
+			for (const field of [
+				'provider',
+				'serviceId',
+				'units',
+				'increment',
+				'startingQuantity',
+				'option',
+				'recoveryMode',
+				'attempts',
+				'profitBudgetPercent'
+			] as const)
+				if (raw[field] !== original[field])
+					throw new Error('Use supplier setup to change service details.');
+			if (raw.useDefaultMarkup !== undefined && typeof raw.useDefaultMarkup !== 'boolean')
+				throw new Error('Check profit override.');
+			row.useDefaultMarkup = raw.useDefaultMarkup ?? false;
+			for (const field of ['profitTargetNgn', 'hardProfitNgn'] as const) {
+				if (
+					raw[field] !== undefined &&
+					(!Number.isFinite(raw[field]) || raw[field]! < 0 || raw[field]! > 1e7)
+				)
+					throw new Error('Check profit override.');
+				row[field] = raw[field];
+			}
+		}
+		return next;
+	} catch (error) {
+		if (error instanceof BoostPricingError) throw error;
+		throw new BoostPricingError(
+			error instanceof Error ? error.message : 'Invalid pricing controls.'
+		);
+	}
+}
+
+/** One atomic Save: rules, changed offer prices/visibility and audit. No supplier purchases. */
+export async function saveBoostControls(
+	input: unknown,
+	actor: string,
+	database: PrismaClient = prisma,
+	automatic = false
+) {
+	return database.$transaction(
+		async (tx) => {
+			await lock(tx);
+			await tx.$queryRaw`SELECT id FROM boost_customer_offers ORDER BY id FOR UPDATE`;
+			await tx.$queryRaw`SELECT key FROM microcopy WHERE key IN (${BOOSTING_PRICING_KEYS.usdNgnRate}, ${BOOSTING_PRICING_KEYS.currencyBufferPercent}, ${BOOSTING_PRICING_KEYS.defaultMarginPercent}) ORDER BY CASE key WHEN ${BOOSTING_PRICING_KEYS.usdNgnRate} THEN 0 WHEN ${BOOSTING_PRICING_KEYS.currencyBufferPercent} THEN 1 ELSE 2 END FOR UPDATE`;
+			const current = await loadBoostControls(tx);
+			const next = clean(input, current);
+			if (next.version !== current.sheet.version)
+				throw new BoostPricingError('Newer settings were saved. Reload before saving.', 409);
+			const ruleChanges = JSON.stringify(next.settings) !== JSON.stringify(current.sheet.settings);
+			const offers = await tx.boostCustomerOffer.findMany({
+				where: { category: { categoryType: 'boosting_service' } },
+				include: includes
+			});
+			const maxAge = Math.max(5, Number(env.BOOSTING_CATALOG_MAX_AGE_MINUTES) || 390) * 60000;
+			let applied = 0;
+			for (const row of next.rows) {
+				const original = current.sheet.rows.find((r) => r.id === row.id)!;
+				const edited = boostControlSignature(row) !== boostControlSignature(original);
+				if (!edited && !ruleChanges && !automatic) continue;
+				const offer = offers.find((o) => o.id === row.sourceOfferId);
+				if (!offer) {
+					if (edited) throw new BoostPricingError(`${row.title}: set up this offer first.`);
+					continue;
+				}
+				const quote = current.quotes[row.id];
+				if (!row.selected && !edited) continue;
+				if (automatic && (row.priceMode !== 'target' || !row.selected)) continue;
+				// Going offline must work even during supplier outages, without recalculating its price.
+				if (!row.selected && original.selected && !automatic) {
+					const saved = await tx.boostCustomerOffer.update({
+						where: { id: offer.id },
+						data: { status: 'hidden' }
+					});
+					row.sale = original.sale;
+					row.priceMode = original.priceMode;
+					row.sourceUpdatedAt = saved.updatedAt.toISOString();
+					applied++;
+					continue;
+				}
+				const validQuote =
+					quote &&
+					!quote.issues.length &&
+					quote.rateUsd !== null &&
+					quote.rateUsd > 0 &&
+					Date.now() - Date.parse(quote.checkedAt) <= maxAge &&
+					quote.min !== null &&
+					quote.max !== null &&
+					row.startingQuantity >= quote.min &&
+					row.startingQuantity <= quote.max;
+				if (!validQuote) {
+					if (automatic) continue;
+					throw new BoostPricingError(`${row.title}: refresh costs or review supplier setup.`);
+				}
+				if (row.selected && !current.setup[row.id]?.reviewed)
+					throw new BoostPricingError(`${row.title}: review supplier routes before going live.`);
+				if (row.selected && !original.selected && env.BOOSTING_AUTOMATION_MODE !== 'live')
+					throw new BoostPricingError('Live Boosting dispatch must be enabled.');
+				if (row.priceMode === 'target') {
+					const computed = boostAutoPrice(row, next, quote)!;
+					row.sale = automatic
+						? stabilizePrice(original.sale, computed, offer.updatedAt, new Date()).price
+						: computed;
+					// Profit safety wins over price smoothing when a supplier cost increase consumes the floor.
+					const held = pricingEconomics(row, next, quote);
+					if (
+						automatic &&
+						(held.profit ?? 0) < Math.max(next.settings.hardProfitNgn ?? 0, row.hardProfitNgn ?? 0)
+					)
+						row.sale = computed;
+				}
+				const economics = pricingEconomics(row, next, quote);
+				const hardFloor = Math.max(next.settings.hardProfitNgn ?? 0, row.hardProfitNgn ?? 0);
+				if (
+					economics.profit === null ||
+					economics.profit <= 0 ||
+					economics.profit + 1e-8 < hardFloor
+				)
+					throw new BoostPricingError(
+						`${row.title}: price does not cover cost, fees and minimum retained profit.`
+					);
+				let stepPrice: number;
+				try {
+					stepPrice = pricingStepPrice(row);
+				} catch {
+					throw new BoostPricingError(
+						`${row.title}: price must divide into whole kobo at this increment.`
+					);
+				}
+				const scale = row.startingQuantity / row.units;
+				const remaining = (row.sale - economics.fees - hardFloor) * scale;
+				const existingMargin = Number(offer.minimumMarginPercent);
+				const marginFloor = Math.min(existingMargin, Math.max(0, economics.markup ?? 0));
+				const safeBudget =
+					Math.floor(
+						Math.min(remaining, ((row.sale - economics.fees) * scale) / (1 + marginFloor / 100)) *
+							100 +
+							1e-7
+					) / 100;
+				const normalCost = Math.ceil(economics.cost! * scale * 100 - 1e-7) / 100;
+				// Keep reviewed cost ceilings. A pricing edit never grants a route a larger spending limit.
+				const maximumCost = Math.min(Number(offer.maximumSupplierCostNgn), safeBudget);
+				if (maximumCost + 1e-8 < normalCost) {
+					if (automatic) continue;
+					throw new BoostPricingError(
+						`${row.title}: supplier cost exceeds the reviewed cost limit. Review supplier setup.`
+					);
+				}
+				if (automatic && Math.abs(row.sale - original.sale) < 0.005) continue;
+				const saved = await tx.boostCustomerOffer.update({
+					where: { id: offer.id },
+					data: {
+						pricePerStepNgn: stepPrice,
+						priceLocked: row.priceMode === 'manual',
+						minimumMarginPercent: marginFloor,
+						normalCostTargetNgn: normalCost,
+						maximumSupplierCostNgn: maximumCost,
+						status: row.selected ? 'live' : offer.status
+					}
+				});
+				if (row.selected && !offer.category.isActive)
+					await tx.category.update({ where: { id: offer.categoryId }, data: { isActive: true } });
+				row.sourceUpdatedAt = saved.updatedAt.toISOString();
+				applied++;
+			}
+			if (automatic && applied === 0) return { applied: 0 };
+			for (const [key, value] of [
+				[BOOSTING_PRICING_KEYS.usdNgnRate, next.settings.fx],
+				[
+					BOOSTING_PRICING_KEYS.defaultMarginPercent,
+					Math.min(500, next.settings.defaultMarkup ?? 40)
+				]
+			] as const)
+				await tx.microcopy.upsert({
+					where: { key },
+					create: { key, value: String(value), category: 'settings', isActive: true },
+					update: { value: String(value), isActive: true }
+				});
+			const previous = await state(tx);
+			next.version++;
+			await recordSheet(tx, next, actor, 'boosting_controls_saved', previous.record);
+			return { applied };
+		},
+		{ timeout: 60000 }
+	);
+}
+
+/** Used after successful catalogue sync; opt-in only once the owner has saved the new controls. */
+export async function refreshBoostAutoPrices(database: PrismaClient = prisma) {
+	const previous = await state(database);
+	if (!previous.sheet.settings.defaultMarkup && previous.sheet.settings.defaultMarkup !== 0)
+		return { applied: 0 };
+	const view = await loadBoostControls(database);
+	const actor = previous.record?.actorUserId;
+	if (!actor || previous.record?.action !== 'boosting_controls_saved') return { applied: 0 };
+	return saveBoostControls(view.sheet, actor, database, true);
+}

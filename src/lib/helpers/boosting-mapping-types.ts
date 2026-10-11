@@ -4,6 +4,7 @@ export type BoostMappingPolicy = 'automatic' | 'preferred' | 'locked';
 export type BoostMappingRouteState = 'shadow' | 'enabled' | 'paused';
 
 export interface BoostMappingOfferDraft {
+	sourceUpdatedAt?: string;
 	qualityTier: string;
 	customerName: string;
 	shortPromise: string;

@@ -101,20 +101,8 @@
 			{ href: '/admin/tiers', label: 'Tiers', icon: Target, permission: 'admin:catalog:manage' },
 			{
 				href: '/admin/boosting-pricing',
-				label: 'Boosting Pricing',
+				label: 'Boosting',
 				icon: Zap,
-				permission: 'admin:catalog:manage'
-			},
-			{
-				href: '/admin/boosting-mappings',
-				label: 'Boosting Advanced',
-				icon: Zap,
-				permission: 'admin:catalog:manage'
-			},
-			{
-				href: '/admin/numbers-pricing',
-				label: 'Numbers Pricing',
-				icon: Phone,
 				permission: 'admin:catalog:manage'
 			},
 			{

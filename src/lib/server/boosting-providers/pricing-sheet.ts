@@ -26,7 +26,8 @@ const ACTIONS = [
 	'boosting_pricing_draft_saved',
 	'boosting_pricing_published',
 	'boosting_pricing_restored',
-	'boosting_pricing_reconciled'
+	'boosting_pricing_reconciled',
+	'boosting_controls_saved'
 ];
 
 export class BoostPricingError extends Error {
@@ -48,7 +49,7 @@ function snapshot(metadata: unknown): BoostPricingSheet | null {
 	const value = metadata as { sheet?: BoostPricingSheet } | null;
 	return value?.sheet ?? null;
 }
-async function state(database: Database) {
+export async function state(database: Database) {
 	const record = await latest(database);
 	const sheet =
 		structuredClone(snapshot(record?.metadata)) ??
@@ -98,6 +99,7 @@ async function state(database: Database) {
 			sale: Number(offer.pricePerStepNgn),
 			targetMarkup: Number(offer.minimumMarginPercent),
 			priceMode: 'manual',
+			useDefaultMarkup: sheet.settings.defaultMarkup !== undefined,
 			increment: offer.stepQuantity,
 			startingQuantity: offer.minQuantity,
 			recoveryMode: 'off',
@@ -186,7 +188,7 @@ export async function loadBoostPricingView(database: Database = prisma): Promise
 	};
 }
 
-async function recordSheet(
+export async function recordSheet(
 	database: Database,
 	sheet: BoostPricingSheet,
 	actor: string,
@@ -210,7 +212,7 @@ async function recordSheet(
 	});
 }
 
-async function lock(database: Database) {
+export async function lock(database: Database) {
 	await database.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('fastaccs:boosting-pricing-sheet'))`;
 }
 function checkVersion(requested: unknown, actual: number) {

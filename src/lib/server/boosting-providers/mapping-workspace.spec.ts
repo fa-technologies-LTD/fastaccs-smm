@@ -96,9 +96,15 @@ function database(
 	const categoryUpdate = vi.fn().mockResolvedValue({});
 	const rolloutUpsert = vi.fn().mockResolvedValue({});
 	const tx = {
-		boostCustomerOffer: { upsert: offerUpsert, update: offerUpdate },
+		$executeRaw: vi.fn(),
+		$queryRaw: vi.fn(),
+		boostCustomerOffer: {
+			upsert: offerUpsert,
+			update: offerUpdate,
+			findUnique: vi.fn().mockResolvedValue(null)
+		},
 		boostServiceRoute: { upsert: routeUpsert, updateMany: routeUpdateMany },
-		adminAuditLog: { create: auditCreate },
+		adminAuditLog: { create: auditCreate, findFirst: vi.fn().mockResolvedValue(null) },
 		category: { update: categoryUpdate },
 		microcopy: { upsert: rolloutUpsert }
 	};
@@ -133,11 +139,35 @@ function database(
 		offerUpdate,
 		auditCreate,
 		categoryUpdate,
-		rolloutUpsert
+		rolloutUpsert,
+		tx
 	};
 }
 
 describe('boosting mapping workspace persistence', () => {
+	it('cannot bypass a saved retained-profit floor through supplier setup', async () => {
+		const db = database();
+		db.tx.adminAuditLog.findFirst.mockResolvedValue({
+			metadata: { sheet: { settings: { hardProfitNgn: 4000, feeConfirmed: false }, rows: [] } }
+		} as never);
+		await expect(
+			saveBoostMappingWorkspace(categoryId, validInput(), 'owner', { database: db.client })
+		).rejects.toThrow('minimum retained profit');
+		expect(db.offerUpsert).not.toHaveBeenCalled();
+	});
+	it('rejects a stale supplier editor before overwriting a newer offer', async () => {
+		const db = database();
+		db.tx.boostCustomerOffer.findUnique.mockResolvedValue({
+			id: 'offer',
+			updatedAt: new Date('2026-10-11T14:00:00Z')
+		} as never);
+		const input = validInput();
+		input.offer.sourceUpdatedAt = '2026-10-11T13:00:00.000Z';
+		await expect(
+			saveBoostMappingWorkspace(categoryId, input, 'owner', { database: db.client })
+		).rejects.toMatchObject({ status: 409 });
+		expect(db.offerUpsert).not.toHaveBeenCalled();
+	});
 	it('rejects a supplier input contract that checkout cannot submit, regardless of quality approval', async () => {
 		const custom = { ...providerService(), providerType: 'Custom Comments' };
 		await expect(

@@ -1,125 +1,182 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
-	import { onMount } from 'svelte';
-	import { SvelteMap } from 'svelte/reactivity';
-	import { Save, Download, RefreshCcw, Search, ChevronRight, Zap } from '$lib/icons';
+	import { onMount, untrack } from 'svelte';
+	import { beforeNavigate } from '$app/navigation';
+	import { adminDialog } from '$lib/helpers/admin-dialog';
+	import { Save, Download, RefreshCcw, Lock, Unlock, Zap, X } from '$lib/icons';
+	import BoostingSupplierSetup from '$lib/components/admin/BoostingSupplierSetup.svelte';
 	import { showError, showSuccess } from '$lib/stores/toasts';
-	import { BOOSTING_PLATFORM_LABELS } from '$lib/helpers/boosting-service-config';
 	import {
-		exportPricingCsv,
+		BOOSTING_PLATFORM_LABELS,
+		BOOSTING_ACTION_LABELS
+	} from '$lib/helpers/boosting-service-config';
+	import {
 		pricingEconomics,
-		pricingWarnings,
 		pricingStart,
-		pricingTarget,
-		type BoostPricingRow,
-		type BoostPricingView
+		exportPricingCsv,
+		type BoostPricingRow
 	} from '$lib/helpers/boosting-pricing-sheet';
+	import {
+		boostAutoPrice,
+		boostRowWarnings,
+		type BoostControlsView,
+		type BoostingSetupData
+	} from '$lib/helpers/boosting-pricing-controls';
 	import type { PageData } from './$types';
+
 	let { data }: { data: PageData } = $props();
-	let view = $state<BoostPricingView>(
+	let view = $state<BoostControlsView>(
 		untrack(() => structuredClone($state.snapshot(data.pricing)))
 	);
 	let saved = $state(untrack(() => JSON.stringify(data.pricing.sheet)));
 	let platform = $state('all');
+	let filter = $state('all');
 	let search = $state('');
-	let filter = $state('menu');
 	let busy = $state(false);
-	let expanded = $state<string | null>(null);
 	let error = $state('');
-	let showPublish = $state(false);
-	let showHistory = $state(false);
-	const lookupSerial = new SvelteMap<string, number>();
-	let nextLookupSerial = 0;
+	let expanded = $state<string | null>(null);
+	let supplier = $state<BoostPricingRow | null>(null);
+	let expandConfirm = $state(false);
+	let balances = $state<
+		Array<{ id: string; label: string; balance: number | null; currency: string | null }>
+	>([]);
 	const dirty = $derived(JSON.stringify(view.sheet) !== saved);
+	beforeNavigate(({ cancel }) => {
+		if ((dirty || supplier) && !confirm('Leave this page? Unsaved changes will be lost.')) cancel();
+	});
+	const label = (p: string) => (BOOSTING_PLATFORM_LABELS as Record<string, string>)[p] ?? p;
+	const money = (v: number | null) =>
+		v == null ? '—' : `₦${v.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
+	const quote = (r: BoostPricingRow) => view.quotes[r.id] ?? null;
+	const economics = (r: BoostPricingRow) => pricingEconomics(r, view.sheet, quote(r));
+	const warnings = (r: BoostPricingRow) => {
+		const issues = boostRowWarnings(r, view.sheet, quote(r));
+		if (r.sourceOfferId && !view.setup[r.id]?.reviewed) issues.push('Review supplier setup.');
+		const q = quote(r);
+		if (q && Date.now() - Date.parse(q.checkedAt) > (view.catalogMaxAgeMinutes ?? 390) * 60000)
+			issues.push('Refresh supplier costs.');
+		if (
+			q?.rateUsd != null &&
+			view.setup[r.id] &&
+			(q.rateUsd * view.sheet.settings.fx * r.startingQuantity) / 1000 >
+				view.setup[r.id].maximumCostNgn + 0.005
+		)
+			issues.push('Supplier cost exceeds reviewed limit.');
+		return issues;
+	};
 	const platforms = $derived([...new Set(view.sheet.rows.map((r) => r.platform))]);
-	const selectedCount = $derived(view.sheet.rows.filter((r) => r.selected).length);
-	const flaggedCount = $derived(
-		view.sheet.rows.filter((r) => r.selected && warnings(r).length).length
-	);
+	const flagged = $derived(view.sheet.rows.filter((r) => warnings(r).length > 0).length);
+	const live = $derived(view.sheet.rows.filter((r) => view.liveStatuses[r.id] === 'live').length);
 	const visible = $derived(
 		view.sheet.rows.filter(
 			(r) =>
 				(platform === 'all' || r.platform === platform) &&
-				(filter !== 'menu' || r.selected) &&
-				(filter !== 'check' || warnings(r).length > 0) &&
+				(filter !== 'live' || r.selected) &&
+				(filter !== 'review' || warnings(r).length > 0) &&
 				`${r.title} ${r.option} ${r.serviceId}`.toLowerCase().includes(search.toLowerCase())
 		)
 	);
-	const label = (p: string) => (BOOSTING_PLATFORM_LABELS as Record<string, string>)[p] ?? p;
-	const money = (n: number | null) =>
-		n === null ? '—' : `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
-	const quote = (r: BoostPricingRow) => view.quotes[r.id] ?? null;
-	const economics = (r: BoostPricingRow) => pricingEconomics(r, view.sheet, quote(r));
-	const warnings = (r: BoostPricingRow) => pricingWarnings(r, view.sheet, quote(r));
+	const setupData = $derived.by((): BoostingSetupData => {
+		const r = supplier;
+		const categoryId = r ? view.setup[r.id]?.categoryId : undefined;
+		return {
+			offers:
+				r && categoryId
+					? [
+							{
+								id: categoryId,
+								name: r.title,
+								isActive: r.selected,
+								platform: r.platform,
+								platformLabel: label(r.platform),
+								outcome: r.outcome,
+								outcomeLabel:
+									(BOOSTING_ACTION_LABELS as Record<string, string>)[r.outcome] ?? r.outcome,
+								pricePerStepNgn: (r.sale * r.increment) / r.units
+							}
+						]
+					: [],
+			mappingSummary: { categories: 1, tiers: 1, reviewedTiers: 0, approvedRoutes: 0 }
+		};
+	});
 
 	onMount(() => {
-		const before = (e: BeforeUnloadEvent) => {
-			if (dirty) {
-				e.preventDefault();
-				e.returnValue = '';
+		const before = (event: BeforeUnloadEvent) => {
+			if (dirty || supplier) {
+				event.preventDefault();
+				event.returnValue = '';
 			}
 		};
 		window.addEventListener('beforeunload', before);
+		void fetch('/api/admin/boosting-suppliers/discovery')
+			.then((r) => r.json())
+			.then((result) => {
+				if (result.success) balances = result.data.providers;
+			})
+			.catch(() => {});
 		return () => window.removeEventListener('beforeunload', before);
 	});
-	function updateTargets() {
+	function previewPrices() {
 		for (const row of view.sheet.rows)
 			if (row.priceMode === 'target') {
-				const target = pricingTarget(row, view.sheet, quote(row));
-				if (target !== null) row.sale = target;
+				const price = boostAutoPrice(row, view.sheet, quote(row));
+				if (price != null) row.sale = price;
 			}
 	}
-	async function action(payload: Record<string, unknown>) {
-		lookupSerial.clear();
+	function toggleLock(row: BoostPricingRow) {
+		row.priceMode = row.priceMode === 'manual' ? 'target' : 'manual';
+		if (row.priceMode === 'target') {
+			const price = boostAutoPrice(row, view.sheet, quote(row));
+			if (price != null) row.sale = price;
+		}
+	}
+	async function request(payload: Record<string, unknown>) {
+		const response = await fetch('/api/admin/boosting-pricing', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(payload)
+		});
+		const result = await response.json();
+		if (!response.ok || !result.success)
+			throw new Error(result.error || 'Could not save settings.');
+		return result;
+	}
+	async function reload() {
+		const response = await fetch('/api/admin/boosting-pricing');
+		const result = await response.json();
+		if (!response.ok || !result.success)
+			throw new Error(result.error || 'Could not reload settings.');
+		view = result.data;
+		saved = JSON.stringify(view.sheet);
+	}
+	async function save() {
 		busy = true;
 		error = '';
 		try {
-			const response = await fetch('/api/admin/boosting-pricing', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify(payload)
-			});
-			const result = await response.json();
-			if (!response.ok || !result.success) throw new Error(result.error || 'Could not save.');
+			const result = await request({ action: 'save', sheet: view.sheet });
 			view = result.data;
-			lookupSerial.clear();
 			saved = JSON.stringify(view.sheet);
-			showPublish = false;
-			showHistory = false;
-			showSuccess(
-				payload.action === 'publish'
-					? 'Menu published.'
-					: payload.action === 'restore'
-						? 'Restored as a draft. Nothing published.'
-						: 'Draft saved.'
-			);
+			showSuccess('Boosting settings saved.');
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Could not save.';
+			error = cause instanceof Error ? cause.message : 'Save failed.';
 			showError(error);
 		} finally {
 			busy = false;
 		}
 	}
-	async function refresh() {
-		lookupSerial.clear();
+	async function refreshCosts() {
+		if (dirty) {
+			showError('Save your changes before refreshing costs.');
+			return;
+		}
 		busy = true;
 		error = '';
 		try {
-			const sync = await fetch('/api/admin/boosting-suppliers/sync', { method: 'POST' });
-			const result = await sync.json();
-			if (!sync.ok || !result.success) throw new Error(result.error || 'Costs could not refresh.');
-			const response = await fetch('/api/admin/boosting-pricing');
-			const fresh = await response.json();
-			if (!response.ok || !fresh.success) throw new Error('Could not load updated costs.');
-			for (const row of view.sheet.rows) {
-				const stored = fresh.data.sheet.rows.find((r: BoostPricingRow) => r.id === row.id);
-				if (stored?.provider === row.provider && stored?.serviceId === row.serviceId)
-					view.quotes[row.id] = fresh.data.quotes[row.id];
-			}
-			view.liveStatuses = fresh.data.liveStatuses;
-			view.changedRows = fresh.data.changedRows;
-			// Refreshing quotes deliberately does not overwrite ANY draft price, even target mode.
-			showSuccess('Costs refreshed. Your prices are unchanged.');
+			const response = await fetch('/api/admin/boosting-suppliers/sync', { method: 'POST' });
+			const result = await response.json();
+			if (!response.ok || !result.success)
+				throw new Error(result.error || 'Costs could not refresh.');
+			await reload();
+			showSuccess('Costs refreshed. Locked prices kept.');
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : 'Refresh failed.';
 			showError(error);
@@ -127,36 +184,42 @@
 			busy = false;
 		}
 	}
-	async function lookup(row: BoostPricingRow) {
-		const serial = ++nextLookupSerial;
-		lookupSerial.set(row.id, serial);
-		const provider = row.provider,
-			code = row.serviceId;
-		view.quotes[row.id] = null;
-		if (!row.sourceOfferId) return;
+	async function expandCatalog() {
+		busy = true;
+		error = '';
+		expandConfirm = false;
 		try {
-			const response = await fetch(
-				`/api/admin/boosting-pricing/lookup?row=${encodeURIComponent(row.id)}&provider=${encodeURIComponent(provider)}&code=${encodeURIComponent(code)}`
-			);
-			const result = await response.json();
-			if (
-				serial !== lookupSerial.get(row.id) ||
-				row.provider !== provider ||
-				row.serviceId !== code
-			)
-				return;
-			if (!response.ok || !result.success)
-				throw new Error(result.error || 'Service lookup failed.');
-			view.quotes[row.id] = result.data;
-			if (row.priceMode === 'target') {
-				const target = pricingTarget(row, view.sheet, result.data);
-				if (target !== null) row.sale = target;
-			}
+			const result = await request({ action: 'expand' });
+			view = result.data;
+			saved = JSON.stringify(view.sheet);
+			showSuccess(`${result.summary.offersCreated} new offers added. Nothing published.`);
 		} catch (cause) {
-			showError(cause instanceof Error ? cause.message : 'Service lookup failed.');
+			error = cause instanceof Error ? cause.message : 'Expansion failed.';
+			showError(error);
+		} finally {
+			busy = false;
 		}
 	}
-	function exportSheet() {
+	function openSupplier(row: BoostPricingRow) {
+		if (dirty) {
+			showError('Save your pricing changes before opening supplier setup.');
+			return;
+		}
+		if (!view.setup[row.id]) {
+			showError('Expand catalogue to set up this result.');
+			return;
+		}
+		supplier = row;
+	}
+	function closeSupplier() {
+		if (confirm('Close supplier setup? Any unsaved supplier edits will be lost.')) supplier = null;
+	}
+	async function supplierSaved() {
+		await reload();
+		supplier = null;
+		showSuccess('Supplier setup saved. Enable Live when ready.');
+	}
+	function download() {
 		const url = URL.createObjectURL(
 			new Blob([exportPricingCsv(view.sheet, view.quotes)], { type: 'text/csv;charset=utf-8' })
 		);
@@ -168,704 +231,665 @@
 	}
 </script>
 
-<svelte:head><title>Boosting Pricing · FastAccs Admin</title></svelte:head>
-<div class="pricing-page">
-	<header class="pricing-header">
-		<div>
-			<p class="eyebrow">BOOSTING</p>
-			<h1><Zap size={24} /> Boosting Pricing</h1>
-			<p class="subtitle">One sheet. Your services, prices and profit.</p>
+<svelte:head><title>Boosting · FastAccs Admin</title></svelte:head>
+<div class="boosting-page">
+	<header>
+		<div class="heading">
+			<Zap size={25} style="color: var(--primary);" />
+			<div>
+				<h1>Boosting — Pricing</h1>
+				<p>Set your rules. Keep prices automatic, or lock your own.</p>
+			</div>
 		</div>
-		<div class="toolbar">
-			<button class="quiet" onclick={exportSheet}><Download size={16} /> Export</button>
-			<button class="quiet" disabled={busy} onclick={refresh}
-				><RefreshCcw size={16} /> Refresh costs</button
+		<div class="actions">
+			<button onclick={download}><Download size={16} /> Export</button>
+			<button disabled={busy || dirty} onclick={() => (expandConfirm = true)}
+				>+ Expand catalogue</button
 			>
-			<button class="quiet" disabled={busy} onclick={() => (showHistory = !showHistory)}
-				>History</button
-			>
-			<button
-				class="save"
-				disabled={busy || (!dirty && view.sheet.version > 0)}
-				onclick={() => action({ action: 'save', sheet: view.sheet })}
-				><Save size={16} /> Save draft</button
-			>
-			<button
-				class="publish"
-				disabled={busy || dirty || view.sheet.version === 0}
-				onclick={() => (showPublish = true)}>Publish menu</button
+			<button class="primary" disabled={busy || !dirty} onclick={save}
+				><Save size={16} /> {busy ? 'Working…' : 'Save'}</button
 			>
 		</div>
 	</header>
-	<div class="status-bar">
-		<span>{selectedCount} in menu</span><span>{flaggedCount} to check</span><span
-			>{dirty
-				? 'Unsaved changes'
-				: view.sheet.version === 0
-					? 'Approved review · save draft'
-					: view.history[0]?.action === 'boosting_pricing_published'
-						? `Published · v${view.sheet.version}`
-						: `Saved draft · v${view.sheet.version}`}</span
-		><a href="/admin/boosting-mappings">Advanced setup <ChevronRight size={14} /></a>
-	</div>
-	{#if error}<p class="error" role="alert">{error}</p>{/if}
-	{#if view.changedRows?.length}
-		<section class="confirm-panel" aria-label="Review setup changes">
-			<div>
-				<h2>Advanced setup has changed</h2>
-				<p>
-					Review the current costs and service limits, then accept. Your sheet prices stay
-					unchanged.
-				</p>
-			</div>
-			<a class="quiet" href="/admin/boosting-mappings">Review setup</a>
-			<button
-				class="quiet"
-				disabled={busy || dirty}
-				onclick={() => action({ action: 'reconcile', version: view.sheet.version, confirm: true })}
-				>Accept as draft</button
-			>
-		</section>
-	{/if}
-	{#if showPublish}
-		<section class="confirm-panel" aria-label="Confirm publication">
-			<div>
-				<h2>Publish {selectedCount} offers?</h2>
-				<p>
-					This replaces the menu with your saved selection. Unselected offers go offline. Existing
-					orders stay unchanged.
-				</p>
-			</div>
-			<button class="quiet" disabled={busy} onclick={() => (showPublish = false)}>Not yet</button>
-			<button
-				class="publish"
-				disabled={busy}
-				onclick={() => action({ action: 'publish', version: view.sheet.version, confirm: true })}
-				>Yes, publish</button
-			>
-		</section>
-	{/if}
-	{#if showHistory}
-		<section class="history" aria-label="Saved versions">
-			<h2>Saved versions</h2>
-			<p>Restore creates a draft. It does not publish.</p>
-			{#each view.history as h (h.id)}<div>
-					<span
-						>v{h.version} · {h.action === 'boosting_pricing_published' ? 'Published' : 'Draft'} · {new Date(
-							h.createdAt
-						).toLocaleString('en-NG', { timeZone: 'Africa/Lagos' })}</span
-					><button
-						class="quiet"
-						disabled={busy || dirty}
-						onclick={() =>
-							action({ action: 'restore', historyId: h.id, version: view.sheet.version })}
-						>Restore draft</button
-					>
-				</div>{/each}
-			{#if !view.history.length}<p>No saved versions yet.</p>{/if}
-		</section>
-	{/if}
-	<div class="filters">
-		<label class="search"
-			><Search size={17} /><input
-				aria-label="Search services"
-				placeholder="Search services or code"
-				bind:value={search}
-			/></label
-		>
-		<select aria-label="Platform" bind:value={platform}
-			><option value="all">All platforms</option>{#each platforms as p (p)}<option value={p}
-					>{label(p)}</option
-				>{/each}</select
-		>
-		<select aria-label="Rows" bind:value={filter}
-			><option value="menu">In menu</option><option value="all">All offers</option><option
-				value="check">Needs a check</option
-			></select
-		>
-		<details class="settings">
-			<summary>Pricing settings</summary>
-			<div>
+	<fieldset disabled={busy}>
+		{#if error}<p class="error" role="alert">{error}</p>{/if}
+		{#if view.archivedDraft}<p class="hint">
+				Showing current offer settings. Earlier sheet revisions remain in history.
+			</p>{/if}
+		<section class="panel">
+			<h2>Pricing rules</h2>
+			<p>
+				Supplier cost × your dollar rate + profit, rounded up to ₦50. Overrides apply to the
+				quantity shown in each row.
+			</p>
+			<div class="fields">
 				<label
-					>USD → NGN<input
+					>Dollar rate (₦ per $1)<input
 						type="number"
 						min="1"
 						bind:value={view.sheet.settings.fx}
-						onchange={updateTargets}
+						oninput={() => queueMicrotask(previewPrices)}
 					/></label
 				>
 				<label
-					><input
-						type="checkbox"
-						bind:checked={view.sheet.settings.feeConfirmed}
-						onchange={updateTargets}
-					/> Include estimated fees</label
+					>Default profit on cost (%)<input
+						type="number"
+						min="0"
+						max="500"
+						bind:value={view.sheet.settings.defaultMarkup}
+						oninput={() => queueMicrotask(previewPrices)}
+					/><small>Rows with an override keep their own percentage.</small></label
 				>
-				{#if view.sheet.settings.feeConfirmed}<label
-						>Fee %<input
+				<label
+					>Profit target per pricing quantity (₦)<input
+						type="number"
+						min="0"
+						bind:value={view.sheet.settings.profitTargetNgn}
+						oninput={() => queueMicrotask(previewPrices)}
+					/><small>0 means percentage-only pricing.</small></label
+				>
+			</div>
+			<div class="floor">
+				<label
+					>Minimum retained profit per pricing quantity (₦)<input
+						type="number"
+						min="0"
+						bind:value={view.sheet.settings.hardProfitNgn}
+						oninput={() => queueMicrotask(previewPrices)}
+					/></label
+				>
+				<p>A safety limit, not a selling-price target. Separate from the ₦500 minimum checkout.</p>
+			</div>
+			<details>
+				<summary>Advanced pricing & fees</summary>
+				<div class="fields">
+					<label
+						>Maximum price multiple<input
+							type="number"
+							min="0"
+							step="0.1"
+							bind:value={view.sheet.settings.maxPriceMultiple}
+							oninput={() => queueMicrotask(previewPrices)}
+						/><small>0 = off. Profit protection takes priority.</small></label
+					>
+					<label
+						>Estimated payment fee (%)<input
 							type="number"
 							min="0"
 							max="99"
 							step="0.01"
 							bind:value={view.sheet.settings.feePercent}
-							onchange={updateTargets}
+							oninput={() => queueMicrotask(previewPrices)}
 						/></label
-					><label
-						>Fixed fee ₦<input
+					>
+					<label
+						>Fee allocation per pricing quantity (₦)<input
 							type="number"
 							min="0"
-							step="0.01"
 							bind:value={view.sheet.settings.feeFixed}
-							onchange={updateTargets}
-						/></label
-					>{/if}
-				<p>Supplier rate is protected. Manual selling prices stay fixed.</p>
+							oninput={() => queueMicrotask(previewPrices)}
+						/><small>Planning estimate; not an extra customer charge.</small></label
+					>
+				</div>
+				<label class="check"
+					><input
+						type="checkbox"
+						bind:checked={view.sheet.settings.feeConfirmed}
+						onchange={() => queueMicrotask(previewPrices)}
+					/> Include these verified fee estimates</label
+				>
+			</details>
+			<p class="hint">
+				Save applies changes. Unlocked prices follow your rules; locked prices stay put.
+			</p>
+		</section>
+		<div class="catalog-toolbar">
+			<div class="balances">
+				{#each balances as balance (balance.id)}<span
+						>{balance.label}
+						<strong
+							>{balance.balance == null
+								? '—'
+								: `${balance.currency ?? 'USD'} ${balance.balance.toFixed(2)}`}</strong
+						></span
+					>{/each}
 			</div>
-		</details>
-	</div>
-	<div class="sheet-wrap" role="region" aria-label="Boosting pricing sheet">
-		<table>
-			<thead
-				><tr
-					><th>Service</th><th>Menu</th><th>Supplier / code</th><th>Pack quantity</th><th
-						>Supplier cost</th
-					><th>Target profit %</th><th>Selling price</th><th>Profit</th><th
-						><span class="sr-only">Options</span></th
-					></tr
-				></thead
+			<button disabled={busy || dirty} onclick={refreshCosts}
+				><RefreshCcw size={15} /> Refresh costs</button
 			>
-			<tbody
-				>{#each visible as row (row.id)}
-					{@const e = economics(row)}{@const issues = warnings(row)}{@const q = quote(row)}
-					<tr class:flagged={issues.length > 0}>
-						<td class="service"
-							><span class="platform">{label(row.platform)}</span><strong
-								>{row.title.replace(new RegExp(`^${row.platform}\\s*`, 'i'), '')}</strong
-							>{#if row.option}<span class="option">{row.option}</span>{/if}<span class="live-state"
-								>{view.liveStatuses[row.id] === 'live' ? 'Live' : 'Offline'}{#if issues.length}
-									· <span class="warning">{issues.length} to check</span>{/if}</span
-							></td
-						>
-						<td data-label="Menu"
-							><input
-								type="checkbox"
-								aria-label={`Include ${row.title} ${row.option}`}
-								bind:checked={row.selected}
-								disabled={busy}
-							/></td
-						>
-						<td data-label="Supplier / code" class="supplier"
-							><select
-								aria-label={`Supplier for ${row.title}`}
-								bind:value={row.provider}
-								disabled={busy}
-								onchange={() => lookup(row)}
-								><option value="bulk_follows">BulkFollows</option><option value="smm_raja"
-									>SMM Raja</option
-								></select
-							><input
-								aria-label={`Code for ${row.title}`}
-								bind:value={row.serviceId}
-								disabled={busy}
-								onchange={() => lookup(row)}
-							/><span title={q?.name}>{q?.name ?? 'Needs lookup'}</span></td
-						>
-						<td data-label="Pack quantity"
-							><input
-								type="number"
-								aria-label={`Pack quantity for ${row.title}`}
-								min="1"
-								step="1"
-								bind:value={row.units}
-								disabled={busy}
-								onchange={updateTargets}
-							/></td
-						>
-						<td data-label="Supplier cost" class="cost"
-							>{money(e.cost)}<small>{q ? `$${q.rateUsd ?? '—'} / 1,000` : 'No quote'}</small></td
-						>
-						<td data-label="Target profit %"
-							><input
-								type="number"
-								aria-label={`Target profit for ${row.title}`}
-								min="0"
-								max="10000"
-								step="0.01"
-								bind:value={row.targetMarkup}
-								disabled={busy}
-								onchange={updateTargets}
-							/></td
-						>
-						<td data-label="Selling price"
-							><input
-								type="number"
-								aria-label={`Selling price for ${row.title}`}
-								min="0"
-								step="50"
-								bind:value={row.sale}
-								disabled={busy}
-								oninput={() => (row.priceMode = 'manual')}
-							/><select
-								class="mode"
-								aria-label={`Price mode for ${row.title}`}
-								bind:value={row.priceMode}
-								disabled={busy}
-								onchange={updateTargets}
-								><option value="manual">My price</option><option value="target">Use target</option
-								></select
-							></td
-						>
-						<td data-label="Profit" class="profit" class:loss={e.profit !== null && e.profit <= 0}
-							>{money(e.profit)}<small
-								>{e.markup === null
-									? '—'
-									: `${Math.round(e.markup).toLocaleString()}% on cost`}</small
-							></td
-						>
-						<td class="details-cell"
-							><button
-								class="quiet"
-								aria-label={`Details for ${row.title}`}
-								aria-expanded={expanded === row.id}
-								onclick={() => (expanded = expanded === row.id ? null : row.id)}
-								>{expanded === row.id ? 'Close' : 'Details'}</button
-							></td
-						>
-					</tr>
-					{#if expanded === row.id}<tr class="detail-row"
-							><td colspan="9"
-								><div class="row-details">
-									<div class="detail-fields">
-										<label
-											>Option name<input
-												bind:value={row.option}
-												disabled={busy}
-												placeholder="Leave blank for a single option"
-											/></label
-										><label
-											>Starting quantity<input
-												type="number"
-												min="1"
-												step="1"
-												bind:value={row.startingQuantity}
-												disabled={busy}
-											/></label
-										><label
-											>Quantity increment<input
-												type="number"
-												min="1"
-												step="1"
-												bind:value={row.increment}
-												disabled={busy}
-											/></label
-										><label
-											>Retry<select bind:value={row.recoveryMode} disabled={busy}
-												><option value="off">Off</option><option value="definitive"
-													>Confirmed failure only</option
-												><option value="fallback">Advanced fallback</option></select
-											></label
-										><label
-											>Total attempts<input
-												type="number"
-												min="1"
-												max="4"
-												bind:value={row.attempts}
-												disabled={busy}
-											/></label
-										><label
-											>Profit budget %<input
-												type="number"
-												min="0"
-												max="100"
-												bind:value={row.profitBudgetPercent}
-												disabled={busy}
-											/></label
-										><label class="note"
-											>Private note<input bind:value={row.note} disabled={busy} /></label
-										>
-									</div>
-									<p>
-										Customer starts at {pricingStart(row, q?.max ?? null).toLocaleString()} · Supplier
-										range {q?.min?.toLocaleString() ?? '—'}–{q?.max?.toLocaleString() ?? '—'} · Recovery
-										estimate {money(e.recoveryBudget)}
-									</p>
-									<p>
-										Retries cover confirmed, uncharged failures only. Paid replacements are not
-										enabled. {view.sheet.settings.feeConfirmed
-											? 'Estimated fees included.'
-											: 'Profit estimates exclude payment fees.'}
-									</p>
-									{#if issues.length}<ul class="issues">
-											{#each issues as issue (issue)}<li>{issue}</li>{/each}
-										</ul>{/if}
+		</div>
+		<div class="filters">
+			<p>{live} offers live · <span>{flagged} need review</span></p>
+			<div>
+				<label class="sr-only" for="platform">Platform</label><select
+					id="platform"
+					bind:value={platform}
+					><option value="all">All platforms</option>{#each platforms as p}<option value={p}
+							>{label(p)}</option
+						>{/each}</select
+				>
+				<label class="sr-only" for="status">Status</label><select id="status" bind:value={filter}
+					><option value="all">All offers</option><option value="live">Live</option><option
+						value="review">Needs review</option
+					></select
+				>
+				<input aria-label="Search offers" placeholder="Search offers" bind:value={search} />
+			</div>
+		</div>
+		<div class="table-scroll">
+			<table>
+				<thead
+					><tr
+						><th>Service</th><th>Option</th><th>Quantity</th><th>Source</th><th>Cost ₦</th><th
+							>Price ₦</th
+						><th>Profit ₦</th><th>Status</th><th>Live</th></tr
+					></thead
+				><tbody>
+					{#each visible as row (row.id)}
+						<tr
+							><td
+								><button
+									class="service"
+									aria-expanded={expanded === row.id}
+									onclick={() => (expanded = expanded === row.id ? null : row.id)}
+									>{row.title}</button
+								></td
+							>
+							<td
+								>{view.sheet.rows.filter(
+									(r) => r.platform === row.platform && r.outcome === row.outcome
+								).length > 1
+									? row.option ||
+										(
+											{ value: 'Affordable', stable: 'More stable', premium: 'Premium' } as Record<
+												string,
+												string
+											>
+										)[row.tier] ||
+										row.tier
+									: '—'}</td
+							>
+							<td>{row.units.toLocaleString()}</td><td
+								><button class="source" onclick={() => openSupplier(row)}
+									>{quote(row)
+										? row.provider === 'smm_raja'
+											? 'SMM Raja'
+											: 'BulkFollows'
+										: 'Set up'}<small
+										>{row.serviceId ? `#${row.serviceId}` : ''}{view.setup[row.id]
+											?.routingPolicy === 'automatic'
+											? ' · Auto'
+											: ''}</small
+									></button
+								></td
+							>
+							<td>{money(economics(row).cost)}</td><td
+								><div class="price">
+									<input
+										aria-label={`Price for ${row.title} ${row.tier}`}
+										type="number"
+										min="0"
+										step="0.01"
+										bind:value={row.sale}
+										oninput={() => (row.priceMode = 'manual')}
+									/><button
+										class:locked={row.priceMode === 'manual'}
+										aria-label={`${row.priceMode === 'manual' ? 'Unlock' : 'Lock'} ${row.title} ${row.tier} price`}
+										onclick={() => toggleLock(row)}
+										>{#if row.priceMode === 'manual'}<Lock size={15} />{:else}<Unlock
+												size={15}
+											/>{/if}</button
+									>
 								</div></td
-							></tr
-						>{/if}
-				{/each}</tbody
-			>
-		</table>
-		{#if !visible.length}<p class="empty">No matching services.</p>{/if}
-	</div>
-	<p class="footnote">
-		Prices and costs are for the pack quantity. Save keeps changes private; Publish updates the
-		storefront.
-	</p>
+							>
+							<td class:negative={(economics(row).profit ?? 0) <= 0} class="profit"
+								>{money(economics(row).profit)}</td
+							>
+							<td
+								><span
+									class="badge"
+									class:warning={warnings(row).length > 0}
+									title={warnings(row).join(' ')}
+									>{warnings(row).length
+										? 'Needs review'
+										: view.liveStatuses[row.id] === 'live'
+											? 'Healthy'
+											: 'Hidden'}</span
+								></td
+							>
+							<td
+								><input
+									aria-label={`Live ${row.title} ${row.tier}`}
+									type="checkbox"
+									bind:checked={row.selected}
+									disabled={busy ||
+										(!row.selected &&
+											(!view.setup[row.id]?.reviewed ||
+												warnings(row).some(
+													(w) =>
+														![
+															'Below profit target.',
+															'Check option price order.',
+															'Costs more per item than followers.'
+														].includes(w)
+												)))}
+								/></td
+							>
+						</tr>
+						{#if expanded === row.id}<tr class="expanded"
+								><td colspan="9"
+									><div class="row-details">
+										<div>
+											<h3>{row.title}</h3>
+											<p>{quote(row)?.name ?? 'No supplier chosen'}</p>
+											{#each warnings(row) as warning}<p class="warning-copy">{warning}</p>{/each}
+											<p>
+												Customers start at {pricingStart(
+													row,
+													quote(row)?.max ?? null
+												).toLocaleString()} · +/− {row.increment.toLocaleString()}
+											</p>
+											<p>
+												Reviewed supplier limit: {money(view.setup[row.id]?.maximumCostNgn ?? null)}
+												per {row.startingQuantity.toLocaleString()}.
+											</p>
+											<button disabled={busy || dirty} onclick={() => openSupplier(row)}
+												>Supplier setup</button
+											>
+										</div>
+										<div class="fields">
+											<label class="check"
+												><input
+													type="checkbox"
+													bind:checked={row.useDefaultMarkup}
+													onchange={() => queueMicrotask(previewPrices)}
+												/> Use default profit percentage</label
+											>
+											<label
+												>Profit on supplier cost (%)<input
+													type="number"
+													min="0"
+													max="10000"
+													disabled={row.useDefaultMarkup}
+													bind:value={row.targetMarkup}
+													oninput={() => queueMicrotask(previewPrices)}
+												/></label
+											>
+											<label
+												>Profit target override (₦)<input
+													type="number"
+													min="0"
+													placeholder="Global"
+													bind:value={row.profitTargetNgn}
+													oninput={() => queueMicrotask(previewPrices)}
+												/></label
+											>
+											<label
+												>Minimum retained profit override (₦)<input
+													type="number"
+													min="0"
+													placeholder="Global"
+													bind:value={row.hardProfitNgn}
+													oninput={() => queueMicrotask(previewPrices)}
+												/></label
+											>
+										</div>
+									</div></td
+								></tr
+							>{/if}
+					{:else}<tr><td colspan="9" class="empty">No offers match these filters.</td></tr>{/each}
+				</tbody>
+			</table>
+		</div>
+		<details class="history">
+			<summary>Change history</summary>{#each view.history as item}<p>
+					{new Date(item.createdAt).toLocaleString('en-NG')} · {item.action.replaceAll('_', ' ')} · v{item.version}
+				</p>{/each}
+		</details>
+	</fieldset>
 </div>
 
+{#if expandConfirm}<div class="overlay">
+		<div
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="expand-title"
+			tabindex="-1"
+			class="confirm panel"
+			use:adminDialog={() => (expandConfirm = false)}
+		>
+			<h2 id="expand-title">Expand catalogue?</h2>
+			<p>
+				Add missing services from the latest supplier catalogue. Existing offers stay untouched. New
+				offers stay hidden until reviewed.
+			</p>
+			<div class="actions">
+				<button onclick={() => (expandConfirm = false)}>Cancel</button><button
+					class="primary"
+					onclick={expandCatalog}>Expand catalogue</button
+				>
+			</div>
+		</div>
+	</div>{/if}
+{#if supplier}<div class="overlay">
+		<div
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="supplier-title"
+			tabindex="-1"
+			class="supplier-panel"
+			use:adminDialog={closeSupplier}
+		>
+			<header>
+				<h2 id="supplier-title">{supplier.title} · Supplier setup</h2>
+				<button aria-label="Close supplier setup" onclick={closeSupplier}><X size={20} /></button>
+			</header>
+			<BoostingSupplierSetup
+				data={setupData}
+				categoryId={view.setup[supplier.id].categoryId}
+				qualityTier={supplier.tier as 'value' | 'stable' | 'premium'}
+				embedded
+				onSaved={supplierSaved}
+			/>
+		</div>
+	</div>{/if}
+
 <style>
-	.pricing-page {
-		--brand: var(--primary);
-		min-width: 0;
+	.boosting-page {
+		max-width: 1200px;
+		margin: auto;
+		padding: 24px;
 		color: var(--text);
-		max-width: 1600px;
-		margin: 0 auto;
 	}
-	.pricing-header,
-	.toolbar,
-	.status-bar,
-	.filters {
+	header,
+	.actions,
+	.heading,
+	.catalog-toolbar,
+	.filters,
+	.filters > div,
+	.price {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
+		gap: 12px;
+	}
+	header,
+	.catalog-toolbar,
+	.filters {
+		justify-content: space-between;
 		flex-wrap: wrap;
 	}
-	.pricing-header {
-		justify-content: space-between;
-		margin-bottom: 1.5rem;
-		align-items: flex-start;
-	}
-	.eyebrow {
-		color: var(--brand);
-		font-size: 0.7rem;
-		letter-spacing: 0.16em;
-		font-weight: 700;
-		margin: 0 0 0.5rem;
+	fieldset {
+		border: 0;
+		padding: 0;
+		min-width: 0;
 	}
 	h1 {
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-		font-size: 1.6rem;
+		font-size: 24px;
 		font-weight: 700;
-		margin: 0;
 	}
-	.subtitle,
-	.footnote {
+	h2,
+	h3 {
+		font-weight: 650;
+	}
+	p,
+	small {
 		color: var(--text-muted);
-		font-size: 0.85rem;
-		margin: 0.5rem 0 0;
+		font-size: 13px;
+	}
+	header p {
+		margin-top: 3px;
+	}
+	button,
+	select,
+	input {
+		border: 1px solid var(--border);
+		background: var(--bg-elev-1);
+		border-radius: 9px;
+		color: var(--text);
+		padding: 9px 12px;
+		font-size: 13px;
 	}
 	button {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		gap: 0.4rem;
-		font-size: 0.8rem;
-		font-weight: 600;
-		border-radius: 0.65rem;
-		padding: 0.65rem 0.8rem;
+		gap: 7px;
 		cursor: pointer;
-		border: 1px solid var(--border);
-		white-space: nowrap;
 	}
 	button:disabled {
 		opacity: 0.45;
 		cursor: not-allowed;
 	}
-	.quiet {
-		background: var(--surface);
-		color: var(--text);
+	.primary {
+		background: var(--primary);
+		color: var(--primary-foreground, #00150b);
+		font-weight: 650;
 	}
-	.save {
-		background: var(--surface);
-		border-color: var(--brand);
-		color: var(--brand);
-	}
-	.publish {
-		background: var(--brand);
-		color: #03110c;
-		border-color: var(--brand);
-	}
-	.status-bar {
-		padding: 0.7rem 1rem;
+	.panel {
+		margin: 20px 0;
 		border: 1px solid var(--border);
-		border-radius: 0.8rem;
+		border-radius: 12px;
 		background: var(--surface);
+		padding: 20px;
+	}
+	.panel > p {
+		margin: 10px 0 18px;
+	}
+	.fields {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 16px;
+		margin-top: 15px;
+	}
+	label {
+		font-size: 12px;
 		color: var(--text-muted);
-		font-size: 0.8rem;
 	}
-	.status-bar > span + span::before {
-		content: '·';
-		margin-right: 0.75rem;
-	}
-	.status-bar a {
-		margin-left: auto;
-		color: var(--brand);
-		display: flex;
-		align-items: center;
-	}
-	.filters {
-		padding: 1rem 0;
-	}
-	input:not([type='checkbox']),
-	select {
-		color: var(--text);
-		background: var(--bg);
-		border: 1px solid var(--border);
-		border-radius: 0.5rem;
-		padding: 0.5rem 0.6rem;
-		min-height: 38px;
-		font-size: 0.8rem;
+	label > input:not([type='checkbox']) {
+		display: block;
 		width: 100%;
+		margin-top: 7px;
 	}
-	input:focus,
-	select:focus,
-	button:focus-visible,
-	summary:focus-visible,
-	.sheet-wrap:focus-visible {
-		outline: 2px solid var(--brand);
-		outline-offset: 2px;
+	small {
+		display: block;
+		font-size: 11px;
+		margin-top: 5px;
 	}
-	input[type='checkbox'] {
-		width: 17px;
-		height: 17px;
-		accent-color: var(--brand);
-	}
-	.search {
+	.floor {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: 20px;
+		border: 1px solid color-mix(in srgb, var(--primary) 40%, transparent);
+		background: color-mix(in srgb, var(--primary) 7%, transparent);
+		padding: 15px;
+		border-radius: 10px;
+		margin-top: 16px;
+	}
+	.floor label {
 		flex: 1;
-		min-width: 200px;
-		border: 1px solid var(--border);
-		border-radius: 0.6rem;
-		padding-left: 0.7rem;
+		color: var(--primary);
 	}
-	.search input {
-		border: 0;
-		background: transparent;
+	.floor p {
+		flex: 1;
+		font-size: 12px;
 	}
-	.filters > select {
-		width: auto;
+	details {
+		margin-top: 16px;
+		font-size: 12px;
 	}
-	.settings {
-		margin-left: auto;
-		position: relative;
-		font-size: 0.8rem;
-	}
-	.settings summary {
+	summary {
 		cursor: pointer;
 		color: var(--text-muted);
 	}
-	.settings > div {
-		position: absolute;
-		z-index: 5;
-		top: 2rem;
-		right: 0;
-		width: 280px;
-		padding: 1rem;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 0.8rem;
-		box-shadow: 0 12px 30px #0004;
-	}
-	.settings label,
-	.detail-fields label {
+	.check {
 		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-		font-size: 0.75rem;
-		color: var(--text-muted);
+		align-items: center;
+		gap: 8px;
+		margin-top: 14px;
 	}
-	.settings label + label {
-		margin-top: 0.7rem;
+	.hint {
+		font-size: 12px;
+		margin: 12px 0;
 	}
-	.settings p {
-		margin-top: 0.8rem;
-		color: var(--text-muted);
-		font-size: 0.75rem;
+	.balances {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
 	}
-	.sheet-wrap {
+	.balances > span {
 		border: 1px solid var(--border);
-		border-radius: 0.9rem;
-		overflow: auto;
+		border-radius: 10px;
 		background: var(--surface);
+		padding: 13px;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+	strong {
+		margin-left: 8px;
+		color: var(--text);
+	}
+	.filters {
+		margin: 20px 0 12px;
+	}
+	.filters p span,
+	.warning-copy {
+		color: #fbbf24;
+	}
+	.filters > div {
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	.table-scroll {
+		max-width: 100%;
+		overflow: auto;
+		border: 1px solid var(--border);
+		border-radius: 12px;
 	}
 	table {
-		border-collapse: separate;
-		border-spacing: 0;
 		width: 100%;
-		min-width: 1160px;
-		font-size: 0.8rem;
+		min-width: 980px;
+		border-collapse: collapse;
+		text-align: left;
+		font-size: 13px;
 	}
 	th {
-		position: sticky;
-		top: 0;
-		background: var(--surface);
+		font-size: 11px;
+		text-transform: uppercase;
 		color: var(--text-muted);
-		text-align: left;
-		font-weight: 600;
-		font-size: 0.7rem;
-		padding: 0.9rem 0.7rem;
-		border-bottom: 1px solid var(--border);
-		z-index: 2;
-		white-space: nowrap;
+		padding: 15px;
+		background: var(--bg-elev-1);
 	}
 	td {
-		padding: 0.9rem 0.7rem;
-		vertical-align: top;
-		border-bottom: 1px solid var(--border);
+		padding: 13px;
+		border-top: 1px solid var(--border);
+		background: var(--surface);
+		vertical-align: middle;
 	}
-	td input[type='number'] {
-		min-width: 80px;
-		width: 100px;
+	.service,
+	.source {
+		border: 0;
+		padding: 0;
+		background: none;
+		text-align: left;
+		justify-content: flex-start;
 	}
 	.service {
-		min-width: 190px;
-		position: sticky;
-		left: 0;
-		background: var(--bg-elev-1);
-		z-index: 1;
+		font-weight: 650;
 	}
-	.service strong {
+	.source {
 		display: block;
-		font-size: 0.9rem;
-		margin: 0.2rem 0;
+		font-size: 12px;
 	}
-	.platform {
-		color: var(--text-muted);
-		font-size: 0.7rem;
+	.source small {
+		font-size: 10px;
 	}
-	.option {
-		display: block;
-		color: var(--text-muted);
-		font-size: 0.75rem;
-		margin-bottom: 0.2rem;
+	.price {
+		gap: 5px;
 	}
-	.live-state {
-		color: var(--text-muted);
-		font-size: 0.7rem;
+	.price input {
+		width: 95px;
+		text-align: center;
+		font-weight: 600;
+		padding: 7px;
 	}
-	.warning {
-		color: #eab308;
+	.price button {
+		padding: 7px;
 	}
-	.supplier {
-		min-width: 190px;
-		max-width: 230px;
+	.locked {
+		color: #fbbf24;
+		border-color: #fbbf24;
 	}
-	.supplier input {
-		margin-top: 0.35rem;
-	}
-	.supplier > span {
-		display: block;
-		color: var(--text-muted);
-		font-size: 0.65rem;
-		margin-top: 0.3rem;
-		max-width: 190px;
-		text-overflow: ellipsis;
-		overflow: hidden;
-		white-space: nowrap;
-	}
-	.cost,
 	.profit {
-		min-width: 125px;
+		color: var(--primary);
 		font-weight: 600;
 	}
-	.cost small,
-	.profit small {
-		display: block;
-		color: var(--text-muted);
-		font-size: 0.65rem;
-		font-weight: 400;
-		margin-top: 0.4rem;
-		white-space: nowrap;
-	}
-	.profit {
-		color: var(--brand);
-	}
-	.loss,
+	.negative,
 	.error {
 		color: #f87171;
 	}
-	.mode {
-		font-size: 0.65rem;
-		padding: 0.2rem 0.4rem;
-		min-height: 28px;
-		margin-top: 0.3rem;
+	.badge {
+		display: inline-block;
+		background: color-mix(in srgb, var(--primary) 12%, transparent);
+		color: var(--primary);
+		padding: 3px 6px;
+		border-radius: 4px;
+		font-size: 11px;
 	}
-	.detail-row td {
-		padding: 0;
+	.badge.warning {
+		color: #fbbf24;
+		background: rgba(245, 158, 11, 0.1);
+	}
+	input[type='checkbox'] {
+		accent-color: var(--primary);
+		width: 15px;
+		height: 15px;
 	}
 	.row-details {
-		padding: 1rem;
-		background: var(--bg);
-	}
-	.detail-fields {
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 1rem;
+		grid-template-columns: 1fr 1.5fr;
+		gap: 24px;
+		padding: 8px;
 	}
-	.detail-fields input {
-		width: 100%;
+	.row-details p {
+		margin: 6px 0;
 	}
-	.detail-fields .note {
-		grid-column: 1/-1;
-	}
-	.row-details p,
-	.history p {
-		font-size: 0.75rem;
-		color: var(--text-muted);
-		margin: 0.8rem 0 0;
-	}
-	.issues {
-		margin: 0.7rem 0 0;
-		padding-left: 1rem;
-		color: #eab308;
-		font-size: 0.75rem;
-	}
-	.issues li + li {
-		margin-top: 0.3rem;
+	.row-details .fields {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		margin: 0;
 	}
 	.empty {
-		padding: 2rem;
+		padding: 30px;
 		text-align: center;
-		color: var(--text-muted);
 	}
-	.confirm-panel,
-	.history {
-		padding: 1rem;
-		margin-top: 1rem;
+	.history p {
+		margin-top: 8px;
+	}
+	.overlay {
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.7);
+		z-index: 80;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 20px;
+	}
+	.confirm {
+		width: 480px;
+		max-width: 100%;
+	}
+	.supplier-panel {
+		width: 1050px;
+		max-width: 100%;
+		max-height: 92dvh;
+		overflow: auto;
+		background: var(--bg);
+		padding: 24px;
 		border: 1px solid var(--border);
-		border-radius: 0.8rem;
-		background: var(--surface);
+		border-radius: 16px;
 	}
-	.confirm-panel {
-		display: flex;
-		gap: 0.75rem;
-		align-items: center;
-		flex-wrap: wrap;
-	}
-	.confirm-panel > div {
-		flex: 1;
-		min-width: 200px;
-	}
-	.confirm-panel p {
-		font-size: 0.8rem;
-		color: var(--text-muted);
-		margin-top: 0.4rem;
-	}
-	h2 {
-		margin: 0;
-		font-size: 0.95rem;
-		font-weight: 600;
-	}
-	.history > div {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 0.6rem 0;
-		font-size: 0.8rem;
+	.supplier-panel > header {
+		margin-bottom: 20px;
 	}
 	.sr-only {
 		position: absolute;
@@ -875,120 +899,41 @@
 		clip: rect(0, 0, 0, 0);
 	}
 	@media (max-width: 700px) {
-		h1 {
-			font-size: 1.4rem;
+		.boosting-page {
+			padding: 16px;
 		}
-		.toolbar {
-			width: 100%;
-			gap: 0.5rem;
+		.fields {
+			grid-template-columns: 1fr;
 		}
-		.toolbar button {
-			flex: 1;
-			padding: 0.6rem;
+		.floor {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 12px;
 		}
-		.status-bar {
-			gap: 0.5rem;
+		.actions {
+			flex-wrap: wrap;
+			gap: 8px;
 		}
-		.status-bar a {
-			width: 100%;
-			margin: 0;
+		.heading h1 {
+			font-size: 21px;
 		}
-		.filters > select {
-			flex: 1;
-		}
-		.search {
-			flex-basis: 100%;
-		}
-		.settings {
-			width: 100%;
-			margin: 0;
-		}
-		.settings > div {
-			position: static;
-			width: 100%;
-			margin-top: 0.5rem;
-		}
-		.sheet-wrap {
-			overflow: visible;
-			border: 0;
-			background: transparent;
-		}
-		table,
-		tbody {
-			display: block;
-			min-width: 0;
-		}
-		thead {
-			display: none;
-		}
-		tbody > tr:not(.detail-row) {
-			display: grid;
-			grid-template-columns: 1fr 1fr;
-			gap: 0.8rem;
-			padding: 1rem;
-			border: 1px solid var(--border);
-			border-radius: 0.85rem;
-			background: var(--surface);
-			margin-bottom: 0.8rem;
-		}
-		td {
-			display: block;
-			padding: 0;
-			border: 0;
-			min-width: 0 !important;
-			max-width: none !important;
-		}
-		.service {
-			position: static;
-			grid-column: 1;
-			background: transparent;
-		}
-		td[data-label]::before {
-			content: attr(data-label);
-			display: block;
-			font-size: 0.65rem;
-			color: var(--text-muted);
-			font-weight: 400;
-			margin-bottom: 0.3rem;
-		}
-		td:nth-child(2) {
-			text-align: right;
-		}
-		.supplier {
-			grid-column: 1/-1;
-		}
-		.supplier > span {
-			max-width: 100%;
-		}
-		td input[type='number'] {
+		.filters > div {
 			width: 100%;
 		}
-		.cost,
-		.profit {
-			padding: 0.3rem 0;
-		}
-		.details-cell {
-			grid-column: 1/-1;
-		}
-		.details-cell button {
+		.filters input {
 			width: 100%;
-		}
-		.detail-row {
-			display: block;
-			margin: -0.8rem 0 0.8rem;
 		}
 		.row-details {
-			border: 1px solid var(--border);
-			border-radius: 0.8rem;
+			grid-template-columns: 1fr;
 		}
-		.detail-fields {
-			grid-template-columns: 1fr 1fr;
+		.row-details .fields {
+			grid-template-columns: 1fr;
 		}
-		.history > div {
-			align-items: flex-start;
+		.overlay {
+			padding: 10px;
 		}
-		.history > div span {
-			font-size: 0.7rem;
+		.supplier-panel {
+			padding: 14px;
 		}
 	}
 </style>

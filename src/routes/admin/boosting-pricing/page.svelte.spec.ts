@@ -4,155 +4,124 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import '$lib/../app.css';
 import Page from './+page.svelte';
 import { sheet, quote } from '$lib/helpers/boosting-pricing-sheet-fixtures';
-import type { BoostPricingView } from '$lib/helpers/boosting-pricing-sheet';
-
-function fixture(version = 1): BoostPricingView {
+import type { BoostControlsView } from '$lib/helpers/boosting-pricing-controls';
+vi.mock('$app/navigation', () => ({ beforeNavigate: vi.fn() }));
+function fixture(): BoostControlsView {
 	return {
-		sheet: { ...structuredClone(sheet), version },
-		quotes: { row: structuredClone(quote) },
-		liveStatuses: { row: 'hidden' },
+		sheet: {
+			...structuredClone(sheet),
+			version: 1,
+			settings: {
+				...sheet.settings,
+				defaultMarkup: 40,
+				profitTargetNgn: 0,
+				hardProfitNgn: 0,
+				maxPriceMultiple: 0
+			}
+		},
+		quotes: { row: { ...structuredClone(quote), checkedAt: new Date().toISOString() } },
+		liveStatuses: { row: 'live' },
+		setup: {
+			row: { categoryId: 'category', routingPolicy: 'locked', maximumCostNgn: 20, reviewed: true }
+		},
+		archivedDraft: false,
 		history: [],
-		approval: { id: 'approval', approvedAt: '2026-10-10T13:43:41Z', digest: 'verified' }
+		approval: { id: 'approval', approvedAt: '2026-10-10', digest: 'test' }
 	};
 }
 beforeEach(async () => {
 	await page.viewport(1360, 900);
 	document.body.style.padding = '24px';
 	document.body.style.background = 'var(--bg)';
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () => Response.json({ success: true, data: { providers: [] } }))
+	);
 });
 afterEach(() => {
 	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
 });
-
-it('saves the initial approved sheet only as a draft and requires a separate publish confirmation', async () => {
-	const fetchMock = vi.fn(async () => Response.json({ success: true, data: fixture(1) }));
+it('uses one Save and locks edited customer prices', async () => {
+	const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+		if (String(input).includes('/discovery'))
+			return Response.json({ success: true, data: { providers: [] } });
+		const next = fixture();
+		next.sheet = JSON.parse(init!.body as string).sheet;
+		return Response.json({ success: true, data: next });
+	});
 	vi.stubGlobal('fetch', fetchMock);
-	render(Page, { data: { pricing: fixture(0) } } as never);
-	await expect.element(page.getByRole('button', { name: 'Publish menu' })).toBeDisabled();
-	await page.getByRole('button', { name: 'Save draft' }).click();
-	await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
+	render(Page, { data: { pricing: fixture() } } as never);
+	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }).fill('900');
+	await expect
+		.element(page.getByRole('button', { name: 'Unlock TikTok Likes value price' }))
+		.toBeVisible();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await expect
+		.poll(() => fetchMock.mock.calls.filter((c) => c[1]?.method === 'POST').length)
+		.toBe(1);
 	expect(
-		JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)
-			.action
-	).toBe('save');
-	await page.getByRole('button', { name: 'Publish menu' }).click();
-	expect(fetchMock).toHaveBeenCalledTimes(1);
-	await expect.element(page.getByRole('region', { name: 'Confirm publication' })).toBeVisible();
-	await page.getByRole('button', { name: 'Yes, publish' }).click();
+		JSON.parse(fetchMock.mock.calls.find((c) => c[1]?.method === 'POST')![1]!.body as string)
+	).toMatchObject({ action: 'save', sheet: { rows: [{ sale: 900 }] } });
+	expect(page.getByRole('button', { name: 'Publish menu' }).query()).toBeNull();
+});
+it('previews automatic prices but preserves manual locks when the dollar rate changes', async () => {
+	render(Page, { data: { pricing: fixture() } } as never);
+	await page.getByRole('spinbutton', { name: 'Dollar rate' }).fill('2000');
+	await expect
+		.element(page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }))
+		.toHaveValue(500);
+	await page.getByRole('button', { name: 'Unlock TikTok Likes value price' }).click();
+	await expect
+		.element(page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }))
+		.toHaveValue(150);
+	await page.getByRole('spinbutton', { name: 'Dollar rate' }).fill('3000');
+	await expect
+		.element(page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }))
+		.toHaveValue(250);
+});
+it('requires confirmation before add-only catalogue expansion', async () => {
+	const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+		Response.json({
+			success: true,
+			data: String(input).includes('/discovery') ? { providers: [] } : fixture(),
+			summary: { offersCreated: 2 }
+		})
+	);
+	vi.stubGlobal('fetch', fetchMock);
+	render(Page, { data: { pricing: fixture() } } as never);
+	await page.getByRole('button', { name: '+ Expand catalogue' }).click();
+	await expect.element(page.getByRole('dialog', { name: 'Expand catalogue?' })).toBeVisible();
+	expect(fetchMock.mock.calls.length).toBe(1);
+	await page.getByRole('button', { name: 'Expand catalogue', exact: true }).click();
 	await expect.poll(() => fetchMock.mock.calls.length).toBe(2);
-	expect(
-		JSON.parse((fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body as string)
-	).toMatchObject({ action: 'publish', version: 1, confirm: true });
 });
-
-it('editing a price switches to manual and blocks publication until saved', async () => {
+it('protects unsaved prices from refresh and supplier setup', async () => {
 	render(Page, { data: { pricing: fixture() } } as never);
-	await page.getByRole('spinbutton', { name: 'Selling price for TikTok Likes' }).fill('900');
-	await expect
-		.element(page.getByRole('combobox', { name: 'Price mode for TikTok Likes' }))
-		.toHaveValue('manual');
-	await expect.element(page.getByRole('button', { name: 'Publish menu' })).toBeDisabled();
-	await expect.element(page.getByText('Unsaved changes')).toBeVisible();
+	await page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }).fill('900');
+	await expect.element(page.getByRole('button', { name: 'Refresh costs' })).toBeDisabled();
+	await expect.element(page.getByRole('button', { name: '+ Expand catalogue' })).toBeDisabled();
+	await page.getByRole('button', { name: 'SMM Raja' }).click();
+	expect(page.getByRole('dialog', { name: 'TikTok Likes · Supplier setup' }).query()).toBeNull();
 });
-
-it('refreshes costs without overwriting an unsaved customer price', async () => {
-	const fresh = fixture();
-	fresh.quotes.row!.rateUsd = 0.1;
-	vi.stubGlobal(
-		'fetch',
-		vi.fn(async (url: RequestInfo | URL) =>
-			Response.json({ success: true, data: String(url).includes('/sync') ? {} : fresh })
-		)
-	);
-	render(Page, { data: { pricing: fixture() } } as never);
-	await page.getByRole('spinbutton', { name: 'Selling price for TikTok Likes' }).fill('900');
-	await page.getByRole('button', { name: 'Refresh costs' }).click();
-	await expect
-		.element(page.getByRole('spinbutton', { name: 'Selling price for TikTok Likes' }))
-		.toHaveValue(900);
-	await expect.poll(() => document.querySelector('td.profit')?.textContent).toContain('₦750');
-});
-
-it('ignores a late supplier response after the code has changed again', async () => {
-	let resolveFirst: (value: Response) => void = () => {};
-	vi.stubGlobal(
-		'fetch',
-		vi.fn((url: RequestInfo | URL) =>
-			String(url).includes('code=old')
-				? new Promise<Response>((resolve) => {
-						resolveFirst = resolve;
-					})
-				: Promise.resolve(
-						Response.json({ success: true, data: { ...quote, name: 'Latest chosen service' } })
-					)
-		)
-	);
-	render(Page, { data: { pricing: fixture() } } as never);
-	await page.getByRole('textbox', { name: 'Code for TikTok Likes' }).fill('old');
-	await page.getByRole('spinbutton', { name: 'Pack quantity for TikTok Likes' }).click();
-	await page.getByRole('textbox', { name: 'Code for TikTok Likes' }).fill('new');
-	await page.getByRole('spinbutton', { name: 'Pack quantity for TikTok Likes' }).click();
-	await expect.element(page.getByText('Latest chosen service')).toBeVisible();
-	resolveFirst(Response.json({ success: true, data: { ...quote, name: 'Stale service' } }));
-	await expect.element(page.getByText('Latest chosen service')).toBeVisible();
-});
-
-it('exports the edited sheet, not stale saved prices', async () => {
+it('exports current edits without saving or publishing them', async () => {
 	const create = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
 	vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 	render(Page, { data: { pricing: fixture() } } as never);
-	await page.getByRole('spinbutton', { name: 'Selling price for TikTok Likes' }).fill('950');
+	await page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }).fill('950');
 	await page.getByRole('button', { name: 'Export', exact: true }).click();
-	const csv = await (create.mock.calls[0][0] as Blob).text();
-	expect(csv).toContain('950');
-	expect(csv).toContain('TikTok Likes');
+	expect(await (create.mock.calls[0][0] as Blob).text()).toContain('950');
 });
-it('does not let a lookup started before saving overwrite a later lookup', async () => {
-	let old: (value: Response) => void = () => {};
-	const v = fixture(2);
-	v.sheet.rows[0].serviceId = 'old';
-	vi.stubGlobal(
-		'fetch',
-		vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
-			if (init?.method === 'POST')
-				return Promise.resolve(Response.json({ success: true, data: v }));
-			if (String(url).includes('code=old'))
-				return new Promise<Response>((resolve) => {
-					old = resolve;
-				});
-			return Promise.resolve(
-				Response.json({ success: true, data: { ...quote, name: 'New after save' } })
-			);
-		})
-	);
-	render(Page, { data: { pricing: fixture() } } as never);
-	await page.getByRole('textbox', { name: 'Code for TikTok Likes' }).fill('old');
-	await page.getByRole('spinbutton', { name: 'Pack quantity for TikTok Likes' }).click();
-	await page.getByRole('button', { name: 'Save draft' }).click();
-	await expect.element(page.getByText('Saved draft · v2')).toBeVisible();
-	await page.getByRole('textbox', { name: 'Code for TikTok Likes' }).fill('new');
-	await page.getByRole('spinbutton', { name: 'Pack quantity for TikTok Likes' }).click();
-	await expect.element(page.getByText('New after save')).toBeVisible();
-	old(Response.json({ success: true, data: { ...quote, name: 'Old before save' } }));
-	await expect.element(page.getByText('New after save')).toBeVisible();
-});
-
-it('fits mobile without sideways page scrolling and keeps extra settings collapsed', async () => {
+it('keeps the catalogue scroll inside the page on mobile', async () => {
 	await page.viewport(390, 844);
 	render(Page, { data: { pricing: fixture() } } as never);
-	await expect.element(page.getByRole('heading', { name: 'Boosting Pricing' })).toBeVisible();
+	await expect.element(page.getByRole('heading', { name: 'Boosting — Pricing' })).toBeVisible();
 	expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
-	expect(page.getByText('Profit budget %').query()).toBeNull();
-	await page.screenshot({
-		path: 'src/routes/admin/boosting-pricing/__screenshots__/mobile.png'
-	});
+	await page.screenshot({ path: 'src/routes/admin/boosting-pricing/__screenshots__/mobile.png' });
 });
-
-it('keeps spreadsheet overflow inside the table on desktop', async () => {
+it('matches the native Numbers-style layout on desktop', async () => {
 	render(Page, { data: { pricing: fixture() } } as never);
 	expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(1360);
-	await page.screenshot({
-		path: 'src/routes/admin/boosting-pricing/__screenshots__/desktop.png'
-	});
+	await page.screenshot({ path: 'src/routes/admin/boosting-pricing/__screenshots__/desktop.png' });
 });

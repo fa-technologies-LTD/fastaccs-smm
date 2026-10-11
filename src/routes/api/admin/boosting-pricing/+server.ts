@@ -1,22 +1,23 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
+import { BoostPricingError } from '$lib/server/boosting-providers/pricing-sheet';
 import {
-	BoostPricingError,
-	loadBoostPricingView,
-	saveBoostPricingDraft,
-	publishBoostPricingSheet,
-	restoreBoostPricingDraft,
-	reconcileBoostPricingDraft
-} from '$lib/server/boosting-providers/pricing-sheet';
+	loadBoostControls,
+	saveBoostControls
+} from '$lib/server/boosting-providers/pricing-controls';
+import { prepopulateBoostingDraftSuggestions } from '$lib/server/boosting-providers/draft-suggestions';
+import { syncBoostProviderCatalogues } from '$lib/server/boosting-providers/catalog-sync';
 import { exportPricingCsv } from '$lib/helpers/boosting-pricing-sheet';
+
+export const config = { maxDuration: 300 };
 
 const allowed = (locals: App.Locals) =>
 	Boolean(locals.user && hasAdminPermission(locals.adminContext, 'admin:catalog:manage'));
 export const GET: RequestHandler = async ({ locals, url, setHeaders }) => {
 	if (!allowed(locals)) return json({ success: false, error: 'Forbidden' }, { status: 403 });
 	setHeaders({ 'cache-control': 'private, no-store' });
-	const view = await loadBoostPricingView();
+	const view = await loadBoostControls();
 	if (url.searchParams.get('export') === 'csv')
 		return new Response(exportPricingCsv(view.sheet, view.quotes), {
 			headers: {
@@ -39,25 +40,19 @@ export const POST: RequestHandler = async ({ locals, request, url, setHeaders })
 		const body = JSON.parse(text);
 		if (!body || typeof body !== 'object' || Array.isArray(body))
 			throw new BoostPricingError('Invalid request.');
-		if (body.action === 'save') await saveBoostPricingDraft(body.sheet, locals.user!.id);
-		else if (body.action === 'publish') {
-			if (body.confirm !== true || !Number.isInteger(body.version))
-				throw new BoostPricingError('Confirm publication of the saved draft.');
-			await publishBoostPricingSheet(body.version, locals.user!.id);
-		} else if (body.action === 'restore') {
-			if (
-				typeof body.historyId !== 'string' ||
-				!/^[0-9a-f-]{36}$/i.test(body.historyId) ||
-				!Number.isInteger(body.version)
-			)
-				throw new BoostPricingError('Invalid saved version.');
-			await restoreBoostPricingDraft(body.historyId, body.version, locals.user!.id);
-		} else if (body.action === 'reconcile') {
-			if (body.confirm !== true || !Number.isInteger(body.version))
-				throw new BoostPricingError('Confirm acceptance of setup changes.');
-			await reconcileBoostPricingDraft(body.version, locals.user!.id);
+		if (body.action === 'save') await saveBoostControls(body.sheet, locals.user!.id);
+		else if (body.action === 'expand') {
+			const results = await syncBoostProviderCatalogues();
+			if (!results.some((r) => r.status === 'synced'))
+				throw new BoostPricingError('Suppliers could not refresh. Nothing added.');
+			const current = await loadBoostControls();
+			const summary = await prepopulateBoostingDraftSuggestions({
+				appendOnly: true,
+				usdNgnRate: current.sheet.settings.fx
+			});
+			return json({ success: true, summary, data: await loadBoostControls() });
 		} else throw new BoostPricingError('Unknown action.');
-		return json({ success: true, data: await loadBoostPricingView() });
+		return json({ success: true, data: await loadBoostControls() });
 	} catch (cause) {
 		if (cause instanceof BoostPricingError)
 			return json({ success: false, error: cause.message }, { status: cause.status });

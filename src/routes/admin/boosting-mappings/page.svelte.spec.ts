@@ -2,7 +2,7 @@ import { page } from '@vitest/browser/context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { BoostMappingWorkspace } from '$lib/helpers/boosting-mapping-types';
-import Page from './+page.svelte';
+import Page from '$lib/components/admin/BoostingSupplierSetup.svelte';
 
 const offers = [
 	{

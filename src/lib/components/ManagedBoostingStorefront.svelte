@@ -359,9 +359,12 @@
 
 		{#if selectedGroup}
 			<div>
-				<p class="mb-3 text-sm font-semibold" style="color: var(--text-muted);">
-					Pick what suits you
-				</p>
+				{#if selectedGroup.offers.length > 1}<p
+						class="mb-3 text-sm font-semibold"
+						style="color: var(--text-muted);"
+					>
+						Pick what suits you
+					</p>{/if}
 				<div class="grid gap-3">
 					{#each selectedGroup.offers as offer, index (offer.id)}
 						<button
@@ -375,9 +378,12 @@
 							<div class="flex items-start justify-between gap-4">
 								<div>
 									<div class="flex flex-wrap items-center gap-2">
-										<strong class="text-lg" style="color: var(--text);">{offer.customerName}</strong
+										<strong class="text-lg" style="color: var(--text);"
+											>{selectedGroup.offers.length === 1
+												? `${selectedGroup.platformLabel} ${selectedGroup.outcomeLabel}`
+												: offer.customerName}</strong
 										>
-										{#if index === 0}
+										{#if index === 0 && selectedGroup.offers.length > 1}
 											<span
 												class="rounded-full px-2 py-0.5 text-[10px] font-bold"
 												style="background: var(--primary); color: #00150b;">Recommended</span
