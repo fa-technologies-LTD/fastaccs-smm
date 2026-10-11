@@ -16,6 +16,7 @@
 			error: string | null;
 			canViewRevenue?: boolean;
 			canViewOrderAmounts?: boolean;
+			adminPermissions?: string[];
 		};
 	}>();
 
@@ -240,6 +241,13 @@
 			</div>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
+			{#if data.adminPermissions?.includes('admin:orders:manage')}
+				<a
+					href="/admin/payment-recovery"
+					class="rounded-lg border px-3 py-1.5 text-xs"
+					style="border-color: var(--border); color: var(--text-muted);">Payment issues</a
+				>
+			{/if}
 			<button
 				onclick={loadOrders}
 				disabled={loading}

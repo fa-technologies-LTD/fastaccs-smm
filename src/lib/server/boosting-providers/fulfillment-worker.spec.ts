@@ -45,4 +45,22 @@ describe('Boosting fulfillment safety policy', () => {
 		expect(customerStatusForProviderState('failed')).toBe('under_review');
 		expect(customerStatusForProviderState('unknown')).toBe('processing');
 	});
+	it('fails closed for corrupt retry counters instead of permitting unbounded attempts', () => {
+		const rejected = new BoostProviderSubmissionError(
+			'Not accepted',
+			'smm_raja',
+			'provider_rejected',
+			'not_submitted'
+		);
+		for (const [attempts, cap] of [
+			[-1, 2],
+			[0, 2],
+			[1.5, 2],
+			[1, Infinity],
+			[NaN, 2],
+			[1, NaN],
+			[1, 2.5]
+		])
+			expect(canRetryBoostSubmission(rejected, attempts, cap)).toBe(false);
+	});
 });

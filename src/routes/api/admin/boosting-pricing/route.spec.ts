@@ -60,7 +60,13 @@ it('rejects cross-origin mutations before contacting suppliers', async () => {
 });
 it('saves through the atomic controls service, with no separate publish step', async () => {
 	expect((await POST(event({ action: 'save', sheet }))).status).toBe(200);
-	expect(mock.save).toHaveBeenCalledWith(sheet, 'admin');
+	expect(mock.save).toHaveBeenCalledWith(sheet, 'admin', undefined, false, false);
+});
+it('passes publication confirmation only when it is explicitly true', async () => {
+	await POST(event({ action: 'save', sheet, confirmPublish: true }));
+	expect(mock.save).toHaveBeenLastCalledWith(sheet, 'admin', undefined, false, true);
+	await POST(event({ action: 'save', sheet, confirmPublish: 'true' }));
+	expect(mock.save).toHaveBeenLastCalledWith(sheet, 'admin', undefined, false, false);
 });
 it('expands from refreshed catalogues using add-only hidden drafts', async () => {
 	const response = await POST(event({ action: 'expand' }));

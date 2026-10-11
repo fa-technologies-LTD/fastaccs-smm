@@ -95,6 +95,92 @@ describe('Numbers no-code recovery emails', () => {
 		);
 	});
 
+	it.each(['awaiting_sms', 'renting', 'replacing', 'pending'])(
+		'does not nudge an attempt still %s',
+		async (status) => {
+			prismaMock.order.findMany.mockResolvedValueOnce([
+				{
+					id: 'pending',
+					status: 'processing',
+					userId: 'user-1',
+					createdAt: new Date('2026-07-01'),
+					user: { email: 'buyer@example.com' },
+					orderItems: [{ phoneRental: { status, otp: null, receivedAt: null } }]
+				}
+			]);
+			expect((await runNumbersRecoveryEmails(10)).sent).toBe(0);
+			expect(sendMarketingEmailMock).not.toHaveBeenCalled();
+		}
+	);
+
+	it('does not call an unpaid order without a rental a failed number', async () => {
+		prismaMock.order.findMany.mockResolvedValueOnce([
+			{
+				id: 'unpaid',
+				status: 'pending',
+				userId: 'user-1',
+				createdAt: new Date('2026-07-01'),
+				user: { email: 'buyer@example.com' },
+				orderItems: [{ phoneRental: null }]
+			}
+		]);
+		expect((await runNumbersRecoveryEmails(10)).sent).toBe(0);
+	});
+
+	it('waits 24 hours after the order last changed and avoids ancient attempts', async () => {
+		prismaMock.order.findMany.mockResolvedValueOnce([]);
+		await runNumbersRecoveryEmails(10);
+		expect(prismaMock.order.findMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: expect.objectContaining({
+					updatedAt: { lte: expect.any(Date) },
+					createdAt: { lte: expect.any(Date), gte: expect.any(Date) }
+				})
+			})
+		);
+	});
+
+	it('suppresses all failures for a recently nudged customer', async () => {
+		prismaMock.order.findMany
+			.mockResolvedValueOnce([
+				{
+					id: 'failed',
+					status: 'failed',
+					userId: 'user-1',
+					createdAt: new Date('2026-07-01'),
+					user: { email: 'buyer@example.com' },
+					orderItems: []
+				}
+			])
+			.mockResolvedValueOnce([]);
+		prismaMock.emailNotification.findMany.mockResolvedValue([
+			{ userId: 'user-1', referenceId: 'numbers-recovery:other' }
+		]);
+		expect((await runNumbersRecoveryEmails(10)).sent).toBe(0);
+	});
+
+	it('does not send a second email while a newer attempt is still active', async () => {
+		prismaMock.order.findMany
+			.mockResolvedValueOnce([
+				{
+					id: 'failed',
+					status: 'failed',
+					userId: 'user-1',
+					createdAt: new Date('2026-07-01'),
+					user: { email: 'buyer@example.com' },
+					orderItems: []
+				}
+			])
+			.mockResolvedValueOnce([
+				{
+					userId: 'user-1',
+					createdAt: new Date('2026-07-02'),
+					orderItems: [{ phoneRental: { status: 'awaiting_sms', otp: null, receivedAt: null } }]
+				}
+			]);
+		expect((await runNumbersRecoveryEmails(10)).sent).toBe(0);
+	});
+
 	it('does not email when that attempt delivered an OTP', async () => {
 		prismaMock.order.findMany.mockResolvedValueOnce([
 			{
@@ -151,5 +237,63 @@ describe('Numbers no-code recovery emails', () => {
 
 		expect(result).toMatchObject({ ran: true, sent: 0, skipped: 1 });
 		expect(sendMarketingEmailMock).not.toHaveBeenCalled();
+	});
+
+	it('suppresses a code that arrives between the two eligibility reads', async () => {
+		const createdAt = new Date('2026-07-01');
+		prismaMock.order.findMany
+			.mockResolvedValueOnce([
+				{
+					id: 'failed',
+					status: 'failed',
+					userId: 'user-1',
+					createdAt,
+					user: { email: 'buyer@example.com' },
+					orderItems: []
+				}
+			])
+			.mockResolvedValueOnce([
+				{
+					userId: 'user-1',
+					createdAt,
+					orderItems: [
+						{ phoneRental: { status: 'received', otp: '123456', receivedAt: new Date() } }
+					]
+				}
+			]);
+		expect((await runNumbersRecoveryEmails(10)).sent).toBe(0);
+		expect(sendMarketingEmailMock).not.toHaveBeenCalled();
+	});
+
+	it('does not send several failures to one customer in a batch', async () => {
+		const attempt = {
+			status: 'failed',
+			userId: 'user-1',
+			createdAt: new Date('2026-07-01'),
+			user: { email: 'buyer@example.com' },
+			orderItems: []
+		};
+		prismaMock.order.findMany
+			.mockResolvedValueOnce([
+				{ ...attempt, id: 'one' },
+				{ ...attempt, id: 'two' }
+			])
+			.mockResolvedValueOnce([]);
+		expect((await runNumbersRecoveryEmails(10)).sent).toBe(1);
+		expect(sendMarketingEmailMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not treat a contradictory failed order with an active rental as terminal', async () => {
+		prismaMock.order.findMany.mockResolvedValueOnce([
+			{
+				id: 'contradictory',
+				status: 'failed',
+				userId: 'user-1',
+				createdAt: new Date('2026-07-01'),
+				user: { email: 'buyer@example.com' },
+				orderItems: [{ phoneRental: { status: 'awaiting_sms', otp: null, receivedAt: null } }]
+			}
+		]);
+		expect((await runNumbersRecoveryEmails(10)).sent).toBe(0);
 	});
 });

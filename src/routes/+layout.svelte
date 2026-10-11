@@ -10,11 +10,6 @@
 	import CookieConsentBar from '$lib/components/CookieConsentBar.svelte';
 	import SitePopupHost from '$lib/components/SitePopupHost.svelte';
 	import PushNotificationPrompt from '$lib/components/PushNotificationPrompt.svelte';
-	import {
-		trackSnapPageView,
-		trackSnapConfirmedVisit,
-		trackPendingSnapSignup
-	} from '$lib/services/snap-pixel';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { syncGa4Consent, trackGa4PageView } from '$lib/services/ga4';
 	import { PRIVACY_CONSENT_CHANGED_EVENT } from '$lib/helpers/privacyConsent';
@@ -28,10 +23,8 @@
 
 	let { children, data }: Props = $props();
 	let tawkLoadRequested = false;
-	// Seed with the page key src/app.html's inline snippet already tracked
-	// (if any), so the post-hydration pass below doesn't double-count it.
-	let lastSnapPageKey = typeof window !== 'undefined' ? window.__snapPixelInitialPageKey || '' : '';
-	let lastSnapConfirmedKey = '';
+	let lastAnalyticsPageKey = '';
+	let lastAnalyticsConfirmedKey = '';
 	let lastGa4PageKey = '';
 	let hydrated = false;
 	const defaultShareTitle = 'Buy Social Media Accounts & Boosting Services | FastAccs';
@@ -78,30 +71,24 @@
 		loadTawkWidget();
 	}
 
-	function trackCurrentSnapPageView(force = false): void {
+	function trackCurrentPageView(): void {
 		if (typeof window === 'undefined') return;
 
 		const currentUrl = new URL(window.location.href);
 		const pageKey = `${currentUrl.pathname}${currentUrl.search}`;
-		if (!force && pageKey === lastSnapPageKey) return;
+		if (pageKey === lastAnalyticsPageKey) return;
 
-		if (trackSnapPageView(currentUrl)) {
-			lastSnapPageKey = pageKey;
-			recordAnalyticsEvent('page_view', pageKey);
-		}
+		if (recordAnalyticsEvent('page_view', pageKey)) lastAnalyticsPageKey = pageKey;
 	}
 
-	function trackCurrentSnapConfirmedVisit(force = false): void {
+	function trackCurrentConfirmedVisit(): void {
 		if (typeof window === 'undefined' || !hydrated) return;
 
 		const currentUrl = new URL(window.location.href);
 		const pageKey = `${currentUrl.pathname}${currentUrl.search}`;
-		if (!force && pageKey === lastSnapConfirmedKey) return;
+		if (pageKey === lastAnalyticsConfirmedKey) return;
 
-		if (trackSnapConfirmedVisit(currentUrl)) {
-			lastSnapConfirmedKey = pageKey;
-			recordAnalyticsEvent('confirmed_visit', pageKey);
-		}
+		if (recordAnalyticsEvent('confirmed_visit', pageKey)) lastAnalyticsConfirmedKey = pageKey;
 	}
 
 	function trackCurrentGa4PageView(force = false): void {
@@ -121,8 +108,8 @@
 	}
 
 	afterNavigate(() => {
-		trackCurrentSnapPageView();
-		trackCurrentSnapConfirmedVisit();
+		trackCurrentPageView();
+		trackCurrentConfirmedVisit();
 		trackCurrentGa4PageView();
 	});
 
@@ -172,13 +159,14 @@
 
 	onMount(() => {
 		hydrated = true;
-		trackCurrentSnapPageView();
-		trackCurrentSnapConfirmedVisit();
-		trackPendingSnapSignup();
+		trackCurrentPageView();
+		trackCurrentConfirmedVisit();
 		syncGa4Consent();
 		trackCurrentGa4PageView();
 
 		const handleConsentChanged = () => {
+			trackCurrentPageView();
+			trackCurrentConfirmedVisit();
 			syncGa4Consent();
 			trackCurrentGa4PageView(true);
 		};

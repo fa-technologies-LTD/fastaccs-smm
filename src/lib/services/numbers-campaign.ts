@@ -33,6 +33,7 @@ interface DiscoveryEmailCandidate {
 
 interface RecoveryOrderCandidate {
 	id: string;
+	status: string;
 	userId: string | null;
 	createdAt: Date;
 	user: { email: string | null; fullName: string | null } | null;
@@ -332,6 +333,37 @@ async function sendDueDiscoveryEmails(limit: number): Promise<{
 }
 
 const RECOVERY_WAIT_MS = 24 * 60 * 60 * 1000;
+const RECOVERY_COOLDOWN_MS = 7 * RECOVERY_WAIT_MS;
+const RECOVERY_LOOKBACK_MS = 30 * RECOVERY_WAIT_MS;
+
+function deliveredCode(order: Pick<RecoveryOrderCandidate, 'orderItems'>): boolean {
+	return order.orderItems.some(({ phoneRental: rental }) =>
+		Boolean(
+			rental &&
+				(rental.status === 'received' || rental.receivedAt || String(rental.otp || '').trim())
+		)
+	);
+}
+
+function terminalFailedAttempt(order: RecoveryOrderCandidate): boolean {
+	if (deliveredCode(order)) return false;
+	if (
+		order.orderItems.some(
+			({ phoneRental }) =>
+				phoneRental && !['failed', 'expired', 'cancelled', 'refunded'].includes(phoneRental.status)
+		)
+	)
+		return false;
+	if (['failed', 'cancelled', 'refunded'].includes(order.status)) return true;
+	return (
+		order.orderItems.length > 0 &&
+		order.orderItems.every(({ phoneRental }) =>
+			Boolean(
+				phoneRental && ['failed', 'expired', 'cancelled', 'refunded'].includes(phoneRental.status)
+			)
+		)
+	);
+}
 
 function recoveryReference(orderId: string): string {
 	return `numbers-recovery:${orderId}`;
@@ -339,8 +371,8 @@ function recoveryReference(orderId: string): string {
 
 /**
  * Sends at most one recovery email for each Numbers attempt that is at least
- * 24 hours old and never produced a code. A later successful Numbers order
- * suppresses recovery for an older failed attempt.
+ * 24 hours past its last change and never produced a code. A newer attempt
+ * suppresses the old reminder, with a seven-day per-customer cooldown.
  */
 export async function runNumbersRecoveryEmails(limit = 200): Promise<{
 	ran: boolean;
@@ -356,17 +388,20 @@ export async function runNumbersRecoveryEmails(limit = 200): Promise<{
 	let skipped = 0;
 	const pageSize = Math.min(1000, Math.max(limit * 5, 50));
 	let cursor: string | null = null;
+	const contactedUsers = new Set<string>();
 	do {
 		const candidates: RecoveryOrderCandidate[] = await prisma.order.findMany({
 			where: {
 				orderType: 'phone',
 				userId: { not: null },
-				createdAt: { lte: cutoff },
+				createdAt: { lte: cutoff, gte: new Date(Date.now() - RECOVERY_LOOKBACK_MS) },
+				updatedAt: { lte: cutoff },
 				user: {
 					is: {
 						userType: 'REGISTERED',
 						isActive: true,
 						emailVerified: true,
+						marketingEmailEnabled: true,
 						marketingUnsubscribedAt: null,
 						marketingSuppressedAt: null,
 						email: { not: '' }
@@ -375,6 +410,7 @@ export async function runNumbersRecoveryEmails(limit = 200): Promise<{
 			},
 			select: {
 				id: true,
+				status: true,
 				userId: true,
 				createdAt: true,
 				user: { select: { email: true, fullName: true } },
@@ -390,33 +426,30 @@ export async function runNumbersRecoveryEmails(limit = 200): Promise<{
 		});
 		if (!candidates.length) break;
 		cursor = candidates.at(-1)!.id;
-		const failedAttempts = candidates.filter(
-			(order) =>
-				!order.orderItems.some((item) => {
-					const rental = item.phoneRental;
-					return Boolean(
-						rental &&
-							(rental.status === 'received' || rental.receivedAt || String(rental.otp || '').trim())
-					);
-				})
-		);
+		const failedAttempts = candidates.filter(terminalFailedAttempt);
 		if (failedAttempts.length) {
 			const userIds = [
 				...new Set(
 					failedAttempts.map((order) => order.userId).filter((id): id is string => Boolean(id))
 				)
 			];
-			const [sentRows, successfulOrders]: [
-				Array<{ referenceId: string | null }>,
+			const [sentRows, subsequentOrders]: [
+				Array<{ referenceId: string | null; userId?: string | null }>,
 				DeliveredOrderCandidate[]
 			] = await Promise.all([
 				prisma.emailNotification.findMany({
 					where: {
 						notificationType: 'numbers_recovery',
 						status: 'sent',
-						referenceId: { in: failedAttempts.map((order) => recoveryReference(order.id)) }
+						OR: [
+							{ referenceId: { in: failedAttempts.map((order) => recoveryReference(order.id)) } },
+							{
+								userId: { in: userIds },
+								sentAt: { gte: new Date(Date.now() - RECOVERY_COOLDOWN_MS) }
+							}
+						]
 					},
-					select: { referenceId: true }
+					select: { referenceId: true, userId: true }
 				}),
 				prisma.order.findMany({
 					where: { orderType: 'phone', userId: { in: userIds } },
@@ -432,38 +465,41 @@ export async function runNumbersRecoveryEmails(limit = 200): Promise<{
 				})
 			]);
 			const alreadySent = new Set(sentRows.map((row) => row.referenceId));
-			const successfulAtByUser = new Map<string, Date[]>();
-			for (const order of successfulOrders) {
+			for (const row of sentRows) if (row.userId) contactedUsers.add(row.userId);
+			const subsequentByUser = new Map<string, DeliveredOrderCandidate[]>();
+			for (const order of subsequentOrders) {
 				if (!order.userId) continue;
-				const deliveredCode = order.orderItems.some((item) => {
-					const rental = item.phoneRental;
-					return Boolean(
-						rental &&
-							(rental.status === 'received' || rental.receivedAt || String(rental.otp || '').trim())
-					);
-				});
-				if (!deliveredCode) continue;
-				const rows = successfulAtByUser.get(order.userId) || [];
-				rows.push(order.createdAt);
-				successfulAtByUser.set(order.userId, rows);
+				// Any newer attempt means the customer already returned, even if its code is pending.
+				const rows = subsequentByUser.get(order.userId) || [];
+				rows.push(order);
+				subsequentByUser.set(order.userId, rows);
 			}
 			for (const order of failedAttempts) {
 				if (sent >= limit) break;
 				const referenceId = recoveryReference(order.id);
-				const laterSuccess = order.userId
-					? (successfulAtByUser.get(order.userId) || []).some(
-							(successfulOrderAt) => successfulOrderAt.getTime() > order.createdAt.getTime()
+				const returnedOrDelivered = order.userId
+					? (subsequentByUser.get(order.userId) || []).some(
+							(current) =>
+								current.createdAt > order.createdAt ||
+								(current.createdAt.getTime() === order.createdAt.getTime() &&
+									deliveredCode(current))
 						)
 					: false;
-				if (!order.user?.email || alreadySent.has(referenceId) || laterSuccess) {
+				if (
+					!order.user?.email ||
+					!order.userId ||
+					alreadySent.has(referenceId) ||
+					returnedOrDelivered ||
+					contactedUsers.has(order.userId)
+				) {
 					skipped += 1;
 					continue;
 				}
 				const firstName = (order.user.fullName || '').trim().split(/\s+/)[0] || 'there';
 				const result = await sendMarketingEmail({
 					to: order.user.email,
-					subject: 'Your verification number did not deliver a code — try again',
-					body: `Hi ${firstName},\n\nYour earlier Numbers attempt did not eventually deliver a verification code. You can try again from the current available routes. If a new attempt does not produce a code within its activation window, it is refunded automatically.`,
+					subject: 'Still need a verification number?',
+					body: `Hi ${firstName},\n\nYour last number attempt didn’t work out. If you still need one, check the available options and try again.\n\nAny refund credit in your dashboard can be used at checkout.`,
 					ctaText: 'Try Numbers again',
 					ctaUrl: `${baseUrl}/numbers`,
 					userId: order.userId as string,
@@ -471,8 +507,10 @@ export async function runNumbersRecoveryEmails(limit = 200): Promise<{
 					referenceId,
 					campaignKey: `numbers-recovery:${order.id}`
 				});
-				if (result.success) sent += 1;
-				else skipped += 1;
+				if (result.success) {
+					sent += 1;
+					contactedUsers.add(order.userId);
+				} else skipped += 1;
 			}
 		}
 		if (candidates.length < pageSize) break;

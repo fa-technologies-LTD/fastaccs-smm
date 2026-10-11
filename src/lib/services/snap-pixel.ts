@@ -1,4 +1,5 @@
-import { browser, dev } from '$app/environment';
+import { browser } from '$app/environment';
+export { isProductionTrackingHost } from '$lib/helpers/tracking-host';
 
 /**
  * Snap Pixel REMOVED (owner decision, 10 Oct 2026). It loaded and tracked every visitor without
@@ -26,12 +27,6 @@ export type SnapPixelPayload = Record<
 	string | number | boolean | Array<string | number> | null | undefined
 >;
 
-export function isProductionTrackingHost(): boolean {
-	if (!browser || dev) return false;
-	const hostname = window.location.hostname.toLowerCase();
-	return !['localhost', '127.0.0.1', '0.0.0.0'].includes(hostname);
-}
-
 export function initializeSnapPixel(): boolean {
 	return false;
 }
@@ -43,7 +38,7 @@ export const trackSnapPurchase: (
 	payload: SnapPixelPayload & { transaction_id?: string }
 ) => boolean = () => false;
 
-/** Clears the leftover signup flag cookie (still set by the Google sign-in callback). */
+/** Compatibility only: clears a legacy flag; the Google callback no longer creates it. */
 export function trackPendingSnapSignup(): boolean {
 	if (!browser) return false;
 	if (document.cookie.split(';').some((part) => part.trim().startsWith(`${SNAP_SIGNUP_COOKIE}=`))) {

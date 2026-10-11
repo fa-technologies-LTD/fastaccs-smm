@@ -79,6 +79,10 @@ export function canRetryBoostSubmission(
 	return (
 		error instanceof BoostProviderSubmissionError &&
 		error.certainty === 'not_submitted' &&
+		Number.isSafeInteger(attemptCount) &&
+		attemptCount >= 1 &&
+		Number.isSafeInteger(attemptCap) &&
+		attemptCap >= 1 &&
 		attemptCount < attemptCap
 	);
 }

@@ -5,7 +5,6 @@
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { buyNumber } from '$lib/services/numbers-buy';
 	import { codeToFlag, listNumbersPages, numbersPagePath } from '$lib/helpers/numbers-slugs';
-	import { trackSnapEvent } from '$lib/services/snap-pixel';
 	import { showWarning, showSuccess, showError } from '$lib/stores/toasts';
 	import { RefreshCw, ChevronDown, Phone, BellRing, Check, Search } from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
@@ -101,14 +100,6 @@
 		measuredServiceOpens.add(service.serviceId);
 
 		const path = `/numbers/service/${service.serviceId}`;
-		trackSnapEvent('VIEW_CONTENT', {
-			item_ids: [`numbers-service-${service.serviceId}`],
-			item_category: 'Verification numbers',
-			description: service.serviceName,
-			price: cheapest(service.tiers),
-			currency: 'NGN',
-			number_items: 1
-		});
 		recordAnalyticsEvent('view_content', path);
 		recordAnalyticsEvent('numbers_service_open', path);
 	}

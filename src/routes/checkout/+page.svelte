@@ -31,7 +31,6 @@
 	import { BOOSTING_TURNAROUND_MESSAGE } from '$lib/helpers/boosting-service-config';
 	import type { BoostingPlatform, BoostingActionType } from '$lib/helpers/social-link-validator';
 	import { buildCheckoutFingerprint } from '$lib/helpers/checkout-session';
-	import { trackSnapEvent } from '$lib/services/snap-pixel';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import {
 		getGa4ClientId,
@@ -57,7 +56,7 @@
 	let checkoutSlow = $state(false);
 	let lastCartNotice = $state('');
 	let lastGa4CartKey = $state('');
-	let lastSnapCheckoutKey = $state('');
+	let lastAnalyticsCheckoutKey = $state('');
 	let cartLoadPromise: Promise<void> | null = null;
 	const PENDING_ORDER_STORAGE_KEY = 'fastaccs_pending_order_id';
 	const CHECKOUT_SESSION_STORAGE_KEY = 'fastaccs_checkout_session';
@@ -350,29 +349,6 @@
 		showSuccess('Link updated', '');
 	}
 
-	function getCheckoutSnapPayload(orderId?: string) {
-		const itemCategories = Array.from(
-			new Set(
-				cartItems.map((item) =>
-					item.boosting
-						? 'Boosting services'
-						: item.tier.deliveryMode === 'auto_sms'
-							? 'Verification numbers'
-							: 'Social media accounts'
-				)
-			)
-		);
-		return {
-			item_ids: cartItems.map((item) => item.tierId),
-			item_category: itemCategories.join(', '),
-			description: cartItems.map((item) => item.tier.name).join(', '),
-			price: checkoutTotal,
-			currency: 'NGN',
-			number_items: cartItems.reduce((sum, item) => sum + item.quantity, 0),
-			client_dedup_id: orderId ? `checkout-${orderId}` : undefined
-		};
-	}
-
 	function getCheckoutGa4Items(): Ga4Item[] {
 		return cartItems.map((item, index) => ({
 			item_id: item.tierId,
@@ -467,13 +443,13 @@
 			.map((item) => `${item.item_id}:${item.quantity}:${item.item_variant}`)
 			.join('|')}`;
 
-		if (!cartKey || cartKey === lastGa4CartKey) return;
-		if (cartKey !== lastSnapCheckoutKey) {
-			if (trackSnapEvent('START_CHECKOUT', getCheckoutSnapPayload())) {
-				lastSnapCheckoutKey = cartKey;
-				recordAnalyticsEvent('start_checkout', `${page.url.pathname}${page.url.search}`);
-			}
-		}
+		if (!cartItems.length) return;
+		if (
+			cartKey !== lastAnalyticsCheckoutKey &&
+			recordAnalyticsEvent('start_checkout', page.url.pathname)
+		)
+			lastAnalyticsCheckoutKey = cartKey;
+		if (cartKey === lastGa4CartKey) return;
 
 		if (
 			trackGa4ViewCart({
@@ -663,7 +639,6 @@
 
 			const resolvedOrderId = String(orderResult.orderId || '');
 			const ga4CheckoutPayload = getCheckoutGa4Payload(resolvedOrderId);
-			trackSnapEvent('ADD_BILLING', getCheckoutSnapPayload(resolvedOrderId));
 			trackGa4BeginCheckout(ga4CheckoutPayload);
 			if (resolvedOrderId) {
 				saveGa4CheckoutSnapshot({

@@ -416,6 +416,11 @@
 					<h2 class="text-base font-semibold" style="color: var(--fa-blue-300);">
 						Boosting Services
 					</h2>
+					<a
+						href="/admin/boosting-orders"
+						class="text-sm font-medium"
+						style="color: var(--fa-blue-300);">View Boosting report →</a
+					>
 					<div class="flex flex-wrap gap-4 text-sm" style="color: var(--text-muted);">
 						<span
 							>Orders: <strong style="color: var(--text);"

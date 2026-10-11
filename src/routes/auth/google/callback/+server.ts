@@ -15,8 +15,6 @@ import {
 import type { RequestHandler } from './$types';
 import type { OAuth2Tokens } from 'arctic';
 
-const SNAP_SIGNUP_COOKIE = 'fa_snap_signup';
-
 export const GET: RequestHandler = async (event) => {
 	const { url, cookies } = event;
 	const google = getGoogleClient(url.origin);
@@ -98,15 +96,6 @@ export const GET: RequestHandler = async (event) => {
 				isSecureRequest: url.protocol === 'https:',
 				referredUserId: user.id,
 				source: 'google_signup'
-			});
-			// The browser consumes this after the OAuth redirect and records SIGN_UP.
-			// It contains no customer data and expires quickly.
-			cookies.set(SNAP_SIGNUP_COOKIE, 'google', {
-				path: '/',
-				maxAge: 300,
-				httpOnly: false,
-				sameSite: 'lax',
-				secure: url.protocol === 'https:'
 			});
 		}
 

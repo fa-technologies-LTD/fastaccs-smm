@@ -21,7 +21,6 @@
 		Users
 	} from '$lib/icons';
 	import { cart } from '$lib/stores/cart.svelte';
-	import { trackSnapEvent } from '$lib/services/snap-pixel';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { showError, showSuccess, showWarning } from '$lib/stores/toasts';
 	import { formatPrice } from '$lib/helpers/utils';
@@ -200,23 +199,11 @@
 		if (opening && service) measureServiceView(service);
 	}
 
-	function getSnapServicePayload(service: BoostingServiceDisplay, quantity: number) {
-		return {
-			item_ids: [service.id],
-			item_category: 'Boosting services',
-			description: `${data.label} ${service.name}`,
-			price: computeBoostingPrice(service.config, quantity),
-			currency: 'NGN',
-			number_items: quantity
-		};
-	}
-
 	function measureServiceView(service: BoostingServiceDisplay): void {
 		if (measuredServiceViews.has(service.id)) return;
 		measuredServiceViews.add(service.id);
 
-		const path = `/services/${data.platform}?service=${encodeURIComponent(service.id)}`;
-		trackSnapEvent('VIEW_CONTENT', getSnapServicePayload(service, service.config.minQuantity));
+		const path = `/services/${data.platform}/${service.config.actionType}`;
 		recordAnalyticsEvent('view_content', path);
 	}
 
@@ -369,11 +356,7 @@
 				quantity,
 				service.offerId
 			);
-			trackSnapEvent('ADD_CART', getSnapServicePayload(service, quantity));
-			recordAnalyticsEvent(
-				'add_cart',
-				`/services/${data.platform}?service=${encodeURIComponent(service.id)}`
-			);
+			recordAnalyticsEvent('add_cart', `/services/${data.platform}/${service.config.actionType}`);
 			showSuccess(
 				'Added to cart!',
 				`${quantity.toLocaleString()} ${service.name} added successfully. Click to view cart.`,

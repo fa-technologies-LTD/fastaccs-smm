@@ -33,7 +33,6 @@
 		getTierDeliveryModeLabel,
 		type TierDeliveryMode
 	} from '$lib/helpers/tier-delivery-config';
-	import { trackSnapEvent } from '$lib/services/snap-pixel';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import {
 		trackGa4AddToCart,
@@ -238,18 +237,6 @@
 		return 'Featured';
 	}
 
-	function getSnapTierPayload(quantity = selectedQuantity) {
-		const unitPrice = Number(data.tier?.price || 0) + (selectedFollowerAddon?.priceDelta || 0);
-		return {
-			item_ids: data.tierCategory?.id ? [data.tierCategory.id] : [],
-			item_category: data.platform?.name || 'FastAccs SMM',
-			description: data.tier?.tier_name || 'FastAccs tier',
-			price: unitPrice * quantity,
-			currency: 'NGN',
-			number_items: quantity
-		};
-	}
-
 	function getGa4TierItem(quantity = selectedQuantity, variant = 'standard_pool'): Ga4Item {
 		return {
 			item_id: data.tierCategory?.id || data.tier?.category_id || undefined,
@@ -344,7 +331,6 @@
 				selectedQuantity,
 				selectedFollowerAddon ? { ...selectedFollowerAddon } : undefined
 			);
-			trackSnapEvent('ADD_CART', getSnapTierPayload(selectedQuantity));
 			recordAnalyticsEvent('add_cart', `${page.url.pathname}${page.url.search}`);
 			trackGa4AddToCart(getGa4TierPayload(selectedQuantity, 'standard_pool'));
 
@@ -522,10 +508,6 @@
 				screenshotUrl: account.screenshotUrl || null,
 				reservedUntil: account.reservedUntil
 			});
-			trackSnapEvent('ADD_CART', {
-				...getSnapTierPayload(1),
-				delivery_method: 'exact_profile'
-			});
 			recordAnalyticsEvent('add_cart', `${page.url.pathname}${page.url.search}`);
 			trackGa4AddToCart(getGa4TierPayload(1, 'exact_profile'));
 			showSuccess(
@@ -591,10 +573,6 @@
 				isReservedByCurrentUser: true
 			};
 			selectedQuantity = 1;
-			trackSnapEvent('ADD_CART', {
-				...getSnapTierPayload(1),
-				delivery_method: 'exact_profile'
-			});
 			recordAnalyticsEvent('add_cart', `${page.url.pathname}${page.url.search}`);
 			trackGa4AddToCart(getGa4TierPayload(1, 'exact_profile'));
 			showSuccess(
@@ -622,7 +600,6 @@
 
 	onMount(() => {
 		if (data.tier && data.tierCategory) {
-			trackSnapEvent('VIEW_CONTENT', getSnapTierPayload(1));
 			recordAnalyticsEvent('view_content', `${page.url.pathname}${page.url.search}`);
 			trackGa4ViewItem(
 				getGa4TierPayload(1, exactPreviewConfig.enabled ? 'exact_enabled' : 'standard_pool')

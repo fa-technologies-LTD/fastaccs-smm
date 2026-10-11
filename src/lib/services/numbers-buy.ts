@@ -1,6 +1,5 @@
 import { goto } from '$app/navigation';
 import { cart } from '$lib/stores/cart.svelte';
-import { trackSnapEvent } from '$lib/services/snap-pixel';
 import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 import { showWarning } from '$lib/stores/toasts';
 
@@ -26,14 +25,6 @@ export async function buyNumber(input: {
 	// Reset the cart to exactly this number (clears any leftover), then go straight to checkout.
 	cart.clear();
 	cart.addTier(input.tierId, 1);
-	trackSnapEvent('ADD_CART', {
-		item_ids: [input.tierId],
-		item_category: 'Verification numbers',
-		description: `${input.serviceName} — ${input.countryName}`,
-		price: input.priceNgn,
-		currency: 'NGN',
-		number_items: 1
-	});
 	recordAnalyticsEvent('add_cart', `/numbers/service/${input.serviceId}`);
 	goto('/checkout');
 }

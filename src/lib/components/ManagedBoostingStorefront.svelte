@@ -26,7 +26,6 @@
 	} from '$lib/helpers/social-link-validator';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
-	import { trackSnapEvent } from '$lib/services/snap-pixel';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { showError, showSuccess, showWarning } from '$lib/stores/toasts';
 	import { getTierDeliveryModeLabel } from '$lib/helpers/tier-delivery-config';
@@ -149,17 +148,7 @@
 		selectedOfferId = offer.id;
 		quantity = isCustomComments ? parsedComments.quantity : boostingStartingQuantity(offer);
 		linkError = null;
-		trackSnapEvent('VIEW_CONTENT', {
-			item_ids: [offer.id],
-			item_category: 'Boosting services',
-			description: `${selectedGroup?.platformLabel ?? offer.platform} ${selectedGroup?.outcomeLabel ?? offer.outcome}`,
-			price: roundCatalogPriceNgn(
-				(boostingStartingQuantity(offer) / offer.stepQuantity) * offer.pricePerStepNgn
-			),
-			currency: 'NGN',
-			number_items: boostingStartingQuantity(offer)
-		});
-		recordAnalyticsEvent('view_content', `/services?offer=${encodeURIComponent(offer.id)}`);
+		recordAnalyticsEvent('view_content', `/services/${offer.platform}/${offer.outcome}`);
 	}
 
 	function linkLabel(platform: BoostingPlatform, outcome: BoostingActionType): string {
@@ -282,15 +271,10 @@
 				selectedOffer.id,
 				isCustomComments ? parsedComments.text : undefined
 			);
-			trackSnapEvent('ADD_CART', {
-				item_ids: [selectedOffer.id],
-				item_category: 'Boosting services',
-				description: `${selectedGroup.platformLabel} ${selectedGroup.outcomeLabel}`,
-				price: total,
-				currency: 'NGN',
-				number_items: quantity
-			});
-			recordAnalyticsEvent('add_cart', `/services?offer=${encodeURIComponent(selectedOffer.id)}`);
+			recordAnalyticsEvent(
+				'add_cart',
+				`/services/${selectedOffer.platform}/${selectedOffer.outcome}`
+			);
 			showSuccess(
 				'Added to cart!',
 				`${quantity.toLocaleString()} ${selectedGroup.outcomeLabel.toLowerCase()} added successfully.`,

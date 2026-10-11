@@ -1,14 +1,5 @@
 import type { PageLoad } from './$types';
-
-const DEFAULT_STATS = {
-	total_orders: 0,
-	pending_fulfillment: 0,
-	in_progress_fulfillment: 0,
-	completed_fulfillment: 0,
-	total_revenue: 0,
-	todays_revenue: 0,
-	this_month_revenue: 0
-};
+import type { getBoostingAnalytics } from '$lib/services/boosting-analytics';
 
 const DEFAULT_META = {
 	page: 1,
@@ -20,6 +11,7 @@ const DEFAULT_META = {
 	search: '',
 	canRunShadowRouting: false,
 	activeCount: 0,
+	totalItems: 0,
 	statusCounts: {
 		pending: 0,
 		in_progress: 0,
@@ -54,16 +46,16 @@ export const load: PageLoad = async ({ fetch }) => {
 		error = 'Failed to load boosting orders';
 	}
 
-	let stats = DEFAULT_STATS;
+	let analytics: Awaited<ReturnType<typeof getBoostingAnalytics>> | null = null;
+	let analyticsError: string | null = null;
 	try {
-		const statsResponse = await fetch('/api/orders/stats');
-		if (statsResponse.ok) {
-			const statsResult = await statsResponse.json();
-			stats = statsResult.boostingData || DEFAULT_STATS;
-		}
-	} catch (err) {
-		console.error('Failed to load boosting stats:', err);
+		const response = await fetch('/api/admin/boosting-orders/analytics');
+		const result = await response.json();
+		if (response.ok && result.success) analytics = result.data;
+		else analyticsError = 'Analytics unavailable. Order management is still available.';
+	} catch {
+		analyticsError = 'Analytics unavailable. Order management is still available.';
 	}
 
-	return { items, meta, stats, error };
+	return { items, meta, error, analytics, analyticsError };
 };

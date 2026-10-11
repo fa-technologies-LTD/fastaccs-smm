@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { trackSnapEvent } from '$lib/services/snap-pixel';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import logo from '$lib/assets/logo.png';
 	import { TrendingUp, Users, Phone, LifeBuoy, ArrowRight } from '$lib/icons';
@@ -43,15 +42,13 @@
 		}
 	];
 
-	// A short delay before navigating gives the Snap pixel network call (and the
-	// keepalive analytics fetch) a chance to leave the page before the browser
+	// A short delay gives the consented keepalive analytics fetch time to leave before the browser
 	// unloads it. Modifier/middle clicks (new tab) are left alone so they behave
 	// normally.
 	function handleClick(event: MouseEvent, link: HubLink) {
 		if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
 
 		event.preventDefault();
-		trackSnapEvent('VIEW_CONTENT', { content_name: link.id, content_category: 'hub_click' });
 		recordAnalyticsEvent('view_content', `/go/${link.id}`);
 
 		window.setTimeout(() => {

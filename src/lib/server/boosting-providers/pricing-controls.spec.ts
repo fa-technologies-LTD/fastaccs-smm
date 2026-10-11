@@ -9,7 +9,7 @@ const db = vi.hoisted(() => ({
 	adminAuditLog: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
 	boostCustomerOffer: { findMany: vi.fn(), update: vi.fn() },
 	boostProviderService: { findMany: vi.fn() },
-	category: { update: vi.fn() },
+	category: { update: vi.fn(), findMany: vi.fn() },
 	microcopy: { findMany: vi.fn(), upsert: vi.fn() }
 }));
 vi.mock('$lib/prisma', () => ({ prisma: db }));
@@ -96,8 +96,121 @@ beforeEach(() => {
 	});
 	db.boostProviderService.findMany.mockImplementation(async () => store.services);
 	db.microcopy.findMany.mockResolvedValue([{ key: 'config.boosting.usd_ngn_rate', value: '1500' }]);
+	db.category.findMany.mockResolvedValue([]);
 });
 const current = async () => structuredClone((await loadBoostControls(db as never)).sheet);
+
+it('requires explicit publication confirmation before a hidden offer can become live', async () => {
+	store.offers[0].status = 'reviewed';
+	const next = await current();
+	next.rows[0].selected = true;
+	await expect(saveBoostControls(next, 'owner', db as never)).rejects.toThrow(
+		'Confirm the selected offers'
+	);
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(store.offers[0].status).toBe('live');
+});
+it('does not silently reopen an inactive category while editing its price', async () => {
+	store.offers[0].category.isActive = false;
+	const view = await loadBoostControls(db as never);
+	expect(view.sheet.rows[0].selected).toBe(false);
+	expect(view.liveStatuses.row).toBe('category_hidden');
+	view.sheet.rows[0].sale = 900;
+	await saveBoostControls(view.sheet, 'owner', db as never);
+	expect(db.category.update).not.toHaveBeenCalled();
+});
+it('saves a hidden price draft even with unavailable unreviewed routes, without spending approval', async () => {
+	store.offers[0].status = 'hidden';
+	store.offers[0].routes[0].state = 'paused';
+	store.offers[0].routes[0].equivalenceApproved = false;
+	store.services[0].lastSeenAt = new Date('2020-01-01');
+	store.services[0].unavailableAt = new Date();
+	const next = await current();
+	next.rows[0].sale = 900;
+	await saveBoostControls(next, 'owner', db as never);
+	expect(db.boostCustomerOffer.update.mock.calls[0][0].data).toEqual({
+		pricePerStepNgn: 90,
+		priceLocked: true
+	});
+	expect(store.offers[0].status).toBe('hidden');
+	expect(store.offers[0].maximumSupplierCostNgn).toBe(20);
+	expect(db.category.update).not.toHaveBeenCalled();
+	expect((await current()).rows[0].sale).toBe(900);
+	const publish = await current();
+	publish.rows[0].selected = true;
+	await expect(saveBoostControls(publish, 'owner', db as never, false, true)).rejects.toThrow(
+		'Supplier unavailable.'
+	);
+});
+it('does not let an unavailable hidden automatic option block saving global rules', async () => {
+	store.offers[0].status = 'hidden';
+	store.offers[0].priceLocked = false;
+	store.services[0].unavailableAt = new Date();
+	const next = await current();
+	next.settings.defaultMarkup = 200;
+	next.rows[0].sale = 150; // Browser preview for a hidden option, not publication.
+	await saveBoostControls(next, 'owner', db as never);
+	expect(store.offers[0]).toMatchObject({
+		status: 'hidden',
+		pricePerStepNgn: 15,
+		priceLocked: false,
+		maximumSupplierCostNgn: 20
+	});
+	expect(db.category.update).not.toHaveBeenCalled();
+});
+it('allows below-cost hidden drafts but rejects making them Live until their price covers costs', async () => {
+	store.offers[0].status = 'hidden';
+	const next = await current();
+	next.rows[0].sale = 50;
+	await saveBoostControls(next, 'owner', db as never);
+	expect(store.offers[0].status).toBe('hidden');
+	const publish = await current();
+	publish.rows[0].selected = true;
+	await expect(saveBoostControls(publish, 'owner', db as never, false, true)).rejects.toThrow(
+		'price does not cover cost'
+	);
+	expect(store.offers[0].status).toBe('hidden');
+});
+it('never treats a live offer in an inactive category as a harmless hidden draft', async () => {
+	store.offers[0].category.isActive = false;
+	store.services[0].unavailableAt = new Date();
+	const next = await current();
+	next.rows[0].sale = 900;
+	await expect(saveBoostControls(next, 'owner', db as never)).rejects.toThrow(
+		'Supplier unavailable.'
+	);
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+});
+it('still requires hidden draft prices to fit whole-kobo quantity increments', async () => {
+	store.offers[0].status = 'hidden';
+	const next = await current();
+	next.rows[0].sale = 50.01;
+	await expect(saveBoostControls(next, 'owner', db as never)).rejects.toThrow('whole kobo');
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+});
+it('lets unconfigured proposals open their existing category setup, without pretending they are live', async () => {
+	store.offers = [];
+	db.category.findMany.mockResolvedValue([
+		{ id: 'category', metadata: { boosting_platform: 'tiktok', boosting_action_type: 'likes' } }
+	]);
+	const view = await loadBoostControls(db as never);
+	expect(view.setup.row).toMatchObject({
+		categoryId: 'category',
+		reviewed: false,
+		routingPolicy: 'unconfigured'
+	});
+	expect(view.sheet.rows[0]).toMatchObject({ sourceOfferId: null, selected: false });
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+});
+it('saves unconfigured price proposals without publishing or creating an offer', async () => {
+	store.offers = [];
+	const next = await current();
+	next.rows[0].sale = 900;
+	await saveBoostControls(next, 'owner', db as never);
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+	expect(store.record.metadata.sheet.rows[0]).toMatchObject({ sale: 900, selected: false });
+});
 
 it('uses live price and visibility rather than silently applying old sheet drafts', async () => {
 	store.offers[0].pricePerStepNgn = 70;
@@ -178,7 +291,7 @@ it('does not enable unreviewed routes even with a safe price', async () => {
 	store.offers[0].routes[0].equivalenceApproved = false;
 	const next = await current();
 	next.rows[0].selected = true;
-	await expect(saveBoostControls(next, 'owner', db as never)).rejects.toThrow(
+	await expect(saveBoostControls(next, 'owner', db as never, false, true)).rejects.toThrow(
 		'review supplier routes'
 	);
 	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
@@ -197,7 +310,46 @@ it('keeps manual prices fixed when global markup changes', async () => {
 	const next = await current();
 	next.settings.defaultMarkup = 200;
 	await saveBoostControls(next, 'owner', db as never);
-	expect(db.boostCustomerOffer.update.mock.calls[0][0].data.pricePerStepNgn).toBe(50);
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+	expect(store.offers[0].pricePerStepNgn).toBe(50);
+});
+it('does not let an unrelated stale locked offer block a default-markup edit', async () => {
+	store.services[0].lastSeenAt = new Date('2020-01-01');
+	const next = await current();
+	next.settings.defaultMarkup = 200;
+	await saveBoostControls(next, 'owner', db as never);
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+	expect(db.microcopy.upsert).toHaveBeenCalled();
+});
+it('still requires fresh costs when an exchange-rate change affects a locked offer', async () => {
+	store.services[0].lastSeenAt = new Date('2020-01-01');
+	const next = await current();
+	next.settings.fx = 2000;
+	await expect(saveBoostControls(next, 'owner', db as never)).rejects.toThrow(
+		'click Refresh costs'
+	);
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+	expect(db.microcopy.upsert).not.toHaveBeenCalled();
+});
+it('still requires fresh costs for an automatic price using the changed default margin', async () => {
+	store.services[0].lastSeenAt = new Date('2020-01-01');
+	store.offers[0].priceLocked = false;
+	const next = await current();
+	next.rows[0].useDefaultMarkup = true;
+	next.settings.defaultMarkup = 200;
+	await expect(saveBoostControls(next, 'owner', db as never)).rejects.toThrow(
+		'click Refresh costs'
+	);
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+});
+it('identifies incompatible supplier setup instead of suggesting a pointless refresh', async () => {
+	store.services[0].platforms = ['threads'];
+	const next = await current();
+	next.rows[0].sale = 900;
+	await expect(saveBoostControls(next, 'owner', db as never)).rejects.toThrow(
+		'Different platform.'
+	);
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
 });
 it('rejects a manual price that cannot cover the retained-profit floor', async () => {
 	const next = await current();

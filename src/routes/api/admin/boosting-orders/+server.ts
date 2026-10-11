@@ -7,7 +7,8 @@ import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
 import {
 	BOOST_ITEM_STATUSES,
 	BOOST_ACTIVE_ITEM_STATUSES,
-	BOOST_OPEN_COMPLAINT_STATUSES
+	BOOST_OPEN_COMPLAINT_STATUSES,
+	normalizeBoostItemStatus
 } from '$lib/helpers/boosting-admin-status';
 
 const ISSUE_EVENT_TYPES = ['boosting_link_review_requested', 'boosting_rejected'] as const;
@@ -58,6 +59,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		OR: [
 			{ boostFulfillmentStatus: null },
 			{ boostFulfillmentStatus: { in: [...BOOST_ACTIVE_ITEM_STATUSES] } },
+			{ boostFulfillmentStatus: { notIn: [...BOOST_ITEM_STATUSES] } },
 			{
 				boostFulfillment: {
 					is: { complaints: { some: { status: { in: [...BOOST_OPEN_COMPLAINT_STATUSES] } } } }
@@ -68,7 +70,18 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	if (statusFilter === 'active') {
 		conditions.push(activeCondition);
 	} else if (BOOST_ITEM_STATUSES.includes(statusFilter as (typeof BOOST_ITEM_STATUSES)[number])) {
-		conditions.push({ boostFulfillmentStatus: statusFilter });
+		conditions.push(
+			statusFilter === 'pending'
+				? { OR: [{ boostFulfillmentStatus: 'pending' }, { boostFulfillmentStatus: null }] }
+				: statusFilter === 'under_review'
+					? {
+							OR: [
+								{ boostFulfillmentStatus: 'under_review' },
+								{ boostFulfillmentStatus: { notIn: [...BOOST_ITEM_STATUSES] } }
+							]
+						}
+					: { boostFulfillmentStatus: statusFilter }
+		);
 	}
 
 	if (search) {
@@ -156,6 +169,12 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		lastCheckedAt: Date | null;
 		status: string;
 		fulfillmentMode: string;
+		customerStatus: string;
+		startCount: number | null;
+		remains: number | null;
+		supplierOrderId: string | null;
+		rawProviderStatus: string | null;
+		offerSnapshot: Prisma.JsonValue;
 		complaints: Array<{
 			id: string;
 			type: string;
@@ -183,6 +202,12 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 					lastCheckedAt: true,
 					status: true,
 					fulfillmentMode: true,
+					customerStatus: true,
+					startCount: true,
+					remains: true,
+					supplierOrderId: true,
+					rawProviderStatus: true,
+					offerSnapshot: true,
 					complaints: {
 						where: {
 							status: { in: [...BOOST_OPEN_COMPLAINT_STATUSES] }
@@ -235,49 +260,76 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		rejected: 0
 	};
 	for (const group of statusGroups) {
-		const status = group.boostFulfillmentStatus || 'pending';
+		const status = normalizeBoostItemStatus(group.boostFulfillmentStatus);
 		statusCounts[status] = (statusCounts[status] || 0) + group._count._all;
 	}
 
-	return json({
-		success: true,
-		data: items.map((item) => {
-			const shadow = shadowByItem.get(item.id);
-			return {
-				...item,
-				latestIssue: latestIssueByItem.get(item.id) || null,
-				shadowDecision:
-					shadow && canViewRevenue(locals)
+	return json(
+		{
+			success: true,
+			data: items.map((item) => {
+				const shadow = shadowByItem.get(item.id);
+				const snapshot =
+					shadow?.offerSnapshot &&
+					typeof shadow.offerSnapshot === 'object' &&
+					!Array.isArray(shadow.offerSnapshot)
+						? (shadow.offerSnapshot as Record<string, unknown>)
+						: null;
+				const refillDays =
+					typeof snapshot?.refillDays === 'number' &&
+					Number.isInteger(snapshot.refillDays) &&
+					snapshot.refillDays > 0
+						? snapshot.refillDays
+						: null;
+				return {
+					...item,
+					latestIssue: latestIssueByItem.get(item.id) || null,
+					shadowDecision:
+						shadow && canViewRevenue(locals)
+							? {
+									provider: shadow.provider,
+									providerServiceId: shadow.selectedRoute?.providerService.serviceId || null,
+									providerServiceName: shadow.selectedRoute?.providerService.name || null,
+									quotedSupplierCostUsd:
+										shadow.quotedSupplierCostUsd === null
+											? null
+											: Number(shadow.quotedSupplierCostUsd),
+									projectedMarginNgn:
+										shadow.projectedMarginNgn === null ? null : Number(shadow.projectedMarginNgn),
+									attention: shadow.lastSafeErrorCategory,
+									checkedAt: shadow.lastCheckedAt
+								}
+							: null,
+					complaints: shadow?.complaints || [],
+					fulfillmentState: shadow ? { status: shadow.status, mode: shadow.fulfillmentMode } : null,
+					progress: shadow
 						? {
-								provider: shadow.provider,
-								providerServiceId: shadow.selectedRoute?.providerService.serviceId || null,
-								providerServiceName: shadow.selectedRoute?.providerService.name || null,
-								quotedSupplierCostUsd:
-									shadow.quotedSupplierCostUsd === null
-										? null
-										: Number(shadow.quotedSupplierCostUsd),
-								projectedMarginNgn:
-									shadow.projectedMarginNgn === null ? null : Number(shadow.projectedMarginNgn),
-								attention: shadow.lastSafeErrorCategory,
-								checkedAt: shadow.lastCheckedAt
+								customerStatus: shadow.customerStatus ?? null,
+								startCount: shadow.startCount ?? null,
+								remains: shadow.remains ?? null,
+								supplierOrderId: shadow.supplierOrderId ?? null,
+								rawProviderStatus: shadow.rawProviderStatus ?? null,
+								lastCheckedAt: shadow.lastCheckedAt,
+								refillDays
 							}
-						: null,
-				complaints: shadow?.complaints || [],
-				fulfillmentState: shadow ? { status: shadow.status, mode: shadow.fulfillmentMode } : null
-			};
-		}),
-		meta: {
-			page,
-			pageSize,
-			total,
-			totalPages: Math.max(1, Math.ceil(total / pageSize)),
-			sort,
-			status: statusFilter,
-			search,
-			statusCounts,
-			activeCount,
-			canRunShadowRouting: hasAdminPermission(locals.adminContext, 'admin:settings:manage')
+						: null
+				};
+			}),
+			meta: {
+				page,
+				pageSize,
+				total,
+				totalPages: Math.max(1, Math.ceil(total / pageSize)),
+				sort,
+				status: statusFilter,
+				search,
+				statusCounts,
+				totalItems: statusGroups.reduce((sum, group) => sum + group._count._all, 0),
+				activeCount,
+				canRunShadowRouting: hasAdminPermission(locals.adminContext, 'admin:settings:manage')
+			},
+			error: null
 		},
-		error: null
-	});
+		{ headers: { 'cache-control': 'private, no-store' } }
+	);
 };

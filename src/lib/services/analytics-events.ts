@@ -1,4 +1,5 @@
-import { isProductionTrackingHost } from './snap-pixel';
+import { isProductionTrackingHost } from '$lib/helpers/tracking-host';
+import { hasAnalyticsConsent } from '$lib/helpers/privacyConsent';
 
 // Canonical funnel order, shared by the recording endpoint (validation) and
 // the admin "Traffic & Funnel" view (labels + step ordering).
@@ -25,16 +26,46 @@ export type AnalyticsEventType = (typeof ANALYTICS_EVENT_TYPES)[number];
 
 const MAX_PATH_LENGTH = 300;
 
-// Internal funnel tracking, recorded alongside Snap events. Gated to the same
-// production hosts as Snap so local `npm run dev` (which shares the live DB)
-// never writes rows here.
-export function recordAnalyticsEvent(type: AnalyticsEventType, path: string): void {
-	if (!isProductionTrackingHost()) return;
+// First-party funnel tracking is independent of advertising pixels and requires consent.
+// Return whether recording was attempted so callers can deduplicate without marking denied events.
+export function recordAnalyticsEvent(type: AnalyticsEventType, path: string): boolean {
+	if (!isProductionTrackingHost() || !hasAnalyticsConsent()) return false;
+	if (!path.startsWith('/') || path.startsWith('//')) return false;
+	const pathname = path.split(/[?#]/, 1)[0].slice(0, MAX_PATH_LENGTH);
+	if (/^\/(?:admin|api)(?:\/|$)/.test(pathname)) return false;
+	try {
+		void fetch('/api/analytics/event', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ type, path: pathname }),
+			keepalive: true
+		}).catch(() => {});
+		return true;
+	} catch {
+		// Analytics failure must never interrupt buying or payment verification.
+		return false;
+	}
+}
 
-	fetch('/api/analytics/event', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ type, path: path.slice(0, MAX_PATH_LENGTH) }),
-		keepalive: true
-	}).catch(() => {});
+const TRACKED_PURCHASES_KEY = 'fa_analytics_purchases';
+
+/** Called only after server payment verification. Browser reloads must not recount a purchase. */
+export function recordAnalyticsPurchase(orderId: string): boolean {
+	if (!orderId || !isProductionTrackingHost() || !hasAnalyticsConsent()) return false;
+	let tracked: string[] = [];
+	try {
+		const stored: unknown = JSON.parse(localStorage.getItem(TRACKED_PURCHASES_KEY) || '[]');
+		if (Array.isArray(stored))
+			tracked = stored.filter((id): id is string => typeof id === 'string');
+	} catch {
+		/* Optional storage must not interrupt payment verification. */
+	}
+	if (tracked.includes(orderId)) return false;
+	if (!recordAnalyticsEvent('purchase', '/checkout/verify')) return false;
+	try {
+		localStorage.setItem(TRACKED_PURCHASES_KEY, JSON.stringify([...tracked, orderId].slice(-50)));
+	} catch {
+		/* If storage is unavailable, financial totals still come from server orders. */
+	}
+	return true;
 }

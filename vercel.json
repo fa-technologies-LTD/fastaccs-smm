@@ -41,6 +41,10 @@
 			"schedule": "30 9 * * *"
 		},
 		{
+			"path": "/api/internal/cron/store-credit-reminders",
+			"schedule": "35 10 * * *"
+		},
+		{
 			"path": "/api/internal/cron/numbers-catalog-sync",
 			"schedule": "2,32 * * * *"
 		},

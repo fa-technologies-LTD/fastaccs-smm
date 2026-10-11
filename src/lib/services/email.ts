@@ -36,6 +36,7 @@ export type EmailNotificationType =
 	| 'marketing_campaign'
 	| 'numbers_launch'
 	| 'numbers_recovery'
+	| 'store_credit_reminder'
 	| 'promo_reminder'
 	| 'admin_broadcast';
 
@@ -283,7 +284,10 @@ function getEmailEyebrow(params: SendEmailParams): string {
 		case 'boosting_service_live':
 			return 'BOOSTING';
 		case 'numbers_launch':
+		case 'numbers_recovery':
 			return 'NUMBERS';
+		case 'store_credit_reminder':
+			return 'YOUR CREDIT';
 		case 'promo_reminder':
 			return 'YOUR REWARD';
 		case 'welcome':

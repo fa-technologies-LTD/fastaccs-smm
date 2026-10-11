@@ -124,3 +124,34 @@ export function boostControlSignature(row: BoostPricingRow): string {
 		row.hardProfitNgn ?? null
 	]);
 }
+
+/** Only rules that can affect this offer's price or financial safety require revalidation. */
+export function boostEffectiveRules(row: BoostPricingRow, sheet: BoostPricingSheet): string {
+	const s = sheet.settings;
+	return JSON.stringify([
+		s.fx,
+		s.feeConfirmed ? s.feePercent : 0,
+		s.feeConfirmed ? s.feeFixed : 0,
+		Math.max(s.hardProfitNgn ?? 0, row.hardProfitNgn ?? 0),
+		...(row.priceMode === 'target'
+			? [
+					row.useDefaultMarkup ? (s.defaultMarkup ?? 40) : row.targetMarkup,
+					row.profitTargetNgn ?? s.profitTargetNgn ?? 0,
+					s.maxPriceMultiple ?? 0
+				]
+			: [])
+	]);
+}
+
+/** Refresh quotes without losing edits or rebasing them over someone else's changed settings. */
+export function mergeBoostCostRefresh(
+	baseline: BoostPricingSheet,
+	draft: BoostPricingSheet,
+	fresh: BoostControlsView
+): BoostControlsView {
+	if (JSON.stringify(baseline) !== JSON.stringify(fresh.sheet))
+		throw new Error(
+			'Offer settings changed elsewhere. Your edits are kept; export them before reloading.'
+		);
+	return { ...fresh, sheet: structuredClone(draft) };
+}

@@ -123,6 +123,14 @@ export const AUTOMATION_JOBS = {
 		lockTimeoutMinutes: 10,
 		expectedIntervalMinutes: 1440
 	},
+	'store-credit-reminders': {
+		name: 'store-credit-reminders',
+		path: '/api/internal/cron/store-credit-reminders',
+		schedule: 'daily 10:35 UTC',
+		risk: 'marketing',
+		lockTimeoutMinutes: 10,
+		expectedIntervalMinutes: 1440
+	},
 	'numbers-catalog-sync': {
 		name: 'numbers-catalog-sync',
 		path: '/api/internal/cron/numbers-catalog-sync',

@@ -35,7 +35,6 @@
 		type TierDeliveryMode
 	} from '$lib/helpers/tier-delivery-config';
 	import { getTierExactPreviewConfig } from '$lib/helpers/tier-exact-preview';
-	import { trackSnapEvent } from '$lib/services/snap-pixel';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { trackGa4AddToCart, type Ga4EventParams, type Ga4Item } from '$lib/services/ga4';
 
@@ -144,17 +143,6 @@
 		const scoreDiff = getTierPopularityScore(b) - getTierPopularityScore(a);
 		if (scoreDiff !== 0) return scoreDiff;
 		return compareTierByPriceAsc(a, b);
-	}
-
-	function getSnapTierPayload(tier: TierCard, quantity: number) {
-		return {
-			item_ids: [tier.category_id],
-			item_category: data.platform?.name || 'FastAccs SMM',
-			description: tier.tier_name || 'FastAccs tier',
-			price: Number(tier.price || 0) * quantity,
-			currency: 'NGN',
-			number_items: quantity
-		};
 	}
 
 	function getGa4TierItem(tier: TierCard, quantity: number, variant = 'standard_pool'): Ga4Item {
@@ -650,7 +638,6 @@
 			}
 
 			cart.addTier(tier.category_id, quickAddQuantity);
-			trackSnapEvent('ADD_CART', getSnapTierPayload(tier, quickAddQuantity));
 			recordAnalyticsEvent('add_cart', `${page.url.pathname}${page.url.search}`);
 			trackGa4AddToCart(getGa4TierPayload(tier, quickAddQuantity, 'standard_pool'));
 			showSuccess(

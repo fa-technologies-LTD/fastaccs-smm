@@ -65,7 +65,7 @@ export async function state(database: Database) {
 		if (known.has(offer.id)) continue;
 		const placeholder = sheet.rows.find(
 			(r) =>
-				!r.sourceOfferId &&
+				(!r.sourceOfferId || !offers.some((current) => current.id === r.sourceOfferId)) &&
 				r.platform === offer.platform &&
 				r.outcome === offer.outcome &&
 				r.tier === offer.qualityTier &&

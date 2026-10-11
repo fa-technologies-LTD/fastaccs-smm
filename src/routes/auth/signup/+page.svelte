@@ -3,7 +3,6 @@
 	import { page } from '$app/state';
 	import { UserPlus, ArrowLeft } from '$lib/icons';
 	import { isValidPhone } from '$lib/helpers/phone';
-	import { trackSnapEvent } from '$lib/services/snap-pixel';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
@@ -70,7 +69,6 @@
 				return;
 			}
 
-			trackSnapEvent('SIGN_UP', { sign_up_method: 'email' });
 			await goto(result.redirectTo || `/verify-email?next=${encodeURIComponent(redirectTo)}`);
 		} catch (signupError) {
 			console.error('Signup failed:', signupError);

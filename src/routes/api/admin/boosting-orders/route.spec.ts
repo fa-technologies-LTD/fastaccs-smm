@@ -76,11 +76,45 @@ describe('boosting admin queue list', () => {
 			})
 		);
 	});
-	it.each(['partial', 'under_review'])('supports the %s exception filter', async (status) => {
+	it.each(['partial'])('supports the %s exception filter', async (status) => {
 		await callGet(`?status=${status}`);
 		expect(prisma.orderItem.findMany).toHaveBeenCalledWith(
 			expect.objectContaining({
 				where: { AND: expect.arrayContaining([{ boostFulfillmentStatus: status }]) }
+			})
+		);
+	});
+	it('uses item counts for All, not the number of checkout orders', async () => {
+		const body = await (await callGet()).json();
+		expect(body.meta.totalItems).toBe(4);
+	});
+	it('includes legacy null pending statuses in the Pending filter', async () => {
+		await callGet('?status=pending');
+		expect(prisma.orderItem.findMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: {
+					AND: expect.arrayContaining([
+						{ OR: [{ boostFulfillmentStatus: 'pending' }, { boostFulfillmentStatus: null }] }
+					])
+				}
+			})
+		);
+	});
+	it('routes unexpected statuses to review instead of losing them from the queue', async () => {
+		vi.mocked(prisma.orderItem.groupBy).mockResolvedValue([
+			{ boostFulfillmentStatus: 'unknown-provider-state', _count: { _all: 2 } }
+		] as never);
+		const body = await (await callGet('?status=under_review')).json();
+		expect(body.meta.statusCounts.under_review).toBe(2);
+		expect(prisma.orderItem.findMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: {
+					AND: expect.arrayContaining([
+						expect.objectContaining({
+							OR: expect.arrayContaining([{ boostFulfillmentStatus: 'under_review' }])
+						})
+					])
+				}
 			})
 		);
 	});

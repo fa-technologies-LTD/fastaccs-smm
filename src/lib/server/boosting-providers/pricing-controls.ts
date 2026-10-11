@@ -15,6 +15,7 @@ import {
 import {
 	boostAutoPrice,
 	boostControlSignature,
+	boostEffectiveRules,
 	validateBoostRules,
 	type BoostControlsView
 } from '$lib/helpers/boosting-pricing-controls';
@@ -76,6 +77,13 @@ export async function loadBoostControls(database: Database = prisma): Promise<Bo
 		include: includes
 	});
 	const setup: BoostControlsView['setup'] = {};
+	const missingRows = view.sheet.rows.filter((r) => !offers.some((o) => o.id === r.sourceOfferId));
+	const categories = missingRows.length
+		? await database.category.findMany({
+				where: { categoryType: 'boosting_service' },
+				select: { id: true, metadata: true }
+			})
+		: [];
 	let archivedDraft = false;
 	view.sheet.settings.fx = config.usdNgnRate;
 	view.sheet.settings.defaultMarkup = config.defaultMarginPercent;
@@ -89,14 +97,29 @@ export async function loadBoostControls(database: Database = prisma): Promise<Bo
 		const offer = offers.find((o) => o.id === row.sourceOfferId);
 		if (!offer) {
 			row.selected = false;
-			view.quotes[row.id] = null;
+			row.sourceOfferId = null;
+			row.sourceUpdatedAt = null;
+			const category = categories.find((c) => {
+				const m = c.metadata as Record<string, unknown> | null;
+				return m?.boosting_platform === row.platform && m?.boosting_action_type === row.outcome;
+			});
+			if (category)
+				setup[row.id] = {
+					categoryId: category.id,
+					routingPolicy: 'unconfigured',
+					maximumCostNgn: 0,
+					reviewed: false
+				};
+			else view.quotes[row.id] = null;
 			continue;
 		}
 		const liveSale = (Number(offer.pricePerStepNgn) * row.units) / offer.stepQuantity;
 		if (Math.abs(row.sale - liveSale) > 0.005 || row.selected !== (offer.status === 'live'))
 			archivedDraft = true;
 		row.sale = Math.round(liveSale * 100) / 100;
-		row.selected = offer.status === 'live';
+		row.selected = offer.status === 'live' && offer.category.isActive;
+		if (offer.status === 'live' && !offer.category.isActive)
+			view.liveStatuses[row.id] = 'category_hidden';
 		row.priceMode = offer.priceLocked ? 'manual' : 'target';
 		row.increment = offer.stepQuantity;
 		row.startingQuantity = offer.minQuantity;
@@ -193,7 +216,8 @@ export async function saveBoostControls(
 	input: unknown,
 	actor: string,
 	database: PrismaClient = prisma,
-	automatic = false
+	automatic = false,
+	publicationConfirmed = false
 ) {
 	return database.$transaction(
 		async (tx) => {
@@ -202,9 +226,15 @@ export async function saveBoostControls(
 			await tx.$queryRaw`SELECT key FROM microcopy WHERE key IN (${BOOSTING_PRICING_KEYS.usdNgnRate}, ${BOOSTING_PRICING_KEYS.currencyBufferPercent}, ${BOOSTING_PRICING_KEYS.defaultMarginPercent}) ORDER BY CASE key WHEN ${BOOSTING_PRICING_KEYS.usdNgnRate} THEN 0 WHEN ${BOOSTING_PRICING_KEYS.currencyBufferPercent} THEN 1 ELSE 2 END FOR UPDATE`;
 			const current = await loadBoostControls(tx);
 			const next = clean(input, current);
+			if (
+				next.rows.some(
+					(r) => r.selected && !current.sheet.rows.find((old) => old.id === r.id)?.selected
+				) &&
+				!publicationConfirmed
+			)
+				throw new BoostPricingError('Confirm the selected offers before publishing them.');
 			if (next.version !== current.sheet.version)
 				throw new BoostPricingError('Newer settings were saved. Reload before saving.', 409);
-			const ruleChanges = JSON.stringify(next.settings) !== JSON.stringify(current.sheet.settings);
 			const offers = await tx.boostCustomerOffer.findMany({
 				where: { category: { categoryType: 'boosting_service' } },
 				include: includes
@@ -214,10 +244,13 @@ export async function saveBoostControls(
 			for (const row of next.rows) {
 				const original = current.sheet.rows.find((r) => r.id === row.id)!;
 				const edited = boostControlSignature(row) !== boostControlSignature(original);
+				const ruleChanges =
+					boostEffectiveRules(row, next) !== boostEffectiveRules(original, current.sheet);
 				if (!edited && !ruleChanges && !automatic) continue;
 				const offer = offers.find((o) => o.id === row.sourceOfferId);
 				if (!offer) {
-					if (edited) throw new BoostPricingError(`${row.title}: set up this offer first.`);
+					if (row.selected) throw new BoostPricingError(`${row.title}: set up this offer first.`);
+					// Proposal prices may be saved to the audit draft, never to a sellable SKU.
 					continue;
 				}
 				const quote = current.quotes[row.id];
@@ -235,6 +268,26 @@ export async function saveBoostControls(
 					applied++;
 					continue;
 				}
+				// Hidden prices are drafts, not executable spending approval. Let the owner save
+				// them during supplier outages without publishing or changing reviewed budgets.
+				// An inactive category with a still-live offer is deliberately not exempt.
+				if (!row.selected && offer.status !== 'live' && !automatic) {
+					let stepPrice: number;
+					try {
+						stepPrice = pricingStepPrice(row);
+					} catch {
+						throw new BoostPricingError(
+							`${row.title}: price must divide into whole kobo at this increment.`
+						);
+					}
+					const saved = await tx.boostCustomerOffer.update({
+						where: { id: offer.id },
+						data: { pricePerStepNgn: stepPrice, priceLocked: row.priceMode === 'manual' }
+					});
+					row.sourceUpdatedAt = saved.updatedAt.toISOString();
+					applied++;
+					continue;
+				}
 				const validQuote =
 					quote &&
 					!quote.issues.length &&
@@ -247,7 +300,18 @@ export async function saveBoostControls(
 					row.startingQuantity <= quote.max;
 				if (!validQuote) {
 					if (automatic) continue;
-					throw new BoostPricingError(`${row.title}: refresh costs or review supplier setup.`);
+					const reason = !quote
+						? 'review supplier setup; no supplier cost is available.'
+						: quote.issues.length
+							? `review supplier setup. ${quote.issues.join(' ')}`
+							: quote.min != null && row.startingQuantity < quote.min
+								? `starting quantity is below the supplier minimum (${quote.min}).`
+								: quote.max != null && row.startingQuantity > quote.max
+									? `starting quantity exceeds the supplier maximum (${quote.max}).`
+									: quote.rateUsd == null || quote.rateUsd <= 0
+										? 'refresh costs; the supplier price is missing.'
+										: 'click Refresh costs, then Save. Your edits will be kept.';
+					throw new BoostPricingError(`${row.title}: ${reason}`);
 				}
 				if (row.selected && !current.setup[row.id]?.reviewed)
 					throw new BoostPricingError(`${row.title}: review supplier routes before going live.`);

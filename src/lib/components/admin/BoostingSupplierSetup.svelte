@@ -54,12 +54,16 @@
 		categoryId = '',
 		qualityTier = 'value',
 		embedded = false,
+		suggestedServiceCode = '',
+		suggestedProvider = 'smm_raja',
 		onSaved
 	}: {
 		data: BoostingSetupData;
 		categoryId?: string;
 		qualityTier?: QualityTier;
 		embedded?: boolean;
+		suggestedServiceCode?: string;
+		suggestedProvider?: Provider;
 		onSaved?: () => void | Promise<void>;
 	} = $props();
 	let selectedPlatform = $state('');
@@ -736,7 +740,12 @@
 		selectedQualityTier = categoryId
 			? qualityTier
 			: (data.firstReviewQueue?.[0]?.qualityTier as QualityTier) || 'value';
-		void loadWorkspace();
+		void loadWorkspace().then(() => {
+			if (embedded && workspace && !workspace.offer && suggestedServiceCode) {
+				serviceCode = suggestedServiceCode;
+				provider = suggestedProvider;
+			}
+		});
 	});
 </script>
 
@@ -1306,7 +1315,10 @@
 							/></label
 						>
 						<label class="text-xs font-semibold" style="color: var(--text-muted);"
-							>Visibility<select bind:value={offerDraft.status} class="field mt-1"
+							>Visibility<select
+								bind:value={offerDraft.status}
+								class="field mt-1"
+								disabled={embedded}
 								><option value="hidden">Not offered</option><option value="reviewed"
 									>Private preview</option
 								><option value="live">Live storefront</option></select

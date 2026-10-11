@@ -6,10 +6,8 @@
 		ChevronLeft,
 		ChevronRight,
 		Copy,
-		DollarSign,
 		ExternalLink,
 		Search,
-		ShoppingCart,
 		Zap
 	} from '$lib/icons';
 	import { showError, showSuccess } from '$lib/stores/toasts';
@@ -23,6 +21,7 @@
 		canManuallyChangeBoostStatus,
 		type BoostItemStatus
 	} from '$lib/helpers/boosting-admin-status';
+	import type { getBoostingAnalytics } from '$lib/services/boosting-analytics';
 	import type { PageData } from './$types';
 
 	type StatusFilter =
@@ -66,6 +65,15 @@
 			refillCheckedAt: string | null;
 		}>;
 		fulfillmentState: { status: string; mode: string } | null;
+		progress?: {
+			customerStatus: string | null;
+			startCount: number | null;
+			remains: number | null;
+			supplierOrderId: string | null;
+			rawProviderStatus: string | null;
+			lastCheckedAt: string | null;
+			refillDays: number | null;
+		} | null;
 		order: {
 			id: string;
 			orderNumber: string;
@@ -87,6 +95,7 @@
 		search: string;
 		statusCounts: Record<string, number>;
 		activeCount: number;
+		totalItems: number;
 		canRunShadowRouting: boolean;
 	}
 
@@ -106,7 +115,12 @@
 
 	let items = $state<BoostingOrderItem[]>(untrack(() => data.items));
 	let meta = $state<ListMeta>(untrack(() => data.meta as ListMeta));
-	let stats = $state(untrack(() => data.stats));
+	let analytics = $state<Awaited<ReturnType<typeof getBoostingAnalytics>> | null>(
+		untrack(() => data.analytics)
+	);
+	let analyticsError = $state(untrack(() => data.analyticsError));
+	let analyticsLoading = $state(false);
+	let analyticsRequestId = 0;
 	let statusFilter = $state<StatusFilter>('active');
 	let sortOrder = $state<'newest' | 'oldest'>('newest');
 	let searchDraft = $state('');
@@ -143,8 +157,30 @@
 		},
 		{ value: 'rejected' as const, label: 'Rejected', count: meta.statusCounts.rejected || 0 },
 		{ value: 'cancelled' as const, label: 'Cancelled', count: meta.statusCounts.cancelled || 0 },
-		{ value: 'all' as const, label: 'All', count: stats.total_orders || 0 }
+		{ value: 'all' as const, label: 'All', count: meta.totalItems || 0 }
 	]);
+	async function refreshAnalytics() {
+		const requestId = ++analyticsRequestId;
+		analyticsLoading = true;
+		try {
+			const response = await fetch('/api/admin/boosting-orders/analytics');
+			const result = await response.json();
+			if (!response.ok || !result.success) throw new Error();
+			if (requestId !== analyticsRequestId) return;
+			analytics = result.data;
+			analyticsError = null;
+		} catch {
+			if (requestId === analyticsRequestId)
+				analyticsError = analytics
+					? 'Could not refresh analytics. Showing the last successful report.'
+					: 'Analytics unavailable. Order management is still available.';
+		} finally {
+			if (requestId === analyticsRequestId) analyticsLoading = false;
+		}
+	}
+	async function refreshAll() {
+		await Promise.all([loadItems(meta.page), refreshAnalytics()]);
+	}
 
 	function getStatus(item: BoostingOrderItem): ItemStatus {
 		return normalizeBoostItemStatus(item.boostFulfillmentStatus);
@@ -343,7 +379,7 @@
 			const result = await response.json();
 			if (!response.ok || result.error) throw new Error(result.error || 'Failed to update');
 			showSuccess(status === 'needs_link' ? 'Customer notified' : 'Order updated', '');
-			await loadItems(meta.page);
+			await refreshAll();
 			refreshAdminAttentionBadges();
 		} catch (error) {
 			showError('Update failed', error instanceof Error ? error.message : 'Please try again.');
@@ -424,73 +460,136 @@
 </script>
 
 <svelte:head>
-	<title>Boosting Orders | Admin</title>
+	<title>Boosting — Orders & Analytics | Admin</title>
 </svelte:head>
 
 <div class="space-y-5">
 	<header>
 		<h1 class="flex items-center gap-2 text-2xl font-bold" style="color: var(--text);">
 			<Zap class="h-6 w-6" style="color: var(--primary);" />
-			Boosting Orders
+			Boosting — Orders & Analytics
 		</h1>
 		<p class="mt-1 text-sm" style="color: var(--text-muted);">
-			Automation handles mapped routes. Review only exceptions, link problems and customer reports
-			here.
+			Track delivery, supplier costs and customer reports.
 		</p>
 		<div class="mt-2 flex flex-wrap items-center justify-between gap-2">
 			<OrderTypeTabs active="boosting" />
-			{#if meta.canRunShadowRouting}
+			<div class="flex flex-wrap items-center gap-2">
+				<a href="/admin/boosting-pricing" class="text-sm" style="color: var(--primary);"
+					>Pricing →</a
+				>
 				<button
 					type="button"
-					onclick={runShadowChecks}
-					disabled={shadowRunning}
-					class="rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50"
-					style="border-color: rgba(5,212,113,0.35); color: var(--primary);"
+					onclick={refreshAll}
+					disabled={loading || analyticsLoading}
+					class="rounded-lg border px-3 py-2 text-xs"
+					style="border-color: var(--border);"
+					>{loading || analyticsLoading ? 'Refreshing…' : 'Refresh'}</button
 				>
-					{shadowRunning ? 'Checking routes…' : 'Preview supplier routes'}
-				</button>
-			{/if}
+				{#if meta.canRunShadowRouting}
+					<button
+						type="button"
+						onclick={runShadowChecks}
+						disabled={shadowRunning}
+						class="rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50"
+						style="border-color: rgba(5,212,113,0.35); color: var(--primary);"
+					>
+						{shadowRunning ? 'Checking routes…' : 'Preview supplier routes'}
+					</button>
+				{/if}
+			</div>
 		</div>
 	</header>
 
-	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-		<div
+	{#if analyticsError}<p role="status" class="text-sm" style="color: var(--text-muted);">
+			{analyticsError}
+		</p>{/if}
+	{#if analytics}
+		<p class="text-xs" style="color: var(--text-dim);">
+			Last 30 days · paid orders, including later refunds
+		</p>
+		<div class="grid grid-cols-2 gap-3 lg:grid-cols-6">
+			{#each [['Paid orders', analytics.overall.orders.toLocaleString()], ['Boosting items', analytics.overall.items.toLocaleString()], ['Completed', analytics.overall.completionRate === null ? '—' : `${analytics.overall.completionRate}%`], ...(canViewRevenue ? [['Net sales', formatMonetaryAmount(analytics.overall.netSalesNgn ?? 0)], ['Recorded supplier cost', analytics.overall.supplierCostNgn === null ? '—' : formatMonetaryAmount(analytics.overall.supplierCostNgn)], ['Recorded margin', analytics.overall.recordedMarginNgn === null ? '—' : formatMonetaryAmount(analytics.overall.recordedMarginNgn)]] : [])] as metric}
+				<div
+					class="rounded-[var(--r-md)] border p-4"
+					style="border-color: var(--border); background: var(--bg-elev-1);"
+				>
+					<p class="text-xs" style="color: var(--text-muted);">{metric[0]}</p>
+					<p class="mt-1 text-xl font-bold">{metric[1]}</p>
+				</div>
+			{/each}
+		</div>
+		{#if canViewRevenue && analytics.overall.knownCostItems < analytics.overall.items}<p
+				class="text-xs"
+				style="color: var(--text-muted);"
+			>
+				Costs recorded for {analytics.overall.knownCostItems} of {analytics.overall.items} items. Margin
+				covers those items only, before payment fees. Unknown costs aren’t treated as free.
+			</p>{/if}
+		<details
 			class="rounded-[var(--r-md)] border p-4"
 			style="border-color: var(--border); background: var(--bg-elev-1);"
 		>
-			<div class="flex items-center gap-2 text-xs font-medium" style="color: var(--text-muted);">
-				<DollarSign size={16} /> Lifetime net sales
+			<summary class="cursor-pointer font-semibold">By service · last 30 days</summary>
+			<div class="mt-3 overflow-x-auto">
+				<table class="w-full text-left text-sm">
+					<thead
+						><tr style="color: var(--text-muted);"
+							><th class="p-2">Service</th><th class="p-2">Items</th><th class="p-2">Completed</th
+							>{#if canViewRevenue}<th class="p-2">Net sales</th><th class="p-2">Recorded margin</th
+								>{/if}</tr
+						></thead
+					>
+					<tbody
+						>{#each analytics.byService as row (`${row.categoryId}:${row.platform}:${row.outcome}`)}<tr
+								style="border-top: 1px solid var(--border);"
+								><td class="p-2">{row.name}</td><td class="p-2">{row.items}</td><td class="p-2"
+									>{row.completed}</td
+								>{#if canViewRevenue}<td class="p-2"
+										>{formatMonetaryAmount(row.netSalesNgn ?? 0)}</td
+									><td class="p-2"
+										>{row.recordedMarginNgn === null
+											? '—'
+											: formatMonetaryAmount(row.recordedMarginNgn)}</td
+									>{/if}</tr
+							>{:else}<tr
+								><td colspan={canViewRevenue ? 5 : 3} class="p-4" style="color: var(--text-muted);"
+									>No paid Boosting items in this period.</td
+								></tr
+							>{/each}</tbody
+					>
+				</table>
 			</div>
-			<p class="mt-1 text-xl font-bold" style="color: var(--text);">
-				{formatMonetaryAmount(stats.total_revenue)}
-			</p>
-		</div>
-		<div
-			class="rounded-[var(--r-md)] border p-4"
-			style="border-color: var(--border); background: var(--bg-elev-1);"
-		>
-			<div class="flex items-center gap-2 text-xs font-medium" style="color: var(--text-muted);">
-				<DollarSign size={16} /> This month
-			</div>
-			<p class="mt-1 text-xl font-bold" style="color: var(--text);">
-				{formatMonetaryAmount(stats.this_month_revenue)}
-			</p>
-		</div>
-		<div
-			class="rounded-[var(--r-md)] border p-4"
-			style="border-color: var(--border); background: var(--bg-elev-1);"
-		>
-			<div class="flex items-center gap-2 text-xs font-medium" style="color: var(--text-muted);">
-				<ShoppingCart size={16} /> Paid orders
-			</div>
-			<p class="mt-1 text-xl font-bold" style="color: var(--text);">{stats.total_orders}</p>
-		</div>
-	</div>
+			{#if canViewRevenue}<div class="mt-4 flex flex-wrap gap-3">
+					{#each analytics.providers as provider (provider.provider)}<div
+							class="rounded-lg border px-3 py-2 text-sm"
+							style="border-color: var(--border);"
+						>
+							<span style="color: var(--text-muted);">{provider.label} balance</span>
+							<strong
+								>{provider.balance === null
+									? '—'
+									: `${provider.currency ?? ''} ${provider.balance.toFixed(2)}`}</strong
+							>
+							<p class="text-xs" style="color: var(--text-dim);">
+								{provider.lastBalanceSuccessAt
+									? `Last checked ${formatDateTime(provider.lastBalanceSuccessAt)}`
+									: 'Not checked yet'}{!provider.enabled || provider.circuitOpen
+									? ' · Supplier paused'
+									: ''}
+							</p>
+						</div>{/each}
+				</div>{/if}
+		</details>
+	{/if}
 
 	<section
 		class="rounded-[var(--r-md)] border p-3 sm:p-4"
 		style="border-color: var(--border); background: var(--bg-elev-1);"
 	>
+		<p class="mb-3 text-xs" style="color: var(--text-dim);">
+			Delivery queue · all-time Boosting items
+		</p>
 		<div class="flex flex-wrap gap-2">
 			{#each statusOptions as option}
 				<button
@@ -549,7 +648,7 @@
 		</div>
 		<p class="mt-2 text-xs" style="color: var(--text-dim);">
 			{meta.total === 0
-				? 'No matching orders'
+				? 'No matching Boosting items'
 				: `Showing ${(meta.page - 1) * meta.pageSize + 1}–${Math.min(meta.page * meta.pageSize, meta.total)} of ${meta.total}`}
 		</p>
 	</section>
@@ -558,6 +657,11 @@
 		{#each items as item (item.id)}
 			{@const config = getBoostingServiceConfig(item.category?.metadata)}
 			{@const status = getStatus(item)}
+			{@const refillDays = item.fulfillmentState
+				? item.progress?.refillDays
+				: config.refillAvailable
+					? config.refillDays
+					: null}
 			<article
 				class="rounded-[var(--r-md)] border p-4"
 				style="border-color: var(--border); background: var(--bg-elev-1);"
@@ -570,9 +674,9 @@
 								class="rounded-md border px-2 py-0.5 text-[11px] font-semibold"
 								style={getStatusStyle(status)}>{getStatusLabel(status)}</span
 							>
-							{#if config.refillAvailable}
+							{#if refillDays}
 								<span class="text-[11px]" style="color: var(--text-dim);"
-									>{config.refillDays}-day refill</span
+									>{refillDays}-day refill</span
 								>
 							{/if}
 						</div>
@@ -597,6 +701,18 @@
 							</p>{/if}
 					</div>
 				</div>
+				{#if item.progress}<p class="mt-3 text-xs" style="color: var(--text-muted);">
+						{item.progress.rawProviderStatus
+							? `Supplier: ${item.progress.rawProviderStatus}`
+							: 'Awaiting supplier update'}
+						{#if item.progress.remains !== null && item.progress.remains >= 0 && item.boostQuantity !== null && item.boostQuantity > 0}
+							· {Math.max(
+								0,
+								Math.min(item.boostQuantity, item.boostQuantity - item.progress.remains)
+							).toLocaleString()} / {item.boostQuantity.toLocaleString()} supplier-reported{/if}
+						{#if item.progress.lastCheckedAt}
+							· Checked {formatAge(item.progress.lastCheckedAt)}{/if}
+					</p>{/if}
 
 				{#if item.latestIssue?.reason && ['needs_link', 'rejected'].includes(status)}
 					<div
@@ -741,7 +857,7 @@
 				<div class="mt-3 flex flex-wrap items-center justify-between gap-2">
 					<p class="text-xs" style="color: var(--text-dim);">
 						Supplier ref: <span style="color: var(--text-muted);"
-							>{item.boostProviderReference || 'Not added'}</span
+							>{item.progress?.supplierOrderId || item.boostProviderReference || 'Not added'}</span
 						>
 					</p>
 					<div class="flex flex-wrap gap-2">

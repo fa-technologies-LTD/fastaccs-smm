@@ -7,7 +7,8 @@
 	import { showError, showSuccess } from '$lib/stores/toasts';
 	import {
 		BOOSTING_PLATFORM_LABELS,
-		BOOSTING_ACTION_LABELS
+		BOOSTING_ACTION_LABELS,
+		BOOSTING_ACTION_TYPES
 	} from '$lib/helpers/boosting-service-config';
 	import {
 		pricingEconomics,
@@ -18,6 +19,7 @@
 	import {
 		boostAutoPrice,
 		boostRowWarnings,
+		mergeBoostCostRefresh,
 		type BoostControlsView,
 		type BoostingSetupData
 	} from '$lib/helpers/boosting-pricing-controls';
@@ -36,6 +38,10 @@
 	let expanded = $state<string | null>(null);
 	let supplier = $state<BoostPricingRow | null>(null);
 	let expandConfirm = $state(false);
+	let publishConfirm = $state(false);
+	const newlyLive = $derived(
+		view.sheet.rows.filter((r) => r.selected && view.liveStatuses[r.id] !== 'live')
+	);
 	let balances = $state<
 		Array<{ id: string; label: string; balance: number | null; currency: string | null }>
 	>([]);
@@ -50,6 +56,7 @@
 	const economics = (r: BoostPricingRow) => pricingEconomics(r, view.sheet, quote(r));
 	const warnings = (r: BoostPricingRow) => {
 		const issues = boostRowWarnings(r, view.sheet, quote(r));
+		if (!BOOSTING_ACTION_TYPES.includes(r.outcome as never)) issues.push('Needs checkout support.');
 		if (r.sourceOfferId && !view.setup[r.id]?.reviewed) issues.push('Review supplier setup.');
 		const q = quote(r);
 		if (q && Date.now() - Date.parse(q.checkedAt) > (view.catalogMaxAgeMinutes ?? 390) * 60000)
@@ -63,6 +70,28 @@
 			issues.push('Supplier cost exceeds reviewed limit.');
 		return issues;
 	};
+	const liveBlockers = (r: BoostPricingRow) =>
+		warnings(r).filter(
+			(warning) =>
+				![
+					'Below profit target.',
+					'Check option price order.',
+					'Costs more per item than followers.'
+				].includes(warning)
+		);
+	function toggleLive(row: BoostPricingRow, input: HTMLInputElement) {
+		if (input.checked && !row.selected) {
+			const blockers = liveBlockers(row);
+			if (blockers.length) {
+				input.checked = false;
+				expanded = row.id;
+				error = `${row.title}: ${blockers.join(' ')}`;
+				return;
+			}
+		}
+		row.selected = input.checked;
+		error = '';
+	}
 	const platforms = $derived([...new Set(view.sheet.rows.map((r) => r.platform))]);
 	const flagged = $derived(view.sheet.rows.filter((r) => warnings(r).length > 0).length);
 	const live = $derived(view.sheet.rows.filter((r) => view.liveStatuses[r.id] === 'live').length);
@@ -148,11 +177,20 @@
 		view = result.data;
 		saved = JSON.stringify(view.sheet);
 	}
-	async function save() {
+	async function save(confirmed = false) {
+		if (newlyLive.length && !confirmed) {
+			publishConfirm = true;
+			return;
+		}
+		publishConfirm = false;
 		busy = true;
 		error = '';
 		try {
-			const result = await request({ action: 'save', sheet: view.sheet });
+			const result = await request({
+				action: 'save',
+				sheet: view.sheet,
+				confirmPublish: confirmed
+			});
 			view = result.data;
 			saved = JSON.stringify(view.sheet);
 			showSuccess('Boosting settings saved.');
@@ -164,19 +202,26 @@
 		}
 	}
 	async function refreshCosts() {
-		if (dirty) {
-			showError('Save your changes before refreshing costs.');
-			return;
-		}
 		busy = true;
 		error = '';
 		try {
-			const response = await fetch('/api/admin/boosting-suppliers/sync', { method: 'POST' });
+			const response = await fetch('/api/admin/boosting-suppliers/sync', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ refreshPrices: false })
+			});
 			const result = await response.json();
 			if (!response.ok || !result.success)
 				throw new Error(result.error || 'Costs could not refresh.');
-			await reload();
-			showSuccess('Costs refreshed. Locked prices kept.');
+			const freshResponse = await fetch('/api/admin/boosting-pricing');
+			const freshResult = await freshResponse.json();
+			if (!freshResponse.ok || !freshResult.success)
+				throw new Error(freshResult.error || 'Could not reload costs.');
+			const fresh = freshResult.data as BoostControlsView;
+			view = mergeBoostCostRefresh(JSON.parse(saved), $state.snapshot(view.sheet), fresh);
+			saved = JSON.stringify(fresh.sheet);
+			previewPrices();
+			showSuccess('Costs refreshed. Your edits are kept. Save when ready.');
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : 'Refresh failed.';
 			showError(error);
@@ -201,6 +246,10 @@
 		}
 	}
 	function openSupplier(row: BoostPricingRow) {
+		if (!BOOSTING_ACTION_TYPES.includes(row.outcome as never)) {
+			showError('This result needs checkout support. A saved price alone cannot make it live.');
+			return;
+		}
 		if (dirty) {
 			showError('Save your pricing changes before opening supplier setup.');
 			return;
@@ -246,7 +295,7 @@
 			<button disabled={busy || dirty} onclick={() => (expandConfirm = true)}
 				>+ Expand catalogue</button
 			>
-			<button class="primary" disabled={busy || !dirty} onclick={save}
+			<button class="primary" disabled={busy || !dirty} onclick={() => save()}
 				><Save size={16} /> {busy ? 'Working…' : 'Save'}</button
 			>
 		</div>
@@ -256,6 +305,9 @@
 		{#if view.archivedDraft}<p class="hint">
 				Showing current offer settings. Earlier sheet revisions remain in history.
 			</p>{/if}
+		<p class="hint">
+			Hidden prices save as drafts. Turning on new Live offers requires confirmation.
+		</p>
 		<section class="panel">
 			<h2>Pricing rules</h2>
 			<p>
@@ -340,7 +392,8 @@
 				>
 			</details>
 			<p class="hint">
-				Save applies changes. Unlocked prices follow your rules; locked prices stay put.
+				Unlocked prices follow your rules; locked prices stay put. New Live offers require
+				confirmation.
 			</p>
 		</section>
 		<div class="catalog-toolbar">
@@ -354,9 +407,7 @@
 						></span
 					>{/each}
 			</div>
-			<button disabled={busy || dirty} onclick={refreshCosts}
-				><RefreshCcw size={15} /> Refresh costs</button
-			>
+			<button disabled={busy} onclick={refreshCosts}><RefreshCcw size={15} /> Refresh costs</button>
 		</div>
 		<div class="filters">
 			<p>{live} offers live · <span>{flagged} need review</span></p>
@@ -411,7 +462,7 @@
 							>
 							<td>{row.units.toLocaleString()}</td><td
 								><button class="source" onclick={() => openSupplier(row)}
-									>{quote(row)
+									>{quote(row) && row.sourceOfferId
 										? row.provider === 'smm_raja'
 											? 'SMM Raja'
 											: 'BulkFollows'
@@ -461,18 +512,12 @@
 								><input
 									aria-label={`Live ${row.title} ${row.tier}`}
 									type="checkbox"
-									bind:checked={row.selected}
-									disabled={busy ||
-										(!row.selected &&
-											(!view.setup[row.id]?.reviewed ||
-												warnings(row).some(
-													(w) =>
-														![
-															'Below profit target.',
-															'Check option price order.',
-															'Costs more per item than followers.'
-														].includes(w)
-												)))}
+									checked={row.selected}
+									onchange={(event) => toggleLive(row, event.currentTarget)}
+									disabled={busy}
+									title={!row.selected && liveBlockers(row).length
+										? 'Click to see what needs fixing.'
+										: 'Apply with Save.'}
 								/></td
 							>
 						</tr>
@@ -549,6 +594,37 @@
 	</fieldset>
 </div>
 
+{#if publishConfirm}<div class="overlay">
+		<div
+			class="confirm panel"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="publish-title"
+			tabindex="-1"
+			use:adminDialog={() => (publishConfirm = false)}
+		>
+			<h2 id="publish-title">
+				Publish {newlyLive.length}
+				{newlyLive.length === 1 ? 'offer' : 'offers'}?
+			</h2>
+			<p>
+				These selected offers become available to customers when you save. Other hidden offers stay
+				hidden.
+			</p>
+			<ul>
+				{#each newlyLive.slice(0, 8) as row (row.id)}<li>
+						{row.title}{row.option ? ` · ${row.option}` : ''}
+					</li>{/each}
+			</ul>
+			{#if newlyLive.length > 8}<p>And {newlyLive.length - 8} more selected offers.</p>{/if}
+			<div class="actions">
+				<button onclick={() => (publishConfirm = false)}>Cancel</button><button
+					class="primary"
+					onclick={() => save(true)}>Publish selected & save</button
+				>
+			</div>
+		</div>
+	</div>{/if}
 {#if expandConfirm}<div class="overlay">
 		<div
 			role="dialog"
@@ -588,6 +664,8 @@
 				data={setupData}
 				categoryId={view.setup[supplier.id].categoryId}
 				qualityTier={supplier.tier as 'value' | 'stable' | 'premium'}
+				suggestedServiceCode={supplier.sourceOfferId ? '' : supplier.serviceId}
+				suggestedProvider={supplier.provider}
 				embedded
 				onSaved={supplierSaved}
 			/>
