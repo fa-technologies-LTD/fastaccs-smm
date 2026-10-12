@@ -32,6 +32,15 @@ const KNOWN_SOURCES: Array<[RegExp, string]> = [
 	[/linkedin\.com/i, 'linkedin']
 ];
 
+// Payment pages redirect buyers back to us (full page load, gateway as referrer). They are part of
+// checkout, never a marketing source.
+const PAYMENT_GATEWAY_HOST =
+	/(^|\.)(monnify\.com|paystack\.(com|co)|flutterwave\.com|ravepay\.co|checkout\.stripe\.com|paypal\.com|opaycheckout\.com|squadco\.com|interswitchng\.com)$/i;
+
+export function isPaymentGatewayHost(host: string): boolean {
+	return PAYMENT_GATEWAY_HOST.test(host.trim().toLowerCase());
+}
+
 /** Map a referrer URL to a channel. '' = internal/unattributable; 'direct' = no referrer. */
 export function deriveSource(referrer: string, ownHost: string): string {
 	if (!referrer) return 'direct';
@@ -44,6 +53,7 @@ export function deriveSource(referrer: string, ownHost: string): string {
 	if (!host) return 'direct';
 	// Our own domain(s) = internal navigation, not an acquisition source.
 	if (host === (ownHost || '').toLowerCase() || host.endsWith('fastaccs.com')) return '';
+	if (isPaymentGatewayHost(host)) return '';
 	for (const [re, name] of KNOWN_SOURCES) if (re.test(host)) return name;
 	return host.replace(/^www\./, ''); // unknown external → the bare domain
 }
