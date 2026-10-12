@@ -13,6 +13,7 @@
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { syncGa4Consent, trackGa4PageView } from '$lib/services/ga4';
 	import { initAttributionCapture } from '$lib/services/attribution-client';
+	import { markAppMounted } from '$lib/client/boot-guard';
 	import { PRIVACY_CONSENT_CHANGED_EVENT } from '$lib/helpers/privacyConsent';
 	import { getSiteBaseUrl } from '$lib/helpers/site-url';
 	import type { LayoutData } from './$types';
@@ -160,6 +161,7 @@
 
 	onMount(() => {
 		hydrated = true;
+		markAppMounted();
 		trackCurrentPageView();
 		trackCurrentConfirmedVisit();
 		syncGa4Consent();
