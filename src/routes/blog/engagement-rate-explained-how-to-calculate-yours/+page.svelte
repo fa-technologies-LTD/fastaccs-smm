@@ -14,6 +14,7 @@
 			"@context": "https://schema.org",
 			"@type": "BlogPosting",
 			"headline": "Engagement Rate Explained: How to Calculate Yours and What's 'Good' by Platform",
+			"image": "https://smm.fastaccs.com/og-share-1200x630.png",
 			"description": "Engagement rate is the one metric that actually tells you if your audience is real. Here's how to calculate it correctly and what counts as 'good' by platform and account size.",
 			"datePublished": "2026-06-26",
 			"dateModified": "2026-06-26",

@@ -50,6 +50,7 @@
 </svelte:head>
 
 <JsonLd data={data.product} />
+<JsonLd data={data.breadcrumb} />
 
 <Navigation />
 

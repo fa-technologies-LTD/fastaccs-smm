@@ -28,6 +28,7 @@
 	import { formatPrice } from '$lib/helpers/utils';
 	import { platformDisplayName } from '$lib/helpers/platform-seo';
 	import SeoFaq from '$lib/components/SeoFaq.svelte';
+	import JsonLd from '$lib/components/JsonLd.svelte';
 	import { lockScroll, unlockScroll } from '$lib/helpers/scroll-lock';
 	import {
 		getTierDeliveryModeLabel as getDeliveryModeLabel,
@@ -775,6 +776,8 @@
 </script>
 
 <svelte:window onkeydown={handleQuickAddWindowKeydown} />
+
+<JsonLd data={data.breadcrumb ?? null} />
 
 <svelte:head>
 	<title>{data.seo?.title ?? 'Accounts - FastAccs'}</title>

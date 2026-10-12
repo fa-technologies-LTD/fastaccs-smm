@@ -14,6 +14,7 @@
 			"@context": "https://schema.org",
 			"@type": "BlogPosting",
 			"headline": "Do You Need a VPN to Verify WhatsApp or Telegram With an Online Number?",
+			"image": "https://smm.fastaccs.com/og-share-1200x630.png",
 			"description": "When a VPN helps with a verification number, when it does nothing, and the few cases where it's worth it.",
 			"datePublished": "2026-08-02",
 			"dateModified": "2026-08-02",

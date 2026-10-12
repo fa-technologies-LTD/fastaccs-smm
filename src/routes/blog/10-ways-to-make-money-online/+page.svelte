@@ -14,6 +14,7 @@
 			"@context": "https://schema.org",
 			"@type": "BlogPosting",
 			"headline": "10 Proven Ways to Make Money Online in 2026",
+			"image": "https://smm.fastaccs.com/og-share-1200x630.png",
 			"description": "Honest breakdown of 10 real ways people earn income online in 2026 — from freelancing and content creation to affiliate marketing. What each one actually takes, and who it suits.",
 			"datePublished": "2026-06-16",
 			"dateModified": "2026-06-16",

@@ -13,7 +13,8 @@
 	} from '$lib/icons';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import { platformDisplayName } from '$lib/helpers/platform-seo';
-	import { productJsonLd } from '$lib/helpers/structured-data';
+	import { breadcrumbJsonLd, productJsonLd, SHARE_IMAGE_PATH } from '$lib/helpers/structured-data';
+	import { getSiteBaseUrl } from '$lib/helpers/site-url';
 	import JsonLd from '$lib/components/JsonLd.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
@@ -647,6 +648,39 @@
 		return `Buy ${platform} ${tierName} Account${price} | FastAccs`;
 	});
 
+	// Includes the tier name so every tier page has its own description.
+	const tierSeoDescription = $derived.by(() => {
+		const platform = platformDisplayName(data.platform?.name ?? '', data.platform?.slug ?? '');
+		const tierName = String(data.tier?.tier_name ?? '').trim();
+		const fr = data.tier?.metadata?.follower_range;
+		const fc = Number(data.tier?.metadata?.follower_count || 0);
+		const display = String(fr?.display || '').trim();
+		const hasRange = fr && ((fr.min || 0) !== 0 || (fr.max || 0) !== 0);
+		const detail = display
+			? display
+			: hasRange
+				? `${formatFollowers(fr.min || 0)} - ${formatFollowers(fr.max || 0)} followers`
+				: fc > 0
+					? `${formatFollowers(fc)} followers`
+					: '';
+		return `Buy ${platform} ${tierName} accounts${detail ? ` with ${detail}` : ''}. Premium quality accounts with instant delivery and full access.`;
+	});
+
+	const tierBreadcrumb = $derived(
+		breadcrumbJsonLd([
+			{ name: 'Home', url: `${getSiteBaseUrl()}/` },
+			{ name: 'Accounts', url: `${getSiteBaseUrl()}/platforms` },
+			{
+				name: `${platformDisplayName(data.platform?.name ?? '', data.platform?.slug ?? '')} accounts`,
+				url: `${getSiteBaseUrl()}/platforms/${data.platform?.slug ?? ''}`
+			},
+			{
+				name: String(data.tier?.tier_name ?? '').trim(),
+				url: `${getSiteBaseUrl()}${page.url.pathname}`
+			}
+		])
+	);
+
 	// One account type = one product: lets search show price + stock under the listing.
 	const tierProduct = $derived.by(() => {
 		const platform = platformDisplayName(data.platform?.name ?? '', data.platform?.slug ?? '');
@@ -656,7 +690,8 @@
 			description:
 				String(data.tier?.description ?? '').trim() ||
 				`${platform} ${tierName} account, delivered to your dashboard after payment.`,
-			url: `${page.url.origin}${page.url.pathname}`,
+			url: `${getSiteBaseUrl()}${page.url.pathname}`,
+			image: `${getSiteBaseUrl()}${SHARE_IMAGE_PATH}`,
 			priceNgn: Number(data.tier?.price ?? 0),
 			inStock: Number(data.tier?.visible_available ?? 0) > 0,
 			category: 'Social media accounts'
@@ -665,25 +700,11 @@
 </script>
 
 <JsonLd data={tierProduct} />
+<JsonLd data={tierBreadcrumb} />
 
 <svelte:head>
 	<title>{tierSeoTitle}</title>
-	<meta
-		name="description"
-		content={(() => {
-			const fr = data.tier?.metadata?.follower_range;
-			const fc = Number(data.tier?.metadata?.follower_count || 0);
-			const display = String(fr?.display || '').trim();
-			const hasRange = fr && ((fr.min || 0) !== 0 || (fr.max || 0) !== 0);
-			if (display)
-				return `Buy ${platformDisplayName(data.platform?.name ?? '', data.platform?.slug ?? '')} accounts with ${display}. Premium quality accounts with instant delivery and full access.`;
-			if (hasRange)
-				return `Buy ${platformDisplayName(data.platform?.name ?? '', data.platform?.slug ?? '')} accounts with ${formatFollowers(fr.min || 0)} - ${formatFollowers(fr.max || 0)} followers. Premium quality accounts with instant delivery and full access.`;
-			if (fc > 0)
-				return `Buy ${platformDisplayName(data.platform?.name ?? '', data.platform?.slug ?? '')} accounts with ${formatFollowers(fc)} followers. Premium quality accounts with instant delivery and full access.`;
-			return `Buy premium ${platformDisplayName(data.platform?.name ?? '', data.platform?.slug ?? '')} accounts. Instant delivery and full access.`;
-		})()}
-	/>
+	<meta name="description" content={tierSeoDescription} />
 </svelte:head>
 
 <Navigation />

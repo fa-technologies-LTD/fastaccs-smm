@@ -2,6 +2,9 @@
 	import type { Snippet } from 'svelte';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	import BlogLike from '$lib/components/blog/BlogLike.svelte';
+	import JsonLd from '$lib/components/JsonLd.svelte';
+	import { breadcrumbJsonLd } from '$lib/helpers/structured-data';
+	import { getSiteBaseUrl } from '$lib/helpers/site-url';
 
 	interface Props {
 		tags: string[];
@@ -13,7 +16,17 @@
 	}
 
 	let { tags, title, publishedAt, readTime, slug, children }: Props = $props();
+
+	const breadcrumb = $derived(
+		breadcrumbJsonLd([
+			{ name: 'Home', url: `${getSiteBaseUrl()}/` },
+			{ name: 'Blog', url: `${getSiteBaseUrl()}/blog` },
+			{ name: title, url: `${getSiteBaseUrl()}/blog/${slug}` }
+		])
+	);
 </script>
+
+<JsonLd data={breadcrumb} />
 
 <main class="min-h-screen" style="font-family: var(--font-body); color: var(--text);">
 	<!-- Article Hero -->
@@ -27,11 +40,16 @@
 		</div>
 
 		<div class="hero-inner">
-			<Breadcrumb items={[{ label: 'Blog', href: '/blog' }, { label: title, active: true }]} />
+			<Breadcrumb
+				items={[
+					{ label: 'Blog', href: '/blog' },
+					{ label: title, active: true }
+				]}
+			/>
 
 			<div class="hero-content">
 				<div class="tags-row">
-					{#each tags as tag}
+					{#each tags as tag (tag)}
 						<span class="tag-pill">{tag}</span>
 					{/each}
 				</div>

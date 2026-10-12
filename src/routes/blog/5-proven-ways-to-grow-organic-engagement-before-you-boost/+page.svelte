@@ -14,6 +14,7 @@
 			"@context": "https://schema.org",
 			"@type": "BlogPosting",
 			"headline": "5 Proven Ways to Grow Organic Engagement Before You Pay for a Boost",
+			"image": "https://smm.fastaccs.com/og-share-1200x630.png",
 			"description": "A boost performs best on content that's already earning real attention. Here are 5 practical, free tactics to grow organic engagement before you spend on a boost.",
 			"datePublished": "2026-06-26",
 			"dateModified": "2026-06-26",
