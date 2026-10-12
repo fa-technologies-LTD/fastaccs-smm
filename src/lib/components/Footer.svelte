@@ -18,13 +18,25 @@
 					Secure marketplace for social media accounts and boosting services.
 				</p>
 				<div class="flex space-x-4">
-					<a href="https://web.facebook.com/profile.php?id=100089537246012" class="footer-social">
+					<a
+						href="https://web.facebook.com/profile.php?id=100089537246012"
+						class="footer-social"
+						aria-label="FastAccs on Facebook"
+					>
 						<Facebook class="h-5 w-5" />
 					</a>
-					<a href="https://www.tiktok.com/@fastaccounts_" class="footer-social">
+					<a
+						href="https://www.tiktok.com/@fastaccounts_"
+						class="footer-social"
+						aria-label="FastAccs on TikTok"
+					>
 						<Music2 class="h-5 w-5" />
 					</a>
-					<a href="https://www.instagram.com/fastaccounts_/" class="footer-social">
+					<a
+						href="https://www.instagram.com/fastaccounts_/"
+						class="footer-social"
+						aria-label="FastAccs on Instagram"
+					>
 						<Instagram class="h-5 w-5" />
 					</a>
 				</div>
