@@ -32,10 +32,87 @@ const COUNTRY_DISPLAY: Record<string, string> = {
 	'united states of america': 'USA'
 };
 
-// Still sold on /numbers, but no search landing pages: "number for PayPal/Coinbase verification"
-// style queries attract fraud-driven traffic, which risks search penalties and payment-provider
-// scrutiny. Owner can change this list.
-const NO_SEARCH_PAGE_SERVICES = new Set(['paypal', 'coinbase', 'revolut', 'tinder', 'bumble']);
+// Still sold on /numbers, but no search landing pages (owner decision): finance and dating
+// verification queries attract fraud-driven traffic, which risks search penalties and payment-
+// provider scrutiny. Explicit names plus keyword rules, so catalogue additions are covered.
+const NO_SEARCH_PAGE_SERVICES = new Set([
+	// dating
+	'tinder',
+	'bumble',
+	'grindr',
+	'hinge',
+	'okcupid',
+	'badoo',
+	'happn',
+	'match',
+	'plenty-of-fish',
+	'pof',
+	'zoosk',
+	'eharmony',
+	'feeld',
+	'coffee-meets-bagel',
+	'lovoo',
+	'meetme',
+	'skout',
+	'taimi',
+	'hily',
+	'jaumo',
+	'mamba',
+	'tantan',
+	'raya',
+	'the-league',
+	// finance, payments, crypto
+	'paypal',
+	'coinbase',
+	'revolut',
+	'venmo',
+	'zelle',
+	'chime',
+	'wise',
+	'skrill',
+	'neteller',
+	'payoneer',
+	'stripe',
+	'binance',
+	'bybit',
+	'kucoin',
+	'okx',
+	'kraken',
+	'crypto-com',
+	'bitget',
+	'gate-io',
+	'huobi',
+	'htx',
+	'mexc',
+	'bitpay',
+	'blockchain',
+	'uphold',
+	'monzo',
+	'n26',
+	'starling',
+	'klarna',
+	'afterpay',
+	'western-union',
+	'moneygram',
+	'remitly',
+	'worldremit',
+	'sendwave',
+	'opay',
+	'palmpay',
+	'kuda',
+	'moniepoint',
+	'chipper',
+	'alipay',
+	'webmoney',
+	'perfect-money',
+	'airtm',
+	'payeer',
+	'sofi',
+	'robinhood',
+	'webull',
+	'etoro'
+]);
+const NO_SEARCH_PAGE_PATTERN = /pay|bank|wallet|crypto|coin|cash|money|loan|dating/;
 
 export function slugifyName(value: string): string {
 	return value
@@ -60,7 +137,8 @@ export function countryDisplayName(countryName: string): string {
 }
 
 export function hasSearchPage(serviceName: string): boolean {
-	return !NO_SEARCH_PAGE_SERVICES.has(serviceSlug(serviceName));
+	const slug = serviceSlug(serviceName);
+	return !NO_SEARCH_PAGE_SERVICES.has(slug) && !NO_SEARCH_PAGE_PATTERN.test(slug);
 }
 
 export function numbersPagePath(serviceName: string, countryName: string): string | null {

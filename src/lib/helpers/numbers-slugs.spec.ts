@@ -47,6 +47,26 @@ describe('slugs', () => {
 });
 
 describe('page eligibility', () => {
+	it('covers newer dating apps and finance names by keyword', () => {
+		for (const name of [
+			'Grindr',
+			'Hinge',
+			'OkCupid',
+			'Cash App',
+			'Google Pay',
+			'Crypto.com',
+			'MoneyGram'
+		]) {
+			expect(hasSearchPage(name), name).toBe(false);
+		}
+	});
+
+	it('keeps pages for every non-finance, non-dating app in the current catalogue', () => {
+		const sold =
+			'airbnb aliexpress amazon apple-icloud bereal blizzard bolt booking-com claude-ai clubhouse deliveroo discord doordash dropbox ebay epic-games facebook fiverr foodpanda gitlab google-gmail imo instagram kakaotalk line linkedin lyft microsoft-outlook netflix nike openai-chatgpt pinterest proton-mail pubg reddit riot-games roblox shein signal skype snapchat spotify steam telegram temu tiktok truecaller twitch uber upwork viber vk walmart wechat whatsapp x-twitter yahoo';
+		for (const slug of sold.split(' ')) expect(hasSearchPage(slug), slug).toBe(true);
+	});
+
 	it('skips search pages for finance and dating verification', () => {
 		expect(hasSearchPage('PayPal')).toBe(false);
 		expect(hasSearchPage('Tinder')).toBe(false);
