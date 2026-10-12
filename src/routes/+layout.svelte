@@ -35,9 +35,9 @@
 	const publicBaseUrl = $derived(getSiteBaseUrl());
 	const shareImagePath = '/og-share-1200x630.png?v=20260428a';
 	const shareImageUrl = $derived(`${publicBaseUrl}${shareImagePath}`);
-	const currentPageUrl = $derived(
-		`${publicBaseUrl}${page.url?.pathname || '/'}${page.url?.search || ''}`
-	);
+	// Canonical/og:url never include the query string: tracking tags (utm_*, fa_click, fbclid) and
+	// UI parameters (?tab=, ?service=) must not turn into self-canonical duplicate pages.
+	const currentPageUrl = $derived(`${publicBaseUrl}${page.url?.pathname || '/'}`);
 	// Pages can override the social-share title/description/type by returning
 	// a `seo` object from their load function (see src/routes/blog/+layout.server.ts).
 	const seoTitle = $derived(page.data?.seo?.title ?? defaultShareTitle);
@@ -209,7 +209,9 @@
 </script>
 
 <svelte:head>
-	<link rel="canonical" href={currentPageUrl} />
+	{#if !page.error}
+		<link rel="canonical" href={currentPageUrl} />
+	{/if}
 	<meta property="og:site_name" content="FastAccs" />
 	<meta property="og:type" content={seoType} />
 	<meta property="og:title" content={seoTitle} />
