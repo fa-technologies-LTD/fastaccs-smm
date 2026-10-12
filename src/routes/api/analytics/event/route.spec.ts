@@ -49,13 +49,19 @@ describe('POST /api/analytics/event', () => {
 	it('records an unattributed visit without a source', async () => {
 		await call({ type: 'page_view', path: '/' }, { first: null, last: null });
 		expect(mocks.executeRaw).not.toHaveBeenCalled();
-		expect(mocks.create).toHaveBeenCalledWith({ data: { type: 'page_view', path: '/' } });
+		expect(mocks.create).toHaveBeenCalledWith({
+			data: { type: 'page_view', path: '/' },
+			select: { id: true }
+		});
 	});
 
 	it('still records the visit before the marketing migration exists', async () => {
 		mocks.executeRaw.mockRejectedValueOnce(new Error('column "source" does not exist'));
 		await call({ type: 'page_view', path: '/numbers' }, { first: null, last: lastTouch });
-		expect(mocks.create).toHaveBeenCalledWith({ data: { type: 'page_view', path: '/numbers' } });
+		expect(mocks.create).toHaveBeenCalledWith({
+			data: { type: 'page_view', path: '/numbers' },
+			select: { id: true }
+		});
 	});
 
 	it('rejects invalid events', async () => {

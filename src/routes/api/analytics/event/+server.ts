@@ -49,9 +49,12 @@ export const POST: RequestHandler = async ({ request, getClientAddress, locals }
 		}
 	}
 
-	await prisma.analyticsEvent.create({ data: { type, path } }).catch((error) => {
-		console.error('Failed to record analytics event:', error);
-	});
+	// Avoid Prisma's default RETURNING of the new columns before their migration is applied.
+	await prisma.analyticsEvent
+		.create({ data: { type, path }, select: { id: true } })
+		.catch((error) => {
+			console.error('Failed to record analytics event:', error);
+		});
 
 	return json({ success: true });
 };
