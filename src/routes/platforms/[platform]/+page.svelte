@@ -779,6 +779,10 @@
 <svelte:head>
 	<title>{data.seo?.title ?? 'Accounts - FastAccs'}</title>
 	<meta name="description" content={data.seo?.description ?? ''} />
+	{#if data.platform && data.tiers.length === 0}
+		<!-- Nothing to buy yet: keep the empty page out of search until account types are added. -->
+		<meta name="robots" content="noindex" />
+	{/if}
 </svelte:head>
 
 <Navigation />
