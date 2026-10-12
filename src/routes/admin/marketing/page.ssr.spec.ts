@@ -3,7 +3,7 @@ import { render } from 'svelte/server';
 import Page from './+page.svelte';
 import { DEFAULT_THRESHOLDS } from '$lib/services/marketing/rules';
 
-const data = {
+const base = {
 	report: {
 		windowDays: 30,
 		totals: { signups: 4, attributedSignups: 3, buyers: 2, revenueNgn: 11500 },
@@ -38,25 +38,110 @@ const data = {
 		{ label: 'All accounts', path: '/platforms' },
 		{ label: 'X (Twitter) accounts', path: '/platforms/x' }
 	],
-	siteUrl: 'https://smm.fastaccs.com'
+	siteUrl: 'https://smm.fastaccs.com',
+	window: { days: 30, sinceDay: '2026-09-11', untilDay: '2026-10-10', timeZone: 'Africa/Lagos' },
+	placements: [
+		{
+			channelKey: 'propellerads',
+			campaignKey: '183788',
+			placementKey: '7777',
+			spendNgn: 8000,
+			impressions: 20000,
+			clicks: 400,
+			buyers: 0,
+			orders: 0,
+			revenueNgn: 0
+		}
+	],
+	channels: [
+		{
+			key: 'propellerads',
+			name: 'PropellerAds',
+			kind: 'network',
+			status: 'testing',
+			targetCacNgn: null,
+			dailyCapNgn: null,
+			postbackConfigured: true,
+			dedupByClickId: false,
+			notes: null
+		}
+	],
+	heldPostbacks: [
+		{
+			orderId: '4a6f1d2c-9b1e-4c3a-8f00-123456789abc',
+			orderNumber: 'ORD-77',
+			channelKey: 'propellerads',
+			netNgn: 6000,
+			lastResult: 'TimeoutError: may have been recorded',
+			attempts: 1,
+			paidAt: null
+		}
+	],
+	spendTrackingReady: true,
+	canManage: true,
+	propellerConfigured: true
 };
 
-describe('admin marketing page (server render)', () => {
-	it('renders totals, campaign rows, landing pages and the link builder', () => {
-		const { body } = render(Page, { props: { data } as never });
+const html = (data: Record<string, unknown>) => render(Page, { props: { data } as never }).body;
 
-		expect(body).toContain('Marketing');
-		expect(body).toContain('75%'); // 3 of 4 signups came from a tracked source
-		expect(body).toContain('nairaland');
+describe('admin marketing page (server render)', () => {
+	it('shows the signup cohort without dividing it by spend', () => {
+		const body = html(base);
+		expect(body).toContain('New signups by first source');
+		expect(body).toContain('75%');
 		expect(body).toContain('sports-oct');
-		expect(body).toContain('Spend for nairaland sports-oct');
-		expect(body).toContain('X (Twitter) accounts');
-		expect(body).toContain('1,544');
-		expect(body).toContain('Enter a source to build the link');
+		expect(body).toContain('since 2026-09-11');
 	});
 
-	it('offers no spend box for untracked signups', () => {
-		const { body } = render(Page, { props: { data } as never });
-		expect(body).not.toContain('Spend for untracked');
+	it('judges cost per buyer on placements, with the not-profit caveat', () => {
+		const body = html(base);
+		expect(body).toContain('Cost per buyer by placement');
+		expect(body).toContain('not profit');
+		expect(body).toContain('kill'); // ₦8,000 spent, no buyers
+	});
+
+	it('defaults booking dates to the business day, not UTC', () => {
+		expect(html(base)).toContain('value="2026-10-10"');
+	});
+
+	it('lists held sale reports with send/discard for managers', () => {
+		const body = html(base);
+		expect(body).toContain('Sale reports waiting for you (1)');
+		expect(body).toContain('ORD-77');
+		expect(body).toContain('Discard');
+	});
+
+	it('shows stopped channels as not reporting', () => {
+		const body = html({
+			...base,
+			channels: [{ ...base.channels[0], status: 'killed' }]
+		});
+		expect(body).toContain('off (stopped)');
+	});
+
+	it('offers to block a PropellerAds zone that hit the kill limit', () => {
+		const body = html(base);
+		expect(body).toContain('7777');
+		expect(body).toContain('Block zone');
+	});
+
+	it('hides management controls from view-only admins', () => {
+		const body = html({ ...base, canManage: false });
+		expect(body).not.toContain('Block zone');
+		expect(body).not.toContain('Book spend for a direct buy');
+		expect(body).not.toContain('Save channel');
+	});
+
+	it('explains the missing setup before the migration and hides spend tools', () => {
+		const body = html({
+			...base,
+			spendTrackingReady: false,
+			placements: [],
+			channels: [],
+			heldPostbacks: []
+		});
+		expect(body).toContain("Spend tracking isn't set up yet");
+		expect(body).not.toContain('Book spend for a direct buy');
+		expect(body).toContain('Tracked link builder');
 	});
 });

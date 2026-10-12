@@ -16,6 +16,14 @@ vi.mock('$lib/prisma', () => ({
 
 import { getCampaignReport, resolveChannel } from './campaign-report';
 
+const WINDOW = {
+	days: 30,
+	sinceDay: '2026-09-11',
+	untilDay: '2026-10-10',
+	untilUtc: new Date('2026-10-10T23:00:00.000Z'),
+	sinceUtc: new Date('2026-09-10T23:00:00.000Z')
+};
+
 const user = (
 	id: string,
 	source: string | null,
@@ -48,7 +56,7 @@ describe('getCampaignReport', () => {
 			{ userId: 'u3', totalAmount: 2500, refundedAmount: 0 }
 		]);
 
-		const report = await getCampaignReport(30);
+		const report = await getCampaignReport(WINDOW);
 
 		const sports = report.campaigns.find((row) => row.campaign === 'sports-oct');
 		expect(sports).toMatchObject({
@@ -76,12 +84,22 @@ describe('getCampaignReport', () => {
 			revenueNgn: 2500
 		});
 		expect(report.topPages).toEqual([{ path: '/platforms/x', views: 40 }]);
+		expect(mocks.findUsers).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: {
+					registeredAt: {
+						gte: new Date('2026-09-10T23:00:00.000Z'),
+						lt: new Date('2026-10-10T23:00:00.000Z')
+					}
+				}
+			})
+		);
 	});
 
 	it('skips the order query when nobody signed up in the window', async () => {
 		mocks.findUsers.mockResolvedValue([]);
 
-		const report = await getCampaignReport(7);
+		const report = await getCampaignReport({ ...WINDOW, days: 7 });
 
 		expect(mocks.findOrders).not.toHaveBeenCalled();
 		expect(report.totals.signups).toBe(0);

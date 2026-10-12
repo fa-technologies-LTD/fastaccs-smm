@@ -11,6 +11,7 @@ import {
 	isDefinitiveInitializationFailure
 } from '$lib/services/payment-initialization-recovery';
 import { json } from '@sveltejs/kit';
+import { buildOrderAttribution } from '$lib/services/marketing/order-attribution';
 import { captureGa4OrderMetadata } from '$lib/server/ga4-order-metadata';
 import { isGa4MeasurementProtocolConfigured } from '$lib/server/ga4-measurement-protocol';
 import type { RequestHandler } from './$types';
@@ -1310,6 +1311,14 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						}
 
 						let orderAnalyticsMetadata = buildOrderAnalyticsMetadata(orderData.analytics);
+						// Consented first/last touch (ad click id) for campaign reporting + postbacks.
+						const acquisition = buildOrderAttribution(locals.attribution);
+						if (acquisition) {
+							orderAnalyticsMetadata = {
+								...orderAnalyticsMetadata,
+								attribution: acquisition
+							} as unknown as Prisma.InputJsonObject;
+						}
 						if (attribution.affiliateProgramId && attribution.affiliateUserId) {
 							// Revalidate that the attributed program is still active, then copy
 							// the relationship's immutable commercial agreement onto this order.

@@ -1151,9 +1151,14 @@ model AnalyticsEvent {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   type      String
   path      String
+  // Visit source, stamped server-side from consented attribution cookies (null = unattributed).
+  source    String?
+  campaign  String?
+  content   String?
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([type, createdAt])
+  @@index([source, createdAt])
   @@map("analytics_events")
 }
 
@@ -1294,4 +1299,63 @@ model PhoneSupplierCatalogScope {
   @@index([serviceId, countryId, refreshedAt])
   @@index([provider, countryId, refreshedAt])
   @@map("phone_supplier_catalog_scopes")
+}
+
+// Paid/organic acquisition channels. `key` matches the utm_source on tracked links.
+// Postback templates live here (not in code) because the repository is public.
+model MarketingChannel {
+  key              String                @id
+  name             String
+  kind             String                @default("network") // network | direct | affiliate | seo
+  status           String                @default("testing") // testing | scaling | paused | killed
+  targetCacNgn     Int?                  @map("target_cac_ngn")
+  dailyCapNgn      Int?                  @map("daily_cap_ngn")
+  postbackTemplate String?               @map("postback_template")
+  // Only true once the network's docs confirm duplicate click-id postbacks are ignored.
+  dedupByClickId   Boolean               @default(false) @map("dedup_by_click_id")
+  notes            String?
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @default(now()) @updatedAt @map("updated_at")
+  spend            MarketingSpendDaily[]
+
+  @@map("marketing_channels")
+}
+
+// Spend per channel / campaign / placement / day. Imported from network APIs or entered manually
+// for direct buys (a booking's cost is spread across its days).
+model MarketingSpendDaily {
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  channelKey   String           @map("channel_key")
+  campaignKey  String           @default("") @map("campaign_key")
+  placementKey String           @default("") @map("placement_key")
+  day          DateTime         @db.Date
+  spendNgn     Decimal          @default(0) @map("spend_ngn") @db.Decimal(12, 2)
+  spendUsd     Decimal?         @map("spend_usd") @db.Decimal(12, 4)
+  impressions  Int              @default(0)
+  clicks       Int              @default(0)
+  conversions  Int              @default(0)
+  source       String           @default("manual") // api | manual
+  updatedAt    DateTime         @default(now()) @updatedAt @map("updated_at")
+  channel      MarketingChannel @relation(fields: [channelKey], references: [key], onDelete: Cascade)
+
+  @@unique([channelKey, campaignKey, placementKey, day])
+  @@index([day])
+  @@map("marketing_spend_daily")
+}
+
+// Audit trail for automated and manual marketing changes (zone blocks, budget moves, held
+// postbacks sent or discarded).
+model MarketingAction {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  channelKey   String   @map("channel_key")
+  campaignKey  String   @default("") @map("campaign_key")
+  placementKey String   @default("") @map("placement_key")
+  action       String
+  reason       String?
+  detail       Json     @default("{}")
+  actor        String   @default("system")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([channelKey, createdAt])
+  @@map("marketing_actions")
 }

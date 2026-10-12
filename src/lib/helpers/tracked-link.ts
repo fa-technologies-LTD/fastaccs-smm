@@ -43,3 +43,26 @@ export function buildTrackedUrl(input: TrackedLinkInput): string | null {
 	for (const [key, value] of params) if (value) url.searchParams.set(key, value);
 	return url.toString();
 }
+
+// Ad networks fill these placeholders per click, so they must stay unencoded in the destination
+// URL. Confirm the token names in the network's campaign form when creating a campaign.
+const NETWORK_MACROS: Record<string, { campaign: string; content: string; click: string }> = {
+	propellerads: { campaign: '{campaignid}', content: '{zoneid}', click: '${SUBID}' }
+};
+
+export function hasNetworkMacros(source: string): boolean {
+	return slugifyUtm(source) in NETWORK_MACROS;
+}
+
+/** Destination URL for an ad network campaign: campaign, zone and click id filled by the network. */
+export function buildNetworkTemplateUrl(input: {
+	baseUrl: string;
+	path: string;
+	source: string;
+	medium?: string;
+}): string | null {
+	const macros = NETWORK_MACROS[slugifyUtm(input.source)];
+	const base = buildTrackedUrl({ ...input, campaign: '', content: '' });
+	if (!macros || !base) return null;
+	return `${base}&utm_campaign=${macros.campaign}&utm_content=${macros.content}&fa_click=${macros.click}`;
+}

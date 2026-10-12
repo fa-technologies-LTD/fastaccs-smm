@@ -1,6 +1,30 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import {
+		readCookieConsent,
+		saveCookieConsent,
+		type CookieConsentLevel
+	} from '$lib/helpers/privacyConsent';
+
+	let choice = $state<CookieConsentLevel | null>(null);
+	onMount(() => (choice = readCookieConsent()));
+
+	function choose(level: CookieConsentLevel) {
+		saveCookieConsent(level);
+		choice = level;
+	}
+
+	const choiceLabel = $derived(
+		choice === 'marketing'
+			? 'All cookies accepted'
+			: choice === 'necessary'
+				? 'Necessary cookies only'
+				: choice === 'analytics'
+					? 'Necessary and analytics cookies'
+					: 'No choice saved yet'
+	);
 </script>
 
 <svelte:head>
@@ -19,14 +43,15 @@
 			>
 				Cookie Policy
 			</h1>
-			<p style="color: var(--text-muted);">Effective date: June 12, 2026</p>
+			<p style="color: var(--text-muted);">Effective date: October 10, 2026</p>
 		</div>
 
 		<div class="space-y-7" style="color: var(--text-muted);">
 			<section>
 				<p>
-					We use cookies and similar storage tools to keep FastAccs secure and functional. Optional
-					analytics cookies help us improve speed, reliability, and user experience.
+					We use cookies and similar storage tools to keep FastAccs secure and functional. With your
+					permission we also use optional cookies to understand how visitors find and use the site,
+					and which of our ads bring customers.
 				</p>
 			</section>
 
@@ -43,8 +68,15 @@
 						cart, and security.
 					</li>
 					<li>
-						<strong style="color: var(--text);">Analytics cookies:</strong> optional metrics used to
-						improve product performance.
+						<strong style="color: var(--text);">Analytics cookies (optional):</strong> page and visit
+						metrics, and where a visitor first came from (for example a search engine or one of our links),
+						used to improve the site.
+					</li>
+					<li>
+						<strong style="color: var(--text);">Advertising measurement cookies (optional):</strong>
+						when you arrive from one of our ads, we remember that ad's click reference for 7 days. If
+						you then buy, we tell that ad network a sale happened (the click reference and the sale value
+						only, never your name, email or order details) so it can show our ads to the right people.
 					</li>
 				</ul>
 			</section>
@@ -57,11 +89,34 @@
 					Your Choice
 				</h2>
 				<p>
-					By continuing to browse FastAccs, you agree to our use of cookies as described in this
-					policy. If you'd rather not be tracked, you can block or delete cookies at any time
-					through your browser's settings — necessary cookies will still be used to keep you logged
-					in and your cart working.
+					Optional cookies are only used after you choose <strong style="color: var(--text);"
+						>Accept</strong
+					>. Choosing <strong style="color: var(--text);">Necessary only</strong> keeps just the cookies
+					needed for login, cart and security. You can change your choice at any time here.
 				</p>
+				<div
+					class="mt-4 flex flex-wrap items-center gap-3 rounded-xl p-4"
+					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+				>
+					<span class="text-sm" style="color: var(--text);">Your choice: {choiceLabel}</span>
+					<span class="flex-1"></span>
+					<button
+						type="button"
+						onclick={() => choose('necessary')}
+						class="rounded-full px-4 py-2 text-sm font-semibold"
+						style="border: 1px solid var(--border); color: var(--text);"
+					>
+						Necessary only
+					</button>
+					<button
+						type="button"
+						onclick={() => choose('marketing')}
+						class="rounded-full px-4 py-2 text-sm font-semibold"
+						style="background: var(--btn-primary-gradient); color: #04140C;"
+					>
+						Accept all
+					</button>
+				</div>
 			</section>
 
 			<section>
