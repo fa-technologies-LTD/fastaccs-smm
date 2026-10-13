@@ -6,7 +6,10 @@ import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { recordOrderEvent } from '$lib/services/order-events';
 import { notifyBoostingOrderCompleted } from '$lib/services/boosting-fulfillment-notifications';
 import { queuePaidBoostFulfillments } from '$lib/server/boosting-providers/fulfillment-worker';
-import { supplierSubmissionMayExist } from '$lib/server/boosting-providers/transition-safety';
+import {
+	supplierSubmissionMayExist,
+	UNRESOLVED_BOOST_SUBMISSION_OUTCOMES
+} from '$lib/server/boosting-providers/transition-safety';
 import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 
 const VALID_STATUSES = ['pending', 'in_progress', 'needs_link', 'completed', 'rejected'] as const;
@@ -135,7 +138,10 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 						leaseToken: true,
 						leaseExpiresAt: true,
 						attempts: {
-							where: { type: 'submission' },
+							where: {
+								type: 'submission',
+								outcome: { in: [...UNRESOLVED_BOOST_SUBMISSION_OUTCOMES] }
+							},
 							select: { type: true, outcome: true },
 							orderBy: { createdAt: 'desc' },
 							take: 1

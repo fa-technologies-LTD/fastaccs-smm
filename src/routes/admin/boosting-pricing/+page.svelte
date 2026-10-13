@@ -33,9 +33,11 @@
 	let platform = $state('all');
 	let filter = $state('all');
 	let search = $state('');
+	let tableWidth = $state(980);
 	let busy = $state(false);
 	let error = $state('');
 	let expanded = $state<string | null>(null);
+	let blockedLiveRow = $state<string | null>(null);
 	let supplier = $state<BoostPricingRow | null>(null);
 	let expandConfirm = $state(false);
 	let publishConfirm = $state(false);
@@ -85,12 +87,19 @@
 			if (blockers.length) {
 				input.checked = false;
 				expanded = row.id;
-				error = `${row.title}: ${blockers.join(' ')}`;
+				blockedLiveRow = row.id;
+				error = '';
 				return;
 			}
 		}
 		row.selected = input.checked;
+		blockedLiveRow = null;
 		error = '';
+	}
+	function closeDetails(row: BoostPricingRow) {
+		expanded = null;
+		blockedLiveRow = null;
+		document.getElementById(`boost-offer-${row.id}`)?.focus();
 	}
 	const platforms = $derived([...new Set(view.sheet.rows.map((r) => r.platform))]);
 	const flagged = $derived(view.sheet.rows.filter((r) => warnings(r).length > 0).length);
@@ -185,6 +194,7 @@
 		publishConfirm = false;
 		busy = true;
 		error = '';
+		blockedLiveRow = null;
 		try {
 			const result = await request({
 				action: 'save',
@@ -193,6 +203,7 @@
 			});
 			view = result.data;
 			saved = JSON.stringify(view.sheet);
+			expanded = null;
 			showSuccess('Boosting settings saved.');
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : 'Save failed.';
@@ -427,7 +438,11 @@
 				<input aria-label="Search offers" placeholder="Search offers" bind:value={search} />
 			</div>
 		</div>
-		<div class="table-scroll">
+		<div
+			class="table-scroll"
+			bind:clientWidth={tableWidth}
+			style={`--boost-table-width: ${tableWidth}px;`}
+		>
 			<table>
 				<thead
 					><tr
@@ -441,9 +456,16 @@
 							><td
 								><button
 									class="service"
+									id={`boost-offer-${row.id}`}
 									aria-expanded={expanded === row.id}
-									onclick={() => (expanded = expanded === row.id ? null : row.id)}
-									>{row.title}</button
+									aria-controls={`boost-details-${row.id}`}
+									onclick={() => {
+										if (expanded === row.id) closeDetails(row);
+										else {
+											expanded = row.id;
+											blockedLiveRow = null;
+										}
+									}}>{row.title}</button
 								></td
 							>
 							<td
@@ -522,12 +544,17 @@
 							>
 						</tr>
 						{#if expanded === row.id}<tr class="expanded"
-								><td colspan="9"
+								><td colspan="9" id={`boost-details-${row.id}`}
 									><div class="row-details">
 										<div>
 											<h3>{row.title}</h3>
 											<p>{quote(row)?.name ?? 'No supplier chosen'}</p>
-											{#each warnings(row) as warning}<p class="warning-copy">{warning}</p>{/each}
+											<div role={blockedLiveRow === row.id ? 'alert' : undefined}>
+												{#if blockedLiveRow === row.id}<p class="warning-copy">
+														Not live yet. Review the items below.
+													</p>{/if}
+												{#each warnings(row) as warning}<p class="warning-copy">{warning}</p>{/each}
+											</div>
 											<p>
 												Customers start at {pricingStart(
 													row,
@@ -546,8 +573,11 @@
 											<label class="check"
 												><input
 													type="checkbox"
-													bind:checked={row.useDefaultMarkup}
-													onchange={() => queueMicrotask(previewPrices)}
+													checked={row.useDefaultMarkup ?? false}
+													onchange={(event) => {
+														row.useDefaultMarkup = event.currentTarget.checked;
+														queueMicrotask(previewPrices);
+													}}
 												/> Use default profit percentage</label
 											>
 											<label
@@ -579,6 +609,19 @@
 												/></label
 											>
 										</div>
+									</div>
+									<div class="row-actions">
+										<p>
+											{dirty
+												? 'Save applies all pricing changes. Closing keeps your edits.'
+												: 'No changes to save.'}
+										</p>
+										<div class="actions">
+											<button disabled={busy} onclick={() => closeDetails(row)}>Close</button>
+											<button class="primary" disabled={busy || !dirty} onclick={() => save()}
+												><Save size={16} /> {busy ? 'Working…' : 'Save changes'}</button
+											>
+										</div>
 									</div></td
 								></tr
 							>{/if}
@@ -592,6 +635,14 @@
 				</p>{/each}
 		</details>
 	</fieldset>
+	{#if dirty && !expanded && !supplier}
+		<div class="save-bar">
+			<p>Unsaved changes</p>
+			<button class="primary" disabled={busy} onclick={() => save()}
+				><Save size={16} /> {busy ? 'Working…' : 'Save changes'}</button
+			>
+		</div>
+	{/if}
 </div>
 
 {#if publishConfirm}<div class="overlay">
@@ -931,6 +982,32 @@
 	.row-details p {
 		margin: 6px 0;
 	}
+	.row-actions,
+	.save-bar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 12px;
+		padding: 12px 8px;
+		border-top: 1px solid var(--border);
+	}
+	.row-actions {
+		position: sticky;
+		left: 0;
+		width: min(100%, calc(var(--boost-table-width) - 28px));
+		margin-top: 12px;
+	}
+	.save-bar {
+		position: sticky;
+		bottom: 12px;
+		z-index: 5;
+		padding: 12px 16px;
+		border: 1px solid var(--border);
+		border-radius: 12px;
+		background: var(--surface);
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+	}
 	.row-details .fields {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 		margin: 0;
@@ -1003,6 +1080,9 @@
 		}
 		.row-details {
 			grid-template-columns: 1fr;
+			position: sticky;
+			left: 0;
+			width: min(100%, calc(var(--boost-table-width) - 28px));
 		}
 		.row-details .fields {
 			grid-template-columns: 1fr;

@@ -1,5 +1,6 @@
 import { getOrderById } from '$lib/services/orders';
 import { error } from '@sveltejs/kit';
+import { orderedItemSummary } from '$lib/helpers/ordered-item-summary';
 
 export const load = async ({
 	params,
@@ -46,11 +47,7 @@ export const load = async ({
 
 	// What was ordered (tier + quantity) — always available even when no accounts
 	// are allocated yet (manual handover, unfulfilled), so the order is never blank.
-	const orderedItems = orderItems.map((item: any) => ({
-		tierName: item.category?.name || item.productName || 'Unknown tier',
-		platformName: item.category?.parent?.name || item.productCategory || '',
-		quantity: Number(item.quantity || 0)
-	}));
+	const orderedItems = orderItems.map(orderedItemSummary);
 
 	const orderTotal = Number(rawOrder.totalAmount || 0);
 	const refundedAmount = Number(rawOrder.refundedAmount || 0);

@@ -187,6 +187,129 @@ it('always allows a live offer to be switched off even when supplier costs are u
 	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
 	expect(page.getByRole('alert').query()).toBeNull();
 });
+it('does not create unsaved edits just by opening an older hidden offer for review', async () => {
+	const original = fixture();
+	original.sheet.rows[0].selected = false;
+	delete original.sheet.rows[0].useDefaultMarkup;
+	original.liveStatuses.row = 'hidden';
+	original.setup.row.reviewed = false;
+	render(Page, { data: { pricing: original } } as never);
+	await page.getByRole('checkbox', { name: 'Live TikTok Likes value' }).click();
+	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect
+		.element(page.getByRole('button', { name: 'Supplier setup', exact: true }))
+		.toBeEnabled();
+	await expect
+		.element(page.getByRole('button', { name: 'Save changes', exact: true }))
+		.toBeDisabled();
+	await page.getByRole('button', { name: 'Close', exact: true }).click();
+	await expect
+		.element(page.getByRole('button', { name: 'TikTok Likes', exact: true }))
+		.toHaveAttribute('aria-expanded', 'false');
+	expect(document.activeElement?.id).toBe('boost-offer-row');
+});
+it('keeps edited prices on Close and offers Save without scrolling back to the header', async () => {
+	const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+		if (String(input).includes('/discovery'))
+			return Response.json({ success: true, data: { providers: [] } });
+		const next = fixture();
+		next.sheet = JSON.parse(init!.body as string).sheet;
+		return Response.json({ success: true, data: next });
+	});
+	vi.stubGlobal('fetch', fetchMock);
+	render(Page, { data: { pricing: fixture() } } as never);
+	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
+	await page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }).fill('950');
+	await expect
+		.element(page.getByText('Save applies all pricing changes. Closing keeps your edits.'))
+		.toBeVisible();
+	await page.getByRole('button', { name: 'Close', exact: true }).click();
+	await expect
+		.element(page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }))
+		.toHaveValue(950);
+	await expect.element(page.getByText('Unsaved changes', { exact: true })).toBeVisible();
+	expect(fetchMock.mock.calls.filter((c) => c[1]?.method === 'POST')).toHaveLength(0);
+	await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	expect(
+		JSON.parse(fetchMock.mock.calls.find((c) => c[1]?.method === 'POST')![1]!.body as string)
+	).toMatchObject({ action: 'save', confirmPublish: false, sheet: { rows: [{ sale: 950 }] } });
+});
+it('keeps the details open and preserves edits when inline Save fails', async () => {
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async (input: RequestInfo | URL) =>
+			String(input).includes('/discovery')
+				? Response.json({ success: true, data: { providers: [] } })
+				: Response.json({ success: false, error: 'Save failed. Try again.' }, { status: 503 })
+		)
+	);
+	render(Page, { data: { pricing: fixture() } } as never);
+	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
+	await page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }).fill('950');
+	await expect
+		.element(page.getByRole('button', { name: 'TikTok Likes', exact: true }))
+		.toHaveAttribute('aria-expanded', 'true');
+	await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+	await expect.element(page.getByRole('alert')).toHaveTextContent('Save failed. Try again.');
+	await expect.element(page.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
+	await expect
+		.element(page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }))
+		.toHaveValue(950);
+});
+it('retains explicit publication confirmation when saving from the expanded row', async () => {
+	const original = fixture();
+	original.sheet.rows[0].selected = false;
+	original.liveStatuses.row = 'hidden';
+	const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+		Response.json({
+			success: true,
+			data: String(input).includes('/discovery') ? { providers: [] } : fixture()
+		})
+	);
+	vi.stubGlobal('fetch', fetchMock);
+	render(Page, { data: { pricing: original } } as never);
+	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
+	await page.getByRole('checkbox', { name: 'Live TikTok Likes value' }).click();
+	await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+	await expect.element(page.getByRole('dialog', { name: 'Publish 1 offer?' })).toBeVisible();
+	expect(
+		fetchMock.mock.calls.filter((c) => (c as [unknown, RequestInit?])[1]?.method === 'POST')
+	).toHaveLength(0);
+	await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect.element(page.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
+	await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+	await page.getByRole('button', { name: 'Publish selected & save' }).click();
+	await expect
+		.element(page.getByRole('button', { name: 'TikTok Likes', exact: true }))
+		.toHaveAttribute('aria-expanded', 'false');
+	expect(
+		fetchMock.mock.calls.filter((c) => (c as [unknown, RequestInit?])[1]?.method === 'POST')
+	).toHaveLength(1);
+});
+it('keeps review actions inside the mobile viewport after a blocked Live click', async () => {
+	await page.viewport(390, 844);
+	const original = fixture();
+	original.sheet.rows[0].selected = false;
+	original.setup.row.reviewed = false;
+	original.liveStatuses.row = 'hidden';
+	render(Page, { data: { pricing: original } } as never);
+	await page.getByRole('checkbox', { name: 'Live TikTok Likes value' }).click();
+	await expect.element(page.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
+	await expect
+		.element(page.getByRole('button', { name: 'Save changes', exact: true }))
+		.toBeDisabled();
+	const close = page
+		.getByRole('button', { name: 'Close', exact: true })
+		.element()
+		.getBoundingClientRect();
+	expect(close.left).toBeGreaterThanOrEqual(0);
+	expect(close.right).toBeLessThanOrEqual(390);
+	expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+	await page.screenshot({
+		path: 'src/routes/admin/boosting-pricing/__screenshots__/mobile-review.png'
+	});
+});
 it('allows cost refresh with unsaved prices while still protecting catalogue and supplier setup', async () => {
 	render(Page, { data: { pricing: fixture() } } as never);
 	await page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }).fill('900');

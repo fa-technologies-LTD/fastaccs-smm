@@ -1,6 +1,9 @@
 import type { PrismaClient } from '@prisma/client';
 import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
-import { supplierSubmissionMayExist } from './transition-safety';
+import {
+	supplierSubmissionMayExist,
+	UNRESOLVED_BOOST_SUBMISSION_OUTCOMES
+} from './transition-safety';
 import type { BoostProviderId } from './types';
 
 /** Final local dispatch gate, serialized with refunds; no network call inside the transaction. */
@@ -26,6 +29,7 @@ export async function reserveBoostSubmission(
 		input.balanceSafetyUsd < 0
 	)
 		return 'balance_unavailable';
+	if (!Number.isSafeInteger(input.attemptCount) || input.attemptCount < 0) return 'state_changed';
 	return database.$transaction(async (tx) => {
 		await tx.$queryRaw`SELECT id FROM orders WHERE id = ${input.orderId}::uuid FOR UPDATE`;
 		const order = await tx.order.findUnique({
@@ -48,8 +52,10 @@ export async function reserveBoostSubmission(
 				leaseToken: true,
 				leaseExpiresAt: true,
 				attemptCount: true,
+				attemptCap: true,
+				orderItem: { select: { orderId: true } },
 				attempts: {
-					where: { type: 'submission' },
+					where: { type: 'submission', outcome: { in: [...UNRESOLVED_BOOST_SUBMISSION_OUTCOMES] } },
 					select: { type: true, outcome: true },
 					orderBy: { createdAt: 'desc' },
 					take: 1
@@ -63,6 +69,10 @@ export async function reserveBoostSubmission(
 			!current.leaseExpiresAt ||
 			current.leaseExpiresAt <= new Date() ||
 			current.attemptCount !== input.attemptCount ||
+			!Number.isSafeInteger(current.attemptCap) ||
+			current.attemptCap < 1 ||
+			current.attemptCount >= current.attemptCap ||
+			current.orderItem.orderId !== input.orderId ||
 			supplierSubmissionMayExist({ ...current, leaseToken: null, leaseExpiresAt: null })
 		)
 			return 'state_changed';

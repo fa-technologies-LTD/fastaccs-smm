@@ -8,7 +8,12 @@ export interface BoostTransitionState {
 }
 
 const DEFINITELY_SUBMITTED_STATUSES = new Set(['submitted', 'in_progress', 'completed']);
-const UNCERTAIN_OR_ACCEPTED_OUTCOMES = new Set(['started', 'accepted', 'submission_unknown']);
+export const UNRESOLVED_BOOST_SUBMISSION_OUTCOMES = [
+	'started',
+	'accepted',
+	'submission_unknown'
+] as const;
+const UNCERTAIN_OR_ACCEPTED_OUTCOMES = new Set<string>(UNRESOLVED_BOOST_SUBMISSION_OUTCOMES);
 
 /**
  * A target may only be changed or re-queued when we can prove no supplier order exists.
@@ -27,8 +32,9 @@ export function supplierSubmissionMayExist(
 		fulfillment.leaseExpiresAt.getTime() > now.getTime()
 	)
 		return true;
-	const lastAttempt = fulfillment.attempts[0];
-	return Boolean(
-		lastAttempt?.type === 'submission' && UNCERTAIN_OR_ACCEPTED_OUTCOMES.has(lastAttempt.outcome)
+	// A later rejection cannot prove that an earlier accepted/uncertain submission never existed.
+	return fulfillment.attempts.some(
+		(attempt) =>
+			attempt.type === 'submission' && UNCERTAIN_OR_ACCEPTED_OUTCOMES.has(attempt.outcome)
 	);
 }

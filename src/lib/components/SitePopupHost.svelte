@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import AffiliatePopupModal from './AffiliatePopupModal.svelte';
 	import type { PendingSitePopup } from '$lib/services/site-popups';
 
@@ -13,12 +13,15 @@
 	const SESSION_CHECK_KEY = 'fastaccs_site_popup_checked';
 
 	let activePopup = $state<PendingSitePopup | null>(null);
+	function isAdminPath(): boolean {
+		return page.url.pathname === '/admin' || page.url.pathname.startsWith('/admin/');
+	}
 
 	function checkForPopup(): void {
 		fetch('/api/site-popup')
 			.then((response) => (response.ok ? response.json() : null))
 			.then((result) => {
-				if (result?.popup) {
+				if (result?.popup && isLoggedIn && !isAdminPath()) {
 					activePopup = result.popup;
 				}
 			})
@@ -27,8 +30,11 @@
 			});
 	}
 
-	onMount(() => {
-		if (!isLoggedIn) return;
+	$effect(() => {
+		if (!isLoggedIn || isAdminPath()) {
+			activePopup = null;
+			return;
+		}
 		if (window.sessionStorage.getItem(SESSION_CHECK_KEY) === '1') return;
 
 		window.sessionStorage.setItem(SESSION_CHECK_KEY, '1');

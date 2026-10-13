@@ -14,6 +14,21 @@ function state(overrides: Partial<BoostTransitionState> = {}): BoostTransitionSt
 }
 
 describe('Boosting transition safety', () => {
+	it.each(['started', 'accepted', 'submission_unknown'])(
+		'does not hide older %s work behind a newer rejection',
+		(outcome) => {
+			expect(
+				supplierSubmissionMayExist(
+					state({
+						attempts: [
+							{ type: 'submission', outcome: 'provider_rejected' },
+							{ type: 'submission', outcome }
+						]
+					})
+				)
+			).toBe(true);
+		}
+	);
 	it('allows a never-submitted manual-review item and a definitive rejection to be retried', () => {
 		expect(supplierSubmissionMayExist(state())).toBe(false);
 		expect(

@@ -170,6 +170,8 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 						accounts: true,
 						boostFulfillment: {
 							select: {
+								platform: true,
+								outcome: true,
 								status: true,
 								lastSafeErrorCategory: true,
 								quantity: true,

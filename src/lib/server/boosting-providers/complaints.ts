@@ -31,12 +31,16 @@ export function getBoostComplaintEligibility(input: {
 		Number.isInteger(suppliedDays) && suppliedDays > 0 && suppliedDays <= 365 ? suppliedDays : 0;
 	const completedAt = input.completedAt ? new Date(input.completedAt) : null;
 	const now = input.now ?? new Date();
+	const awaitingCompletion =
+		!input.completedAt ||
+		(input.fulfillmentStatus !== undefined && input.fulfillmentStatus !== 'completed');
 	let refillEndsAt: Date | null = null;
 	const submittedAt = input.submittedAt ? new Date(input.submittedAt) : null;
 	if (
 		refillDays > 0 &&
 		completedAt &&
 		!Number.isNaN(completedAt.getTime()) &&
+		completedAt <= now &&
 		(!input.fulfillmentStatus || input.fulfillmentStatus === 'completed')
 	) {
 		// Until a provider's clock is verified, use the earlier start and never extend protection.
@@ -53,7 +57,11 @@ export function getBoostComplaintEligibility(input: {
 		note: allowedTypes.includes('dropped')
 			? 'Keep the original link and username unchanged.'
 			: refillDays > 0
-				? 'The refill window is no longer active. You can still report missing or stopped delivery.'
+				? awaitingCompletion
+					? 'You can request a refill after delivery completes. You can still report missing or stopped delivery.'
+					: !refillEndsAt
+						? 'We’re checking your refill eligibility. You can still report missing or stopped delivery.'
+						: 'The refill window is no longer active. You can still report missing or stopped delivery.'
 				: 'This choice did not include drop/refill protection. You can still report missing or stopped delivery.'
 	};
 }

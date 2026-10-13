@@ -51,6 +51,25 @@ describe('Boosting complaint eligibility', () => {
 			getBoostComplaintEligibility({ ...protectedPurchase, completedAt: null }).allowedTypes
 		).not.toContain('dropped');
 	});
+	it('does not tell a pending delivery that its refill protection has expired', () => {
+		const result = getBoostComplaintEligibility({
+			...protectedPurchase,
+			completedAt: null,
+			fulfillmentStatus: 'in_progress'
+		});
+		expect(result.allowedTypes).not.toContain('dropped');
+		expect(result.note).toContain('after delivery completes');
+		expect(result.note).not.toContain('no longer active');
+	});
+	it.each(['invalid', '2030-01-01T00:00:00Z'])(
+		'does not grant a refill using an invalid or future completion time: %s',
+		(completedAt) => {
+			const result = getBoostComplaintEligibility({ ...protectedPurchase, completedAt });
+			expect(result.allowedTypes).not.toContain('dropped');
+			expect(result.refillEndsAt).toBeNull();
+			expect(result.note).toContain('checking your refill eligibility');
+		}
+	);
 	it('always permits missing and stopped delivery after payment', () => {
 		expect(
 			getBoostComplaintEligibility({

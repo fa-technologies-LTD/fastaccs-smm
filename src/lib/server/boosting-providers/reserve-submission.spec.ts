@@ -28,17 +28,17 @@ beforeEach(() => {
 				.mockResolvedValue({ status: 'paid', paymentStatus: 'paid', deliveryStatus: 'processing' })
 		},
 		boostFulfillment: {
-			findUnique: vi
-				.fn()
-				.mockResolvedValue({
-					status: 'queued',
-					leaseToken: 'lease-1',
-					leaseExpiresAt: new Date(+now + 120000),
-					attemptCount: 0,
-					supplierOrderId: null,
-					submittedAt: null,
-					attempts: []
-				})
+			findUnique: vi.fn().mockResolvedValue({
+				status: 'queued',
+				leaseToken: 'lease-1',
+				leaseExpiresAt: new Date(+now + 120000),
+				attemptCount: 0,
+				attemptCap: 2,
+				orderItem: { orderId: input.orderId },
+				supplierOrderId: null,
+				submittedAt: null,
+				attempts: []
+			})
 		},
 		boostProviderState: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 		boostAttempt: { create: vi.fn().mockResolvedValue({}) }
@@ -62,6 +62,18 @@ describe('final Boosting dispatch reservation gate', () => {
 				data: expect.objectContaining({ outcome: 'started', requestFingerprint: 'request-1' })
 			})
 		);
+		expect(tx.boostFulfillment.findUnique).toHaveBeenCalledWith(
+			expect.objectContaining({
+				select: expect.objectContaining({
+					attempts: expect.objectContaining({
+						where: {
+							type: 'submission',
+							outcome: { in: ['started', 'accepted', 'submission_unknown'] }
+						}
+					})
+				})
+			})
+		);
 	});
 	it.each(['cancelled', 'refunded', 'failed', 'completed'])(
 		'does not reserve or start dispatch after the queued order became %s',
@@ -81,6 +93,9 @@ describe('final Boosting dispatch reservation gate', () => {
 		{ leaseExpiresAt: new Date(+now - 1) },
 		{ status: 'cancelled' },
 		{ attemptCount: 1 },
+		{ attemptCap: 0 },
+		{ attemptCap: 1.5 },
+		{ orderItem: { orderId: 'a-different-order' } },
 		{ supplierOrderId: '123' },
 		{ submittedAt: now },
 		{ attempts: [{ type: 'submission', outcome: 'submission_unknown' }] }
@@ -90,6 +105,23 @@ describe('final Boosting dispatch reservation gate', () => {
 		expect(await reserveBoostSubmission(db, input)).toBe('state_changed');
 		expect(tx.boostProviderState.updateMany).not.toHaveBeenCalled();
 		expect(tx.boostAttempt.create).not.toHaveBeenCalled();
+	});
+	it.each([-1, 0.5, NaN, Infinity])(
+		'rejects invalid attempt counter %s before opening a transaction',
+		async (attemptCount) => {
+			expect(await reserveBoostSubmission(db, { ...input, attemptCount })).toBe('state_changed');
+			expect(db.$transaction).not.toHaveBeenCalled();
+		}
+	);
+	it('does not reserve after the snapshotted attempt cap is exhausted', async () => {
+		const current = await tx.boostFulfillment.findUnique();
+		tx.boostFulfillment.findUnique.mockResolvedValue({
+			...current,
+			attemptCount: 2,
+			attemptCap: 2
+		});
+		expect(await reserveBoostSubmission(db, { ...input, attemptCount: 2 })).toBe('state_changed');
+		expect(tx.boostProviderState.updateMany).not.toHaveBeenCalled();
 	});
 	it('does not dispatch if the protected projected balance cannot be reserved', async () => {
 		tx.boostProviderState.updateMany.mockResolvedValue({ count: 0 });

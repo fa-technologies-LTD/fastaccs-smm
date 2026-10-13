@@ -38,7 +38,12 @@
 		data: {
 			order: OrderMetadata;
 			items: OrderItemWithDetails[];
-			orderedItems?: Array<{ tierName: string; platformName: string; quantity: number }>;
+			orderedItems?: Array<{
+				tierName: string;
+				platformName: string;
+				quantity: number;
+				quantityLabel?: string;
+			}>;
 			error: string | null;
 			canViewRevenue?: boolean;
 			canViewOrderAmounts?: boolean;
@@ -632,7 +637,7 @@
 							</div>
 							<p class="text-2xl font-bold text-[var(--text)]">{order.item_count}</p>
 							<p class="text-sm text-[var(--text-muted)]">
-								{isBoostingOrder ? 'boost quantity' : 'accounts ordered'}
+								{isBoostingOrder ? 'boosting items' : 'accounts ordered'}
 							</p>
 						</div>
 						<div>
@@ -689,7 +694,7 @@
 										{/if}
 									</div>
 									<div class="text-sm font-medium text-[var(--text-muted)]">
-										×{ordered.quantity}
+										{ordered.quantityLabel || `×${ordered.quantity}`}
 									</div>
 								</div>
 							{/each}

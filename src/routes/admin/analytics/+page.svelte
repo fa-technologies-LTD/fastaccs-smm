@@ -8,6 +8,13 @@
 	import DonutChart from '$lib/components/charts/DonutChart.svelte';
 	import Sparkline from '$lib/components/charts/Sparkline.svelte';
 	import { STATUS_COLOR_MAP } from '$lib/components/charts/chart-theme';
+	import { page } from '$app/state';
+	import { pushState } from '$app/navigation';
+	import AnalyticsNavigation from '$lib/components/admin/AnalyticsNavigation.svelte';
+	import {
+		getAnalyticsSection,
+		type AnalyticsSection
+	} from '$lib/helpers/admin-analytics-navigation';
 
 	let { data }: { data: PageData } = $props();
 
@@ -49,8 +56,21 @@
 		return `${Number(value).toFixed(1)}%`;
 	}
 
-	type AnalyticsTab = 'overview' | 'users' | 'numbers';
-	let activeTab = $state<AnalyticsTab>('overview');
+	const activeTab = $derived(
+		getAnalyticsSection(
+			(page.state as { analyticsSection?: string }).analyticsSection ??
+				page.url.searchParams.get('tab')
+		)
+	);
+	function selectSection(_section: AnalyticsSection, href: string) {
+		// Existing data serves hub panels; do not rerun the analytics queries on every tab click.
+		const next = new URL(page.url);
+		const selected = new URL(href, next.origin).searchParams.get('tab');
+		if (selected) next.searchParams.set('tab', selected);
+		else next.searchParams.delete('tab');
+		// Kit's shallow pushState changes page.state, not page.url.
+		pushState(next, { ...page.state, analyticsSection: _section });
+	}
 	const ua = $derived((data.userAnalytics ?? null) as Record<string, any> | null);
 	const acq = $derived(
 		(data.acquisition ?? null) as {
@@ -145,11 +165,6 @@
 		}
 	);
 	const uaTotalRt = $derived(Math.max(1, uaRt.account + uaRt.numbers + uaRt.boosting));
-	const ANALYTICS_TABS: { id: AnalyticsTab; label: string }[] = [
-		{ id: 'overview', label: 'Overview' },
-		{ id: 'users', label: 'Users' },
-		{ id: 'numbers', label: 'Numbers' }
-	];
 
 	let granularity = $state<'day' | 'week' | 'month'>('day');
 	const granularityData = $derived.by(() => {
@@ -189,21 +204,11 @@
 		{/if}
 	</div>
 
-	<!-- Analytics hub tabs -->
-	<div class="flex flex-wrap gap-2">
-		{#each ANALYTICS_TABS as tab (tab.id)}
-			<button
-				type="button"
-				onclick={() => (activeTab = tab.id)}
-				class="rounded-full px-4 py-1.5 text-sm font-semibold transition-colors"
-				style={activeTab === tab.id
-					? 'background: var(--fa-lime-700); color: #0a0a0a;'
-					: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
-			>
-				{tab.label}
-			</button>
-		{/each}
-	</div>
+	<AnalyticsNavigation
+		active={activeTab}
+		permissions={data.adminPermissions ?? []}
+		onSelect={selectSection}
+	/>
 
 	{#if activeTab === 'overview'}
 		<div
@@ -1094,6 +1099,65 @@
 				</section>
 			</div>
 		{/if}
+	{:else if activeTab === 'accounts'}
+		<section class="space-y-4" aria-label="Accounts analytics">
+			<h2 class="text-lg font-semibold" style="color: var(--text);">Accounts</h2>
+			{#if typeof stats.totalAccounts === 'number'}
+				<div class="grid grid-cols-2 gap-3 lg:grid-cols-3">
+					{#each [['Accounts sold', Number(stats.accountsSold || 0).toLocaleString()], ['Available stock', Number(stats.availableAccounts || 0).toLocaleString()], ...(canViewRevenue ? [['Lifetime net sales', formatMoney(stats.accountSales?.totalRevenue || 0)]] : [])] as metric}
+						<div
+							class="rounded-lg border p-4"
+							style="background: var(--bg-elev-1); border-color: var(--border);"
+						>
+							<p class="text-xs" style="color: var(--text-muted);">{metric[0]}</p>
+							<p class="mt-1 text-xl font-bold" style="color: var(--text);">{metric[1]}</p>
+						</div>
+					{/each}
+				</div>
+				{#if canViewRevenue}
+					<div
+						class="rounded-lg border p-4"
+						style="background: var(--bg-elev-1); border-color: var(--border);"
+					>
+						<h3 class="font-semibold" style="color: var(--text);">Account sales by platform</h3>
+						<p class="mt-1 text-xs" style="color: var(--text-muted);">
+							Last 180 days · paid sales after refunds · excludes Numbers and Boosting.
+						</p>
+						<div class="mt-3">
+							<BarChart
+								orientation="horizontal"
+								data={(stats.revenueBreakdown?.byPlatform || [])
+									.slice(0, 8)
+									.map((row: { name: string; revenue: number }) => ({
+										label: row.name,
+										value: row.revenue
+									}))}
+								formatValue={formatMoney}
+								emptyMessage="No account sales in this period."
+							/>
+						</div>
+					</div>
+				{/if}
+				<div class="flex flex-wrap gap-4 text-sm">
+					<a href="/admin/orders" style="color: var(--primary);">Account orders →</a>
+					<a href="/admin/inventory" style="color: var(--primary);">Inventory →</a>
+				</div>
+			{:else}
+				<p role="status" style="color: var(--text-muted);">
+					Account analytics are unavailable right now. Reload to try again.
+				</p>
+			{/if}
+		</section>
+	{:else if activeTab === 'boosting'}
+		<section
+			class="rounded-lg border p-6"
+			style="background: var(--bg-elev-1); border-color: var(--border);"
+		>
+			<h2 class="font-semibold" style="color: var(--text);">Boosting analytics</h2>
+			<a href="/admin/boosting-orders" class="mt-3 inline-block" style="color: var(--primary);"
+				>Open Boosting report →</a
+			>
+		</section>
 	{:else if activeTab === 'users'}
 		{#if ua}
 			<!-- Insight callouts -->

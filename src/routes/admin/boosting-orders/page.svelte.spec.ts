@@ -74,6 +74,22 @@ it('makes incomplete cost coverage explicit instead of calling unknown costs fre
 	await expect.element(page.getByText(/Costs recorded for 1 of 53 items/)).toBeVisible();
 	await expect.element(page.getByText(/Unknown costs aren’t treated as free/)).toBeVisible();
 });
+it('explains payment fees even when supplier cost coverage is complete', async () => {
+	const data = fixture();
+	data.analytics = {
+		...analytics,
+		overall: { ...analytics.overall, knownCostItems: analytics.overall.items }
+	};
+	render(Page, { data } as never);
+	await expect
+		.element(
+			page.getByText(
+				'Recorded margin is after refunds and known supplier charges, before payment fees. It is not final profit.'
+			)
+		)
+		.toBeVisible();
+	expect(page.getByText(/Costs recorded for/).query()).toBeNull();
+});
 it('refreshes analytics and the order queue together from their real endpoint contracts', async () => {
 	const fresh = structuredClone(analytics);
 	fresh.overall.orders = 46;

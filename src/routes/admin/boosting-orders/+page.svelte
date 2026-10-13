@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AnalyticsNavigation from '$lib/components/admin/AnalyticsNavigation.svelte';
 	import { untrack } from 'svelte';
 	import {
 		AlertTriangle,
@@ -11,7 +12,6 @@
 		Zap
 	} from '$lib/icons';
 	import { showError, showSuccess } from '$lib/stores/toasts';
-	import OrderTypeTabs from '$lib/components/admin/OrderTypeTabs.svelte';
 	import { getBoostingServiceConfig } from '$lib/helpers/boosting-service-config';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { formatAdminMoney } from '$lib/helpers/admin-money';
@@ -473,7 +473,6 @@
 			Track delivery, supplier costs and customer reports.
 		</p>
 		<div class="mt-2 flex flex-wrap items-center justify-between gap-2">
-			<OrderTypeTabs active="boosting" />
 			<div class="flex flex-wrap items-center gap-2">
 				<a href="/admin/boosting-pricing" class="text-sm" style="color: var(--primary);"
 					>Pricing →</a
@@ -500,6 +499,7 @@
 			</div>
 		</div>
 	</header>
+	<AnalyticsNavigation active="boosting" permissions={data.adminPermissions ?? []} />
 
 	{#if analyticsError}<p role="status" class="text-sm" style="color: var(--text-muted);">
 			{analyticsError}
@@ -519,12 +519,18 @@
 				</div>
 			{/each}
 		</div>
+		{#if canViewRevenue && analytics.overall.items > 0}
+			<p class="text-xs" style="color: var(--text-muted);">
+				Recorded margin is after refunds and known supplier charges, before payment fees. It is not
+				final profit.
+			</p>
+		{/if}
 		{#if canViewRevenue && analytics.overall.knownCostItems < analytics.overall.items}<p
 				class="text-xs"
 				style="color: var(--text-muted);"
 			>
 				Costs recorded for {analytics.overall.knownCostItems} of {analytics.overall.items} items. Margin
-				covers those items only, before payment fees. Unknown costs aren’t treated as free.
+				covers those items only. Unknown costs aren’t treated as free.
 			</p>{/if}
 		<details
 			class="rounded-[var(--r-md)] border p-4"
