@@ -14,6 +14,7 @@
 			"@context": "https://schema.org",
 			"@type": "BlogPosting",
 			"headline": "Why Aged X (Twitter) Accounts Outperform New Ones — And What to Look For",
+			"image": "https://smm.fastaccs.com/og-share-1200x630.png",
 			"description": "X's algorithm gives older accounts a quiet advantage in reach, DM limits, and monetization eligibility. Here's the data, and what to check before buying.",
 			"datePublished": "2026-06-16",
 			"dateModified": "2026-06-16",

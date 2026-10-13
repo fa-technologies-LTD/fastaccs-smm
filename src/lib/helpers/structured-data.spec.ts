@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { productJsonLd, serializeJsonLd } from './structured-data';
+import { breadcrumbJsonLd, productJsonLd, serializeJsonLd } from './structured-data';
 
 describe('serializeJsonLd', () => {
 	it('escapes characters that could break out of the script tag', () => {
@@ -48,5 +48,46 @@ describe('productJsonLd', () => {
 	it('emits nothing without a real price or name', () => {
 		expect(productJsonLd({ ...base, priceNgn: 0 })).toBeNull();
 		expect(productJsonLd({ ...base, name: '  ' })).toBeNull();
+	});
+});
+
+describe('productJsonLd image', () => {
+	it('includes the image when given', () => {
+		expect(
+			productJsonLd({
+				name: 'X',
+				description: 'd',
+				url: 'https://smm.fastaccs.com/x',
+				priceNgn: 100,
+				inStock: true,
+				image: 'https://smm.fastaccs.com/og-share-1200x630.png'
+			})
+		).toMatchObject({ image: 'https://smm.fastaccs.com/og-share-1200x630.png' });
+	});
+});
+
+describe('breadcrumbJsonLd', () => {
+	it('numbers positions from 1 and keeps absolute URLs', () => {
+		expect(
+			breadcrumbJsonLd([
+				{ name: 'Home', url: 'https://smm.fastaccs.com/' },
+				{ name: 'Accounts', url: 'https://smm.fastaccs.com/platforms' }
+			])
+		).toEqual({
+			'@context': 'https://schema.org',
+			'@type': 'BreadcrumbList',
+			itemListElement: [
+				{ '@type': 'ListItem', position: 1, name: 'Home', item: 'https://smm.fastaccs.com/' },
+				{
+					'@type': 'ListItem',
+					position: 2,
+					name: 'Accounts',
+					item: 'https://smm.fastaccs.com/platforms'
+				}
+			]
+		});
+	});
+	it('emits nothing for a trail shorter than two', () => {
+		expect(breadcrumbJsonLd([{ name: 'Home', url: 'https://smm.fastaccs.com/' }])).toBeNull();
 	});
 });

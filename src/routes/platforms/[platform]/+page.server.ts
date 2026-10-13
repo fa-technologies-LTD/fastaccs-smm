@@ -5,6 +5,8 @@ import { getTierMerchandisingState } from '$lib/helpers/tier-merchandising';
 import { getTierStockStatus } from '$lib/helpers/tier-delivery-config';
 import { getLowStockThresholdSetting } from '$lib/services/admin-settings';
 import { sanitizePublicCategoryMetadata } from '$lib/helpers/public-category';
+import { getSiteBaseUrl } from '$lib/helpers/site-url';
+import { breadcrumbJsonLd } from '$lib/helpers/structured-data';
 import {
 	buildPlatformFaq,
 	buildPlatformSeo,
@@ -183,7 +185,15 @@ export const load: PageServerLoad = async ({ params, url }) => {
 				startingPriceNgn: startingPrice(tiers),
 				typeCount: tiers.length
 			}),
-			faq: buildPlatformFaq(platformDisplayName(platform.name, platform.slug))
+			faq: buildPlatformFaq(platformDisplayName(platform.name, platform.slug)),
+			breadcrumb: breadcrumbJsonLd([
+				{ name: 'Home', url: `${getSiteBaseUrl()}/` },
+				{ name: 'Accounts', url: `${getSiteBaseUrl()}/platforms` },
+				{
+					name: `${platformDisplayName(platform.name, platform.slug)} accounts`,
+					url: `${getSiteBaseUrl()}/platforms/${platform.slug}`
+				}
+			])
 		};
 	} catch (cause) {
 		if (cause && typeof cause === 'object' && 'status' in cause) throw cause;

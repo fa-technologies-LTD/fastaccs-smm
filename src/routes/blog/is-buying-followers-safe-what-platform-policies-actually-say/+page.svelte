@@ -14,6 +14,7 @@
 			"@context": "https://schema.org",
 			"@type": "BlogPosting",
 			"headline": "Is Buying Followers Safe? What Platform Policies Actually Say",
+			"image": "https://smm.fastaccs.com/og-share-1200x630.png",
 			"description": "Most 'is it safe' articles guess. This one quotes the actual policy language from Instagram, TikTok, YouTube, and Facebook, and explains what they really enforce against.",
 			"datePublished": "2026-06-26",
 			"dateModified": "2026-06-26",

@@ -9,7 +9,8 @@ import {
 } from '$lib/helpers/numbers-slugs';
 import { formatPrice } from '$lib/helpers/utils';
 import type { SeoFaqItem } from '$lib/helpers/platform-seo';
-import { productJsonLd } from '$lib/helpers/structured-data';
+import { breadcrumbJsonLd, productJsonLd, SHARE_IMAGE_PATH } from '$lib/helpers/structured-data';
+import { getSiteBaseUrl } from '$lib/helpers/site-url';
 
 // Same wording as the /numbers FAQ and Support page: no new promises.
 function buildNumbersFaq(serviceName: string, country: string): SeoFaqItem[] {
@@ -96,11 +97,20 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		product: productJsonLd({
 			name: `${country} number for ${service.serviceName} verification`,
 			description,
-			url: `${url.origin}${canonicalPath ?? url.pathname}`,
+			url: `${getSiteBaseUrl()}${canonicalPath ?? url.pathname}`,
 			priceNgn: tier.priceNgn,
 			inStock: tier.available,
-			category: 'Verification numbers'
+			category: 'Verification numbers',
+			image: `${getSiteBaseUrl()}${SHARE_IMAGE_PATH}`
 		}),
+		breadcrumb: breadcrumbJsonLd([
+			{ name: 'Home', url: `${getSiteBaseUrl()}/` },
+			{ name: 'Verification numbers', url: `${getSiteBaseUrl()}/numbers` },
+			{
+				name: `${country} number for ${service.serviceName}`,
+				url: `${getSiteBaseUrl()}${canonicalPath ?? url.pathname}`
+			}
+		]),
 		service: { serviceId: service.serviceId, serviceName: service.serviceName },
 		tier,
 		country,

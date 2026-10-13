@@ -67,6 +67,8 @@ export const GET: RequestHandler = async () => {
 		});
 
 		for (const platform of platforms) {
+			// A platform with no active account types renders an empty page: keep it out of search.
+			if (platform.children.length === 0) continue;
 			urls.push({
 				path: `/platforms/${platform.slug}`,
 				lastmod: platform.updatedAt.toISOString()

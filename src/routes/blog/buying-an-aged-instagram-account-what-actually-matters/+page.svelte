@@ -14,6 +14,7 @@
 			"@context": "https://schema.org",
 			"@type": "BlogPosting",
 			"headline": "Buying an Aged Instagram Account: What Actually Matters",
+			"image": "https://smm.fastaccs.com/og-share-1200x630.png",
 			"description": "Not all Instagram accounts are worth buying. Here's exactly what to look for — account age, niche match, engagement rate, and how to avoid getting burned.",
 			"datePublished": "2026-06-16",
 			"dateModified": "2026-06-16",

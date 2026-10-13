@@ -28,6 +28,7 @@
 	import { formatPrice } from '$lib/helpers/utils';
 	import { platformDisplayName } from '$lib/helpers/platform-seo';
 	import SeoFaq from '$lib/components/SeoFaq.svelte';
+	import JsonLd from '$lib/components/JsonLd.svelte';
 	import { lockScroll, unlockScroll } from '$lib/helpers/scroll-lock';
 	import {
 		getTierDeliveryModeLabel as getDeliveryModeLabel,
@@ -776,9 +777,15 @@
 
 <svelte:window onkeydown={handleQuickAddWindowKeydown} />
 
+<JsonLd data={data.breadcrumb ?? null} />
+
 <svelte:head>
 	<title>{data.seo?.title ?? 'Accounts - FastAccs'}</title>
 	<meta name="description" content={data.seo?.description ?? ''} />
+	{#if data.platform && data.tiers.length === 0}
+		<!-- Nothing to buy yet: keep the empty page out of search until account types are added. -->
+		<meta name="robots" content="noindex" />
+	{/if}
 </svelte:head>
 
 <Navigation />

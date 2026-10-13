@@ -14,6 +14,7 @@
 			"@context": "https://schema.org",
 			"@type": "BlogPosting",
 			"headline": "Why Social Media Managers Use VPNs — And How to Pick the Right One",
+			"image": "https://smm.fastaccs.com/og-share-1200x630.png",
 			"description": "Platforms track your IP address more aggressively than most users realise. Here is how VPNs solve the multi-account detection problem and what to look for before you buy.",
 			"datePublished": "2026-06-16",
 			"dateModified": "2026-06-16",

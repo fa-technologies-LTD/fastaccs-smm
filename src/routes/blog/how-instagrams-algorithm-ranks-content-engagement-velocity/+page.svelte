@@ -14,6 +14,7 @@
 			"@context": "https://schema.org",
 			"@type": "BlogPosting",
 			"headline": "How Instagram's Algorithm Really Ranks Your Content (and Why Engagement Velocity Matters)",
+			"image": "https://smm.fastaccs.com/og-share-1200x630.png",
 			"description": "Instagram doesn't rank content once — it re-ranks constantly based on engagement velocity. Here's how the system actually works and how to use that timing to your advantage.",
 			"datePublished": "2026-06-26",
 			"dateModified": "2026-06-26",

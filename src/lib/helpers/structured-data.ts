@@ -12,6 +12,9 @@ export function serializeJsonLd(data: unknown): string {
 		.replace(/\u2029/g, '\\u2029');
 }
 
+/** The site's 1200×630 share image: a valid `image` until products have their own. */
+export const SHARE_IMAGE_PATH = '/og-share-1200x630.png';
+
 export function productJsonLd(input: {
 	name: string;
 	description: string;
@@ -19,6 +22,7 @@ export function productJsonLd(input: {
 	priceNgn: number;
 	inStock: boolean;
 	category?: string;
+	image?: string;
 }): Record<string, unknown> | null {
 	if (!(input.priceNgn > 0) || !input.name.trim()) return null;
 	return {
@@ -26,6 +30,7 @@ export function productJsonLd(input: {
 		'@type': 'Product',
 		name: input.name.trim(),
 		description: input.description.trim(),
+		...(input.image ? { image: input.image } : {}),
 		...(input.category ? { category: input.category } : {}),
 		brand: { '@type': 'Brand', name: 'FastAccs' },
 		offers: {
@@ -36,5 +41,23 @@ export function productJsonLd(input: {
 			availability: input.inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
 			seller: { '@type': 'Organization', name: 'FastAccs' }
 		}
+	};
+}
+
+/** BreadcrumbList for the trail shown to search users (absolute URLs, last item = this page). */
+export function breadcrumbJsonLd(
+	items: Array<{ name: string; url: string }>
+): Record<string, unknown> | null {
+	const valid = items.filter((item) => item.name.trim() && item.url);
+	if (valid.length < 2) return null;
+	return {
+		'@context': 'https://schema.org',
+		'@type': 'BreadcrumbList',
+		itemListElement: valid.map((item, index) => ({
+			'@type': 'ListItem',
+			position: index + 1,
+			name: item.name.trim(),
+			item: item.url
+		}))
 	};
 }

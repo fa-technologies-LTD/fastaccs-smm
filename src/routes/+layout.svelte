@@ -13,6 +13,7 @@
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { syncGa4Consent, trackGa4PageView } from '$lib/services/ga4';
 	import { initAttributionCapture } from '$lib/services/attribution-client';
+	import { markAppMounted } from '$lib/client/boot-guard';
 	import { PRIVACY_CONSENT_CHANGED_EVENT } from '$lib/helpers/privacyConsent';
 	import { getSiteBaseUrl } from '$lib/helpers/site-url';
 	import type { LayoutData } from './$types';
@@ -35,9 +36,9 @@
 	const publicBaseUrl = $derived(getSiteBaseUrl());
 	const shareImagePath = '/og-share-1200x630.png?v=20260428a';
 	const shareImageUrl = $derived(`${publicBaseUrl}${shareImagePath}`);
-	const currentPageUrl = $derived(
-		`${publicBaseUrl}${page.url?.pathname || '/'}${page.url?.search || ''}`
-	);
+	// Canonical/og:url never include the query string: tracking tags (utm_*, fa_click, fbclid) and
+	// UI parameters (?tab=, ?service=) must not turn into self-canonical duplicate pages.
+	const currentPageUrl = $derived(`${publicBaseUrl}${page.url?.pathname || '/'}`);
 	// Pages can override the social-share title/description/type by returning
 	// a `seo` object from their load function (see src/routes/blog/+layout.server.ts).
 	const seoTitle = $derived(page.data?.seo?.title ?? defaultShareTitle);
@@ -160,6 +161,7 @@
 
 	onMount(() => {
 		hydrated = true;
+		markAppMounted();
 		trackCurrentPageView();
 		trackCurrentConfirmedVisit();
 		syncGa4Consent();
@@ -209,7 +211,9 @@
 </script>
 
 <svelte:head>
-	<link rel="canonical" href={currentPageUrl} />
+	{#if !page.error}
+		<link rel="canonical" href={currentPageUrl} />
+	{/if}
 	<meta property="og:site_name" content="FastAccs" />
 	<meta property="og:type" content={seoType} />
 	<meta property="og:title" content={seoTitle} />

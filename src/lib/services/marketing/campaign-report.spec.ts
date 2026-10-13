@@ -132,6 +132,16 @@ describe('resolveChannel', () => {
 		).toEqual({ source: 'nairaland', medium: 'referral', campaign: 'sports' });
 	});
 
+	it('treats legacy payment-gateway sources as untracked', () => {
+		expect(
+			resolveChannel({
+				...base,
+				acquisitionSource: 'sdk.monnify.com',
+				acquisitionLanding: '/checkout/verify'
+			})
+		).toMatchObject({ source: 'untracked' });
+	});
+
 	it('marks users without any source as untracked', () => {
 		expect(
 			resolveChannel({ ...base, acquisitionSource: null, acquisitionLanding: '/platforms/x' })

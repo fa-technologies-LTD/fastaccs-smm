@@ -14,6 +14,7 @@
 			"@context": "https://schema.org",
 			"@type": "BlogPosting",
 			"headline": "Organic vs. Bought Engagement: What Actually Moves the Algorithm",
+			"image": "https://smm.fastaccs.com/og-share-1200x630.png",
 			"description": "Organic and bought engagement do different jobs. Here's an honest, research-backed breakdown of what each one actually changes in the algorithm — and how to combine them.",
 			"datePublished": "2026-06-26",
 			"dateModified": "2026-06-26",

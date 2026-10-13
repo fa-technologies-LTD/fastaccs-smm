@@ -22,6 +22,26 @@ describe('deriveSource', () => {
 		expect(deriveSource('https://smm.fastaccs.com/numbers', 'smm.fastaccs.com')).toBe('');
 		expect(deriveSource('https://gifting.fastaccs.com/', 'smm.fastaccs.com')).toBe('');
 	});
+	it('treats payment gateways as part of checkout, not a source', () => {
+		for (const ref of [
+			'https://sdk.monnify.com/checkout/abc',
+			'https://checkout.paystack.com/x',
+			'https://checkout.flutterwave.com/v3/x',
+			'https://checkout.stripe.com/c/pay/x',
+			'https://www.paypal.com/checkoutnow'
+		]) {
+			expect(deriveSource(ref, 'smm.fastaccs.com'), ref).toBe('');
+		}
+		expect(
+			buildFirstTouch({
+				searchParams: new URLSearchParams(),
+				referrer: 'https://sdk.monnify.com/',
+				pathname: '/checkout/verify',
+				ownHost: 'smm.fastaccs.com'
+			})
+		).toBeNull();
+	});
+
 	it('falls back to the bare domain for unknown external referrers', () => {
 		expect(deriveSource('https://www.somenewsite.io/x', 'smm.fastaccs.com')).toBe('somenewsite.io');
 	});

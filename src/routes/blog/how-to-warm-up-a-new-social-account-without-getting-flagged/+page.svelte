@@ -14,6 +14,7 @@
 			"@context": "https://schema.org",
 			"@type": "BlogPosting",
 			"headline": "How to Warm Up a New Social Media Account Without Getting Flagged",
+			"image": "https://smm.fastaccs.com/og-share-1200x630.png",
 			"description": "Your first 2-4 weeks on a freshly acquired account decide everything. This cross-platform warm-up checklist keeps you under the radar while building genuine traction.",
 			"datePublished": "2026-06-16",
 			"dateModified": "2026-06-16",

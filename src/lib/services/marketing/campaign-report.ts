@@ -1,6 +1,7 @@
 import { prisma } from '$lib/prisma';
 import { buildRevenueOrderWhere } from '$lib/helpers/order-revenue.server';
 import { toNetSales } from '$lib/helpers/order-revenue';
+import { isPaymentGatewayHost } from '$lib/services/attribution';
 import type { ReportWindow } from './window';
 
 /**
@@ -54,7 +55,9 @@ export function resolveChannel(user: {
 	acquisitionCampaign: string | null;
 	acquisitionLanding: string | null;
 }): { source: string; medium: string; campaign: string } {
-	const source = clean(user.acquisitionSource);
+	// Legacy rows recorded the payment page as a source; it never is one.
+	const raw = clean(user.acquisitionSource);
+	const source = isPaymentGatewayHost(raw) ? '' : raw;
 	const referral = REFERRAL_LANDING.exec((user.acquisitionLanding ?? '').trim());
 	if (referral && (!source || source === 'direct')) {
 		return { source: 'affiliate', medium: 'referral-link', campaign: clean(referral[1]) };

@@ -14,6 +14,7 @@
 			"@context": "https://schema.org",
 			"@type": "BlogPosting",
 			"headline": "How to Use a One-Time Verification Number (Without Getting Locked Out)",
+			"image": "https://smm.fastaccs.com/og-share-1200x630.png",
 			"description": "The right way to use a rented number for WhatsApp, Telegram or TikTok — and the backup step people skip.",
 			"datePublished": "2026-08-02",
 			"dateModified": "2026-08-02",
