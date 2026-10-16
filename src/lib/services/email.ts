@@ -316,7 +316,7 @@ export function renderEmailTemplate(params: {
 	const safeCtaUrl = normalizeEmailActionUrl(params.ctaUrl);
 	const showCta = Boolean(params.showCta && params.ctaText && safeCtaUrl);
 	const baseUrl = getBaseUrl();
-	const supportEmail = env.SMTP_FROM_EMAIL || env.GMAIL_USER || 'support@fastaccs.com';
+	const supportEmail = getSupportEmail();
 	const preheader = String(params.preheader || '')
 		.replace(/\s+/g, ' ')
 		.trim()
@@ -456,6 +456,11 @@ function getFromAddress(): string {
 	return `"${fromName}" <${fromEmail}>`;
 }
 
+/** The monitored inbox customers can write to. Never the (unmonitored) sending address. */
+export function getSupportEmail(): string {
+	return (env.SUPPORT_EMAIL || 'support@fastaccs.com').trim();
+}
+
 async function createEmailLog(params: EmailLogParams): Promise<string | null> {
 	try {
 		const record = await prisma.emailNotification.create({
@@ -575,6 +580,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 		const transporter = getTransporter();
 		const result = await transporter.sendMail({
 			from: getFromAddress(),
+			replyTo: getSupportEmail(),
 			to: recipient,
 			subject,
 			text: textBody,
