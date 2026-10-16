@@ -21,6 +21,7 @@
 	// Get redirect URL from server data or query params
 	const redirectTo = data.returnUrl || page.url.searchParams.get('returnUrl') || '/dashboard';
 	const errorParam = page.url.searchParams.get('error');
+	const passwordWasReset = page.url.searchParams.get('reset') === '1';
 
 	onMount(() => {
 		// Show error from URL params
@@ -59,14 +60,14 @@
 				})
 			});
 			const result = await response.json();
-				if (!response.ok || !result.success) {
-					error = result.error || 'Login failed.';
-					return;
-				}
+			if (!response.ok || !result.success) {
+				error = result.error || 'Login failed.';
+				return;
+			}
 
-				await invalidateAll();
-				await goto(result.redirectTo || redirectTo);
-			} catch (loginError) {
+			await invalidateAll();
+			await goto(result.redirectTo || redirectTo);
+		} catch (loginError) {
 			console.error('Login failed:', loginError);
 			error = 'Unable to log in right now. Please try again.';
 		} finally {
@@ -120,6 +121,15 @@
 
 			<!-- Content -->
 			<div class="px-6 py-6 sm:px-8 sm:py-8">
+				{#if passwordWasReset && !error}
+					<div
+						role="status"
+						style="background: var(--status-success-bg); border: 1px solid var(--status-success-border); color: var(--status-success);"
+						class="mb-6 rounded-lg p-4 text-sm font-medium"
+					>
+						Password updated. Sign in with your new password.
+					</div>
+				{/if}
 				{#if error}
 					<div
 						style="background: var(--status-error-bg); border: 1px solid var(--status-error-border); color: var(--status-error);"
@@ -172,6 +182,13 @@
 								placeholder="Enter your password"
 								required
 							/>
+							<div class="mt-1.5 text-right">
+								<a
+									href="/auth/forgot-password"
+									class="text-xs font-medium underline-offset-2 hover:underline"
+									style="color: var(--link);">Forgot password?</a
+								>
+							</div>
 						</div>
 						<button
 							type="submit"
@@ -189,8 +206,7 @@
 					<div class="h-px" style="background: var(--border);"></div>
 					<span
 						class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-2 text-xs"
-						style="background: var(--bg-elev-1); color: var(--text-muted);"
-						>or continue with</span
+						style="background: var(--bg-elev-1); color: var(--text-muted);">or continue with</span
 					>
 				</div>
 

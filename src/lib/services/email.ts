@@ -17,6 +17,7 @@ import { randomInt } from 'crypto';
 
 export type EmailNotificationType =
 	| 'verification'
+	| 'password_reset'
 	| 'welcome'
 	| 'onboarding_step'
 	| 'nurture_step'
@@ -266,6 +267,7 @@ function getEmailEyebrow(params: SendEmailParams): string {
 
 	switch (params.notificationType) {
 		case 'verification':
+		case 'password_reset':
 			return 'SECURITY';
 		case 'order_confirmation':
 		case 'order_delivery':
