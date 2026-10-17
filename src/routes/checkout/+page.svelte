@@ -105,16 +105,43 @@
 	// preview the discount — the refund bucket spends up to 100% of the order, the
 	// earned bucket is capped at 30%. The server recomputes authoritatively at
 	// checkout, so this is only an estimate for display.
-	let applyStoreCredit = $state(false);
+	// Promo credit (Refer & Win / BIGSPENDER) expires, so the box starts ticked when the buyer has
+	// some; they can untick it. Without promo credit it stays opt-in as before.
+	const hasPromoCreditAtLoad = () => (data.storeCredit?.promoAvailable ?? 0) > 0;
+	let applyStoreCredit = $state(hasPromoCreditAtLoad());
 	const storeCreditAvailable = $derived(data.storeCredit?.totalAvailable ?? 0);
+	const promoCreditAvailable = $derived(data.storeCredit?.promoAvailable ?? 0);
+	const promoCreditNote = $derived.by(() => {
+		const promo = data.storeCredit?.promo ?? [];
+		if (promoCreditAvailable <= 0 || promo.length === 0) return '';
+		const caps = data.storeCredit?.promoCaps ?? {};
+		const cap = Math.max(...promo.map((entry) => caps[entry.campaign] ?? 50));
+		const soonest = promo
+			.map((entry) => entry.nextExpiresAt)
+			.filter((value): value is string => Boolean(value))
+			.sort()[0];
+		const expiry = soonest
+			? new Date(soonest).toLocaleDateString('en-GB', {
+					day: 'numeric',
+					month: 'short',
+					timeZone: 'Africa/Lagos'
+				})
+			: '';
+		return `Includes ${formatPrice(promoCreditAvailable)} promo credit · pays up to ${cap}% of an order${expiry ? ` · expires ${expiry}` : ''}`;
+	});
 	const storeCreditApplied = $derived.by(() => {
 		if (!applyStoreCredit || storeCreditAvailable <= 0 || checkoutTotal <= 0) return 0;
 		return (
 			activeServerQuote?.creditApplied ??
-			computeOrderRedemption(checkoutTotal, {
-				refundAvailable: data.storeCredit?.refundAvailable ?? 0,
-				earnedAvailable: data.storeCredit?.earnedAvailable ?? 0
-			}).totalApplied
+			computeOrderRedemption(
+				checkoutTotal,
+				{
+					refundAvailable: data.storeCredit?.refundAvailable ?? 0,
+					earnedAvailable: data.storeCredit?.earnedAvailable ?? 0,
+					promo: data.storeCredit?.promo ?? []
+				},
+				{ promoCaps: data.storeCredit?.promoCaps ?? {} }
+			).totalApplied
 		);
 	});
 	const payableTotal = $derived(Math.max(0, checkoutTotal - storeCreditApplied));
@@ -1368,6 +1395,14 @@
 										>{formatPrice(storeCreditAvailable)} available</span
 									>
 								</label>
+								{#if promoCreditNote}
+									<p
+										class="-mt-1 text-xs"
+										style="color: var(--text-muted); font-family: var(--font-body);"
+									>
+										{promoCreditNote}
+									</p>
+								{/if}
 							{/if}
 							{#if storeCreditApplied > 0}
 								<div

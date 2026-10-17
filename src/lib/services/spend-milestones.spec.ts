@@ -12,6 +12,11 @@ const prismaMock = vi.hoisted(() => ({
 }));
 
 vi.mock('$lib/prisma', () => ({ prisma: prismaMock }));
+vi.mock('$lib/services/promo-campaigns', () => ({
+	maybeGrantBigSpender: vi.fn(async () => {}),
+	reconcileBigSpender: vi.fn(async () => {}),
+	reconcileReferWinForFriend: vi.fn(async () => {})
+}));
 vi.mock('$lib/helpers/order-revenue.server', () => ({
 	buildRevenueOrderWhere: vi.fn(() => ({})),
 	toNetSales: vi.fn(

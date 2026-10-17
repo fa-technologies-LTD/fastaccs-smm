@@ -11,6 +11,8 @@ export async function getDashboardInitialData(userId: string) {
 		getStoreCreditBuckets(userId).catch(() => ({
 			earnedAvailable: 0,
 			refundAvailable: 0,
+			promoAvailable: 0,
+			promo: [],
 			totalAvailable: 0
 		}))
 	]);

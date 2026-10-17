@@ -219,6 +219,12 @@ const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
 		writePermission: 'admin:promotions:manage'
 	},
 	{
+		// Changes are further limited to the owner inside the page actions.
+		prefix: '/admin/campaigns',
+		readPermission: 'admin:revenue:view',
+		writePermission: 'admin:revenue:view'
+	},
+	{
 		prefix: '/api/admin/users',
 		readPermission: 'admin:access',
 		writePermission: 'admin:users:manage'

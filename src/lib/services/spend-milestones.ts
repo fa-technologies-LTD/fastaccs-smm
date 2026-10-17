@@ -44,6 +44,11 @@ export async function maybeGrantSpendMilestones(userId: string | null | undefine
 		const spend = await cumulativePaidSpend(userId);
 		if (spend >= GIFT_MILESTONE_SPEND) await maybeGrantSpendGift(userId);
 		if (spend >= PROMO_MILESTONE_SPEND) await maybeGrantSpendPromo(userId);
+		// BIGSPENDER (promo credit): does nothing unless the owner has switched it on.
+		const { maybeGrantBigSpender } = await import('$lib/services/promo-campaigns');
+		await maybeGrantBigSpender(userId, spend).catch((error) =>
+			console.error('maybeGrantBigSpender failed:', error)
+		);
 	} catch (error) {
 		console.error('maybeGrantSpendMilestones failed:', error);
 	}
@@ -172,6 +177,12 @@ export async function maybeClawbackSpendMilestones(
 		const spend = await cumulativePaidSpend(userId);
 		if (spend < GIFT_MILESTONE_SPEND) await maybeClawbackGift(userId);
 		if (spend < PROMO_MILESTONE_SPEND) await deactivateUnusedPromo(userId);
+		// Promo campaigns: remove unspent credit the refund no longer justifies (logs spent credit).
+		const { reconcileBigSpender, reconcileReferWinForFriend } = await import(
+			'$lib/services/promo-campaigns'
+		);
+		await reconcileBigSpender(userId, spend);
+		await reconcileReferWinForFriend(userId);
 	} catch (error) {
 		console.error('maybeClawbackSpendMilestones failed:', error);
 		if (options.throwOnError) throw error;

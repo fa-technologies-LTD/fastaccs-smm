@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
+import { isOwnerOnlyConfigKey } from '$lib/helpers/promo-campaign-rules';
 
 export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 	try {
@@ -10,6 +11,13 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 		}
 
 		const { id } = params;
+		const current = await prisma.microcopy.findUnique({ where: { id }, select: { key: true } });
+		if (current && isOwnerOnlyConfigKey(current.key)) {
+			return json(
+				{ error: 'Campaign settings are changed from Admin → Campaigns.' },
+				{ status: 403 }
+			);
+		}
 		const { isActive } = await request.json();
 
 		const microcopy = await prisma.microcopy.update({

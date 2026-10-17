@@ -159,6 +159,12 @@
 				permission: 'admin:revenue:view'
 			},
 			{
+				href: '/admin/campaigns',
+				label: 'Campaigns',
+				icon: Tag,
+				permission: 'admin:revenue:view'
+			},
+			{
 				href: '/admin/promotions',
 				label: 'Promotions',
 				icon: Tag,

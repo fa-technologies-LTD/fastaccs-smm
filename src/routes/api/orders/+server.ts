@@ -66,8 +66,10 @@ import {
 import {
 	getStoreCreditBuckets,
 	computeOrderRedemption,
-	redeemStoreCreditForOrder
+	redeemStoreCreditForOrder,
+	type OrderRedemption
 } from '$lib/services/store-credit';
+import { getPromoCaps } from '$lib/services/promo-campaigns';
 import { recoverPaidOrder, settleFailedPayment } from '$lib/services/payment-settlement';
 import { logOrderStatusTransition } from '$lib/services/order-audit';
 import { recordOrderEvent } from '$lib/services/order-events';
@@ -1284,13 +1286,18 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		// Store-credit redemption (registered users, opt-in). The credit is
 		// reserve-debited in the order transaction below; a failed/expired payment
 		// reverses it. Refund credit spends freely; earned/gifted capped at 30%.
-		let storeCreditRedemption = { refundApplied: 0, earnedApplied: 0, totalApplied: 0 };
+		let storeCreditRedemption: OrderRedemption = {
+			refundApplied: 0,
+			earnedApplied: 0,
+			totalApplied: 0
+		};
+		let promoCaps: Record<string, number> = {};
 		if (orderData.useStoreCredit && checkoutUserId) {
 			try {
-				storeCreditRedemption = computeOrderRedemption(
-					finalOrderTotal,
-					await getStoreCreditBuckets(checkoutUserId)
-				);
+				const buckets = await getStoreCreditBuckets(checkoutUserId);
+				// Promo credit (Refer & Win / BIGSPENDER) is capped per campaign by the owner.
+				if (buckets.promoAvailable > 0) promoCaps = await getPromoCaps();
+				storeCreditRedemption = computeOrderRedemption(finalOrderTotal, buckets, { promoCaps });
 			} catch {
 				logPaymentEvent('warn', 'checkout.store_credit.compute_failed', {
 					traceId,
@@ -1676,7 +1683,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 								userId: checkoutUserId,
 								orderId: createdOrder.id,
 								orderNumber: createdOrder.orderNumber,
-								redemption: storeCreditRedemption
+								redemption: storeCreditRedemption,
+								orderTotal: finalOrderTotal,
+								promoCaps
 							});
 						}
 

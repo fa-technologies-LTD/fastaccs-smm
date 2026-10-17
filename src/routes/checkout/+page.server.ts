@@ -1,20 +1,33 @@
 import type { PageServerLoad } from './$types';
 import { readAffiliateReferralCookie } from '$lib/services/affiliate';
 import { getStoreCreditBuckets } from '$lib/services/store-credit';
+import { getPromoCaps } from '$lib/services/promo-campaigns';
+import type { PromoCampaignBalance } from '$lib/helpers/promo-credit';
 import { prisma } from '$lib/prisma';
 
 export const load: PageServerLoad = async ({ cookies, locals }) => {
 	const affiliateRef = readAffiliateReferralCookie(cookies);
 	const userId = locals.user?.id;
-	const emptyStoreCredit = { earnedAvailable: 0, refundAvailable: 0, totalAvailable: 0 };
+	const emptyStoreCredit = {
+		earnedAvailable: 0,
+		refundAvailable: 0,
+		promoAvailable: 0,
+		promo: [] as PromoCampaignBalance[],
+		promoCaps: {} as Record<string, number>,
+		totalAvailable: 0
+	};
 
 	const [storeCredit, availablePromo] = userId
 		? await Promise.all([
 				getStoreCreditBuckets(userId)
-					.then((buckets) => ({
+					.then(async (buckets) => ({
 						earnedAvailable: buckets.earnedAvailable,
 						refundAvailable: buckets.refundAvailable,
-						totalAvailable: buckets.earnedAvailable + buckets.refundAvailable
+						promoAvailable: buckets.promoAvailable,
+						promo: buckets.promo,
+						// Per-campaign checkout caps, so the preview matches the server exactly.
+						promoCaps: buckets.promoAvailable > 0 ? await getPromoCaps() : {},
+						totalAvailable: buckets.totalAvailable
 					}))
 					.catch((error) => {
 						console.error('Failed to load store credit for checkout:', error);

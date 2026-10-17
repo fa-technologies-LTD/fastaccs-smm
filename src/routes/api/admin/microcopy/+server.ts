@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
+import { isOwnerOnlyConfigKey } from '$lib/helpers/promo-campaign-rules';
 
 // GET all microcopy
 export const GET: RequestHandler = async ({ url }) => {
@@ -36,6 +37,12 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 		if (!key || !value) {
 			return json({ error: 'Key and value are required' }, { status: 400 });
+		}
+		if (isOwnerOnlyConfigKey(key)) {
+			return json(
+				{ error: 'Campaign settings are changed from Admin → Campaigns.' },
+				{ status: 403 }
+			);
 		}
 
 		// Check if key already exists
