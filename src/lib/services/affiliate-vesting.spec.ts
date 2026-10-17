@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { NOT_HELD_FOR_IDENTITY_REVIEW } from './affiliate-review-hold';
 
 const txMock = vi.hoisted(() => ({
 	$queryRaw: vi.fn(),
@@ -133,7 +134,7 @@ describe('super monthly bonus vesting', () => {
 		expect(prismaMock.walletTransaction.count).toHaveBeenCalledWith({
 			where: expect.objectContaining({
 				status: { notIn: ['reversed', 'failed', 'cancelled'] },
-				NOT: { metadata: { path: ['suspectedSelfReferral'], equals: true } }
+				AND: [NOT_HELD_FOR_IDENTITY_REVIEW]
 			})
 		});
 	});
@@ -304,5 +305,76 @@ describe('affiliate reward reconciliation after partial refunds', () => {
 			where: { id: { in: ['adjustment-1'] } },
 			data: { status: 'reversed' }
 		});
+	});
+});
+
+describe('clearing job and identity-review holds', () => {
+	const due = '2026-09-01T00:00:00.000Z';
+
+	it('looks only for rewards not held for review, and clears an unflagged due reward', async () => {
+		prismaMock.walletTransaction.findMany.mockResolvedValue([
+			{
+				id: 'reward-9',
+				amount: 700,
+				walletId: 'wallet-1',
+				userId: 'affiliate-1',
+				metadata: { vestsAt: due, orderId: 'order-9' }
+			}
+		]);
+		txMock.walletTransaction.findUnique.mockResolvedValue({ status: 'pending', amount: 700 });
+		txMock.wallet.findUnique.mockResolvedValue({ balance: 2_800 });
+
+		const result = await vestMaturedAffiliateRewards();
+
+		const where = prismaMock.walletTransaction.findMany.mock.calls[0][0].where;
+		expect(where).toMatchObject({ type: 'affiliate_credit', status: 'pending' });
+		expect(where.AND).toEqual([NOT_HELD_FOR_IDENTITY_REVIEW]);
+		expect(where).not.toHaveProperty('NOT');
+		expect(result.vested).toBe(1);
+		expect(txMock.wallet.update).toHaveBeenCalledWith({
+			where: { id: 'wallet-1' },
+			data: { balance: 3_500 }
+		});
+		expect(txMock.walletTransaction.update).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: { id: 'reward-9' },
+				data: expect.objectContaining({ status: 'available' })
+			})
+		);
+	});
+
+	it('keeps a flagged reward held even if one reaches the job', async () => {
+		prismaMock.walletTransaction.findMany.mockResolvedValue([
+			{
+				id: 'reward-flagged',
+				amount: 700,
+				walletId: 'wallet-1',
+				userId: 'affiliate-1',
+				metadata: { vestsAt: due, suspectedSelfReferral: true }
+			}
+		]);
+
+		const result = await vestMaturedAffiliateRewards();
+
+		expect(result).toMatchObject({ vested: 0, skipped: 1 });
+		expect(txMock.walletTransaction.update).not.toHaveBeenCalled();
+		expect(txMock.wallet.update).not.toHaveBeenCalled();
+	});
+
+	it('leaves a reward that is not yet due as pending', async () => {
+		prismaMock.walletTransaction.findMany.mockResolvedValue([
+			{
+				id: 'reward-future',
+				amount: 700,
+				walletId: 'wallet-1',
+				userId: 'affiliate-1',
+				metadata: { vestsAt: '2999-01-01T00:00:00.000Z' }
+			}
+		]);
+
+		const result = await vestMaturedAffiliateRewards();
+
+		expect(result).toMatchObject({ vested: 0, skipped: 1 });
+		expect(txMock.walletTransaction.update).not.toHaveBeenCalled();
 	});
 });

@@ -36,6 +36,7 @@ import {
 } from '$lib/services/affiliate-policy';
 import { recordAffiliateEvent } from '$lib/services/affiliate-events';
 import { createAdminAuditLog } from '$lib/services/admin-audit';
+import { NOT_HELD_FOR_IDENTITY_REVIEW } from '$lib/services/affiliate-review-hold';
 
 export const AFFILIATE_REFERRAL_COOKIE = 'fa_aff_ref';
 
@@ -2598,7 +2599,7 @@ async function recordSuperMonthlyTierCrossing(
 			userId: superUserId,
 			reference: { startsWith: `super:activation:${superUserId}:` },
 			status: { notIn: [AFFILIATE_LEDGER_STATUS.reversed, 'failed', 'cancelled'] },
-			NOT: { metadata: { path: ['suspectedSelfReferral'], equals: true } },
+			AND: [NOT_HELD_FOR_IDENTITY_REVIEW],
 			createdAt: { gte: startOfMonth, lt: endOfMonth }
 		}
 	});
@@ -2756,7 +2757,7 @@ export async function reconcileSuperMonthlyBonusAfterActivationReversal(
 			userId: superUserId,
 			reference: { startsWith: `super:activation:${superUserId}:` },
 			status: { notIn: [AFFILIATE_LEDGER_STATUS.reversed, 'failed', 'cancelled'] },
-			NOT: { metadata: { path: ['suspectedSelfReferral'], equals: true } },
+			AND: [NOT_HELD_FOR_IDENTITY_REVIEW],
 			createdAt: { gte: monthStart, lt: monthEnd }
 		}
 	});
@@ -4126,7 +4127,7 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 					userId,
 					reference: { startsWith: `super:activation:${userId}:` },
 					status: { notIn: [AFFILIATE_LEDGER_STATUS.reversed, 'failed', 'cancelled'] },
-					NOT: { metadata: { path: ['suspectedSelfReferral'], equals: true } }
+					AND: [NOT_HELD_FOR_IDENTITY_REVIEW]
 				},
 				select: { reference: true, createdAt: true }
 			}),

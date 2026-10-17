@@ -9,6 +9,7 @@ import {
 	isAffiliateEligibleOrderType
 } from '$lib/services/affiliate-policy';
 import { recordAffiliateEvent } from '$lib/services/affiliate-events';
+import { NOT_HELD_FOR_IDENTITY_REVIEW } from '$lib/services/affiliate-review-hold';
 
 // Affiliate rewards VEST before they become usable: a reward is recorded as `pending`
 // (not counted toward the spendable or withdrawable balance) and only flips to
@@ -57,7 +58,7 @@ async function superRewardStillQualifies(
 				userId,
 				reference: { startsWith: `super:activation:${userId}:` },
 				status: { notIn: ['reversed', 'failed', 'cancelled'] },
-				NOT: { metadata: { path: ['suspectedSelfReferral'], equals: true } },
+				AND: [NOT_HELD_FOR_IDENTITY_REVIEW],
 				createdAt: { gte: start, lt: end }
 			}
 		});
@@ -310,7 +311,7 @@ export async function vestMaturedAffiliateRewards(limit = 500): Promise<{
 			status: 'pending',
 			// Rewards held for identity review must never auto-vest, but they also
 			// must not occupy a bounded batch forever and starve legitimate rewards.
-			NOT: { metadata: { path: ['suspectedSelfReferral'], equals: true } }
+			AND: [NOT_HELD_FOR_IDENTITY_REVIEW]
 		},
 		select: { id: true, amount: true, walletId: true, userId: true, metadata: true },
 		orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],

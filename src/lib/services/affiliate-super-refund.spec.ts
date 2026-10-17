@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { NOT_HELD_FOR_IDENTITY_REVIEW } from './affiliate-review-hold';
 
 const mocks = vi.hoisted(() => ({
 	countActivations: vi.fn(),
@@ -127,7 +128,7 @@ describe('super monthly bonus refund reconciliation', () => {
 		expect(mocks.countActivations).toHaveBeenCalledWith({
 			where: expect.objectContaining({
 				status: { notIn: ['reversed', 'failed', 'cancelled'] },
-				NOT: { metadata: { path: ['suspectedSelfReferral'], equals: true } }
+				AND: [NOT_HELD_FOR_IDENTITY_REVIEW]
 			})
 		});
 		expect(tx.walletTransaction.update).toHaveBeenCalledOnce();
