@@ -6,8 +6,14 @@ import { runWinBackCampaign } from '$lib/services/winback';
 import type { AutomationJobName } from '$lib/server/automation-jobs';
 import { runBoostingShadowRouter } from '$lib/server/boosting-providers/shadow-router';
 import { prepopulateBoostingDraftSuggestions } from '$lib/server/boosting-providers/draft-suggestions';
+import { reviewOverdueBoostOrders } from '$lib/services/boosting-support-review';
+import { emailBoostingAttention } from '$lib/services/boosting-attention-email';
 
 const MANUAL_AUTOMATION_WORK = {
+	'boosting-support-review': async () => ({
+		...(await reviewOverdueBoostOrders()),
+		emailAlerts: await emailBoostingAttention()
+	}),
 	'exact-preview-thumbnails': () => generateMissingExactPreviewThumbnails({ limit: 6 }),
 	'low-stock-alerts': () => sendLowStockAdminAlertIfNeeded('admin_manual_low_stock'),
 	'boosting-draft-suggestions': () => prepopulateBoostingDraftSuggestions(),

@@ -5,6 +5,9 @@ import { defineConfig } from 'vite';
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 	server: {
+		// Generated build artifacts and screenshots are not dev source. Reloading on these
+		// interrupts reviews and retains large obsolete module graphs during repeated builds.
+		watch: { ignored: ['**/.svelte-kit/output/**', '**/.vercel/output/**', '**/__screenshots__/**'] },
 		allowedHosts: ['matha-excursionary-veraciously.ngrok-free.dev']
 	},
 	test: {

@@ -59,14 +59,14 @@
 				})
 			});
 			const result = await response.json();
-				if (!response.ok || !result.success) {
-					error = result.error || 'Login failed.';
-					return;
-				}
+			if (!response.ok || !result.success) {
+				error = result.error || 'Login failed.';
+				return;
+			}
 
-				await invalidateAll();
-				await goto(result.redirectTo || redirectTo);
-			} catch (loginError) {
+			await invalidateAll();
+			await goto(result.redirectTo || redirectTo);
+		} catch (loginError) {
 			console.error('Login failed:', loginError);
 			error = 'Unable to log in right now. Please try again.';
 		} finally {
@@ -102,7 +102,7 @@
 			class="mb-6 flex items-center gap-2 transition-colors hover:opacity-80"
 		>
 			<ArrowLeft size={20} />
-			<span class="text-sm sm:text-base">Back to Home</span>
+			<span class="text-sm sm:text-base">Back to browsing</span>
 		</button>
 
 		<!-- Login Card -->
@@ -115,7 +115,7 @@
 				style="background: var(--bg-elev-2); border-bottom: 1px solid var(--border); color: var(--text-primary); font-family: var(--font-heading);"
 				class="px-6 py-6 text-center sm:px-8 sm:py-8"
 			>
-				<h1 class="mb-2 text-2xl font-bold sm:text-3xl">Account Required</h1>
+				<h1 class="mb-2 text-2xl font-bold sm:text-3xl">Sign in to FastAccs</h1>
 			</div>
 
 			<!-- Content -->
@@ -189,8 +189,7 @@
 					<div class="h-px" style="background: var(--border);"></div>
 					<span
 						class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-2 text-xs"
-						style="background: var(--bg-elev-1); color: var(--text-muted);"
-						>or continue with</span
+						style="background: var(--bg-elev-1); color: var(--text-muted);">or continue with</span
 					>
 				</div>
 
@@ -222,16 +221,6 @@
 						<span class="font-medium">Continue with Google</span>
 					</a>
 
-					<div class="text-center">
-						<button
-							onclick={goBack}
-							style="color: var(--text-muted); font-family: var(--font-body);"
-							class="text-sm transition-colors hover:opacity-80 active:scale-95"
-						>
-							← Back to browsing
-						</button>
-					</div>
-
 					<div class="text-center text-sm" style="color: var(--text-muted);">
 						No account yet?
 						<a
@@ -241,31 +230,6 @@
 						>
 							Create account
 						</a>
-					</div>
-				</div>
-
-				<!-- Features -->
-				<div class="mt-6 space-y-3 sm:mt-8">
-					<div
-						style="color: var(--text-muted); font-family: var(--font-body);"
-						class="flex items-center gap-3 text-sm"
-					>
-						<div style="background: var(--primary);" class="h-2 w-2 rounded-full"></div>
-						<span>Browse all available products</span>
-					</div>
-					<div
-						style="color: var(--text-muted); font-family: var(--font-body);"
-						class="flex items-center gap-3 text-sm"
-					>
-						<div style="background: var(--primary);" class="h-2 w-2 rounded-full"></div>
-						<span>View detailed product information</span>
-					</div>
-					<div
-						style="color: var(--text-muted); font-family: var(--font-body);"
-						class="flex items-center gap-3 text-sm"
-					>
-						<div style="background: var(--primary);" class="h-2 w-2 rounded-full"></div>
-						<span>Contact support for purchases</span>
 					</div>
 				</div>
 			</div>

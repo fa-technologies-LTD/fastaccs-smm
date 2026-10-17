@@ -1,10 +1,10 @@
 import { json } from '@sveltejs/kit';
 import { Prisma } from '@prisma/client';
 import { env } from '$env/dynamic/private';
-import { getBoostingDisplayExpectationChips } from '$lib/helpers/boosting-service-config';
 import { prisma } from '$lib/prisma';
-import { supportsBoostServiceInput } from '$lib/helpers/boosting-service-input';
-import { serviceMatchesBoostOutcome } from '$lib/server/boosting-providers/catalog-normalizer';
+import { boostSaleInclude, inspectBoostSale } from '$lib/server/boosting-sale-readiness';
+import { boostCustomerCopy, boostCustomerOptionName } from '$lib/helpers/boosting-customer-copy';
+import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
 import {
 	BOOSTING_MANAGED_STOREFRONT_KEY,
 	isBoostingManagedStorefrontEnabled
@@ -20,103 +20,66 @@ function isFoundationPending(error: unknown): boolean {
 
 export const GET: RequestHandler = async ({ setHeaders }) => {
 	setHeaders({
-		'cache-control': 'public, max-age=15, s-maxage=30',
+		'cache-control': 'no-store',
 		...(/^[a-f0-9]{40}$/i.test(env.VERCEL_GIT_COMMIT_SHA || '')
 			? { 'x-app-revision': env.VERCEL_GIT_COMMIT_SHA }
 			: {})
 	});
 	try {
-		const [offers, rolloutMarker] = await Promise.all([
+		const [offers, rolloutMarker, pricing] = await Promise.all([
 			prisma.boostCustomerOffer.findMany({
 				where: {
 					status: 'live',
 					category: { categoryType: 'boosting_service', isActive: true },
 					routes: { some: { state: 'enabled', equivalenceApproved: true } }
 				},
-				select: {
-					id: true,
-					categoryId: true,
-					platform: true,
-					outcome: true,
-					targetType: true,
-					customerName: true,
-					shortPromise: true,
-					expectationChips: true,
-					qualityTier: true,
-					minQuantity: true,
-					maxQuantity: true,
-					stepQuantity: true,
-					quantityPresets: true,
-					pricePerStepNgn: true,
-					refillDays: true,
-					displayOrder: true,
-					routingPolicy: true,
-					lockedRouteId: true,
-					routes: {
-						where: { state: 'enabled', equivalenceApproved: true },
-						select: {
-							id: true,
-							providerService: {
-								select: {
-									name: true,
-									category: true,
-									providerType: true,
-									platforms: true,
-									unavailableAt: true
-								}
-							}
-						}
-					}
-				},
+				include: boostSaleInclude,
 				orderBy: [{ displayOrder: 'asc' }, { customerName: 'asc' }]
 			}),
 			prisma.microcopy.findUnique({
 				where: { key: BOOSTING_MANAGED_STOREFRONT_KEY },
 				select: { value: true, isActive: true }
-			})
+			}),
+			getBoostingPricingConfig()
 		]);
 		// Published rows alone must not collect money while production dispatch is disabled.
 		const automationReady = env.BOOSTING_AUTOMATION_MODE === 'live';
-		const compatibleOffers = (automationReady ? offers : []).filter((offer) =>
-			(offer.routingPolicy === 'locked'
-				? offer.routes.filter((route) => route.id === offer.lockedRouteId)
-				: offer.routes
-			).some(
-				({ providerService: service }) =>
-					!service.unavailableAt &&
-					service.platforms.includes(offer.platform) &&
-					supportsBoostServiceInput(service.providerType, offer.outcome) &&
-					serviceMatchesBoostOutcome(service, offer.outcome)
-			)
-		);
+		const compatibleOffers = (automationReady ? offers : []).flatMap((offer) => {
+			const readiness = inspectBoostSale(offer, pricing.usdNgnRate);
+			return readiness.available ? [{ offer, readiness }] : [];
+		});
 		return json({
 			success: true,
 			automationReady,
 			managedRolloutActive: isBoostingManagedStorefrontEnabled(rolloutMarker, offers.length > 0),
-			data: compatibleOffers.map((offer) => ({
+			data: compatibleOffers.map(({ offer, readiness }) => ({
 				id: offer.id,
 				categoryId: offer.categoryId,
 				platform: offer.platform,
 				outcome: offer.outcome,
 				targetType: offer.targetType,
-				customerName: offer.customerName,
-				shortPromise: offer.shortPromise,
+				...boostCustomerCopy(offer),
+				customerName: boostCustomerOptionName(
+					offer,
+					compatibleOffers
+						.filter((entry) => entry.offer.categoryId === offer.categoryId)
+						.findIndex((entry) => entry.offer.id === offer.id),
+					compatibleOffers.filter((entry) => entry.offer.categoryId === offer.categoryId).length
+				),
 				qualityTier: offer.qualityTier,
 				minQuantity: offer.minQuantity,
-				maxQuantity: offer.maxQuantity,
+				maxQuantity: readiness.maximumQuantity,
 				stepQuantity: offer.stepQuantity,
 				quantityPresets: offer.quantityPresets,
 				refillDays: offer.refillDays,
 				displayOrder: offer.displayOrder,
-				expectationChips: getBoostingDisplayExpectationChips(offer.expectationChips),
 				pricePerStepNgn: Number(offer.pricePerStepNgn)
 			}))
 		});
 	} catch (error) {
-		// The rollout is additive: before its deliberate migration, the existing category copy remains
-		// the storefront source of truth instead of breaking or hiding today's Boosting catalogue.
+		// Missing safety data must not resurrect legacy prices or purchase forms.
 		if (isFoundationPending(error)) {
-			return json({ success: true, managedRolloutActive: false, data: [] });
+			return json({ success: true, managedRolloutActive: true, automationReady: false, data: [] });
 		}
 		throw error;
 	}

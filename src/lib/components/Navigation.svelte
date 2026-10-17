@@ -642,6 +642,8 @@
 					onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
 					class="cart-btn flex items-center justify-center p-2"
 					aria-label="Toggle mobile menu"
+					aria-expanded={mobileMenuOpen}
+					aria-controls="mobile-navigation"
 				>
 					{#if mobileMenuOpen}
 						<X class="h-6 w-6" />
@@ -656,6 +658,7 @@
 	<!-- Mobile menu -->
 	{#if mobileMenuOpen}
 		<div
+			id="mobile-navigation"
 			class="min-[1160px]:hidden"
 			style="border-top: 1px solid var(--border); background: var(--bg-elev-1);"
 		>

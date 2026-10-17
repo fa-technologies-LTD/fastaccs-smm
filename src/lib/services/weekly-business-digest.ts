@@ -7,6 +7,7 @@ import {
 	getOperationalAlertRecipients
 } from '$lib/services/admin-settings';
 import { sendEmail } from '$lib/services/email';
+import { shouldEmailAdmin } from '$lib/helpers/admin-email-policy';
 import { EMAIL_FAILURE_NOISE_FILTER } from '$lib/services/email-failure-filters';
 import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 
@@ -177,6 +178,8 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 	reason?: string;
 	recipientsSent?: number;
 }> {
+	if (!shouldEmailAdmin('routine_summary'))
+		return { sent: false, reason: 'routine_admin_email_disabled' };
 	const [timezone, recipients, lowStockThreshold] = await Promise.all([
 		getBusinessTimezoneSetting().catch(() => 'Africa/Lagos'),
 		getOperationalAlertRecipients(),

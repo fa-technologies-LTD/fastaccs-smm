@@ -63,6 +63,12 @@ it('reports missing supplier costs as unknown, not zero-margin-free stock', asyn
 		recordedMarginNgn: null
 	});
 });
+it('does not invent payment fees or advertise final profit when fees are not recorded', async () => {
+	expect((await getBoostingAnalytics(true, db as never)).overall).toMatchObject({
+		paymentFeesNgn: null,
+		profitAfterPaymentFeesNgn: null
+	});
+});
 it('redacts revenue and provider account balances for restricted admins', async () => {
 	const a = await getBoostingAnalytics(false, db as never);
 	expect(a.overall).toMatchObject({
@@ -77,7 +83,10 @@ it('uses paid history, discount/refund attribution and historical final charges,
 	await getBoostingAnalytics(true, db as never);
 	const query = db.$queryRaw.mock.calls[0][0];
 	expect(query.sql).toContain('COUNT(DISTINCT order_id)');
-	expect(query.sql).toContain('final_supplier_cost_usd * f.fx_ngn_per_usd');
+	expect(query.sql).toContain('charges.total_usd * f.fx_ngn_per_usd');
+	expect(query.sql).toContain('DISTINCT ON (a.provider_key, a.supplier_order_id)');
+	expect(query.sql).toContain("a.type='status_poll'");
+	expect(query.sql).toContain('count(charge)=count(*)');
 	expect(query.sql).toContain('order_refund - attributed_refund');
 	expect(query.sql).toContain('full_refund THEN 0');
 	expect(query.sql).not.toMatch(/quoted_supplier|projected_margin/);

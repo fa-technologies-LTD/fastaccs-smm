@@ -1,6 +1,13 @@
-/** Keep keyboard focus inside the active admin dialog and restore it when closed. */
+let scrollLocks = 0;
+let previousOverflow = '';
+
+/** Keep keyboard focus inside the dialog, stop background scrolling and restore both on close. */
 export function adminDialog(node: HTMLElement, close: () => void) {
 	const previous = document.activeElement as HTMLElement | null;
+	if (scrollLocks++ === 0) {
+		previousOverflow = document.body.style.overflow;
+		document.body.style.overflow = 'hidden';
+	}
 	node.focus();
 	const keydown = (event: KeyboardEvent) => {
 		if (event.key === 'Escape') {
@@ -37,7 +44,8 @@ export function adminDialog(node: HTMLElement, close: () => void) {
 	return {
 		destroy() {
 			node.removeEventListener('keydown', keydown);
-			previous?.focus();
+			if (--scrollLocks === 0) document.body.style.overflow = previousOverflow;
+			if (previous?.isConnected) previous.focus({ preventScroll: true });
 		}
 	};
 }

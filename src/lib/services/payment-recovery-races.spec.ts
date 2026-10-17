@@ -67,4 +67,19 @@ describe('paid recovery concurrent terminal transitions', () => {
 		expect(mocks.queue).not.toHaveBeenCalled();
 		expect(mocks.notify).not.toHaveBeenCalled();
 	});
+	it('queues an ordinary paid Boosting order without a per-sale admin email', async () => {
+		mocks.order.findUnique.mockResolvedValue({
+			id: 'order',
+			userId: 'buyer',
+			status: 'paid',
+			paymentStatus: 'paid',
+			deliveryStatus: 'processing'
+		});
+		mocks.milestones.mockResolvedValue(undefined);
+		mocks.boosting.mockResolvedValue(true);
+		mocks.order.updateMany.mockResolvedValue({ count: 1 });
+		await recoverPaidOrder('order', 'reconcile');
+		expect(mocks.queue).toHaveBeenCalledOnce();
+		expect(mocks.notify).not.toHaveBeenCalled();
+	});
 });

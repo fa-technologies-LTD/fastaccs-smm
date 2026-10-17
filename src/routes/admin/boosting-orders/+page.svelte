@@ -26,6 +26,7 @@
 
 	type StatusFilter =
 		| 'active'
+		| 'overdue'
 		| 'pending'
 		| 'needs_link'
 		| 'in_progress'
@@ -39,6 +40,8 @@
 
 	interface BoostingOrderItem {
 		id: string;
+		holdReasons?: string[];
+		overdueReview?: boolean;
 		productName: string;
 		boostTargetUrl: string;
 		boostQuantity: number | null;
@@ -95,6 +98,7 @@
 		search: string;
 		statusCounts: Record<string, number>;
 		activeCount: number;
+		overdueCount?: number;
 		totalItems: number;
 		canRunShadowRouting: boolean;
 	}
@@ -133,6 +137,7 @@
 
 	const statusOptions = $derived([
 		{ value: 'active' as const, label: 'Active', count: activeCount },
+		{ value: 'overdue' as const, label: '24h review', count: meta.overdueCount || 0 },
 		{ value: 'pending' as const, label: 'Pending', count: meta.statusCounts.pending || 0 },
 		{
 			value: 'under_review' as const,
@@ -248,12 +253,6 @@
 		if (provider === 'smm_raja') return 'SMM Raja';
 		if (provider === 'bulk_follows') return 'BulkFollows';
 		return 'No route';
-	}
-
-	function shadowAttentionLabel(attention: string | null): string {
-		if (attention === 'target_review_needed') return 'Review this official share link first.';
-		if (attention === 'invalid_target') return 'The link does not match this service.';
-		return 'No mapped route passes every safety check yet.';
 	}
 
 	function copyToClipboard(text: string, message = 'Copied') {
@@ -522,7 +521,8 @@
 		{#if canViewRevenue && analytics.overall.items > 0}
 			<p class="text-xs" style="color: var(--text-muted);">
 				Recorded margin is after refunds and known supplier charges, before payment fees. It is not
-				final profit.
+				final profit. Actual payment fees are not recorded. Repeated polls are counted once per
+				supplier order; missing charges remain unknown.
 			</p>
 		{/if}
 		{#if canViewRevenue && analytics.overall.knownCostItems < analytics.overall.items}<p
@@ -793,6 +793,22 @@
 					</div>
 				{/if}
 
+				{#if item.holdReasons?.length}
+					<section
+						class="mt-3 rounded-lg border p-3"
+						style="border-color: rgba(234,179,8,.3); background: rgba(234,179,8,.06);"
+						aria-label="Why this order needs review"
+					>
+						<p class="text-sm font-bold" style="color: #facc15;">Why this order needs review</p>
+						<ul class="mt-2 list-disc pl-5 text-sm" style="color: var(--text-muted);">
+							{#each item.holdReasons as reason}<li>{reason}</li>{/each}
+						</ul>
+						<p class="mt-2 text-xs" style="color: var(--text-dim);">
+							These are recorded checks, not a fresh supplier status. Review delivery and charges
+							before resolving the order.
+						</p>
+					</section>
+				{/if}
 				{#if item.shadowDecision}
 					<div
 						class="mt-3 rounded-lg border p-3"
@@ -824,9 +840,9 @@
 									{formatMonetaryAmount(item.shadowDecision.projectedMarginNgn ?? 0)} projected margin
 								</p>
 							{/if}
-						{:else}
+						{:else if !item.holdReasons?.length}
 							<p class="mt-1 text-sm" style="color: #facc15;">
-								{shadowAttentionLabel(item.shadowDecision.attention)}
+								No supplier submission is recorded. Review this order’s history.
 							</p>
 						{/if}
 					</div>
@@ -867,6 +883,13 @@
 						>
 					</p>
 					<div class="flex flex-wrap gap-2">
+						{#if item.overdueReview}
+							<p
+								class="w-full rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300"
+							>
+								24-hour review due. Delivery is still open; this is not confirmed failure.
+							</p>
+						{/if}
 						<a
 							href={`/admin/orders/${item.order.id}`}
 							class="rounded-lg border px-3 py-1.5 text-xs font-semibold"

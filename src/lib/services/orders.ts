@@ -1,4 +1,5 @@
 import type { Order, OrderItem, User, Category, Account } from '@prisma/client';
+import type { CheckoutQuote } from '$lib/helpers/checkout-quote';
 
 // Re-export Prisma types that are used by components
 export type { OrderItem };
@@ -28,6 +29,7 @@ export interface CreateOrderData {
 		accountAddonKey?: string;
 	}[];
 	totalAmount: number;
+	acceptedQuote?: CheckoutQuote;
 	currency: string;
 	paymentMethod: string;
 	checkoutKey?: string;
@@ -57,22 +59,39 @@ async function handleApiCall(response: Response) {
 		let errorText = raw;
 		let traceId = '';
 		let orderId = '';
+		let details: {
+			code?: string;
+			quote?: CheckoutQuote;
+			categoryId?: string;
+			boostOfferId?: string;
+		} = {};
 		try {
 			const parsed = JSON.parse(raw) as {
 				error?: unknown;
 				message?: unknown;
 				traceId?: unknown;
 				orderId?: unknown;
+				code?: string;
+				quote?: CheckoutQuote;
+				categoryId?: string;
+				boostOfferId?: string;
 			};
 			errorText = String(parsed.error || parsed.message || raw);
 			traceId = typeof parsed.traceId === 'string' ? parsed.traceId.trim().slice(0, 100) : '';
 			orderId = typeof parsed.orderId === 'string' ? parsed.orderId.trim() : '';
+			details = {
+				code: parsed.code,
+				quote: parsed.quote,
+				categoryId: parsed.categoryId,
+				boostOfferId: parsed.boostOfferId
+			};
 		} catch {
 			errorText = raw;
 		}
 		const reference = traceId ? ` Reference: ${traceId}` : '';
 		return {
 			data: null,
+			...details,
 			error: `HTTP ${response.status}: ${errorText}${reference}`,
 			...(orderId ? { orderId } : {})
 		};

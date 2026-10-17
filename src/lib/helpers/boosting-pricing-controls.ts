@@ -4,7 +4,13 @@ import type {
 	BoostPricingQuote,
 	BoostPricingView
 } from './boosting-pricing-sheet';
-import { pricingEconomics, pricingStepPrice, pricingWarnings } from './boosting-pricing-sheet';
+import {
+	pricingEconomics,
+	pricingStepPrice,
+	pricingWarnings,
+	pricingStart,
+	pricingQuantityMaximum
+} from './boosting-pricing-sheet';
 import { roundUpCatalogPriceNgn } from './catalog-pricing';
 
 export interface BoostingSetupData {
@@ -34,6 +40,26 @@ export interface BoostControlsView extends BoostPricingView {
 	>;
 	archivedDraft: boolean;
 	catalogMaxAgeMinutes?: number;
+	availability?: Record<string, { reasons: string[]; checkedAt: string }>;
+}
+
+/** Surface the first actionable blocker, not a generic review badge. */
+export function boostReadinessSummary(
+	blockers: string[],
+	warnings: string[],
+	isLive: boolean
+): string {
+	const issue = blockers[0] ?? warnings[0];
+	if (!issue) return isLive ? 'Live' : 'Ready to publish';
+	const labels: Record<string, string> = {
+		'Review supplier setup.': 'Supplier not approved',
+		'Set up this offer.': 'Offer not set up',
+		'Choose a supplier.': 'No supplier selected',
+		'Refresh supplier costs.': 'Refresh costs',
+		'Below supplier minimum.': 'Quantity below supplier minimum',
+		'Supplier cost exceeds reviewed limit.': 'Supplier cost over approved limit'
+	};
+	return labels[issue] ?? issue.replace(/\.$/, '');
 }
 
 export function validateBoostRules(settings: BoostPricingSheet['settings']) {
@@ -77,6 +103,17 @@ export function boostRowWarnings(
 	quote: BoostPricingQuote | null
 ): string[] {
 	const issues = [...(quote?.issues ?? ['Choose a supplier.'])];
+	if (row.maximumQuantity != null && row.maximumQuantity < row.startingQuantity)
+		issues.push('Maximum quantity is below the minimum.');
+	if (row.maximumQuantity != null && quote?.max != null && row.maximumQuantity > quote.max)
+		issues.push('Maximum quantity exceeds supplier limit.');
+	const customerStart = pricingStart(row, quote?.max ?? null);
+	const effectiveMax = pricingQuantityMaximum(row, quote?.max ?? null);
+	if (
+		effectiveMax != null &&
+		(customerStart > effectiveMax || (customerStart / row.units) * row.sale <= 450)
+	)
+		issues.push('Maximum quantity is too low to reach the ₦500 checkout minimum.');
 	const economics = pricingEconomics(row, sheet, quote);
 	if (!row.sourceOfferId) issues.push('Set up this offer.');
 	if (quote?.min != null && row.startingQuantity < quote.min)
@@ -121,7 +158,12 @@ export function boostControlSignature(row: BoostPricingRow): string {
 		row.targetMarkup,
 		row.useDefaultMarkup ?? false,
 		row.profitTargetNgn ?? null,
-		row.hardProfitNgn ?? null
+		row.hardProfitNgn ?? null,
+		row.startingQuantity,
+		row.increment,
+		row.maximumQuantity ?? null,
+		row.option,
+		row.shortPromise ?? ''
 	]);
 }
 

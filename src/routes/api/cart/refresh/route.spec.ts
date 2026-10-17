@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { saleOfferFixture } from '$lib/server/boosting-sale-readiness-fixtures';
+vi.mock('$lib/services/boosting-pricing', () => ({
+	getBoostingPricingConfig: async () => ({ usdNgnRate: 1500 })
+}));
 
 const mocks = vi.hoisted(() => ({ categories: vi.fn(), offers: vi.fn(), maintenance: vi.fn() }));
 vi.mock('$lib/prisma', () => ({
@@ -33,6 +37,7 @@ beforeEach(() => {
 	]);
 	mocks.offers.mockResolvedValue([
 		{
+			...saleOfferFixture(),
 			id: offerId,
 			categoryId,
 			customerName: 'Premium',
@@ -41,7 +46,22 @@ beforeEach(() => {
 			minQuantity: 10,
 			maxQuantity: 500,
 			stepQuantity: 1,
-			pricePerStepNgn: 10.5
+			pricePerStepNgn: 10.5,
+			routes: [
+				{
+					...saleOfferFixture().routes[0],
+					minimumQuantity: 1,
+					verifiedSignals: [],
+					providerService: {
+						...saleOfferFixture().routes[0].providerService,
+						name: 'TikTok Custom Comments',
+						category: 'TikTok Custom Comments',
+						providerType: 'Custom Comments',
+						outcomes: ['custom_comments'],
+						minQuantity: 1
+					}
+				}
+			]
 		}
 	]);
 });
@@ -76,6 +96,15 @@ async function refresh(comments: unknown, quantity: number) {
 }
 
 describe('Boosting custom comments survive cart refresh', () => {
+	it('removes a known-unavailable mapping and keeps supplier details private', async () => {
+		const offers = await mocks.offers();
+		offers[0].routes[0].providerService.providerState.projectedBalance = 0;
+		mocks.offers.mockResolvedValue(offers);
+		const result = await refresh(Array.from({ length: 10 }, () => 'Good product').join('\n'), 10);
+		expect(result.data.items).toEqual([]);
+		expect(result.data.messages[0]).toContain('currently unavailable');
+		expect(JSON.stringify(result)).not.toContain('FIXTURE-NOT-REAL');
+	});
 	it('preserves normalized comments, quantity, offer and server-owned pricing', async () => {
 		const lines = Array.from({ length: 10 }, (_, index) => `Lovely product ${index + 1}!`);
 		const result = await refresh(` ${lines.join(' \r\n ')} \r\n\r\n`, 10);
@@ -109,6 +138,7 @@ describe('Boosting custom comments survive cart refresh', () => {
 	it('leaves ordinary Boosting lines unchanged and does not attach custom text', async () => {
 		mocks.offers.mockResolvedValue([
 			{
+				...saleOfferFixture(),
 				id: offerId,
 				categoryId,
 				customerName: 'Affordable',
@@ -117,7 +147,14 @@ describe('Boosting custom comments survive cart refresh', () => {
 				minQuantity: 10,
 				maxQuantity: 500,
 				stepQuantity: 1,
-				pricePerStepNgn: 5
+				pricePerStepNgn: 5,
+				routes: [
+					{
+						...saleOfferFixture().routes[0],
+						minimumQuantity: 1,
+						providerService: { ...saleOfferFixture().routes[0].providerService, minQuantity: 1 }
+					}
+				]
 			}
 		]);
 		const result = await refresh(undefined, 10);

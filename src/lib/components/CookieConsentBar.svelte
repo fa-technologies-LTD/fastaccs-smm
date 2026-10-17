@@ -7,6 +7,19 @@
 	} from '$lib/helpers/privacyConsent';
 
 	let visible = $state(false);
+	let notice = $state<HTMLDivElement>();
+	$effect(() => {
+		if (!visible || !notice) return;
+		const resize = () =>
+			document.documentElement.style.setProperty(
+				'--cookie-notice-mobile-offset',
+				`${Math.ceil(notice!.getBoundingClientRect().height) + 24}px`
+			);
+		resize();
+		const observer = new ResizeObserver(resize);
+		observer.observe(notice);
+		return () => observer.disconnect();
+	});
 
 	function setMobileNoticeOffset(show: boolean) {
 		if (typeof document === 'undefined') return;
@@ -19,7 +32,11 @@
 
 	// An explicit choice either way (Nigeria GAID 2025): optional cookies only after "Accept".
 	function choose(level: CookieConsentLevel) {
-		saveCookieConsent(level);
+		try {
+			saveCookieConsent(level);
+		} catch {
+			/* storage denied: optional tracking stays off */
+		}
 		visible = false;
 		setMobileNoticeOffset(false);
 	}
@@ -36,6 +53,7 @@
 
 {#if visible}
 	<div
+		bind:this={notice}
 		class="cookie-notice fixed right-3 bottom-3 left-3 z-[80] sm:right-5 sm:bottom-5 sm:left-auto"
 		style="background: rgba(7, 9, 12, 0.94); border-color: var(--border); backdrop-filter: blur(12px);"
 		role="status"

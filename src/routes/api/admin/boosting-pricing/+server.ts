@@ -40,15 +40,11 @@ export const POST: RequestHandler = async ({ locals, request, url, setHeaders })
 		const body = JSON.parse(text);
 		if (!body || typeof body !== 'object' || Array.isArray(body))
 			throw new BoostPricingError('Invalid request.');
-		if (body.action === 'save')
-			await saveBoostControls(
-				body.sheet,
-				locals.user!.id,
-				undefined,
-				false,
-				body.confirmPublish === true
-			);
-		else if (body.action === 'expand') {
+		if (body.action === 'save') {
+			if (body.confirmSave !== true)
+				throw new BoostPricingError('Review and confirm all changes before saving.');
+			await saveBoostControls(body.sheet, locals.user!.id, undefined, false, true);
+		} else if (body.action === 'expand') {
 			const results = await syncBoostProviderCatalogues();
 			if (!results.some((r) => r.status === 'synced'))
 				throw new BoostPricingError('Suppliers could not refresh. Nothing added.');

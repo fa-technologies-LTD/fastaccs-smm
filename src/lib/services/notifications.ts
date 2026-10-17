@@ -20,6 +20,8 @@ export type NotificationType =
 	| 'affiliate_payout';
 
 export function getNotificationActionUrl(type: string, orderId?: string | null): string | null {
+	if (type === 'admin_order_review' && orderId)
+		return `/admin/orders/${encodeURIComponent(orderId)}`;
 	if (orderId) return `/order/${encodeURIComponent(orderId)}`;
 	if (String(type || '').startsWith('affiliate_')) return '/dashboard?tab=affiliate';
 	if (type === 'store_credit') return '/dashboard';

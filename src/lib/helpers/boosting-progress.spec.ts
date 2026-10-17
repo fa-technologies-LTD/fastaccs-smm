@@ -8,6 +8,19 @@ const item = {
 	boostFulfillmentStatus: 'in_progress'
 };
 describe('buyer Boosting progress', () => {
+	it('explains overdue delivery without changing supplier status or losing partial evidence', () => {
+		const result = getBoostingProgress(
+			{ ...item, boostFulfillment: { remains: 3 } },
+			{ ...paid, paidAt: '2026-10-13T12:00:00Z' },
+			new Date('2026-10-14T12:00:00Z')
+		);
+		expect(result).toMatchObject({
+			status: 'in_progress',
+			label: 'In progress',
+			reportedDelivered: 7,
+			message: expect.stringContaining('Contact support')
+		});
+	});
 	it('keeps private supplier data out and bounds reported progress', () => {
 		const result = getBoostingProgress(
 			{

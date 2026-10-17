@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from 'crypto';
+import { matchesCheckoutQuote, type CheckoutQuote } from '$lib/helpers/checkout-quote';
 import { boostingMinimumMessage } from '$lib/helpers/boosting-checkout';
 import { parseBoostComments, supportsBoostServiceInput } from '$lib/helpers/boosting-service-input';
 import { serviceMatchesBoostOutcome } from '$lib/server/boosting-providers/catalog-normalizer';
+import { inspectBoostSale } from '$lib/server/boosting-sale-readiness';
+import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
+import { boostCustomerCopy } from '$lib/helpers/boosting-customer-copy';
 import {
 	BOOSTING_MANAGED_STOREFRONT_KEY,
 	isBoostingManagedStorefrontEnabled
@@ -114,6 +118,7 @@ interface CreateOrderInput {
 	phone?: string;
 	items?: CreateOrderItemInput[];
 	totalAmount?: number;
+	acceptedQuote?: CheckoutQuote;
 	currency?: string;
 	paymentMethod?: string;
 	checkoutKey?: string;
@@ -585,7 +590,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					include: {
 						routes: {
 							where: { state: 'enabled', equivalenceApproved: true },
-							include: { providerService: true }
+							include: { providerService: { include: { providerState: true } } }
 						}
 					}
 				})
@@ -606,7 +611,11 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			});
 			if (isBoostingManagedStorefrontEnabled(marker, boostOffers.length > 0))
 				return json(
-					{ success: false, error: 'Choose an available Boosting option again.' },
+					{
+						success: false,
+						code: 'ITEM_UNAVAILABLE',
+						error: 'Choose an available Boosting option again.'
+					},
 					{ status: 409 }
 				);
 		}
@@ -638,7 +647,12 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			const category = categoryById.get(item.categoryId);
 			if (!category) {
 				return json(
-					{ success: false, error: `Tier unavailable: ${item.categoryId}` },
+					{
+						success: false,
+						code: 'ITEM_UNAVAILABLE',
+						categoryId: item.categoryId,
+						error: 'This item is currently unavailable.'
+					},
 					{ status: 400 }
 				);
 			}
@@ -650,7 +664,10 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					return json(
 						{
 							success: false,
-							error: `${category.name}: this customer option is no longer available.`
+							error: `${category.name}: this customer option is no longer available.`,
+							code: 'ITEM_UNAVAILABLE',
+							categoryId: item.categoryId,
+							boostOfferId: item.boostOfferId
 						},
 						{ status: 409 }
 					);
@@ -689,7 +706,12 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				}
 				if (customComments && !offer)
 					return json(
-						{ success: false, error: 'Choose an available custom-comment option.' },
+						{
+							success: false,
+							code: 'ITEM_UNAVAILABLE',
+							categoryId: item.categoryId,
+							error: 'Choose an available custom-comment option.'
+						},
 						{ status: 409 }
 					);
 				if (
@@ -703,13 +725,23 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					)
 				) {
 					return json(
-						{ success: false, error: 'This option is being updated. Choose another.' },
+						{
+							success: false,
+							code: 'ITEM_UNAVAILABLE',
+							categoryId: item.categoryId,
+							boostOfferId: item.boostOfferId,
+							error: 'This option is being updated. Choose another.'
+						},
 						{ status: 409 }
 					);
 				}
 				if (offer && getBoostAutomationMode() !== 'live') {
 					return json(
-						{ success: false, error: 'Boosting is being updated. Please try again soon.' },
+						{
+							success: false,
+							code: 'BOOSTING_PAUSED',
+							error: 'Boosting is being updated. Please try again soon.'
+						},
 						{ status: 409 }
 					);
 				}
@@ -770,12 +802,31 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						{ status: 400 }
 					);
 				}
+				if (offer) {
+					const pricing = await getBoostingPricingConfig();
+					if (
+						!inspectBoostSale(offer, pricing.usdNgnRate, item.boostQuantity, {
+							customerPriceNgn: unitPrice
+						}).available
+					)
+						return json(
+							{
+								success: false,
+								error:
+									'This option is temporarily unavailable. Remove it from your cart or try again later.',
+								code: 'ITEM_UNAVAILABLE',
+								categoryId: item.categoryId,
+								boostOfferId: item.boostOfferId
+							},
+							{ status: 409 }
+						);
+				}
 
 				itemsWithNames.push({
 					categoryId: item.categoryId,
 					quantity: 1,
 					unitPrice,
-					categoryName: offer?.customerName || category.name,
+					categoryName: offer ? boostCustomerCopy(offer).customerName : category.name,
 					categoryMetadata: (category.metadata as Record<string, unknown> | null | undefined) || {},
 					deliveryMode: 'boosting_manual',
 					exactAccountId: null,
@@ -792,9 +843,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 								outcome: offer.outcome,
 								targetType: offer.targetType,
 								qualityTier: offer.qualityTier,
-								customerName: offer.customerName,
-								shortPromise: offer.shortPromise,
-								expectationChips: offer.expectationChips,
+								customerName: boostCustomerCopy(offer).customerName,
+								shortPromise: boostCustomerCopy(offer).shortPromise,
+								expectationChips: boostCustomerCopy(offer).expectationChips,
 								refillDays: offer.refillDays,
 								minimumMarginPercent: Number(offer.minimumMarginPercent),
 								maximumSupplierCostNgn: Number(offer.maximumSupplierCostNgn),
@@ -854,7 +905,12 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				: null;
 			if (item.accountAddonKey && !accountAddon) {
 				return json(
-					{ success: false, error: `${category.name}: follower add-on is no longer available.` },
+					{
+						success: false,
+						code: 'ITEM_UNAVAILABLE',
+						categoryId: item.categoryId,
+						error: `${category.name}: follower add-on is no longer available.`
+					},
 					{ status: 409 }
 				);
 			}
@@ -985,7 +1041,12 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			if (item.deliveryMode === 'manual_handover' || item.deliveryMode === 'auto_sms') {
 				if (!getTierStockStatus(item.categoryMetadata, 0).available) {
 					return json(
-						{ success: false, error: `${item.categoryName} is currently unavailable.` },
+						{
+							success: false,
+							code: 'ITEM_UNAVAILABLE',
+							categoryId: item.categoryId,
+							error: `${item.categoryName} is currently unavailable.`
+						},
 						{ status: 409 }
 					);
 				}
@@ -996,6 +1057,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				return json(
 					{
 						success: false,
+						code: 'ITEM_UNAVAILABLE',
+						categoryId: item.categoryId,
 						error:
 							availableCount > 0
 								? `Only ${availableCount} ${item.categoryName} ${availableCount === 1 ? 'account is' : 'accounts are'} available. Please refresh your cart.`
@@ -1191,6 +1254,31 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					{ status: 400 }
 				);
 		}
+		// Discounts affect revenue; store credit below is tender, not a price reduction.
+		if (boostOffers.length) {
+			const pricing = await getBoostingPricingConfig();
+			for (const item of itemsWithNames) {
+				const offer = item.boostOfferId ? boostOfferById.get(item.boostOfferId) : null;
+				if (
+					offer &&
+					!inspectBoostSale(offer, pricing.usdNgnRate, item.boostQuantity!, {
+						customerPriceNgn:
+							Math.round(((item.unitPrice * finalOrderTotal) / subtotalAmount) * 100) / 100
+					}).available
+				)
+					return json(
+						{
+							success: false,
+							error:
+								'This option is temporarily unavailable at the checkout price. Remove it from your cart or try again later.',
+							code: 'ITEM_UNAVAILABLE',
+							categoryId: item.categoryId,
+							boostOfferId: item.boostOfferId
+						},
+						{ status: 409 }
+					);
+			}
+		}
 
 		// Store-credit redemption (registered users, opt-in). The credit is
 		// reserve-debited in the order transaction below; a failed/expired payment
@@ -1207,6 +1295,15 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					traceId,
 					userId: checkoutUserId
 				});
+				return json(
+					{
+						success: false,
+						code: 'CREDIT_UNAVAILABLE',
+						error:
+							'We couldn’t check your store credit. No new order or payment has been started. Please try again.'
+					},
+					{ status: 503 }
+				);
 			}
 		}
 		const amountToCharge = Math.max(
@@ -1214,6 +1311,31 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			Math.round((finalOrderTotal - storeCreditRedemption.totalApplied) * 100) / 100
 		);
 		const isFullyCreditPaid = amountToCharge <= 0 && storeCreditRedemption.totalApplied > 0;
+		const quote: CheckoutQuote = {
+			subtotal: Math.round(subtotalAmount * 100) / 100,
+			discount: discountAmount,
+			total: finalOrderTotal,
+			creditApplied: storeCreditRedemption.totalApplied,
+			payable: amountToCharge,
+			linePrices: itemsWithNames.map((item) => item.unitPrice * item.quantity)
+		};
+		if (
+			(orderData.totalAmount !== undefined &&
+				(!Number.isFinite(orderData.totalAmount) ||
+					Math.round(orderData.totalAmount * 100) !== Math.round(finalOrderTotal * 100))) ||
+			(orderData.acceptedQuote !== undefined &&
+				!matchesCheckoutQuote(orderData.acceptedQuote, quote))
+		) {
+			return json(
+				{
+					success: false,
+					code: 'CHECKOUT_PRICE_CHANGED',
+					error: 'Your checkout total changed. Review the updated amount before continuing.',
+					quote
+				},
+				{ status: 409 }
+			);
+		}
 
 		// A zero/negative charge is only valid when store credit fully covers the
 		// order (the zero-charge path). Anything else — e.g. an over-discounted promo

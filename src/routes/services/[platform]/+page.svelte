@@ -89,23 +89,6 @@
 	);
 	const hasRefillOffer = $derived(services.some((service) => service.config.refillAvailable));
 
-	function qualityBadge(qualityTier: string | null, serviceName: string): string | null {
-		if (qualityTier === 'value') return 'Recommended';
-		const label =
-			qualityTier === 'premium' ? 'Premium' : qualityTier === 'stable' ? 'More stable' : null;
-		return label && label.toLowerCase() !== serviceName.trim().toLowerCase() ? label : null;
-	}
-
-	function qualityBadgeStyle(qualityTier: string | null): string {
-		if (qualityTier === 'premium') {
-			return 'background: rgba(168,85,247,.14); color: #d8b4fe; border-color: rgba(168,85,247,.3);';
-		}
-		if (qualityTier === 'stable') {
-			return 'background: rgba(59,130,246,.13); color: #93c5fd; border-color: rgba(59,130,246,.28);';
-		}
-		return 'background: rgba(16,185,129,.11); color: #6ee7b7; border-color: rgba(16,185,129,.25);';
-	}
-
 	const ACTION_ICONS: Record<BoostingActionType, typeof Heart> = {
 		followers: UserPlus,
 		subscribers: UserPlus,
@@ -504,11 +487,13 @@
 				style="border-color: var(--border); background: var(--bg-elev-1);"
 			>
 				<summary class="cursor-pointer font-semibold" style="color: var(--text);">
-					What does refill protection mean?
+					What does a refill option mean?
 				</summary>
 				<p class="mt-2 text-xs leading-relaxed" style="color: var(--text-muted);">
-					An “X-day refill” means the refill option stays available for that many days after
-					fulfilment. It works only while the original link and username stay unchanged.
+					The request window normally starts when the order is sent to the supplier, not when
+					delivery finishes. Your order shows the recorded deadline once eligibility can be checked.
+					Keep the original link and username unchanged. Requests are subject to eligibility and
+					supplier acceptance; this is not a guarantee against drops.
 				</p>
 			</details>
 		{/if}
@@ -559,14 +544,6 @@
 								</p>{/if}
 							<div class="flex flex-wrap items-center gap-2">
 								<p class="font-semibold" style="color: var(--text);">{service.name}</p>
-								{#if qualityBadge(service.qualityTier, service.name)}
-									<span
-										class="rounded-full border px-2 py-0.5 text-[10px] font-bold"
-										style={qualityBadgeStyle(service.qualityTier)}
-									>
-										{qualityBadge(service.qualityTier, service.name)}
-									</span>
-								{/if}
 							</div>
 							{#if isComingSoon}
 								<p class="text-xs font-medium" style="color: var(--status-pending);">Coming soon</p>
@@ -574,7 +551,8 @@
 								<p class="text-xs" style="color: var(--text-dim);">
 									From {formatPrice(startingPrice)}
 									{#if service.config.refillAvailable}
-										· {service.config.refillDays}-day refill protection included
+										· {service.config.refillDays}-day refill requests included; subject to
+										eligibility
 									{/if}
 								</p>
 							{/if}

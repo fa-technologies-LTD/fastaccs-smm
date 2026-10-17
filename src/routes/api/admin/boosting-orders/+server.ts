@@ -4,6 +4,9 @@ import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
+import { overdueBoostItemsWhere } from '$lib/services/boosting-support-review';
+import { isBoostOrderOverdue } from '$lib/helpers/boosting-overdue-review';
+import { boostHoldReasons } from '$lib/helpers/boosting-hold-reason';
 import {
 	BOOST_ITEM_STATUSES,
 	BOOST_ACTIVE_ITEM_STATUSES,
@@ -36,7 +39,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	}
 
 	const statusFilter = String(url.searchParams.get('status') || 'active').toLowerCase();
-	if (!['active', 'all', ...BOOST_ITEM_STATUSES].includes(statusFilter)) {
+	if (!['active', 'all', 'overdue', ...BOOST_ITEM_STATUSES].includes(statusFilter)) {
 		return json({ success: false, error: 'Choose a valid status.' }, { status: 400 });
 	}
 	const sort = url.searchParams.get('sort') === 'oldest' ? 'oldest' : 'newest';
@@ -67,7 +70,10 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			}
 		]
 	};
-	if (statusFilter === 'active') {
+	const now = new Date();
+	if (statusFilter === 'overdue') {
+		conditions.push(overdueBoostItemsWhere(now));
+	} else if (statusFilter === 'active') {
 		conditions.push(activeCondition);
 	} else if (BOOST_ITEM_STATUSES.includes(statusFilter as (typeof BOOST_ITEM_STATUSES)[number])) {
 		conditions.push(
@@ -112,7 +118,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		order: { paymentStatus: { in: [...CONFIRMED_PAYMENT_STATUSES] } }
 	};
 
-	const [total, items, statusGroups, activeCount] = await Promise.all([
+	const [total, items, statusGroups, activeCount, overdueCount] = await Promise.all([
 		prisma.orderItem.count({ where }),
 		prisma.orderItem.findMany({
 			where,
@@ -132,6 +138,9 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 						guestEmail: true,
 						createdAt: true,
 						paidAt: true,
+						paymentStatus: true,
+						status: true,
+						deliveryStatus: true,
 						user: { select: { email: true, fullName: true } }
 					}
 				},
@@ -146,7 +155,8 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			where: baseWhere,
 			_count: { _all: true }
 		}),
-		prisma.orderItem.count({ where: { AND: [baseWhere, activeCondition] } })
+		prisma.orderItem.count({ where: { AND: [baseWhere, activeCondition] } }),
+		prisma.orderItem.count({ where: overdueBoostItemsWhere(now) })
 	]);
 
 	const issueEvents = items.length
@@ -175,6 +185,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		supplierOrderId: string | null;
 		rawProviderStatus: string | null;
 		offerSnapshot: Prisma.JsonValue;
+		attempts?: Array<{ safeSummary: Prisma.JsonValue; createdAt: Date }>;
 		complaints: Array<{
 			id: string;
 			type: string;
@@ -208,6 +219,12 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 					supplierOrderId: true,
 					rawProviderStatus: true,
 					offerSnapshot: true,
+					attempts: {
+						where: { type: 'route_decision' },
+						orderBy: { createdAt: 'desc' },
+						take: 1,
+						select: { safeSummary: true, createdAt: true }
+					},
 					complaints: {
 						where: {
 							status: { in: [...BOOST_OPEN_COMPLAINT_STATUSES] }
@@ -283,7 +300,15 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 						: null;
 				return {
 					...item,
+					overdueReview: isBoostOrderOverdue(item, now),
 					latestIssue: latestIssueByItem.get(item.id) || null,
+					holdReasons:
+						shadow &&
+						!['completed', 'cancelled'].includes(
+							normalizeBoostItemStatus(item.boostFulfillmentStatus)
+						)
+							? boostHoldReasons(shadow.lastSafeErrorCategory, shadow.attempts?.[0]?.safeSummary)
+							: [],
 					shadowDecision:
 						shadow && canViewRevenue(locals)
 							? {
@@ -326,6 +351,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 				statusCounts,
 				totalItems: statusGroups.reduce((sum, group) => sum + group._count._all, 0),
 				activeCount,
+				overdueCount,
 				canRunShadowRouting: hasAdminPermission(locals.adminContext, 'admin:settings:manage')
 			},
 			error: null

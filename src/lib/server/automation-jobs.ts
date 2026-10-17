@@ -91,6 +91,14 @@ export const AUTOMATION_JOBS = {
 		lockTimeoutMinutes: 15,
 		expectedIntervalMinutes: 60
 	},
+	'boosting-support-review': {
+		name: 'boosting-support-review',
+		path: '/api/internal/cron/boosting-support-review',
+		schedule: 'hourly',
+		risk: 'operational',
+		lockTimeoutMinutes: 15,
+		expectedIntervalMinutes: 60
+	},
 	'affiliate-announcement': {
 		name: 'affiliate-announcement',
 		path: '/api/internal/cron/affiliate-announcement',

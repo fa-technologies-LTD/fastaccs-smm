@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Phone, TrendingUp, AlertTriangle, ShieldCheck } from '$lib/icons';
-	import OrderTypeTabs from '$lib/components/admin/OrderTypeTabs.svelte';
+	import AnalyticsNavigation from '$lib/components/admin/AnalyticsNavigation.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -12,8 +12,8 @@
 		data.pvapinsBalanceCents != null && data.pvapinsBalanceCents < data.lowBalanceThresholdCents
 	);
 
-	function ngn(n: number): string {
-		return '₦' + Math.round(n).toLocaleString();
+	function ngn(n: number | null): string {
+		return n === null ? '—' : '₦' + Math.round(n).toLocaleString();
 	}
 	function pct(n: number | null): string {
 		return n == null ? '—' : `${n}%`;
@@ -55,7 +55,7 @@
 		<a href="/admin/numbers" class="text-sm hover:underline" style="color: #38bdf8;">Pricing →</a>
 	</div>
 	<div class="mb-6">
-		<OrderTypeTabs active="numbers" />
+		<AnalyticsNavigation active="numbers" permissions={data.adminPermissions ?? []} />
 	</div>
 
 	{#if lowBalance}
@@ -79,12 +79,23 @@
 		</div>
 	{/if}
 
+	{#if !data.canViewRevenue}
+		<p class="mb-3 text-xs" style="color: var(--text-muted);">
+			Revenue and supplier costs are hidden for your role.
+		</p>
+	{:else}
+		<p class="mb-3 text-xs" style="color: var(--text-muted);">
+			Margin is estimated at your current dollar rate, before payment fees. Some supplier costs use
+			rental quotes.
+		</p>
+	{/if}
+
 	<!-- KPI cards -->
 	<div class="mb-8 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
 		{@render kpi('Total rents', String(a.overall.total))}
 		{@render kpi('Success rate', pct(a.overall.successRatePct))}
 		{@render kpi('Net sales', ngn(a.overall.revenueNgn))}
-		{@render kpi('Margin', ngn(a.overall.marginNgn), true)}
+		{@render kpi('Estimated margin', ngn(a.overall.marginNgn), true)}
 		<div
 			class="rounded-lg p-4"
 			style="border: 1px solid {lowBalance ? '#dc2626' : 'var(--border)'}; background: {lowBalance
@@ -221,7 +232,7 @@
 					<th class="px-4 py-3 text-right">Success</th>
 					<th class="px-4 py-3 text-right">Avg OTP</th>
 					<th class="px-4 py-3 text-right">Net sales</th>
-					<th class="px-4 py-3 text-right">Margin</th>
+					<th scope="col" class="px-4 py-3 text-right">Estimated margin</th>
 				</tr>
 			</thead>
 			<tbody>

@@ -24,6 +24,9 @@
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import { createOrder } from '$lib/services/orders';
+	import type { CreateOrderData } from '$lib/services/orders';
+	import { computeOrderRedemption } from '$lib/helpers/store-credit-redemption';
+	import { matchesCheckoutQuote, type CheckoutQuote } from '$lib/helpers/checkout-quote';
 	import type { CartItemWithTier } from '$lib/types/cart';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
@@ -67,30 +70,52 @@
 	// Cart items and total
 	let cartItems = $state<CartItemWithTier[]>([]);
 	let cartTotal = $state(0);
+	let loadedCartSignature = $state('');
+	let serverQuote = $state<CheckoutQuote | null>(null);
+	let serverQuoteContext = $state('');
+	let priceChangeMessage = $state('');
+	let priceChangeContext = $state('');
+	let savedAttempt = $state<CreateOrderData | null>(null);
 	let failedCheckoutIcons = $state<Record<string, boolean>>({});
-	const checkoutTotal = $derived(Math.max(0, cartTotal - promoDiscountAmount));
+	function quoteContext() {
+		return JSON.stringify([
+			user?.id,
+			applyStoreCredit,
+			affiliateCode,
+			promoAppliedCode,
+			cartItems.map((item) => [
+				getCartLineKey(item),
+				item.quantity,
+				item.boosting?.boostQuantity,
+				item.boosting?.targetUrl,
+				item.boosting?.comments,
+				cart.getItemLinePrice(item)
+			])
+		]);
+	}
+	const activeServerQuote = $derived(serverQuoteContext === quoteContext() ? serverQuote : null);
+	const currentPriceChangeMessage = $derived(
+		priceChangeContext === quoteContext() ? priceChangeMessage : ''
+	);
+	const checkoutTotal = $derived(
+		activeServerQuote?.total ?? Math.max(0, cartTotal - promoDiscountAmount)
+	);
 
 	// Store credit (signed-in buyers). Mirrors the server redemption rule so we can
 	// preview the discount — the refund bucket spends up to 100% of the order, the
 	// earned bucket is capped at 30%. The server recomputes authoritatively at
 	// checkout, so this is only an estimate for display.
-	const STORE_CREDIT_EARNED_CAP = 0.3;
 	let applyStoreCredit = $state(false);
 	const storeCreditAvailable = $derived(data.storeCredit?.totalAvailable ?? 0);
 	const storeCreditApplied = $derived.by(() => {
 		if (!applyStoreCredit || storeCreditAvailable <= 0 || checkoutTotal <= 0) return 0;
-		const total = checkoutTotal;
-		const refund = Math.min(data.storeCredit?.refundAvailable ?? 0, total);
-		const remaining = total - refund;
-		const earned = Math.max(
-			0,
-			Math.min(
-				data.storeCredit?.earnedAvailable ?? 0,
-				Math.floor(total * STORE_CREDIT_EARNED_CAP),
-				remaining
-			)
+		return (
+			activeServerQuote?.creditApplied ??
+			computeOrderRedemption(checkoutTotal, {
+				refundAvailable: data.storeCredit?.refundAvailable ?? 0,
+				earnedAvailable: data.storeCredit?.earnedAvailable ?? 0
+			}).totalApplied
 		);
-		return refund + earned;
 	});
 	const payableTotal = $derived(Math.max(0, checkoutTotal - storeCreditApplied));
 	const hasManualHandover = $derived(
@@ -98,9 +123,14 @@
 	);
 	const hasBoostingOrder = $derived(cartItems.some((item) => Boolean(item.boosting)));
 	const hasNumbersOrder = $derived(cartItems.some((item) => item.tier.deliveryMode === 'auto_sms'));
+	$effect(() => {
+		const signature = JSON.stringify(cart.items);
+		if (!loadingCartData && !loading && signature !== loadedCartSignature) void loadCartData(true);
+	});
 
 	onMount(() => {
 		loading = false;
+		savedAttempt = resumableRequest();
 		void loadCartData();
 
 		const refCode = page.url.searchParams.get('ref');
@@ -119,9 +149,9 @@
 		};
 	});
 
-	function loadCartData(): Promise<void> {
+	function loadCartData(force = false): Promise<void> {
 		if (cartLoadPromise) return cartLoadPromise;
-		cartLoadPromise = performCartLoad().finally(() => {
+		cartLoadPromise = performCartLoad(force).finally(() => {
 			cartLoadPromise = null;
 		});
 		return cartLoadPromise;
@@ -144,17 +174,19 @@
 				: 'Browse Accounts'
 	);
 
-	async function performCartLoad() {
+	async function performCartLoad(force = false) {
 		loadingCartData = true;
 		cartLoadError = null;
 		if (cart.itemCount === 0) {
 			await goto(shopReturnPath());
+			loadedCartSignature = JSON.stringify(cart.items);
 			loadingCartData = false;
 			return;
 		}
 
 		try {
-			cartItems = await cart.getItemsWithTiers();
+			const previousContext = quoteContext();
+			cartItems = await cart.getItemsWithTiers({ force });
 			cartTotal = cart.getTotal(cartItems);
 			if (cart.error) {
 				cartLoadError = cart.error;
@@ -168,7 +200,7 @@
 				return;
 			}
 			// Cart mutation invalidates promo context. Re-apply manually for deterministic totals.
-			if (promoAppliedCode) {
+			if (promoAppliedCode && previousContext !== quoteContext()) {
 				promoAppliedCode = null;
 				promoDiscountAmount = 0;
 			}
@@ -191,6 +223,7 @@
 			console.error('Failed to load cart data:', error);
 			cartLoadError = 'We could not refresh your cart. Your saved items are still safe.';
 		} finally {
+			loadedCartSignature = JSON.stringify(cart.items);
 			loadingCartData = false;
 		}
 	}
@@ -428,6 +461,42 @@
 
 	function resetCheckoutSession(): void {
 		localStorage.removeItem(CHECKOUT_SESSION_STORAGE_KEY);
+		savedAttempt = null;
+	}
+	function displayedQuote(): CheckoutQuote {
+		return {
+			subtotal: cartTotal,
+			discount: activeServerQuote?.discount ?? promoDiscountAmount,
+			total: checkoutTotal,
+			creditApplied: storeCreditApplied,
+			payable: payableTotal,
+			linePrices: cartItems.map((item) => cart.getItemLinePrice(item))
+		};
+	}
+	function resumableRequest(): CreateOrderData | null {
+		try {
+			const saved = JSON.parse(localStorage.getItem(CHECKOUT_SESSION_STORAGE_KEY) || 'null');
+			return saved?.request?.userId === user?.id && saved.request.checkoutKey === saved.key
+				? saved.request
+				: null;
+		} catch {
+			return null;
+		}
+	}
+	function rememberRequest(request: CreateOrderData) {
+		savedAttempt = request;
+		try {
+			localStorage.setItem(
+				CHECKOUT_SESSION_STORAGE_KEY,
+				JSON.stringify({
+					fingerprint: getCheckoutFingerprint(),
+					key: request.checkoutKey,
+					request: { ...request, analytics: undefined }
+				})
+			);
+		} catch {
+			/* the in-flight request remains stable even if browser storage is unavailable */
+		}
 	}
 
 	function shouldRotateCheckoutSession(errorText: unknown): boolean {
@@ -494,10 +563,18 @@
 			checkoutSlow = true;
 		}, 6_000);
 		try {
-			if (cartLoadError) {
-				await loadCartData();
-				if (cartLoadError) {
+			let requestSnapshot = resumableRequest();
+			if (!requestSnapshot) {
+				const previousQuote = displayedQuote();
+				await loadCartData(true);
+				if (cartLoadError)
 					throw new Error('Your cart could not be refreshed. Please retry before paying.');
+				if (!cartItems.length) return;
+				if (!matchesCheckoutQuote(previousQuote, displayedQuote())) {
+					priceChangeMessage = `Your total changed from ${formatPrice(previousQuote.payable)} to ${formatPrice(payableTotal)}. Review the updated order before continuing.`;
+					priceChangeContext = quoteContext();
+					showWarning('Review your updated order', priceChangeMessage);
+					return;
 				}
 			}
 
@@ -508,38 +585,44 @@
 				const controller = new AbortController();
 				const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 				try {
-					return await createOrder(
-						{
-							email: user.email || '',
-							phone: user.phone || '',
-							items: cartItems.map((item) => ({
-								categoryId: item.tierId,
-								quantity: item.quantity,
-								price: cart.getItemLinePrice(item),
-								exactAccountId: item.exactAccount?.accountId,
-								exactAccountLabel: item.exactAccount?.displayLabel,
-								boostTargetUrl: item.boosting?.targetUrl,
-								boostQuantity: item.boosting?.boostQuantity,
-								boostOfferId: item.boosting?.boostOfferId,
-								boostComments: item.boosting?.comments,
-								accountAddonKey: item.accountAddon?.key
-							})),
-							totalAmount: finalTotal,
-							currency: 'NGN',
-							paymentMethod: 'monnify',
-							checkoutKey: getOrCreateCheckoutKey(),
-							affiliateCode:
-								hasBoostingOrder || hasNumbersOrder ? undefined : affiliateCode || undefined,
-							promotionCode:
-								hasBoostingOrder || hasNumbersOrder ? undefined : promoAppliedCode || undefined,
-							useStoreCredit: applyStoreCredit && storeCreditAvailable > 0,
-							analytics: {
-								ga4ClientId,
-								consentGranted: Boolean(ga4ClientId)
-							}
-						},
-						{ signal: controller.signal }
-					);
+					requestSnapshot ??= {
+						userId: user.id,
+						email: user.email || '',
+						phone: user.phone || '',
+						items: cartItems.map((item) => ({
+							categoryId: item.tierId,
+							quantity: item.quantity,
+							price: cart.getItemLinePrice(item),
+							exactAccountId: item.exactAccount?.accountId,
+							exactAccountLabel: item.exactAccount?.displayLabel,
+							boostTargetUrl: item.boosting?.targetUrl,
+							boostQuantity: item.boosting?.boostQuantity,
+							boostOfferId: item.boosting?.boostOfferId,
+							boostComments: item.boosting?.comments,
+							accountAddonKey: item.accountAddon?.key
+						})),
+						totalAmount: finalTotal,
+						acceptedQuote: displayedQuote(),
+						currency: 'NGN',
+						paymentMethod: 'monnify',
+						checkoutKey: getOrCreateCheckoutKey(),
+						affiliateCode:
+							hasBoostingOrder || hasNumbersOrder ? undefined : affiliateCode || undefined,
+						promotionCode:
+							hasBoostingOrder || hasNumbersOrder ? undefined : promoAppliedCode || undefined,
+						useStoreCredit: applyStoreCredit && storeCreditAvailable > 0,
+						analytics: {
+							ga4ClientId,
+							consentGranted: Boolean(ga4ClientId)
+						}
+					};
+					// Keep financial intent stable, but optional tracking must use CURRENT consent.
+					requestSnapshot = {
+						...requestSnapshot,
+						analytics: { ga4ClientId, consentGranted: Boolean(ga4ClientId) }
+					};
+					rememberRequest(requestSnapshot);
+					return await createOrder(requestSnapshot, { signal: controller.signal });
 				} finally {
 					window.clearTimeout(timeout);
 				}
@@ -579,10 +662,37 @@
 			}
 			if (!orderResult.success && shouldRotateCheckoutSession(orderResult.error)) {
 				resetCheckoutSession();
+				requestSnapshot = null;
 				orderResult = await createCheckoutOrder();
 			}
 
 			if (!orderResult.success) {
+				if (orderResult.code === 'CREDIT_UNAVAILABLE') {
+					resetCheckoutSession();
+					showWarning(
+						'Store credit could not be checked',
+						'No new payment was started. Please try again or choose not to use store credit.'
+					);
+					return;
+				}
+				if (orderResult.code === 'CHECKOUT_PRICE_CHANGED' && orderResult.quote) {
+					resetCheckoutSession();
+					await loadCartData(true);
+					if (cartLoadError) throw new Error('Please refresh your cart before continuing.');
+					serverQuote =
+						orderResult.quote.subtotal === cartTotal &&
+						orderResult.quote.linePrices.length === cartItems.length &&
+						orderResult.quote.linePrices.every(
+							(price: number, i: number) => price === cart.getItemLinePrice(cartItems[i])
+						)
+							? orderResult.quote
+							: null;
+					serverQuoteContext = quoteContext();
+					priceChangeMessage = `Your checkout amount changed to ${formatPrice(orderResult.quote.payable)}. Review the updated total before continuing.`;
+					priceChangeContext = quoteContext();
+					showWarning('Review your updated total', priceChangeMessage);
+					return;
+				}
 				if (isUnauthorizedApiError(orderResult.error)) {
 					showWarning('Session expired', 'Please log in again to continue checkout.');
 					redirectToLoginWithReturnUrl();
@@ -609,21 +719,19 @@
 					);
 					return;
 				}
-				// A number went unavailable between browsing and paying — send them back to pick
-				// another, with a clean message (strip the raw "HTTP 409:" prefix; no scary
-				// "payment failed"). No money was touched.
-				const cleanOrderError = String(orderResult.error || '').replace(/^HTTP \d+:\s*/i, '');
+				// Only explicit pre-payment refusals may reset an attempt. A gateway outage
+				// containing similar English wording can have an uncertain, already-saved outcome.
 				if (
-					/currently unavailable|just sold out|no longer available|momentarily unavailable/i.test(
-						cleanOrderError
-					)
+					orderResult.code === 'ITEM_UNAVAILABLE' ||
+					orderResult.code === 'number_unavailable' ||
+					orderResult.code === 'BOOSTING_PAUSED'
 				) {
 					showWarning(
-						'This number isn’t available right now',
-						'You haven’t been charged. Choose another country or try again shortly.'
+						'This option is currently unavailable',
+						'You haven’t been charged. Your other cart items are unchanged. Choose another option or try again later.'
 					);
-					cart.clear();
-					goto('/numbers');
+					resetCheckoutSession();
+					await loadCartData(true);
 					loading = false;
 					return;
 				}
@@ -634,13 +742,25 @@
 				) {
 					await loadCartData();
 				}
+				// A confirmed input-validation rejection did not create a payable order.
+				// Let the buyer correct the form instead of replaying that rejected request forever.
+				if (!orderResult.orderId && /^HTTP 400:/i.test(String(orderResult.error || '')))
+					resetCheckoutSession();
 				throw new Error(orderResult.error || 'Failed to create order');
 			}
 
 			const resolvedOrderId = String(orderResult.orderId || '');
 			const ga4CheckoutPayload = getCheckoutGa4Payload(resolvedOrderId);
+			if (orderResult.resumed) {
+				// The displayed basket may have changed since this saved order was created.
+				// Use its durable amount and do not invent current-basket product attribution.
+				ga4CheckoutPayload.value = Number(
+					orderResult.data?.totalAmount ?? requestSnapshot?.totalAmount ?? checkoutTotal
+				);
+				ga4CheckoutPayload.items = [];
+			}
 			trackGa4BeginCheckout(ga4CheckoutPayload);
-			if (resolvedOrderId) {
+			if (resolvedOrderId && !orderResult.resumed) {
 				saveGa4CheckoutSnapshot({
 					orderId: resolvedOrderId,
 					value: checkoutTotal,
@@ -714,6 +834,7 @@
 		} finally {
 			window.clearTimeout(slowTimer);
 			checkoutSlow = false;
+			loading = false;
 		}
 	}
 </script>
@@ -738,7 +859,7 @@
 			</h1>
 		</div>
 
-		{#if loadingCartData}
+		{#if loadingCartData && cartItems.length === 0}
 			<!-- Loading Spinner -->
 			<div
 				class="rounded-lg p-12 text-center shadow-sm sm:p-16"
@@ -889,27 +1010,16 @@
 											class="font-medium"
 											style="color: var(--text); font-family: var(--font-head);"
 										>
-											Login Required
+											Sign in to checkout
 										</p>
 										<p
 											class="text-sm"
 											style="color: var(--text-muted); font-family: var(--font-body);"
 										>
-											Please log in to continue with your purchase
+											Your order and delivery details will be saved to your account.
 										</p>
 									</div>
 								</div>
-								<button
-									onclick={() => {
-										const currentUrl = new URL(window.location.href);
-										const returnUrl = encodeURIComponent(currentUrl.pathname + currentUrl.search);
-										goto(`/auth/login?returnUrl=${returnUrl}`);
-									}}
-									style="background: var(--fa-lime-700); color: var(--bg); font-family: var(--font-head);"
-									class="mt-3 rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90"
-								>
-									Login to Continue
-								</button>
 							</div>
 						{/if}
 					</div>
@@ -1211,16 +1321,20 @@
 									>{formatPrice(cartTotal)}</span
 								>
 							</div>
-							{#if promoAppliedCode && promoDiscountAmount > 0}
+							{#if (activeServerQuote?.discount ?? promoDiscountAmount) > 0}
 								<div
 									class="flex justify-between text-xs font-semibold sm:text-sm"
 									style="color: var(--primary); font-family: var(--font-body);"
 								>
 									<span class="flex items-center gap-1">
 										<Tag size={14} />
-										Promo Discount
+										{promoAppliedCode
+											? 'Promo discount'
+											: affiliateCode
+												? 'Referral savings'
+												: 'Discount'}
 									</span>
-									<span>-{formatPrice(promoDiscountAmount)}</span>
+									<span>-{formatPrice(activeServerQuote?.discount ?? promoDiscountAmount)}</span>
 								</div>
 							{/if}
 							<div class="flex justify-between text-xs sm:text-sm">
@@ -1318,9 +1432,31 @@
 							{/if}
 						</p>
 						<!-- Complete checkout -->
+						{#if savedAttempt}
+							<p
+								role="status"
+								class="mt-4 rounded-lg border p-3 text-sm"
+								style="border-color: var(--border); color: var(--text-muted);"
+							>
+								Your earlier checkout is saved at {formatPrice(
+									savedAttempt.acceptedQuote?.payable ?? savedAttempt.totalAmount
+								)}. Continue it, or
+								<a class="underline" href="/dashboard?tab=orders">review it in My Orders</a> before starting
+								another payment.
+							</p>
+						{/if}
+						{#if currentPriceChangeMessage}
+							<p
+								role="status"
+								class="mt-4 rounded-lg border p-3 text-sm"
+								style="border-color: var(--status-warning); color: var(--text);"
+							>
+								{currentPriceChangeMessage}
+							</p>
+						{/if}
 						<button
 							onclick={payWithMonnify}
-							disabled={loading || !user}
+							disabled={loading || loadingCartData}
 							class="btn-fa btn-fa--primary mt-6 w-full py-3 sm:py-4 sm:text-base"
 						>
 							{#if loading}
@@ -1338,7 +1474,11 @@
 								>
 							{:else if !user}
 								<Lock size={18} class="sm:h-5 sm:w-5" />
-								<span class="text-sm sm:text-base">Login Required</span>
+								<span class="text-sm sm:text-base">Sign in &amp; continue</span>
+							{:else if savedAttempt}
+								<span class="text-sm sm:text-base">Continue saved checkout</span>
+							{:else if currentPriceChangeMessage}
+								<span class="text-sm sm:text-base">Confirm updated total &amp; continue</span>
 							{:else if payableTotal <= 0}
 								<CreditCard size={18} class="sm:h-5 sm:w-5" />
 								<span class="text-sm sm:text-base">Complete Order</span>

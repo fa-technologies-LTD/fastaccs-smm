@@ -20,7 +20,8 @@ const tx = vi.hoisted(() => ({
 	orderItem: { update: vi.fn(), updateMany: vi.fn() },
 	boostFulfillment: { updateMany: vi.fn() },
 	refundRecoveryTask: { upsert: vi.fn() },
-	walletTransaction: { aggregate: vi.fn() }
+	walletTransaction: { aggregate: vi.fn() },
+	notification: { create: vi.fn() }
 }));
 
 vi.mock('$lib/prisma', () => ({ prisma: { $transaction: mocks.transaction } }));
@@ -52,9 +53,13 @@ const ORDER_ID = '11111111-1111-4111-8111-111111111111';
 const USER_ID = '22222222-2222-4222-8222-222222222222';
 const AFFILIATE_ID = '33333333-3333-4333-8333-333333333333';
 
-function callRefund() {
+function callRefund(customerMessage?: unknown) {
 	return POST({
 		params: { id: ORDER_ID },
+		request: new Request(`https://smm.fastaccs.com/api/orders/${ORDER_ID}/refund`, {
+			method: 'POST',
+			...(customerMessage === undefined ? {} : { body: JSON.stringify({ customerMessage }) })
+		}),
 		locals: {
 			user: { id: '44444444-4444-4444-8444-444444444444' },
 			adminContext: {}
@@ -94,6 +99,7 @@ beforeEach(() => {
 	tx.orderItem.update.mockResolvedValue({});
 	tx.orderItem.updateMany.mockResolvedValue({ count: 0 });
 	tx.boostFulfillment.updateMany.mockResolvedValue({ count: 0 });
+	tx.notification.create.mockResolvedValue({ id: 'refund-notice' });
 	mocks.creditStoreCredit.mockResolvedValue({});
 	mocks.recordOrderEvent.mockResolvedValue(true);
 	mocks.voidSuper.mockResolvedValue(undefined);
@@ -105,6 +111,31 @@ beforeEach(() => {
 });
 
 describe('full-order refund integrity', () => {
+	it('saves the customer message and refund notification in the money transaction', async () => {
+		const response = await callRefund('We could not complete delivery.');
+		expect(response.status).toBe(200);
+		expect(tx.notification.create).toHaveBeenCalledWith({
+			data: expect.objectContaining({
+				userId: USER_ID,
+				orderId: ORDER_ID,
+				type: 'store_credit',
+				message: expect.stringContaining('We could not complete delivery.')
+			})
+		});
+		expect(mocks.recordOrderEvent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				description: expect.stringContaining('We could not complete delivery.')
+			}),
+			tx
+		);
+	});
+	it.each([123, 'x'.repeat(501)])(
+		'rejects invalid refund wording before any money mutation',
+		async (message) => {
+			expect((await callRefund(message)).status).toBe(400);
+			expect(mocks.transaction).not.toHaveBeenCalled();
+		}
+	);
 	it('does not issue money just because an unpaid order was labelled completed', async () => {
 		tx.order.findUnique.mockResolvedValue(
 			paidOrder({ status: 'completed', paymentStatus: 'pending' })
@@ -173,5 +204,6 @@ describe('full-order refund integrity', () => {
 		expect(mocks.creditStoreCredit).not.toHaveBeenCalled();
 		expect(tx.order.update).not.toHaveBeenCalled();
 		expect(mocks.voidSuper).not.toHaveBeenCalled();
+		expect(tx.notification.create).not.toHaveBeenCalled();
 	});
 });

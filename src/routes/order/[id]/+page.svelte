@@ -441,6 +441,22 @@
 					</a>
 				{/if}
 
+				{#if data.customerSupportUpdates?.length}
+					<section
+						class="mb-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5"
+						aria-label="Order support updates"
+					>
+						<h3 class="font-semibold text-[var(--text)]">Order update</h3>
+						<p class="mt-2 text-sm whitespace-pre-wrap text-[var(--text)]">
+							{data.customerSupportUpdates[0].message}
+						</p>
+						<time
+							class="mt-2 block text-xs text-[var(--text-muted)]"
+							datetime={data.customerSupportUpdates[0].at}
+							>{formatDate(data.customerSupportUpdates[0].at)}</time
+						>
+					</section>
+				{/if}
 				<!-- Order Items -->
 				<div
 					class="rounded-lg p-6"

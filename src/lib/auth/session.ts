@@ -34,7 +34,7 @@ export function invalidateUserSessionCache(userId: string): void {
 
 // Clean up expired cache entries periodically
 if (typeof setInterval !== 'undefined') {
-	setInterval(() => {
+	const cleanupTimer = setInterval(() => {
 		const now = Date.now();
 		for (const [key, value] of sessionCache.entries()) {
 			if (now - value.cachedAt > CACHE_TTL) {
@@ -42,6 +42,8 @@ if (typeof setInterval !== 'undefined') {
 			}
 		}
 	}, 60 * 1000); // Clean up every minute
+	// Cache housekeeping must not keep an idle server/verification process alive.
+	if (typeof cleanupTimer === 'object') cleanupTimer.unref?.();
 }
 
 // Generate a secure session token

@@ -50,6 +50,22 @@ function data(
 }
 
 describe('customer Boosting progress and refill journey', () => {
+	it('shows support wording as plain text without changing reported delivery', async () => {
+		const d = data('in_progress', { remains: 40 }) as Record<string, unknown>;
+		render(OrderPage, {
+			data: {
+				...d,
+				customerSupportUpdates: [
+					{ message: '<script>customer update</script>', at: new Date().toISOString() }
+				]
+			}
+		} as never);
+		await expect.element(page.getByRole('region', { name: 'Order support updates' })).toBeVisible();
+		await expect
+			.element(page.getByText('<script>customer update</script>', { exact: true }))
+			.toBeVisible();
+		await expect.element(page.getByText('Reported progress: 60 / 100')).toBeVisible();
+	});
 	afterEach(() => vi.restoreAllMocks());
 	it('separates payment confirmation from queued delivery', async () => {
 		render(OrderPage, { data: data('pending') });

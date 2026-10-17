@@ -2,6 +2,13 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { CartItemWithTier } from '$lib/types/cart';
 import { prisma } from '$lib/prisma';
+import { boostSaleInclude, inspectBoostSale } from '$lib/server/boosting-sale-readiness';
+import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
+import { boostCustomerCopy } from '$lib/helpers/boosting-customer-copy';
+import {
+	BOOSTING_MANAGED_STOREFRONT_KEY,
+	isBoostingManagedStorefrontEnabled
+} from '$lib/server/boosting-providers/storefront-rollout';
 import {
 	normalizeTierDeliveryMode,
 	getTierStockStatus,
@@ -303,17 +310,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 							status: 'live',
 							routes: { some: { state: 'enabled', equivalenceApproved: true } }
 						},
-						select: {
-							id: true,
-							categoryId: true,
-							customerName: true,
-							platform: true,
-							outcome: true,
-							minQuantity: true,
-							maxQuantity: true,
-							stepQuantity: true,
-							pricePerStepNgn: true
-						}
+						include: boostSaleInclude
 					})
 				: Promise.resolve([])
 		]);
@@ -343,6 +340,19 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		const messages: string[] = [];
 		const mergedItems = new Map<string, CartItemWithTier>();
 		const now = new Date();
+		const boostPricing = boostOffers.length ? await getBoostingPricingConfig() : null;
+		const managedMarker = inputItems.some(
+			(item) => item.boosting && !normalizeText(item.boosting.boostOfferId)
+		)
+			? await prisma.microcopy.findUnique({
+					where: { key: BOOSTING_MANAGED_STOREFRONT_KEY },
+					select: { value: true, isActive: true }
+				})
+			: null;
+		const managedBoosting = isBoostingManagedStorefrontEnabled(
+			managedMarker,
+			boostOffers.length > 0
+		);
 
 		for (const input of inputItems) {
 			const rawTierId = normalizeText(input.tierId);
@@ -355,6 +365,12 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			if (tier.categoryType === 'boosting_service') {
 				const legacyConfig = getBoostingServiceConfig(tier.metadata);
 				const requestedOfferId = normalizeText(input.boosting?.boostOfferId);
+				if (!requestedOfferId && managedBoosting) {
+					messages.push(
+						'This Boosting option has changed. Choose an available option again. Your other items are unchanged.'
+					);
+					continue;
+				}
 				const offer = requestedOfferId ? boostOfferById.get(requestedOfferId) : null;
 				if (requestedOfferId && (!offer || offer.categoryId !== tier.id)) {
 					messages.push(
@@ -374,6 +390,16 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					: legacyConfig;
 				const targetUrl = normalizeText(input.boosting?.targetUrl);
 				const boostQuantity = Math.floor(Number(input.boosting?.boostQuantity || 0));
+				if (
+					offer &&
+					(!boostPricing ||
+						!inspectBoostSale(offer, boostPricing.usdNgnRate, boostQuantity).available)
+				) {
+					messages.push(
+						`${boostCustomerCopy(offer).customerName} is currently unavailable and was removed. Your other items are unchanged.`
+					);
+					continue;
+				}
 				const comments =
 					config.actionType === 'custom_comments'
 						? parseBoostComments(input.boosting?.comments)
@@ -411,7 +437,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 				const boostingTierPayload: CartRefreshTier = {
 					id: tier.id,
-					name: offer?.customerName || tier.name,
+					name: offer ? boostCustomerCopy(offer).customerName : tier.name,
 					price: 0,
 					slug: tier.slug,
 					platformName: BOOSTING_PLATFORM_LABELS[config.platform],

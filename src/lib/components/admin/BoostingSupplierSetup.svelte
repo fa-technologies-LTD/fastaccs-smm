@@ -24,6 +24,7 @@
 		suggestBoostingPricePerStep
 	} from '$lib/helpers/boosting-price-unit';
 	import { showError, showSuccess } from '$lib/stores/toasts';
+	import { standardBoostQuantityDefaults } from '$lib/helpers/boosting-quantity-defaults';
 	import type { BoostingSetupData } from '$lib/helpers/boosting-pricing-controls';
 
 	type QualityTier = 'value' | 'stable' | 'premium';
@@ -620,6 +621,19 @@
 		} else offerDraft.minQuantity = parsed;
 		if (!offerDraft.priceLocked) queueMicrotask(useSuggestedPrice);
 	}
+	function useStandardQuantities(): void {
+		if (!offerDraft) return;
+		const minimum = Math.max(
+			1,
+			...routeDrafts
+				.filter((r) => r.state !== 'paused')
+				.map((r) => candidateById.get(r.providerServiceId)?.minQuantity ?? 1)
+		);
+		const defaults = standardBoostQuantityDefaults(workspace?.category.outcome ?? '', minimum);
+		if (!defaults || !setQuantityIncrement(defaults.step)) return;
+		offerDraft.minQuantity = defaults.minimum;
+		if (!offerDraft.priceLocked) queueMicrotask(useSuggestedPrice);
+	}
 
 	function updateCustomerPrice(value: string): void {
 		if (!offerDraft) return;
@@ -1148,7 +1162,11 @@
 									>
 										<div>
 											<p class="text-xs font-bold" style="color: var(--primary);">
-												{index === 0 ? 'Primary' : `Fallback ${index}`} · {candidate.providerLabel} #{candidate.serviceId}
+												{offerDraft.routingPolicy === 'automatic'
+													? `Configured service ${index + 1}`
+													: index === 0
+														? 'Primary'
+														: `Fallback ${index}`} · {candidate.providerLabel} #{candidate.serviceId}
 											</p>
 											<p class="mt-1 text-sm font-semibold" style="color: var(--text);">
 												{candidate.name}
@@ -1176,9 +1194,18 @@
 					style="border-color: var(--border); background: var(--bg-elev-1);"
 				>
 					<h2 class="font-bold" style="color: var(--text);">4. Set profit and customer price</h2>
+					{#if standardBoostQuantityDefaults(workspace.category.outcome)}
+						<button
+							type="button"
+							onclick={useStandardQuantities}
+							disabled={saving}
+							class="mt-2 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text)]"
+							>Use standard quantities</button
+						>
+					{/if}
 					<p class="mt-1 text-xs" style="color: var(--text-muted);">
-						The supplier minimum is copied in when you choose a primary service. You can adjust what
-						customers start with and the amount each +/− click changes.
+						Comments 10 / +10 · Likes 200 / +200 · Followers 500 / +500. Higher supplier minimums
+						still apply. Cheap offers start higher to reach ₦500; the increment stays unchanged.
 					</p>
 					<div class="mt-4 grid grid-cols-2 gap-3 sm:gap-4">
 						<label class="text-xs font-semibold" style="color: var(--text-muted);"

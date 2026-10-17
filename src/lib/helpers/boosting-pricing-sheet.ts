@@ -22,6 +22,8 @@ export interface BoostPricingRow {
 	hardProfitNgn?: number;
 	increment: number;
 	startingQuantity: number;
+	maximumQuantity?: number | null;
+	shortPromise?: string;
 	recoveryMode: 'off' | 'definitive' | 'fallback';
 	profitBudgetPercent: number;
 	attempts: number;
@@ -102,13 +104,24 @@ export function pricingStepPrice(row: BoostPricingRow): number {
 	return kobo / 100;
 }
 
+export function pricingQuantityMaximum(
+	row: BoostPricingRow,
+	supplierMax: number | null
+): number | null {
+	return row.maximumQuantity == null
+		? supplierMax
+		: supplierMax == null
+			? row.maximumQuantity
+			: Math.min(row.maximumQuantity, supplierMax);
+}
+
 export function pricingStart(row: BoostPricingRow, max: number | null): number {
 	try {
 		return boostingStartingQuantity({
 			minQuantity: row.startingQuantity,
 			stepQuantity: row.increment,
 			pricePerStepNgn: pricingStepPrice(row),
-			maxQuantity: max
+			maxQuantity: pricingQuantityMaximum(row, max)
 		});
 	} catch {
 		return row.startingQuantity;
@@ -216,6 +229,19 @@ export function validatePricingSheet(value: unknown): asserts value is BoostPric
 		for (const key of ['units', 'increment', 'startingQuantity', 'attempts'] as const)
 			if (!Number.isSafeInteger(r[key]) || r[key] < 1 || r[key] > 100000000)
 				throw new Error('Use positive whole quantities.');
+		if (
+			r.maximumQuantity != null &&
+			(!Number.isSafeInteger(r.maximumQuantity) ||
+				r.maximumQuantity < 1 ||
+				r.maximumQuantity < r.startingQuantity ||
+				r.maximumQuantity > 2147483647)
+		)
+			throw new Error('Maximum quantity must be a whole number at least as large as the minimum.');
+		if (
+			r.shortPromise !== undefined &&
+			(typeof r.shortPromise !== 'string' || r.shortPromise.length > 120)
+		)
+			throw new Error('Keep the customer description within 120 characters.');
 		if (r.attempts > 4) throw new Error('Maximum four attempts.');
 		if (
 			!Number.isFinite(r.sale) ||
@@ -259,6 +285,9 @@ export function sanitizePricingSheet(
 				priceMode: r.priceMode,
 				increment: r.increment,
 				startingQuantity: r.startingQuantity,
+				maximumQuantity:
+					r.maximumQuantity === undefined ? original.maximumQuantity : r.maximumQuantity,
+				shortPromise: r.shortPromise === undefined ? original.shortPromise : r.shortPromise.trim(),
 				recoveryMode: r.recoveryMode,
 				profitBudgetPercent: r.profitBudgetPercent,
 				attempts: r.attempts,
@@ -305,7 +334,9 @@ export function exportPricingCsv(
 		'Recovery',
 		'Attempts',
 		'Recovery budget %',
-		'Note'
+		'Note',
+		'Customer maximum',
+		'Customer description'
 	];
 	const rows = sheet.rows.map((r) => {
 		const e = pricingEconomics(r, sheet, quotes[r.id] ?? null);
@@ -335,7 +366,9 @@ export function exportPricingCsv(
 			r.recoveryMode,
 			r.attempts,
 			r.profitBudgetPercent,
-			r.note
+			r.note,
+			r.maximumQuantity ?? '',
+			r.shortPromise ?? ''
 		];
 	});
 	return '\uFEFF' + [headers, ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n');

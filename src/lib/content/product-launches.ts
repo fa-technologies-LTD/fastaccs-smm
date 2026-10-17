@@ -27,34 +27,34 @@ export const PRODUCT_LAUNCH_EMAIL_DRAFTS: readonly ProductLaunchEmailDraft[] = [
 	{
 		id: 'account_delivery_privacy',
 		label: 'Account delivery update',
-		subject: 'Your account details are now in your dashboard',
+		subject: 'Account details now stay in your dashboard',
 		body: `Hi {{first_name}},
 
 For your privacy, account login details now appear only in your dashboard. Order emails simply let you know when your accounts are ready.
 
-Sign in and open your order to view your details.
+Sign in and open Purchases to view your details. This does not remove details from older emails.
 
 [View your orders](https://smm.fastaccs.com/dashboard?tab=purchases)`
 	},
 	{
 		id: 'numbers_improved',
 		label: 'Numbers improved',
-		subject: 'Numbers are now faster ⚡',
+		subject: 'Need a verification number?',
 		body: `Hi {{first_name}},
 
-Getting a verification number is now faster and smoother. Choose the app and country you need, then follow your code from the order page.
+Choose the app and country you need, get a number, and follow your code from the order page.
 
-If no code arrives within the activation window, you are refunded automatically.
+If no code arrives within the activation window, your payment is refunded automatically to store credit.
 
 [Get a number](https://smm.fastaccs.com/numbers)`
 	},
 	{
 		id: 'boosting_refresh',
 		label: 'Boosting refresh',
-		subject: 'Boosting just got easier 🚀',
+		subject: 'Boosting, made simpler',
 		body: `Hi {{first_name}},
 
-Our new Boosting flow is faster and easier to use. Choose a platform and result, paste your link, pick an amount, and track the order from your dashboard.
+Choose an available service, paste your link, and pick an amount. Follow your order from your dashboard.
 
 No password needed.
 

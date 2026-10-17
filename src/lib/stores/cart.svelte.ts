@@ -18,6 +18,7 @@ function normalizeLookupValue(value: string): string {
 const STORAGE_KEY = 'fastaccs_cart';
 const CHECKOUT_SESSION_STORAGE_KEY = 'fastaccs_checkout_session';
 const STORAGE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
+const QUOTE_CACHE_MS = 30_000;
 
 function getCartItemId(
 	item: Pick<CartItem, 'tierId' | 'exactAccount' | 'boosting' | 'accountAddon'>
@@ -40,6 +41,7 @@ class CartStore {
 	private refreshRevision = -1;
 	private refreshPromise: Promise<CartItemWithTier[]> | null = null;
 	private lastItemsWithTiers: CartItemWithTier[] = [];
+	private refreshedAt = 0;
 	private tierDeliveryModes = new Map<string, TierDeliveryMode>();
 
 	constructor() {
@@ -96,13 +98,21 @@ class CartStore {
 
 		try {
 			const stored = localStorage.getItem(STORAGE_KEY);
-			if (!stored) return;
+			if (!stored) {
+				this.state.items = [];
+				this.lastItemsWithTiers = [];
+				this.revision += 1;
+				this.refreshedAt = 0;
+				this.state.error = null;
+				this.state.notice = null;
+				return;
+			}
 
 			const data: CartStorage = JSON.parse(stored);
 
 			// Check if data is expired
 			if (Date.now() - data.lastUpdated > STORAGE_EXPIRY) {
-				this.clearStorage();
+				this.clear();
 				return;
 			}
 
@@ -140,7 +150,7 @@ class CartStore {
 			this.revision += 1;
 		} catch (error) {
 			console.error('Failed to load cart from storage:', error);
-			this.clearStorage();
+			this.clear();
 		}
 	}
 
@@ -153,7 +163,7 @@ class CartStore {
 		if (!browser) return;
 
 		window.addEventListener('storage', (event) => {
-			if (event.key === STORAGE_KEY) {
+			if (event.key === STORAGE_KEY || event.key === null) {
 				this.loadFromStorage();
 			}
 		});
@@ -370,7 +380,7 @@ class CartStore {
 	}
 
 	// Get items with tier data
-	async getItemsWithTiers(): Promise<CartItemWithTier[]> {
+	async getItemsWithTiers(options: { force?: boolean } = {}): Promise<CartItemWithTier[]> {
 		if (this.state.items.length === 0) {
 			this.lastItemsWithTiers = [];
 			return [];
@@ -378,6 +388,8 @@ class CartStore {
 
 		const cachedItems = this.getCachedItemsForCurrentCart();
 		if (
+			!options.force &&
+			Date.now() - this.refreshedAt < QUOTE_CACHE_MS &&
 			!this.state.error &&
 			this.refreshRevision === this.revision &&
 			cachedItems.length === this.state.items.length
@@ -461,6 +473,7 @@ class CartStore {
 				accountAddon: item.accountAddon
 			}));
 			this.lastItemsWithTiers = itemsWithTiers;
+			this.refreshedAt = Date.now();
 			for (const item of itemsWithTiers) {
 				if (item.tier.deliveryMode) {
 					this.tierDeliveryModes.set(item.tierId, item.tier.deliveryMode);
@@ -473,6 +486,7 @@ class CartStore {
 
 			return itemsWithTiers;
 		})().catch((error) => {
+			if (requestRevision !== this.revision) return this.getCachedItemsForCurrentCart();
 			console.error('Failed to refresh cart:', error);
 			this.state.error = 'We could not refresh your cart. Your saved items are still safe.';
 			this.state.notice = null;

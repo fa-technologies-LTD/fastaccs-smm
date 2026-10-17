@@ -2,6 +2,7 @@ import { prisma } from '$lib/prisma';
 import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
 import { getAdminSettingsSnapshot } from '$lib/services/admin-settings';
 import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
+import { shouldEmailAdmin } from '$lib/helpers/admin-email-policy';
 
 // Fire the "order paid" admin alert only ONCE per order. Manual/boosting orders
 // stay in status 'paid' (never 'completed'), so re-settlement would otherwise
@@ -52,7 +53,7 @@ export async function notifyManualHandoverOrderPaid(
 	];
 
 	await sendCriticalAdminAlert({
-		title: 'New manual-handover order',
+		title: 'Action needed: manual delivery',
 		message: bodyLines.join('\n'),
 		source,
 		preheader: `${orderLabel} · ₦${Number(order.totalAmount || 0).toLocaleString()} · ${buyerName}`,
@@ -64,6 +65,7 @@ export async function notifyManualHandoverOrderPaid(
 }
 
 export async function notifyBoostingOrderPaid(orderId: string, source: string): Promise<void> {
+	if (!shouldEmailAdmin('routine_order')) return;
 	const order = await prisma.order.findUnique({
 		where: { id: orderId },
 		select: {

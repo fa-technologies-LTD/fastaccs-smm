@@ -58,6 +58,24 @@ const groups = [
 ];
 
 describe('Managed Boosting storefront', () => {
+	it('uses neutral option labels, no invented recommendation, and explains refill limits', async () => {
+		render(ManagedBoostingStorefront, { groups });
+		await expect
+			.element(page.getByText('X (Twitter) Followers · Standard option 1', { exact: true }))
+			.toBeVisible();
+		await expect
+			.element(page.getByText('X (Twitter) Followers · 30-day refill option', { exact: true }))
+			.toBeVisible();
+		await expect.element(page.getByText('Recommended', { exact: true })).not.toBeInTheDocument();
+		await expect
+			.element(page.getByText('Less likely to drop, with stronger staying power.', { exact: true }))
+			.not.toBeInTheDocument();
+		await expect
+			.element(
+				page.getByText(/Subject\s+to\s+eligibility;\s+not\s+a\s+guarantee\s+against\s+drops/)
+			)
+			.toBeVisible();
+	});
 	afterEach(() => {
 		cart.close();
 		notifications.showSuccess.mockClear();
@@ -150,15 +168,15 @@ describe('Managed Boosting storefront', () => {
 	it('renders the approved platform, result, tier and working purchase controls', async () => {
 		render(ManagedBoostingStorefront, { groups });
 
-		await expect.element(page.getByRole('button', { name: /X \(Twitter\)/ })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: /X \(Twitter\)/ }).first()).toBeVisible();
 		await expect
 			.element(page.getByRole('button', { name: 'Followers', exact: true }))
 			.toBeVisible();
-		await expect.element(page.getByRole('button', { name: /Affordable/ })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: /Standard option 1/ })).toBeVisible();
 		await expect
-			.element(page.getByRole('button', { name: /Affordable/ }))
+			.element(page.getByRole('button', { name: /Standard option 1/ }))
 			.toHaveTextContent('500 followers');
-		await expect.element(page.getByRole('button', { name: /More stable/ })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: /30-day refill option/ })).toBeVisible();
 		await expect.element(page.getByLabelText('Paste your profile link')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: /Add to Cart/ })).toBeEnabled();
 	});

@@ -10,6 +10,7 @@ import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 import { getBoostComplaintEligibility } from '$lib/server/boosting-providers/complaints';
 import { sanitizeCustomerOrder } from '$lib/helpers/customer-order-visibility';
 import { getBoostingProgress } from '$lib/helpers/boosting-progress';
+import { isPhoneRefundConfirmed } from '$lib/helpers/phone-refund-state';
 
 export const load: PageServerLoad = async ({ params, locals, url, depends }) => {
 	depends('app:order-progress');
@@ -76,10 +77,16 @@ export const load: PageServerLoad = async ({ params, locals, url, depends }) => 
 		? await prisma.orderEvent.findMany({
 				where: {
 					orderId: order.id,
-					orderItemId: { not: null },
-					type: { in: ['boosting_link_review_requested', 'boosting_rejected'] }
+					type: {
+						in: [
+							'boosting_link_review_requested',
+							'boosting_rejected',
+							'customer_support_update',
+							'order_refunded'
+						]
+					}
 				},
-				select: { orderItemId: true, description: true, occurredAt: true },
+				select: { type: true, orderItemId: true, description: true, occurredAt: true },
 				orderBy: { occurredAt: 'desc' }
 			})
 		: [];
@@ -95,7 +102,7 @@ export const load: PageServerLoad = async ({ params, locals, url, depends }) => 
 	const phoneRefundMessage = (() => {
 		const r = phoneItem?.phoneRental;
 		if (!r) return null;
-		if (!['refunded', 'failed', 'expired', 'cancelled'].includes(r.status)) return null;
+		if (!isPhoneRefundConfirmed(r, order)) return null;
 		const reason = (r.failureReason || '').toLowerCase();
 		if (reason.includes('cancelled by you')) return 'Cancelled — refunded to your store credit.';
 		if (
@@ -119,6 +126,7 @@ export const load: PageServerLoad = async ({ params, locals, url, depends }) => 
 				countryName: phoneItem.phoneRental.countryName,
 				phoneNumber: phoneItem.phoneRental.phoneNumber,
 				status: phoneItem.phoneRental.status,
+				refundConfirmed: isPhoneRefundConfirmed(phoneItem.phoneRental, order),
 				otp: phoneItem.phoneRental.otp,
 				smsMessage: phoneItem.phoneRental.smsMessage,
 				expiresAt: phoneItem.phoneRental.expiresAt?.toISOString() ?? null,
@@ -174,6 +182,10 @@ export const load: PageServerLoad = async ({ params, locals, url, depends }) => 
 	// Convert Decimal fields to numbers for serialization.
 	return {
 		fromTab,
+		customerSupportUpdates: boostingIssueEvents
+			.filter((e) => ['customer_support_update', 'order_refunded'].includes(e.type))
+			.slice(0, 3)
+			.map((e) => ({ message: e.description, at: e.occurredAt.toISOString() })),
 		phone,
 		support: {
 			whatsappNumber: business?.whatsappNumber || '',

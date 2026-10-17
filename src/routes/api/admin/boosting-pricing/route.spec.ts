@@ -59,14 +59,22 @@ it('rejects cross-origin mutations before contacting suppliers', async () => {
 	expect(mock.sync).not.toHaveBeenCalled();
 });
 it('saves through the atomic controls service, with no separate publish step', async () => {
-	expect((await POST(event({ action: 'save', sheet }))).status).toBe(200);
-	expect(mock.save).toHaveBeenCalledWith(sheet, 'admin', undefined, false, false);
+	expect((await POST(event({ action: 'save', sheet, confirmSave: true }))).status).toBe(200);
+	expect(mock.save).toHaveBeenCalledWith(sheet, 'admin', undefined, false, true);
 });
-it('passes publication confirmation only when it is explicitly true', async () => {
-	await POST(event({ action: 'save', sheet, confirmPublish: true }));
-	expect(mock.save).toHaveBeenLastCalledWith(sheet, 'admin', undefined, false, true);
-	await POST(event({ action: 'save', sheet, confirmPublish: 'true' }));
-	expect(mock.save).toHaveBeenLastCalledWith(sheet, 'admin', undefined, false, false);
+it.each([undefined, false, 'true', 1])(
+	'rejects Save without an explicit final confirmation (%s)',
+	async (confirmSave) => {
+		expect(
+			(await POST(event({ action: 'save', sheet, confirmSave, confirmPublish: true }))).status
+		).toBe(400);
+		expect(mock.save).not.toHaveBeenCalled();
+	}
+);
+
+it('removes the old price-only path so it cannot bypass final confirmation', async () => {
+	expect((await POST(event({ action: 'save_prices', sheet, confirmSave: true }))).status).toBe(400);
+	expect(mock.save).not.toHaveBeenCalled();
 });
 it('expands from refreshed catalogues using add-only hidden drafts', async () => {
 	const response = await POST(event({ action: 'expand' }));
@@ -95,7 +103,7 @@ it('rejects malformed data and hides internal failures', async () => {
 	expect((await POST(event(null))).status).toBe(400);
 	const log = vi.spyOn(console, 'error').mockImplementation(() => {});
 	mock.save.mockRejectedValueOnce(new Error('private database password'));
-	const response = await POST(event({ action: 'save', sheet }));
+	const response = await POST(event({ action: 'save', sheet, confirmSave: true }));
 	expect(response.status).toBe(500);
 	expect(await response.text()).not.toContain('password');
 	log.mockRestore();

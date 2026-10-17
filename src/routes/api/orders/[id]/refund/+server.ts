@@ -24,13 +24,36 @@ function isUuid(value: string): boolean {
 // Cancel-with-refund: return the paid amount to the buyer as (spend-only) Store
 // Credit, mark the order refunded, and log it. Available to any admin with
 // orders:manage (includes the assistant). Only refunds money that was received.
-export const POST: RequestHandler = async ({ params, locals }) => {
+export const POST: RequestHandler = async ({ params, locals, request }) => {
 	if (!locals.user || !hasAdminPermission(locals.adminContext, 'admin:orders:manage')) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
 	const actorUserId = locals.user.id;
 	const orderId = String(params.id || '').trim();
 	if (!isUuid(orderId)) return json({ error: 'Invalid order ID' }, { status: 400 });
+	let customerMessage = '';
+	if (request) {
+		const raw = await request.text();
+		if (raw.length > 3000) return json({ error: 'Refund message is too long.' }, { status: 400 });
+		if (raw.trim()) {
+			let body;
+			try {
+				body = JSON.parse(raw);
+			} catch {
+				return json({ error: 'Invalid refund request.' }, { status: 400 });
+			}
+			if (
+				!body ||
+				typeof body !== 'object' ||
+				Array.isArray(body) ||
+				(body.customerMessage !== undefined && typeof body.customerMessage !== 'string')
+			)
+				return json({ error: 'Enter a plain-text refund message.' }, { status: 400 });
+			customerMessage = (body.customerMessage ?? '').trim();
+			if (customerMessage.length > 500)
+				return json({ error: 'Keep the refund message within 500 characters.' }, { status: 400 });
+		}
+	}
 
 	const result = await prisma.$transaction(
 		async (tx) => {
@@ -166,13 +189,22 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 					source: 'admin',
 					actorUserId,
 					amount,
-					description: `Refunded to store credit for order ${order.orderNumber}`,
+					description: `Refunded to store credit for order ${order.orderNumber}${customerMessage ? `. ${customerMessage}` : ''}`,
 					idempotencyKey: `refund:order:${order.id}`,
 					metadata: { priorPartialRefunds: alreadyCredited, cumulativeRefunded: totalAmount }
 				},
 				tx
 			);
 			await enqueueRefundRecovery(tx, order.id, `refund:order:${order.id}`);
+			await tx.notification.create({
+				data: {
+					userId: order.userId,
+					orderId: order.id,
+					type: 'store_credit',
+					title: 'Order refunded to store credit',
+					message: `₦${amount.toLocaleString('en-NG')} added to your store credit.${customerMessage ? ` ${customerMessage}` : ' Open your order for details.'}`
+				}
+			});
 			return { outcome: 'refunded' as const, order, amount, alreadyCredited };
 		},
 		{ maxWait: 10_000, timeout: 20_000 }

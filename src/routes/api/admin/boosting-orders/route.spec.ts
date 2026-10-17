@@ -40,6 +40,42 @@ beforeEach(() => {
 });
 
 describe('boosting admin queue list', () => {
+	it('gives support admins the precise recorded hold reason without revealing the audit payload or money', async () => {
+		vi.mocked(prisma.orderItem.findMany).mockResolvedValue([
+			{ id: 'held', boostFulfillmentStatus: 'under_review' }
+		] as never);
+		vi.mocked(prisma.boostFulfillment.findMany).mockResolvedValue([
+			{
+				orderItemId: 'held',
+				lastSafeErrorCategory: 'no_safe_route',
+				status: 'manual_review',
+				fulfillmentMode: 'live',
+				attempts: [
+					{
+						safeSummary: {
+							projections: [
+								{ reasons: ['insufficient_balance'], projectedMarginNgn: 999, raw: 'SECRET' }
+							]
+						}
+					}
+				]
+			}
+		] as never);
+		const body = await (await callGet('', false)).json();
+		expect(body.data[0].holdReasons).toEqual([
+			'The recorded supplier balance is insufficient after its safety reserve.'
+		]);
+		expect(body.data[0].shadowDecision).toBeNull();
+		expect(JSON.stringify(body)).not.toMatch(/SECRET|999|safeSummary|projections/);
+	});
+	it('offers an overdue filter without changing fulfillment status or treating age as failure', async () => {
+		const response = await callGet('?status=overdue');
+		expect(response.status).toBe(200);
+		expect((await response.json()).meta).toHaveProperty('overdueCount');
+		const query = vi.mocked(prisma.orderItem.findMany).mock.calls[0][0];
+		expect(JSON.stringify(query?.where)).toContain('paidAt');
+		expect(JSON.stringify(query?.where)).toContain('completed');
+	});
 	it('keeps partial delivery, review and completed orders with open refill reports in the active queue', async () => {
 		vi.mocked(prisma.orderItem.count).mockResolvedValue(4);
 		const response = await callGet();

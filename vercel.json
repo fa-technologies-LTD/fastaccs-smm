@@ -1,6 +1,10 @@
 {
 	"crons": [
 		{
+			"path": "/api/internal/cron/boosting-support-review",
+			"schedule": "9 * * * *"
+		},
+		{
 			"path": "/api/internal/cron/payments-reconcile",
 			"schedule": "1,11,21,31,41,51 * * * *"
 		},

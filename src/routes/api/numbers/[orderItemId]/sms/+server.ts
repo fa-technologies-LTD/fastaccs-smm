@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { prisma } from '$lib/prisma';
 import { pollPhoneRentalSms } from '$lib/services/phone-fulfillment';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
+import { isPhoneRefundConfirmed } from '$lib/helpers/phone-refund-state';
 
 // The first poll on a pending order kicks off the rent SWEEP (up to ~9s) + persist; give the
 // function headroom so it can never be killed mid-rent (which would orphan a paid-for number).
@@ -34,5 +35,22 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	}
 
 	const result = await pollPhoneRentalSms(orderItemId);
-	return json(result);
+	const accounting = await prisma.orderItem.findUnique({
+		where: { id: orderItemId },
+		select: {
+			phoneRental: { select: { refundedAt: true, saleAmountNgn: true } },
+			order: { select: { userId: true, refundedAmount: true } }
+		}
+	});
+	const refundConfirmed = accounting
+		? isPhoneRefundConfirmed(accounting.phoneRental, accounting.order)
+		: false;
+	return json(
+		{
+			...result,
+			status: refundConfirmed && result.status !== 'received' ? 'refunded' : result.status,
+			refundConfirmed
+		},
+		{ headers: { 'Cache-Control': 'no-store' } }
+	);
 };

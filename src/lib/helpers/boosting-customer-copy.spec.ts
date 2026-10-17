@@ -1,0 +1,33 @@
+import { expect, it } from 'vitest';
+import { boostCustomerCopy, boostCustomerOptionName } from './boosting-customer-copy';
+const offer = {
+	platform: 'instagram',
+	outcome: 'followers',
+	customerName: 'More stable',
+	shortPromise: 'Less likely to drop, with stronger staying power.',
+	expectationChips: ['Premium quality', '30-day refill protection'],
+	refillDays: null
+};
+it('does not invent quality evidence or a tier label for a single option', () => {
+	expect(boostCustomerCopy(offer)).toMatchObject({
+		customerName: 'Instagram Followers',
+		expectationChips: []
+	});
+	expect(boostCustomerCopy(offer).shortPromise).not.toMatch(/drop|quality|power/i);
+	expect(boostCustomerOptionName(offer, 0, 1)).toBe('Instagram Followers');
+});
+it('distinguishes options with factual refill terms, not comparative quality', () => {
+	expect(boostCustomerOptionName({ ...offer, refillDays: 30 }, 1, 2)).toBe(
+		'Instagram Followers · 30-day refill option'
+	);
+	expect(boostCustomerOptionName(offer, 0, 2)).toBe('Instagram Followers · Standard option 1');
+});
+it('keeps neutral owner-written names and descriptions', () => {
+	expect(
+		boostCustomerCopy({
+			...offer,
+			customerName: 'Nigeria option',
+			shortPromise: 'For Nigerian profiles.'
+		})
+	).toMatchObject({ customerName: 'Nigeria option', shortPromise: 'For Nigerian profiles.' });
+});

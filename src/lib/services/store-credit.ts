@@ -1,6 +1,12 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { moneyNgn } from '$lib/helpers/money';
+import type { OrderRedemption } from '$lib/helpers/store-credit-redemption';
+export {
+	computeOrderRedemption,
+	EARNED_REDEMPTION_CAP_PERCENT,
+	type OrderRedemption
+} from '$lib/helpers/store-credit-redemption';
 
 /**
  * Store Credit — spendable-on-site wallet credit, built on the existing
@@ -108,54 +114,15 @@ export async function getStoreCreditHistory(
 const EARNED_CREDIT_TYPES = [SC_CREDIT_AFFILIATE, SC_CREDIT_GIFT];
 const REFUND_CREDIT_TYPES = [SC_CREDIT_REFUND];
 
-// Earned/gifted credit may cover at most this fraction of an order's value.
-export const EARNED_REDEMPTION_CAP_PERCENT = 0.3;
-
 export interface StoreCreditBuckets {
 	earnedAvailable: number; // capped-spend + cashable
 	refundAvailable: number; // free-spend, not cashable
 	totalAvailable: number;
 }
 
-export interface OrderRedemption {
-	refundApplied: number;
-	earnedApplied: number;
-	totalApplied: number;
-}
-
 function naira(value: unknown): number {
 	const n = Math.floor(Number(value || 0));
 	return Number.isFinite(n) && n > 0 ? n : 0;
-}
-
-/**
- * Pure: given an order total and the user's available buckets, decide how much
- * credit to apply. Refund credit first (uncapped up to the order), then earned
- * credit (capped at EARNED_REDEMPTION_CAP_PERCENT of the ORDER total). Never
- * exceeds the order total. Refund credit preserves kobo; earned credit retains its whole-naira rule.
- */
-export function computeOrderRedemption(
-	orderTotal: number,
-	buckets: Pick<StoreCreditBuckets, 'earnedAvailable' | 'refundAvailable'>,
-	options: { earnedCapPercent?: number } = {}
-): OrderRedemption {
-	const total = moneyNgn(orderTotal);
-	const refundAvail = moneyNgn(buckets.refundAvailable);
-	const earnedAvail = naira(buckets.earnedAvailable);
-	const capPercent = options.earnedCapPercent ?? EARNED_REDEMPTION_CAP_PERCENT;
-
-	if (total <= 0) return { refundApplied: 0, earnedApplied: 0, totalApplied: 0 };
-
-	// Refund credit first — uncapped, but never more than the order.
-	const refundApplied = Math.min(refundAvail, total);
-	const remaining = moneyNgn(total - refundApplied);
-
-	// Earned credit — capped at capPercent of the ORDER total, and the remainder.
-	const earnedCap = Math.floor(total * capPercent);
-	const earnedApplied = Math.max(0, Math.min(earnedAvail, earnedCap, Math.floor(remaining)));
-
-	const totalApplied = moneyNgn(refundApplied + earnedApplied);
-	return { refundApplied, earnedApplied, totalApplied };
 }
 
 /**

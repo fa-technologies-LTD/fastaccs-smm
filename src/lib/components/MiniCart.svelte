@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { tick } from 'svelte';
+	import { lockScroll, unlockScroll } from '$lib/helpers/scroll-lock';
 	import { cart } from '$lib/stores/cart.svelte';
 	import { ShoppingCart, X, Trash2, ArrowRight, ShoppingBag, Loader } from '$lib/icons';
 	import { goto } from '$app/navigation';
@@ -24,6 +26,52 @@
 	let failedCustomIcons = $state<Record<string, boolean>>({});
 	let isLoadingCartItems = $state(false);
 	let lastLoadedCartKey = $state('');
+	let dialog = $state<HTMLDivElement>();
+	$effect(() => {
+		if (!isOpen) return;
+		const previous = document.activeElement;
+		let closed = false;
+		lockScroll();
+		void tick().then(() => {
+			if (!closed) dialog?.focus();
+		});
+		return () => {
+			closed = true;
+			unlockScroll();
+			if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+		};
+	});
+	function handleKey(event: KeyboardEvent) {
+		if (!isOpen) return;
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			cart.close();
+			return;
+		}
+		if (event.key !== 'Tab' || !dialog) return;
+		const buttons = [
+			...dialog.querySelectorAll<HTMLElement>(
+				'button:not([disabled]), a[href], input:not([disabled]), [tabindex="0"]'
+			)
+		].filter((el) => el.getClientRects().length > 0);
+		const first = buttons[0],
+			last = buttons[buttons.length - 1];
+		if (!first) {
+			event.preventDefault();
+			dialog.focus();
+			return;
+		}
+		if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
+			event.preventDefault();
+			last.focus();
+		} else if (
+			!event.shiftKey &&
+			(document.activeElement === last || !dialog.contains(document.activeElement))
+		) {
+			event.preventDefault();
+			first.focus();
+		}
+	}
 
 	function getCartItemKey(item: Pick<CartItem, 'cartItemId' | 'tierId' | 'exactAccount'>): string {
 		return (
@@ -53,7 +101,10 @@
 
 	// Load cart items when cart opens or items change
 	$effect(() => {
-		if (!isOpen) return;
+		if (!isOpen) {
+			lastLoadedCartKey = '';
+			return;
+		}
 
 		if (itemCount === 0) {
 			cartItems = [];
@@ -71,7 +122,7 @@
 		isLoadingCartItems = true;
 
 		try {
-			const refreshedItems = await cart.getItemsWithTiers();
+			const refreshedItems = await cart.getItemsWithTiers({ force: true });
 			cartItems = refreshedItems;
 			total = refreshedItems.reduce((sum, item) => sum + getItemPrice(item), 0);
 			lastLoadedCartKey = getCartSnapshotKey(cart.items);
@@ -144,10 +195,11 @@
 </script>
 
 <!-- Professional MiniCart Dropdown -->
+<svelte:window onkeydown={handleKey} />
 {#if isOpen}
 	<!-- Backdrop -->
 	<button
-		class="fixed inset-0 z-40 transition-opacity"
+		class="fixed inset-0 z-[70] transition-opacity"
 		style="background: rgba(0, 0, 0, 0.6);"
 		onclick={closeCart}
 		aria-label="Close cart"
@@ -155,10 +207,15 @@
 
 	<!-- Cart Dropdown -->
 	<div
-		class="fixed inset-x-3 bottom-3 z-50 md:top-1/2 md:right-auto md:bottom-auto md:left-1/2 md:w-96 md:-translate-x-1/2 md:-translate-y-1/2 md:transform"
+		bind:this={dialog}
+		role="dialog"
+		aria-modal="true"
+		aria-label="Shopping cart"
+		tabindex="-1"
+		class="cart-dialog fixed inset-x-3 z-[90] outline-none md:top-1/2 md:right-auto md:bottom-auto md:left-1/2 md:w-96 md:-translate-x-1/2 md:-translate-y-1/2 md:transform"
 	>
 		<div
-			class="flex max-h-[82vh] flex-col overflow-hidden md:max-h-none"
+			class="cart-dialog-content flex flex-col overflow-hidden"
 			style="background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-2);"
 		>
 			<!-- Header -->
@@ -417,6 +474,20 @@
 {/if}
 
 <style>
+	.cart-dialog {
+		bottom: calc(var(--cookie-notice-mobile-offset, 0px) + 0.75rem);
+	}
+	.cart-dialog-content {
+		max-height: min(82dvh, calc(100dvh - var(--cookie-notice-mobile-offset, 0px) - 2rem));
+	}
+	@media (min-width: 768px) {
+		.cart-dialog {
+			bottom: auto;
+		}
+		.cart-dialog-content {
+			max-height: 88dvh;
+		}
+	}
 	.btn-checkout:disabled {
 		opacity: 0.65;
 		cursor: wait;

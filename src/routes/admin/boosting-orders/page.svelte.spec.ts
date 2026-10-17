@@ -135,6 +135,8 @@ it('shows purchased refill protection and supplier progress without manual compl
 	(data.items as unknown[]) = [
 		{
 			id: 'item',
+			holdReasons: ['The last supplier status check failed. Delivery is not confirmed.'],
+			overdueReview: true,
 			productName: 'Instagram Followers',
 			boostTargetUrl: 'https://instagram.com/example',
 			boostQuantity: 1000,
@@ -165,7 +167,15 @@ it('shows purchased refill protection and supplier progress without manual compl
 		}
 	];
 	render(Page, { data } as never);
+	await expect
+		.element(
+			page.getByText('24-hour review due. Delivery is still open; this is not confirmed failure.')
+		)
+		.toBeVisible();
 	await expect.element(page.getByText('7-day refill', { exact: true })).toBeVisible();
+	await expect
+		.element(page.getByRole('region', { name: 'Why this order needs review' }))
+		.toHaveTextContent('The last supplier status check failed. Delivery is not confirmed.');
 	await expect.element(page.getByText(/200 \/ 1,000 supplier-reported/)).toBeVisible();
 	expect(page.getByRole('button', { name: 'Complete', exact: true }).query()).toBeNull();
 	expect(page.getByText('30-day refill', { exact: true }).query()).toBeNull();

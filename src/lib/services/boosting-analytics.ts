@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from '$lib/prisma';
+import { boostChargedCostSql } from '$lib/server/boosting-charged-cost';
 
 type Aggregate = {
 	categoryId: string | null;
@@ -28,6 +29,8 @@ export interface BoostingAnalyticsRow {
 	netSalesNgn: number | null;
 	supplierCostNgn: number | null;
 	recordedMarginNgn: number | null;
+	paymentFeesNgn: null;
+	profitAfterPaymentFeesNgn: null;
 }
 
 /** Reporting only. Uses historical charged costs + historical FX, never today's quote or price. */
@@ -49,11 +52,12 @@ export async function getBoostingAnalytics(
 					SUM(i.refunded_amount) OVER (PARTITION BY i.order_id) AS attributed_refund,
 					o.total_amount, o.refunded_amount AS order_refund,
 					(o.status = 'refunded' OR o.payment_status = 'refunded' OR o.delivery_status = 'refunded') AS full_refund,
-					CASE WHEN f.final_supplier_cost_usd IS NOT NULL AND f.fx_ngn_per_usd > 0
-						THEN f.final_supplier_cost_usd * f.fx_ngn_per_usd ELSE NULL END AS cost
+					CASE WHEN charges.total_usd IS NOT NULL AND f.fx_ngn_per_usd > 0
+						THEN charges.total_usd * f.fx_ngn_per_usd ELSE NULL END AS cost
 				FROM order_items i JOIN orders o ON o.id = i.order_id
 				JOIN categories c ON c.id = i.category_id
 				LEFT JOIN boost_fulfillments f ON f.order_item_id = i.id
+				LEFT JOIN LATERAL (${boostChargedCostSql()}) charges ON true
 				WHERE o.order_type = 'boosting' AND i.boost_target_url IS NOT NULL
 					AND COALESCE(o.paid_at, o.created_at) >= ${since}
 					AND COALESCE(o.paid_at, o.created_at) <= ${now}
@@ -102,7 +106,9 @@ export async function getBoostingAnalytics(
 			: null,
 		netSalesNgn: revenueVisible ? Number(r.netSales) : null,
 		supplierCostNgn: revenueVisible && Number(r.knownCosts) ? Number(r.supplierCost) : null,
-		recordedMarginNgn: revenueVisible && Number(r.knownCosts) ? Number(r.recordedMargin) : null
+		recordedMarginNgn: revenueVisible && Number(r.knownCosts) ? Number(r.recordedMargin) : null,
+		paymentFeesNgn: null,
+		profitAfterPaymentFeesNgn: null
 	});
 	const overall = rows.find((r) => r.categoryId === null) ?? {
 		categoryId: null,

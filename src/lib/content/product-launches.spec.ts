@@ -31,4 +31,13 @@ describe('product launch copy', () => {
 
 		expect(allCopy).not.toMatch(/fully automated/i);
 	});
+	it('does not promise faster delivery or cash refunds, and explains that old emails are unchanged', () => {
+		const numbers = PRODUCT_LAUNCH_EMAIL_DRAFTS.find((d) => d.id === 'numbers_improved')!;
+		const privacy = PRODUCT_LAUNCH_EMAIL_DRAFTS.find((d) => d.id === 'account_delivery_privacy')!;
+		expect(numbers.body).toContain('to store credit');
+		expect(PRODUCT_LAUNCH_EMAIL_DRAFTS.map((d) => d.subject + d.body).join(' ')).not.toMatch(
+			/faster|instantly|guaranteed delivery/i
+		);
+		expect(privacy.body).toContain('does not remove details from older emails');
+	});
 });

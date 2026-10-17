@@ -46,7 +46,7 @@
 		{
 			question: 'Can I choose a specific account?',
 			answer:
-				'Accounts are distributed automatically from our inventory to keep delivery fair and fast.'
+				'Use Quick buy and we’ll choose an available account, or choose a specific profile where offered.'
 		},
 		{
 			question: 'Can I get a refund?',
@@ -67,7 +67,7 @@
 			id: 'boosting-refills',
 			question: 'What does 30-day refill protection mean?',
 			answer:
-				'The refill option stays available for 30 days after fulfilment. If the delivered amount drops during that time, you can request the included refill. Keep the original link and username unchanged, or the refill may not work. This does not mean the result can never drop.'
+				'Where included, refill protection may start when your order is sent to the supplier—not when delivery finishes. After delivery, request a refill before your order’s deadline. Eligibility and supplier approval apply. Keep the original link and username unchanged.'
 		},
 		{
 			question: 'What link should I submit for a boosting order?',

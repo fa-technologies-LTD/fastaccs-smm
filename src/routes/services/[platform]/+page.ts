@@ -47,6 +47,12 @@ async function fetchPlatformServices(
 			fetch('/api/boosting-offers')
 		]);
 		const servicesResult = await servicesResponse.json();
+		if (!offerCopyResponse.ok)
+			return {
+				services: [],
+				iconUrl: null,
+				error: 'Boosting availability could not be checked. Please try again shortly.'
+			};
 
 		if (!servicesResponse.ok) {
 			return {

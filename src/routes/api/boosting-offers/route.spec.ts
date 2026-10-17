@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { saleOfferFixture } from '$lib/server/boosting-sale-readiness-fixtures';
+vi.mock('$lib/services/boosting-pricing', () => ({
+	getBoostingPricingConfig: async () => ({ usdNgnRate: 1500 })
+}));
 
 const mocks = vi.hoisted(() => ({ findMany: vi.fn(), findRolloutMarker: vi.fn(), mode: 'live' }));
 vi.mock('$env/dynamic/private', () => ({
@@ -22,17 +26,24 @@ beforeEach(() => {
 	mocks.mode = 'live';
 	mocks.findMany.mockResolvedValue([
 		{
+			...saleOfferFixture(),
 			categoryId: 'category-1',
 			platform: 'instagram',
 			outcome: 'followers',
+			targetType: 'profile',
 			pricePerStepNgn: 100,
 			routes: [
 				{
+					...saleOfferFixture().routes[0],
+					targetType: 'profile',
 					providerService: {
+						...saleOfferFixture().routes[0].providerService,
 						name: 'Instagram Followers',
 						category: 'Followers',
 						providerType: 'Default',
 						platforms: ['instagram'],
+						outcomes: ['followers'],
+						targetType: 'profile',
 						unavailableAt: null
 					}
 				}
@@ -48,6 +59,23 @@ beforeEach(() => {
 });
 
 describe('public live Boosting offer copy', () => {
+	it.each(['funds', 'stale', 'refill', 'approval', 'missing'])(
+		'does not sell a known unavailable offer: %s',
+		async (issue) => {
+			const base = (await mocks.findMany())[0];
+			if (issue === 'funds') base.routes[0].providerService.providerState.projectedBalance = 0;
+			if (issue === 'stale')
+				base.routes[0].providerService.providerState.lastBalanceSuccessAt = new Date(0);
+			if (issue === 'refill') base.refillDays = 30;
+			if (issue === 'approval') base.routes[0].equivalenceApproved = false;
+			if (issue === 'missing') base.routes = [];
+			mocks.findMany.mockResolvedValue([base]);
+			expect(await (await GET({ setHeaders: vi.fn() } as never)).json()).toMatchObject({
+				managedRolloutActive: true,
+				data: []
+			});
+		}
+	);
 	it.each(['shadow', 'pilot', ''])(
 		'keeps offers offline when dispatch is not live (%s)',
 		async (mode) => {
@@ -79,16 +107,11 @@ describe('public live Boosting offer copy', () => {
 					category: { categoryType: 'boosting_service', isActive: true },
 					routes: { some: { state: 'enabled', equivalenceApproved: true } }
 				}),
-				select: expect.not.objectContaining({
-					routes: true,
-					minimumMarginPercent: true,
-					maximumSupplierCostNgn: true
-				})
+				include: expect.objectContaining({ routes: expect.any(Object) })
 			})
 		);
-		expect(mocks.findMany.mock.calls[0]?.[0]?.select).toMatchObject({ maxQuantity: true });
 		expect(setHeaders).toHaveBeenCalledWith(
-			expect.objectContaining({ 'cache-control': expect.stringContaining('s-maxage=30') })
+			expect.objectContaining({ 'cache-control': 'no-store' })
 		);
 	});
 	it('a retained old route cannot keep an unavailable locked selection visible', async () => {
@@ -135,6 +158,7 @@ describe('public live Boosting offer copy', () => {
 		async (outcome, name, category, providerType) => {
 			mocks.findMany.mockResolvedValue([
 				{
+					...saleOfferFixture(),
 					platform: 'tiktok',
 					outcome,
 					routes: [

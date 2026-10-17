@@ -1,4 +1,5 @@
 import { isOrderPaymentConfirmed } from './buyer-order-visibility';
+import { isBoostOrderOverdue } from './boosting-overdue-review';
 
 export interface BoostingProgress {
 	status: string;
@@ -24,7 +25,8 @@ function date(value: unknown): string | null {
 /** Buyer-facing delivery state, not payment state or a guarantee of visible engagement. */
 export function getBoostingProgress(
 	itemValue: unknown,
-	orderValue: unknown
+	orderValue: unknown,
+	now = new Date()
 ): BoostingProgress | null {
 	const item = record(itemValue);
 	if (!item.boostTargetUrl) return null;
@@ -73,11 +75,30 @@ export function getBoostingProgress(
 		'Not started',
 		'Delivery starts after payment is confirmed.'
 	];
+	const overdue = isBoostOrderOverdue(
+		{
+			boostFulfillmentStatus: status,
+			order: {
+				paymentStatus: typeof order.paymentStatus === 'string' ? order.paymentStatus : '',
+				status: typeof order.status === 'string' ? order.status : '',
+				deliveryStatus: typeof order.deliveryStatus === 'string' ? order.deliveryStatus : '',
+				paidAt:
+					order.paidAt instanceof Date || typeof order.paidAt === 'string' ? order.paidAt : null,
+				createdAt:
+					order.createdAt instanceof Date || typeof order.createdAt === 'string'
+						? order.createdAt
+						: null
+			}
+		},
+		now
+	);
 	const message =
-		fulfillment.lastSafeErrorCategory === 'status_check_failed' &&
-		['pending', 'queued', 'in_progress'].includes(status)
-			? 'The latest update is delayed. Your order has not been restarted.'
-			: originalMessage;
+		overdue && ['pending', 'queued', 'in_progress'].includes(status)
+			? 'Delivery is taking longer. Contact support for an update; no need to reorder.'
+			: fulfillment.lastSafeErrorCategory === 'status_check_failed' &&
+				  ['pending', 'queued', 'in_progress'].includes(status)
+				? 'The latest update is delayed. Your order has not been restarted.'
+				: originalMessage;
 	return {
 		status,
 		label,

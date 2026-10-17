@@ -48,6 +48,7 @@
 			canViewRevenue?: boolean;
 			canViewOrderAmounts?: boolean;
 			adminRole?: string;
+			adminPermissions?: string[];
 		};
 	}
 
@@ -55,6 +56,7 @@
 	// Order detail shows per-order amounts (what the buyer paid) — visible to the
 	// assistant so she can process refunds. Not gated on canViewRevenue.
 	const canViewOrderAmounts = Boolean(data.canViewOrderAmounts);
+	const canManageOrders = $derived(Boolean(data.adminPermissions?.includes('admin:orders:manage')));
 	let hideMonetaryAmounts = $state(false);
 
 	let order = $state(data.order);
@@ -71,6 +73,44 @@
 	let isProcessing = $state(false);
 	let showCredentials = $state(false);
 	let newNote = $state('');
+	let customerUpdate = $state('');
+	let customerUpdateBusy = $state(false);
+	let customerUpdateRequestId = '';
+	let lastUpdatePayload = '';
+	let refundMessage = $state('');
+	async function sendCustomerUpdate() {
+		if (customerUpdateBusy || customerUpdate.trim().length < 3) return;
+		const message = customerUpdate.trim();
+		if (!customerUpdateRequestId || lastUpdatePayload !== message)
+			customerUpdateRequestId = crypto.randomUUID();
+		lastUpdatePayload = message;
+		customerUpdateBusy = true;
+		try {
+			const response = await fetch(`/api/admin/orders/${order.id}/support-update`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ message, requestId: customerUpdateRequestId })
+			});
+			const result = await response.json();
+			if (!response.ok || !result.success)
+				throw new Error(result.error || 'Could not send update.');
+			addToast({
+				type: 'success',
+				title: 'Customer update saved',
+				message: 'Visible on the order and in their notification bell.'
+			});
+			customerUpdate = '';
+			customerUpdateRequestId = '';
+		} catch (error) {
+			addToast({
+				type: 'error',
+				title: 'Update not confirmed',
+				message: error instanceof Error ? error.message : 'Try again; your message is kept.'
+			});
+		} finally {
+			customerUpdateBusy = false;
+		}
+	}
 	let selectedDeliveryMethod = $state<'email' | 'whatsapp' | 'telegram'>('email');
 	if (typeof window !== 'undefined') {
 		hideMonetaryAmounts = localStorage.getItem(ADMIN_MONEY_VISIBILITY_KEY) === 'true';
@@ -306,7 +346,11 @@
 		refundArmed = false;
 		isProcessing = true;
 		try {
-			const res = await fetch(`/api/orders/${order.id}/refund`, { method: 'POST' });
+			const res = await fetch(`/api/orders/${order.id}/refund`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ customerMessage: refundMessage })
+			});
 			const result = await res.json();
 			if (!res.ok || !result.success) {
 				addToast({
@@ -567,11 +611,22 @@
 						</button>
 					{/if}
 
-					<!-- Refund: only while payment is received but the order is NOT yet
-					     completed/delivered (hard-blocked once completed). Two-step to
-					     avoid accidental clicks. -->
-					{#if order.paymentStatus === 'paid' && String(order.status) !== 'completed' && String(order.status) !== 'refunded'}
+					<!-- A provider-reported completion does not remove Boosting refund rights.
+					     Preserve the existing Accounts restriction; the refund API rechecks payment. -->
+					{#if canManageOrders && ['paid', 'success', 'overpaid'].includes(order.paymentStatus) && (isBoostingOrder || String(order.status) !== 'completed') && String(order.status) !== 'refunded'}
 						{#if refundArmed}
+							{#if isBoostingOrder}<p class="w-full text-sm text-[var(--text-muted)]">
+									Refunds the entire order to store credit. Existing supplier work may continue.
+								</p>{/if}
+							<label class="text-sm text-[var(--text-muted)]"
+								>Message with refund (optional)
+								<input
+									maxlength="500"
+									bind:value={refundMessage}
+									disabled={isProcessing}
+									class="block rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] p-2 text-[var(--text)]"
+								/>
+							</label>
 							<button
 								onclick={refundOrder}
 								disabled={isProcessing}
@@ -626,6 +681,34 @@
 		<div class="grid grid-cols-1 gap-8 lg:grid-cols-3">
 			<!-- Main Content -->
 			<div class="space-y-6 lg:col-span-2">
+				{#if isBoostingOrder && canManageOrders}
+					<details class="rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] p-5">
+						<summary class="cursor-pointer font-semibold text-[var(--text)]"
+							>Customer update</summary
+						>
+						<p class="mt-2 text-sm text-[var(--text-muted)]">
+							Shown on their order and notification bell. This does not change delivery status or
+							send an email.
+						</p>
+						<label class="mt-3 block text-sm text-[var(--text-muted)]"
+							>Message to customer
+							<textarea
+								maxlength="500"
+								rows="3"
+								bind:value={customerUpdate}
+								disabled={customerUpdateBusy}
+								class="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elev-2)] p-3 text-[var(--text)]"
+							></textarea>
+						</label>
+						<button
+							onclick={sendCustomerUpdate}
+							disabled={customerUpdateBusy || customerUpdate.trim().length < 3}
+							class="mt-3 rounded-lg bg-[var(--primary)] px-4 py-2 font-semibold text-[#00150b] disabled:opacity-50"
+						>
+							{customerUpdateBusy ? 'Saving update…' : 'Send customer update'}
+						</button>
+					</details>
+				{/if}
 				<!-- Order Summary -->
 				<div class="rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] p-6 shadow-sm">
 					<h2 class="mb-4 text-lg font-semibold text-[var(--text)]">Order Summary</h2>

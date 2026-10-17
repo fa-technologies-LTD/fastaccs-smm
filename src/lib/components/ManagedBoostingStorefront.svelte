@@ -1,5 +1,6 @@
 <script lang="ts">
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
+	import { boostCustomerCopy, boostCustomerOptionName } from '$lib/helpers/boosting-customer-copy';
 	import { boostingStartingQuantity } from '$lib/helpers/boosting-checkout';
 	import {
 		parseBoostComments,
@@ -365,16 +366,21 @@
 										<strong class="text-lg" style="color: var(--text);"
 											>{selectedGroup.offers.length === 1
 												? `${selectedGroup.platformLabel} ${selectedGroup.outcomeLabel}`
-												: offer.customerName}</strong
+												: boostCustomerOptionName(
+														offer,
+														index,
+														selectedGroup.offers.length
+													)}</strong
 										>
-										{#if index === 0 && selectedGroup.offers.length > 1}
-											<span
-												class="rounded-full px-2 py-0.5 text-[10px] font-bold"
-												style="background: var(--primary); color: #00150b;">Recommended</span
-											>
-										{/if}
 									</div>
-									<p class="mt-1 text-sm" style="color: var(--text-muted);">{offer.shortPromise}</p>
+									<p class="mt-1 text-sm" style="color: var(--text-muted);">
+										{boostCustomerCopy(offer).shortPromise}
+									</p>
+									{#if offer.refillDays}<p class="mt-1 text-xs" style="color: var(--text-muted);">
+											{offer.refillDays}-day refill requests included. Subject to eligibility; not a
+											guarantee against drops. The window normally starts when the order is sent to
+											the supplier; check your order for eligibility.
+										</p>{/if}
 								</div>
 								<strong class="text-right whitespace-nowrap" style="color: var(--text);">
 									{formatPrice(
@@ -388,9 +394,9 @@
 									>
 								</strong>
 							</div>
-							{#if offer.expectationChips.length}
+							{#if boostCustomerCopy(offer).expectationChips.length}
 								<div class="mt-3 flex flex-wrap gap-x-4 gap-y-2">
-									{#each offer.expectationChips as chip (chip)}
+									{#each boostCustomerCopy(offer).expectationChips as chip (chip)}
 										<span
 											class="flex items-center gap-1.5 text-xs"
 											style="color: var(--text-muted);"

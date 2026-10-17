@@ -3,6 +3,7 @@
 	import { afterNavigate, goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { AdminPermission } from '$lib/auth/admin-roles';
+	import { adminDialog } from '$lib/helpers/admin-dialog';
 	import {
 		Package,
 		ShoppingCart,
@@ -67,6 +68,11 @@
 	afterNavigate(() => void refreshAttentionCounts());
 
 	onMount(() => {
+		const desktop = window.matchMedia('(min-width: 1024px)');
+		const closeOnDesktop = () => {
+			if (desktop.matches) sidebarOpen = false;
+		};
+		desktop.addEventListener('change', closeOnDesktop);
 		const refreshWhenVisible = () => {
 			if (document.visibilityState === 'visible') void refreshAttentionCounts();
 		};
@@ -77,6 +83,7 @@
 		window.addEventListener('fastaccs:admin-attention-refresh', refreshAfterAdminAction);
 
 		return () => {
+			desktop.removeEventListener('change', closeOnDesktop);
 			window.clearInterval(timer);
 			window.removeEventListener('focus', refreshWhenVisible);
 			document.removeEventListener('visibilitychange', refreshWhenVisible);
@@ -192,6 +199,15 @@
 	});
 
 	let sidebarOpen = $state(false);
+	const activeNavHref = $derived(
+		adminNavItems
+			.filter(
+				(item) =>
+					page.url.pathname === item.href ||
+					(item.href !== '/admin' && page.url.pathname.startsWith(item.href + '/'))
+			)
+			.sort((a, b) => b.href.length - a.href.length)[0]?.href
+	);
 
 	async function signOut() {
 		try {
@@ -233,8 +249,9 @@
 						<a
 							href={item.href}
 							data-sveltekit-preload-data="hover"
-							class="group flex items-center rounded-md px-2 py-1.5 text-xs font-medium transition-all {page
-								.url.pathname === item.href
+							aria-current={activeNavHref === item.href ? 'page' : undefined}
+							class="group flex items-center rounded-md px-2 py-1.5 text-xs font-medium transition-all {activeNavHref ===
+							item.href
 								? 'bg-white/10 text-white'
 								: 'text-gray-300 hover:bg-white/5 hover:text-white'}"
 						>
@@ -271,6 +288,12 @@
 				<div
 					class="relative flex w-full max-w-xs flex-1 flex-col"
 					style="background: var(--bg-elev-1);"
+					id="admin-mobile-navigation"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Admin navigation"
+					tabindex="-1"
+					use:adminDialog={() => (sidebarOpen = false)}
 				>
 					<div class="h-0 flex-1 overflow-y-auto pt-5 pb-4">
 						<!-- Logo and Close Button -->
@@ -281,6 +304,7 @@
 								class="flex h-10 w-10 items-center justify-center rounded-full transition-colors focus:ring-2 focus:outline-none"
 								style="color: var(--text-muted);"
 								onclick={() => (sidebarOpen = false)}
+								aria-label="Close admin navigation"
 							>
 								<X class="h-6 w-6" />
 							</button>
@@ -291,8 +315,9 @@
 								{@const IconComponent = item.icon}
 								<a
 									href={item.href}
-									class="group flex items-center rounded-md px-2 py-2 text-sm font-medium transition-all {page
-										.url.pathname === item.href
+									aria-current={activeNavHref === item.href ? 'page' : undefined}
+									class="group flex items-center rounded-md px-2 py-2 text-sm font-medium transition-all {activeNavHref ===
+									item.href
 										? 'bg-white/10 text-white'
 										: 'text-gray-300 hover:bg-white/5 hover:text-white'}"
 									onclick={() => (sidebarOpen = false)}
@@ -333,6 +358,9 @@
 					class="-mt-0.5 -ml-0.5 inline-flex h-10 w-10 items-center justify-center rounded-md transition-colors focus:ring-2 focus:outline-none focus:ring-inset lg:hidden"
 					style="color: var(--text-muted);"
 					onclick={() => (sidebarOpen = true)}
+					aria-label="Open admin navigation"
+					aria-controls="admin-mobile-navigation"
+					aria-expanded={sidebarOpen}
 				>
 					<Menu class="h-5 w-5" />
 				</button>

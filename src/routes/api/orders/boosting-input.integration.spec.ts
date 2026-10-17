@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { saleOfferFixture } from '$lib/server/boosting-sale-readiness-fixtures';
+vi.mock('$lib/services/boosting-pricing', () => ({
+	getBoostingPricingConfig: async () => ({ usdNgnRate: 1500 })
+}));
 
 const mocks = vi.hoisted(() => ({
 	categories: vi.fn(),
@@ -29,6 +33,7 @@ vi.mock('$lib/server/boosting-providers/fulfillment-worker', () => ({
 import { POST } from './+server';
 
 const offer = {
+	...saleOfferFixture(),
 	id: 'custom-offer',
 	categoryId: 'custom-category',
 	platform: 'tiktok',
@@ -39,7 +44,12 @@ const offer = {
 	pricePerStepNgn: 10.5,
 	routes: [
 		{
+			...saleOfferFixture().routes[0],
+			minimumQuantity: 10,
 			providerService: {
+				...saleOfferFixture().routes[0].providerService,
+				minQuantity: 10,
+				outcomes: ['custom_comments'],
 				name: 'TikTok Custom Comments',
 				category: 'TikTok Comments',
 				providerType: 'Custom Comments',

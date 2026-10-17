@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { saleOfferFixture } from '$lib/server/boosting-sale-readiness-fixtures';
+vi.mock('$lib/services/boosting-pricing', () => ({
+	getBoostingPricingConfig: async () => ({ usdNgnRate: 1500 })
+}));
 
 const mocks = vi.hoisted(() => ({ categories: vi.fn(), offers: vi.fn(), transaction: vi.fn() }));
 vi.mock('$lib/prisma', () => ({
@@ -30,7 +34,10 @@ async function checkout(quantities: number[]) {
 			body: JSON.stringify({
 				checkoutKey: 'minimum-test',
 				paymentMethod: 'monnify',
-				totalAmount: 99999,
+				totalAmount: quantities.reduce(
+					(sum, quantity) => sum + Math.ceil(((quantity / 100) * 125) / 50) * 50,
+					0
+				),
 				items: quantities.map((boostQuantity, i) => ({
 					categoryId: `category-${i}`,
 					boostOfferId: `offer-${i}`,
@@ -63,6 +70,7 @@ describe('server-authoritative combined Boosting checkout minimum', () => {
 		);
 		mocks.offers.mockResolvedValue(
 			[0, 1].map((i) => ({
+				...saleOfferFixture(),
 				id: `offer-${i}`,
 				categoryId: `category-${i}`,
 				platform: 'tiktok',
@@ -73,7 +81,9 @@ describe('server-authoritative combined Boosting checkout minimum', () => {
 				pricePerStepNgn: 125,
 				routes: [
 					{
+						...saleOfferFixture().routes[0],
 						providerService: {
+							...saleOfferFixture().routes[0].providerService,
 							name: 'TikTok Likes',
 							category: 'TikTok Likes',
 							providerType: 'Default',
@@ -89,6 +99,21 @@ describe('server-authoritative combined Boosting checkout minimum', () => {
 		mocks.transaction.mockRejectedValue(new Error('Fixture financial boundary reached.'));
 	});
 	afterEach(() => vi.restoreAllMocks());
+	it.each(['funds', 'stale', 'locked', 'refill', 'quantity'])(
+		'rejects a stale cart before order or payment writes: %s',
+		async (issue) => {
+			const offers = await mocks.offers();
+			if (issue === 'funds') offers[0].routes[0].providerService.providerState.projectedBalance = 0;
+			if (issue === 'stale')
+				offers[0].routes[0].providerService.providerState.lastBalanceSuccessAt = new Date(0);
+			if (issue === 'locked') offers[0].lockedRouteId = 'missing';
+			if (issue === 'refill') offers[0].refillDays = 30;
+			if (issue === 'quantity') offers[0].routes[0].maximumQuantity = 200;
+			mocks.offers.mockResolvedValue(offers);
+			expect((await checkout([400])).status).toBe(409);
+			expect(mocks.transaction).not.toHaveBeenCalled();
+		}
+	);
 	it('rejects an under-minimum cart using saved prices, ignoring forged client totals', async () => {
 		const response = await checkout([200]);
 		expect(response.status).toBe(400);

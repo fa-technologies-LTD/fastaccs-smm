@@ -1,0 +1,284 @@
+# Sprint completion — prioritised master checklist
+
+## Current — owner-approved final review and local integration, 17 October 2026
+
+- [x] Owner explicitly approved review and merge. Push/deploy, migrations, offer publication and announcements remain separate approvals.
+- [x] Fetch/review upstream main: preserve password recovery and monitored support-inbox reply routing. Keep old one-off production scripts/private notes outside the app merge and untouched.
+- [x] Final review caught pre-payment freshness defaults looser than dispatch defaults. Tighten refusal/admin review defaults to the existing 90-minute catalogue / 45-minute balance limits; add regression coverage. No router, selection, price, supplier, environment or production changes. Focused safety tests: 79 pass.
+- [ ] Commit reviewed app/tests/verification tooling, merge current upstream main without losing either contributor's changes, then rerun merged tests/type/build/native/staging verification.
+- [ ] Owner price review and explicit push/deploy approval; publish only the owner's selected ready offers after the live admin actually contains the new code. A local merge does not update production.
+- [ ] Universal: SEO/indexing/marketing with Claude; support inbox verification; announcement approval before sending; retention/refill evidence; production/cold-load checks and deferred cleanup. Supplier selection/learning/automatic paid retries remain excluded.
+
+## Current — local admin workflow completion, 17 October 2026
+
+Owner requested a smoother, complete admin experience. Scope is the existing Boosting
+price-review workflow and shared mobile navigation, not supplier selection, learning,
+automatic retries, a new admin information architecture or a production release.
+
+- [x] Separate actual Live-now filtering from draft ticks; add unsaved-edits/ready filters, result counts, supplier/code search and Clear filters without losing edits. Mark edited rows and pending visibility explicitly.
+- [x] Confirmed discard-draft action, read-only Reload saved action, clear operation states and one final Save/review flow. Failed reloads preserve all drafts; an uncertain Save blocks resubmission until the saved result is checked. Export remains available for keeping a copy.
+- [x] Refresh stored supplier details without saving settings; bound read requests and retain actionable load/retry errors. Keep supplier inspection read-only and catalogue/publication safeguards intact.
+- [x] Ctrl/Cmd+S opens the same review, never submits it; Escape/focus/scroll locking for admin dialogs and mobile navigation. Highlight the most-specific sidebar destination and close mobile navigation when resizing to desktop.
+- [x] Deduplicate repeated review warnings, clarify pricing quantities and estimated profit, consolidate uncertain-save alerts. Reuse draft-change calculations and currency formatters rather than rebuilding them on every edit.
+- [x] Regression checks: 237 server suites / 1,764 tests; 18 browser suites / 118 tests, including a 120-offer edit-isolation check. Final type check: zero errors / 113 remaining warnings. Desktop/mobile native sample walkthrough: no page errors or network writes; draft filters/discard/keyboard review/supplier inspection/single in-memory Save passed. No owner browser tab or port-5173 restart.
+- [x] Final sequential verified-staging build/bootstrap identity check passed. Refreshed built preview on 5181 passes mobile hydration/overflow smoke checks without page errors or network writes. Owner price-review server on 5173 remains running unchanged.
+- [x] Real separate-staging authenticated Save → persisted price/quantity → storefront → acknowledged ₦500 unpaid checkout rehearsal passed. Known unavailable items hidden and stale carts refused. Fake gateway only; zero supplier calls, real payments, emails or production changes. Transaction rollback and independent fixture cleanup verified.
+- [ ] Owner localhost review → explicit release approval. No owner prices, mappings or production data changed by this work; nothing pushed, merged, deployed, published or emailed.
+- [ ] Universal: explicit release approval after local review; SEO/indexing/marketing with Claude; support inbox verification; announcement approval before sending; retention/refill evidence; production/cold-load performance and deferred cleanup. Supplier selection/learning/automatic paid retries remain excluded.
+
+## Current follow-up — balance refresh and saved-supplier display, 16 October 2026
+
+- [x] Confirm release state read-only: local HEAD `6f7b09e`, GitHub main `86e5903`; recent UI/customer-flow fixes remain uncommitted, unpushed and undeployed. No release merge attempted in this dirty worktree.
+- [x] Add per-supplier, tap-to-refresh balance cards with pending/retry states and clearly marked previous values on failure. Dedicated authorised, uncached balance-only reads; no catalogue sync, repricing, database writes or supplier purchases. Draft prices, locks, quantities and Live ticks remain intact.
+- [x] Diagnose Facebook Comments save using a strict-TLS, database-read-only HTTPS fallback after native connection failure: `s4975` is saved as shadow/review-only; historical `s1842`/`s1845` records are paused. No production data changed.
+- [x] Fix the pricing display's arbitrary `offer.routes[0]` fallback. Show the current review-only configuration when no enabled automatic mappings exist; never present a retired paused mapping as the new saved selection. This is a display/cost projection, not a supplier-routing or publication change. Existing approval/availability safeguards remain enforced.
+- [x] Distinguish a multi-service cost reference from a fixed primary; label automatic editor records as configured services and inspection records as saved for review. Avoid repeating the result name as an option label.
+- [x] Verification: 237 server suites / 1,764 tests, 16 Chromium suites / 107 tests, zero type errors / 113 remaining warnings, clean staging build with matching client/server bootstrap. Actual desktop/mobile localhost sample walkthrough passes with no page errors or write requests. Pricing-review port 5173 was not restarted.
+- [ ] Owner reviews localhost UI before explicit release approval. No merged/released fixes yet; do not reload a price-review tab over unsaved edits. The saved `s4975` mapping remains review-only, not activated by this fix.
+- [ ] Proposed checkout-warning wording/refinement remains separate: show an accurate final total before payment and explain subsequent changes specifically. The latest explanation did not itself authorise another checkout rewrite.
+- [ ] Universal: SEO/indexing/marketing with Claude; support inbox verification; approved email announcements only after explicit send approval; retention/refill evidence; production/cold-load performance; deferred cleanup. Routing/learning/automatic paid retries remain excluded.
+
+## Current — approved customer-flow and admin-email fixes, 16 October 2026
+
+This checkpoint supersedes the audit's open implementation list below. Approved local work
+only; no push/deploy, production data/publication, real payment/refund, supplier action or
+outbound email. Owner prices/settings/selections untouched. Full handoff: CUSTOMER_FLOW_FIXES_2026-10-16.md.
+
+- [x] Fresh quotes, changed-amount confirmation and server consent checks before new payable orders; preserve exact uncertain checkout requests/keys and explain saved attempts.
+- [x] Correct unavailable-item recovery, shared availability inspection/neutral cart labels and stale managed-catalogue refusal; preserve unaffected basket lines and cross-tab state.
+- [x] Shared exact-kobo credit preview/server policy; keep earned/refund/affiliate separation and stop on unreadable credit balances.
+- [x] Isolate each Numbers order's code/state/polls; ignore late responses, explain failure and distinguish pending from accounting-confirmed refunds. Cover cancellation/replacement/unknown states and missing receipt details too.
+- [x] Cookie/cart mobile overlap, Escape/dialog/focus/scroll behavior, navigation expanded state and concise sign-in/support/refill copy.
+- [x] Silence routine paid-Boosting and routine weekly-summary admin email; retain manual-action/critical alerts. Add grouped, per-recipient recorded-exception/24-hour overdue emails to existing support review, without supplier/financial mutations.
+- [x] 1,754 server tests; 101 browser tests; zero type errors / 113 remaining warnings; clean sequential build with new bootstrap-identity guard. Saved financial requests never freeze optional tracking consent/IDs.
+- [x] Built-app desktop/mobile 38-route-visit sweep: zero startup/HTTP asset errors or horizontal overflow; working mobile menu; no network writes. Real staging Save-to-acknowledged-checkout/stale-price refusal rehearsal passed, with fake gateway only and rollback verified.
+- [x] Built-page CPU-throttled speed checks completed. Cold local-to-staging waits ~4–7s included a transient DB connection failure/fallback; final authenticated staging rehearsal/rollback subsequently passed. Warm/fallback timings do not prove production speed. Recheck during controlled release.
+- [ ] Owner localhost review (stable built preview: http://localhost:5181/auth/login and /support) and continuing price review. Pricing-review port 5173 was not stopped/restarted.
+- [ ] Explicit release approval → push/deploy verification while offers remain unpublished → owner confirms selected ready offers with final Save. No blanket catalogue approval.
+- [ ] Universal: SEO/indexing/marketing with Claude; support inbox verification; email privacy/copy and approval before announcements; retention/refill evidence; production/cold-load performance and deferred cleanup. Routing/learning/automatic paid retries remain excluded.
+
+## Previous checkpoint — customer-system audit findings, 16 October 2026
+
+The owner's price review can continue. The broader audit found additional customer-flow
+defects not covered by the previous launch-safety checkpoint. No price, offer, supplier,
+product behavior or production state changed in this audit. No push/deploy, customer login,
+real payment/refund, supplier action or email. Full findings: CUSTOMER_SYSTEM_AUDIT_2026-10-16.md.
+
+- [x] Broad read-only source review and 38 anonymous desktop/mobile visits across 19 routes; no whole-page overflow. Correct protected-page redirects. Zero network-write requests.
+- [x] Fresh baseline: 229 server suites / 1,732 tests pass. Eight browser and two server observations independently reproduce defects; those observations assert current bugs, not desired passing behavior. Temporary source tests removed after preserving evidence.
+- [ ] Local fix approval → fresh quote and explicit changed-price acceptance before creating the payable order; retain authoritative pricing and checkout idempotency.
+- [ ] Correct unavailable-item recovery: no wrong-shop redirect or whole-cart loss. Carry known-unavailability refusal and honest labels through cart refresh.
+- [ ] Correct Numbers order-switch state/polling, failed-state explanation and evidence-based refund messaging.
+- [ ] Reconcile fractional refund / earned-credit preview with server policy; preserve bucket and affiliate separation.
+- [ ] Fix cross-tab cart clearing, mobile cookie/cart overlap and modal keyboard/focus behavior.
+- [ ] Reconcile Support refill terms and standard/exact account selection copy; reduce repeated homepage/sign-in/checkout wording without redesigning the price-review UI.
+- [ ] Local Numbers dependency returns Vite 504 and fails hydration. Preserve owner drafts before a controlled dev-server/cache recovery; not a demonstrated production outage.
+- [ ] Add permanent desired-behavior regressions, repeat built-app staging customer journey and throttled performance checks, then localhost review and explicit release approval. Existing tests/dev timings are not proof of real paid delivery or production speed.
+- [ ] Owner continues price review independently; no publication implied by this audit.
+- [ ] Universal: SEO/indexing/marketing with Claude; support inbox verification; email privacy/copy and announcement approval before sending; retention/refill evidence; deferred cleanup. Routing/learning/automatic paid retries remain excluded.
+
+## Previous checkpoint — local UI and customer-protection completion, 16 October 2026
+
+This checkpoint supersedes the historical launch/readiness claims below. Local implementation
+only: no push, deploy, production write/reopening, real gateway payment, supplier call/order,
+wallet credit, refund or customer email. Supplier selection, learning and automatic retries
+remain outside this approved scope; no blanket catalogue/supplier approval is implied.
+
+- [x] One final Save reviews prices, locks, offer settings and Live/offline selections; edits survive closing and read-only supplier inspection.
+- [x] Customer minimum, increment, optional maximum, option name and short description remain editable drafts. Preserve per-item price and lock; reject invalid edits without erasing other work.
+- [x] Known-unavailable offers are hidden, with shared refusal checks repeated before checkout and publication. Missing/stale funds, invalid mappings/inputs/quantities, unverified promises and existing safety-limit failures are not silently accepted. Failed availability reads cannot revive legacy prices.
+- [x] Held orders show allowlisted, recorded reasons and safe next steps, including low funds, partial delivery and uncertain submission. No automatic retry, cancellation or refund introduced.
+- [x] Remove invented recommendations and unsupported inherited quality claims. Refill copy reflects eligibility, acceptance and the existing conservative deadline—not guaranteed retention. Purchased snapshots preserved.
+- [x] Real separate-staging rehearsal of built app: authenticated session → one confirmed Save → stored price/quantities → public visibility → correct ₦500 unpaid checkout, with a fake gateway response only. Insufficient synthetic funds then hides the offer and refuses a stale cart before another order. All fixtures/settings/runtime/audits rolled back; cleanup verified.
+- [x] 1,732 server tests, 45 focused browser tests, zero type errors / 121 existing warnings; verified-staging build passed. Actual localhost desktop/mobile draft/confirmation walkthrough passed with zero browser errors and zero network-write requests.
+- [x] Fix a real staging Save regression: inherited maxima up to the database integer limit were rejected by the new editor's narrower limit. Accept representable maxima without clamping or changing existing offers.
+- [ ] Owner localhost price review: http://localhost:5173/admin/boosting-pricing. Sample-only UI review: http://localhost:5173/local-review/boosting-pricing (reload resets sample).
+- [ ] Explicit owner push/deploy approval → controlled release verification while offers remain unpublished → owner confirms only selected ready offers with final Save. Any unavailable/unmapped/unverified offers remain blocked with reasons.
+- [ ] Universal: SEO/indexing/marketing with Claude; support inbox verification; email privacy/copy and announcement approval (no send); retention/refill evidence; deferred cleanup. Prior applied migrations must not be replayed based on old checklist text.
+
+## Pricing/catalogue reset and parallel R3 review — 10 October 2026 (current)
+
+- [x] Owner direction recorded: quantity-first, buyer-segment agnostic, approval in chat; one plain-named option for most outcomes and up to two meaningfully different follower options. Boosting still offline.
+- [x] Main pulled through Claude's `274df98`; both fresh supplier catalogues and all 104 saved offers read without writes/purchases. Core retail/package proposal and bundle/Threads/Spotify/package-unit exceptions prepared for chat approval; no saved prices/routes changed.
+- [x] Claude R3 reviewed without integration: 13 targeted suites / 98 tests pass; six additional mocked observations reproduce consent downgrade/startup, internal-destination, stopped-channel and malformed-body gaps. Findings/requested fixes added to the same private coordination note. Temporary review test removed; Claude's worktree untouched.
+- [ ] Owner approves core price/service substitutions and exceptions; complete remaining result price proposals and bundle billing/output verification before any implementation/publication.
+- [ ] Approved canaries, visible delivery/retention/refill evidence → implement clean packages/solo naming/contract-safe catalogue → regression checks → controlled launch.
+- [ ] Claude fixes/retests R3 → fresh backup/staging rehearsal/owner migration approval → combined integration/live verification. Dead Snap callers/cookie cleanup is optional and deferred.
+- [ ] Universal: Spacemail inbound/reply/site-email tests; marketing launch copy/approval/send only after relaunch; affiliate costs/exclusions; old live-site cleanup and deferred technical debt.
+
+The owner-pause checkpoint below remains in force; this review does not authorize reopening Boosting.
+
+## Owner pause — 10 October 2026 (current)
+
+- [x] Boosting taken offline: eight live rows returned to reviewed; public API independently returns zero offers with managed rollout still active. Prices, supplier settings and placed orders preserved.
+- [x] Deploy/verify lightweight reduced-motion-aware upgrade screen with “We’re upgrading this section…”. Production revision `3006db5b6cef3772fe98a16fa475abc31e85f73c` verified: zero public offers, animation present, reduced motion respected, no mobile overflow/browser errors; Accounts and Numbers return HTTP 200.
+- [ ] Resume only after owner review: one offer for most results, up to two meaningful follower choices; coherent retail rates and clean package quantities; broader verified catalogue. No pricing changes or new supplier purchases during the pause.
+- [ ] Universal follow-ups retained: provider/retention/refill evidence, Spacemail, marketing/launch messages, affiliate setup, live-site cleanup and deferred technical debt.
+
+The preceding launch details below are historical; the store is now paused.
+
+## Release checkpoint — 10 October 2026 (authoritative)
+
+- [x] Fresh private production archive validated; exactly three additive safety migrations applied through Prisma and independently verified.
+- [x] Five exact owner-approved internal cost limits saved; retail prices preserved. Four unreviewed custom-comment input categories separated; ambiguous Default supplier contract paused.
+- [x] Fix legacy Boosting cart bypass, stale cross-platform/unavailable checkout routes, shadow-mode purchase/publication protection, unrestricted general-audience routing and exact-kobo cost-ceiling precision. Round Boosting quotes upwards consistently without changing supplier costs, paid orders or refunds.
+- [x] Final combined 175 server suites / 1,210 tests pass after integrating Claude's two additional commits; browser 4 suites / 12 assertions pass with existing teardown diagnostics; policy 8 tests pass; zero type errors / 121 deferred warnings; production build passes.
+- [x] Fresh read-only supplier-status and retention checks: all previously pending known orders terminal, Instagram visible counts remain 11 and 10; no new supplier purchase. Eight reviewed/test-confirmed offers pass actual route simulation; identical Facebook follower tiers excluded.
+- [x] Final staging recovery walkthrough: nine checks pass, rollback verified and zero external calls. Verified changes committed and pushed to main as `01f37ee`, including Claude's five preceding commits.
+- [x] Production now serves full revision `01f37eeb288e844a15d38c7892bcc1731dfca85b`; public offers endpoint returns HTTP 200, managed rollout true, automationReady false, zero offers. Homepage/services return 200, services remain in maintenance; payment-recovery API returns 403 and refill cron 401 without authentication. The new payment reconciliation summary ran successfully at 00:01 UTC on 10 October with webhook/refund/reporting recovery sections; no manual cron execution.
+- [x] Owner enabled Production live mode and redeployed `01f37ee`; public automationReady true and same-revision successful natural worker verified. A new private validated backup preceded exact eight-offer publication, with retail/quantity/margin preservation checked. Independent audit: 104 total, eight live, no pending safety migrations and no live-offer price flags. Other 96 rows remain unpublished; no new supplier spend/refill requests.
+- [x] Read-only live browser checks pass at 390px and 1440px: platform/result/tier selection, minimum quantity adjustment, custom-comment validation and no whole-page overflow or browser errors. Non-GET requests blocked.
+- [x] Deploy and verify small MiniCart rounding follow-up: four isolated browser tests pass; quote 455 rounds upwards to 500 consistently, and combined/minimum checkout messages preserve the agreed policy. No retail base-price changes. Deployed through `65a9a7a`.
+- [x] Deploy and verify custom-comment cart-refresh preservation: eight new route tests and twelve existing order-input tests pass. Full server run 176 / 1,218 pass; typecheck zero errors / 121 deferred warnings; production build passes. No lost/truncated comment text or count mismatch allowed through refresh.
+- [x] Final revision `65a9a7ab6084f2304bc6093a186e789928430a72` independently verified on live API. Three real anonymous mobile browser cart flows pass: a 910-like quote remains 500 through cart/checkout; a 100-like 50-naira cart stays on services and only shows missing-450 warning after the checkout attempt; 100 custom-comment lines remain exact through real cart refresh and checkout. Anonymous Boosting-only refresh is SELECT-only; order/payment/reservation/analytics/supplier writes blocked. This is not a real Monnify charge or full paid supplier-dispatch proof.
+- [ ] Broader unapproved-service tests need exact owner-approved spend/targets; uncertain follower submission, full visible delivery/longer retention and a real eligible refill remain held. They must not become blanket verified promises for launch.
+- [ ] Universal follow-ups remain: Spacemail receiving/reply/website-email tests; Claude consent/marketing integration; separate Super-affiliate costs/exclusions; approved launch notices/blasts and remaining live-site cleanup; older warnings/dev advisories deferred.
+
+Older checklist statements below are historical where contradicted by this release checkpoint.
+
+## Combined code and recovery checkpoint — 9 October 2026
+
+- [x] Integrate Claude's three main commits through conflict-free autostash rebase; preserve both workstreams. Current HEAD `0343eaa`; no edits to Claude-owned source files.
+- [x] Rehearse all three pending safety schemas with real application recovery queues inside one rolled-back staging transaction: nine checks pass; external gateway/reward/alert calls mocked, outbound HTTP blocked; schema/history/fixture rollback independently verified.
+- [x] Regression-test server-authoritative ₦500 checkout: forged totals ignored, combined Boosting items permitted, no financial write before the minimum guard.
+- [x] Combined verification: 168 server files / 1,147 tests; supplier policy 8; typecheck zero errors / 121 deferred warnings; production build, diff whitespace and new-file formatting pass. Isolated browser 4 files / 12 assertions pass with existing SvelteKit hook/teardown errors; earlier combined browser failure is not a pass.
+- [x] Refresh SELECT-only production gates: 104 offers, zero live, three safety migrations pending; five stale hidden cost caps, eleven absent unpaused routes, two input/service price ties. Saved-rate economics show no below-cost offers; fresh quotes remain separate.
+- [ ] Owner's five hidden internal-cost-cap approvals and remaining supplier/input/price decisions; leave affected drafts hidden rather than silently rewriting reviewed choices.
+- [ ] Delivery/retention/refill evidence and final customer/admin walkthrough; no real gateway sandbox walkthrough claim (owner cannot provide sandbox credentials).
+- [ ] Fresh production backup, approved migration application, commit/deploy/live analytics and cron verification, then controlled publication of ready offers.
+- [ ] Support inbox: Spacemail Pro selected; owner setup, DNS/authentication and inbound/reply/website-email tests pending.
+- [ ] Marketing consent/endpoint/postback integration and other universal tasks remain open. No early marketing cron/schema registration.
+
+No new supplier spend, production write/migration, publication, commit, push or deployment in this checkpoint. Universal and sprint lists still accompany the owner-facing chat reply.
+
+## Latest follow-up — 9 October 2026 (supersedes older pending-implementation claims)
+
+- [x] Canonical purchase reporting: one reporter per newly captured order, browser fallback without server configuration, explicit consent, original paid value/time, promotion-adjusted item revenue, store-credit-inclusive full sale value, no historical-order upgrade.
+- [x] Durable kobo-exact incremental refund analytics independently of buyer credit; committed dispatch before HTTP, ambiguous-send/restart holds, concurrent extra refund preserved, JSON merge, permission-checked read-only admin review list without blind resend.
+- [x] Actual PostgreSQL exposed/fixed Prisma void-result analytics advisory locks. Initialization review/expired-link/finalization races covered. Numbers re-reads terminal/payment/remainder after the shared order lock, preserving cumulative/item refund accounting and showing exact credited kobo.
+- [x] Eighteen real application/database checks pass, exact synthetic cleanup verified; external providers/report collection/notifications/refund-recovery enqueue mocked/blocked. Not an external gateway or full provider walkthrough.
+- [x] 165 server files / 1,123 tests; supplier-budget checks 8; typecheck 0 errors / 121 deferred warnings; production build and whitespace check pass. Isolated browser 4 files / 12 assertions pass with existing Vite/SvelteKit hook/shutdown warnings; earlier concurrent run aborted. Debug schemas pass with placeholder secret, zero collected report events, not production credential verification.
+- [x] Read-only current supplier status and public retention check: IG #14918 and Reel #s2657 now Completed; earlier test likes still 11/10. TikTok counters unavailable. No new supplier spend or inferred long-term retention.
+- [ ] Owner approval of exact internal limits for five hidden drafts: Facebook Shares value/stable, Spotify Streams stable/premium, TikTok Followers stable. Selling prices remain cost-safe; no limit updates applied.
+- [ ] Remaining price/input/route exceptions, approved delivery/retention/refill evidence; optional X Likes neutral target. Preserve reviewed choices and current paused states.
+- [ ] Remaining provider/browser recovery walkthrough, production analytics delivery, fresh backup + three safety migrations, commit/deploy/live cron checks, publish only ready offers.
+- [ ] Claude marketing integration after consent and safe postback retries are agreed; no missing-route cron registration or early marketing migration.
+
+Universal tasks still belong in each chat wrap-up: inbound support inbox/MX (Spacemail option), private costs/affiliate exclusions and separate Super-affiliate scope, announcement/email approvals, remaining live-site issues/Claude SEO integration. Warnings/dev-tool advisories explicitly deferred. No production write/migration/push/deployment/new supplier purchase in this follow-up.
+
+Created 7 October 2026. Sources: PAYMENT_REVIEW_2026-10-07.md and BOOSTING_PRICE_REVIEW_2026-10-07.md. Unchecked items are not completed. This document does not authorize or record production changes.
+
+Latest safety checkpoint, 9 October: ten actual PostgreSQL/application concurrency checks PASS on the independently verified, separate staging branch. A loopback-only bridge maintains certificate-verified remote TLS; no remote TLS bypass or production target. Synthetic fixtures only, provider/payment/email/reporting dispatch blocked, zero external charges; final journal `fastaccs-payment-races-Mw2X2Z/fixtures.json` and log `/private/tmp/fastaccs-db-races-20261009-final.log`. All generated users, orders, wallet transactions and synthetic inventory were removed with independent cleanup readback. The first run uncovered a real first-wallet creation race (empty Prisma upsert update); fixed with a balance-neutral native upsert and verified actual ON CONFLICT SQL, including the same primitive in affiliate paths without changing policy. Account allocation now also rejects a surviving delivery-refund marker. GA client-id capture requires current consent; blocked storage/malformed cookies fail closed. Debug validation now rejects validation messages and malformed responses; transport errors cannot leak API-secret URLs. Google debug accepts the diagnostic purchase, standard purchase and kobo partial-refund schemas. Debug used a placeholder because the local GA secret is absent: this does NOT verify production credentials or collected report delivery. External refund reporting remains unimplemented; server purchase is still a diagnostic event, not a claim of canonical GA revenue delivery. Final local verification: 163 server files / 1,066 tests pass; 8 supplier-budget policy tests pass; type check 0 errors / 121 deferred warnings; production build and whitespace checks pass. Fresh public read: zero managed offers and maintenance message visible. No supplier purchase, production write, migration, code commit, push or deployment in this workflow. X test remains on hold with no neutral link. Dedicated owner-owned social accounts are optional for logged-in baseline/retention checks; no passwords in chat and no unattended-monitoring promise.
+
+Final checkpoint, 9 October: all eleven explicitly approved price changes are saved with independent exact before/after verification. Latest Comments prices per 100: IG ₦500 (target 256.12%), Threads ₦3,750 (target 30%), YouTube ₦700 (draft budget only, target 30%; replacement cost unverified). YouTube s5815 is LIVE-chat, not normal post comments, so its route is paused and no replacement purchased or approved. LIVE/LIVE-chat comments are now blocked from post-comment routes locally. Pricing audit covers all 104 offers using cached rates, with fresh supplier quotes separately checked for changed mappings. Higher conservative cost targets/legacy upward rounding are not treated as bugs. Remaining hidden cost-ceiling/understated-target/no-route flags, IG Comments equal ₦500 tiers (custom vs random input), and unreviewed service classifications stay on the launch review list; no price manipulation of unapproved upper tiers. Public retention reread still shows 11 likes for BulkFollows #13445's post and 10 for SMM Raja #s5814's post; longer retention/complete follower delivery/TikTok independent counts remain unverified. Two old provider orders still pending: BulkFollows #14918 IG Likes and SMM Raja #s2657 IG Reel Views. Final local verification: 161 server files / 1,051 tests pass, 8 budget-policy tests pass, 0 type errors / 121 deferred warnings, production build passes, diff whitespace check passes. New archive `../backups/fastaccs-pre-comment-prices-20261009.JkPgyZ/database.dump` validated (13,502,942 bytes, mode 0600; no full separate restore test). No new supplier purchase, code push, deployment or production migration. Zero live offers; fresh public API returns empty managed offers and storefront maintenance remains. Older checklist items below are historical where contradicted by this checkpoint. Chat sprint/universal lists are mandatory.
+
+Latest checkpoint, 9 October: approved Likes/View price corrections are saved and independently verified (IG Likes ₦500/900/1,350; X Likes ₦500/2,500, Premium off; X Views ₦500/1,000/2,000, per 1,000). Quantity grids and minimum margin percentages are preserved; cost targets and ceilings updated. X Likes NFT-specific middle route is paused, and its ordinary-post replacement s5487 is a candidate only. Owner approved a 10-like test capped at $0.003; no test purchased, neutral business/product target requested. Baseline on the old political-thread link was 1 like, but it is not used for paid engagement. Previous reservations remain unchanged. Fresh archive `../backups/fastaccs-pre-likes-views-20261009.KVMClY/database.dump` validated; no full separate restore test. First price transaction timed out and exact rollback was independently verified; batched-lock retry and exact after-verification passed. All offers still offline (zero live rows). New local guard preserves exact manually locked per-unit prices when switching supplier/Smart Auto/quantity increments; refuses fractional-kobo distortion. Final local checks: 161 server files / 1,047 tests pass, 8 supplier-policy tests pass, 0 type errors / 121 deferred warnings, build passes, diff whitespace check passes. No code push or production migration. Full-catalogue follow-up review and public retention read in progress; provider statuses still show BulkFollows IG Likes #14918 and SMM Raja Reel Views #s2657 in progress. Historical completion statements below do not supersede this checkpoint.
+
+Latest checkpoint, 8 October: owner-facing sprint/universal lists MUST accompany each chat wrap-up. Four result categories corrected and three unsafe routes paused with saved economics preserved. Custom-text input, ₦500 checkout enforcement, customer progress, quiet refresh, admin exception states, payment/dispatch guards and provider-specific BulkFollows refill tracking are implemented and tested locally. SMM Raja refills remain manual/unverified. Final checks: 161 server files / 1,034 tests pass, 8 supplier-test-policy checks pass, typecheck 0 errors / 121 deferred warnings, build passes, browser 4 files / 12 assertions pass (existing Vite teardown errors remain). All three safety migration SQL files were rehearsed on the separately verified staging database inside a transaction; rollback and unchanged schema verified. This is NOT a Prisma deployment or a production migration. Fresh private production archive `../backups/fastaccs-pre-release-20261008.vY6PHm/database.dump` validated (13,446,536 bytes, mode 0600); full separate restore is NOT tested. Public Boosting remains offline (fresh HTTP checks: empty offers and maintenance page). No commit, push, publication or production migration in this checkpoint.
+
+Supplier campaign is separate and approval-gated: the fresh read-only proposal covers all 104 offers, excludes 10 reviewed/protected offers and services selected in them, and blocks previously dispatched/uncertain tests from repeat purchase. Every new batch requires explicit approval of its exact spend before payment; all historical quotes are conservatively reserved and the cumulative total must stay STRICTLY below $5. Existing reservations are approximately $0.0833, not a statement of actual charges. Historical paid runners are closed; read-only status commands still work. Exact customer price changes also require approval. The owner reports TikTok views and photo likes appear delivered but did not capture old counts: record baseline-missing evidence, not fully verified delivery/retention. Instagram Reel views are still provider-in-progress on the latest read. Future tests capture baselines and revisit at 24h/72h/7d where applicable; untested owner-trusted choices must not be labelled canary-verified.
+
+Still outstanding: remaining price/route proposals and approval; broader Numbers/initialization recovery walkthrough and real payment-provider end-to-end evidence (owner declined sandbox, do not charge customers); production migration application and code deployment; live cron/analytics verification; external analytics refund reporting and manual review of failures outside the bounded replay window; legitimate real refill happy-path; delivery/retention checks and publication only of ready offers. The ten isolated application/database races above are complete, not the whole provider walkthrough. Full current and universal lists belong in chat. Historical checkpoints below are not current completion claims.
+
+## Agreed scope and rules
+
+- Owner approved Facebook Followers Premium's tiny-step ₦50 rounding and resulting higher actual markup: preserve it.
+- Owner approved TikTok Likes Premium's higher selling price (₦8,750 per 1,000): preserve it and BulkFollows #15258. Its 30% target is a minimum, not a requirement to reduce the selling price.
+
+- Keep Boosting offline until payment and fulfilment launch gates pass.
+- Preserve saved owner choices; show a proposed before/after before changing a reviewed offer's service, quantity grid, markup or customer price. Do not regenerate the entire catalogue over them.
+- Prices must follow real supplier costs plus an explicit profit target, with sensible commercial adjustments—not arbitrary relabelling of identical services as better tiers.
+- Compare tiers at equal, valid quantities. Affordable < More stable < Premium where present. Different default quantities and ₦500 starts must be labelled clearly.
+- Likes and Views should be cheaper than Followers for comparable quantities and corresponding tiers. Exceptions require owner approval; don't choose unsafe services just to satisfy a price cap.
+- At most three meaningful tiers; one or two is fine. If a compatible service cannot support the price/quality promise, leave that tier offline rather than force it.
+- Retain ₦500 Boosting checkout minimum, automatic cheap-offer starting quantities, normal increments, combined-cart eligibility, attempt-only message and server enforcement. This is not ₦500 pricing for every unit.
+- Do not change regular-affiliate rewards or buyer-discount policy. Super-affiliate work remains a separate launch decision.
+
+## P0 — money integrity and state transitions (launch blockers)
+
+Latest local checkpoint, 8 October 2026: 155 server test files / 916 tests passed; all four browser suites / nine tests passed; four production-build end-to-end smoke tests passed (homepage, platforms and mocked checkout/cart recovery). Type check reports 0 errors and 121 previously deferred warnings. Production build passed. Browser unit tests pass but the existing Vite/SvelteKit teardown reports a disconnected transport after completion. Draft-selection and route-simulator tests were rerun after correcting the missing provider-type query field: 24 passed. No production migration, deployment, publication or financial repair was performed.
+
+Validated production backup: `../backups/fastaccs-pre-payment-fixes-20261008.0CHKYc/database.dump`. Both archive listing and full data decoding passed. A restore into a separate database has NOT been tested. The earlier incomplete backup is labelled `.incomplete` and is not a recovery source.
+
+Read-only production integrity audit: 1,512 orders, 45 wallets, 233 wallet transactions and 241 affiliate programs; no blocker findings from that audit. Two affiliate sales counters differ from recalculated retained sales, and one old manual-test credit cleanup requires review. No financial repair was applied. A clean read-only audit is not a real payment-provider sandbox test.
+
+Local implementation checkpoint (not deployed): terminal-safe recovery and locked cancellation/reference/amount rechecks implemented with regressions; review holds preserved; verification outages distinguished and explicit-expiry callers protected; refund credit and refund calculations preserve kobo, while earned-credit policy stays unchanged. Authentication, verification and initialization requests have bounded timeouts. Ambiguous initialization keeps the original merchant reference and credit reservation; checkout replay cannot supersede that reference merely because the initialization grace period elapsed. Definite rejection still follows failure cleanup.
+
+Authenticated webhooks now commit to a deduplicated database inbox before acknowledgement, attempt immediate processing, and recover through leased cron retries after request failure or restart. Permanent unsafe failures and exhausted retries are retained as quarantined records with an attempted admin alert. The inbox stores routing references/status only, not customer/bank payloads. The additive migration `20261007193000_add_payment_webhook_inbox` is prepared but NOT applied. Back up production and apply it before deploying code that uses the inbox. Confirm cron health and provide an operational review/retry path for quarantine before launch. Browser/payment sandbox and production verification remain outstanding.
+
+- [x] Locally implement and regression-test terminal-safe paid recovery and downstream Boosting queue guards.
+- [x] Revalidate cancellation/failure, reference binding, expected amount and review holds under settlement's order row lock.
+- [x] Preserve payment-review states when late failure callbacks arrive.
+- [x] Separate transient verification outage from definitive failure; protect explicit-expiry callers.
+- [x] Bound Monnify requests and cron batch budgets; rotate unavailable verifications without expiring payments.
+- [x] Persist authenticated webhook work before acknowledgement; implement leased retries, quarantine and permission-checked admin retry control.
+- [x] Preserve original merchant reference and reservations on ambiguous initialization in both checkout paths; regression-test delayed replay.
+- [x] Preserve kobo through refund calculations and credit ledger; retain earned-credit policy.
+- [x] Add permanent mocked regressions for these failure, duplicate and concurrency interleavings. Real database/provider concurrency walkthrough remains a separate launch gate.
+- [x] Run ten scoped real PostgreSQL/application safety cases: refund/recovery, cancellation/settlement, duplicate payment transitions, distinct first-wallet credits, concurrent spend, duplicate refunds, repeated reversal/restore, final Boosting hold and account inventory allocation/replay. Verify native wallet SQL and clean up exact fixtures. External providers and notifications are stubbed; this is not a live gateway or complete browser walkthrough.
+
+## P1 — related order, refund and analytics safety
+
+Local implementation checkpoint: Mark Complete now requires a paid/in-progress order in UI and server. Refunds and store-credit ledger preserve kobo; this does not repair historical short refunds automatically.
+
+- [x] Gate Mark Complete in UI and server to confirmed-paid, eligible orders.
+- [ ] Explain failed/cancelled/completed and refund separately. Do not silently convert old failed orders to completed or change their accounting.
+- [x] Enqueue durable refund-accounting tasks in full, partial-account and automatic Numbers refund transactions; retry reward reversals and clawbacks independently of newest-N scans.
+- [x] Serialize supplier outcomes against refunds and holds; retain supplier references without reopening terminal delivery.
+- [ ] Check payment initialization finalization races, stale checkout reuse, checkout idempotency and stock/credit reservation release. Confirm two concurrent checkouts cannot spend the same credit or allocate the same account.
+- [ ] Verify Numbers rent/refund/SMS concurrency, account allocation, manual handover and Boosting queues remain terminal-safe and idempotent after settlement changes.
+- [ ] Verify purchase analytics use the full sale once, distinguish gateway-paid amount from store credit, and handle partial/full refunds according to reporting design. Test webhook/verify/reconcile duplicates and interrupted delivery; check live analytics delivery separately.
+
+Analytics checkpoint: server purchase dispatch is awaited, separately locked, and marked only after a successful transport response; regressions cover full sale value, recorded/refunded exclusions and failed transport. Recent unsent paid/completed orders now replay through a bounded 72-hour cron scan, with persistent backoff, terminal rechecks and write-time JSON metadata merges that preserve unrelated keys. The scan also recovers an interrupted first dispatch with no committed failure marker. This never re-settles payment or re-runs fulfilment, and needs no new migration. Read-only production selector audit: 20 recent paid orders, 8 with eligible client IDs and no server-sent marker; this is NOT evidence that browser purchases were absent. Internal net-sales reporting accounts for refunds. Outstanding: external GA refund reporting, manual review beyond the replay window, live delivery, and the unavoidable remote-accept/local-marker crash window. Do not claim exactly-once external delivery.
+
+Prepared additive migrations (not applied): `20261007193000_add_payment_webhook_inbox` and `20261007200000_add_refund_recovery_tasks`. Recheck the actual production migration table before applying; do not infer deployment state from this file.
+
+## P2 — pricing and supplier economics (before publishing affected offers)
+
+- [x] Allow precise kobo-priced increments in admin persistence and draft suggestions; retain normal increments and label storefront starting quantities. Saved prices remain untouched; correcting reviewed prices requires approval.
+- [ ] TikTok Comments: reviewed Affordable is ₦50 per ONE comment (₦5,000 per 100), target 30%; mid/premium drafts are ₦150/₦300 per 100. Show actual cost, price-unit and target calculation. Owner decides whether to correct Affordable's price unit/rounding or intentionally retain it and rebuild upper tiers with genuinely stronger services—not just inflate them.
+- [ ] Instagram Followers: propose an economically supported ladder with Premium at most ₦12,000 per 1,000. Find compatible, genuinely distinct mid-tier service; preserve reviewed Affordable where viable. Current upper drafts are ₦32,500/₦65,000 per 1,000 and middle has no non-paused route. Recompute cost ceilings and margins, not just selling price.
+- [ ] Instagram Likes: propose ladder with Premium at most ₦1,350 per 1,000, all lower tiers below it and corresponding Followers prices. Correct reviewed Affordable's ten-unit rounding distortion; choose compatible services and viable markup. Keep fewer tiers if necessary.
+- [x] Facebook Followers Premium: explained rounding distortion; owner explicitly approved it. Preserve price and profit target; exempt this approved commercial outcome from automatic corrections.
+- [x] TikTok Likes Premium: owner explicitly approved the higher selling price. Preserve ₦8,750 per 1,000 and BulkFollows #15258; do not reset to the cost-plus-30% suggestion.
+- [ ] X Likes/Views: build ladders cheaper than corresponding Followers at equal quantity, using real compatible costs/quality and chosen markup. Current Affordable Likes ₦5,200 and Views ₦1,950 exceed Followers ₦1,300 per 1,000. Don't lower beneath costs or manufacture quality claims.
+- [ ] Below-cost drafts: Instagram Comments Affordable (₦100 vs ≈₦140.40/100), Threads Comments Affordable (₦1,900 vs ≈₦2,880/100), YouTube Comments Affordable (₦50 vs ≈₦281.25/100). Find a compatible lower-cost service, increase customer price with the intended markup, or omit. No loss-making option is published as-is.
+- [ ] Review unusually high generated markups: Instagram Views/Saves/Shares, TikTok Views/Saves, X Views, Telegram drafts and other matrix outliers. Distinguish intentional commercial prices from stale target/quantity/cost data; list proposed changes for owner.
+- [ ] Recheck current supplier costs against saved target costs/ceilings (several changed mappings leave stale draft economics). Telegram Shares and Instagram Followers middle lack non-paused routes: no verifiable current profit until compatible mapping exists.
+- [ ] Run whole-catalogue audit after changes: equal-quantity ordering and ties, supported overlapping quantities, storefront rounding, loss guard, actual-vs-target markup, ascending card prices with quantities clearly displayed, cross-result price relationship and route cost ceilings.
+- [ ] Produce owner-review before/after with platform/result/tier, primary/fallback changes, cost for a standard quantity, target %, actual profit %, start quantity, increment, customer price and publication state.
+
+## P3 — verification and launch sequence
+
+Gifting-profile test checkpoint (17:38 Lagos, 8 October): five new requests were accepted using the actual production panel client; total additional quote $0.014628. SMM Raja prefixed service submission is now verified. BulkFollows follower order reports Completed but the observed public count rose only seven, so full visible delivery remains unconfirmed; like orders are pending/processing. Real BulkFollows batch status is verified. Its blank starting-count field exposed a parser bug, now fixed locally with regressions; full server suite 155 files / 925 tests passed. Details and order references in `BOOSTING_CUSTOMER_FLOW_REVIEW_2026-10-08.md`. No refill, publication or deploy.
+
+- [ ] Correct newly observed mappings before publication: TikTok Affordable/More stable Likes are Live Likes; IG Premium Views is Impressions/Reach; IG Affordable Likes `s5297` is a subscription type; IG Affordable Shares maps to Story Shares. Re-evaluate economics after changing routes, preserve owner approvals, and never substitute ordinary Shares for Reposts.
+- [ ] Obtain a genuine owner-controlled video/Reel target for views tests; the latest TikTok target is another photo. Verify photo compatibility separately for #15258.
+- [ ] Reconcile provider completion with visible delivery and check retention; five accepted requests are not proof that all selected services or all quality tiers work.
+
+Owner-confirmed custom-comment canary: screenshot verifies the ten approved BulkFollows #14260 comments landed. That service is saved as the sole locked route for the hidden Premium custom-comments draft, ₦1,050/100 at unchanged 30% target; old route paused, no fallback or refill promise. Custom-text integration remains a launch gate. Owner reports no SMM Raja order received; no retry was dispatched while Instagram links are being checked.
+
+New customer-flow gate: see `BOOSTING_CUSTOMER_FLOW_REVIEW_2026-10-08.md`. Numeric-only SMM Raja service-ID validation is corrected locally with regressions; progress exceptions, refill lifecycle tracking and custom-comment input handling are not ready for launch. Owner authorised small real canaries: BulkFollows reports custom comments Completed ($0.052) and cancelled the follower test at zero charge; SMM Raja submission is uncertain and must not be repeated without panel review. TikTok Affordable Comments correction is now saved at ₦500/100 and target 226.79%, with updated cost ceilings and an audit record; routes/quantities/status unchanged, still offline. All other reviewed price changes remain unapplied. Latest customer-flow verification: 155 server suites / 920 tests passed, zero type errors, production build passed.
+
+- [x] Rerun complete server suite, browser suites, mocked-cart end-to-end tests, type checks and production build. Results above are local verification, not payment-provider sandbox sign-off.
+- [ ] Sandbox payment walkthrough: fresh checkout, repeated click, redirect loss, webhook-first/browser-first, partial payment, split/full store credit, verification outage, expiry/late payment, partial/full refund and customer order display. No live customer charges as a diagnostic.
+- [x] Run read-only production integrity audit and report counter/test-credit discrepancies; financial repairs require separate approval.
+- [ ] Owner reviews targeted price/service proposals. Missing tiers are explicitly acceptable; do not require configuring all 104 offers manually.
+- [ ] Back up production before migrations or financial repairs. Identify exact migrations actually needed; do not reuse an obsolete migration count.
+- [ ] Deploy verified code separately from publication. Publish only cost-safe, approved offers; leave unsuitable drafts hidden. Check global storefront availability, category visibility and offer status together.
+- [ ] Verify paid automation configuration, reviewed/enabled routes, supplier balance and cron health. Visibility alone does not enable safe fulfilment. Run a controlled authorized canary before broader automation.
+- [ ] Confirm storefront, cart, ₦500 boundary, payment, customer order and admin exception flow; monitor review holds and supplier errors. Define rollback/offline controls that preserve in-flight paid orders.
+
+## P4 — end-of-sprint owner reminder: support inbox
+
+Latest DNS check: the local resolver returned SERVFAIL, but independent Google and Cloudflare DNS-over-HTTPS queries both returned NOERROR with no MX answers for `fastaccs.com`. Root inbound MX setup is still outstanding; no DNS changes were made. Official Spacemail third-party setup: https://www.spaceship.com/knowledgebase/spacemail-dns-records-third-party-domain/ .
+
+- [ ] Remind owner to activate support@fastaccs.com inbound mailbox (Spacemail is acceptable).
+- [ ] Create mailbox, verify domain, configure root MX and provider SPF/DKIM/DMARC without breaking Resend sending records or duplicating SPF at one hostname.
+- [ ] Enable 2FA; test external inbound, support reply and one automated website email. Verify actual DNS state at setup time rather than relying on an earlier missing-MX observation.
+
+## Deferred / not to widen this sprint accidentally
+
+- Older Svelte warnings and dev-tool-only audit advisories are deferred per owner.
+- No wallet funding redesign is required for the ₦500 Boosting launch rule.
+- Unfinished Super-affiliate private-cost/contract work must not alter regular-affiliate or buyer-discount terms and needs its own checklist/launch sign-off.

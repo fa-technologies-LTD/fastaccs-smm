@@ -10,10 +10,7 @@ import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
 import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
 import { isAutoDeliveryPausedSetting } from '$lib/services/admin-settings';
 import { sendOrderConfirmationEmailIfNeeded } from '$lib/services/email';
-import {
-	notifyManualHandoverOrderPaid,
-	notifyBoostingOrderPaid
-} from '$lib/services/manual-handover';
+import { notifyManualHandoverOrderPaid } from '$lib/services/manual-handover';
 import { logOrderStatusTransition } from '$lib/services/order-audit';
 import { isManualHandoverOrder, isBoostingOrder } from '$lib/services/order-delivery-mode';
 import {
@@ -686,7 +683,7 @@ export async function recoverPaidOrder(
 		const stopped = await claimPaidRecovery(order.id);
 		if (stopped) return stopped;
 		await queuePaidBoostFulfillments(order.id);
-		await notifyBoostingOrderPaid(order.id, `payments.${source}.boosting`);
+		// Routine paid Boosting orders stay in the dashboard. Support review emails only exceptions.
 		await sendServerPurchaseVerifiedEvent(order.id, 'PAID').catch((error) =>
 			console.warn('[ga4.purchase] dispatch failed', {
 				orderId: order.id,

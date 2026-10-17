@@ -11,6 +11,7 @@ const DEFAULT_META = {
 	search: '',
 	canRunShadowRouting: false,
 	activeCount: 0,
+	overdueCount: 0,
 	totalItems: 0,
 	statusCounts: {
 		pending: 0,

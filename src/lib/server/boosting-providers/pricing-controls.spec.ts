@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { sheet as fixture } from '$lib/helpers/boosting-pricing-sheet-fixtures';
 import type { BoostPricingSheet } from '$lib/helpers/boosting-pricing-sheet';
+import { saleOfferFixture } from '../boosting-sale-readiness-fixtures';
 const store = vi.hoisted(() => ({ record: {} as any, offers: [] as any[], services: [] as any[] }));
 const db = vi.hoisted(() => ({
 	$executeRaw: vi.fn(),
@@ -16,9 +17,20 @@ vi.mock('$lib/prisma', () => ({ prisma: db }));
 vi.mock('$env/dynamic/private', () => ({ env: { BOOSTING_AUTOMATION_MODE: 'live' } }));
 import { loadBoostControls, saveBoostControls, refreshBoostAutoPrices } from './pricing-controls';
 
+it('price-only saves cannot publish even with forged selections and confirmation', async () => {
+	store.offers[0].status = 'hidden';
+	const next = structuredClone((await loadBoostControls(db as never)).sheet);
+	next.rows[0].selected = true;
+	next.rows[0].sale = 900;
+	await saveBoostControls(next, 'owner', db as never, false, true, true);
+	expect(store.offers[0].status).toBe('hidden');
+	expect(store.offers[0].pricePerStepNgn).toBe(90);
+});
+
 beforeEach(() => {
 	vi.clearAllMocks();
 	const service = {
+		...saleOfferFixture().routes[0].providerService,
 		id: 'service',
 		provider: 'smm_raja',
 		serviceId: 's1675',
@@ -38,10 +50,12 @@ beforeEach(() => {
 	store.services = [service];
 	store.offers = [
 		{
+			...saleOfferFixture(),
 			id: 'offer',
 			updatedAt: new Date(fixture.rows[0].sourceUpdatedAt!),
 			platform: 'tiktok',
 			outcome: 'likes',
+			targetType: 'content',
 			qualityTier: 'value',
 			audienceTag: 'general',
 			categoryId: 'category',
@@ -58,12 +72,16 @@ beforeEach(() => {
 			priceLocked: true,
 			stepQuantity: 100,
 			minQuantity: 100,
+			maxQuantity: null,
+			shortPromise: 'Original description',
+			normalCostTargetNgn: 8.1,
 			maximumSupplierCostNgn: 20,
 			minimumMarginPercent: 30,
 			routingPolicy: 'locked',
 			lockedRouteId: 'route',
 			routes: [
 				{
+					...saleOfferFixture().routes[0],
 					id: 'route',
 					providerService: service,
 					equivalenceApproved: true,
@@ -99,6 +117,141 @@ beforeEach(() => {
 	db.category.findMany.mockResolvedValue([]);
 });
 const current = async () => structuredClone((await loadBoostControls(db as never)).sheet);
+
+it('does not let inherited valid large supplier maxima block unrelated hidden price edits', async () => {
+	store.offers[0].status = 'hidden';
+	store.offers[0].maxQuantity = 2147483647;
+	store.services[0].maxQuantity = 2147483647;
+	const next = await current();
+	next.rows[0].sale = 900;
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(store.offers[0].status).toBe('hidden');
+	expect(store.offers[0].maxQuantity).toBe(2147483647);
+	expect((await current()).rows[0].sale).toBe(900);
+});
+
+it('saves offer settings, price and Live selection together without modifying suppliers or refill promises', async () => {
+	store.offers[0].status = 'hidden';
+	const next = await current();
+	Object.assign(next.rows[0], {
+		startingQuantity: 200,
+		increment: 200,
+		maximumQuantity: 10000,
+		option: 'Everyday likes',
+		shortPromise: 'A straightforward option.',
+		sale: 900,
+		selected: true
+	});
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(store.offers[0]).toMatchObject({
+		minQuantity: 200,
+		stepQuantity: 200,
+		maxQuantity: 10000,
+		pricePerStepNgn: 180,
+		priceLocked: true,
+		customerName: 'Everyday likes',
+		shortPromise: 'A straightforward option.',
+		maximumSupplierCostNgn: 40,
+		status: 'live'
+	});
+	const reloaded = await current();
+	expect(reloaded.rows[0]).toMatchObject({
+		startingQuantity: 200,
+		increment: 200,
+		maximumQuantity: 10000,
+		option: 'Everyday likes',
+		shortPromise: 'A straightforward option.',
+		sale: 900
+	});
+	const patch = db.boostCustomerOffer.update.mock.calls[0][0].data;
+	for (const key of [
+		'routingPolicy',
+		'lockedRouteId',
+		'preferredRouteId',
+		'requiredVerifiedSignals',
+		'refillDays',
+		'attemptCap'
+	])
+		expect(patch).not.toHaveProperty(key);
+	expect(
+		store.offers[0].quantityPresets.every(
+			(n: number) => n >= 200 && n <= 10000 && (n - 200) % 200 === 0
+		)
+	).toBe(true);
+});
+
+it('saves hidden offer edits during an outage while preserving unit cost ceilings', async () => {
+	store.offers[0].status = 'hidden';
+	store.services[0].unavailableAt = new Date();
+	const next = await current();
+	Object.assign(next.rows[0], {
+		startingQuantity: 200,
+		increment: 200,
+		maximumQuantity: 10000,
+		option: 'Draft option'
+	});
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(store.offers[0]).toMatchObject({
+		status: 'hidden',
+		minQuantity: 200,
+		stepQuantity: 200,
+		maxQuantity: 10000,
+		pricePerStepNgn: 100,
+		maximumSupplierCostNgn: 40,
+		normalCostTargetNgn: 16.2
+	});
+});
+
+it.each([0, -10, 1.5, 100000001])('rejects invalid minimum %s before writing', async (minimum) => {
+	const next = await current();
+	next.rows[0].startingQuantity = minimum;
+	await expect(saveBoostControls(next, 'owner', db as never, false, true)).rejects.toThrow(
+		'whole quantities'
+	);
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+});
+
+it('rejects maximum below minimum and excessive text rather than silently clamping settings', async () => {
+	const next = await current();
+	next.rows[0].maximumQuantity = 50;
+	await expect(saveBoostControls(next, 'owner', db as never, false, true)).rejects.toThrow(
+		'Maximum quantity'
+	);
+	next.rows[0].maximumQuantity = 10000;
+	next.rows[0].shortPromise = 'x'.repeat(121);
+	await expect(saveBoostControls(next, 'owner', db as never, false, true)).rejects.toThrow(
+		'120 characters'
+	);
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+});
+
+it('does not allow quantity changes to bypass supplier minimum or customer checkout minimum', async () => {
+	const next = await current();
+	next.rows[0].startingQuantity = 10;
+	await expect(saveBoostControls(next, 'owner', db as never, false, true)).rejects.toThrow(
+		'supplier minimum'
+	);
+	next.rows[0].startingQuantity = 100;
+	next.rows[0].maximumQuantity = 500;
+	await expect(saveBoostControls(next, 'owner', db as never, false, true)).rejects.toThrow(
+		'₦500 checkout minimum'
+	);
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+});
+
+it('clears an optional maximum and restores the service name without clearing other settings', async () => {
+	store.offers[0].maxQuantity = 10000;
+	store.offers[0].customerName = 'Old option';
+	const next = await current();
+	next.rows[0].maximumQuantity = null;
+	next.rows[0].option = '';
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(store.offers[0]).toMatchObject({
+		maxQuantity: null,
+		customerName: 'TikTok Likes',
+		shortPromise: 'Original description'
+	});
+});
 
 it('requires explicit publication confirmation before a hidden offer can become live', async () => {
 	store.offers[0].status = 'reviewed';
@@ -239,6 +392,30 @@ it('saves a price and audit in one transaction without changing supplier routes 
 	expect(db.$transaction).toHaveBeenCalledOnce();
 	expect(db.adminAuditLog.create.mock.calls[0][0].data.action).toBe('boosting_controls_saved');
 });
+
+it('saves a confirmed price edit and unpublishing together, even without a supplier quote', async () => {
+	const next = await current();
+	next.rows[0].selected = false;
+	next.rows[0].sale = 950;
+	store.services[0].unavailableAt = new Date();
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(store.offers[0]).toMatchObject({
+		status: 'hidden',
+		pricePerStepNgn: 95,
+		priceLocked: true
+	});
+	expect(store.record.metadata.sheet.rows[0]).toMatchObject({ sale: 950, selected: false });
+});
+
+it('does not replace a confirmed price with a newly calculated one during manual Save', async () => {
+	store.offers[0].priceLocked = false;
+	const next = await current();
+	next.rows[0].sale = 950;
+	await expect(saveBoostControls(next, 'owner', db as never, false, true)).rejects.toThrow(
+		'suggested price changed'
+	);
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+});
 it('rejects stale page versions before any pricing writes', async () => {
 	const next = await current();
 	next.version = 0;
@@ -284,7 +461,11 @@ it('can take a service offline during a supplier outage', async () => {
 	next.rows[0].selected = false;
 	store.services[0].unavailableAt = new Date();
 	await saveBoostControls(next, 'owner', db as never);
-	expect(db.boostCustomerOffer.update.mock.calls[0][0].data).toEqual({ status: 'hidden' });
+	expect(db.boostCustomerOffer.update.mock.calls[0][0].data).toEqual({
+		status: 'hidden',
+		pricePerStepNgn: 50,
+		priceLocked: true
+	});
 });
 it('does not enable unreviewed routes even with a safe price', async () => {
 	store.offers[0].status = 'hidden';
@@ -296,15 +477,14 @@ it('does not enable unreviewed routes even with a safe price', async () => {
 	);
 	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
 });
-it('recalculates an unlocked price from server costs, ignoring a fabricated client price', async () => {
+it('rejects a fabricated unlocked price rather than silently saving a different price', async () => {
 	const next = await current();
 	next.rows[0].priceMode = 'target';
 	next.rows[0].sale = 1;
-	await saveBoostControls(next, 'owner', db as never);
-	expect(db.boostCustomerOffer.update.mock.calls[0][0].data).toMatchObject({
-		pricePerStepNgn: 15,
-		priceLocked: false
-	});
+	await expect(saveBoostControls(next, 'owner', db as never)).rejects.toThrow(
+		'suggested price changed'
+	);
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
 });
 it('keeps manual prices fixed when global markup changes', async () => {
 	const next = await current();
@@ -405,4 +585,59 @@ it('uses the highest approved cost when quoting an automatic shortlist', async (
 	const view = await loadBoostControls(db as never);
 	expect(view.quotes.row!.rateUsd).toBe(0.1);
 	expect(view.setup.row.routingPolicy).toBe('automatic');
+});
+
+it('loads the current locked supplier instead of the historical sheet service after a manual change', async () => {
+	const replacement = {
+		...store.services[0],
+		id: 'replacement',
+		serviceId: 'manual-new',
+		ratePerThousand: 0.075
+	};
+	store.offers[0].routes.push({
+		...store.offers[0].routes[0],
+		id: 'replacement-route',
+		providerService: replacement
+	});
+	store.offers[0].lockedRouteId = 'replacement-route';
+	const view = await loadBoostControls(db as never);
+	expect(view.sheet.rows[0].serviceId).toBe('manual-new');
+	expect(view.quotes.row).toMatchObject({ providerServiceId: 'replacement', rateUsd: 0.075 });
+	expect(store.record.metadata.sheet.rows[0].serviceId).toBe('s1675');
+});
+
+it('displays the newly saved review-only service, never a retired service, without approving publication', async () => {
+	store.offers[0].routingPolicy = 'automatic';
+	store.offers[0].status = 'reviewed';
+	store.offers[0].lockedRouteId = null;
+	store.offers[0].routes[0].state = 'paused';
+	store.offers[0].routes.push({
+		...store.offers[0].routes[0],
+		id: 'new-shadow',
+		state: 'shadow',
+		providerService: {
+			...store.services[0],
+			id: 'new-service',
+			serviceId: 'saved-new',
+			ratePerThousand: 0.075
+		}
+	});
+	const view = await loadBoostControls(db as never);
+	expect(view.sheet.rows[0]).toMatchObject({ serviceId: 'saved-new', selected: false });
+	expect(view.quotes.row).toMatchObject({ providerServiceId: 'new-service', rateUsd: 0.075 });
+	expect(view.setup.row.reviewed).toBe(false);
+	view.sheet.rows[0].selected = true;
+	await expect(saveBoostControls(view.sheet, 'owner', db as never, false, true)).rejects.toThrow(
+		'review supplier routes'
+	);
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+});
+
+it('does not present an arbitrary paused service as the current automatic configuration', async () => {
+	store.offers[0].routingPolicy = 'automatic';
+	store.offers[0].routes[0].state = 'paused';
+	const view = await loadBoostControls(db as never);
+	expect(view.quotes.row).toBeNull();
+	expect(view.sheet.rows[0].serviceId).toBe('');
+	expect(view.setup.row.reviewed).toBe(false);
 });

@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { sheet, row, quote } from './boosting-pricing-sheet-fixtures';
 import {
+	boostReadinessSummary,
 	boostAutoPrice,
 	boostControlSignature,
 	boostEffectiveRules,
@@ -8,6 +9,17 @@ import {
 	type BoostControlsView,
 	validateBoostRules
 } from './boosting-pricing-controls';
+
+it('shows a specific publication blocker, or explicit readiness', () => {
+	expect(boostReadinessSummary(['Review supplier setup.'], [], false)).toBe(
+		'Supplier not approved'
+	);
+	expect(boostReadinessSummary([], [], false)).toBe('Ready to publish');
+	expect(boostReadinessSummary([], [], true)).toBe('Live');
+	expect(boostReadinessSummary(['Below supplier minimum.'], ['Below profit target.'], false)).toBe(
+		'Quantity below supplier minimum'
+	);
+});
 
 it('combines markup with profit targets and clean rounding', () => {
 	expect(boostAutoPrice(row, sheet, quote)).toBe(150);

@@ -81,6 +81,13 @@ export const load: PageLoad = async ({ fetch }) => {
 			fetch('/api/boosting-offers')
 		]);
 		const servicesResult = await servicesResponse.json();
+		if (!offersResponse.ok)
+			return {
+				managedRolloutActive: true,
+				managedGroups: [] as ManagedBoostingGroup[],
+				platformTiles: [] as ServicesPlatformTile[],
+				error: 'Boosting availability could not be checked. Please try again shortly.'
+			};
 
 		if (!servicesResponse.ok) {
 			return {
