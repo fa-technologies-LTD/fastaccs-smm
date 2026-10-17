@@ -37,6 +37,14 @@ import {
 import { recordAffiliateEvent } from '$lib/services/affiliate-events';
 import { createAdminAuditLog } from '$lib/services/admin-audit';
 import { NOT_HELD_FOR_IDENTITY_REVIEW } from '$lib/services/affiliate-review-hold';
+import { recordSuperOrderCommission } from '$lib/services/super-commission';
+import {
+	formatWeekOf,
+	groupWeeklyCommissions,
+	isSuperCommissionReference,
+	weeklyCommissionTitle
+} from '$lib/helpers/super-earnings-grouping';
+import { getSuperSwitchoverAt, superBonusWindowEnd } from '$lib/services/super-affiliate-terms';
 
 export const AFFILIATE_REFERRAL_COOKIE = 'fa_aff_ref';
 
@@ -242,6 +250,10 @@ export interface AffiliateDashboardState {
 	isSuperAffiliate: boolean;
 	superReferrals: SuperReferralProgressItem[];
 	superActivationsThisMonth: number;
+	/** True once the Super switchover has passed: monthly bonus retired, 5% order earnings live. */
+	superOnNewTerms: boolean;
+	/** Super 5% earnings, one line per week across all friends (never per order). */
+	superWeeklyEarnings: SuperWeeklyEarning[];
 	regularPolicy: {
 		buyerDiscountPercent: number;
 		affiliateRewardPercent: number;
@@ -264,6 +276,15 @@ export type AffiliatePayoutBlocker =
 	| 'bank_details_pending'
 	| 'bank_details_rejected'
 	| 'payout_pending';
+
+export interface SuperWeeklyEarning {
+	id: string;
+	weekOf: string;
+	orders: number;
+	friends: number;
+	amount: number;
+	statusLabel: string;
+}
 
 export interface SuperReferralProgressItem {
 	userId: string;
@@ -2243,13 +2264,21 @@ async function getSuperReferralProgressForPolicy(
 				{ userId: referredUserId, affiliateUserId: superUserId, orderType: 'account' }
 			]
 		},
-		select: { totalAmount: true, refundedAmount: true }
+		select: {
+			totalAmount: true,
+			refundedAmount: true,
+			storeCreditApplied: true,
+			paidAt: true,
+			createdAt: true
+		}
 	});
 	return calculateSuperReferralProgress({
 		orders: paidOrders,
 		enabled: policy.enabled,
 		spendThreshold: policy.spendThreshold,
-		orderThreshold: policy.orderThreshold
+		orderThreshold: policy.orderThreshold,
+		// From the switchover, only kept cash on account orders counts towards activation.
+		switchoverAt: await getSuperSwitchoverAt()
 	});
 }
 
@@ -2593,6 +2622,9 @@ async function recordSuperMonthlyTierCrossing(
 	monthDate: Date = new Date()
 ): Promise<void> {
 	const { start: startOfMonth, end: endOfMonth, key: monthKey } = getUtcMonthWindow(monthDate);
+	// The monthly bonus is retired at the Super switchover: only activations before it count.
+	const bonusWindowEnd = superBonusWindowEnd(endOfMonth, await getSuperSwitchoverAt());
+	if (bonusWindowEnd <= startOfMonth) return;
 	const monthlyTiers = await getSuperMonthlyPolicy(superUserId, monthDate, config);
 	const count = await prisma.walletTransaction.count({
 		where: {
@@ -2600,7 +2632,7 @@ async function recordSuperMonthlyTierCrossing(
 			reference: { startsWith: `super:activation:${superUserId}:` },
 			status: { notIn: [AFFILIATE_LEDGER_STATUS.reversed, 'failed', 'cancelled'] },
 			AND: [NOT_HELD_FOR_IDENTITY_REVIEW],
-			createdAt: { gte: startOfMonth, lt: endOfMonth }
+			createdAt: { gte: startOfMonth, lt: bonusWindowEnd }
 		}
 	});
 	const tier = getHighestSuperMonthlyTier(monthlyTiers, count);
@@ -2758,7 +2790,10 @@ export async function reconcileSuperMonthlyBonusAfterActivationReversal(
 			reference: { startsWith: `super:activation:${superUserId}:` },
 			status: { notIn: [AFFILIATE_LEDGER_STATUS.reversed, 'failed', 'cancelled'] },
 			AND: [NOT_HELD_FOR_IDENTITY_REVIEW],
-			createdAt: { gte: monthStart, lt: monthEnd }
+			createdAt: {
+				gte: monthStart,
+				lt: superBonusWindowEnd(monthEnd, await getSuperSwitchoverAt())
+			}
 		}
 	});
 	const validTier = getHighestSuperMonthlyTier(monthlyTiers, validActivationCount);
@@ -3226,6 +3261,8 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 				deliveryStatus: true,
 				refundedAmount: true,
 				analyticsMetadata: true,
+				paidAt: true,
+				createdAt: true,
 				orderItems: {
 					select: {
 						id: true,
@@ -3310,12 +3347,17 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 			? snapshottedProgramType === 'super'
 			: Boolean(affiliateProgram?.isSuperAffiliate);
 		if (isSuperOrder) {
-			return await recordSuperAffiliateActivation({
+			const activation = await recordSuperAffiliateActivation({
 				superUserId: order.affiliateUserId,
 				referredUserId: order.userId,
 				affiliateCode: order.affiliateCode,
 				triggerOrderId: order.id
 			});
+			// From the switchover, later account orders of an activated buyer earn 5% of profit.
+			await recordSuperOrderCommission(order).catch((error) =>
+				console.error('Failed to record Super order commission:', error)
+			);
+			return activation;
 		}
 
 		const reference = `affiliate:credit:order:${order.id}`;
@@ -3950,12 +3992,15 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 					type: true,
 					status: true,
 					amount: true,
-					createdAt: true
+					createdAt: true,
+					reference: true,
+					metadata: true
 				},
 				orderBy: {
 					createdAt: 'desc'
 				},
-				take: 6
+				// Wide enough that weekly-grouped Super order earnings still leave 6 lines to show.
+				take: 80
 			})
 		]);
 
@@ -3998,6 +4043,8 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 		const buyerUserId =
 			metadata && typeof metadata.buyerUserId === 'string' ? metadata.buyerUserId.trim() : '';
 		if (!buyerUserId || !referredUserIds.has(buyerUserId)) continue;
+		// Super order earnings are only shown as weekly totals across all friends.
+		if (metadata?.kind === 'super_order_commission') continue;
 
 		const current = creditByUser.get(buyerUserId) || { total: 0, lastCreditAt: null };
 		const amount = Math.max(0, Number(tx.amount || 0));
@@ -4040,25 +4087,54 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 		.sort((a, b) => new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime())
 		.slice(0, 3);
 
-	const recentStoreCreditActivity: AffiliateRecentStoreCreditActivity[] = recentLedgerRows.map(
-		(row) => {
-			const amount = Math.max(0, Number(row.amount || 0));
-			const status = String(row.status || '')
-				.trim()
-				.toLowerCase();
-			const isCredit =
-				(row.type === AFFILIATE_LEDGER_CREDIT_TYPE && status !== 'reversed') ||
-				(row.type !== AFFILIATE_LEDGER_CREDIT_TYPE && status === 'reversed');
-			return {
-				id: row.id,
-				title: mapStoreCreditTitle(row.type, row.status),
-				statusLabel: mapLedgerStatusLabel(row.status),
-				amount: isCredit ? amount : amount * -1,
-				isCredit,
-				createdAt: row.createdAt.toISOString()
-			};
-		}
+	const superCommissionRows = recentLedgerRows.filter(
+		(row) =>
+			row.type === AFFILIATE_LEDGER_CREDIT_TYPE &&
+			isSuperCommissionReference(row.reference) &&
+			!['reversed', 'failed', 'cancelled'].includes(String(row.status || '').toLowerCase())
 	);
+	const recentSuperWeeks = groupWeeklyCommissions(
+		superCommissionRows.map((row) => ({
+			amount: Number(row.amount || 0),
+			status: String(row.status || ''),
+			createdAt: row.createdAt,
+			buyerUserId:
+				row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+					? String((row.metadata as Record<string, unknown>).buyerUserId || '') || null
+					: null
+		}))
+	);
+	const recentStoreCreditActivity: AffiliateRecentStoreCreditActivity[] = [
+		...recentSuperWeeks.map((group) => ({
+			id: `super-week:${group.weekStart.toISOString()}:${group.status}`,
+			title: weeklyCommissionTitle(group),
+			statusLabel: mapLedgerStatusLabel(group.status),
+			amount: toRoundedNaira(group.amount),
+			isCredit: true,
+			createdAt: group.latestAt.toISOString()
+		})),
+		...recentLedgerRows
+			.filter((row) => !isSuperCommissionReference(row.reference))
+			.map((row) => {
+				const amount = Math.max(0, Number(row.amount || 0));
+				const status = String(row.status || '')
+					.trim()
+					.toLowerCase();
+				const isCredit =
+					(row.type === AFFILIATE_LEDGER_CREDIT_TYPE && status !== 'reversed') ||
+					(row.type !== AFFILIATE_LEDGER_CREDIT_TYPE && status === 'reversed');
+				return {
+					id: row.id,
+					title: mapStoreCreditTitle(row.type, row.status),
+					statusLabel: mapLedgerStatusLabel(row.status),
+					amount: isCredit ? amount : amount * -1,
+					isCredit,
+					createdAt: row.createdAt.toISOString()
+				};
+			})
+	]
+		.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+		.slice(0, 6);
 
 	const paidReferredUsers = paidUserIdSet.size;
 
@@ -4095,6 +4171,8 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 	const isSuperAffiliate = Boolean(program?.isSuperAffiliate || superContractByUser.size > 0);
 	let superReferrals: SuperReferralProgressItem[] = [];
 	let superActivationsThisMonth = 0;
+	let superOnNewTerms = false;
+	let superWeeklyEarnings: SuperWeeklyEarning[] = [];
 	let activeSuperMonthlyTiers = getConfiguredSuperMonthlyTiers(config);
 	if (isSuperAffiliate) {
 		const superReferralIds = [...superContractByUser.keys()];
@@ -4104,43 +4182,91 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 		const monthlyFallbackConfig = firstContract
 			? applySuperReferralTerms(config, firstContract.terms)
 			: config;
-		const [superOrderAgg, activationRows, monthlyPolicy] = await Promise.all([
-			superReferralIds.length
-				? prisma.order.groupBy({
-						by: ['userId'],
-						where: {
-							AND: [
-								buildRevenueOrderWhere(),
-								{
-									userId: { in: superReferralIds },
-									affiliateUserId: userId,
-									orderType: 'account'
-								}
-							]
-						},
-						_count: { _all: true },
-						_sum: { totalAmount: true, refundedAmount: true }
-					})
-				: Promise.resolve([]),
-			prisma.walletTransaction.findMany({
-				where: {
-					userId,
-					reference: { startsWith: `super:activation:${userId}:` },
-					status: { notIn: [AFFILIATE_LEDGER_STATUS.reversed, 'failed', 'cancelled'] },
-					AND: [NOT_HELD_FOR_IDENTITY_REVIEW]
-				},
-				select: { reference: true, createdAt: true }
-			}),
-			getSuperMonthlyPolicy(userId, new Date(), monthlyFallbackConfig)
-		]);
+		const [superOrders, activationRows, monthlyPolicy, switchoverAt, weeklyCommissionRows] =
+			await Promise.all([
+				superReferralIds.length
+					? prisma.order.findMany({
+							where: {
+								AND: [
+									buildRevenueOrderWhere(),
+									{
+										userId: { in: superReferralIds },
+										affiliateUserId: userId,
+										orderType: 'account'
+									}
+								]
+							},
+							select: {
+								userId: true,
+								totalAmount: true,
+								refundedAmount: true,
+								storeCreditApplied: true,
+								paidAt: true,
+								createdAt: true
+							}
+						})
+					: Promise.resolve([]),
+				prisma.walletTransaction.findMany({
+					where: {
+						userId,
+						reference: { startsWith: `super:activation:${userId}:` },
+						status: { notIn: [AFFILIATE_LEDGER_STATUS.reversed, 'failed', 'cancelled'] },
+						AND: [NOT_HELD_FOR_IDENTITY_REVIEW]
+					},
+					select: { reference: true, createdAt: true }
+				}),
+				getSuperMonthlyPolicy(userId, new Date(), monthlyFallbackConfig),
+				getSuperSwitchoverAt(),
+				prisma.walletTransaction.findMany({
+					where: {
+						userId,
+						type: AFFILIATE_LEDGER_CREDIT_TYPE,
+						reference: { startsWith: 'super:commission:order:' },
+						status: { in: ['pending', 'available', 'requested', 'paid'] },
+						createdAt: { gte: new Date(Date.now() - 10 * 7 * 86_400_000) }
+					},
+					select: { amount: true, status: true, createdAt: true, metadata: true }
+				})
+			]);
 		activeSuperMonthlyTiers = monthlyPolicy;
+		superOnNewTerms = Boolean(switchoverAt && Date.now() >= switchoverAt.getTime());
+		superWeeklyEarnings = groupWeeklyCommissions(
+			weeklyCommissionRows.map((row) => ({
+				amount: Number(row.amount || 0),
+				status: String(row.status || ''),
+				createdAt: row.createdAt,
+				buyerUserId:
+					row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+						? String((row.metadata as Record<string, unknown>).buyerUserId || '') || null
+						: null
+			}))
+		).map((group) => ({
+			id: `${group.weekStart.toISOString()}:${group.status}`,
+			weekOf: formatWeekOf(group.weekStart),
+			orders: group.orders,
+			friends: group.friends,
+			amount: toRoundedNaira(group.amount),
+			statusLabel: mapLedgerStatusLabel(group.status)
+		}));
 
-		const orderAggByUser = new Map<string, { orderCount: number; cumulativeSpend: number }>();
-		for (const row of superOrderAgg) {
+		// Same spend rules as activation itself (kept cash only, from the switchover).
+		const ordersByUser = new Map<string, typeof superOrders>();
+		for (const row of superOrders) {
 			if (!row.userId) continue;
-			orderAggByUser.set(row.userId, {
-				orderCount: row._count._all,
-				cumulativeSpend: toNetSales(row._sum.totalAmount, row._sum.refundedAmount)
+			ordersByUser.set(row.userId, [...(ordersByUser.get(row.userId) ?? []), row]);
+		}
+		const orderAggByUser = new Map<string, { orderCount: number; cumulativeSpend: number }>();
+		for (const [buyerId, orders] of ordersByUser) {
+			const progress = calculateSuperReferralProgress({
+				orders,
+				enabled: true,
+				spendThreshold: 1,
+				orderThreshold: 1,
+				switchoverAt
+			});
+			orderAggByUser.set(buyerId, {
+				orderCount: progress.orderCount,
+				cumulativeSpend: progress.cumulativeSpend
 			});
 		}
 
@@ -4165,7 +4291,8 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 					displayName: formatAffiliateDisplayName(usersById.get(referredUserId)?.fullName),
 					status: activatedAt ? ('activated' as const) : ('pending' as const),
 					orderCount: agg.orderCount,
-					cumulativeSpend: agg.cumulativeSpend,
+					// After activation a friend's spending is not shown (her 5% would reveal our profit).
+					cumulativeSpend: activatedAt ? 0 : agg.cumulativeSpend,
 					orderTarget: contract.terms.activationOrderThreshold,
 					spendTarget: contract.terms.activationSpendThreshold,
 					activationReward: contract.terms.activationReward,
@@ -4254,6 +4381,8 @@ export async function getAffiliateDashboardState(userId: string): Promise<Affili
 		isSuperAffiliate,
 		superReferrals,
 		superActivationsThisMonth,
+		superOnNewTerms,
+		superWeeklyEarnings,
 		regularPolicy: {
 			buyerDiscountPercent: config.discountStage1Percent,
 			affiliateRewardPercent: config.storeCreditFallbackPercent,

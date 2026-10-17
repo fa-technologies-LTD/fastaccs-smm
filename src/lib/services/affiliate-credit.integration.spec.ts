@@ -55,7 +55,9 @@ vi.mock('$lib/prisma', () => ({
 		affiliateEvent: { create: mocks.createAffiliateEvent },
 		microcopy: {
 			findMany: mocks.findSettings,
-			findFirst: mocks.findSetting
+			findFirst: mocks.findSetting,
+			// No Super switchover set: today's terms apply.
+			findUnique: vi.fn().mockResolvedValue(null)
 		},
 		$transaction: mocks.transaction
 	}

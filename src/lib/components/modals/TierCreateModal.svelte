@@ -41,6 +41,7 @@
 				exact_preview_enabled: boolean;
 				verified_x_follower_addons: boolean;
 				affiliate_excluded: boolean;
+				unit_cost_ngn?: number | string | null;
 			};
 		};
 		loading?: boolean;
@@ -208,6 +209,37 @@
 										aria-label="Enable exact account preview"
 									/>
 								</div>
+							</div>
+
+							<div
+								class="rounded-lg p-3 md:col-span-2"
+								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+							>
+								<label class="block">
+									<span class="text-sm font-semibold" style="color: var(--text);"
+										>Our cost per account (₦)</span
+									>
+									<span
+										class="mt-1 block text-xs leading-relaxed"
+										style="color: var(--text-muted);"
+									>
+										Private. What one account from this tier really costs us, including a small
+										buffer for payment fees. Never shown to customers or affiliates. Used to work
+										out Super profit commission. Leave blank if unknown; commission on this tier is
+										then held for review.
+									</span>
+									<input
+										type="number"
+										min="0"
+										step="1"
+										inputmode="numeric"
+										bind:value={tierForm.metadata.unit_cost_ngn}
+										placeholder="e.g. 1200"
+										aria-label="Our cost per account in naira"
+										class="mt-2 w-full rounded-lg px-3 py-2"
+										style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
+									/>
+								</label>
 							</div>
 
 							<div

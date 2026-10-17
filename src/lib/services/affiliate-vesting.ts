@@ -10,6 +10,11 @@ import {
 } from '$lib/services/affiliate-policy';
 import { recordAffiliateEvent } from '$lib/services/affiliate-events';
 import { NOT_HELD_FOR_IDENTITY_REVIEW } from '$lib/services/affiliate-review-hold';
+import {
+	SUPER_COMMISSION_REFERENCE_PREFIX,
+	getSuperSwitchoverAt,
+	superBonusWindowEnd
+} from '$lib/services/super-affiliate-terms';
 
 // Affiliate rewards VEST before they become usable: a reward is recorded as `pending`
 // (not counted toward the spendable or withdrawable balance) and only flips to
@@ -36,13 +41,20 @@ async function superRewardStillQualifies(
 					{ userId: referredUserId, affiliateUserId: userId, orderType: 'account' }
 				]
 			},
-			select: { totalAmount: true, refundedAmount: true }
+			select: {
+				totalAmount: true,
+				refundedAmount: true,
+				storeCreditApplied: true,
+				paidAt: true,
+				createdAt: true
+			}
 		});
 		return calculateSuperReferralProgress({
 			orders,
 			enabled: true,
 			spendThreshold: metadata.activationSpendThreshold,
-			orderThreshold: metadata.activationOrderThreshold
+			orderThreshold: metadata.activationOrderThreshold,
+			switchoverAt: await getSuperSwitchoverAt()
 		}).activated;
 	}
 
@@ -59,7 +71,7 @@ async function superRewardStillQualifies(
 				reference: { startsWith: `super:activation:${userId}:` },
 				status: { notIn: ['reversed', 'failed', 'cancelled'] },
 				AND: [NOT_HELD_FOR_IDENTITY_REVIEW],
-				createdAt: { gte: start, lt: end }
+				createdAt: { gte: start, lt: superBonusWindowEnd(end, await getSuperSwitchoverAt()) }
 			}
 		});
 		return validActivations >= tierCount;
@@ -186,7 +198,8 @@ export async function voidUnvestedRewardsForOrder(orderId: string): Promise<{ vo
 	const pending = await prisma.walletTransaction.findMany({
 		where: {
 			type: 'affiliate_credit',
-			status: 'pending',
+			// `under_review` = a Super order commission held for a missing goods cost.
+			status: { in: ['pending', 'under_review'] },
 			OR: [
 				{ reference: `affiliate:credit:order:${orderId}` },
 				{ metadata: { path: ['orderId'], equals: orderId } }
@@ -196,7 +209,7 @@ export async function voidUnvestedRewardsForOrder(orderId: string): Promise<{ vo
 	});
 	if (pending.length === 0) return { voided: 0 };
 	const result = await prisma.walletTransaction.updateMany({
-		where: { id: { in: pending.map((p) => p.id) }, status: 'pending' },
+		where: { id: { in: pending.map((p) => p.id) }, status: { in: ['pending', 'under_review'] } },
 		data: { status: 'reversed' }
 	});
 	if (result.count > 0) {
@@ -229,7 +242,9 @@ export async function reverseVestedRegularRewardForOrder(
 		where: {
 			type: 'affiliate_credit',
 			status: 'available',
-			reference: `affiliate:credit:order:${orderId}`
+			reference: {
+				in: [`affiliate:credit:order:${orderId}`, `${SUPER_COMMISSION_REFERENCE_PREFIX}${orderId}`]
+			}
 		},
 		select: { id: true, amount: true, walletId: true, userId: true }
 	});
@@ -435,6 +450,10 @@ export async function vestMaturedAffiliateRewards(limit = 500): Promise<{
  * Pending rewards are resized before vesting; already-vested rewards are reduced under
  * the wallet lock. Idempotent across repeated refund requests. */
 export async function reconcileRegularRewardForOrder(orderId: string): Promise<void> {
+	// Super order commissions follow the same refund rules (loaded lazily: that module uses this one).
+	const { reconcileSuperCommissionForOrder } = await import('$lib/services/super-commission');
+	await reconcileSuperCommissionForOrder(orderId);
+
 	const [order, reward] = await Promise.all([
 		prisma.order.findUnique({
 			where: { id: orderId },

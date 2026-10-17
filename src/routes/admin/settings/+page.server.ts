@@ -21,6 +21,8 @@ import { invalidateSession } from '$lib/auth/session';
 import { prisma } from '$lib/prisma';
 import { sendEmail } from '$lib/services/email';
 import { getAffiliateConfig, saveAffiliateConfig } from '$lib/services/affiliate';
+import { SUPER_SWITCHOVER_KEY, getSuperSwitchoverAt } from '$lib/services/super-affiliate-terms';
+import { dateToWatInput, watInputToDate } from '$lib/helpers/wat-datetime';
 import { createAdminAuditLog } from '$lib/services/admin-audit';
 
 function maskSecret(value: string): string {
@@ -31,6 +33,7 @@ function maskSecret(value: string): string {
 }
 
 export const load: PageServerLoad = async ({ locals }) => {
+	const superSwitchoverAt = await getSuperSwitchoverAt();
 	const [settings, featureFlags, admins, sessions, announcementBannerConfig, affiliateConfig] =
 		await Promise.all([
 			getAdminSettingsSnapshot(),
@@ -91,6 +94,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			settings.business.businessTimezone || 'Africa/Lagos'
 		),
 		affiliateConfig,
+		superSwitchoverWat: dateToWatInput(superSwitchoverAt),
 		featureFlags,
 		smtpHealth: getSmtpHealthSnapshot(),
 		sessions: sessions.map((session) => ({
@@ -232,6 +236,51 @@ export const actions: Actions = {
 			success: true,
 			section: 'store',
 			message: 'Store controls updated.'
+		};
+	},
+
+	saveSuperSwitchover: async ({ request, locals }) => {
+		if (!locals.adminContext || !hasAdminPermission(locals.adminContext, 'admin:settings:manage')) {
+			return fail(403, { success: false, error: 'Forbidden' });
+		}
+		const raw = String((await request.formData()).get('superSwitchoverAt') || '').trim();
+		const nextAt = watInputToDate(raw);
+		if (raw && !nextAt) {
+			return fail(400, { success: false, error: 'Enter the switchover as a WAT date and time.' });
+		}
+		const before = await getSuperSwitchoverAt();
+		await prisma.$transaction(async (tx) => {
+			await tx.microcopy.upsert({
+				where: { key: SUPER_SWITCHOVER_KEY },
+				create: {
+					key: SUPER_SWITCHOVER_KEY,
+					value: nextAt ? nextAt.toISOString() : '',
+					category: 'settings',
+					description: 'Super affiliate switchover to the new terms (blank = not set)',
+					isActive: Boolean(nextAt)
+				},
+				update: { value: nextAt ? nextAt.toISOString() : '', isActive: Boolean(nextAt) }
+			});
+			await createAdminAuditLog(
+				{
+					actorUserId: locals.user?.id || null,
+					action: 'super_switchover_changed',
+					resourceType: 'affiliate_settings',
+					description: nextAt
+						? `Super switchover set to ${dateToWatInput(nextAt)} WAT`
+						: 'Super switchover cleared',
+					metadata: {
+						before: before?.toISOString() ?? null,
+						after: nextAt?.toISOString() ?? null
+					},
+					required: true
+				},
+				tx
+			);
+		});
+		return {
+			success: true,
+			message: nextAt ? 'Super switchover saved.' : 'Super switchover cleared.'
 		};
 	},
 

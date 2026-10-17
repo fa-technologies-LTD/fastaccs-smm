@@ -808,6 +808,47 @@
 					Save affiliate controls
 				</button>
 			</form>
+
+			<form
+				method="POST"
+				action="?/saveSuperSwitchover"
+				class="mt-6 rounded-lg p-4"
+				style="border: 1px solid var(--border); background: var(--bg);"
+			>
+				<p class="text-sm font-semibold" style="color: var(--text);">
+					Super switchover to the new terms
+				</p>
+				<p class="mt-1 text-xs leading-relaxed" style="color: var(--text-muted);">
+					Leave blank to keep today's Super terms, including the monthly bonus. From the date and
+					time you set (WAT): ₦700 when a referred buyer's kept cash on account orders reaches
+					₦3,500 or 3 account orders; then 5% of profit on that buyer's later account orders;
+					monthly bonus retired. Orders paid before it keep today's terms. Nothing already earned
+					changes.
+				</p>
+				<label class="mt-3 block text-sm" style="color: var(--text-muted);">
+					Switchover (WAT)
+					<input
+						type="datetime-local"
+						name="superSwitchoverAt"
+						value={data.superSwitchoverWat}
+						disabled={!canManageSettings}
+						class="mt-1 w-full rounded-lg px-3 py-2 sm:w-auto"
+						style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
+					/>
+				</label>
+				<p class="mt-2 text-xs" style="color: var(--text-muted);">
+					{data.superSwitchoverWat
+						? `Set for ${data.superSwitchoverWat.replace('T', ' ')} WAT.`
+						: 'Not set.'} Profit commission needs a cost on each account tier; orders without one are
+					held for review.
+				</p>
+				<button
+					type="submit"
+					disabled={!canManageSettings}
+					class="mt-3 rounded-lg px-4 py-2 text-sm font-semibold"
+					style="background: var(--btn-primary-gradient); color: #04140C;">Save switchover</button
+				>
+			</form>
 		</section>
 
 		<section

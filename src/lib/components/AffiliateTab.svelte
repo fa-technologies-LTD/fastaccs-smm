@@ -79,6 +79,15 @@
 		isSuperAffiliate?: boolean;
 		superReferrals?: SuperReferralItem[];
 		superActivationsThisMonth?: number;
+		superOnNewTerms?: boolean;
+		superWeeklyEarnings?: Array<{
+			id: string;
+			weekOf: string;
+			orders: number;
+			friends: number;
+			amount: number;
+			statusLabel: string;
+		}>;
 		regularPolicy?: {
 			buyerDiscountPercent: number;
 			affiliateRewardPercent: number;
@@ -262,6 +271,15 @@
 		Array.isArray(affiliateData?.superReferrals) ? affiliateData.superReferrals : []
 	);
 	const superActivationsThisMonth = $derived(toNumber(affiliateData?.superActivationsThisMonth));
+	const superOnNewTerms = $derived(Boolean(affiliateData?.superOnNewTerms));
+	const superWeeklyEarnings = $derived(
+		Array.isArray(affiliateData?.superWeeklyEarnings) ? affiliateData.superWeeklyEarnings : []
+	);
+	const payoutProcessingNote = $derived(
+		isSuperAffiliate && superOnNewTerms
+			? 'Payouts are processed within 1–3 days.'
+			: 'Requests are processed on Saturdays.'
+	);
 	const superEnabledForNewReferrals = $derived(
 		Boolean(affiliateData?.superPolicy?.enabledForNewReferrals)
 	);
@@ -737,7 +755,7 @@
 				{/if}
 				{#if affiliateData?.payoutEligible}
 					<p class="mt-2 text-sm" style="color: var(--primary);">
-						You can request a payout now. Requests are processed on Saturdays.
+						You can request a payout now. {payoutProcessingNote}
 					</p>
 				{:else if payoutBlockerMessages.length > 0}
 					<div class="mt-2 text-sm" style="color: var(--text-muted);">
@@ -747,7 +765,7 @@
 								<li class="list-disc">{message}</li>
 							{/each}
 						</ul>
-						<p class="mt-2 text-xs">Approved requests are processed on Saturdays.</p>
+						<p class="mt-2 text-xs">{payoutProcessingNote}</p>
 					</div>
 				{/if}
 				<div class="mt-3 flex flex-wrap gap-2">
@@ -835,27 +853,65 @@
 								{superActivationsThisMonth}
 							</div>
 						</div>
-						<div class="rounded-[var(--r-sm)] border border-[var(--border)] p-3">
-							<div class="text-xs" style="color: var(--text-muted);">Monthly bonus</div>
-							{#if superBonusTier}
-								<div class="text-lg font-bold" style="color: var(--primary);">
-									₦{superBonusTier.totalAmount.toLocaleString()}
+						{#if superOnNewTerms}
+							<div class="rounded-[var(--r-sm)] border border-[var(--border)] p-3">
+								<div class="text-xs" style="color: var(--text-muted);">Order earnings</div>
+								<div class="text-[11px] leading-snug" style="color: var(--text);">
+									5% of our profit on each account order your activated friends place.
 								</div>
-								<div class="text-[10px]" style="color: var(--text-muted);">
-									{superBonusTier.count}+ activations this month
-								</div>
-							{:else}
-								<div class="text-sm" style="color: var(--text-muted);">
-									—
-									{#if firstSuperBonusTier}
-										<span class="text-[10px]">
-											({firstSuperBonusTier.count}+ unlocks ₦{firstSuperBonusTier.totalAmount.toLocaleString()})
-										</span>
-									{/if}
-								</div>
-							{/if}
-						</div>
+							</div>
+						{:else}
+							<div class="rounded-[var(--r-sm)] border border-[var(--border)] p-3">
+								<div class="text-xs" style="color: var(--text-muted);">Monthly bonus</div>
+								{#if superBonusTier}
+									<div class="text-lg font-bold" style="color: var(--primary);">
+										₦{superBonusTier.totalAmount.toLocaleString()}
+									</div>
+									<div class="text-[10px]" style="color: var(--text-muted);">
+										{superBonusTier.count}+ activations this month
+									</div>
+								{:else}
+									<div class="text-sm" style="color: var(--text-muted);">
+										—
+										{#if firstSuperBonusTier}
+											<span class="text-[10px]">
+												({firstSuperBonusTier.count}+ unlocks ₦{firstSuperBonusTier.totalAmount.toLocaleString()})
+											</span>
+										{/if}
+									</div>
+								{/if}
+							</div>
+						{/if}
 					</div>
+
+					{#if superWeeklyEarnings.length > 0}
+						<div class="mb-4">
+							<div class="mb-2 text-xs font-semibold" style="color: var(--text-muted);">
+								Order earnings by week
+							</div>
+							<div class="space-y-2">
+								{#each superWeeklyEarnings as week (week.id)}
+									<div
+										class="flex items-center justify-between gap-3 rounded-[var(--r-sm)] border border-[var(--border)] p-3"
+									>
+										<div class="min-w-0">
+											<div class="text-sm font-semibold" style="color: var(--text);">
+												Week of {week.weekOf}
+											</div>
+											<div class="text-[11px]" style="color: var(--text-muted);">
+												{week.orders} order{week.orders === 1 ? '' : 's'}{week.friends > 0
+													? ` from ${week.friends} friend${week.friends === 1 ? '' : 's'}`
+													: ''} · {week.statusLabel}
+											</div>
+										</div>
+										<div class="text-sm font-bold" style="color: var(--primary);">
+											+₦{toNumber(week.amount).toLocaleString()}
+										</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
 
 					<div class="mb-2 text-xs font-semibold" style="color: var(--text-muted);">
 						Your referrals
@@ -940,8 +996,7 @@
 											Earned ₦{toNumber(ref.activationReward).toLocaleString()} · {ref.orderCount} order{ref.orderCount ===
 											1
 												? ''
-												: 's'}, ₦{ref.cumulativeSpend.toLocaleString()}
-											spent
+												: 's'}
 										</div>
 									{/if}
 								</div>

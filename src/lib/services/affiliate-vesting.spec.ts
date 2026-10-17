@@ -25,6 +25,8 @@ const prismaMock = vi.hoisted(() => ({
 	order: { findUnique: vi.fn() },
 	walletTransaction: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
 	affiliateEvent: { create: vi.fn() },
+	// No Super switchover set: today's terms apply.
+	microcopy: { findUnique: vi.fn().mockResolvedValue(null) },
 	$transaction: vi.fn()
 }));
 
@@ -174,7 +176,9 @@ describe('refund reward boundaries', () => {
 		expect(prismaMock.walletTransaction.findMany).toHaveBeenCalledWith({
 			where: {
 				type: 'affiliate_credit',
-				status: 'pending',
+				// Pending rewards plus Super commissions held for a missing cost; activations are
+				// tagged with activatedByOrderId (not orderId), so they are never matched here.
+				status: { in: ['pending', 'under_review'] },
 				OR: [
 					{ reference: 'affiliate:credit:order:order-1' },
 					{ metadata: { path: ['orderId'], equals: 'order-1' } }

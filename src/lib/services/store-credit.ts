@@ -1,6 +1,11 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { moneyNgn } from '$lib/helpers/money';
+import {
+	groupWeeklyCommissions,
+	isSuperCommissionReference,
+	weeklyCommissionTitle
+} from '$lib/helpers/super-earnings-grouping';
 import type { OrderRedemption } from '$lib/helpers/store-credit-redemption';
 export {
 	computeOrderRedemption,
@@ -93,22 +98,48 @@ export async function getStoreCreditHistory(
 			amount: true,
 			status: true,
 			description: true,
-			createdAt: true
+			createdAt: true,
+			reference: true,
+			metadata: true
 		}
 	});
-	return rows.map((r) => {
-		const kind = STORE_CREDIT_DEBIT_TYPES.has(r.type) ? ('debit' as const) : ('credit' as const);
-		const amount = moneyNgn(r.amount);
-		const delta = kind === 'debit' ? -amount : amount;
-		return {
-			at: r.createdAt.toISOString(),
-			description: r.description,
-			delta,
-			kind,
-			category: SC_CATEGORY[r.type] ?? (kind === 'credit' ? 'Credit' : 'Spent'),
-			status: String(r.status || '')
-		};
-	});
+	// Super order earnings appear as weekly totals across all friends, never per order.
+	const weeklySuper: StoreCreditEntry[] = groupWeeklyCommissions(
+		rows
+			.filter((r) => r.type === SC_CREDIT_AFFILIATE && isSuperCommissionReference(r.reference))
+			.map((r) => ({
+				amount: moneyNgn(r.amount),
+				status: String(r.status || ''),
+				createdAt: r.createdAt,
+				buyerUserId:
+					r.metadata && typeof r.metadata === 'object' && !Array.isArray(r.metadata)
+						? String((r.metadata as Record<string, unknown>).buyerUserId || '') || null
+						: null
+			}))
+	).map((group) => ({
+		at: group.latestAt.toISOString(),
+		description: weeklyCommissionTitle(group),
+		delta: group.amount,
+		kind: 'credit' as const,
+		category: SC_CATEGORY[SC_CREDIT_AFFILIATE],
+		status: group.status
+	}));
+	const individual = rows
+		.filter((r) => !(r.type === SC_CREDIT_AFFILIATE && isSuperCommissionReference(r.reference)))
+		.map((r) => {
+			const kind = STORE_CREDIT_DEBIT_TYPES.has(r.type) ? ('debit' as const) : ('credit' as const);
+			const amount = moneyNgn(r.amount);
+			const delta = kind === 'debit' ? -amount : amount;
+			return {
+				at: r.createdAt.toISOString(),
+				description: r.description,
+				delta,
+				kind,
+				category: SC_CATEGORY[r.type] ?? (kind === 'credit' ? 'Credit' : 'Spent'),
+				status: String(r.status || '')
+			};
+		});
+	return [...weeklySuper, ...individual].sort((a, b) => b.at.localeCompare(a.at));
 }
 
 const EARNED_CREDIT_TYPES = [SC_CREDIT_AFFILIATE, SC_CREDIT_GIFT];

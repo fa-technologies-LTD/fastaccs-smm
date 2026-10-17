@@ -1,5 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { sendEmail } from '$lib/services/email';
+import { getSuperSwitchoverAt } from '$lib/services/super-affiliate-terms';
 
 type PayoutEmailStatus = 'requested' | 'paid' | 'reversed';
 
@@ -7,6 +8,24 @@ const PAYOUT_EMAIL_PENDING_STALE_MS = 10 * 60 * 1000;
 
 function getBaseUrl(): string {
 	return (process.env.PUBLIC_BASE_URL || 'https://smm.fastaccs.com').replace(/\/+$/, '');
+}
+
+async function isSuperOnNewTerms(userId: string | null): Promise<boolean> {
+	if (!userId) return false;
+	try {
+		const [program, switchoverAt] = await Promise.all([
+			prisma.affiliateProgram.findUnique({
+				where: { userId },
+				select: { isSuperAffiliate: true }
+			}),
+			getSuperSwitchoverAt()
+		]);
+		return Boolean(
+			program?.isSuperAffiliate && switchoverAt && Date.now() >= switchoverAt.getTime()
+		);
+	} catch {
+		return false;
+	}
 }
 
 function getFirstName(fullName: string | null, email: string): string {
@@ -19,6 +38,8 @@ function getPayoutEmailContent(params: {
 	amount: number;
 	reference: string;
 	adminNotes?: string;
+	/** Super affiliates on the new terms: payouts within 1–3 days instead of the Saturday run. */
+	superFastProcessing?: boolean;
 }): {
 	subject: string;
 	body: string;
@@ -34,7 +55,7 @@ function getPayoutEmailContent(params: {
 Requested amount: ${amount}
 Request reference: ${params.reference}
 
-We will review it for the next Saturday payout cycle. You can follow its status from your affiliate dashboard.`,
+${params.superFastProcessing ? 'We aim to process it within 1–3 days.' : 'We will review it for the next Saturday payout cycle.'} You can follow its status from your affiliate dashboard.`,
 			ctaText: 'View payout status'
 		};
 	}
@@ -156,7 +177,10 @@ export async function sendAffiliatePayoutStatusEmailIfNeeded(params: {
 	});
 
 	if (!reservation) return false;
-	const content = getPayoutEmailContent(reservation);
+	const content = getPayoutEmailContent({
+		...reservation,
+		superFastProcessing: await isSuperOnNewTerms(reservation.userId)
+	});
 	const result = await sendEmail({
 		to: reservation.email,
 		userId: reservation.userId,

@@ -22,6 +22,47 @@
 	let bankDetailsActionLoading = $state(false);
 	let bankDetailsRevealLoading = $state(false);
 	let flaggedRewards = $state<any[]>([...(data.flaggedRewards || [])]);
+	let costHeldCommissions = $state<any[]>([...(data.costHeldCommissions || [])]);
+	let costInputs = $state<Record<string, string>>({});
+	let costSaving = $state<Record<string, boolean>>({});
+
+	async function releaseWithCost(transactionId: string) {
+		const raw = costInputs[transactionId];
+		const goodsCostNgn = Number(raw);
+		if (raw === undefined || raw === '' || !Number.isFinite(goodsCostNgn) || goodsCostNgn < 0) {
+			addToast({
+				type: 'error',
+				title: 'Enter the real goods cost for this order.',
+				duration: 3600
+			});
+			return;
+		}
+		if (costSaving[transactionId]) return;
+		costSaving = { ...costSaving, [transactionId]: true };
+		try {
+			const response = await fetch(`/api/admin/affiliates/${data.affiliate.id}/commission-cost`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ transactionId, goodsCostNgn })
+			});
+			const result = await response.json();
+			if (!response.ok || !result.success) throw new Error(result.error || 'Could not release');
+			costHeldCommissions = costHeldCommissions.filter((row) => row.id !== transactionId);
+			addToast({
+				type: 'success',
+				title: `Commission set to ${formatPrice(result.amount)}. It clears after the normal hold.`,
+				duration: 3600
+			});
+		} catch (error) {
+			addToast({
+				type: 'error',
+				title: error instanceof Error ? error.message : 'Could not release',
+				duration: 3600
+			});
+		} finally {
+			costSaving = { ...costSaving, [transactionId]: false };
+		}
+	}
 	let rewardReviewLoading = $state<Record<string, boolean>>({});
 
 	const referralBaseUrl = 'https://smm.fastaccs.com';
@@ -573,6 +614,60 @@
 			{/each}
 		</div>
 	</div>
+
+	{#if costHeldCommissions.length > 0}
+		<div
+			class="mb-6 rounded-lg border p-6"
+			style="border-color: var(--status-warning-border); background: var(--bg-elev-1);"
+		>
+			<h2 class="text-lg font-semibold" style="color: var(--text); font-family: var(--font-head);">
+				Super commissions waiting for a cost ({costHeldCommissions.length})
+			</h2>
+			<p class="mt-1 text-sm" style="color: var(--text-dim);">
+				These orders had no tier cost when they were paid. Enter the real goods cost for each order
+				to work out the 5% commission. It then clears after the normal 14-day hold.
+			</p>
+			<div class="mt-4 space-y-3">
+				{#each costHeldCommissions as row (row.id)}
+					<div
+						class="flex flex-wrap items-end justify-between gap-3 rounded-lg border p-3"
+						style="border-color: var(--border); background: var(--bg-elev-2);"
+					>
+						<div class="text-sm">
+							<p class="font-semibold" style="color: var(--text);">{row.orderNumber}</p>
+							<p style="color: var(--text-dim);">
+								{row.paidAt ? formatDate(row.paidAt) : ''} · Order {formatPrice(row.orderTotal)} · Cash
+								paid {formatPrice(row.cashPaid)}{row.refunded > 0
+									? ` · Refunded ${formatPrice(row.refunded)}`
+									: ''}
+							</p>
+						</div>
+						<div class="flex items-end gap-2">
+							<label class="text-xs" style="color: var(--text-dim);">
+								Goods cost (₦)
+								<input
+									type="number"
+									min="0"
+									step="1"
+									bind:value={costInputs[row.id]}
+									class="mt-1 block w-32 rounded-lg px-2 py-1.5 text-sm"
+									style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+								/>
+							</label>
+							<button
+								type="button"
+								disabled={costSaving[row.id]}
+								onclick={() => releaseWithCost(row.id)}
+								class="rounded-lg px-3 py-2 text-sm font-semibold"
+								style="background: var(--btn-primary-gradient); color: #04140C;"
+								>{costSaving[row.id] ? 'Saving…' : 'Calculate & release'}</button
+							>
+						</div>
+					</div>
+				{/each}
+			</div>
+		</div>
+	{/if}
 
 	<div
 		class="mb-6 rounded-lg border p-6"

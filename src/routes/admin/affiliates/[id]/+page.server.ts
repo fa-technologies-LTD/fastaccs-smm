@@ -32,9 +32,9 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				affiliateWelcomePopupSeenAt: true,
 				affiliateProgress50PopupSeenAt: true,
 				affiliateProgress80PopupSeenAt: true,
-					affiliateProgress95PopupSeenAt: true,
-					affiliateUnlockedPopupSeenAt: true,
-					affiliateShareCodePopupSeenAt: true,
+				affiliateProgress95PopupSeenAt: true,
+				affiliateUnlockedPopupSeenAt: true,
+				affiliateShareCodePopupSeenAt: true,
 				affiliatePrograms: {
 					select: {
 						id: true,
@@ -241,9 +241,9 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 					welcome: affiliate.affiliateWelcomePopupSeenAt,
 					progress50: affiliate.affiliateProgress50PopupSeenAt,
 					progress80: affiliate.affiliateProgress80PopupSeenAt,
-						progress95: affiliate.affiliateProgress95PopupSeenAt,
-						unlocked: affiliate.affiliateUnlockedPopupSeenAt,
-						shareCode: affiliate.affiliateShareCodePopupSeenAt
+					progress95: affiliate.affiliateProgress95PopupSeenAt,
+					unlocked: affiliate.affiliateUnlockedPopupSeenAt,
+					shareCode: affiliate.affiliateShareCodePopupSeenAt
 				}
 			},
 			program: {
@@ -263,6 +263,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			ledgerSummary,
 			payouts,
 			bankDetails: bankDetailsSummary,
+			costHeldCommissions: await loadCostHeldCommissions(ledgerRows),
 			flaggedRewards: flaggedRewards.map((row) => {
 				const metadata =
 					row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
@@ -320,3 +321,49 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		throw error(500, 'Failed to load affiliate details');
 	}
 };
+
+/** Super order commissions held because the order had no goods cost (admin enters it). */
+async function loadCostHeldCommissions(
+	rows: ReadonlyArray<{ id: string; status: string; reference: string | null; metadata: unknown }>
+) {
+	const held = rows.filter((row) => {
+		const metadata =
+			row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+				? (row.metadata as Record<string, unknown>)
+				: {};
+		return (
+			row.status === 'under_review' &&
+			Boolean(row.reference?.startsWith('super:commission:order:')) &&
+			metadata.holdReason === 'cost_missing'
+		);
+	});
+	if (held.length === 0) return [];
+	const orderIds = held.map((row) => String(row.reference).slice('super:commission:order:'.length));
+	const orders = await prisma.order.findMany({
+		where: { id: { in: orderIds } },
+		select: {
+			id: true,
+			orderNumber: true,
+			paidAt: true,
+			createdAt: true,
+			totalAmount: true,
+			storeCreditApplied: true,
+			refundedAmount: true
+		}
+	});
+	const byId = new Map(orders.map((order) => [order.id, order]));
+	return held.map((row) => {
+		const order = byId.get(String(row.reference).slice('super:commission:order:'.length));
+		return {
+			id: row.id,
+			orderNumber: order?.orderNumber ?? 'Unknown order',
+			paidAt: (order?.paidAt ?? order?.createdAt ?? null)?.toISOString() ?? null,
+			orderTotal: Number(order?.totalAmount || 0),
+			cashPaid: Math.max(
+				0,
+				Number(order?.totalAmount || 0) - Number(order?.storeCreditApplied || 0)
+			),
+			refunded: Number(order?.refundedAmount || 0)
+		};
+	});
+}

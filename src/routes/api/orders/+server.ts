@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'crypto';
+import { buildGoodsCostSnapshot } from '$lib/services/super-affiliate-terms';
 import { matchesCheckoutQuote, type CheckoutQuote } from '$lib/helpers/checkout-quote';
 import { boostingMinimumMessage } from '$lib/helpers/boosting-checkout';
 import { parseBoostComments, supportsBoostServiceInput } from '$lib/helpers/boosting-service-input';
@@ -1433,6 +1434,22 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						}
 
 						let orderAnalyticsMetadata = buildOrderAnalyticsMetadata(orderData.analytics);
+						if (!isBoostingCheckout && !isPhoneCheckout) {
+							// Private goods cost, frozen at purchase from each tier's entered cost, so
+							// later edits to a tier never rewrite an order's Super commission.
+							orderAnalyticsMetadata = {
+								...orderAnalyticsMetadata,
+								goodsCost: buildGoodsCostSnapshot(
+									reservationItems.map((item) => ({
+										orderItemId: item.orderItemId,
+										categoryId: item.categoryId,
+										quantity: item.quantity,
+										categoryMetadata: item.categoryMetadata,
+										hasAddon: Boolean(item.accountAddon)
+									}))
+								)
+							} as unknown as Prisma.InputJsonObject;
+						}
 						// Consented first/last touch (ad click id) for campaign reporting + postbacks.
 						const acquisition = buildOrderAttribution(locals.attribution);
 						if (acquisition) {

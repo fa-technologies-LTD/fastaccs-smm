@@ -19,6 +19,7 @@
 		retireCategory
 	} from '$lib/services/categories';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
+	import { parseTierUnitCostForForm } from '$lib/helpers/tier-unit-cost';
 	import type { CategoryMetadata, CategoryInsert, CategoryUpdate } from '$lib/services/categories';
 	import {
 		applyTierSampleScreenshotSanitization,
@@ -148,7 +149,8 @@
 			login_guide_label: DEFAULT_LOGIN_GUIDE_LABEL,
 			exact_preview_enabled: false,
 			verified_x_follower_addons: false,
-			affiliate_excluded: true
+			affiliate_excluded: true,
+			unit_cost_ngn: '' as number | string
 		}
 	});
 
@@ -216,7 +218,8 @@
 				login_guide_label: deliveryConfig.loginGuideLabel || DEFAULT_LOGIN_GUIDE_LABEL,
 				exact_preview_enabled: exactPreviewConfig.enabled,
 				verified_x_follower_addons: metadata?.verified_x_follower_addons === true,
-				affiliate_excluded: metadata?.affiliate_excluded === true
+				affiliate_excluded: metadata?.affiliate_excluded === true,
+				unit_cost_ngn: parseTierUnitCostForForm(metadata)
 			}
 		};
 		showEditModal = true;
@@ -255,7 +258,8 @@
 				login_guide_label: DEFAULT_LOGIN_GUIDE_LABEL,
 				exact_preview_enabled: false,
 				verified_x_follower_addons: false,
-				affiliate_excluded: true
+				affiliate_excluded: true,
+				unit_cost_ngn: ''
 			}
 		};
 	}

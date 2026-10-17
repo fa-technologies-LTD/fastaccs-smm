@@ -26,7 +26,7 @@ vi.mock('$lib/prisma', () => ({
 	prisma: {
 		walletTransaction: { count: mocks.countActivations, findUnique: mocks.findActivation },
 		order: { findMany: mocks.findOrders },
-		microcopy: { findMany: mocks.findSettings },
+		microcopy: { findMany: mocks.findSettings, findUnique: vi.fn().mockResolvedValue(null) },
 		$transaction: mocks.transaction
 	}
 }));
