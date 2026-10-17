@@ -60,6 +60,12 @@ export function boostingPricingChanges(before: BoostPricingSheet, after: BoostPr
 			r.priceMode === 'manual' ? 'Locked' : 'Follows pricing rules';
 		add(changes, 'Price lock', lockLabel(previous), lockLabel(row));
 		add(changes, 'Live', yesNo(previous.selected), yesNo(row.selected));
+		if (row.supplierChoiceId && row.supplierChoiceId !== previous.supplierChoiceId)
+			changes.push({
+				label: 'Supplier',
+				before: 'Saved supplier setup',
+				after: 'Use and approve selected service (listed below)'
+			});
 		const quantity = (value: number) => value.toLocaleString('en-NG');
 		add(
 			changes,

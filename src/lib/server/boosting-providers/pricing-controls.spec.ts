@@ -8,14 +8,16 @@ const db = vi.hoisted(() => ({
 	$queryRaw: vi.fn(),
 	$transaction: vi.fn(),
 	adminAuditLog: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
-	boostCustomerOffer: { findMany: vi.fn(), update: vi.fn() },
-	boostProviderService: { findMany: vi.fn() },
+	boostCustomerOffer: { findMany: vi.fn(), update: vi.fn(), create: vi.fn() },
+	boostProviderService: { findMany: vi.fn(), findUnique: vi.fn() },
+	boostServiceRoute: { upsert: vi.fn(), updateMany: vi.fn() },
 	category: { update: vi.fn(), findMany: vi.fn() },
 	microcopy: { findMany: vi.fn(), upsert: vi.fn() }
 }));
 vi.mock('$lib/prisma', () => ({ prisma: db }));
 vi.mock('$env/dynamic/private', () => ({ env: { BOOSTING_AUTOMATION_MODE: 'live' } }));
 import { loadBoostControls, saveBoostControls, refreshBoostAutoPrices } from './pricing-controls';
+import { supplierChoiceRevision } from './supplier-choice';
 
 it('price-only saves cannot publish even with forged selections and confirmation', async () => {
 	store.offers[0].status = 'hidden';
@@ -112,7 +114,51 @@ beforeEach(() => {
 		Object.assign(offer, data, { updatedAt: new Date() });
 		return offer;
 	});
+	db.boostCustomerOffer.create.mockImplementation(async ({ data }: any) => {
+		const offer = {
+			...saleOfferFixture(),
+			...data,
+			id: 'created-offer',
+			updatedAt: new Date(),
+			category: {
+				id: data.categoryId,
+				name: 'TikTok Likes',
+				isActive: true,
+				metadata: {},
+				categoryType: 'boosting_service'
+			},
+			routes: []
+		};
+		store.offers.push(offer);
+		return offer;
+	});
 	db.boostProviderService.findMany.mockImplementation(async () => store.services);
+	db.boostProviderService.findUnique.mockImplementation(
+		async ({ where }: any) => store.services.find((s) => s.id === where.id) ?? null
+	);
+	db.boostServiceRoute.updateMany.mockImplementation(async ({ where, data }: any) => {
+		for (const offer of store.offers)
+			for (const route of offer.routes)
+				if (where.id.in.includes(route.id)) Object.assign(route, data);
+		return { count: where.id.in.length };
+	});
+	db.boostServiceRoute.upsert.mockImplementation(async ({ where, create, update }: any) => {
+		const offer = store.offers.find((o) => o.id === where.offerId_providerServiceId.offerId);
+		let route = offer.routes.find(
+			(r: any) => r.providerService.id === where.offerId_providerServiceId.providerServiceId
+		);
+		if (route) Object.assign(route, update);
+		else {
+			route = {
+				...saleOfferFixture().routes[0],
+				...create,
+				id: 'new-route',
+				providerService: store.services.find((s) => s.id === create.providerServiceId)
+			};
+			offer.routes.push(route);
+		}
+		return route;
+	});
 	db.microcopy.findMany.mockResolvedValue([{ key: 'config.boosting.usd_ngn_rate', value: '1500' }]);
 	db.category.findMany.mockResolvedValue([]);
 });
@@ -467,15 +513,20 @@ it('can take a service offline during a supplier outage', async () => {
 		priceLocked: true
 	});
 });
-it('does not enable unreviewed routes even with a safe price', async () => {
+it('approves the displayed preload only through the owner-confirmed Live Save', async () => {
 	store.offers[0].status = 'hidden';
 	store.offers[0].routes[0].equivalenceApproved = false;
 	const next = await current();
 	next.rows[0].selected = true;
-	await expect(saveBoostControls(next, 'owner', db as never, false, true)).rejects.toThrow(
-		'review supplier routes'
-	);
-	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+	await expect(saveBoostControls(next, 'owner', db as never)).rejects.toThrow('Confirm');
+	expect(db.boostServiceRoute.updateMany).not.toHaveBeenCalled();
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(store.offers[0].status).toBe('live');
+	expect(store.offers[0].routes[0]).toMatchObject({
+		state: 'enabled',
+		equivalenceApproved: true,
+		reviewedByUserId: 'owner'
+	});
 });
 it('rejects a fabricated unlocked price rather than silently saving a different price', async () => {
 	const next = await current();
@@ -627,11 +678,174 @@ it('displays the newly saved review-only service, never a retired service, witho
 	expect(view.quotes.row).toMatchObject({ providerServiceId: 'new-service', rateUsd: 0.075 });
 	expect(view.setup.row.reviewed).toBe(false);
 	view.sheet.rows[0].selected = true;
-	await expect(saveBoostControls(view.sheet, 'owner', db as never, false, true)).rejects.toThrow(
-		'review supplier routes'
-	);
-	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+	await saveBoostControls(view.sheet, 'owner', db as never, false, true);
+	expect(store.offers[0].routes[0].state).toBe('paused');
+	expect(store.offers[0].routes[1]).toMatchObject({ state: 'enabled', equivalenceApproved: true });
+	expect(store.offers[0].status).toBe('live');
 });
+
+it('pins an exact owner choice without changing other mappings, evidence or retry policy', async () => {
+	const replacement = {
+		...store.services[0],
+		id: '11111111-1111-4111-8111-111111111111',
+		serviceId: 's999',
+		ratePerThousand: 0.08
+	};
+	store.services.push(replacement);
+	const next = await current();
+	Object.assign(next.rows[0], {
+		supplierChoiceId: replacement.id,
+		supplierChoiceRevision: supplierChoiceRevision(replacement),
+		sale: 1000
+	});
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(store.offers[0]).toMatchObject({
+		routingPolicy: 'locked',
+		lockedRouteId: 'new-route',
+		preferredRouteId: null,
+		status: 'live'
+	});
+	expect(store.offers[0].routes[0]).toMatchObject({ state: 'enabled', id: 'route' });
+	expect(store.offers[0].routes[1]).toMatchObject({
+		verifiedSignals: [],
+		reviewedByUserId: 'owner'
+	});
+	const reloaded = await loadBoostControls(db as never);
+	expect(reloaded.sheet.rows[0]).toMatchObject({
+		serviceId: 's999',
+		sale: 1000,
+		priceMode: 'manual'
+	});
+	expect(reloaded.sheet.rows[0].supplierChoiceId).toBeUndefined();
+	expect(store.record.metadata.sheet.rows[0]).toMatchObject({ provider: 'smm_raja', serviceId: 's999' });
+});
+
+it('does not approve a service through a hidden price-only save or automated repricing', async () => {
+	const next = await current();
+	next.rows[0].supplierChoiceId = '11111111-1111-4111-8111-111111111111';
+	next.rows[0].supplierChoiceRevision = 'a'.repeat(64);
+	await expect(saveBoostControls(next, 'owner', db as never, true, true)).rejects.toThrow(
+		'confirmed owner Save'
+	);
+	await expect(saveBoostControls(next, 'owner', db as never, false, true, true)).rejects.toThrow(
+		'confirmed owner Save'
+	);
+	await expect(saveBoostControls(next, 'owner', db as never)).rejects.toThrow('confirm supplier');
+	expect(db.boostServiceRoute.upsert).not.toHaveBeenCalled();
+});
+
+it('creates a missing customer offer and exact mapping through the same confirmed Save', async () => {
+	store.offers = [];
+	db.category.findMany.mockResolvedValue([
+		{ id: 'category', metadata: { boosting_platform: 'tiktok', boosting_action_type: 'likes' } }
+	]);
+	store.services[0].id = '11111111-1111-4111-8111-111111111111';
+	const next = await current();
+	expect(next.rows[0].sourceOfferId).toBeNull();
+	Object.assign(next.rows[0], {
+		supplierChoiceId: store.services[0].id,
+		supplierChoiceRevision: supplierChoiceRevision(store.services[0]),
+		selected: true,
+		startingQuantity: 200,
+		increment: 200,
+		sale: 1000
+	});
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(store.offers).toHaveLength(1);
+	expect(store.offers[0]).toMatchObject({
+		status: 'live',
+		routingPolicy: 'locked',
+		lockedRouteId: 'new-route',
+		minQuantity: 200,
+		stepQuantity: 200,
+		pricePerStepNgn: 200,
+		requiredVerifiedSignals: [],
+		refillDays: null,
+		attemptCap: 1
+	});
+	expect((await current()).rows[0]).toMatchObject({
+		sourceOfferId: 'created-offer',
+		serviceId: 's1675',
+		selected: true
+	});
+});
+
+it('keeps an explicitly chosen supplier offline when Live is unticked', async () => {
+	store.offers[0].status = 'hidden';
+	store.services[0].id = '11111111-1111-4111-8111-111111111111';
+	const next = await current();
+	Object.assign(next.rows[0], {
+		supplierChoiceId: store.services[0].id,
+		supplierChoiceRevision: supplierChoiceRevision(store.services[0]),
+		sale: 900
+	});
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(store.offers[0].status).toBe('hidden');
+	expect(store.offers[0].pricePerStepNgn).toBe(90);
+	expect(store.offers[0].routes[0]).toMatchObject({ state: 'enabled', equivalenceApproved: true });
+});
+
+it('reviews fractional supplier costs at a newly lowered minimum without losing a kobo to double rounding', async () => {
+	store.offers[0].status = 'hidden';
+	const service = {
+		...store.services[0],
+		id: '11111111-1111-4111-8111-111111111111',
+		minQuantity: 10,
+		ratePerThousand: 2.5014
+	};
+	store.services.push(service);
+	const next = await current();
+	Object.assign(next.rows[0], {
+		supplierChoiceId: service.id,
+		supplierChoiceRevision: supplierChoiceRevision(service),
+		selected: true,
+		startingQuantity: 10,
+		increment: 10,
+		sale: 10000
+	});
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(Number(store.offers[0].maximumSupplierCostNgn)).toBe(37.53);
+	expect(store.offers[0].status).toBe('live');
+});
+
+it('rejects a changed supplier quote and stale mapping approval before accepting the selection', async () => {
+	const replacement = { ...store.services[0], id: '11111111-1111-4111-8111-111111111111' };
+	store.services.push(replacement);
+	const next = await current();
+	Object.assign(next.rows[0], {
+		supplierChoiceId: replacement.id,
+		supplierChoiceRevision: supplierChoiceRevision(replacement)
+	});
+	replacement.ratePerThousand = 99;
+	await expect(saveBoostControls(next, 'owner', db as never, false, true)).rejects.toThrow(
+		'selected supplier details changed'
+	);
+	delete next.rows[0].supplierChoiceId;
+	store.offers[0].routes[0].state = 'paused';
+	await expect(saveBoostControls(next, 'owner', db as never, false, true)).rejects.toThrow(
+		'supplier setup or cost changed'
+	);
+	expect(db.boostServiceRoute.upsert).not.toHaveBeenCalled();
+});
+
+it.each(['platform', 'inputs', 'unavailable', 'stale'])(
+	'refuses an incompatible %s exact choice rather than bypassing safety checks',
+	async (kind) => {
+		const service = { ...store.services[0], id: '11111111-1111-4111-8111-111111111111' };
+		if (kind === 'platform') service.platforms = ['facebook'];
+		if (kind === 'inputs') service.providerType = 'Subscriptions';
+		if (kind === 'unavailable') service.unavailableAt = new Date();
+		if (kind === 'stale') service.lastSeenAt = new Date(Date.now() - 400 * 60000);
+		store.services.push(service);
+		const next = await current();
+		Object.assign(next.rows[0], {
+			supplierChoiceId: service.id,
+			supplierChoiceRevision: supplierChoiceRevision(service)
+		});
+		await expect(saveBoostControls(next, 'owner', db as never, false, true)).rejects.toThrow();
+		expect(db.boostServiceRoute.upsert).not.toHaveBeenCalled();
+	}
+);
 
 it('does not present an arbitrary paused service as the current automatic configuration', async () => {
 	store.offers[0].routingPolicy = 'automatic';

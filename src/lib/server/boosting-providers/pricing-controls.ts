@@ -26,6 +26,7 @@ import { supportsBoostServiceInput } from '$lib/helpers/boosting-service-input';
 import { getRequiredLinkType, type BoostingActionType } from '$lib/helpers/social-link-validator';
 import { getBoostingServiceConfig, getQuantityChips } from '$lib/helpers/boosting-service-config';
 import { inspectBoostSale } from '$lib/server/boosting-sale-readiness';
+import { supplierChoice, supplierChoiceRevision } from './supplier-choice';
 
 type Database = PrismaClient | Prisma.TransactionClient;
 type Offer = Prisma.BoostCustomerOfferGetPayload<{
@@ -44,6 +45,45 @@ function routesFor(offer: Offer) {
 		return offer.routes.filter((r) => r.id === offer.lockedRouteId);
 	// Automatic quotes use the highest approved route cost, not a cheap route that cannot represent the shortlist.
 	return offer.routes.filter((r) => r.equivalenceApproved && r.state === 'enabled');
+}
+function approvalRoutesFor(offer: Offer) {
+	if (offer.routingPolicy === 'locked')
+		return offer.routes.filter((r) => r.id === offer.lockedRouteId && r.state !== 'paused');
+	const enabled = routesFor(offer);
+	return enabled.length ? enabled : offer.routes.filter((r) => r.state === 'shadow');
+}
+function mappingRevision(offer: Offer) {
+	return createHash('sha256')
+		.update(
+			JSON.stringify([
+				offer.routingPolicy,
+				offer.lockedRouteId,
+				offer.preferredRouteId,
+				[...offer.routes]
+					.sort((a, b) => a.id.localeCompare(b.id))
+					.map((r) => [
+						r.id,
+						r.state,
+						r.equivalenceApproved,
+						r.minimumQuantity,
+						r.maximumQuantity,
+						r.quantityStep,
+						r.verifiedSignals,
+						r.verifiedRefillDays,
+						r.audienceTags,
+						supplierChoiceRevision(r.providerService)
+					])
+			])
+		)
+		.digest('hex');
+}
+function reviewedSupplierCost(rate: number, fx: number, quantity: number, title: string) {
+	const cost = Math.ceil(((rate * fx * quantity) / 1000) * 100 - 1e-7) / 100;
+	if (!Number.isFinite(cost) || cost < 0 || cost > 99999999.99)
+		throw new BoostPricingError(
+			`${title}: supplier cost is outside the supported budget. Choose another service or review the quantity.`
+		);
+	return cost;
 }
 function quoteFor(offer: Offer, route: Offer['routes'][number]): BoostPricingQuote {
 	const service = route.providerService;
@@ -105,7 +145,10 @@ export async function loadBoostControls(database: Database = prisma): Promise<Bo
 		.update(JSON.stringify(view.sheet.settings))
 		.digest('hex');
 	for (const row of view.sheet.rows) {
+		delete row.supplierChoiceId;
+		delete row.supplierChoiceRevision;
 		const offer = offers.find((o) => o.id === row.sourceOfferId);
+		row.supplierRevision = offer ? mappingRevision(offer) : 'unconfigured';
 		if (!offer) {
 			row.selected = false;
 			row.sourceOfferId = null;
@@ -177,6 +220,12 @@ export async function loadBoostControls(database: Database = prisma): Promise<Bo
 			categoryId: offer.categoryId,
 			routingPolicy: offer.routingPolicy,
 			maximumCostNgn: Number(offer.maximumSupplierCostNgn),
+			approvalServices: approvalRoutesFor(offer).map((r) => ({
+				id: r.providerService.id,
+				provider: r.providerService.provider,
+				serviceId: r.providerService.serviceId,
+				name: r.providerService.name
+			})),
 			reviewed:
 				candidates.length > 0 &&
 				candidates.every((r) => r.equivalenceApproved && r.state === 'enabled')
@@ -204,6 +253,24 @@ function clean(input: unknown, current: BoostControlsView): BoostPricingSheet {
 			const raw = submitted.rows.find((r) => r.id === row.id)!;
 			if (raw.sourceUpdatedAt !== original.sourceUpdatedAt)
 				throw new BoostPricingError(`${row.title}: settings changed. Reload before saving.`, 409);
+			if (
+				(row.selected || raw.supplierChoiceId) &&
+				raw.supplierRevision !== original.supplierRevision
+			)
+				throw new BoostPricingError(
+					`${row.title}: supplier setup or cost changed. Reload saved settings before confirming. Your draft is kept.`,
+					409
+				);
+			if (
+				raw.supplierChoiceId !== undefined &&
+				(typeof raw.supplierChoiceId !== 'string' ||
+					!/^[a-f0-9-]{36}$/i.test(raw.supplierChoiceId) ||
+					typeof raw.supplierChoiceRevision !== 'string' ||
+					!/^[a-f0-9]{64}$/.test(raw.supplierChoiceRevision))
+			)
+				throw new BoostPricingError(
+					`${row.title}: choose a supplier from the picker before saving.`
+				);
 			for (const field of [
 				'provider',
 				'serviceId',
@@ -237,6 +304,147 @@ function clean(input: unknown, current: BoostControlsView): BoostPricingSheet {
 	}
 }
 
+/** Only the owner's confirmed Save may approve an explicit choice or the displayed preload. */
+async function prepareSupplierReview(
+	tx: Prisma.TransactionClient,
+	current: BoostControlsView,
+	next: BoostPricingSheet,
+	actor: string
+) {
+	const offers = await tx.boostCustomerOffer.findMany({
+		where: { category: { categoryType: 'boosting_service' } },
+		include: includes
+	});
+	for (const row of next.rows) {
+		const original = current.sheet.rows.find((r) => r.id === row.id)!;
+		let offer = offers.find((o) => o.id === row.sourceOfferId);
+		const approvePreload = row.selected && !original.selected && !current.setup[row.id]?.reviewed;
+		if (!row.supplierChoiceId && !approvePreload) continue;
+		if (row.supplierChoiceId) {
+			const service = await tx.boostProviderService.findUnique({
+				where: { id: row.supplierChoiceId },
+				include: { providerState: true }
+			});
+			if (!service)
+				throw new BoostPricingError(
+					`${row.title}: the selected supplier service no longer exists.`
+				);
+			const choice = supplierChoice(service, row);
+			if (choice.revision !== row.supplierChoiceRevision)
+				throw new BoostPricingError(
+					`${row.title}: the selected supplier details changed. Reopen Choose supplier and review it again.`,
+					409
+				);
+			if (choice.issues.length) throw new BoostPricingError(`${row.title}: ${choice.issues[0]}`);
+			const reviewedCost = reviewedSupplierCost(
+				Number(service.ratePerThousand),
+				next.settings.fx,
+				original.startingQuantity,
+				row.title
+			);
+			if (!offer) {
+				const categoryId = current.setup[row.id]?.categoryId;
+				if (!categoryId)
+					throw new BoostPricingError(`${row.title}: the customer result has not been configured.`);
+				offer = await tx.boostCustomerOffer.create({
+					data: {
+						categoryId,
+						platform: row.platform,
+						outcome: row.outcome,
+						qualityTier: row.tier,
+						targetType: getRequiredLinkType(row.outcome as BoostingActionType),
+						audienceTag: 'general',
+						customerName: row.option || row.title,
+						shortPromise: row.shortPromise || '',
+						expectationChips: [],
+						minQuantity: original.startingQuantity,
+						maxQuantity: row.maximumQuantity ?? null,
+						stepQuantity: row.increment,
+						quantityPresets: [],
+						pricePerStepNgn: pricingStepPrice(row),
+						priceLocked: row.priceMode === 'manual',
+						requiredVerifiedSignals: [],
+						refillDays: null,
+						minimumMarginPercent: 0,
+						normalCostTargetNgn: 0,
+						maximumSupplierCostNgn: 0,
+						attemptCap: 1,
+						recoveryModes: [],
+						status: 'hidden'
+					},
+					include: includes
+				});
+				row.sourceOfferId = offer.id;
+			}
+			const existing = offer.routes.find((r) => r.providerService.id === service.id);
+			// Reuse recorded evidence/history, but never turn supplier advertising into verified evidence.
+			const route = await tx.boostServiceRoute.upsert({
+				where: { offerId_providerServiceId: { offerId: offer.id, providerServiceId: service.id } },
+				create: {
+					offerId: offer.id,
+					providerServiceId: service.id,
+					state: 'enabled',
+					equivalenceApproved: true,
+					targetType: service.targetType!,
+					minimumQuantity: service.minQuantity!,
+					maximumQuantity: service.maxQuantity!,
+					verifiedSignals: [],
+					audienceTags: [],
+					maximumPilotQuantity: service.minQuantity!,
+					reviewedByUserId: actor,
+					reviewedAt: new Date()
+				},
+				update: {
+					state: 'enabled',
+					equivalenceApproved: true,
+					reviewedByUserId: actor,
+					reviewedAt: new Date(),
+					// Existing reviewed limits, reliability and refill evidence remain intact.
+					...(existing
+						? {}
+						: { minimumQuantity: service.minQuantity!, maximumQuantity: service.maxQuantity! })
+				}
+			});
+			await tx.boostCustomerOffer.update({
+				where: { id: offer.id },
+				data: {
+					routingPolicy: 'locked',
+					lockedRouteId: route.id,
+					preferredRouteId: null,
+					maximumSupplierCostNgn: reviewedCost
+				}
+			});
+		} else if (offer) {
+			const routes = approvalRoutesFor(offer);
+			if (!routes.length)
+				throw new BoostPricingError(
+					`${row.title}: ${current.quotes[row.id]?.issues[0] ?? 'choose a supplier before publishing.'}`
+				);
+			await tx.boostServiceRoute.updateMany({
+				where: { id: { in: routes.map((r) => r.id) } },
+				data: {
+					state: 'enabled',
+					equivalenceApproved: true,
+					reviewedByUserId: actor,
+					reviewedAt: new Date()
+				}
+			});
+			const rate = Math.max(...routes.map((r) => Number(r.providerService.ratePerThousand)));
+			await tx.boostCustomerOffer.update({
+				where: { id: offer.id },
+				data: {
+					maximumSupplierCostNgn: reviewedSupplierCost(
+						rate,
+						next.settings.fx,
+						original.startingQuantity,
+						row.title
+					)
+				}
+			});
+		}
+	}
+}
+
 /** One atomic Save: rules, changed offer prices/visibility and audit. No supplier purchases. */
 export async function saveBoostControls(
 	input: unknown,
@@ -250,6 +458,7 @@ export async function saveBoostControls(
 		async (tx) => {
 			await lock(tx);
 			await tx.$queryRaw`SELECT id FROM boost_customer_offers ORDER BY id FOR UPDATE`;
+			await tx.$queryRaw`SELECT id FROM boost_service_routes ORDER BY id FOR UPDATE`;
 			await tx.$queryRaw`SELECT key FROM microcopy WHERE key IN (${BOOSTING_PRICING_KEYS.usdNgnRate}, ${BOOSTING_PRICING_KEYS.currencyBufferPercent}, ${BOOSTING_PRICING_KEYS.defaultMarginPercent}) ORDER BY CASE key WHEN ${BOOSTING_PRICING_KEYS.usdNgnRate} THEN 0 WHEN ${BOOSTING_PRICING_KEYS.currencyBufferPercent} THEN 1 ELSE 2 END FOR UPDATE`;
 			const current = await loadBoostControls(tx);
 			const next = clean(input, current);
@@ -266,6 +475,30 @@ export async function saveBoostControls(
 				throw new BoostPricingError('Confirm the selected offers before publishing them.');
 			if (next.version !== current.sheet.version)
 				throw new BoostPricingError('Newer settings were saved. Reload before saving.', 409);
+			if ((automatic || preserveVisibility) && next.rows.some((r) => r.supplierChoiceId))
+				throw new BoostPricingError('Supplier changes require the confirmed owner Save.');
+			const needsSupplierReview =
+				!automatic &&
+				!preserveVisibility &&
+				next.rows.some(
+					(r) =>
+						r.supplierChoiceId ||
+						(r.selected &&
+							!current.sheet.rows.find((old) => old.id === r.id)?.selected &&
+							!current.setup[r.id]?.reviewed)
+				);
+			if (needsSupplierReview && !publicationConfirmed)
+				throw new BoostPricingError('Review and confirm supplier choices before saving.');
+			if (needsSupplierReview) await prepareSupplierReview(tx, current, next, actor);
+			const prepared = needsSupplierReview ? await loadBoostControls(tx) : current;
+			for (const row of next.rows) {
+				if (!row.supplierChoiceId) continue;
+				const canonical = prepared.sheet.rows.find((r) => r.id === row.id)!;
+				// Record the actual server-resolved supplier in the audit, never the old
+				// display-only code or browser-supplied metadata.
+				row.provider = canonical.provider;
+				row.serviceId = canonical.serviceId;
+			}
 			const offers = await tx.boostCustomerOffer.findMany({
 				where: { category: { categoryType: 'boosting_service' } },
 				include: includes
@@ -284,7 +517,7 @@ export async function saveBoostControls(
 					// Proposal prices may be saved to the audit draft, never to a sellable SKU.
 					continue;
 				}
-				const quote = current.quotes[row.id];
+				const quote = prepared.quotes[row.id];
 				const offerEdits: Prisma.BoostCustomerOfferUpdateInput = {};
 				const quantitiesChanged =
 					row.startingQuantity !== original.startingQuantity ||
@@ -310,8 +543,18 @@ export async function saveBoostControls(
 				// Budgets are stored per customer minimum. Changing that quantity preserves
 				// the existing per-item ceiling; it does not approve a more expensive supplier.
 				const budgetScale = row.startingQuantity / original.startingQuantity;
+				const approvingNow =
+					needsSupplierReview &&
+					Boolean(
+						row.supplierChoiceId ||
+							(row.selected && !original.selected && !current.setup[row.id]?.reviewed)
+					);
+				// An explicit new supplier approval reviews cost at the NEW minimum directly.
+				// Scaling a rounded old minimum can otherwise lose a kobo and reject a valid choice.
 				const reviewedCeiling =
-					Math.floor(Number(offer.maximumSupplierCostNgn) * budgetScale * 100 + 1e-7) / 100;
+					approvingNow && quote?.rateUsd != null
+						? reviewedSupplierCost(quote.rateUsd, next.settings.fx, row.startingQuantity, row.title)
+						: Math.floor(Number(offer.maximumSupplierCostNgn) * budgetScale * 100 + 1e-7) / 100;
 				if (row.startingQuantity !== original.startingQuantity) {
 					offerEdits.maximumSupplierCostNgn = reviewedCeiling;
 					offerEdits.normalCostTargetNgn =
@@ -392,7 +635,7 @@ export async function saveBoostControls(
 										: 'click Refresh costs, then Save. Your edits will be kept.';
 					throw new BoostPricingError(`${row.title}: ${reason}`);
 				}
-				if (row.selected && !current.setup[row.id]?.reviewed)
+				if (row.selected && !prepared.setup[row.id]?.reviewed)
 					throw new BoostPricingError(`${row.title}: review supplier routes before going live.`);
 				if (row.maximumQuantity != null && row.maximumQuantity > quote!.max!)
 					throw new BoostPricingError(

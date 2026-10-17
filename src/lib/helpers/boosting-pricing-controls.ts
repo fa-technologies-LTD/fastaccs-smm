@@ -36,7 +36,13 @@ export interface BoostingSetupData {
 export interface BoostControlsView extends BoostPricingView {
 	setup: Record<
 		string,
-		{ categoryId: string; routingPolicy: string; maximumCostNgn: number; reviewed: boolean }
+		{
+			categoryId: string;
+			routingPolicy: string;
+			maximumCostNgn: number;
+			reviewed: boolean;
+			approvalServices?: Array<{ id: string; provider: string; serviceId: string; name: string }>;
+		}
 	>;
 	archivedDraft: boolean;
 	catalogMaxAgeMinutes?: number;
@@ -163,7 +169,9 @@ export function boostControlSignature(row: BoostPricingRow): string {
 		row.increment,
 		row.maximumQuantity ?? null,
 		row.option,
-		row.shortPromise ?? ''
+		row.shortPromise ?? '',
+		row.supplierChoiceId ?? null,
+		row.supplierChoiceRevision ?? null
 	]);
 }
 

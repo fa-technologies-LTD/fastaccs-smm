@@ -124,7 +124,7 @@ try {
 				const service = await tx.boostProviderService.create({
 					data: {
 						provider: 'smm_raja',
-						serviceId: `LOCAL-NOT-REAL-${fixtureId}`,
+						serviceId: `s999${Date.now()}`,
 						name: 'TikTok Likes',
 						category: 'TikTok Likes',
 						providerType: 'Default',
@@ -172,8 +172,8 @@ try {
 					data: {
 						offerId: offer.id,
 						providerServiceId: service.id,
-						state: 'enabled',
-						equivalenceApproved: true,
+						state: 'shadow',
+						equivalenceApproved: false,
 						targetType: 'content',
 						verifiedSignals: [],
 						audienceTags: [],
@@ -186,6 +186,31 @@ try {
 				await tx.boostCustomerOffer.update({
 					where: { id: offer.id },
 					data: { lockedRouteId: route.id }
+				});
+				const unmappedOffer = await tx.boostCustomerOffer.create({
+					data: {
+						categoryId: category.id,
+						platform: 'tiktok',
+						outcome: 'likes',
+						targetType: 'content',
+						qualityTier: 'stable',
+						customerName: 'Synthetic unmapped option',
+						shortPromise: 'A neutral description.',
+						expectationChips: [],
+						minQuantity: 100,
+						maxQuantity: 10000,
+						stepQuantity: 100,
+						quantityPresets: [100, 200, 500],
+						pricePerStepNgn: 300,
+						priceLocked: true,
+						requiredVerifiedSignals: [],
+						minimumMarginPercent: 20,
+						normalCostTargetNgn: 0,
+						maximumSupplierCostNgn: 0,
+						attemptCap: 1,
+						recoveryModes: [],
+						status: 'hidden'
+					}
 				});
 				// Keep the real application queries/writes inside this same real PostgreSQL transaction.
 				let proxy;
@@ -278,10 +303,68 @@ try {
 				assert.equal(stored.customerName, 'Reviewed option');
 				assert.equal(Number(stored.pricePerStepNgn), 500);
 				assert.equal(stored.status, 'live');
+				const approvedRoute = await tx.boostServiceRoute.findUniqueOrThrow({
+					where: { id: route.id }
+				});
+				assert.equal(approvedRoute.state, 'enabled');
+				assert.equal(approvedRoute.equivalenceApproved, true);
+				assert.equal(approvedRoute.reviewedByUserId, user.id);
 				const visible = await (await request('/api/boosting-offers')).json();
 				assert.ok(
 					visible.data.some((row) => row.id === offer.id),
 					'Saved fixture is offered'
+				);
+				// The other missing UI path: browse an unmapped offer, select an exact code,
+				// then atomically approve/pin it together with its price and Live tick.
+				const afterSave = (await (await request('/api/admin/boosting-pricing')).json()).data;
+				const unmappedRow = afterSave.sheet.rows.find((r) => r.sourceOfferId === unmappedOffer.id);
+				assert.ok(unmappedRow);
+				assert.equal(afterSave.quotes[unmappedRow.id], null);
+				const choicesResponse = await request(
+					`/api/admin/boosting-pricing/supplier-choices?${new URLSearchParams({ row: unmappedRow.id, provider: 'smm_raja', search: service.serviceId })}`
+				);
+				assert.equal(choicesResponse.status, 200);
+				const choices = (await choicesResponse.json()).data.services;
+				assert.equal(choices.length, 1);
+				assert.equal(choices[0].providerServiceId, service.id);
+				assert.deepEqual(choices[0].issues, []);
+				Object.assign(unmappedRow, {
+					supplierChoiceId: service.id,
+					supplierChoiceRevision: choices[0].revision,
+					selected: true,
+					sale: 300
+				});
+				const selectedSave = await request('/api/admin/boosting-pricing', {
+					action: 'save',
+					confirmSave: true,
+					sheet: afterSave.sheet
+				});
+				assert.equal(
+					selectedSave.status,
+					200,
+					`Exact-choice Save: ${(await selectedSave.clone().text()).slice(0, 180)}`
+				);
+				const pinned = await tx.boostCustomerOffer.findUniqueOrThrow({
+					where: { id: unmappedOffer.id },
+					include: { routes: true }
+				});
+				assert.equal(pinned.status, 'live');
+				assert.equal(pinned.routingPolicy, 'locked');
+				assert.equal(pinned.routes.length, 1);
+				assert.equal(pinned.routes[0].id, pinned.lockedRouteId);
+				assert.equal(pinned.routes[0].providerServiceId, service.id);
+				assert.equal(pinned.routes[0].equivalenceApproved, true);
+				assert.deepEqual(pinned.routes[0].verifiedSignals, []);
+				assert.equal(pinned.routes[0].verifiedRefillDays, null);
+				const selectionAudit = await tx.adminAuditLog.findFirstOrThrow({ where: { actorUserId: user.id, action: 'boosting_controls_saved' }, orderBy: { createdAt: 'desc' } });
+				const auditedSelection = selectionAudit.metadata.sheet.rows.find((r) => r.sourceOfferId === pinned.id);
+				assert.equal(auditedSelection.provider, 'smm_raja');
+				assert.equal(auditedSelection.serviceId, service.serviceId);
+				assert.equal(
+					(await (await request('/api/boosting-offers')).json()).data.some(
+						(r) => r.id === pinned.id
+					),
+					true
 				);
 				const checkoutBody = {
 					checkoutKey: `local-${fixtureId}`,
@@ -342,6 +425,9 @@ try {
 					separateStaging: true,
 					realSessionLogin: true,
 					oneConfirmedSave: true,
+					preloadedSupplierApprovedWithFinalSave: true,
+					exactSupplierSearchAndUnmappedOfferSave: true,
+					selectedSupplierPersistedAndLocked: true,
 					quantityAndPricePersisted: true,
 					storefrontVerified: true,
 					checkoutTotalNgn: 500,
@@ -356,7 +442,7 @@ try {
 				};
 				throw rollback;
 			},
-			{ timeout: 180000, maxWait: 20000 }
+			{ timeout: 300000, maxWait: 20000 }
 		)
 		.catch((error) => {
 			if (error !== rollback) throw error;

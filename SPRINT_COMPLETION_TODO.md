@@ -1,5 +1,24 @@
 # Sprint completion — prioritised master checklist
 
+## Current — owner-approved manual supplier workflow release, 17 October 2026
+
+Owner approved one pricing-page flow: browse/search either supplier or enter an exact
+service code → Use this service as a draft → review price/quantities → Live tick → one
+confirmed final Save. Existing preloaded supplier approval belongs in that same final
+confirmation, not a hidden separate admin task. Owner reviewed the localhost preview and
+explicitly approved “looks good, push”. Release scope is this tested code only; supplier
+selection, prices and offer publication remain the owner's actions in the live admin.
+
+- [x] Add read-only, bounded alphabetical catalogue search, exact provider/code lookup, costs/limits/advertised refill, loading/error/retry/empty states and mobile-friendly picker. Common saved-offer searches do not reload the entire pricing sheet per keystroke.
+- [x] Keep manual supplier choice, price locks, quantities, descriptions and Live ticks as drafts. Cancel/undo/discard/inspection do not save or publish; final review lists the exact choice/approval and cost. A specific choice is pinned until the owner changes it.
+- [x] Final Save transaction resolves IDs from trusted stored catalogue, checks changed facts/mappings and permissions, approves the displayed preload or exact selection, creates a missing offer when its customer result exists, saves pricing/visibility/audit, and keeps offline selections offline. No invented quality/refill evidence, runtime router/learning changes or paid retries.
+- [x] Verification: 241 server suites / 1,808 tests; 18 Chromium suites / 122 tests; final canonical-audit follow-up 73 focused server tests. Type check zero errors / 113 existing warnings. Final verified-staging build/bootstrap identity check passed. Actual desktop/mobile exact-code selection, price/quantity preservation, final review, cancel and undo passed with zero page errors, overflow or network writes. A transient old Vite overlay cleared on fresh navigation; no owner server/tab restart.
+- [x] Final built-app separate-staging rehearsal passed: synthetic real login, preloaded supplier approved through final Save, unmapped offer exact-code search/choice saved and pinned, canonical supplier audit, storefront, correct ₦500 unpaid fake-gateway checkout, known-unavailable hiding/stale-cart refusal. Transaction rollback and independent cleanup verified; zero supplier calls, real payments, emails or production changes.
+- [x] Owner localhost review and explicit push approval received. No production prices, mappings, publication or supplier orders changed by this follow-up.
+- [ ] Push the reviewed code, verify production revision/deployment and independent CI, then read-only live smoke. No migration or catalogue/settings changes are part of this release.
+- [ ] Owner reviews prices and supplier choices, ticks selected ready offers and confirms final Save. Save/export any existing draft before moving to a fresh tab after deployment.
+- [ ] Universal: SEO/indexing/marketing with Claude; support inbox verification; announcements require send approval; retention/refill evidence; production performance and deferred cleanup. Automatic selection/learning/paid retries remain excluded.
+
 ## Current — owner-approved final review and local integration, 17 October 2026
 
 - [x] Owner explicitly approved review and merge. Push/deploy, migrations, offer publication and announcements remain separate approvals.

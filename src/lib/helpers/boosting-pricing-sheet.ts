@@ -28,6 +28,10 @@ export interface BoostPricingRow {
 	profitBudgetPercent: number;
 	attempts: number;
 	note: string;
+	/** Owner's draft selection; resolved and revalidated server-side only on final Save. */
+	supplierChoiceId?: string;
+	supplierChoiceRevision?: string;
+	supplierRevision?: string;
 }
 export interface BoostPricingSheet {
 	version: number;
@@ -275,6 +279,8 @@ export function sanitizePricingSheet(
 			if (!original) throw new Error('Unknown row. Reload the sheet.');
 			return {
 				...original,
+				supplierChoiceId: r.supplierChoiceId,
+				supplierChoiceRevision: r.supplierChoiceRevision,
 				option: r.option.trim(),
 				selected: r.selected,
 				provider: r.provider,

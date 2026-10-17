@@ -6,6 +6,7 @@ import Page from './+page.svelte';
 import { sheet, quote } from '$lib/helpers/boosting-pricing-sheet-fixtures';
 import type { BoostControlsView } from '$lib/helpers/boosting-pricing-controls';
 import { supplierDetailsFixture } from '$lib/helpers/boosting-supplier-details-fixtures';
+import type { BoostSupplierChoice } from '$lib/helpers/boosting-supplier-choice';
 vi.mock('$app/navigation', () => ({ beforeNavigate: vi.fn() }));
 function fixture(): BoostControlsView {
 	return {
@@ -42,6 +43,129 @@ beforeEach(async () => {
 afterEach(() => {
 	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
+});
+
+const choice = (): BoostSupplierChoice => ({
+	providerServiceId: '11111111-1111-4111-8111-111111111111',
+	provider: 'bulk_follows',
+	serviceId: '1234',
+	name: 'Exact TikTok Likes',
+	rateUsd: 0.08,
+	min: 100,
+	max: 100000,
+	checkedAt: new Date().toISOString(),
+	issues: [],
+	publicationIssues: [],
+	revision: 'a'.repeat(64),
+	refillAdvertised: true,
+	refillDaysClaimed: 30
+});
+
+it.each([true, false])(
+	'chooses an exact supplier as a draft for an existing offer (%s), preserves price/quantities, and uses one final Save',
+	async (configured) => {
+		const initial = fixture();
+		if (!configured) initial.sheet.rows[0].sourceOfferId = null;
+		initial.sheet.rows[0].selected = false;
+		initial.liveStatuses.row = 'hidden';
+		initial.quotes.row = null;
+		initial.sheet.rows[0].serviceId = '';
+		initial.setup.row.reviewed = false;
+		const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			if (String(input).includes('/balances'))
+				return Response.json({ success: true, data: { providers: [] } });
+			if (String(input).includes('/supplier-choices'))
+				return Response.json({ success: true, data: { services: [choice()], hasMore: false } });
+			return Response.json({
+				success: true,
+				data: { ...initial, sheet: JSON.parse(init!.body as string).sheet }
+			});
+		});
+		vi.stubGlobal('fetch', fetchMock);
+		render(Page, { data: { pricing: initial } } as never);
+		await page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }).fill('900');
+		await page.getByRole('button', { name: 'Choose supplier', exact: true }).click();
+		await page.getByRole('combobox', { name: 'Supplier provider' }).selectOptions('bulk_follows');
+		await page.getByRole('textbox', { name: 'Search supplier services' }).fill('1234');
+		await page.getByRole('button', { name: 'Use BulkFollows 1234' }).click();
+		await expect
+			.element(page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }))
+			.toHaveValue(900);
+		await expect
+			.element(page.getByRole('spinbutton', { name: 'Customer minimum for TikTok Likes value' }))
+			.toHaveValue(100);
+		await expect
+			.element(page.getByRole('spinbutton', { name: 'Quantity increment for TikTok Likes value' }))
+			.toHaveValue(100);
+		expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
+		await page.getByRole('checkbox', { name: 'Live TikTok Likes value' }).click();
+		await expect
+			.element(page.getByRole('checkbox', { name: 'Live TikTok Likes value' }))
+			.toBeChecked();
+		await page.getByRole('button', { name: 'Save all changes' }).click();
+		const review = page.getByRole('dialog', { name: 'Save these changes?' });
+		await expect.element(review).toHaveTextContent('BulkFollows #1234 · Exact TikTok Likes');
+		await expect.element(review).toHaveTextContent('This exact service will stay selected');
+		await review.getByRole('button', { name: 'Confirm & save' }).click();
+		const submitted = JSON.parse(
+			fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')![1]!.body as string
+		);
+		expect(submitted.sheet.rows[0]).toMatchObject({
+			supplierChoiceId: choice().providerServiceId,
+			supplierChoiceRevision: choice().revision,
+			sale: 900,
+			selected: true,
+			priceMode: 'manual'
+		});
+		expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+	}
+);
+
+it('allows the owner to approve a displayed preload in the same final Live Save', async () => {
+	const initial = fixture();
+	initial.sheet.rows[0].selected = false;
+	initial.liveStatuses.row = 'hidden';
+	initial.setup.row.reviewed = false;
+	initial.setup.row.approvalServices = [
+		{ id: 'service', provider: 'smm_raja', serviceId: 's1675', name: 'TikTok Likes' }
+	];
+	initial.availability = {
+		row: {
+			reasons: ['The supplier mapping is not approved and enabled.'],
+			checkedAt: new Date().toISOString()
+		}
+	};
+	render(Page, { data: { pricing: initial } } as never);
+	await page.getByRole('checkbox', { name: 'Live TikTok Likes value' }).click();
+	await expect
+		.element(page.getByRole('checkbox', { name: 'Live TikTok Likes value' }))
+		.toBeChecked();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	const review = page.getByRole('dialog', { name: 'Save these changes?' });
+	await expect.element(review).toHaveTextContent('Supplier approval');
+	await expect.element(review).toHaveTextContent('SMM Raja #s1675 · TikTok Likes');
+});
+
+it('keeps genuine supplier problems visible and lets the owner cancel or retry a failed picker without losing edits', async () => {
+	const initial = fixture();
+	const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+		String(input).includes('/balances')
+			? Response.json({ success: true, data: { providers: [] } })
+			: Response.json({ success: false }, { status: 503 })
+	);
+	vi.stubGlobal('fetch', fetchMock);
+	render(Page, { data: { pricing: initial } } as never);
+	await page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }).fill('950');
+	await page.getByRole('button', { name: /SMM Raja #s1675/ }).click();
+	await expect.element(page.getByRole('alert')).toHaveTextContent('Your draft is kept');
+	await expect.element(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+	await page.getByRole('button', { name: 'Close supplier picker' }).click();
+	await expect
+		.element(page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }))
+		.toHaveValue(950);
+	expect(
+		fetchMock.mock.calls.every(([, init]: any) => !init?.method || init.method === 'GET')
+	).toBe(true);
 });
 
 it('cancels or confirms discarding a draft without making a server write', async () => {
@@ -844,7 +968,8 @@ it('allows viewing supplier details with unsaved prices while still protecting c
 	await page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }).fill('900');
 	await expect.element(page.getByRole('button', { name: 'Refresh costs' })).toBeEnabled();
 	await expect.element(page.getByRole('button', { name: '+ Expand catalogue' })).toBeDisabled();
-	await page.getByRole('button', { name: /SMM Raja #s1675/ }).click();
+	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
+	await page.getByRole('button', { name: 'Supplier details', exact: true }).click();
 	await expect
 		.element(page.getByRole('dialog', { name: 'TikTok Likes · Supplier details' }))
 		.toBeVisible();
@@ -873,7 +998,8 @@ it('keeps prices, rules and pending Live ticks while inspecting both providers a
 	await page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }).fill('900');
 	await page.getByRole('spinbutton', { name: 'Dollar rate' }).fill('2000');
 	await page.getByRole('checkbox', { name: 'Live TikTok Likes value' }).click();
-	await page.getByRole('button', { name: /SMM Raja #s1675/ }).click();
+	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
+	await page.getByRole('button', { name: 'Supplier details', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'TikTok Likes · Supplier details' });
 	await expect
 		.element(dialog.getByRole('region', { name: 'SMM Raja supplier records' }))
@@ -925,7 +1051,8 @@ it('allows closing failed supplier details without losing draft edits or forcing
 	vi.stubGlobal('fetch', fetchMock);
 	render(Page, { data: { pricing: fixture() } } as never);
 	await page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }).fill('950');
-	await page.getByRole('button', { name: /SMM Raja #s1675/ }).click();
+	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
+	await page.getByRole('button', { name: 'Supplier details', exact: true }).click();
 	await expect.element(page.getByRole('alert')).toHaveTextContent('Your pricing edits are kept.');
 	await page.getByRole('button', { name: 'Close supplier details', exact: true }).click();
 	await expect
@@ -944,7 +1071,8 @@ it('shows sample supplier details without requests and retains draft prices on c
 		previewSupplierDetails: { row: supplierDetailsFixture() }
 	} as never);
 	await page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }).fill('950');
-	await page.getByRole('button', { name: /SMM Raja #s1675/ }).click();
+	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
+	await page.getByRole('button', { name: 'Supplier details', exact: true }).click();
 	await expect
 		.element(page.getByText('Illustrative supplier records only—not real services or balances.'))
 		.toBeVisible();

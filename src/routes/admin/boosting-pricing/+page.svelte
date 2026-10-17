@@ -5,6 +5,8 @@
 	import { Save, Download, RefreshCcw, Lock, Unlock, Zap, X } from '$lib/icons';
 	import BoostingSupplierDetails from '$lib/components/admin/BoostingSupplierDetails.svelte';
 	import BoostingSupplierBalances from '$lib/components/admin/BoostingSupplierBalances.svelte';
+	import BoostingSupplierPicker from '$lib/components/admin/BoostingSupplierPicker.svelte';
+	import type { BoostSupplierChoice } from '$lib/helpers/boosting-supplier-choice';
 	import type { BoostSupplierDetails } from '$lib/helpers/boosting-supplier-details';
 	import { showError, showSuccess } from '$lib/stores/toasts';
 	import {
@@ -61,6 +63,8 @@
 	let expanded = $state<string | null>(null);
 	let blockedLiveRow = $state<string | null>(null);
 	let supplier = $state<BoostPricingRow | null>(null);
+	let picker = $state<BoostPricingRow | null>(null);
+	let supplierDrafts = $state<Record<string, BoostSupplierChoice>>({});
 	let expandConfirm = $state(false);
 	let saveDraft = $state<BoostPricingSheet | null>(null);
 	const savedSheet = $derived(JSON.parse(saved) as BoostPricingSheet);
@@ -70,25 +74,72 @@
 	const savedSelections = $derived(
 		new Map((JSON.parse(saved) as BoostPricingSheet).rows.map((row) => [row.id, row.selected]))
 	);
-	const dirty = $derived(
-		draftReview.count > 0 ||
-			Object.keys(quantityErrors).length > 0
-	);
+	const dirty = $derived(draftReview.count > 0 || Object.keys(quantityErrors).length > 0);
 	beforeNavigate(({ cancel }) => {
 		if (dirty && !confirm('Leave this page? Unsaved changes will be lost.')) cancel();
 	});
 	const label = (p: string) => (BOOSTING_PLATFORM_LABELS as Record<string, string>)[p] ?? p;
 	const amountFormat = new Intl.NumberFormat('en-NG', { maximumFractionDigits: 2 });
 	const money = (v: number | null) =>
-		v == null || !Number.isFinite(v)
-			? '—'
-			: `₦${amountFormat.format(v)}`;
-	const quote = (r: BoostPricingRow) => view.quotes[r.id] ?? null;
+		v == null || !Number.isFinite(v) ? '—' : `₦${amountFormat.format(v)}`;
+	const quote = (r: BoostPricingRow) => supplierDrafts[r.id] ?? view.quotes[r.id] ?? null;
+	const sourceProvider = (r: BoostPricingRow) => supplierDrafts[r.id]?.provider ?? r.provider;
+	const sourceCode = (r: BoostPricingRow) => supplierDrafts[r.id]?.serviceId ?? r.serviceId;
+	const preloadApproval = (r: BoostPricingRow) =>
+		!savedSelections.get(r.id) &&
+		!view.setup[r.id]?.reviewed &&
+		Boolean(view.setup[r.id]?.approvalServices?.length);
+	const approvingSupplier = (r: BoostPricingRow) =>
+		Boolean(r.supplierChoiceId || preloadApproval(r));
+	function useSupplier(row: BoostPricingRow, choice: BoostSupplierChoice) {
+		row.supplierChoiceId = choice.providerServiceId;
+		row.supplierChoiceRevision = choice.revision;
+		supplierDrafts[row.id] = choice;
+		if (row.priceMode === 'target') {
+			const price = boostAutoPrice(row, view.sheet, choice);
+			if (price != null) row.sale = price;
+		}
+		picker = null;
+		expanded = row.id;
+		blockedLiveRow = null;
+		error = '';
+	}
+	function chooseSupplier(row: BoostPricingRow) {
+		if (busy || saveUncertain) return;
+		supplier = null;
+		picker = row;
+	}
+	function undoSupplier(row: BoostPricingRow) {
+		delete row.supplierChoiceId;
+		delete row.supplierChoiceRevision;
+		delete supplierDrafts[row.id];
+		if (row.priceMode === 'target') {
+			const price = boostAutoPrice(row, view.sheet, quote(row));
+			if (price != null) row.sale = price;
+		}
+	}
+	function approvalNames(row: BoostPricingRow) {
+		const draft = supplierDrafts[row.id];
+		return draft
+			? [
+					`${draft.provider === 'smm_raja' ? 'SMM Raja' : 'BulkFollows'} #${draft.serviceId} · ${draft.name}`
+				]
+			: (view.setup[row.id]?.approvalServices ?? []).map(
+					(s) =>
+						`${s.provider === 'smm_raja' ? 'SMM Raja' : 'BulkFollows'} #${s.serviceId} · ${s.name}`
+				);
+	}
 	const economics = (r: BoostPricingRow) => pricingEconomics(r, view.sheet, quote(r));
 	const savedQuantities = $derived(
 		new Map((JSON.parse(saved) as BoostPricingSheet).rows.map((r) => [r.id, r.startingQuantity]))
 	);
 	const costLimit = (r: BoostPricingRow) => {
+		if (approvingSupplier(r) && quote(r)?.rateUsd != null)
+			return (
+				Math.ceil(
+					((quote(r)!.rateUsd! * view.sheet.settings.fx * r.startingQuantity) / 1000) * 100 - 1e-7
+				) / 100
+			);
 		const limit = view.setup[r.id]?.maximumCostNgn;
 		return limit == null
 			? null
@@ -98,18 +149,34 @@
 				) / 100;
 	};
 	const warnings = (r: BoostPricingRow) => {
-		const issues = [...rowQuantityErrors(r), ...boostRowWarnings(r, view.sheet, quote(r))];
+		const issues = [
+			...rowQuantityErrors(r),
+			...boostRowWarnings(r, view.sheet, quote(r)).filter(
+				(reason) =>
+					!(r.supplierChoiceId && view.setup[r.id]?.categoryId && reason === 'Set up this offer.')
+			)
+		];
 		// Price/quantity-dependent checks are repeated with the actual draft on Save.
 		issues.push(
-			...(view.availability?.[r.id]?.reasons ?? []).filter(
-				(reason) => !/quantity|profit safety|spending limit/i.test(reason)
+			...(r.supplierChoiceId
+				? (supplierDrafts[r.id]?.publicationIssues ?? [])
+				: (view.availability?.[r.id]?.reasons ?? [])
+			).filter(
+				(reason) =>
+					!/quantity|profit safety|spending limit/i.test(reason) &&
+					!(approvingSupplier(r) && /mapping is not approved|No supplier is mapped/.test(reason))
 			)
 		);
 		if (!BOOSTING_ACTION_TYPES.includes(r.outcome as never)) issues.push('Needs checkout support.');
-		if (r.sourceOfferId && !view.setup[r.id]?.reviewed) issues.push('Review supplier setup.');
+		if (r.sourceOfferId && !view.setup[r.id]?.reviewed && !approvingSupplier(r))
+			issues.push('Review supplier setup.');
 		const q = quote(r);
 		if (q && Date.now() - Date.parse(q.checkedAt) > (view.catalogMaxAgeMinutes ?? 390) * 60000)
-			issues.push('Refresh supplier costs.');
+			issues.push(
+				r.supplierChoiceId
+					? 'Reopen Choose supplier to review refreshed costs.'
+					: 'Refresh supplier costs.'
+			);
 		if (
 			q?.rateUsd != null &&
 			view.setup[r.id] &&
@@ -122,6 +189,7 @@
 		warnings(r).filter(
 			(warning) =>
 				// A smaller draft minimum can change the required balance; the server rechecks it.
+				!(approvingSupplier(r) && /mapping is not approved|Review supplier setup/.test(warning)) &&
 				!(
 					/balance is insufficient/i.test(warning) &&
 					r.startingQuantity < (savedQuantities.get(r.id) ?? r.startingQuantity)
@@ -208,7 +276,7 @@
 				(filter !== 'ready' || (!r.selected && liveBlockers(r).length === 0)) &&
 				(filter !== 'edited' || changedRows.has(r.id)) &&
 				(filter !== 'review' || warnings(r).length > 0) &&
-				`${r.title} ${r.option} ${r.serviceId} ${r.provider === 'smm_raja' ? 'SMM Raja' : 'BulkFollows'}`
+				`${r.title} ${r.option} ${sourceCode(r)} ${sourceProvider(r) === 'smm_raja' ? 'SMM Raja' : 'BulkFollows'}`
 					.toLowerCase()
 					.includes(search.trim().replace(/^#/, '').toLowerCase())
 		)
@@ -224,7 +292,7 @@
 		const shortcut = (event: KeyboardEvent) => {
 			if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 's') return;
 			event.preventDefault();
-			if (!supplier && !saveDraft && !expandConfirm && !reloadConfirm && !discardConfirm)
+			if (!supplier && !picker && !saveDraft && !expandConfirm && !reloadConfirm && !discardConfirm)
 				void save();
 		};
 		window.addEventListener('keydown', shortcut);
@@ -250,6 +318,8 @@
 		)
 			throw new Error('Saved settings could not be confirmed. Your draft is kept.');
 		view = next;
+		supplierDrafts = {};
+		picker = null;
 		saved = JSON.stringify(next.sheet);
 		quantityInputs = {};
 		quantityErrors = {};
@@ -262,6 +332,7 @@
 	function discardDraft() {
 		if (busy || saveUncertain) return;
 		view.sheet = JSON.parse(saved);
+		supplierDrafts = {};
 		quantityInputs = {};
 		quantityErrors = {};
 		expanded = null;
@@ -331,11 +402,32 @@
 			if (payload.action !== 'save' || payload.confirmSave !== true)
 				throw new Error('Only the Save flow is available in this local UI preview.');
 			const sheet = structuredClone(payload.sheet) as BoostPricingSheet;
+			const quotes = structuredClone($state.snapshot(view.quotes));
+			const setup = structuredClone($state.snapshot(view.setup));
+			for (const row of sheet.rows) {
+				if (supplierDrafts[row.id]) {
+					const choice = supplierDrafts[row.id];
+					quotes[row.id] = structuredClone($state.snapshot(choice));
+					row.provider = choice.provider;
+					row.serviceId = choice.serviceId;
+					setup[row.id] = {
+						...setup[row.id],
+						routingPolicy: 'locked',
+						reviewed: true,
+						maximumCostNgn: costLimit(row) ?? 0
+					};
+					row.sourceOfferId ||= `demo-${row.id}`;
+				}
+				delete row.supplierChoiceId;
+				delete row.supplierChoiceRevision;
+			}
 			sheet.version++;
 			return {
 				success: true,
 				data: {
 					...$state.snapshot(view),
+					quotes,
+					setup,
 					sheet,
 					liveStatuses: Object.fromEntries(
 						sheet.rows.map((row) => [row.id, row.selected ? 'live' : 'hidden'])
@@ -488,8 +580,18 @@
 		supplier = null;
 	}
 	function download() {
+		const draftSheet = structuredClone($state.snapshot(view.sheet));
+		const draftQuotes = { ...$state.snapshot(view.quotes) };
+		for (const row of draftSheet.rows) {
+			const choice = supplierDrafts[row.id];
+			if (choice) {
+				row.provider = choice.provider;
+				row.serviceId = choice.serviceId;
+				draftQuotes[row.id] = $state.snapshot(choice);
+			}
+		}
 		const url = URL.createObjectURL(
-			new Blob([exportPricingCsv(view.sheet, view.quotes)], { type: 'text/csv;charset=utf-8' })
+			new Blob([exportPricingCsv(draftSheet, draftQuotes)], { type: 'text/csv;charset=utf-8' })
 		);
 		const link = document.createElement('a');
 		link.href = url;
@@ -747,17 +849,19 @@
 							<td>{row.units.toLocaleString()}</td><td
 								><button
 									class="source"
-									onclick={() => openSupplier(row)}
-									title={view.setup[row.id]?.routingPolicy === 'automatic'
-										? 'Pricing cost reference: the highest configured cost, not a fixed primary supplier. Click to inspect all saved services and their review status.'
-										: 'Inspect the saved supplier details.'}
-									>{quote(row) && row.sourceOfferId
-										? row.provider === 'smm_raja'
+									onclick={() => chooseSupplier(row)}
+									title={row.supplierChoiceId
+										? 'Draft exact supplier choice. Click to change it.'
+										: view.setup[row.id]?.routingPolicy === 'automatic'
+											? 'Pricing cost reference: the highest configured cost, not a fixed primary supplier. Click to choose a specific service.'
+											: 'Choose or change the supplier service.'}
+									>{quote(row)
+										? sourceProvider(row) === 'smm_raja'
 											? 'SMM Raja'
 											: 'BulkFollows'
-										: 'Set up'}<small
-										>{row.serviceId ? `#${row.serviceId}` : ''}{view.setup[row.id]
-											?.routingPolicy === 'automatic'
+										: 'Choose supplier'}<small
+										>{sourceCode(row) ? `#${sourceCode(row)}` : ''}{!row.supplierChoiceId &&
+										view.setup[row.id]?.routingPolicy === 'automatic'
 											? ' · Cost reference'
 											: ''}</small
 									></button
@@ -840,6 +944,19 @@
 											<button disabled={busy} onclick={() => openSupplier(row)}
 												>Supplier details</button
 											>
+											<button onclick={() => chooseSupplier(row)} disabled={busy || saveUncertain}
+												>{quote(row) ? 'Change supplier' : 'Choose supplier'}</button
+											>
+											{#if row.supplierChoiceId}<p class="hint">
+													Supplier choice is a draft. Final Save approves and keeps this exact
+													service for new orders.
+												</p>
+												<button onclick={() => undoSupplier(row)} disabled={busy}
+													>Undo supplier change</button
+												>
+											{:else if preloadApproval(row)}<p class="hint">
+													Final Save will approve the displayed supplier setup when you tick Live.
+												</p>{/if}
 										</div>
 										<div class="offer-controls">
 											<section
@@ -1048,7 +1165,7 @@
 			<p>
 				{previewOnly
 					? 'Preview only. Confirm updates this sample page; nothing is published or saved to a database.'
-					: 'Nothing has changed yet. Confirm to save prices, locks, rules and Live selections together.'}
+					: 'Nothing has changed yet. Confirm to save supplier choices, prices, locks, rules and Live selections together.'}
 			</p>
 			<p class="review-summary">
 				{review.offers.length}
@@ -1064,7 +1181,10 @@
 								</li>{/each}
 						</ul>
 					</section>{/if}
-				{#each review.offers as offer (offer.id)}<section
+				{#each review.offers as offer (offer.id)}{@const row = saveDraft.rows.find(
+						(r) => r.id === offer.id
+					)!}
+					<section
 						aria-label={`Changes for ${offer.title}${offer.option ? ` ${offer.option}` : ''}`}
 					>
 						<h3>{offer.title}{offer.option ? ` · ${offer.option}` : ''}</h3>
@@ -1078,6 +1198,27 @@
 									<span>{change.label}</span><span>{change.before} → <b>{change.after}</b></span>
 								</li>{/each}
 						</ul>
+						{#if row.supplierChoiceId || (offer.goingLive && preloadApproval(row))}
+							<div class="supplier-review">
+								<h4>Supplier approval</h4>
+								{#each approvalNames(row) as name}<p>{name}</p>{/each}
+								<p>
+									Reviewed supplier cost: {money(economics(row).cost)} per {row.units.toLocaleString()}.
+								</p>
+								<p>
+									{row.supplierChoiceId
+										? 'This exact service will stay selected until you change it.'
+										: 'This approves the saved setup shown above; it does not select different services.'}
+									{row.selected
+										? 'Your Live tick will make this offer available.'
+										: 'This offer will stay offline.'}
+								</p>
+								<p>
+									Supplier approval is permission to fulfil orders—not a new quality or refill
+									guarantee.
+								</p>
+							</div>
+						{/if}
 					</section>{/each}
 			</div>
 			<div class="actions">
@@ -1135,11 +1276,102 @@
 					{previewOnly}
 					initialData={previewSupplierDetails[supplier.id] ?? null}
 				/>{/key}
-			<div class="supplier-footer"><button onclick={closeSupplier}>Close details</button></div>
+			<div class="supplier-footer">
+				<button onclick={closeSupplier}>Close details</button><button
+					class="primary"
+					disabled={busy || saveUncertain}
+					onclick={() => chooseSupplier(supplier!)}>Choose / change supplier</button
+				>
+			</div>
+		</div>
+	</div>{/if}
+{#if picker}<div class="overlay">
+		<div
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="picker-title"
+			tabindex="-1"
+			class="supplier-panel"
+			use:adminDialog={() => (picker = null)}
+		>
+			<header>
+				<div>
+					<h2 id="picker-title">{picker.title} · Choose supplier</h2>
+					<p class="hint">
+						Your price: {money(picker.sale)} per {picker.units.toLocaleString()}
+					</p>
+				</div>
+				<button aria-label="Close supplier picker" onclick={() => (picker = null)}
+					><X size={20} /></button
+				>
+			</header>
+			{#key picker.id}<BoostingSupplierPicker
+					rowId={picker.id}
+					offerId={picker.sourceOfferId}
+					quantity={picker.units}
+					fx={view.sheet.settings.fx}
+					currentId={picker.supplierChoiceId ?? quote(picker)?.providerServiceId}
+					onChoose={(choice) => useSupplier(picker!, choice)}
+					previewChoices={previewOnly
+						? [
+								{
+									providerServiceId: '11111111-1111-4111-8111-111111111111',
+									provider: 'smm_raja',
+									serviceId: 'DEMO-101',
+									name: `Sample ${picker.title} service`,
+									rateUsd: 0.2,
+									min: 10,
+									max: 100000,
+									checkedAt: new Date().toISOString(),
+									issues: [],
+									publicationIssues: [],
+									revision: 'a'.repeat(64),
+									refillAdvertised: false,
+									refillDaysClaimed: null
+								},
+								{
+									providerServiceId: '22222222-2222-4222-8222-222222222222',
+									provider: 'bulk_follows',
+									serviceId: 'DEMO-202',
+									name: `Alternative sample ${picker.title} service`,
+									rateUsd: 0.25,
+									min: 100,
+									max: 50000,
+									checkedAt: new Date().toISOString(),
+									issues: [],
+									publicationIssues: [],
+									revision: 'b'.repeat(64),
+									refillAdvertised: true,
+									refillDaysClaimed: 30
+								}
+							]
+						: undefined}
+				/>{/key}
+			<div class="supplier-footer">
+				<span class="hint">No changes are saved here.</span><button onclick={() => (picker = null)}
+					>Close</button
+				>
+			</div>
 		</div>
 	</div>{/if}
 
 <style>
+	.supplier-review {
+		margin-top: 16px;
+		border: 1px solid var(--primary);
+		border-radius: 10px;
+		padding: 12px;
+		background: color-mix(in srgb, var(--primary) 5%, transparent);
+	}
+	.supplier-review h4 {
+		margin: 0 0 10px;
+		font-size: 13px;
+	}
+	.supplier-review p {
+		font-size: 12px;
+		line-height: 1.6;
+		overflow-wrap: anywhere;
+	}
 	.boosting-page {
 		max-width: 1200px;
 		margin: auto;
@@ -1554,6 +1786,9 @@
 		border-top: 1px solid var(--border);
 		display: flex;
 		justify-content: flex-end;
+		gap: 10px;
+		flex-wrap: wrap;
+		align-items: center;
 	}
 	.sr-only {
 		position: absolute;
