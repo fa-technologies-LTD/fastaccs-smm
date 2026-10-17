@@ -11,6 +11,12 @@ export const SIGNUP_RATE_LIMITS = {
 	identity: { limit: 6, windowMs: 60 * 60 * 1000 }
 } as const;
 
+// Every reset request (not only failures) counts, so the form cannot be used to flood an inbox.
+export const PASSWORD_RESET_RATE_LIMITS = {
+	ip: { limit: 10, windowMs: 60 * 60 * 1000 },
+	identity: { limit: 3, windowMs: 60 * 60 * 1000 }
+} as const;
+
 export const RESTOCK_NOTIFY_RATE_LIMITS = {
 	ip: { limit: 18, windowMs: 60 * 60 * 1000 },
 	email: { limit: 6, windowMs: 60 * 60 * 1000 }
@@ -21,6 +27,8 @@ type RateLimitScope =
 	| 'login_identity'
 	| 'signup_ip'
 	| 'signup_identity'
+	| 'password_reset_ip'
+	| 'password_reset_identity'
 	| 'restock_notify_ip'
 	| 'restock_notify_email';
 

@@ -153,4 +153,18 @@ describe('account email send boundary', () => {
 		const mail = mocks.sendMail.mock.calls[0][0];
 		expect(mail.text).not.toContain(cta.ctaUrl);
 	});
+
+	it('points support links and replies at the support inbox, not the sending address', async () => {
+		await sendEmail({
+			to: 'buyer@example.com',
+			subject: 'Your order is ready',
+			body: 'Open your dashboard.',
+			notificationType: 'order_delivery'
+		});
+		const mail = mocks.sendMail.mock.calls[0][0];
+		expect(mail.from).toContain('mailer@test.invalid');
+		expect(mail.replyTo).toBe('support@fastaccs.com');
+		expect(mail.html).toContain('mailto:support@fastaccs.com');
+		expect(mail.html).not.toContain('mailto:mailer@test.invalid');
+	});
 });
