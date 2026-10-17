@@ -4,21 +4,32 @@ import { inspectBoostSale } from './boosting-sale-readiness';
 import { saleOfferFixture } from './boosting-sale-readiness-fixtures';
 
 describe('read-only sale refusal checks', () => {
-	it.each([
-		['catalogue', 91, 'Supplier catalogue information needs refreshing.'],
-		['balance', 46, 'Supplier balance information needs refreshing.']
-	])('refuses stale %s records before payment at the existing dispatch default', (kind, minutes, reason) => {
+	it('keeps the live sync window rather than inheriting the older shadow preview limits', () => {
 		const offer = saleOfferFixture();
-		const stale = new Date(Date.now() - Number(minutes) * 60000);
 		const service = offer.routes[0].providerService;
-		if (kind === 'catalogue') {
-			service.lastSeenAt = stale;
-			service.providerState.lastCatalogueSuccessAt = stale;
-		} else service.providerState.lastBalanceSuccessAt = stale;
-		const result = inspectBoostSale(offer, 1500);
-		expect(result.available).toBe(false);
-		expect(result.reasons).toContain(reason);
+		service.lastSeenAt = new Date(Date.now() - 120 * 60000);
+		service.providerState.lastCatalogueSuccessAt = service.lastSeenAt;
+		service.providerState.lastBalanceSuccessAt = new Date(Date.now() - 60 * 60000);
+		expect(inspectBoostSale(offer, 1500).available).toBe(true);
 	});
+	it.each([
+		['catalogue', 391, 'Supplier catalogue information needs refreshing.'],
+		['balance', 391, 'Supplier balance information needs refreshing.']
+	])(
+		'refuses stale %s records before payment at the existing live fulfillment default',
+		(kind, minutes, reason) => {
+			const offer = saleOfferFixture();
+			const stale = new Date(Date.now() - Number(minutes) * 60000);
+			const service = offer.routes[0].providerService;
+			if (kind === 'catalogue') {
+				service.lastSeenAt = stale;
+				service.providerState.lastCatalogueSuccessAt = stale;
+			} else service.providerState.lastBalanceSuccessAt = stale;
+			const result = inspectBoostSale(offer, 1500);
+			expect(result.available).toBe(false);
+			expect(result.reasons).toContain(reason);
+		}
+	);
 	it('permits a valid recorded configuration without selecting or exposing a supplier', () => {
 		const result = inspectBoostSale(saleOfferFixture(), 1500);
 		expect(result).toMatchObject({ available: true, reasons: [], maximumQuantity: 10000 });

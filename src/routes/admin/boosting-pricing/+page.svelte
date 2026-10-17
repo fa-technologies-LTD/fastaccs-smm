@@ -108,7 +108,7 @@
 		if (!BOOSTING_ACTION_TYPES.includes(r.outcome as never)) issues.push('Needs checkout support.');
 		if (r.sourceOfferId && !view.setup[r.id]?.reviewed) issues.push('Review supplier setup.');
 		const q = quote(r);
-		if (q && Date.now() - Date.parse(q.checkedAt) > (view.catalogMaxAgeMinutes ?? 90) * 60000)
+		if (q && Date.now() - Date.parse(q.checkedAt) > (view.catalogMaxAgeMinutes ?? 390) * 60000)
 			issues.push('Refresh supplier costs.');
 		if (
 			q?.rateUsd != null &&

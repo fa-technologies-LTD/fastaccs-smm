@@ -188,7 +188,7 @@ export async function loadBoostControls(database: Database = prisma): Promise<Bo
 		setup,
 		availability,
 		archivedDraft,
-		catalogMaxAgeMinutes: Math.max(5, Number(env.BOOSTING_CATALOG_MAX_AGE_MINUTES) || 90)
+		catalogMaxAgeMinutes: Math.max(5, Number(env.BOOSTING_CATALOG_MAX_AGE_MINUTES) || 390)
 	};
 }
 
@@ -270,7 +270,7 @@ export async function saveBoostControls(
 				where: { category: { categoryType: 'boosting_service' } },
 				include: includes
 			});
-			const maxAge = Math.max(5, Number(env.BOOSTING_CATALOG_MAX_AGE_MINUTES) || 90) * 60000;
+			const maxAge = Math.max(5, Number(env.BOOSTING_CATALOG_MAX_AGE_MINUTES) || 390) * 60000;
 			let applied = 0;
 			for (const row of next.rows) {
 				const original = current.sheet.rows.find((r) => r.id === row.id)!;

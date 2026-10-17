@@ -26,9 +26,10 @@ export function inspectBoostSale(
 	options: { now?: Date; customerPriceNgn?: number; requirePublished?: boolean } = {}
 ) {
 	const now = (options.now ?? new Date()).getTime();
-	// Match dispatch defaults: stale data must be refused before payment, not only afterward.
-	const catalogAge = positive(env.BOOSTING_CATALOG_MAX_AGE_MINUTES, 90, 5) * 60_000;
-	const balanceAge = positive(env.BOOSTING_BALANCE_MAX_AGE_MINUTES, 45, 5) * 60_000;
+	// Match live fulfillment's six-hour sync window plus its existing refresh grace period.
+	// The older shadow-preview defaults are not the live purchase contract.
+	const catalogAge = positive(env.BOOSTING_CATALOG_MAX_AGE_MINUTES, 390, 5) * 60_000;
+	const balanceAge = positive(env.BOOSTING_BALANCE_MAX_AGE_MINUTES, 390, 5) * 60_000;
 	const fresh = (date: Date | null | undefined, age: number) => {
 		const time = date?.getTime();
 		return time != null && Number.isFinite(time) && time <= now && now - time <= age;
