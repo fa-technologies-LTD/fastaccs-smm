@@ -294,7 +294,13 @@ describe('store-credit ledger safeguards', () => {
 
 		await expect(
 			getStoreCreditBuckets('11111111-1111-4111-8111-111111111111', db as never)
-		).resolves.toEqual({ earnedAvailable: 300, refundAvailable: 0, totalAvailable: 300 });
+		).resolves.toEqual({
+			earnedAvailable: 300,
+			refundAvailable: 0,
+			promoAvailable: 0,
+			promo: [],
+			totalAvailable: 300
+		});
 	});
 
 	it('carries an unrecovered affiliate adjustment forward against future earnings', async () => {
@@ -313,7 +319,13 @@ describe('store-credit ledger safeguards', () => {
 
 		await expect(
 			getStoreCreditBuckets('11111111-1111-4111-8111-111111111111', db as never)
-		).resolves.toEqual({ earnedAvailable: 500, refundAvailable: 0, totalAvailable: 500 });
+		).resolves.toEqual({
+			earnedAvailable: 500,
+			refundAvailable: 0,
+			promoAvailable: 0,
+			promo: [],
+			totalAvailable: 500
+		});
 	});
 
 	it('atomically re-reserves restored credit before a late split payment can fulfil', async () => {
