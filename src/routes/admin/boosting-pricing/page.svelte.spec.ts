@@ -61,6 +61,55 @@ const choice = (): BoostSupplierChoice => ({
 	refillDaysClaimed: 30
 });
 
+it('displays a legacy pack per 1,000 and saves an edited rate without changing its quantity grid or rule basis', async () => {
+	const initial = fixture();
+	Object.assign(initial.sheet.rows[0], {
+		units: 10,
+		sale: 150,
+		startingQuantity: 500,
+		increment: 500
+	});
+	initial.setup.row.maximumCostNgn = 100;
+	const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
+		String(input).includes('/balances')
+			? Response.json({ success: true, data: { providers: [] } })
+			: Response.json({
+					success: true,
+					data: { ...initial, sheet: JSON.parse(init!.body as string).sheet }
+				})
+	);
+	vi.stubGlobal('fetch', fetchMock);
+	render(Page, { data: { pricing: initial } } as never);
+	const price = page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' });
+	await expect.element(price).toHaveValue(15000);
+	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect.element(page.getByRole('cell', { name: '₦81', exact: true })).toBeVisible();
+	await expect.element(page.getByRole('cell', { name: '₦14,919', exact: true })).toBeVisible();
+	await price.fill('15000.02');
+	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
+	await expect
+		.element(page.getByRole('spinbutton', { name: 'Customer minimum for TikTok Likes value' }))
+		.toHaveValue(500);
+	await expect
+		.element(page.getByRole('spinbutton', { name: 'Quantity increment for TikTok Likes value' }))
+		.toHaveValue(500);
+	await page.getByRole('button', { name: 'Save all changes', exact: true }).click();
+	const review = page.getByRole('dialog', { name: 'Save these changes?' });
+	await expect.element(review).toHaveTextContent('₦15,000.02 per 1,000');
+	await review.getByRole('button', { name: 'Confirm & save' }).click();
+	const submitted = JSON.parse(
+		fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')![1]!.body as string
+	);
+	expect(submitted.sheet.rows[0]).toMatchObject({
+		units: 10,
+		sale: 150.0002,
+		startingQuantity: 500,
+		increment: 500,
+		priceMode: 'manual'
+	});
+	await expect.element(price).toHaveValue(15000.02);
+});
+
 it.each([true, false])(
 	'chooses an exact supplier as a draft for an existing offer (%s), preserves price/quantities, and uses one final Save',
 	async (configured) => {

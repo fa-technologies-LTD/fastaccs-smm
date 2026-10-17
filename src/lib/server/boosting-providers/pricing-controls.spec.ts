@@ -164,6 +164,26 @@ beforeEach(() => {
 });
 const current = async () => structuredClone((await loadBoostControls(db as never)).sheet);
 
+it('preserves fractional legacy pack rates on load and Save instead of rounding the actual selling rate', async () => {
+	store.record.metadata.sheet.rows[0].units = 10;
+	store.offers[0].stepQuantity = 500;
+	store.offers[0].minQuantity = 500;
+	store.offers[0].pricePerStepNgn = 7500.01;
+	store.offers[0].normalCostTargetNgn = 40.5;
+	store.offers[0].maximumSupplierCostNgn = 100;
+	const next = await current();
+	expect(next.rows[0]).toMatchObject({
+		units: 10,
+		sale: 150.0002,
+		increment: 500,
+		startingQuantity: 500
+	});
+	next.rows[0].shortPromise = 'Updated description';
+	await saveBoostControls(next, 'owner', db as never, false);
+	expect(store.offers[0].pricePerStepNgn).toBe(7500.01);
+	expect((await current()).rows[0].sale).toBe(150.0002);
+});
+
 it('does not let inherited valid large supplier maxima block unrelated hidden price edits', async () => {
 	store.offers[0].status = 'hidden';
 	store.offers[0].maxQuantity = 2147483647;
@@ -717,7 +737,10 @@ it('pins an exact owner choice without changing other mappings, evidence or retr
 		priceMode: 'manual'
 	});
 	expect(reloaded.sheet.rows[0].supplierChoiceId).toBeUndefined();
-	expect(store.record.metadata.sheet.rows[0]).toMatchObject({ provider: 'smm_raja', serviceId: 's999' });
+	expect(store.record.metadata.sheet.rows[0]).toMatchObject({
+		provider: 'smm_raja',
+		serviceId: 's999'
+	});
 });
 
 it('does not approve a service through a hidden price-only save or automated repricing', async () => {

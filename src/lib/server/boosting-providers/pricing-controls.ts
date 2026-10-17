@@ -170,7 +170,9 @@ export async function loadBoostControls(database: Database = prisma): Promise<Bo
 		const liveSale = (Number(offer.pricePerStepNgn) * row.units) / offer.stepQuantity;
 		if (Math.abs(row.sale - liveSale) > 0.005 || row.selected !== (offer.status === 'live'))
 			archivedDraft = true;
-		row.sale = Math.round(liveSale * 100) / 100;
+		// A legacy comparison pack can be smaller than the billable increment. Keep its
+		// fractional-kobo rate exact; the actual billable step remains whole kobo.
+		row.sale = liveSale;
 		row.selected = offer.status === 'live' && offer.category.isActive;
 		if (offer.status === 'live' && !offer.category.isActive)
 			view.liveStatuses[row.id] = 'category_hidden';

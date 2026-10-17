@@ -67,6 +67,22 @@ export interface BoostPricingView {
 	approval: { id: string; approvedAt: string; digest: string };
 }
 
+/** Comparison/display unit only. Never change an offer's quantity grid or saved rule basis. */
+export const BOOST_PRICING_DISPLAY_QUANTITY = 1000;
+export function pricingDisplayAmount(
+	row: Pick<BoostPricingRow, 'units'>,
+	amount: number | null | undefined
+): number | null {
+	if (amount == null || !Number.isFinite(amount)) return null;
+	return Number(((amount * BOOST_PRICING_DISPLAY_QUANTITY) / row.units).toPrecision(15));
+}
+export function pricingStoredAmount(
+	row: Pick<BoostPricingRow, 'units'>,
+	amountPerThousand: number
+): number {
+	return Number(((amountPerThousand * row.units) / BOOST_PRICING_DISPLAY_QUANTITY).toPrecision(15));
+}
+
 export function pricingEconomics(
 	row: BoostPricingRow,
 	sheet: BoostPricingSheet,
@@ -322,17 +338,17 @@ export function exportPricingCsv(
 		'Menu',
 		'Supplier',
 		'Code',
-		'Pack quantity',
-		'Cost NGN',
+		'Pricing quantity',
+		'Cost NGN per 1000',
 		'Supplier service',
 		'USD per 1000',
 		'Supplier minimum',
 		'Supplier maximum',
 		'Target profit %',
-		'Selling price NGN',
-		'Profit NGN',
+		'Selling price NGN per 1000',
+		'Profit NGN per 1000',
 		'Actual profit on cost %',
-		'Estimated fees NGN',
+		'Estimated fees NGN per 1000',
 		'Price mode',
 		'Starting quantity',
 		'Customer starting quantity',
@@ -342,7 +358,9 @@ export function exportPricingCsv(
 		'Recovery budget %',
 		'Note',
 		'Customer maximum',
-		'Customer description'
+		'Customer description',
+		'Saved rule quantity',
+		'Price per saved rule quantity NGN'
 	];
 	const rows = sheet.rows.map((r) => {
 		const e = pricingEconomics(r, sheet, quotes[r.id] ?? null);
@@ -354,17 +372,17 @@ export function exportPricingCsv(
 			r.selected ? 'Yes' : 'No',
 			r.provider,
 			r.serviceId,
-			r.units,
-			e.cost?.toFixed(2),
+			BOOST_PRICING_DISPLAY_QUANTITY,
+			pricingDisplayAmount(r, e.cost)?.toFixed(2),
 			quotes[r.id]?.name,
 			quotes[r.id]?.rateUsd,
 			quotes[r.id]?.min,
 			quotes[r.id]?.max,
 			r.targetMarkup,
-			r.sale,
-			e.profit?.toFixed(2),
+			pricingDisplayAmount(r, r.sale),
+			pricingDisplayAmount(r, e.profit)?.toFixed(2),
 			e.markup?.toFixed(2),
-			e.fees.toFixed(2),
+			pricingDisplayAmount(r, e.fees)?.toFixed(2),
 			r.priceMode,
 			r.startingQuantity,
 			pricingStart(r, quotes[r.id]?.max ?? null),
@@ -374,7 +392,9 @@ export function exportPricingCsv(
 			r.profitBudgetPercent,
 			r.note,
 			r.maximumQuantity ?? '',
-			r.shortPromise ?? ''
+			r.shortPromise ?? '',
+			r.units,
+			r.sale
 		];
 	});
 	return '\uFEFF' + [headers, ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n');

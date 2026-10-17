@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
 	exportPricingCsv,
+	pricingDisplayAmount,
+	pricingStoredAmount,
 	pricingEconomics,
 	pricingStart,
 	pricingStepPrice,
@@ -13,6 +15,48 @@ import {
 import { row, sheet, quote } from './boosting-pricing-sheet-fixtures';
 
 describe('Boosting Pricing sheet', () => {
+	it.each([10, 100, 1000])(
+		'compares prices and economics per 1,000 without changing a saved %s-unit rule',
+		(units) => {
+			const legacy = { ...row, units, sale: 15 * units, startingQuantity: 500, increment: 500 };
+			const snapshot = JSON.stringify(legacy);
+			const economics = pricingEconomics(legacy, sheet, quote);
+			expect(pricingDisplayAmount(legacy, legacy.sale)).toBe(15000);
+			expect(pricingDisplayAmount(legacy, economics.cost)).toBe(81);
+			expect(pricingDisplayAmount(legacy, economics.profit)).toBe(14919);
+			expect(pricingStoredAmount(legacy, 15000.02)).toBeCloseTo(15.00002 * units, 9);
+			expect(pricingStepPrice({ ...legacy, sale: pricingStoredAmount(legacy, 15000.02) })).toBe(
+				7500.01
+			);
+			expect(pricingStepPrice(legacy)).toBe(7500);
+			expect(JSON.stringify(legacy)).toBe(snapshot);
+		}
+	);
+	it('does not make unknown display costs free or round an untouched fractional pricing basis', () => {
+		const legacy = { ...row, units: 10, sale: 150.0002, increment: 500 };
+		expect(pricingDisplayAmount(legacy, null)).toBeNull();
+		expect(pricingDisplayAmount(legacy, NaN)).toBeNull();
+		expect(pricingDisplayAmount(legacy, legacy.sale)).toBe(15000.02);
+		expect(pricingStoredAmount(legacy, 15000.02)).toBe(150.0002);
+		expect(pricingStepPrice(legacy)).toBe(7500.01);
+	});
+	it('exports matching per-1,000 prices, costs and profit with the saved basis retained for reference', () => {
+		const legacy = { ...row, units: 10, sale: 150, increment: 500 };
+		const csv = exportPricingCsv({ ...sheet, rows: [legacy] }, { row: quote });
+		const [headers, values] = csv
+			.slice(1)
+			.split('\r\n')
+			.map((line) => line.split(',').map((value) => value.slice(1, -1)));
+		const exported = Object.fromEntries(headers.map((header, i) => [header, values[i]]));
+		expect(exported).toMatchObject({
+			'Pricing quantity': '1000',
+			'Cost NGN per 1000': '81.00',
+			'Selling price NGN per 1000': '15000',
+			'Profit NGN per 1000': '14919.00',
+			'Saved rule quantity': '10',
+			'Price per saved rule quantity NGN': '150'
+		});
+	});
 	it('costs the pack independently from its increment', () => {
 		expect(pricingEconomics(row, sheet, quote)).toMatchObject({
 			cost: 81,

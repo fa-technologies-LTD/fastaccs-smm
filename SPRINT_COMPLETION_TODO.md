@@ -1,5 +1,23 @@
 # Sprint completion — prioritised master checklist
 
+## Current — matching per-1,000 pricing display, 17 October 2026
+
+Owner explicitly requested this fix and push. Compare every offer's selling price,
+supplier cost and estimated profit per 1,000, matching the provider catalogue rate.
+This is a reversible display conversion, not a production price/quantity migration.
+For example, an existing ₦150 per 10 displays as ₦15,000 per 1,000 with the same
+customer charge. Existing minimums, increments, locks, supplier choices, pricing-rule
+quantities and publication selections are preserved.
+
+- [x] Apply the same comparison quantity to the table, price input, supplier inspection/picker, spending-limit display, final Save review, per-offer monetary overrides and CSV export. Keep raw saved-rule references in the export for recovery.
+- [x] Convert edited per-1,000 amounts back to the existing saved basis. Merely viewing an offer does not create a draft or reprice it. Preserve fractional legacy pack rates when loading so actual whole-kobo billable charges survive Save/reload exactly.
+- [x] Regression: 1,815 server tests accounted for (239 suites / 1,806 tests plus two isolated retry suites / nine tests after unrelated icon-compilation timeouts); 18 Chromium suites / 123 tests pass. Focused pricing tests: 81 pass. Type check zero errors / 113 existing warnings. Initial browser-runner startup failure resolved with headless full-suite run; no app change or owner-server restart.
+- [x] Final sequential verified-staging build and client/server bootstrap identity pass. Desktop/mobile native walkthrough passes: matching table amounts, read-only details, price/quantity preservation and final in-memory Save; zero page errors, overflow or completed network writes. Cookie-consent sync attempts are explicitly blocked and counted, not mistaken for pricing writes.
+- [x] Final built-app separate-staging rehearsal passes: real synthetic login, one confirmed Save, preload approval/exact manual supplier choice, persisted price/quantities, storefront and correct ₦500 unpaid fake-gateway checkout; known-unavailable hiding/stale-cart refusal. Zero supplier calls, real payments, emails or production changes; transaction rollback and independent cleanup verified.
+- [ ] Push approved code and verify production revision/deployment, independent CI and anonymous access guards read-only. No migration or offer-publication changes in this release.
+- [ ] Owner keeps/export existing drafts before opening the updated live pricing page in a fresh tab, reviews rates, ticks intended ready offers and confirms the final Save. No agent production repricing, supplier choices, offer publication, orders, emails or migration.
+- [ ] Universal: priority development-tool security cleanup; SEO/indexing/marketing with Claude; support inbox verification; announcements only after send approval; retention/refill evidence; production performance and other deferred cleanup. Routing/learning/automatic paid retries remain excluded.
+
 ## Current — owner-approved manual supplier workflow release, 17 October 2026
 
 Owner approved one pricing-page flow: browse/search either supplier or enter an exact
@@ -15,7 +33,7 @@ selection, prices and offer publication remain the owner's actions in the live a
 - [x] Verification: 241 server suites / 1,808 tests; 18 Chromium suites / 122 tests; final canonical-audit follow-up 73 focused server tests. Type check zero errors / 113 existing warnings. Final verified-staging build/bootstrap identity check passed. Actual desktop/mobile exact-code selection, price/quantity preservation, final review, cancel and undo passed with zero page errors, overflow or network writes. A transient old Vite overlay cleared on fresh navigation; no owner server/tab restart.
 - [x] Final built-app separate-staging rehearsal passed: synthetic real login, preloaded supplier approved through final Save, unmapped offer exact-code search/choice saved and pinned, canonical supplier audit, storefront, correct ₦500 unpaid fake-gateway checkout, known-unavailable hiding/stale-cart refusal. Transaction rollback and independent cleanup verified; zero supplier calls, real payments, emails or production changes.
 - [x] Owner localhost review and explicit push approval received. No production prices, mappings, publication or supplier orders changed by this follow-up.
-- [ ] Push the reviewed code, verify production revision/deployment and independent CI, then read-only live smoke. No migration or catalogue/settings changes are part of this release.
+- [x] Reviewed code released as `dbbf719`; production revision, Vercel deployment, independent CI and read-only mobile/desktop live smoke verified. Public catalogue unchanged by that release; no migration or catalogue/settings changes.
 - [ ] Owner reviews prices and supplier choices, ticks selected ready offers and confirms final Save. Save/export any existing draft before moving to a fresh tab after deployment.
 - [ ] Universal: SEO/indexing/marketing with Claude; support inbox verification; announcements require send approval; retention/refill evidence; production performance and deferred cleanup. Automatic selection/learning/paid retries remain excluded.
 
