@@ -18,6 +18,7 @@ vi.mock('$lib/prisma', () => ({ prisma: db }));
 vi.mock('$env/dynamic/private', () => ({ env: { BOOSTING_AUTOMATION_MODE: 'live' } }));
 import { loadBoostControls, saveBoostControls, refreshBoostAutoPrices } from './pricing-controls';
 import { supplierChoiceRevision } from './supplier-choice';
+import { inspectBoostSale } from '$lib/server/boosting-sale-readiness';
 
 it('price-only saves cannot publish even with forged selections and confirmation', async () => {
 	store.offers[0].status = 'hidden';
@@ -163,6 +164,124 @@ beforeEach(() => {
 	db.category.findMany.mockResolvedValue([]);
 });
 const current = async () => structuredClone((await loadBoostControls(db as never)).sheet);
+
+it.each([
+	[3484.44, 6000],
+	[3745.25, 7500]
+])(
+	'saves an owner-reviewed price cut with fractional cost %s, and the saved offer remains purchasable',
+	async (cost, price) => {
+		store.services[0].ratePerThousand = cost / 1500;
+		store.services[0].minQuantity = 10;
+		Object.assign(store.offers[0], {
+			minQuantity: 10,
+			stepQuantity: 10,
+			pricePerStepNgn: 270,
+			minimumMarginPercent: 350,
+			maximumSupplierCostNgn: 100
+		});
+		store.offers[0].routes[0].minimumQuantity = 10;
+		const next = await current();
+		next.rows[0].sale = price;
+		await saveBoostControls(next, 'owner', db as never, false, true);
+		expect(Number(store.offers[0].normalCostTargetNgn)).toBe(Math.ceil(cost - 1e-7) / 100);
+		expect(inspectBoostSale(store.offers[0], 1500)).toMatchObject({ available: true, reasons: [] });
+		expect((await current()).rows[0].sale).toBe(price);
+	}
+);
+
+it('accepts the owner-confirmed manual price below profit preferences and reviews only the displayed current cost', async () => {
+	store.offers[0].maximumSupplierCostNgn = 5;
+	const next = await current();
+	next.settings.hardProfitNgn = 1000;
+	next.rows[0].sale = 600;
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(store.offers[0].maximumSupplierCostNgn).toBe(8.1);
+	expect(store.offers[0].pricePerStepNgn).toBe(60);
+	expect(store.record.metadata.sheet.settings.hardProfitNgn).toBe(1000);
+	expect(inspectBoostSale(store.offers[0], 1500).available).toBe(true);
+});
+
+it('queues explicit review without a price edit, but cannot repeat that acceptance automatically', async () => {
+	store.offers[0].maximumSupplierCostNgn = 5;
+	const next = await current();
+	next.rows[0].reviewRequested = true;
+	await expect(saveBoostControls(next, 'owner', db as never)).rejects.toThrow(
+		'confirm current prices'
+	);
+	await expect(saveBoostControls(next, 'owner', db as never, true, true)).rejects.toThrow(
+		'confirm current prices'
+	);
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(store.offers[0].maximumSupplierCostNgn).toBe(8.1);
+	expect((await current()).rows[0].reviewRequested).toBeUndefined();
+	expect(store.record.metadata.sheet.rows[0].reviewRequested).toBeUndefined();
+});
+
+it('keeps custom non-multiple quantity grids purchasable after approving a fractional quote', async () => {
+	store.services[0].ratePerThousand = 81.1 / 1500;
+	Object.assign(store.offers[0], {
+		maximumSupplierCostNgn: 5,
+		stepQuantity: 50,
+		pricePerStepNgn: 25
+	});
+	const next = await current();
+	next.rows[0].reviewRequested = true;
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(store.offers[0].maximumSupplierCostNgn).toBe(8.12);
+	for (const quantity of [100, 150, 200, 250, 1000])
+		expect(inspectBoostSale(store.offers[0], 1500, quantity).available).toBe(true);
+	expect(store.record.metadata.ownerReviews[0].quantityRoundingAllowanceNgn).toBe(0.01);
+});
+
+it('floors the accepted margin at database precision so reloading cannot make the saved offer unavailable', async () => {
+	store.services[0].ratePerThousand = 97.4 / 1500;
+	store.offers[0].minimumMarginPercent = 600;
+	const next = await current();
+	next.rows[0].sale = 600;
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(store.offers[0].minimumMarginPercent).toBe(516.01);
+	expect(inspectBoostSale(store.offers[0], 1500).available).toBe(true);
+});
+
+it('does not approve a current quote above the supported persisted spending budget', async () => {
+	store.services[0].ratePerThousand = 1000 / 1500;
+	store.services[0].maxQuantity = 100000000;
+	store.offers[0].routes[0].maximumQuantity = 100000000;
+	store.offers[0].minQuantity = 100000000;
+	const next = await current();
+	next.rows[0].sale = 10000000;
+	await expect(saveBoostControls(next, 'owner', db as never, false, true)).rejects.toThrow(
+		'choose a cheaper supplier'
+	);
+	expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+});
+
+it('removes unverified quality requirements only for new owner-reviewed purchases, without fabricating route evidence', async () => {
+	store.offers[0].requiredVerifiedSignals = ['verified-existing', 'unverified-quality'];
+	store.offers[0].routes[0].verifiedSignals = ['verified-existing'];
+	const oldPurchaseRequirements = structuredClone(store.offers[0].requiredVerifiedSignals);
+	const next = await current();
+	next.rows[0].sale = 900;
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	expect(store.offers[0].requiredVerifiedSignals).toEqual(['verified-existing']);
+	expect(store.offers[0].routes[0].verifiedSignals).toEqual(['verified-existing']);
+	expect(oldPurchaseRequirements).toEqual(['verified-existing', 'unverified-quality']);
+	expect(db.boostServiceRoute.updateMany).not.toHaveBeenCalled();
+	expect(inspectBoostSale(store.offers[0], 1500).available).toBe(true);
+});
+
+it.each(['loss', 'unavailable', 'refill'])(
+	'does not let an owner confirmation bypass %s safeguards',
+	async (issue) => {
+		if (issue === 'unavailable') store.services[0].unavailableAt = new Date();
+		if (issue === 'refill') store.offers[0].refillDays = 30;
+		const next = await current();
+		next.rows[0].sale = issue === 'loss' ? 50 : 900;
+		await expect(saveBoostControls(next, 'owner', db as never, false, true)).rejects.toThrow();
+		expect(db.boostCustomerOffer.update).not.toHaveBeenCalled();
+	}
+);
 
 it('preserves fractional legacy pack rates on load and Save instead of rounding the actual selling rate', async () => {
 	store.record.metadata.sheet.rows[0].units = 10;

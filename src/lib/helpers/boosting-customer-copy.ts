@@ -2,7 +2,7 @@ import { BOOSTING_ACTION_LABELS, BOOSTING_PLATFORM_LABELS } from './boosting-ser
 import type { BoostingActionType, BoostingPlatform } from './social-link-validator';
 
 const unsupportedClaim =
-	/less likely to drop|staying power|higher.quality delivery|non.?drop|guaranteed|real (?:users|people)|instant delivery/i;
+	/less likely to drop|staying power|\b(?:high(?:er)?[ -]?quality|best|more stable|premium quality|refill|protection)\b|non.?drop|guaranteed|real (?:users|people)|instant delivery/i;
 const tierLabel = /^(?:affordable|value|more stable|stable|premium|recommended)$/i;
 
 /** Remove inherited quality promises; never turn a supplier advertisement into a guarantee. */
@@ -22,6 +22,7 @@ export function boostCustomerCopy(offer: {
 	).trim();
 	const generatedName =
 		!suffix ||
+		unsupportedClaim.test(offer.customerName) ||
 		tierLabel.test(suffix) ||
 		tierLabel.test(offer.customerName) ||
 		/\b(?:premium|stable)\b/i.test(offer.customerName);

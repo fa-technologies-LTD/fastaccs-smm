@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { Search, RefreshCcw, Check, AlertTriangle } from '$lib/icons';
+	import { boostPricingAdvisory } from '$lib/helpers/boosting-pricing-controls';
 	import type {
 		BoostSupplierChoice,
 		BoostSupplierChoices
@@ -172,7 +173,9 @@
 					{#if service.issues.length}<ul class="issues">
 							{#each service.issues as issue}<li>{issue}</li>{/each}
 						</ul>{:else if service.publicationIssues?.length}<ul class="issues">
-							{#each service.publicationIssues as issue}<li>Before publishing: {issue}</li>{/each}
+							{#each service.publicationIssues as issue}<li>
+									{boostPricingAdvisory(issue) ? 'Advisory' : 'Before publishing'}: {issue}
+								</li>{/each}
 						</ul>{/if}
 					<div class="service-footer">
 						<small

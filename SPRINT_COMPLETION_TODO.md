@@ -1,5 +1,23 @@
 # Sprint completion — prioritised master checklist
 
+## Current — owner-confirmed pricing warnings, approved release, 18 October 2026
+
+Owner requested that supplier cost over the approved limit, profit below the preferred
+minimum and unverified quality claims do not prevent manual review/Save. After the
+localhost preview and verification, the owner explicitly approved “go live”. Release
+authority covers this tested code only, not production repricing or offer publication.
+
+- [x] Distinguish advisory preferences from genuine purchase blockers in the price table, expanded offer and supplier picker, including separate counts/filters. Preserve unavailable/incompatible suppliers, quantity/input limits, insufficient funding, loss-making prices and unverified structured refill/audience protections.
+- [x] One confirmed owner Save accepts a profitable manual price below retained-profit preferences and reviews the displayed current supplier quote. An optional draft-only “Review current price and cost” button permits this without changing a price or reselecting a supplier. No immediate writes; cancellation keeps edits; the acknowledgement clears after Save.
+- [x] Align rounded supplier charges, saved budget, persisted margin precision and the configuration checked before Save. Non-multiple quantity grids receive a disclosed one-kobo rounding allowance; recorded budgets remain bounded and positive-profit checks remain enforced. Automated/price-only saves cannot grant a cost increase or use these manual acknowledgements.
+- [x] Remove unsupported future quality requirements only through owner-confirmed Save, without fabricating supplier evidence or changing existing purchased snapshots/refill promises. Customer-facing names/descriptions remain neutral rather than claiming “Best”, unverified high quality or refill protection. Receipt records actual provider/service, quote/FX/quantity, old/new spend limit, rounding allowance and accepted preferences/removed unsupported requirements in existing audit storage.
+- [x] Final regression: 241 server suites / 1,831 tests and 18 Chromium suites / 125 tests pass, including screenshot price cuts, custom grids, database rounding precision, supported budget bounds, explicit review without a price edit, automatic-save refusal and retained genuine supplier/refill/no-loss guards. Type check zero errors / 113 existing warnings. Existing browser-runner hooks/close warning remains tooling cleanup; test run exits successfully.
+- [x] Final verified-staging build/bootstrap identity passes. Final desktop/mobile native walkthrough verifies all three flags, zero blockers for advisory-only offers, Live tick, review/cancel/preserve/final in-memory Save, zero page errors/overflow/completed network writes; consent-sync attempts blocked separately. Owner's port-5173 server/tab not restarted.
+- [x] Real separate-staging built-app rehearsal passes: synthetic authenticated owner confirms an unchanged manual price below the retained-profit preference, accepts the current quote over an old limit and drops unsupported future quality requirements. Persisted cap/price and immutable audit receipt verified; neutral customer copy, storefront and correct ₦500 unpaid fake checkout pass. Existing known-unavailable/stale-cart refusal retained. Zero supplier calls, real payments, emails or production changes; transaction rollback and independent cleanup verified.
+- [x] Localhost preview provided and explicit owner release approval received (“go live”). Production settings/prices/supplier selections/publication, real payments, supplier orders and emails remain outside this release.
+- [ ] Push reviewed code; independently verify production revision, deployment, CI and anonymous access guards. Preserve all owner drafts and production catalogue decisions.
+- [ ] Universal: priority development-tool security cleanup; SEO/indexing/marketing with Claude; support inbox verification; announcements only after send approval; retention/refill evidence; production performance and deferred cleanup. Routing/learning/automatic paid retries remain excluded.
+
 ## Current — matching per-1,000 pricing display, 17 October 2026
 
 Owner explicitly requested this fix and push. Compare every offer's selling price,
@@ -14,7 +32,7 @@ quantities and publication selections are preserved.
 - [x] Regression: 1,815 server tests accounted for (239 suites / 1,806 tests plus two isolated retry suites / nine tests after unrelated icon-compilation timeouts); 18 Chromium suites / 123 tests pass. Focused pricing tests: 81 pass. Type check zero errors / 113 existing warnings. Initial browser-runner startup failure resolved with headless full-suite run; no app change or owner-server restart.
 - [x] Final sequential verified-staging build and client/server bootstrap identity pass. Desktop/mobile native walkthrough passes: matching table amounts, read-only details, price/quantity preservation and final in-memory Save; zero page errors, overflow or completed network writes. Cookie-consent sync attempts are explicitly blocked and counted, not mistaken for pricing writes.
 - [x] Final built-app separate-staging rehearsal passes: real synthetic login, one confirmed Save, preload approval/exact manual supplier choice, persisted price/quantities, storefront and correct ₦500 unpaid fake-gateway checkout; known-unavailable hiding/stale-cart refusal. Zero supplier calls, real payments, emails or production changes; transaction rollback and independent cleanup verified.
-- [ ] Push approved code and verify production revision/deployment, independent CI and anonymous access guards read-only. No migration or offer-publication changes in this release.
+- [x] Released as `9c59846`: matching production revision, Vercel deployment, independent CI run `39065850775` and anonymous access guards verified. Public catalogue unchanged across that release (six owner-published offers); no migration or agent offer publication/repricing.
 - [ ] Owner keeps/export existing drafts before opening the updated live pricing page in a fresh tab, reviews rates, ticks intended ready offers and confirms the final Save. No agent production repricing, supplier choices, offer publication, orders, emails or migration.
 - [ ] Universal: priority development-tool security cleanup; SEO/indexing/marketing with Claude; support inbox verification; announcements only after send approval; retention/refill evidence; production performance and other deferred cleanup. Routing/learning/automatic paid retries remain excluded.
 

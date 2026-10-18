@@ -31,3 +31,12 @@ it('keeps neutral owner-written names and descriptions', () => {
 		})
 	).toMatchObject({ customerName: 'Nigeria option', shortPromise: 'For Nigerian profiles.' });
 });
+
+it.each(['Best', 'High-quality delivery.', 'More stable', 'Premium quality'])(
+	'does not advertise %s as verified quality after manual review',
+	(claim) => {
+		const copy = boostCustomerCopy({ ...offer, customerName: claim, shortPromise: claim });
+		expect(copy.customerName).toBe('Instagram Followers');
+		expect(copy.shortPromise).toBe('Delivery timing varies. Track progress from your order.');
+	}
+);

@@ -28,6 +28,7 @@
 	import { boostingPricingChanges } from '$lib/helpers/boosting-pricing-changes';
 	import {
 		boostAutoPrice,
+		boostPricingAdvisory,
 		boostRowWarnings,
 		boostReadinessSummary,
 		boostControlSignature,
@@ -212,11 +213,7 @@
 					/balance is insufficient/i.test(warning) &&
 					r.startingQuantity < (savedQuantities.get(r.id) ?? r.startingQuantity)
 				) &&
-				![
-					'Below profit target.',
-					'Check option price order.',
-					'Costs more per item than followers.'
-				].includes(warning)
+				!boostPricingAdvisory(warning)
 		);
 	function toggleLive(row: BoostPricingRow, input: HTMLInputElement) {
 		if (input.checked && !row.selected) {
@@ -284,7 +281,12 @@
 			.map(([, message]) => message);
 	}
 	const platforms = $derived([...new Set(view.sheet.rows.map((r) => r.platform))]);
-	const flagged = $derived(view.sheet.rows.filter((r) => warnings(r).length > 0).length);
+	const flagged = $derived(view.sheet.rows.filter((r) => liveBlockers(r).length > 0).length);
+	const advisoryCount = $derived(
+		view.sheet.rows.filter(
+			(r) => liveBlockers(r).length === 0 && warnings(r).some(boostPricingAdvisory)
+		).length
+	);
 	const live = $derived(view.sheet.rows.filter((r) => view.liveStatuses[r.id] === 'live').length);
 	const visible = $derived(
 		view.sheet.rows.filter(
@@ -293,7 +295,9 @@
 				(filter !== 'live' || view.liveStatuses[r.id] === 'live') &&
 				(filter !== 'ready' || (!r.selected && liveBlockers(r).length === 0)) &&
 				(filter !== 'edited' || changedRows.has(r.id)) &&
-				(filter !== 'review' || warnings(r).length > 0) &&
+				(filter !== 'review' || liveBlockers(r).length > 0) &&
+				(filter !== 'advisory' ||
+					(liveBlockers(r).length === 0 && warnings(r).some(boostPricingAdvisory))) &&
 				`${r.title} ${r.option} ${sourceCode(r)} ${sourceProvider(r) === 'smm_raja' ? 'SMM Raja' : 'BulkFollows'}`
 					.toLowerCase()
 					.includes(search.trim().replace(/^#/, '').toLowerCase())
@@ -422,7 +426,25 @@
 			const sheet = structuredClone(payload.sheet) as BoostPricingSheet;
 			const quotes = structuredClone($state.snapshot(view.quotes));
 			const setup = structuredClone($state.snapshot(view.setup));
+			const availability = structuredClone($state.snapshot(view.availability ?? {}));
 			for (const row of sheet.rows) {
+				if (row.selected && quote(row)?.rateUsd != null) {
+					setup[row.id].maximumCostNgn = Math.max(
+						setup[row.id].maximumCostNgn,
+						Math.ceil(
+							((quote(row)!.rateUsd! * sheet.settings.fx * row.startingQuantity) / 1000) * 100 -
+								1e-7
+						) / 100
+					);
+					if (availability[row.id])
+						availability[row.id].reasons = availability[row.id].reasons.filter(
+							(reason) =>
+								![
+									'A customer-facing service claim has not been verified.',
+									'Supplier cost exceeds the approved spending limit.'
+								].includes(reason)
+						);
+				}
 				if (supplierDrafts[row.id]) {
 					const choice = supplierDrafts[row.id];
 					quotes[row.id] = structuredClone($state.snapshot(choice));
@@ -438,6 +460,7 @@
 				}
 				delete row.supplierChoiceId;
 				delete row.supplierChoiceRevision;
+				delete row.reviewRequested;
 			}
 			sheet.version++;
 			return {
@@ -445,6 +468,7 @@
 				data: {
 					...$state.snapshot(view),
 					quotes,
+					availability,
 					setup,
 					sheet,
 					liveStatuses: Object.fromEntries(
@@ -737,7 +761,10 @@
 						oninput={() => queueMicrotask(previewPrices)}
 					/></label
 				>
-				<p>A safety limit, not a selling-price target. Separate from the ₦500 minimum checkout.</p>
+				<p>
+					Used by automatic pricing. Your confirmed manual price may be lower, but must still cover
+					supplier cost and fees. Separate from the ₦500 checkout minimum.
+				</p>
 			</div>
 			<details>
 				<summary>Advanced pricing & fees</summary>
@@ -790,7 +817,10 @@
 			>
 		</div>
 		<div class="filters">
-			<p>{live} offers live · <span>{flagged} need review</span></p>
+			<p>
+				{live} offers live · <span>{flagged} blocked</span> ·
+				<span>{advisoryCount} with advisories</span>
+			</p>
 			<div>
 				<label class="sr-only" for="platform">Platform</label><select
 					id="platform"
@@ -802,8 +832,9 @@
 				<label class="sr-only" for="status">Status</label><select id="status" bind:value={filter}
 					><option value="all">All offers</option><option value="live">Live now</option><option
 						value="ready">Ready to publish</option
-					><option value="edited">Unsaved edits</option><option value="review">Needs review</option
-					></select
+					><option value="edited">Unsaved edits</option><option value="review"
+						>Blocked offers</option
+					><option value="advisory">Advisories only</option></select
 				>
 				<input aria-label="Search offers" placeholder="Search offers" bind:value={search} />
 				{#if platform !== 'all' || filter !== 'all' || search}<button
@@ -949,6 +980,22 @@
 														Not live yet. Review the items below.
 													</p>{/if}
 												{#each warnings(row) as warning}<p class="warning-copy">{warning}</p>{/each}
+												{#if warnings(row).some(boostPricingAdvisory)}
+													<p class="hint">
+														These preferences do not block your confirmed manual Save. Unverified
+														quality labels are not customer guarantees.
+													</p>
+													<button
+														disabled={busy || saveUncertain || row.reviewRequested}
+														onclick={() => {
+															row.reviewRequested = true;
+															row.priceMode = 'manual';
+														}}
+														>{row.reviewRequested
+															? 'Queued for final Save'
+															: 'Review current price and cost'}</button
+													>
+												{/if}
 											</div>
 											<p>
 												Customers start at {pricingStart(
@@ -1203,6 +1250,12 @@
 				{review.offers.length === 1 ? 'offer' : 'offers'} changed · {review.goingLive} going live · {review.goingOffline}
 				going offline
 			</p>
+			<p class="hint">
+				For the selected Live offers below, confirming accepts your manual prices even below profit
+				preferences and reviews the displayed supplier costs. Availability, compatibility,
+				positive-profit and refill checks still apply. Custom quantity grids may include a one-kobo
+				rounding allowance at the minimum.
+			</p>
 			<div class="change-review">
 				{#if review.rules.length}<section aria-label="Pricing rule changes">
 						<h3>Pricing rules</h3>
@@ -1229,6 +1282,20 @@
 									<span>{change.label}</span><span>{change.before} → <b>{change.after}</b></span>
 								</li>{/each}
 						</ul>
+						{#if row.selected}
+							<p class="hint">
+								Supplier cost reviewed with this Save: {money(
+									displayAmount(row, economics(row).cost)
+								)} per 1,000.
+							</p>
+							{#if warnings(row).includes('A customer-facing service claim has not been verified.')}
+								<p class="warning-copy">
+									Unverified quality requirements will be removed for future purchases, not marked
+									as verified. Existing orders and refill promises are unchanged; customers will see
+									neutral quality wording.
+								</p>
+							{/if}
+						{/if}
 						{#if row.supplierChoiceId || (offer.goingLive && preloadApproval(row))}
 							<div class="supplier-review">
 								<h4>Supplier approval</h4>

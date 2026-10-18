@@ -32,6 +32,8 @@ export interface BoostPricingRow {
 	supplierChoiceId?: string;
 	supplierChoiceRevision?: string;
 	supplierRevision?: string;
+	/** Explicit draft acknowledgement, cleared after the confirmed Save. */
+	reviewRequested?: boolean;
 }
 export interface BoostPricingSheet {
 	version: number;
@@ -295,6 +297,7 @@ export function sanitizePricingSheet(
 			if (!original) throw new Error('Unknown row. Reload the sheet.');
 			return {
 				...original,
+				reviewRequested: r.reviewRequested,
 				supplierChoiceId: r.supplierChoiceId,
 				supplierChoiceRevision: r.supplierChoiceRevision,
 				option: r.option.trim(),

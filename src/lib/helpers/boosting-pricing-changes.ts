@@ -51,6 +51,12 @@ export function boostingPricingChanges(before: BoostPricingSheet, after: BoostPr
 		const previous = baseline.get(row.id);
 		if (!previous) return [];
 		const changes: PricingFieldChange[] = [];
+		if (row.reviewRequested && !previous.reviewRequested)
+			changes.push({
+				label: 'Owner review',
+				before: 'Not queued',
+				after: 'Accept displayed supplier cost and price'
+			});
 		add(
 			changes,
 			'Price',

@@ -49,6 +49,19 @@ export interface BoostControlsView extends BoostPricingView {
 	availability?: Record<string, { reasons: string[]; checkedAt: string }>;
 }
 
+/** The owner's final review may accept these preferences, never supplier incompatibility/outages. */
+export function boostPricingAdvisory(reason: string): boolean {
+	return [
+		'Below profit target.',
+		'Below minimum retained profit.',
+		'Supplier cost exceeds reviewed limit.',
+		'Supplier cost exceeds the approved spending limit.',
+		'A customer-facing service claim has not been verified.',
+		'Check option price order.',
+		'Costs more per item than followers.'
+	].includes(reason);
+}
+
 /** Surface the first actionable blocker, not a generic review badge. */
 export function boostReadinessSummary(
 	blockers: string[],
@@ -65,7 +78,8 @@ export function boostReadinessSummary(
 		'Below supplier minimum.': 'Quantity below supplier minimum',
 		'Supplier cost exceeds reviewed limit.': 'Supplier cost over approved limit'
 	};
-	return labels[issue] ?? issue.replace(/\.$/, '');
+	const label = labels[issue] ?? issue.replace(/\.$/, '');
+	return !blockers.length && boostPricingAdvisory(issue) ? `${label} · advisory` : label;
 }
 
 export function validateBoostRules(settings: BoostPricingSheet['settings']) {
@@ -171,7 +185,8 @@ export function boostControlSignature(row: BoostPricingRow): string {
 		row.option,
 		row.shortPromise ?? '',
 		row.supplierChoiceId ?? null,
-		row.supplierChoiceRevision ?? null
+		row.supplierChoiceRevision ?? null,
+		row.reviewRequested ?? false
 	]);
 }
 

@@ -253,6 +253,8 @@ function clean(input: unknown, current: BoostControlsView): BoostPricingSheet {
 		for (const row of next.rows) {
 			const original = current.sheet.rows.find((r) => r.id === row.id)!;
 			const raw = submitted.rows.find((r) => r.id === row.id)!;
+			if (raw.reviewRequested !== undefined && typeof raw.reviewRequested !== 'boolean')
+				throw new Error('Check the offer review selection.');
 			if (raw.sourceUpdatedAt !== original.sourceUpdatedAt)
 				throw new BoostPricingError(`${row.title}: settings changed. Reload before saving.`, 409);
 			if (
@@ -464,6 +466,11 @@ export async function saveBoostControls(
 			await tx.$queryRaw`SELECT key FROM microcopy WHERE key IN (${BOOSTING_PRICING_KEYS.usdNgnRate}, ${BOOSTING_PRICING_KEYS.currencyBufferPercent}, ${BOOSTING_PRICING_KEYS.defaultMarginPercent}) ORDER BY CASE key WHEN ${BOOSTING_PRICING_KEYS.usdNgnRate} THEN 0 WHEN ${BOOSTING_PRICING_KEYS.currencyBufferPercent} THEN 1 ELSE 2 END FOR UPDATE`;
 			const current = await loadBoostControls(tx);
 			const next = clean(input, current);
+			if (
+				next.rows.some((row) => row.reviewRequested) &&
+				(!publicationConfirmed || automatic || preserveVisibility)
+			)
+				throw new BoostPricingError('Review and confirm current prices and costs before saving.');
 			if (preserveVisibility) {
 				for (const row of next.rows)
 					row.selected = current.sheet.rows.find((r) => r.id === row.id)!.selected;
@@ -507,6 +514,7 @@ export async function saveBoostControls(
 			});
 			const maxAge = Math.max(5, Number(env.BOOSTING_CATALOG_MAX_AGE_MINUTES) || 390) * 60000;
 			let applied = 0;
+			const ownerReviews: Prisma.InputJsonValue[] = [];
 			for (const row of next.rows) {
 				const original = current.sheet.rows.find((r) => r.id === row.id)!;
 				const edited = boostControlSignature(row) !== boostControlSignature(original);
@@ -673,7 +681,13 @@ export async function saveBoostControls(
 					throw new BoostPricingError(
 						`${row.title}: maximum quantity is too low to reach the ₦500 checkout minimum.`
 					);
-				const hardFloor = Math.max(next.settings.hardProfitNgn ?? 0, row.hardProfitNgn ?? 0);
+				// Only the explicit owner confirmation can accept a manual price below preferences
+				// or review the current quoted cost. Automated/price-only saves keep prior limits.
+				const ownerReview = publicationConfirmed && !automatic && !preserveVisibility;
+				const manualReview = ownerReview && row.priceMode === 'manual';
+				const hardFloor = manualReview
+					? 0
+					: Math.max(next.settings.hardProfitNgn ?? 0, row.hardProfitNgn ?? 0);
 				if (
 					economics.profit === null ||
 					economics.profit <= 0 ||
@@ -692,24 +706,57 @@ export async function saveBoostControls(
 				}
 				const scale = row.startingQuantity / row.units;
 				const remaining = (row.sale - economics.fees - hardFloor) * scale;
+				const normalCost = Math.ceil(economics.cost! * scale * 100 - 1e-7) / 100;
+				// A non-multiple grid can create fractional kobo when scaling the cost cap.
+				const roundingAllowance =
+					ownerReview && row.increment % row.startingQuantity !== 0 ? 0.01 : 0;
+				const reviewedCurrentCost = Math.round((normalCost + roundingAllowance) * 100) / 100;
 				const existingMargin = Number(offer.minimumMarginPercent);
-				const marginFloor = Math.min(existingMargin, Math.max(0, economics.markup ?? 0));
+				// Derive the retained margin from the same rounded charge that dispatch reserves.
+				// Using the raw quote here could round the budget DOWN a kobo below that charge.
+				const roundedMargin = Math.max(
+					0,
+					(((row.sale - economics.fees) * scale) / normalCost - 1) * 100
+				);
+				// Stored as Decimal(5,2): floor at that precision so PostgreSQL cannot
+				// round the requirement back above the margin the owner just accepted.
+				const marginFloor = Math.min(existingMargin, Math.floor(roundedMargin * 100) / 100);
 				const safeBudget =
 					Math.floor(
-						Math.min(remaining, ((row.sale - economics.fees) * scale) / (1 + marginFloor / 100)) *
+						Math.min(
+							remaining,
+							manualReview
+								? (row.sale - economics.fees) * scale - 0.01
+								: ((row.sale - economics.fees) * scale) / (1 + marginFloor / 100)
+						) *
 							100 +
 							1e-7
 					) / 100;
-				const normalCost = Math.ceil(economics.cost! * scale * 100 - 1e-7) / 100;
-				// Keep reviewed cost ceilings. A pricing edit never grants a route a larger spending limit.
-				const maximumCost = Math.min(reviewedCeiling, safeBudget);
-				if (maximumCost + 1e-8 < normalCost) {
+				// Owner confirmation reviews THIS quote, not arbitrary future supplier spending.
+				const maximumCost = Math.min(
+					ownerReview ? Math.max(reviewedCeiling, reviewedCurrentCost) : reviewedCeiling,
+					safeBudget,
+					99999999.99 // The persisted Decimal(10,2) budget must never overflow.
+				);
+				if (maximumCost + 1e-8 < (ownerReview ? reviewedCurrentCost : normalCost)) {
 					if (automatic) continue;
 					throw new BoostPricingError(
-						`${row.title}: supplier cost exceeds the reviewed cost limit. Review supplier setup.`
+						manualReview
+							? `${row.title}: the supplier charge, fees and quantity-rounding allowance leave no positive profit at the customer minimum. Increase the price or choose a cheaper supplier.`
+							: `${row.title}: supplier cost exceeds the reviewed cost limit. Review supplier setup.`
 					);
 				}
 				if (automatic && Math.abs(row.sale - original.sale) < 0.005) continue;
+				const reviewRoutes = routesFor(offer);
+				const requiredSignals = ownerReview
+					? offer.requiredVerifiedSignals.filter(
+							(signal) =>
+								reviewRoutes.length > 0 &&
+								reviewRoutes.every((route) => route.verifiedSignals.includes(signal))
+						)
+					: offer.requiredVerifiedSignals;
+				if (requiredSignals.length !== offer.requiredVerifiedSignals.length)
+					offerEdits.requiredVerifiedSignals = requiredSignals;
 				if (row.selected && !automatic) {
 					const availability = inspectBoostSale(
 						{
@@ -718,6 +765,8 @@ export async function saveBoostControls(
 							maxQuantity: row.maximumQuantity ?? null,
 							stepQuantity: row.increment,
 							pricePerStepNgn: new Prisma.Decimal(stepPrice),
+							requiredVerifiedSignals: requiredSignals,
+							minimumMarginPercent: new Prisma.Decimal(marginFloor),
 							maximumSupplierCostNgn: new Prisma.Decimal(maximumCost)
 						},
 						next.settings.fx,
@@ -729,6 +778,28 @@ export async function saveBoostControls(
 							`${row.title}: ${availability.reasons[0] ?? 'This offer is unavailable.'} Your edits have not been saved.`
 						);
 				}
+				if (ownerReview)
+					ownerReviews.push({
+						offerId: offer.id,
+						providerServices: reviewRoutes.map((route) => ({
+							provider: route.providerService.provider,
+							serviceId: route.providerService.serviceId
+						})),
+						rateUsdPerThousand: quote!.rateUsd,
+						fx: next.settings.fx,
+						minimumQuantity: row.startingQuantity,
+						previousCostLimitNgn: Number(offer.maximumSupplierCostNgn),
+						approvedCostLimitNgn: maximumCost,
+						quantityRoundingAllowanceNgn: roundingAllowance,
+						minimumMarginPercent: marginFloor,
+						acceptedBelowProfitPreference:
+							manualReview &&
+							economics.profit! <
+								Math.max(next.settings.hardProfitNgn ?? 0, row.hardProfitNgn ?? 0),
+						removedUnverifiedRequirements: offer.requiredVerifiedSignals.filter(
+							(signal) => !requiredSignals.includes(signal)
+						)
+					});
 				const saved = await tx.boostCustomerOffer.update({
 					where: { id: offer.id },
 					data: {
@@ -747,6 +818,7 @@ export async function saveBoostControls(
 				applied++;
 			}
 			if (automatic && applied === 0) return { applied: 0 };
+			for (const row of next.rows) delete row.reviewRequested;
 			for (const [key, value] of [
 				[BOOSTING_PRICING_KEYS.usdNgnRate, next.settings.fx],
 				[
@@ -761,7 +833,7 @@ export async function saveBoostControls(
 				});
 			const previous = await state(tx);
 			next.version++;
-			await recordSheet(tx, next, actor, 'boosting_controls_saved', previous.record);
+			await recordSheet(tx, next, actor, 'boosting_controls_saved', previous.record, ownerReviews);
 			return { applied };
 		},
 		{ timeout: 60000 }
