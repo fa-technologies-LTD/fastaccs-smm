@@ -5,6 +5,7 @@ import { prisma } from '$lib/prisma';
 import { boostSaleInclude, inspectBoostSale } from '$lib/server/boosting-sale-readiness';
 import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
 import { boostCustomerCopy } from '$lib/helpers/boosting-customer-copy';
+import { boostBenefitLabel } from '$lib/helpers/boosting-customer-facts';
 import {
 	BOOSTING_MANAGED_STOREFRONT_KEY,
 	isBoostingManagedStorefrontEnabled
@@ -83,6 +84,7 @@ type CartRefreshTier = {
 		pricePerStep: number;
 		platform: string;
 		actionType: string;
+		benefitLabel?: string | null;
 	};
 	verifiedXFollowerAddons?: Array<{
 		key: string;
@@ -450,7 +452,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 						stepQuantity: config.stepQuantity,
 						pricePerStep: config.pricePerStep,
 						platform: config.platform,
-						actionType: config.actionType
+						actionType: config.actionType,
+						benefitLabel: offer ? boostBenefitLabel(offer) : null
 					}
 				};
 

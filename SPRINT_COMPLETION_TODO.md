@@ -1,5 +1,41 @@
 # Sprint completion — prioritised master checklist
 
+## Current — compact customer labels and reopening popup, approved release, 19 October 2026
+
+- [x] Replace generated option numbers/repeated platform names with concise factual choices: same-quantity lower price, confirmed purchased refill window or reviewed matching audience. Do not infer quality from price or supplier advertising; a single generic offer needs no artificial tier label.
+- [x] Keep shared delivery copy once and selected eligibility details expandable. Cart/checkout use readable quantities, omit duplicated platform subtitles and show confirmed benefits. Order receipts derive quantity/benefit from the purchased snapshot, not later offer edits. Prices, quantities, selections, money flows and purchased terms unchanged.
+- [x] Owner additionally requested a reopening modal. Add a clean, accessible “Boosting is back” notice for guests and signed-in customers, once per browser using a versioned local impression preference (session/memory fallback). Only browsing routes and a successful current available-offers check can show it; no checkout/order/auth/admin interruptions or stacked old launch announcement. Close, Maybe later, Escape, native focus containment/restoration and reduced-motion support; no announcement email or new analytics.
+- [x] Fictional loopback/development-only preview: http://localhost:5173/local-review/boosting-copy — includes Preview launch popup. Desktop 1360px/mobile 390px native checks pass: truthful labels, exact sample prices/quantities, selected refill terms, notice close/Escape/focus return, no page errors/overflow/completed network writes. Consent-sync attempts blocked separately; owner port-5173 server/tab not restarted.
+- [x] Combined regression: 244 server suites/1,866 tests and 18 Chromium suites/139 tests pass; zero type errors/113 existing warnings; final verified-staging build and client/server bootstrap identity pass. Corrected a test-only typed pathname assignment found by the first type check, then repeated check passed. Existing browser-runner hook/close noise remains deferred tooling cleanup. No real staging purchase, payment, supplier action, production data, publication, commit, merge, push, deployment or outbound email in this follow-up.
+- [x] Local preview provided; owner explicitly instructed “push the modal and those earlier changes first”. Release scope is this verified UI/copy work only. Latest supplier-retry/ranking proposal is not implemented or included. Announcements by email remain deferred until fulfilled-order evidence and separate wording/audience/send approval.
+- [ ] Push reviewed code; verify independent CI, deployment revision, anonymous access guards and read-only desktop/mobile live modal smoke. No migrations, repricing, supplier actions, offer publication, payment/refund or outbound email authorised by this release. Final live receipt in chat/private coordination supersedes this pre-push checkpoint.
+- [ ] Universal: tooling-security cleanup; Claude SEO/indexing/marketing; support inbox verification; consent-based email announcement approval; retention/refill evidence; performance/deferred cleanup. Routing/learning/automatic paid retry remain excluded.
+
+## Current — one approved held Instagram order, 19 October 2026
+
+- [x] Owner explicitly approved original paid order ending 7CD784AE: 500 Instagram followers, BulkFollows #11524, unchanged ₦330 supplier cap. Fresh service/balance/quote checks, verified scoped backup and rollback-only separate-staging release/duplicate/prior-submission/over-cap rehearsal passed.
+- [x] Requeued exactly one never-submitted fulfillment with owner-approval event/admin audit. Existing live worker submitted once: supplier ref 171031825, attemptCount1. Independent supplier status confirms Pending, charge $0.21875 USD (₦328.13 at saved FX1500), remains500. Acceptance is not completed delivery. Never resubmit; existing worker polls the saved reference.
+- [x] Original customer price ₦850, quantity500, service, paid snapshot and ₦330 cap preserved. No other order, price, offer publication, production settings, refunds or code deployment changes. Local copy changes preserved.
+- [x] Later read-only supplier/store check supersedes the initial Pending observation: supplier ref171031825 Canceled, recorded charge $0 USD, remains500, customer refundedAmount0; store is held for manual review with provider_cancelled. No new paid replacement or refund authorised. The contradictory overdue “not confirmed failure” banner is a separate pending support-copy fix, not changed by the label/modal task.
+- [ ] Customer value-promise labels and modal are implemented locally in the checkpoint above; owner review and explicit release approval remain pending. No arbitrary quality claims inferred from price.
+- [ ] Universal: priority tooling-security cleanup; SEO/indexing/marketing with Claude; support inbox verification; announcements only after send approval; retention/refill evidence; production performance and deferred cleanup. Routing/learning/automatic paid retries remain excluded.
+
+## Current — customer copy repetition, LOCAL only, 18 October 2026
+
+Owner completed manual offer review; a read-only public catalogue check confirmed 72
+published offers across eight platforms with positive prices and valid quantity ranges.
+This confirms publication, not supplier delivery. Owner then flagged repeated delivery
+copy and the long repeated refill explanation. Scope is presentation only; no price,
+quantity, supplier, refill eligibility, publication or production changes.
+
+- [x] Move identical descriptions shared by every option into one note below the cards. Preserve distinct descriptions within their own cards; do not imply one option's conditions apply to another.
+- [x] Keep refill cards concise; show expandable eligibility, window-start and no-guarantee terms for the selected refill option before checkout. Reset terms on selection changes. Keep purchase calculations unchanged.
+- [x] Add fictional loopback/development-only preview with checkout and option analytics disabled; production/non-loopback preview returns 404. No database reads/writes in the fixture.
+- [x] Verification: 242 server suites / 1,834 tests; 18 Chromium suites / 127 tests; zero type errors / 113 existing warnings; verified-staging build/bootstrap identity pass. One initial new test assertion did not tolerate wrapped whitespace; corrected assertion, then full browser rerun passed. Existing test-runner hook/close noise remains deferred tooling cleanup.
+- [x] Actual 1360px/390px click-through: delivery message once, exact example prices/quantities preserved, one selected card, expandable refill terms, switch-back resets terms/quantity, demo checkout disabled; zero page errors, overflow or completed network writes. Cookie-consent sync attempts blocked and counted separately. Owner port-5173 server/tab not restarted. Screenshots inspected.
+- [ ] Owner reviews http://localhost:5173/local-review/boosting-copy and explicitly approves any push/deployment. No production changes, supplier orders, payments or emails in this follow-up.
+- [ ] Universal: priority tooling-security cleanup; SEO/indexing/marketing with Claude; support inbox verification; announcements only after send approval; retention/refill evidence; production performance and deferred cleanup. Routing/learning/automatic paid retries remain excluded.
+
 ## Current — owner-confirmed pricing warnings, approved release, 18 October 2026
 
 Owner requested that supplier cost over the approved limit, profit below the preferred
@@ -15,7 +51,7 @@ authority covers this tested code only, not production repricing or offer public
 - [x] Final verified-staging build/bootstrap identity passes. Final desktop/mobile native walkthrough verifies all three flags, zero blockers for advisory-only offers, Live tick, review/cancel/preserve/final in-memory Save, zero page errors/overflow/completed network writes; consent-sync attempts blocked separately. Owner's port-5173 server/tab not restarted.
 - [x] Real separate-staging built-app rehearsal passes: synthetic authenticated owner confirms an unchanged manual price below the retained-profit preference, accepts the current quote over an old limit and drops unsupported future quality requirements. Persisted cap/price and immutable audit receipt verified; neutral customer copy, storefront and correct ₦500 unpaid fake checkout pass. Existing known-unavailable/stale-cart refusal retained. Zero supplier calls, real payments, emails or production changes; transaction rollback and independent cleanup verified.
 - [x] Localhost preview provided and explicit owner release approval received (“go live”). Production settings/prices/supplier selections/publication, real payments, supplier orders and emails remain outside this release.
-- [ ] Push reviewed code; independently verify production revision, deployment, CI and anonymous access guards. Preserve all owner drafts and production catalogue decisions.
+- [x] Released as `0ea0c23`: production revision, Vercel deployment, independent CI run `39130216191` and anonymous access guards verified. Public catalogue unchanged across that release (three owner-published offers). No agent repricing, supplier selection or publication.
 - [ ] Universal: priority development-tool security cleanup; SEO/indexing/marketing with Claude; support inbox verification; announcements only after send approval; retention/refill evidence; production performance and deferred cleanup. Routing/learning/automatic paid retries remain excluded.
 
 ## Current — matching per-1,000 pricing display, 17 October 2026

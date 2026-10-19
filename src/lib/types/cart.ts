@@ -43,6 +43,7 @@ export interface CartItemWithTier extends CartItem {
 			pricePerStep: number;
 			platform: string;
 			actionType: string;
+			benefitLabel?: string | null;
 		};
 		verifiedXFollowerAddons?: Array<{
 			key: string;

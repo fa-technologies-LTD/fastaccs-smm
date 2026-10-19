@@ -36,6 +36,7 @@ const user = {
 	fullName: 'Fixture buyer'
 };
 let price = 500;
+let benefitLabel: string | null = null;
 function line() {
 	return {
 		...cart.items[0],
@@ -53,7 +54,8 @@ function line() {
 				stepQuantity: 200,
 				pricePerStep: price,
 				platform: 'instagram',
-				actionType: 'likes'
+				actionType: 'likes',
+				benefitLabel
 			}
 		}
 	};
@@ -72,6 +74,7 @@ beforeEach(async () => {
 	cart.close();
 	localStorage.clear();
 	price = 500;
+	benefitLabel = null;
 	mocks.goto.mockReset();
 	mocks.warning.mockReset();
 	mocks.createOrder.mockReset();
@@ -92,6 +95,17 @@ afterEach(() => {
 	cart.close();
 	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
+});
+it('shows selected terms and human quantities without repeating platform text or creating a payment', async () => {
+	benefitLabel = '30-day refill';
+	seed();
+	render(Checkout, {
+		data: { user, storeCredit: { totalAvailable: 0 }, affiliateRef: null }
+	} as never);
+	await expect.element(page.getByText('200 likes', { exact: true })).toBeVisible();
+	await expect.element(page.getByText('30-day refill', { exact: true })).toBeVisible();
+	await expect.element(page.getByText('Instagram', { exact: true })).not.toBeInTheDocument();
+	expect(mocks.createOrder).not.toHaveBeenCalled();
 });
 it('does not redirect a removed Boosting offer to Numbers or clear other cart items', async () => {
 	seed();

@@ -59,6 +59,16 @@ beforeEach(() => {
 });
 
 describe('public live Boosting offer copy', () => {
+	it('includes a reviewed benefit without revealing suppliers or numbering options', async () => {
+		const base = (await mocks.findMany())[0];
+		base.refillDays = 30;
+		base.routes[0].verifiedRefillDays = 30;
+		base.routes[0].providerService.refillAdvertised = true;
+		mocks.findMany.mockResolvedValue([base, { ...base, id: 'other', refillDays: null }]);
+		const body = await (await GET({ setHeaders: vi.fn() } as never)).json();
+		expect(body.data[0].benefitLabel).toBe('30-day refill');
+		expect(JSON.stringify(body)).not.toMatch(/Standard option|providerService|verifiedSignals/);
+	});
 	it.each(['funds', 'stale', 'refill', 'approval', 'missing'])(
 		'does not sell a known unavailable offer: %s',
 		async (issue) => {

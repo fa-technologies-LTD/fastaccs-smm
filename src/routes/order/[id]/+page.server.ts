@@ -10,6 +10,7 @@ import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 import { getBoostComplaintEligibility } from '$lib/server/boosting-providers/complaints';
 import { sanitizeCustomerOrder } from '$lib/helpers/customer-order-visibility';
 import { getBoostingProgress } from '$lib/helpers/boosting-progress';
+import { boostBenefitLabel, boostQuantityText } from '$lib/helpers/boosting-customer-facts';
 import { isPhoneRefundConfirmed } from '$lib/helpers/phone-refund-state';
 
 export const load: PageServerLoad = async ({ params, locals, url, depends }) => {
@@ -161,6 +162,13 @@ export const load: PageServerLoad = async ({ params, locals, url, depends }) => 
 			allocatedCount: item.accounts.length,
 			boostIssueReason: latestBoostingIssueByItem.get(item.id) || null,
 			boostProgress: getBoostingProgress(item, order),
+			boostBenefitLabel: boostBenefitLabel(item.boostFulfillment?.offerSnapshot),
+			boostQuantityLabel: boostQuantityText(
+				item.boostQuantity ?? 0,
+				String(
+					(item.boostFulfillment?.offerSnapshot as Record<string, unknown> | null)?.outcome ?? ''
+				)
+			),
 			boostComplaintEligibility: item.boostFulfillment
 				? getBoostComplaintEligibility({
 						offerSnapshot: item.boostFulfillment.offerSnapshot,

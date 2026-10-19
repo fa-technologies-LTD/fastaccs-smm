@@ -50,6 +50,17 @@ function data(
 }
 
 describe('customer Boosting progress and refill journey', () => {
+	it('keeps the purchased benefit alongside its contextual quantity and original item name', async () => {
+		const d = data('pending') as unknown as { order: { orderItems: Record<string, unknown>[] } };
+		d.order.orderItems[0].boostBenefitLabel = '30-day refill';
+		d.order.orderItems[0].boostQuantityLabel = '100 likes';
+		render(OrderPage, { data: d } as never);
+		await expect
+			.element(page.getByRole('heading', { name: 'TikTok Likes', exact: true }))
+			.toBeVisible();
+		await expect.element(page.getByText('30-day refill', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('100 likes for:', { exact: true })).toBeVisible();
+	});
 	it('shows support wording as plain text without changing reported delivery', async () => {
 		const d = data('in_progress', { remains: 40 }) as Record<string, unknown>;
 		render(OrderPage, {

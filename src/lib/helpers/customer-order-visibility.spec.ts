@@ -2,6 +2,33 @@ import { describe, expect, it } from 'vitest';
 import { sanitizeCustomerOrder } from './customer-order-visibility';
 
 describe('customer order DTO', () => {
+	it('shows purchased benefit/units from the frozen snapshot, not a current offer or supplied display field', () => {
+		const result = sanitizeCustomerOrder({
+			status: 'paid',
+			paymentStatus: 'paid',
+			orderItems: [
+				{
+					id: 'boost',
+					accounts: [],
+					boostTargetUrl: 'https://x.com/fixture',
+					boostQuantity: 500,
+					boostBenefitLabel: '90-day guarantee',
+					boostFulfillment: {
+						offerSnapshot: { outcome: 'followers', refillDays: 30 },
+						provider: 'private-provider',
+						offer: { refillDays: 90 }
+					}
+				}
+			]
+		});
+		expect(result.orderItems).toEqual([
+			expect.objectContaining({
+				boostBenefitLabel: '30-day refill',
+				boostQuantityLabel: '500 followers'
+			})
+		]);
+		expect(JSON.stringify(result)).not.toMatch(/90-day|private-provider|offerSnapshot/);
+	});
 	it('exposes only the reporting owner, never tracking IDs or refund dispatch metadata', () => {
 		const result = sanitizeCustomerOrder({
 			id: 'order',

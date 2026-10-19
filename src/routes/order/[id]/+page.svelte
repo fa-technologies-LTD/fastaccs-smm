@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { boostQuantityText } from '$lib/helpers/boosting-customer-facts';
 	import { goto, invalidate } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { CheckCircle, Clock, XCircle, Copy, ExternalLink } from '$lib/icons';
@@ -468,7 +469,18 @@
 							<div class="pb-6 last:pb-0" style="border-bottom: 1px solid var(--border);">
 								<div class="flex items-start justify-between">
 									<div class="flex-1">
-										<h4 class="font-medium" style="color: var(--text);">{item.category.name}</h4>
+										<h4 class="font-medium" style="color: var(--text);">
+											{isBoostingItem(item)
+												? item.productName || item.category.name
+												: item.category.name}
+										</h4>
+										{#if isBoostingItem(item) && item.boostBenefitLabel && !(item.productName || '')
+												.toLowerCase()
+												.includes(item.boostBenefitLabel.toLowerCase())}
+											<p class="mt-1 text-xs font-medium" style="color: var(--text-muted);">
+												{item.boostBenefitLabel}
+											</p>
+										{/if}
 										{#if !isBoostingItem(item)}
 											<p class="text-sm" style="color: var(--text-muted);">
 												Quantity: {item.quantity} • {formatPrice(item.unitPrice)} each
@@ -591,8 +603,8 @@
 													</p>
 												{/if}
 												<p class="text-xs" style="color: var(--text-muted);">
-													{item.boostQuantity?.toLocaleString() ?? '?'}
-													{item.category.name} for:
+													{item.boostQuantityLabel ||
+														boostQuantityText(item.boostQuantity ?? 0, '')} for:
 												</p>
 												<a
 													href={getBoostingTargetUrl(item)}

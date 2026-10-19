@@ -1,9 +1,11 @@
 import { BOOSTING_ACTION_LABELS, BOOSTING_PLATFORM_LABELS } from './boosting-service-config';
 import type { BoostingActionType, BoostingPlatform } from './social-link-validator';
+import { boostBenefitLabel } from './boosting-customer-facts';
 
 const unsupportedClaim =
 	/less likely to drop|staying power|\b(?:high(?:er)?[ -]?quality|best|more stable|premium quality|refill|protection)\b|non.?drop|guaranteed|real (?:users|people)|instant delivery/i;
-const tierLabel = /^(?:affordable|value|more stable|stable|premium|recommended)$/i;
+const tierLabel =
+	/^(?:affordable|value|more stable|stable|premium|recommended|lower price|lowest price|cheaper|best value)$/i;
 
 /** Remove inherited quality promises; never turn a supplier advertisement into a guarantee. */
 export function boostCustomerCopy(offer: {
@@ -22,6 +24,7 @@ export function boostCustomerCopy(offer: {
 	).trim();
 	const generatedName =
 		!suffix ||
+		/\b(?:standard option(?: \d+)?|option \d+)$/i.test(offer.customerName) ||
 		unsupportedClaim.test(offer.customerName) ||
 		tierLabel.test(suffix) ||
 		tierLabel.test(offer.customerName) ||
@@ -40,21 +43,45 @@ export function boostCustomerCopy(offer: {
 				!/premium quality|refill|protection/i.test(chip)
 		),
 		refillDays: offer.refillDays,
-		optionLabel: offer.refillDays ? `${offer.refillDays}-day refill option` : 'Standard option'
+		optionLabel: boostBenefitLabel(offer) ?? 'No refill'
 	};
+}
+
+/** Strip context already visible above the choices, including old generated option numbers. */
+export function boostCustomerShortName(
+	offer: Parameters<typeof boostCustomerCopy>[0]
+): string | null {
+	const copy = boostCustomerCopy(offer);
+	const outcome = BOOSTING_ACTION_LABELS[offer.outcome as BoostingActionType] ?? offer.outcome;
+	const bases = [
+		`${BOOSTING_PLATFORM_LABELS[offer.platform as BoostingPlatform] ?? offer.platform} ${outcome}`,
+		...(offer.platform === 'x' ? [`X ${outcome}`] : []),
+		outcome
+	];
+	let name = copy.customerName.trim();
+	for (const base of bases) {
+		if (name.toLowerCase() === base.toLowerCase()) return null;
+		if (name.toLowerCase().startsWith(`${base.toLowerCase()} · `)) {
+			name = name
+				.slice(base.length)
+				.replace(/^[\s·—–:-]+/, '')
+				.trim();
+			break;
+		}
+	}
+	return !name ||
+		/^(?:standard option(?: \d+)?|no refill|\d+-day refill(?: option)?|option \d+)$/i.test(name)
+		? null
+		: name;
 }
 
 export function boostCustomerOptionName(
 	offer: Parameters<typeof boostCustomerCopy>[0],
-	index: number,
+	_index: number,
 	count: number
 ) {
 	const copy = boostCustomerCopy(offer);
 	if (count <= 1) return copy.customerName;
 	const baseName = `${BOOSTING_PLATFORM_LABELS[offer.platform as BoostingPlatform] ?? offer.platform} ${BOOSTING_ACTION_LABELS[offer.outcome as BoostingActionType] ?? offer.outcome}`;
-	return copy.customerName === offer.customerName &&
-		offer.customerName !== baseName &&
-		!tierLabel.test(offer.customerName)
-		? copy.customerName
-		: `${copy.customerName} · ${copy.optionLabel}${offer.refillDays ? '' : ` ${index + 1}`}`;
+	return boostCustomerShortName(offer) ? copy.customerName : `${baseName} · ${copy.optionLabel}`;
 }

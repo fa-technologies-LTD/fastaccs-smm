@@ -18,9 +18,9 @@ it('does not invent quality evidence or a tier label for a single option', () =>
 });
 it('distinguishes options with factual refill terms, not comparative quality', () => {
 	expect(boostCustomerOptionName({ ...offer, refillDays: 30 }, 1, 2)).toBe(
-		'Instagram Followers · 30-day refill option'
+		'Instagram Followers · 30-day refill'
 	);
-	expect(boostCustomerOptionName(offer, 0, 2)).toBe('Instagram Followers · Standard option 1');
+	expect(boostCustomerOptionName(offer, 0, 2)).toBe('Instagram Followers · No refill');
 });
 it('keeps neutral owner-written names and descriptions', () => {
 	expect(

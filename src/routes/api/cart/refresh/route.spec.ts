@@ -96,6 +96,21 @@ async function refresh(comments: unknown, quantity: number) {
 }
 
 describe('Boosting custom comments survive cart refresh', () => {
+	it('returns only server-reviewed benefit labels with unchanged quantities and prices', async () => {
+		const offers = await mocks.offers();
+		offers[0].refillDays = 7;
+		offers[0].routes[0].verifiedRefillDays = 7;
+		offers[0].routes[0].providerService.refillAdvertised = true;
+		mocks.offers.mockResolvedValue(offers);
+		const result = await refresh(Array.from({ length: 10 }, () => 'Local test').join('\n'), 10);
+		expect(result.data.items[0].tier.boostingConfig).toMatchObject({
+			benefitLabel: '7-day refill',
+			pricePerStep: 10.5,
+			stepQuantity: 1
+		});
+		expect(result.data.items[0].boosting.boostQuantity).toBe(10);
+		expect(JSON.stringify(result)).not.toContain('providerService');
+	});
 	it('removes a known-unavailable mapping and keeps supplier details private', async () => {
 		const offers = await mocks.offers();
 		offers[0].routes[0].providerService.providerState.projectedBalance = 0;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { boostQuantityText } from '$lib/helpers/boosting-customer-facts';
 	import { onMount } from 'svelte';
 	import { boostingMinimumMessage } from '$lib/helpers/boosting-checkout';
 	import { goto } from '$app/navigation';
@@ -1090,12 +1091,19 @@
 												>
 													{item.tier.name}
 												</h4>
-												<p
-													class="text-xs"
-													style="color: var(--text-muted); font-family: var(--font-body);"
-												>
-													{item.tier.platformName}
-												</p>
+												{#if !item.boosting}<p
+														class="text-xs"
+														style="color: var(--text-muted); font-family: var(--font-body);"
+													>
+														{item.tier.platformName}
+													</p>{/if}
+												{#if item.boosting && item.tier.boostingConfig?.benefitLabel && !item.tier.name
+														.toLowerCase()
+														.includes(item.tier.boostingConfig.benefitLabel.toLowerCase())}
+													<p class="mt-1 text-xs font-medium" style="color: var(--text-muted);">
+														{item.tier.boostingConfig.benefitLabel}
+													</p>
+												{/if}
 												{#if item.exactAccount}
 													<a
 														href={item.exactAccount.profileUrl}
@@ -1188,7 +1196,10 @@
 													class="rounded-md px-2 py-1 text-xs font-semibold"
 													style="border: 1px solid var(--border); color: var(--text-muted); background: var(--bg-elev-2);"
 												>
-													{item.boosting.boostQuantity.toLocaleString()} qty
+													{boostQuantityText(
+														item.boosting.boostQuantity,
+														item.tier.boostingConfig?.actionType ?? ''
+													)}
 												</span>
 											{:else if item.exactAccount || item.tier.deliveryMode === 'auto_sms'}
 												<span
