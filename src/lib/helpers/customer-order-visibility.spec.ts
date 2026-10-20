@@ -2,6 +2,31 @@ import { describe, expect, it } from 'vitest';
 import { sanitizeCustomerOrder } from './customer-order-visibility';
 
 describe('customer order DTO', () => {
+	it('exposes the support request but not its raw events or private delivery evidence', () => {
+		const result = sanitizeCustomerOrder({
+			status: 'completed',
+			paymentStatus: 'paid',
+			orderItems: [
+				{
+					id: 'item',
+					boostTargetUrl: 'https://instagram.com/example',
+					boostSupport: { state: 'forged' },
+					boostSupportEvents: [
+						{
+							id: 'event',
+							type: 'boosting_support_resolved',
+							description: 'Support confirmed delivery.',
+							occurredAt: new Date(),
+							metadata: { evidence: 'PRIVATE-EVIDENCE', previousSupplierStatus: 'PRIVATE-PROVIDER' }
+						}
+					],
+					accounts: []
+				}
+			]
+		});
+		expect(JSON.stringify(result)).toContain('Support confirmed delivery.');
+		expect(JSON.stringify(result)).not.toMatch(/PRIVATE-|boostSupportEvents|forged/);
+	});
 	it('shows purchased benefit/units from the frozen snapshot, not a current offer or supplied display field', () => {
 		const result = sanitizeCustomerOrder({
 			status: 'paid',

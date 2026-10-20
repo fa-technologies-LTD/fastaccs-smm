@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { getRequiredAdminPermission } from './admin-roles';
 
 describe('order route permissions', () => {
+	it('allows only POST customer support replies to use their own strict owner check', () => {
+		expect(
+			getRequiredAdminPermission('/api/orders/order-1/boosting-support/item-1', 'POST')
+		).toBeNull();
+		expect(getRequiredAdminPermission('/api/orders/order-1/boosting-support/item-1', 'PATCH')).toBe(
+			'admin:orders:manage'
+		);
+		expect(getRequiredAdminPermission('/api/admin/boosting-orders/item-1/support', 'POST')).toBe(
+			'admin:orders:manage'
+		);
+	});
 	it('lets the customer boosting-link endpoint perform its own owner check', () => {
 		expect(
 			getRequiredAdminPermission('/api/orders/order-1/boosting-link/item-1', 'PATCH')

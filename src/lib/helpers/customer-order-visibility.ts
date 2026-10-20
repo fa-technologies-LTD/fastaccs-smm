@@ -3,6 +3,7 @@ import { toPublicCategory } from './public-category';
 import { getBoostingProgress } from './boosting-progress';
 import { boostBenefitLabel, boostQuantityText } from './boosting-customer-facts';
 import { ga4PurchaseReporter } from '$lib/server/ga4-order-metadata';
+import { getBoostSupportState, type BoostSupportEvent } from './boosting-support';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -117,6 +118,12 @@ export function sanitizeCustomerOrder(order: unknown): JsonRecord {
 	result.orderItems = items.map((value) => {
 		const item = asRecord(value);
 		const safe = copyAllowed(item, CUSTOMER_ORDER_ITEM_FIELDS);
+		if (item.boostTargetUrl)
+			safe.boostSupport = getBoostSupportState(
+				Array.isArray(item.boostSupportEvents)
+					? (item.boostSupportEvents as BoostSupportEvent[])
+					: []
+			);
 		const progress = getBoostingProgress(item, raw);
 		if (progress) safe.boostProgress = progress;
 		if (progress) {

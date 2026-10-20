@@ -367,6 +367,12 @@ export function getRequiredAdminPermission(
 	if (normalizedMethod === 'POST' && /^\/api\/orders\/[^/]+\/boosting-complaints$/.test(pathname)) {
 		return null;
 	}
+	// This support-only reply route checks the signed-in order owner under the order lock.
+	if (
+		normalizedMethod === 'POST' &&
+		/^\/api\/orders\/[^/]+\/boosting-support\/[^/]+$/.test(pathname)
+	)
+		return null;
 
 	if (pathname.startsWith('/api/orders/')) {
 		if (pathname.startsWith('/api/orders/stats')) {

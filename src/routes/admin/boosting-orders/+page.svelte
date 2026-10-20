@@ -1,5 +1,7 @@
 <script lang="ts">
 	import AnalyticsNavigation from '$lib/components/admin/AnalyticsNavigation.svelte';
+	import BoostingOrderSupport from '$lib/components/admin/BoostingOrderSupport.svelte';
+	import { boostReviewNotice, type BoostSupportState } from '$lib/helpers/boosting-support';
 	import { untrack } from 'svelte';
 	import {
 		AlertTriangle,
@@ -39,6 +41,7 @@
 	type ItemStatus = BoostItemStatus;
 
 	interface BoostingOrderItem {
+		support?: BoostSupportState;
 		id: string;
 		holdReasons?: string[];
 		overdueReview?: boolean;
@@ -89,6 +92,7 @@
 	}
 
 	interface ListMeta {
+		canManageOrders?: boolean;
 		page: number;
 		pageSize: number;
 		total: number;
@@ -125,10 +129,12 @@
 	let analyticsError = $state(untrack(() => data.analyticsError));
 	let analyticsLoading = $state(false);
 	let analyticsRequestId = 0;
-	let statusFilter = $state<StatusFilter>('active');
+	let statusFilter = $state<StatusFilter>(
+		untrack(() => (data.meta.status || 'active') as StatusFilter)
+	);
 	let sortOrder = $state<'newest' | 'oldest'>('newest');
-	let searchDraft = $state('');
-	let appliedSearch = $state('');
+	let searchDraft = $state(untrack(() => data.meta.search || ''));
+	let appliedSearch = $state(untrack(() => data.meta.search || ''));
 	let loading = $state(false);
 	let busyItemId = $state<string | null>(null);
 	let shadowRunning = $state(false);
@@ -887,7 +893,7 @@
 							<p
 								class="w-full rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300"
 							>
-								24-hour review due. Delivery is still open; this is not confirmed failure.
+								{boostReviewNotice(item.shadowDecision?.attention)}
 							</p>
 						{/if}
 						<a
@@ -949,6 +955,24 @@
 						{/if}
 					</div>
 				</div>
+				<BoostingOrderSupport
+					itemId={item.id}
+					orderId={item.order.id}
+					productName={item.productName}
+					support={item.support}
+					held={item.fulfillmentState?.status === 'manual_review' ||
+						(item.fulfillmentState?.status === 'completed' &&
+							item.complaints.some((complaint) =>
+								['open', 'validated'].includes(complaint.status)
+							)) ||
+						(!item.fulfillmentState && ['under_review', 'needs_link', 'partial'].includes(status))}
+					canManage={meta.canManageOrders === true}
+					canRequestLink={item.fulfillmentState?.status !== 'completed' && status !== 'completed'}
+					onUpdated={async () => {
+						await refreshAll();
+						refreshAdminAttentionBadges();
+					}}
+				/>
 			</article>
 		{/each}
 

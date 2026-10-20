@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BoostingSupportReply from '$lib/components/BoostingSupportReply.svelte';
 	import { boostQuantityText } from '$lib/helpers/boosting-customer-facts';
 	import { goto, invalidate } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -115,9 +116,7 @@
 	// Show guidance only when it's actually relevant, so refunded/failed orders aren't cluttered
 	// with account-care tips for a product that was never delivered.
 	const paymentState = $derived(getPaymentState(data.order.status, data.order.paymentStatus));
-	const fulfillmentLabel = $derived(
-		getFulfillmentState(data.order.status, data.order.deliveryStatus, paymentState.tone)
-	);
+	const fulfillmentLabel = $derived(getCustomerFulfillmentLabel());
 	const orderDelivered = $derived(fulfillmentLabel === 'Completed');
 	const isPhoneOrder = $derived(data.order.orderType === 'phone');
 	const displayOrderNumber = $derived(formatOrderRef(data.order.orderNumber, data.order.id));
@@ -136,6 +135,26 @@
 
 	function isBoostingOrder(): boolean {
 		return data.order.orderItems.some(isBoostingItem);
+	}
+	function getCustomerFulfillmentLabel(): string {
+		const fallback = getFulfillmentState(
+			data.order.status,
+			data.order.deliveryStatus,
+			paymentState.tone
+		);
+		if (!isBoostingOrder() || paymentState.tone !== 'success' || fallback === 'Refunded')
+			return fallback;
+		const states = data.order.orderItems.filter(isBoostingItem).map(getBoostingStatus);
+		if (states.length && states.every((state) => state === 'completed')) return 'Completed';
+		if (states.includes('needs_link')) return 'Action needed';
+		if (
+			states.some((state) =>
+				['under_review', 'manual_review', 'partial', 'rejected'].includes(state)
+			)
+		)
+			return 'Under review';
+		if (states.every((state) => state === 'cancelled')) return 'Cancelled';
+		return 'Processing';
 	}
 
 	function getBoostingStatus(item: (typeof data.order.orderItems)[number]): string {
@@ -178,7 +197,7 @@
 			const active = data.order.orderItems.some(
 				(item) =>
 					(isBoostingItem(item) &&
-						['pending', 'queued', 'in_progress', 'under_review', 'partial'].includes(
+						['pending', 'queued', 'needs_link', 'in_progress', 'under_review', 'partial'].includes(
 							getBoostingStatus(item)
 						)) ||
 					item.boostComplaints?.some((report) =>
@@ -560,7 +579,14 @@
 															})} WAT
 														</p>{/if}
 												{/if}
-												{#if getBoostingStatus(item) === 'needs_link'}
+												{#if item.boostSupport && item.boostSupport.state !== 'none'}
+													{#key `${item.id}:${item.boostSupport.revision}`}<BoostingSupportReply
+															support={item.boostSupport}
+															orderId={data.order.id}
+															itemId={item.id}
+															onSubmitted={() => invalidate('app:order-progress')}
+														/>{/key}
+												{:else if getBoostingStatus(item) === 'needs_link'}
 													<div
 														class="mb-3 rounded-lg border p-3"
 														style="border-color: rgba(234,179,8,0.35); background: rgba(234,179,8,0.08);"

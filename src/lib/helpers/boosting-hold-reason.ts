@@ -1,8 +1,16 @@
 const reasons: Record<string, string> = {
-	provider_rejected: 'The supplier explicitly rejected the submission. Check the order history before deciding how to resolve it.',
-	balance_reservation_failed: 'The available supplier balance could not cover this order after its safety reserve.',
-	submission_order_hold: 'This order is unpaid, cancelled, refunded or otherwise on hold. Do not send it to a supplier.',
-	submission_state_changed: 'The order state changed before submission. Check for an existing supplier reference before taking action.',
+	admin_link_requested:
+		'The customer has been asked to send a valid link. Delivery is held for support review.',
+	admin_link_reply:
+		'The customer has sent a replacement link for review. The original supplier target has not been changed or resubmitted.',
+	provider_rejected:
+		'The supplier explicitly rejected the submission. Check the order history before deciding how to resolve it.',
+	balance_reservation_failed:
+		'The available supplier balance could not cover this order after its safety reserve.',
+	submission_order_hold:
+		'This order is unpaid, cancelled, refunded or otherwise on hold. Do not send it to a supplier.',
+	submission_state_changed:
+		'The order state changed before submission. Check for an existing supplier reference before taking action.',
 	not_approved: 'The supplier mapping has not been approved.',
 	route_not_enabled: 'The supplier mapping is paused or not enabled.',
 	provider_unavailable:

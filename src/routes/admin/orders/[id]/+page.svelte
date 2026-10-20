@@ -32,6 +32,7 @@
 	} from '$lib/helpers/credential-contract';
 	import { normalizeAccountStatus } from '$lib/helpers/account-status';
 	import { canCompleteOrder } from '$lib/helpers/order-completion';
+	import { getBoostOrderSummaryStatus } from '$lib/helpers/boosting-progress';
 
 	// Props from load function
 	interface Props {
@@ -60,6 +61,7 @@
 	let hideMonetaryAmounts = $state(false);
 
 	let order = $state(data.order);
+	const displayStatus = $derived(getBoostOrderSummaryStatus(order) ?? order.status);
 	let items = $state<OrderItemWithDetails[]>(data.items);
 	const orderedItems = $derived(data.orderedItems || []);
 	const isBoostingOrder = $derived(
@@ -151,6 +153,7 @@
 	}
 
 	function formatStatusLabel(status: string) {
+		if (status === 'needs_link') return 'Action needed';
 		return String(status || '')
 			.replace(/_/g, ' ')
 			.replace(/\b\w/g, (char) => char.toUpperCase());
@@ -246,6 +249,12 @@
 		newStatus: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled'
 	) {
 		if (isProcessing) return;
+		if (newStatus === 'completed' && isBoostingOrder) {
+			await goto(
+				`/admin/boosting-orders?q=${encodeURIComponent(String(order.orderNumber || order.id))}`
+			);
+			return;
+		}
 
 		// Cancelling a PAID order: offer to refund it to store credit in the same step.
 		if (
@@ -544,17 +553,17 @@
 					<div class="flex-1">
 						<div class="mb-2 flex items-center gap-3">
 							{#if order}
-								{@const StatusIcon = getStatusIcon(order.status)}
-								<StatusIcon class="h-6 w-6 {getStatusColor(order.status).split(' ')[0]}" />
+								{@const StatusIcon = getStatusIcon(displayStatus)}
+								<StatusIcon class="h-6 w-6 {getStatusColor(displayStatus).split(' ')[0]}" />
 								<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text);">
 									Order #{getDisplayOrderId(order.id)}
 								</h1>
 								<span
 									class="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium {getStatusColor(
-										order.status
+										displayStatus
 									)}"
 								>
-									{formatStatusLabel(order.status)}
+									{formatStatusLabel(displayStatus)}
 								</span>
 							{/if}
 						</div>
@@ -567,7 +576,20 @@
 				</div>
 
 				<!-- Quick Actions -->
+				{#if isBoostingOrder && order.status === 'completed' && (order as unknown as { orderItems: Array<{ boostTargetUrl?: string; boostFulfillmentStatus?: string }> }).orderItems.some((item) => item.boostTargetUrl && item.boostFulfillmentStatus !== 'completed')}
+					<p
+						class="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200"
+					>
+						The order summary was marked done, but a Boosting item still needs attention. Use Manage
+						delivery review to confirm delivery or handle the customer’s next step.
+					</p>
+				{/if}
 				<div class="flex flex-wrap items-center gap-2 sm:gap-3">
+					{#if canManageOrders && isBoostingOrder}<a
+							href={`/admin/boosting-orders?q=${encodeURIComponent(String(order.orderNumber || order.id))}`}
+							class="rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold"
+							>Manage delivery review</a
+						>{/if}
 					{#if order.status === 'pending' || order.status === 'pending_payment'}
 						<button
 							onclick={() => updateStatus('processing')}
@@ -589,7 +611,7 @@
 						{/if}
 					{/if}
 
-					{#if order.status === 'processing'}
+					{#if order.status === 'processing' && !isBoostingOrder}
 						<button
 							onclick={processDelivery}
 							disabled={isProcessing}
@@ -600,7 +622,7 @@
 						</button>
 					{/if}
 
-					{#if canCompleteOrder(order)}
+					{#if canCompleteOrder(order) && !isBoostingOrder}
 						<button
 							onclick={() => updateStatus('completed')}
 							disabled={isProcessing}
@@ -1177,45 +1199,47 @@
 				{/if}
 
 				<!-- Delivery Management -->
-				<div class="rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] p-6 shadow-sm">
-					<h3 class="mb-4 text-lg font-semibold text-[var(--text)]">Delivery Management</h3>
+				{#if !isBoostingOrder}
+					<div class="rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] p-6 shadow-sm">
+						<h3 class="mb-4 text-lg font-semibold text-[var(--text)]">Delivery Management</h3>
 
-					<div class="space-y-4">
-						<div>
-							<label
-								for="delivery-method"
-								class="mb-2 block text-sm font-medium text-[var(--text-muted)]"
+						<div class="space-y-4">
+							<div>
+								<label
+									for="delivery-method"
+									class="mb-2 block text-sm font-medium text-[var(--text-muted)]"
+								>
+									Delivery Method
+								</label>
+								<select
+									id="delivery-method"
+									bind:value={selectedDeliveryMethod}
+									class="w-full rounded-lg border border-[var(--border)] px-3 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+								>
+									<option value="email">Email</option>
+									<option value="whatsapp">WhatsApp</option>
+									<option value="telegram">Telegram</option>
+								</select>
+							</div>
+
+							<button
+								onclick={processDelivery}
+								disabled={isProcessing || order.status === 'completed'}
+								class="flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
 							>
-								Delivery Method
-							</label>
-							<select
-								id="delivery-method"
-								bind:value={selectedDeliveryMethod}
-								class="w-full rounded-lg border border-[var(--border)] px-3 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
-							>
-								<option value="email">Email</option>
-								<option value="whatsapp">WhatsApp</option>
-								<option value="telegram">Telegram</option>
-							</select>
+								{#if isProcessing}
+									<RefreshCw class="h-4 w-4 animate-spin" />
+									Processing...
+								{:else}
+									<Send class="h-4 w-4" />
+									Send via {formatDeliveryMethod(selectedDeliveryMethod)}
+								{/if}
+							</button>
 						</div>
-
-						<button
-							onclick={processDelivery}
-							disabled={isProcessing || order.status === 'completed'}
-							class="flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-						>
-							{#if isProcessing}
-								<RefreshCw class="h-4 w-4 animate-spin" />
-								Processing...
-							{:else}
-								<Send class="h-4 w-4" />
-								Send via {formatDeliveryMethod(selectedDeliveryMethod)}
-							{/if}
-						</button>
 					</div>
-				</div>
 
-				<!-- Order Status Management -->
+					<!-- Order Status Management -->
+				{/if}
 				<div class="rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] p-6 shadow-sm">
 					<h3 class="mb-4 text-lg font-semibold text-[var(--text)]">Status Management</h3>
 
@@ -1238,7 +1262,7 @@
 								class="flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
 							>
 								<CheckCircle class="h-4 w-4" />
-								Mark as Completed
+								{isBoostingOrder ? 'Review Boosting delivery' : 'Mark as Completed'}
 							</button>
 						{/if}
 

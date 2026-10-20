@@ -1,4 +1,4 @@
-import { page as browser } from '@vitest/browser/context';
+import { page as browser } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { page } from '$app/state';

@@ -22,6 +22,37 @@ function date(value: unknown): string | null {
 	return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
+/** Display only: never let a legacy order-summary Done flag hide unfinished delivery. */
+export function getBoostOrderSummaryStatus(orderValue: unknown): string | null {
+	const order = record(orderValue);
+	const items = Array.isArray(order.orderItems) ? order.orderItems : [];
+	const boosts = items.filter((item) => Boolean(record(item).boostTargetUrl));
+	if (!boosts.length) return null;
+	if ([order.status, order.paymentStatus, order.deliveryStatus].includes('refunded'))
+		return 'refunded';
+	if (order.status === 'cancelled') return 'cancelled';
+	if (!isOrderPaymentConfirmed({ status: order.status, paymentStatus: order.paymentStatus }))
+		return 'pending';
+	const states = boosts.map((item) => {
+		const progress = record(record(item).boostProgress);
+		return typeof progress.status === 'string'
+			? progress.status
+			: getBoostingProgress(item, order)?.status;
+	});
+	if (states.includes('needs_link')) return 'needs_link';
+	if (
+		states.some((state) =>
+			['under_review', 'manual_review', 'partial', 'rejected'].includes(state ?? '')
+		)
+	)
+		return 'under_review';
+	if (states.every((state) => state === 'completed'))
+		return boosts.length === items.length ? 'completed' : 'processing';
+	if (states.every((state) => state === 'cancelled')) return 'cancelled';
+	if (states.every((state) => state === 'refunded')) return 'refunded';
+	return 'processing';
+}
+
 /** Buyer-facing delivery state, not payment state or a guarantee of visible engagement. */
 export function getBoostingProgress(
 	itemValue: unknown,
@@ -36,6 +67,11 @@ export function getBoostingProgress(
 	if (fulfillment.status === 'manual_review' || fulfillment.status === 'submission_unknown') {
 		status = fulfillment.lastSafeErrorCategory === 'provider_partial' ? 'partial' : 'under_review';
 	}
+	if (
+		item.boostFulfillmentStatus === 'needs_link' &&
+		fulfillment.lastSafeErrorCategory === 'admin_link_requested'
+	)
+		status = 'needs_link';
 	if (order.status === 'cancelled') status = 'cancelled';
 	if (
 		order.paymentStatus === 'refunded' ||

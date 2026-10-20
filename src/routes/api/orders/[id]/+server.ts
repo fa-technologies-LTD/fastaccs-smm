@@ -294,10 +294,28 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 			await tx.$queryRaw`SELECT id FROM orders WHERE id = ${params.id}::uuid FOR UPDATE`;
 			const current = await tx.order.findUnique({
 				where: { id: params.id },
-				select: { status: true, paymentStatus: true, deliveryStatus: true }
+				select: { status: true, paymentStatus: true, deliveryStatus: true, orderType: true }
 			});
 			if (!current) return { blocked: 'not_found' as const };
 			if (isRefundReversal(current, updateData)) return { blocked: 'refunded' as const };
+			if (
+				current.orderType === 'boosting' &&
+				(updateData.status === 'completed' || updateData.deliveryStatus === 'delivered')
+			) {
+				const unfinished = await tx.orderItem.findFirst({
+					where: {
+						orderId: params.id,
+						boostTargetUrl: { not: null },
+						OR: [
+							{ boostFulfillmentStatus: null },
+							{ boostFulfillmentStatus: { not: 'completed' } },
+							{ boostFulfillment: { is: { status: { not: 'completed' } } } }
+						]
+					},
+					select: { id: true }
+				});
+				if (unfinished) return { blocked: 'boost_review' as const };
+			}
 			const finalPaymentStatus =
 				typeof updateData.paymentStatus === 'string'
 					? updateData.paymentStatus
@@ -384,6 +402,15 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 				{ status: 409 }
 			);
 		}
+		if (outcome.blocked === 'boost_review')
+			return json(
+				{
+					data: null,
+					error:
+						'This Boosting delivery still needs review. Use Mark completed in Boosting Orders to confirm delivery and close its review together.'
+				},
+				{ status: 409 }
+			);
 		const data = outcome.data;
 		if (data.status === 'cancelled' || data.status === 'failed') {
 			await releaseOrderReservations(data.id);

@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID, scryptSync } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
-import { verifiedNativeStagingUrl } from './verified-native-staging.mjs';
+import { createVerifiedStagingBridge } from './verified-staging-bridge.mjs';
 
 // Built application, real separate staging PostgreSQL, rollback-only synthetic fixtures.
 // No supplier/client imports, paid order, wallet credit, real gateway, emails or persistent edits.
 if (process.argv.length !== 2) throw new Error('No arguments accepted. Build locally first.');
-const target = verifiedNativeStagingUrl();
+const bridge = await createVerifiedStagingBridge();
+const target = bridge.url;
 const db = new PrismaClient({ datasourceUrl: target, log: [] });
 const originalFetch = globalThis.fetch;
 const rollback = new Error('EXPECTED_FIXTURE_ROLLBACK');
@@ -560,6 +561,7 @@ try {
 		process.exitCode = 1;
 	}
 	await db.$disconnect();
+	await bridge.close();
 }
 // The compiled application has unrelated background timers. All transaction cleanup above
 // is awaited before ending this isolated verification process.

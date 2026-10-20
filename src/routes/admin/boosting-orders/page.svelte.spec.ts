@@ -1,4 +1,4 @@
-import { page } from '@vitest/browser/context';
+import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import '$lib/../app.css';
@@ -169,7 +169,9 @@ it('shows purchased refill protection and supplier progress without manual compl
 	render(Page, { data } as never);
 	await expect
 		.element(
-			page.getByText('24-hour review due. Delivery is still open; this is not confirmed failure.')
+			page.getByText(
+				'24-hour review due. Check the latest delivery evidence; elapsed time alone does not confirm failure.'
+			)
 		)
 		.toBeVisible();
 	await expect.element(page.getByText('7-day refill', { exact: true })).toBeVisible();
@@ -195,3 +197,109 @@ it('fits a mobile viewport without horizontal page scrolling', async () => {
 	expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
 	await page.screenshot({ path: '__screenshots__/mobile.png' });
 });
+it.each(['manual_review', 'completed'])(
+	'one confirmed completion clears the %s delivery review from Active and keeps Completed history',
+	async (fulfillmentStatus) => {
+		const held = {
+			id: 'held-item',
+			productName: 'Instagram Followers',
+			boostTargetUrl: 'https://instagram.com/example',
+			boostQuantity: 500,
+			boostFulfillmentStatus: 'under_review',
+			boostProviderReference: null,
+			boostCompletedAt: null,
+			createdAt: '2026-10-14T11:00:00Z',
+			complaints:
+				fulfillmentStatus === 'completed'
+					? [
+							{
+								id: 'customer-review',
+								type: 'missing',
+								status: 'open',
+								createdAt: '2026-10-14T12:00:00Z'
+							}
+						]
+					: [],
+			latestIssue: null,
+			shadowDecision: null,
+			fulfillmentState: { status: fulfillmentStatus, mode: 'live' },
+			holdReasons: ['Supplier reported cancellation.'],
+			category: { metadata: {} },
+			order: {
+				id: 'held-order',
+				orderNumber: 'DEMO-MANUALLY-SORTED',
+				createdAt: '2026-10-14T11:00:00Z',
+				paidAt: '2026-10-14T11:01:00Z',
+				user: null,
+				guestEmail: null
+			}
+		};
+		let completed = false;
+		const listMeta = () => ({
+			...meta,
+			total: 1,
+			totalItems: 1,
+			canManageOrders: true,
+			activeCount: completed ? 0 : 1,
+			statusCounts: { under_review: completed ? 0 : 1, completed: completed ? 1 : 0 }
+		});
+		const mock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			const url = new URL(String(input), 'https://local.example');
+			if (url.pathname.endsWith('/support') && init?.method === 'POST') {
+				completed = true;
+				return Response.json({ success: true });
+			}
+			if (url.pathname.endsWith('/analytics'))
+				return Response.json({ success: true, data: analytics });
+			if (url.pathname === '/api/admin/boosting-orders') {
+				const status = url.searchParams.get('status');
+				const history = {
+					...held,
+					complaints: [],
+					boostFulfillmentStatus: 'completed',
+					holdReasons: [],
+					fulfillmentState: { status: 'completed', mode: 'live' },
+					support: {
+						revision: 'resolved',
+						state: 'resolved',
+						requestId: null,
+						updatedAt: null,
+						reply: null,
+						message: 'Support confirmed the manually sorted delivery.'
+					}
+				};
+				return Response.json({
+					success: true,
+					data: completed ? (status === 'completed' || status === 'all' ? [history] : []) : [held],
+					meta: { ...listMeta(), status }
+				});
+			}
+			return Response.json({ success: true, data: {} });
+		});
+		vi.stubGlobal('fetch', mock);
+		render(Page, { data: { ...fixture(), meta: listMeta(), items: [held] } } as never);
+		if (fulfillmentStatus === 'completed')
+			expect(
+				page.getByRole('button', { name: 'Request valid link', exact: true }).query()
+			).toBeNull();
+		await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
+		await page
+			.getByRole('textbox', { name: /What delivery evidence/ })
+			.fill('Owner confirmed delivery was manually sorted.');
+		await page.getByRole('checkbox').click();
+		await page.getByRole('button', { name: 'Confirm completion', exact: true }).click();
+		await expect
+			.element(page.getByText('Nothing needs attention here.', { exact: true }))
+			.toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Completed 1', exact: true }))
+			.toBeVisible();
+		expect(mock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+		await page.getByRole('button', { name: 'Completed 1', exact: true }).click();
+		await expect
+			.element(page.getByText('Review resolved by support', { exact: true }))
+			.toBeVisible();
+		await expect.element(page.getByText('Instagram Followers', { exact: true })).toBeVisible();
+		expect(page.getByRole('button', { name: 'Mark completed', exact: true }).query()).toBeNull();
+	}
+);

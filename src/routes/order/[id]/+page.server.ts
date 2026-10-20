@@ -12,6 +12,7 @@ import { sanitizeCustomerOrder } from '$lib/helpers/customer-order-visibility';
 import { getBoostingProgress } from '$lib/helpers/boosting-progress';
 import { boostBenefitLabel, boostQuantityText } from '$lib/helpers/boosting-customer-facts';
 import { isPhoneRefundConfirmed } from '$lib/helpers/phone-refund-state';
+import { BOOST_SUPPORT_EVENT_TYPES } from '$lib/helpers/boosting-support';
 
 export const load: PageServerLoad = async ({ params, locals, url, depends }) => {
 	depends('app:order-progress');
@@ -80,6 +81,7 @@ export const load: PageServerLoad = async ({ params, locals, url, depends }) => 
 					orderId: order.id,
 					type: {
 						in: [
+							...BOOST_SUPPORT_EVENT_TYPES,
 							'boosting_link_review_requested',
 							'boosting_rejected',
 							'customer_support_update',
@@ -87,12 +89,20 @@ export const load: PageServerLoad = async ({ params, locals, url, depends }) => 
 						]
 					}
 				},
-				select: { type: true, orderItemId: true, description: true, occurredAt: true },
+				select: {
+					id: true,
+					type: true,
+					orderItemId: true,
+					description: true,
+					occurredAt: true,
+					metadata: true
+				},
 				orderBy: { occurredAt: 'desc' }
 			})
 		: [];
 	const latestBoostingIssueByItem = new Map<string, string | null>();
 	for (const event of boostingIssueEvents) {
+		if (!['boosting_link_review_requested', 'boosting_rejected'].includes(event.type)) continue;
 		if (!event.orderItemId || latestBoostingIssueByItem.has(event.orderItemId)) continue;
 		latestBoostingIssueByItem.set(event.orderItemId, event.description);
 	}
@@ -161,6 +171,11 @@ export const load: PageServerLoad = async ({ params, locals, url, depends }) => 
 			totalPrice: Number(item.totalPrice),
 			allocatedCount: item.accounts.length,
 			boostIssueReason: latestBoostingIssueByItem.get(item.id) || null,
+			boostSupportEvents: boostingIssueEvents.filter(
+				(event) =>
+					event.orderItemId === item.id && BOOST_SUPPORT_EVENT_TYPES.includes(event.type as never)
+			),
+			boostSupport: null as import('$lib/helpers/boosting-support').BoostSupportState | null,
 			boostProgress: getBoostingProgress(item, order),
 			boostBenefitLabel: boostBenefitLabel(item.boostFulfillment?.offerSnapshot),
 			boostQuantityLabel: boostQuantityText(

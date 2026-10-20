@@ -7,6 +7,7 @@ import { canViewRevenue } from '$lib/services/admin-revenue-visibility';
 import { overdueBoostItemsWhere } from '$lib/services/boosting-support-review';
 import { isBoostOrderOverdue } from '$lib/helpers/boosting-overdue-review';
 import { boostHoldReasons } from '$lib/helpers/boosting-hold-reason';
+import { BOOST_SUPPORT_EVENT_TYPES, getBoostSupportState } from '$lib/helpers/boosting-support';
 import {
 	BOOST_ITEM_STATUSES,
 	BOOST_ACTIVE_ITEM_STATUSES,
@@ -163,9 +164,16 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		? await prisma.orderEvent.findMany({
 				where: {
 					orderItemId: { in: items.map((item) => item.id) },
-					type: { in: [...ISSUE_EVENT_TYPES] }
+					type: { in: [...ISSUE_EVENT_TYPES, ...BOOST_SUPPORT_EVENT_TYPES] }
 				},
-				select: { orderItemId: true, type: true, description: true, occurredAt: true },
+				select: {
+					id: true,
+					orderItemId: true,
+					type: true,
+					description: true,
+					occurredAt: true,
+					metadata: true
+				},
 				orderBy: { occurredAt: 'desc' }
 			})
 		: [];
@@ -258,6 +266,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		{ type: string; reason: string | null; occurredAt: Date }
 	>();
 	for (const event of issueEvents) {
+		if (!ISSUE_EVENT_TYPES.includes(event.type as never)) continue;
 		if (!event.orderItemId || latestIssueByItem.has(event.orderItemId)) continue;
 		latestIssueByItem.set(event.orderItemId, {
 			type: event.type,
@@ -300,6 +309,9 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 						: null;
 				return {
 					...item,
+					support: getBoostSupportState(
+						issueEvents.filter((event) => event.orderItemId === item.id)
+					),
 					overdueReview: isBoostOrderOverdue(item, now),
 					latestIssue: latestIssueByItem.get(item.id) || null,
 					holdReasons:
@@ -341,6 +353,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 				};
 			}),
 			meta: {
+				canManageOrders: hasAdminPermission(locals.adminContext, 'admin:orders:manage'),
 				page,
 				pageSize,
 				total,

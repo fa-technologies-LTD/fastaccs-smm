@@ -1,4 +1,4 @@
-import { page } from '@vitest/browser/context';
+import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { afterEach, expect, it, vi } from 'vitest';
 import { orderedItemSummary } from '$lib/helpers/ordered-item-summary';
@@ -34,6 +34,20 @@ function supportFixture(permissions: string[] = ['admin:orders:manage']) {
 it('hides customer messaging from read-only admins', () => {
 	render(Page, { data: supportFixture([]) } as any);
 	expect(page.getByText('Customer update', { exact: true }).query()).toBeNull();
+});
+it('shows under review rather than a stale completed summary for a held Boosting order', async () => {
+	const data = supportFixture();
+	data.order.status = 'completed';
+	data.order.orderItems = [
+		{
+			boostTargetUrl: 'https://example.invalid/test',
+			boostFulfillmentStatus: 'under_review'
+		}
+	] as any;
+	render(Page, { data } as any);
+	await expect.element(page.getByText('Under Review', { exact: true })).toBeVisible();
+	await expect.element(page.getByRole('link', { name: 'Manage delivery review' })).toBeVisible();
+	expect(page.getByText('Completed', { exact: true }).query()).toBeNull();
 });
 it('keeps a failed message and retries with the same request key', async () => {
 	const fetchMock = vi

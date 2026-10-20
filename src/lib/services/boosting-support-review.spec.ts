@@ -46,6 +46,10 @@ it('commits one support marker and admin notifications without delivery or finan
 		]
 	});
 	expect(db.adminRoleAssignment.findMany.mock.calls[0][0].where.role.in).not.toContain('READ_ONLY');
+	expect(tx.notification.createMany.mock.calls[0][0].data[0].message).toContain(
+		'needs a delivery review'
+	);
+	expect(JSON.stringify(tx.notification.createMany.mock.calls)).not.toContain('still open');
 });
 it('does not notify twice when another worker recorded the same order', async () => {
 	tx.orderEvent.createMany.mockResolvedValue({ count: 0 });
