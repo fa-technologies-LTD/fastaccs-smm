@@ -1,3 +1,4 @@
+import { applyTierUnitCostSanitization } from '$lib/helpers/tier-unit-cost';
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
@@ -96,14 +97,18 @@ export async function PUT({ params, request, locals }) {
 				// Preserve an existing explicit eligibility decision when a partial/older
 				// admin payload does not know about the affiliate field. Legacy tiers with
 				// no field remain eligible until the owner changes them.
-				nextMetadata =
+				nextMetadata = applyTierUnitCostSanitization(
 					metadataObject.affiliate_excluded === undefined &&
-					existingMetadata.affiliate_excluded !== undefined
+						existingMetadata.affiliate_excluded !== undefined
 						? {
 								...sanitized,
 								affiliate_excluded: existingMetadata.affiliate_excluded
 							}
-						: sanitized;
+						: sanitized,
+					existingMetadata,
+					// Only admins who can see costs may set or clear one; others keep it as saved.
+					{ canEditCost: Boolean(locals.adminContext?.canViewRevenue) }
+				);
 			}
 		}
 

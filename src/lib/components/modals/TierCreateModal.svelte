@@ -41,9 +41,12 @@
 				exact_preview_enabled: boolean;
 				verified_x_follower_addons: boolean;
 				affiliate_excluded: boolean;
+				unit_cost_ngn?: number | string | null;
 			};
 		};
 		loading?: boolean;
+		/** Full admins only: the private cost field. */
+		canEditCost?: boolean;
 		onClose: () => void;
 		onCreate: () => void;
 	}
@@ -53,6 +56,7 @@
 		platforms,
 		tierForm = $bindable(),
 		loading = false,
+		canEditCost = false,
 		onClose,
 		onCreate
 	}: Props = $props();
@@ -541,6 +545,19 @@
 								/>
 							</div>
 
+							<div>
+								<label for="quality score" class="block text-sm font-medium text-gray-700"
+									>Quality Score (1-5)</label
+								>
+								<input
+									type="number"
+									min="1"
+									max="5"
+									bind:value={tierForm.metadata.quality_score}
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-purple-500 focus:ring-purple-500"
+								/>
+							</div>
+
 							<!-- Pricing -->
 							<div>
 								<label
@@ -563,18 +580,29 @@
 								</p>
 							</div>
 
-							<div>
-								<label for="quality score" class="block text-sm font-medium text-gray-700"
-									>Quality Score (1-5)</label
-								>
-								<input
-									type="number"
-									min="1"
-									max="5"
-									bind:value={tierForm.metadata.quality_score}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-purple-500 focus:ring-purple-500"
-								/>
-							</div>
+							{#if canEditCost}
+								<div>
+									<label
+										for="tier-create-unit-cost"
+										class="block text-sm font-medium"
+										style="color: var(--text);">Our cost per account (₦)</label
+									>
+									<input
+										id="tier-create-unit-cost"
+										type="number"
+										min="0"
+										step="1"
+										inputmode="numeric"
+										bind:value={tierForm.metadata.unit_cost_ngn}
+										placeholder="Blank = not set"
+										class="mt-1 block w-full rounded-md px-4 py-2"
+										style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
+									/>
+									<p class="mt-1 text-xs" style="color: var(--text-muted);">
+										Private. Include payment fees. Never shown to customers or affiliates.
+									</p>
+								</div>
+							{/if}
 
 							<div class="md:col-span-2">
 								<label

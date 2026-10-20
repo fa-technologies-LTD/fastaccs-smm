@@ -1,3 +1,4 @@
+import { applyTierUnitCostSanitization } from '$lib/helpers/tier-unit-cost';
 import { json } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
 import { invalidateAdminStatsCache } from '$lib/services/admin-metrics';
@@ -80,10 +81,20 @@ export async function POST({ request, locals }) {
 		// New account tiers are margin-unknown until the owner deliberately includes
 		// them in the affiliate offer. Enforce the safe default at the API boundary too,
 		// so an older admin client or direct request cannot bypass the UI checkbox.
-		const metadata =
+		const withAffiliateDefault =
 			rest.categoryType === 'tier' && rawMetadata.affiliate_excluded === undefined
 				? { ...sanitizedMetadata, affiliate_excluded: true }
 				: sanitizedMetadata;
+		const metadata =
+			rest.categoryType === 'tier'
+				? applyTierUnitCostSanitization(
+						withAffiliateDefault,
+						{},
+						{
+							canEditCost: Boolean(locals.adminContext?.canViewRevenue)
+						}
+					)
+				: withAffiliateDefault;
 
 		const data = await prisma.category.create({
 			data: {
