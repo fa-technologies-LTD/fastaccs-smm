@@ -11,7 +11,7 @@
 	const statusLabel: Record<string, string> = {
 		issue: 'Due now',
 		waiting: 'Waiting (24h after completion)',
-		monthly_limit: 'Next month (limit reached)',
+		dropped_limit: 'Dropped (monthly limit reached)',
 		held_identity: 'Held: identity match',
 		super_excluded: 'Super excluded',
 		issued: 'Issued',
@@ -33,7 +33,6 @@
 	let bsCapInput = $state<number | null>(null);
 	const rwCap = $derived(rwCapInput ?? rw.settings.capPercent);
 	const bsCap = $derived(bsCapInput ?? bs.settings.capPercent);
-	let confirmGrant = $state('');
 
 	const card = 'background: var(--bg-elev-1); border: 1px solid var(--border);';
 	const inner = 'border: 1px solid var(--border); background: var(--bg);';
@@ -159,9 +158,9 @@
 				<p class="mt-1" style="color: var(--text-muted);">
 					Due now: {rw.live_dry_run.summary.issueNow.count} ({formatPrice(
 						rw.live_dry_run.summary.issueNow.amount
-					)}) · waiting: {rw.live_dry_run.summary.waiting.count} · next month: {rw.live_dry_run
-						.summary.monthlyLimit.count} · held: {rw.live_dry_run.summary.heldIdentity.count} · issued
-					so far: {rw.live_dry_run.summary.issued.count}
+					)}) · waiting: {rw.live_dry_run.summary.waiting.count} · dropped (limit): {rw.live_dry_run
+						.summary.dropped.count} · held: {rw.live_dry_run.summary.heldIdentity.count} · issued so
+					far: {rw.live_dry_run.summary.issued.count}
 					({formatPrice(rw.live_dry_run.summary.issued.amount)})
 				</p>
 				{#if rw.live_dry_run.rows.length}
@@ -211,8 +210,8 @@
 				{rw.illustrative.summary.issueNow.count} would be due now ({formatPrice(
 					rw.illustrative.summary.issueNow.amount
 				)}),
-				{rw.illustrative.summary.waiting.count} soon, {rw.illustrative.summary.monthlyLimit.count} held
-				back by the monthly limit, {rw.illustrative.summary.heldIdentity.count} held for identity, and
+				{rw.illustrative.summary.waiting.count} soon, {rw.illustrative.summary.dropped.count} dropped
+				by the monthly limit, {rw.illustrative.summary.heldIdentity.count} held for identity, and
 				{rw.illustrative.summary.superExcluded.count} excluded as Super referrals ({formatPrice(
 					rw.illustrative.summary.superExcluded.amount
 				)}). Including Super:
@@ -407,68 +406,37 @@
 		</div>
 
 		<div class="mt-4 rounded-lg p-4 text-sm" style={inner}>
-			<p class="font-semibold" style="color: var(--text);">
-				Dry run — customers already over {formatPrice(bs.settings.thresholdNgn)}
-			</p>
+			<p class="font-semibold" style="color: var(--text);">Dry run — who gets it, and when</p>
 			<p class="mt-1" style="color: var(--text-muted);">
-				Switching on only pays customers who cross the line from then on. These
-				{bs.existing.rows.length} customers ({formatPrice(bs.existing.total)}) are paid only if you
-				grant them below. {bs.existing.rows.filter((row) => row.hadSpendGift70k).length} of them already
-				received the ₦3,000 gift at ₦70,000.
+				One {formatPrice(bs.settings.rewardNgn)} per customer, nobody paid on switch-on. While BIGSPENDER
+				is on, the ₦70,000 gift stops for anyone who hasn't had it. Customers who never had that gift
+				get BIGSPENDER at {formatPrice(bs.settings.thresholdNgn)}. The {bs.targets.length} customers
+				below already had the gift or are already over {formatPrice(bs.settings.thresholdNgn)}, so
+				theirs comes at their next round mark.
 			</p>
-			{#if bs.existing.rows.length}
+			{#if bs.targets.length}
 				<div class="mt-2 overflow-x-auto">
 					<table class="w-full text-xs" style="color: var(--text);">
 						<thead style="color: var(--text-muted);">
 							<tr class="text-left">
 								<th class="py-1 pr-3">Customer</th>
-								<th class="py-1 pr-3">Lifetime spend</th>
-								<th class="py-1">Got ₦70k gift</th>
+								<th class="py-1 pr-3">Spend now</th>
+								<th class="py-1 pr-3">Gets {formatPrice(bs.settings.rewardNgn)} at</th>
+								<th class="py-1">Still to spend</th>
 							</tr>
 						</thead>
 						<tbody>
-							{#each bs.existing.rows as row (row.userId)}
+							{#each bs.targets as row (row.userId)}
 								<tr style="border-top: 1px solid var(--border);">
-									<td class="py-1 pr-3">{row.name || row.email || row.userId}</td>
-									<td class="py-1 pr-3">{formatPrice(row.lifetimeSpend)}</td>
-									<td class="py-1">{row.hadSpendGift70k ? 'Yes' : 'No'}</td>
+									<td class="py-1 pr-3">{row.label}</td>
+									<td class="py-1 pr-3">{formatPrice(row.spendNow)}</td>
+									<td class="py-1 pr-3">{formatPrice(row.targetNgn)}</td>
+									<td class="py-1">{row.alreadyGranted ? 'Paid' : formatPrice(row.toGo)}</td>
 								</tr>
 							{/each}
 						</tbody>
 					</table>
 				</div>
-				{#if bs.live && !ownerOnly}
-					<form
-						method="POST"
-						action="?/grantBigSpenderExisting"
-						class="mt-3 flex flex-wrap items-end gap-2"
-					>
-						<input
-							type="hidden"
-							name="approvedUserIds"
-							value={JSON.stringify(bs.existing.rows.map((row) => row.userId))}
-						/>
-						<label class="text-xs" style="color: var(--text-muted);">
-							Type GRANT to pay these {bs.existing.rows.length} customers {formatPrice(
-								bs.existing.total
-							)}
-							<input
-								name="confirm"
-								bind:value={confirmGrant}
-								class="mt-1 block rounded-lg px-3 py-2"
-								style={input}
-							/>
-						</label>
-						<button
-							type="submit"
-							disabled={confirmGrant.trim().toUpperCase() !== 'GRANT'}
-							class="rounded-lg px-4 py-2 text-sm font-semibold"
-							style="border: 1px solid var(--border-2); color: var(--text);"
-						>
-							Grant to existing customers
-						</button>
-					</form>
-				{/if}
 			{/if}
 		</div>
 
@@ -588,7 +556,7 @@
 						checked={bs.settings.remindersEnabled}
 						disabled={ownerOnly}
 					/>
-					Send expiry reminder emails (off by default)
+					Send an expiry reminder email before the credit runs out
 				</label>
 				<label class="flex items-center gap-2">
 					<input

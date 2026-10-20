@@ -76,7 +76,7 @@ export const BIGSPENDER_DEFAULTS: BigSpenderSettings = {
 	...COMMON_DEFAULTS,
 	rewardNgn: 3_000,
 	thresholdNgn: 100_000,
-	remindersEnabled: false,
+	remindersEnabled: true,
 	reminderDaysBefore: 7
 };
 
@@ -150,7 +150,10 @@ export function parseBigSpenderSettings(raw: string | null | undefined): BigSpen
 	return {
 		...parseCommon(value, BIGSPENDER_DEFAULTS),
 		thresholdNgn: wholeNumber(value.thresholdNgn, BIGSPENDER_DEFAULTS.thresholdNgn),
-		remindersEnabled: value.remindersEnabled === true,
+		remindersEnabled:
+			typeof value.remindersEnabled === 'boolean'
+				? value.remindersEnabled
+				: BIGSPENDER_DEFAULTS.remindersEnabled,
 		reminderDaysBefore: wholeNumber(
 			value.reminderDaysBefore,
 			BIGSPENDER_DEFAULTS.reminderDaysBefore
@@ -198,6 +201,22 @@ export function isCampaignLive(settings: CampaignCommonSettings, now: Date = new
 	if (!settings.enabled || !settings.startsAt) return false;
 	if (new Date(settings.startsAt) > now) return false;
 	return !settings.endsAt || now < new Date(settings.endsAt);
+}
+
+/**
+ * BIGSPENDER pays one ₦3,000 per customer. Customers who never had the ₦70k gift get it at the
+ * threshold (₦100,000). Customers who already had the ₦70k gift, or were already over the threshold
+ * when BIGSPENDER switched on, get it at their next round mark above that (₦130k → ₦200k,
+ * ₦85k → ₦200k, ₦575,700 → ₦600k).
+ */
+export function bigSpenderTarget(
+	spendAtLaunch: number,
+	hadSpendGift: boolean,
+	thresholdNgn: number
+): number {
+	const threshold = Math.max(1, thresholdNgn);
+	if (!hadSpendGift && spendAtLaunch < threshold) return threshold;
+	return (Math.floor(Math.max(spendAtLaunch, threshold) / threshold) + 1) * threshold;
 }
 
 // ---------------------------------------------------------------------------------------------

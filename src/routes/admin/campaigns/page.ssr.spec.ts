@@ -6,7 +6,7 @@ import { BIGSPENDER_DEFAULTS, REFER_WIN_DEFAULTS } from '$lib/helpers/promo-camp
 const summary = {
 	issueNow: { count: 0, amount: 0 },
 	waiting: { count: 0, amount: 0 },
-	monthlyLimit: { count: 0, amount: 0 },
+	dropped: { count: 0, amount: 0 },
 	heldIdentity: { count: 0, amount: 0 },
 	superExcluded: { count: 11, amount: 11_000 },
 	issued: { count: 0, amount: 0 },
@@ -51,19 +51,17 @@ const data = (overrides: { isOwner?: boolean } = {}) => ({
 		live: false,
 		endsAtWat: '',
 		startsAtWat: '',
-		existing: {
-			rows: [
-				{
-					userId: 'u1',
-					email: 'a@x.test',
-					name: 'Ada',
-					lifetimeSpend: 575_700,
-					hadSpendGift70k: true
-				}
-			],
-			total: 3_000,
-			alreadyGranted: 0
-		},
+		targets: [
+			{
+				userId: 'u1',
+				label: 'Ada',
+				spendNow: 575_700,
+				targetNgn: 600_000,
+				toGo: 24_300,
+				hadSpendGift70k: true,
+				alreadyGranted: false
+			}
+		],
 		report: report('bigspender')
 	}
 });
@@ -85,7 +83,8 @@ describe('admin campaigns page', () => {
 		const body = html(data());
 		expect(body).toContain('nobody');
 		expect(body).toContain('never paid');
-		expect(body).toMatch(/1 of them already\s+received the ₦3,000 gift/);
+		expect(body).toContain('next round mark');
+		expect(body).toContain('₦600,000');
 		expect(body).toContain('Ada');
 	});
 
@@ -93,5 +92,6 @@ describe('admin campaigns page', () => {
 		const body = html(data({ isOwner: false }));
 		expect(body).toContain('Only the owner can change these settings.');
 		expect(body).not.toContain('Grant to existing customers');
+		expect(body).toContain('disabled');
 	});
 });

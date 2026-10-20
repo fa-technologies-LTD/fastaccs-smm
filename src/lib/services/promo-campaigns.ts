@@ -7,6 +7,7 @@ import { createAdminAuditLog } from '$lib/services/admin-audit';
 import { recordAffiliateEvent } from '$lib/services/affiliate-events';
 import { detectAffiliateIdentityRiskSignals } from '$lib/services/affiliate-vesting';
 import { goodsCostFromOrderMetadata } from '$lib/services/super-affiliate-terms';
+import { sendPromoCreditIssuedEmail } from '$lib/services/promo-credit-email';
 import {
 	closePromoLot,
 	creditPromoCredit,
@@ -20,6 +21,7 @@ import {
 import {
 	BIGSPENDER_KEY,
 	REFER_WIN_KEY,
+	bigSpenderTarget,
 	isCampaignLive,
 	keptCash,
 	lagosMonthStart,
@@ -44,6 +46,8 @@ import {
 
 const DAY_MS = 86_400_000;
 const REFER_WIN_REFERENCE = (friendUserId: string) => `refer_win:${friendUserId}`;
+// Final: a reward dropped because the referrer had already had this month's limit.
+const REFER_WIN_DROPPED_KEY = (friendUserId: string) => `refer_win:dropped:${friendUserId}`;
 const BIGSPENDER_REFERENCE = (userId: string) => `bigspender:${userId}`;
 const naira = (value: number) => `₦${Math.round(value).toLocaleString('en-NG')}`;
 
@@ -162,7 +166,7 @@ export type ReferWinStatus =
 	| 'issued'
 	| 'waiting'
 	| 'not_yet'
-	| 'monthly_limit'
+	| 'dropped_limit'
 	| 'held_identity'
 	| 'super_excluded';
 
@@ -176,7 +180,7 @@ export interface ReferWinDecision {
 	settledCash: number;
 	pendingCash: number;
 	amount: number;
-	/** When it was/would be issued (for waiting/limit: the earliest possible time). */
+	/** When it was/would be issued (waiting: the earliest time; dropped: when it was dropped). */
 	when: Date | null;
 	triggerOrderId: string | null;
 	signals: string[];
@@ -265,7 +269,7 @@ export async function evaluateReferWin(options: {
 	if (referrals.length === 0) return [];
 
 	const friendIds = referrals.map((referral) => referral.referredUserId);
-	const [ordersByFriend, grants, monthGrants] = await Promise.all([
+	const [ordersByFriend, grants, monthGrants, droppedEvents] = await Promise.all([
 		loadFriendOrders(friendIds),
 		prisma.walletTransaction.findMany({
 			where: { reference: { in: friendIds.map(REFER_WIN_REFERENCE) } },
@@ -278,8 +282,17 @@ export async function evaluateReferWin(options: {
 				createdAt: { gte: lagosMonthStart(now) }
 			},
 			select: { userId: true }
+		}),
+		prisma.affiliateEvent.findMany({
+			where: { dedupeKey: { in: friendIds.map(REFER_WIN_DROPPED_KEY) } },
+			select: { referredUserId: true, createdAt: true }
 		})
 	]);
+	const droppedAt = new Map(
+		droppedEvents
+			.filter((event) => event.referredUserId)
+			.map((event) => [event.referredUserId!, event.createdAt])
+	);
 	const grantByReference = new Map(grants.map((grant) => [grant.reference, grant]));
 	const issuedThisMonth = new Map<string, number>();
 	for (const row of monthGrants) {
@@ -299,6 +312,18 @@ export async function evaluateReferWin(options: {
 		};
 		const grant = grantByReference.get(REFER_WIN_REFERENCE(referral.referredUserId));
 		const orders = ordersByFriend.get(referral.referredUserId) ?? [];
+		const dropped = droppedAt.get(referral.referredUserId);
+		if (!grant && dropped) {
+			decisions.push({
+				...base,
+				status: 'dropped_limit',
+				settledCash: totalKeptCash(orders),
+				pendingCash: 0,
+				when: dropped,
+				triggerOrderId: null
+			});
+			continue;
+		}
 		if (grant) {
 			decisions.push({
 				...base,
@@ -333,7 +358,7 @@ export async function evaluateReferWin(options: {
 		});
 	}
 
-	// Identity checks, then the monthly limit (earliest qualifier first within each referrer).
+	// Identity checks, then the monthly limit. Over the limit, the reward is dropped (not deferred).
 	for (const decision of decisions.filter((entry) => entry.status === 'issue')) {
 		decision.signals = await detectAffiliateIdentityRiskSignals(
 			decision.referrerUserId,
@@ -344,8 +369,7 @@ export async function evaluateReferWin(options: {
 	for (const decision of decisions.filter((entry) => entry.status === 'issue')) {
 		const used = issuedThisMonth.get(decision.referrerUserId) ?? 0;
 		if (used >= settings.monthlyLimit) {
-			decision.status = 'monthly_limit';
-			decision.when = nextLagosMonthStart(now);
+			decision.status = 'dropped_limit';
 		} else {
 			issuedThisMonth.set(decision.referrerUserId, used + 1);
 		}
@@ -398,7 +422,26 @@ async function issueReferWinCredit(
 			}
 		})
 		.catch(() => {});
+	await sendPromoCreditIssuedEmail({
+		userId: decision.referrerUserId,
+		grantReference: REFER_WIN_REFERENCE(decision.friendUserId),
+		subject: `You earned ${naira(settings.rewardNgn)} store credit`,
+		body: `A friend you referred reached ${naira(settings.qualifyingCashNgn)} in orders, so **${naira(settings.rewardNgn)} store credit** is now on your account.\n\nUse it on anything in the store. It can pay up to ${settings.capPercent}% of an order and is applied at checkout. It expires on ${formatPromoExpiry(expiresAt)}.`
+	}).catch((error) => console.error('Refer & Win email failed:', error));
 	return true;
+}
+
+/** Record that a reward was dropped for the monthly limit, so it is never issued later. */
+async function recordReferWinDropped(decision: ReferWinDecision, settings: ReferWinSettings) {
+	await recordAffiliateEvent({
+		type: 'refer_win_dropped_monthly_limit',
+		dedupeKey: REFER_WIN_DROPPED_KEY(decision.friendUserId),
+		affiliateUserId: decision.referrerUserId,
+		referredUserId: decision.friendUserId,
+		orderId: decision.triggerOrderId,
+		source: 'promo_campaign',
+		metadata: { monthlyLimit: settings.monthlyLimit, amount: settings.rewardNgn }
+	});
 }
 
 /** Cron: issue every Refer & Win reward that is due. Does nothing while the campaign is off. */
@@ -406,10 +449,10 @@ export async function runReferWinIssuance(now: Date = new Date()): Promise<{
 	live: boolean;
 	issued: number;
 	held: number;
-	limited: number;
+	dropped: number;
 }> {
 	const { referWin } = await getCampaignSettings();
-	if (!isCampaignLive(referWin, now)) return { live: false, issued: 0, held: 0, limited: 0 };
+	if (!isCampaignLive(referWin, now)) return { live: false, issued: 0, held: 0, dropped: 0 };
 	const decisions = await evaluateReferWin({
 		settings: referWin,
 		now,
@@ -419,11 +462,18 @@ export async function runReferWinIssuance(now: Date = new Date()): Promise<{
 	for (const decision of decisions.filter((entry) => entry.status === 'issue')) {
 		if (await issueReferWinCredit(decision, referWin, now)) issued += 1;
 	}
+	let dropped = 0;
+	for (const decision of decisions.filter(
+		(entry) => entry.status === 'dropped_limit' && entry.triggerOrderId
+	)) {
+		await recordReferWinDropped(decision, referWin);
+		dropped += 1;
+	}
 	return {
 		live: true,
 		issued,
 		held: decisions.filter((entry) => entry.status === 'held_identity').length,
-		limited: decisions.filter((entry) => entry.status === 'monthly_limit').length
+		dropped
 	};
 }
 
@@ -454,7 +504,11 @@ export async function releaseHeldReferWin(params: {
 		}
 	});
 	if (used >= referWin.monthlyLimit) {
-		return { success: false, error: 'This referrer has reached this month’s limit.' };
+		await recordReferWinDropped(decision, referWin);
+		return {
+			success: false,
+			error: 'This referrer already had this month’s limit, so this reward is dropped.'
+		};
 	}
 	const created = await issueReferWinCredit(decision, referWin, now, {
 		identityReleasedBy: params.actorUserId,
@@ -516,38 +570,47 @@ export async function reconcileReferWinForFriend(friendUserId: string): Promise<
 // BIGSPENDER
 // ---------------------------------------------------------------------------------------------
 
+const SPEND_GIFT_70K_REFERENCE = (userId: string) => `spend:gift:70k:${userId}`;
+
+function beforeFilter(before?: Date) {
+	return before
+		? [{ OR: [{ paidAt: { lt: before } }, { paidAt: null, createdAt: { lt: before } }] }]
+		: [];
+}
+
 async function lifetimeSpend(userId: string, before?: Date): Promise<number> {
 	const agg = await prisma.order.aggregate({
-		where: {
-			AND: [
-				buildRevenueOrderWhere(),
-				{ userId },
-				...(before
-					? [{ OR: [{ paidAt: { lt: before } }, { paidAt: null, createdAt: { lt: before } }] }]
-					: [])
-			]
-		},
+		where: { AND: [buildRevenueOrderWhere(), { userId }, ...beforeFilter(before)] },
 		_sum: { totalAmount: true, refundedAmount: true }
 	});
 	return toNetSales(agg._sum.totalAmount, agg._sum.refundedAmount);
+}
+
+/** True while BIGSPENDER is live: the ₦70k gift then stops for anyone who has not had it. */
+export async function isBigSpenderLive(now: Date = new Date()): Promise<boolean> {
+	const { bigSpender } = await getCampaignSettings();
+	return isCampaignLive(bigSpender, now);
 }
 
 async function grantBigSpender(
 	userId: string,
 	settings: BigSpenderSettings,
 	now: Date,
+	targetNgn: number,
 	extra: Record<string, Prisma.InputJsonValue | null>
 ): Promise<boolean> {
 	const expiresAt = new Date(now.getTime() + settings.expiryDays * DAY_MS);
+	const reference = BIGSPENDER_REFERENCE(userId);
 	const created = await prisma.$transaction((tx) =>
 		creditPromoCredit(tx, {
 			userId,
 			amount: settings.rewardNgn,
 			campaign: 'bigspender',
 			expiresAt,
-			description: `BIGSPENDER: thank you for spending over ${naira(settings.thresholdNgn)} · expires ${formatPromoExpiry(expiresAt)}`,
-			reference: BIGSPENDER_REFERENCE(userId),
-			metadata: { kind: 'bigspender', thresholdNgn: settings.thresholdNgn, ...extra }
+			description: `BIGSPENDER: thank you for reaching ${naira(targetNgn)} in orders · expires ${formatPromoExpiry(expiresAt)}`,
+			reference,
+			// thresholdNgn is this customer's own mark; a refund below it removes unspent credit.
+			metadata: { kind: 'bigspender', thresholdNgn: targetNgn, ...extra }
 		})
 	);
 	if (!created) return false;
@@ -557,33 +620,50 @@ async function grantBigSpender(
 				userId,
 				type: 'store_credit_gift',
 				title: `${naira(settings.rewardNgn)} store credit for you`,
-				message: `Thank you for spending over ${naira(settings.thresholdNgn)} with us. Your ${naira(settings.rewardNgn)} store credit is ready to spend until ${formatPromoExpiry(expiresAt)}.`
+				message: `Thank you for reaching ${naira(targetNgn)} in orders. Your ${naira(settings.rewardNgn)} store credit is ready to spend until ${formatPromoExpiry(expiresAt)}.`
 			}
 		})
 		.catch(() => {});
+	await sendPromoCreditIssuedEmail({
+		userId,
+		grantReference: reference,
+		subject: `${naira(settings.rewardNgn)} store credit, on us`,
+		body: `Thank you for reaching ${naira(targetNgn)} in orders with Fast Accounts. **${naira(settings.rewardNgn)} store credit** is now on your account.\n\nUse it on anything in the store. It can pay up to ${settings.capPercent}% of an order and is applied at checkout. It expires on ${formatPromoExpiry(expiresAt)}.`
+	}).catch((error) => console.error('BIGSPENDER email failed:', error));
 	return true;
 }
 
 /**
- * After every paid order: grant BIGSPENDER the moment a customer crosses the threshold, if they
- * crossed it after launch. Customers who were already over it at launch are only granted by the
- * owner's one-off action (after its dry run). Best-effort; never blocks fulfilment.
+ * After every paid order: one ₦3,000 per customer, the moment they reach their mark (see
+ * bigSpenderTarget): ₦100,000 for customers who never had the ₦70k gift; the next round ₦100k mark
+ * for customers who had it or were already over ₦100,000 at launch. Best-effort.
  */
 export async function maybeGrantBigSpender(userId: string, spend: number): Promise<void> {
 	const { bigSpender } = await getCampaignSettings();
 	const now = new Date();
 	if (!isCampaignLive(bigSpender, now) || spend < bigSpender.thresholdNgn) return;
-	const existing = await prisma.walletTransaction.findUnique({
-		where: { reference: BIGSPENDER_REFERENCE(userId) },
-		select: { id: true }
-	});
+	const [existing, gift] = await Promise.all([
+		prisma.walletTransaction.findUnique({
+			where: { reference: BIGSPENDER_REFERENCE(userId) },
+			select: { id: true }
+		}),
+		prisma.walletTransaction.findUnique({
+			where: { reference: SPEND_GIFT_70K_REFERENCE(userId) },
+			select: { status: true }
+		})
+	]);
 	if (existing) return;
+	const hadSpendGift = gift?.status === 'available';
 	const spendAtLaunch = await lifetimeSpend(userId, new Date(bigSpender.startsAt!));
-	if (spendAtLaunch >= bigSpender.thresholdNgn) return;
-	await grantBigSpender(userId, bigSpender, now, { crossedAfterLaunch: true });
+	const target = bigSpenderTarget(spendAtLaunch, hadSpendGift, bigSpender.thresholdNgn);
+	if (spend < target) return;
+	await grantBigSpender(userId, bigSpender, now, target, {
+		spendAtLaunch,
+		hadSpendGift70k: hadSpendGift
+	});
 }
 
-/** After a refund: if lifetime spend fell back below the threshold, remove the unspent credit. */
+/** After a refund: if lifetime spend fell back below the customer's mark, remove unspent credit. */
 export async function reconcileBigSpender(userId: string, spend: number): Promise<void> {
 	const grant = await prisma.walletTransaction.findUnique({
 		where: { reference: BIGSPENDER_REFERENCE(userId) },
@@ -597,7 +677,7 @@ export async function reconcileBigSpender(userId: string, spend: number): Promis
 			userId,
 			lotId: grant.id,
 			type: SC_PROMO_REVERSAL,
-			description: 'BIGSPENDER credit removed after a refund brought spend below the threshold',
+			description: 'BIGSPENDER credit removed after a refund brought spend below the mark',
 			reference: `bigspender:reversal:${userId}`,
 			metadata: { kind: 'bigspender_reversal', lifetimeSpend: spend }
 		})
@@ -615,110 +695,86 @@ export async function reconcileBigSpender(userId: string, spend: number): Promis
 	}).catch(() => {});
 }
 
-export interface BigSpenderQualifier {
+export interface BigSpenderTargetRow {
 	userId: string;
 	email: string | null;
 	name: string | null;
-	lifetimeSpend: number;
+	spendNow: number;
+	spendAtLaunch: number;
 	hadSpendGift70k: boolean;
+	targetNgn: number;
 	alreadyGranted: boolean;
 }
 
-/** Customers at or over the threshold today (the one-off grant's dry run). */
-export async function listBigSpenderQualifiers(
+/**
+ * Dry run: customers whose mark is above ₦100,000 (had the ₦70k gift, or were already over it at
+ * launch) with their mark and how far they are from it. Before launch, "launch" means today.
+ * Everyone else simply gets it at ₦100,000.
+ */
+export async function listBigSpenderTargets(
 	settings: BigSpenderSettings
-): Promise<BigSpenderQualifier[]> {
-	const grouped = await prisma.order.groupBy({
-		by: ['userId'],
-		where: { AND: [buildRevenueOrderWhere(), { userId: { not: null } }] },
-		_sum: { totalAmount: true, refundedAmount: true }
-	});
-	const over = grouped
-		.map((row) => ({
-			userId: row.userId!,
-			spend: toNetSales(row._sum.totalAmount, row._sum.refundedAmount)
-		}))
-		.filter((row) => row.spend >= settings.thresholdNgn);
-	if (over.length === 0) return [];
-	const ids = over.map((row) => row.userId);
-	const [users, gifts, grants] = await Promise.all([
+): Promise<BigSpenderTargetRow[]> {
+	const launch = settings.startsAt ? new Date(settings.startsAt) : undefined;
+	const sumBy = (before?: Date) =>
+		prisma.order.groupBy({
+			by: ['userId'],
+			where: {
+				AND: [buildRevenueOrderWhere(), { userId: { not: null } }, ...beforeFilter(before)]
+			},
+			_sum: { totalAmount: true, refundedAmount: true }
+		});
+	const [nowRows, launchRows, gifts] = await Promise.all([
+		sumBy(),
+		launch ? sumBy(launch) : Promise.resolve(null),
+		prisma.walletTransaction.findMany({
+			where: { reference: { startsWith: 'spend:gift:70k:' }, status: 'available' },
+			select: { userId: true }
+		})
+	]);
+	const spendOf = (rows: typeof nowRows) =>
+		new Map(
+			rows.map((row) => [row.userId!, toNetSales(row._sum.totalAmount, row._sum.refundedAmount)])
+		);
+	const spendNow = spendOf(nowRows);
+	const spendAtLaunch = launchRows ? spendOf(launchRows) : spendNow;
+	const gifted = new Set(gifts.map((row) => row.userId).filter(Boolean) as string[]);
+	const candidates = [...spendNow.keys()].filter(
+		(userId) => gifted.has(userId) || (spendAtLaunch.get(userId) ?? 0) >= settings.thresholdNgn
+	);
+	if (candidates.length === 0) return [];
+	const [users, grants] = await Promise.all([
 		prisma.user.findMany({
-			where: { id: { in: ids } },
+			where: { id: { in: candidates } },
 			select: { id: true, email: true, fullName: true }
 		}),
 		prisma.walletTransaction.findMany({
-			where: { reference: { in: ids.map((id) => `spend:gift:70k:${id}`) } },
-			select: { userId: true }
-		}),
-		prisma.walletTransaction.findMany({
-			where: { reference: { in: ids.map(BIGSPENDER_REFERENCE) } },
+			where: { reference: { in: candidates.map(BIGSPENDER_REFERENCE) } },
 			select: { userId: true }
 		})
 	]);
 	const userById = new Map(users.map((user) => [user.id, user]));
-	const gifted = new Set(gifts.map((row) => row.userId));
 	const granted = new Set(grants.map((row) => row.userId));
-	return over
-		.map((row) => ({
-			userId: row.userId,
-			email: userById.get(row.userId)?.email ?? null,
-			name: userById.get(row.userId)?.fullName ?? null,
-			lifetimeSpend: row.spend,
-			hadSpendGift70k: gifted.has(row.userId),
-			alreadyGranted: granted.has(row.userId)
-		}))
-		.sort((a, b) => b.lifetimeSpend - a.lifetimeSpend);
+	return candidates
+		.map((userId) => {
+			const atLaunch = spendAtLaunch.get(userId) ?? 0;
+			const hadGift = gifted.has(userId);
+			return {
+				userId,
+				email: userById.get(userId)?.email ?? null,
+				name: userById.get(userId)?.fullName ?? null,
+				spendNow: spendNow.get(userId) ?? 0,
+				spendAtLaunch: atLaunch,
+				hadSpendGift70k: hadGift,
+				targetNgn: bigSpenderTarget(atLaunch, hadGift, settings.thresholdNgn),
+				alreadyGranted: granted.has(userId)
+			};
+		})
+		.sort((a, b) => b.spendNow - a.spendNow);
 }
 
 /**
- * Owner's one-off grant to customers who were already over the threshold. Only runs while the
- * campaign is on, and only for exactly the customers the owner saw in the dry run.
- */
-export async function grantBigSpenderToExisting(params: {
-	approvedUserIds: string[];
-	actorUserId: string;
-}): Promise<{ success: boolean; granted: number; error?: string }> {
-	const { bigSpender } = await getCampaignSettings();
-	const now = new Date();
-	if (!isCampaignLive(bigSpender, now)) {
-		return { success: false, granted: 0, error: 'Switch BIGSPENDER on before granting.' };
-	}
-	const due = (await listBigSpenderQualifiers(bigSpender)).filter((row) => !row.alreadyGranted);
-	const dueIds = due.map((row) => row.userId).sort();
-	const approved = [...new Set(params.approvedUserIds)].sort();
-	if (dueIds.length === 0 || dueIds.join(',') !== approved.join(',')) {
-		return {
-			success: false,
-			granted: 0,
-			error: 'The list changed since the dry run. Reload the page and review it again.'
-		};
-	}
-	let granted = 0;
-	for (const row of due) {
-		if (
-			await grantBigSpender(row.userId, bigSpender, now, {
-				existingQualifier: true,
-				approvedBy: params.actorUserId
-			})
-		) {
-			granted += 1;
-		}
-	}
-	await createAdminAuditLog({
-		actorUserId: params.actorUserId,
-		action: 'bigspender_existing_granted',
-		resourceType: 'promo_campaign',
-		resourceId: 'bigspender',
-		description: `BIGSPENDER granted to ${granted} existing customers (${naira(granted * bigSpender.rewardNgn)})`,
-		metadata: { userIds: approved, rewardNgn: bigSpender.rewardNgn },
-		required: true
-	});
-	return { success: true, granted };
-}
-
-/**
- * Expiry reminders for BIGSPENDER credit. Written but OFF: returns immediately unless the owner
- * turns reminders on. Consent, suppression and de-duplication go through the marketing sender.
+ * Expiry reminders for BIGSPENDER credit (on by default; the owner can turn them off). Consent,
+ * suppression and de-duplication go through the marketing sender.
  */
 export async function runBigSpenderExpiryReminders(now: Date = new Date()): Promise<{
 	enabled: boolean;

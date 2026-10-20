@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	BIGSPENDER_DEFAULTS,
 	REFER_WIN_DEFAULTS,
+	bigSpenderTarget,
 	isCampaignLive,
 	isOwnerOnlyConfigKey,
 	keptCash,
@@ -48,7 +49,7 @@ describe('campaign settings', () => {
 			thresholdNgn: 100_000,
 			expiryDays: 30,
 			capPercent: 50,
-			remindersEnabled: false
+			remindersEnabled: true
 		});
 	});
 
@@ -73,6 +74,21 @@ describe('campaign settings', () => {
 	it('keeps campaign settings out of the general microcopy editor', () => {
 		expect(isOwnerOnlyConfigKey('config.campaign.refer_win')).toBe(true);
 		expect(isOwnerOnlyConfigKey('config.store.announcement_banner')).toBe(false);
+	});
+});
+
+describe('BIGSPENDER mark per customer', () => {
+	it('is ₦100,000 for customers who never had the ₦70k gift', () => {
+		expect(bigSpenderTarget(0, false, 100_000)).toBe(100_000);
+		expect(bigSpenderTarget(60_000, false, 100_000)).toBe(100_000);
+	});
+
+	it('is the next round ₦100k mark for customers who had the gift or were already over', () => {
+		expect(bigSpenderTarget(85_000, true, 100_000)).toBe(200_000);
+		expect(bigSpenderTarget(130_000, true, 100_000)).toBe(200_000);
+		expect(bigSpenderTarget(575_700, true, 100_000)).toBe(600_000);
+		expect(bigSpenderTarget(200_000, true, 100_000)).toBe(300_000);
+		expect(bigSpenderTarget(150_000, false, 100_000)).toBe(200_000);
 	});
 });
 

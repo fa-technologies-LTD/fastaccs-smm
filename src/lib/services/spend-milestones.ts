@@ -9,7 +9,8 @@ import { buildRevenueOrderWhere, toNetSales } from '$lib/helpers/order-revenue.s
 /**
  * Spend-milestone rewards (buyer-facing, driven by lifetime paid spend):
  *  - ₦8,000 spent  → a single-use ₦1,000 promo code (min ₦2,000 order, 30-day expiry)
- *  - ₦70,000 spent → a ₦3,000 store-credit gift (spendable, not cashable)
+ *  - ₦70,000 spent → a ₦3,000 store-credit gift (spendable, not cashable); paused while
+ *    BIGSPENDER is on, which then pays the one big-spend reward instead
  * Each is granted once per user (idempotent). Best-effort; never blocks fulfilment.
  */
 export const PROMO_MILESTONE_SPEND = 8000;
@@ -42,10 +43,15 @@ export async function maybeGrantSpendMilestones(userId: string | null | undefine
 	if (!userId) return;
 	try {
 		const spend = await cumulativePaidSpend(userId);
-		if (spend >= GIFT_MILESTONE_SPEND) await maybeGrantSpendGift(userId);
+		const { isBigSpenderLive, maybeGrantBigSpender } = await import(
+			'$lib/services/promo-campaigns'
+		);
+		// One big-spend reward per customer: while BIGSPENDER is on it replaces the ₦70k gift.
+		if (spend >= GIFT_MILESTONE_SPEND && !(await isBigSpenderLive())) {
+			await maybeGrantSpendGift(userId);
+		}
 		if (spend >= PROMO_MILESTONE_SPEND) await maybeGrantSpendPromo(userId);
 		// BIGSPENDER (promo credit): does nothing unless the owner has switched it on.
-		const { maybeGrantBigSpender } = await import('$lib/services/promo-campaigns');
 		await maybeGrantBigSpender(userId, spend).catch((error) =>
 			console.error('maybeGrantBigSpender failed:', error)
 		);

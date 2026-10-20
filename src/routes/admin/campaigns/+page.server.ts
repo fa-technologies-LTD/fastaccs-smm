@@ -16,8 +16,7 @@ import {
 	evaluateReferWin,
 	getCampaignSettings,
 	getReferWinMarginCheck,
-	grantBigSpenderToExisting,
-	listBigSpenderQualifiers,
+	listBigSpenderTargets,
 	releaseHeldReferWin,
 	saveCampaignSettings,
 	type ReferWinDecision
@@ -29,7 +28,7 @@ function summarize(decisions: ReferWinDecision[]) {
 	return {
 		issueNow: { count: by('issue').length, amount: amount(by('issue')) },
 		waiting: { count: by('waiting').length, amount: amount(by('waiting')) },
-		monthlyLimit: { count: by('monthly_limit').length, amount: amount(by('monthly_limit')) },
+		dropped: { count: by('dropped_limit').length, amount: amount(by('dropped_limit')) },
 		heldIdentity: { count: by('held_identity').length, amount: amount(by('held_identity')) },
 		superExcluded: { count: by('super_excluded').length, amount: amount(by('super_excluded')) },
 		issued: { count: by('issued').length, amount: amount(by('issued')) },
@@ -66,7 +65,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const now = new Date();
 	const { referWin, bigSpender } = await getCampaignSettings();
 	const monthOf = parseMonth(url.searchParams.get('month'));
-	const [margin, liveDecisions, illustrative, qualifiers, referWinReport, bigSpenderReport] =
+	const [margin, liveDecisions, illustrative, targets, referWinReport, bigSpenderReport] =
 		await Promise.all([
 			getReferWinMarginCheck(referWin),
 			referWin.startsAt
@@ -82,11 +81,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 				launchForwardFrom: null,
 				illustrateExisting: true
 			}),
-			listBigSpenderQualifiers(bigSpender),
+			listBigSpenderTargets(bigSpender),
 			buildPromoCampaignReport('refer_win', monthOf),
 			buildPromoCampaignReport('bigspender', monthOf)
 		]);
-	const pendingQualifiers = qualifiers.filter((row) => !row.alreadyGranted);
 	const monthStart = lagosMonthStart(monthOf);
 	return {
 		isOwner: isOwnerAdmin(locals.user, locals.adminContext),
@@ -117,17 +115,16 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			live: isCampaignLive(bigSpender, now),
 			endsAtWat: dateToWatInput(bigSpender.endsAt ? new Date(bigSpender.endsAt) : null),
 			startsAtWat: dateToWatInput(bigSpender.startsAt ? new Date(bigSpender.startsAt) : null),
-			existing: {
-				rows: pendingQualifiers.map((row) => ({
-					userId: row.userId,
-					email: row.email,
-					name: row.name,
-					lifetimeSpend: row.lifetimeSpend,
-					hadSpendGift70k: row.hadSpendGift70k
-				})),
-				total: pendingQualifiers.length * bigSpender.rewardNgn,
-				alreadyGranted: qualifiers.length - pendingQualifiers.length
-			},
+			// Customers whose mark is above the threshold (had the ₦70k gift or already over it).
+			targets: targets.map((row) => ({
+				userId: row.userId,
+				label: row.name || row.email || row.userId,
+				spendNow: row.spendNow,
+				targetNgn: row.targetNgn,
+				toGo: Math.max(0, row.targetNgn - row.spendNow),
+				hadSpendGift70k: row.hadSpendGift70k,
+				alreadyGranted: row.alreadyGranted
+			})),
 			report: bigSpenderReport
 		}
 	};
@@ -306,31 +303,5 @@ export const actions: Actions = {
 			description: turnOn ? 'BIGSPENDER switched ON' : 'BIGSPENDER switched OFF'
 		});
 		return { success: true, message: turnOn ? 'BIGSPENDER is on.' : 'BIGSPENDER is off.' };
-	},
-
-	grantBigSpenderExisting: async (ctx) => {
-		const denied = requireOwner(ctx);
-		if (denied) return denied;
-		const form = await ctx.request.formData();
-		if (
-			String(form.get('confirm') || '')
-				.trim()
-				.toUpperCase() !== 'GRANT'
-		) {
-			return fail(400, { success: false, error: 'Type GRANT to confirm.' });
-		}
-		let approved: string[] = [];
-		try {
-			approved = JSON.parse(String(form.get('approvedUserIds') || '[]'));
-		} catch {
-			approved = [];
-		}
-		const result = await grantBigSpenderToExisting({
-			approvedUserIds: Array.isArray(approved) ? approved.map(String) : [],
-			actorUserId: ctx.locals.user!.id
-		});
-		return result.success
-			? { success: true, message: `Granted to ${result.granted} customers.` }
-			: fail(400, { success: false, error: result.error });
 	}
 };

@@ -39,6 +39,7 @@ export type EmailNotificationType =
 	| 'numbers_recovery'
 	| 'store_credit_reminder'
 	| 'promo_reminder'
+	| 'promo_credit'
 	| 'admin_broadcast';
 
 export type EmailClassification = 'transactional' | 'marketing' | 'operational';
@@ -291,6 +292,7 @@ function getEmailEyebrow(params: SendEmailParams): string {
 		case 'store_credit_reminder':
 			return 'YOUR CREDIT';
 		case 'promo_reminder':
+		case 'promo_credit':
 			return 'YOUR REWARD';
 		case 'welcome':
 		case 'onboarding_step':
