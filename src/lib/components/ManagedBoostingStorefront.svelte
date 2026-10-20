@@ -1,23 +1,18 @@
 <script lang="ts">
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
-	import { boostCustomerCopy, boostCustomerOptionName } from '$lib/helpers/boosting-customer-copy';
+	import { boostCustomerCopy, boostCustomerShortName } from '$lib/helpers/boosting-customer-copy';
+	import {
+		boostBenefitLabel,
+		boostLowerPriceOffer,
+		boostQuantityText
+	} from '$lib/helpers/boosting-customer-facts';
 	import { boostingStartingQuantity } from '$lib/helpers/boosting-checkout';
 	import {
 		parseBoostComments,
 		MAX_BOOST_COMMENT_TEXT_LENGTH
 	} from '$lib/helpers/boosting-service-input';
 	import BoostingQuantitySelector from '$lib/components/BoostingQuantitySelector.svelte';
-	import {
-		Check,
-		Eye,
-		Heart,
-		MessageCircle,
-		Music,
-		Repeat,
-		Share2,
-		UserPlus,
-		Users
-	} from '$lib/icons';
+	import { Eye, Heart, MessageCircle, Music, Repeat, Share2, UserPlus, Users } from '$lib/icons';
 	import { roundUpCatalogPriceNgn as roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
 	import {
 		getRequiredLinkType,
@@ -37,6 +32,7 @@
 		platform: BoostingPlatform;
 		outcome: string;
 		customerName: string;
+		benefitLabel?: string | null;
 		shortPromise: string;
 		expectationChips: string[];
 		qualityTier: string;
@@ -58,7 +54,7 @@
 		offers: Offer[];
 	}
 
-	let { groups }: { groups: Group[] } = $props();
+	let { groups, previewOnly = false }: { groups: Group[]; previewOnly?: boolean } = $props();
 	let selectedPlatform = $state<BoostingPlatform | ''>('');
 	let selectedCategoryId = $state('');
 	let selectedOfferId = $state('');
@@ -91,6 +87,35 @@
 			selectedGroup?.offers[0] ??
 			null
 	);
+	const lowerPriceOfferId = $derived(boostLowerPriceOffer(selectedGroup?.offers ?? []));
+	const selectedCopy = $derived(selectedOffer ? boostCustomerCopy(selectedOffer) : null);
+	const offerCards = $derived(
+		(selectedGroup?.offers ?? []).map((offer, _index, offers) => {
+			const copy = boostCustomerCopy(offer);
+			const benefit = offer.benefitLabel ?? boostBenefitLabel(offer);
+			const specificName = boostCustomerShortName(offer);
+			return {
+				offer,
+				quantityAsName: offers.length === 1 && !specificName,
+				name:
+					offers.length === 1
+						? (specificName ?? boostQuantityText(boostingStartingQuantity(offer), offer.outcome))
+						: (benefit ??
+							specificName ??
+							(offer.id === lowerPriceOfferId ? 'Lower price' : 'No refill')),
+				benefit: offers.length === 1 && benefit && benefit !== specificName ? benefit : null,
+				description: copy.shortPromise.replace(/\s+/g, ' ').trim()
+			};
+		})
+	);
+	const sharedDescriptions = $derived.by(() => {
+		const counts = new Map<string, number>();
+		for (const { description } of offerCards)
+			if (description) counts.set(description, (counts.get(description) ?? 0) + 1);
+		return [...counts]
+			.filter(([, count]) => count > 1 && count === offerCards.length)
+			.map(([description]) => description);
+	});
 	const total = $derived(
 		selectedOffer
 			? roundCatalogPriceNgn(
@@ -149,7 +174,8 @@
 		selectedOfferId = offer.id;
 		quantity = isCustomComments ? parsedComments.quantity : boostingStartingQuantity(offer);
 		linkError = null;
-		recordAnalyticsEvent('view_content', `/services/${offer.platform}/${offer.outcome}`);
+		if (!previewOnly)
+			recordAnalyticsEvent('view_content', `/services/${offer.platform}/${offer.outcome}`);
 	}
 
 	function linkLabel(platform: BoostingPlatform, outcome: BoostingActionType): string {
@@ -208,7 +234,7 @@
 	}
 
 	async function addToCart(): Promise<void> {
-		if (!selectedGroup || !selectedOffer || adding) return;
+		if (previewOnly || !selectedGroup || !selectedOffer || adding) return;
 		if (
 			isCustomComments &&
 			(parsedComments.error ||
@@ -312,7 +338,10 @@
 						? 'border-color: var(--primary); background: rgba(16,185,129,.08);'
 						: 'border-color: var(--border);'}
 				>
-					<span class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-white">
+					<span
+						aria-hidden="true"
+						class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-white"
+					>
 						<BrandIcon service={platform} size={29} />
 					</span>
 					<span class="mt-2 block text-sm font-semibold" style="color: var(--text);">{label}</span>
@@ -348,13 +377,19 @@
 						class="mb-3 text-sm font-semibold"
 						style="color: var(--text-muted);"
 					>
-						Pick what suits you
+						{selectedGroup.platformLabel}
+						{selectedGroup.outcomeLabel}
 					</p>{/if}
-				<div class="grid gap-3">
-					{#each selectedGroup.offers as offer, index (offer.id)}
+				<div
+					class="grid gap-3"
+					role="group"
+					aria-label={`${selectedGroup.platformLabel} ${selectedGroup.outcomeLabel} options`}
+				>
+					{#each offerCards as { offer, name, benefit, description, quantityAsName } (offer.id)}
 						<button
 							type="button"
 							onclick={() => chooseOffer(offer)}
+							aria-pressed={selectedOffer?.id === offer.id}
 							class="min-h-24 rounded-xl border p-4 text-left"
 							style={selectedOffer?.id === offer.id
 								? 'border-color: var(--primary); background: rgba(16,185,129,.07);'
@@ -363,24 +398,16 @@
 							<div class="flex items-start justify-between gap-4">
 								<div>
 									<div class="flex flex-wrap items-center gap-2">
-										<strong class="text-lg" style="color: var(--text);"
-											>{selectedGroup.offers.length === 1
-												? `${selectedGroup.platformLabel} ${selectedGroup.outcomeLabel}`
-												: boostCustomerOptionName(
-														offer,
-														index,
-														selectedGroup.offers.length
-													)}</strong
-										>
+										<strong class="text-lg" style="color: var(--text);">{name}</strong>
 									</div>
-									<p class="mt-1 text-sm" style="color: var(--text-muted);">
-										{boostCustomerCopy(offer).shortPromise}
-									</p>
-									{#if offer.refillDays}<p class="mt-1 text-xs" style="color: var(--text-muted);">
-											{offer.refillDays}-day refill requests included. Subject to eligibility; not a
-											guarantee against drops. The window normally starts when the order is sent to
-											the supplier; check your order for eligibility.
-										</p>{/if}
+									{#if description && !sharedDescriptions.includes(description)}
+										<p class="mt-1 text-sm" style="color: var(--text-muted);">{description}</p>
+									{/if}
+									{#if benefit}
+										<p class="mt-1 text-xs" style="color: var(--text-muted);">
+											{benefit}
+										</p>
+									{/if}
 								</div>
 								<strong class="text-right whitespace-nowrap" style="color: var(--text);">
 									{formatPrice(
@@ -388,26 +415,37 @@
 											(boostingStartingQuantity(offer) / offer.stepQuantity) * offer.pricePerStepNgn
 										)
 									)}
-									<span class="mt-1 block text-xs font-normal" style="color: var(--text-muted);"
-										>{boostingStartingQuantity(offer).toLocaleString()}
-										{selectedGroup.outcomeLabel.toLowerCase()}</span
-									>
+									{#if !quantityAsName}<span
+											class="mt-1 block text-xs font-normal"
+											style="color: var(--text-muted);"
+											>{boostingStartingQuantity(offer).toLocaleString()}
+											{selectedGroup.outcomeLabel.toLowerCase()}</span
+										>{/if}
 								</strong>
 							</div>
-							{#if boostCustomerCopy(offer).expectationChips.length}
-								<div class="mt-3 flex flex-wrap gap-x-4 gap-y-2">
-									{#each boostCustomerCopy(offer).expectationChips as chip (chip)}
-										<span
-											class="flex items-center gap-1.5 text-xs"
-											style="color: var(--text-muted);"
-											><Check size={14} style="color: var(--primary);" /> {chip}</span
-										>
-									{/each}
-								</div>
-							{/if}
 						</button>
 					{/each}
 				</div>
+				{#each sharedDescriptions as description (description)}
+					<p class="mt-3 text-sm" style="color: var(--text-muted);">{description}</p>
+				{/each}
+				{#if selectedOffer && (selectedOffer.refillDays || selectedCopy?.expectationChips.length)}
+					{#key selectedOffer.id}
+						<details class="mt-3 text-sm" style="color: var(--text-muted);">
+							<summary class="min-h-11 cursor-pointer py-3 font-medium">
+								{selectedOffer.refillDays ? 'Refill terms (eligibility applies)' : 'Option details'}
+							</summary>
+							{#if selectedOffer.refillDays}<p class="pb-2">
+									{selectedOffer.refillDays}-day refill requests are included, not a guarantee
+									against drops. The window normally starts when your order is sent to the supplier.
+									Check your order for the exact window and eligibility.
+								</p>{/if}
+							{#each selectedCopy?.expectationChips ?? [] as chip}
+								<p class="pb-2">{chip}</p>
+							{/each}
+						</details>
+					{/key}
+				{/if}
 			</div>
 
 			{#if selectedOffer}
@@ -481,11 +519,17 @@
 					<button
 						type="button"
 						onclick={addToCart}
-						disabled={adding || !Number.isFinite(total)}
+						disabled={previewOnly || adding || !Number.isFinite(total)}
 						class="mt-4 min-h-12 w-full rounded-xl px-4 py-3 text-base font-bold disabled:opacity-60"
 						style="background: var(--primary); color: #00150b;"
 					>
-						{adding ? 'Adding…' : total > 0 ? `Add to Cart — ${formatPrice(total)}` : 'Add to Cart'}
+						{previewOnly
+							? 'Preview only — checkout disabled'
+							: adding
+								? 'Adding…'
+								: total > 0
+									? `Add to Cart — ${formatPrice(total)}`
+									: 'Add to Cart'}
 					</button>
 				</div>
 			{/if}

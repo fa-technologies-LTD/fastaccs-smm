@@ -21,6 +21,7 @@ export interface ManagedBoostingOffer {
 	platform: BoostingPlatform;
 	outcome: string;
 	customerName: string;
+	benefitLabel?: string | null;
 	shortPromise: string;
 	expectationChips: string[];
 	qualityTier: string;

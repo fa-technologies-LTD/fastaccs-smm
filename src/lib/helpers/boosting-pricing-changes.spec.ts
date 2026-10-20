@@ -2,6 +2,16 @@ import { expect, it } from 'vitest';
 import { sheet } from './boosting-pricing-sheet-fixtures';
 import { boostingPricingChanges } from './boosting-pricing-changes';
 
+it('reviews legacy prices using the same per-1,000 basis as the price input', () => {
+	const before = structuredClone(sheet);
+	before.rows[0] = { ...before.rows[0], units: 10, sale: 150 };
+	const after = structuredClone(before);
+	after.rows[0].sale = 155;
+	expect(boostingPricingChanges(before, after).offers[0].changes).toEqual([
+		{ label: 'Price', before: '₦15,000 per 1,000', after: '₦15,500 per 1,000' }
+	]);
+});
+
 it('lists price, locks, Live changes and rules in one review without mutating either input', () => {
 	const before = structuredClone(sheet);
 	const after = structuredClone(before);

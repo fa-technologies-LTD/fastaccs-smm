@@ -1,6 +1,15 @@
 import { expect, it, vi } from 'vitest';
 import { load } from './+page';
 
+it('opens a specific order search in All so completed history is still reachable', async () => {
+	const fetch = vi.fn(async (_input: RequestInfo | URL) =>
+		Response.json({ success: true, data: [], meta: { status: 'all', search: 'ORD-DEMO' } })
+	);
+	await load({ fetch, url: new URL('http://localhost/admin/boosting-orders?q=ORD-DEMO') } as never);
+	expect(String(fetch.mock.calls[0][0])).toContain('status=all');
+	expect(String(fetch.mock.calls[0][0])).toContain('q=ORD-DEMO');
+});
+
 it('loads the dedicated reporting endpoint alongside the order queue, without any writes', async () => {
 	const analytics = { overall: { orders: 2, items: 3 } };
 	const fetch = vi.fn(async (input: RequestInfo | URL) =>

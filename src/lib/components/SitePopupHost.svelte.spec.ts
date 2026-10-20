@@ -1,9 +1,19 @@
-import { page as browser } from '@vitest/browser/context';
+import { page as browser, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { page } from '$app/state';
 import SitePopupHost from './SitePopupHost.svelte';
+import { markBoostingLaunchNoticeSeen } from '$lib/helpers/boosting-launch-notice';
+
+const launchState = vi.hoisted(() => ({ seen: false }));
+vi.mock('$lib/helpers/boosting-launch-notice', async (original) => ({
+	...(await original<typeof import('$lib/helpers/boosting-launch-notice')>()),
+	hasSeenBoostingLaunchNotice: () => launchState.seen,
+	markBoostingLaunchNoticeSeen: vi.fn(() => {
+		launchState.seen = true;
+	})
+}));
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('$app/state', async () => {
@@ -18,11 +28,19 @@ const popup = {
 	ctaText: 'Close'
 };
 beforeEach(() => {
+	launchState.seen = false;
+	vi.clearAllMocks();
 	page.url.href = 'http://localhost/admin/analytics';
 	sessionStorage.removeItem('fastaccs_site_popup_checked');
 	vi.stubGlobal(
 		'fetch',
-		vi.fn(async () => Response.json({ popup }))
+		vi.fn(async (url) =>
+			Response.json(
+				url === '/api/boosting-offers'
+					? { automationReady: false, managedRolloutActive: true, data: [] }
+					: { popup }
+			)
+		)
 	);
 });
 afterEach(() => {
@@ -41,12 +59,13 @@ it('retains customer popups and hides them upon entering admin without marking t
 	page.url.pathname = '/dashboard';
 	render(SitePopupHost, { isLoggedIn: true });
 	await expect.element(browser.getByRole('dialog')).toBeVisible();
-	expect(fetch).toHaveBeenCalledOnce();
+	expect(fetch).toHaveBeenCalledTimes(2);
 	page.url.pathname = '/admin';
 	await expect.element(browser.getByRole('dialog')).not.toBeInTheDocument();
-	expect(fetch).toHaveBeenCalledOnce();
+	expect(fetch).toHaveBeenCalledTimes(2);
 });
 it('ignores a late storefront popup response after navigation into admin', async () => {
+	launchState.seen = true;
 	let resolvePopup!: (response: Response) => void;
 	vi.stubGlobal(
 		'fetch',
@@ -66,5 +85,100 @@ it('ignores a late storefront popup response after navigation into admin', async
 	resolvePopup(Response.json({ popup }));
 	await tick();
 	await tick();
+	expect(browser.getByRole('dialog').query()).toBeNull();
+});
+
+it('shows guests one reopening notice, marks the impression and does not repeat after remount', async () => {
+	page.url.pathname = '/';
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () =>
+			Response.json({
+				automationReady: true,
+				managedRolloutActive: true,
+				data: [{ id: 'available' }]
+			})
+		)
+	);
+	const first = render(SitePopupHost, { isLoggedIn: false });
+	await expect.element(browser.getByRole('dialog', { name: 'Boosting is back.' })).toBeVisible();
+	expect(markBoostingLaunchNoticeSeen).toHaveBeenCalledOnce();
+	await expect
+		.element(browser.getByRole('link', { name: 'Explore Boosting' }))
+		.toHaveAttribute('href', '/services');
+	await browser.getByRole('button', { name: 'Close announcement' }).click();
+	await expect.element(browser.getByRole('dialog')).not.toBeInTheDocument();
+	await first.unmount();
+	render(SitePopupHost, { isLoggedIn: false });
+	await tick();
+	expect(fetch).toHaveBeenCalledOnce();
+	expect(browser.getByRole('dialog').query()).toBeNull();
+});
+
+it('does not stack another announcement for signed-in customers and supports Escape', async () => {
+	page.url.pathname = '/dashboard';
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () =>
+			Response.json({
+				automationReady: true,
+				managedRolloutActive: true,
+				data: [{ id: 'available' }]
+			})
+		)
+	);
+	render(SitePopupHost, { isLoggedIn: true });
+	await expect.element(browser.getByRole('dialog', { name: 'Boosting is back.' })).toBeVisible();
+	await userEvent.keyboard('{Escape}');
+	await expect.element(browser.getByRole('dialog')).not.toBeInTheDocument();
+	expect(fetch).toHaveBeenCalledOnce();
+});
+
+it.each(['/checkout', '/order/paid', '/admin/boosting-pricing', '/login', '/numbers/order/test'])(
+	'never interrupts the sensitive route %s',
+	async (path) => {
+		page.url.href = `http://localhost${path}`;
+		render(SitePopupHost, { isLoggedIn: true });
+		await tick();
+		expect(fetch).not.toHaveBeenCalled();
+		expect(markBoostingLaunchNoticeSeen).not.toHaveBeenCalled();
+	}
+);
+
+it('does not announce unavailable services or consume the announcement impression', async () => {
+	page.url.pathname = '/services';
+	render(SitePopupHost, { isLoggedIn: false });
+	await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+	await tick();
+	expect(markBoostingLaunchNoticeSeen).not.toHaveBeenCalled();
+	expect(browser.getByRole('dialog').query()).toBeNull();
+});
+
+it('ignores an availability response arriving after navigation to checkout', async () => {
+	let resolveAvailability!: (response: Response) => void;
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(
+			() =>
+				new Promise<Response>((resolve) => {
+					resolveAvailability = resolve;
+				})
+		)
+	);
+	page.url.pathname = '/';
+	render(SitePopupHost, { isLoggedIn: false });
+	await tick();
+	page.url.pathname = '/checkout';
+	await tick();
+	resolveAvailability(
+		Response.json({
+			automationReady: true,
+			managedRolloutActive: true,
+			data: [{ id: 'available' }]
+		})
+	);
+	await tick();
+	await tick();
+	expect(markBoostingLaunchNoticeSeen).not.toHaveBeenCalled();
 	expect(browser.getByRole('dialog').query()).toBeNull();
 });

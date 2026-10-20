@@ -53,7 +53,13 @@ describe('getDashboardOrdersPage', () => {
 				select: expect.objectContaining({
 					orderItems: {
 						select: expect.objectContaining({
-							boostFulfillment: { select: { offerId: true } }
+							boostFulfillment: {
+								select: expect.objectContaining({
+									offerId: true,
+									status: true,
+									lastSafeErrorCategory: true
+								})
+							}
 						})
 					}
 				})
@@ -65,5 +71,41 @@ describe('getDashboardOrdersPage', () => {
 			unitPrice: 7550
 		});
 		expect(page.orders[0].orderItems[0]).not.toHaveProperty('boostFulfillment');
+	});
+	it('projects a held delivery truthfully without exposing the supplier record', async () => {
+		mocks.findMany.mockResolvedValue([
+			{
+				id: 'held',
+				status: 'completed',
+				paymentStatus: 'paid',
+				deliveryStatus: 'delivered',
+				totalAmount: '850',
+				refundedAmount: '0',
+				orderItems: [
+					{
+						id: 'item',
+						boostTargetUrl: 'https://instagram.com/example',
+						boostQuantity: 500,
+						boostFulfillmentStatus: 'completed',
+						unitPrice: '850',
+						totalPrice: '850',
+						refundedAmount: '0',
+						boostFulfillment: {
+							offerId: 'offer',
+							status: 'manual_review',
+							lastSafeErrorCategory: 'provider_cancelled',
+							remains: 500
+						}
+					}
+				]
+			}
+		]);
+		const result = await getDashboardOrdersPage({ userId: 'buyer' });
+		expect(result.orders[0].orderItems[0].boostProgress).toMatchObject({
+			status: 'under_review',
+			reportedDelivered: null
+		});
+		expect(result.orders[0].orderItems[0]).not.toHaveProperty('boostFulfillment');
+		expect(JSON.stringify(result)).not.toContain('provider_cancelled');
 	});
 });

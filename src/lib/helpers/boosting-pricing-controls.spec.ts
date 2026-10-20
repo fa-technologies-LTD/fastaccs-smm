@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import { sheet, row, quote } from './boosting-pricing-sheet-fixtures';
 import {
 	boostReadinessSummary,
+	boostPricingAdvisory,
 	boostAutoPrice,
 	boostControlSignature,
 	boostEffectiveRules,
@@ -9,6 +10,22 @@ import {
 	type BoostControlsView,
 	validateBoostRules
 } from './boosting-pricing-controls';
+
+it('keeps owner-accepted preferences advisory, without allowing genuine supplier or refill problems', () => {
+	for (const reason of [
+		'Below minimum retained profit.',
+		'Supplier cost exceeds reviewed limit.',
+		'A customer-facing service claim has not been verified.'
+	])
+		expect(boostPricingAdvisory(reason)).toBe(true);
+	for (const reason of [
+		'Supplier unavailable.',
+		'Below supplier minimum.',
+		'No profit at this price.',
+		'The advertised refill cover is not verified for this supplier.'
+	])
+		expect(boostPricingAdvisory(reason)).toBe(false);
+});
 
 it('shows a specific publication blocker, or explicit readiness', () => {
 	expect(boostReadinessSummary(['Review supplier setup.'], [], false)).toBe(

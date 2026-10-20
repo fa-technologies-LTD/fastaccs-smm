@@ -2,6 +2,12 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import AffiliatePopupModal from './AffiliatePopupModal.svelte';
+	import BoostingLaunchNotice from './BoostingLaunchNotice.svelte';
+	import {
+		canShowBoostingLaunchNotice,
+		hasSeenBoostingLaunchNotice,
+		markBoostingLaunchNoticeSeen
+	} from '$lib/helpers/boosting-launch-notice';
 	import type { PendingSitePopup } from '$lib/services/site-popups';
 
 	interface Props {
@@ -13,6 +19,49 @@
 	const SESSION_CHECK_KEY = 'fastaccs_site_popup_checked';
 
 	let activePopup = $state<PendingSitePopup | null>(null);
+	let showBoostingLaunch = $state(false);
+	let launchChecked = false;
+	let launchShownThisVisit = false;
+	let launchChecking = $state(false);
+
+	$effect(() => {
+		const eligible = canShowBoostingLaunchNotice(page.url.pathname);
+		if (!eligible) showBoostingLaunch = false;
+		if (!eligible || launchChecked || hasSeenBoostingLaunchNotice()) return;
+		const controller = new AbortController();
+		launchChecking = true;
+		fetch('/api/boosting-offers', { signal: controller.signal })
+			.then((response) => (response.ok ? response.json() : null))
+			.then((result) => {
+				if (controller.signal.aborted) return;
+				launchChecked = true;
+				if (
+					result?.automationReady === true &&
+					result?.managedRolloutActive === true &&
+					Array.isArray(result.data) &&
+					result.data.length > 0 &&
+					canShowBoostingLaunchNotice(page.url.pathname) &&
+					!hasSeenBoostingLaunchNotice()
+				) {
+					activePopup = null;
+					launchShownThisVisit = true;
+					showBoostingLaunch = true;
+					// Do not stack another marketing modal immediately after this announcement.
+					try {
+						window.sessionStorage.setItem(SESSION_CHECK_KEY, '1');
+					} catch {
+						/* optional storage */
+					}
+				}
+			})
+			.catch(() => {
+				if (!controller.signal.aborted) launchChecked = true;
+			})
+			.finally(() => {
+				launchChecking = false;
+			});
+		return () => controller.abort();
+	});
 	function isAdminPath(): boolean {
 		return page.url.pathname === '/admin' || page.url.pathname.startsWith('/admin/');
 	}
@@ -21,7 +70,17 @@
 		fetch('/api/site-popup')
 			.then((response) => (response.ok ? response.json() : null))
 			.then((result) => {
-				if (result?.popup && isLoggedIn && !isAdminPath()) {
+				if (
+					result?.popup &&
+					isLoggedIn &&
+					!isAdminPath() &&
+					!showBoostingLaunch &&
+					canShowBoostingLaunchNotice(page.url.pathname) &&
+					!(
+						hasSeenBoostingLaunchNotice() &&
+						['boosting_refresh', 'boosting_launch'].includes(result.popup.type)
+					)
+				) {
 					activePopup = result.popup;
 				}
 			})
@@ -31,13 +90,18 @@
 	}
 
 	$effect(() => {
-		if (!isLoggedIn || isAdminPath()) {
+		if (!isLoggedIn || isAdminPath() || !canShowBoostingLaunchNotice(page.url.pathname)) {
 			activePopup = null;
 			return;
 		}
-		if (window.sessionStorage.getItem(SESSION_CHECK_KEY) === '1') return;
+		if (launchChecking || showBoostingLaunch || launchShownThisVisit) return;
+		try {
+			if (window.sessionStorage.getItem(SESSION_CHECK_KEY) === '1') return;
 
-		window.sessionStorage.setItem(SESSION_CHECK_KEY, '1');
+			window.sessionStorage.setItem(SESSION_CHECK_KEY, '1');
+		} catch {
+			return;
+		}
 		checkForPopup();
 	});
 
@@ -72,7 +136,14 @@
 	}
 </script>
 
-{#if activePopup}
+{#if showBoostingLaunch}
+	<BoostingLaunchNotice
+		onClose={() => {
+			showBoostingLaunch = false;
+		}}
+		onShown={markBoostingLaunchNoticeSeen}
+	/>
+{:else if activePopup}
 	<AffiliatePopupModal
 		isOpen={true}
 		onClose={dismissPopup}

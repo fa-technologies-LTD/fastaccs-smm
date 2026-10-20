@@ -6,6 +6,7 @@
 	import { cart } from '$lib/stores/cart.svelte';
 	import { normalizePaymentStatus } from '$lib/helpers/payment-status';
 	import { toNetSales } from '$lib/helpers/order-revenue';
+	import { getBoostOrderSummaryStatus } from '$lib/helpers/boosting-progress';
 	import {
 		getTierDeliveryModeLabel,
 		normalizeTierDeliveryMode,
@@ -26,6 +27,7 @@
 		boostTargetUrl?: string | null;
 		boostQuantity?: number | null;
 		boostFulfillmentStatus?: string | null;
+		boostProgress?: { status: string } | null;
 		boostOfferId?: string | null;
 	}
 
@@ -196,14 +198,19 @@
 		}
 
 		if (isBoostingOrder(order)) {
+			const summary = getBoostOrderSummaryStatus({ ...order, orderItems: getOrderItems(order) });
+			if (summary === 'under_review') return 'Under Review';
+			if (summary === 'refunded') return 'Refunded';
+			if (summary === 'cancelled') return 'Cancelled';
+			if (summary === 'pending') return 'Not Started';
 			const boostingItems = getBoostingItems(order);
-			if (boostingItems.some((item) => item.boostFulfillmentStatus === 'needs_link')) {
+			if (summary === 'needs_link') {
 				return 'Action Needed — Update Link';
 			}
 			if (boostingItems.some((item) => item.boostFulfillmentStatus === 'rejected')) {
 				return 'Needs Support';
 			}
-			if (boostingItems.every((item) => item.boostFulfillmentStatus === 'completed')) {
+			if (summary === 'completed') {
 				return 'Boost Completed';
 			}
 			if (boostingItems.some((item) => item.boostFulfillmentStatus === 'in_progress')) {

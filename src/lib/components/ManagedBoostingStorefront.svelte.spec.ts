@@ -1,4 +1,4 @@
-import { page } from '@vitest/browser/context';
+import { page } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import ManagedBoostingStorefront from './ManagedBoostingStorefront.svelte';
@@ -60,21 +60,62 @@ const groups = [
 describe('Managed Boosting storefront', () => {
 	it('uses neutral option labels, no invented recommendation, and explains refill limits', async () => {
 		render(ManagedBoostingStorefront, { groups });
-		await expect
-			.element(page.getByText('X (Twitter) Followers · Standard option 1', { exact: true }))
-			.toBeVisible();
-		await expect
-			.element(page.getByText('X (Twitter) Followers · 30-day refill option', { exact: true }))
-			.toBeVisible();
+		await expect.element(page.getByText('Lower price', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('30-day refill', { exact: true })).toBeVisible();
 		await expect.element(page.getByText('Recommended', { exact: true })).not.toBeInTheDocument();
 		await expect
 			.element(page.getByText('Less likely to drop, with stronger staying power.', { exact: true }))
 			.not.toBeInTheDocument();
+		expect(
+			page
+				.getByText('Delivery timing varies. Track progress from your order.', { exact: true })
+				.all()
+		).toHaveLength(1);
 		await expect
-			.element(
-				page.getByText(/Subject\s+to\s+eligibility;\s+not\s+a\s+guarantee\s+against\s+drops/)
-			)
+			.element(page.getByText('Refill terms (eligibility applies)', { exact: true }))
+			.not.toBeInTheDocument();
+		await page.getByRole('button', { name: /30-day refill/ }).click();
+		const terms = page.getByText('Refill terms (eligibility applies)', { exact: true });
+		await expect.element(terms).toBeVisible();
+		await expect.element(page.getByText(/not\s+a\s+guarantee\s+against\s+drops/)).not.toBeVisible();
+		await terms.click();
+		await expect.element(page.getByText(/not\s+a\s+guarantee\s+against\s+drops/)).toBeVisible();
+		await expect
+			.element(page.getByText(/normally starts when your order is sent to the supplier/))
 			.toBeVisible();
+		await page.getByRole('button', { name: /Lower price/ }).click();
+		await expect.element(terms).not.toBeInTheDocument();
+	});
+	it('keeps differing descriptions attached to their own options', async () => {
+		render(ManagedBoostingStorefront, {
+			groups: [
+				{
+					...groups[0],
+					offers: groups[0].offers.map((offer, index) => ({
+						...offer,
+						shortPromise: index ? 'For public profiles.' : 'For public pages.'
+					}))
+				}
+			]
+		});
+		await expect
+			.element(page.getByRole('button', { name: /Lower price/ }))
+			.toHaveTextContent('For public pages.');
+		await expect
+			.element(page.getByRole('button', { name: /30-day refill/ }))
+			.toHaveTextContent('For public profiles.');
+	});
+	it('shows a short refill label for a custom name and disables checkout in the local demo', async () => {
+		const add = vi.spyOn(cart, 'addBoostingService').mockImplementation(() => {});
+		render(ManagedBoostingStorefront, {
+			groups: [{ ...groups[0], offers: [{ ...groups[0].offers[1], customerName: 'X Followers' }] }],
+			previewOnly: true
+		});
+		await expect.element(page.getByText('30-day refill', { exact: true })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Preview only — checkout disabled' }))
+			.toBeDisabled();
+		expect(add).not.toHaveBeenCalled();
 	});
 	afterEach(() => {
 		cart.close();
@@ -172,11 +213,11 @@ describe('Managed Boosting storefront', () => {
 		await expect
 			.element(page.getByRole('button', { name: 'Followers', exact: true }))
 			.toBeVisible();
-		await expect.element(page.getByRole('button', { name: /Standard option 1/ })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: /Lower price/ })).toBeVisible();
 		await expect
-			.element(page.getByRole('button', { name: /Standard option 1/ }))
+			.element(page.getByRole('button', { name: /Lower price/ }))
 			.toHaveTextContent('500 followers');
-		await expect.element(page.getByRole('button', { name: /30-day refill option/ })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: /30-day refill/ })).toBeVisible();
 		await expect.element(page.getByLabelText('Paste your profile link')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: /Add to Cart/ })).toBeEnabled();
 	});
@@ -184,9 +225,7 @@ describe('Managed Boosting storefront', () => {
 		render(ManagedBoostingStorefront, {
 			groups: [{ ...groups[0], offers: [{ ...groups[0].offers[0], customerName: 'Premium' }] }]
 		});
-		await expect
-			.element(page.getByRole('button', { name: /X \(Twitter\) Followers/ }))
-			.toBeVisible();
+		await expect.element(page.getByRole('button', { name: /500 followers/ })).toBeVisible();
 		expect(page.getByText('Premium', { exact: true }).query()).toBeNull();
 		expect(page.getByText('Recommended', { exact: true }).query()).toBeNull();
 		expect(page.getByText('Pick what suits you', { exact: true }).query()).toBeNull();

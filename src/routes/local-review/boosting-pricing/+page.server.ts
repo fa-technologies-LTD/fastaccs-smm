@@ -10,6 +10,17 @@ export const load: PageServerLoad = async ({ url, setHeaders }) => {
 		'$lib/helpers/boosting-supplier-details-fixtures'
 	);
 	const pricing = boostingPricingPreview();
+	if (url.searchParams.get('review') === 'advisories') {
+		pricing.sheet.settings.hardProfitNgn = 1000;
+		pricing.sheet.rows[0].sale = 500;
+		pricing.setup[pricing.sheet.rows[0].id].maximumCostNgn = 10;
+		pricing.availability = {
+			[pricing.sheet.rows[0].id]: {
+				reasons: ['A customer-facing service claim has not been verified.'],
+				checkedAt: new Date().toISOString()
+			}
+		};
+	}
 	return {
 		pricing,
 		supplierDetails: Object.fromEntries(

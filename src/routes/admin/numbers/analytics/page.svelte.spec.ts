@@ -1,4 +1,4 @@
-import { page } from '@vitest/browser/context';
+import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { expect, it } from 'vitest';
 import '$lib/../app.css';

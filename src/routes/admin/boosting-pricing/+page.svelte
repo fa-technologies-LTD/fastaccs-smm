@@ -15,6 +15,9 @@
 	} from '$lib/helpers/boosting-service-config';
 	import {
 		pricingEconomics,
+		pricingDisplayAmount,
+		pricingStoredAmount,
+		BOOST_PRICING_DISPLAY_QUANTITY,
 		pricingStart,
 		pricingStepPrice,
 		validatePricingSheet,
@@ -25,6 +28,7 @@
 	import { boostingPricingChanges } from '$lib/helpers/boosting-pricing-changes';
 	import {
 		boostAutoPrice,
+		boostPricingAdvisory,
 		boostRowWarnings,
 		boostReadinessSummary,
 		boostControlSignature,
@@ -130,6 +134,21 @@
 				);
 	}
 	const economics = (r: BoostPricingRow) => pricingEconomics(r, view.sheet, quote(r));
+	const displayAmount = (r: BoostPricingRow, amount: number | null | undefined) =>
+		pricingDisplayAmount(r, amount);
+	function updateDisplayPrice(row: BoostPricingRow, input: HTMLInputElement) {
+		row.sale = pricingStoredAmount(row, input.value === '' ? NaN : Number(input.value));
+		row.priceMode = 'manual';
+		recheckIncrement(row);
+	}
+	function updateDisplayOverride(
+		row: BoostPricingRow,
+		field: 'profitTargetNgn' | 'hardProfitNgn',
+		input: HTMLInputElement
+	) {
+		row[field] = input.value === '' ? undefined : pricingStoredAmount(row, Number(input.value));
+		previewPrices();
+	}
 	const savedQuantities = $derived(
 		new Map((JSON.parse(saved) as BoostPricingSheet).rows.map((r) => [r.id, r.startingQuantity]))
 	);
@@ -194,11 +213,7 @@
 					/balance is insufficient/i.test(warning) &&
 					r.startingQuantity < (savedQuantities.get(r.id) ?? r.startingQuantity)
 				) &&
-				![
-					'Below profit target.',
-					'Check option price order.',
-					'Costs more per item than followers.'
-				].includes(warning)
+				!boostPricingAdvisory(warning)
 		);
 	function toggleLive(row: BoostPricingRow, input: HTMLInputElement) {
 		if (input.checked && !row.selected) {
@@ -266,7 +281,12 @@
 			.map(([, message]) => message);
 	}
 	const platforms = $derived([...new Set(view.sheet.rows.map((r) => r.platform))]);
-	const flagged = $derived(view.sheet.rows.filter((r) => warnings(r).length > 0).length);
+	const flagged = $derived(view.sheet.rows.filter((r) => liveBlockers(r).length > 0).length);
+	const advisoryCount = $derived(
+		view.sheet.rows.filter(
+			(r) => liveBlockers(r).length === 0 && warnings(r).some(boostPricingAdvisory)
+		).length
+	);
 	const live = $derived(view.sheet.rows.filter((r) => view.liveStatuses[r.id] === 'live').length);
 	const visible = $derived(
 		view.sheet.rows.filter(
@@ -275,7 +295,9 @@
 				(filter !== 'live' || view.liveStatuses[r.id] === 'live') &&
 				(filter !== 'ready' || (!r.selected && liveBlockers(r).length === 0)) &&
 				(filter !== 'edited' || changedRows.has(r.id)) &&
-				(filter !== 'review' || warnings(r).length > 0) &&
+				(filter !== 'review' || liveBlockers(r).length > 0) &&
+				(filter !== 'advisory' ||
+					(liveBlockers(r).length === 0 && warnings(r).some(boostPricingAdvisory))) &&
 				`${r.title} ${r.option} ${sourceCode(r)} ${sourceProvider(r) === 'smm_raja' ? 'SMM Raja' : 'BulkFollows'}`
 					.toLowerCase()
 					.includes(search.trim().replace(/^#/, '').toLowerCase())
@@ -404,7 +426,25 @@
 			const sheet = structuredClone(payload.sheet) as BoostPricingSheet;
 			const quotes = structuredClone($state.snapshot(view.quotes));
 			const setup = structuredClone($state.snapshot(view.setup));
+			const availability = structuredClone($state.snapshot(view.availability ?? {}));
 			for (const row of sheet.rows) {
+				if (row.selected && quote(row)?.rateUsd != null) {
+					setup[row.id].maximumCostNgn = Math.max(
+						setup[row.id].maximumCostNgn,
+						Math.ceil(
+							((quote(row)!.rateUsd! * sheet.settings.fx * row.startingQuantity) / 1000) * 100 -
+								1e-7
+						) / 100
+					);
+					if (availability[row.id])
+						availability[row.id].reasons = availability[row.id].reasons.filter(
+							(reason) =>
+								![
+									'A customer-facing service claim has not been verified.',
+									'Supplier cost exceeds the approved spending limit.'
+								].includes(reason)
+						);
+				}
 				if (supplierDrafts[row.id]) {
 					const choice = supplierDrafts[row.id];
 					quotes[row.id] = structuredClone($state.snapshot(choice));
@@ -420,6 +460,7 @@
 				}
 				delete row.supplierChoiceId;
 				delete row.supplierChoiceRevision;
+				delete row.reviewRequested;
 			}
 			sheet.version++;
 			return {
@@ -427,6 +468,7 @@
 				data: {
 					...$state.snapshot(view),
 					quotes,
+					availability,
 					setup,
 					sheet,
 					liveStatuses: Object.fromEntries(
@@ -677,8 +719,8 @@
 		<section class="panel">
 			<h2>Pricing rules</h2>
 			<p>
-				Supplier cost × your dollar rate + profit, rounded up to ₦50. Overrides apply to the
-				quantity shown in each row.
+				Compare supplier cost, selling price and estimated profit per 1,000. Existing pricing rules,
+				customer minimums and increments stay unchanged.
 			</p>
 			<div class="fields">
 				<label
@@ -704,7 +746,10 @@
 						min="0"
 						bind:value={view.sheet.settings.profitTargetNgn}
 						oninput={() => queueMicrotask(previewPrices)}
-					/><small>0 means percentage-only pricing.</small></label
+					/><small
+						>0 means percentage-only pricing. Saved rule quantities are unchanged; each offer's
+						Advanced pricing shows its equivalent per 1,000.</small
+					></label
 				>
 			</div>
 			<div class="floor">
@@ -716,7 +761,10 @@
 						oninput={() => queueMicrotask(previewPrices)}
 					/></label
 				>
-				<p>A safety limit, not a selling-price target. Separate from the ₦500 minimum checkout.</p>
+				<p>
+					Used by automatic pricing. Your confirmed manual price may be lower, but must still cover
+					supplier cost and fees. Separate from the ₦500 checkout minimum.
+				</p>
 			</div>
 			<details>
 				<summary>Advanced pricing & fees</summary>
@@ -769,7 +817,10 @@
 			>
 		</div>
 		<div class="filters">
-			<p>{live} offers live · <span>{flagged} need review</span></p>
+			<p>
+				{live} offers live · <span>{flagged} blocked</span> ·
+				<span>{advisoryCount} with advisories</span>
+			</p>
 			<div>
 				<label class="sr-only" for="platform">Platform</label><select
 					id="platform"
@@ -781,8 +832,9 @@
 				<label class="sr-only" for="status">Status</label><select id="status" bind:value={filter}
 					><option value="all">All offers</option><option value="live">Live now</option><option
 						value="ready">Ready to publish</option
-					><option value="edited">Unsaved edits</option><option value="review">Needs review</option
-					></select
+					><option value="edited">Unsaved edits</option><option value="review"
+						>Blocked offers</option
+					><option value="advisory">Advisories only</option></select
 				>
 				<input aria-label="Search offers" placeholder="Search offers" bind:value={search} />
 				{#if platform !== 'all' || filter !== 'all' || search}<button
@@ -795,6 +847,7 @@
 			</div>
 			<p class="hint">
 				Showing {visible.length} of {view.sheet.rows.length} offers. Live ticks are drafts until Save.
+				Prices, costs and estimated profit are all per 1,000.
 			</p>
 		</div>
 		<div
@@ -846,7 +899,7 @@
 										row.tier
 									: '—'}</td
 							>
-							<td>{row.units.toLocaleString()}</td><td
+							<td>{BOOST_PRICING_DISPLAY_QUANTITY.toLocaleString()}</td><td
 								><button
 									class="source"
 									onclick={() => chooseSupplier(row)}
@@ -867,18 +920,15 @@
 									></button
 								></td
 							>
-							<td>{money(economics(row).cost)}</td><td
+							<td>{money(displayAmount(row, economics(row).cost))}</td><td
 								><div class="price">
 									<input
 										aria-label={`Price for ${row.title} ${row.tier}`}
 										type="number"
 										min="0"
 										step="0.01"
-										bind:value={row.sale}
-										oninput={() => {
-											row.priceMode = 'manual';
-											queueMicrotask(() => recheckIncrement(row));
-										}}
+										value={displayAmount(row, row.sale)}
+										oninput={(event) => updateDisplayPrice(row, event.currentTarget)}
 									/><button
 										class:locked={row.priceMode === 'manual'}
 										aria-label={`${row.priceMode === 'manual' ? 'Unlock' : 'Lock'} ${row.title} ${row.tier} price`}
@@ -890,7 +940,7 @@
 								</div></td
 							>
 							<td class:negative={(economics(row).profit ?? 0) <= 0} class="profit"
-								>{money(economics(row).profit)}</td
+								>{money(displayAmount(row, economics(row).profit))}</td
 							>
 							<td
 								><span
@@ -930,6 +980,22 @@
 														Not live yet. Review the items below.
 													</p>{/if}
 												{#each warnings(row) as warning}<p class="warning-copy">{warning}</p>{/each}
+												{#if warnings(row).some(boostPricingAdvisory)}
+													<p class="hint">
+														These preferences do not block your confirmed manual Save. Unverified
+														quality labels are not customer guarantees.
+													</p>
+													<button
+														disabled={busy || saveUncertain || row.reviewRequested}
+														onclick={() => {
+															row.reviewRequested = true;
+															row.priceMode = 'manual';
+														}}
+														>{row.reviewRequested
+															? 'Queued for final Save'
+															: 'Review current price and cost'}</button
+													>
+												{/if}
 											</div>
 											<p>
 												Customers start at {pricingStart(
@@ -938,8 +1004,11 @@
 												).toLocaleString()} · +/− {row.increment.toLocaleString()}
 											</p>
 											<p>
-												Reviewed supplier limit: {money(costLimit(row))}
-												per {row.startingQuantity.toLocaleString()}.
+												Reviewed supplier limit: {money(
+													costLimit(row) == null
+														? null
+														: (costLimit(row)! * 1000) / row.startingQuantity
+												)} per 1,000.
 											</p>
 											<button disabled={busy} onclick={() => openSupplier(row)}
 												>Supplier details</button
@@ -1025,8 +1094,8 @@
 														{message}
 													</p>{/each}
 												<p>
-													Prices are per {row.units.toLocaleString()}. Changing the increment keeps
-													the same per-item price.
+													Prices and costs are per 1,000. Changing the increment keeps the same
+													per-item price.
 												</p>
 												<p>
 													Cheap offers may start higher to meet the ₦500 checkout minimum. Supplier
@@ -1035,6 +1104,13 @@
 											</section>
 											<details>
 												<summary>Advanced pricing</summary>
+												<p class="hint">
+													Amounts below are per 1,000. Inherited profit target: {money(
+														displayAmount(row, view.sheet.settings.profitTargetNgn ?? 0)
+													)}; minimum retained profit: {money(
+														displayAmount(row, view.sheet.settings.hardProfitNgn ?? 0)
+													)}. Existing rule calculations are preserved.
+												</p>
 												<div class="fields">
 													<label class="check"
 														><input
@@ -1057,21 +1133,23 @@
 														/></label
 													>
 													<label
-														>Profit target override (₦)<input
+														>Profit target override per 1,000 (₦)<input
 															type="number"
 															min="0"
 															placeholder="Global"
-															bind:value={row.profitTargetNgn}
-															oninput={() => queueMicrotask(previewPrices)}
+															value={displayAmount(row, row.profitTargetNgn)}
+															oninput={(event) =>
+																updateDisplayOverride(row, 'profitTargetNgn', event.currentTarget)}
 														/></label
 													>
 													<label
-														>Minimum retained profit override (₦)<input
+														>Minimum retained profit override per 1,000 (₦)<input
 															type="number"
 															min="0"
 															placeholder="Global"
-															bind:value={row.hardProfitNgn}
-															oninput={() => queueMicrotask(previewPrices)}
+															value={displayAmount(row, row.hardProfitNgn)}
+															oninput={(event) =>
+																updateDisplayOverride(row, 'hardProfitNgn', event.currentTarget)}
 														/></label
 													>
 												</div>
@@ -1172,6 +1250,12 @@
 				{review.offers.length === 1 ? 'offer' : 'offers'} changed · {review.goingLive} going live · {review.goingOffline}
 				going offline
 			</p>
+			<p class="hint">
+				For the selected Live offers below, confirming accepts your manual prices even below profit
+				preferences and reviews the displayed supplier costs. Availability, compatibility,
+				positive-profit and refill checks still apply. Custom quantity grids may include a one-kobo
+				rounding allowance at the minimum.
+			</p>
 			<div class="change-review">
 				{#if review.rules.length}<section aria-label="Pricing rule changes">
 						<h3>Pricing rules</h3>
@@ -1198,12 +1282,26 @@
 									<span>{change.label}</span><span>{change.before} → <b>{change.after}</b></span>
 								</li>{/each}
 						</ul>
+						{#if row.selected}
+							<p class="hint">
+								Supplier cost reviewed with this Save: {money(
+									displayAmount(row, economics(row).cost)
+								)} per 1,000.
+							</p>
+							{#if warnings(row).includes('A customer-facing service claim has not been verified.')}
+								<p class="warning-copy">
+									Unverified quality requirements will be removed for future purchases, not marked
+									as verified. Existing orders and refill promises are unchanged; customers will see
+									neutral quality wording.
+								</p>
+							{/if}
+						{/if}
 						{#if row.supplierChoiceId || (offer.goingLive && preloadApproval(row))}
 							<div class="supplier-review">
 								<h4>Supplier approval</h4>
 								{#each approvalNames(row) as name}<p>{name}</p>{/each}
 								<p>
-									Reviewed supplier cost: {money(economics(row).cost)} per {row.units.toLocaleString()}.
+									Reviewed supplier cost: {money(displayAmount(row, economics(row).cost))} per 1,000.
 								</p>
 								<p>
 									{row.supplierChoiceId
@@ -1267,7 +1365,7 @@
 			</header>
 			{#key supplier.id}<BoostingSupplierDetails
 					offerId={supplier.sourceOfferId}
-					quantity={supplier.units}
+					quantity={BOOST_PRICING_DISPLAY_QUANTITY}
 					fx={view.sheet.settings.fx}
 					rowProvider={supplier.provider}
 					rowServiceId={supplier.serviceId}
@@ -1298,7 +1396,7 @@
 				<div>
 					<h2 id="picker-title">{picker.title} · Choose supplier</h2>
 					<p class="hint">
-						Your price: {money(picker.sale)} per {picker.units.toLocaleString()}
+						Your price: {money(displayAmount(picker, picker.sale))} per 1,000
 					</p>
 				</div>
 				<button aria-label="Close supplier picker" onclick={() => (picker = null)}
@@ -1308,7 +1406,7 @@
 			{#key picker.id}<BoostingSupplierPicker
 					rowId={picker.id}
 					offerId={picker.sourceOfferId}
-					quantity={picker.units}
+					quantity={BOOST_PRICING_DISPLAY_QUANTITY}
 					fx={view.sheet.settings.fx}
 					currentId={picker.supplierChoiceId ?? quote(picker)?.providerServiceId}
 					onChoose={(choice) => useSupplier(picker!, choice)}

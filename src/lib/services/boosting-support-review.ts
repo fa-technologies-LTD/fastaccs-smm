@@ -77,7 +77,7 @@ export async function reviewOverdueBoostOrders(database: PrismaClient = prisma, 
 					idempotencyKey: `boost-overdue:${row.orderId}`,
 					occurredAt: now,
 					description:
-						'Open delivery has reached the 24-hour support review checkpoint. This is not confirmed failure.'
+						'This paid delivery item has reached the 24-hour support review checkpoint. Check the latest evidence; elapsed time alone does not confirm delivery or failure.'
 				}
 			});
 			if (!marker.count) return 0;
@@ -87,7 +87,7 @@ export async function reviewOverdueBoostOrders(database: PrismaClient = prisma, 
 					orderId: row.orderId,
 					type: 'admin_order_review',
 					title: 'Order needs a delivery check',
-					message: `${item.order.orderNumber} is still open after 24 hours. Review the latest supplier response and customer update.`
+					message: `${item.order.orderNumber} needs a delivery review after 24 hours. Check the latest supplier response and what the customer received.`
 				}))
 			});
 			return 1;

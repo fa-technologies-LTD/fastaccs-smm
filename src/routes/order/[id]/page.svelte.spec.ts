@@ -1,4 +1,4 @@
-import { page } from '@vitest/browser/context';
+import { page } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import OrderPage from './+page.svelte';
@@ -50,6 +50,25 @@ function data(
 }
 
 describe('customer Boosting progress and refill journey', () => {
+	it('does not show a completed order summary when its delivery still needs review', async () => {
+		const d = data('under_review') as any;
+		d.order.status = 'completed';
+		d.order.deliveryStatus = 'delivered';
+		render(OrderPage, { data: d });
+		await expect.element(page.getByText('Under review', { exact: true }).first()).toBeVisible();
+		expect(page.getByText('Completed', { exact: true }).query()).toBeNull();
+	});
+	it('keeps the purchased benefit alongside its contextual quantity and original item name', async () => {
+		const d = data('pending') as unknown as { order: { orderItems: Record<string, unknown>[] } };
+		d.order.orderItems[0].boostBenefitLabel = '30-day refill';
+		d.order.orderItems[0].boostQuantityLabel = '100 likes';
+		render(OrderPage, { data: d } as never);
+		await expect
+			.element(page.getByRole('heading', { name: 'TikTok Likes', exact: true }))
+			.toBeVisible();
+		await expect.element(page.getByText('30-day refill', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('100 likes for:', { exact: true })).toBeVisible();
+	});
 	it('shows support wording as plain text without changing reported delivery', async () => {
 		const d = data('in_progress', { remains: 40 }) as Record<string, unknown>;
 		render(OrderPage, {

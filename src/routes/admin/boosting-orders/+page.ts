@@ -25,14 +25,15 @@ const DEFAULT_META = {
 	}
 };
 
-export const load: PageLoad = async ({ fetch }) => {
+export const load: PageLoad = async ({ fetch, url }) => {
 	let items: any[] = [];
 	let meta = DEFAULT_META;
 	let error: string | null = null;
 
 	try {
+		const query = url?.searchParams.get('q')?.trim().slice(0, 100);
 		const response = await fetch(
-			'/api/admin/boosting-orders?status=active&sort=newest&page=1&pageSize=25'
+			`/api/admin/boosting-orders?status=${query ? 'all' : 'active'}&sort=newest&page=1&pageSize=25${query ? `&q=${encodeURIComponent(query)}` : ''}`
 		);
 		const result = await response.json();
 

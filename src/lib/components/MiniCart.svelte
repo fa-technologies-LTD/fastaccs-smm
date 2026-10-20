@@ -12,6 +12,7 @@
 	import { showSuccess } from '$lib/stores/toasts';
 	import { roundUpCatalogPriceNgn as roundCatalogPriceNgn } from '$lib/helpers/catalog-pricing';
 	import { boostingMinimumMessage } from '$lib/helpers/boosting-checkout';
+	import { boostQuantityText } from '$lib/helpers/boosting-customer-facts';
 	import { showWarning } from '$lib/stores/toasts';
 
 	// Reactive state
@@ -151,7 +152,11 @@
 	}
 
 	function getItemQuantityLabel(item: CartItemWithTier): string {
-		if (item.boosting) return `Qty: ${item.boosting.boostQuantity.toLocaleString()}`;
+		if (item.boosting)
+			return boostQuantityText(
+				item.boosting.boostQuantity,
+				item.tier.boostingConfig?.actionType ?? ''
+			);
 		return item.exactAccount ? 'Qty: 1 locked' : `Qty: ${item.quantity}`;
 	}
 
@@ -382,11 +387,18 @@
 										>
 											{item.tier.name}
 										</h4>
-										<p
-											style="font-size: 0.75rem; color: var(--text-dim); font-family: var(--font-body);"
-										>
-											{item.tier.platformName}
-										</p>
+										{#if !item.boosting}<p
+												style="font-size: 0.75rem; color: var(--text-dim); font-family: var(--font-body);"
+											>
+												{item.tier.platformName}
+											</p>{/if}
+										{#if item.boosting && item.tier.boostingConfig?.benefitLabel && !item.tier.name
+												.toLowerCase()
+												.includes(item.tier.boostingConfig.benefitLabel.toLowerCase())}
+											<p class="text-xs font-medium" style="color: var(--text-muted);">
+												{item.tier.boostingConfig.benefitLabel}
+											</p>
+										{/if}
 										{#if item.accountAddon}
 											<p class="text-xs font-semibold" style="color: var(--primary);">
 												{item.accountAddon.label} add-on

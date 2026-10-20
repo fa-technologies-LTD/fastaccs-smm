@@ -1,4 +1,5 @@
 import { prisma } from '$lib/prisma';
+import { getBoostingProgress } from '$lib/helpers/boosting-progress';
 
 export const DASHBOARD_ORDERS_PAGE_SIZE = 20;
 
@@ -34,7 +35,16 @@ export async function getDashboardOrdersPage(input: {
 					boostTargetUrl: true,
 					boostQuantity: true,
 					boostFulfillmentStatus: true,
-					boostFulfillment: { select: { offerId: true } }
+					boostFulfillment: {
+						select: {
+							offerId: true,
+							status: true,
+							lastSafeErrorCategory: true,
+							remains: true,
+							lastCheckedAt: true,
+							nextActionAt: true
+						}
+					}
 				}
 			}
 		},
@@ -50,6 +60,7 @@ export async function getDashboardOrdersPage(input: {
 		refundedAmount: Number(order.refundedAmount),
 		orderItems: order.orderItems.map(({ boostFulfillment, ...item }) => ({
 			...item,
+			boostProgress: getBoostingProgress({ ...item, boostFulfillment }, order),
 			boostOfferId: boostFulfillment?.offerId || null,
 			unitPrice: Number(item.unitPrice),
 			totalPrice: Number(item.totalPrice),

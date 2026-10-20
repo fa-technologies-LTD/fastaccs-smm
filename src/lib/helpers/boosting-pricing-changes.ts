@@ -1,4 +1,5 @@
 import type { BoostPricingRow, BoostPricingSheet } from './boosting-pricing-sheet';
+import { pricingDisplayAmount } from './boosting-pricing-sheet';
 
 export interface PricingFieldChange {
 	label: string;
@@ -50,11 +51,17 @@ export function boostingPricingChanges(before: BoostPricingSheet, after: BoostPr
 		const previous = baseline.get(row.id);
 		if (!previous) return [];
 		const changes: PricingFieldChange[] = [];
+		if (row.reviewRequested && !previous.reviewRequested)
+			changes.push({
+				label: 'Owner review',
+				before: 'Not queued',
+				after: 'Accept displayed supplier cost and price'
+			});
 		add(
 			changes,
 			'Price',
-			`${money(previous.sale)} per ${previous.units.toLocaleString('en-NG')}`,
-			`${money(row.sale)} per ${row.units.toLocaleString('en-NG')}`
+			`${money(pricingDisplayAmount(previous, previous.sale)!)} per 1,000`,
+			`${money(pricingDisplayAmount(row, row.sale)!)} per 1,000`
 		);
 		const lockLabel = (r: BoostPricingRow) =>
 			r.priceMode === 'manual' ? 'Locked' : 'Follows pricing rules';
@@ -104,14 +111,26 @@ export function boostingPricingChanges(before: BoostPricingSheet, after: BoostPr
 		add(
 			changes,
 			'Profit target override',
-			override(previous.profitTargetNgn),
-			override(row.profitTargetNgn)
+			override(
+				previous.profitTargetNgn == null
+					? undefined
+					: pricingDisplayAmount(previous, previous.profitTargetNgn)!
+			),
+			override(
+				row.profitTargetNgn == null ? undefined : pricingDisplayAmount(row, row.profitTargetNgn)!
+			)
 		);
 		add(
 			changes,
 			'Minimum retained profit override',
-			override(previous.hardProfitNgn),
-			override(row.hardProfitNgn)
+			override(
+				previous.hardProfitNgn == null
+					? undefined
+					: pricingDisplayAmount(previous, previous.hardProfitNgn)!
+			),
+			override(
+				row.hardProfitNgn == null ? undefined : pricingDisplayAmount(row, row.hardProfitNgn)!
+			)
 		);
 		return changes.length
 			? [

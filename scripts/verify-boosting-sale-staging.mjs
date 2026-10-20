@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID, scryptSync } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
-import { verifiedNativeStagingUrl } from './verified-native-staging.mjs';
+import { createVerifiedStagingBridge } from './verified-staging-bridge.mjs';
 
 // Built application, real separate staging PostgreSQL, rollback-only synthetic fixtures.
 // No supplier/client imports, paid order, wallet credit, real gateway, emails or persistent edits.
 if (process.argv.length !== 2) throw new Error('No arguments accepted. Build locally first.');
-const target = verifiedNativeStagingUrl();
+const bridge = await createVerifiedStagingBridge();
+const target = bridge.url;
 const db = new PrismaClient({ datasourceUrl: target, log: [] });
 const originalFetch = globalThis.fetch;
 const rollback = new Error('EXPECTED_FIXTURE_ROLLBACK');
@@ -314,6 +315,53 @@ try {
 					visible.data.some((row) => row.id === offer.id),
 					'Saved fixture is offered'
 				);
+				// Review existing prices without reselecting a supplier: accept the owner's
+				// preference override/current cost and remove only unverified future claims.
+				await tx.boostCustomerOffer.update({
+					where: { id: offer.id },
+					data: {
+						maximumSupplierCostNgn: 0.01,
+						requiredVerifiedSignals: ['unverified-quality'],
+						minimumMarginPercent: 350
+					}
+				});
+				const advisoryView = (await (await request('/api/admin/boosting-pricing')).json()).data;
+				advisoryView.sheet.settings.hardProfitNgn = 1000;
+				const reviewedRow = advisoryView.sheet.rows.find((r) => r.sourceOfferId === offer.id);
+				Object.assign(reviewedRow, { reviewRequested: true, shortPromise: 'Best' });
+				const advisorySave = await request('/api/admin/boosting-pricing', {
+					action: 'save',
+					confirmSave: true,
+					sheet: advisoryView.sheet
+				});
+				assert.equal(
+					advisorySave.status,
+					200,
+					`Owner advisory review: ${(await advisorySave.clone().text()).slice(0, 180)}`
+				);
+				const reviewedOffer = await tx.boostCustomerOffer.findUniqueOrThrow({
+					where: { id: offer.id }
+				});
+				assert.equal(Number(reviewedOffer.pricePerStepNgn), 500);
+				assert.equal(Number(reviewedOffer.maximumSupplierCostNgn), 30);
+				assert.deepEqual(reviewedOffer.requiredVerifiedSignals, []);
+				const reviewedPublic = (await (await request('/api/boosting-offers')).json()).data.find(
+					(r) => r.id === offer.id
+				);
+				assert.ok(reviewedPublic, 'Reviewed offer remains purchasable');
+				assert.equal(
+					reviewedPublic.shortPromise,
+					'Delivery timing varies. Track progress from your order.'
+				);
+				const reviewAudit = await tx.adminAuditLog.findFirstOrThrow({
+					where: { actorUserId: user.id, action: 'boosting_controls_saved' },
+					orderBy: { createdAt: 'desc' }
+				});
+				const receipt = reviewAudit.metadata.ownerReviews.find((r) => r.offerId === offer.id);
+				assert.equal(receipt.previousCostLimitNgn, 0.01);
+				assert.equal(receipt.approvedCostLimitNgn, 30);
+				assert.equal(receipt.acceptedBelowProfitPreference, true);
+				assert.deepEqual(receipt.removedUnverifiedRequirements, ['unverified-quality']);
 				// The other missing UI path: browse an unmapped offer, select an exact code,
 				// then atomically approve/pin it together with its price and Live tick.
 				const afterSave = (await (await request('/api/admin/boosting-pricing')).json()).data;
@@ -356,8 +404,13 @@ try {
 				assert.equal(pinned.routes[0].equivalenceApproved, true);
 				assert.deepEqual(pinned.routes[0].verifiedSignals, []);
 				assert.equal(pinned.routes[0].verifiedRefillDays, null);
-				const selectionAudit = await tx.adminAuditLog.findFirstOrThrow({ where: { actorUserId: user.id, action: 'boosting_controls_saved' }, orderBy: { createdAt: 'desc' } });
-				const auditedSelection = selectionAudit.metadata.sheet.rows.find((r) => r.sourceOfferId === pinned.id);
+				const selectionAudit = await tx.adminAuditLog.findFirstOrThrow({
+					where: { actorUserId: user.id, action: 'boosting_controls_saved' },
+					orderBy: { createdAt: 'desc' }
+				});
+				const auditedSelection = selectionAudit.metadata.sheet.rows.find(
+					(r) => r.sourceOfferId === pinned.id
+				);
 				assert.equal(auditedSelection.provider, 'smm_raja');
 				assert.equal(auditedSelection.serviceId, service.serviceId);
 				assert.equal(
@@ -429,6 +482,10 @@ try {
 					exactSupplierSearchAndUnmappedOfferSave: true,
 					selectedSupplierPersistedAndLocked: true,
 					quantityAndPricePersisted: true,
+					manualProfitPreferenceAccepted: true,
+					currentQuotedCostReviewed: true,
+					unverifiedQualityNotPromised: true,
+					reviewAuditVerified: true,
 					storefrontVerified: true,
 					checkoutTotalNgn: 500,
 					unpaidOrderOnly: true,
@@ -504,6 +561,7 @@ try {
 		process.exitCode = 1;
 	}
 	await db.$disconnect();
+	await bridge.close();
 }
 // The compiled application has unrelated background timers. All transaction cleanup above
 // is awaited before ending this isolated verification process.

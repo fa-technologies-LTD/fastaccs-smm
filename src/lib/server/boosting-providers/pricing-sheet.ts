@@ -193,7 +193,8 @@ export async function recordSheet(
 	sheet: BoostPricingSheet,
 	actor: string,
 	action: string,
-	previous: Awaited<ReturnType<typeof latest>>
+	previous: Awaited<ReturnType<typeof latest>>,
+	ownerReviews?: Prisma.InputJsonValue[]
 ) {
 	// Existing immutable audit storage provides durable snapshots without another schema migration.
 	// Monotonic timestamps under the advisory lock prevent same-millisecond ordering ambiguity.
@@ -205,6 +206,7 @@ export async function recordSheet(
 			description: `Boosting Pricing v${sheet.version}`,
 			createdAt: new Date(Math.max(Date.now(), (previous?.createdAt.getTime() ?? 0) + 1)),
 			metadata: {
+				...(ownerReviews?.length ? { ownerReviews } : {}),
 				sheet: sheet as unknown as Prisma.InputJsonValue,
 				approvalId: approved.approval.id
 			}

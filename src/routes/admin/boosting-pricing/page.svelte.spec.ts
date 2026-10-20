@@ -1,4 +1,4 @@
-import { page } from '@vitest/browser/context';
+import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import '$lib/../app.css';
@@ -59,6 +59,136 @@ const choice = (): BoostSupplierChoice => ({
 	revision: 'a'.repeat(64),
 	refillAdvertised: true,
 	refillDaysClaimed: 30
+});
+
+it('treats profit preferences, reviewed-cost and unverified quality flags as advisory, with one explicit final Save', async () => {
+	const initial = fixture();
+	initial.sheet.settings.hardProfitNgn = 1000;
+	initial.setup.row.maximumCostNgn = 5;
+	initial.availability = {
+		row: {
+			reasons: ['A customer-facing service claim has not been verified.'],
+			checkedAt: new Date().toISOString()
+		}
+	};
+	const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+		if (String(input).includes('/balances'))
+			return Response.json({ success: true, data: { providers: [] } });
+		const sheet = JSON.parse(init!.body as string).sheet;
+		delete sheet.rows[0].reviewRequested;
+		return Response.json({ success: true, data: { ...initial, sheet } });
+	});
+	vi.stubGlobal('fetch', fetchMock);
+	render(Page, { data: { pricing: initial } } as never);
+	await expect.element(page.getByText('0 blocked', { exact: true })).toBeVisible();
+	await expect.element(page.getByText('1 with advisories', { exact: true })).toBeVisible();
+	const statusFilter = page.getByRole('combobox', { name: 'Status', exact: true });
+	await statusFilter.selectOptions('review');
+	await expect.element(page.getByText('No offers match these filters.')).toBeVisible();
+	await statusFilter.selectOptions('advisory');
+	await expect
+		.element(page.getByRole('button', { name: 'TikTok Likes', exact: true }))
+		.toBeVisible();
+	await statusFilter.selectOptions('all');
+	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
+	await expect
+		.element(
+			page.getByText('These preferences do not block your confirmed manual Save.', { exact: false })
+		)
+		.toBeVisible();
+	await page.getByRole('button', { name: 'Review current price and cost', exact: true }).click();
+	await expect.element(page.getByRole('button', { name: 'Queued for final Save' })).toBeDisabled();
+	expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
+	await page.getByRole('button', { name: 'Save all changes', exact: true }).click();
+	const review = page.getByRole('dialog', { name: 'Save these changes?' });
+	await expect
+		.element(review)
+		.toHaveTextContent('Supplier cost reviewed with this Save: ₦81 per 1,000');
+	await expect
+		.element(review)
+		.toHaveTextContent('Unverified quality requirements will be removed for future purchases');
+	await review.getByRole('button', { name: 'Keep editing' }).click();
+	await expect
+		.element(page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }))
+		.toHaveValue(500);
+	await page.getByRole('button', { name: 'Save all changes', exact: true }).click();
+	await review.getByRole('button', { name: 'Confirm & save' }).click();
+	const submitted = JSON.parse(
+		fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')![1]!.body as string
+	);
+	expect(submitted.sheet.rows[0]).toMatchObject({
+		reviewRequested: true,
+		sale: 500,
+		selected: true
+	});
+	expect(submitted.confirmSave).toBe(true);
+	expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+});
+
+it('allows a hidden offer with only unverified quality claims to be ticked Live before the final Save', async () => {
+	const initial = fixture();
+	initial.sheet.rows[0].selected = false;
+	initial.liveStatuses.row = 'hidden';
+	initial.availability = {
+		row: {
+			reasons: ['A customer-facing service claim has not been verified.'],
+			checkedAt: new Date().toISOString()
+		}
+	};
+	render(Page, { data: { pricing: initial } } as never);
+	await page.getByRole('checkbox', { name: 'Live TikTok Likes value' }).click();
+	await expect
+		.element(page.getByRole('checkbox', { name: 'Live TikTok Likes value' }))
+		.toBeChecked();
+});
+
+it('displays a legacy pack per 1,000 and saves an edited rate without changing its quantity grid or rule basis', async () => {
+	const initial = fixture();
+	Object.assign(initial.sheet.rows[0], {
+		units: 10,
+		sale: 150,
+		startingQuantity: 500,
+		increment: 500
+	});
+	initial.setup.row.maximumCostNgn = 100;
+	const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
+		String(input).includes('/balances')
+			? Response.json({ success: true, data: { providers: [] } })
+			: Response.json({
+					success: true,
+					data: { ...initial, sheet: JSON.parse(init!.body as string).sheet }
+				})
+	);
+	vi.stubGlobal('fetch', fetchMock);
+	render(Page, { data: { pricing: initial } } as never);
+	const price = page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' });
+	await expect.element(price).toHaveValue(15000);
+	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect.element(page.getByRole('cell', { name: '₦81', exact: true })).toBeVisible();
+	await expect.element(page.getByRole('cell', { name: '₦14,919', exact: true })).toBeVisible();
+	await price.fill('15000.02');
+	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
+	await expect
+		.element(page.getByRole('spinbutton', { name: 'Customer minimum for TikTok Likes value' }))
+		.toHaveValue(500);
+	await expect
+		.element(page.getByRole('spinbutton', { name: 'Quantity increment for TikTok Likes value' }))
+		.toHaveValue(500);
+	await page.getByRole('button', { name: 'Save all changes', exact: true }).click();
+	const review = page.getByRole('dialog', { name: 'Save these changes?' });
+	await expect.element(review).toHaveTextContent('₦15,000.02 per 1,000');
+	await review.getByRole('button', { name: 'Confirm & save' }).click();
+	const submitted = JSON.parse(
+		fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')![1]!.body as string
+	);
+	expect(submitted.sheet.rows[0]).toMatchObject({
+		units: 10,
+		sale: 150.0002,
+		startingQuantity: 500,
+		increment: 500,
+		priceMode: 'manual'
+	});
+	await expect.element(price).toHaveValue(15000.02);
 });
 
 it.each([true, false])(

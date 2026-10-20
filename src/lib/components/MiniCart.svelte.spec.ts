@@ -1,4 +1,4 @@
-import { page } from '@vitest/browser/context';
+import { page } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import MiniCart from './MiniCart.svelte';
@@ -9,7 +9,12 @@ const mocks = vi.hoisted(() => ({ goto: vi.fn(), showWarning: vi.fn() }));
 vi.mock('$app/navigation', () => ({ goto: mocks.goto }));
 vi.mock('$lib/stores/toasts', () => ({ showSuccess: vi.fn(), showWarning: mocks.showWarning }));
 
-function openBoostingCart(quantities: number[], step = 10, price = 5): CartItemWithTier[] {
+function openBoostingCart(
+	quantities: number[],
+	step = 10,
+	price = 5,
+	benefitLabel: string | null = null
+): CartItemWithTier[] {
 	cart.clear();
 	for (const quantity of quantities) {
 		cart.addBoostingService('category', 'https://www.instagram.com/p/test/', quantity, 'offer');
@@ -30,7 +35,8 @@ function openBoostingCart(quantities: number[], step = 10, price = 5): CartItemW
 				stepQuantity: step,
 				pricePerStep: price,
 				platform: 'instagram',
-				actionType: 'likes'
+				actionType: 'likes',
+				benefitLabel
 			}
 		}
 	}));
@@ -41,6 +47,13 @@ function openBoostingCart(quantities: number[], step = 10, price = 5): CartItemW
 }
 
 describe('MiniCart Boosting checkout pricing', () => {
+	it('shows purchased facts and contextual quantity without a repeated platform subtitle', async () => {
+		openBoostingCart([1000], 10, 5, '30-day refill');
+		await expect.element(page.getByText('1,000 likes', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('30-day refill', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('Instagram', { exact: true })).not.toBeInTheDocument();
+		await expect.element(page.getByText('₦500', { exact: true }).first()).toBeVisible();
+	});
 	afterEach(() => {
 		cart.clear();
 		cart.close();

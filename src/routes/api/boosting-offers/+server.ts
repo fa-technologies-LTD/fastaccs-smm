@@ -4,6 +4,7 @@ import { env } from '$env/dynamic/private';
 import { prisma } from '$lib/prisma';
 import { boostSaleInclude, inspectBoostSale } from '$lib/server/boosting-sale-readiness';
 import { boostCustomerCopy, boostCustomerOptionName } from '$lib/helpers/boosting-customer-copy';
+import { boostBenefitLabel } from '$lib/helpers/boosting-customer-facts';
 import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
 import {
 	BOOSTING_MANAGED_STOREFRONT_KEY,
@@ -59,6 +60,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 				outcome: offer.outcome,
 				targetType: offer.targetType,
 				...boostCustomerCopy(offer),
+				benefitLabel: boostBenefitLabel(offer),
 				customerName: boostCustomerOptionName(
 					offer,
 					compatibleOffers

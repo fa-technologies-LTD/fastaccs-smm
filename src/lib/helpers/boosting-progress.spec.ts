@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getBoostingProgress } from './boosting-progress';
+import { getBoostingProgress, getBoostOrderSummaryStatus } from './boosting-progress';
 
 const paid = { status: 'paid', paymentStatus: 'paid' };
 const item = {
@@ -8,6 +8,37 @@ const item = {
 	boostFulfillmentStatus: 'in_progress'
 };
 describe('buyer Boosting progress', () => {
+	it('keeps a cancelled held delivery in review even when the parent was marked completed', () => {
+		const order = {
+			...paid,
+			status: 'completed',
+			deliveryStatus: 'delivered',
+			orderItems: [
+				{
+					...item,
+					boostFulfillmentStatus: 'completed',
+					boostFulfillment: { status: 'manual_review', lastSafeErrorCategory: 'provider_cancelled' }
+				}
+			]
+		};
+		expect(getBoostOrderSummaryStatus(order)).toBe('under_review');
+		expect(getBoostOrderSummaryStatus({ ...order, paymentStatus: 'refunded' })).toBe('refunded');
+	});
+	it('requires completed items, respects link requests and leaves non-Boosting orders alone', () => {
+		const order = { ...paid, orderItems: [{ ...item, boostFulfillmentStatus: 'completed' }] };
+		expect(getBoostOrderSummaryStatus(order)).toBe('completed');
+		expect(
+			getBoostOrderSummaryStatus({ ...order, orderItems: [...order.orderItems, { quantity: 1 }] })
+		).toBe('processing');
+		expect(
+			getBoostOrderSummaryStatus({
+				...paid,
+				orderItems: [{ ...item, boostFulfillmentStatus: 'needs_link' }]
+			})
+		).toBe('needs_link');
+		expect(getBoostOrderSummaryStatus({ ...paid, orderItems: [{ quantity: 1 }] })).toBeNull();
+		expect(getBoostOrderSummaryStatus({ ...order, paymentStatus: 'pending' })).toBe('pending');
+	});
 	it('explains overdue delivery without changing supplier status or losing partial evidence', () => {
 		const result = getBoostingProgress(
 			{ ...item, boostFulfillment: { remains: 3 } },
