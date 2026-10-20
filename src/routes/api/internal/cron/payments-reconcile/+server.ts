@@ -23,7 +23,8 @@ export const GET: RequestHandler = async ({ request }) =>
 					Math.min(deadlineMs + 50_000, Date.now() + 30_000)
 				),
 				refundAnalytics: await drainRefundAnalytics(
-					3, Math.min(deadlineMs + 80_000, Date.now() + 30_000)
+					3,
+					Math.min(deadlineMs + 80_000, Date.now() + 30_000)
 				)
 			};
 		}

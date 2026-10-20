@@ -28,6 +28,23 @@
 	let isLoadingCartItems = $state(false);
 	let lastLoadedCartKey = $state('');
 	let dialog = $state<HTMLDivElement>();
+	// Store credit and first-order offer reminders, refreshed at most once a minute while open.
+	let rewardHints = $state<string[]>([]);
+	let rewardHintsLoadedAt = 0;
+	$effect(() => {
+		if (!isOpen || Date.now() - rewardHintsLoadedAt < 60_000) return;
+		rewardHintsLoadedAt = Date.now();
+		fetch('/api/rewards/cart-hint')
+			.then((response) => (response.ok ? response.json() : { lines: [] }))
+			.then((body: { lines?: unknown }) => {
+				rewardHints = Array.isArray(body.lines)
+					? body.lines.filter((line): line is string => typeof line === 'string').slice(0, 2)
+					: [];
+			})
+			.catch(() => {
+				rewardHints = [];
+			});
+	});
 	$effect(() => {
 		if (!isOpen) return;
 		const previous = document.activeElement;
@@ -446,6 +463,18 @@
 						<div
 							style="border-top: 1px solid var(--border); background: var(--bg-elev-1); padding: var(--space-lg);"
 						>
+							{#if rewardHints.length}
+								<div class="mb-3 space-y-1">
+									{#each rewardHints as hint (hint)}
+										<p
+											class="text-xs font-medium"
+											style="color: var(--primary); font-family: var(--font-body);"
+										>
+											🎁 {hint}
+										</p>
+									{/each}
+								</div>
+							{/if}
 							<!-- Total -->
 							<div class="mb-4 flex items-center justify-between">
 								<span

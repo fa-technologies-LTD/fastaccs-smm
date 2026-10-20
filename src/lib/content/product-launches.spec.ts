@@ -10,6 +10,8 @@ describe('product launch copy', () => {
 		expect(NUMBERS_IMPROVED_ANNOUNCEMENT.secondaryHref).toBe('/numbers');
 		expect(BOOSTING_REFRESH_ANNOUNCEMENT.secondaryHref).toBe('/services');
 		expect(PRODUCT_LAUNCH_EMAIL_DRAFTS.map((draft) => draft.id)).toEqual([
+			'x_restock',
+			'x_verified',
 			'account_delivery_privacy',
 			'numbers_improved',
 			'boosting_refresh'

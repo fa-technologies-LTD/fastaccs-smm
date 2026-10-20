@@ -220,6 +220,15 @@
 					<input type="checkbox" name="reviewedDryRun" disabled={ownerOnly} />
 					I reviewed the dry run above
 				</label>
+				<label class="mt-2 flex items-center gap-2" style="color: var(--text);">
+					<input type="checkbox" name="announce" checked disabled={ownerOnly} />
+					Also show it in the site announcement bar
+				</label>
+				{#if data.currentBanner}
+					<p class="mt-1 text-xs" style="color: var(--text-muted);">
+						This replaces the bar now showing: “{data.currentBanner}”
+					</p>
+				{/if}
 				<button
 					type="submit"
 					disabled={ownerOnly}
@@ -440,6 +449,15 @@
 					<input type="checkbox" name="reviewedDryRun" disabled={ownerOnly} />
 					I reviewed the dry run above
 				</label>
+				<label class="mt-2 flex items-center gap-2" style="color: var(--text);">
+					<input type="checkbox" name="announce" checked disabled={ownerOnly} />
+					Also show it in the site announcement bar
+				</label>
+				{#if data.currentBanner}
+					<p class="mt-1 text-xs" style="color: var(--text-muted);">
+						This replaces the bar now showing: “{data.currentBanner}”
+					</p>
+				{/if}
 				<button
 					type="submit"
 					disabled={ownerOnly}

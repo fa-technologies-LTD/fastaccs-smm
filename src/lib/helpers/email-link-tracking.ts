@@ -9,6 +9,7 @@ const TAGGED_EMAIL_TYPES = new Set([
 	'welcome',
 	'onboarding_step',
 	'nurture_step',
+	'verification_reminder',
 	'abandoned_order',
 	'restock_alert',
 	'boosting_service_live',

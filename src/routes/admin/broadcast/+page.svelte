@@ -607,6 +607,10 @@
 					Loads an editable draft only. Nothing is sent until you review, confirm the audience and
 					press Send.
 				</p>
+				<p class="mt-1 text-xs" style="color: var(--text-dim);">
+					X accounts are about 70% of account sales. For the X drafts, check stock first and pick
+					“Buyers of specific platforms → X” as the audience.
+				</p>
 			</div>
 
 			<div>

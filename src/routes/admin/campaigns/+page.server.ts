@@ -1,6 +1,11 @@
 import type { Actions, PageServerLoad } from './$types';
 import { error, fail } from '@sveltejs/kit';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
+import {
+	announceCampaignInBanner,
+	getCurrentBannerText,
+	withdrawCampaignBanner
+} from '$lib/services/campaign-banner';
 import { isOwnerAdmin } from '$lib/auth/owner';
 import { dateToWatInput, watInputToDate } from '$lib/helpers/wat-datetime';
 import {
@@ -86,9 +91,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			buildPromoCampaignReport('bigspender', monthOf)
 		]);
 	const monthStart = lagosMonthStart(monthOf);
+	const currentBanner = await getCurrentBannerText().catch(() => null);
 	return {
 		isOwner: isOwnerAdmin(locals.user, locals.adminContext),
 		month: dateToWatInput(monthStart).slice(0, 7),
+		currentBanner,
 		referWin: {
 			settings: referWin,
 			live: isCampaignLive(referWin, now),
@@ -131,6 +138,30 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 };
 
 type Ctx = Parameters<Actions[string]>[0];
+
+/** On switch-on (box ticked) show the campaign in the site bar; on switch-off take it down. */
+async function syncCampaignBanner(
+	kind: 'refer_win' | 'bigspender',
+	turnOn: boolean,
+	form: FormData
+): Promise<string> {
+	try {
+		const settings = (await getCampaignSettings())[
+			kind === 'refer_win' ? 'referWin' : 'bigSpender'
+		];
+		if (turnOn && form.get('announce') === 'on') {
+			await announceCampaignInBanner(kind, settings);
+			return ' It is now in the site announcement bar.';
+		}
+		if (!turnOn && (await withdrawCampaignBanner(kind, settings))) {
+			return ' Its announcement bar message was taken down.';
+		}
+		return '';
+	} catch (error) {
+		console.error('Campaign banner update failed:', error);
+		return ' (The announcement bar could not be updated; change it in Settings.)';
+	}
+}
 
 function requireOwner(ctx: Ctx) {
 	if (!isOwnerAdmin(ctx.locals.user, ctx.locals.adminContext) || !ctx.locals.user) {
@@ -212,7 +243,11 @@ export const actions: Actions = {
 			actorUserId: ctx.locals.user!.id,
 			description: turnOn ? 'Refer & Win switched ON' : 'Refer & Win switched OFF'
 		});
-		return { success: true, message: turnOn ? 'Refer & Win is on.' : 'Refer & Win is off.' };
+		const banner = await syncCampaignBanner('refer_win', turnOn, form);
+		return {
+			success: true,
+			message: (turnOn ? 'Refer & Win is on.' : 'Refer & Win is off.') + banner
+		};
 	},
 
 	releaseReferWin: async (ctx) => {
@@ -273,6 +308,10 @@ export const actions: Actions = {
 			actorUserId: ctx.locals.user!.id,
 			description: turnOn ? 'BIGSPENDER switched ON' : 'BIGSPENDER switched OFF'
 		});
-		return { success: true, message: turnOn ? 'BIGSPENDER is on.' : 'BIGSPENDER is off.' };
+		const banner = await syncCampaignBanner('bigspender', turnOn, form);
+		return {
+			success: true,
+			message: (turnOn ? 'BIGSPENDER is on.' : 'BIGSPENDER is off.') + banner
+		};
 	}
 };

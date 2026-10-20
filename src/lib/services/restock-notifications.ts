@@ -3,18 +3,22 @@ import { sendMarketingEmail } from './email';
 import { pickVariantIndex, RESTOCK_VARIANTS } from './email-variants';
 import { sendPushToUser } from './push-notifications';
 import { env } from '$env/dynamic/private';
+import { getTierStockStatus } from '$lib/helpers/tier-delivery-config';
 
-interface RestockTierInfo {
+export interface RestockTierInfo {
 	id: string;
 	name: string;
 	slug: string;
 	price: number;
 	availableCount: number;
+	/** Can a customer buy it right now (active, and in stock or a manual-handover tier switched on)? */
+	buyable: boolean;
+	isManual: boolean;
 	platformName: string;
 	platformSlug: string;
 }
 
-async function getTierInfo(tierId: string): Promise<RestockTierInfo | null> {
+export async function getTierInfo(tierId: string): Promise<RestockTierInfo | null> {
 	const tier = await prisma.category.findFirst({
 		where: {
 			id: tierId,
@@ -41,6 +45,7 @@ async function getTierInfo(tierId: string): Promise<RestockTierInfo | null> {
 		price?: number | string;
 	};
 	const price = Number(metadata.pricing?.base_price || metadata.price || 0);
+	const stock = getTierStockStatus(tier.metadata, tier.accounts.length);
 
 	return {
 		id: tier.id,
@@ -48,14 +53,33 @@ async function getTierInfo(tierId: string): Promise<RestockTierInfo | null> {
 		slug: tier.slug,
 		price,
 		availableCount: tier.accounts.length,
+		buyable: tier.isActive && stock.available,
+		isManual: stock.isManual,
 		platformName: tier.parent?.name || 'Platform',
 		platformSlug: tier.parent?.slug || ''
 	};
 }
 
+export function restockUrgencyNote(tierInfo: RestockTierInfo): string {
+	if (tierInfo.isManual) return 'Available now. Our team hands it over on WhatsApp.';
+	return tierInfo.availableCount <= 5
+		? `Only ${tierInfo.availableCount} left — these go fast.`
+		: `${tierInfo.availableCount} accounts are currently available.`;
+}
+
+export function restockTierUrl(tierInfo: RestockTierInfo): string {
+	const baseUrl = (
+		env.PUBLIC_BASE_URL ||
+		process.env.PUBLIC_BASE_URL ||
+		'https://smm.fastaccs.com'
+	).replace(/\/+$/, '');
+	return `${baseUrl}/platforms/${tierInfo.platformSlug}/tiers/${tierInfo.slug}`;
+}
+
 export async function triggerRestockNotificationsForTier(tierId: string): Promise<void> {
 	const tierInfo = await getTierInfo(tierId);
-	if (!tierInfo || tierInfo.availableCount <= 0) return;
+	// Hidden tiers are not buyable even with stock; manual-handover tiers count when switched on.
+	if (!tierInfo || !tierInfo.buyable) return;
 
 	const subscribers = await prisma.restockSubscription.findMany({
 		where: {
@@ -66,16 +90,8 @@ export async function triggerRestockNotificationsForTier(tierId: string): Promis
 
 	if (subscribers.length === 0) return;
 
-	const baseUrl = (
-		env.PUBLIC_BASE_URL ||
-		process.env.PUBLIC_BASE_URL ||
-		'https://smm.fastaccs.com'
-	).replace(/\/+$/, '');
-	const tierUrl = `${baseUrl}/platforms/${tierInfo.platformSlug}/tiers/${tierInfo.slug}`;
-	const urgencyNote =
-		tierInfo.availableCount <= 5
-			? `Only ${tierInfo.availableCount} left — these go fast.`
-			: `${tierInfo.availableCount} accounts are currently available.`;
+	const tierUrl = restockTierUrl(tierInfo);
+	const urgencyNote = restockUrgencyNote(tierInfo);
 
 	const notifiedSubscriptionIds = (
 		await Promise.all(

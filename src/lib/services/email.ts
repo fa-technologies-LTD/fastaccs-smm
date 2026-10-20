@@ -46,6 +46,7 @@ export type EmailNotificationType =
 	| 'store_credit_reminder'
 	| 'promo_reminder'
 	| 'promo_credit'
+	| 'verification_reminder'
 	| 'admin_broadcast';
 
 export type EmailClassification = 'transactional' | 'marketing' | 'operational';
@@ -303,6 +304,7 @@ function getEmailEyebrow(params: SendEmailParams): string {
 		case 'welcome':
 		case 'onboarding_step':
 		case 'nurture_step':
+		case 'verification_reminder':
 			return 'GET STARTED';
 		default:
 			return params.classification === 'marketing' ? 'FAST ACCOUNTS' : 'UPDATE';
