@@ -824,7 +824,10 @@ async function countSuccessfulOrdersForAffiliatePair(
 					userId: buyerUserId,
 					affiliateUserId,
 					orderType: 'account',
-					discountAmount: { gt: 0 }
+					discountAmount: { gt: 0 },
+					// A promo-code order replaced the referral discount: it is not one of the
+					// referral-discount orders and never uses up one of the buyer's slots.
+					promotionId: null
 				}
 			]
 		}
@@ -3254,6 +3257,7 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 				orderType: true,
 				subtotal: true,
 				discountAmount: true,
+				promotionId: true,
 				storeCreditApplied: true,
 				totalAmount: true,
 				status: true,
@@ -3374,7 +3378,8 @@ export async function recordAffiliateStoreCreditForOrder(orderId: string): Promi
 		// creating rewards after the buyer's offer has ended. The idempotency check
 		// deliberately comes first so a settled retry remains settled even if a later
 		// repair changes the order's discount fields.
-		if (Number(order.discountAmount || 0) <= 0) {
+		if (Number(order.discountAmount || 0) <= 0 || order.promotionId) {
+			// No referral discount on this order (none, or a promo code replaced it).
 			return { success: true, storeCreditAwarded: 0 };
 		}
 

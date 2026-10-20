@@ -304,7 +304,12 @@
 
 			promoAppliedCode = result.data.code;
 			promoDiscountAmount = Number(result.data.discountAmount || 0);
-			showSuccess('Promo applied', `${result.data.code} saved ${formatPrice(promoDiscountAmount)}`);
+			showSuccess(
+				'Promo applied',
+				result.data.replacesReferralDiscount
+					? `${result.data.code} saved ${formatPrice(promoDiscountAmount)}, used instead of your referral discount on this order`
+					: `${result.data.code} saved ${formatPrice(promoDiscountAmount)}`
+			);
 		} catch (error) {
 			promoAppliedCode = null;
 			promoDiscountAmount = 0;

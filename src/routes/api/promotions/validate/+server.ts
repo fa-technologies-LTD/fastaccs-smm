@@ -44,7 +44,12 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		: [];
 
 	if (!normalizedCode) {
-		return json({ success: false, error: 'Promo code is required.', discountAmount: 0, finalTotal: subtotal });
+		return json({
+			success: false,
+			error: 'Promo code is required.',
+			discountAmount: 0,
+			finalTotal: subtotal
+		});
 	}
 
 	const [lockedReferral, affiliateCandidate] = await Promise.all([
@@ -52,15 +57,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		validateAffiliateCode(normalizedCode)
 	]);
 
-	if (!affiliateCandidate.valid && lockedReferral) {
-		return json({
-			success: false,
-			error:
-				'Promo codes cannot be combined with an active affiliate referral. Complete checkout without a promo code.',
-			discountAmount: 0,
-			finalTotal: subtotal
-		});
-	}
+	// A referred customer may use a promo code: it replaces the referral discount on this order.
+	const replacesReferralDiscount = !affiliateCandidate.valid && Boolean(lockedReferral);
 
 	if (affiliateCandidate.valid) {
 		const itemCategoryIds: string[] = [...new Set(inputItems.map((item) => item.categoryId))];
@@ -160,7 +158,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			value: Number(result.promotion?.value || 0),
 			currency: result.promotion?.currency || 'NGN',
 			discountAmount: result.discountAmount,
-			finalTotal: result.finalTotal
+			finalTotal: result.finalTotal,
+			// Shown at checkout: the code is used instead of the referral discount, not on top.
+			replacesReferralDiscount
 		}
 	});
 };

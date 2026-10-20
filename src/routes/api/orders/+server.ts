@@ -1197,17 +1197,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				promotionCode = '';
 			}
 
-			if (hasAffiliateAttribution && promotionCode) {
-				return json(
-					{
-						success: false,
-						error:
-							'Promo codes cannot be combined with affiliate referral pricing on the same order.'
-					},
-					{ status: 400 }
-				);
-			}
-
+			// A promo code replaces the referral discount on this order (never both). The referral
+			// itself is kept; a regular affiliate earns only on referral-discount orders.
 			if (promotionCode) {
 				const promotionResult = await validatePromotionCode({
 					code: promotionCode,

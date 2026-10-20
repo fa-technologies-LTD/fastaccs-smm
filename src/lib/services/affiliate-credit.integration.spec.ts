@@ -373,11 +373,24 @@ describe('affiliate credit settlement boundaries', () => {
 						userId: 'buyer-1',
 						affiliateUserId: 'affiliate-1',
 						orderType: 'account',
-						discountAmount: { gt: 0 }
+						discountAmount: { gt: 0 },
+						promotionId: null
 					}
 				]
 			}
 		});
+	});
+
+	it('pays no regular commission when a promo code replaced the referral discount', async () => {
+		mocks.findOrder.mockResolvedValue(
+			buildOrder({ status: 'completed', paymentStatus: 'paid', promotionId: 'promo-1' })
+		);
+
+		const result = await recordAffiliateStoreCreditForOrder('order-1');
+
+		expect(result).toEqual({ success: true, storeCreditAwarded: 0 });
+		expect(mocks.countOrders).not.toHaveBeenCalled();
+		expect(mocks.transaction).not.toHaveBeenCalled();
 	});
 
 	it('does not award Store Credit for an unpaid pending order', async () => {
