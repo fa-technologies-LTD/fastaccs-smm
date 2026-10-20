@@ -9,7 +9,7 @@ const prismaMock = vi.hoisted(() => ({
 
 vi.mock('$lib/prisma', () => ({ prisma: prismaMock }));
 
-import { validatePromotionCode } from './promotions';
+import { getFirstOrderOffer, validatePromotionCode } from './promotions';
 
 const welcome10 = {
 	id: 'promotion-1',
@@ -97,5 +97,34 @@ describe('WELCOME10 promotion contract', () => {
 			categoryIds: []
 		});
 		expect(result.valid).toBe(false);
+	});
+});
+
+describe('first-order offer shown at checkout and on the dashboard', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		prismaMock.promotionCode.findUnique.mockResolvedValue(welcome10);
+		prismaMock.promotionRedemption.findFirst.mockResolvedValue(null);
+		prismaMock.order.findFirst.mockResolvedValue(null);
+	});
+
+	it('offers WELCOME10 to a customer with no account order yet', async () => {
+		expect(await getFirstOrderOffer('user-1')).toEqual({
+			code: 'WELCOME10',
+			type: 'PERCENT',
+			value: 10,
+			minOrderValue: 0,
+			label: '10% off your first account order'
+		});
+	});
+
+	it('offers nothing after a first account order, after using it, or when the code is off', async () => {
+		prismaMock.order.findFirst.mockResolvedValueOnce({ id: 'earlier' });
+		expect(await getFirstOrderOffer('user-1')).toBeNull();
+		prismaMock.promotionRedemption.findFirst.mockResolvedValueOnce({ id: 'used' });
+		expect(await getFirstOrderOffer('user-1')).toBeNull();
+		prismaMock.promotionCode.findUnique.mockResolvedValueOnce({ ...welcome10, isActive: false });
+		expect(await getFirstOrderOffer('user-1')).toBeNull();
+		expect(await getFirstOrderOffer(null)).toBeNull();
 	});
 });

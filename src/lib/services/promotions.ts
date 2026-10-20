@@ -401,3 +401,53 @@ export async function recordPromotionRedemption(orderId: string): Promise<{ reco
 		return { recorded: true };
 	});
 }
+
+export interface FirstOrderOffer {
+	code: string;
+	type: PromotionType;
+	value: number;
+	minOrderValue: number;
+	/** Plain words for buttons and banners, e.g. "10% off your first account order". */
+	label: string;
+}
+
+/**
+ * The first-account-order code (WELCOME10) if this customer can still use it: the code is live,
+ * they have no account order paid before, and they haven't redeemed it. Checkout offers it as a
+ * one-tap button and the dashboard reminds them, so nobody has to remember the code from an email.
+ */
+export async function getFirstOrderOffer(
+	userId: string | null | undefined,
+	now: Date = new Date()
+): Promise<FirstOrderOffer | null> {
+	if (!userId) return null;
+	for (const code of FIRST_ACCOUNT_ORDER_PROMO_CODES) {
+		const promotion = await prisma.promotionCode.findUnique({ where: { code } });
+		if (!promotion?.isActive || promotion.issuedToUserId) continue;
+		if (!isPromotionScheduledForNow(promotion, now)) continue;
+		if (promotion.usageCap !== null && promotion.usageCount >= promotion.usageCap) continue;
+		const [priorAccountOrder, redeemed] = await Promise.all([
+			prisma.order.findFirst({
+				where: { AND: [buildSettledOrderWhere(), { userId, orderType: 'account' }] },
+				select: { id: true }
+			}),
+			prisma.promotionRedemption.findFirst({
+				where: { promotionId: promotion.id, userId },
+				select: { id: true }
+			})
+		]);
+		if (priorAccountOrder || redeemed) return null;
+		const value = Number(promotion.value || 0);
+		return {
+			code: promotion.code,
+			type: promotion.type,
+			value,
+			minOrderValue: Number(promotion.minOrderValue || 0),
+			label:
+				promotion.type === 'PERCENT'
+					? `${value}% off your first account order`
+					: `₦${value.toLocaleString('en-NG')} off your first account order`
+		};
+	}
+	return null;
+}

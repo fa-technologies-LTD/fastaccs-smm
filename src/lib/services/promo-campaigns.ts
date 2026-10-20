@@ -663,6 +663,48 @@ export async function maybeGrantBigSpender(userId: string, spend: number): Promi
 	});
 }
 
+export interface BigSpenderProgress {
+	rewardNgn: number;
+	targetNgn: number;
+	toGo: number;
+}
+
+/** For the customer's dashboard: how far they are from their BIGSPENDER mark (null when off). */
+export async function getBigSpenderProgress(userId: string): Promise<BigSpenderProgress | null> {
+	const { bigSpender } = await getCampaignSettings();
+	if (!isCampaignLive(bigSpender)) return null;
+	const [existing, gift, spend, spendAtLaunch] = await Promise.all([
+		prisma.walletTransaction.findUnique({
+			where: { reference: BIGSPENDER_REFERENCE(userId) },
+			select: { id: true }
+		}),
+		prisma.walletTransaction.findUnique({
+			where: { reference: SPEND_GIFT_70K_REFERENCE(userId) },
+			select: { status: true }
+		}),
+		lifetimeSpend(userId),
+		lifetimeSpend(userId, new Date(bigSpender.startsAt!))
+	]);
+	if (existing) return null;
+	const target = bigSpenderTarget(
+		spendAtLaunch,
+		gift?.status === 'available',
+		bigSpender.thresholdNgn
+	);
+	return { rewardNgn: bigSpender.rewardNgn, targetNgn: target, toGo: Math.max(0, target - spend) };
+}
+
+/** For the customer's dashboard: the Refer & Win offer while it is on. */
+export async function getReferWinOffer(): Promise<{
+	rewardNgn: number;
+	qualifyingCashNgn: number;
+} | null> {
+	const { referWin } = await getCampaignSettings();
+	return isCampaignLive(referWin)
+		? { rewardNgn: referWin.rewardNgn, qualifyingCashNgn: referWin.qualifyingCashNgn }
+		: null;
+}
+
 /** After a refund: if lifetime spend fell back below the customer's mark, remove unspent credit. */
 export async function reconcileBigSpender(userId: string, spend: number): Promise<void> {
 	const grant = await prisma.walletTransaction.findUnique({

@@ -28,6 +28,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			affiliateData: null,
 			affiliateLoaded: false,
 			storeCredit: null,
+			rewards: null,
 			purchases: [],
 			purchasesNextCursor: null,
 			purchasesLoaded: false,

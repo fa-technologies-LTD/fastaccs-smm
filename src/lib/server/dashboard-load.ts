@@ -2,9 +2,10 @@ import { getBusinessSettingsSnapshot } from '$lib/services/admin-settings';
 import { getStoreCreditBuckets } from '$lib/services/store-credit';
 import { getDashboardMetrics } from '$lib/server/dashboard-metrics';
 import { getDashboardOrdersPage } from '$lib/server/dashboard-orders';
+import { getCustomerRewards } from '$lib/server/customer-rewards';
 
 export async function getDashboardInitialData(userId: string) {
-	const [ordersPage, metrics, business, storeCredit] = await Promise.all([
+	const [ordersPage, metrics, business, storeCredit, rewards] = await Promise.all([
 		getDashboardOrdersPage({ userId }),
 		getDashboardMetrics(userId),
 		getBusinessSettingsSnapshot().catch(() => null),
@@ -14,7 +15,8 @@ export async function getDashboardInitialData(userId: string) {
 			promoAvailable: 0,
 			promo: [],
 			totalAvailable: 0
-		}))
+		})),
+		getCustomerRewards(userId).catch(() => null)
 	]);
 
 	return {
@@ -24,6 +26,7 @@ export async function getDashboardInitialData(userId: string) {
 		affiliateData: null,
 		affiliateLoaded: false,
 		storeCredit,
+		rewards,
 		purchases: [],
 		purchasesNextCursor: null,
 		purchasesLoaded: false,

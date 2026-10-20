@@ -2,6 +2,7 @@ import type { PageServerLoad } from './$types';
 import { readAffiliateReferralCookie } from '$lib/services/affiliate';
 import { getStoreCreditBuckets } from '$lib/services/store-credit';
 import { getPromoCaps } from '$lib/services/promo-campaigns';
+import { getFirstOrderOffer } from '$lib/services/promotions';
 import type { PromoCampaignBalance } from '$lib/helpers/promo-credit';
 import { prisma } from '$lib/prisma';
 
@@ -44,15 +45,27 @@ export const load: PageServerLoad = async ({ cookies, locals }) => {
 						select: { code: true, value: true, minOrderValue: true },
 						orderBy: { createdAt: 'desc' }
 					})
-					.then((promo) =>
-						promo
+					.then(async (promo) => {
+						if (promo) {
+							return {
+								code: promo.code,
+								value: Number(promo.value),
+								minOrderValue: Number(promo.minOrderValue),
+								label: `₦${Number(promo.value).toLocaleString()} off`
+							};
+						}
+						// No personal code: offer the first-account-order code as one tap, so nobody
+						// has to remember WELCOME10 from an email.
+						const offer = await getFirstOrderOffer(userId);
+						return offer
 							? {
-									code: promo.code,
-									value: Number(promo.value),
-									minOrderValue: Number(promo.minOrderValue)
+									code: offer.code,
+									value: offer.value,
+									minOrderValue: offer.minOrderValue,
+									label: offer.label
 								}
-							: null
-					)
+							: null;
+					})
 					.catch((error) => {
 						console.error('Failed to load available promo for checkout:', error);
 						return null;

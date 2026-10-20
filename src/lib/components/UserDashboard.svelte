@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { CustomerRewards } from '$lib/helpers/customer-rewards';
 	import { onMount } from 'svelte';
 	import { BriefcaseBusiness, Compass, LifeBuoy, Lock, Unlock, Clock3, X } from '$lib/icons';
 	import OrderTab from './OrderTab.svelte';
@@ -49,6 +50,7 @@
 		affiliateData: initialAffiliateData = null,
 		affiliateLoaded: initialAffiliateLoaded = false,
 		storeCredit = null,
+		rewards = null,
 		purchases: initialPurchases = [],
 		purchasesNextCursor = null,
 		purchasesLoaded = false,
@@ -61,7 +63,12 @@
 		metrics?: DashboardMetrics | null;
 		affiliateData?: unknown;
 		affiliateLoaded?: boolean;
-		storeCredit?: { totalAvailable?: number } | null;
+		storeCredit?: {
+			totalAvailable?: number;
+			promoAvailable?: number;
+			promo?: Array<{ campaign: string; available: number; nextExpiresAt: string | null }>;
+		} | null;
+		rewards?: CustomerRewards | null;
 		purchases?: DashboardPurchase[];
 		purchasesNextCursor?: string | null;
 		purchasesLoaded?: boolean;
@@ -69,6 +76,57 @@
 	} = $props();
 
 	const storeCreditBalance = $derived(Math.max(0, Number(storeCredit?.totalAvailable || 0)));
+
+	// "Your rewards": only what applies to this customer right now, each with one next step.
+	const rewardLines = $derived.by(() => {
+		const naira = (value: number) => `₦${Math.round(value).toLocaleString()}`;
+		const lines: Array<{ icon: string; text: string; cta: string; href: string }> = [];
+		const promoAvailable = Math.max(0, Number(storeCredit?.promoAvailable || 0));
+		if (promoAvailable > 0) {
+			const soonest = (storeCredit?.promo ?? [])
+				.map((entry) => entry.nextExpiresAt)
+				.filter((value): value is string => Boolean(value))
+				.sort()[0];
+			const expiry = soonest
+				? new Date(soonest).toLocaleDateString('en-GB', {
+						day: 'numeric',
+						month: 'short',
+						timeZone: 'Africa/Lagos'
+					})
+				: null;
+			lines.push({
+				icon: '🎁',
+				text: `${naira(promoAvailable)} promo credit${expiry ? ` · use by ${expiry}` : ''} — applied at checkout`,
+				cta: 'Shop',
+				href: '/platforms'
+			});
+		}
+		if (rewards?.firstOrderOffer) {
+			lines.push({
+				icon: '🏷️',
+				text: `${rewards.firstOrderOffer.label} — one tap at checkout (${rewards.firstOrderOffer.code})`,
+				cta: 'Shop',
+				href: '/platforms'
+			});
+		}
+		if (rewards?.bigSpender && rewards.bigSpender.toGo > 0) {
+			lines.push({
+				icon: '⭐',
+				text: `Spend ${naira(rewards.bigSpender.toGo)} more to get ${naira(rewards.bigSpender.rewardNgn)} store credit`,
+				cta: 'Shop',
+				href: '/platforms'
+			});
+		}
+		if (rewards?.referWin) {
+			lines.push({
+				icon: '🤝',
+				text: `Refer a friend: get ${naira(rewards.referWin.rewardNgn)} credit when they spend ${naira(rewards.referWin.qualifyingCashNgn)}`,
+				cta: 'Get my link',
+				href: '/dashboard?tab=affiliate'
+			});
+		}
+		return lines;
+	});
 
 	// Store-credit history (lazy-loaded when the card is tapped).
 	type CreditEntry = {
@@ -453,6 +511,32 @@
 			</div>
 		</button>
 	</div>
+
+	{#if rewardLines.length}
+		<div
+			class="mb-4 space-y-1.5 rounded-[var(--r-sm)] border border-[var(--border)] px-3 py-2.5"
+			style="background: var(--surface-2);"
+		>
+			<p
+				class="text-[11px] font-semibold tracking-wide uppercase"
+				style="color: var(--text-muted);"
+			>
+				Your rewards
+			</p>
+			{#each rewardLines as line (line.text)}
+				<a
+					href={line.href}
+					class="flex items-center justify-between gap-3 text-sm"
+					style="color: var(--text);"
+				>
+					<span>{line.icon} {line.text}</span>
+					<span class="shrink-0 text-xs font-semibold" style="color: var(--primary);"
+						>{line.cta} →</span
+					>
+				</a>
+			{/each}
+		</div>
+	{/if}
 
 	<div id="dashboard-tabs" class="mb-4 overflow-x-auto border-b border-[var(--border)]">
 		<nav class="flex flex-nowrap gap-6 pb-2 whitespace-nowrap">

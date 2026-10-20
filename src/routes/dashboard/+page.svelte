@@ -31,6 +31,7 @@
 	affiliateData={data.affiliateData}
 	affiliateLoaded={data.affiliateLoaded}
 	storeCredit={data.storeCredit}
+	rewards={data.rewards}
 	purchases={data.purchases}
 	purchasesNextCursor={data.purchasesNextCursor}
 	purchasesLoaded={data.purchasesLoaded}
