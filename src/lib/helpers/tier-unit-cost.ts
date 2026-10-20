@@ -22,13 +22,16 @@ export function parseTierUnitCostForForm(metadata: unknown): number | string {
 
 /**
  * Normalise the cost on save. A payload that does not mention the cost (an older form) keeps the
- * existing cost; an empty box clears it; anything else must be a non-negative number.
+ * existing cost; an empty box clears it; anything else must be a non-negative number. Admins who
+ * cannot see costs (they get public tier data) can never set or clear it: their save keeps it.
  */
 export function applyTierUnitCostSanitization(
 	metadata: Record<string, unknown>,
-	existingMetadata: unknown = {}
+	existingMetadata: unknown = {},
+	options: { canEditCost?: boolean } = {}
 ): Record<string, unknown> {
 	const next = { ...metadata };
+	if (options.canEditCost === false) delete next[TIER_UNIT_COST_KEY];
 	if (!(TIER_UNIT_COST_KEY in next)) {
 		const existing = parseTierUnitCost(existingMetadata);
 		if (existing !== null) next[TIER_UNIT_COST_KEY] = existing;

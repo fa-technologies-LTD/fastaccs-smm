@@ -87,7 +87,13 @@ export async function POST({ request, locals }) {
 				: sanitizedMetadata;
 		const metadata =
 			rest.categoryType === 'tier'
-				? applyTierUnitCostSanitization(withAffiliateDefault)
+				? applyTierUnitCostSanitization(
+						withAffiliateDefault,
+						{},
+						{
+							canEditCost: Boolean(locals.adminContext?.canViewRevenue)
+						}
+					)
 				: withAffiliateDefault;
 
 		const data = await prisma.category.create({

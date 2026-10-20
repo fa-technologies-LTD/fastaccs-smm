@@ -45,6 +45,8 @@
 			};
 		};
 		loading?: boolean;
+		/** Full admins only: the private cost field. */
+		canEditCost?: boolean;
 		onClose: () => void;
 		onCreate: () => void;
 	}
@@ -54,6 +56,7 @@
 		platforms,
 		tierForm = $bindable(),
 		loading = false,
+		canEditCost = false,
 		onClose,
 		onCreate
 	}: Props = $props();
@@ -209,37 +212,6 @@
 										aria-label="Enable exact account preview"
 									/>
 								</div>
-							</div>
-
-							<div
-								class="rounded-lg p-3 md:col-span-2"
-								style="border: 1px solid var(--border); background: var(--bg-elev-1);"
-							>
-								<label class="block">
-									<span class="text-sm font-semibold" style="color: var(--text);"
-										>Our cost per account (₦)</span
-									>
-									<span
-										class="mt-1 block text-xs leading-relaxed"
-										style="color: var(--text-muted);"
-									>
-										Private. What one account from this tier really costs us, including a small
-										buffer for payment fees. Never shown to customers or affiliates. Used to work
-										out Super profit commission. Leave blank if unknown; commission on this tier is
-										then held for review.
-									</span>
-									<input
-										type="number"
-										min="0"
-										step="1"
-										inputmode="numeric"
-										bind:value={tierForm.metadata.unit_cost_ngn}
-										placeholder="e.g. 1200"
-										aria-label="Our cost per account in naira"
-										class="mt-2 w-full rounded-lg px-3 py-2"
-										style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
-									/>
-								</label>
 							</div>
 
 							<div
@@ -573,6 +545,19 @@
 								/>
 							</div>
 
+							<div>
+								<label for="quality score" class="block text-sm font-medium text-gray-700"
+									>Quality Score (1-5)</label
+								>
+								<input
+									type="number"
+									min="1"
+									max="5"
+									bind:value={tierForm.metadata.quality_score}
+									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-purple-500 focus:ring-purple-500"
+								/>
+							</div>
+
 							<!-- Pricing -->
 							<div>
 								<label
@@ -595,18 +580,29 @@
 								</p>
 							</div>
 
-							<div>
-								<label for="quality score" class="block text-sm font-medium text-gray-700"
-									>Quality Score (1-5)</label
-								>
-								<input
-									type="number"
-									min="1"
-									max="5"
-									bind:value={tierForm.metadata.quality_score}
-									class="mt-1 block w-full rounded-md border border-gray-300 px-4 py-2 focus:border-purple-500 focus:ring-purple-500"
-								/>
-							</div>
+							{#if canEditCost}
+								<div>
+									<label
+										for="tier-create-unit-cost"
+										class="block text-sm font-medium"
+										style="color: var(--text);">Our cost per account (₦)</label
+									>
+									<input
+										id="tier-create-unit-cost"
+										type="number"
+										min="0"
+										step="1"
+										inputmode="numeric"
+										bind:value={tierForm.metadata.unit_cost_ngn}
+										placeholder="Blank = not set"
+										class="mt-1 block w-full rounded-md px-4 py-2"
+										style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
+									/>
+									<p class="mt-1 text-xs" style="color: var(--text-muted);">
+										Private. Include payment fees. Never shown to customers or affiliates.
+									</p>
+								</div>
+							{/if}
 
 							<div class="md:col-span-2">
 								<label

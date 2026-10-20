@@ -21,6 +21,19 @@ describe('tier cost on save', () => {
 		expect(applyTierUnitCostSanitization({ unit_cost_ngn: 'abc' })).toEqual({});
 	});
 
+	it('never lets an admin who cannot see costs set or clear one', () => {
+		const existing = { unit_cost_ngn: 1_200 };
+		expect(
+			applyTierUnitCostSanitization({ unit_cost_ngn: '' }, existing, { canEditCost: false })
+		).toEqual({ unit_cost_ngn: 1_200 });
+		expect(
+			applyTierUnitCostSanitization({ unit_cost_ngn: 5 }, existing, { canEditCost: false })
+		).toEqual({ unit_cost_ngn: 1_200 });
+		expect(applyTierUnitCostSanitization({ unit_cost_ngn: 5 }, {}, { canEditCost: false })).toEqual(
+			{}
+		);
+	});
+
 	it('fills the admin form with the saved cost or an empty box', () => {
 		expect(parseTierUnitCostForForm({ unit_cost_ngn: 700 })).toBe(700);
 		expect(parseTierUnitCostForForm({})).toBe('');

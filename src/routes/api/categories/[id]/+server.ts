@@ -105,7 +105,9 @@ export async function PUT({ params, request, locals }) {
 								affiliate_excluded: existingMetadata.affiliate_excluded
 							}
 						: sanitized,
-					existingMetadata
+					existingMetadata,
+					// Only admins who can see costs may set or clear one; others keep it as saved.
+					{ canEditCost: Boolean(locals.adminContext?.canViewRevenue) }
 				);
 			}
 		}

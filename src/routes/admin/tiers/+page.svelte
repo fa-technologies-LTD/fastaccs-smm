@@ -1041,6 +1041,7 @@
 		{platforms}
 		bind:tierForm
 		{loading}
+		canEditCost={Boolean(data.canViewRevenue)}
 		onClose={() => (showCreateModal = false)}
 		onCreate={handleCreate}
 	/>
@@ -1052,6 +1053,7 @@
 		open={showEditModal}
 		bind:tierForm
 		{loading}
+		canEditCost={Boolean(data.canViewRevenue)}
 		onClose={() => (showEditModal = false)}
 		onUpdate={handleUpdate}
 	/>
