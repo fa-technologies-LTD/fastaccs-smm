@@ -566,6 +566,11 @@
 			<p class="mt-1 text-sm" style="color: var(--text-muted);">
 				Compose and send campaigns to verified user audiences.
 			</p>
+			<p class="mt-1 text-xs" style="color: var(--text-muted);">
+				Best time to send: 5–7pm WAT. Most orders come in between 9pm and 3am. New sign-ups in their
+				first 3 weeks who haven't bought are skipped; they're getting the welcome emails with the
+				first-order code.
+			</p>
 		</div>
 		<button
 			type="button"

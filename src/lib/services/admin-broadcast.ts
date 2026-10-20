@@ -259,7 +259,30 @@ async function getSuccessfulOrderStatsByUser(): Promise<
 		}));
 }
 
+/**
+ * New sign-ups who haven't bought are in their 3-week welcome emails (with the first-order code).
+ * Broadcasts skip them so the one-marketing-email-a-day limit never pushes that offer out.
+ */
+export const NEW_SIGNUP_BROADCAST_QUIET_DAYS = 21;
+
 async function getAudienceWhereClause(
+	audience: BroadcastAudience,
+	filters: BroadcastAudienceFilters
+): Promise<Prisma.UserWhereInput> {
+	return {
+		AND: [
+			await getSegmentWhereClause(audience, filters),
+			{
+				OR: [
+					{ registeredAt: { lt: getSinceDate(NEW_SIGNUP_BROADCAST_QUIET_DAYS) } },
+					{ orders: { some: SUCCESSFUL_ORDER_FILTER } }
+				]
+			}
+		]
+	};
+}
+
+async function getSegmentWhereClause(
 	audience: BroadcastAudience,
 	filters: BroadcastAudienceFilters
 ): Promise<Prisma.UserWhereInput> {

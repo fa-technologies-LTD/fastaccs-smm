@@ -117,15 +117,27 @@ describe('admin customer broadcasts', () => {
 				}
 			]);
 
-		const recipients = await getBroadcastRecipients('all_verified', [], [], [
-			'buyer@example.com',
-			'extra@example.com'
-		]);
+		const recipients = await getBroadcastRecipients(
+			'all_verified',
+			[],
+			[],
+			['buyer@example.com', 'extra@example.com']
+		);
 
 		expect(recipients).toHaveLength(2);
 		expect(recipients.map((r) => r.email).sort()).toEqual([
 			'buyer@example.com',
 			'extra@example.com'
 		]);
+	});
+
+	it('skips new sign-ups who have not bought yet (they are in the welcome emails)', async () => {
+		prismaMock.user.findMany.mockResolvedValue([]);
+		await getBroadcastRecipients('all_verified', [], [], []);
+		const where = prismaMock.user.findMany.mock.calls[0][0].where;
+		expect(where.AND[1].OR[0].registeredAt.lt).toBeInstanceOf(Date);
+		const quietDays = (Date.now() - where.AND[1].OR[0].registeredAt.lt.getTime()) / 86_400_000;
+		expect(Math.round(quietDays)).toBe(21);
+		expect(where.AND[1].OR[1]).toHaveProperty('orders.some');
 	});
 });
