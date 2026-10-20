@@ -58,6 +58,8 @@ export const SC_PROMO_EXPIRY = 'store_credit_promo_expiry'; // metadata.lotId
 export const SC_PROMO_REVERSAL = 'store_credit_promo_reversal'; // metadata.lotId
 // Moves the promo-paid part of a refunded order out of refund credit and back into promo credit.
 export const SC_REFUND_TO_PROMO = 'store_credit_refund_to_promo';
+// Moves the rewards-credit-paid part of a refunded order out of refund credit, back to rewards credit.
+export const SC_REFUND_TO_EARNED = 'store_credit_refund_to_earned';
 export const PROMO_DEFAULT_EXPIRY_DAYS = 30;
 
 // Human category per transaction type, for the customer-facing ledger.
@@ -73,7 +75,8 @@ const SC_CATEGORY: Record<string, string> = {
 	[SC_REDEEM_PROMO]: 'Spent',
 	[SC_PROMO_EXPIRY]: 'Expired',
 	[SC_PROMO_REVERSAL]: 'Promo credit removed',
-	[SC_REFUND_TO_PROMO]: 'Refund'
+	[SC_REFUND_TO_PROMO]: 'Refund',
+	[SC_REFUND_TO_EARNED]: 'Refund'
 };
 
 export interface StoreCreditEntry {
@@ -97,7 +100,8 @@ const STORE_CREDIT_HISTORY_TYPES = [
 	SC_REDEEM_PROMO,
 	SC_PROMO_EXPIRY,
 	SC_PROMO_REVERSAL,
-	SC_REFUND_TO_PROMO
+	SC_REFUND_TO_PROMO,
+	SC_REFUND_TO_EARNED
 ] as const;
 
 const STORE_CREDIT_DEBIT_TYPES = new Set<string>([
@@ -108,7 +112,8 @@ const STORE_CREDIT_DEBIT_TYPES = new Set<string>([
 	SC_REDEEM_PROMO,
 	SC_PROMO_EXPIRY,
 	SC_PROMO_REVERSAL,
-	SC_REFUND_TO_PROMO
+	SC_REFUND_TO_PROMO,
+	SC_REFUND_TO_EARNED
 ]);
 
 /**
@@ -198,7 +203,8 @@ const BUCKET_TYPES = [
 	SC_AFFILIATE_ADJUSTMENT,
 	SC_PAYOUT,
 	SC_CREDIT_PROMO,
-	SC_REFUND_TO_PROMO
+	SC_REFUND_TO_PROMO,
+	SC_REFUND_TO_EARNED
 ];
 const PROMO_DEBIT_TYPES = [SC_REDEEM_PROMO, SC_PROMO_EXPIRY, SC_PROMO_REVERSAL];
 
@@ -230,7 +236,8 @@ function addToSums(sums: BucketSums, type: string, rawStatus: unknown, rawAmount
 	// expired payments) are excluded so the credit is restored.
 	else if (type === SC_REDEEM_EARNED && status === 'available') sums.earnedRedeemed += amount;
 	else if (type === SC_REDEEM_REFUND && status === 'available') sums.refundRedeemed += amount;
-	else if (type === SC_REFUND_TO_PROMO && status === 'available') sums.refundRedeemed += amount;
+	else if ((type === SC_REFUND_TO_PROMO || type === SC_REFUND_TO_EARNED) && status === 'available')
+		sums.refundRedeemed += amount;
 	else if (type === SC_AFFILIATE_ADJUSTMENT && status === 'available')
 		sums.earnedRedeemed += amount;
 	else if (type === SC_CREDIT_PROMO && status === 'available') sums.promoCredits += amount;
@@ -562,14 +569,143 @@ export async function creditStoreCredit(
 	if (!written || params.type !== SC_CREDIT_REFUND) return;
 	const orderId = metadataRecord(params.metadata).orderId;
 	if (typeof orderId === 'string' && orderId) {
-		await returnPromoPartOfRefund(tx, {
+		// Both moves leave the wallet total unchanged, so they share the post-credit balance. The
+		// order's refund share is only looked up when the order used promo or rewards credit.
+		let share: Promise<RefundShare> | null = null;
+		const getShare = () => (share ??= refundedShareOfOrder(tx, params.userId, orderId));
+		const promoReturned = await returnPromoPartOfRefund(tx, {
 			userId: params.userId,
 			orderId,
 			walletId: written.walletId,
 			refundAmount: amount,
-			balance: written.balanceAfter
+			balance: written.balanceAfter,
+			getShare
+		});
+		await returnEarnedPartOfRefund(tx, {
+			userId: params.userId,
+			orderId,
+			orderNumber: metadataRecord(params.metadata).orderNumber,
+			walletId: written.walletId,
+			refundAmount: amount - promoReturned,
+			balance: written.balanceAfter,
+			getShare
 		});
 	}
+}
+
+interface RefundShare {
+	orderTotal: number;
+	refunded: number;
+}
+
+/** Order total and how much of it has been refunded to store credit so far (this refund included). */
+async function refundedShareOfOrder(
+	tx: Prisma.TransactionClient,
+	userId: string,
+	orderId: string
+): Promise<RefundShare> {
+	const [order, refunds] = await Promise.all([
+		tx.order.findUnique({ where: { id: orderId }, select: { totalAmount: true } }),
+		tx.walletTransaction.aggregate({
+			where: {
+				userId,
+				type: SC_CREDIT_REFUND,
+				status: { notIn: ['failed', 'reversed', 'cancelled'] },
+				metadata: { path: ['orderId'], equals: orderId }
+			},
+			_sum: { amount: true }
+		})
+	]);
+	return { orderTotal: moneyNgn(order?.totalAmount), refunded: moneyNgn(refunds._sum.amount) };
+}
+
+/** The share of `spent` that belongs to what has been refunded so far (whole naira). */
+function refundedPart(spent: number, share: RefundShare): number {
+	return share.orderTotal <= 0 || share.refunded + 0.005 >= share.orderTotal
+		? spent
+		: Math.min(spent, Math.floor((share.refunded * spent) / share.orderTotal));
+}
+
+/**
+ * Rewards credit (affiliate earnings and gifts) is capped at 30% of an order. Without this, a
+ * refund would hand the rewards-paid part back as uncapped refund credit. Instead the refunded
+ * share goes back to rewards credit: the order's "rewards credit used" record is re-recorded at the
+ * amount still kept, so balances and affiliate cash-out maths pick it up unchanged.
+ */
+async function returnEarnedPartOfRefund(
+	tx: Prisma.TransactionClient,
+	params: {
+		userId: string;
+		orderId: string;
+		orderNumber: unknown;
+		walletId: string;
+		refundAmount: number;
+		balance: number;
+		getShare: () => Promise<RefundShare>;
+	}
+): Promise<number> {
+	const first = await tx.walletTransaction.findUnique({
+		where: { reference: `${params.orderId}:earned` },
+		select: { type: true, userId: true }
+	});
+	if (first?.type !== SC_REDEEM_EARNED || first.userId !== params.userId) return 0;
+	const rows = await tx.walletTransaction.findMany({
+		where: {
+			userId: params.userId,
+			type: SC_REDEEM_EARNED,
+			reference: { startsWith: `${params.orderId}:earned` }
+		},
+		select: { id: true, reference: true, amount: true, status: true }
+	});
+	const original = rows.find((row) => row.reference === `${params.orderId}:earned`);
+	if (!original) return 0;
+	const spent = naira(original.amount);
+	const active = rows.filter((row) => row.status === 'available');
+	const activeKept = active.reduce((sum, row) => sum + naira(row.amount), 0);
+	const alreadyReturned = Math.max(0, spent - activeKept);
+	const target = refundedPart(spent, await params.getShare());
+	const toReturn = Math.min(Math.floor(params.refundAmount), target - alreadyReturned, activeKept);
+	if (toReturn <= 0) return 0;
+	const kept = activeKept - toReturn;
+
+	await tx.walletTransaction.updateMany({
+		where: { id: { in: active.map((row) => row.id) }, status: 'available' },
+		data: { status: 'reversed' }
+	});
+	let balance = params.balance;
+	await tx.walletTransaction.create({
+		data: {
+			walletId: params.walletId,
+			userId: params.userId,
+			type: SC_REFUND_TO_EARNED,
+			amount: toReturn,
+			balanceBefore: balance,
+			balanceAfter: balance - toReturn,
+			description: 'Part paid with rewards credit, returned as rewards credit',
+			reference: `earned:refund-return:${params.orderId}:${target}`,
+			status: 'available',
+			metadata: { orderId: params.orderId, earnedReturned: toReturn }
+		}
+	});
+	balance = balance - toReturn + activeKept;
+	if (kept > 0) {
+		await tx.walletTransaction.create({
+			data: {
+				walletId: params.walletId,
+				userId: params.userId,
+				type: SC_REDEEM_EARNED,
+				amount: kept,
+				balanceBefore: balance,
+				balanceAfter: balance - kept,
+				description:
+					`Store Credit applied to order ${typeof params.orderNumber === 'string' ? params.orderNumber : ''}`.trim(),
+				reference: `${params.orderId}:earned:kept:${target}`,
+				status: 'available',
+				metadata: { orderId: params.orderId, bucket: 'earned', keptAfterPartialRefund: true }
+			}
+		});
+	}
+	return toReturn;
 }
 
 /**
@@ -586,8 +722,9 @@ async function returnPromoPartOfRefund(
 		walletId: string;
 		refundAmount: number;
 		balance: number;
+		getShare: () => Promise<RefundShare>;
 	}
-): Promise<void> {
+): Promise<number> {
 	const redemption = await tx.walletTransaction.findUnique({
 		where: { reference: `${params.orderId}:promo` },
 		select: {
@@ -605,38 +742,21 @@ async function returnPromoPartOfRefund(
 		redemption.userId !== params.userId ||
 		redemption.status !== 'available'
 	) {
-		return;
+		return 0;
 	}
 	const promoSpent = naira(redemption.amount);
-	if (promoSpent <= 0) return;
+	if (promoSpent <= 0) return 0;
 
-	const [order, refunds, restoredRows] = await Promise.all([
-		tx.order.findUnique({ where: { id: params.orderId }, select: { totalAmount: true } }),
-		tx.walletTransaction.aggregate({
-			where: {
-				userId: params.userId,
-				type: SC_CREDIT_REFUND,
-				status: { notIn: ['failed', 'reversed', 'cancelled'] },
-				metadata: { path: ['orderId'], equals: params.orderId }
-			},
-			_sum: { amount: true }
-		}),
-		tx.walletTransaction.findMany({
-			where: {
-				userId: params.userId,
-				type: SC_CREDIT_PROMO,
-				metadata: { path: ['restoredFromOrderId'], equals: params.orderId }
-			},
-			select: { amount: true, metadata: true }
-		})
-	]);
-	const orderTotal = moneyNgn(order?.totalAmount);
-	const refunded = moneyNgn(refunds._sum.amount);
+	const restoredRows = await tx.walletTransaction.findMany({
+		where: {
+			userId: params.userId,
+			type: SC_CREDIT_PROMO,
+			metadata: { path: ['restoredFromOrderId'], equals: params.orderId }
+		},
+		select: { amount: true, metadata: true }
+	});
 	// The promo share of everything refunded so far (whole naira); a full refund returns it all.
-	const target =
-		orderTotal <= 0 || refunded + 0.005 >= orderTotal
-			? promoSpent
-			: Math.min(promoSpent, Math.floor((refunded * promoSpent) / orderTotal));
+	const target = refundedPart(promoSpent, await params.getShare());
 	const restoredByLot = new Map<string, number>();
 	let alreadyRestored = 0;
 	for (const row of restoredRows) {
@@ -648,7 +768,7 @@ async function returnPromoPartOfRefund(
 		}
 	}
 	let toRestore = Math.min(Math.floor(params.refundAmount), target - alreadyRestored);
-	if (toRestore <= 0) return;
+	if (toRestore <= 0) return 0;
 
 	const spentParts = promoDebitFromRow(redemption).lots ?? [];
 	const sourceRows =
@@ -693,7 +813,7 @@ async function returnPromoPartOfRefund(
 		});
 	}
 	const total = returns.reduce((sum, entry) => sum + entry.amount, 0);
-	if (total <= 0) return;
+	if (total <= 0) return 0;
 
 	const step = alreadyRestored + total;
 	let balance = params.balance;
@@ -735,6 +855,7 @@ async function returnPromoPartOfRefund(
 		});
 		balance += entry.amount;
 	}
+	return total;
 }
 
 export function formatPromoExpiry(at: Date): string {

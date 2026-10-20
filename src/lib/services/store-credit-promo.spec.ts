@@ -344,6 +344,63 @@ describe('promo wallet ledger', () => {
 		expect(state.wallets.get(USER)!.balance).toBe(0);
 	});
 
+	it('returns the rewards-credit part of a refund as rewards credit, not uncapped refund credit', async () => {
+		await creditStoreCredit(tx(), {
+			userId: USER,
+			amount: 1_000,
+			type: 'store_credit_gift',
+			description: 'Gift',
+			reference: 'gift:1'
+		});
+		const redemption = await payOrder('order-a', 5_000); // ₦1,000 gift + ₦4,000 cash
+		expect(redemption.earnedApplied).toBe(1_000);
+		await refund('order-a', 5_000, 'order-a');
+		const buckets = await getStoreCreditBuckets(USER);
+		expect(buckets.earnedAvailable).toBe(1_000);
+		expect(buckets.refundAvailable).toBe(4_000);
+		expect(state.wallets.get(USER)!.balance).toBe(5_000);
+	});
+
+	it('splits partial refunds between rewards credit and refund credit', async () => {
+		await creditStoreCredit(tx(), {
+			userId: USER,
+			amount: 1_000,
+			type: 'store_credit_gift',
+			description: 'Gift',
+			reference: 'gift:1'
+		});
+		await payOrder('order-a', 5_000);
+		await refund('order-a', 2_500, 'acct-1');
+		let buckets = await getStoreCreditBuckets(USER);
+		expect(buckets.earnedAvailable).toBe(500);
+		expect(buckets.refundAvailable).toBe(2_000);
+		await refund('order-a', 2_500, 'order-a');
+		await refund('order-a', 2_500, 'order-a'); // replay
+		buckets = await getStoreCreditBuckets(USER);
+		expect(buckets.earnedAvailable).toBe(1_000);
+		expect(buckets.refundAvailable).toBe(4_000);
+		expect(state.wallets.get(USER)!.balance).toBe(5_000);
+	});
+
+	it('handles an order paid with promo, rewards and cash together', async () => {
+		await grant('rw:1', 1_000);
+		await creditStoreCredit(tx(), {
+			userId: USER,
+			amount: 1_000,
+			type: 'store_credit_gift',
+			description: 'Gift',
+			reference: 'gift:1'
+		});
+		await payOrder('order-a', 4_000); // ₦1,000 promo + ₦1,000 gift + ₦2,000 cash
+		await refund('order-a', 4_000, 'order-a');
+		const buckets = await getStoreCreditBuckets(USER);
+		expect(buckets).toMatchObject({
+			promoAvailable: 1_000,
+			earnedAvailable: 1_000,
+			refundAvailable: 2_000
+		});
+	});
+
 	it('counts unspent promo credit in what we owe customers', async () => {
 		await grant('rw:1', 1_000);
 		await grant('bs:1', 3_000, 'bigspender');
