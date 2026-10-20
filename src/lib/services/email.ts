@@ -1,4 +1,10 @@
 import nodemailer, { type Transporter } from 'nodemailer';
+import {
+	emailUtmContent,
+	shouldTagEmailLinks,
+	tagEmailBodyLinks,
+	tagEmailLink
+} from '$lib/helpers/email-link-tracking';
 import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
 import { prisma } from '$lib/prisma';
@@ -554,7 +560,34 @@ async function shouldShowCustomerInboxTip(
 	}
 }
 
-export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
+/** Marketing and reminder emails get tracking tags on links to our own site. */
+function withEmailTracking(params: SendEmailParams): SendEmailParams {
+	if (!shouldTagEmailLinks(params.notificationType, params.classification)) return params;
+	const siteHosts = [
+		...new Set(
+			[getBaseUrl(), CANONICAL_PUBLIC_BASE_URL].map((url) => {
+				try {
+					return new URL(url).hostname.toLowerCase();
+				} catch {
+					return '';
+				}
+			})
+		)
+	].filter(Boolean);
+	const options = {
+		siteHosts,
+		campaign: params.notificationType,
+		content: emailUtmContent(params.referenceId ?? params.campaignKey, params.broadcastId)
+	};
+	return {
+		...params,
+		body: tagEmailBodyLinks(params.body, options),
+		ctaUrl: tagEmailLink(params.ctaUrl, options)
+	};
+}
+
+export async function sendEmail(rawParams: SendEmailParams): Promise<SendEmailResult> {
+	const params = withEmailTracking(rawParams);
 	const recipient = params.to.trim().toLowerCase();
 	const subject = params.subject.trim();
 	const body = params.body.trim();
