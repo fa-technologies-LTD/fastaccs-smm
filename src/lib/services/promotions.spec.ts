@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const prismaMock = vi.hoisted(() => ({
 	promotionCode: { findUnique: vi.fn() },
 	promotionRedemption: { findFirst: vi.fn() },
-	category: { findMany: vi.fn() }
+	category: { findMany: vi.fn() },
+	order: { findFirst: vi.fn() }
 }));
 
 vi.mock('$lib/prisma', () => ({ prisma: prismaMock }));
@@ -35,6 +36,7 @@ describe('WELCOME10 promotion contract', () => {
 		vi.clearAllMocks();
 		prismaMock.promotionCode.findUnique.mockResolvedValue(welcome10);
 		prismaMock.promotionRedemption.findFirst.mockResolvedValue(null);
+		prismaMock.order.findFirst.mockResolvedValue(null);
 	});
 
 	it('takes 10% off without a global cap or platform restriction', async () => {
@@ -65,5 +67,35 @@ describe('WELCOME10 promotion contract', () => {
 
 		expect(result.valid).toBe(false);
 		expect(result.error).toContain('already been used');
+	});
+
+	it('only works on the customer’s first account order', async () => {
+		prismaMock.order.findFirst.mockResolvedValue({ id: 'earlier-account-order' });
+
+		const result = await validatePromotionCode({
+			code: 'WELCOME10',
+			userId: 'user-1',
+			subtotal: 5_000,
+			categoryIds: []
+		});
+
+		expect(result).toMatchObject({ valid: false, discountAmount: 0, finalTotal: 5_000 });
+		expect(result.error).toBe('WELCOME10 is for your first account order only.');
+		expect(prismaMock.order.findFirst).toHaveBeenCalledWith({
+			where: {
+				AND: [expect.anything(), { userId: 'user-1', orderType: 'account' }]
+			},
+			select: { id: true }
+		});
+	});
+
+	it('needs a signed-in customer to check it is their first order', async () => {
+		const result = await validatePromotionCode({
+			code: 'WELCOME10',
+			userId: null,
+			subtotal: 5_000,
+			categoryIds: []
+		});
+		expect(result.valid).toBe(false);
 	});
 });

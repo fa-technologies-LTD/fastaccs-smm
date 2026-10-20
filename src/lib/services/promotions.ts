@@ -1,5 +1,12 @@
 import type { PromotionCode, PromotionType } from '@prisma/client';
 import { prisma } from '$lib/prisma';
+import { buildSettledOrderWhere } from '$lib/helpers/order-revenue.server';
+
+/**
+ * Codes promised as "your first account order" (WELCOME10 is sent in the signed-up-never-bought
+ * emails). They only work for a signed-in customer with no account order paid before.
+ */
+export const FIRST_ACCOUNT_ORDER_PROMO_CODES: ReadonlySet<string> = new Set(['WELCOME10']);
 
 interface PromotionValidationInput {
 	code: string;
@@ -46,7 +53,9 @@ export interface PromotionUpdateInput {
 }
 
 function normalizeCode(value: string): string {
-	return String(value || '').trim().toUpperCase();
+	return String(value || '')
+		.trim()
+		.toUpperCase();
 }
 
 function toAmount(value: number): number {
@@ -124,7 +133,12 @@ export async function validatePromotionCode(
 ): Promise<PromotionValidationResult> {
 	const code = normalizeCode(input.code);
 	if (!code) {
-		return { valid: false, error: 'Promo code is required.', discountAmount: 0, finalTotal: toAmount(input.subtotal) };
+		return {
+			valid: false,
+			error: 'Promo code is required.',
+			discountAmount: 0,
+			finalTotal: toAmount(input.subtotal)
+		};
 	}
 
 	const subtotal = toAmount(input.subtotal);
@@ -203,6 +217,25 @@ export async function validatePromotionCode(
 		}
 	}
 
+	if (FIRST_ACCOUNT_ORDER_PROMO_CODES.has(promotion.code)) {
+		const priorAccountOrder = input.userId
+			? await prisma.order.findFirst({
+					where: {
+						AND: [buildSettledOrderWhere(), { userId: input.userId, orderType: 'account' }]
+					},
+					select: { id: true }
+				})
+			: null;
+		if (!input.userId || priorAccountOrder) {
+			return {
+				valid: false,
+				error: `${promotion.code} is for your first account order only.`,
+				discountAmount: 0,
+				finalTotal: subtotal
+			};
+		}
+	}
+
 	if (promotion.singleUsePerUser && input.userId) {
 		const priorRedemption = await prisma.promotionRedemption.findFirst({
 			where: {
@@ -273,7 +306,10 @@ export async function createPromotion(input: PromotionCreateInput): Promise<Prom
 	});
 }
 
-export async function updatePromotion(id: string, input: PromotionUpdateInput): Promise<PromotionCode> {
+export async function updatePromotion(
+	id: string,
+	input: PromotionUpdateInput
+): Promise<PromotionCode> {
 	const startsAt = input.startsAt !== undefined ? parseIsoDate(input.startsAt || null) : undefined;
 	const endsAt = input.endsAt !== undefined ? parseIsoDate(input.endsAt || null) : undefined;
 	if (startsAt && endsAt && startsAt.getTime() > endsAt.getTime()) {
@@ -285,7 +321,8 @@ export async function updatePromotion(id: string, input: PromotionUpdateInput): 
 		data: {
 			type: input.type,
 			value: input.value !== undefined ? toAmount(input.value) : undefined,
-			currency: input.currency !== undefined ? input.currency.trim().toUpperCase() || 'NGN' : undefined,
+			currency:
+				input.currency !== undefined ? input.currency.trim().toUpperCase() || 'NGN' : undefined,
 			minOrderValue: input.minOrderValue !== undefined ? toAmount(input.minOrderValue) : undefined,
 			usageCap:
 				input.usageCap === undefined
