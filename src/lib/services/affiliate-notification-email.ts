@@ -1,6 +1,10 @@
 import { prisma } from '$lib/prisma';
 import { sendEmail } from '$lib/services/email';
 import { getRewardVestingDays } from '$lib/services/affiliate-vesting';
+import {
+	isSuperAffiliateOnNewTerms,
+	payoutTimingSentence
+} from '$lib/services/super-affiliate-terms';
 
 const FIRST_CREDIT_PENDING_STALE_MS = 10 * 60 * 1000;
 const AFFILIATE_UNLOCK_PENDING_STALE_MS = 10 * 60 * 1000;
@@ -102,6 +106,18 @@ Keep sharing your link. You earn 5% on each referred friend's first two eligible
 	return result.success;
 }
 
+/** How a Super affiliate earns, from the live settings (today's terms or the new ones). */
+async function superEarningSentence(userId: string): Promise<string> {
+	const { getAffiliateConfig } = await import('$lib/services/affiliate');
+	const config = await getAffiliateConfig();
+	const reward = `₦${config.superActivationReward.toLocaleString()}`;
+	const spend = `₦${config.superActivationSpendThreshold.toLocaleString()}`;
+	const orders = config.superActivationOrderThreshold;
+	return (await isSuperAffiliateOnNewTerms(userId))
+		? `You earn ${reward} when a friend you referred pays ${spend} in cash on account orders or places ${orders} account orders, then 5% of our profit on their later account orders.`
+		: `You earn ${reward} when a friend you referred reaches ${spend} in account orders or ${orders} account orders, plus a monthly bonus as more friends activate.`;
+}
+
 export async function sendAffiliateUnlockEmailIfNeeded(userId: string): Promise<boolean> {
 	const reservation = await prisma.$transaction(async (tx) => {
 		const lockedUsers = await tx.$queryRaw<Array<{ id: string }>>`
@@ -138,7 +154,7 @@ export async function sendAffiliateUnlockEmailIfNeeded(userId: string): Promise<
 					isActive: true,
 					affiliatePrograms: {
 						where: { status: 'active' },
-						select: { affiliateCode: true },
+						select: { affiliateCode: true, isSuperAffiliate: true },
 						take: 1
 					}
 				}
@@ -165,11 +181,18 @@ export async function sendAffiliateUnlockEmailIfNeeded(userId: string): Promise<
 			email: user.email,
 			firstName: getFirstName(user.fullName, user.email),
 			affiliateCode,
+			isSuperAffiliate: Boolean(user.affiliatePrograms[0]?.isSuperAffiliate),
 			payoutMinimum: parsePayoutMinimum(payoutSetting?.value)
 		};
 	});
 
 	if (!reservation) return false;
+	const howYouEarn = reservation.isSuperAffiliate
+		? await superEarningSentence(userId)
+		: 'Friends save 5% on their first two eligible account orders. You earn 5% on each of those orders, up to ₦1,000 per order.';
+	const timing = payoutTimingSentence(
+		reservation.isSuperAffiliate && (await isSuperAffiliateOnNewTerms(userId))
+	);
 	const result = await sendEmail({
 		to: reservation.email,
 		subject: 'Your Fast Accounts affiliate code is ready',
@@ -177,9 +200,9 @@ export async function sendAffiliateUnlockEmailIfNeeded(userId: string): Promise<
 
 Your code: **${reservation.affiliateCode}**
 
-Share your code. Friends save 5% on their first two eligible account orders. You earn 5% on each of those orders, up to ₦1,000 per order.
+Share your code. ${howYouEarn}
 
-Once your earnings clear, use them to shop or withdraw when your balance reaches ₦${reservation.payoutMinimum.toLocaleString()}. Withdrawals are processed on Saturdays.`,
+Once your earnings clear, use them to shop or withdraw when your balance reaches ₦${reservation.payoutMinimum.toLocaleString()}. ${timing}`,
 		ctaText: 'View and share my code',
 		ctaUrl: `${getBaseUrl()}/dashboard?tab=affiliate`,
 		notificationType: 'affiliate_unlock',
@@ -305,12 +328,13 @@ export async function sendAffiliateBankReadyEmailIfNeeded(userId: string): Promi
 	});
 
 	if (!reservation) return false;
+	const timing = payoutTimingSentence(await isSuperAffiliateOnNewTerms(userId));
 	const result = await sendEmail({
 		to: reservation.email,
 		subject: 'Your first referral earning is now available',
 		body: `Hi ${reservation.firstName},
 
-Spend it on Fast Accounts, or add bank details and request a payout when your balance reaches ₦${reservation.payoutMinimum.toLocaleString()}. Payouts run on Saturdays.`,
+Spend it on Fast Accounts, or add bank details and request a payout when your balance reaches ₦${reservation.payoutMinimum.toLocaleString()}. ${timing}`,
 		ctaText: 'Add bank details',
 		ctaUrl: `${getBaseUrl()}/affiliate/bank-details`,
 		userId,

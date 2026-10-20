@@ -29,6 +29,19 @@ vi.mock('$lib/services/email', () => ({
 	sendEmail: sendEmailMock
 }));
 
+const superTerms = vi.hoisted(() => ({ onNewTerms: false }));
+vi.mock('$lib/services/super-affiliate-terms', async (original) => ({
+	...(await original<typeof import('$lib/services/super-affiliate-terms')>()),
+	isSuperAffiliateOnNewTerms: async () => superTerms.onNewTerms
+}));
+vi.mock('$lib/services/affiliate', () => ({
+	getAffiliateConfig: async () => ({
+		superActivationReward: 700,
+		superActivationSpendThreshold: 3_500,
+		superActivationOrderThreshold: 3
+	})
+}));
+
 import {
 	recoverFirstStoreCreditEmails,
 	sendAffiliateUnlockEmailIfNeeded,
@@ -54,6 +67,7 @@ describe('first Store Credit email', () => {
 		});
 		txMock.microcopy.findUnique.mockResolvedValue({ value: '5000' });
 		sendEmailMock.mockResolvedValue({ success: true, messageId: 'message-1' });
+		superTerms.onNewTerms = false;
 	});
 
 	it('sends only for the first lifetime credit', async () => {
@@ -130,5 +144,28 @@ describe('first Store Credit email', () => {
 				referenceId: 'affiliate_unlock:11111111-1111-1111-1111-111111111111'
 			})
 		);
+	});
+
+	it('tells regular affiliates payouts are on Saturdays', async () => {
+		await sendAffiliateUnlockEmailIfNeeded('11111111-1111-1111-1111-111111111111');
+		const body = sendEmailMock.mock.calls[0][0].body as string;
+		expect(body).toContain('You earn 5% on each of those orders');
+		expect(body).toContain('Payouts are processed on Saturdays.');
+	});
+
+	it('tells a Super on the new terms how she earns and that payouts take 1–3 days', async () => {
+		superTerms.onNewTerms = true;
+		txMock.user.findUnique.mockResolvedValue({
+			email: 'stacy@example.com',
+			fullName: 'Stacy',
+			isActive: true,
+			affiliatePrograms: [{ affiliateCode: 'STACY', isSuperAffiliate: true }]
+		});
+		await sendAffiliateUnlockEmailIfNeeded('11111111-1111-1111-1111-111111111111');
+		const body = sendEmailMock.mock.calls[0][0].body as string;
+		expect(body).toContain('You earn ₦700 when a friend you referred pays ₦3,500 in cash');
+		expect(body).toContain('Payouts are processed within 1–3 days.');
+		expect(body).not.toContain('Saturdays');
+		expect(body).not.toMatch(/₦\d[\d,]* (profit|cost|margin)/i);
 	});
 });

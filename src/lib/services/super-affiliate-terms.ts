@@ -90,3 +90,30 @@ export function goodsCostFromOrderMetadata(analyticsMetadata: unknown): number |
 	}
 	return Math.round(total * 100) / 100;
 }
+
+/** A Super affiliate once the switchover has passed (new terms: payouts within 1–3 days). */
+export async function isSuperAffiliateOnNewTerms(
+	userId: string | null | undefined,
+	now: Date = new Date()
+): Promise<boolean> {
+	if (!userId) return false;
+	try {
+		const [program, switchoverAt] = await Promise.all([
+			prisma.affiliateProgram.findUnique({
+				where: { userId },
+				select: { isSuperAffiliate: true }
+			}),
+			getSuperSwitchoverAt()
+		]);
+		return Boolean(program?.isSuperAffiliate && switchoverAt && now >= switchoverAt);
+	} catch {
+		return false;
+	}
+}
+
+/** The payout-timing sentence affiliates see in emails. */
+export function payoutTimingSentence(superOnNewTerms: boolean): string {
+	return superOnNewTerms
+		? 'Payouts are processed within 1–3 days.'
+		: 'Payouts are processed on Saturdays.';
+}
