@@ -1,5 +1,13 @@
 # Sprint completion — prioritised master checklist
 
+## Final security follow-up — 20 October 2026
+
+- [x] Reviewed support/status release `e4f9cf1` pushed; independent GitHub CI and Vercel deployment succeeded. Read-only production revision matches, anonymous admin/API and local-preview guards pass, all72 public offers retain the exact pre-release price/quantity/terms fingerprint. No production data or supplier/payment actions.
+- [x] Independent GitHub scan caught three Vite advisories not reported by either clean npm audit. Prior critical findings cleared. Update only Vite6.4.3→6.4.4, a compatible patch; no framework major or other lockfile package changes. Repeat full server1,900/browser152 tests passes; full/omit-dev npm audits0 and offline npm-ci dry-run consistent. Known test-only Kit/Vite teardown noise remains.
+- [x] Patched type check: zero errors/113 existing warnings. Verified separate-staging build/bootstrap identity passes. Repeated built desktop/mobile42-route sweep and both cart recovery/refresh checks pass, with no page/asset errors, blank screens, missing visible labels, overflow or real browser writes. Temporary audit preview5191 stopped; original owner5173 preserved.
+- [ ] Reviewed-path follow-up push and independent CI/deployment/GitHub-security/live desktop-mobile verification. Final live receipt in chat/private coordination supersedes this pre-push checkpoint.
+- [ ] Operational/universal follow-up remains as listed below: manually sorted IG requires owner's Mark completed; X non-delivery and FB transfer-receipt/late-payment investigation stay open. SEO/Search Console/Claude marketing, inbox/retention-refill/performance/deferred cleanup remain separate; announcements require later approval. No automatic paid retry/switching/ranking.
+
 ## Current — owner-approved final audit and release, 20 October 2026
 
 - [x] Owner explicitly approved: “check for bugs one more time, site wide, then push, we are done”. Local preview already reviewed/provided. Release scope is the verified support/status/customer-link controls plus targeted dependency-security updates and verification tooling; exclude other Claude branches and unrelated one-off scripts/proposals. No migration, offer publication/repricing, real order resolution/refund/submission or outbound announcement authorised by this code release.
