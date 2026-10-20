@@ -37,8 +37,17 @@ const data = (overrides: { isOwner?: boolean } = {}) => ({
 		live: false,
 		endsAtWat: '',
 		startsAtWat: '',
-		margin: { status: 'needs_costs', missing: ['Instagram · Aged'], checked: 24 },
-		switchOnBlock: 'Refer & Win stays locked until every active account tier has a cost.',
+		margin: {
+			status: 'no_costs',
+			missing: ['Instagram · Aged'],
+			checked: 24,
+			thinnestTier: null,
+			thinnestMarginPercent: null,
+			profitOnQualifyingOrder: null,
+			halfProfit: null,
+			lossMaking: []
+		},
+		warnings: ['No account tier has a cost yet, so the margin can’t be checked.'],
 		live_dry_run: { summary, rows: [] },
 		illustrative: {
 			summary: { ...summary, issueNow: { count: 1, amount: 1_000 } },
@@ -70,13 +79,15 @@ const html = (input: ReturnType<typeof data>) =>
 	render(Page, { props: { data: input, form: null } as never }).body;
 
 describe('admin campaigns page', () => {
-	it('shows both campaigns OFF, locked until tier costs exist', () => {
+	it('shows both campaigns OFF with margin warnings that do not lock the switch', () => {
 		const body = html(data());
 		expect(body).toContain('Refer &amp; Win');
 		expect(body).toContain('BIGSPENDER');
 		expect(body.match(/>OFF</g)?.length).toBe(2);
-		expect(body).toContain('every active account tier has a cost');
+		expect(body).toContain('No account tier has a cost yet');
 		expect(body).toContain('Instagram · Aged');
+		expect(body).toMatch(/<button type="submit"[^>]*>Switch Refer &amp; Win on/);
+		expect(body).not.toMatch(/disabled[^>]*>Switch Refer &amp; Win on/);
 	});
 
 	it('shows the dry runs in naira with no backfill', () => {

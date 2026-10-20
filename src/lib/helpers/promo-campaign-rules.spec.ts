@@ -12,7 +12,7 @@ import {
 	parseReferWinSettings,
 	referWinMarginCheck,
 	referWinProgress,
-	referWinSwitchOnBlock,
+	referWinWarnings,
 	validateCampaignSettings,
 	type FriendOrder
 } from './promo-campaign-rules';
@@ -92,10 +92,10 @@ describe('BIGSPENDER mark per customer', () => {
 	});
 });
 
-describe('Refer & Win margin gate', () => {
+describe('Refer & Win margin check (advice only)', () => {
 	const settings = { rewardNgn: 1_000, qualifyingCashNgn: 5_000 };
 
-	it('stays locked until every active account tier has a cost', () => {
+	it('checks the tiers that have a cost and lists the ones that do not', () => {
 		const check = referWinMarginCheck(
 			[
 				{ name: 'IG · Aged', priceNgn: 4_000, unitCostNgn: 1_000 },
@@ -103,10 +103,15 @@ describe('Refer & Win margin gate', () => {
 			],
 			settings
 		);
-		expect(check).toEqual({ status: 'needs_costs', missing: ['X · Fresh'], checked: 2 });
-		expect(referWinSwitchOnBlock({ ...settings, marginWarningAcknowledged: null }, check)).toMatch(
-			/X · Fresh/
-		);
+		expect(check).toMatchObject({
+			status: 'ok',
+			missing: ['X · Fresh'],
+			thinnestTier: 'IG · Aged',
+			thinnestMarginPercent: 75
+		});
+		expect(referWinWarnings(settings, check)).toEqual([
+			'1 of 2 active account tiers have no cost; the margin check ignores them.'
+		]);
 	});
 
 	it('warns below a 40% margin (₦1,000 is more than half the profit on ₦5,000)', () => {
@@ -123,32 +128,25 @@ describe('Refer & Win margin gate', () => {
 			thinnestMarginPercent: 35,
 			profitOnQualifyingOrder: 1_750
 		});
+		expect(referWinWarnings(settings, thin)[0]).toMatch(/^Margin too low: the ₦1,000 reward/);
 		const fine = referWinMarginCheck(
 			[{ name: 'IG', priceNgn: 2_000, unitCostNgn: 1_100 }],
 			settings
 		); // 45%
 		expect(fine.status).toBe('ok');
+		expect(referWinWarnings(settings, fine)).toEqual([]);
 	});
 
-	it('blocks switch-on until the owner acknowledges the exact reward and threshold', () => {
-		const check = referWinMarginCheck(
-			[{ name: 'X', priceNgn: 2_000, unitCostNgn: 1_300 }],
+	it('flags tiers sold at or below cost, and says when nothing has a cost yet', () => {
+		const loss = referWinMarginCheck(
+			[{ name: 'X', priceNgn: 2_000, unitCostNgn: 2_100 }],
 			settings
 		);
-		const ack = { at: now.toISOString(), by: 'owner', rewardNgn: 1_000, qualifyingCashNgn: 5_000 };
-		expect(referWinSwitchOnBlock({ ...settings, marginWarningAcknowledged: null }, check)).toMatch(
-			/Acknowledge/
-		);
-		expect(
-			referWinSwitchOnBlock({ ...settings, marginWarningAcknowledged: ack }, check)
-		).toBeNull();
-		// Raising the reward later needs a fresh acknowledgement.
-		expect(
-			referWinSwitchOnBlock(
-				{ ...settings, rewardNgn: 1_500, marginWarningAcknowledged: ack },
-				check
-			)
-		).toMatch(/Acknowledge/);
+		expect(loss.lossMaking).toEqual(['X']);
+		expect(referWinWarnings(settings, loss).join(' ')).toMatch(/at or above the price on: X/);
+		const none = referWinMarginCheck([{ name: 'X', priceNgn: 2_000, unitCostNgn: null }], settings);
+		expect(none.status).toBe('no_costs');
+		expect(referWinWarnings(settings, none)[0]).toMatch(/No account tier has a cost yet/);
 	});
 });
 

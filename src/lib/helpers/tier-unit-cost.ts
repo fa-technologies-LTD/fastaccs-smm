@@ -42,3 +42,68 @@ export function applyTierUnitCostSanitization(
 	else next[TIER_UNIT_COST_KEY] = parsed;
 	return next;
 }
+
+export interface TierMarginNote {
+	level: 'error' | 'warning' | 'info';
+	text: string;
+}
+
+const THIN_MARGIN = 0.4;
+const VERY_THIN_MARGIN = 0.2;
+
+/**
+ * Live advice under the cost box while a full admin edits a tier. Never blocks a save: the owner
+ * checks the real numbers outside the app.
+ */
+export function tierMarginNotes(input: {
+	priceNgn: unknown;
+	unitCostNgn: unknown;
+	affiliateExcluded?: boolean;
+}): { marginPercent: number | null; profitNgn: number | null; notes: TierMarginNote[] } {
+	const price = Number(input.priceNgn);
+	const cost = parseTierUnitCost({ [TIER_UNIT_COST_KEY]: input.unitCostNgn });
+	if (cost === null) {
+		return {
+			marginPercent: null,
+			profitNgn: null,
+			notes: [
+				{
+					level: 'info',
+					text: 'No cost yet: Super order earnings on this tier are held until you add one.'
+				}
+			]
+		};
+	}
+	if (!Number.isFinite(price) || price <= 0) {
+		return { marginPercent: null, profitNgn: null, notes: [] };
+	}
+	const profit = Math.round((price - cost) * 100) / 100;
+	const margin = profit / price;
+	const percent = Math.round(margin * 1000) / 10;
+	const naira = (value: number) => `₦${Math.abs(value).toLocaleString('en-NG')}`;
+	const notes: TierMarginNote[] = [
+		{ level: 'info', text: `Margin ${percent}% · ${naira(profit)} per account.` }
+	];
+	if (profit <= 0) {
+		notes.push({
+			level: 'error',
+			text:
+				profit === 0
+					? 'Cost equals the price: each sale makes nothing.'
+					: `Cost is above the price: each sale loses ${naira(profit)}.`
+		});
+	} else if (margin < VERY_THIN_MARGIN) {
+		notes.push({
+			level: 'warning',
+			text: input.affiliateExcluded
+				? `Very thin margin (${percent}%): any discount or store credit can wipe out the profit.`
+				: `Very thin margin (${percent}%): the affiliate offer (5% off + 5% commission) takes half or more of the profit.`
+		});
+	} else if (margin < THIN_MARGIN) {
+		notes.push({
+			level: 'warning',
+			text: `Thin margin (${percent}%): a ₦1,000 Refer & Win reward is more than half the profit on ₦5,000 of this tier.`
+		});
+	}
+	return { marginPercent: percent, profitNgn: profit, notes };
+}

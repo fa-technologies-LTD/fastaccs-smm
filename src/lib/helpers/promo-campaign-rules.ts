@@ -36,13 +36,6 @@ export interface ReferWinSettings extends CampaignCommonSettings {
 	monthlyLimit: number;
 	includeSuper: boolean;
 	waitHours: number;
-	/** Owner acknowledged the thin-margin warning for exactly these reward/qualifying values. */
-	marginWarningAcknowledged: {
-		at: string;
-		by: string;
-		rewardNgn: number;
-		qualifyingCashNgn: number;
-	} | null;
 }
 
 export interface BigSpenderSettings extends CampaignCommonSettings {
@@ -68,8 +61,7 @@ export const REFER_WIN_DEFAULTS: ReferWinSettings = {
 	qualifyingCashNgn: 5_000,
 	monthlyLimit: 3,
 	includeSuper: false,
-	waitHours: 24,
-	marginWarningAcknowledged: null
+	waitHours: 24
 };
 
 export const BIGSPENDER_DEFAULTS: BigSpenderSettings = {
@@ -126,22 +118,12 @@ function parseCommon<T extends CampaignCommonSettings>(
 /** Settings as stored (microcopy JSON). Anything missing or malformed falls back to OFF defaults. */
 export function parseReferWinSettings(raw: string | null | undefined): ReferWinSettings {
 	const value = parseJson(raw);
-	const ack = record(value.marginWarningAcknowledged);
 	return {
 		...parseCommon(value, REFER_WIN_DEFAULTS),
 		qualifyingCashNgn: wholeNumber(value.qualifyingCashNgn, REFER_WIN_DEFAULTS.qualifyingCashNgn),
 		monthlyLimit: wholeNumber(value.monthlyLimit, REFER_WIN_DEFAULTS.monthlyLimit),
 		includeSuper: value.includeSuper === true,
-		waitHours: wholeNumber(value.waitHours, REFER_WIN_DEFAULTS.waitHours),
-		marginWarningAcknowledged:
-			typeof ack.at === 'string' && typeof ack.by === 'string'
-				? {
-						at: ack.at,
-						by: ack.by,
-						rewardNgn: wholeNumber(ack.rewardNgn, 0),
-						qualifyingCashNgn: wholeNumber(ack.qualifyingCashNgn, 0)
-					}
-				: null
+		waitHours: wholeNumber(value.waitHours, REFER_WIN_DEFAULTS.waitHours)
 	};
 }
 
@@ -229,21 +211,24 @@ export interface TierMargin {
 	unitCostNgn: number | null;
 }
 
-export type MarginCheck =
-	| { status: 'needs_costs'; missing: string[]; checked: number }
-	| {
-			status: 'ok' | 'warning';
-			thinnestTier: string;
-			thinnestMarginPercent: number;
-			profitOnQualifyingOrder: number;
-			halfProfit: number;
-			checked: number;
-	  };
+export interface MarginCheck {
+	/** no_costs: no tier has a cost yet; warning: the reward is more than half the profit. */
+	status: 'no_costs' | 'ok' | 'warning';
+	/** Active priced account tiers still without a cost (the check ignores them). */
+	missing: string[];
+	checked: number;
+	thinnestTier: string | null;
+	thinnestMarginPercent: number | null;
+	profitOnQualifyingOrder: number | null;
+	halfProfit: number | null;
+	/** Tiers whose cost is at or above the price. */
+	lossMaking: string[];
+}
 
 /**
  * Is the reward more than half the profit we'd make on the friend's qualifying spend, if they
  * bought our thinnest-margin account tier? (₦1,000 on ₦5,000 crosses this below a 40% margin.)
- * Blocked outright until every active account tier has a cost, as the owner asked.
+ * Advice only: the owner verifies the numbers outside the app, so nothing here blocks a switch.
  */
 export function referWinMarginCheck(
 	tiers: ReadonlyArray<TierMargin>,
@@ -251,12 +236,22 @@ export function referWinMarginCheck(
 ): MarginCheck {
 	const priced = tiers.filter((tier) => tier.priceNgn > 0);
 	const missing = priced.filter((tier) => tier.unitCostNgn === null).map((tier) => tier.name);
-	if (priced.length === 0 || missing.length > 0) {
-		return { status: 'needs_costs', missing, checked: priced.length };
+	const costed = priced.filter((tier) => tier.unitCostNgn !== null);
+	const base = { missing, checked: priced.length };
+	if (costed.length === 0) {
+		return {
+			...base,
+			status: 'no_costs',
+			thinnestTier: null,
+			thinnestMarginPercent: null,
+			profitOnQualifyingOrder: null,
+			halfProfit: null,
+			lossMaking: []
+		};
 	}
-	let thinnest = priced[0];
+	let thinnest = costed[0];
 	let thinnestMargin = Infinity;
-	for (const tier of priced) {
+	for (const tier of costed) {
 		const margin = (tier.priceNgn - (tier.unitCostNgn ?? 0)) / tier.priceNgn;
 		if (margin < thinnestMargin) {
 			thinnestMargin = margin;
@@ -266,36 +261,40 @@ export function referWinMarginCheck(
 	const profit = Math.max(0, Math.round(settings.qualifyingCashNgn * thinnestMargin));
 	const halfProfit = profit / 2;
 	return {
+		...base,
 		status: settings.rewardNgn > halfProfit ? 'warning' : 'ok',
 		thinnestTier: thinnest.name,
 		thinnestMarginPercent: Math.round(thinnestMargin * 1000) / 10,
 		profitOnQualifyingOrder: profit,
 		halfProfit: Math.round(halfProfit),
-		checked: priced.length
+		lossMaking: costed
+			.filter((tier) => (tier.unitCostNgn ?? 0) >= tier.priceNgn)
+			.map((tier) => tier.name)
 	};
 }
 
-/** May Refer & Win be switched on? Returns the plain-English reason when it may not. */
-export function referWinSwitchOnBlock(
-	settings: Pick<ReferWinSettings, 'rewardNgn' | 'qualifyingCashNgn' | 'marginWarningAcknowledged'>,
+/** Plain-English warnings shown beside the Refer & Win switch. They never block it. */
+export function referWinWarnings(
+	settings: Pick<ReferWinSettings, 'rewardNgn' | 'qualifyingCashNgn'>,
 	check: MarginCheck
-): string | null {
-	if (check.status === 'needs_costs') {
-		return check.checked === 0
-			? 'Refer & Win stays locked until account tiers have prices and costs.'
-			: `Refer & Win stays locked until every active account tier has a cost. Missing: ${check.missing.join(', ')}.`;
+): string[] {
+	const warnings: string[] = [];
+	if (check.status === 'no_costs') {
+		warnings.push('No account tier has a cost yet, so the margin can’t be checked.');
+	} else if (check.missing.length > 0) {
+		warnings.push(
+			`${check.missing.length} of ${check.checked} active account tiers have no cost; the margin check ignores them.`
+		);
+	}
+	if (check.lossMaking.length > 0) {
+		warnings.push(`Cost is at or above the price on: ${check.lossMaking.join(', ')}.`);
 	}
 	if (check.status === 'warning') {
-		const ack = settings.marginWarningAcknowledged;
-		const acknowledged =
-			ack &&
-			ack.rewardNgn === settings.rewardNgn &&
-			ack.qualifyingCashNgn === settings.qualifyingCashNgn;
-		if (!acknowledged) {
-			return `The reward is more than half the profit on a qualifying order at the thinnest margin (${check.thinnestTier}, ${check.thinnestMarginPercent}%). Acknowledge the warning first.`;
-		}
+		warnings.push(
+			`Margin too low: the ₦${settings.rewardNgn.toLocaleString()} reward is more than half the ₦${(check.profitOnQualifyingOrder ?? 0).toLocaleString()} profit on a ₦${settings.qualifyingCashNgn.toLocaleString()} order of ${check.thinnestTier} (${check.thinnestMarginPercent}% margin).`
+		);
 	}
-	return null;
+	return warnings;
 }
 
 // ---------------------------------------------------------------------------------------------

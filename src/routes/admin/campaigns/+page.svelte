@@ -91,58 +91,40 @@
 			</span>
 		</div>
 
-		<!-- Margin gate -->
+		<!-- Margin check: advice only, never blocks -->
 		<div class="mt-4 rounded-lg p-4 text-sm" style={inner}>
 			<p class="font-semibold" style="color: var(--text);">Margin check</p>
-			{#if rw.margin.status === 'needs_costs'}
-				<p class="mt-1" style="color: var(--text-muted);">
-					Locked until every active account tier has a cost ({rw.margin.checked -
-						rw.margin.missing.length}
-					of {rw.margin.checked} entered). Add costs in Tiers → edit → “Our cost per account”.
-				</p>
-				{#if rw.margin.missing.length}
-					<details class="mt-2">
-						<summary class="cursor-pointer text-xs" style="color: var(--text-muted);">
-							Tiers missing a cost ({rw.margin.missing.length})
-						</summary>
-						<ul class="mt-1 list-disc pl-5 text-xs" style="color: var(--text-muted);">
-							{#each rw.margin.missing as name (name)}<li>{name}</li>{/each}
-						</ul>
-					</details>
-				{/if}
-			{:else}
+			{#if rw.margin.thinnestTier}
 				<p class="mt-1" style="color: var(--text-muted);">
 					Thinnest margin: {rw.margin.thinnestTier} at {rw.margin.thinnestMarginPercent}%. Profit on
 					a
 					{formatPrice(rw.settings.qualifyingCashNgn)} order there: {formatPrice(
-						rw.margin.profitOnQualifyingOrder
-					)}; half is {formatPrice(rw.margin.halfProfit)}.
-					{#if rw.margin.status === 'warning'}
-						<strong style="color: var(--text);">
-							The {formatPrice(rw.settings.rewardNgn)} reward is more than half that profit.
-						</strong>
-					{:else}
-						The reward is within half the profit.
-					{/if}
+						rw.margin.profitOnQualifyingOrder ?? 0
+					)}; half is {formatPrice(rw.margin.halfProfit ?? 0)}.
 				</p>
-				{#if rw.margin.status === 'warning'}
-					{#if rw.settings.marginWarningAcknowledged && rw.settings.marginWarningAcknowledged.rewardNgn === rw.settings.rewardNgn && rw.settings.marginWarningAcknowledged.qualifyingCashNgn === rw.settings.qualifyingCashNgn}
-						<p class="mt-1 text-xs" style="color: var(--text-muted);">
-							Acknowledged {when(rw.settings.marginWarningAcknowledged.at)}.
-						</p>
-					{:else}
-						<form method="POST" action="?/acknowledgeReferWinMargin" class="mt-2">
-							<button
-								type="submit"
-								disabled={ownerOnly}
-								class="rounded-lg px-3 py-1.5 text-xs font-semibold"
-								style="border: 1px solid var(--border-2); color: var(--text);"
-							>
-								I understand — acknowledge this warning
-							</button>
-						</form>
-					{/if}
-				{/if}
+			{/if}
+			{#if rw.warnings.length}
+				<ul class="mt-2 space-y-1 text-xs" style="color: var(--text);">
+					{#each rw.warnings as warning (warning)}
+						<li class="rounded-md px-2 py-1" style="background: rgba(245, 166, 35, 0.12);">
+							⚠ {warning}
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<p class="mt-1 text-xs" style="color: var(--text-muted);">
+					The reward is within half the profit on every costed tier.
+				</p>
+			{/if}
+			{#if rw.margin.missing.length}
+				<details class="mt-2">
+					<summary class="cursor-pointer text-xs" style="color: var(--text-muted);">
+						Tiers missing a cost ({rw.margin.missing.length})
+					</summary>
+					<ul class="mt-1 list-disc pl-5 text-xs" style="color: var(--text-muted);">
+						{#each rw.margin.missing as name (name)}<li>{name}</li>{/each}
+					</ul>
+				</details>
 			{/if}
 		</div>
 
@@ -234,19 +216,15 @@
 				>
 			{:else}
 				<input type="hidden" name="to" value="on" />
-				{#if rw.switchOnBlock}
-					<p style="color: var(--text-muted);">{rw.switchOnBlock}</p>
-				{/if}
 				<label class="mt-2 flex items-center gap-2" style="color: var(--text);">
-					<input type="checkbox" name="reviewedDryRun" disabled={ownerOnly || !!rw.switchOnBlock} />
+					<input type="checkbox" name="reviewedDryRun" disabled={ownerOnly} />
 					I reviewed the dry run above
 				</label>
 				<button
 					type="submit"
-					disabled={ownerOnly || !!rw.switchOnBlock}
+					disabled={ownerOnly}
 					class="mt-2 rounded-lg px-4 py-2 text-sm font-semibold"
-					style="background: var(--btn-primary-gradient); color: #04140C; opacity: {ownerOnly ||
-					rw.switchOnBlock
+					style="background: var(--btn-primary-gradient); color: #04140C; opacity: {ownerOnly
 						? 0.5
 						: 1};">Switch Refer & Win on</button
 				>

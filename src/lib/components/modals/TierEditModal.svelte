@@ -3,6 +3,7 @@
 	import { Plus, Trash2, Target } from '$lib/icons';
 	import type { TierDeliveryMode } from '$lib/helpers/tier-delivery-config';
 	import TierSampleScreenshotFields from '$lib/components/modals/TierSampleScreenshotFields.svelte';
+	import { tierMarginNotes } from '$lib/helpers/tier-unit-cost';
 
 	interface Props {
 		open: boolean;
@@ -57,6 +58,15 @@
 		onClose,
 		onUpdate
 	}: Props = $props();
+
+	// Live margin advice under the cost box (never blocks a save).
+	const marginNotes = $derived(
+		tierMarginNotes({
+			priceNgn: tierForm.metadata.pricing.base_price,
+			unitCostNgn: tierForm.metadata.unit_cost_ngn,
+			affiliateExcluded: tierForm.metadata.affiliate_excluded
+		})
+	);
 </script>
 
 {#if open}
@@ -574,6 +584,18 @@
 									<p class="mt-1 text-xs" style="color: var(--text-muted);">
 										Private. Include payment fees. Never shown to customers or affiliates.
 									</p>
+									{#each marginNotes.notes as note (note.text)}
+										<p
+											class="mt-1 text-xs font-medium"
+											style="color: {note.level === 'error'
+												? 'var(--danger, #e5484d)'
+												: note.level === 'warning'
+													? '#d97706'
+													: 'var(--text-muted)'};"
+										>
+											{note.level === 'info' ? '' : '⚠ '}{note.text}
+										</p>
+									{/each}
 								</div>
 							{/if}
 

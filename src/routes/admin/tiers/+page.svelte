@@ -47,6 +47,7 @@
 	import TierCreateModal from '$lib/components/modals/TierCreateModal.svelte';
 	import TierEditModal from '$lib/components/modals/TierEditModal.svelte';
 	import TierDeleteModal from '$lib/components/modals/TierDeleteModal.svelte';
+	import { parseTierUnitCost, tierMarginNotes } from '$lib/helpers/tier-unit-cost';
 
 	interface Props {
 		data: PageData;
@@ -74,6 +75,41 @@
 	const searchActive = $derived(tierSearch.trim().length > 0);
 
 	const activeTierCount = $derived(tiers.filter((tier) => isTierActive(tier)).length);
+	// Full admins: which active account tiers still need a cost and which margins need a look.
+	// Advice only; nothing here blocks anything.
+	const costOverview = $derived.by(() => {
+		if (!data.canViewRevenue) return null;
+		const rows = tiers
+			.filter((tier) => isTierActive(tier))
+			.map((tier) => {
+				const metadata = (tier.metadata ?? {}) as Record<string, unknown>;
+				const pricing = (metadata.pricing ?? {}) as Record<string, unknown>;
+				const mode = String(metadata.delivery_mode || 'instant_auto');
+				const priceNgn = Number(pricing.base_price ?? metadata.price ?? 0);
+				const advice = tierMarginNotes({
+					priceNgn,
+					unitCostNgn: metadata.unit_cost_ngn,
+					affiliateExcluded: metadata.affiliate_excluded === true
+				});
+				return {
+					name: tier.name,
+					accountTier: ['instant_auto', 'manual_handover'].includes(mode) && priceNgn > 0,
+					hasCost: parseTierUnitCost(metadata) !== null,
+					margin: advice.marginPercent,
+					level: advice.notes.find((note) => note.level !== 'info')?.level ?? null
+				};
+			})
+			.filter((row) => row.accountTier);
+		return {
+			total: rows.length,
+			withCost: rows.filter((row) => row.hasCost).length,
+			missing: rows.filter((row) => !row.hasCost).map((row) => row.name),
+			thin: rows
+				.filter((row) => row.level === 'warning')
+				.map((row) => `${row.name} (${row.margin}%)`),
+			losing: rows.filter((row) => row.level === 'error').map((row) => row.name)
+		};
+	});
 	const archivedTierCount = $derived(tiers.filter((tier) => !isTierActive(tier)).length);
 	const visibleTiers = $derived.by(() => {
 		let list =
@@ -564,6 +600,35 @@
 					Manage follower tiers that work across all platforms. Accounts from any platform can be
 					assigned to these tiers.
 				</p>
+				{#if costOverview && costOverview.total > 0}
+					<div
+						class="mt-2 rounded-lg p-3 text-xs"
+						style="border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text-muted);"
+					>
+						<p>
+							Costs entered on <strong style="color: var(--text);"
+								>{costOverview.withCost} of {costOverview.total}</strong
+							>
+							active account tiers.
+							{#if costOverview.missing.length}
+								Missing: {costOverview.missing.slice(0, 6).join(', ')}{costOverview.missing.length >
+								6
+									? ` and ${costOverview.missing.length - 6} more`
+									: ''}.
+							{/if}
+						</p>
+						{#if costOverview.losing.length}
+							<p class="mt-1 font-medium" style="color: var(--danger, #e5484d);">
+								⚠ Cost at or above price: {costOverview.losing.join(', ')}
+							</p>
+						{/if}
+						{#if costOverview.thin.length}
+							<p class="mt-1 font-medium" style="color: #d97706;">
+								⚠ Thin margins: {costOverview.thin.join(', ')}
+							</p>
+						{/if}
+					</div>
+				{/if}
 			</div>
 			<button
 				onclick={openCreateModal}

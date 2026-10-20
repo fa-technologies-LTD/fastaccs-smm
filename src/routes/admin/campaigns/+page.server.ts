@@ -6,7 +6,7 @@ import { dateToWatInput, watInputToDate } from '$lib/helpers/wat-datetime';
 import {
 	isCampaignLive,
 	lagosMonthStart,
-	referWinSwitchOnBlock,
+	referWinWarnings,
 	validateCampaignSettings,
 	type BigSpenderSettings,
 	type ReferWinSettings
@@ -95,7 +95,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			endsAtWat: dateToWatInput(referWin.endsAt ? new Date(referWin.endsAt) : null),
 			startsAtWat: dateToWatInput(referWin.startsAt ? new Date(referWin.startsAt) : null),
 			margin,
-			switchOnBlock: referWinSwitchOnBlock(referWin, margin),
+			warnings: referWinWarnings(referWin, margin),
 			live_dry_run: {
 				summary: summarize(liveDecisions),
 				rows: liveDecisions.filter((row) => row.status !== 'not_yet').map(serializeDecision)
@@ -190,44 +190,15 @@ export const actions: Actions = {
 		return { success: true, message: 'Refer & Win settings saved.' };
 	},
 
-	acknowledgeReferWinMargin: async (ctx) => {
-		const denied = requireOwner(ctx);
-		if (denied) return denied;
-		const { referWin } = await getCampaignSettings();
-		const margin = await getReferWinMarginCheck(referWin);
-		if (margin.status !== 'warning') {
-			return fail(400, { success: false, error: 'There is no margin warning to acknowledge.' });
-		}
-		await saveCampaignSettings({
-			kind: 'refer_win',
-			settings: {
-				...referWin,
-				marginWarningAcknowledged: {
-					at: new Date().toISOString(),
-					by: ctx.locals.user!.id,
-					rewardNgn: referWin.rewardNgn,
-					qualifyingCashNgn: referWin.qualifyingCashNgn
-				}
-			},
-			before: referWin,
-			actorUserId: ctx.locals.user!.id,
-			description: `Refer & Win margin warning acknowledged (thinnest ${margin.thinnestTier}, ${margin.thinnestMarginPercent}%)`
-		});
-		return { success: true, message: 'Warning acknowledged.' };
-	},
-
 	switchReferWin: async (ctx) => {
 		const denied = requireOwner(ctx);
 		if (denied) return denied;
 		const form = await ctx.request.formData();
 		const turnOn = form.get('to') === 'on';
 		const { referWin } = await getCampaignSettings();
-		if (turnOn) {
-			if (form.get('reviewedDryRun') !== 'on') {
-				return fail(400, { success: false, error: 'Tick that you reviewed the dry run first.' });
-			}
-			const block = referWinSwitchOnBlock(referWin, await getReferWinMarginCheck(referWin));
-			if (block) return fail(400, { success: false, error: block });
+		// Margin warnings are shown on the page but never block: the owner checks the numbers.
+		if (turnOn && form.get('reviewedDryRun') !== 'on') {
+			return fail(400, { success: false, error: 'Tick that you reviewed the dry run first.' });
 		}
 		await saveCampaignSettings({
 			kind: 'refer_win',
