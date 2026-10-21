@@ -1,4 +1,5 @@
 import { prisma } from '$lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { toNetSales } from '$lib/helpers/order-revenue';
 import { buildRevenueOrderWhere } from '$lib/helpers/order-revenue.server';
 import { SC_AFFILIATE_ADJUSTMENT } from '$lib/services/store-credit';
@@ -10,6 +11,12 @@ import {
 } from '$lib/services/affiliate-policy';
 import { recordAffiliateEvent } from '$lib/services/affiliate-events';
 import { NOT_HELD_FOR_IDENTITY_REVIEW } from '$lib/services/affiliate-review-hold';
+import {
+	getAffiliateRewardVestsAt,
+	isSuperAffiliateReward,
+	SUPER_REWARD_VESTING_HOURS,
+	SUPER_REWARD_VESTING_POLICY
+} from '$lib/helpers/affiliate-reward-timing';
 import {
 	SUPER_COMMISSION_REFERENCE_PREFIX,
 	getSuperSwitchoverAt,
@@ -25,16 +32,18 @@ const REWARD_VESTING_DAYS_KEY = 'config.affiliate.reward_vesting_days';
 export const DEFAULT_REWARD_VESTING_DAYS = 14;
 // An order in any of these states means its reward must not vest (void it instead).
 const REFUNDED_ORDER_STATUSES = new Set(['refunded', 'cancelled', 'failed', 'expired']);
+type RewardReadDb = Pick<Prisma.TransactionClient, 'order' | 'walletTransaction'>;
 
 async function superRewardStillQualifies(
 	userId: string,
-	metadata: Record<string, unknown>
+	metadata: Record<string, unknown>,
+	db: RewardReadDb = prisma
 ): Promise<boolean> {
 	const kind = String(metadata.kind || '');
 	if (kind === 'super_activation') {
 		const referredUserId = String(metadata.referredUserId || '');
 		if (!referredUserId) return false;
-		const orders = await prisma.order.findMany({
+		const orders = await db.order.findMany({
 			where: {
 				AND: [
 					buildRevenueOrderWhere(),
@@ -65,7 +74,7 @@ async function superRewardStillQualifies(
 		const start = new Date(`${monthKey}-01T00:00:00.000Z`);
 		if (!Number.isFinite(start.getTime())) return false;
 		const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
-		const validActivations = await prisma.walletTransaction.count({
+		const validActivations = await db.walletTransaction.count({
 			where: {
 				userId,
 				reference: { startsWith: `super:activation:${userId}:` },
@@ -78,6 +87,34 @@ async function superRewardStillQualifies(
 	}
 
 	return true;
+}
+
+async function rewardVestsAt(
+	row: { metadata: unknown; reference?: string | null; createdAt?: Date },
+	db: RewardReadDb = prisma
+): Promise<Date | null> {
+	const metadata =
+		row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+			? (row.metadata as Record<string, unknown>)
+			: {};
+	let commissionEarnedAt: Date | null = null;
+	if (
+		metadata.kind === 'super_order_commission' ||
+		row.reference?.startsWith('super:commission:order:')
+	) {
+		const orderId =
+			typeof metadata.orderId === 'string'
+				? metadata.orderId
+				: row.reference?.slice('super:commission:order:'.length);
+		if (!orderId) return null;
+		const order = await db.order.findUnique({
+			where: { id: orderId },
+			select: { paidAt: true, createdAt: true }
+		});
+		if (!order) return null;
+		commissionEarnedAt = order.paidAt ?? order.createdAt;
+	}
+	return getAffiliateRewardVestsAt({ ...row, commissionEarnedAt });
 }
 
 export async function getRewardVestingDays(): Promise<number> {
@@ -314,7 +351,10 @@ export async function reverseVestedRegularRewardForOrder(
  * balance), skipping any whose order has since been refunded/cancelled (those are voided
  * instead as a backstop). Run on a schedule.
  */
-export async function vestMaturedAffiliateRewards(limit = 500): Promise<{
+export async function vestMaturedAffiliateRewards(
+	limit = 500,
+	scope?: { userId?: string; rewardIds?: readonly string[] }
+): Promise<{
 	vested: number;
 	voided: number;
 	skipped: number;
@@ -324,11 +364,21 @@ export async function vestMaturedAffiliateRewards(limit = 500): Promise<{
 		where: {
 			type: 'affiliate_credit',
 			status: 'pending',
+			...(scope?.userId ? { userId: scope.userId } : {}),
+			...(scope?.rewardIds ? { id: { in: [...scope.rewardIds] } } : {}),
 			// Rewards held for identity review must never auto-vest, but they also
 			// must not occupy a bounded batch forever and starve legitimate rewards.
 			AND: [NOT_HELD_FOR_IDENTITY_REVIEW]
 		},
-		select: { id: true, amount: true, walletId: true, userId: true, metadata: true },
+		select: {
+			id: true,
+			amount: true,
+			walletId: true,
+			userId: true,
+			metadata: true,
+			createdAt: true,
+			reference: true
+		},
 		orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
 		take: limit
 	});
@@ -342,18 +392,24 @@ export async function vestMaturedAffiliateRewards(limit = 500): Promise<{
 			string,
 			unknown
 		>;
-		const vestsAt = typeof meta.vestsAt === 'string' ? meta.vestsAt : null;
-		if (!vestsAt || vestsAt > nowIso) {
+		const vestsAt = await rewardVestsAt(row);
+		if (!vestsAt || vestsAt.getTime() > Date.parse(nowIso)) {
 			skipped += 1; // not matured yet
 			continue;
 		}
-		if (meta.suspectedSelfReferral === true) {
+		if (meta.suspectedSelfReferral === true || meta.holdReason) {
 			skipped += 1; // flagged for admin review — never auto-vests
 			continue;
 		}
 		if (!(await superRewardStillQualifies(row.userId, meta))) {
 			const result = await prisma.walletTransaction.updateMany({
-				where: { id: row.id, status: 'pending' },
+				where: {
+					id: row.id,
+					userId: row.userId,
+					walletId: row.walletId,
+					status: 'pending',
+					AND: [NOT_HELD_FOR_IDENTITY_REVIEW]
+				},
 				data: { status: 'reversed' }
 			});
 			voided += result.count;
@@ -365,7 +421,9 @@ export async function vestMaturedAffiliateRewards(limit = 500): Promise<{
 			(typeof meta.activatedByOrderId === 'string' && meta.activatedByOrderId) ||
 			null;
 
-		if (orderId) {
+		// Super activation belongs to the retained relationship, not just its trigger
+		// order. The complete history above may still qualify after that order refunds.
+		if (orderId && meta.kind !== 'super_activation') {
 			const order = await prisma.order.findUnique({
 				where: { id: orderId },
 				select: { status: true, paymentStatus: true, deliveryStatus: true }
@@ -377,7 +435,13 @@ export async function vestMaturedAffiliateRewards(limit = 500): Promise<{
 					REFUNDED_ORDER_STATUSES.has(order.deliveryStatus));
 			if (refunded) {
 				const result = await prisma.walletTransaction.updateMany({
-					where: { id: row.id, status: 'pending' },
+					where: {
+						id: row.id,
+						userId: row.userId,
+						walletId: row.walletId,
+						status: 'pending',
+						AND: [NOT_HELD_FOR_IDENTITY_REVIEW]
+					},
 					data: { status: 'reversed' }
 				});
 				voided += result.count;
@@ -388,26 +452,75 @@ export async function vestMaturedAffiliateRewards(limit = 500): Promise<{
 		// Matured + order still good → vest: flip to available and credit the balance now.
 		const changed = await prisma.$transaction(async (tx) => {
 			await tx.$queryRaw`SELECT id FROM wallets WHERE id = ${row.walletId}::uuid FOR UPDATE`;
+			await tx.$queryRaw`SELECT id FROM wallet_transactions WHERE id = ${row.id}::uuid FOR UPDATE`;
 			const liveReward = await tx.walletTransaction.findUnique({
 				where: { id: row.id },
-				select: { status: true, amount: true }
+				select: {
+					status: true,
+					amount: true,
+					metadata: true,
+					createdAt: true,
+					reference: true,
+					userId: true,
+					walletId: true
+				}
 			});
 			if (liveReward?.status !== 'pending') return false;
+			const live = { ...row, ...liveReward };
+			if (live.userId !== row.userId || live.walletId !== row.walletId) return false;
+			const liveMeta =
+				live.metadata && typeof live.metadata === 'object' && !Array.isArray(live.metadata)
+					? (live.metadata as Record<string, unknown>)
+					: {};
+			if (liveMeta.suspectedSelfReferral === true || liveMeta.holdReason) return false;
+			const liveVestsAt = await rewardVestsAt(live, tx);
+			if (!liveVestsAt || liveVestsAt.getTime() > Date.parse(nowIso)) return false;
+			if (!(await superRewardStillQualifies(live.userId, liveMeta, tx))) return false;
+			const liveOrderId =
+				(typeof liveMeta.orderId === 'string' && liveMeta.orderId) ||
+				(typeof liveMeta.activatedByOrderId === 'string' && liveMeta.activatedByOrderId) ||
+				null;
+			if (liveOrderId && liveMeta.kind !== 'super_activation') {
+				const order = await tx.order.findUnique({
+					where: { id: liveOrderId },
+					select: { status: true, paymentStatus: true, deliveryStatus: true }
+				});
+				if (
+					!order ||
+					[order.status, order.paymentStatus, order.deliveryStatus].some((status) =>
+						REFUNDED_ORDER_STATUSES.has(status)
+					)
+				)
+					return false;
+			}
 			const w = await tx.wallet.findUnique({
 				where: { id: row.walletId },
-				select: { balance: true }
+				select: { balance: true, isActive: true }
 			});
-			if (!w) return false;
+			if (!w || w.isActive === false) return false;
 			const before = Number(w?.balance || 0);
 			await tx.wallet.update({
 				where: { id: row.walletId },
 				data: { balance: before + Number(liveReward.amount || 0) }
 			});
+			const timingMetadata = isSuperAffiliateReward(live)
+				? {
+						...liveMeta,
+						originalVestsAt: liveMeta.originalVestsAt ?? liveMeta.vestsAt ?? null,
+						vestsAt: liveVestsAt.toISOString(),
+						vestingPolicy: SUPER_REWARD_VESTING_POLICY,
+						vestingHours: SUPER_REWARD_VESTING_HOURS
+					}
+				: liveMeta;
 			await tx.walletTransaction.update({
 				where: { id: row.id },
 				data: {
 					status: 'available',
-					metadata: { ...meta, lifecycleStatus: 'available', vestedAt: nowIso }
+					metadata: {
+						...timingMetadata,
+						lifecycleStatus: 'available',
+						vestedAt: nowIso
+					} as Prisma.InputJsonObject
 				}
 			});
 			const availableRewardCount = await tx.walletTransaction.count({

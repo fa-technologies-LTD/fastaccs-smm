@@ -95,9 +95,36 @@ describe('first Store Credit email', () => {
 				notificationType: 'affiliate_store_credit',
 				referenceId: 'affiliate_first_credit:11111111-1111-1111-1111-111111111111',
 				subject: 'Your first referral reward is pending 🎉',
-				body: expect.stringContaining("will be available in 14 days if the order isn't refunded")
+				body: expect.stringContaining(
+					'can clear after 14 days, subject to refund and review checks'
+				)
 			})
 		);
+	});
+
+	it('states the 24-hour Super wait without promising automatic clearance or regular commissions', async () => {
+		await sendFirstStoreCreditEmailIfNeeded({
+			userId: 'super-1',
+			creditAmount: 700,
+			superReward: true
+		});
+		const body = sendEmailMock.mock.calls[0][0].body;
+		expect(body).toContain('can clear after 24 hours, subject to refund and review checks');
+		expect(body).not.toContain('14 days');
+		expect(body).not.toContain('first two eligible account orders');
+	});
+
+	it('uses the original reward kind when recovering a Super first-reward email', async () => {
+		prismaMock.walletTransaction.findMany.mockResolvedValue([
+			{
+				userId: 'super-1',
+				amount: 700,
+				metadata: { kind: 'super_activation' },
+				reference: 'super:activation:super-1:buyer-1'
+			}
+		]);
+		await recoverFirstStoreCreditEmails();
+		expect(sendEmailMock.mock.calls[0][0].body).toContain('after 24 hours');
 	});
 
 	it('recovers the oldest first credit for each affiliate', async () => {

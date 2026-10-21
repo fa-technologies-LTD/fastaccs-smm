@@ -45,6 +45,7 @@ import {
 	weeklyCommissionTitle
 } from '$lib/helpers/super-earnings-grouping';
 import { getSuperSwitchoverAt, superBonusWindowEnd } from '$lib/services/super-affiliate-terms';
+import { computeSuperRewardVestsAt } from '$lib/helpers/affiliate-reward-timing';
 
 export const AFFILIATE_REFERRAL_COOKIE = 'fa_aff_ref';
 
@@ -2640,7 +2641,8 @@ async function recordSuperMonthlyTierCrossing(
 	});
 	const tier = getHighestSuperMonthlyTier(monthlyTiers, count);
 	if (!tier || tier.amount <= 0) return;
-	const vestsAt = computeVestsAt(await getRewardVestingDays());
+	const earnedAt = new Date();
+	const vestsAt = computeSuperRewardVestsAt(earnedAt);
 
 	try {
 		await prisma.$transaction(async (tx) => {
@@ -2719,6 +2721,7 @@ async function recordSuperMonthlyTierCrossing(
 					status: AFFILIATE_LEDGER_STATUS.pending,
 					metadata: {
 						kind: 'super_monthly_bonus',
+						earnedAt: earnedAt.toISOString(),
 						superUserId,
 						monthKey,
 						monthlyTiers: monthlyTiers.map((monthlyTier) => ({
@@ -2979,7 +2982,8 @@ async function recordSuperAffiliateActivation(params: {
 		.findUnique({ where: { id: referredUserId }, select: { fullName: true } })
 		.catch(() => null);
 	const referralName = formatAffiliateDisplayName(referredUser?.fullName);
-	const superVestsAt = computeVestsAt(await getRewardVestingDays());
+	const superEarnedAt = new Date();
+	const superVestsAt = computeSuperRewardVestsAt(superEarnedAt);
 	const identityRiskSignals = await detectAffiliateIdentityRiskSignals(superUserId, referredUserId);
 	const suspectedSelfReferral = identityRiskSignals.length > 0;
 	if (suspectedSelfReferral) {
@@ -3010,6 +3014,7 @@ async function recordSuperAffiliateActivation(params: {
 					status: AFFILIATE_LEDGER_STATUS.pending,
 					metadata: {
 						kind: 'super_activation',
+						earnedAt: superEarnedAt.toISOString(),
 						referredUserId,
 						affiliateCode,
 						activatedByOrderId: triggerOrderId,

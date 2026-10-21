@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NOT_HELD_FOR_IDENTITY_REVIEW } from './affiliate-review-hold';
 
 const txMock = vi.hoisted(() => ({
 	$queryRaw: vi.fn(),
+	order: { findUnique: vi.fn(), findMany: vi.fn() },
 	walletTransaction: {
 		findUnique: vi.fn(),
 		findMany: vi.fn(),
@@ -22,7 +23,7 @@ const txMock = vi.hoisted(() => ({
 const prismaMock = vi.hoisted(() => ({
 	user: { findMany: vi.fn() },
 	affiliatePayoutDetails: { findFirst: vi.fn() },
-	order: { findUnique: vi.fn() },
+	order: { findUnique: vi.fn(), findMany: vi.fn() },
 	walletTransaction: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
 	affiliateEvent: { create: vi.fn() },
 	// No Super switchover set: today's terms apply.
@@ -40,9 +41,14 @@ import {
 	voidUnvestedRewardsForOrder
 } from './affiliate-vesting';
 
+afterEach(() => vi.useRealTimers());
+
 beforeEach(() => {
 	vi.clearAllMocks();
 	prismaMock.order.findUnique.mockResolvedValue({ totalAmount: 22_500, refundedAmount: 7_500 });
+	prismaMock.order.findMany.mockResolvedValue([{ totalAmount: 5000, refundedAmount: 0 }]);
+	txMock.order.findUnique.mockImplementation((args) => prismaMock.order.findUnique(args));
+	txMock.order.findMany.mockImplementation((args) => prismaMock.order.findMany(args));
 	prismaMock.user.findMany.mockResolvedValue([]);
 	prismaMock.affiliatePayoutDetails.findFirst.mockResolvedValue(null);
 	prismaMock.walletTransaction.findUnique.mockResolvedValue({
@@ -110,6 +116,173 @@ describe('affiliate identity risk signals', () => {
 	});
 });
 
+describe('24-hour Super reward release', () => {
+	const now = new Date('2026-10-21T12:00:00.000Z');
+	function reward(overrides: Record<string, unknown> = {}) {
+		return {
+			id: 'super-reward',
+			amount: 700,
+			walletId: 'wallet-1',
+			userId: 'affiliate-1',
+			createdAt: new Date('2026-10-20T12:00:00.000Z'),
+			reference: 'super:activation:affiliate-1:buyer-1',
+			metadata: {
+				kind: 'super_activation',
+				referredUserId: 'buyer-1',
+				activatedByOrderId: 'order-1',
+				activationSpendThreshold: 3500,
+				activationOrderThreshold: 3,
+				vestsAt: '2026-11-03T12:00:00.000Z'
+			},
+			...overrides
+		};
+	}
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.setSystemTime(now);
+		prismaMock.order.findUnique.mockResolvedValue({
+			status: 'completed',
+			paymentStatus: 'paid',
+			deliveryStatus: 'delivered',
+			paidAt: new Date('2026-10-20T12:00:00.000Z'),
+			createdAt: new Date('2026-10-20T11:59:00.000Z')
+		});
+		txMock.walletTransaction.findUnique.mockResolvedValue({ status: 'pending', amount: 700 });
+		txMock.wallet.findUnique.mockResolvedValue({ balance: 1800, isActive: true });
+	});
+	it('clears a legacy 14-day Super reward at exactly 24 hours, preserving the old deadline in history', async () => {
+		prismaMock.walletTransaction.findMany.mockResolvedValue([reward()]);
+		expect(await vestMaturedAffiliateRewards()).toMatchObject({ vested: 1 });
+		expect(txMock.wallet.update).toHaveBeenCalledWith({
+			where: { id: 'wallet-1' },
+			data: { balance: 2500 }
+		});
+		expect(txMock.walletTransaction.update).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({
+					status: 'available',
+					metadata: expect.objectContaining({
+						originalVestsAt: '2026-11-03T12:00:00.000Z',
+						vestsAt: '2026-10-21T12:00:00.000Z',
+						vestingHours: 24,
+						vestingPolicy: 'super-24h-v1'
+					})
+				})
+			})
+		);
+	});
+	it('does not clear at 23 hours 59 minutes 59 seconds', async () => {
+		prismaMock.walletTransaction.findMany.mockResolvedValue([
+			reward({ createdAt: new Date('2026-10-20T12:00:01.000Z') })
+		]);
+		expect(await vestMaturedAffiliateRewards()).toMatchObject({ vested: 0, skipped: 1 });
+		expect(txMock.wallet.update).not.toHaveBeenCalled();
+	});
+	it('keeps an ordinary reward on its existing 14-day schedule', async () => {
+		prismaMock.walletTransaction.findMany.mockResolvedValue([
+			reward({
+				reference: 'affiliate:credit:order:order-1',
+				metadata: { orderId: 'order-1', vestsAt: '2026-11-03T12:00:00.000Z' }
+			})
+		]);
+		expect(await vestMaturedAffiliateRewards()).toMatchObject({ vested: 0, skipped: 1 });
+		expect(txMock.wallet.update).not.toHaveBeenCalled();
+	});
+	it('uses original payment time for a legacy Super commission, not its later creation time', async () => {
+		prismaMock.walletTransaction.findMany.mockResolvedValue([
+			reward({
+				createdAt: new Date('2026-10-21T11:00:00.000Z'),
+				reference: 'super:commission:order:order-1',
+				metadata: {
+					kind: 'super_order_commission',
+					orderId: 'order-1',
+					vestsAt: '2026-11-03T12:00:00.000Z'
+				}
+			})
+		]);
+		expect(await vestMaturedAffiliateRewards()).toMatchObject({ vested: 1 });
+	});
+	it('holds a cost-missing commission even if it incorrectly has pending status', async () => {
+		const r = reward();
+		prismaMock.walletTransaction.findMany.mockResolvedValue([
+			{ ...r, metadata: { ...r.metadata, holdReason: 'cost_missing' } }
+		]);
+		expect(await vestMaturedAffiliateRewards()).toMatchObject({ vested: 0, skipped: 1 });
+		expect(txMock.wallet.update).not.toHaveBeenCalled();
+	});
+	it('rechecks a review hold added after selection while the wallet is locked', async () => {
+		const r = reward();
+		prismaMock.walletTransaction.findMany.mockResolvedValue([r]);
+		txMock.walletTransaction.findUnique.mockResolvedValue({
+			...r,
+			status: 'pending',
+			metadata: { ...r.metadata, suspectedSelfReferral: true }
+		});
+		expect(await vestMaturedAffiliateRewards()).toMatchObject({ vested: 0, skipped: 1 });
+		expect(txMock.wallet.update).not.toHaveBeenCalled();
+	});
+	it('does not use a stale selection after an account transfer', async () => {
+		prismaMock.walletTransaction.findMany.mockResolvedValue([reward()]);
+		txMock.walletTransaction.findUnique.mockResolvedValue({
+			status: 'pending',
+			amount: 700,
+			userId: 'different-user',
+			walletId: 'different-wallet'
+		});
+		expect(await vestMaturedAffiliateRewards()).toMatchObject({ vested: 0, skipped: 1 });
+		expect(txMock.wallet.update).not.toHaveBeenCalled();
+	});
+	it('checks refunds again under the wallet lock', async () => {
+		prismaMock.walletTransaction.findMany.mockResolvedValue([
+			reward({
+				reference: 'affiliate:credit:order:order-1',
+				metadata: { orderId: 'order-1', vestsAt: '2026-10-20T12:00:00.000Z' }
+			})
+		]);
+		txMock.order.findUnique.mockResolvedValueOnce({
+			status: 'refunded',
+			paymentStatus: 'refunded',
+			deliveryStatus: 'refunded'
+		});
+		expect(await vestMaturedAffiliateRewards()).toMatchObject({ vested: 0, skipped: 1 });
+		expect(txMock.wallet.update).not.toHaveBeenCalled();
+	});
+
+	it('keeps an earned activation when other retained orders still qualify after its trigger refunded', async () => {
+		prismaMock.walletTransaction.findMany.mockResolvedValue([reward()]);
+		prismaMock.order.findUnique.mockResolvedValue({
+			status: 'refunded',
+			paymentStatus: 'refunded',
+			deliveryStatus: 'refunded'
+		});
+		prismaMock.order.findMany.mockResolvedValue([{ totalAmount: 5000, refundedAmount: 0 }]);
+		expect((await vestMaturedAffiliateRewards()).vested).toBe(1);
+	});
+	it('does not credit an inactive wallet or an already-cleared reward', async () => {
+		prismaMock.walletTransaction.findMany.mockResolvedValue([reward()]);
+		txMock.wallet.findUnique.mockResolvedValue({ balance: 1800, isActive: false });
+		expect((await vestMaturedAffiliateRewards()).vested).toBe(0);
+		txMock.walletTransaction.findUnique.mockResolvedValue({ status: 'available', amount: 700 });
+		expect((await vestMaturedAffiliateRewards()).vested).toBe(0);
+		expect(txMock.wallet.update).not.toHaveBeenCalled();
+	});
+	it('supports an exact internal recovery scope without changing the normal cron default', async () => {
+		prismaMock.walletTransaction.findMany.mockResolvedValue([]);
+		await vestMaturedAffiliateRewards(5, { userId: 'affiliate-1', rewardIds: ['super-reward'] });
+		expect(prismaMock.walletTransaction.findMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: expect.objectContaining({
+					userId: 'affiliate-1',
+					id: { in: ['super-reward'] },
+					status: 'pending',
+					type: 'affiliate_credit',
+					AND: [NOT_HELD_FOR_IDENTITY_REVIEW]
+				})
+			})
+		);
+	});
+});
+
 describe('super monthly bonus vesting', () => {
 	it('does not count identity-flagged activations toward a vesting tier', async () => {
 		prismaMock.walletTransaction.findMany.mockResolvedValue([
@@ -127,6 +300,7 @@ describe('super monthly bonus vesting', () => {
 			}
 		]);
 		prismaMock.walletTransaction.count.mockResolvedValue(10);
+		txMock.walletTransaction.count.mockResolvedValue(10);
 		txMock.walletTransaction.findUnique.mockResolvedValue({ status: 'pending', amount: 3_000 });
 		txMock.wallet.findUnique.mockResolvedValue({ balance: 0 });
 

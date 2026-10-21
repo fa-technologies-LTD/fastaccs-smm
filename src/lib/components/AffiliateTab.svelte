@@ -590,6 +590,11 @@
 					>
 						₦{toNumber(affiliateData?.pendingStoreCredit).toLocaleString()}
 					</div>
+					{#if affiliateData?.isSuperAffiliate}
+						<p class="mt-1 text-xs" style="color: var(--text-muted);">
+							Super rewards clear after 24 hours, subject to checks.
+						</p>
+					{/if}
 				</div>
 				<div
 					class="rounded-[var(--r-sm)] border border-[var(--border)] p-3 sm:p-4"

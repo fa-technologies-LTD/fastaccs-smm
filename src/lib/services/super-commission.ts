@@ -2,11 +2,8 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
 import { calculateSuperOrderCommission } from '$lib/services/affiliate-policy';
 import { recordAffiliateEvent } from '$lib/services/affiliate-events';
-import {
-	computeVestsAt,
-	detectAffiliateIdentityRiskSignals,
-	getRewardVestingDays
-} from '$lib/services/affiliate-vesting';
+import { detectAffiliateIdentityRiskSignals } from '$lib/services/affiliate-vesting';
+import { computeSuperRewardVestsAt } from '$lib/helpers/affiliate-reward-timing';
 import { SC_AFFILIATE_ADJUSTMENT } from '$lib/services/store-credit';
 import {
 	SUPER_COMMISSION_REFERENCE_PREFIX,
@@ -91,7 +88,7 @@ export async function recordSuperOrderCommission(
 	if (!commission.held && commission.amount <= 0) return { recorded: 'none', amount: 0 };
 
 	const identityRiskSignals = await detectAffiliateIdentityRiskSignals(superUserId, buyerUserId);
-	const vestsAt = computeVestsAt(await getRewardVestingDays(), paidAt);
+	const vestsAt = computeSuperRewardVestsAt(paidAt);
 	const metadata: Prisma.InputJsonObject = {
 		kind: SUPER_ORDER_COMMISSION_KIND,
 		orderId: order.id,
@@ -99,6 +96,7 @@ export async function recordSuperOrderCommission(
 		affiliateCode: order.affiliateCode,
 		percent: SUPER_ORDER_COMMISSION_PERCENT,
 		termsVersion: 'super-v2',
+		earnedAt: paidAt.toISOString(),
 		vestsAt: vestsAt.toISOString(),
 		...(commission.held ? { holdReason: SUPER_COST_MISSING_HOLD } : {}),
 		...(identityRiskSignals.length > 0 ? { suspectedSelfReferral: true, identityRiskSignals } : {})
@@ -294,10 +292,7 @@ export async function resolveHeldSuperCommission(params: {
 		percent: Number(metadata.percent ?? SUPER_ORDER_COMMISSION_PERCENT)
 	});
 	const vestsAt = new Date(
-		Math.max(
-			Date.now(),
-			computeVestsAt(await getRewardVestingDays(), order.paidAt ?? order.createdAt).getTime()
-		)
+		Math.max(Date.now(), computeSuperRewardVestsAt(order.paidAt ?? order.createdAt).getTime())
 	);
 	const { holdReason: _resolved, ...rest } = metadata;
 	void _resolved;
@@ -308,6 +303,7 @@ export async function resolveHeldSuperCommission(params: {
 			status: commission.amount > 0 ? 'pending' : 'reversed',
 			metadata: {
 				...rest,
+				earnedAt: (order.paidAt ?? order.createdAt).toISOString(),
 				vestsAt: vestsAt.toISOString(),
 				costResolvedBy: params.actorUserId,
 				costResolvedAt: new Date().toISOString()

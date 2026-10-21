@@ -1,6 +1,7 @@
 import { prisma } from '$lib/prisma';
 import { sendEmail } from '$lib/services/email';
 import { getRewardVestingDays } from '$lib/services/affiliate-vesting';
+import { isSuperAffiliateReward } from '$lib/helpers/affiliate-reward-timing';
 import {
 	isSuperAffiliateOnNewTerms,
 	payoutTimingSentence
@@ -27,6 +28,7 @@ function getFirstName(fullName: string | null, email: string): string {
 export async function sendFirstStoreCreditEmailIfNeeded(params: {
 	userId: string;
 	creditAmount: number;
+	superReward?: boolean;
 }): Promise<boolean> {
 	const reservation = await prisma.$transaction(async (tx) => {
 		const lockedUsers = await tx.$queryRaw<Array<{ id: string }>>`
@@ -85,16 +87,19 @@ export async function sendFirstStoreCreditEmailIfNeeded(params: {
 
 	if (!reservation) return false;
 
-	const vestingDays = await getRewardVestingDays();
+	const waitingPeriod = params.superReward ? '24 hours' : `${await getRewardVestingDays()} days`;
+	const earningSentence = params.superReward
+		? 'Your Super Affiliate earning terms are shown in your dashboard.'
+		: "You earn 5% on each referred friend's first two eligible account orders, up to ₦1,000 per order.";
 
 	const result = await sendEmail({
 		to: reservation.email,
 		subject: 'Your first referral reward is pending 🎉',
 		body: `Hi ${reservation.firstName},
 
-**₦${params.creditAmount.toLocaleString('en-US')}** is pending and will be available in ${vestingDays} days if the order isn't refunded.
+**₦${params.creditAmount.toLocaleString('en-US')}** is pending and can clear after ${waitingPeriod}, subject to refund and review checks.
 
-Keep sharing your link. You earn 5% on each referred friend's first two eligible account orders, up to ₦1,000 per order.`,
+Keep sharing your link. ${earningSentence}`,
 		ctaText: 'View affiliate dashboard',
 		ctaUrl: `${getBaseUrl()}/dashboard?tab=affiliate`,
 		userId: params.userId,
@@ -232,7 +237,9 @@ export async function recoverFirstStoreCreditEmails(limit = 300): Promise<{
 		},
 		select: {
 			userId: true,
-			amount: true
+			amount: true,
+			metadata: true,
+			reference: true
 		},
 		orderBy: { createdAt: 'asc' },
 		distinct: ['userId'],
@@ -246,7 +253,8 @@ export async function recoverFirstStoreCreditEmails(limit = 300): Promise<{
 			if (
 				await sendFirstStoreCreditEmailIfNeeded({
 					userId: credit.userId,
-					creditAmount: Number(credit.amount || 0)
+					creditAmount: Number(credit.amount || 0),
+					superReward: isSuperAffiliateReward(credit)
 				})
 			) {
 				sent += 1;

@@ -92,7 +92,7 @@ describe('recording a Super profit commission', () => {
 		expect((await recordSuperOrderCommission(order({ orderType: 'phone' }))).recorded).toBe('none');
 	});
 
-	it('records 5% of profit as a pending reward with a 14-day hold and no cost/profit stored', async () => {
+	it('records 5% of profit with a 24-hour wait from payment and no cost/profit stored', async () => {
 		const result = await recordSuperOrderCommission(order());
 		expect(result).toEqual({ recorded: 'pending', amount: 40 });
 		const data = mocks.create.mock.calls[0][0].data;
@@ -104,7 +104,8 @@ describe('recording a Super profit commission', () => {
 			description: 'Order earnings'
 		});
 		expect(data.metadata).toMatchObject({ kind: 'super_order_commission', orderId: 'order-2' });
-		expect(data.metadata.vestsAt).toBe('2026-11-19T10:00:00.000Z');
+		expect(data.metadata.vestsAt).toBe('2026-11-06T10:00:00.000Z');
+		expect(data.metadata.earnedAt).toBe('2026-11-05T10:00:00.000Z');
 		expect(JSON.stringify(data.metadata)).not.toMatch(/cost|profit|margin/i);
 	});
 

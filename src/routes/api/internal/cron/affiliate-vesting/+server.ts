@@ -5,8 +5,8 @@ import { recoverAffiliateRewardIntegrity } from '$lib/services/affiliate';
 import { runPromoCampaignJobs } from '$lib/services/promo-campaigns';
 
 // Promotes matured pending affiliate rewards to available (and voids any whose order was
-// refunded in the meantime). Scheduled every few hours; vesting is 14 days so cadence
-// precision is not critical.
+// refunded in the meantime). Scheduled every few hours: eligible Super rewards clear
+// on the next check after 24 hours; regular rewards keep their configured window.
 export const GET: RequestHandler = async ({ request }) =>
 	runAuthorizedAutomationCron({
 		request,
