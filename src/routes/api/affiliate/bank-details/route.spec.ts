@@ -80,6 +80,29 @@ describe('affiliate bank-details submission', () => {
 		expect(mocks.encrypt).not.toHaveBeenCalled();
 	});
 
+	it.each(['0123456789', '9876543210'])(
+		'accepts exactly ten digits and preserves the account number %s',
+		async (accountNumber) => {
+			const response = await callPost({ ...DETAILS, accountNumber });
+			expect(response.status).toBe(200);
+			expect(mocks.encrypt).toHaveBeenCalledWith(USER_ID, { ...DETAILS, accountNumber });
+			expect(await response.json()).toMatchObject({ success: true, data: { status: 'pending' } });
+		}
+	);
+
+	it.each(['123456789', '12345678901', '12345a7890', '12345-7890'])(
+		'rejects invalid length or non-digits at the server: %s',
+		async (accountNumber) => {
+			const response = await callPost({ ...DETAILS, accountNumber });
+			expect(response.status).toBe(400);
+			expect(await response.json()).toMatchObject({
+				error: 'Enter a valid 10-digit Nigerian bank account number.'
+			});
+			expect(mocks.encrypt).not.toHaveBeenCalled();
+			expect(mocks.upsertSubmission).not.toHaveBeenCalled();
+		}
+	);
+
 	it('stores only the encrypted envelope and clears legacy plaintext columns', async () => {
 		const response = await callPost({ ...DETAILS, accountNumber: '01234 56789' });
 		const body = await response.json();

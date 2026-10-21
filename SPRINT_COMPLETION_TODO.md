@@ -1,5 +1,14 @@
 # Sprint completion — prioritised master checklist
 
+## Current — owner-approved bank-account form hotfix, 21 October 2026
+
+- [x] Reproduce owner's valid10-digit rejection in the actual browser: quoted Svelte quantifier compiled `[0-9]{10}` into `[0-9]10`. Before-fix regression fails valid format/submission while invalid cases remain blocked. Server already correctly requires exactly10digits; no financial-policy change required.
+- [x] Keep the browser pattern literal, preserve numeric keyboard/text storage/leading zeros, and add concise format help. Existing encryption, authentication, pending bank review, payout eligibility and balances unchanged. API tests cover exact10digits including leadingzero, 9/11digits, letters and punctuation; original spaced-input normalization remains covered.
+- [x] Targeted16server tests and6browser tests pass. Native390px/1360px actual-form preview passes validation, leadingzero preservation, invalid-number refusal and intercepted fictional submission, with no page errors/overflow/bankAPIrequests/completed writes. Mobile screenshot inspected. Local preview: http://localhost:5173/local-review/affiliate-bank-details; dev/loopback only, no caching/indexing, production404. Existing5173process preserved.
+- [x] Full22browser suites/158tests pass, typecheck0errors/114existingwarnings38files; verified separate-staging production build/bootstrap identity, formatting and diff checks pass. Known test-only Kit/Vite teardown noise remains deferred.
+- [ ] Reviewed-path push and independent CI/production-revision/access-guard/served-pattern verification. Owner explicitly requested “fix and push asap”; no real bank submission, payout, email, balance, schema, supplier or production-data action authorised or performed. Preserve Claude and unrelated local work.
+- [ ] Separate existing follow-ups remain: IG case closure; X non-delivery; FB transfer receipt/late-payment tracing; SEO/SearchConsole/marketing, support/refill validation and performance/deferred cleanup. Announcements need later wording/audience/send approval. No automated paid supplier retry/switching/ranking.
+
 ## Current — owner-approved Super reward timing, 21 October 2026
 
 - [x] Owner explicitly requested Super rewards clear after 24 hours, not 14 days, with cross-check and push. Apply to existing pending Super rewards using their original earning/payment time, not the account-transfer date. Regular affiliate timing, payout minimum/processing, bank checks and spend-only refund credit remain unchanged. No payout requested or paid.

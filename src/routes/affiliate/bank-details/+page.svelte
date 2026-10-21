@@ -158,15 +158,20 @@
 					id="accountNumber"
 					type="text"
 					inputmode="numeric"
-					pattern="[0-9]{10}"
+					pattern={'[0-9]{10}'}
 					minlength="10"
 					maxlength="10"
+					title="Enter exactly 10 digits (numbers only)."
+					aria-describedby="account-number-hint"
 					bind:value={accountNumber}
 					required
 					placeholder="0123456789"
 					class="block w-full rounded-md px-3 py-2 text-sm"
 					style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 				/>
+				<p id="account-number-hint" class="mt-1 text-xs" style="color: var(--text-muted);">
+					Your 10-digit Nigerian bank account number. Keep any leading zero.
+				</p>
 			</div>
 
 			<div>
