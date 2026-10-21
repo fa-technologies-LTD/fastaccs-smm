@@ -11,9 +11,24 @@ export const BIGSPENDER_KEY = `${CAMPAIGN_KEY_PREFIX}bigspender`;
 
 export type CampaignKind = 'refer_win' | 'bigspender';
 
-/** Campaign settings are owner-only and edited from Admin → Campaigns, never the microcopy editor. */
+/** Telegram autopilot rows: its settings, plus system-managed channel/deal/lock rows. */
+const AUTOPILOT_PREFIXES = ['config.autopilot.', 'autopilot.'];
+
+/**
+ * Campaign and autopilot settings are owner-only and edited from their own admin pages
+ * (Admin → Campaigns, Admin → Telegram autopilot), never the microcopy editor.
+ */
 export function isOwnerOnlyConfigKey(key: unknown): boolean {
-	return typeof key === 'string' && key.startsWith(CAMPAIGN_KEY_PREFIX);
+	return (
+		typeof key === 'string' &&
+		(key.startsWith(CAMPAIGN_KEY_PREFIX) ||
+			AUTOPILOT_PREFIXES.some((prefix) => key.startsWith(prefix)))
+	);
+}
+
+/** Autopilot rows (channel admins' payment details, deal state) never appear in the microcopy list. */
+export function isHiddenFromMicrocopy(key: unknown): boolean {
+	return typeof key === 'string' && AUTOPILOT_PREFIXES.some((prefix) => key.startsWith(prefix));
 }
 
 export interface CampaignCommonSettings {

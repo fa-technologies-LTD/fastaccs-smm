@@ -87,6 +87,7 @@
 		"vitest-browser-svelte": "^2.2.1"
 	},
 	"dependencies": {
+		"@anthropic-ai/sdk": "0.132.0",
 		"@prisma/client": "^6.16.3",
 		"@tabler/icons-svelte": "^3.44.0",
 		"@types/nodemailer": "^7.0.2",
@@ -95,6 +96,7 @@
 		"d3-scale": "^4.0.2",
 		"d3-shape": "^3.2.0",
 		"nodemailer": "^10.0.14",
+		"telegram": "2.26.22",
 		"web-push": "^3.6.7"
 	},
 	"overrides": {

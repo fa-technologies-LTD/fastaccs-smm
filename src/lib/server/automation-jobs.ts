@@ -126,7 +126,7 @@ export const AUTOMATION_JOBS = {
 	'numbers-campaign': {
 		name: 'numbers-campaign',
 		path: '/api/internal/cron/numbers-campaign',
-		schedule: 'daily 09:30',
+		schedule: 'daily 16:20 UTC (17:20 WAT)',
 		risk: 'marketing',
 		lockTimeoutMinutes: 10,
 		expectedIntervalMinutes: 1440
@@ -134,7 +134,7 @@ export const AUTOMATION_JOBS = {
 	'store-credit-reminders': {
 		name: 'store-credit-reminders',
 		path: '/api/internal/cron/store-credit-reminders',
-		schedule: 'daily 10:35 UTC',
+		schedule: 'daily 16:15 UTC (17:15 WAT)',
 		risk: 'marketing',
 		lockTimeoutMinutes: 10,
 		expectedIntervalMinutes: 1440
@@ -198,7 +198,7 @@ export const AUTOMATION_JOBS = {
 	'promo-reminder': {
 		name: 'promo-reminder',
 		path: '/api/internal/cron/promo-reminder',
-		schedule: 'daily 10:10',
+		schedule: 'daily 16:05 UTC (17:05 WAT)',
 		risk: 'marketing',
 		lockTimeoutMinutes: 10,
 		expectedIntervalMinutes: 1440
@@ -210,6 +210,14 @@ export const AUTOMATION_JOBS = {
 		risk: 'marketing',
 		lockTimeoutMinutes: 10,
 		expectedIntervalMinutes: 30
+	},
+	'telegram-autopilot': {
+		name: 'telegram-autopilot',
+		path: '/api/internal/cron/telegram-autopilot',
+		schedule: 'every 15 minutes (:02, :17, :32, :47)',
+		risk: 'marketing',
+		lockTimeoutMinutes: 10,
+		expectedIntervalMinutes: 15
 	},
 	'marketing-spend-sync': {
 		name: 'marketing-spend-sync',

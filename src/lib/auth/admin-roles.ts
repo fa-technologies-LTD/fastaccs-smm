@@ -220,6 +220,12 @@ const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
 	},
 	{
 		// Changes are further limited to the owner inside the page actions.
+		prefix: '/admin/autopilot',
+		readPermission: 'admin:revenue:view',
+		writePermission: 'admin:revenue:view'
+	},
+	{
+		// Changes are further limited to the owner inside the page actions.
 		prefix: '/admin/campaigns',
 		readPermission: 'admin:revenue:view',
 		writePermission: 'admin:revenue:view'

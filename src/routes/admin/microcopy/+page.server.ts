@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
+import { isHiddenFromMicrocopy } from '$lib/helpers/promo-campaign-rules';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	try {
@@ -12,7 +13,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			orderBy: [{ category: 'asc' }, { key: 'asc' }]
 		});
 
-		return { microcopy };
+		return { microcopy: microcopy.filter((row) => !isHiddenFromMicrocopy(row.key)) };
 	} catch (error) {
 		console.error('Error loading microcopy:', error);
 		return { microcopy: [] };

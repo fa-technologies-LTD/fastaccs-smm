@@ -4,6 +4,7 @@ import {
 	REFER_WIN_DEFAULTS,
 	bigSpenderTarget,
 	isCampaignLive,
+	isHiddenFromMicrocopy,
 	isOwnerOnlyConfigKey,
 	keptCash,
 	lagosMonthStart,
@@ -74,6 +75,10 @@ describe('campaign settings', () => {
 	it('keeps campaign settings out of the general microcopy editor', () => {
 		expect(isOwnerOnlyConfigKey('config.campaign.refer_win')).toBe(true);
 		expect(isOwnerOnlyConfigKey('config.store.announcement_banner')).toBe(false);
+		expect(isOwnerOnlyConfigKey('config.autopilot.telegram')).toBe(true);
+		expect(isOwnerOnlyConfigKey('autopilot.tg.channel.somechannel')).toBe(true);
+		expect(isHiddenFromMicrocopy('autopilot.tg.channel.somechannel')).toBe(true);
+		expect(isHiddenFromMicrocopy('config.campaign.refer_win')).toBe(false);
 	});
 });
 

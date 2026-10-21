@@ -1,0 +1,133 @@
+import { env } from '$env/dynamic/private';
+import { Api, TelegramClient, errors, sessions } from 'telegram';
+import { LogLevel } from 'telegram/extensions/Logger';
+
+/**
+ * The autopilot's own Telegram account (the spare SIM), driven through Telegram's official
+ * MTProto API. Each cron run connects with the saved login (TELEGRAM_SESSION), does its work and
+ * disconnects. Everything the engine needs goes through this small port so it can be tested.
+ */
+
+export interface ChannelPost {
+	id: number;
+	views: number;
+	date: Date;
+	text: string;
+}
+
+export interface FoundChannel {
+	username: string;
+	title: string;
+	id: string;
+}
+
+export interface UserbotPort {
+	searchChannels(query: string): Promise<FoundChannel[]>;
+	channelInfo(username: string): Promise<{ about: string; members: number; posts: ChannelPost[] }>;
+	recentPosts(username: string, limit?: number): Promise<ChannelPost[]>;
+	/** A person we can message: null for bots, channels and unknown handles. */
+	resolvePerson(username: string): Promise<{ username: string; userId: string } | null>;
+	sendMessage(username: string, text: string): Promise<number>;
+	/** Messages the person sent us after `sinceId` (oldest first). */
+	incomingFrom(username: string, sinceId: number): Promise<ChannelPost[]>;
+	close(): Promise<void>;
+}
+
+/** Telegram asked us to slow down: stop this run and try later. */
+export class TelegramSlowDown extends Error {
+	constructor(public seconds: number) {
+		super(`Telegram asked to wait ${seconds}s`);
+	}
+}
+
+export function userbotConfigured(): boolean {
+	return Boolean(env.TELEGRAM_API_ID && env.TELEGRAM_API_HASH && env.TELEGRAM_SESSION);
+}
+
+function toPost(message: Api.Message): ChannelPost {
+	return {
+		id: message.id,
+		views: Number(message.views ?? 0),
+		date: new Date(Number(message.date ?? 0) * 1000),
+		text: message.message ?? ''
+	};
+}
+
+async function guard<T>(work: () => Promise<T>): Promise<T> {
+	try {
+		return await work();
+	} catch (error) {
+		if (error instanceof errors.FloodWaitError) throw new TelegramSlowDown(error.seconds);
+		throw error;
+	}
+}
+
+export async function connectUserbot(): Promise<UserbotPort> {
+	if (!userbotConfigured()) throw new Error('TELEGRAM_NOT_CONFIGURED');
+	const client = new TelegramClient(
+		new sessions.StringSession(env.TELEGRAM_SESSION),
+		Number(env.TELEGRAM_API_ID),
+		String(env.TELEGRAM_API_HASH),
+		{ connectionRetries: 2 }
+	);
+	client.setLogLevel(LogLevel.ERROR);
+	await client.connect();
+
+	const recentPosts = (username: string, limit = 15) =>
+		guard(async () => {
+			const messages = await client.getMessages(username, { limit });
+			return messages.filter((m): m is Api.Message => m instanceof Api.Message).map(toPost);
+		});
+
+	return {
+		searchChannels: (query) =>
+			guard(async () => {
+				const result = await client.invoke(new Api.contacts.Search({ q: query, limit: 20 }));
+				return result.chats
+					.filter((chat): chat is Api.Channel => chat instanceof Api.Channel)
+					.filter((chat) => Boolean(chat.broadcast && chat.username))
+					.map((chat) => ({
+						username: String(chat.username),
+						title: chat.title,
+						id: String(chat.id)
+					}));
+			}),
+		channelInfo: (username) =>
+			guard(async () => {
+				const full = await client.invoke(new Api.channels.GetFullChannel({ channel: username }));
+				const info = full.fullChat as Api.ChannelFull;
+				return {
+					about: info.about ?? '',
+					members: Number(info.participantsCount ?? 0),
+					posts: await recentPosts(username)
+				};
+			}),
+		recentPosts,
+		resolvePerson: (username) =>
+			guard(async () => {
+				try {
+					const entity = await client.getEntity(username);
+					if (!(entity instanceof Api.User) || entity.bot || entity.deleted) return null;
+					return { username: String(entity.username ?? username), userId: String(entity.id) };
+				} catch {
+					return null; // unknown or private handle
+				}
+			}),
+		sendMessage: (username, text) =>
+			guard(async () => {
+				const sent = await client.sendMessage(username, { message: text });
+				return sent.id;
+			}),
+		incomingFrom: (username, sinceId) =>
+			guard(async () => {
+				const messages = await client.getMessages(username, { limit: 20, minId: sinceId });
+				return messages
+					.filter((m): m is Api.Message => m instanceof Api.Message && !m.out)
+					.map(toPost)
+					.sort((a, b) => a.id - b.id);
+			}),
+		close: async () => {
+			await client.destroy().catch(() => client.disconnect().catch(() => {}));
+		}
+	};
+}

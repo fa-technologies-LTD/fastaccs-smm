@@ -15,7 +15,10 @@ export const PATCH: RequestHandler = async ({ locals, params, request }) => {
 		const current = await prisma.microcopy.findUnique({ where: { id }, select: { key: true } });
 		if (current && isOwnerOnlyConfigKey(current.key)) {
 			return json(
-				{ error: 'Campaign settings are changed from Admin → Campaigns.' },
+				{
+					error:
+						'This setting is changed from its own admin page (Campaigns or Telegram autopilot).'
+				},
 				{ status: 403 }
 			);
 		}
@@ -50,7 +53,10 @@ export const DELETE: RequestHandler = async ({ locals, params }) => {
 		const current = await prisma.microcopy.findUnique({ where: { id }, select: { key: true } });
 		if (current && isOwnerOnlyConfigKey(current.key)) {
 			return json(
-				{ error: 'Campaign settings are changed from Admin → Campaigns.' },
+				{
+					error:
+						'This setting is changed from its own admin page (Campaigns or Telegram autopilot).'
+				},
 				{ status: 403 }
 			);
 		}

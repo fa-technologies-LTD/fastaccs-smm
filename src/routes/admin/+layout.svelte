@@ -23,7 +23,8 @@
 		Tag,
 		Activity,
 		Zap,
-		Phone
+		Phone,
+		Send
 	} from '$lib/icons';
 
 	import logo from '$lib/assets/logo.png';
@@ -162,6 +163,12 @@
 				href: '/admin/campaigns',
 				label: 'Campaigns',
 				icon: Tag,
+				permission: 'admin:revenue:view'
+			},
+			{
+				href: '/admin/autopilot',
+				label: 'Telegram autopilot',
+				icon: Send,
 				permission: 'admin:revenue:view'
 			},
 			{

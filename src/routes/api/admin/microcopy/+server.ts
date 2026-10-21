@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/prisma';
-import { isOwnerOnlyConfigKey } from '$lib/helpers/promo-campaign-rules';
+import { isHiddenFromMicrocopy, isOwnerOnlyConfigKey } from '$lib/helpers/promo-campaign-rules';
 
 // GET all microcopy
 export const GET: RequestHandler = async ({ url }) => {
@@ -18,7 +18,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			orderBy: { key: 'asc' }
 		});
 
-		return json({ microcopy });
+		return json({ microcopy: microcopy.filter((row) => !isHiddenFromMicrocopy(row.key)) });
 	} catch (error) {
 		console.error('Error fetching microcopy:', error);
 		return json({ error: 'Failed to fetch microcopy' }, { status: 500 });
@@ -40,7 +40,10 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 		}
 		if (isOwnerOnlyConfigKey(key)) {
 			return json(
-				{ error: 'Campaign settings are changed from Admin → Campaigns.' },
+				{
+					error:
+						'This setting is changed from its own admin page (Campaigns or Telegram autopilot).'
+				},
 				{ status: 403 }
 			);
 		}
