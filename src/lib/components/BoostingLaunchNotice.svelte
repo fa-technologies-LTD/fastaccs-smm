@@ -34,13 +34,10 @@
 			<X size={20} />
 		</button>
 		<div class="notice-icon" aria-hidden="true"><Zap size={32} /></div>
-		<p class="notice-eyebrow">BACK ON FASTACCS</p>
 		<h2 id="boosting-back-title">Boosting is back.</h2>
-		<p id="boosting-back-description">
-			Explore the available services, choose your quantity, and follow your order in one place.
-		</p>
+		<p id="boosting-back-description">Pick a service. Place your order. Track it here.</p>
 		<a href="/services" class="notice-action" onclick={onClose}>
-			Explore Boosting <ArrowRight size={18} aria-hidden="true" />
+			View services <ArrowRight size={18} aria-hidden="true" />
 		</a>
 		<button type="button" class="notice-later" onclick={onClose}>Maybe later</button>
 	</div>
@@ -89,13 +86,6 @@
 		color: #52efa4;
 		background: #13bc6920;
 		transform: rotate(-6deg);
-	}
-	.notice-eyebrow {
-		margin: 0 0 10px;
-		color: #6de6a9;
-		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 0.17em;
 	}
 	h2 {
 		margin: 0 0 12px;

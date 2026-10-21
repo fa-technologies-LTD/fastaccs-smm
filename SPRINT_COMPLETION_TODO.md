@@ -1,5 +1,14 @@
 # Sprint completion — prioritised master checklist
 
+## Current — approved revised reopening notice, 21 October 2026
+
+- [x] Owner accepted local preview/copy and explicitly approved “perfect, retrigger”. Keep “Boosting is back.”; shorten body to “Pick a service. Place your order. Track it here.” and button to “View services”. Remove the repeated “back” eyebrow without adding quality/speed/refill promises.
+- [x] Version only this browser impression preference so previous dismissals do not suppress one revised notice. Preserve old/unrelated preferences, availability checks, guests/signed-in behavior, session/memory fallbacks, dismissal/Escape/focus handling and checkout/order/bank/admin exclusions. No customer database reset, emails, pricing, supplier, bank, affiliate or payment changes.
+- [x] 18 helper/server tests and12 actual Chromium host tests pass, including old-version dismissal/new version/reload non-repeat, preserved preferences, revised copy/link, pre-existing session check, no stacking, protected routes and late/unavailable catalogue responses. Local preview provided and accepted: http://localhost:5173/local-review/boosting-copy → Preview launch popup. Format/diff checks pass.
+- [x] Final verified-staging typecheck0errors/114existingwarnings38files and production build/startup identity checks pass. Slowed by local memory pressure/concurrent marketing tests; no owner/Claude processes stopped. No shared marketing-worktree edits/package/config changes included.
+- [ ] Reviewed-path commit/push, independent CI/deployment/live revision and isolated390px/1360px live old-dismissal→new-modal→dismiss→reload-no-repeat verification. Claude's active work stays separate. No production financial/account/offer data changes or email announcement.
+- [ ] Other existing follow-ups remain: IG closure; X non-delivery; FB payment receipt/tracing; SEO/SearchConsole/marketing, support/refill validation and performance/deferred cleanup. Email announcements still need separate audience/wording/send approval. No automated paid supplier retry/switching/ranking.
+
 ## Current — owner-approved bank-account form hotfix, 21 October 2026
 
 - [x] Reproduce owner's valid10-digit rejection in the actual browser: quoted Svelte quantifier compiled `[0-9]{10}` into `[0-9]10`. Before-fix regression fails valid format/submission while invalid cases remain blocked. Server already correctly requires exactly10digits; no financial-policy change required.

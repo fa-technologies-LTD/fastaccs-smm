@@ -104,8 +104,13 @@ it('shows guests one reopening notice, marks the impression and does not repeat 
 	await expect.element(browser.getByRole('dialog', { name: 'Boosting is back.' })).toBeVisible();
 	expect(markBoostingLaunchNoticeSeen).toHaveBeenCalledOnce();
 	await expect
-		.element(browser.getByRole('link', { name: 'Explore Boosting' }))
+		.element(browser.getByRole('link', { name: 'View services' }))
 		.toHaveAttribute('href', '/services');
+	await expect
+		.element(browser.getByText('Pick a service. Place your order. Track it here.', { exact: true }))
+		.toBeVisible();
+	expect(browser.getByText('BACK ON FASTACCS', { exact: true }).query()).toBeNull();
+	expect(browser.getByText(/Explore the available services/).query()).toBeNull();
 	await browser.getByRole('button', { name: 'Close announcement' }).click();
 	await expect.element(browser.getByRole('dialog')).not.toBeInTheDocument();
 	await first.unmount();
@@ -117,6 +122,8 @@ it('shows guests one reopening notice, marks the impression and does not repeat 
 
 it('does not stack another announcement for signed-in customers and supports Escape', async () => {
 	page.url.pathname = '/dashboard';
+	// A previous announcement check in this visit must not consume this revised notice.
+	sessionStorage.setItem('fastaccs_site_popup_checked', '1');
 	vi.stubGlobal(
 		'fetch',
 		vi.fn(async () =>

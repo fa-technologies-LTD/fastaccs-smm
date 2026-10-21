@@ -1,4 +1,5 @@
-export const BOOSTING_LAUNCH_NOTICE_KEY = 'fastaccs_boosting_back_20261019';
+// A new announcement version permits one fresh impression without clearing other preferences.
+export const BOOSTING_LAUNCH_NOTICE_KEY = 'fastaccs_boosting_back_20261021_v2';
 
 /** Browsing only: never interrupt payment, an existing order, login or admin work. */
 export function canShowBoostingLaunchNotice(path: string): boolean {

@@ -61,3 +61,30 @@ it('does not break browsing or repeat during the visit when browser storage is b
 	expect(() => notice.markBoostingLaunchNoticeSeen()).not.toThrow();
 	expect(notice.hasSeenBoostingLaunchNotice()).toBe(true);
 });
+
+it('permits the revised announcement once despite the previous version being seen, without clearing preferences', async () => {
+	vi.resetModules();
+	const previousKey = 'fastaccs_boosting_back_20261019';
+	const local = new Map([
+		[previousKey, '1'],
+		['unrelated-preference', 'keep']
+	]);
+	const session = new Map([
+		[previousKey, '1'],
+		['fastaccs_site_popup_checked', '1']
+	]);
+	const storage = (values: Map<string, string>) => ({
+		getItem: (key: string) => values.get(key),
+		setItem: (key: string, value: string) => values.set(key, value)
+	});
+	vi.stubGlobal('window', { localStorage: storage(local), sessionStorage: storage(session) });
+	const notice = await import('./boosting-launch-notice');
+	expect(notice.BOOSTING_LAUNCH_NOTICE_KEY).not.toBe(previousKey);
+	expect(notice.hasSeenBoostingLaunchNotice()).toBe(false);
+	notice.markBoostingLaunchNoticeSeen();
+	expect(local.get(previousKey)).toBe('1');
+	expect(local.get('unrelated-preference')).toBe('keep');
+	expect(session.get('fastaccs_site_popup_checked')).toBe('1');
+	vi.resetModules();
+	expect((await import('./boosting-launch-notice')).hasSeenBoostingLaunchNotice()).toBe(true);
+});
