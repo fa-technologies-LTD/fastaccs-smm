@@ -1,6 +1,7 @@
 import { env } from '$env/dynamic/private';
 import { Api, TelegramClient, errors, sessions } from 'telegram';
 import { LogLevel } from 'telegram/extensions/Logger';
+import { TelegramSlowDown } from './errors';
 
 /**
  * The autopilot's own Telegram account (the spare SIM), driven through Telegram's official
@@ -33,12 +34,7 @@ export interface UserbotPort {
 	close(): Promise<void>;
 }
 
-/** Telegram asked us to slow down: stop this run and try later. */
-export class TelegramSlowDown extends Error {
-	constructor(public seconds: number) {
-		super(`Telegram asked to wait ${seconds}s`);
-	}
-}
+export { TelegramSlowDown };
 
 export function userbotConfigured(): boolean {
 	return Boolean(env.TELEGRAM_API_ID && env.TELEGRAM_API_HASH && env.TELEGRAM_SESSION);
@@ -58,6 +54,10 @@ async function guard<T>(work: () => Promise<T>): Promise<T> {
 		return await work();
 	} catch (error) {
 		if (error instanceof errors.FloodWaitError) throw new TelegramSlowDown(error.seconds);
+		// PEER_FLOOD: Telegram has limited the account for messaging strangers. Back off a day.
+		if (error instanceof errors.RPCError && /PEER_FLOOD/.test(error.errorMessage)) {
+			throw new TelegramSlowDown(24 * 3600, 'account_limited');
+		}
 		throw error;
 	}
 }

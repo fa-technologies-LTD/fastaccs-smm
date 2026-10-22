@@ -75,7 +75,22 @@ export async function runAutopilotJob(): Promise<RunSummary | { skipped: string 
 	} catch (error) {
 		const latest = await getRunState();
 		if (error instanceof TelegramSlowDown) {
-			latest.pausedUntil = new Date(Date.now() + (error.seconds + 60) * 1000).toISOString();
+			const until = new Date(Date.now() + (error.seconds + 60) * 1000);
+			latest.pausedUntil = until.toISOString();
+			if (error.reason === 'account_limited' || error.seconds >= 3600) {
+				const when = until.toLocaleString('en-GB', {
+					day: 'numeric',
+					month: 'short',
+					hour: '2-digit',
+					minute: '2-digit',
+					timeZone: 'Africa/Lagos'
+				});
+				await ownerNotifier(settings)(
+					error.reason === 'account_limited'
+						? `⚠️ Telegram has limited the autopilot account from messaging new people (usually after too many first messages). I've paused until ${when} WAT and will resume by myself. If it keeps happening, lower "New admins to message per day".`
+						: `⏸ Telegram asked the autopilot to slow down. Paused until ${when} WAT; it resumes by itself.`
+				);
+			}
 		}
 		latest.lastError = error instanceof Error ? error.message.slice(0, 300) : 'failed';
 		await saveRunState(latest);

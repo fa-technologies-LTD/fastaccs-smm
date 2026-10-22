@@ -1,4 +1,5 @@
 import type { BotButton } from './bot';
+import { TelegramSlowDown } from './errors';
 import type { ClaudeReading } from './llm';
 import {
 	autopilotCopy,
@@ -63,6 +64,7 @@ export interface RunSummary {
 	contacted: number;
 	posted: number;
 	escalated: number;
+	errors: number;
 	stoppedEarly: boolean;
 }
 
@@ -92,6 +94,7 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 		contacted: 0,
 		posted: 0,
 		escalated: 0,
+		errors: 0,
 		stoppedEarly: false
 	};
 	const timeLeft = () => Date.now() < deps.deadline;
@@ -119,9 +122,45 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 		rec.ownerPromptId = promptId ?? rec.ownerPromptId;
 	};
 
+	const MONEY_STATUSES: ChannelRecord['status'][] = [
+		'agreed',
+		'awaiting_payment',
+		'paid',
+		'posted'
+	];
+
+	/**
+	 * One channel's Telegram error (deleted, renamed, private, blocked us...) never stops the run.
+	 * Three in a row: a channel with money involved goes to the owner, any other is set aside.
+	 * Only "slow down" errors stop the whole run. The count resets after a run in which every
+	 * Telegram call for that channel worked.
+	 */
+	const attempted = new Set<string>();
+	const erroredNow = new Set<string>();
+	const failed = async (rec: ChannelRecord, step: string, error: unknown) => {
+		if (error instanceof TelegramSlowDown) throw error;
+		const message = error instanceof Error ? error.message.slice(0, 120) : 'failed';
+		if (!erroredNow.has(rec.username)) rec.errorCount += 1; // once per run
+		erroredNow.add(rec.username);
+		summary.errors += 1;
+		await store.logAction('channel_error', rec.username, { step, message });
+		if (rec.errorCount >= 3) {
+			if (!MONEY_STATUSES.includes(rec.status)) rec.status = 'skipped';
+			else if (!rec.waitingOwner) {
+				await escalate(
+					rec,
+					`Telegram keeps failing for this channel (${message})`,
+					rec.lastAdminText ?? '(no reply)'
+				);
+			}
+		}
+		await store.saveChannel(rec, `error (${step}): ${message}`);
+	};
+
 	// 1. Owner's typed replies.
 	for (const rec of channels.filter((r) => r.outbox.length > 0)) {
 		if (!timeLeft()) break;
+		attempted.add(rec.username);
 		// Claim the messages before sending, so a clash with the owner's bot can't send one twice.
 		const pending = [...rec.outbox];
 		rec.outbox = [];
@@ -131,8 +170,8 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 				await send(rec, text);
 			} catch (error) {
 				rec.outbox = pending.slice(i); // try the rest next run
-				await store.saveChannel(rec, 'send failed, will retry');
-				throw error;
+				await failed(rec, 'send', error);
+				break;
 			}
 		}
 	}
@@ -140,8 +179,17 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 	// 2. Admins' replies.
 	for (const rec of channels.filter((r) => ACTIVE_STATUSES.includes(r.status) && r.contact)) {
 		if (!timeLeft()) break;
-		const incoming = await userbot.incomingFrom(rec.contact!, rec.lastInboundId);
+		attempted.add(rec.username);
+		let incoming: Awaited<ReturnType<UserbotPort['incomingFrom']>>;
+		try {
+			incoming = await userbot.incomingFrom(rec.contact!, rec.lastInboundId);
+		} catch (error) {
+			await failed(rec, 'read replies', error);
+			continue;
+		}
 		if (incoming.length === 0) continue;
+		// If answering fails part-way, put the deal back as it was so the reply is retried next run.
+		const before = structuredClone(rec);
 		summary.repliesRead += incoming.length;
 		rec.lastInboundId = Math.max(rec.lastInboundId, ...incoming.map((m) => m.id));
 		const text = incoming
@@ -149,7 +197,13 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 			.filter(Boolean)
 			.join('\n');
 		rec.lastAdminText = text.slice(0, 2000);
-		await handleReply(rec, text);
+		try {
+			await handleReply(rec, text);
+		} catch (error) {
+			Object.assign(rec, before);
+			await failed(rec, 'answer reply', error);
+			continue;
+		}
 		await store.saveChannel(rec, `reply: ${text.slice(0, 80)}`);
 	}
 
@@ -271,11 +325,20 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 
 	for (const rec of channels.filter((r) => r.status === 'paid')) {
 		if (!timeLeft()) break;
-		const live = await checkPost(rec);
+		attempted.add(rec.username);
+		let live: boolean;
+		try {
+			live = await checkPost(rec);
+		} catch (error) {
+			await failed(rec, 'check post', error);
+			continue;
+		}
 		const sincePaid = rec.paidAt ? now.getTime() - new Date(rec.paidAt).getTime() : 0;
 		if (!live && sincePaid > 24 * HOUR && !rec.remindedAt) {
-			await send(rec, autopilotCopy.postReminder());
-			rec.remindedAt = now.toISOString();
+			rec.remindedAt = now.toISOString(); // once, even if the reminder can't be delivered
+			await send(rec, autopilotCopy.postReminder()).catch((error) =>
+				failed(rec, 'reminder', error)
+			);
 		} else if (!live && sincePaid > 72 * HOUR && !rec.notPostedAlerted) {
 			rec.notPostedAlerted = true;
 			await escalate(
@@ -291,8 +354,15 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 		if (!timeLeft()) break;
 		const age = now.getTime() - new Date(rec.postedAt!).getTime();
 		if (age < 24 * HOUR || (rec.views24h !== null && age < 48 * HOUR)) continue;
-		const post = (await userbot.recentPosts(rec.username, 40)).find((p) => p.id === rec.postId);
-		const views = post?.views ?? 0;
+		attempted.add(rec.username);
+		let posts: Awaited<ReturnType<UserbotPort['recentPosts']>>;
+		try {
+			posts = await userbot.recentPosts(rec.username, 40);
+		} catch (error) {
+			await failed(rec, 'count views', error);
+			continue;
+		}
+		const views = posts.find((p) => p.id === rec.postId)?.views ?? 0;
 		if (rec.views24h === null) {
 			rec.views24h = views;
 		} else {
@@ -325,12 +395,35 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 		let inspected = 0;
 		for (const keyword of [...new Set(keywords)]) {
 			if (!timeLeft() || inspected >= 12) break;
-			for (const found of await userbot.searchChannels(keyword)) {
+			let results: Awaited<ReturnType<UserbotPort['searchChannels']>> = [];
+			try {
+				results = await userbot.searchChannels(keyword);
+			} catch (error) {
+				if (error instanceof TelegramSlowDown) throw error;
+				await store.logAction('search_error', keyword, {
+					message: error instanceof Error ? error.message.slice(0, 120) : 'failed'
+				});
+			}
+			for (const found of results) {
 				if (!timeLeft() || inspected >= 12) break;
 				const username = normalizeUsername(found.username);
 				if (byName.has(username)) continue;
 				inspected += 1;
-				const info = await userbot.channelInfo(username);
+				let info: Awaited<ReturnType<UserbotPort['channelInfo']>>;
+				try {
+					info = await userbot.channelInfo(username);
+				} catch (error) {
+					if (error instanceof TelegramSlowDown) throw error;
+					const rec = newChannelRecord({
+						username,
+						title: found.title,
+						keyword,
+						status: 'skipped'
+					});
+					await store.saveChannel(rec, 'skipped: could not read the channel');
+					byName.set(username, rec);
+					continue;
+				}
 				const avgViews = typicalViews(info.posts);
 				const lastPostAt = info.posts[0]?.date ?? null;
 				const rec = newChannelRecord({
@@ -384,7 +477,15 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 		.sort((a, b) => b.nigeria - a.nigeria || b.avgViews - a.avgViews);
 	for (const rec of queue) {
 		if (!timeLeft() || state.outreachCount >= settings.dailyNewContacts || remaining < 500) break;
-		if (await send(rec, autopilotCopy.intro(rec.title))) {
+		attempted.add(rec.username);
+		let introduced = false;
+		try {
+			introduced = await send(rec, autopilotCopy.intro(rec.title));
+		} catch (error) {
+			await failed(rec, 'intro', error);
+			continue;
+		}
+		if (introduced) {
 			rec.status = 'contacted';
 			rec.contactedAt = now.toISOString();
 			state.outreachCount += 1;
@@ -414,6 +515,15 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 			].join('\n')
 		);
 		state.lastReportDay = today;
+	}
+
+	// Channels whose Telegram calls all worked this run start counting errors afresh.
+	for (const username of attempted) {
+		const rec = byName.get(username);
+		if (rec && rec.errorCount > 0 && !erroredNow.has(username)) {
+			rec.errorCount = 0;
+			await store.saveChannel(rec);
+		}
 	}
 
 	state.lastRunAt = now.toISOString();

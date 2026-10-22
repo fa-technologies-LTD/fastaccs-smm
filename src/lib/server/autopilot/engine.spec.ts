@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BotButton } from './bot';
 import { runAutopilotOnce, type EngineDeps } from './engine';
+import { TelegramSlowDown } from './errors';
 import { AUTOPILOT_DEFAULTS, type AutopilotSettings } from './settings';
 import { newChannelRecord, type ChannelRecord, type RunState } from './state';
 import type { ChannelPost, UserbotPort } from './userbot';
@@ -284,5 +285,94 @@ describe('outreach and discovery', () => {
 		]);
 		await runAutopilotOnce(t.deps);
 		expect(t.saved.get('airdrop_naija')!.status).toBe('no_reply');
+	});
+});
+
+describe('one broken channel never stops the rest', () => {
+	it('a deleted channel is set aside after three failed runs; others keep going', async () => {
+		const userbot = fakeUserbot();
+		userbot.bot.incomingFrom = vi.fn(async (username: string) => {
+			if (username === 'gone_admin') throw new Error('USERNAME_NOT_OCCUPIED');
+			return username === 'promo_boss' ? [{ id: 5, text: 'Promo is 3k', views: 0, date: NOW }] : [];
+		});
+		const broken = contacted({ username: 'gone_channel', contact: 'gone_admin' });
+		const t = setup([broken, contacted()], {}, userbot);
+		await runAutopilotOnce(t.deps);
+		expect(t.saved.get('airdrop_naija')!.status).toBe('agreed');
+		expect(t.saved.get('gone_channel')!.errorCount).toBe(1);
+		expect(t.saved.get('gone_channel')!.status).toBe('contacted');
+		await runAutopilotOnce(t.deps);
+		await runAutopilotOnce(t.deps);
+		expect(t.saved.get('gone_channel')!.status).toBe('skipped');
+		expect(t.actions.filter((a) => a === 'channel_error')).toHaveLength(3);
+	});
+
+	it('a paid channel that keeps failing goes to the owner instead of being dropped', async () => {
+		const userbot = fakeUserbot({
+			recentPosts: vi.fn(async () => {
+				throw new Error('CHANNEL_PRIVATE');
+			})
+		});
+		const paidAt = new Date(NOW.getTime() - 2 * HOUR).toISOString();
+		const t = setup([contacted({ status: 'paid', agreedNgn: 3_000, paidAt })], {}, userbot);
+		for (let i = 0; i < 3; i += 1) await runAutopilotOnce(t.deps);
+		const rec = t.saved.get('airdrop_naija')!;
+		expect(rec.status).toBe('paid');
+		expect(rec.waitingOwner).toBe(true);
+		expect(t.owner.at(-1)?.text).toContain('Telegram keeps failing');
+	});
+
+	it('a failed answer leaves the deal as it was, to retry next run', async () => {
+		const userbot = fakeUserbot();
+		userbot.bot.sendMessage = vi.fn(async () => {
+			throw new Error('USER_IS_BLOCKED');
+		});
+		const t = setup([contacted()], {}, userbot);
+		userbot.reply('promo_boss', 5, 'Promo is 3k');
+		await runAutopilotOnce(t.deps);
+		const rec = t.saved.get('airdrop_naija')!;
+		expect(rec.status).toBe('contacted');
+		expect(rec.lastInboundId).toBe(0);
+		expect(rec.errorCount).toBe(1);
+	});
+
+	it('an unreadable channel found in search is skipped, the search carries on', async () => {
+		const posts = Array.from({ length: 12 }, (_, i) => ({
+			id: i + 1,
+			views: 1_200,
+			date: new Date(NOW.getTime() - (i + 1) * HOUR),
+			text: 'post'
+		}));
+		const userbot = fakeUserbot({
+			searchChannels: vi.fn(async () => [
+				{ username: 'private_one', title: 'Private', id: '1' },
+				{ username: 'good_one', title: 'Naija Airdrops', id: '2' }
+			]),
+			channelInfo: vi.fn(async (username: string) => {
+				if (username === 'private_one') throw new Error('CHANNEL_PRIVATE');
+				return { about: 'ads: @ads_guy', members: 6_000, posts };
+			})
+		});
+		const t = setup([], { testMode: true, testContacts: [] }, userbot);
+		t.state = { ...t.state, lastDiscoveryDay: null };
+		const summary = await runAutopilotOnce(t.deps);
+		expect(t.saved.get('private_one')!.status).toBe('skipped');
+		expect(summary.discovered).toBe(1);
+	});
+
+	it('a clean run clears the error count', async () => {
+		const t = setup([contacted({ errorCount: 2 })]);
+		await runAutopilotOnce(t.deps);
+		expect(t.saved.get('airdrop_naija')!.errorCount).toBe(0);
+	});
+
+	it('"slow down" from Telegram stops the whole run', async () => {
+		const userbot = fakeUserbot({
+			incomingFrom: vi.fn(async () => {
+				throw new TelegramSlowDown(600);
+			})
+		});
+		const t = setup([contacted()], {}, userbot);
+		await expect(runAutopilotOnce(t.deps)).rejects.toBeInstanceOf(TelegramSlowDown);
 	});
 });

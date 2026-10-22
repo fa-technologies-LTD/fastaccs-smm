@@ -81,6 +81,8 @@ export interface ChannelRecord {
 	/** Added by the owner (skips the discovery checks). */
 	manual: boolean;
 	notPostedAlerted: boolean;
+	/** Telegram errors in a row for this channel (deleted, renamed, blocked us...). */
+	errorCount: number;
 	log: string[];
 	discoveredAt: string;
 	updatedAt: string;
@@ -165,6 +167,7 @@ export function newChannelRecord(
 		waitingOwner: false,
 		manual: false,
 		notPostedAlerted: false,
+		errorCount: 0,
 		log: [],
 		discoveredAt: now,
 		updatedAt: now,
