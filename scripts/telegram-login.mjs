@@ -10,7 +10,7 @@
  * session text: paste that into Vercel as TELEGRAM_SESSION. Anyone holding it can use the
  * account, so keep it as secret as a password. Nothing is saved to disk.
  */
-import { createInterface } from 'node:readline/promises';
+import { createInterface } from 'node:readline';
 import { stdin, stdout } from 'node:process';
 import telegram from 'telegram';
 import loggerModule from 'telegram/extensions/Logger.js';
@@ -19,7 +19,21 @@ const { TelegramClient, sessions } = telegram;
 const { LogLevel } = loggerModule;
 
 const rl = createInterface({ input: stdin, output: stdout });
-const ask = async (question) => (await rl.question(question)).trim();
+// Answers are queued line by line (no readline/promises), so this runs on older Node versions
+// and nothing is lost if several lines are pasted at once.
+const queued = [];
+const waiting = [];
+rl.on('line', (line) => {
+	const next = waiting.shift();
+	if (next) next(line.trim());
+	else queued.push(line.trim());
+});
+const ask = (question) => {
+	stdout.write(question);
+	return queued.length
+		? Promise.resolve(queued.shift())
+		: new Promise((resolve) => waiting.push(resolve));
+};
 
 const apiId = Number(process.env.TELEGRAM_API_ID || (await ask('api_id (numbers only): ')));
 const apiHash = process.env.TELEGRAM_API_HASH || (await ask('api_hash: '));
