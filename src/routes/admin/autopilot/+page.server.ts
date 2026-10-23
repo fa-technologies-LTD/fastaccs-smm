@@ -4,7 +4,13 @@ import { randomBytes } from 'node:crypto';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { isOwnerAdmin } from '$lib/auth/owner';
 import { prisma } from '$lib/prisma';
-import { botConfigured, botSetWebhook, botUsername } from '$lib/server/autopilot/bot';
+import {
+	botConfigured,
+	botSetWebhook,
+	botUsername,
+	botWebhookInfo,
+	type WebhookHealth
+} from '$lib/server/autopilot/bot';
 import { committedSpend } from '$lib/server/autopilot/engine';
 import { botWebhookSecret } from '$lib/server/autopilot/job';
 import { claudeConfigured } from '$lib/server/autopilot/llm';
@@ -40,8 +46,29 @@ const STATUS_ORDER = [
 	'skipped'
 ];
 
+const WEBHOOK_URL = `${SITE_URL}/api/telegram/bot`;
+
+async function bindLinkFor(code: string | null): Promise<string | null> {
+	if (!code || !botConfigured()) return null;
+	const username = await botUsername().catch(() => null);
+	return username ? `https://t.me/${username}?start=${code}` : null;
+}
+
+/** Can Telegram reach the site? (Telegram's own delivery report.) */
+async function webhookStatus(): Promise<
+	(WebhookHealth & { pointsHere: boolean; recentError: boolean }) | null
+> {
+	if (!botConfigured()) return null;
+	const info = await botWebhookInfo().catch(() => null);
+	if (!info) return null;
+	const recent =
+		Boolean(info.lastErrorAt) && Date.now() - new Date(info.lastErrorAt!).getTime() < 3_600_000;
+	return { ...info, pointsHere: info.url === WEBHOOK_URL, recentError: recent };
+}
+
 export const load: PageServerLoad = async ({ locals }) => {
 	if (!hasAdminPermission(locals.adminContext, 'admin:revenue:view')) throw error(403, 'Forbidden');
+	const isOwner = isOwnerAdmin(locals.user, locals.adminContext);
 	const [settings, state, channels, actions] = await Promise.all([
 		getAutopilotSettings(),
 		getRunState(),
@@ -57,8 +84,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 		.filter((r) => ['paid', 'posted', 'done'].includes(r.status))
 		.reduce((sum, r) => sum + (r.agreedNgn ?? 0), 0);
 	return {
-		isOwner: isOwnerAdmin(locals.user, locals.adminContext),
+		isOwner,
 		settings: { ...settings, bindCode: null },
+		// Until the owner's chat is connected, keep showing their link (owner only).
+		bindLink: isOwner && !settings.ownerChatId ? await bindLinkFor(settings.bindCode) : null,
+		webhook: isOwner ? await webhookStatus() : null,
 		ready: {
 			bot: botConfigured(),
 			telegramAccount: userbotConfigured(),
@@ -169,14 +199,17 @@ export const actions: Actions = {
 		if (!botConfigured() || !secret)
 			return fail(400, { error: 'Add TELEGRAM_BOT_TOKEN in Vercel first.' });
 		// Telegram can only reach the live site, so the webhook always points there.
-		await botSetWebhook(`${SITE_URL}/api/telegram/bot`, secret);
+		await botSetWebhook(WEBHOOK_URL, secret);
 		const s = await getAutopilotSettings();
-		const bindCode = randomBytes(9).toString('base64url');
-		await saveAutopilotSettings({ ...s, bindCode });
-		const username = await botUsername();
+		// Pressing again keeps the same link until it's used (an older link must keep working).
+		const bindCode =
+			s.bindCode && !s.ownerChatId ? s.bindCode : randomBytes(9).toString('base64url');
+		if (bindCode !== s.bindCode) await saveAutopilotSettings({ ...s, bindCode });
 		return {
-			message: 'Bot connected to the site. Open the link below on your phone and press Start.',
-			bindLink: `https://t.me/${username}?start=${bindCode}`
+			message: s.ownerChatId
+				? 'Bot reconnected. To move approvals to a different chat, open the link below there and press Start.'
+				: 'Bot connected to the site. Open the link below on your phone and press Start.',
+			bindLink: await bindLinkFor(bindCode)
 		};
 	},
 

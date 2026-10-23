@@ -41,6 +41,9 @@
 	const primary = (disabled: boolean) =>
 		`background: var(--btn-primary-gradient); color: #04140C; opacity: ${disabled ? 0.5 : 1};`;
 
+	const bindLink = $derived((form && 'bindLink' in form && form.bindLink) || data.bindLink);
+	const bindCode = $derived(bindLink ? (bindLink.split('start=')[1] ?? '') : '');
+
 	const readiness = $derived([
 		{ ok: data.ready.bot, label: 'Bot token (TELEGRAM_BOT_TOKEN)' },
 		{
@@ -80,14 +83,32 @@
 			style="border: 1px solid var(--primary); color: var(--text);"
 		>
 			<p>{form.message}</p>
-			{#if form && 'bindLink' in form && form.bindLink}
-				<a
-					href={form.bindLink}
-					target="_blank"
-					rel="noreferrer"
-					class="mt-2 inline-block font-semibold underline">{form.bindLink}</a
-				>
-			{/if}
+		</div>
+	{/if}
+
+	{#if bindLink}
+		<div
+			class="rounded-lg p-4 text-sm"
+			style="border: 1px solid var(--primary); color: var(--text);"
+		>
+			<p class="font-semibold">Connect your chat to the bot</p>
+			<ol class="mt-2 list-decimal space-y-1 pl-5">
+				<li>
+					On your phone, open
+					<a href={bindLink} target="_blank" rel="noreferrer" class="font-semibold underline"
+						>{bindLink}</a
+					>
+					and press <strong>Start</strong>.
+				</li>
+				<li>The bot replies “✅ Connected”. Then refresh this page.</li>
+				<li>
+					No reply? In the bot chat, send exactly:
+					<code class="rounded px-1" style="background: var(--bg-elev-2);">/start {bindCode}</code>
+				</li>
+			</ol>
+			<p class="mt-2 text-xs" style="color: var(--text-muted);">
+				This link stays the same until it's used, so pressing Connect bot again is safe.
+			</p>
 		</div>
 	{/if}
 
@@ -145,6 +166,19 @@
 				{#each readiness as item (item.label)}
 					<li>{item.ok ? '✅' : '⬜'} {item.label}</li>
 				{/each}
+				{#if data.webhook}
+					{#if !data.webhook.pointsHere}
+						<li>⬜ Telegram is not sending the bot's messages here yet: press Connect bot</li>
+					{:else if data.webhook.recentError}
+						<li style="color: var(--danger, #e5484d);">
+							⚠ Telegram can't reach the site: {data.webhook.lastError} ({when(
+								data.webhook.lastErrorAt
+							)})
+						</li>
+					{:else}
+						<li>✅ Telegram can reach the site</li>
+					{/if}
+				{/if}
 			</ul>
 			<p class="mt-2 text-xs" style="color: var(--text-muted);">
 				Secrets go in Vercel → Project → Settings → Environment Variables. They are never shown

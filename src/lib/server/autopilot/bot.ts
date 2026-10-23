@@ -80,3 +80,26 @@ export async function botSetWebhook(url: string, secret: string): Promise<void> 
 		drop_pending_updates: true
 	});
 }
+
+export interface WebhookHealth {
+	url: string;
+	pendingUpdates: number;
+	lastErrorAt: string | null;
+	lastError: string | null;
+}
+
+/** What Telegram says about delivering updates to our webhook (shown on the admin page). */
+export async function botWebhookInfo(): Promise<WebhookHealth> {
+	const info = await call<{
+		url?: string;
+		pending_update_count?: number;
+		last_error_date?: number;
+		last_error_message?: string;
+	}>('getWebhookInfo', {});
+	return {
+		url: info.url ?? '',
+		pendingUpdates: info.pending_update_count ?? 0,
+		lastErrorAt: info.last_error_date ? new Date(info.last_error_date * 1000).toISOString() : null,
+		lastError: info.last_error_message ?? null
+	};
+}

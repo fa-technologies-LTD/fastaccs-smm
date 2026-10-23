@@ -79,6 +79,21 @@ describe('connecting the owner', () => {
 		expect(t.settings.bindCode).toBeNull();
 	});
 
+	it('explains an out-of-date link while nobody is connected', async () => {
+		const t = setup({ ownerChatId: null, bindCode: 'current' });
+		await handleOwnerUpdate(say('/start oldcode', '42'), t.deps);
+		expect(t.settings.ownerChatId).toBeNull();
+		expect(t.sent[0].text).toContain('out of date');
+	});
+
+	it('once connected, a stranger’s /start gets silence and the owner is told they are connected', async () => {
+		const t = setup();
+		await handleOwnerUpdate(say('/start whatever', '999'), t.deps);
+		expect(t.sent).toHaveLength(0);
+		await handleOwnerUpdate(say('/start'), t.deps);
+		expect(t.sent[0].text).toContain('already connected');
+	});
+
 	it('ignores everyone else', async () => {
 		const t = setup({ enabled: true });
 		await handleOwnerUpdate(say('/pause', '999'), t.deps);

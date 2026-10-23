@@ -68,9 +68,22 @@ export async function handleOwnerUpdate(update: TelegramUpdate, deps: OwnerDeps)
 			const code = text.split(/\s+/)[1] ?? '';
 			if (settings.bindCode && code === settings.bindCode) {
 				await deps.saveSettings({ ...settings, ownerChatId: chatId, bindCode: null });
-				await deps.send(
+				return deps.send(
 					chatId,
 					"✅ Connected. I'll send your approvals, alerts and the evening report here."
+				);
+			}
+			if (chatId === settings.ownerChatId) {
+				return deps.send(
+					chatId,
+					"✅ You're already connected. Send /status to see how it's going."
+				);
+			}
+			// Nobody connected yet: say why nothing happened (once an owner is connected, strangers get silence).
+			if (!settings.ownerChatId) {
+				return deps.send(
+					chatId,
+					'That link is out of date or incomplete. On the site, open Admin → Telegram autopilot and use the link shown there.'
 				);
 			}
 			return;
