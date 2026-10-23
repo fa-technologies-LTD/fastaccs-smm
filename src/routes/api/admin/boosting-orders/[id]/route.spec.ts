@@ -149,35 +149,14 @@ describe('manual boosting order workflow', () => {
 		expect(mocks.transaction).not.toHaveBeenCalled();
 	});
 
-	it('requests a new link, records the reason, and notifies the buyer atomically', async () => {
+	it('requires the unified support action instead of a legacy link mutation', async () => {
 		const response = await callPatch({
 			status: 'needs_link',
 			reason: 'Please send the public Facebook Page link.'
 		});
-		const body = await response.json();
-
-		expect(response.status).toBe(200);
-		expect(body.success).toBe(true);
-		expect(tx.orderItem.update).toHaveBeenCalledWith(
-			expect.objectContaining({
-				data: expect.objectContaining({ boostFulfillmentStatus: 'needs_link' })
-			})
-		);
-		expect(tx.notification.create).toHaveBeenCalledWith(
-			expect.objectContaining({
-				data: expect.objectContaining({
-					type: 'boosting_link_review',
-					orderId: existing.orderId
-				})
-			})
-		);
-		expect(mocks.recordOrderEvent).toHaveBeenCalledWith(
-			expect.objectContaining({
-				type: 'boosting_link_review_requested',
-				description: 'Please send the public Facebook Page link.'
-			}),
-			tx
-		);
+		expect(response.status).toBe(409);
+		expect((await response.json()).code).toBe('USE_ORDER_RESOLUTION');
+		expect(mocks.transaction).not.toHaveBeenCalled();
 	});
 
 	it('does not request a new link after supplier submission may have started', async () => {
@@ -200,37 +179,20 @@ describe('manual boosting order workflow', () => {
 		expect(tx.orderItem.update).not.toHaveBeenCalled();
 	});
 
-	it('marks an unfulfillable paid boost for review without creating a refund path', async () => {
-		tx.orderItem.findMany.mockResolvedValue([{ boostFulfillmentStatus: 'rejected' }]);
+	it('does not let an old tab reject delivery outside the resolution flow', async () => {
 		const response = await callPatch({
 			status: 'rejected',
 			reason: 'Supplier does not support it.'
 		});
-
-		expect(response.status).toBe(200);
-		expect(tx.order.update).toHaveBeenCalledWith({
-			where: { id: existing.orderId },
-			data: { status: 'paid', deliveryStatus: 'failed', deliveredAt: null }
-		});
-		expect(tx.notification.create).toHaveBeenCalledOnce();
+		expect(response.status).toBe(409);
+		expect((await response.json()).code).toBe('USE_ORDER_RESOLUTION');
+		expect(mocks.transaction).not.toHaveBeenCalled();
 	});
 
-	it('marks the order delivered only when every boosting item is complete', async () => {
-		tx.orderItem.findMany.mockResolvedValue([
-			{ boostFulfillmentStatus: 'completed' },
-			{ boostFulfillmentStatus: 'completed' }
-		]);
+	it('does not let a direct Done flag bypass delivery evidence', async () => {
 		const response = await callPatch({ status: 'completed' });
-
-		expect(response.status).toBe(200);
-		expect(tx.order.update).toHaveBeenCalledWith({
-			where: { id: existing.orderId },
-			data: {
-				status: 'completed',
-				deliveryStatus: 'delivered',
-				deliveredAt: expect.any(Date)
-			}
-		});
-		expect(mocks.notifyCompleted).toHaveBeenCalledWith(existing.orderId);
+		expect(response.status).toBe(409);
+		expect((await response.json()).code).toBe('USE_ORDER_RESOLUTION');
+		expect(mocks.transaction).not.toHaveBeenCalled();
 	});
 });

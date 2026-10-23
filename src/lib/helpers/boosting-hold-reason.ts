@@ -1,4 +1,8 @@
 const reasons: Record<string, string> = {
+	confirmed_non_delivery:
+		'Missing delivery was confirmed. Review the customer’s delivery or refund options.',
+	link_request_withdrawn:
+		'The link request was withdrawn. Choose the appropriate delivery or refund resolution.',
 	admin_link_requested:
 		'The customer has been asked to send a valid link. Delivery is held for support review.',
 	admin_link_reply:

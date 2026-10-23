@@ -1,7 +1,8 @@
 export const BOOST_SUPPORT_EVENT_TYPES = [
 	'boosting_support_requested',
 	'boosting_support_replied',
-	'boosting_support_resolved'
+	'boosting_support_resolved',
+	'boosting_support_withdrawn'
 ] as const;
 
 export interface BoostSupportEvent {
@@ -56,6 +57,11 @@ export function getBoostSupportState(events: BoostSupportEvent[]): BoostSupportS
 			if (!link || !/^https:\/\//i.test(link)) continue;
 			state.state = 'reply_received';
 			state.reply = { link, note: text(event.description, 500) };
+		} else if (event.type === 'boosting_support_withdrawn') {
+			state.state = 'none';
+			state.requestId = null;
+			state.message = text(event.description, 500);
+			state.reply = null;
 		} else {
 			state.state = 'resolved';
 			state.requestId = null;
@@ -70,6 +76,8 @@ export function getBoostSupportState(events: BoostSupportEvent[]): BoostSupportS
 
 /** A support deadline is not evidence that delivery is still running. */
 export function boostReviewNotice(reason: string | null | undefined): string {
+	if (reason === 'confirmed_non_delivery')
+		return 'Missing delivery was confirmed. Review delivery evidence or refund options.';
 	if (reason === 'provider_cancelled' || reason === 'provider_refunded')
 		return 'Supplier reported cancellation. Review delivery and the customer’s payment before resolving.';
 	if (reason === 'provider_failed')

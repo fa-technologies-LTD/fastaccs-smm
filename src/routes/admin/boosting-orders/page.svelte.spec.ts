@@ -42,6 +42,30 @@ const fixture = () => ({
 	analytics,
 	canViewRevenue: true
 });
+
+const compactItem = (id: string, status = 'under_review') => ({
+	id,
+	productName: 'Instagram Followers',
+	boostTargetUrl: 'https://instagram.com/example',
+	boostQuantity: 500,
+	boostFulfillmentStatus: status,
+	boostProviderReference: 'SUPPLIER-PRIVATE-REFERENCE',
+	createdAt: '2026-10-22T12:00:00Z',
+	complaints: [],
+	latestIssue: null,
+	shadowDecision: null,
+	fulfillmentState: { status: 'manual_review', mode: 'live' },
+	holdReasons: ['Check the customer’s delivery evidence.'],
+	category: { metadata: {} },
+	order: {
+		id: `order-${id}`,
+		orderNumber: `DEMO-${id}`,
+		createdAt: '2026-10-22T12:00:00Z',
+		paidAt: '2026-10-22T12:01:00Z',
+		user: { fullName: 'Example customer', email: null },
+		guestEmail: null
+	}
+});
 beforeEach(async () => {
 	await page.viewport(1360, 900);
 	document.body.style.padding = '24px';
@@ -54,6 +78,127 @@ beforeEach(async () => {
 afterEach(() => {
 	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
+});
+
+it('starts with separated compact previews and only opens one order at a time', async () => {
+	await page.viewport(390, 844);
+	const data = fixture();
+	(data.items as unknown[]) = [compactItem('ONE'), compactItem('TWO'), compactItem('THREE')];
+	(data.meta as Record<string, unknown>) = { ...meta, total: 3, canManageOrders: true };
+	render(Page, { data } as never);
+	expect(page.getByText('Resolve order', { exact: true }).query()).toBeNull();
+	expect(page.getByText('SUPPLIER-PRIVATE-REFERENCE', { exact: true }).query()).toBeNull();
+	const cards = [...document.querySelectorAll('.review-order')];
+	expect(cards).toHaveLength(3);
+	const first = cards[0].getBoundingClientRect(),
+		second = cards[1].getBoundingClientRect();
+	expect(first.height).toBeLessThan(210);
+	expect(second.top - first.bottom).toBeGreaterThanOrEqual(19);
+	await page
+		.getByRole('button', { name: 'Open Instagram Followers · DEMO-ONE', exact: true })
+		.click();
+	await expect.element(page.getByText('Resolve order', { exact: true })).toBeVisible();
+	await page
+		.getByRole('button', { name: 'Open Instagram Followers · DEMO-TWO', exact: true })
+		.click();
+	expect(
+		page
+			.getByRole('button', { name: 'Open Instagram Followers · DEMO-ONE', exact: true })
+			.element()
+			.getAttribute('aria-expanded')
+	).toBe('false');
+	expect(document.querySelectorAll('.order-detail')).toHaveLength(1);
+	expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+});
+
+it('keeps link requests clear without repeated overdue warnings or completion buttons', async () => {
+	const item = {
+		...compactItem('LINK', 'needs_link'),
+		overdueReview: true,
+		support: {
+			revision: 'requested',
+			state: 'awaiting_customer',
+			requestId: 'requested',
+			message: 'Please send a valid public link.',
+			updatedAt: null,
+			reply: null
+		}
+	};
+	render(Page, {
+		data: { ...fixture(), items: [item], meta: { ...meta, total: 1, canManageOrders: true } }
+	} as never);
+	await expect.element(page.getByText('Waiting for link', { exact: true })).toBeVisible();
+	await page
+		.getByRole('button', { name: 'Open Instagram Followers · DEMO-LINK', exact: true })
+		.click();
+	await expect
+		.element(page.getByText('Waiting for the customer’s link', { exact: true }))
+		.toBeVisible();
+	expect(page.getByRole('region', { name: 'Why this order needs review' }).query()).toBeNull();
+	expect(page.getByText(/24-hour review due/).query()).toBeNull();
+	await page.getByText('Change resolution', { exact: true }).click();
+	expect(page.getByRole('button', { name: 'Mark completed', exact: true }).query()).toBeNull();
+});
+
+it('does not label an unresolved held delivery completed just because its item label is stale', async () => {
+	render(Page, { data: { ...fixture(), items: [compactItem('STALE', 'completed')] } } as never);
+	const card = page.getByRole('article', { name: 'Instagram Followers · DEMO-STALE', exact: true });
+	await expect.element(card).toHaveTextContent('Needs review');
+	expect(card.element().textContent).not.toContain('Completed');
+});
+
+it('keeps every status and the search/sort tools available on mobile', async () => {
+	await page.viewport(390, 844);
+	render(Page, { data: fixture() } as never);
+	await page
+		.getByRole('combobox', { name: 'Order status', exact: true })
+		.selectOptions('in_progress');
+	await expect.poll(() => vi.mocked(fetch).mock.calls.length).toBe(1);
+	expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain('status=in_progress');
+	await page.getByText('Search & sort', { exact: true }).click();
+	await expect
+		.element(page.getByRole('textbox', { name: 'Search orders', exact: true }))
+		.toBeVisible();
+	await expect
+		.element(page.getByRole('combobox', { name: 'Order sort', exact: true }))
+		.toBeVisible();
+});
+
+it('does not submit completion twice if the real list refresh fails after saving', async () => {
+	let listFails = true;
+	const mock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+		if (init?.method === 'POST') return Response.json({ success: true });
+		if (String(input).includes('/analytics'))
+			return Response.json({ success: true, data: analytics });
+		return listFails
+			? Response.json({ success: false, error: 'List unavailable' }, { status: 503 })
+			: Response.json({ success: true, data: [], meta });
+	});
+	vi.stubGlobal('fetch', mock);
+	render(Page, {
+		data: {
+			...fixture(),
+			items: [compactItem('REFRESH')],
+			meta: { ...meta, total: 1, canManageOrders: true }
+		}
+	} as never);
+	await page
+		.getByRole('button', { name: 'Open Instagram Followers · DEMO-REFRESH', exact: true })
+		.click();
+	await page.getByText('Resolve order', { exact: true }).click();
+	await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
+	await page
+		.getByRole('textbox', { name: /What delivery evidence/ })
+		.fill('Customer confirmed receipt; checked manually.');
+	await page.getByRole('checkbox').click();
+	await page.getByRole('button', { name: 'Confirm completion', exact: true }).click();
+	await expect.element(page.getByRole('alert')).toHaveTextContent('Your update was saved');
+	listFails = false;
+	await page.getByRole('button', { name: 'Refresh review', exact: true }).click();
+	await expect
+		.element(page.getByText('Nothing needs attention here.', { exact: true }))
+		.toBeVisible();
+	expect(mock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
 });
 
 it('uses the same item unit for all status counts, even when orders contain multiple items', async () => {
@@ -70,6 +215,7 @@ it('uses the same item unit for all status counts, even when orders contain mult
 });
 it('makes incomplete cost coverage explicit instead of calling unknown costs free', async () => {
 	render(Page, { data: fixture() } as never);
+	await page.getByText('Reports & analytics', { exact: true }).click();
 	await page.getByText('By service · last 30 days', { exact: true }).click();
 	await expect.element(page.getByText(/Costs recorded for 1 of 53 items/)).toBeVisible();
 	await expect.element(page.getByText(/Unknown costs aren’t treated as free/)).toBeVisible();
@@ -81,6 +227,7 @@ it('explains payment fees even when supplier cost coverage is complete', async (
 		overall: { ...analytics.overall, knownCostItems: analytics.overall.items }
 	};
 	render(Page, { data } as never);
+	await page.getByText('Reports & analytics', { exact: true }).click();
 	await expect
 		.element(
 			page.getByText(
@@ -105,6 +252,7 @@ it('refreshes analytics and the order queue together from their real endpoint co
 		)
 	);
 	render(Page, { data: fixture() } as never);
+	await page.getByText('Reports & analytics', { exact: true }).click();
 	await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 	await expect.element(page.getByText('46', { exact: true })).toBeVisible();
 	await expect.element(page.getByRole('button', { name: 'All 54', exact: true })).toBeVisible();
@@ -120,6 +268,7 @@ it('labels cached reporting when analytics fails without replacing it with fake 
 		)
 	);
 	render(Page, { data: fixture() } as never);
+	await page.getByText('Reports & analytics', { exact: true }).click();
 	await page.getByRole('button', { name: 'Refresh', exact: true }).click();
 	await expect
 		.element(
@@ -167,13 +316,10 @@ it('shows purchased refill protection and supplier progress without manual compl
 		}
 	];
 	render(Page, { data } as never);
-	await expect
-		.element(
-			page.getByText(
-				'24-hour review due. Check the latest delivery evidence; elapsed time alone does not confirm failure.'
-			)
-		)
-		.toBeVisible();
+	await page
+		.getByRole('button', { name: 'Open Instagram Followers · FA-TEST', exact: true })
+		.click();
+	expect(page.getByText(/24-hour review due/).query()).toBeNull();
 	await expect.element(page.getByText('7-day refill', { exact: true })).toBeVisible();
 	await expect
 		.element(page.getByRole('region', { name: 'Why this order needs review' }))
@@ -184,6 +330,7 @@ it('shows purchased refill protection and supplier progress without manual compl
 });
 it('does not render revenue cards for restricted admins', async () => {
 	render(Page, { data: { ...fixture(), canViewRevenue: false } } as never);
+	await page.getByText('Reports & analytics', { exact: true }).click();
 	expect(page.getByText('Net sales', { exact: true }).query()).toBeNull();
 	expect(page.getByText('Recorded margin', { exact: true }).query()).toBeNull();
 	await expect.element(page.getByText('Boosting items', { exact: true })).toBeVisible();
@@ -192,7 +339,7 @@ it('fits a mobile viewport without horizontal page scrolling', async () => {
 	await page.viewport(390, 844);
 	render(Page, { data: fixture() } as never);
 	await expect
-		.element(page.getByRole('heading', { name: 'Boosting — Orders & Analytics' }))
+		.element(page.getByRole('heading', { name: 'Boosting orders', exact: true }))
 		.toBeVisible();
 	expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
 	await page.screenshot({ path: '__screenshots__/mobile.png' });
@@ -278,10 +425,14 @@ it.each(['manual_review', 'completed'])(
 		});
 		vi.stubGlobal('fetch', mock);
 		render(Page, { data: { ...fixture(), meta: listMeta(), items: [held] } } as never);
+		await page
+			.getByRole('button', { name: 'Open Instagram Followers · DEMO-MANUALLY-SORTED', exact: true })
+			.click();
 		if (fulfillmentStatus === 'completed')
 			expect(
 				page.getByRole('button', { name: 'Request valid link', exact: true }).query()
 			).toBeNull();
+		await page.getByText('Resolve order', { exact: true }).click();
 		await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
 		await page
 			.getByRole('textbox', { name: /What delivery evidence/ })
@@ -296,6 +447,9 @@ it.each(['manual_review', 'completed'])(
 			.toBeVisible();
 		expect(mock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
 		await page.getByRole('button', { name: 'Completed 1', exact: true }).click();
+		await page
+			.getByRole('button', { name: 'Open Instagram Followers · DEMO-MANUALLY-SORTED', exact: true })
+			.click();
 		await expect
 			.element(page.getByText('Review resolved by support', { exact: true }))
 			.toBeVisible();

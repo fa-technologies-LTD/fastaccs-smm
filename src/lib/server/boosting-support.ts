@@ -8,6 +8,7 @@ import {
 	type BoostingPlatform
 } from '$lib/helpers/social-link-validator';
 import { getBoostingServiceConfig } from '$lib/helpers/boosting-service-config';
+import { boostOrderWorkflow } from '$lib/helpers/boosting-order-workflow';
 
 export class BoostSupportError extends Error {
 	constructor(
@@ -44,10 +45,17 @@ export async function applyBoostSupportAction(
 		actorId: string;
 		operationId: string;
 		expectedRevision: string | null;
-		action: 'request_link' | 'message' | 'confirm_delivery' | 'reply';
+		action:
+			| 'request_link'
+			| 'message'
+			| 'confirm_delivery'
+			| 'reply'
+			| 'confirm_failure'
+			| 'withdraw_link';
 		message: string;
 		confirmed?: boolean;
 		evidence?: string;
+		quantity?: number;
 		orderId?: string;
 		requestId?: string;
 		link?: string;
@@ -63,7 +71,11 @@ export async function applyBoostSupportAction(
 	await tx.$queryRaw`SELECT id FROM boost_fulfillments WHERE order_item_id=${input.itemId}::uuid FOR UPDATE`;
 	const item = await tx.orderItem.findUnique({
 		where: { id: input.itemId },
-		include: { order: true, boostFulfillment: true, category: { select: { metadata: true } } }
+		include: {
+			order: true,
+			boostFulfillment: true,
+			category: { select: { metadata: true } }
+		}
 	});
 	if (!item?.boostTargetUrl) throw new BoostSupportError('Boosting order item not found.', 404);
 	if (item.orderId !== preflight.orderId)
@@ -83,7 +95,8 @@ export async function applyBoostSupportAction(
 				input.evidence ?? null,
 				input.confirmed === true,
 				input.requestId ?? null,
-				input.link ?? null
+				input.link ?? null,
+				...(input.action === 'confirm_failure' ? [input.quantity ?? null] : [])
 			])
 		)
 		.digest('hex');
@@ -110,6 +123,35 @@ export async function applyBoostSupportAction(
 	if (support.revision !== input.expectedRevision)
 		throw new BoostSupportError('This review changed. Refresh before sending another update.');
 	const fulfillment = item.boostFulfillment;
+	const workflow = boostOrderWorkflow({
+		support,
+		held: fulfillment
+			? ['manual_review', 'completed'].includes(fulfillment.status)
+			: item.boostFulfillmentStatus !== 'completed' || item.order.deliveryStatus !== 'delivered',
+		status: item.boostFulfillmentStatus ?? undefined,
+		refunded: Number(item.refundedAmount) > 0
+	});
+	if (input.action === 'confirm_delivery' && !workflow.canConfirmDelivery)
+		throw new BoostSupportError(
+			Number(item.refundedAmount) > 0
+				? 'This item has a refund recorded. Review its accounting before resolving.'
+				: support.state === 'awaiting_customer'
+					? 'This order is waiting for a link. Withdraw that request before recording a different resolution.'
+					: 'This delivery is not ready for manual completion.'
+		);
+	if (input.action === 'request_link' && !workflow.canRequestLink)
+		throw new BoostSupportError(
+			fulfillment &&
+			['queued', 'submitted', 'in_progress', 'submission_unknown'].includes(fulfillment.status)
+				? 'A supplier submission is active or uncertain. Send a customer update instead.'
+				: 'A link request is already active. Review that step first.'
+		);
+	if (input.action === 'confirm_failure' && !workflow.canConfirmFailure)
+		throw new BoostSupportError(
+			'This order already has a link request or resolution. Review that step first.'
+		);
+	if (input.action === 'withdraw_link' && !workflow.canWithdrawLink)
+		throw new BoostSupportError('There is no waiting link request that can be withdrawn.');
 	const now = new Date(
 		Math.max(Date.now(), support.updatedAt ? Date.parse(support.updatedAt) + 1 : 0)
 	);
@@ -119,7 +161,14 @@ export async function applyBoostSupportAction(
 			Boolean(
 				fulfillment.leaseToken && fulfillment.leaseExpiresAt && fulfillment.leaseExpiresAt > now
 			));
-	if (input.action !== 'message' && busy)
+	if (
+		input.action === 'confirm_failure' &&
+		fulfillment?.leaseToken &&
+		fulfillment.leaseExpiresAt &&
+		fulfillment.leaseExpiresAt > now
+	)
+		throw new BoostSupportError('A delivery check is running. Refresh before recording failure.');
+	if (!['message', 'confirm_failure'].includes(input.action) && busy)
 		throw new BoostSupportError(
 			'A supplier submission is active or uncertain. Send a customer update instead; do not replace its link or close delivery yet.'
 		);
@@ -133,7 +182,48 @@ export async function applyBoostSupportAction(
 		throw new BoostSupportError(
 			'The recorded supplier result is not final. Review it before requesting a different link or closing delivery.'
 		);
-	if (input.action === 'confirm_delivery') {
+	if (input.action === 'confirm_failure') {
+		if (
+			!fulfillment ||
+			!input.confirmed ||
+			!input.evidence ||
+			input.evidence.trim().length < 10 ||
+			input.evidence.length > 1000 ||
+			!Number.isSafeInteger(input.quantity) ||
+			input.quantity! < 1 ||
+			input.quantity! > fulfillment.quantity
+		)
+			throw new BoostSupportError(
+				'Confirm missing delivery, record the evidence (10–1,000 characters) and enter the missing quantity.',
+				400
+			);
+		await tx.boostFulfillment.update({
+			where: { id: fulfillment.id },
+			data: {
+				status: 'manual_review',
+				customerStatus: 'under_review',
+				lastSafeErrorCategory: 'confirmed_non_delivery',
+				nextActionAt: null
+			}
+		});
+		await tx.orderItem.update({
+			where: { id: item.id },
+			data: { boostFulfillmentStatus: 'under_review' }
+		});
+		await tx.order.update({
+			where: { id: item.orderId },
+			data: { status: 'paid', deliveryStatus: 'processing', deliveredAt: null }
+		});
+	} else if (input.action === 'withdraw_link') {
+		await tx.orderItem.update({
+			where: { id: item.id },
+			data: { boostFulfillmentStatus: 'under_review' }
+		});
+		await tx.boostFulfillment.updateMany({
+			where: { orderItemId: item.id },
+			data: { lastSafeErrorCategory: 'link_request_withdrawn', nextActionAt: null }
+		});
+	} else if (input.action === 'confirm_delivery') {
 		if (
 			!input.confirmed ||
 			!input.evidence ||
@@ -301,13 +391,17 @@ export async function applyBoostSupportAction(
 			orderItemId: item.id,
 			actorUserId: input.actorId,
 			type:
-				input.action === 'reply'
-					? 'boosting_support_replied'
-					: input.action === 'confirm_delivery'
-						? 'boosting_support_resolved'
-						: input.action === 'message'
-							? 'customer_support_update'
-							: 'boosting_support_requested',
+				input.action === 'withdraw_link'
+					? 'boosting_support_withdrawn'
+					: input.action === 'confirm_failure'
+						? 'boosting_delivery_failure_confirmed'
+						: input.action === 'reply'
+							? 'boosting_support_replied'
+							: input.action === 'confirm_delivery'
+								? 'boosting_support_resolved'
+								: input.action === 'message'
+									? 'customer_support_update'
+									: 'boosting_support_requested',
 			source: input.action === 'reply' ? 'customer.order' : 'admin.boosting_support',
 			description: input.message,
 			idempotencyKey: key,
@@ -323,6 +417,13 @@ export async function applyBoostSupportAction(
 							evidence: input.evidence,
 							previousStatus: item.boostFulfillmentStatus,
 							previousHoldReason: fulfillment?.lastSafeErrorCategory ?? null,
+							previousSupplierStatus: fulfillment?.rawProviderStatus ?? null
+						}
+					: {}),
+				...(input.action === 'confirm_failure'
+					? {
+							evidence: input.evidence,
+							missingQuantity: input.quantity,
 							previousSupplierStatus: fulfillment?.rawProviderStatus ?? null
 						}
 					: {})

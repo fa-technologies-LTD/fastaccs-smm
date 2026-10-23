@@ -1,11 +1,11 @@
 <script lang="ts">
 	import AnalyticsNavigation from '$lib/components/admin/AnalyticsNavigation.svelte';
 	import BoostingOrderSupport from '$lib/components/admin/BoostingOrderSupport.svelte';
+	import ReviewOrderCard from '$lib/components/admin/ReviewOrderCard.svelte';
 	import { boostReviewNotice, type BoostSupportState } from '$lib/helpers/boosting-support';
 	import { untrack } from 'svelte';
 	import {
 		AlertTriangle,
-		Calendar,
 		ChevronLeft,
 		ChevronRight,
 		Copy,
@@ -20,7 +20,6 @@
 	import { getBoostComplaintStatusLabel } from '$lib/helpers/boosting-complaint-progress';
 	import {
 		normalizeBoostItemStatus,
-		canManuallyChangeBoostStatus,
 		type BoostItemStatus
 	} from '$lib/helpers/boosting-admin-status';
 	import type { getBoostingAnalytics } from '$lib/services/boosting-analytics';
@@ -81,6 +80,8 @@
 			refillDays: number | null;
 		} | null;
 		order: {
+			status?: string;
+			deliveryStatus?: string;
 			id: string;
 			orderNumber: string;
 			guestEmail: string | null;
@@ -138,6 +139,7 @@
 	let loading = $state(false);
 	let busyItemId = $state<string | null>(null);
 	let shadowRunning = $state(false);
+	let expandedItemId = $state<string | null>(null);
 
 	const activeCount = $derived(meta.activeCount || 0);
 
@@ -194,7 +196,15 @@
 	}
 
 	function getStatus(item: BoostingOrderItem): ItemStatus {
-		return normalizeBoostItemStatus(item.boostFulfillmentStatus);
+		if (item.support?.state === 'awaiting_customer') return 'needs_link';
+		const status = normalizeBoostItemStatus(item.boostFulfillmentStatus);
+		if (
+			status === 'completed' &&
+			(item.fulfillmentState?.status === 'manual_review' ||
+				item.complaints?.some((complaint) => ['open', 'validated'].includes(complaint.status)))
+		)
+			return 'under_review';
+		return status;
 	}
 
 	function getStatusLabel(status: ItemStatus): string {
@@ -228,6 +238,27 @@
 		return (
 			item.order.user?.fullName || item.order.user?.email || item.order.guestEmail || 'Unknown'
 		);
+	}
+
+	function previewStatus(item: BoostingOrderItem): string {
+		if (item.support?.state === 'awaiting_customer' || getStatus(item) === 'needs_link')
+			return 'Waiting for link';
+		return getStatusLabel(getStatus(item));
+	}
+
+	function previewNextStep(item: BoostingOrderItem): string {
+		if (item.support?.state === 'awaiting_customer' || getStatus(item) === 'needs_link')
+			return 'The customer needs to send a valid link.';
+		if (item.support?.state === 'reply_received')
+			return 'New link received. Review the customer’s reply.';
+		if (item.complaints?.some((complaint) => ['open', 'validated'].includes(complaint.status)))
+			return 'Customer reported a delivery issue. Open to review.';
+		if (getStatus(item) === 'completed') return '';
+		if (item.holdReasons?.[0]) return item.holdReasons[0];
+		if (item.overdueReview) return 'Delivery is overdue for review—not confirmed failed.';
+		return getStatus(item) === 'in_progress'
+			? 'Supplier is processing. Delivery is not yet confirmed.'
+			: '';
 	}
 
 	function formatDateTime(value: string | null | undefined): string {
@@ -276,8 +307,11 @@
 		);
 	}
 
-	async function loadItems(nextPage = 1) {
-		if (loading) return;
+	async function loadItems(nextPage = 1, requireSuccess = false) {
+		if (loading) {
+			if (requireSuccess) throw new Error('A list refresh is already running. Try Refresh review.');
+			return;
+		}
 		loading = true;
 		try {
 			const params = new URLSearchParams({
@@ -292,11 +326,14 @@
 			if (!response.ok || !result.success) throw new Error(result.error || 'Failed to load orders');
 			items = result.data || [];
 			meta = result.meta;
+			if (expandedItemId && !items.some((item) => item.id === expandedItemId))
+				expandedItemId = null;
 		} catch (error) {
 			showError(
 				'Could not load boosting orders',
 				error instanceof Error ? error.message : 'Try again.'
 			);
+			if (requireSuccess) throw error;
 		} finally {
 			loading = false;
 		}
@@ -304,6 +341,7 @@
 
 	async function applySearch(event: SubmitEvent) {
 		event.preventDefault();
+		expandedItemId = null;
 		appliedSearch = searchDraft.trim();
 		await loadItems(1);
 	}
@@ -341,81 +379,13 @@
 	}
 
 	async function selectStatus(value: StatusFilter) {
+		expandedItemId = null;
 		statusFilter = value;
 		await loadItems(1);
 	}
 
 	function refreshAdminAttentionBadges(): void {
 		window.dispatchEvent(new CustomEvent('fastaccs:admin-attention-refresh'));
-	}
-
-	async function updateItem(
-		item: BoostingOrderItem,
-		status: 'pending' | 'in_progress' | 'needs_link' | 'completed' | 'rejected'
-	) {
-		let reason = '';
-		if (status === 'needs_link') {
-			const response = prompt('What should the customer correct about this link?');
-			if (response === null) return;
-			reason = response.trim();
-		}
-		if (status === 'rejected') {
-			const response = prompt(
-				'Tell the customer why this cannot be fulfilled. This does not refund the paid order automatically.'
-			);
-			if (response === null) return;
-			reason = response.trim();
-			if (
-				!confirm(
-					'Mark this boost as rejected? You must separately refund or reopen the paid order.'
-				)
-			) {
-				return;
-			}
-		}
-
-		busyItemId = item.id;
-		try {
-			const response = await fetch(`/api/admin/boosting-orders/${encodeURIComponent(item.id)}`, {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ status, reason })
-			});
-			const result = await response.json();
-			if (!response.ok || result.error) throw new Error(result.error || 'Failed to update');
-			showSuccess(status === 'needs_link' ? 'Customer notified' : 'Order updated', '');
-			await refreshAll();
-			refreshAdminAttentionBadges();
-		} catch (error) {
-			showError('Update failed', error instanceof Error ? error.message : 'Please try again.');
-		} finally {
-			busyItemId = null;
-		}
-	}
-
-	async function updateProviderReference(item: BoostingOrderItem) {
-		const value = prompt('Supplier order/reference ID:', item.boostProviderReference || '');
-		if (value === null) return;
-		busyItemId = item.id;
-		try {
-			const response = await fetch(`/api/admin/boosting-orders/${encodeURIComponent(item.id)}`, {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ providerReference: value })
-			});
-			const result = await response.json();
-			if (!response.ok || result.error) throw new Error(result.error || 'Failed to save reference');
-			items = items.map((row) =>
-				row.id === item.id
-					? { ...row, boostProviderReference: result.data.boostProviderReference }
-					: row
-			);
-			showSuccess('Supplier reference saved', '');
-		} catch (error) {
-			showError('Could not save reference', error instanceof Error ? error.message : 'Try again.');
-		} finally {
-			busyItemId = null;
-		}
 	}
 
 	function complaintLabel(type: string): string {
@@ -472,10 +442,10 @@
 	<header>
 		<h1 class="flex items-center gap-2 text-2xl font-bold" style="color: var(--text);">
 			<Zap class="h-6 w-6" style="color: var(--primary);" />
-			Boosting — Orders & Analytics
+			Boosting orders
 		</h1>
 		<p class="mt-1 text-sm" style="color: var(--text-muted);">
-			Track delivery, supplier costs and customer reports.
+			Open an order to review it or help the customer.
 		</p>
 		<div class="mt-2 flex flex-wrap items-center justify-between gap-2">
 			<div class="flex flex-wrap items-center gap-2">
@@ -504,106 +474,117 @@
 			</div>
 		</div>
 	</header>
-	<AnalyticsNavigation active="boosting" permissions={data.adminPermissions ?? []} />
+	<details class="report-panel">
+		<summary>Reports & analytics</summary>
+		<div class="report-content">
+			<AnalyticsNavigation active="boosting" permissions={data.adminPermissions ?? []} />
 
-	{#if analyticsError}<p role="status" class="text-sm" style="color: var(--text-muted);">
-			{analyticsError}
-		</p>{/if}
-	{#if analytics}
-		<p class="text-xs" style="color: var(--text-dim);">
-			Last 30 days · paid orders, including later refunds
-		</p>
-		<div class="grid grid-cols-2 gap-3 lg:grid-cols-6">
-			{#each [['Paid orders', analytics.overall.orders.toLocaleString()], ['Boosting items', analytics.overall.items.toLocaleString()], ['Completed', analytics.overall.completionRate === null ? '—' : `${analytics.overall.completionRate}%`], ...(canViewRevenue ? [['Net sales', formatMonetaryAmount(analytics.overall.netSalesNgn ?? 0)], ['Recorded supplier cost', analytics.overall.supplierCostNgn === null ? '—' : formatMonetaryAmount(analytics.overall.supplierCostNgn)], ['Recorded margin', analytics.overall.recordedMarginNgn === null ? '—' : formatMonetaryAmount(analytics.overall.recordedMarginNgn)]] : [])] as metric}
-				<div
+			{#if analyticsError}<p role="status" class="text-sm" style="color: var(--text-muted);">
+					{analyticsError}
+				</p>{/if}
+			{#if analytics}
+				<p class="text-xs" style="color: var(--text-dim);">
+					Last 30 days · paid orders, including later refunds
+				</p>
+				<div class="grid grid-cols-2 gap-3 lg:grid-cols-6">
+					{#each [['Paid orders', analytics.overall.orders.toLocaleString()], ['Boosting items', analytics.overall.items.toLocaleString()], ['Completed', analytics.overall.completionRate === null ? '—' : `${analytics.overall.completionRate}%`], ...(canViewRevenue ? [['Net sales', formatMonetaryAmount(analytics.overall.netSalesNgn ?? 0)], ['Recorded supplier cost', analytics.overall.supplierCostNgn === null ? '—' : formatMonetaryAmount(analytics.overall.supplierCostNgn)], ['Recorded margin', analytics.overall.recordedMarginNgn === null ? '—' : formatMonetaryAmount(analytics.overall.recordedMarginNgn)]] : [])] as metric}
+						<div
+							class="rounded-[var(--r-md)] border p-4"
+							style="border-color: var(--border); background: var(--bg-elev-1);"
+						>
+							<p class="text-xs" style="color: var(--text-muted);">{metric[0]}</p>
+							<p class="mt-1 text-xl font-bold">{metric[1]}</p>
+						</div>
+					{/each}
+				</div>
+				{#if canViewRevenue && analytics.overall.items > 0}
+					<p class="text-xs" style="color: var(--text-muted);">
+						Recorded margin is after refunds and known supplier charges, before payment fees. It is
+						not final profit. Actual payment fees are not recorded. Repeated polls are counted once
+						per supplier order; missing charges remain unknown.
+					</p>
+				{/if}
+				{#if canViewRevenue && analytics.overall.knownCostItems < analytics.overall.items}<p
+						class="text-xs"
+						style="color: var(--text-muted);"
+					>
+						Costs recorded for {analytics.overall.knownCostItems} of {analytics.overall.items} items.
+						Margin covers those items only. Unknown costs aren’t treated as free.
+					</p>{/if}
+				<details
 					class="rounded-[var(--r-md)] border p-4"
 					style="border-color: var(--border); background: var(--bg-elev-1);"
 				>
-					<p class="text-xs" style="color: var(--text-muted);">{metric[0]}</p>
-					<p class="mt-1 text-xl font-bold">{metric[1]}</p>
-				</div>
-			{/each}
-		</div>
-		{#if canViewRevenue && analytics.overall.items > 0}
-			<p class="text-xs" style="color: var(--text-muted);">
-				Recorded margin is after refunds and known supplier charges, before payment fees. It is not
-				final profit. Actual payment fees are not recorded. Repeated polls are counted once per
-				supplier order; missing charges remain unknown.
-			</p>
-		{/if}
-		{#if canViewRevenue && analytics.overall.knownCostItems < analytics.overall.items}<p
-				class="text-xs"
-				style="color: var(--text-muted);"
-			>
-				Costs recorded for {analytics.overall.knownCostItems} of {analytics.overall.items} items. Margin
-				covers those items only. Unknown costs aren’t treated as free.
-			</p>{/if}
-		<details
-			class="rounded-[var(--r-md)] border p-4"
-			style="border-color: var(--border); background: var(--bg-elev-1);"
-		>
-			<summary class="cursor-pointer font-semibold">By service · last 30 days</summary>
-			<div class="mt-3 overflow-x-auto">
-				<table class="w-full text-left text-sm">
-					<thead
-						><tr style="color: var(--text-muted);"
-							><th class="p-2">Service</th><th class="p-2">Items</th><th class="p-2">Completed</th
-							>{#if canViewRevenue}<th class="p-2">Net sales</th><th class="p-2">Recorded margin</th
-								>{/if}</tr
-						></thead
-					>
-					<tbody
-						>{#each analytics.byService as row (`${row.categoryId}:${row.platform}:${row.outcome}`)}<tr
-								style="border-top: 1px solid var(--border);"
-								><td class="p-2">{row.name}</td><td class="p-2">{row.items}</td><td class="p-2"
-									>{row.completed}</td
-								>{#if canViewRevenue}<td class="p-2"
-										>{formatMonetaryAmount(row.netSalesNgn ?? 0)}</td
-									><td class="p-2"
-										>{row.recordedMarginNgn === null
-											? '—'
-											: formatMonetaryAmount(row.recordedMarginNgn)}</td
-									>{/if}</tr
-							>{:else}<tr
-								><td colspan={canViewRevenue ? 5 : 3} class="p-4" style="color: var(--text-muted);"
-									>No paid Boosting items in this period.</td
-								></tr
-							>{/each}</tbody
-					>
-				</table>
-			</div>
-			{#if canViewRevenue}<div class="mt-4 flex flex-wrap gap-3">
-					{#each analytics.providers as provider (provider.provider)}<div
-							class="rounded-lg border px-3 py-2 text-sm"
-							style="border-color: var(--border);"
-						>
-							<span style="color: var(--text-muted);">{provider.label} balance</span>
-							<strong
-								>{provider.balance === null
-									? '—'
-									: `${provider.currency ?? ''} ${provider.balance.toFixed(2)}`}</strong
+					<summary class="cursor-pointer font-semibold">By service · last 30 days</summary>
+					<div class="mt-3 overflow-x-auto">
+						<table class="w-full text-left text-sm">
+							<thead
+								><tr style="color: var(--text-muted);"
+									><th class="p-2">Service</th><th class="p-2">Items</th><th class="p-2"
+										>Completed</th
+									>{#if canViewRevenue}<th class="p-2">Net sales</th><th class="p-2"
+											>Recorded margin</th
+										>{/if}</tr
+								></thead
 							>
-							<p class="text-xs" style="color: var(--text-dim);">
-								{provider.lastBalanceSuccessAt
-									? `Last checked ${formatDateTime(provider.lastBalanceSuccessAt)}`
-									: 'Not checked yet'}{!provider.enabled || provider.circuitOpen
-									? ' · Supplier paused'
-									: ''}
-							</p>
-						</div>{/each}
-				</div>{/if}
-		</details>
-	{/if}
+							<tbody
+								>{#each analytics.byService as row (`${row.categoryId}:${row.platform}:${row.outcome}`)}<tr
+										style="border-top: 1px solid var(--border);"
+										><td class="p-2">{row.name}</td><td class="p-2">{row.items}</td><td class="p-2"
+											>{row.completed}</td
+										>{#if canViewRevenue}<td class="p-2"
+												>{formatMonetaryAmount(row.netSalesNgn ?? 0)}</td
+											><td class="p-2"
+												>{row.recordedMarginNgn === null
+													? '—'
+													: formatMonetaryAmount(row.recordedMarginNgn)}</td
+											>{/if}</tr
+									>{:else}<tr
+										><td
+											colspan={canViewRevenue ? 5 : 3}
+											class="p-4"
+											style="color: var(--text-muted);">No paid Boosting items in this period.</td
+										></tr
+									>{/each}</tbody
+							>
+						</table>
+					</div>
+					{#if canViewRevenue}<div class="mt-4 flex flex-wrap gap-3">
+							{#each analytics.providers as provider (provider.provider)}<div
+									class="rounded-lg border px-3 py-2 text-sm"
+									style="border-color: var(--border);"
+								>
+									<span style="color: var(--text-muted);">{provider.label} balance</span>
+									<strong
+										>{provider.balance === null
+											? '—'
+											: `${provider.currency ?? ''} ${provider.balance.toFixed(2)}`}</strong
+									>
+									<p class="text-xs" style="color: var(--text-dim);">
+										{provider.lastBalanceSuccessAt
+											? `Last checked ${formatDateTime(provider.lastBalanceSuccessAt)}`
+											: 'Not checked yet'}{!provider.enabled || provider.circuitOpen
+											? ' · Supplier paused'
+											: ''}
+									</p>
+								</div>{/each}
+						</div>{/if}
+				</details>
+			{/if}
+		</div>
+	</details>
 
 	<section
 		class="rounded-[var(--r-md)] border p-3 sm:p-4"
 		style="border-color: var(--border); background: var(--bg-elev-1);"
 	>
 		<p class="mb-3 text-xs" style="color: var(--text-dim);">
-			Delivery queue · all-time Boosting items
+			{meta.total === 0
+				? 'No matching orders'
+				: `Showing ${(meta.page - 1) * meta.pageSize + 1}–${Math.min(meta.page * meta.pageSize, meta.total)} of ${meta.total}`}
 		</p>
-		<div class="flex flex-wrap gap-2">
-			{#each statusOptions as option}
+		<div class="hidden flex-wrap gap-2 sm:flex">
+			{#each statusOptions.filter( (option) => ['active', 'under_review', 'needs_link', 'completed', 'all'].includes(option.value) ) as option}
 				<button
 					type="button"
 					onclick={() => selectStatus(option.value)}
@@ -615,57 +596,86 @@
 					{option.label} <span class="opacity-70">{option.count}</span>
 				</button>
 			{/each}
-		</div>
-
-		<div class="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto]">
-			<form onsubmit={applySearch} class="flex min-w-0 gap-2">
-				<label class="relative min-w-0 flex-1">
-					<Search
-						size={16}
-						class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
-						style="color: var(--text-dim);"
-					/>
-					<input
-						bind:value={searchDraft}
-						placeholder="Order, customer, service or link"
-						class="w-full rounded-lg border py-2 pr-3 pl-9 text-sm"
-						style="background: var(--bg); border-color: var(--border); color: var(--text);"
-					/>
-				</label>
-				<button
-					type="submit"
-					class="rounded-lg border px-3 py-2 text-sm font-semibold"
-					style="border-color: var(--border); color: var(--text);">Search</button
-				>
-			</form>
 			<select
-				bind:value={sortOrder}
-				onchange={() => loadItems(1)}
-				class="rounded-lg border px-3 py-2 text-sm"
-				style="background: var(--bg); border-color: var(--border); color: var(--text);"
-				aria-label="Order sort"
+				aria-label="More order statuses"
+				value={['active', 'under_review', 'needs_link', 'completed', 'all'].includes(statusFilter)
+					? ''
+					: statusFilter}
+				onchange={(event) => {
+					if (event.currentTarget.value)
+						void selectStatus(event.currentTarget.value as StatusFilter);
+				}}
+				class="rounded-lg border px-3 py-2 text-xs"
+				style="background:var(--bg);border-color:var(--border);color:var(--text-muted)"
 			>
-				<option value="newest">Newest first</option>
-				<option value="oldest">Oldest first</option>
+				<option value="">More statuses</option>
+				{#each statusOptions.filter((option) => !['active', 'under_review', 'needs_link', 'completed', 'all'].includes(option.value)) as option}
+					<option value={option.value}>{option.label} ({option.count})</option>
+				{/each}
 			</select>
-			<button
-				type="button"
-				onclick={copyVisibleLinks}
-				disabled={items.length === 0}
-				class="inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-40"
-				style="border-color: var(--border); color: var(--text);"
-			>
-				<Copy size={15} /> Copy visible
-			</button>
 		</div>
-		<p class="mt-2 text-xs" style="color: var(--text-dim);">
-			{meta.total === 0
-				? 'No matching Boosting items'
-				: `Showing ${(meta.page - 1) * meta.pageSize + 1}–${Math.min(meta.page * meta.pageSize, meta.total)} of ${meta.total}`}
-		</p>
+		<select
+			aria-label="Order status"
+			value={statusFilter}
+			onchange={(event) => {
+				void selectStatus(event.currentTarget.value as StatusFilter);
+			}}
+			class="w-full rounded-lg border px-3 py-2 text-sm sm:hidden"
+			style="background:var(--bg);border-color:var(--border);color:var(--text)"
+		>
+			{#each statusOptions as option}<option value={option.value}
+					>{option.label} ({option.count})</option
+				>{/each}
+		</select>
+
+		<details class="queue-tools">
+			<summary>Search & sort</summary>
+			<div class="mt-3 grid grid-cols-2 gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto]">
+				<form onsubmit={applySearch} class="col-span-2 flex min-w-0 gap-2 md:col-span-1">
+					<label class="relative min-w-0 flex-1">
+						<Search
+							size={16}
+							class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
+							style="color: var(--text-dim);"
+						/>
+						<input
+							bind:value={searchDraft}
+							aria-label="Search orders"
+							placeholder="Order, customer, service or link"
+							class="w-full rounded-lg border py-2 pr-3 pl-9 text-sm"
+							style="background: var(--bg); border-color: var(--border); color: var(--text);"
+						/>
+					</label>
+					<button
+						type="submit"
+						class="rounded-lg border px-3 py-2 text-sm font-semibold"
+						style="border-color: var(--border); color: var(--text);">Search</button
+					>
+				</form>
+				<select
+					bind:value={sortOrder}
+					onchange={() => loadItems(1)}
+					class="rounded-lg border px-3 py-2 text-sm"
+					style="background: var(--bg); border-color: var(--border); color: var(--text);"
+					aria-label="Order sort"
+				>
+					<option value="newest">Newest first</option>
+					<option value="oldest">Oldest first</option>
+				</select>
+				<button
+					type="button"
+					onclick={copyVisibleLinks}
+					disabled={items.length === 0}
+					class="inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-40"
+					style="border-color: var(--border); color: var(--text);"
+				>
+					<Copy size={15} /> Copy links
+				</button>
+			</div>
+		</details>
 	</section>
 
-	<div class="relative space-y-3" class:opacity-60={loading}>
+	<div class="order-list relative" class:opacity-60={loading} aria-busy={loading}>
 		{#each items as item (item.id)}
 			{@const config = getBoostingServiceConfig(item.category?.metadata)}
 			{@const status = getStatus(item)}
@@ -674,45 +684,37 @@
 				: config.refillAvailable
 					? config.refillDays
 					: null}
-			<article
-				class="rounded-[var(--r-md)] border p-4"
-				style="border-color: var(--border); background: var(--bg-elev-1);"
+			<ReviewOrderCard
+				id={item.id}
+				title={item.productName}
+				reference={item.order.orderNumber}
+				status={previewStatus(item)}
+				statusStyle={getStatusStyle(status)}
+				metadata={`${item.boostQuantity?.toLocaleString() ?? '?'} qty · ${getCustomerLabel(item)} · ${formatAge(item.order.createdAt || item.createdAt)}`}
+				nextStep={previewNextStep(item)}
+				open={expandedItemId === item.id}
+				onToggle={() => {
+					expandedItemId = expandedItemId === item.id ? null : item.id;
+				}}
 			>
-				<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-					<div class="min-w-0">
-						<div class="flex flex-wrap items-center gap-2">
-							<h2 class="font-semibold" style="color: var(--text);">{item.productName}</h2>
-							<span
-								class="rounded-md border px-2 py-0.5 text-[11px] font-semibold"
-								style={getStatusStyle(status)}>{getStatusLabel(status)}</span
-							>
-							{#if refillDays}
-								<span class="text-[11px]" style="color: var(--text-dim);"
-									>{refillDays}-day refill</span
-								>
-							{/if}
-						</div>
-						<p class="mt-1 text-sm" style="color: var(--text-muted);">
-							{item.boostQuantity?.toLocaleString() ?? '?'} quantity · {item.order.orderNumber} · {getCustomerLabel(
-								item
-							)}
-						</p>
+				<dl class="order-facts">
+					<div>
+						<dt>Order</dt>
+						<dd>{item.order.orderNumber}</dd>
 					</div>
-					<div class="shrink-0 text-left sm:text-right">
-						<p
-							class="inline-flex items-center gap-1 text-xs font-medium"
-							style="color: var(--text-muted);"
-						>
-							<Calendar size={14} /> Placed {formatAge(item.order.createdAt || item.createdAt)}
-						</p>
-						<p class="mt-0.5 text-xs" style="color: var(--text-dim);">
-							{formatDateTime(item.order.createdAt || item.createdAt)}
-						</p>
-						{#if item.order.paidAt}<p class="mt-0.5 text-[11px]" style="color: var(--text-dim);">
-								Paid {formatDateTime(item.order.paidAt)}
-							</p>{/if}
+					<div>
+						<dt>Placed</dt>
+						<dd>{formatDateTime(item.order.createdAt || item.createdAt)}</dd>
 					</div>
-				</div>
+					<div>
+						<dt>Paid</dt>
+						<dd>{item.order.paidAt ? formatDateTime(item.order.paidAt) : 'Not recorded'}</dd>
+					</div>
+					{#if refillDays}<div>
+							<dt>Purchased cover</dt>
+							<dd>{refillDays}-day refill</dd>
+						</div>{/if}
+				</dl>
 				{#if item.progress}<p class="mt-3 text-xs" style="color: var(--text-muted);">
 						{item.progress.rawProviderStatus
 							? `Supplier: ${item.progress.rawProviderStatus}`
@@ -726,7 +728,7 @@
 							· Checked {formatAge(item.progress.lastCheckedAt)}{/if}
 					</p>{/if}
 
-				{#if item.latestIssue?.reason && ['needs_link', 'rejected'].includes(status)}
+				{#if item.latestIssue?.reason && ['needs_link', 'rejected'].includes(status) && !['awaiting_customer', 'reply_received'].includes(item.support?.state ?? '')}
 					<div
 						class="mt-3 flex gap-2 rounded-lg border p-3 text-sm"
 						style={status === 'rejected'
@@ -799,7 +801,7 @@
 					</div>
 				{/if}
 
-				{#if item.holdReasons?.length}
+				{#if item.holdReasons?.length && !['awaiting_customer', 'reply_received'].includes(item.support?.state ?? '')}
 					<section
 						class="mt-3 rounded-lg border p-3"
 						style="border-color: rgba(234,179,8,.3); background: rgba(234,179,8,.06);"
@@ -816,17 +818,18 @@
 					</section>
 				{/if}
 				{#if item.shadowDecision}
-					<div
+					<details
 						class="mt-3 rounded-lg border p-3"
 						style={item.shadowDecision.provider
 							? 'border-color: rgba(5,212,113,0.28); background: rgba(5,212,113,0.06);'
 							: 'border-color: rgba(234,179,8,0.28); background: rgba(234,179,8,0.06);'}
 					>
+						<summary class="cursor-pointer text-xs font-semibold" style="color:var(--text-muted)"
+							>Supplier details</summary
+						>
 						<div class="flex flex-wrap items-center justify-between gap-2">
 							<p class="text-xs font-bold" style="color: var(--text);">
-								{item.fulfillmentState?.mode === 'shadow'
-									? 'Shadow suggestion'
-									: 'Automation route'}
+								{item.fulfillmentState?.mode === 'shadow' ? 'Shadow suggestion' : 'Supplier record'}
 							</p>
 							<span class="text-[10px] font-semibold" style="color: var(--text-dim);"
 								>{item.fulfillmentState?.mode === 'shadow'
@@ -851,7 +854,7 @@
 								No supplier submission is recorded. Review this order’s history.
 							</p>
 						{/if}
-					</div>
+					</details>
 				{/if}
 
 				<div
@@ -889,91 +892,49 @@
 						>
 					</p>
 					<div class="flex flex-wrap gap-2">
-						{#if item.overdueReview}
+						{#if item.overdueReview && !item.holdReasons?.length && !['awaiting_customer', 'reply_received'].includes(item.support?.state ?? '')}
 							<p
 								class="w-full rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300"
 							>
 								{boostReviewNotice(item.shadowDecision?.attention)}
 							</p>
 						{/if}
-						<a
-							href={`/admin/orders/${item.order.id}`}
-							class="rounded-lg border px-3 py-1.5 text-xs font-semibold"
-							style="border-color: var(--border); color: var(--text);">View order</a
-						>
 						<button
 							type="button"
-							onclick={() => updateProviderReference(item)}
-							disabled={busyItemId === item.id}
+							onclick={() =>
+								copyToClipboard(
+									item.progress?.supplierOrderId || item.boostProviderReference || ''
+								)}
+							disabled={busyItemId === item.id ||
+								!(item.progress?.supplierOrderId || item.boostProviderReference)}
 							class="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-							style="border-color: var(--border); color: var(--text);">Supplier ref</button
+							style="border-color: var(--border); color: var(--text);">Copy supplier ref</button
 						>
-						{#if canManuallyChangeBoostStatus(item.fulfillmentState)}
-							{#if status === 'pending'}
-								<button
-									type="button"
-									onclick={() => updateItem(item, 'in_progress')}
-									disabled={busyItemId === item.id}
-									class="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-									style="background: var(--primary); color: #00150b;">Start</button
-								>
-							{:else if status === 'in_progress'}
-								<button
-									type="button"
-									onclick={() => updateItem(item, 'completed')}
-									disabled={busyItemId === item.id}
-									class="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-									style="background: var(--primary); color: #00150b;">Complete</button
-								>
-							{:else if status === 'needs_link' || status === 'rejected' || status === 'completed'}
-								<button
-									type="button"
-									onclick={() =>
-										updateItem(item, status === 'completed' ? 'in_progress' : 'pending')}
-									disabled={busyItemId === item.id}
-									class="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-									style="border-color: var(--border); color: var(--text);">Reopen</button
-								>
-							{/if}
-							{#if !['completed', 'rejected', 'cancelled'].includes(status)}
-								<button
-									type="button"
-									onclick={() => updateItem(item, 'needs_link')}
-									disabled={busyItemId === item.id}
-									class="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-									style="border-color: rgba(234,179,8,0.35); color: #facc15;">Request link</button
-								>
-								<button
-									type="button"
-									onclick={() => updateItem(item, 'rejected')}
-									disabled={busyItemId === item.id}
-									class="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-									style="border-color: rgba(248,113,113,0.35); color: #fca5a5;"
-									>Can't fulfill</button
-								>
-							{/if}
-						{/if}
 					</div>
 				</div>
 				<BoostingOrderSupport
 					itemId={item.id}
 					orderId={item.order.id}
 					productName={item.productName}
+					status={item.boostFulfillmentStatus === 'refunded' ? 'refunded' : status}
+					quantity={item.boostQuantity ?? 1}
 					support={item.support}
 					held={item.fulfillmentState?.status === 'manual_review' ||
 						(item.fulfillmentState?.status === 'completed' &&
 							item.complaints.some((complaint) =>
 								['open', 'validated'].includes(complaint.status)
 							)) ||
-						(!item.fulfillmentState && ['under_review', 'needs_link', 'partial'].includes(status))}
+						(!item.fulfillmentState &&
+							(status !== 'completed' || item.order.deliveryStatus !== 'delivered'))}
 					canManage={meta.canManageOrders === true}
 					canRequestLink={item.fulfillmentState?.status !== 'completed' && status !== 'completed'}
 					onUpdated={async () => {
-						await refreshAll();
+						await loadItems(meta.page, true);
+						void refreshAnalytics();
 						refreshAdminAttentionBadges();
 					}}
 				/>
-			</article>
+			</ReviewOrderCard>
 		{/each}
 
 		{#if items.length === 0 && !loading}
@@ -1017,3 +978,55 @@
 		</nav>
 	{/if}
 </div>
+
+<style>
+	.order-list {
+		display: grid;
+		gap: 20px;
+	}
+	.queue-tools {
+		margin-top: 12px;
+	}
+	.queue-tools > summary {
+		cursor: pointer;
+		padding: 4px 0;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+	.order-facts {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 14px;
+		font-size: 12px;
+	}
+	.order-facts dt {
+		color: var(--text-dim);
+		margin-bottom: 4px;
+	}
+	.order-facts dd {
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
+	}
+	.report-panel {
+		border: 1px solid var(--border);
+		border-radius: 12px;
+		background: var(--bg-elev-1);
+	}
+	.report-panel > summary {
+		padding: 12px 16px;
+		font-size: 13px;
+		font-weight: 600;
+		cursor: pointer;
+		color: var(--text-muted);
+	}
+	.report-content {
+		display: grid;
+		gap: 16px;
+		padding: 0 16px 16px;
+	}
+	@media (min-width: 768px) {
+		.order-facts {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+</style>

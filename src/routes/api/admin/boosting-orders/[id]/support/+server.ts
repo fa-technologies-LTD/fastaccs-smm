@@ -29,7 +29,9 @@ export const POST: RequestHandler = async ({ params, request, locals, url }) => 
 		!uuid(params.id) ||
 		!uuid(body.operationId) ||
 		(body.expectedRevision !== null && !uuid(body.expectedRevision)) ||
-		!['request_link', 'message', 'confirm_delivery'].includes(body.action) ||
+		!['request_link', 'message', 'confirm_delivery', 'confirm_failure', 'withdraw_link'].includes(
+			body.action
+		) ||
 		typeof body.message !== 'string' ||
 		body.message.trim().length < 5 ||
 		body.message.length > 500
@@ -52,7 +54,8 @@ export const POST: RequestHandler = async ({ params, request, locals, url }) => 
 					action: body.action,
 					message: body.message.trim(),
 					confirmed: body.confirmed === true,
-					evidence: typeof body.evidence === 'string' ? body.evidence.trim() : undefined
+					evidence: typeof body.evidence === 'string' ? body.evidence.trim() : undefined,
+					quantity: typeof body.quantity === 'number' ? body.quantity : undefined
 				}),
 			{ timeout: 15000 }
 		);

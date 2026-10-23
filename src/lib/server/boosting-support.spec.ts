@@ -29,6 +29,7 @@ beforeEach(() => {
 		},
 		boostFulfillment: {
 			id: 'f',
+			quantity: 500,
 			status: 'manual_review',
 			supplierOrderId: 'supplier-ref',
 			rawProviderStatus: 'Canceled',
@@ -51,7 +52,10 @@ beforeEach(() => {
 			findMany: vi.fn(async () => [item])
 		},
 		order: { update: vi.fn(async () => ({})) },
-		boostFulfillment: { updateMany: vi.fn(async () => ({ count: 1 })) },
+		boostFulfillment: {
+			updateMany: vi.fn(async () => ({ count: 1 })),
+			update: vi.fn(async ({ data }: any) => Object.assign(item.boostFulfillment, data))
+		},
 		boostComplaint: {
 			findFirst: vi.fn().mockResolvedValue(null),
 			updateMany: vi.fn().mockResolvedValue({ count: 0 })
@@ -111,6 +115,95 @@ it('allows a message without overriding active delivery', async () => {
 	expect(tx.orderItem.update).not.toHaveBeenCalled();
 	expect(tx.boostFulfillment.updateMany).not.toHaveBeenCalled();
 	expect(tx.orderEvent.create.mock.calls[0][0].data.type).toBe('customer_support_update');
+});
+
+it('records confirmed missing delivery without queueing a supplier order or altering supplier charges', async () => {
+	Object.assign(item.boostFulfillment, {
+		status: 'in_progress',
+		rawProviderStatus: 'Processing',
+		finalSupplierCostUsd: 0.3125
+	});
+	const request = {
+		...input(),
+		action: 'confirm_failure' as const,
+		confirmed: true,
+		quantity: 500,
+		evidence: 'Customer confirmed non-delivery; checked the order evidence.'
+	};
+	await applyBoostSupportAction(tx, request);
+	expect(item.boostFulfillment).toMatchObject({
+		status: 'manual_review',
+		supplierOrderId: 'supplier-ref',
+		rawProviderStatus: 'Processing',
+		finalSupplierCostUsd: 0.3125,
+		nextActionAt: null
+	});
+	expect(tx.orderItem.update.mock.lastCall[0].data).toEqual({
+		boostFulfillmentStatus: 'under_review'
+	});
+	expect(tx.orderEvent.create.mock.lastCall[0].data).toMatchObject({
+		type: 'boosting_delivery_failure_confirmed',
+		metadata: { missingQuantity: 500, evidence: request.evidence }
+	});
+	expect(tx.orderItem.findUnique.mock.lastCall[0].include.boostFulfillment).toBe(true);
+	expect(tx.order.update.mock.lastCall[0].data).not.toHaveProperty('paymentStatus');
+	expect((await applyBoostSupportAction(tx, request)).repeated).toBe(true);
+	expect(tx.notification.create).toHaveBeenCalledOnce();
+});
+
+it('rejects missing-delivery recording while a worker owns the delivery lock', async () => {
+	Object.assign(item.boostFulfillment, {
+		leaseToken: 'active-worker',
+		leaseExpiresAt: new Date(Date.now() + 60000)
+	});
+	await expect(
+		applyBoostSupportAction(tx, {
+			...input(),
+			action: 'confirm_failure',
+			confirmed: true,
+			quantity: 500,
+			evidence: 'Customer confirms missing delivery.'
+		})
+	).rejects.toThrow('delivery check is running');
+	expect(tx.boostFulfillment.update).not.toHaveBeenCalled();
+});
+
+it.each([0, 501, 1.5])(
+	'rejects invalid missing quantity %s before changing a delivery',
+	async (quantity) => {
+		await expect(
+			applyBoostSupportAction(tx, {
+				...input(),
+				action: 'confirm_failure',
+				confirmed: true,
+				quantity,
+				evidence: 'Customer confirms missing delivery.'
+			})
+		).rejects.toThrow('missing quantity');
+		expect(tx.boostFulfillment.update).not.toHaveBeenCalled();
+	}
+);
+
+it('requires withdrawal of a pending link request before manual delivery confirmation', async () => {
+	const requested = await applyBoostSupportAction(tx, input());
+	await expect(
+		applyBoostSupportAction(tx, {
+			...input(),
+			action: 'confirm_delivery',
+			expectedRevision: requested.support.revision,
+			confirmed: true,
+			evidence: 'Owner has checked the delivered result.'
+		})
+	).rejects.toThrow('Withdraw that request');
+	const withdrawn = await applyBoostSupportAction(tx, {
+		...input(),
+		action: 'withdraw_link',
+		expectedRevision: requested.support.revision,
+		message: 'We are reviewing a different resolution for your order.'
+	});
+	expect(withdrawn.support.state).toBe('none');
+	expect(item.boostFulfillmentStatus).toBe('under_review');
+	expect(tx.orderEvent.create.mock.lastCall[0].data.type).toBe('boosting_support_withdrawn');
 });
 it('records a customer link as a proposal, never as a supplier-target edit or queued retry', async () => {
 	const request = await applyBoostSupportAction(tx, input());

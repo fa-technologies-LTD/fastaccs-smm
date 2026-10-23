@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { adminDialog } from '$lib/helpers/admin-dialog';
 	import { getBoostSupportState, type BoostSupportState } from '$lib/helpers/boosting-support';
+	import { boostOrderWorkflow } from '$lib/helpers/boosting-order-workflow';
 	let {
 		itemId,
 		orderId,
@@ -9,6 +10,8 @@
 		held = false,
 		canRequestLink = true,
 		canManage = false,
+		status,
+		quantity = 1,
 		onUpdated,
 		previewAction
 	}: {
@@ -19,10 +22,15 @@
 		held?: boolean;
 		canRequestLink?: boolean;
 		canManage?: boolean;
+		status?: string;
+		quantity?: number;
 		onUpdated: () => void | Promise<void>;
 		previewAction?: (input: { action: string; message: string }) => void;
 	} = $props();
-	let action = $state<'request_link' | 'message' | 'confirm_delivery' | null>(null);
+	let action = $state<
+		'request_link' | 'message' | 'confirm_delivery' | 'confirm_failure' | 'withdraw_link' | null
+	>(null);
+	let missingQuantity = $state(1);
 	let message = $state('');
 	let evidence = $state('');
 	let confirmed = $state(false);
@@ -31,28 +39,47 @@
 	let operationId = '';
 	let operationBody = '';
 	let refreshNeeded = $state(false);
+	let savedUpdate = $state(false);
 	const supportState = $derived(support ?? getBoostSupportState([]));
+	const workflow = $derived(boostOrderWorkflow({ support: supportState, held, status }));
+	const completionHint = $derived(
+		evidence.trim().length < 10
+			? 'Add a short evidence note (at least 10 characters).'
+			: !confirmed
+				? 'Tick the box to confirm the customer received the delivery.'
+				: ''
+	);
 	const title = $derived(
-		action === 'request_link'
-			? 'Request a valid link'
-			: action === 'confirm_delivery'
-				? 'Mark delivery completed'
-				: 'Send a customer update'
+		action === 'confirm_failure'
+			? 'Confirm missing delivery'
+			: action === 'withdraw_link'
+				? 'Withdraw link request'
+				: action === 'request_link'
+					? 'Request a valid link'
+					: action === 'confirm_delivery'
+						? 'Mark delivery completed'
+						: 'Send a customer update'
 	);
 	function open(next: typeof action) {
 		action = next;
 		message =
-			next === 'request_link'
-				? 'Please send the correct public link for the service you ordered. We’ll review it before continuing.'
-				: next === 'confirm_delivery'
-					? 'Support has confirmed that your order was delivered. This review is now closed.'
-					: '';
+			next === 'confirm_failure'
+				? 'We’ve confirmed missing delivery. Support is reviewing your order. You do not need to pay again.'
+				: next === 'withdraw_link'
+					? 'Support is reviewing a different resolution. You no longer need to send a new link.'
+					: next === 'request_link'
+						? 'Please send the correct public link for the service you ordered. We’ll review it before continuing.'
+						: next === 'confirm_delivery'
+							? 'Your delivery is confirmed. This review is closed.'
+							: '';
 		evidence = '';
+		missingQuantity = quantity;
 		confirmed = false;
 		error = '';
 		operationId = '';
 		operationBody = '';
 		refreshNeeded = false;
+		savedUpdate = false;
 	}
 	function close() {
 		if (!busy) action = null;
@@ -61,8 +88,18 @@
 		event.preventDefault();
 		if (busy || !action) return;
 		if (refreshNeeded) {
-			await onUpdated();
-			action = null;
+			busy = true;
+			error = '';
+			try {
+				await onUpdated();
+				action = null;
+			} catch {
+				error = savedUpdate
+					? 'Your update was saved, but the list could not refresh. Try Refresh review; do not submit the action again.'
+					: 'The list could not refresh. Try again before changing this order.';
+			} finally {
+				busy = false;
+			}
 			return;
 		}
 		const body = {
@@ -70,6 +107,7 @@
 			message: message.trim(),
 			evidence: evidence.trim(),
 			confirmed,
+			...(action === 'confirm_failure' ? { quantity: missingQuantity } : {}),
 			expectedRevision: supportState.revision
 		};
 		const encoded = JSON.stringify(body);
@@ -96,11 +134,14 @@
 					throw new Error(result.error || 'This update could not be confirmed.');
 				}
 			}
-			action = null;
+			savedUpdate = true;
+			refreshNeeded = true;
 			await onUpdated();
+			action = null;
 		} catch (cause) {
-			error =
-				cause instanceof Error
+			error = savedUpdate
+				? 'Your update was saved, but the list could not refresh. Use Refresh review; the action will not be sent twice.'
+				: cause instanceof Error
 					? cause.message
 					: 'The result is uncertain. Retry the same action or refresh the order before changing it.';
 		} finally {
@@ -117,7 +158,7 @@
 		</div>
 	{:else if supportState.state === 'reply_received'}
 		<div class="support-status">
-			<strong>Customer replied — review their link</strong><a
+			<strong>Customer supplied a new link</strong><a
 				href={supportState.reply?.link}
 				target="_blank"
 				rel="noopener noreferrer">{supportState.reply?.link}</a
@@ -134,17 +175,39 @@
 	{/if}
 	{#if canManage}
 		<div class="actions">
-			<button type="button" onclick={() => open('message')}>Customer update</button>
-			{#if held}
-				{#if canRequestLink}<button type="button" onclick={() => open('request_link')}
-						>Request valid link</button
-					>{/if}
-				<button type="button" class="primary" onclick={() => open('confirm_delivery')}
-					>Mark completed</button
-				>
+			{#if workflow.canResolve}
+				<details class="resolution-menu">
+					<summary class="primary"
+						>{workflow.canWithdrawLink ? 'Change resolution' : 'Resolve order'}</summary
+					>
+					<div class="resolution-options">
+						<a
+							href={previewAction
+								? '#preview-refunds'
+								: `/admin/orders/${encodeURIComponent(orderId)}`}>Review refund options</a
+						>
+						{#if workflow.canRequestLink && canRequestLink}<button
+								type="button"
+								onclick={() => open('request_link')}>Request valid link</button
+							>{/if}
+						{#if workflow.canConfirmFailure}<button
+								type="button"
+								onclick={() => open('confirm_failure')}>Confirm delivery failed</button
+							>{/if}
+						{#if workflow.canConfirmDelivery}<button
+								type="button"
+								onclick={() => open('confirm_delivery')}>Mark completed</button
+							>{/if}
+						{#if workflow.canWithdrawLink}<button
+								type="button"
+								onclick={() => open('withdraw_link')}>Withdraw link request</button
+							>{/if}
+					</div>
+				</details>
 			{/if}
+			<button type="button" onclick={() => open('message')}>Customer update</button>
 			<a href={previewAction ? '#preview-refunds' : `/admin/orders/${encodeURIComponent(orderId)}`}
-				>Refund / order details</a
+				>Order details</a
 			>
 		</div>
 	{/if}
@@ -171,65 +234,112 @@
 						>✕</button
 					>
 				</header>
-				{#if action === 'confirm_delivery'}
-					<p class="muted">
-						Completes this delivery and closes its review together. It leaves the active list and
-						stays in history. The whole order is completed when all its deliveries are complete.
-						Recorded charges stay unchanged. If delivery did not happen, use Refund / order details.
-					</p>
+				<div class="dialog-fields">
+					{#if action === 'confirm_failure'}
+						<p class="muted">
+							Records missing delivery—not supplier closure. This opens a support review; it does
+							not place another supplier order or issue a refund.
+						</p>
+						<label
+							>What failed and how did you check?<textarea
+								bind:value={evidence}
+								required
+								minlength="10"
+								maxlength="1000"
+								rows="2"
+								disabled={busy}
+								placeholder="Record the delivery evidence you checked."
+							></textarea></label
+						>
+						<label
+							>Quantity still missing<input
+								type="number"
+								min="1"
+								max={quantity}
+								step="1"
+								bind:value={missingQuantity}
+								required
+								disabled={busy}
+							/></label
+						>
+						<label class="confirmation"
+							><input type="checkbox" bind:checked={confirmed} required disabled={busy} />I checked
+							the target link and confirmed this quantity was not delivered.</label
+						>
+					{:else if action === 'withdraw_link'}
+						<p class="muted">
+							Cancels the outstanding link request, not the paid order. You can then choose delivery
+							confirmation or a refund. Neither happens automatically.
+						</p>
+					{:else if action === 'confirm_delivery'}
+						<p class="muted">Closes this review. History and charges stay unchanged.</p>
+						<label
+							>What delivery evidence did you check?<textarea
+								bind:value={evidence}
+								minlength="10"
+								maxlength="1000"
+								required
+								disabled={busy}
+								rows="2"
+								aria-describedby="completion-evidence-help"
+								placeholder="For example: customer confirmed receipt; include the date and where you checked."
+							></textarea></label
+						>
+						<p id="completion-evidence-help" class="muted evidence-help">
+							Admin only · at least 10 characters.
+						</p>
+						<label class="confirmation"
+							><input type="checkbox" bind:checked={confirmed} required disabled={busy} />I verified
+							that the customer received the delivery—not just the supplier’s status.</label
+						>
+					{:else if action === 'request_link'}
+						<p class="muted">
+							Shown on the customer’s order and notifications. Their reply comes here for review; it
+							does not resubmit the order.
+						</p>
+					{:else}
+						<p class="muted">
+							Shown on their order and notifications. No delivery change or email.
+						</p>
+					{/if}
 					<label
-						>What delivery evidence did you check? <span class="muted">(admin only)</span><textarea
-							bind:value={evidence}
-							minlength="10"
-							maxlength="1000"
+						>Message the customer will see<textarea
+							bind:value={message}
+							minlength="5"
+							maxlength="500"
 							required
 							disabled={busy}
-							rows="3"
-							placeholder="For example: customer confirmed receipt; include the date and where you checked."
+							rows={action === 'confirm_delivery' ? 2 : 4}
 						></textarea></label
 					>
-					<label class="confirmation"
-						><input type="checkbox" bind:checked={confirmed} required disabled={busy} />I checked
-						that the customer received the delivery. A supplier’s status alone is not proof.</label
-					>
-				{:else if action === 'request_link'}
-					<p class="muted">
-						The customer sees this request on their order and in their notification bell. Their
-						reply comes back here for review; it will not change or resubmit the supplier order.
-					</p>
-				{:else}
-					<p class="muted">
-						Shown on the customer’s order and in their notification bell. This does not change
-						delivery or send an email.
-					</p>
-				{/if}
-				<label
-					>Message the customer will see<textarea
-						bind:value={message}
-						minlength="5"
-						maxlength="500"
-						required
-						disabled={busy}
-						rows="4"
-					></textarea></label
-				>
-				{#if error}<p role="alert" class="error">{error}</p>{/if}
+					{#if error}<p role="alert" class="error">{error}</p>{/if}
+				</div>
 				<footer>
-					<button type="button" onclick={close} disabled={busy}>Cancel</button><button
-						class="primary"
-						type="submit"
-						disabled={busy ||
-							(!refreshNeeded &&
-								(message.trim().length < 5 ||
-									(action === 'confirm_delivery' && (!confirmed || evidence.trim().length < 10))))}
-						>{busy
-							? 'Saving…'
-							: refreshNeeded
-								? 'Refresh review'
-								: action === 'confirm_delivery'
-									? 'Confirm completion'
-									: 'Send to customer'}</button
-					>
+					{#if action === 'confirm_delivery' && !refreshNeeded && completionHint}
+						<p class="muted completion-hint" role="status">{completionHint}</p>
+					{/if}
+					<div class="dialog-buttons">
+						<button type="button" onclick={close} disabled={busy}>Cancel</button><button
+							class="primary"
+							type="submit"
+							disabled={busy ||
+								(!refreshNeeded &&
+									(message.trim().length < 5 ||
+										((action === 'confirm_delivery' || action === 'confirm_failure') &&
+											(!confirmed || evidence.trim().length < 10))))}
+							>{busy
+								? 'Saving…'
+								: refreshNeeded
+									? 'Refresh review'
+									: action === 'confirm_failure'
+										? 'Confirm failure'
+										: action === 'withdraw_link'
+											? 'Withdraw request'
+											: action === 'confirm_delivery'
+												? 'Confirm completion'
+												: 'Send to customer'}</button
+						>
+					</div>
 				</footer>
 			</form>
 		</div>
@@ -249,6 +359,7 @@
 		align-items: center;
 	}
 	button,
+	summary,
 	.actions a {
 		min-height: 40px;
 		border: 1px solid var(--border);
@@ -267,6 +378,31 @@
 		background: var(--primary);
 		color: #00150b;
 		border-color: var(--primary);
+	}
+	.resolution-options {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin-top: 8px;
+	}
+	.resolution-options button {
+		text-align: left;
+	}
+	.resolution-menu[open] {
+		flex-basis: 100%;
+	}
+	.resolution-menu summary {
+		cursor: pointer;
+	}
+	input[type='number'] {
+		display: block;
+		margin-top: 6px;
+		padding: 8px;
+		width: 100%;
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		font-size: 16px;
 	}
 	.support-status {
 		margin-bottom: 12px;
@@ -303,18 +439,30 @@
 	.support-dialog {
 		width: min(540px, 100%);
 		max-height: calc(100dvh - 32px);
-		overflow-y: auto;
+		overflow: hidden;
 		border: 1px solid var(--border);
 		border-radius: 18px;
 		background: var(--bg-elev-1);
-		padding: 24px;
+		padding: 20px;
+	}
+	form {
+		display: flex;
+		flex-direction: column;
+		max-height: calc(100dvh - 74px);
+	}
+	.dialog-fields {
+		overflow-y: auto;
+		min-height: 0;
+		padding: 0 2px;
+		overscroll-behavior: contain;
 	}
 	header {
+		flex-shrink: 0;
 		display: flex;
 		align-items: start;
 		justify-content: space-between;
 		gap: 16px;
-		margin-bottom: 16px;
+		margin-bottom: 10px;
 	}
 	h2 {
 		font-size: 20px;
@@ -322,18 +470,21 @@
 	}
 	label {
 		display: block;
-		margin-top: 16px;
+		margin-top: 12px;
 		font-size: 13px;
 		font-weight: 600;
 	}
 	textarea {
 		display: block;
-		margin-top: 8px;
+		margin-top: 6px;
 		width: 100%;
 		border: 1px solid var(--border);
 		border-radius: 10px;
 		background: var(--bg);
-		padding: 12px;
+		padding: 10px;
+		font-size: 16px;
+		font-weight: 400;
+		line-height: 1.4;
 		color: var(--text);
 		resize: vertical;
 	}
@@ -349,10 +500,19 @@
 		flex-shrink: 0;
 	}
 	footer {
-		margin-top: 20px;
+		flex-shrink: 0;
+		margin-top: 12px;
+	}
+	.dialog-buttons {
 		display: flex;
 		justify-content: end;
 		gap: 10px;
+	}
+	.evidence-help {
+		margin-top: 4px;
+	}
+	.completion-hint {
+		margin-bottom: 8px;
 	}
 	.error {
 		margin-top: 12px;
@@ -361,10 +521,10 @@
 	}
 	@media (max-width: 480px) {
 		.support-dialog {
-			padding: 18px;
+			padding: 16px;
 		}
-		footer {
-			flex-wrap: wrap;
+		form {
+			max-height: calc(100dvh - 66px);
 		}
 		footer button {
 			flex: 1;

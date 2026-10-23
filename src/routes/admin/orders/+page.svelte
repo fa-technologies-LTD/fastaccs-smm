@@ -393,13 +393,13 @@
 	{/if}
 
 	<!-- Orders Table -->
-	<div class="space-y-3 lg:hidden">
+	<div class="space-y-5 lg:hidden">
 		{#each paginatedOrders as order}
 			<article
-				class="rounded-lg p-3"
+				class="rounded-xl p-4"
 				style={isUnresolvedManual(order)
 					? 'border: 1.5px solid var(--primary); background: var(--bg-elev-1); box-shadow: 0 0 0 1px rgba(5,212,113,0.25);'
-					: 'border: 1px solid var(--border); background: var(--bg-elev-1);'}
+					: 'border: 1px solid color-mix(in srgb, var(--text-muted) 32%, var(--border)); background: var(--bg-elev-1);'}
 			>
 				<div class="mb-2 flex items-start justify-between gap-3">
 					<div class="min-w-0">
@@ -449,19 +449,19 @@
 				</div>
 
 				<div class="flex items-center justify-between gap-2">
-					<div class="truncate text-xs" style="color: var(--text-muted);">
-						{order.affiliateCode ? `Affiliate: ${order.affiliateCode}` : 'No affiliate'}
-					</div>
+					{#if order.affiliateCode}<div class="truncate text-xs" style="color: var(--text-muted);">
+							Affiliate: {order.affiliateCode}
+						</div>{/if}
 					<a
 						href={`/admin/orders/${order.id}`}
 						onclick={(event) => {
 							event.preventDefault();
 							goto(`/admin/orders/${order.id}`);
 						}}
-						class="rounded-full px-3 py-1.5 text-xs font-semibold"
+						class="ml-auto rounded-full px-3 py-1.5 text-xs font-semibold"
 						style="background: rgba(105,109,250,0.14); border: 1px solid rgba(170,173,255,0.25); color: var(--link);"
 					>
-						View
+						Open order
 					</a>
 				</div>
 			</article>

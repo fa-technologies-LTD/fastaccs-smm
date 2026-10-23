@@ -53,6 +53,25 @@ it('ignores stale replies, invalid dates, unrelated notes and unsafe link scheme
 	).toBeNull();
 	expect(getBoostSupportState([{ ...events[0], occurredAt: 'invalid' }]).state).toBe('none');
 });
+
+it('withdraws a link request without calling the delivery complete or accepting an old reply', () => {
+	const state = getBoostSupportState([
+		event('request', 'boosting_support_requested', {}, 1),
+		event('withdraw', 'boosting_support_withdrawn', {}, 2),
+		event(
+			'reply',
+			'boosting_support_replied',
+			{ requestId: 'request', link: 'https://instagram.com/example' },
+			3
+		)
+	]);
+	expect(state).toMatchObject({
+		state: 'none',
+		revision: 'withdraw',
+		requestId: null,
+		reply: null
+	});
+});
 it('does not describe confirmed cancellation or partial delivery as still running', () => {
 	expect(boostReviewNotice('provider_cancelled')).toContain('cancellation');
 	expect(boostReviewNotice('provider_partial')).toContain('partial');

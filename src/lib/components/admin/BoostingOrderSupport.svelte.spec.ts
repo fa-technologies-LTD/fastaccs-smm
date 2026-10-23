@@ -6,6 +6,7 @@ const props = {
 	itemId: 'item',
 	orderId: 'order',
 	productName: 'Instagram Followers',
+	quantity: 500,
 	held: true,
 	canManage: true,
 	onUpdated: vi.fn()
@@ -16,10 +17,104 @@ it('shows support controls for held live orders and no write controls for read-o
 	expect(page.getByRole('button', { name: 'Mark completed' }).query()).toBeNull();
 	await first.unmount();
 	render(Component, props);
+	await page.getByText('Resolve order', { exact: true }).click();
 	await expect.element(page.getByRole('button', { name: 'Request valid link' })).toBeVisible();
 	await expect
 		.element(page.getByRole('button', { name: 'Customer update', exact: true }))
 		.toBeVisible();
+});
+
+it('does not offer delivery resolution for a refunded item', async () => {
+	render(Component, { ...props, status: 'refunded' });
+	expect(page.getByText('Resolve order', { exact: true }).query()).toBeNull();
+	await expect
+		.element(page.getByRole('button', { name: 'Customer update', exact: true }))
+		.toBeVisible();
+});
+
+it('keeps resolved history closed even without an item status', async () => {
+	render(Component, {
+		...props,
+		held: false,
+		support: {
+			revision: 'resolved',
+			state: 'resolved',
+			requestId: null,
+			message: 'Your delivery is confirmed. This review is closed.',
+			updatedAt: null,
+			reply: null
+		}
+	});
+	expect(page.getByText('Resolve order', { exact: true }).query()).toBeNull();
+	await expect.element(page.getByText('Review resolved by support')).toBeVisible();
+});
+
+it('offers a deliberate change of resolution, not completion or retry, while waiting for a link', async () => {
+	render(Component, {
+		...props,
+		support: {
+			revision: 'request',
+			state: 'awaiting_customer',
+			requestId: 'request',
+			message: 'Please correct your public link.',
+			updatedAt: null,
+			reply: null
+		}
+	});
+	await expect.element(page.getByText('Waiting for the customer’s link')).toBeVisible();
+	await page.getByText('Change resolution', { exact: true }).click();
+	expect(page.getByRole('button', { name: 'Mark completed', exact: true }).query()).toBeNull();
+	expect(
+		page.getByRole('button', { name: 'Confirm delivery failed', exact: true }).query()
+	).toBeNull();
+	await expect.element(page.getByRole('button', { name: 'Withdraw link request' })).toBeVisible();
+});
+it('keeps customer updates available during an active delivery without offering completion', async () => {
+	render(Component, { ...props, held: false, status: 'in_progress' });
+	await page.getByText('Resolve order', { exact: true }).click();
+	expect(page.getByRole('button', { name: 'Mark completed', exact: true }).query()).toBeNull();
+	await page.getByRole('button', { name: 'Customer update', exact: true }).click();
+	await expect.element(page.getByRole('dialog')).toHaveTextContent('No delivery change or email');
+	await userEvent.keyboard('{Escape}');
+});
+it('records failure evidence and the missing quantity without claiming supplier closure', async () => {
+	const fetchMock = vi.fn().mockResolvedValue(Response.json({ success: true }));
+	vi.stubGlobal('fetch', fetchMock);
+	render(Component, { ...props, held: false });
+	await page.getByText('Resolve order', { exact: true }).click();
+	await page.getByRole('button', { name: 'Confirm delivery failed', exact: true }).click();
+	await expect.element(page.getByRole('dialog')).toHaveTextContent('not supplier closure');
+	await page
+		.getByRole('textbox', { name: 'What failed and how did you check?' })
+		.fill('Valid target checked; customer confirmed no delivery.');
+	await page.getByRole('spinbutton', { name: 'Quantity still missing' }).fill('500');
+	await page.getByRole('checkbox').click();
+	await page.getByRole('button', { name: 'Confirm failure', exact: true }).click();
+	expect(fetchMock).toHaveBeenCalledOnce();
+	expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+		action: 'confirm_failure',
+		quantity: 500,
+		confirmed: true
+	});
+});
+
+it('does not submit a saved update again when refreshing the order list fails', async () => {
+	const fetchMock = vi.fn().mockResolvedValue(Response.json({ success: true }));
+	vi.stubGlobal('fetch', fetchMock);
+	const onUpdated = vi
+		.fn()
+		.mockRejectedValueOnce(new Error('Network unavailable'))
+		.mockResolvedValue(undefined);
+	render(Component, { ...props, onUpdated });
+	await page.getByRole('button', { name: 'Customer update', exact: true }).click();
+	await page
+		.getByRole('textbox', { name: 'Message the customer will see' })
+		.fill('We are checking your order.');
+	await page.getByRole('button', { name: 'Send to customer', exact: true }).click();
+	await expect.element(page.getByRole('alert')).toHaveTextContent('update was saved');
+	await page.getByRole('button', { name: 'Refresh review', exact: true }).click();
+	expect(fetchMock).toHaveBeenCalledOnce();
+	await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
 });
 it('preserves a failed message and retries with the same operation key', async () => {
 	const fetchMock = vi
@@ -46,19 +141,48 @@ it('requires delivery evidence and an explicit check before closing, and Escape 
 	const fetchMock = vi.fn().mockResolvedValue(Response.json({ success: true }));
 	vi.stubGlobal('fetch', fetchMock);
 	render(Component, props);
+	await page.getByText('Resolve order', { exact: true }).click();
 	await page.getByRole('button', { name: 'Mark completed' }).click();
 	const submit = page.getByRole('button', { name: 'Confirm completion', exact: true });
+	await expect.element(submit).toBeDisabled();
+	await page.getByRole('textbox', { name: /What delivery evidence/ }).fill('....');
+	await expect.element(page.getByRole('status')).toHaveTextContent('at least 10 characters');
 	await expect.element(submit).toBeDisabled();
 	await page
 		.getByRole('textbox', { name: /What delivery evidence/ })
 		.fill('Customer confirmed receipt in support chat.');
 	await expect.element(submit).toBeDisabled();
+	await expect.element(page.getByRole('status')).toHaveTextContent('Tick the box');
 	await page.getByRole('checkbox').click();
 	await expect.element(submit).toBeEnabled();
 	await userEvent.keyboard('{Escape}');
 	await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
 	expect(fetchMock).not.toHaveBeenCalled();
 	await expect.element(page.getByRole('button', { name: 'Mark completed' })).toHaveFocus();
+});
+
+it('keeps completion actions inside a short mobile viewport without scrolling the dialog', async () => {
+	await page.viewport(360, 560);
+	render(Component, props);
+	await page.getByText('Resolve order', { exact: true }).click();
+	await page.getByRole('button', { name: 'Mark completed' }).click();
+	const button = page.getByRole('button', { name: 'Confirm completion', exact: true }).element();
+	const rect = button.getBoundingClientRect();
+	expect(rect.bottom).toBeLessThanOrEqual(window.innerHeight - 16);
+	expect(rect.top).toBeGreaterThan(0);
+	await page
+		.getByRole('textbox', { name: /What delivery evidence/ })
+		.fill('Customer confirmed receipt in support chat.');
+	await page.getByRole('checkbox').click();
+	await expect.element(button).toBeEnabled();
+	const point = button.getBoundingClientRect();
+	expect(
+		button.contains(
+			document.elementFromPoint(point.x + point.width / 2, point.y + point.height / 2)
+		)
+	).toBe(true);
+	await userEvent.keyboard('{Escape}');
+	await page.viewport(1280, 720);
 });
 it('keeps active supplier deliveries out of the link-change and close-review controls', async () => {
 	render(Component, { ...props, held: false });
@@ -73,6 +197,7 @@ it('completes a manually sorted delivery and its review with one confirmed actio
 	const onUpdated = vi.fn();
 	vi.stubGlobal('fetch', fetchMock);
 	render(Component, { ...props, onUpdated });
+	await page.getByText('Resolve order', { exact: true }).click();
 	await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
 	await page
 		.getByRole('textbox', { name: /What delivery evidence/ })
