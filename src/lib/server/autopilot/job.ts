@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { botAnswer, botConfigured, botEdit, botSend, type BotButton } from './bot';
-import { runAutopilotOnce, type RunSummary } from './engine';
+import { planAutopilotRun, runAutopilotOnce, type AutopilotMode, type RunSummary } from './engine';
 import { claudeConfigured, readWithClaude } from './llm';
 import { bookSpend, ensurePlacementCode, trackedLinkFor } from './money';
 import { handleOwnerUpdate, type TelegramUpdate } from './owner';
@@ -48,8 +48,20 @@ export function postFor(rec: ChannelRecord, settings: AutopilotSettings): string
 	});
 }
 
-/** The 15-minute cron. Does nothing while the autopilot is off or not set up. */
-export async function runAutopilotJob(): Promise<RunSummary | { skipped: string }> {
+/** Which run is due right now (null: nothing to do, so the cron returns without touching Telegram). */
+export async function autopilotModeNow(now = new Date()): Promise<AutopilotMode | null> {
+	const [settings, state, channels] = await Promise.all([
+		getAutopilotSettings(),
+		getRunState(),
+		listChannels()
+	]);
+	return planAutopilotRun({ now, settings, configured: userbotConfigured(), state, channels });
+}
+
+/** One run. Does nothing while the autopilot is off or not set up. */
+export async function runAutopilotJob(
+	mode: AutopilotMode = 'full'
+): Promise<RunSummary | { skipped: string }> {
 	const settings = await getAutopilotSettings();
 	if (!settings.enabled) return { skipped: 'off' };
 	if (!userbotConfigured()) return { skipped: 'telegram_not_set_up' };
@@ -70,7 +82,8 @@ export async function runAutopilotJob(): Promise<RunSummary | { skipped: string 
 				? (text, title) => readWithClaude(text, { channelTitle: title, model: settings.llmModel })
 				: undefined,
 			postFor: (rec) => postFor(rec, settings),
-			deadline: Date.now() + 45_000
+			deadline: Date.now() + (mode === 'full' ? 45_000 : 30_000),
+			mode
 		});
 	} catch (error) {
 		const latest = await getRunState();

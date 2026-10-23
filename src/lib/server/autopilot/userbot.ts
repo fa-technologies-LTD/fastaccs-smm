@@ -24,13 +24,21 @@ export interface FoundChannel {
 
 export interface UserbotPort {
 	searchChannels(query: string): Promise<FoundChannel[]>;
-	channelInfo(username: string): Promise<{ about: string; members: number; posts: ChannelPost[] }>;
+	channelInfo(
+		username: string
+	): Promise<{ title: string; about: string; members: number; posts: ChannelPost[] }>;
 	recentPosts(username: string, limit?: number): Promise<ChannelPost[]>;
 	/** A person we can message: null for bots, channels and unknown handles. */
 	resolvePerson(username: string): Promise<{ username: string; userId: string } | null>;
 	sendMessage(username: string, text: string): Promise<number>;
 	/** Messages the person sent us after `sinceId` (oldest first). */
 	incomingFrom(username: string, sinceId: number): Promise<ChannelPost[]>;
+	/** People with unread messages to us, by username (one cheap call for the quick reply check). */
+	unreadChats(): Promise<Map<string, number>>;
+	/** Mark a person's messages as read (they see we've read them). */
+	markRead(username: string): Promise<void>;
+	/** Telegram's "similar channels" for a channel. */
+	similarChannels(username: string): Promise<FoundChannel[]>;
 	close(): Promise<void>;
 }
 
@@ -96,7 +104,12 @@ export async function connectUserbot(): Promise<UserbotPort> {
 			guard(async () => {
 				const full = await client.invoke(new Api.channels.GetFullChannel({ channel: username }));
 				const info = full.fullChat as Api.ChannelFull;
+				const channel = full.chats.find(
+					(chat): chat is Api.Channel => chat instanceof Api.Channel && chat.id.equals(info.id)
+				);
+				if (!channel?.broadcast) throw new Error('NOT_A_CHANNEL'); // a group, not a channel
 				return {
+					title: channel.title,
 					about: info.about ?? '',
 					members: Number(info.participantsCount ?? 0),
 					posts: await recentPosts(username)
@@ -125,6 +138,36 @@ export async function connectUserbot(): Promise<UserbotPort> {
 					.filter((m): m is Api.Message => m instanceof Api.Message && !m.out)
 					.map(toPost)
 					.sort((a, b) => a.id - b.id);
+			}),
+		unreadChats: () =>
+			guard(async () => {
+				const dialogs = await client.getDialogs({ limit: 100 });
+				const unread = new Map<string, number>();
+				for (const dialog of dialogs) {
+					const entity = dialog.entity;
+					if (dialog.unreadCount > 0 && entity instanceof Api.User && entity.username) {
+						unread.set(entity.username.toLowerCase(), dialog.unreadCount);
+					}
+				}
+				return unread;
+			}),
+		markRead: (username) =>
+			guard(async () => {
+				await client.markAsRead(username);
+			}),
+		similarChannels: (username) =>
+			guard(async () => {
+				const result = await client.invoke(
+					new Api.channels.GetChannelRecommendations({ channel: username })
+				);
+				return result.chats
+					.filter((chat): chat is Api.Channel => chat instanceof Api.Channel)
+					.filter((chat) => Boolean(chat.broadcast && chat.username))
+					.map((chat) => ({
+						username: String(chat.username),
+						title: chat.title,
+						id: String(chat.id)
+					}));
 			}),
 		close: async () => {
 			await client.destroy().catch(() => client.disconnect().catch(() => {}));

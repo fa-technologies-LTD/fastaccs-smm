@@ -90,8 +90,23 @@ export interface ChannelRecord {
 	rev: number;
 }
 
+/** Today's channel search: how far it got and why channels were passed over. */
+export interface DiscoveryDay {
+	day: string | null;
+	inspected: number;
+	found: number;
+	searches: number;
+	reasons: Record<string, number>;
+}
+
 export interface RunState {
 	lastDiscoveryDay: string | null;
+	lastFullRunAt: string | null;
+	discovery: DiscoveryDay;
+	/** Which search word comes next (keeps rotating across days). */
+	keywordCursor: number;
+	/** Channels to look at next: similar channels and channels promoted by good ones. */
+	candidates: Array<{ username: string; via: string }>;
 	lastReportDay: string | null;
 	outreachDay: string | null;
 	outreachCount: number;
@@ -243,6 +258,10 @@ export async function getRunState(): Promise<RunState> {
 	});
 	return parse<RunState>(row?.value, {
 		lastDiscoveryDay: null,
+		lastFullRunAt: null,
+		discovery: { day: null, inspected: 0, found: 0, searches: 0, reasons: {} },
+		keywordCursor: 0,
+		candidates: [],
 		lastReportDay: null,
 		outreachDay: null,
 		outreachCount: 0,
@@ -257,7 +276,7 @@ export async function saveRunState(state: RunState): Promise<void> {
 }
 
 /** One run at a time. A lock older than `ttlMs` is treated as abandoned. */
-export async function acquireLock(ttlMs = 5 * 60_000): Promise<boolean> {
+export async function acquireLock(ttlMs = 2 * 60_000): Promise<boolean> {
 	return prisma.$transaction(async (tx) => {
 		await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(hashtext('${LOCK_KEY}'))`);
 		const row = await tx.microcopy.findUnique({

@@ -54,4 +54,23 @@ describe('cost-aware production automation schedules', () => {
 		expect(schedules.get('/api/internal/cron/marketing-spend-sync')).toBe('7 * * * *');
 		expect(AUTOMATION_JOBS['marketing-spend-sync'].expectedIntervalMinutes).toBe(60);
 	});
+
+	it('checks Telegram replies only on minutes other jobs already wake the database', () => {
+		const autopilot = schedules.get('/api/internal/cron/telegram-autopilot')!.split(' ');
+		expect(autopilot.slice(1).join(' ')).toBe('* * * *');
+		const awake = new Set<number>();
+		for (const [path, schedule] of schedules) {
+			const [minutes, hours] = schedule.split(' ');
+			if (path.endsWith('/telegram-autopilot') || hours !== '*') continue;
+			for (const minute of minutes.split(',')) awake.add(Number(minute));
+		}
+		const fullRuns = [2, 17, 32, 47];
+		for (const minute of autopilot[0].split(',').map(Number)) {
+			expect(
+				awake.has(minute) || fullRuns.includes(minute),
+				`minute ${minute} wakes the database`
+			).toBe(true);
+		}
+		expect(AUTOMATION_JOBS['telegram-autopilot'].expectedIntervalMinutes).toBe(15);
+	});
 });

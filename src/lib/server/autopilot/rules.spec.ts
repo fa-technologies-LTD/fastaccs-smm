@@ -7,6 +7,8 @@ import {
 	findPricesNgn,
 	isOurPost,
 	maxPriceFor,
+	mentionedUsernames,
+	nigeriaScore,
 	placementCode,
 	postCopy,
 	promoContactCandidates,
@@ -216,5 +218,25 @@ describe('money wording', () => {
 		expect(brief).toContain('brings 2+ new buyers');
 		expect(brief).toContain('THE POST');
 		expect(brief).toContain('GTB 0123456789 Ada Obi');
+	});
+});
+
+describe('looking for Nigerian channels', () => {
+	it('scores Nigerian signs, including ₦ and local payment apps', () => {
+		expect(nigeriaScore('Daily airdrops. Withdraw to Opay, earn ₦5,000')).toBe(2);
+		expect(nigeriaScore('Naija hustle from Lagos')).toBe(2);
+		expect(nigeriaScore('Global crypto signals')).toBe(0);
+	});
+
+	it('picks up channels a channel promotes, but not itself, bots or invite links', () => {
+		expect(
+			mentionedUsernames(
+				[
+					'Join @AirdropHub and t.me/naija_earn',
+					'Me: @self_channel, bot: @tip_bot, t.me/joinchat/abc'
+				],
+				'self_channel'
+			)
+		).toEqual(['airdrophub', 'naija_earn']);
 	});
 });

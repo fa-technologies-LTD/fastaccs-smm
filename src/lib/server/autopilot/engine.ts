@@ -8,6 +8,7 @@ import {
 	decidePrice,
 	isOurPost,
 	maxPriceFor,
+	mentionedUsernames,
 	nigeriaScore,
 	promoContactCandidates,
 	readReply,
@@ -25,14 +26,43 @@ import {
 import type { UserbotPort } from './userbot';
 
 /**
- * One autopilot run (every 15 minutes, time-boxed):
+ * One autopilot run (time-boxed). The quick "replies" run (every 1–3 minutes, only while there are
+ * conversations) does steps 1–2; the full run (every 15 minutes) does everything:
  *   1. send anything the owner typed for an admin
  *   2. read admins' replies and act on them (rules first, Claude for the unclear ones, owner last)
  *   3. check paid posts went live; measure their views at 24h and 48h
  *   4. close deals nobody answered
- *   5. once a day: find new channels; message a few new admins; send the owner a report
+ *   5. find new channels through the day; message a few new admins; send the owner a report
  * Money never moves here: payment always waits for the owner's tap in the bot.
  */
+
+export type AutopilotMode = 'full' | 'replies';
+
+/** Full runs keep the old 15-minute rhythm. */
+export const FULL_RUN_MINUTES = [2, 17, 32, 47];
+
+/**
+ * Which run (if any) is due this minute. Quick runs only happen while there are conversations to
+ * follow, so a quiet autopilot costs nothing between full runs.
+ */
+export function planAutopilotRun(input: {
+	now: Date;
+	settings: Pick<AutopilotSettings, 'enabled'>;
+	configured: boolean;
+	state: Pick<RunState, 'lastFullRunAt' | 'pausedUntil'>;
+	channels: Array<Pick<ChannelRecord, 'status' | 'contact' | 'outbox'>>;
+}): AutopilotMode | null {
+	const { now, settings, state } = input;
+	if (FULL_RUN_MINUTES.includes(now.getUTCMinutes())) return 'full';
+	if (!settings.enabled || !input.configured) return null;
+	if (state.pausedUntil && new Date(state.pausedUntil) > now) return null;
+	const lastFull = state.lastFullRunAt ? new Date(state.lastFullRunAt).getTime() : 0;
+	if (now.getTime() - lastFull > 16 * 60_000) return 'full'; // just switched on, or a run was missed
+	const busy = input.channels.some(
+		(rec) => rec.outbox.length > 0 || (ACTIVE_STATUSES.includes(rec.status) && rec.contact)
+	);
+	return busy ? 'replies' : null;
+}
 
 export interface EngineStore {
 	listChannels(): Promise<ChannelRecord[]>;
@@ -55,6 +85,8 @@ export interface EngineDeps {
 	deadline: number;
 	/** The post copy (with tracked link and code) a channel would publish. */
 	postFor(rec: ChannelRecord): string;
+	/** 'replies': only steps 1–2, reading just the chats with unread messages. Default 'full'. */
+	mode?: AutopilotMode;
 }
 
 export interface RunSummary {
@@ -65,7 +97,9 @@ export interface RunSummary {
 	posted: number;
 	escalated: number;
 	errors: number;
+	inspected: number;
 	stoppedEarly: boolean;
+	mode: AutopilotMode;
 }
 
 const HOUR = 3_600_000;
@@ -77,6 +111,15 @@ export function watDay(at: Date): string {
 
 function watHour(at: Date): number {
 	return new Date(at.getTime() + HOUR).getUTCHours();
+}
+
+/** "Search today: looked at 34, 6 good · skipped: few views 12, not Nigerian 9, ..." */
+export function discoveryLine(disc: RunState['discovery']): string {
+	const reasons = Object.entries(disc.reasons)
+		.sort((a, b) => b[1] - a[1])
+		.map(([reason, count]) => `${reason} ${count}`)
+		.join(', ');
+	return `Search today: looked at ${disc.inspected}, ${disc.found} good${reasons ? ` · skipped: ${reasons}` : ''}`;
 }
 
 export function committedSpend(channels: ChannelRecord[]): number {
@@ -95,8 +138,11 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 		posted: 0,
 		escalated: 0,
 		errors: 0,
-		stoppedEarly: false
+		inspected: 0,
+		stoppedEarly: false,
+		mode: deps.mode ?? 'full'
 	};
+	const quick = summary.mode === 'replies';
 	const timeLeft = () => Date.now() < deps.deadline;
 	const channels = await store.listChannels();
 	const byName = new Map(channels.map((rec) => [rec.username, rec]));
@@ -176,9 +222,20 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 		}
 	}
 
-	// 2. Admins' replies.
+	// 2. Admins' replies. The quick run asks Telegram once which chats have unread messages and
+	// reads only those; the full run checks every conversation (in case one was read on the phone).
+	let unread: Map<string, number> | null = null;
+	if (quick) {
+		try {
+			unread = await userbot.unreadChats();
+		} catch (error) {
+			if (error instanceof TelegramSlowDown) throw error;
+			unread = null; // fall back to checking every conversation
+		}
+	}
 	for (const rec of channels.filter((r) => ACTIVE_STATUSES.includes(r.status) && r.contact)) {
 		if (!timeLeft()) break;
+		if (unread && !unread.has(rec.contact!)) continue;
 		attempted.add(rec.username);
 		let incoming: Awaited<ReturnType<UserbotPort['incomingFrom']>>;
 		try {
@@ -205,7 +262,13 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 			continue;
 		}
 		await store.saveChannel(rec, `reply: ${text.slice(0, 80)}`);
+		await userbot.markRead(rec.contact!).catch((error) => {
+			if (error instanceof TelegramSlowDown) throw error;
+		});
 	}
+
+	// Steps 3–5 belong to the full run only.
+	if (quick) return finish();
 
 	async function handleReply(rec: ChannelRecord, text: string) {
 		let reading: ReadReply = readReply(text);
@@ -386,84 +449,127 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 
 	const today = watDay(now);
 
-	// 5a. Discovery, once a day, a few keywords at a time.
-	if (state.lastDiscoveryDay !== today && timeLeft()) {
-		const dayIndex = Math.floor(now.getTime() / (24 * HOUR));
-		const keywords = settings.keywords.length
-			? [0, 1, 2].map((i) => settings.keywords[(dayIndex * 3 + i) % settings.keywords.length])
-			: [];
-		let inspected = 0;
-		for (const keyword of [...new Set(keywords)]) {
-			if (!timeLeft() || inspected >= 12) break;
-			let results: Awaited<ReturnType<UserbotPort['searchChannels']>> = [];
+	// 5a. Discovery, through the day until there are enough good channels. Each good Nigerian
+	// channel leads to more (Telegram's similar channels and the channels it promotes); search
+	// words fill the queue when it runs dry.
+	const disc =
+		state.discovery.day === today
+			? state.discovery
+			: { day: today, inspected: 0, found: 0, searches: 0, reasons: {} as Record<string, number> };
+	state.discovery = disc;
+	state.lastDiscoveryDay = today;
+	const target = Math.max(10, settings.dailyNewContacts * 2);
+	const queued = new Set(state.candidates.map((c) => c.username));
+	const enqueue = (usernames: string[], via: string) => {
+		for (const raw of usernames) {
+			const username = normalizeUsername(raw);
+			if (!username || byName.has(username) || queued.has(username)) continue;
+			queued.add(username);
+			state.candidates.push({ username, via });
+		}
+		state.candidates = state.candidates.slice(-300);
+	};
+	const skip = (reason: string) => {
+		disc.reasons[reason] = (disc.reasons[reason] ?? 0) + 1;
+	};
+	let inspectedNow = 0;
+	let searchesNow = 0;
+	while (timeLeft() && disc.found < target && disc.inspected < 80 && inspectedNow < 10) {
+		const next = state.candidates.shift();
+		if (!next) {
+			if (!settings.keywords.length || searchesNow >= 2) break;
+			if (disc.searches >= settings.keywords.length) break; // every word tried today
+			const keyword = settings.keywords[state.keywordCursor % settings.keywords.length];
+			state.keywordCursor += 1;
+			disc.searches += 1;
+			searchesNow += 1;
 			try {
-				results = await userbot.searchChannels(keyword);
+				const results = await userbot.searchChannels(keyword);
+				enqueue(
+					results.map((r) => r.username),
+					`search "${keyword}"`
+				);
 			} catch (error) {
 				if (error instanceof TelegramSlowDown) throw error;
 				await store.logAction('search_error', keyword, {
 					message: error instanceof Error ? error.message.slice(0, 120) : 'failed'
 				});
 			}
-			for (const found of results) {
-				if (!timeLeft() || inspected >= 12) break;
-				const username = normalizeUsername(found.username);
-				if (byName.has(username)) continue;
-				inspected += 1;
-				let info: Awaited<ReturnType<UserbotPort['channelInfo']>>;
-				try {
-					info = await userbot.channelInfo(username);
-				} catch (error) {
-					if (error instanceof TelegramSlowDown) throw error;
-					const rec = newChannelRecord({
-						username,
-						title: found.title,
-						keyword,
-						status: 'skipped'
-					});
-					await store.saveChannel(rec, 'skipped: could not read the channel');
-					byName.set(username, rec);
-					continue;
-				}
-				const avgViews = typicalViews(info.posts);
-				const lastPostAt = info.posts[0]?.date ?? null;
-				const rec = newChannelRecord({
-					username,
-					title: found.title,
-					members: info.members,
-					avgViews,
-					lastPostAt: lastPostAt?.toISOString() ?? null,
-					keyword,
-					nigeria: nigeriaScore(`${found.title}\n${info.about}`),
-					maxPriceNgn: maxPriceFor(avgViews, settings)
-				});
-				const fit = channelQualifies(
-					{ members: info.members, avgViews, lastPostAt, text: info.about },
-					settings,
-					now
-				);
-				if (fit.ok) {
-					for (const candidate of promoContactCandidates(info.about, username)) {
-						const person = await userbot.resolvePerson(candidate);
-						if (person) {
-							rec.contact = normalizeUsername(person.username);
-							break;
-						}
-					}
-				}
-				if (!fit.ok || !rec.contact || rec.maxPriceNgn < 500) {
-					rec.status = 'skipped';
-					await store.saveChannel(
-						rec,
-						`skipped: ${!fit.ok ? fit.reason : rec.contact ? 'too small' : 'no promo contact'}`
-					);
-				} else {
-					await store.saveChannel(rec, `found via "${keyword}"`);
-					summary.discovered += 1;
-				}
-				byName.set(username, rec);
-			}
+			continue;
 		}
-		state.lastDiscoveryDay = timeLeft() ? today : state.lastDiscoveryDay;
+		const username = normalizeUsername(next.username);
+		queued.delete(username);
+		if (byName.has(username)) continue;
+		inspectedNow += 1;
+		disc.inspected += 1;
+		summary.inspected += 1;
+		let info: Awaited<ReturnType<UserbotPort['channelInfo']>>;
+		try {
+			info = await userbot.channelInfo(username);
+		} catch (error) {
+			if (error instanceof TelegramSlowDown) throw error;
+			skip('not a readable channel');
+			const rec = newChannelRecord({ username, keyword: next.via, status: 'skipped' });
+			await store.saveChannel(rec, 'skipped: not a readable channel');
+			byName.set(username, rec);
+			continue;
+		}
+		const avgViews = typicalViews(info.posts);
+		const lastPostAt = info.posts[0]?.date ?? null;
+		const title = info.title || username;
+		const rec = newChannelRecord({
+			username,
+			title,
+			members: info.members,
+			avgViews,
+			lastPostAt: lastPostAt?.toISOString() ?? null,
+			keyword: next.via,
+			nigeria: nigeriaScore([title, info.about, ...info.posts.map((p) => p.text)].join('\n')),
+			maxPriceNgn: maxPriceFor(avgViews, settings)
+		});
+		const fit = channelQualifies(
+			{ members: info.members, avgViews, lastPostAt, text: info.about },
+			settings,
+			now
+		);
+		let reason: string | null = !fit.ok ? (fit.reason ?? 'not a fit') : null;
+		if (!reason && rec.nigeria === 0) reason = 'not Nigerian';
+		if (!reason) {
+			// A good Nigerian channel: look at its neighbours next, then find who sells its posts.
+			const similar = await userbot.similarChannels(username).catch((error) => {
+				if (error instanceof TelegramSlowDown) throw error;
+				return [];
+			});
+			enqueue(
+				[
+					...similar.map((c) => c.username),
+					...mentionedUsernames(
+						info.posts.map((p) => p.text),
+						username
+					)
+				],
+				`via @${username}`
+			);
+			for (const candidate of promoContactCandidates(info.about, username)) {
+				const person = await userbot.resolvePerson(candidate);
+				if (person) {
+					rec.contact = normalizeUsername(person.username);
+					break;
+				}
+			}
+			if (!rec.contact) reason = 'no promo contact';
+			else if (rec.maxPriceNgn < 500) reason = 'too small';
+		}
+		if (reason) {
+			skip(reason);
+			rec.status = 'skipped';
+			await store.saveChannel(rec, `skipped: ${reason}`);
+		} else {
+			disc.found += 1;
+			summary.discovered += 1;
+			await store.saveChannel(rec, `found ${next.via}`);
+		}
+		byName.set(username, rec);
 	}
 
 	// 5b. Outreach: a few new admins a day, best channels first, never past the budget.
@@ -511,24 +617,29 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 				`Talking to: ${count(['contacted', 'negotiating'])} · agreed: ${count(['agreed', 'awaiting_payment'])} · live posts: ${count(['paid', 'posted'])} · finished: ${count(['done'])}`,
 				`Spent ${naira(spent)} of ${naira(settings.budgetNgn)} (committed ${naira(committedSpend(all))})`,
 				`New admins messaged today: ${state.outreachCount}/${settings.dailyNewContacts}`,
+				discoveryLine(disc),
 				`Waiting on you: ${all.filter((r) => r.waitingOwner || r.status === 'awaiting_payment').length}`
 			].join('\n')
 		);
 		state.lastReportDay = today;
 	}
 
-	// Channels whose Telegram calls all worked this run start counting errors afresh.
-	for (const username of attempted) {
-		const rec = byName.get(username);
-		if (rec && rec.errorCount > 0 && !erroredNow.has(username)) {
-			rec.errorCount = 0;
-			await store.saveChannel(rec);
-		}
-	}
+	return finish();
 
-	state.lastRunAt = now.toISOString();
-	state.lastError = null;
-	await store.saveRunState(state);
-	summary.stoppedEarly = !timeLeft();
-	return summary;
+	async function finish(): Promise<RunSummary> {
+		// Channels whose Telegram calls all worked this run start counting errors afresh.
+		for (const username of attempted) {
+			const rec = byName.get(username);
+			if (rec && rec.errorCount > 0 && !erroredNow.has(username)) {
+				rec.errorCount = 0;
+				await store.saveChannel(rec);
+			}
+		}
+		state.lastRunAt = now.toISOString();
+		if (!quick) state.lastFullRunAt = now.toISOString();
+		state.lastError = null;
+		await store.saveRunState(state);
+		summary.stoppedEarly = !timeLeft();
+		return summary;
+	}
 }

@@ -174,9 +174,36 @@ export function channelQualifies(
 	return { ok: true };
 }
 
-/** Nigerian channels first: they are our buyers. */
+const NIGERIA_SIGNALS = [
+	/\bnigeria(?:n|ns)?\b/i,
+	/\bnaija\b/i,
+	/\b9ja\b/i,
+	/\b(?:lagos|abuja|ibadan|port harcourt|enugu|kano)\b/i,
+	/₦/,
+	/\b(?:naira|ngn)\b/i,
+	/\b(?:opay|palmpay|moniepoint|kuda)\b/i
+];
+
+/** How Nigerian a channel looks (0 = no sign at all). Nigerian channels are our buyers. */
 export function nigeriaScore(text: string): number {
-	return /\b(nigeria|naija|lagos|abuja|₦|naira|9ja)\b/i.test(text) ? 1 : 0;
+	return NIGERIA_SIGNALS.filter((signal) => signal.test(text || '')).length;
+}
+
+/**
+ * Channels a channel points to in its posts (@handles and t.me links). Channels that cross-promote
+ * are exactly the ones that sell posts, so these are good places to look next.
+ */
+export function mentionedUsernames(texts: string[], self: string): string[] {
+	const found = new Set<string>();
+	for (const text of texts) {
+		for (const match of (text || '').matchAll(/(?:t\.me\/|@)([a-zA-Z][a-zA-Z0-9_]{3,31})/g)) {
+			const name = match[1].toLowerCase();
+			if (name === self.toLowerCase() || name.startsWith('joinchat') || name.endsWith('bot'))
+				continue;
+			found.add(name);
+		}
+	}
+	return [...found];
 }
 
 // ---------------------------------------------------------------------------------------------

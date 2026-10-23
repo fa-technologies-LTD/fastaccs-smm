@@ -11,7 +11,7 @@ import {
 	botWebhookInfo,
 	type WebhookHealth
 } from '$lib/server/autopilot/bot';
-import { committedSpend } from '$lib/server/autopilot/engine';
+import { committedSpend, discoveryLine, watDay } from '$lib/server/autopilot/engine';
 import { botWebhookSecret } from '$lib/server/autopilot/job';
 import { claudeConfigured } from '$lib/server/autopilot/llm';
 import { SITE_URL } from '$lib/server/autopilot/money';
@@ -95,7 +95,20 @@ export const load: PageServerLoad = async ({ locals }) => {
 			claude: claudeConfigured(),
 			ownerConnected: Boolean(settings.ownerChatId)
 		},
-		state,
+		state: {
+			lastRunAt: state.lastRunAt,
+			lastFullRunAt: state.lastFullRunAt,
+			lastError: state.lastError,
+			pausedUntil: state.pausedUntil
+		},
+		search: {
+			line: discoveryLine(
+				state.discovery.day === watDay(new Date())
+					? state.discovery
+					: { day: null, inspected: 0, found: 0, searches: 0, reasons: {} }
+			),
+			queued: state.candidates.length
+		},
 		money: { spent, committed: committedSpend(channels), budget: settings.budgetNgn },
 		channels: channels
 			.sort(

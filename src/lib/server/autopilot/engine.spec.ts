@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BotButton } from './bot';
-import { runAutopilotOnce, type EngineDeps } from './engine';
+import { discoveryLine, planAutopilotRun, runAutopilotOnce, type EngineDeps } from './engine';
 import { TelegramSlowDown } from './errors';
 import { AUTOPILOT_DEFAULTS, type AutopilotSettings } from './settings';
 import { newChannelRecord, type ChannelRecord, type RunState } from './state';
@@ -12,9 +12,10 @@ const HOUR = 3_600_000;
 function fakeUserbot(overrides: Partial<UserbotPort> = {}) {
 	const sent: Array<{ to: string; text: string }> = [];
 	const inbox = new Map<string, ChannelPost[]>();
+	const unread = new Set<string>();
 	const bot: UserbotPort = {
 		searchChannels: vi.fn(async () => []),
-		channelInfo: vi.fn(async () => ({ about: '', members: 0, posts: [] })),
+		channelInfo: vi.fn(async () => ({ title: '', about: '', members: 0, posts: [] })),
 		recentPosts: vi.fn(async () => []),
 		resolvePerson: vi.fn(async (username: string) => ({ username, userId: '1' })),
 		sendMessage: vi.fn(async (to: string, text: string) => {
@@ -24,11 +25,16 @@ function fakeUserbot(overrides: Partial<UserbotPort> = {}) {
 		incomingFrom: vi.fn(async (username: string, sinceId: number) =>
 			(inbox.get(username) ?? []).filter((m) => m.id > sinceId)
 		),
+		unreadChats: vi.fn(async () => new Map([...unread].map((name) => [name, 1]))),
+		markRead: vi.fn(async (username: string) => void unread.delete(username)),
+		similarChannels: vi.fn(async () => []),
 		close: vi.fn(async () => {}),
 		...overrides
 	};
-	const reply = (from: string, id: number, text: string) =>
+	const reply = (from: string, id: number, text: string) => {
 		inbox.set(from, [...(inbox.get(from) ?? []), { id, text, views: 0, date: NOW }]);
+		unread.add(from);
+	};
 	return { bot, sent, reply };
 }
 
@@ -41,7 +47,11 @@ function setup(
 	const actions: string[] = [];
 	const owner: Array<{ text: string; rows?: BotButton[][] }> = [];
 	let state: RunState = {
-		lastDiscoveryDay: '2026-10-22', // skip discovery unless a test resets it
+		lastDiscoveryDay: null,
+		lastFullRunAt: null,
+		discovery: { day: null, inspected: 0, found: 0, searches: 0, reasons: {} },
+		keywordCursor: 0,
+		candidates: [],
 		lastReportDay: null,
 		outreachDay: null,
 		outreachCount: 0,
@@ -262,8 +272,18 @@ describe('outreach and discovery', () => {
 			]),
 			channelInfo: vi.fn(async (username: string) =>
 				username === 'goodchannel'
-					? { about: 'For promo DM @ads_guy', members: 6_000, posts }
-					: { about: '', members: 6_000, posts: posts.map((p) => ({ ...p, views: 40 })) }
+					? {
+							title: 'Naija Airdrops',
+							about: 'Naija airdrops daily. For promo DM @ads_guy',
+							members: 6_000,
+							posts
+						}
+					: {
+							title: 'Quiet',
+							about: '',
+							members: 6_000,
+							posts: posts.map((p) => ({ ...p, views: 40 }))
+						}
 			)
 		});
 		const t = setup([], { testMode: true, testContacts: [] }, userbot);
@@ -350,7 +370,7 @@ describe('one broken channel never stops the rest', () => {
 			]),
 			channelInfo: vi.fn(async (username: string) => {
 				if (username === 'private_one') throw new Error('CHANNEL_PRIVATE');
-				return { about: 'ads: @ads_guy', members: 6_000, posts };
+				return { title: 'Naija Airdrops', about: 'Lagos. ads: @ads_guy', members: 6_000, posts };
 			})
 		});
 		const t = setup([], { testMode: true, testContacts: [] }, userbot);
@@ -374,5 +394,180 @@ describe('one broken channel never stops the rest', () => {
 		});
 		const t = setup([contacted()], {}, userbot);
 		await expect(runAutopilotOnce(t.deps)).rejects.toBeInstanceOf(TelegramSlowDown);
+	});
+});
+
+describe('quick reply checks between full runs', () => {
+	it('reads only chats with unread messages, answers, marks them read, and does nothing else', async () => {
+		const quiet = contacted({ username: 'quiet_one', contact: 'quiet_admin' });
+		const newcomer = newChannelRecord({ username: 'new_channel', contact: 'new_admin' });
+		const t = setup([contacted(), quiet, newcomer]);
+		t.userbot.reply('promo_boss', 5, 'Promo is 3k');
+		t.deps.mode = 'replies';
+		const summary = await runAutopilotOnce(t.deps);
+		expect(summary.mode).toBe('replies');
+		expect(t.saved.get('airdrop_naija')!.status).toBe('agreed');
+		expect(t.userbot.bot.incomingFrom).toHaveBeenCalledTimes(1); // not quiet_admin
+		expect(t.userbot.bot.markRead).toHaveBeenCalledWith('promo_boss');
+		expect(t.saved.get('new_channel')!.status).toBe('discovered'); // no outreach
+		expect(t.userbot.bot.searchChannels).not.toHaveBeenCalled(); // no search
+		expect(t.state.lastFullRunAt).toBeNull();
+	});
+
+	it('sends what the owner queued (like the post after Approve) straight away', async () => {
+		const t = setup([contacted({ status: 'paid', outbox: ['THE POST'] })]);
+		t.deps.mode = 'replies';
+		await runAutopilotOnce(t.deps);
+		expect(t.userbot.sent).toEqual([{ to: 'promo_boss', text: 'THE POST' }]);
+	});
+});
+
+describe('when to run', () => {
+	const at = (iso: string) => new Date(iso);
+	const base = {
+		settings: { enabled: true },
+		configured: true,
+		state: { lastFullRunAt: '2026-10-23T12:02:00Z', pausedUntil: null },
+		channels: [] as Array<Pick<ChannelRecord, 'status' | 'contact' | 'outbox'>>
+	};
+	const talking = [{ status: 'contacted' as const, contact: 'promo_boss', outbox: [] }];
+
+	it('full run at :02, :17, :32 and :47, even when switched off (it then just reports "off")', () => {
+		expect(planAutopilotRun({ ...base, now: at('2026-10-23T12:17:00Z') })).toBe('full');
+		expect(
+			planAutopilotRun({ ...base, settings: { enabled: false }, now: at('2026-10-23T12:32:00Z') })
+		).toBe('full');
+	});
+
+	it('quick checks in between only while there are conversations', () => {
+		expect(planAutopilotRun({ ...base, now: at('2026-10-23T12:05:00Z') })).toBeNull();
+		expect(planAutopilotRun({ ...base, channels: talking, now: at('2026-10-23T12:05:00Z') })).toBe(
+			'replies'
+		);
+		expect(
+			planAutopilotRun({
+				...base,
+				channels: [{ status: 'discovered', contact: 'x', outbox: ['hi'] }],
+				now: at('2026-10-23T12:05:00Z')
+			})
+		).toBe('replies');
+	});
+
+	it('a full run right after switching on, and nothing while Telegram asked us to wait', () => {
+		expect(
+			planAutopilotRun({
+				...base,
+				state: { lastFullRunAt: null, pausedUntil: null },
+				now: at('2026-10-23T12:05:00Z')
+			})
+		).toBe('full');
+		expect(
+			planAutopilotRun({
+				...base,
+				channels: talking,
+				state: { ...base.state, pausedUntil: '2026-10-23T13:00:00Z' },
+				now: at('2026-10-23T12:05:00Z')
+			})
+		).toBeNull();
+		expect(
+			planAutopilotRun({
+				...base,
+				channels: talking,
+				configured: false,
+				now: at('2026-10-23T12:05:00Z')
+			})
+		).toBeNull();
+	});
+});
+
+describe('finding channels through the day', () => {
+	const posts = (views: number, text = 'post') =>
+		Array.from({ length: 12 }, (_, i) => ({
+			id: i + 1,
+			views,
+			date: new Date(NOW.getTime() - (i + 1) * HOUR),
+			text
+		}));
+
+	it('follows a good channel to its similar channels and the channels it promotes', async () => {
+		const userbot = fakeUserbot({
+			searchChannels: vi.fn(async () => [{ username: 'seed_ng', title: 'Seed', id: '1' }]),
+			similarChannels: vi.fn(async (username: string) =>
+				username === 'seed_ng' ? [{ username: 'sister_ng', title: 'Sister', id: '2' }] : []
+			),
+			channelInfo: vi.fn(async (username: string) => ({
+				title: username,
+				about: `Naija crypto. Ads: @${username}_ads`,
+				members: 8_000,
+				posts: posts(1_500, username === 'seed_ng' ? 'Join our partner @promoted_ng' : 'post')
+			}))
+		});
+		const t = setup([], { testMode: true, testContacts: [] }, userbot);
+		const summary = await runAutopilotOnce(t.deps);
+		expect(summary.discovered).toBe(3);
+		expect(t.saved.get('sister_ng')).toMatchObject({
+			status: 'discovered',
+			keyword: 'via @seed_ng'
+		});
+		expect(t.saved.get('promoted_ng')).toMatchObject({
+			status: 'discovered',
+			contact: 'promoted_ng_ads'
+		});
+	});
+
+	it('passes over channels with no sign of Nigeria, and says why', async () => {
+		const userbot = fakeUserbot({
+			searchChannels: vi.fn(async () => [{ username: 'global_crypto', title: 'Global', id: '1' }]),
+			channelInfo: vi.fn(async () => ({
+				title: 'Global Crypto',
+				about: 'Ads: @global_ads',
+				members: 8_000,
+				posts: posts(1_500)
+			}))
+		});
+		const t = setup([], {}, userbot);
+		await runAutopilotOnce(t.deps);
+		expect(t.saved.get('global_crypto')!.status).toBe('skipped');
+		expect(t.state.discovery.reasons).toEqual({ 'not Nigerian': 1 });
+		expect(discoveryLine(t.state.discovery)).toBe(
+			'Search today: looked at 1, 0 good · skipped: not Nigerian 1'
+		);
+	});
+
+	it('tries two search words per run, rotating, and each word only once a day', async () => {
+		const t = setup([], { keywords: ['a1', 'b2', 'c3'] });
+		await runAutopilotOnce(t.deps);
+		expect(t.userbot.bot.searchChannels).toHaveBeenCalledTimes(2);
+		await runAutopilotOnce(t.deps);
+		expect(t.userbot.bot.searchChannels).toHaveBeenCalledTimes(3); // c3 only; a1, b2 done today
+		expect(vi.mocked(t.userbot.bot.searchChannels).mock.calls.map((c) => c[0])).toEqual([
+			'a1',
+			'b2',
+			'c3'
+		]);
+		t.deps.now = new Date(NOW.getTime() + 24 * HOUR); // next day carries on from where it stopped
+		await runAutopilotOnce(t.deps);
+		expect(vi.mocked(t.userbot.bot.searchChannels).mock.calls.at(-2)?.[0]).toBe('a1');
+	});
+
+	it('stops looking once it has enough good channels for the day', async () => {
+		const userbot = fakeUserbot({
+			searchChannels: vi.fn(async (keyword: string) =>
+				Array.from({ length: 20 }, (_, i) => ({
+					username: `${keyword}_ng${i}`,
+					title: 'x',
+					id: `${i}`
+				}))
+			),
+			channelInfo: vi.fn(async (username: string) => ({
+				title: username,
+				about: `Naija. Ads: @${username}_ads`,
+				members: 8_000,
+				posts: posts(1_500)
+			}))
+		});
+		const t = setup([], { dailyNewContacts: 2, testMode: true }, userbot);
+		for (let i = 0; i < 3; i += 1) await runAutopilotOnce(t.deps);
+		expect(t.state.discovery.found).toBe(10); // target: max(10, 2 × daily contacts)
 	});
 });

@@ -63,9 +63,10 @@
 			Telegram autopilot
 		</h1>
 		<p class="mt-1 text-sm" style="color: var(--text-muted);">
-			Every 15 minutes it finds Telegram channels in your niches, messages their admins, reads the
-			replies and agrees a price inside your limits. It never pays: each payment comes to your bot
-			as a one-tap card with the deal and what to expect, and nothing is paid unless you approve it.
+			Through the day it finds Nigerian Telegram channels in your niches and messages their admins.
+			It answers their replies within about 1–3 minutes and agrees a price inside your limits. It
+			never pays: each payment comes to your bot as a one-tap card with the deal and what to expect,
+			and nothing is paid unless you approve it.
 			{#if ownerOnly}<strong>Only the owner can change these settings.</strong>{/if}
 		</p>
 	</header>
@@ -118,10 +119,14 @@
 			<div>
 				<h2 class="text-lg font-semibold" style="color: var(--text);">Status</h2>
 				<p class="text-xs" style="color: var(--text-muted);">
-					Last run: {when(data.state.lastRunAt)}{data.state.pausedUntil &&
-					new Date(data.state.pausedUntil) > new Date()
+					Last check: {when(data.state.lastRunAt)} · last full run: {when(
+						data.state.lastFullRunAt
+					)}{data.state.pausedUntil && new Date(data.state.pausedUntil) > new Date()
 						? ` · Telegram asked us to slow down, resuming ${when(data.state.pausedUntil)}`
 						: ''}
+				</p>
+				<p class="mt-1 text-xs" style="color: var(--text-muted);">
+					{data.search.line}{data.search.queued ? ` · ${data.search.queued} more lined up` : ''}
 				</p>
 				{#if data.state.lastError}
 					<p class="mt-1 text-xs" style="color: var(--danger, #e5484d);">
