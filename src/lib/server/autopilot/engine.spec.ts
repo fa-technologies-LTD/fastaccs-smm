@@ -76,7 +76,8 @@ function setup(
 		settings: { ...AUTOPILOT_DEFAULTS, enabled: true, testMode: false, ...settings },
 		store: {
 			listChannels: async () => [...saved.values()],
-			saveChannel: async (rec) => {
+			saveChannel: async (rec, note) => {
+				if (note) rec.log = [...rec.log, note];
 				saved.set(rec.username, rec);
 				return true;
 			},
@@ -303,7 +304,7 @@ describe('outreach and discovery', () => {
 			id: i + 1,
 			views: 1_200,
 			date: new Date(NOW.getTime() - (i + 1) * HOUR),
-			text: 'post'
+			text: 'Naija post'
 		}));
 		const userbot = fakeUserbot({
 			searchChannels: vi.fn(async () => [
@@ -401,7 +402,7 @@ describe('one broken channel never stops the rest', () => {
 			id: i + 1,
 			views: 1_200,
 			date: new Date(NOW.getTime() - (i + 1) * HOUR),
-			text: 'post'
+			text: 'Naija post'
 		}));
 		const userbot = fakeUserbot({
 			searchChannels: vi.fn(async () => [
@@ -521,7 +522,7 @@ describe('when to run', () => {
 });
 
 describe('finding channels through the day', () => {
-	const posts = (views: number, text = 'post') =>
+	const posts = (views: number, text = 'Naija post') =>
 		Array.from({ length: 12 }, (_, i) => ({
 			id: i + 1,
 			views,
@@ -539,7 +540,10 @@ describe('finding channels through the day', () => {
 				title: username,
 				about: `Naija crypto. Ads: @${username}_ads`,
 				members: 8_000,
-				posts: posts(1_500, username === 'seed_ng' ? 'Join our partner @promoted_ng' : 'post')
+				posts: posts(
+					1_500,
+					username === 'seed_ng' ? 'Naija: join our partner @promoted_ng' : 'Naija post'
+				)
 			}))
 		});
 		const t = setup([], { testMode: true, testContacts: [] }, userbot);
@@ -562,7 +566,7 @@ describe('finding channels through the day', () => {
 				title: 'Global Crypto',
 				about: 'Ads: @global_ads',
 				members: 8_000,
-				posts: posts(1_500)
+				posts: posts(1_500, 'Crypto signals')
 			}))
 		});
 		const t = setup([], {}, userbot);
@@ -734,5 +738,76 @@ describe('checks before we message or pay anyone', () => {
 		expect(rec.checks?.warnings).toContain('Deleted our paid post after about 5h');
 		expect(t.owner.at(-1)?.text).toContain('deleted our post about 5h after it went up');
 		expect(t.actions).toContain('post_deleted');
+	});
+});
+
+describe('one seller, several channels', () => {
+	const seller = (username: string, over: Partial<ChannelRecord> = {}) =>
+		newChannelRecord({
+			username,
+			contact: 'tgowner999',
+			nigeria: 2,
+			avgViews: 1_500,
+			members: 20_000,
+			checks: {
+				at: NOW.toISOString(),
+				warnings: [],
+				facts: {
+					avgViews: 1_500,
+					viewShare: 7.5,
+					engagementPer1k: 20,
+					postsLastWeek: 10,
+					nigerianPosts: 8,
+					nichePosts: 8,
+					sponsoredPosts: 1,
+					postsChecked: 12
+				}
+			},
+			...over
+		});
+
+	it('messages the seller about one channel only', async () => {
+		const t = setup([seller('chan_a'), seller('chan_b'), seller('chan_c')]);
+		await runAutopilotOnce(t.deps);
+		expect(t.userbot.sent).toHaveLength(1);
+		await runAutopilotOnce(t.deps);
+		expect(t.userbot.sent).toHaveLength(1); // still talking about the first one
+	});
+
+	it("one reply is applied to one deal, never to all of the seller's channels", async () => {
+		const t = setup([
+			seller('chan_a', { status: 'contacted', maxPriceNgn: 4_000 }),
+			seller('chan_b', { status: 'contacted', maxPriceNgn: 4_000 })
+		]);
+		t.userbot.reply('tgowner999', 5, '3k');
+		await runAutopilotOnce(t.deps);
+		const statuses = ['chan_a', 'chan_b'].map((u) => t.saved.get(u)!.status).sort();
+		expect(statuses).toEqual(['agreed', 'contacted']);
+	});
+
+	it('skips found channels whose members look bought or whose posts are not Nigerian', async () => {
+		const bought = seller('bought_members', {
+			contact: 'a_admin',
+			members: 856_047,
+			checks: {
+				at: NOW.toISOString(),
+				warnings: [],
+				facts: {
+					avgViews: 592,
+					viewShare: 0.1,
+					engagementPer1k: 7,
+					postsLastWeek: 12,
+					nigerianPosts: 0,
+					nichePosts: 8,
+					sponsoredPosts: 1,
+					postsChecked: 12
+				}
+			}
+		});
+		const t = setup([bought]);
+		await runAutopilotOnce(t.deps);
+		expect(t.saved.get('bought_members')!.status).toBe('skipped');
+		expect(t.saved.get('bought_members')!.log.at(-1)).toContain('members look bought');
+		expect(t.userbot.sent).toHaveLength(0);
 	});
 });

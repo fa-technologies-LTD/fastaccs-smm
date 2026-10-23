@@ -320,6 +320,17 @@ export function checkAudience(
 	};
 }
 
+/**
+ * Extra bar for channels the autopilot finds by itself (outreach slots are few): most members must
+ * not be fake, and the posts themselves must look Nigerian, not just the channel's name.
+ */
+export function searchBlocker(facts: AudienceFacts, members: number): string | null {
+	if (facts.viewShare !== null && facts.viewShare < 1 && members >= 10_000)
+		return 'members look bought';
+	if (facts.postsChecked >= 6 && facts.nigerianPosts < 2) return 'posts not Nigerian';
+	return null;
+}
+
 /** The admin we deal with: a real person, not labelled by Telegram, named by the channel itself. */
 export function checkContact(input: {
 	contact: string;

@@ -15,6 +15,7 @@ import {
 	nigeriaScore,
 	promoContactCandidates,
 	readReply,
+	searchBlocker,
 	type ReadReply
 } from './rules';
 import { mayMessage, normalizeUsername, type AutopilotSettings } from './settings';
@@ -257,9 +258,13 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 			unread = null; // fall back to checking every conversation
 		}
 	}
+	const readContacts = new Set<string>();
 	for (const rec of channels.filter((r) => ACTIVE_STATUSES.includes(r.status) && r.contact)) {
 		if (!timeLeft()) break;
 		if (unread && !unread.has(rec.contact!)) continue;
+		// One chat per person: their messages belong to one deal, never to several at once.
+		if (readContacts.has(rec.contact!)) continue;
+		readContacts.add(rec.contact!);
 		attempted.add(rec.username);
 		let incoming: Awaited<ReturnType<UserbotPort['incomingFrom']>>;
 		try {
@@ -358,12 +363,20 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 						)
 						.map((other) => other.username)
 				: [];
+			const sameSeller = [...byName.values()]
+				.filter((other) => other.username !== rec.username && other.contact === rec.contact)
+				.map((other) => `@${other.username}`);
 			const paymentWarnings = checkPayment({
 				details: rec.paymentDetails ?? '',
 				adminName: rec.adminName ?? '',
 				channelTitle: rec.title,
 				sameAccountElsewhere
 			});
+			if (sameSeller.length) {
+				paymentWarnings.push(
+					`@${rec.contact} also sells posts for ${sameSeller.join(', ')}: one seller, several channels (their audiences may overlap)`
+				);
+			}
 			const lines = checked
 				? checkLines(checked.facts, [...checked.warnings, ...paymentWarnings])
 				: [
@@ -601,7 +614,7 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 			maxPriceNgn: maxPriceFor(audience.facts.avgViews, settings),
 			checks: { at: now.toISOString(), warnings: audience.warnings, facts: audience.facts }
 		});
-		let reason: string | null = audience.blockers[0] ?? null;
+		let reason: string | null = audience.blockers[0] ?? searchBlocker(audience.facts, info.members);
 		if (!reason) {
 			// A good Nigerian channel: look at its neighbours next, then find who sells its posts.
 			const similar = await userbot.similarChannels(username).catch((error) => {
@@ -656,8 +669,22 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 	const queue = [...byName.values()]
 		.filter((r) => r.status === 'discovered' && r.contact && mayMessage(settings, r.contact))
 		.sort((a, b) => b.nigeria - a.nigeria || b.avgViews - a.avgViews);
+	const busyContacts = new Set(
+		[...byName.values()]
+			.filter((r) => r.contact && [...ACTIVE_STATUSES, 'posted'].includes(r.status))
+			.map((r) => r.contact!)
+	);
 	for (const rec of queue) {
 		if (!timeLeft() || state.outreachCount >= settings.dailyNewContacts || remaining < 500) break;
+		// The same person often sells posts for several channels: one deal with them at a time.
+		if (busyContacts.has(rec.contact!)) continue;
+		const bar =
+			!rec.manual && rec.checks?.facts ? searchBlocker(rec.checks.facts, rec.members) : null;
+		if (bar) {
+			rec.status = 'skipped';
+			await store.saveChannel(rec, `skipped: ${bar}`);
+			continue;
+		}
 		attempted.add(rec.username);
 		// Channels the owner added by hand get the same checks before the first message.
 		if (rec.manual && !rec.checks) {
@@ -690,6 +717,7 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 			continue;
 		}
 		if (introduced) {
+			busyContacts.add(rec.contact!);
 			rec.status = 'contacted';
 			rec.contactedAt = now.toISOString();
 			state.outreachCount += 1;
