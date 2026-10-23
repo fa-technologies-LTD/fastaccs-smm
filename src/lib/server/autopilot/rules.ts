@@ -207,6 +207,244 @@ export function mentionedUsernames(texts: string[], self: string): string[] {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Checks: is the audience real, Nigerian and in our niche? Is the person we pay really the admin?
+// Blockers stop a channel (or a payment card); warnings go on the owner's card for them to judge.
+// ---------------------------------------------------------------------------------------------
+
+const NICHE =
+	/\b(airdrops?|crypto|bitcoin|btc|usdt|web3|tokens?|mining|earn(?:ing)?|hustle|make money|online jobs?|twitter|x accounts?|followers|tech|forex|giveaways?)\b/i;
+const SPONSORED = /(#ad\b|\bsponsored\b|\bpromo(?:tion)?\b|\badvert|\bpaid post\b)/i;
+
+interface PostLike {
+	views: number;
+	date: Date;
+	text: string;
+	reactions?: number;
+	forwards?: number;
+	replies?: number;
+}
+
+export interface AudienceFacts {
+	avgViews: number;
+	/** Median views as a share of members (%). */
+	viewShare: number | null;
+	/** Reactions + shares + comments per 1,000 views. */
+	engagementPer1k: number;
+	postsLastWeek: number;
+	nigerianPosts: number;
+	nichePosts: number;
+	sponsoredPosts: number;
+	postsChecked: number;
+}
+
+export interface AudienceCheck {
+	blockers: string[];
+	warnings: string[];
+	facts: AudienceFacts;
+}
+
+export function checkAudience(
+	input: { members: number; posts: PostLike[]; title: string; about: string },
+	settings: Pick<AutopilotSettings, 'minAvgViews'>,
+	now: Date = new Date()
+): AudienceCheck {
+	const posts = input.posts.slice(0, 12);
+	const avgViews = typicalViews(posts);
+	const lastPostAt = posts[0]?.date ?? null;
+	const blockers: string[] = [];
+	const warnings: string[] = [];
+
+	const fit = channelQualifies(
+		{ members: input.members, avgViews, lastPostAt, text: input.about },
+		settings,
+		now
+	);
+	if (!fit.ok) blockers.push(fit.reason ?? 'not a fit');
+	const nigeria = nigeriaScore([input.title, input.about, ...posts.map((p) => p.text)].join('\n'));
+	if (nigeria === 0) blockers.push('not Nigerian');
+
+	// Engagement on posts old enough to have been seen.
+	const settled = posts.filter((p) => now.getTime() - p.date.getTime() > 6 * 3_600_000);
+	const views = settled.reduce((sum, p) => sum + p.views, 0);
+	const actions = settled.reduce(
+		(sum, p) => sum + (p.reactions ?? 0) + (p.forwards ?? 0) + (p.replies ?? 0),
+		0
+	);
+	const engagementPer1k = views > 0 ? Math.round((actions / views) * 10_000) / 10 : 0;
+	const viewShare = input.members > 0 ? Math.round((avgViews / input.members) * 1000) / 10 : null;
+	const postsLastWeek = posts.filter(
+		(p) => now.getTime() - p.date.getTime() < 7 * 86_400_000
+	).length;
+	const nigerianPosts = posts.filter((p) => nigeriaScore(p.text) > 0).length;
+	const nichePosts = posts.filter((p) => NICHE.test(p.text)).length;
+	const sponsoredPosts = posts.filter((p) => SPONSORED.test(p.text)).length;
+
+	if (views >= 1_000 && engagementPer1k < 1) {
+		warnings.push(
+			`Almost no reactions or shares for its views (${engagementPer1k} per 1,000): views may be bought`
+		);
+	}
+	const settledViews = settled.filter((p) => now.getTime() - p.date.getTime() > 24 * 3_600_000);
+	if (settledViews.length >= 5) {
+		const mean = settledViews.reduce((sum, p) => sum + p.views, 0) / settledViews.length;
+		const spread = Math.sqrt(
+			settledViews.reduce((sum, p) => sum + (p.views - mean) ** 2, 0) / settledViews.length
+		);
+		if (mean > 0 && spread / mean < 0.03)
+			warnings.push('Views are suspiciously even from post to post');
+	}
+	if (viewShare !== null && viewShare < 3 && input.members >= 1_000) {
+		warnings.push(`Only ${viewShare}% of members see a post: many members may be bought`);
+	}
+	if (postsLastWeek < 3 && fit.ok)
+		warnings.push(`Posts rarely (${postsLastWeek} in the last week)`);
+	if (nigeria > 0 && nigerianPosts < 2 && posts.length >= 6) {
+		warnings.push(`Only ${nigerianPosts} of ${posts.length} recent posts look Nigerian`);
+	}
+	if (nichePosts === 0 && !NICHE.test(`${input.title} ${input.about}`)) {
+		warnings.push('Posts are not about crypto, hustle, X or tech');
+	}
+	return {
+		blockers,
+		warnings,
+		facts: {
+			avgViews,
+			viewShare,
+			engagementPer1k,
+			postsLastWeek,
+			nigerianPosts,
+			nichePosts,
+			sponsoredPosts,
+			postsChecked: posts.length
+		}
+	};
+}
+
+/** The admin we deal with: a real person, not labelled by Telegram, named by the channel itself. */
+export function checkContact(input: {
+	contact: string;
+	person: { scam: boolean; fake: boolean } | null;
+	about: string;
+}): { blockers: string[]; warnings: string[] } {
+	const blockers: string[] = [];
+	const warnings: string[] = [];
+	if (!input.person) blockers.push(`@${input.contact} is not a person we can message`);
+	else if (input.person.scam) blockers.push(`Telegram labels @${input.contact} as SCAM`);
+	else if (input.person.fake)
+		blockers.push(`Telegram labels @${input.contact} as FAKE (impersonation)`);
+	const listed = new RegExp(`(?:@|t\\.me/)${input.contact}\\b`, 'i').test(input.about || '');
+	if (!listed) {
+		warnings.push(
+			`@${input.contact} is not named in the channel's description, so we can't confirm they run it`
+		);
+	}
+	return { blockers, warnings };
+}
+
+const NAME_NOISE = new Set([
+	'bank',
+	'account',
+	'acct',
+	'name',
+	'number',
+	'details',
+	'plc',
+	'limited',
+	'ltd',
+	'microfinance',
+	'mfb',
+	'opay',
+	'palmpay',
+	'moniepoint',
+	'kuda',
+	'gtb',
+	'gtbank',
+	'guaranty',
+	'trust',
+	'access',
+	'zenith',
+	'uba',
+	'united',
+	'first',
+	'firstbank',
+	'wema',
+	'alat',
+	'fcmb',
+	'sterling',
+	'union',
+	'polaris',
+	'keystone',
+	'fidelity',
+	'ecobank',
+	'stanbic',
+	'ibtc',
+	'providus',
+	'jaiz',
+	'globus',
+	'taj',
+	'vfd',
+	'carbon',
+	'fairmoney',
+	'paga',
+	'psb',
+	'the',
+	'and',
+	'pay',
+	'send',
+	'to'
+]);
+
+function nameWords(text: string): string[] {
+	return (text || '')
+		.toLowerCase()
+		.split(/[^a-z]+/)
+		.filter((word) => word.length >= 3 && !NAME_NOISE.has(word));
+}
+
+/** Who gets paid: warnings only (people often get paid into a relative's account). */
+export function checkPayment(input: {
+	details: string;
+	adminName: string;
+	channelTitle: string;
+	sameAccountElsewhere: string[];
+}): string[] {
+	const warnings: string[] = [];
+	const account = input.details.match(/\b\d{10}\b/)?.[0];
+	if (!account) warnings.push('No 10-digit account number in their details');
+	const known = new Set([...nameWords(input.adminName), ...nameWords(input.channelTitle)]);
+	const payee = nameWords(input.details);
+	if (payee.length && !payee.some((word) => known.has(word))) {
+		warnings.push(
+			`The account name doesn't match the admin's Telegram name${input.adminName ? ` (${input.adminName})` : ''}`
+		);
+	}
+	if (input.sameAccountElsewhere.length) {
+		warnings.push(
+			`The same account number was given for ${input.sameAccountElsewhere.map((u) => `@${u}`).join(', ')}: one person may be posing as several channels`
+		);
+	}
+	return warnings;
+}
+
+/** Lines for the owner's card: ✅ for what checked out, ⚠ for each warning. */
+export function checkLines(facts: AudienceFacts | null, warnings: string[]): string[] {
+	const lines: string[] = [];
+	if (facts) {
+		lines.push(
+			`✅ ${facts.avgViews.toLocaleString('en-NG')} views per post${facts.viewShare !== null ? ` (${facts.viewShare}% of members)` : ''}, ${facts.postsLastWeek} posts this week`
+		);
+		lines.push(
+			`${facts.engagementPer1k >= 1 ? '✅' : '⚠'} ${facts.engagementPer1k} reactions/shares per 1,000 views`
+		);
+		lines.push(
+			`✅ ${facts.nigerianPosts} of ${facts.postsChecked} recent posts look Nigerian · ${facts.nichePosts} on crypto/hustle/X/tech${facts.sponsoredPosts ? ` · runs sponsored posts (${facts.sponsoredPosts} seen)` : ''}`
+		);
+	}
+	for (const warning of warnings) lines.push(`⚠ ${warning}`);
+	return lines;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Messages we send (fixed, reviewed wording)
 // ---------------------------------------------------------------------------------------------
 
@@ -238,6 +476,10 @@ export interface DealBriefInput {
 	paymentDetails: string;
 	post: string;
 	targetCacNgn: number;
+	/** ✅/⚠ lines from the audience, admin and payment checks. */
+	checks?: string[];
+	/** Reasons not to pay at all (e.g. Telegram labels the admin a scam). */
+	blockers?: string[];
 }
 
 /**
@@ -249,7 +491,9 @@ export function dealBrief(input: DealBriefInput): string {
 	const low = Math.max(1, Math.round(input.avgViews * 0.01));
 	const high = Math.max(low, Math.round(input.avgViews * 0.03));
 	const breakEven = Math.max(1, Math.ceil(input.priceNgn / input.targetCacNgn));
+	const blocked = input.blockers?.length ? input.blockers : null;
 	return [
+		...(blocked ? [`⛔ DO NOT PAY: ${blocked.join('; ')}`, ''] : []),
 		`💸 Approve ${naira(input.priceNgn)} for one post in ${input.title}`,
 		`https://t.me/${input.username}`,
 		'',
@@ -257,6 +501,7 @@ export function dealBrief(input: DealBriefInput): string {
 		`Cost: ${naira(perK)} per 1,000 views`,
 		`Expect: roughly ${low.toLocaleString('en-NG')}–${high.toLocaleString('en-NG')} visits to the site`,
 		`Worth it if: it brings ${breakEven}+ new buyer${breakEven === 1 ? '' : 's'} (our target is ${naira(input.targetCacNgn)} per buyer)`,
+		...(input.checks?.length ? ['', 'Checks:', ...input.checks] : []),
 		'',
 		'The post they will publish:',
 		input.post,

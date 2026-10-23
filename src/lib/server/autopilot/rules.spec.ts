@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
 	autopilotCopy,
 	channelQualifies,
+	checkAudience,
+	checkContact,
+	checkPayment,
 	dealBrief,
 	decidePrice,
 	findPricesNgn,
@@ -238,5 +241,126 @@ describe('looking for Nigerian channels', () => {
 				'self_channel'
 			)
 		).toEqual(['airdrophub', 'naija_earn']);
+	});
+});
+
+describe('audience checks', () => {
+	const now = new Date('2026-10-23T12:00:00Z');
+	const posts = (over: Partial<{ views: number; reactions: number; text: string }> = {}) =>
+		Array.from({ length: 12 }, (_, i) => ({
+			views: over.views ?? (i % 2 ? 1_100 : 900),
+			date: new Date(now.getTime() - (i + 1) * 10 * 3_600_000),
+			text: over.text ?? 'Naija airdrop, withdraw to Opay',
+			reactions: over.reactions ?? 30,
+			forwards: 5
+		}));
+	const channel = { members: 6_000, title: 'Airdrops', about: 'Ads: @x' };
+
+	it('passes a lively Nigerian channel in our niche', () => {
+		const result = checkAudience({ ...channel, posts: posts() }, AUTOPILOT_DEFAULTS, now);
+		expect(result.blockers).toEqual([]);
+		expect(result.warnings).toEqual([]);
+		expect(result.facts).toMatchObject({
+			avgViews: 1_000,
+			viewShare: 16.7,
+			nigerianPosts: 12,
+			nichePosts: 12
+		});
+	});
+
+	it('flags views nobody reacts to, and views that are too even', () => {
+		const result = checkAudience(
+			{
+				...channel,
+				posts: posts({ views: 1_000, reactions: 0 }).map((p) => ({ ...p, forwards: 0 }))
+			},
+			AUTOPILOT_DEFAULTS,
+			now
+		);
+		expect(result.warnings.join(' | ')).toContain('Almost no reactions or shares');
+		expect(result.warnings.join(' | ')).toContain('Views are suspiciously even');
+	});
+
+	it('flags a big channel whose members mostly never see a post', () => {
+		const result = checkAudience(
+			{ ...channel, members: 100_000, posts: posts() },
+			AUTOPILOT_DEFAULTS,
+			now
+		);
+		expect(result.warnings).toContain('Only 1% of members see a post: many members may be bought');
+	});
+
+	it('blocks channels with no sign of Nigeria, and notes off-topic ones', () => {
+		const result = checkAudience(
+			{ ...channel, title: 'Kitchen', posts: posts({ text: 'Recipes for dinner' }) },
+			AUTOPILOT_DEFAULTS,
+			now
+		);
+		expect(result.blockers).toContain('not Nigerian');
+		expect(result.warnings).toContain('Posts are not about crypto, hustle, X or tech');
+	});
+});
+
+describe('admin and payment checks', () => {
+	it('blocks Telegram-labelled scam or fake accounts; warns if the channel does not name the admin', () => {
+		expect(
+			checkContact({ contact: 'ads_guy', person: { scam: true, fake: false }, about: '' }).blockers
+		).toEqual(['Telegram labels @ads_guy as SCAM']);
+		expect(checkContact({ contact: 'ads_guy', person: null, about: '' }).blockers[0]).toContain(
+			'not a person'
+		);
+		expect(
+			checkContact({
+				contact: 'ads_guy',
+				person: { scam: false, fake: false },
+				about: 'Promo: @ads_guy'
+			})
+		).toEqual({ blockers: [], warnings: [] });
+		expect(
+			checkContact({
+				contact: 'ads_guy',
+				person: { scam: false, fake: false },
+				about: 'Promo: @ads_guy2'
+			}).warnings[0]
+		).toContain('not named');
+	});
+
+	it('compares the account name with the admin and channel, and spots reused accounts', () => {
+		expect(
+			checkPayment({
+				details: 'Opay 8031234567 Musa Ibrahim',
+				adminName: 'Musa I.',
+				channelTitle: 'Naija Drops',
+				sameAccountElsewhere: []
+			})
+		).toEqual([]);
+		expect(
+			checkPayment({
+				details: 'GTB 0123456789 Chinedu Okafor',
+				adminName: 'Musa',
+				channelTitle: 'Naija Drops',
+				sameAccountElsewhere: ['other_one']
+			})
+		).toEqual([
+			"The account name doesn't match the admin's Telegram name (Musa)",
+			'The same account number was given for @other_one: one person may be posing as several channels'
+		]);
+	});
+
+	it('a blocked deal says DO NOT PAY first and lists the checks', () => {
+		const brief = dealBrief({
+			username: 'x_channel',
+			title: 'X',
+			members: 1_000,
+			avgViews: 500,
+			priceNgn: 1_000,
+			paymentDetails: 'GTB 0123456789 A B',
+			post: 'P',
+			targetCacNgn: 2_600,
+			checks: ['⚠ something'],
+			blockers: ['Telegram labels @x as SCAM']
+		});
+		expect(brief.split('\n')[0]).toBe('⛔ DO NOT PAY: Telegram labels @x as SCAM');
+		expect(brief).toContain('Checks:\n⚠ something');
 	});
 });

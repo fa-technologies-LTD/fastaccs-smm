@@ -459,6 +459,7 @@
 							<th class="py-1 pr-3">Agreed</th>
 							<th class="py-1 pr-3">Code</th>
 							<th class="py-1 pr-3">Views (48h)</th>
+							<th class="py-1 pr-3">Checks</th>
 							<th class="py-1 pr-3">Latest</th>
 							<th class="py-1"></th>
 						</tr>
@@ -486,6 +487,20 @@
 								<td class="py-1 pr-3">{row.agreedNgn ? formatPrice(row.agreedNgn) : '—'}</td>
 								<td class="py-1 pr-3">{row.code ?? '—'}</td>
 								<td class="py-1 pr-3">{row.views48h?.toLocaleString('en-NG') ?? '—'}</td>
+								<td class="py-1 pr-3">
+									{#if !row.checked}
+										—
+									{:else if row.warnings.length === 0}
+										✅
+									{:else}
+										<details>
+											<summary class="cursor-pointer">⚠ {row.warnings.length}</summary>
+											<ul class="mt-1 list-disc pl-4" style="color: var(--text-muted);">
+												{#each row.warnings as warning (warning)}<li>{warning}</li>{/each}
+											</ul>
+										</details>
+									{/if}
+								</td>
 								<td class="py-1 pr-3" style="color: var(--text-muted);">{row.lastNote}</td>
 								<td class="py-1">
 									{#if !ownerOnly && !['paid', 'posted', 'done', 'skipped'].includes(row.status)}

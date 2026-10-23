@@ -17,7 +17,19 @@ function fakeUserbot(overrides: Partial<UserbotPort> = {}) {
 		searchChannels: vi.fn(async () => []),
 		channelInfo: vi.fn(async () => ({ title: '', about: '', members: 0, posts: [] })),
 		recentPosts: vi.fn(async () => []),
-		resolvePerson: vi.fn(async (username: string) => ({ username, userId: '1' })),
+		resolvePerson: vi.fn(async (username: string) => ({
+			username,
+			userId: '1',
+			name: 'Musa Ibrahim',
+			scam: false,
+			fake: false
+		})),
+		postById: vi.fn(async (_username: string, id: number) => ({
+			id,
+			views: 0,
+			date: NOW,
+			text: ''
+		})),
 		sendMessage: vi.fn(async (to: string, text: string) => {
 			sent.push({ to, text });
 			return sent.length;
@@ -154,9 +166,29 @@ describe('price replies', () => {
 	});
 });
 
+/** A healthy Nigerian channel whose description names its ads contact. */
+const healthyChannel = (contact = 'promo_boss') =>
+	vi.fn(async () => ({
+		title: 'Airdrop Naija',
+		about: `Daily airdrops for Naija. Ads: @${contact}`,
+		members: 8_000,
+		posts: Array.from({ length: 12 }, (_, i) => ({
+			id: i + 1,
+			views: i % 2 ? 1_700 : 1_500,
+			date: new Date(NOW.getTime() - (i + 1) * 8 * HOUR),
+			text: i % 2 ? 'Claim this airdrop, withdraw to Opay' : 'New crypto drop',
+			reactions: 40,
+			forwards: 6
+		}))
+	}));
+
 describe('payment: always the owner’s one-tap decision', () => {
 	it('sends the owner a deal brief with Approve / Don’t pay, and pays nothing itself', async () => {
-		const t = setup([contacted({ status: 'agreed', agreedNgn: 3_000 })]);
+		const t = setup(
+			[contacted({ status: 'agreed', agreedNgn: 3_000 })],
+			{},
+			fakeUserbot({ channelInfo: healthyChannel() })
+		);
 		t.userbot.reply('promo_boss', 7, 'Opay 8031234567 Musa Ibrahim');
 		await runAutopilotOnce(t.deps);
 		const rec = t.saved.get('airdrop_naija')!;
@@ -167,6 +199,8 @@ describe('payment: always the owner’s one-tap decision', () => {
 		expect(card.text).toContain('Expect: roughly 16–48 visits');
 		expect(card.text).toContain('Worth it if: it brings 2+ new buyers');
 		expect(card.text).toContain('8031234567');
+		expect(card.text).toContain('Checks:');
+		expect(card.text).not.toContain('⚠');
 		expect(card.rows?.[0].map((b) => b.data)).toEqual([
 			'ap:paid:airdrop_naija',
 			'ap:nopay:airdrop_naija'
@@ -205,7 +239,13 @@ describe('after the owner pays', () => {
 		const userbot = fakeUserbot({
 			recentPosts: vi.fn(async () => [
 				{ id: 77, views: 2_400, date: new Date(NOW.getTime() - HOUR), text: 'Code TGAIRDRO10' }
-			])
+			]),
+			postById: vi.fn(async () => ({
+				id: 77,
+				views: 2_400,
+				date: new Date(NOW.getTime() - HOUR),
+				text: 'Code TGAIRDRO10'
+			}))
 		});
 		const t = setup(
 			[contacted({ status: 'paid', agreedNgn: 3_000, code: 'TGAIRDRO10', paidAt })],
@@ -569,5 +609,130 @@ describe('finding channels through the day', () => {
 		const t = setup([], { dailyNewContacts: 2, testMode: true }, userbot);
 		for (let i = 0; i < 3; i += 1) await runAutopilotOnce(t.deps);
 		expect(t.state.discovery.found).toBe(10); // target: max(10, 2 × daily contacts)
+	});
+});
+
+describe('checks before we message or pay anyone', () => {
+	it('puts warnings on the card: unknown admin, bought-looking views, a payee who is someone else', async () => {
+		const userbot = fakeUserbot({
+			channelInfo: vi.fn(async () => ({
+				title: 'Airdrop Naija',
+				about: 'Naija airdrops. Ads: @someone_else',
+				members: 8_000,
+				posts: Array.from({ length: 12 }, (_, i) => ({
+					id: i + 1,
+					views: 1_600,
+					date: new Date(NOW.getTime() - (i + 1) * 8 * HOUR),
+					text: 'Naija airdrop',
+					reactions: 0,
+					forwards: 0
+				}))
+			}))
+		});
+		const other = newChannelRecord({
+			username: 'other_channel',
+			status: 'paid',
+			paymentDetails: 'GTB 0123456789 Ada Obi'
+		});
+		const t = setup([contacted({ status: 'agreed', agreedNgn: 3_000 }), other], {}, userbot);
+		t.userbot.reply('promo_boss', 7, 'GTB 0123456789 Ada Obi');
+		await runAutopilotOnce(t.deps);
+		const card = t.owner.at(-1)!.text;
+		expect(card).toContain("@promo_boss is not named in the channel's description");
+		expect(card).toContain('Almost no reactions or shares');
+		expect(card).toContain('Views are suspiciously even');
+		expect(card).toContain(
+			"The account name doesn't match the admin's Telegram name (Musa Ibrahim)"
+		);
+		expect(card).toContain('The same account number was given for @other_channel');
+		expect(t.owner.at(-1)!.rows?.[0]).toHaveLength(2); // warnings: the owner still decides
+	});
+
+	it('an admin Telegram labels as a scam gets a DO NOT PAY card with no Approve button', async () => {
+		const userbot = fakeUserbot({
+			channelInfo: healthyChannel(),
+			resolvePerson: vi.fn(async (username: string) => ({
+				username,
+				userId: '1',
+				name: 'Musa Ibrahim',
+				scam: true,
+				fake: false
+			}))
+		});
+		const t = setup([contacted({ status: 'agreed', agreedNgn: 3_000 })], {}, userbot);
+		t.userbot.reply('promo_boss', 7, 'Opay 8031234567 Musa Ibrahim');
+		await runAutopilotOnce(t.deps);
+		const card = t.owner.at(-1)!;
+		expect(card.text).toMatch(/^⛔ DO NOT PAY: Telegram labels @promo_boss as SCAM/);
+		expect(card.rows?.[0].map((b) => b.data)).toEqual(['ap:nopay:airdrop_naija']);
+	});
+
+	it('checks a hand-added channel before the first message', async () => {
+		const manual = (username: string, contact: string) =>
+			newChannelRecord({ username, contact, manual: true, maxPriceNgn: 1_000 });
+		const userbot = fakeUserbot({
+			channelInfo: vi.fn(async (username: string) => {
+				if (username === 'typo_channel') throw new Error('USERNAME_NOT_OCCUPIED');
+				return healthyChannel(username === 'scam_channel' ? 'scammer' : 'good_admin')();
+			}),
+			resolvePerson: vi.fn(async (username: string) => ({
+				username,
+				userId: '1',
+				name: 'X',
+				scam: username === 'scammer',
+				fake: false
+			}))
+		});
+		const t = setup(
+			[
+				manual('typo_channel', 'any_admin'),
+				manual('scam_channel', 'scammer'),
+				manual('good_channel', 'good_admin')
+			],
+			{},
+			userbot
+		);
+		await runAutopilotOnce(t.deps);
+		expect(t.saved.get('typo_channel')!.status).toBe('skipped');
+		expect(t.saved.get('scam_channel')!.status).toBe('skipped');
+		expect(t.saved.get('good_channel')!.status).toBe('contacted');
+		expect(t.saved.get('good_channel')!.checks?.warnings).toEqual([]);
+		expect(t.userbot.sent.map((m) => m.to)).toEqual(['good_admin']);
+		expect(t.owner.map((m) => m.text).join('\n')).toContain("I couldn't open @typo_channel");
+		expect(t.owner.map((m) => m.text).join('\n')).toContain('Telegram labels @scammer as SCAM');
+	});
+
+	it('never picks an ads contact Telegram labels as a scam when searching', async () => {
+		const userbot = fakeUserbot({
+			searchChannels: vi.fn(async () => [{ username: 'naija_drops', title: 'x', id: '1' }]),
+			channelInfo: healthyChannel('fake_admin'),
+			resolvePerson: vi.fn(async (username: string) => ({
+				username,
+				userId: '1',
+				name: 'X',
+				scam: false,
+				fake: username === 'fake_admin'
+			}))
+		});
+		const t = setup([], {}, userbot);
+		await runAutopilotOnce(t.deps);
+		expect(t.saved.get('naija_drops')!.status).toBe('skipped');
+		expect(t.state.discovery.reasons).toEqual({ 'admin labelled scam by Telegram': 1 });
+	});
+
+	it('spots a paid post that was deleted and tells the owner', async () => {
+		const postedAt = new Date(NOW.getTime() - 5 * HOUR).toISOString();
+		const userbot = fakeUserbot({ postById: vi.fn(async () => null) });
+		const t = setup(
+			[contacted({ status: 'posted', agreedNgn: 3_000, postId: 77, postedAt })],
+			{},
+			userbot
+		);
+		await runAutopilotOnce(t.deps);
+		const rec = t.saved.get('airdrop_naija')!;
+		expect(rec.status).toBe('done');
+		expect(rec.checks?.warnings).toContain('Deleted our paid post after about 5h');
+		expect(t.owner.at(-1)?.text).toContain('deleted our post about 5h after it went up');
+		expect(t.actions).toContain('post_deleted');
 	});
 });

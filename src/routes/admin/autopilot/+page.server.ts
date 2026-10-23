@@ -128,6 +128,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 				agreedNgn: r.agreedNgn,
 				code: r.code,
 				views48h: r.views48h,
+				checked: Boolean(r.checks),
+				warnings: r.checks?.warnings ?? [],
 				lastNote: r.log.at(-1) ?? ''
 			})),
 		actions: actions.map((a) => ({

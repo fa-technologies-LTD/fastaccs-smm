@@ -14,6 +14,20 @@ export interface ChannelPost {
 	views: number;
 	date: Date;
 	text: string;
+	/** Reactions, shares and comments on the post (real readers leave some; bought views don't). */
+	reactions?: number;
+	forwards?: number;
+	replies?: number;
+}
+
+export interface Person {
+	username: string;
+	userId: string;
+	/** Telegram display name (first + last). */
+	name: string;
+	/** Telegram's own warning labels on accounts reported for scams or impersonation. */
+	scam: boolean;
+	fake: boolean;
 }
 
 export interface FoundChannel {
@@ -29,7 +43,9 @@ export interface UserbotPort {
 	): Promise<{ title: string; about: string; members: number; posts: ChannelPost[] }>;
 	recentPosts(username: string, limit?: number): Promise<ChannelPost[]>;
 	/** A person we can message: null for bots, channels and unknown handles. */
-	resolvePerson(username: string): Promise<{ username: string; userId: string } | null>;
+	resolvePerson(username: string): Promise<Person | null>;
+	/** One post by id; null if it was deleted. */
+	postById(username: string, id: number): Promise<ChannelPost | null>;
 	sendMessage(username: string, text: string): Promise<number>;
 	/** Messages the person sent us after `sinceId` (oldest first). */
 	incomingFrom(username: string, sinceId: number): Promise<ChannelPost[]>;
@@ -53,7 +69,10 @@ function toPost(message: Api.Message): ChannelPost {
 		id: message.id,
 		views: Number(message.views ?? 0),
 		date: new Date(Number(message.date ?? 0) * 1000),
-		text: message.message ?? ''
+		text: message.message ?? '',
+		reactions: (message.reactions?.results ?? []).reduce((sum, r) => sum + Number(r.count ?? 0), 0),
+		forwards: Number(message.forwards ?? 0),
+		replies: Number(message.replies?.replies ?? 0)
 	};
 }
 
@@ -121,10 +140,21 @@ export async function connectUserbot(): Promise<UserbotPort> {
 				try {
 					const entity = await client.getEntity(username);
 					if (!(entity instanceof Api.User) || entity.bot || entity.deleted) return null;
-					return { username: String(entity.username ?? username), userId: String(entity.id) };
+					return {
+						username: String(entity.username ?? username),
+						userId: String(entity.id),
+						name: [entity.firstName, entity.lastName].filter(Boolean).join(' '),
+						scam: Boolean(entity.scam),
+						fake: Boolean(entity.fake)
+					};
 				} catch {
 					return null; // unknown or private handle
 				}
+			}),
+		postById: (username, id) =>
+			guard(async () => {
+				const [message] = await client.getMessages(username, { ids: [id] });
+				return message instanceof Api.Message ? toPost(message) : null;
 			}),
 		sendMessage: (username, text) =>
 			guard(async () => {

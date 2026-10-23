@@ -3,7 +3,10 @@ import { TelegramSlowDown } from './errors';
 import type { ClaudeReading } from './llm';
 import {
 	autopilotCopy,
-	channelQualifies,
+	checkAudience,
+	checkContact,
+	checkLines,
+	checkPayment,
 	dealBrief,
 	decidePrice,
 	isOurPost,
@@ -12,7 +15,6 @@ import {
 	nigeriaScore,
 	promoContactCandidates,
 	readReply,
-	typicalViews,
 	type ReadReply
 } from './rules';
 import { mayMessage, normalizeUsername, type AutopilotSettings } from './settings';
@@ -203,6 +205,28 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 		await store.saveChannel(rec, `error (${step}): ${message}`);
 	};
 
+	/**
+	 * Fresh checks on a channel and its admin. Only admin problems (not a person, Telegram's SCAM or
+	 * FAKE label) block; audience problems become warnings for the owner (they may know the channel).
+	 */
+	const vet = async (rec: ChannelRecord) => {
+		const info = await userbot.channelInfo(rec.username);
+		const audience = checkAudience({ ...info, title: info.title || rec.title }, settings, now);
+		const person = rec.contact ? await userbot.resolvePerson(rec.contact) : null;
+		const contact = checkContact({ contact: rec.contact ?? '', person, about: info.about });
+		rec.title = info.title || rec.title;
+		rec.members = info.members;
+		rec.avgViews = audience.facts.avgViews;
+		rec.adminName = person?.name ?? rec.adminName;
+		const warnings = [
+			...audience.blockers.map((b) => `Fails our usual channel check: ${b}`),
+			...audience.warnings,
+			...contact.warnings
+		];
+		rec.checks = { at: now.toISOString(), warnings, facts: audience.facts };
+		return { blockers: contact.blockers, warnings, facts: audience.facts };
+	};
+
 	// 1. Owner's typed replies.
 	for (const rec of channels.filter((r) => r.outbox.length > 0)) {
 		if (!timeLeft()) break;
@@ -319,9 +343,37 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 		}
 		if (reading.intent === 'payment_details' && rec.status === 'agreed') {
 			rec.paymentDetails = reading.paymentDetails;
+			// Re-check the channel and admin right before the owner decides.
+			let checked: Awaited<ReturnType<typeof vet>> | null = null;
+			try {
+				checked = await vet(rec);
+			} catch (error) {
+				if (error instanceof TelegramSlowDown) throw error;
+			}
+			const account = rec.paymentDetails?.match(/\b\d{10}\b/)?.[0];
+			const sameAccountElsewhere = account
+				? [...byName.values()]
+						.filter(
+							(other) => other.username !== rec.username && other.paymentDetails?.includes(account)
+						)
+						.map((other) => other.username)
+				: [];
+			const paymentWarnings = checkPayment({
+				details: rec.paymentDetails ?? '',
+				adminName: rec.adminName ?? '',
+				channelTitle: rec.title,
+				sameAccountElsewhere
+			});
+			const lines = checked
+				? checkLines(checked.facts, [...checked.warnings, ...paymentWarnings])
+				: [
+						"⚠ Couldn't re-check the channel just now",
+						...checkLines(null, [...(rec.checks?.warnings ?? []), ...paymentWarnings])
+					];
+			const blockers = checked?.blockers ?? [];
 			rec.status = 'awaiting_payment';
 			await send(rec, autopilotCopy.paymentAck());
-			// The owner's one-tap decision: the deal, what to expect, and who gets paid.
+			// The owner's one-tap decision: the deal, what to expect, the checks, and who gets paid.
 			const promptId = await deps.notifyOwner(
 				dealBrief({
 					username: rec.username,
@@ -331,16 +383,20 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 					priceNgn: rec.agreedNgn ?? 0,
 					paymentDetails: rec.paymentDetails ?? '',
 					post: deps.postFor(rec),
-					targetCacNgn: 2_600
+					targetCacNgn: 2_600,
+					checks: lines,
+					blockers
 				}),
 				[
-					[
-						{
-							text: `✅ Approve: I've paid ${naira(rec.agreedNgn ?? 0)}`,
-							data: `ap:paid:${rec.username}`
-						},
-						{ text: "❌ Don't pay", data: `ap:nopay:${rec.username}` }
-					]
+					blockers.length
+						? [{ text: "❌ Don't pay", data: `ap:nopay:${rec.username}` }]
+						: [
+								{
+									text: `✅ Approve: I've paid ${naira(rec.agreedNgn ?? 0)}`,
+									data: `ap:paid:${rec.username}`
+								},
+								{ text: "❌ Don't pay", data: `ap:nopay:${rec.username}` }
+							]
 				]
 			);
 			rec.ownerPromptId = promptId ?? rec.ownerPromptId;
@@ -415,17 +471,35 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 
 	for (const rec of channels.filter((r) => r.status === 'posted' && r.postId && r.postedAt)) {
 		if (!timeLeft()) break;
+		// Checked every full run: a common trick is to delete a paid post after a few hours.
 		const age = now.getTime() - new Date(rec.postedAt!).getTime();
-		if (age < 24 * HOUR || (rec.views24h !== null && age < 48 * HOUR)) continue;
 		attempted.add(rec.username);
-		let posts: Awaited<ReturnType<UserbotPort['recentPosts']>>;
+		let post: Awaited<ReturnType<UserbotPort['postById']>>;
 		try {
-			posts = await userbot.recentPosts(rec.username, 40);
+			post = await userbot.postById(rec.username, rec.postId!);
 		} catch (error) {
-			await failed(rec, 'count views', error);
+			await failed(rec, 'check post', error);
 			continue;
 		}
-		const views = posts.find((p) => p.id === rec.postId)?.views ?? 0;
+		if (!post) {
+			const hours = Math.max(1, Math.round(age / HOUR));
+			rec.status = 'done';
+			rec.views48h = rec.views48h ?? rec.views24h ?? 0;
+			rec.checks = {
+				at: now.toISOString(),
+				warnings: [...(rec.checks?.warnings ?? []), `Deleted our paid post after about ${hours}h`],
+				facts: rec.checks?.facts ?? null
+			};
+			const promptId = await deps.notifyOwner(
+				`🚩 @${rec.username} deleted our post about ${hours}h after it went up (paid ${naira(rec.agreedNgn ?? 0)}). Reply to this message to ask them to repost. They won't be booked again.`
+			);
+			rec.ownerPromptId = promptId ?? rec.ownerPromptId;
+			await store.logAction('post_deleted', rec.username, { hours });
+			await store.saveChannel(rec, `post deleted after ~${hours}h`);
+			continue;
+		}
+		if (age < 24 * HOUR || (rec.views24h !== null && age < 48 * HOUR)) continue;
+		const views = post.views;
 		if (rec.views24h === null) {
 			rec.views24h = views;
 		} else {
@@ -514,26 +588,20 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 			byName.set(username, rec);
 			continue;
 		}
-		const avgViews = typicalViews(info.posts);
-		const lastPostAt = info.posts[0]?.date ?? null;
 		const title = info.title || username;
+		const audience = checkAudience({ ...info, title }, settings, now);
 		const rec = newChannelRecord({
 			username,
 			title,
 			members: info.members,
-			avgViews,
-			lastPostAt: lastPostAt?.toISOString() ?? null,
+			avgViews: audience.facts.avgViews,
+			lastPostAt: info.posts[0]?.date.toISOString() ?? null,
 			keyword: next.via,
 			nigeria: nigeriaScore([title, info.about, ...info.posts.map((p) => p.text)].join('\n')),
-			maxPriceNgn: maxPriceFor(avgViews, settings)
+			maxPriceNgn: maxPriceFor(audience.facts.avgViews, settings),
+			checks: { at: now.toISOString(), warnings: audience.warnings, facts: audience.facts }
 		});
-		const fit = channelQualifies(
-			{ members: info.members, avgViews, lastPostAt, text: info.about },
-			settings,
-			now
-		);
-		let reason: string | null = !fit.ok ? (fit.reason ?? 'not a fit') : null;
-		if (!reason && rec.nigeria === 0) reason = 'not Nigerian';
+		let reason: string | null = audience.blockers[0] ?? null;
 		if (!reason) {
 			// A good Nigerian channel: look at its neighbours next, then find who sells its posts.
 			const similar = await userbot.similarChannels(username).catch((error) => {
@@ -550,14 +618,21 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 				],
 				`via @${username}`
 			);
+			// The contact must be named in the channel's own description (only its admins can edit
+			// that) and must not carry Telegram's SCAM or FAKE label.
+			let flagged = false;
 			for (const candidate of promoContactCandidates(info.about, username)) {
 				const person = await userbot.resolvePerson(candidate);
-				if (person) {
-					rec.contact = normalizeUsername(person.username);
-					break;
+				if (!person) continue;
+				if (person.scam || person.fake) {
+					flagged = true;
+					continue;
 				}
+				rec.contact = normalizeUsername(person.username);
+				rec.adminName = person.name;
+				break;
 			}
-			if (!rec.contact) reason = 'no promo contact';
+			if (!rec.contact) reason = flagged ? 'admin labelled scam by Telegram' : 'no promo contact';
 			else if (rec.maxPriceNgn < 500) reason = 'too small';
 		}
 		if (reason) {
@@ -584,6 +659,29 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 	for (const rec of queue) {
 		if (!timeLeft() || state.outreachCount >= settings.dailyNewContacts || remaining < 500) break;
 		attempted.add(rec.username);
+		// Channels the owner added by hand get the same checks before the first message.
+		if (rec.manual && !rec.checks) {
+			let checked: Awaited<ReturnType<typeof vet>>;
+			try {
+				checked = await vet(rec);
+			} catch (error) {
+				if (error instanceof TelegramSlowDown) throw error;
+				rec.status = 'skipped';
+				await store.saveChannel(rec, 'skipped: could not open the channel');
+				await deps.notifyOwner(
+					`⛔ I couldn't open @${rec.username} on Telegram (deleted, private or a typo?), so I didn't message @${rec.contact}.`
+				);
+				continue;
+			}
+			if (checked.blockers.length) {
+				rec.status = 'skipped';
+				await store.saveChannel(rec, `skipped: ${checked.blockers.join('; ')}`);
+				await deps.notifyOwner(
+					`⛔ I didn't message @${rec.contact} about @${rec.username}: ${checked.blockers.join('; ')}.`
+				);
+				continue;
+			}
+		}
 		let introduced = false;
 		try {
 			introduced = await send(rec, autopilotCopy.intro(rec.title));

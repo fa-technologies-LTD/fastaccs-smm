@@ -1,4 +1,5 @@
 import { prisma } from '$lib/prisma';
+import type { AudienceFacts } from './rules';
 import {
 	AUTOPILOT_SETTINGS_KEY,
 	normalizeUsername,
@@ -83,6 +84,10 @@ export interface ChannelRecord {
 	notPostedAlerted: boolean;
 	/** Telegram errors in a row for this channel (deleted, renamed, blocked us...). */
 	errorCount: number;
+	/** Latest audience/admin checks: what the owner sees on the payment card. */
+	checks: { at: string; warnings: string[]; facts: AudienceFacts | null } | null;
+	/** The admin's Telegram display name (compared with the bank account name). */
+	adminName: string | null;
 	log: string[];
 	discoveredAt: string;
 	updatedAt: string;
@@ -183,6 +188,8 @@ export function newChannelRecord(
 		manual: false,
 		notPostedAlerted: false,
 		errorCount: 0,
+		checks: null,
+		adminName: null,
 		log: [],
 		discoveredAt: now,
 		updatedAt: now,
