@@ -13,6 +13,8 @@ import {
 	mentionedUsernames,
 	nigeriaScore,
 	parseChannelList,
+	partnerCommission,
+	partnerPayoutBrief,
 	placementCode,
 	postCopy,
 	promoContactCandidates,
@@ -408,5 +410,44 @@ describe('pasted channel lists', () => {
 			'cryptowithshola',
 			'luckyuduchannel'
 		]);
+	});
+});
+
+describe('pay-per-sale wording and maths', () => {
+	it('hears a yes, but a price or a no still wins', () => {
+		for (const yes of [
+			'ok',
+			'Yes please',
+			"I'm interested",
+			'Alright boss',
+			'sounds good to me',
+			'Deal'
+		])
+			expect(readReply(yes).intent, yes).toBe('accept');
+		expect(readReply('Not interested').intent).toBe('refuse');
+		expect(readReply('ok 5k').intent).toBe('price');
+	});
+
+	it('pays their share of net sales, rounded down', () => {
+		expect(partnerCommission(38_000, 10)).toBe(3_800);
+		expect(partnerCommission(12_345, 10)).toBe(1_234);
+	});
+
+	it('the payout card says what, how much and to whom', () => {
+		const text = partnerPayoutBrief({
+			username: 'x_ch',
+			title: 'X',
+			code: 'TGX10',
+			from: '2026-10-12T09:00:00Z',
+			to: '2026-10-24T10:30:00Z',
+			orders: 1,
+			salesNgn: 9_000,
+			percent: 10,
+			amountNgn: 900,
+			paymentDetails: 'GTB 0123456789 A B'
+		});
+		expect(text).toContain('1 order with code TGX10 from 12 Oct to 24 Oct: ₦9,000 in sales');
+		expect(text).toContain('Their 10%: ₦900');
+		expect(text).toContain('GTB 0123456789 A B');
 	});
 });

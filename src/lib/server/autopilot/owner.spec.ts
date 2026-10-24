@@ -178,3 +178,86 @@ describe('owner messages', () => {
 		expect(t.settings.enabled).toBe(true);
 	});
 });
+
+describe('pay-per-sale partners', () => {
+	const pending = () =>
+		newChannelRecord({
+			username: 'airdrop_naija',
+			contact: 'promo_boss',
+			status: 'partner_pending',
+			quotedNgn: 9_000,
+			paymentDetails: 'Opay 8031234567 Musa'
+		});
+
+	it('approving sends the post and their code, fixes the terms, and pays nothing', async () => {
+		const t = setup({ partnerPercent: 10, partnerDays: 30, codeDays: 14 }, [pending()]);
+		await handleOwnerUpdate(tap('ap:partner:airdrop_naija'), t.deps);
+		const rec = t.saved.get('airdrop_naija')!;
+		expect(rec).toMatchObject({
+			deal: 'partner',
+			status: 'paid',
+			partnerPercent: 10,
+			code: 'TGAIRDRO10'
+		});
+		expect(rec.partnerUntil).toBe('2026-11-21T10:00:00.000Z');
+		expect(rec.outbox[0]).toContain('you earn 10% of every order that uses it until 21 November');
+		expect(vi.mocked(t.deps.ensureCode).mock.calls[0][1]).toMatchObject({ codeDays: 30 });
+		expect(t.deps.bookSpend).not.toHaveBeenCalled();
+	});
+
+	it('a payout tap books the money once and tells them', async () => {
+		const rec = {
+			...pending(),
+			status: 'posted' as const,
+			deal: 'partner' as const,
+			partnerPaidUntil: '2026-10-12T09:00:00Z',
+			partnerPayout: {
+				from: '2026-10-12T09:00:00Z',
+				to: '2026-10-24T10:30:00Z',
+				orders: 4,
+				salesNgn: 38_000,
+				amountNgn: 3_800
+			}
+		};
+		const t = setup({}, [rec]);
+		await handleOwnerUpdate(tap('ap:ppaid:airdrop_naija'), t.deps);
+		await handleOwnerUpdate(tap('ap:ppaid:airdrop_naija'), t.deps);
+		const saved = t.saved.get('airdrop_naija')!;
+		expect(saved.partnerEarnedNgn).toBe(3_800);
+		expect(saved.partnerPaidUntil).toBe('2026-10-24T10:30:00Z');
+		expect(saved.partnerPayout).toBeNull();
+		expect(saved.outbox.at(-1)).toContain('Sent you ₦3,800 for 4 sales');
+		expect(t.deps.bookSpend).toHaveBeenCalledTimes(1);
+		expect(t.deps.bookSpend).toHaveBeenCalledWith('airdrop_naija', 3_800, expect.anything());
+	});
+
+	it('"Not now" carries the payout over without booking anything', async () => {
+		const rec = {
+			...pending(),
+			status: 'posted' as const,
+			deal: 'partner' as const,
+			partnerPaidUntil: '2026-10-12T09:00:00Z',
+			partnerPayout: {
+				from: '2026-10-12T09:00:00Z',
+				to: '2026-10-24T10:30:00Z',
+				orders: 1,
+				salesNgn: 5_000,
+				amountNgn: 500
+			}
+		};
+		const t = setup({}, [rec]);
+		await handleOwnerUpdate(tap('ap:pskip:airdrop_naija'), t.deps);
+		expect(t.saved.get('airdrop_naija')).toMatchObject({
+			partnerPayout: null,
+			partnerPaidUntil: '2026-10-12T09:00:00Z'
+		});
+		expect(t.deps.bookSpend).not.toHaveBeenCalled();
+	});
+
+	it('declining a partner tells them politely', async () => {
+		const t = setup({}, [pending()]);
+		await handleOwnerUpdate(tap('ap:nopartner:airdrop_naija'), t.deps);
+		expect(t.saved.get('airdrop_naija')!.status).toBe('skipped');
+		expect(t.saved.get('airdrop_naija')!.outbox[0]).toContain('cancel');
+	});
+});

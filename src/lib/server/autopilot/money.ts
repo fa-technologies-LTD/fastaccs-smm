@@ -1,4 +1,5 @@
 import { prisma } from '$lib/prisma';
+import { buildRevenueOrderWindowWhere, toNetSales } from '$lib/helpers/order-revenue.server';
 import { buildTrackedUrl } from '$lib/helpers/tracked-link';
 import { placementCode } from './rules';
 import type { AutopilotSettings } from './settings';
@@ -100,4 +101,28 @@ export async function bookSpend(
 		},
 		update: { spendNgn: { increment: amountNgn } }
 	});
+}
+
+/**
+ * Sales a partner's code brought in: orders paid in the window that used the code, net of refunds,
+ * counted with the same revenue rules as the sales reports (refunded and self-release orders excluded).
+ */
+export async function partnerSales(
+	code: string,
+	from: Date,
+	to: Date
+): Promise<{ orders: number; salesNgn: number }> {
+	const orders = await prisma.order.findMany({
+		where: {
+			AND: [
+				buildRevenueOrderWindowWhere(from, to),
+				{ promotionCode: { equals: code, mode: 'insensitive' } }
+			]
+		},
+		select: { totalAmount: true, refundedAmount: true }
+	});
+	return {
+		orders: orders.length,
+		salesNgn: orders.reduce((sum, o) => sum + toNetSales(o.totalAmount, o.refundedAmount), 0)
+	};
 }

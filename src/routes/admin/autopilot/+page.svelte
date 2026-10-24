@@ -16,6 +16,8 @@
 		paid: 'Paid, waiting for the post',
 		posted: 'Live, measuring views',
 		done: 'Finished',
+		partner_offered: 'Too expensive: offered pay-per-sale',
+		partner_pending: 'Said yes to pay-per-sale: waiting for your approval',
 		declined: 'Too expensive',
 		refused: 'They said no',
 		no_reply: 'No reply',
@@ -337,6 +339,49 @@
 					style={input}>{s.keywords.join('\n')}</textarea
 				>
 			</label>
+			<div class="rounded-lg p-3 text-sm sm:col-span-2" style={inner}>
+				<label class="flex items-center gap-2" style="color: var(--text);">
+					<input
+						type="checkbox"
+						name="partnerEnabled"
+						checked={s.partnerEnabled}
+						disabled={ownerOnly}
+					/>
+					Pay-per-sale offer when an admin's price is above our limits
+				</label>
+				<p class="mt-1 text-xs" style="color: var(--text-muted);">
+					They post for free and earn a share of every order made with their channel's code. You
+					approve each partner, and each Monday's payout, with one tap.
+				</p>
+				<div class="mt-2 grid gap-3 sm:grid-cols-2">
+					<label style="color: var(--text-muted);">
+						Their share of sales (%)
+						<input
+							name="partnerPercent"
+							type="number"
+							min="1"
+							max="30"
+							value={s.partnerPercent}
+							disabled={ownerOnly}
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style={input}
+						/>
+					</label>
+					<label style="color: var(--text-muted);">
+						For how many days
+						<input
+							name="partnerDays"
+							type="number"
+							min="7"
+							max="90"
+							value={s.partnerDays}
+							disabled={ownerOnly}
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style={input}
+						/>
+					</label>
+				</div>
+			</div>
 			<label class="text-sm" style="color: var(--text-muted);">
 				Test contacts (Telegram usernames, one per line)
 				<textarea
@@ -507,9 +552,13 @@
 									>
 								</td>
 								<td class="py-1 pr-3">
-									{statusLabel[row.status] ?? row.status}{row.waitingOwner
-										? ' · needs your reply'
-										: ''}
+									{#if row.deal === 'partner'}
+										🤝 Partner {row.partnerPercent}% until {when(row.partnerUntil)}, paid {formatPrice(
+											row.partnerEarnedNgn
+										)}{row.payoutWaiting ? ' · payout waiting for you' : ''}
+									{:else}
+										{statusLabel[row.status] ?? row.status}
+									{/if}{row.waitingOwner ? ' · needs your reply' : ''}
 								</td>
 								<td class="py-1 pr-3">{row.members.toLocaleString('en-NG')}</td>
 								<td class="py-1 pr-3">{row.avgViews.toLocaleString('en-NG')}</td>

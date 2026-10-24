@@ -14,6 +14,7 @@ export type ReplyIntent =
 	| 'payment_details'
 	| 'posted'
 	| 'refuse'
+	| 'accept' // yes to our proposal (the partner deal)
 	| 'question'
 	| 'unclear';
 
@@ -26,6 +27,8 @@ export interface ReadReply {
 const BANKS =
 	/\b(opay|palm ?pay|moniepoint|kuda|gt ?bank|gtb|guaranty|access|zenith|uba|united bank|first ?bank|wema|alat|fcmb|sterling|union bank|polaris|keystone|fidelity|ecobank|stanbic|providus|jaiz|globus|taj|vfd|carbon|fairmoney|paga|9 ?psb)\b/i;
 const ACCOUNT_NUMBER = /\b\d{10}\b/;
+const ACCEPT =
+	/^\W*(yes|yeah|yep|yh|ok|okay|ok+ay*|sure|deal|fine|alright|cool|interested|i'?m in|let'?s go|go ahead|no problem|no wahala)\b|\b(i'?m interested|sounds good|that works|let'?s do (it|that)|i agree|count me in)\b/i;
 const POSTED =
 	/\b(posted|done|it'?s live|its live|live now|uploaded|have posted|check (the )?channel|already up)\b/i;
 const REFUSE =
@@ -72,6 +75,7 @@ export function readReply(text: string, usdRate = 1_500): ReadReply {
 	const prices = findPricesNgn(trimmed, usdRate);
 	if (prices.length === 1) return { intent: 'price', priceNgn: prices[0], paymentDetails: null };
 	if (prices.length > 1) return { intent: 'unclear', priceNgn: null, paymentDetails: null };
+	if (ACCEPT.test(trimmed)) return { intent: 'accept', priceNgn: null, paymentDetails: null };
 	if (POSTED.test(trimmed)) return { intent: 'posted', priceNgn: null, paymentDetails: null };
 	if (trimmed.includes('?')) return { intent: 'question', priceNgn: null, paymentDetails: null };
 	return { intent: 'unclear', priceNgn: null, paymentDetails: null };
@@ -492,8 +496,89 @@ export const autopilotCopy = {
 	paidWithPost: (post: string) =>
 		`Payment sent ✅ Here's the post. Please let me know once it's live:\n\n${post}`,
 	postReminder: () => `Hi! Just checking on our post. Please let me know once it's live 🙏`,
-	cancel: () => `Sorry, we have to cancel this one for now. Thanks for your time.`
+	cancel: () => `Sorry, we have to cancel this one for now. Thanks for your time.`,
+	/** Instead of declining: no upfront fee, a share of sales made with their channel's code. */
+	partnerOffer: (percent: number, days: number) =>
+		`Thanks for the quick reply! That's above our budget for a paid post right now. We do have another option: post our ad for free and earn ${percent}% of every sale your readers make with your channel's own discount code, for ${days} days. We track it automatically and pay you every week by bank transfer. Would that work for you?`,
+	partnerAskDetails: () =>
+		`Great! Please send the bank details for your weekly payouts (bank, account number and name) and I'll get it approved.`,
+	partnerStillTooHigh: () =>
+		`Thanks! That's still above our budget for a paid post. The pay-per-sale option stays open if you'd like it.`,
+	partnerWelcome: (input: { post: string; code: string; percent: number; until: string }) =>
+		`You're in ✅ Your channel's code is ${input.code}: your readers get a discount, and you earn ${input.percent}% of every order that uses it until ${input.until}. Payouts go out every Monday. Here's the post; please let me know once it's live:\n\n${input.post}`,
+	partnerPaid: (amount: number, orders: number) =>
+		`Sent you ${naira(amount)} for ${orders} sale${orders === 1 ? '' : 's'} made with your code 🙌 Thanks for partnering with FastAccs!`
 };
+
+/** Their share of sales, rounded down to the naira. */
+export function partnerCommission(salesNgn: number, percent: number): number {
+	return Math.max(0, Math.floor((salesNgn * percent) / 100));
+}
+
+const shortDate = (iso: string) =>
+	new Date(iso).toLocaleDateString('en-GB', {
+		day: 'numeric',
+		month: 'short',
+		timeZone: 'Africa/Lagos'
+	});
+
+/** The owner's one-tap card for a new pay-per-sale partner. Nothing is paid at this point. */
+export function partnerBrief(input: {
+	username: string;
+	title: string;
+	members: number;
+	avgViews: number;
+	quotedNgn: number | null;
+	maxPriceNgn: number;
+	percent: number;
+	days: number;
+	paymentDetails: string;
+	checks?: string[];
+	blockers?: string[];
+}): string {
+	const low = Math.max(1, Math.round(input.avgViews * 0.01));
+	const high = Math.max(low, Math.round(input.avgViews * 0.03));
+	return [
+		...(input.blockers?.length ? [`⛔ DO NOT APPROVE: ${input.blockers.join('; ')}`, ''] : []),
+		`🤝 Approve a pay-per-sale partner: ${input.title}`,
+		`https://t.me/${input.username}`,
+		'',
+		`They asked ${input.quotedNgn ? naira(input.quotedNgn) : 'more'}, above our limit of ${naira(input.maxPriceNgn)}. Instead they post for free and earn ${input.percent}% of sales made with their channel's code for ${input.days} days.`,
+		`Channel: ${input.members.toLocaleString('en-NG')} members · about ${input.avgViews.toLocaleString('en-NG')} views per post`,
+		`Expect: roughly ${low.toLocaleString('en-NG')}–${high.toLocaleString('en-NG')} visits to the site`,
+		...(input.checks?.length ? ['', 'Checks:', ...input.checks] : []),
+		'',
+		'Weekly payouts to:',
+		input.paymentDetails,
+		'',
+		'Nothing is paid now. Each Monday you get a payout card for their sales, and you approve each one.'
+	].join('\n');
+}
+
+/** The owner's weekly payout card for one partner. */
+export function partnerPayoutBrief(input: {
+	username: string;
+	title: string;
+	code: string;
+	from: string;
+	to: string;
+	orders: number;
+	salesNgn: number;
+	percent: number;
+	amountNgn: number;
+	paymentDetails: string;
+}): string {
+	return [
+		`💰 Partner payout: ${input.title} (@${input.username})`,
+		`${input.orders} order${input.orders === 1 ? '' : 's'} with code ${input.code} from ${shortDate(input.from)} to ${shortDate(input.to)}: ${naira(input.salesNgn)} in sales (after refunds)`,
+		`Their ${input.percent}%: ${naira(input.amountNgn)}`,
+		'',
+		'Pay to:',
+		input.paymentDetails,
+		'',
+		"Send the transfer, then tap the button. 'Not now' carries it over to next week."
+	].join('\n');
+}
 
 export interface DealBriefInput {
 	username: string;

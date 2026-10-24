@@ -27,12 +27,16 @@ export type DealStatus =
 	| 'paid' // owner paid; post sent to admin, waiting for it to go live
 	| 'posted' // post found in the channel; measuring views
 	| 'done'
+	| 'partner_offered' // too expensive for a paid post: offered the pay-per-sale deal
+	| 'partner_pending' // they said yes and sent bank details; owner asked to approve
 	| 'declined' // too expensive / no budget
 	| 'refused' // they said no
 	| 'no_reply'
 	| 'skipped'; // owner said skip, or cancelled
 
 export const ACTIVE_STATUSES: DealStatus[] = [
+	'partner_offered',
+	'partner_pending',
 	'contacted',
 	'negotiating',
 	'agreed',
@@ -88,6 +92,24 @@ export interface ChannelRecord {
 	checks: { at: string; warnings: string[]; facts: AudienceFacts | null } | null;
 	/** The admin's Telegram display name (compared with the bank account name). */
 	adminName: string | null;
+	/** 'partner': no upfront fee; they earn a share of sales made with their code. */
+	deal: 'paid' | 'partner';
+	/** They said yes to the partner offer (bank details may still be to come). */
+	partnerAccepted: boolean;
+	/** Share and end date, fixed when the owner approves. */
+	partnerPercent: number | null;
+	partnerUntil: string | null;
+	/** Sales up to this time have been paid out (or the deal started then). */
+	partnerPaidUntil: string | null;
+	partnerEarnedNgn: number;
+	/** The payout card waiting for the owner's tap. */
+	partnerPayout: {
+		from: string;
+		to: string;
+		orders: number;
+		salesNgn: number;
+		amountNgn: number;
+	} | null;
 	log: string[];
 	discoveredAt: string;
 	updatedAt: string;
@@ -107,6 +129,8 @@ export interface DiscoveryDay {
 export interface RunState {
 	lastDiscoveryDay: string | null;
 	lastFullRunAt: string | null;
+	/** WAT day the weekly partner payouts were last worked out. */
+	lastPartnerPayoutDay: string | null;
 	discovery: DiscoveryDay;
 	/** Which search word comes next (keeps rotating across days). */
 	keywordCursor: number;
@@ -190,6 +214,13 @@ export function newChannelRecord(
 		errorCount: 0,
 		checks: null,
 		adminName: null,
+		deal: 'paid',
+		partnerAccepted: false,
+		partnerPercent: null,
+		partnerUntil: null,
+		partnerPaidUntil: null,
+		partnerEarnedNgn: 0,
+		partnerPayout: null,
 		log: [],
 		discoveredAt: now,
 		updatedAt: now,
@@ -266,6 +297,7 @@ export async function getRunState(): Promise<RunState> {
 	return parse<RunState>(row?.value, {
 		lastDiscoveryDay: null,
 		lastFullRunAt: null,
+		lastPartnerPayoutDay: null,
 		discovery: { day: null, inspected: 0, found: 0, searches: 0, reasons: {} },
 		keywordCursor: 0,
 		candidates: [],

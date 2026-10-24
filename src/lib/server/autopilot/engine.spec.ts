@@ -62,6 +62,7 @@ function setup(
 	let state: RunState = {
 		lastDiscoveryDay: null,
 		lastFullRunAt: null,
+		lastPartnerPayoutDay: null,
 		discovery: { day: null, inspected: 0, found: 0, searches: 0, reasons: {} },
 		keywordCursor: 0,
 		candidates: [],
@@ -135,7 +136,7 @@ describe('price replies', () => {
 		expect(t.owner[0].text).toContain('quoted ₦3,500');
 	});
 
-	it('counters once, then declines', async () => {
+	it('counters once, then offers pay-per-sale', async () => {
 		const t = setup([contacted()]);
 		t.userbot.reply('promo_boss', 5, 'It is 5k');
 		await runAutopilotOnce(t.deps);
@@ -144,7 +145,7 @@ describe('price replies', () => {
 
 		t.userbot.reply('promo_boss', 6, 'Last price 5,500');
 		await runAutopilotOnce(t.deps);
-		expect(t.saved.get('airdrop_naija')!.status).toBe('declined');
+		expect(t.saved.get('airdrop_naija')!.status).toBe('partner_offered'); // then the pay-per-sale offer;
 	});
 
 	it('never agrees past what is left of the budget', async () => {
@@ -164,7 +165,7 @@ describe('price replies', () => {
 		await runAutopilotOnce(t.deps);
 		expect(t.saved.get('airdrop_naija')!.status).toBe('negotiating');
 		expect(t.userbot.sent.find((m) => m.to === 'promo_boss')?.text).toContain('₦1,000');
-		expect(t.saved.get('second_one')!.status).toBe('declined');
+		expect(t.saved.get('second_one')!.status).toBe('partner_offered');
 	});
 });
 
@@ -892,5 +893,127 @@ describe('channels the owner asks to try', () => {
 		withPicks(t, ['airdrop_naija']);
 		await runAutopilotOnce(t.deps);
 		expect(t.owner.at(-1)!.text).toContain('Already in progress: @airdrop_naija (contacted)');
+	});
+});
+
+describe('pay-per-sale offer for admins we can’t afford', () => {
+	it('offers a share of sales instead of walking away, then asks for bank details on yes', async () => {
+		const t = setup([contacted({ maxPriceNgn: 4_000 })]);
+		t.userbot.reply('promo_boss', 5, 'Promo is 9k');
+		await runAutopilotOnce(t.deps);
+		const rec = t.saved.get('airdrop_naija')!;
+		expect(rec.status).toBe('partner_offered');
+		expect(t.userbot.sent.at(-1)?.text).toContain('earn 10% of every sale your readers make');
+		expect(t.actions).toContain('partner_offered');
+
+		t.userbot.reply('promo_boss', 6, 'Ok, that works');
+		await runAutopilotOnce(t.deps);
+		expect(t.saved.get('airdrop_naija')!.partnerAccepted).toBe(true);
+		expect(t.userbot.sent.at(-1)?.text).toContain('send the bank details for your weekly payouts');
+	});
+
+	it('bank details after the offer bring the owner a partner card (nothing paid)', async () => {
+		const t = setup(
+			[contacted({ status: 'partner_offered', quotedNgn: 9_000, maxPriceNgn: 4_000 })],
+			{},
+			fakeUserbot({ channelInfo: healthyChannel() })
+		);
+		t.userbot.reply('promo_boss', 7, 'Opay 8031234567 Musa Ibrahim');
+		await runAutopilotOnce(t.deps);
+		expect(t.saved.get('airdrop_naija')!.status).toBe('partner_pending');
+		const card = t.owner.at(-1)!;
+		expect(card.text).toContain('🤝 Approve a pay-per-sale partner: Airdrop Naija');
+		expect(card.text).toContain('They asked ₦9,000, above our limit of ₦4,000');
+		expect(card.text).toContain('Nothing is paid now');
+		expect(card.rows?.[0].map((b) => b.data)).toEqual([
+			'ap:partner:airdrop_naija',
+			'ap:nopartner:airdrop_naija'
+		]);
+	});
+
+	it('a lower price after the offer goes the normal way; still too high gets a polite note', async () => {
+		const t = setup([
+			contacted({ status: 'partner_offered', maxPriceNgn: 4_000 }),
+			contacted({
+				username: 'other_ch',
+				contact: 'other_admin',
+				status: 'partner_offered',
+				maxPriceNgn: 4_000
+			})
+		]);
+		t.userbot.reply('promo_boss', 8, 'Ok 3.5k then');
+		t.userbot.reply('other_admin', 8, 'Make it 7k');
+		await runAutopilotOnce(t.deps);
+		expect(t.saved.get('airdrop_naija')!.status).toBe('agreed');
+		expect(t.saved.get('other_ch')!.status).toBe('partner_offered');
+		expect(t.userbot.sent.find((m) => m.to === 'other_admin')?.text).toContain(
+			'still above our budget'
+		);
+	});
+
+	it('with the offer switched off, too expensive is declined as before', async () => {
+		const t = setup([contacted({ maxPriceNgn: 4_000 })], { partnerEnabled: false });
+		t.userbot.reply('promo_boss', 5, '9k');
+		await runAutopilotOnce(t.deps);
+		expect(t.saved.get('airdrop_naija')!.status).toBe('declined');
+	});
+});
+
+describe('weekly partner payouts', () => {
+	const MONDAY = new Date('2026-10-26T10:30:00Z'); // 11:30 WAT
+	const partner = (over: Partial<ChannelRecord> = {}) =>
+		contacted({
+			status: 'posted',
+			deal: 'partner',
+			code: 'TGAIRDRO10',
+			partnerPercent: 10,
+			paidAt: '2026-10-12T09:00:00Z',
+			partnerPaidUntil: '2026-10-12T09:00:00Z',
+			partnerUntil: '2026-11-11T09:00:00Z',
+			paymentDetails: 'Opay 8031234567 Musa Ibrahim',
+			...over
+		});
+
+	it('on Monday sends one card per partner for sales up to two days ago', async () => {
+		const t = setup([partner()]);
+		const sales = vi.fn(async () => ({ orders: 4, salesNgn: 38_000 }));
+		t.deps.partnerSales = sales;
+		t.deps.now = MONDAY;
+		await runAutopilotOnce(t.deps);
+		expect(sales).toHaveBeenCalledWith(
+			'TGAIRDRO10',
+			new Date('2026-10-12T09:00:00Z'),
+			new Date(MONDAY.getTime() - 48 * HOUR)
+		);
+		const card = t.owner.find((m) => m.text.startsWith('💰 Partner payout'))!;
+		expect(card.text).toContain('4 orders with code TGAIRDRO10');
+		expect(card.text).toContain('₦38,000 in sales');
+		expect(card.text).toContain('Their 10%: ₦3,800');
+		expect(card.rows?.[0].map((b) => b.data)).toEqual([
+			'ap:ppaid:airdrop_naija',
+			'ap:pskip:airdrop_naija'
+		]);
+		expect(t.saved.get('airdrop_naija')!.partnerPayout?.amountNgn).toBe(3_800);
+
+		await runAutopilotOnce(t.deps); // same day: no second card
+		expect(t.owner.filter((m) => m.text.startsWith('💰 Partner payout'))).toHaveLength(1);
+	});
+
+	it('not on other days, and tiny amounts wait for next week', async () => {
+		const t = setup([partner()]);
+		t.deps.partnerSales = vi.fn(async () => ({ orders: 1, salesNgn: 900 }));
+		await runAutopilotOnce(t.deps); // Thursday
+		expect(t.deps.partnerSales).not.toHaveBeenCalled();
+		t.deps.now = MONDAY;
+		await runAutopilotOnce(t.deps); // ₦90: carried over
+		expect(t.owner.some((m) => m.text.startsWith('💰'))).toBe(false);
+	});
+
+	it('closes a finished partner deal with no sales', async () => {
+		const t = setup([partner({ partnerUntil: '2026-10-20T09:00:00Z' })]);
+		t.deps.partnerSales = vi.fn(async () => ({ orders: 0, salesNgn: 0 }));
+		t.deps.now = MONDAY;
+		await runAutopilotOnce(t.deps);
+		expect(t.saved.get('airdrop_naija')!.partnerPaidUntil).toBe('2026-10-20T09:00:00Z');
 	});
 });

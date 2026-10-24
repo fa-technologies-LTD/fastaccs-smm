@@ -11,7 +11,7 @@ import {
 	botWebhookInfo,
 	type WebhookHealth
 } from '$lib/server/autopilot/bot';
-import { committedSpend, discoveryLine, watDay } from '$lib/server/autopilot/engine';
+import { committedSpend, discoveryLine, spentSoFar, watDay } from '$lib/server/autopilot/engine';
 import { parseChannelList } from '$lib/server/autopilot/rules';
 import { botWebhookSecret } from '$lib/server/autopilot/job';
 import { claudeConfigured } from '$lib/server/autopilot/llm';
@@ -85,9 +85,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		}),
 		getOwnerPicks()
 	]);
-	const spent = channels
-		.filter((r) => ['paid', 'posted', 'done'].includes(r.status))
-		.reduce((sum, r) => sum + (r.agreedNgn ?? 0), 0);
+	const spent = spentSoFar(channels);
 	return {
 		isOwner,
 		settings: { ...settings, bindCode: null },
@@ -135,6 +133,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 				code: r.code,
 				views48h: r.views48h,
 				checked: Boolean(r.checks),
+				deal: r.deal,
+				partnerPercent: r.partnerPercent,
+				partnerUntil: r.partnerUntil,
+				partnerEarnedNgn: r.partnerEarnedNgn,
+				payoutWaiting: Boolean(r.partnerPayout),
 				warnings: r.checks?.warnings ?? [],
 				lastNote: r.log.at(-1) ?? ''
 			})),
@@ -184,6 +187,9 @@ export const actions: Actions = {
 			testContacts: lines(form.get('testContacts')).map(normalizeUsername),
 			codePercent: Math.min(30, Math.max(0, num(form, 'codePercent', s.codePercent))),
 			codeDays: Math.min(60, Math.max(1, num(form, 'codeDays', s.codeDays))),
+			partnerEnabled: form.get('partnerEnabled') === 'on',
+			partnerPercent: Math.min(30, Math.max(1, num(form, 'partnerPercent', s.partnerPercent))),
+			partnerDays: Math.min(90, Math.max(7, num(form, 'partnerDays', s.partnerDays))),
 			llmModel: (AUTOPILOT_MODELS as readonly string[]).includes(model) ? model : s.llmModel
 		});
 		return { message: 'Rules saved.' };

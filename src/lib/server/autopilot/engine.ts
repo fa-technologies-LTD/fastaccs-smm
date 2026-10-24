@@ -13,6 +13,9 @@ import {
 	maxPriceFor,
 	mentionedUsernames,
 	nigeriaScore,
+	partnerBrief,
+	partnerCommission,
+	partnerPayoutBrief,
 	promoContactCandidates,
 	readReply,
 	searchBlocker,
@@ -96,6 +99,8 @@ export interface EngineDeps {
 	deadline: number;
 	/** The post copy (with tracked link and code) a channel would publish. */
 	postFor(rec: ChannelRecord): string;
+	/** Sales made with a code between two times: paid orders, net of refunds. */
+	partnerSales?(code: string, from: Date, to: Date): Promise<{ orders: number; salesNgn: number }>;
 	/** 'replies': only steps 1–2, reading just the chats with unread messages. Default 'full'. */
 	mode?: AutopilotMode;
 }
@@ -122,6 +127,24 @@ export function watDay(at: Date): string {
 
 function watHour(at: Date): number {
 	return new Date(at.getTime() + HOUR).getUTCHours();
+}
+
+/** 0 = Sunday … 1 = Monday (WAT). */
+function watWeekday(at: Date): number {
+	return new Date(at.getTime() + HOUR).getUTCDay();
+}
+
+/** Upfront fees paid plus partner payouts made. */
+export function spentSoFar(channels: ChannelRecord[]): number {
+	return channels.reduce(
+		(sum, r) =>
+			sum +
+			(r.deal !== 'partner' && ['paid', 'posted', 'done'].includes(r.status)
+				? (r.agreedNgn ?? 0)
+				: 0) +
+			(r.partnerEarnedNgn ?? 0),
+		0
+	);
 }
 
 /** "Search today: looked at 34, 6 good · skipped: few views 12, not Nigerian 9, ..." */
@@ -180,6 +203,7 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 	};
 
 	const MONEY_STATUSES: ChannelRecord['status'][] = [
+		'partner_pending',
 		'agreed',
 		'awaiting_payment',
 		'paid',
@@ -307,6 +331,45 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 	// Steps 3–5 belong to the full run only.
 	if (quick) return finish();
 
+	/** Fresh channel/admin checks plus payee checks, as ✅/⚠ lines for the owner's card. */
+	async function cardChecks(rec: ChannelRecord): Promise<{ lines: string[]; blockers: string[] }> {
+		let checked: Awaited<ReturnType<typeof vet>> | null = null;
+		try {
+			checked = await vet(rec);
+		} catch (error) {
+			if (error instanceof TelegramSlowDown) throw error;
+		}
+		const account = rec.paymentDetails?.match(/\b\d{10}\b/)?.[0];
+		const sameAccountElsewhere = account
+			? [...byName.values()]
+					.filter(
+						(other) => other.username !== rec.username && other.paymentDetails?.includes(account)
+					)
+					.map((other) => other.username)
+			: [];
+		const sameSeller = [...byName.values()]
+			.filter((other) => other.username !== rec.username && other.contact === rec.contact)
+			.map((other) => `@${other.username}`);
+		const paymentWarnings = checkPayment({
+			details: rec.paymentDetails ?? '',
+			adminName: rec.adminName ?? '',
+			channelTitle: rec.title,
+			sameAccountElsewhere
+		});
+		if (sameSeller.length) {
+			paymentWarnings.push(
+				`@${rec.contact} also sells posts for ${sameSeller.join(', ')}: one seller, several channels (their audiences may overlap)`
+			);
+		}
+		const lines = checked
+			? checkLines(checked.facts, [...checked.warnings, ...paymentWarnings])
+			: [
+					"⚠ Couldn't re-check the channel just now",
+					...checkLines(null, [...(rec.checks?.warnings ?? []), ...paymentWarnings])
+				];
+		return { lines, blockers: checked?.blockers ?? [] };
+	}
+
 	async function handleReply(rec: ChannelRecord, text: string) {
 		let reading: ReadReply = readReply(text);
 		let draft: string | null = null;
@@ -326,7 +389,7 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 		if (
 			reading.intent === 'price' &&
 			reading.priceNgn &&
-			['contacted', 'negotiating'].includes(rec.status)
+			['contacted', 'negotiating', 'partner_offered'].includes(rec.status)
 		) {
 			rec.quotedNgn = reading.priceNgn;
 			const remaining = settings.budgetNgn - committedSpend([...byName.values()]);
@@ -334,7 +397,8 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 				quotedNgn: reading.priceNgn,
 				maxNgn: rec.maxPriceNgn,
 				remainingBudgetNgn: remaining,
-				alreadyCountered: rec.countered
+				// After the pay-per-sale offer we don't counter again.
+				alreadyCountered: rec.countered || rec.status === 'partner_offered'
 			});
 			if (decision.action === 'accept') {
 				// Within the owner's limits, but not a commitment: the owner approves every payment.
@@ -348,50 +412,61 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 				await send(rec, autopilotCopy.counter(rec.title, decision.priceNgn));
 				rec.status = 'negotiating';
 				rec.countered = true;
+			} else if (rec.status === 'partner_offered') {
+				await send(rec, autopilotCopy.partnerStillTooHigh());
+			} else if (settings.partnerEnabled) {
+				// Too expensive for a paid post: offer a share of sales instead of walking away.
+				await send(rec, autopilotCopy.partnerOffer(settings.partnerPercent, settings.partnerDays));
+				rec.status = 'partner_offered';
+				await store.logAction('partner_offered', rec.username, { quotedNgn: rec.quotedNgn });
 			} else {
 				await send(rec, autopilotCopy.decline());
 				rec.status = 'declined';
 			}
 			return;
 		}
+		if (reading.intent === 'accept' && rec.status === 'partner_offered') {
+			rec.partnerAccepted = true;
+			await send(rec, autopilotCopy.partnerAskDetails());
+			return;
+		}
+		if (reading.intent === 'payment_details' && rec.status === 'partner_offered') {
+			// Bank details after the offer mean yes.
+			rec.paymentDetails = reading.paymentDetails;
+			rec.partnerAccepted = true;
+			const { lines, blockers } = await cardChecks(rec);
+			rec.status = 'partner_pending';
+			await send(rec, autopilotCopy.paymentAck());
+			const promptId = await deps.notifyOwner(
+				partnerBrief({
+					username: rec.username,
+					title: rec.title,
+					members: rec.members,
+					avgViews: rec.avgViews,
+					quotedNgn: rec.quotedNgn,
+					maxPriceNgn: rec.maxPriceNgn,
+					percent: settings.partnerPercent,
+					days: settings.partnerDays,
+					paymentDetails: rec.paymentDetails ?? '',
+					checks: lines,
+					blockers
+				}),
+				[
+					blockers.length
+						? [{ text: '❌ No', data: `ap:nopartner:${rec.username}` }]
+						: [
+								{ text: '✅ Approve partner', data: `ap:partner:${rec.username}` },
+								{ text: '❌ No', data: `ap:nopartner:${rec.username}` }
+							]
+				]
+			);
+			rec.ownerPromptId = promptId ?? rec.ownerPromptId;
+			return;
+		}
 		if (reading.intent === 'payment_details' && rec.status === 'agreed') {
 			rec.paymentDetails = reading.paymentDetails;
 			// Re-check the channel and admin right before the owner decides.
-			let checked: Awaited<ReturnType<typeof vet>> | null = null;
-			try {
-				checked = await vet(rec);
-			} catch (error) {
-				if (error instanceof TelegramSlowDown) throw error;
-			}
-			const account = rec.paymentDetails?.match(/\b\d{10}\b/)?.[0];
-			const sameAccountElsewhere = account
-				? [...byName.values()]
-						.filter(
-							(other) => other.username !== rec.username && other.paymentDetails?.includes(account)
-						)
-						.map((other) => other.username)
-				: [];
-			const sameSeller = [...byName.values()]
-				.filter((other) => other.username !== rec.username && other.contact === rec.contact)
-				.map((other) => `@${other.username}`);
-			const paymentWarnings = checkPayment({
-				details: rec.paymentDetails ?? '',
-				adminName: rec.adminName ?? '',
-				channelTitle: rec.title,
-				sameAccountElsewhere
-			});
-			if (sameSeller.length) {
-				paymentWarnings.push(
-					`@${rec.contact} also sells posts for ${sameSeller.join(', ')}: one seller, several channels (their audiences may overlap)`
-				);
-			}
-			const lines = checked
-				? checkLines(checked.facts, [...checked.warnings, ...paymentWarnings])
-				: [
-						"⚠ Couldn't re-check the channel just now",
-						...checkLines(null, [...(rec.checks?.warnings ?? []), ...paymentWarnings])
-					];
-			const blockers = checked?.blockers ?? [];
+			const { lines, blockers } = await cardChecks(rec);
 			rec.status = 'awaiting_payment';
 			await send(rec, autopilotCopy.paymentAck());
 			// The owner's one-tap decision: the deal, what to expect, the checks, and who gets paid.
@@ -434,7 +509,9 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 		if (
 			reading.intent === 'question' &&
 			draft &&
-			!['agreed', 'awaiting_payment', 'paid'].includes(rec.status)
+			!['agreed', 'awaiting_payment', 'paid', 'partner_offered', 'partner_pending'].includes(
+				rec.status
+			)
 		) {
 			await send(rec, draft);
 			return;
@@ -874,21 +951,81 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 		}
 	}
 
-	// 5c. Evening report.
+	// 5c. Partner payouts: each Monday from 10:00 WAT, one card per partner for their sales since
+	// the last payout. Sales count once they are two days old, so refunds come off first. The owner
+	// pays and taps; "Not now" carries the amount over to the next week.
+	if (
+		deps.partnerSales &&
+		state.lastPartnerPayoutDay !== today &&
+		watWeekday(now) === 1 &&
+		watHour(now) >= 10
+	) {
+		for (const rec of [...byName.values()].filter(
+			(r) => r.deal === 'partner' && r.code && r.partnerUntil && !r.partnerPayout
+		)) {
+			if (!timeLeft()) break;
+			const until = new Date(rec.partnerUntil!).getTime();
+			const from = new Date(rec.partnerPaidUntil ?? rec.paidAt ?? now.toISOString());
+			const to = new Date(Math.min(now.getTime() - 48 * HOUR, until));
+			if (to <= from) continue;
+			const sales = await deps.partnerSales(rec.code!, from, to);
+			const percent = rec.partnerPercent ?? settings.partnerPercent;
+			const amount = partnerCommission(sales.salesNgn, percent);
+			const finished = to.getTime() >= until;
+			if (amount === 0 && finished) {
+				rec.partnerPaidUntil = rec.partnerUntil;
+				await store.saveChannel(rec, 'partner deal ended');
+				continue;
+			}
+			if (amount < 100 && !finished) continue; // too small for a transfer: carry over
+			rec.partnerPayout = {
+				from: from.toISOString(),
+				to: to.toISOString(),
+				orders: sales.orders,
+				salesNgn: Math.round(sales.salesNgn),
+				amountNgn: amount
+			};
+			const promptId = await deps.notifyOwner(
+				partnerPayoutBrief({
+					username: rec.username,
+					title: rec.title,
+					code: rec.code!,
+					from: rec.partnerPayout.from,
+					to: rec.partnerPayout.to,
+					orders: sales.orders,
+					salesNgn: rec.partnerPayout.salesNgn,
+					percent,
+					amountNgn: amount,
+					paymentDetails: rec.paymentDetails ?? '(no bank details on file)'
+				}),
+				[
+					[
+						{ text: `✅ I've paid ${naira(amount)}`, data: `ap:ppaid:${rec.username}` },
+						{ text: '⏭ Not now', data: `ap:pskip:${rec.username}` }
+					]
+				]
+			);
+			rec.ownerPromptId = promptId ?? rec.ownerPromptId;
+			await store.saveChannel(rec, `payout card: ${naira(amount)} for ${sales.orders} orders`);
+		}
+		state.lastPartnerPayoutDay = today;
+	}
+
+	// 5d. Evening report.
 	if (state.lastReportDay !== today && watHour(now) >= 18) {
 		const all = [...byName.values()];
 		const count = (s: ChannelRecord['status'][]) => all.filter((r) => s.includes(r.status)).length;
-		const spent = all
-			.filter((r) => ['paid', 'posted', 'done'].includes(r.status))
-			.reduce((s, r) => s + (r.agreedNgn ?? 0), 0);
+		const spent = spentSoFar(all);
+		const partners = all.filter((r) => r.deal === 'partner' && r.partnerUntil);
 		await deps.notifyOwner(
 			[
 				`📋 Autopilot today${settings.testMode ? ' (TEST MODE)' : ''}`,
 				`Talking to: ${count(['contacted', 'negotiating'])} · agreed: ${count(['agreed', 'awaiting_payment'])} · live posts: ${count(['paid', 'posted'])} · finished: ${count(['done'])}`,
 				`Spent ${naira(spent)} of ${naira(settings.budgetNgn)} (committed ${naira(committedSpend(all))})`,
 				`New admins messaged today: ${state.outreachCount}/${settings.dailyNewContacts}`,
+				`Pay-per-sale: ${count(['partner_offered'])} offered · ${count(['partner_pending'])} waiting for you · ${partners.length} partners (paid ${naira(partners.reduce((sum, r) => sum + r.partnerEarnedNgn, 0))})`,
 				discoveryLine(disc),
-				`Waiting on you: ${all.filter((r) => r.waitingOwner || r.status === 'awaiting_payment').length}`
+				`Waiting on you: ${all.filter((r) => r.waitingOwner || ['awaiting_payment', 'partner_pending'].includes(r.status) || r.partnerPayout).length}`
 			].join('\n')
 		);
 		state.lastReportDay = today;

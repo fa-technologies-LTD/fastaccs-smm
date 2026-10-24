@@ -3,7 +3,7 @@ import { env } from '$env/dynamic/private';
 import { botAnswer, botConfigured, botEdit, botSend, type BotButton } from './bot';
 import { planAutopilotRun, runAutopilotOnce, type AutopilotMode, type RunSummary } from './engine';
 import { claudeConfigured, readWithClaude } from './llm';
-import { bookSpend, ensurePlacementCode, trackedLinkFor } from './money';
+import { bookSpend, ensurePlacementCode, partnerSales, trackedLinkFor } from './money';
 import { handleOwnerUpdate, type TelegramUpdate } from './owner';
 import { placementCode, postCopy } from './rules';
 import type { AutopilotSettings } from './settings';
@@ -92,6 +92,7 @@ export async function runAutopilotJob(
 				? (text, title) => readWithClaude(text, { channelTitle: title, model: settings.llmModel })
 				: undefined,
 			postFor: (rec) => postFor(rec, settings),
+			partnerSales,
 			deadline: Date.now() + (mode === 'full' ? 45_000 : 30_000),
 			mode
 		});

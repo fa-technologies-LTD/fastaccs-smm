@@ -27,6 +27,12 @@ export interface AutopilotSettings {
 	landingPath: string;
 	codePercent: number;
 	codeDays: number;
+	/** Pay-per-sale offer for admins whose price is above our limits. */
+	partnerEnabled: boolean;
+	/** Their share of sales made with their channel's code (%). */
+	partnerPercent: number;
+	/** How long the code earns them a share (days). */
+	partnerDays: number;
 	llmModel: AutopilotModel;
 	/** Owner's chat with the bot (set by /start <bindCode>). */
 	ownerChatId: string | null;
@@ -57,6 +63,9 @@ export const AUTOPILOT_DEFAULTS: AutopilotSettings = {
 	landingPath: '/platforms/x',
 	codePercent: 10,
 	codeDays: 14,
+	partnerEnabled: true,
+	partnerPercent: 10,
+	partnerDays: 30,
 	llmModel: 'claude-opus-5-5',
 	ownerChatId: null,
 	bindCode: null,
@@ -119,6 +128,9 @@ export function parseAutopilotSettings(raw: string | null | undefined): Autopilo
 				: d.landingPath,
 		codePercent: int(value.codePercent, d.codePercent, 0, 30),
 		codeDays: int(value.codeDays, d.codeDays, 1, 60),
+		partnerEnabled: value.partnerEnabled !== false,
+		partnerPercent: int(value.partnerPercent, d.partnerPercent, 1, 30),
+		partnerDays: int(value.partnerDays, d.partnerDays, 7, 90),
 		llmModel: (AUTOPILOT_MODELS as readonly string[]).includes(model) ? model : d.llmModel,
 		ownerChatId:
 			typeof value.ownerChatId === 'string' && value.ownerChatId ? value.ownerChatId : null,

@@ -1,3 +1,4 @@
+import { spentSoFar } from './engine';
 import { autopilotCopy, postCopy } from './rules';
 import type { AutopilotSettings } from './settings';
 import type { ChannelRecord } from './state';
@@ -47,12 +48,10 @@ const naira = (n: number) => `₦${Math.round(n).toLocaleString('en-NG')}`;
 function statusText(channels: ChannelRecord[], settings: AutopilotSettings): string {
 	const count = (s: ChannelRecord['status'][]) =>
 		channels.filter((r) => s.includes(r.status)).length;
-	const spent = channels
-		.filter((r) => ['paid', 'posted', 'done'].includes(r.status))
-		.reduce((s, r) => s + (r.agreedNgn ?? 0), 0);
+	const spent = spentSoFar(channels);
 	return [
 		`Autopilot is ${settings.enabled ? 'ON' : 'OFF'}${settings.testMode ? ' (test mode)' : ''}.`,
-		`Found: ${count(['discovered'])} · talking: ${count(['contacted', 'negotiating'])} · waiting on you: ${channels.filter((r) => r.waitingOwner || r.status === 'awaiting_payment').length}`,
+		`Found: ${count(['discovered'])} · talking: ${count(['contacted', 'negotiating', 'partner_offered'])} · waiting on you: ${channels.filter((r) => r.waitingOwner || ['awaiting_payment', 'partner_pending'].includes(r.status) || r.partnerPayout).length}`,
 		`Live posts: ${count(['paid', 'posted'])} · finished: ${count(['done'])}`,
 		`Spent ${naira(spent)} of ${naira(settings.budgetNgn)}`
 	].join('\n');
@@ -158,6 +157,115 @@ export async function handleOwnerUpdate(update: TelegramUpdate, deps: OwnerDeps)
 			chatId,
 			query.message.message_id,
 			`${original}\n\n✅ Approved and paid. Sending them the post now; I'll tell you when it's live.`
+		);
+	}
+
+	if (action === 'partner') {
+		if (rec.status !== 'partner_pending') return deps.answer(query.id, 'Already handled.');
+		const now = deps.now();
+		const days = settings.partnerDays;
+		// The code must keep working for the whole partner period.
+		const code = await deps.ensureCode(
+			rec.username,
+			{ ...settings, codeDays: Math.max(settings.codeDays, days) },
+			rec.code
+		);
+		const link = deps.trackedLink(rec.username, settings);
+		const until = new Date(now.getTime() + days * 86_400_000).toISOString();
+		rec.code = code;
+		rec.link = link;
+		rec.deal = 'partner';
+		rec.partnerPercent = settings.partnerPercent;
+		rec.partnerUntil = until;
+		rec.partnerPaidUntil = now.toISOString();
+		rec.status = 'paid'; // from here it is followed like a paid post: live check, deleted-post alert
+		rec.paidAt = now.toISOString();
+		rec.waitingOwner = false;
+		rec.outbox = [
+			...rec.outbox,
+			autopilotCopy.partnerWelcome({
+				post: postCopy({ link, code, percent: settings.codePercent, days }),
+				code,
+				percent: settings.partnerPercent,
+				until: new Date(until).toLocaleDateString('en-GB', {
+					day: 'numeric',
+					month: 'long',
+					timeZone: 'Africa/Lagos'
+				})
+			})
+		];
+		if (
+			!(await deps.saveChannel(rec, `owner approved partner deal (${settings.partnerPercent}%)`))
+		) {
+			return deps.answer(query.id, BUSY);
+		}
+		await deps.logAction('partner_approved', rec.username, {
+			percent: settings.partnerPercent,
+			days,
+			code
+		});
+		await deps.answer(query.id, 'Partner approved ✅');
+		return deps.edit(
+			chatId,
+			query.message.message_id,
+			`${original}\n\n✅ Approved. Sending them the post and their code now; payout cards come on Mondays.`
+		);
+	}
+
+	if (action === 'nopartner') {
+		if (!['partner_pending', 'partner_offered'].includes(rec.status))
+			return deps.answer(query.id, 'Already handled.');
+		rec.status = 'skipped';
+		rec.waitingOwner = false;
+		rec.outbox = [...rec.outbox, autopilotCopy.cancel()];
+		if (!(await deps.saveChannel(rec, 'owner declined the partner deal'))) {
+			return deps.answer(query.id, BUSY);
+		}
+		await deps.logAction('partner_declined', rec.username);
+		await deps.answer(query.id, 'Not going ahead');
+		return deps.edit(
+			chatId,
+			query.message.message_id,
+			`${original}\n\n❌ Not going ahead. They've been told politely.`
+		);
+	}
+
+	if (action === 'ppaid') {
+		const payout = rec.partnerPayout;
+		if (!payout) return deps.answer(query.id, 'Already handled.');
+		rec.partnerEarnedNgn = (rec.partnerEarnedNgn ?? 0) + payout.amountNgn;
+		rec.partnerPaidUntil = payout.to;
+		rec.partnerPayout = null;
+		rec.outbox = [...rec.outbox, autopilotCopy.partnerPaid(payout.amountNgn, payout.orders)];
+		// Saved first, so a second tap can't book the payout twice.
+		if (!(await deps.saveChannel(rec, `owner paid partner ${naira(payout.amountNgn)}`))) {
+			return deps.answer(query.id, BUSY);
+		}
+		await deps.bookSpend(rec.username, payout.amountNgn, settings);
+		await deps.logAction('partner_paid', rec.username, {
+			amountNgn: payout.amountNgn,
+			orders: payout.orders,
+			salesNgn: payout.salesNgn
+		});
+		await deps.answer(query.id, 'Paid ✅');
+		return deps.edit(
+			chatId,
+			query.message.message_id,
+			`${original}\n\n✅ Paid. I've let them know.`
+		);
+	}
+
+	if (action === 'pskip') {
+		if (!rec.partnerPayout) return deps.answer(query.id, 'Already handled.');
+		rec.partnerPayout = null; // the same sales come back on next Monday's card
+		if (!(await deps.saveChannel(rec, 'owner carried the payout over'))) {
+			return deps.answer(query.id, BUSY);
+		}
+		await deps.answer(query.id, 'Carried over to next week');
+		return deps.edit(
+			chatId,
+			query.message.message_id,
+			`${original}\n\n⏭ Not now. It will be on next Monday's card.`
 		);
 	}
 

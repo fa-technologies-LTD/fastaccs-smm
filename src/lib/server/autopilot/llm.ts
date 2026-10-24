@@ -26,6 +26,7 @@ You read one message from a channel admin and classify it:
 - "payment_details": they sent bank or payment details.
 - "posted": they say the post is live.
 - "refuse": they won't run the ad.
+- "accept": they agree to what we proposed (for example our pay-per-sale offer), with no new price.
 - "question": they asked something about us or the ad.
 - "unclear": anything else, or several different prices.
 
@@ -36,7 +37,7 @@ const SCHEMA = {
 	properties: {
 		intent: {
 			type: 'string',
-			enum: ['price', 'payment_details', 'posted', 'refuse', 'question', 'unclear']
+			enum: ['price', 'payment_details', 'posted', 'refuse', 'accept', 'question', 'unclear']
 		},
 		price_ngn: { type: ['integer', 'null'] },
 		draft_reply: { type: ['string', 'null'] }
