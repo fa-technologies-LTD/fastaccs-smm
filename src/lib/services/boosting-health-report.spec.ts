@@ -14,6 +14,8 @@ const base: BoostingHealthReport = {
 	manualReview: [],
 	failures: [],
 	noRoute: [],
+	notDelivering: [],
+	unroutableOffers: [],
 	complaints: {
 		open: 0,
 		oldestOpenHours: null,
@@ -64,6 +66,15 @@ describe('Boosting check message', () => {
 				{ service: 'IG Followers #11524', provider: 'BulkFollows', outcome: 'cancelled', orders: 2 }
 			],
 			noRoute: [{ offer: 'Instagram Followers', orders: 1 }],
+			notDelivering: [
+				{
+					service: 'S113 Twitter Followers #s5044',
+					provider: 'SMM Raja',
+					orders: 6,
+					oldestHours: 114
+				}
+			],
+			unroutableOffers: ['Instagram Followers'],
 			complaints: {
 				open: 1,
 				oldestOpenHours: 15,
@@ -105,6 +116,12 @@ describe('Boosting check message', () => {
 		expect(text).toContain('⚠ Review (25h): Instagram Followers: customer link needs checking');
 		expect(text).toContain('⚠ IG Followers #11524 (BulkFollows): 2 cancelled');
 		expect(text).toContain('⚠ No supplier could take 1 order for Instagram Followers');
+		expect(text).toContain(
+			"⚠ S113 Twitter Followers #s5044 (SMM Raja): 6 orders with nothing delivered after 12+ hours (oldest 4d 18h). These don't count as failures in its track record yet."
+		);
+		expect(text).toContain(
+			'⚠ On sale but no usable supplier: Instagram Followers (add a service or hide it)'
+		);
 		expect(text).toContain('⚠ 1 open (1 nothing delivered), oldest 15h · 1 new · 0 resolved');
 		expect(text).toContain('Retries paid from margin: 1 (cost ₦469) · 1 delivered after a retry');
 		expect(text).toContain(

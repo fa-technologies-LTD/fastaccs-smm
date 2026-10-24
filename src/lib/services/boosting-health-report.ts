@@ -13,6 +13,11 @@ const HOUR = 3_600_000;
 export const STUCK_AFTER_HOURS = 48;
 /** Supplier balance (USD) below which the report warns. */
 export const LOW_BALANCE_USD = 10;
+/** The router drops a service below this success rate once it has this many results. */
+const RELIABILITY_FLOOR = 0.8;
+/** Orders usually start within hours; nothing at all after this long means the service isn't delivering. */
+export const NOT_STARTED_AFTER_HOURS = 12;
+const MIN_RESULTS_FOR_FLOOR = 3;
 
 export interface BoostingHealthReport {
 	windowHours: number;
@@ -23,6 +28,10 @@ export interface BoostingHealthReport {
 	manualReview: Array<{ service: string; reason: string | null; hours: number }>;
 	failures: Array<{ service: string; provider: string; outcome: string; orders: number }>;
 	noRoute: Array<{ offer: string; orders: number }>;
+	/** Services with orders running 12h+ and nothing delivered (never counted as failures). */
+	notDelivering: Array<{ service: string; provider: string; orders: number; oldestHours: number }>;
+	/** On sale, but every supplier service behind it is switched off or was dropped for failing. */
+	unroutableOffers: string[];
 	complaints: {
 		open: number;
 		oldestOpenHours: number | null;
@@ -91,7 +100,9 @@ export async function buildBoostingHealthReport(
 		learningRows,
 		repeatRows,
 		marginRows,
-		providers
+		providers,
+		notDeliveringRows,
+		unroutableRows
 	] = await Promise.all([
 		database.$queryRaw<Array<{ new_orders: bigint; delivered: bigint }>>(Prisma.sql`
 			SELECT COUNT(*) FILTER (WHERE created_at >= ${since}) AS new_orders,
@@ -209,7 +220,28 @@ export async function buildBoostingHealthReport(
 				lastBalanceSuccessAt: true
 			},
 			orderBy: { label: 'asc' }
-		})
+		}),
+		database.$queryRaw<
+			Array<{ service: string; provider: string; orders: bigint; oldest: Date }>
+		>(Prisma.sql`
+			SELECT ps.name || ' #' || ps.service_id AS service, ps.provider, COUNT(*) AS orders,
+				MIN(COALESCE(f.submitted_at, f.created_at)) AS oldest
+			FROM boost_fulfillments f
+			JOIN boost_service_routes r ON r.id = f.selected_route_id
+			JOIN boost_provider_services ps ON ps.id = r.provider_service_id
+			WHERE f.fulfillment_mode = 'live' AND f.status IN ('submitted', 'in_progress')
+				AND COALESCE(f.submitted_at, f.created_at) < ${new Date(now.getTime() - NOT_STARTED_AFTER_HOURS * HOUR)}
+				AND (f.remains IS NULL OR f.remains >= f.quantity)
+			GROUP BY 1, 2 ORDER BY orders DESC LIMIT 5`),
+		database.$queryRaw<Array<{ offer: string }>>(Prisma.sql`
+			SELECT o.platform || '|' || o.outcome || '|' || o.customer_name AS offer
+			FROM boost_customer_offers o
+			WHERE o.status = 'live' AND NOT EXISTS (
+				SELECT 1 FROM boost_service_routes r
+				WHERE r.offer_id = o.id AND r.state = 'enabled'
+					AND NOT (r.reliability_observations >= ${MIN_RESULTS_FOR_FLOOR} AND r.reliability_score < ${RELIABILITY_FLOOR})
+					AND (o.routing_policy <> 'locked' OR r.id = o.locked_route_id))
+			ORDER BY o.display_order LIMIT 8`)
 	]);
 
 	const labels = new Map(providers.map((p) => [p.provider, p.label]));
@@ -250,6 +282,13 @@ export async function buildBoostingHealthReport(
 			orders: num(row.orders)
 		})),
 		noRoute: noRouteRows.map((row) => ({ offer: row.offer, orders: num(row.orders) })),
+		notDelivering: notDeliveringRows.map((row) => ({
+			service: row.service,
+			provider: supplier(row.provider) ?? row.provider,
+			orders: num(row.orders),
+			oldestHours: hoursSince(row.oldest, now) ?? 0
+		})),
+		unroutableOffers: unroutableRows.map((row) => offerLabel(row.offer)),
 		complaints: {
 			open: openComplaints.length,
 			oldestOpenHours: openComplaints.length
@@ -341,13 +380,21 @@ export function formatBoostingHealthReport(report: BoostingHealthReport): string
 		);
 
 	lines.push('', 'Failures:');
-	if (!r.failures.length && !r.noRoute.length) lines.push('None in this period.');
+	if (!r.failures.length && !r.noRoute.length && !r.notDelivering.length)
+		lines.push('None in this period.');
+	for (const d of r.notDelivering)
+		lines.push(
+			`⚠ ${d.service} (${d.provider}): ${d.orders} order${d.orders === 1 ? '' : 's'} with nothing delivered after ${NOT_STARTED_AFTER_HOURS}+ hours (oldest ${age(d.oldestHours)}). These don't count as failures in its track record yet.`
+		);
 	for (const f of r.failures)
 		lines.push(`⚠ ${f.service} (${f.provider}): ${f.orders} ${f.outcome.replace(/_/g, ' ')}`);
 	for (const n of r.noRoute)
 		lines.push(
 			`⚠ No supplier could take ${n.orders} order${n.orders === 1 ? '' : 's'} for ${n.offer}`
 		);
+
+	for (const offer of r.unroutableOffers)
+		lines.push(`⚠ On sale but no usable supplier: ${offer} (add a service or hide it)`);
 
 	const c = r.complaints;
 	lines.push('', 'Customer reports:');
