@@ -18,6 +18,7 @@ import { claudeConfigured } from '$lib/server/autopilot/llm';
 import { SITE_URL } from '$lib/server/autopilot/money';
 import {
 	AUTOPILOT_MODELS,
+	MAX_KEYWORDS,
 	normalizeUsername,
 	type AutopilotModel
 } from '$lib/server/autopilot/settings';
@@ -179,7 +180,7 @@ export const actions: Actions = {
 				15,
 				Math.max(0, num(form, 'dailyNewContacts', s.dailyNewContacts))
 			),
-			keywords: lines(form.get('keywords')).slice(0, 30),
+			keywords: lines(form.get('keywords')).slice(0, MAX_KEYWORDS),
 			testContacts: lines(form.get('testContacts')).map(normalizeUsername),
 			codePercent: Math.min(30, Math.max(0, num(form, 'codePercent', s.codePercent))),
 			codeDays: Math.min(60, Math.max(1, num(form, 'codeDays', s.codeDays))),

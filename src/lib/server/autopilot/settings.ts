@@ -75,12 +75,15 @@ function int(value: unknown, fallback: number, min: number, max: number): number
 	return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 }
 
-function list(value: unknown, fallback: string[]): string[] {
+/** Most search words kept (each is searched at most once a day, two per run). */
+export const MAX_KEYWORDS = 60;
+
+function list(value: unknown, fallback: string[], max = 30): string[] {
 	if (!Array.isArray(value)) return fallback;
 	return value
 		.map((item) => String(item ?? '').trim())
 		.filter(Boolean)
-		.slice(0, 30);
+		.slice(0, max);
 }
 
 export function normalizeUsername(value: unknown): string {
@@ -109,7 +112,7 @@ export function parseAutopilotSettings(raw: string | null | undefined): Autopilo
 		maxPer1kViewsNgn: int(value.maxPer1kViewsNgn, d.maxPer1kViewsNgn, 100, 100_000),
 		minAvgViews: int(value.minAvgViews, d.minAvgViews, 50, 1_000_000),
 		dailyNewContacts: int(value.dailyNewContacts, d.dailyNewContacts, 0, 15),
-		keywords: list(value.keywords, d.keywords),
+		keywords: list(value.keywords, d.keywords, MAX_KEYWORDS),
 		landingPath:
 			typeof value.landingPath === 'string' && value.landingPath.startsWith('/')
 				? value.landingPath

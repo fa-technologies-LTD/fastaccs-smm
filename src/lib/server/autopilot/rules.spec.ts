@@ -190,6 +190,11 @@ describe('settings', () => {
 		});
 	});
 
+	it('keeps up to 60 search words', () => {
+		const keywords = Array.from({ length: 70 }, (_, i) => `word ${i}`);
+		expect(parseAutopilotSettings(JSON.stringify({ keywords })).keywords).toHaveLength(60);
+	});
+
 	it('in test mode only messages the test contacts', () => {
 		const settings = parseAutopilotSettings(JSON.stringify({ testContacts: ['@OwnerAccount'] }));
 		expect(mayMessage(settings, 'owneraccount')).toBe(true);
