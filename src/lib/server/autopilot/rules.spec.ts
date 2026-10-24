@@ -204,6 +204,12 @@ describe('settings', () => {
 });
 
 describe('money wording', () => {
+	it('uses the reviewed sponsorship introduction', () => {
+		expect(autopilotCopy.intro('Aminu Crypto Labs')).toBe(
+			"Hi! I'm reaching out on behalf of FastAccs (https://smm.fastaccs.com), a platform for ready-to-use social media accounts.\nWe're interested in placing a sponsored post on Aminu Crypto Labs. Could you share your rate for a single promotional post?"
+		);
+	});
+
 	it('never commits to paying: the owner approves every payment', () => {
 		const text = autopilotCopy.withinBudget(3_500);
 		expect(text).toContain('₦3,500 is within our budget');

@@ -480,7 +480,7 @@ const naira = (n: number) => `₦${Math.round(n).toLocaleString('en-NG')}`;
 
 export const autopilotCopy = {
 	intro: (title: string) =>
-		`Hi! I'm with FastAccs (smm.fastaccs.com), a Nigerian store for ready social media accounts. We'd like to book one sponsored post in ${title}. What's your price for a single post?`,
+		`Hi! I'm reaching out on behalf of FastAccs (https://smm.fastaccs.com), a platform for ready-to-use social media accounts.\nWe're interested in placing a sponsored post on ${title}. Could you share your rate for a single promotional post?`,
 	counter: (title: string, price: number) =>
 		`Thanks! Our budget for one post in ${title} is ${naira(price)}. Can you do that?`,
 	/** Not a commitment: the owner approves every payment. */
