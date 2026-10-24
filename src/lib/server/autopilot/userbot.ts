@@ -83,8 +83,8 @@ export interface UserbotPort {
 	joinGroup(username: string): Promise<void>;
 	/** New messages from people after `sinceId`, oldest first. */
 	groupMessages(username: string, sinceId: number): Promise<GroupMessage[]>;
-	/** Post in a group, optionally as a reply to one message. */
-	sendToGroup(username: string, text: string, replyToId?: number): Promise<number>;
+	/** Post in a group (Telegram HTML: bold and link labels), optionally as a reply to one message. */
+	sendToGroup(username: string, html: string, replyToId?: number): Promise<number>;
 	close(): Promise<void>;
 }
 
@@ -282,10 +282,11 @@ export async function connectUserbot(): Promise<UserbotPort> {
 					.filter((m): m is GroupMessage => m !== null)
 					.sort((a, b) => a.id - b.id);
 			}),
-		sendToGroup: (username, text, replyToId) =>
+		sendToGroup: (username, html, replyToId) =>
 			guard(async () => {
 				const sent = await client.sendMessage(username, {
-					message: text,
+					message: html,
+					parseMode: 'html',
 					...(replyToId ? { replyTo: replyToId } : {}),
 					linkPreview: false
 				});

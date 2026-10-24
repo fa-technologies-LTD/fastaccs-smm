@@ -21,8 +21,8 @@ export interface GroupDeps {
 	getState(): Promise<GroupRunState>;
 	saveState(state: GroupRunState): Promise<void>;
 	logAction(action: string, group: string, detail?: Record<string, unknown>): Promise<void>;
-	/** Tracked link for this group (optionally to one platform's page). */
-	trackedLink(group: string, platformSlug?: string): string;
+	/** Tracked link for this group (to one platform's page, or another path such as /affiliate). */
+	trackedLink(group: string, platformSlug?: string, path?: string): string;
 	/** Site visits that came from this group's links since a time. */
 	visitsSince(group: string, since: Date): Promise<number>;
 }
@@ -182,7 +182,13 @@ export async function runGroupsOnce(deps: GroupDeps): Promise<GroupRunSummary> {
 			}
 		}
 		try {
-			await userbot.sendToGroup(group.username, groupCopy.promo(deps.trackedLink(group.username)));
+			await userbot.sendToGroup(
+				group.username,
+				groupCopy.promo(
+					deps.trackedLink(group.username),
+					deps.trackedLink(group.username, undefined, '/affiliate')
+				)
+			);
 		} catch (error) {
 			await handlePostError(group, error);
 			if (group.status === 'joined') await deps.saveGroup(group);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buyRequest, groupQualifies, readGroupRules } from './group-rules';
+import { buyRequest, groupCopy, groupQualifies, readGroupRules } from './group-rules';
 
 describe('spotting people asking to buy', () => {
 	it.each([
@@ -57,5 +57,18 @@ describe('group rules', () => {
 			'no links allowed'
 		);
 		expect(groupQualifies({ ...group, members: 100 }, now, { ownerPick: true }).ok).toBe(true);
+	});
+});
+
+describe('group wording', () => {
+	it('hides long tracking links behind short labels, safely escaped', () => {
+		const promo = groupCopy.promo(
+			'https://smm.fastaccs.com/?utm_source=telegram&utm_content=a',
+			'https://smm.fastaccs.com/affiliate'
+		);
+		expect(promo).toContain(
+			'<a href="https://smm.fastaccs.com/?utm_source=telegram&amp;utm_content=a">Shop now at smm.fastaccs.com</a>'
+		);
+		expect(promo).not.toMatch(/>https?:/); // no raw URL shown as text
 	});
 });

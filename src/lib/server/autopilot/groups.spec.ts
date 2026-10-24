@@ -47,7 +47,8 @@ function setup(groups: GroupRecord[], messages: Record<string, GroupMessage[]> =
 		getState: async () => state,
 		saveState: async (next) => void (state = next),
 		logAction: async (action) => void actions.push(action),
-		trackedLink: (group, slug) => `https://smm.fastaccs.com/platforms/${slug ?? ''}?g=${group}`,
+		trackedLink: (group, slug, path) =>
+			`https://smm.fastaccs.com${path ?? `/platforms/${slug ?? ''}`}?g=${group}`,
 		visitsSince: vi.fn(async () => 0)
 	};
 	return {
@@ -93,9 +94,11 @@ describe('answering people who ask to buy', () => {
 		const summary = await runGroupsOnce(t.deps);
 		expect(summary.replies).toBe(1); // the second request is within 30 minutes of the first
 		expect(t.sent[0]).toMatchObject({ group: 'naija_hub', replyTo: 12 });
-		expect(t.sent[0].text).toContain('ready X (Twitter) accounts');
-		expect(t.sent[0].text).toContain('/platforms/x?g=naija_hub');
-		expect(t.sent[0].text).toContain('WELCOME10');
+		expect(t.sent[0].text).toContain('ready <b>X (Twitter)</b> accounts');
+		expect(t.sent[0].text).toContain(
+			'<a href="https://smm.fastaccs.com/platforms/x?g=naija_hub">Get X (Twitter) accounts</a>'
+		);
+		expect(t.sent[0].text).toContain('Code <b>WELCOME10</b> = 10% off');
 		expect(t.saved.get('naija_hub')).toMatchObject({ lastSeenId: 13, replies: 1, missed: 1 });
 	});
 
@@ -164,6 +167,13 @@ describe('promos where the rules invite them', () => {
 		expect(summary.posts).toBe(1);
 		expect(t.sent.map((m) => m.group)).toEqual(['market_a']);
 		expect(t.sent[0].text).toContain('📢 Updates: @FASTACCOUNT_SMM');
+		expect(t.sent[0].text).toContain(
+			'<a href="https://smm.fastaccs.com/platforms/?g=market_a">Shop now at smm.fastaccs.com</a>'
+		);
+		expect(t.sent[0].text).toContain(
+			'<a href="https://smm.fastaccs.com/affiliate?g=market_a">Earn by referring friends</a>'
+		);
+		expect(t.sent[0].text).toContain('\n\n🎁 First order?');
 		expect(t.saved.get('market_c')!.promoStopped).toBe(true);
 	});
 });

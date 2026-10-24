@@ -129,9 +129,9 @@ export async function partnerSales(
 
 const GROUP_CAMPAIGN = 'tg-groups';
 
-/** Tracked link for one group (to a platform's page when the request named one). */
-export function groupTrackedLink(group: string, platformSlug?: string): string {
-	const path = platformSlug ? `/platforms/${platformSlug}` : '/';
+/** Tracked link for one group (to a platform's page when the request named one, or a given path). */
+export function groupTrackedLink(group: string, platformSlug?: string, toPath?: string): string {
+	const path = toPath ?? (platformSlug ? `/platforms/${platformSlug}` : '/');
 	return (
 		buildTrackedUrl({
 			baseUrl: SITE_URL,

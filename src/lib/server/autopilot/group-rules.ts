@@ -81,18 +81,38 @@ export function groupQualifies(
 	return { ok: true, rules };
 }
 
+const escapeHtml = (text: string) =>
+	text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const linkTo = (href: string, label: string) =>
+	`<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`;
+
+/**
+ * What we post in groups, as Telegram HTML: short link labels instead of long tracking URLs
+ * (the tracking still works), bold for the offer, and blank lines between sections.
+ */
 export const groupCopy = {
 	/** A short public answer to someone asking where to buy. */
 	reply: (platform: string, link: string) =>
-		`Hi! FastAccs has ready ${platform} accounts, delivered instantly to your dashboard. First order? Code WELCOME10 takes 10% off 👉 ${link}`,
-	/** An occasional promo, only where the group's rules invite it. */
-	promo: (link: string) =>
 		[
-			'🚀 Ready social media accounts: X (Twitter), Instagram, TikTok and Facebook',
-			'Delivered instantly to your FastAccs dashboard. Buy one or many in one checkout.',
-			'🎁 First order? Code WELCOME10 = 10% off',
-			`👉 ${link}`,
-			'💸 Earn by referring friends: smm.fastaccs.com/affiliate',
+			`Hi! FastAccs has ready <b>${escapeHtml(platform)}</b> accounts, delivered instantly to your dashboard.`,
+			'',
+			'🎁 First order? Code <b>WELCOME10</b> = 10% off',
+			`👉 ${linkTo(link, `Get ${platform} accounts`)}`
+		].join('\n'),
+	/** An occasional promo, only where the group's rules invite it. */
+	promo: (link: string, affiliateLink: string) =>
+		[
+			'🚀 <b>Ready social media accounts</b>',
+			'X (Twitter) · Instagram · TikTok · Facebook',
+			'',
+			'⚡ Delivered instantly to your FastAccs dashboard',
+			'🛒 Buy one or many in one checkout',
+			'',
+			'🎁 First order? Code <b>WELCOME10</b> = 10% off',
+			'',
+			`👉 ${linkTo(link, 'Shop now at smm.fastaccs.com')}`,
+			'',
+			`💸 ${linkTo(affiliateLink, 'Earn by referring friends')}`,
 			'📢 Updates: @FASTACCOUNT_SMM'
 		].join('\n')
 };
