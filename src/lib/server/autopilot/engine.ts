@@ -30,7 +30,7 @@ import {
 import type { UserbotPort } from './userbot';
 
 /**
- * One autopilot run (time-boxed). The quick "replies" run (every 1–3 minutes, only while there are
+ * One autopilot run (time-boxed). The quick "replies" run (every minute, only while there are
  * conversations) does steps 1–2; the full run (every 15 minutes) does everything:
  *   1. send anything the owner typed for an admin
  *   2. read admins' replies and act on them (rules first, Claude for the unclear ones, owner last)
@@ -41,6 +41,10 @@ import type { UserbotPort } from './userbot';
  */
 
 export type AutopilotMode = 'full' | 'replies';
+
+/** How hard the search works: per full run, per day, and how many good channels a day is enough. */
+export const SEARCH_LIMITS = { inspectionsPerRun: 15, searchesPerRun: 3, inspectionsPerDay: 150 };
+export const goodChannelsPerDay = (dailyNewContacts: number) => Math.max(15, dailyNewContacts * 3);
 
 /** Full runs keep the old 15-minute rhythm. */
 export const FULL_RUN_MINUTES = [2, 17, 32, 47];
@@ -549,7 +553,7 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 			: { day: today, inspected: 0, found: 0, searches: 0, reasons: {} as Record<string, number> };
 	state.discovery = disc;
 	state.lastDiscoveryDay = today;
-	const target = Math.max(10, settings.dailyNewContacts * 2);
+	const target = goodChannelsPerDay(settings.dailyNewContacts);
 	const queued = new Set(state.candidates.map((c) => c.username));
 	const enqueue = (usernames: string[], via: string) => {
 		for (const raw of usernames) {
@@ -696,10 +700,15 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 
 	let inspectedNow = 0;
 	let searchesNow = 0;
-	while (timeLeft() && disc.found < target && disc.inspected < 80 && inspectedNow < 10) {
+	while (
+		timeLeft() &&
+		disc.found < target &&
+		disc.inspected < SEARCH_LIMITS.inspectionsPerDay &&
+		inspectedNow < SEARCH_LIMITS.inspectionsPerRun
+	) {
 		const next = state.candidates.shift();
 		if (!next) {
-			if (!settings.keywords.length || searchesNow >= 2) break;
+			if (!settings.keywords.length || searchesNow >= SEARCH_LIMITS.searchesPerRun) break;
 			if (disc.searches >= settings.keywords.length) break; // every word tried today
 			const keyword = settings.keywords[state.keywordCursor % settings.keywords.length];
 			state.keywordCursor += 1;

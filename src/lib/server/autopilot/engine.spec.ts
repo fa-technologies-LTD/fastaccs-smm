@@ -579,20 +579,21 @@ describe('finding channels through the day', () => {
 		);
 	});
 
-	it('tries two search words per run, rotating, and each word only once a day', async () => {
-		const t = setup([], { keywords: ['a1', 'b2', 'c3'] });
+	it('tries three search words per run, rotating, and each word only once a day', async () => {
+		const t = setup([], { keywords: ['a1', 'b2', 'c3', 'd4'] });
 		await runAutopilotOnce(t.deps);
-		expect(t.userbot.bot.searchChannels).toHaveBeenCalledTimes(2);
+		expect(t.userbot.bot.searchChannels).toHaveBeenCalledTimes(3);
 		await runAutopilotOnce(t.deps);
-		expect(t.userbot.bot.searchChannels).toHaveBeenCalledTimes(3); // c3 only; a1, b2 done today
+		expect(t.userbot.bot.searchChannels).toHaveBeenCalledTimes(4); // d4 only; the rest done today
 		expect(vi.mocked(t.userbot.bot.searchChannels).mock.calls.map((c) => c[0])).toEqual([
 			'a1',
 			'b2',
-			'c3'
+			'c3',
+			'd4'
 		]);
 		t.deps.now = new Date(NOW.getTime() + 24 * HOUR); // next day carries on from where it stopped
 		await runAutopilotOnce(t.deps);
-		expect(vi.mocked(t.userbot.bot.searchChannels).mock.calls.at(-2)?.[0]).toBe('a1');
+		expect(vi.mocked(t.userbot.bot.searchChannels).mock.calls.at(-3)?.[0]).toBe('a1');
 	});
 
 	it('stops looking once it has enough good channels for the day', async () => {
@@ -613,7 +614,7 @@ describe('finding channels through the day', () => {
 		});
 		const t = setup([], { dailyNewContacts: 2, testMode: true }, userbot);
 		for (let i = 0; i < 3; i += 1) await runAutopilotOnce(t.deps);
-		expect(t.state.discovery.found).toBe(10); // target: max(10, 2 × daily contacts)
+		expect(t.state.discovery.found).toBe(15); // target: max(15, 3 × daily contacts)
 	});
 });
 

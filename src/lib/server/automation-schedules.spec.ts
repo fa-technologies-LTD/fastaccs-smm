@@ -55,22 +55,22 @@ describe('cost-aware production automation schedules', () => {
 		expect(AUTOMATION_JOBS['marketing-spend-sync'].expectedIntervalMinutes).toBe(60);
 	});
 
-	it('checks Telegram replies only on minutes other jobs already wake the database', () => {
-		const autopilot = schedules.get('/api/internal/cron/telegram-autopilot')!.split(' ');
-		expect(autopilot.slice(1).join(' ')).toBe('* * * *');
+	it('checks Telegram replies every minute without keeping the database awake any longer', () => {
+		expect(schedules.get('/api/internal/cron/telegram-autopilot')).toBe('* * * * *');
+		// Other jobs already wake the database at least every 3 minutes (well inside its idle
+		// timeout), so a quick check each minute adds no extra wake-ups. If jobs are ever spread out
+		// to let the database sleep, revisit this schedule.
 		const awake = new Set<number>();
 		for (const [path, schedule] of schedules) {
 			const [minutes, hours] = schedule.split(' ');
 			if (path.endsWith('/telegram-autopilot') || hours !== '*') continue;
 			for (const minute of minutes.split(',')) awake.add(Number(minute));
 		}
-		const fullRuns = [2, 17, 32, 47];
-		for (const minute of autopilot[0].split(',').map(Number)) {
-			expect(
-				awake.has(minute) || fullRuns.includes(minute),
-				`minute ${minute} wakes the database`
-			).toBe(true);
-		}
+		const sorted = [...awake].sort((a, b) => a - b);
+		const gaps = sorted.map(
+			(minute, i) => (sorted[(i + 1) % sorted.length] - minute + 60) % 60 || 60
+		);
+		expect(Math.max(...gaps)).toBeLessThanOrEqual(3);
 		expect(AUTOMATION_JOBS['telegram-autopilot'].expectedIntervalMinutes).toBe(15);
 	});
 

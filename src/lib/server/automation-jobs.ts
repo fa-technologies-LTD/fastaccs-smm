@@ -222,9 +222,9 @@ export const AUTOMATION_JOBS = {
 	'telegram-autopilot': {
 		name: 'telegram-autopilot',
 		path: '/api/internal/cron/telegram-autopilot',
-		// Called on minutes other jobs already wake the database; full run :02/:17/:32/:47,
-		// quick reply checks in between only while conversations are open.
-		schedule: 'full run every 15 minutes (:02, :17, :32, :47); replies every 1–3 minutes',
+		// Called every minute: full run :02/:17/:32/:47, quick reply checks in between only while
+		// conversations are open (other jobs already keep the database awake, so no extra wake-ups).
+		schedule: 'full run every 15 minutes (:02, :17, :32, :47); replies checked every minute',
 		risk: 'marketing',
 		lockTimeoutMinutes: 10,
 		expectedIntervalMinutes: 15
