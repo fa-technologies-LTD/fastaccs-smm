@@ -189,6 +189,20 @@ export function nigeriaScore(text: string): number {
 	return NIGERIA_SIGNALS.filter((signal) => signal.test(text || '')).length;
 }
 
+/** Channel usernames from pasted links or @handles (t.me/x, https://t.me/s/x, @x, x), deduplicated. */
+export function parseChannelList(text: string): string[] {
+	const found = new Set<string>();
+	for (const raw of (text || '').split(/[\s,]+/)) {
+		const match = raw
+			.trim()
+			.match(
+				/^(?:https?:\/\/)?(?:t\.me\/(?:s\/)?|telegram\.me\/)?@?([a-zA-Z][a-zA-Z0-9_]{3,31})(?:\/\d+)?\/?(?:\?.*)?$/
+			);
+		if (match && !/^(joinchat|addlist)$/i.test(match[1])) found.add(match[1].toLowerCase());
+	}
+	return [...found];
+}
+
 /**
  * Channels a channel points to in its posts (@handles and t.me links). Channels that cross-promote
  * are exactly the ones that sell posts, so these are good places to look next.

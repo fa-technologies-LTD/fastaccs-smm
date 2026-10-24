@@ -40,6 +40,7 @@ function fakeUserbot(overrides: Partial<UserbotPort> = {}) {
 		unreadChats: vi.fn(async () => new Map([...unread].map((name) => [name, 1]))),
 		markRead: vi.fn(async (username: string) => void unread.delete(username)),
 		similarChannels: vi.fn(async () => []),
+		linkedChannel: vi.fn(async () => null),
 		close: vi.fn(async () => {}),
 		...overrides
 	};
@@ -809,5 +810,86 @@ describe('one seller, several channels', () => {
 		expect(t.saved.get('bought_members')!.status).toBe('skipped');
 		expect(t.saved.get('bought_members')!.log.at(-1)).toContain('members look bought');
 		expect(t.userbot.sent).toHaveLength(0);
+	});
+});
+
+describe('channels the owner asks to try', () => {
+	const ngPosts = (views: number) =>
+		Array.from({ length: 12 }, (_, i) => ({
+			id: i + 1,
+			views: i % 2 ? views + 100 : views - 100,
+			date: new Date(NOW.getTime() - (i + 1) * 8 * HOUR),
+			text: 'Naija airdrop, withdraw to Opay',
+			reactions: 30,
+			forwards: 4
+		}));
+
+	function withPicks(t: ReturnType<typeof setup>, usernames: string[]) {
+		let picks = usernames.map((username) => ({ username, via: 'your list' }));
+		t.deps.store.getOwnerPicks = async () => picks;
+		t.deps.store.settleOwnerPicks = async (done, found) => {
+			picks = [...found, ...picks.filter((p) => !done.includes(p.username))];
+		};
+		return () => picks;
+	}
+
+	it('checks each pick, finds the ads contact, follows group chats to their channel, and sums up', async () => {
+		const userbot = fakeUserbot({
+			channelInfo: vi.fn(async (username: string) => {
+				if (username === 'naija_chat' || username === 'nowhere') throw new Error('NOT_A_CHANNEL');
+				if (username === 'no_contact_ng')
+					return { title: 'No Contact', about: 'Naija drops', members: 5_000, posts: ngPosts(900) };
+				return {
+					title: username,
+					about: `Naija. Ads: @${username}_ads`,
+					members: 900_000,
+					posts: ngPosts(1_500)
+				};
+			}),
+			linkedChannel: vi.fn(async (username: string) =>
+				username === 'naija_chat' ? 'naija_main' : null
+			)
+		});
+		const t = setup([], {}, userbot);
+		const remaining = withPicks(t, ['good_ng', 'no_contact_ng', 'naija_chat', 'nowhere']);
+		await runAutopilotOnce(t.deps);
+		const good = t.saved.get('good_ng')!;
+		expect(good).toMatchObject({ status: 'contacted', manual: true, contact: 'good_ng_ads' }); // messaged
+		expect(good.checks?.warnings.join(' ')).toContain('members see a post'); // bought members: warned, not skipped
+		expect(t.saved.get('no_contact_ng')!.status).toBe('skipped');
+		expect(remaining()).toEqual([{ username: 'naija_main', via: 'channel of @naija_chat' }]);
+		const summary = t.owner.find((m) => m.text.startsWith('📋 Your channels to try'))!.text;
+		expect(summary).toContain('✅ Ready to message: @good_ng (⚠ 1)');
+		expect(summary).toContain('❓ No ads contact in their description: @no_contact_ng');
+		expect(summary).toContain(
+			"ℹ️ @naija_chat is a group chat, so I'll try its channel @naija_main next"
+		);
+		expect(summary).toContain("⛔ Couldn't use: @nowhere (not a public channel");
+	});
+
+	it('picking channels the search had set aside lets them through, still one deal per seller', async () => {
+		const seller = (username: string) =>
+			newChannelRecord({ username, contact: 'tgowner999', status: 'discovered', members: 850_000 });
+		const userbot = fakeUserbot({
+			channelInfo: vi.fn(async (username: string) => ({
+				title: username,
+				about: 'Naija news. Promo: @tgowner999',
+				members: 850_000,
+				posts: ngPosts(1_500)
+			}))
+		});
+		const t = setup([seller('chan_a'), seller('chan_b')], {}, userbot);
+		withPicks(t, ['chan_a', 'chan_b']);
+		await runAutopilotOnce(t.deps);
+		expect(['chan_a', 'chan_b'].map((u) => t.saved.get(u)!.manual)).toEqual([true, true]);
+		expect(t.userbot.sent.map((m) => m.to)).toEqual(['tgowner999']); // one at a time
+		expect(t.owner.at(-1)!.text).toContain('@tgowner999 sells posts for 2 of these');
+	});
+
+	it('leaves channels already in a deal alone', async () => {
+		const t = setup([contacted()]);
+		withPicks(t, ['airdrop_naija']);
+		await runAutopilotOnce(t.deps);
+		expect(t.owner.at(-1)!.text).toContain('Already in progress: @airdrop_naija (contacted)');
 	});
 });

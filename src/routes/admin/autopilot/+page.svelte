@@ -375,6 +375,37 @@
 		</form>
 	</section>
 
+	<!-- ============================== Channels to try ============================== -->
+	<section class="rounded-lg p-6" style={card}>
+		<h2 class="text-lg font-semibold" style="color: var(--text);">Channels to try</h2>
+		<p class="text-xs" style="color: var(--text-muted);">
+			Paste channel links or @usernames, one per line. The autopilot finds who sells ads from each
+			channel's description, runs the checks (as warnings, since you chose them), follows group
+			chats to their channel, and looks at similar channels next. Your bot gets a summary.
+		</p>
+		{#if data.picksQueued.length}
+			<p class="mt-2 text-xs" style="color: var(--text);">
+				Waiting to be checked: {data.picksQueued.map((u) => `@${u}`).join(', ')}
+			</p>
+		{/if}
+		<form method="POST" action="?/tryChannels" class="mt-4 space-y-3">
+			<textarea
+				name="channels"
+				rows="5"
+				placeholder="https://t.me/somechannel  @anotherchannel"
+				disabled={ownerOnly}
+				class="w-full rounded-lg px-3 py-2 text-sm"
+				style={input}
+			></textarea>
+			<button
+				type="submit"
+				disabled={ownerOnly}
+				class="rounded-lg px-4 py-2 text-sm font-semibold"
+				style={primary(ownerOnly)}>Try these channels</button
+			>
+		</form>
+	</section>
+
 	<!-- ============================== Add a channel ============================== -->
 	<section class="rounded-lg p-6" style={card}>
 		<h2 class="text-lg font-semibold" style="color: var(--text);">Add a channel yourself</h2>

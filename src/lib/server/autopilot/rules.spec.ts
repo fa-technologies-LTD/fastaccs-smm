@@ -12,6 +12,7 @@ import {
 	maxPriceFor,
 	mentionedUsernames,
 	nigeriaScore,
+	parseChannelList,
 	placementCode,
 	postCopy,
 	promoContactCandidates,
@@ -362,5 +363,21 @@ describe('admin and payment checks', () => {
 		});
 		expect(brief.split('\n')[0]).toBe('⛔ DO NOT PAY: Telegram labels @x as SCAM');
 		expect(brief).toContain('Checks:\n⚠ something');
+	});
+});
+
+describe('pasted channel lists', () => {
+	it('accepts links, post links, @handles and plain names, once each', () => {
+		expect(
+			parseChannelList(
+				'https://t.me/web3moneyarena\nhttps://t.me/WagmiHub_Chat_Nigeria, t.me/s/AminuCryptoLabs @cryptowithshola\nhttps://t.me/web3moneyarena/123 luckyuduchannel https://t.me/joinchat/abcd https://t.me/+AbCdEf'
+			)
+		).toEqual([
+			'web3moneyarena',
+			'wagmihub_chat_nigeria',
+			'aminucryptolabs',
+			'cryptowithshola',
+			'luckyuduchannel'
+		]);
 	});
 });

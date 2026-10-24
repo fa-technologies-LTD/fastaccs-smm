@@ -24,6 +24,7 @@ import {
 	COMMITTED_STATUSES,
 	newChannelRecord,
 	type ChannelRecord,
+	type OwnerPick,
 	type RunState
 } from './state';
 import type { UserbotPort } from './userbot';
@@ -74,6 +75,9 @@ export interface EngineStore {
 	getRunState(): Promise<RunState>;
 	saveRunState(state: RunState): Promise<void>;
 	logAction(action: string, username: string, detail?: Record<string, unknown>): Promise<void>;
+	/** Channels the owner asked to try, and clearing the ones a run handled. */
+	getOwnerPicks?(): Promise<OwnerPick[]>;
+	settleOwnerPicks?(done: string[], found: OwnerPick[]): Promise<void>;
 }
 
 export interface EngineDeps {
@@ -559,6 +563,137 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 	const skip = (reason: string) => {
 		disc.reasons[reason] = (disc.reasons[reason] ?? 0) + 1;
 	};
+	// Channels the owner asked to try come first, whatever today's search has found. They are the
+	// owner's choice, so the audience checks become warnings; the ads contact still has to be named
+	// in the channel's own description, and Telegram's SCAM/FAKE labels still rule a contact out.
+	const picks = (await store.getOwnerPicks?.()) ?? [];
+	if (picks.length && timeLeft()) {
+		const done: string[] = [];
+		const found: OwnerPick[] = [];
+		const ready: string[] = [];
+		const noContact: string[] = [];
+		const unusable: string[] = [];
+		const busy: string[] = [];
+		const notes: string[] = [];
+		for (const pick of picks.slice(0, 8)) {
+			if (!timeLeft()) break;
+			const username = normalizeUsername(pick.username);
+			done.push(pick.username);
+			const existing = byName.get(username);
+			if (existing && !['discovered', 'skipped'].includes(existing.status)) {
+				busy.push(`@${username} (${existing.status.replace(/_/g, ' ')})`);
+				continue;
+			}
+			let info: Awaited<ReturnType<UserbotPort['channelInfo']>>;
+			try {
+				info = await userbot.channelInfo(username);
+			} catch (error) {
+				if (error instanceof TelegramSlowDown) throw error;
+				const linked = await userbot.linkedChannel(username).catch((linkError) => {
+					if (linkError instanceof TelegramSlowDown) throw linkError;
+					return null;
+				});
+				if (linked && linked !== username) {
+					found.push({ username: linked, via: `channel of @${username}` });
+					notes.push(`@${username} is a group chat, so I'll try its channel @${linked} next`);
+				} else {
+					unusable.push(
+						`@${username} (not a public channel: a private group, a person or a typo?)`
+					);
+				}
+				continue;
+			}
+			const title = info.title || username;
+			const audience = checkAudience({ ...info, title }, settings, now);
+			const rec = newChannelRecord({
+				...(existing ?? {}),
+				username,
+				title,
+				members: info.members,
+				avgViews: audience.facts.avgViews,
+				lastPostAt: info.posts[0]?.date.toISOString() ?? null,
+				keyword: pick.via,
+				nigeria: nigeriaScore([title, info.about, ...info.posts.map((p) => p.text)].join('\n')),
+				maxPriceNgn: maxPriceFor(audience.facts.avgViews, settings),
+				manual: true,
+				status: 'discovered',
+				contact: null,
+				checks: {
+					at: now.toISOString(),
+					warnings: [
+						...audience.blockers.map((b) => `Fails our usual channel check: ${b}`),
+						...audience.warnings
+					],
+					facts: audience.facts
+				}
+			});
+			for (const candidate of promoContactCandidates(info.about, username)) {
+				const person = await userbot.resolvePerson(candidate);
+				if (!person || person.scam || person.fake) continue;
+				rec.contact = normalizeUsername(person.username);
+				rec.adminName = person.name;
+				break;
+			}
+			if (!audience.blockers.length) {
+				const similar = await userbot.similarChannels(username).catch((error) => {
+					if (error instanceof TelegramSlowDown) throw error;
+					return [];
+				});
+				enqueue(
+					[
+						...similar.map((c) => c.username),
+						...mentionedUsernames(
+							info.posts.map((p) => p.text),
+							username
+						)
+					],
+					`via @${username}`
+				);
+			}
+			const warnings = rec.checks?.warnings.length ?? 0;
+			if (!rec.contact) {
+				rec.status = 'skipped';
+				noContact.push(`@${username}`);
+				await store.saveChannel(rec, 'your pick: no ads contact in its description');
+			} else if (rec.maxPriceNgn < 500) {
+				rec.status = 'skipped';
+				unusable.push(`@${username} (only ~${audience.facts.avgViews} views per post)`);
+				await store.saveChannel(rec, 'your pick: too small');
+			} else {
+				ready.push(`@${username}${warnings ? ` (⚠ ${warnings})` : ''}`);
+				await store.saveChannel(rec, `your pick: ready, admin @${rec.contact}`);
+			}
+			byName.set(username, rec);
+		}
+		await store.settleOwnerPicks?.(done, found);
+		const sellers = new Map<string, number>();
+		for (const rec of byName.values())
+			if (rec.manual && rec.status === 'discovered' && rec.contact)
+				sellers.set(rec.contact, (sellers.get(rec.contact) ?? 0) + 1);
+		const multi = [...sellers.entries()].filter(([, count]) => count > 1);
+		await deps.notifyOwner(
+			[
+				'📋 Your channels to try:',
+				ready.length ? `✅ Ready to message: ${ready.join(', ')}` : null,
+				noContact.length
+					? `❓ No ads contact in their description: ${noContact.join(', ')}. If you know the admin, use "Add a channel yourself".`
+					: null,
+				unusable.length ? `⛔ Couldn't use: ${unusable.join('; ')}` : null,
+				busy.length ? `Already in progress: ${busy.join(', ')}` : null,
+				...notes.map((note) => `ℹ️ ${note}`),
+				...multi.map(
+					([contact, count]) =>
+						`ℹ️ @${contact} sells posts for ${count} of these; I'll talk to them about one at a time.`
+				),
+				ready.length && settings.testMode
+					? 'Test mode is on: nothing goes to them until you leave test mode.'
+					: null
+			]
+				.filter(Boolean)
+				.join('\n')
+		);
+	}
+
 	let inspectedNow = 0;
 	let searchesNow = 0;
 	while (timeLeft() && disc.found < target && disc.inspected < 80 && inspectedNow < 10) {

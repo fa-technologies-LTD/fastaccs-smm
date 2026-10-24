@@ -10,6 +10,7 @@ import type { AutopilotSettings } from './settings';
 import {
 	acquireLock,
 	getAutopilotSettings,
+	getOwnerPicks,
 	getRunState,
 	listChannels,
 	logAction,
@@ -17,6 +18,7 @@ import {
 	saveAutopilotSettings,
 	saveChannel,
 	saveRunState,
+	settleOwnerPicks,
 	type ChannelRecord
 } from './state';
 import { TelegramSlowDown, connectUserbot, userbotConfigured, type UserbotPort } from './userbot';
@@ -75,7 +77,15 @@ export async function runAutopilotJob(
 		return await runAutopilotOnce({
 			userbot,
 			settings,
-			store: { listChannels, saveChannel, getRunState, saveRunState, logAction },
+			store: {
+				listChannels,
+				saveChannel,
+				getRunState,
+				saveRunState,
+				logAction,
+				getOwnerPicks,
+				settleOwnerPicks
+			},
 			now: new Date(),
 			notifyOwner: ownerNotifier(settings),
 			readWithClaude: claudeConfigured()

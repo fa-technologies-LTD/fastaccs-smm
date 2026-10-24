@@ -12,6 +12,7 @@ import {
 	type WebhookHealth
 } from '$lib/server/autopilot/bot';
 import { committedSpend, discoveryLine, watDay } from '$lib/server/autopilot/engine';
+import { parseChannelList } from '$lib/server/autopilot/rules';
 import { botWebhookSecret } from '$lib/server/autopilot/job';
 import { claudeConfigured } from '$lib/server/autopilot/llm';
 import { SITE_URL } from '$lib/server/autopilot/money';
@@ -21,8 +22,10 @@ import {
 	type AutopilotModel
 } from '$lib/server/autopilot/settings';
 import {
+	addOwnerPicks,
 	getAutopilotSettings,
 	getChannel,
+	getOwnerPicks,
 	getRunState,
 	listChannels,
 	newChannelRecord,
@@ -69,7 +72,7 @@ async function webhookStatus(): Promise<
 export const load: PageServerLoad = async ({ locals }) => {
 	if (!hasAdminPermission(locals.adminContext, 'admin:revenue:view')) throw error(403, 'Forbidden');
 	const isOwner = isOwnerAdmin(locals.user, locals.adminContext);
-	const [settings, state, channels, actions] = await Promise.all([
+	const [settings, state, channels, actions, picks] = await Promise.all([
 		getAutopilotSettings(),
 		getRunState(),
 		listChannels(),
@@ -78,7 +81,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 			orderBy: { createdAt: 'desc' },
 			take: 30,
 			select: { createdAt: true, action: true, placementKey: true }
-		})
+		}),
+		getOwnerPicks()
 	]);
 	const spent = channels
 		.filter((r) => ['paid', 'posted', 'done'].includes(r.status))
@@ -89,6 +93,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		// Until the owner's chat is connected, keep showing their link (owner only).
 		bindLink: isOwner && !settings.ownerChatId ? await bindLinkFor(settings.bindCode) : null,
 		webhook: isOwner ? await webhookStatus() : null,
+		picksQueued: picks.map((p) => p.username),
 		ready: {
 			bot: botConfigured(),
 			telegramAccount: userbotConfigured(),
@@ -225,6 +230,19 @@ export const actions: Actions = {
 				? 'Bot reconnected. To move approvals to a different chat, open the link below there and press Start.'
 				: 'Bot connected to the site. Open the link below on your phone and press Start.',
 			bindLink: await bindLinkFor(bindCode)
+		};
+	},
+
+	tryChannels: async (ctx) => {
+		const denied = ownerOnly(ctx);
+		if (denied) return denied;
+		const form = await ctx.request.formData();
+		const usernames = parseChannelList(String(form.get('channels') ?? ''));
+		if (!usernames.length)
+			return fail(400, { error: 'Paste channel links (t.me/…) or @usernames.' });
+		const added = await addOwnerPicks(usernames.slice(0, 50));
+		return {
+			message: `${added} channel${added === 1 ? '' : 's'} queued. They're checked on the next full run (within 15 minutes) and your bot gets a summary.`
 		};
 	},
 

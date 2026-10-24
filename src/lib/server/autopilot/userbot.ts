@@ -55,6 +55,8 @@ export interface UserbotPort {
 	markRead(username: string): Promise<void>;
 	/** Telegram's "similar channels" for a channel. */
 	similarChannels(username: string): Promise<FoundChannel[]>;
+	/** For a group chat: the channel it belongs to (its "linked channel"), if any. */
+	linkedChannel(username: string): Promise<string | null>;
 	close(): Promise<void>;
 }
 
@@ -184,6 +186,19 @@ export async function connectUserbot(): Promise<UserbotPort> {
 		markRead: (username) =>
 			guard(async () => {
 				await client.markAsRead(username);
+			}),
+		linkedChannel: (username) =>
+			guard(async () => {
+				const full = await client.invoke(new Api.channels.GetFullChannel({ channel: username }));
+				const info = full.fullChat as Api.ChannelFull;
+				if (!info.linkedChatId) return null;
+				const linked = full.chats.find(
+					(chat): chat is Api.Channel =>
+						chat instanceof Api.Channel &&
+						chat.id.equals(info.linkedChatId!) &&
+						Boolean(chat.broadcast)
+				);
+				return linked?.username ? linked.username.toLowerCase() : null;
 			}),
 		similarChannels: (username) =>
 			guard(async () => {

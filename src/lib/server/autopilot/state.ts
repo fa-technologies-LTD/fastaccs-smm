@@ -308,6 +308,78 @@ export async function acquireLock(ttlMs = 2 * 60_000): Promise<boolean> {
 	});
 }
 
+/** Channels the owner asked to try (Admin → Telegram autopilot), checked on the next full run. */
+export interface OwnerPick {
+	username: string;
+	via: string;
+}
+
+const PICKS_KEY = 'autopilot.tg.picks';
+
+/**
+ * The owner adds picks from the admin page while a run may be taking them, so both sides
+ * read-modify-write under one lock and nothing added in between is lost.
+ */
+async function updatePicks(change: (picks: OwnerPick[]) => OwnerPick[]): Promise<OwnerPick[]> {
+	return prisma.$transaction(async (tx) => {
+		await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${PICKS_KEY}))`;
+		const row = await tx.microcopy.findUnique({
+			where: { key: PICKS_KEY },
+			select: { value: true }
+		});
+		const current = parse<{ picks: OwnerPick[] }>(row?.value, { picks: [] }).picks;
+		const next = change(current).slice(0, 100);
+		const value = JSON.stringify({ picks: next });
+		await tx.microcopy.upsert({
+			where: { key: PICKS_KEY },
+			create: {
+				key: PICKS_KEY,
+				value,
+				category: CATEGORY,
+				description: 'Autopilot: channels the owner asked to try',
+				isActive: true
+			},
+			update: { value, updatedAt: new Date() }
+		});
+		return next;
+	});
+}
+
+export async function getOwnerPicks(): Promise<OwnerPick[]> {
+	const row = await prisma.microcopy.findUnique({
+		where: { key: PICKS_KEY },
+		select: { value: true }
+	});
+	return parse<{ picks: OwnerPick[] }>(row?.value, { picks: [] }).picks;
+}
+
+/** Queue channels to try (skips ones already queued). Returns how many were added. */
+export async function addOwnerPicks(usernames: string[]): Promise<number> {
+	let added = 0;
+	await updatePicks((picks) => {
+		const queued = new Set(picks.map((p) => p.username));
+		const fresh: OwnerPick[] = [];
+		for (const username of usernames.map(normalizeUsername)) {
+			if (!username || queued.has(username)) continue;
+			queued.add(username);
+			fresh.push({ username, via: 'your list' });
+		}
+		added = fresh.length;
+		return [...picks, ...fresh];
+	});
+	return added;
+}
+
+/** After a run: drop the picks it handled and put any it found (a group's channel) at the front. */
+export async function settleOwnerPicks(done: string[], found: OwnerPick[]): Promise<void> {
+	const handled = new Set(done);
+	await updatePicks((picks) => {
+		const rest = picks.filter((p) => !handled.has(p.username));
+		const known = new Set(rest.map((p) => p.username));
+		return [...found.filter((p) => !known.has(p.username)), ...rest];
+	});
+}
+
 export async function releaseLock(): Promise<void> {
 	await prisma.microcopy.updateMany({ where: { key: LOCK_KEY }, data: { value: '0' } });
 }
