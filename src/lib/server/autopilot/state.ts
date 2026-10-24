@@ -340,6 +340,130 @@ export async function acquireLock(ttlMs = 2 * 60_000): Promise<boolean> {
 	});
 }
 
+// ---------------------------------------------------------------------------------------------
+// Group chats
+// ---------------------------------------------------------------------------------------------
+
+export const GROUP_KEY_PREFIX = 'autopilot.tg.group.';
+const GROUP_STATE_KEY = 'autopilot.tg.groupstate';
+
+export interface GroupRecord {
+	username: string;
+	title: string;
+	members: number;
+	/** found → joined, or skipped (not a fit) / blocked (we can't post) */
+	status: 'found' | 'joined' | 'skipped' | 'blocked';
+	reason: string | null;
+	via: string;
+	adsAllowed: boolean;
+	joinedAt: string | null;
+	/** Newest message already looked at. */
+	lastSeenId: number;
+	replies: number;
+	lastReplyAt: string | null;
+	repliesToday: number;
+	repliesDay: string | null;
+	/** People we answered recently (one answer per person per week). */
+	answered: Array<{ id: string; at: string }>;
+	/** Buy requests we saw but didn't answer (daily limit). */
+	missed: number;
+	promoPosts: number;
+	lastPromoAt: string | null;
+	/** Stopped posting promos: three posts and no visits. */
+	promoStopped: boolean;
+	slowUntil: string | null;
+	discoveredAt: string;
+	updatedAt: string;
+	log: string[];
+}
+
+export interface GroupRunState {
+	day: string | null;
+	joinsToday: number;
+	repliesToday: number;
+	postsToday: number;
+	searchesToday: number;
+	keywordCursor: number;
+	candidates: Array<{ username: string; via: string; ownerPick?: boolean }>;
+	lastRunAt: string | null;
+	lastError: string | null;
+}
+
+export function newGroupRecord(input: Partial<GroupRecord> & { username: string }): GroupRecord {
+	const now = new Date().toISOString();
+	return {
+		title: input.username,
+		members: 0,
+		status: 'found',
+		reason: null,
+		via: '',
+		adsAllowed: false,
+		joinedAt: null,
+		lastSeenId: 0,
+		replies: 0,
+		lastReplyAt: null,
+		repliesToday: 0,
+		repliesDay: null,
+		answered: [],
+		missed: 0,
+		promoPosts: 0,
+		lastPromoAt: null,
+		promoStopped: false,
+		slowUntil: null,
+		discoveredAt: now,
+		updatedAt: now,
+		log: [],
+		...input,
+		username: normalizeUsername(input.username)
+	};
+}
+
+export async function listGroups(): Promise<GroupRecord[]> {
+	const rows = await prisma.microcopy.findMany({
+		where: { key: { startsWith: GROUP_KEY_PREFIX } },
+		select: { value: true }
+	});
+	return rows
+		.map((row) => parse<GroupRecord | null>(row.value, null))
+		.filter((rec): rec is GroupRecord => Boolean(rec?.username))
+		.map((rec) => newGroupRecord(rec));
+}
+
+/** Groups are only written by the group run (under the autopilot lock), so a plain save is safe. */
+export async function saveGroup(rec: GroupRecord, note?: string): Promise<void> {
+	const next: GroupRecord = {
+		...rec,
+		updatedAt: new Date().toISOString(),
+		log: note
+			? [...rec.log, `${new Date().toISOString().slice(0, 16)} ${note}`].slice(-30)
+			: rec.log
+	};
+	Object.assign(rec, { updatedAt: next.updatedAt, log: next.log });
+	await put(GROUP_KEY_PREFIX + rec.username, next, `Autopilot group @${rec.username}`);
+}
+
+export async function getGroupRunState(): Promise<GroupRunState> {
+	const row = await prisma.microcopy.findUnique({
+		where: { key: GROUP_STATE_KEY },
+		select: { value: true }
+	});
+	return parse<GroupRunState>(row?.value, {
+		day: null,
+		joinsToday: 0,
+		repliesToday: 0,
+		postsToday: 0,
+		searchesToday: 0,
+		keywordCursor: 0,
+		candidates: [],
+		lastRunAt: null,
+		lastError: null
+	});
+}
+
+export async function saveGroupRunState(state: GroupRunState): Promise<void> {
+	await put(GROUP_STATE_KEY, state, 'Autopilot group run state (system-managed)');
+}
+
 /** Channels the owner asked to try (Admin → Telegram autopilot), checked on the next full run. */
 export interface OwnerPick {
 	username: string;

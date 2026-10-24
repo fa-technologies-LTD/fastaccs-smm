@@ -1,6 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { buildRevenueOrderWindowWhere, toNetSales } from '$lib/helpers/order-revenue.server';
-import { buildTrackedUrl } from '$lib/helpers/tracked-link';
+import { buildTrackedUrl, slugifyUtm } from '$lib/helpers/tracked-link';
 import { placementCode } from './rules';
 import type { AutopilotSettings } from './settings';
 
@@ -125,4 +125,33 @@ export async function partnerSales(
 		orders: orders.length,
 		salesNgn: orders.reduce((sum, o) => sum + toNetSales(o.totalAmount, o.refundedAmount), 0)
 	};
+}
+
+const GROUP_CAMPAIGN = 'tg-groups';
+
+/** Tracked link for one group (to a platform's page when the request named one). */
+export function groupTrackedLink(group: string, platformSlug?: string): string {
+	const path = platformSlug ? `/platforms/${platformSlug}` : '/';
+	return (
+		buildTrackedUrl({
+			baseUrl: SITE_URL,
+			path,
+			source: 'telegram',
+			medium: 'group',
+			campaign: GROUP_CAMPAIGN,
+			content: group
+		}) ?? `${SITE_URL}${path}`
+	);
+}
+
+/** Site visits that came through a group's links since a time (consented visits only). */
+export async function groupVisitsSince(group: string, since: Date): Promise<number> {
+	return prisma.analyticsEvent.count({
+		where: {
+			source: 'telegram',
+			campaign: GROUP_CAMPAIGN,
+			content: slugifyUtm(group, 120),
+			createdAt: { gte: since }
+		}
+	});
 }

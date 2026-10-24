@@ -382,6 +382,73 @@
 					</label>
 				</div>
 			</div>
+			<div class="rounded-lg p-3 text-sm sm:col-span-2" style={inner}>
+				<label class="flex items-center gap-2" style="color: var(--text);">
+					<input
+						type="checkbox"
+						name="groupsEnabled"
+						checked={s.groupsEnabled}
+						disabled={ownerOnly}
+					/>
+					Group chats: answer people asking to buy, post promos where allowed
+				</label>
+				<p class="mt-1 text-xs" style="color: var(--text-muted);">
+					Answers are public replies with a tracked link. It never messages members privately, never
+					posts where the rules say no links or ads, and stops posting promos in a group after 3
+					posts with no visits.
+				</p>
+				<div class="mt-2 grid gap-3 sm:grid-cols-3">
+					<label style="color: var(--text-muted);">
+						Answers a day (all groups)
+						<input
+							name="groupRepliesPerDay"
+							type="number"
+							min="0"
+							max="30"
+							value={s.groupRepliesPerDay}
+							disabled={ownerOnly}
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style={input}
+						/>
+					</label>
+					<label style="color: var(--text-muted);">
+						New groups joined a day
+						<input
+							name="groupJoinsPerDay"
+							type="number"
+							min="0"
+							max="8"
+							value={s.groupJoinsPerDay}
+							disabled={ownerOnly}
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style={input}
+						/>
+					</label>
+					<label style="color: var(--text-muted);">
+						Promo posts a day
+						<input
+							name="groupPostsPerDay"
+							type="number"
+							min="0"
+							max="10"
+							value={s.groupPostsPerDay}
+							disabled={ownerOnly}
+							class="mt-1 w-full rounded-lg px-3 py-2"
+							style={input}
+						/>
+					</label>
+				</div>
+				<label class="mt-2 block" style="color: var(--text-muted);">
+					Group search words (one per line)
+					<textarea
+						name="groupKeywords"
+						rows="4"
+						disabled={ownerOnly}
+						class="mt-1 w-full rounded-lg px-3 py-2"
+						style={input}>{s.groupKeywords.join('\n')}</textarea
+					>
+				</label>
+			</div>
 			<label class="text-sm" style="color: var(--text-muted);">
 				Test contacts (Telegram usernames, one per line)
 				<textarea
@@ -590,6 +657,75 @@
 										</form>
 									{/if}
 								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+	</section>
+
+	<!-- ============================== Groups ============================== -->
+	<section class="rounded-lg p-6" style={card}>
+		<h2 class="text-lg font-semibold" style="color: var(--text);">
+			Group chats ({data.groups.rows.filter((g) => g.status === 'joined').length} joined)
+		</h2>
+		<p class="text-xs" style="color: var(--text-muted);">
+			Today: answered {data.groups.today.replies} buyer{data.groups.today.replies === 1 ? '' : 's'} ·
+			{data.groups.today.posts} promo post{data.groups.today.posts === 1 ? '' : 's'} · joined {data
+				.groups.today.joins} · {data.groups.queued} groups lined up · last run {when(
+				data.groups.lastRunAt
+			)}
+		</p>
+		{#if data.groups.rows.length === 0}
+			<p class="mt-2 text-sm" style="color: var(--text-muted);">
+				No groups yet. Add group links under "Channels to try", or wait for the next group search.
+			</p>
+		{:else}
+			<div class="mt-3 overflow-x-auto">
+				<table class="w-full text-xs" style="color: var(--text);">
+					<thead style="color: var(--text-muted);">
+						<tr class="text-left">
+							<th class="py-1 pr-3">Group</th>
+							<th class="py-1 pr-3">Status</th>
+							<th class="py-1 pr-3">Members</th>
+							<th class="py-1 pr-3">Promos</th>
+							<th class="py-1 pr-3">Buyers answered</th>
+							<th class="py-1 pr-3">Missed (limits)</th>
+							<th class="py-1">Latest</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each data.groups.rows as group (group.username)}
+							<tr style="border-top: 1px solid var(--border);">
+								<td class="py-1 pr-3">
+									<a
+										href={`https://t.me/${group.username}`}
+										target="_blank"
+										rel="noreferrer"
+										class="underline">{group.title}</a
+									>
+								</td>
+								<td class="py-1 pr-3">
+									{group.status === 'joined'
+										? 'Watching'
+										: group.status === 'blocked'
+											? `Can't post (${group.reason})`
+											: group.status === 'skipped'
+												? `Skipped (${group.reason})`
+												: 'Found'}
+								</td>
+								<td class="py-1 pr-3">{group.members.toLocaleString('en-NG')}</td>
+								<td class="py-1 pr-3">
+									{group.adsAllowed
+										? group.promoStopped
+											? `stopped after ${group.promoPosts}`
+											: `${group.promoPosts} posted`
+										: 'not allowed'}
+								</td>
+								<td class="py-1 pr-3">{group.replies}</td>
+								<td class="py-1 pr-3">{group.missed}</td>
+								<td class="py-1" style="color: var(--text-muted);">{group.lastNote}</td>
 							</tr>
 						{/each}
 					</tbody>

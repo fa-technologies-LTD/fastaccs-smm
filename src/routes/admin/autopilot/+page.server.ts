@@ -26,8 +26,10 @@ import {
 	addOwnerPicks,
 	getAutopilotSettings,
 	getChannel,
+	getGroupRunState,
 	getOwnerPicks,
 	getRunState,
+	listGroups,
 	listChannels,
 	newChannelRecord,
 	saveAutopilotSettings,
@@ -73,7 +75,7 @@ async function webhookStatus(): Promise<
 export const load: PageServerLoad = async ({ locals }) => {
 	if (!hasAdminPermission(locals.adminContext, 'admin:revenue:view')) throw error(403, 'Forbidden');
 	const isOwner = isOwnerAdmin(locals.user, locals.adminContext);
-	const [settings, state, channels, actions, picks] = await Promise.all([
+	const [settings, state, channels, actions, picks, groups, groupState] = await Promise.all([
 		getAutopilotSettings(),
 		getRunState(),
 		listChannels(),
@@ -83,7 +85,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 			take: 30,
 			select: { createdAt: true, action: true, placementKey: true }
 		}),
-		getOwnerPicks()
+		getOwnerPicks(),
+		listGroups(),
+		getGroupRunState()
 	]);
 	const spent = spentSoFar(channels);
 	return {
@@ -93,6 +97,38 @@ export const load: PageServerLoad = async ({ locals }) => {
 		bindLink: isOwner && !settings.ownerChatId ? await bindLinkFor(settings.bindCode) : null,
 		webhook: isOwner ? await webhookStatus() : null,
 		picksQueued: picks.map((p) => p.username),
+		groups: {
+			today:
+				groupState.day === watDay(new Date())
+					? {
+							replies: groupState.repliesToday,
+							posts: groupState.postsToday,
+							joins: groupState.joinsToday
+						}
+					: { replies: 0, posts: 0, joins: 0 },
+			lastRunAt: groupState.lastRunAt,
+			queued: groupState.candidates.length,
+			rows: groups
+				.sort(
+					(a, b) =>
+						['joined', 'blocked', 'found', 'skipped'].indexOf(a.status) -
+							['joined', 'blocked', 'found', 'skipped'].indexOf(b.status) || b.replies - a.replies
+				)
+				.slice(0, 150)
+				.map((g) => ({
+					username: g.username,
+					title: g.title,
+					members: g.members,
+					status: g.status,
+					reason: g.reason,
+					adsAllowed: g.adsAllowed,
+					replies: g.replies,
+					missed: g.missed,
+					promoPosts: g.promoPosts,
+					promoStopped: g.promoStopped,
+					lastNote: g.log.at(-1) ?? ''
+				}))
+		},
 		ready: {
 			bot: botConfigured(),
 			telegramAccount: userbotConfigured(),
@@ -190,6 +226,17 @@ export const actions: Actions = {
 			partnerEnabled: form.get('partnerEnabled') === 'on',
 			partnerPercent: Math.min(30, Math.max(1, num(form, 'partnerPercent', s.partnerPercent))),
 			partnerDays: Math.min(90, Math.max(7, num(form, 'partnerDays', s.partnerDays))),
+			groupsEnabled: form.get('groupsEnabled') === 'on',
+			groupRepliesPerDay: Math.min(
+				30,
+				Math.max(0, num(form, 'groupRepliesPerDay', s.groupRepliesPerDay))
+			),
+			groupJoinsPerDay: Math.min(8, Math.max(0, num(form, 'groupJoinsPerDay', s.groupJoinsPerDay))),
+			groupPostsPerDay: Math.min(
+				10,
+				Math.max(0, num(form, 'groupPostsPerDay', s.groupPostsPerDay))
+			),
+			groupKeywords: lines(form.get('groupKeywords')).slice(0, MAX_KEYWORDS),
 			llmModel: (AUTOPILOT_MODELS as readonly string[]).includes(model) ? model : s.llmModel
 		});
 		return { message: 'Rules saved.' };

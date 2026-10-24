@@ -3,13 +3,22 @@ import { env } from '$env/dynamic/private';
 import { botAnswer, botConfigured, botEdit, botSend, type BotButton } from './bot';
 import { planAutopilotRun, runAutopilotOnce, type AutopilotMode, type RunSummary } from './engine';
 import { claudeConfigured, readWithClaude } from './llm';
-import { bookSpend, ensurePlacementCode, partnerSales, trackedLinkFor } from './money';
+import { runGroupsOnce, type GroupRunSummary } from './groups';
+import {
+	bookSpend,
+	ensurePlacementCode,
+	groupTrackedLink,
+	groupVisitsSince,
+	partnerSales,
+	trackedLinkFor
+} from './money';
 import { handleOwnerUpdate, type TelegramUpdate } from './owner';
 import { placementCode, postCopy } from './rules';
 import type { AutopilotSettings } from './settings';
 import {
 	acquireLock,
 	getAutopilotSettings,
+	getGroupRunState,
 	getOwnerPicks,
 	getRunState,
 	listChannels,
@@ -18,6 +27,9 @@ import {
 	saveAutopilotSettings,
 	saveChannel,
 	saveRunState,
+	saveGroup,
+	saveGroupRunState,
+	listGroups,
 	settleOwnerPicks,
 	type ChannelRecord
 } from './state';
@@ -63,7 +75,7 @@ export async function autopilotModeNow(now = new Date()): Promise<AutopilotMode 
 /** One run. Does nothing while the autopilot is off or not set up. */
 export async function runAutopilotJob(
 	mode: AutopilotMode = 'full'
-): Promise<RunSummary | { skipped: string }> {
+): Promise<RunSummary | GroupRunSummary | { skipped: string }> {
 	const settings = await getAutopilotSettings();
 	if (!settings.enabled) return { skipped: 'off' };
 	if (!userbotConfigured()) return { skipped: 'telegram_not_set_up' };
@@ -74,6 +86,21 @@ export async function runAutopilotJob(
 	let userbot: UserbotPort | null = null;
 	try {
 		userbot = await connectUserbot();
+		if (mode === 'groups') {
+			return await runGroupsOnce({
+				userbot,
+				settings,
+				now: new Date(),
+				deadline: Date.now() + 45_000,
+				listGroups,
+				saveGroup,
+				getState: getGroupRunState,
+				saveState: saveGroupRunState,
+				logAction,
+				trackedLink: groupTrackedLink,
+				visitsSince: groupVisitsSince
+			});
+		}
 		return await runAutopilotOnce({
 			userbot,
 			settings,
@@ -84,7 +111,23 @@ export async function runAutopilotJob(
 				saveRunState,
 				logAction,
 				getOwnerPicks,
-				settleOwnerPicks
+				settleOwnerPicks,
+				queueGroup: async (username, via) => {
+					const groupState = await getGroupRunState();
+					if (groupState.candidates.some((c) => c.username === username)) return;
+					groupState.candidates.unshift({ username, via, ownerPick: true });
+					await saveGroupRunState(groupState);
+				}
+			},
+			groupStats: async () => {
+				const [groups, groupState] = await Promise.all([listGroups(), getGroupRunState()]);
+				const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
+				const fresh = groupState.day === today;
+				return {
+					watching: groups.filter((g) => g.status === 'joined').length,
+					repliesToday: fresh ? groupState.repliesToday : 0,
+					postsToday: fresh ? groupState.postsToday : 0
+				};
 			},
 			now: new Date(),
 			notifyOwner: ownerNotifier(settings),
@@ -94,7 +137,7 @@ export async function runAutopilotJob(
 			postFor: (rec) => postFor(rec, settings),
 			partnerSales,
 			deadline: Date.now() + (mode === 'full' ? 45_000 : 30_000),
-			mode
+			mode: mode === 'replies' ? 'replies' : 'full'
 		});
 	} catch (error) {
 		const latest = await getRunState();

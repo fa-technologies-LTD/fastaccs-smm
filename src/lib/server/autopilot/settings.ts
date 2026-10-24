@@ -33,6 +33,12 @@ export interface AutopilotSettings {
 	partnerPercent: number;
 	/** How long the code earns them a share (days). */
 	partnerDays: number;
+	/** Group chats: answer people asking to buy, post where promos are allowed. */
+	groupsEnabled: boolean;
+	groupRepliesPerDay: number;
+	groupJoinsPerDay: number;
+	groupPostsPerDay: number;
+	groupKeywords: string[];
 	llmModel: AutopilotModel;
 	/** Owner's chat with the bot (set by /start <bindCode>). */
 	ownerChatId: string | null;
@@ -66,6 +72,22 @@ export const AUTOPILOT_DEFAULTS: AutopilotSettings = {
 	partnerEnabled: true,
 	partnerPercent: 10,
 	partnerDays: 30,
+	groupsEnabled: true,
+	groupRepliesPerDay: 12,
+	groupJoinsPerDay: 4,
+	groupPostsPerDay: 4,
+	groupKeywords: [
+		'naija hustle',
+		'buy and sell nigeria',
+		'naija marketplace',
+		'nigeria vendors',
+		'naija business',
+		'crypto nigeria',
+		'airdrop nigeria',
+		'twitter growth',
+		'naija tech',
+		'social media nigeria'
+	],
 	llmModel: 'claude-opus-5-5',
 	ownerChatId: null,
 	bindCode: null,
@@ -131,6 +153,11 @@ export function parseAutopilotSettings(raw: string | null | undefined): Autopilo
 		partnerEnabled: value.partnerEnabled !== false,
 		partnerPercent: int(value.partnerPercent, d.partnerPercent, 1, 30),
 		partnerDays: int(value.partnerDays, d.partnerDays, 7, 90),
+		groupsEnabled: value.groupsEnabled !== false,
+		groupRepliesPerDay: int(value.groupRepliesPerDay, d.groupRepliesPerDay, 0, 30),
+		groupJoinsPerDay: int(value.groupJoinsPerDay, d.groupJoinsPerDay, 0, 8),
+		groupPostsPerDay: int(value.groupPostsPerDay, d.groupPostsPerDay, 0, 10),
+		groupKeywords: list(value.groupKeywords, d.groupKeywords, MAX_KEYWORDS),
 		llmModel: (AUTOPILOT_MODELS as readonly string[]).includes(model) ? model : d.llmModel,
 		ownerChatId:
 			typeof value.ownerChatId === 'string' && value.ownerChatId ? value.ownerChatId : null,

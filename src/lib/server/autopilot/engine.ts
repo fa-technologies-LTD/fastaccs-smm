@@ -43,14 +43,15 @@ import type { UserbotPort } from './userbot';
  * Money never moves here: payment always waits for the owner's tap in the bot.
  */
 
-export type AutopilotMode = 'full' | 'replies';
+export type AutopilotMode = 'full' | 'replies' | 'groups';
 
 /** How hard the search works: per full run, per day, and how many good channels a day is enough. */
 export const SEARCH_LIMITS = { inspectionsPerRun: 15, searchesPerRun: 3, inspectionsPerDay: 150 };
 export const goodChannelsPerDay = (dailyNewContacts: number) => Math.max(15, dailyNewContacts * 3);
 
-/** Full runs keep the old 15-minute rhythm. */
+/** Full runs keep the old 15-minute rhythm; group runs sit in between. */
 export const FULL_RUN_MINUTES = [2, 17, 32, 47];
+export const GROUP_RUN_MINUTES = [9, 24, 39, 54];
 
 /**
  * Which run (if any) is due this minute. Quick runs only happen while there are conversations to
@@ -58,7 +59,7 @@ export const FULL_RUN_MINUTES = [2, 17, 32, 47];
  */
 export function planAutopilotRun(input: {
 	now: Date;
-	settings: Pick<AutopilotSettings, 'enabled'>;
+	settings: Pick<AutopilotSettings, 'enabled' | 'groupsEnabled'>;
 	configured: boolean;
 	state: Pick<RunState, 'lastFullRunAt' | 'pausedUntil'>;
 	channels: Array<Pick<ChannelRecord, 'status' | 'contact' | 'outbox'>>;
@@ -69,6 +70,7 @@ export function planAutopilotRun(input: {
 	if (state.pausedUntil && new Date(state.pausedUntil) > now) return null;
 	const lastFull = state.lastFullRunAt ? new Date(state.lastFullRunAt).getTime() : 0;
 	if (now.getTime() - lastFull > 16 * 60_000) return 'full'; // just switched on, or a run was missed
+	if (settings.groupsEnabled && GROUP_RUN_MINUTES.includes(now.getUTCMinutes())) return 'groups';
 	const busy = input.channels.some(
 		(rec) => rec.outbox.length > 0 || (ACTIVE_STATUSES.includes(rec.status) && rec.contact)
 	);
@@ -82,6 +84,8 @@ export interface EngineStore {
 	getRunState(): Promise<RunState>;
 	saveRunState(state: RunState): Promise<void>;
 	logAction(action: string, username: string, detail?: Record<string, unknown>): Promise<void>;
+	/** Hand a group chat to the group run (owner picks that turn out to be groups). */
+	queueGroup?(username: string, via: string): Promise<void>;
 	/** Channels the owner asked to try, and clearing the ones a run handled. */
 	getOwnerPicks?(): Promise<OwnerPick[]>;
 	settleOwnerPicks?(done: string[], found: OwnerPick[]): Promise<void>;
@@ -102,7 +106,9 @@ export interface EngineDeps {
 	/** Sales made with a code between two times: paid orders, net of refunds. */
 	partnerSales?(code: string, from: Date, to: Date): Promise<{ orders: number; salesNgn: number }>;
 	/** 'replies': only steps 1–2, reading just the chats with unread messages. Default 'full'. */
-	mode?: AutopilotMode;
+	mode?: Exclude<AutopilotMode, 'groups'>;
+	/** Today's group activity, for the evening report. */
+	groupStats?(): Promise<{ watching: number; repliesToday: number; postsToday: number }>;
 }
 
 export interface RunSummary {
@@ -115,7 +121,7 @@ export interface RunSummary {
 	errors: number;
 	inspected: number;
 	stoppedEarly: boolean;
-	mode: AutopilotMode;
+	mode: Exclude<AutopilotMode, 'groups'>;
 }
 
 const HOUR = 3_600_000;
@@ -674,10 +680,23 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 					if (linkError instanceof TelegramSlowDown) throw linkError;
 					return null;
 				});
+				const isGroup = await userbot
+					.groupInfo(username)
+					.then(() => true)
+					.catch((groupError) => {
+						if (groupError instanceof TelegramSlowDown) throw groupError;
+						return false;
+					});
+				if (isGroup) {
+					await store.queueGroup?.(username, 'your list');
+					notes.push(
+						`@${username} is a group chat: I'll join it and answer people asking to buy there`
+					);
+				}
 				if (linked && linked !== username) {
 					found.push({ username: linked, via: `channel of @${username}` });
-					notes.push(`@${username} is a group chat, so I'll try its channel @${linked} next`);
-				} else {
+					notes.push(`@${username} also has a channel, @${linked}: I'll try it next`);
+				} else if (!isGroup) {
 					unusable.push(
 						`@${username} (not a public channel: a private group, a person or a typo?)`
 					);
@@ -1025,6 +1044,16 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 				`New admins messaged today: ${state.outreachCount}/${settings.dailyNewContacts}`,
 				`Pay-per-sale: ${count(['partner_offered'])} offered · ${count(['partner_pending'])} waiting for you · ${partners.length} partners (paid ${naira(partners.reduce((sum, r) => sum + r.partnerEarnedNgn, 0))})`,
 				discoveryLine(disc),
+				...(deps.groupStats
+					? [
+							await deps
+								.groupStats()
+								.then(
+									(g) =>
+										`Groups: watching ${g.watching} · answered ${g.repliesToday} buyer${g.repliesToday === 1 ? '' : 's'} today · ${g.postsToday} promo post${g.postsToday === 1 ? '' : 's'}`
+								)
+						]
+					: []),
 				`Waiting on you: ${all.filter((r) => r.waitingOwner || ['awaiting_payment', 'partner_pending'].includes(r.status) || r.partnerPayout).length}`
 			].join('\n')
 		);

@@ -41,6 +41,13 @@ function fakeUserbot(overrides: Partial<UserbotPort> = {}) {
 		markRead: vi.fn(async (username: string) => void unread.delete(username)),
 		similarChannels: vi.fn(async () => []),
 		linkedChannel: vi.fn(async () => null),
+		searchGroups: vi.fn(async () => []),
+		groupInfo: vi.fn(async () => {
+			throw new Error('NOT_A_GROUP');
+		}),
+		joinGroup: vi.fn(async () => {}),
+		groupMessages: vi.fn(async () => []),
+		sendToGroup: vi.fn(async () => 1),
 		close: vi.fn(async () => {}),
 		...overrides
 	};
@@ -468,7 +475,7 @@ describe('quick reply checks between full runs', () => {
 describe('when to run', () => {
 	const at = (iso: string) => new Date(iso);
 	const base = {
-		settings: { enabled: true },
+		settings: { enabled: true, groupsEnabled: true },
 		configured: true,
 		state: { lastFullRunAt: '2026-10-23T12:02:00Z', pausedUntil: null },
 		channels: [] as Array<Pick<ChannelRecord, 'status' | 'contact' | 'outbox'>>
@@ -478,8 +485,23 @@ describe('when to run', () => {
 	it('full run at :02, :17, :32 and :47, even when switched off (it then just reports "off")', () => {
 		expect(planAutopilotRun({ ...base, now: at('2026-10-23T12:17:00Z') })).toBe('full');
 		expect(
-			planAutopilotRun({ ...base, settings: { enabled: false }, now: at('2026-10-23T12:32:00Z') })
+			planAutopilotRun({
+				...base,
+				settings: { enabled: false, groupsEnabled: true },
+				now: at('2026-10-23T12:32:00Z')
+			})
 		).toBe('full');
+	});
+
+	it('group runs at :09, :24, :39 and :54 when group chats are on', () => {
+		expect(planAutopilotRun({ ...base, now: at('2026-10-23T12:09:00Z') })).toBe('groups');
+		expect(
+			planAutopilotRun({
+				...base,
+				settings: { enabled: true, groupsEnabled: false },
+				now: at('2026-10-23T12:09:00Z')
+			})
+		).toBeNull();
 	});
 
 	it('quick checks in between only while there are conversations', () => {
@@ -863,9 +885,7 @@ describe('channels the owner asks to try', () => {
 		const summary = t.owner.find((m) => m.text.startsWith('📋 Your channels to try'))!.text;
 		expect(summary).toContain('✅ Ready to message: @good_ng (⚠ 1)');
 		expect(summary).toContain('❓ No ads contact in their description: @no_contact_ng');
-		expect(summary).toContain(
-			"ℹ️ @naija_chat is a group chat, so I'll try its channel @naija_main next"
-		);
+		expect(summary).toContain("ℹ️ @naija_chat also has a channel, @naija_main: I'll try it next");
 		expect(summary).toContain("⛔ Couldn't use: @nowhere (not a public channel");
 	});
 

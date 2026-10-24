@@ -1,7 +1,7 @@
 import { env } from '$env/dynamic/private';
 import { Api, TelegramClient, errors, sessions } from 'telegram';
 import { LogLevel } from 'telegram/extensions/Logger';
-import { TelegramSlowDown } from './errors';
+import { GroupBlocked, GroupSlowmode, TelegramSlowDown } from './errors';
 
 /**
  * The autopilot's own Telegram account (the spare SIM), driven through Telegram's official
@@ -18,6 +18,25 @@ export interface ChannelPost {
 	reactions?: number;
 	forwards?: number;
 	replies?: number;
+}
+
+/** A message in a group, from a person (messages posted as channels or bots are left out). */
+export interface GroupMessage {
+	id: number;
+	date: Date;
+	text: string;
+	senderId: string;
+}
+
+export interface GroupInfo {
+	title: string;
+	about: string;
+	members: number;
+	/** The pinned message (group rules usually live there). */
+	pinned: string;
+	messages: GroupMessage[];
+	/** Already a member. */
+	joined: boolean;
 }
 
 export interface Person {
@@ -57,6 +76,15 @@ export interface UserbotPort {
 	similarChannels(username: string): Promise<FoundChannel[]>;
 	/** For a group chat: the channel it belongs to (its "linked channel"), if any. */
 	linkedChannel(username: string): Promise<string | null>;
+	/** Public group chats matching a search. */
+	searchGroups(query: string): Promise<FoundChannel[]>;
+	/** A public group's description, rules (pinned message) and recent messages. */
+	groupInfo(username: string): Promise<GroupInfo>;
+	joinGroup(username: string): Promise<void>;
+	/** New messages from people after `sinceId`, oldest first. */
+	groupMessages(username: string, sinceId: number): Promise<GroupMessage[]>;
+	/** Post in a group, optionally as a reply to one message. */
+	sendToGroup(username: string, text: string, replyToId?: number): Promise<number>;
 	close(): Promise<void>;
 }
 
@@ -64,6 +92,17 @@ export { TelegramSlowDown };
 
 export function userbotConfigured(): boolean {
 	return Boolean(env.TELEGRAM_API_ID && env.TELEGRAM_API_HASH && env.TELEGRAM_SESSION);
+}
+
+function toGroupMessage(message: unknown): GroupMessage | null {
+	if (!(message instanceof Api.Message) || message.out) return null;
+	if (!(message.fromId instanceof Api.PeerUser) || message.viaBotId) return null;
+	return {
+		id: message.id,
+		date: new Date(Number(message.date ?? 0) * 1000),
+		text: message.message ?? '',
+		senderId: String(message.fromId.userId)
+	};
 }
 
 function toPost(message: Api.Message): ChannelPost {
@@ -86,6 +125,17 @@ async function guard<T>(work: () => Promise<T>): Promise<T> {
 		// PEER_FLOOD: Telegram has limited the account for messaging strangers. Back off a day.
 		if (error instanceof errors.RPCError && /PEER_FLOOD/.test(error.errorMessage)) {
 			throw new TelegramSlowDown(24 * 3600, 'account_limited');
+		}
+		if (error instanceof errors.RPCError) {
+			const slow = /SLOWMODE_WAIT_(\d+)/.exec(error.errorMessage);
+			if (slow) throw new GroupSlowmode(Number(slow[1]));
+			if (
+				/CHAT_WRITE_FORBIDDEN|USER_BANNED_IN_CHANNEL|CHAT_SEND_PLAIN_FORBIDDEN|CHAT_RESTRICTED|CHAT_GUEST_SEND_FORBIDDEN|CHANNELS_TOO_MUCH|INVITE_REQUEST_SENT/.test(
+					error.errorMessage
+				)
+			) {
+				throw new GroupBlocked(error.errorMessage.toLowerCase().replace(/_/g, ' '));
+			}
 		}
 		throw error;
 	}
@@ -186,6 +236,60 @@ export async function connectUserbot(): Promise<UserbotPort> {
 		markRead: (username) =>
 			guard(async () => {
 				await client.markAsRead(username);
+			}),
+		searchGroups: (query) =>
+			guard(async () => {
+				const result = await client.invoke(new Api.contacts.Search({ q: query, limit: 20 }));
+				return result.chats
+					.filter((chat): chat is Api.Channel => chat instanceof Api.Channel)
+					.filter((chat) => Boolean(chat.megagroup && chat.username))
+					.map((chat) => ({
+						username: String(chat.username),
+						title: chat.title,
+						id: String(chat.id)
+					}));
+			}),
+		groupInfo: (username) =>
+			guard(async () => {
+				const full = await client.invoke(new Api.channels.GetFullChannel({ channel: username }));
+				const info = full.fullChat as Api.ChannelFull;
+				const group = full.chats.find(
+					(chat): chat is Api.Channel => chat instanceof Api.Channel && chat.id.equals(info.id)
+				);
+				if (!group?.megagroup) throw new Error('NOT_A_GROUP');
+				const [pinned] = info.pinnedMsgId
+					? await client.getMessages(username, { ids: [info.pinnedMsgId] })
+					: [];
+				const recent = await client.getMessages(username, { limit: 40 });
+				return {
+					title: group.title,
+					about: info.about ?? '',
+					members: Number(info.participantsCount ?? 0),
+					pinned: pinned instanceof Api.Message ? (pinned.message ?? '') : '',
+					messages: recent.map(toGroupMessage).filter((m): m is GroupMessage => m !== null),
+					joined: !group.left
+				};
+			}),
+		joinGroup: (username) =>
+			guard(async () => {
+				await client.invoke(new Api.channels.JoinChannel({ channel: username }));
+			}),
+		groupMessages: (username, sinceId) =>
+			guard(async () => {
+				const messages = await client.getMessages(username, { limit: 50, minId: sinceId });
+				return messages
+					.map(toGroupMessage)
+					.filter((m): m is GroupMessage => m !== null)
+					.sort((a, b) => a.id - b.id);
+			}),
+		sendToGroup: (username, text, replyToId) =>
+			guard(async () => {
+				const sent = await client.sendMessage(username, {
+					message: text,
+					...(replyToId ? { replyTo: replyToId } : {}),
+					linkPreview: false
+				});
+				return sent.id;
 			}),
 		linkedChannel: (username) =>
 			guard(async () => {
