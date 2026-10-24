@@ -211,6 +211,14 @@ export const AUTOMATION_JOBS = {
 		lockTimeoutMinutes: 10,
 		expectedIntervalMinutes: 30
 	},
+	'boosting-health-report': {
+		name: 'boosting-health-report',
+		path: '/api/internal/cron/boosting-health-report',
+		schedule: 'every 12 hours (08:01 and 20:01 WAT)',
+		risk: 'operational',
+		lockTimeoutMinutes: 10,
+		expectedIntervalMinutes: 720
+	},
 	'telegram-autopilot': {
 		name: 'telegram-autopilot',
 		path: '/api/internal/cron/telegram-autopilot',

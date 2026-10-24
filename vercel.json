@@ -93,6 +93,10 @@
 			"schedule": "7 * * * *"
 		},
 		{
+			"path": "/api/internal/cron/boosting-health-report",
+			"schedule": "1 7,19 * * *"
+		},
+		{
 			"path": "/api/internal/cron/telegram-autopilot",
 			"schedule": "0,1,2,3,4,5,6,7,8,9,10,11,13,16,17,18,20,21,23,26,28,30,31,32,33,35,36,38,40,41,43,46,47,48,50,51,53,56,58 * * * *"
 		}

@@ -73,4 +73,10 @@ describe('cost-aware production automation schedules', () => {
 		}
 		expect(AUTOMATION_JOBS['telegram-autopilot'].expectedIntervalMinutes).toBe(15);
 	});
+
+	it('sends the Boosting check every 12 hours on a minute the database is already awake', () => {
+		expect(schedules.get('/api/internal/cron/boosting-health-report')).toBe('1 7,19 * * *');
+		expect(schedules.get('/api/internal/cron/low-stock-alerts')).toBe('1 * * * *');
+		expect(AUTOMATION_JOBS['boosting-health-report'].expectedIntervalMinutes).toBe(720);
+	});
 });
