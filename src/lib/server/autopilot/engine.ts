@@ -378,6 +378,18 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 
 	async function handleReply(rec: ChannelRecord, text: string) {
 		let reading: ReadReply = readReply(text);
+		// A rate card whose cheapest option is still far above our limit is simply too expensive:
+		// handle it as that price (so the pay-per-sale offer goes out). If the cheapest option fits,
+		// it isn't clear which package they mean, so it stays with the owner.
+		const options = reading.priceOptions ?? [];
+		if (
+			reading.intent === 'unclear' &&
+			options.length > 1 &&
+			options[0] > rec.maxPriceNgn * 1.5 &&
+			['contacted', 'negotiating', 'partner_offered'].includes(rec.status)
+		) {
+			reading = { intent: 'price', priceNgn: options[0], paymentDetails: null };
+		}
 		let draft: string | null = null;
 		if ((reading.intent === 'unclear' || reading.intent === 'question') && deps.readWithClaude) {
 			const claude = await deps.readWithClaude(text, rec.title).catch(() => null);

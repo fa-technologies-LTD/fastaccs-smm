@@ -22,6 +22,8 @@ export interface ReadReply {
 	intent: ReplyIntent;
 	priceNgn: number | null;
 	paymentDetails: string | null;
+	/** Several prices (a rate card): every one of them, cheapest first. */
+	priceOptions?: number[];
 }
 
 const BANKS =
@@ -55,7 +57,8 @@ export function findPricesNgn(text: string, usdRate = 1_500): number[] {
 		if (isUsd) amount *= usdRate;
 		// Bare small numbers ("2 posts", "24 hours") are not prices.
 		if (!marked && amount < 500) continue;
-		if (amount < 300 || amount > 1_000_000) continue;
+		// A marked amount ($1,000, N100k) is a price however big; a bare huge number is not.
+		if (amount < 300 || amount > (marked ? 50_000_000 : 1_000_000)) continue;
 		found.push(Math.round(amount));
 	}
 	return [...new Set(found)];
@@ -74,7 +77,14 @@ export function readReply(text: string, usdRate = 1_500): ReadReply {
 	if (REFUSE.test(trimmed)) return { intent: 'refuse', priceNgn: null, paymentDetails: null };
 	const prices = findPricesNgn(trimmed, usdRate);
 	if (prices.length === 1) return { intent: 'price', priceNgn: prices[0], paymentDetails: null };
-	if (prices.length > 1) return { intent: 'unclear', priceNgn: null, paymentDetails: null };
+	if (prices.length > 1) {
+		return {
+			intent: 'unclear',
+			priceNgn: null,
+			paymentDetails: null,
+			priceOptions: [...prices].sort((a, b) => a - b)
+		};
+	}
 	if (ACCEPT.test(trimmed)) return { intent: 'accept', priceNgn: null, paymentDetails: null };
 	if (POSTED.test(trimmed)) return { intent: 'posted', priceNgn: null, paymentDetails: null };
 	if (trimmed.includes('?')) return { intent: 'question', priceNgn: null, paymentDetails: null };

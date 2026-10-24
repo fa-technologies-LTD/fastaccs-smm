@@ -451,3 +451,23 @@ describe('pay-per-sale wording and maths', () => {
 		expect(text).toContain('GTB 0123456789 A B');
 	});
 });
+
+describe('real replies from admins (24 Oct)', () => {
+	it('reads big dollar prices', () => {
+		expect(readReply('I charge $1000 per post for such.\nGm')).toMatchObject({
+			intent: 'price',
+			priceNgn: 1_500_000
+		});
+		expect(
+			readReply(
+				'Hi, thanks for reaching out.\n\nMy rate for a single sponsored post on Aminu Crypto Labs is $200 USD, payable upfront before publication.'
+			)
+		).toMatchObject({ intent: 'price', priceNgn: 300_000 });
+	});
+
+	it('reads a rate card as a list of options, cheapest first', () => {
+		const card =
+			'Please find our rates for Business Ads:\n\n•N100k to all our platforms (X, telegram, IG, Facebook and WhatsApp) - 15% discount applies for 2 or more ads.\n\n•N50k to X only\n\n•N50k to telegram + WhatsApp only';
+		expect(readReply(card)).toMatchObject({ intent: 'unclear', priceOptions: [50_000, 100_000] });
+	});
+});

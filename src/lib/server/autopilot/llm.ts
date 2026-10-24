@@ -94,7 +94,7 @@ export async function readWithClaude(
 		return {
 			intent: parsed.intent,
 			priceNgn:
-				Number.isFinite(price) && price >= 300 && price <= 1_000_000 ? Math.round(price) : null,
+				Number.isFinite(price) && price >= 300 && price <= 50_000_000 ? Math.round(price) : null,
 			draftReply: parsed.intent === 'question' ? safeDraft(parsed.draft_reply) : null
 		};
 	} catch (error) {

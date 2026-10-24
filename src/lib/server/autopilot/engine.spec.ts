@@ -971,6 +971,21 @@ describe('pay-per-sale offer for admins we can’t afford', () => {
 		);
 	});
 
+	it('a rate card far above our limit gets the offer; one with an option that fits goes to the owner', async () => {
+		const t = setup([
+			contacted({ maxPriceNgn: 5_000 }),
+			contacted({ username: 'cheap_card', contact: 'cheap_admin', maxPriceNgn: 5_000 })
+		]);
+		t.userbot.reply('promo_boss', 5, 'Our rates: N50k to X only, N100k to all platforms');
+		t.userbot.reply('cheap_admin', 5, 'Rates: N4,000 for 12 hours, N7,000 for 24 hours');
+		await runAutopilotOnce(t.deps);
+		expect(t.saved.get('airdrop_naija')).toMatchObject({
+			status: 'partner_offered',
+			quotedNgn: 50_000
+		});
+		expect(t.saved.get('cheap_card')!.waitingOwner).toBe(true);
+	});
+
 	it('with the offer switched off, too expensive is declined as before', async () => {
 		const t = setup([contacted({ maxPriceNgn: 4_000 })], { partnerEnabled: false });
 		t.userbot.reply('promo_boss', 5, '9k');
