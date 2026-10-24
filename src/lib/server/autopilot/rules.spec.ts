@@ -230,6 +230,8 @@ describe('looking for Nigerian channels', () => {
 		expect(nigeriaScore('Daily airdrops. Withdraw to Opay, earn ₦5,000')).toBe(2);
 		expect(nigeriaScore('Naija hustle from Lagos')).toBe(2);
 		expect(nigeriaScore('Global crypto signals')).toBe(0);
+		expect(nigeriaScore('Arewa Strivers: sabon airdrop, kudi a wallet')).toBeGreaterThan(0);
+		expect(nigeriaScore('Abeg claim am sharp sharp')).toBeGreaterThan(0);
 	});
 
 	it('picks up channels a channel promotes, but not itself, bots or invite links', () => {

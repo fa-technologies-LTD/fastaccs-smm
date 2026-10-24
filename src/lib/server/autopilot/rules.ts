@@ -178,7 +178,10 @@ const NIGERIA_SIGNALS = [
 	/\bnigeria(?:n|ns)?\b/i,
 	/\bnaija\b/i,
 	/\b9ja\b/i,
-	/\b(?:lagos|abuja|ibadan|port harcourt|enugu|kano)\b/i,
+	/\b(?:lagos|abuja|ibadan|port harcourt|enugu|kano|kaduna|owerri|warri|benin city)\b/i,
+	/\b(?:arewa|hausa|yoruba|igbo)\b/i,
+	// A few common Hausa / Pidgin words: posts in these languages rarely say "Nigeria".
+	/\b(?:wallahi|kudi|abeg|wetin|dey|sabi)\b/i,
 	/₦/,
 	/\b(?:naira|ngn)\b/i,
 	/\b(?:opay|palmpay|moniepoint|kuda)\b/i
