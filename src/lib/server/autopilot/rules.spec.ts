@@ -293,6 +293,20 @@ describe('audience checks', () => {
 		expect(result.warnings).toContain('Only 1% of members see a post: many members may be bought');
 	});
 
+	it('counts Nigerian sports and news as our niches', () => {
+		const result = checkAudience(
+			{
+				...channel,
+				title: 'Naija Football',
+				posts: posts({ text: 'Super Eagles squad named, Lagos derby tonight' })
+			},
+			AUTOPILOT_DEFAULTS,
+			now
+		);
+		expect(result.warnings).toEqual([]);
+		expect(result.facts.nichePosts).toBe(12);
+	});
+
 	it('blocks channels with no sign of Nigeria, and notes off-topic ones', () => {
 		const result = checkAudience(
 			{ ...channel, title: 'Kitchen', posts: posts({ text: 'Recipes for dinner' }) },
@@ -300,7 +314,9 @@ describe('audience checks', () => {
 			now
 		);
 		expect(result.blockers).toContain('not Nigerian');
-		expect(result.warnings).toContain('Posts are not about crypto, hustle, X or tech');
+		expect(result.warnings).toContain(
+			'Posts are not about crypto, hustle, X, tech, sports or news'
+		);
 	});
 });
 

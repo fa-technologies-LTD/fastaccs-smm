@@ -229,7 +229,7 @@ export function mentionedUsernames(texts: string[], self: string): string[] {
 // ---------------------------------------------------------------------------------------------
 
 const NICHE =
-	/\b(airdrops?|crypto|bitcoin|btc|usdt|web3|tokens?|mining|earn(?:ing)?|hustle|make money|online jobs?|twitter|x accounts?|followers|tech|forex|giveaways?)\b/i;
+	/\b(airdrops?|crypto|bitcoin|btc|usdt|web3|tokens?|mining|earn(?:ing)?|hustle|make money|online jobs?|twitter|x accounts?|followers|tech|forex|giveaways?|football|soccer|sports?|epl|premier league|la ?liga|ucl|champions league|super eagles|transfers?|matches|fixtures|betting|odds|news|breaking|headlines|politics)\b/i;
 const SPONSORED = /(#ad\b|\bsponsored\b|\bpromo(?:tion)?\b|\badvert|\bpaid post\b)/i;
 
 interface PostLike {
@@ -319,7 +319,7 @@ export function checkAudience(
 		warnings.push(`Only ${nigerianPosts} of ${posts.length} recent posts look Nigerian`);
 	}
 	if (nichePosts === 0 && !NICHE.test(`${input.title} ${input.about}`)) {
-		warnings.push('Posts are not about crypto, hustle, X or tech');
+		warnings.push('Posts are not about crypto, hustle, X, tech, sports or news');
 	}
 	return {
 		blockers,
@@ -465,7 +465,7 @@ export function checkLines(facts: AudienceFacts | null, warnings: string[]): str
 			`${facts.engagementPer1k >= 1 ? '✅' : '⚠'} ${facts.engagementPer1k} reactions/shares per 1,000 views`
 		);
 		lines.push(
-			`✅ ${facts.nigerianPosts} of ${facts.postsChecked} recent posts look Nigerian · ${facts.nichePosts} on crypto/hustle/X/tech${facts.sponsoredPosts ? ` · runs sponsored posts (${facts.sponsoredPosts} seen)` : ''}`
+			`✅ ${facts.nigerianPosts} of ${facts.postsChecked} recent posts look Nigerian · ${facts.nichePosts} in our niches (crypto, hustle, X, tech, sports, news)${facts.sponsoredPosts ? ` · runs sponsored posts (${facts.sponsoredPosts} seen)` : ''}`
 		);
 	}
 	for (const warning of warnings) lines.push(`⚠ ${warning}`);
