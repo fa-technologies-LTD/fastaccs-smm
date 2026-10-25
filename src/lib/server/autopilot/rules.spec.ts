@@ -471,3 +471,15 @@ describe('real replies from admins (24 Oct)', () => {
 		expect(readReply(card)).toMatchObject({ intent: 'unclear', priceOptions: [50_000, 100_000] });
 	});
 });
+
+describe('more real replies (25 Oct)', () => {
+	it('hears a polite no', () => {
+		expect(
+			readReply(
+				"Thanks for the offer but we're not currently available for such at this time. \n\nRegards"
+			).intent
+		).toBe('refuse');
+		expect(readReply('Not interested in this package!').intent).toBe('refuse');
+		expect(readReply('We are fully booked this week').intent).toBe('refuse');
+	});
+});

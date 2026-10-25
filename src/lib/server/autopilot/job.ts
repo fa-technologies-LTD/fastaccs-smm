@@ -19,6 +19,7 @@ import {
 	acquireLock,
 	getAutopilotSettings,
 	getGroupRunState,
+	getKnownPeers,
 	getOwnerPicks,
 	getRunState,
 	listChannels,
@@ -27,6 +28,7 @@ import {
 	saveAutopilotSettings,
 	saveChannel,
 	saveRunState,
+	saveKnownPeers,
 	saveGroup,
 	saveGroupRunState,
 	listGroups,
@@ -84,8 +86,9 @@ export async function runAutopilotJob(
 		return { skipped: 'telegram_asked_to_wait' };
 	if (!(await acquireLock())) return { skipped: 'already_running' };
 	let userbot: UserbotPort | null = null;
+	const known = await getKnownPeers().catch(() => []);
 	try {
-		userbot = await connectUserbot();
+		userbot = await connectUserbot(known);
 		if (mode === 'groups') {
 			return await runGroupsOnce({
 				userbot,
@@ -163,6 +166,7 @@ export async function runAutopilotJob(
 		await saveRunState(latest);
 		throw error;
 	} finally {
+		if (userbot) await saveKnownPeers(known, userbot.knownPeers()).catch(() => {});
 		await userbot?.close().catch(() => {});
 		await releaseLock().catch(() => {});
 	}

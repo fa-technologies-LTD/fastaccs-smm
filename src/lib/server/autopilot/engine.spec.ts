@@ -48,6 +48,7 @@ function fakeUserbot(overrides: Partial<UserbotPort> = {}) {
 		joinGroup: vi.fn(async () => {}),
 		groupMessages: vi.fn(async () => []),
 		sendToGroup: vi.fn(async () => 1),
+		knownPeers: vi.fn(() => []),
 		close: vi.fn(async () => {}),
 		...overrides
 	};
@@ -141,6 +142,14 @@ describe('price replies', () => {
 		expect(t.userbot.sent.at(-1)?.text).toContain('within our budget');
 		expect(t.userbot.sent.at(-1)?.text).toContain("I'll get it approved");
 		expect(t.owner[0].text).toContain('quoted ₦3,500');
+	});
+
+	it('an "ok" to our intro gets a friendly ask for their price', async () => {
+		const t = setup([contacted()]);
+		t.userbot.reply('promo_boss', 5, 'ok');
+		await runAutopilotOnce(t.deps);
+		expect(t.userbot.sent.at(-1)?.text).toBe("Great! What's your price for one sponsored post?");
+		expect(t.saved.get('airdrop_naija')!.waitingOwner).toBe(false);
 	});
 
 	it('counters once, then offers pay-per-sale', async () => {

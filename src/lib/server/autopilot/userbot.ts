@@ -39,6 +39,9 @@ export interface GroupInfo {
 	joined: boolean;
 }
 
+/** A looked-up @username: Telegram's id and access key for it. */
+export type KnownPeer = [id: string, accessHash: string, username: string];
+
 export interface Person {
 	username: string;
 	userId: string;
@@ -85,6 +88,8 @@ export interface UserbotPort {
 	groupMessages(username: string, sinceId: number): Promise<GroupMessage[]>;
 	/** Post in a group (Telegram HTML: bold and link labels), optionally as a reply to one message. */
 	sendToGroup(username: string, html: string, replyToId?: number): Promise<number>;
+	/** Usernames looked up so far, to save and reuse next run (see connectUserbot). */
+	knownPeers(): KnownPeer[];
 	close(): Promise<void>;
 }
 
@@ -141,13 +146,26 @@ async function guard<T>(work: () => Promise<T>): Promise<T> {
 	}
 }
 
-export async function connectUserbot(): Promise<UserbotPort> {
+/**
+ * Telegram strictly limits looking up @usernames (breaking the limit means a block of many hours),
+ * and the saved login doesn't remember lookups between runs. So we pass in what earlier runs
+ * looked up, and save what this run learned (knownPeers), to look each name up once.
+ */
+export async function connectUserbot(known: KnownPeer[] = []): Promise<UserbotPort> {
 	if (!userbotConfigured()) throw new Error('TELEGRAM_NOT_CONFIGURED');
+	const session = new sessions.StringSession(env.TELEGRAM_SESSION);
+	const rows = (session as unknown as { _entities: Set<unknown[]> })._entities;
+	for (const [id, hash, username] of known) {
+		// The library reads the access key back with bigInt(), which accepts the saved text.
+		if (id && hash && username) rows.add([id, hash, username, undefined, username]);
+	}
 	const client = new TelegramClient(
-		new sessions.StringSession(env.TELEGRAM_SESSION),
+		session,
 		Number(env.TELEGRAM_API_ID),
 		String(env.TELEGRAM_API_HASH),
-		{ connectionRetries: 2 }
+		{
+			connectionRetries: 2
+		}
 	);
 	client.setLogLevel(LogLevel.ERROR);
 	await client.connect();
@@ -319,6 +337,15 @@ export async function connectUserbot(): Promise<UserbotPort> {
 						id: String(chat.id)
 					}));
 			}),
+		knownPeers: () => {
+			const peers: KnownPeer[] = [];
+			for (const row of rows) {
+				const [id, hash, username] = row as [unknown, unknown, unknown];
+				if (typeof username === 'string' && username && id != null && hash != null)
+					peers.push([String(id), String(hash), username]);
+			}
+			return peers;
+		},
 		close: async () => {
 			await client.destroy().catch(() => client.disconnect().catch(() => {}));
 		}

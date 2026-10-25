@@ -46,7 +46,7 @@ import type { UserbotPort } from './userbot';
 export type AutopilotMode = 'full' | 'replies' | 'groups';
 
 /** How hard the search works: per full run, per day, and how many good channels a day is enough. */
-export const SEARCH_LIMITS = { inspectionsPerRun: 15, searchesPerRun: 3, inspectionsPerDay: 150 };
+export const SEARCH_LIMITS = { inspectionsPerRun: 12, searchesPerRun: 3, inspectionsPerDay: 100 };
 export const goodChannelsPerDay = (dailyNewContacts: number) => Math.max(15, dailyNewContacts * 3);
 
 /** Full runs keep the old 15-minute rhythm; group runs sit in between. */
@@ -441,6 +441,11 @@ export async function runAutopilotOnce(deps: EngineDeps): Promise<RunSummary> {
 				await send(rec, autopilotCopy.decline());
 				rec.status = 'declined';
 			}
+			return;
+		}
+		if (reading.intent === 'accept' && rec.status === 'contacted' && !rec.quotedNgn) {
+			// "ok" to our intro: they're happy to talk but gave no price yet.
+			await send(rec, autopilotCopy.askPrice());
 			return;
 		}
 		if (reading.intent === 'accept' && rec.status === 'partner_offered') {

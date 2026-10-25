@@ -536,6 +536,35 @@ export async function settleOwnerPicks(done: string[], found: OwnerPick[]): Prom
 	});
 }
 
+const PEERS_KEY = 'autopilot.tg.peers';
+const MAX_PEERS = 5_000;
+
+/** Usernames already looked up on Telegram ([id, access key, username]). */
+export async function getKnownPeers(): Promise<Array<[string, string, string]>> {
+	const row = await prisma.microcopy.findUnique({
+		where: { key: PEERS_KEY },
+		select: { value: true }
+	});
+	return parse<{ peers: Array<[string, string, string]> }>(row?.value, { peers: [] }).peers;
+}
+
+/** Keep the newest lookups (only written when this run learned something new). */
+export async function saveKnownPeers(
+	before: Array<[string, string, string]>,
+	after: Array<[string, string, string]>
+): Promise<void> {
+	const known = new Set(before.map((p) => p[2]));
+	if (!after.some((p) => !known.has(p[2]))) return;
+	const byName = new Map(before.map((p) => [p[2], p]));
+	for (const peer of after) byName.set(peer[2], peer);
+	const peers = [...byName.values()].slice(-MAX_PEERS);
+	await put(
+		PEERS_KEY,
+		{ peers },
+		'Autopilot: Telegram usernames already looked up (system-managed)'
+	);
+}
+
 export async function releaseLock(): Promise<void> {
 	await prisma.microcopy.updateMany({ where: { key: LOCK_KEY }, data: { value: '0' } });
 }

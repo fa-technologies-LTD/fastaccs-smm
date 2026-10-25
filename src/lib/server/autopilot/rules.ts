@@ -34,7 +34,7 @@ const ACCEPT =
 const POSTED =
 	/\b(posted|done|it'?s live|its live|live now|uploaded|have posted|check (the )?channel|already up)\b/i;
 const REFUSE =
-	/\b(not interested|no ads|no promo|we don'?t (do|accept|run)|not available|not taking|can'?t (do|take) (it|this|ads)|cannot (do|take))\b/i;
+	/\b(not interested|no ads|no promo|no thanks|we don'?t (do|accept|run)|not (currently |presently |really )?(available|taking|accepting|doing)|(fully|already) booked|can'?t (do|take) (it|this|ads)|cannot (do|take))\b/i;
 
 /**
  * Naira amounts in a message: ₦3,000 · N3000 · #3000 · 3000 naira · 3k · 3.5k · 5,000. Dollar
@@ -510,6 +510,8 @@ export const autopilotCopy = {
 	/** Instead of declining: no upfront fee, a share of sales made with their channel's code. */
 	partnerOffer: (percent: number, days: number) =>
 		`Thanks for the quick reply! That's above our budget for a paid post right now. We do have another option: post our ad for free and earn ${percent}% of every sale your readers make with your channel's own discount code, for ${days} days. We track it automatically and pay you every week by bank transfer. Would that work for you?`,
+	/** They said "ok" to our intro without a price: just ask again. */
+	askPrice: () => `Great! What's your price for one sponsored post?`,
 	partnerAskDetails: () =>
 		`Great! Please send the bank details for your weekly payouts (bank, account number and name) and I'll get it approved.`,
 	partnerStillTooHigh: () =>
