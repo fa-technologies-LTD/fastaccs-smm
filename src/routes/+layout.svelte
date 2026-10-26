@@ -6,6 +6,7 @@
 	import { env as publicEnv } from '$env/dynamic/public';
 
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
+	import DecisionHost from '$lib/components/DecisionHost.svelte';
 	import PageLoadingBar from '$lib/components/PageLoadingBar.svelte';
 	import CookieConsentBar from '$lib/components/CookieConsentBar.svelte';
 	import SitePopupHost from '$lib/components/SitePopupHost.svelte';
@@ -239,4 +240,5 @@
 	<PushNotificationPrompt isLoggedIn={Boolean(data.user)} />
 	<CookieConsentBar />
 	<ToastContainer />
+	<DecisionHost />
 </div>

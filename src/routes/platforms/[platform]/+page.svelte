@@ -22,6 +22,7 @@
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	import PlatformIdentityIcon from '$lib/components/PlatformIdentityIcon.svelte';
 	import { cart } from '$lib/stores/cart.svelte';
+	import { confirmSeparateCheckout } from '$lib/helpers/separate-checkout';
 	import { showError, showSuccess, showWarning } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import { getPlatformColor } from '$lib/helpers/platformColors';
@@ -467,20 +468,14 @@
 			return true;
 		}
 
-		const incomingLabel = getDeliveryModeLabel(mode);
-		const existingLabel = compatibility.existingMode
-			? getDeliveryModeLabel(compatibility.existingMode)
-			: getDeliveryModeLabel('instant_auto');
-		const shouldReplace = window.confirm(
-			`You already have ${existingLabel} item(s) in your cart.\n\n${incomingLabel} items must be checked out separately.\n\nPress OK to clear your cart and add this item, or Cancel to keep your current cart.`
-		);
+		const shouldReplace = await confirmSeparateCheckout(compatibility.existingMode, mode);
 
 		if (!shouldReplace) {
 			return false;
 		}
 
 		cart.clear();
-		showWarning('Cart cleared', `Previous ${existingLabel} items were removed.`);
+		showWarning('Cart emptied', 'Your earlier items were removed.');
 		return true;
 	}
 

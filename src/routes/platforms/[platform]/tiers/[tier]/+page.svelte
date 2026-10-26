@@ -21,6 +21,7 @@
 	import ImagePreviewModal from '$lib/components/ImagePreviewModal.svelte';
 	import PlatformIdentityIcon from '$lib/components/PlatformIdentityIcon.svelte';
 	import { cart } from '$lib/stores/cart.svelte';
+	import { confirmSeparateCheckout } from '$lib/helpers/separate-checkout';
 	import { showError, showWarning, showSuccess } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import { getPlatformColor, isPlatformImageUrl } from '$lib/helpers/platformColors';
@@ -283,12 +284,9 @@
 			}
 
 			if (!compatibility.compatible) {
-				const incomingLabel = getTierDeliveryModeLabel(tierDeliveryConfig.mode);
-				const existingLabel = compatibility.existingMode
-					? getTierDeliveryModeLabel(compatibility.existingMode)
-					: getTierDeliveryModeLabel('instant_auto');
-				const shouldReplace = window.confirm(
-					`You already have ${existingLabel} item(s) in your cart.\n\n${incomingLabel} items must be checked out separately.\n\nPress OK to clear your cart and add this item, or Cancel to keep your current cart.`
+				const shouldReplace = await confirmSeparateCheckout(
+					compatibility.existingMode,
+					tierDeliveryConfig.mode
 				);
 
 				if (!shouldReplace) {
@@ -296,7 +294,7 @@
 				}
 
 				cart.clear();
-				showWarning('Cart cleared', `Previous ${existingLabel} items were removed.`);
+				showWarning('Cart emptied', 'Your earlier items were removed.');
 			}
 
 			// Check existing normal quantity in cart for this account type.
@@ -528,16 +526,13 @@
 				tierDeliveryConfig.mode
 			);
 			if (!compatibility.compatible) {
-				const incomingLabel = getTierDeliveryModeLabel(tierDeliveryConfig.mode);
-				const existingLabel = compatibility.existingMode
-					? getTierDeliveryModeLabel(compatibility.existingMode)
-					: getTierDeliveryModeLabel('instant_auto');
-				const shouldReplace = window.confirm(
-					`You already have ${existingLabel} item(s) in your cart.\n\n${incomingLabel} items must be checked out separately.\n\nPress OK to clear your cart and add this exact account, or Cancel to keep your current cart.`
+				const shouldReplace = await confirmSeparateCheckout(
+					compatibility.existingMode,
+					tierDeliveryConfig.mode
 				);
 				if (!shouldReplace) return;
 				cart.clear();
-				showWarning('Cart cleared', `Previous ${existingLabel} items were removed.`);
+				showWarning('Cart emptied', 'Your earlier items were removed.');
 			}
 
 			const controller = new AbortController();

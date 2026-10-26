@@ -23,8 +23,8 @@
 	import { formatPrice } from '$lib/helpers/utils';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { cart } from '$lib/stores/cart.svelte';
+	import { confirmSeparateCheckout } from '$lib/helpers/separate-checkout';
 	import { showError, showSuccess, showWarning } from '$lib/stores/toasts';
-	import { getTierDeliveryModeLabel } from '$lib/helpers/tier-delivery-config';
 
 	interface Offer {
 		id: string;
@@ -277,18 +277,11 @@
 				return;
 			}
 			if (!compatibility.compatible) {
-				const existingLabel = compatibility.existingMode
-					? getTierDeliveryModeLabel(compatibility.existingMode)
-					: getTierDeliveryModeLabel('instant_auto');
-				if (
-					!window.confirm(
-						`You already have ${existingLabel} item(s) in your cart.\n\nBoosting orders must be checked out separately.\n\nPress OK to clear your cart and continue.`
-					)
-				) {
+				if (!(await confirmSeparateCheckout(compatibility.existingMode, 'boosting_manual'))) {
 					return;
 				}
 				cart.clear();
-				showWarning('Cart cleared', `Previous ${existingLabel} items were removed.`);
+				showWarning('Cart emptied', 'Your earlier items were removed.');
 			}
 
 			cart.addBoostingService(

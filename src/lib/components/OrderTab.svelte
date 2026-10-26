@@ -4,11 +4,11 @@
 	import { formatOrderRef } from '$lib/helpers/utils';
 	import { goto } from '$app/navigation';
 	import { cart } from '$lib/stores/cart.svelte';
+	import { confirmSeparateCheckout } from '$lib/helpers/separate-checkout';
 	import { normalizePaymentStatus } from '$lib/helpers/payment-status';
 	import { toNetSales } from '$lib/helpers/order-revenue';
 	import { getBoostOrderSummaryStatus } from '$lib/helpers/boosting-progress';
 	import {
-		getTierDeliveryModeLabel,
 		normalizeTierDeliveryMode,
 		type TierDeliveryMode
 	} from '$lib/helpers/tier-delivery-config';
@@ -471,13 +471,7 @@
 			incomingMode
 		);
 		if (!compatibility.compatible) {
-			const incomingLabel = getTierDeliveryModeLabel(incomingMode);
-			const existingLabel = compatibility.existingMode
-				? getTierDeliveryModeLabel(compatibility.existingMode)
-				: getTierDeliveryModeLabel('instant_auto');
-			const shouldReplace = window.confirm(
-				`You already have ${existingLabel} item(s) in your cart.\n\n${incomingLabel} items must be checked out separately.\n\nPress OK to clear your cart and continue, or Cancel to keep your current cart.`
-			);
+			const shouldReplace = await confirmSeparateCheckout(compatibility.existingMode, incomingMode);
 			if (!shouldReplace) return;
 			cart.clear();
 		}

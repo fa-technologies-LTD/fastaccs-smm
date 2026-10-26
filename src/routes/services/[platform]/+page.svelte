@@ -21,6 +21,7 @@
 		Users
 	} from '$lib/icons';
 	import { cart } from '$lib/stores/cart.svelte';
+	import { confirmSeparateCheckout } from '$lib/helpers/separate-checkout';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { showError, showSuccess, showWarning } from '$lib/stores/toasts';
 	import { formatPrice } from '$lib/helpers/utils';
@@ -34,10 +35,7 @@
 	} from '$lib/helpers/boosting-service-config';
 	import { validateLinkForAction, getRequiredLinkType } from '$lib/helpers/social-link-validator';
 	import type { BoostingPlatform, BoostingActionType } from '$lib/helpers/social-link-validator';
-	import {
-		getTierDeliveryModeLabel,
-		type TierDeliveryMode
-	} from '$lib/helpers/tier-delivery-config';
+	import { type TierDeliveryMode } from '$lib/helpers/tier-delivery-config';
 	import type { BoostingServiceConfig } from '$lib/helpers/boosting-service-config';
 	import type { PageData } from './$types';
 
@@ -322,15 +320,13 @@
 			}
 
 			if (!compatibility.compatible) {
-				const existingLabel = compatibility.existingMode
-					? getTierDeliveryModeLabel(compatibility.existingMode)
-					: getTierDeliveryModeLabel('instant_auto');
-				const shouldReplace = window.confirm(
-					`You already have ${existingLabel} item(s) in your cart.\n\nBoosting orders must be checked out separately.\n\nPress OK to clear your cart and add this service, or Cancel to keep your current cart.`
+				const shouldReplace = await confirmSeparateCheckout(
+					compatibility.existingMode,
+					'boosting_manual'
 				);
 				if (!shouldReplace) return;
 				cart.clear();
-				showWarning('Cart cleared', `Previous ${existingLabel} items were removed.`);
+				showWarning('Cart emptied', 'Your earlier items were removed.');
 			}
 
 			cart.addBoostingService(
