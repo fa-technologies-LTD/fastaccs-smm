@@ -56,7 +56,7 @@
 				storeCreditHint = null;
 			});
 	});
-	// What the buyer's credit pays toward this cart (same rule as checkout), not the whole balance.
+	// What the buyer's credit could pay toward this cart (same rule as checkout), not the whole balance.
 	const storeCreditLine = $derived.by(() => {
 		if (!storeCreditHint || total <= 0) return '';
 		const applied = computeOrderRedemption(total, storeCreditHint, {
@@ -65,8 +65,8 @@
 		if (applied < 1) return '';
 		const promoNote = storeCreditHint.promoNote ? ` (${storeCreditHint.promoNote})` : '';
 		return applied >= total
-			? `Your store credit covers this cart${promoNote}`
-			: `${formatPrice(applied)} of your store credit applies to this cart${promoNote}`;
+			? `Your store credit can pay for this cart${promoNote}`
+			: `You can use ${formatPrice(applied)} of your store credit on this cart${promoNote}`;
 	});
 	const cartHints = $derived([storeCreditLine, ...rewardHints].filter(Boolean));
 	$effect(() => {

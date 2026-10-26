@@ -240,7 +240,10 @@ it('replaces an earlier Monnify attempt once store credit is used', async () => 
 			affiliateRef: null
 		}
 	} as never);
-	// Credit is on by default, so the earlier card attempt is not offered for continuing.
+	await expect
+		.element(page.getByRole('button', { name: 'Finish that payment', exact: true }))
+		.toBeEnabled();
+	await page.getByRole('checkbox', { name: /store credit/i }).click();
 	await expect.element(page.getByText('This replaces your earlier ₦500 checkout.')).toBeVisible();
 	expect(page.getByRole('button', { name: 'Finish that payment', exact: true }).query()).toBeNull();
 	await page.getByRole('button', { name: 'Pay with store credit', exact: true }).click();
@@ -302,6 +305,7 @@ it('uses the server quote for a changed credit balance and asks for confirmation
 			affiliateRef: null
 		}
 	} as never);
+	await page.getByRole('checkbox', { name: /store credit/i }).click();
 	await page.getByRole('button', { name: 'Pay with store credit', exact: true }).click();
 	await expect
 		.element(page.getByRole('button', { name: 'Confirm updated total & continue', exact: true }))
@@ -384,29 +388,50 @@ it('does not apply a fractional earned-credit remainder the server will refuse',
 			affiliateRef: null
 		}
 	} as never);
+	await page.getByRole('checkbox', { name: /store credit/i }).click();
 	await expect.element(page.getByRole('button', { name: /^Pay ₦/ })).toBeVisible();
 	expect(
 		page.getByRole('button', { name: 'Pay with store credit', exact: true }).query()
 	).toBeNull();
 });
-it('uses store credit by default and remembers an untick for the rest of the visit', async () => {
+it('leaves store credit for the buyer to choose and shows them where it is', async () => {
 	seed();
 	const credit = { totalAvailable: 1000, refundAvailable: 1000, earnedAvailable: 0 };
-	const view = render(Checkout, {
-		data: { user, storeCredit: credit, affiliateRef: null }
-	} as never);
+	render(Checkout, { data: { user, storeCredit: credit, affiliateRef: null } } as never);
 	const box = page.getByRole('checkbox', { name: /store credit/i });
-	await expect.element(box).toBeChecked();
+	await expect.element(box).not.toBeChecked();
+	await expect.element(page.getByText('Use your ₦1,000 store credit')).toBeVisible();
+	await expect.element(page.getByRole('button', { name: /^Pay ₦500/ })).toBeVisible();
+	// First checkout: the credit row gets a short shake, and it is counted.
+	await expect
+		.poll(() => box.element().closest('label')?.classList.contains('nudge'), { timeout: 3000 })
+		.toBe(true);
+	expect(JSON.parse(localStorage.getItem(`fastaccs_checkout_nudges:${user.id}`)!)).toEqual({
+		credit: 1
+	});
+	await box.click();
 	await expect.element(page.getByText('₦500 left after this order')).toBeVisible();
 	await expect
 		.element(page.getByRole('button', { name: 'Pay with store credit', exact: true }))
 		.toBeVisible();
-	await box.click();
-	await expect.element(page.getByText('Use your ₦1,000 store credit')).toBeVisible();
-	await expect.element(page.getByRole('button', { name: /^Pay ₦/ })).toBeVisible();
-	view.unmount();
-	render(Checkout, { data: { user, storeCredit: credit, affiliateRef: null } } as never);
-	await expect.element(page.getByRole('checkbox', { name: /store credit/i })).not.toBeChecked();
+});
+it('stops the shake after three checkouts', async () => {
+	seed();
+	localStorage.setItem(`fastaccs_checkout_nudges:${user.id}`, JSON.stringify({ credit: 3 }));
+	render(Checkout, {
+		data: {
+			user,
+			storeCredit: { totalAvailable: 1000, refundAvailable: 1000, earnedAvailable: 0 },
+			affiliateRef: null
+		}
+	} as never);
+	const box = page.getByRole('checkbox', { name: /store credit/i });
+	await expect.element(box).toBeVisible();
+	await new Promise((resolve) => setTimeout(resolve, 1200));
+	expect(box.element().closest('label')?.classList.contains('nudge')).toBe(false);
+	expect(JSON.parse(localStorage.getItem(`fastaccs_checkout_nudges:${user.id}`)!)).toEqual({
+		credit: 3
+	});
 });
 it('says why reward credit only pays part of a larger order', async () => {
 	price = 13_500;
@@ -418,6 +443,7 @@ it('says why reward credit only pays part of a larger order', async () => {
 			affiliateRef: null
 		}
 	} as never);
+	await page.getByRole('checkbox', { name: /store credit/i }).click();
 	await expect.element(page.getByText('-₦5,850')).toBeVisible();
 	await expect
 		.element(page.getByText('₦16,500 balance · reward credit pays up to 30% of an order'))
@@ -508,8 +534,8 @@ it('keeps a mistyped code in the field and explains the problem in place', async
 	render(Checkout, {
 		data: { user, storeCredit: { totalAvailable: 0 }, affiliateRef: null }
 	} as never);
-	await page.getByRole('button', { name: 'Have a code?', exact: true }).click();
-	const field = page.getByRole('textbox', { name: 'Promo or referral code' });
+	await page.getByRole('button', { name: 'Have a promo code?', exact: true }).click();
+	const field = page.getByRole('textbox', { name: 'Promo code' });
 	await field.fill('WELCOM10');
 	await page.getByRole('button', { name: 'Apply', exact: true }).click();
 	await expect.element(page.getByRole('alert')).toHaveTextContent('This code isn’t valid.');

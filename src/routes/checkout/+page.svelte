@@ -115,25 +115,37 @@
 	// Store credit (signed-in buyers). Mirrors the server redemption rule so we can preview it: refund
 	// credit pays up to 100% of the order, reward credit up to 30%, promo credit up to its campaign cap.
 	// The server recomputes authoritatively at checkout, so this is only an estimate for display.
-	// Credit is used by default; a buyer who unticks it keeps that choice for the rest of the visit.
-	const STORE_CREDIT_OFF_KEY = 'fastaccs_store_credit_off';
-	const creditOnByDefault = () => {
-		if ((data.storeCredit?.totalAvailable ?? 0) <= 0) return false;
-		try {
-			return sessionStorage.getItem(STORE_CREDIT_OFF_KEY) !== '1';
-		} catch {
-			return true;
-		}
-	};
-	let applyStoreCredit = $state(creditOnByDefault());
+	// The buyer decides whether credit pays. Only promo credit (it expires) starts ticked. Instead of
+	// spending credit for them, the credit row and the one-tap offer give a short shake on a buyer's
+	// first few checkouts, so they learn the option is there.
+	const hasPromoCreditAtLoad = () => (data.storeCredit?.promoAvailable ?? 0) > 0;
+	let applyStoreCredit = $state(hasPromoCreditAtLoad());
 	function setStoreCreditChoice(on: boolean) {
 		applyStoreCredit = on;
+		creditNudge = false;
+	}
+	const NUDGE_STORAGE_KEY = 'fastaccs_checkout_nudges';
+	const NUDGES_PER_FEATURE = 3;
+	let creditNudge = $state(false);
+	let offerNudge = $state(false);
+	let nudgesPlanned = false;
+	/** True (and counted) while this buyer has seen fewer than three nudges for this feature. */
+	function takeNudge(feature: 'credit' | 'offer'): boolean {
+		if (!user?.id) return false;
 		try {
-			if (on) sessionStorage.removeItem(STORE_CREDIT_OFF_KEY);
-			else sessionStorage.setItem(STORE_CREDIT_OFF_KEY, '1');
+			const key = `${NUDGE_STORAGE_KEY}:${user.id}`;
+			const seen = JSON.parse(localStorage.getItem(key) || '{}') as Record<string, number>;
+			const count = Number(seen[feature] || 0);
+			if (count >= NUDGES_PER_FEATURE) return false;
+			localStorage.setItem(key, JSON.stringify({ ...seen, [feature]: count + 1 }));
+			return true;
 		} catch {
-			/* the choice still applies on this page */
+			return false;
 		}
+	}
+	function nudge(set: (on: boolean) => void, delay: number) {
+		setTimeout(() => set(true), delay);
+		setTimeout(() => set(false), delay + 1500);
 	}
 	const storeCreditAvailable = $derived(data.storeCredit?.totalAvailable ?? 0);
 	const promoCreditAvailable = $derived(data.storeCredit?.promoAvailable ?? 0);
@@ -193,6 +205,22 @@
 	);
 	const hasBoostingOrder = $derived(cartItems.some((item) => Boolean(item.boosting)));
 	const hasNumbersOrder = $derived(cartItems.some((item) => item.tier.deliveryMode === 'auto_sms'));
+	// Once per checkout visit, after the cart has loaded: shake what the buyer can use but hasn't.
+	$effect(() => {
+		if (nudgesPlanned || loadingCartData || !cartItems.length || !user) return;
+		nudgesPlanned = true;
+		const offer = data.availablePromo;
+		const offerUsable =
+			Boolean(offer) &&
+			!promoAppliedCode &&
+			!hasBoostingOrder &&
+			!hasNumbersOrder &&
+			cartTotal >= Number(offer?.minOrderValue || 0);
+		const creditUsable = storeCreditAvailable > 0 && !applyStoreCredit;
+		if (creditUsable && takeNudge('credit')) nudge((on) => (creditNudge = on), 600);
+		if (offerUsable && takeNudge('offer'))
+			nudge((on) => (offerNudge = on), creditUsable ? 1400 : 600);
+	});
 	// One line under the pay button: what happens next, for the kind of order in the cart.
 	const deliveryNote = $derived.by(() => {
 		const after = payableTotal > 0 ? 'after payment' : 'after you confirm';
@@ -1365,6 +1393,7 @@
 											}}
 											disabled={promoValidationLoading || offerShortBy > 0}
 											class="offer-card flex w-full items-center gap-3 rounded-xl p-3 text-left"
+											class:nudge={offerNudge}
 										>
 											<span class="offer-card__icon" aria-hidden="true"><Gift size={18} /></span>
 											<span class="min-w-0 flex-1">
@@ -1402,8 +1431,8 @@
 												type="text"
 												bind:value={promoCodeInput}
 												oninput={() => (promoError = '')}
-												placeholder="Enter code"
-												aria-label="Promo or referral code"
+												placeholder="Enter promo code"
+												aria-label="Promo code"
 												aria-invalid={promoError ? 'true' : undefined}
 												autocomplete="off"
 												autocapitalize="characters"
@@ -1425,7 +1454,7 @@
 											type="button"
 											onclick={() => (showCodeInput = true)}
 											class="text-xs font-semibold"
-											style="color: var(--primary);">Have a code?</button
+											style="color: var(--primary);">Have a promo code?</button
 										>
 									{/if}
 									{#if promoError}
@@ -1474,6 +1503,7 @@
 							{#if storeCreditAvailable > 0}
 								<label
 									class="flex cursor-pointer items-start justify-between gap-3 rounded-lg p-3"
+									class:nudge={creditNudge}
 									style="background: var(--bg-elev-2); border: 1px solid var(--border-2); font-family: var(--font-body);"
 								>
 									<span class="flex min-w-0 items-start gap-2">
@@ -1695,6 +1725,42 @@
 		}
 	}
 
+	/* Teaching nudge: a short shake and a soft ring, on a buyer's first few checkouts only. */
+	.nudge {
+		animation:
+			nudge-shake 650ms ease-in-out 1,
+			nudge-ring 1.4s ease-out 1;
+	}
+	@keyframes nudge-shake {
+		0%,
+		100% {
+			transform: translateX(0);
+		}
+		15% {
+			transform: translateX(-6px);
+		}
+		30% {
+			transform: translateX(5px);
+		}
+		45% {
+			transform: translateX(-4px);
+		}
+		60% {
+			transform: translateX(3px);
+		}
+		75% {
+			transform: translateX(-1px);
+		}
+	}
+	@keyframes nudge-ring {
+		from {
+			box-shadow: 0 0 0 0 rgba(5, 212, 113, 0.5);
+		}
+		to {
+			box-shadow: 0 0 0 12px rgba(5, 212, 113, 0);
+		}
+	}
+
 	/* First-order offer and applied-code card. */
 	.offer-card {
 		background: rgba(5, 212, 113, 0.08);
@@ -1777,6 +1843,10 @@
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
+		.nudge {
+			animation: none !important;
+			border-color: var(--primary) !important;
+		}
 		.pay-button,
 		.pay-button::after,
 		.pay-button__progress,
