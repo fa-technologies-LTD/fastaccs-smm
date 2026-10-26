@@ -25,6 +25,9 @@
 	import { buildWhatsAppSupportLink } from '$lib/helpers/whatsapp';
 	import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 	import { getBoostingProgress } from '$lib/helpers/boosting-progress';
+	import { getOrderStage, isWithinAccountReportWindow } from '$lib/helpers/order-stage';
+	import OrderStageChip from '$lib/components/OrderStageChip.svelte';
+	import OrderStageProgress from '$lib/components/OrderStageProgress.svelte';
 	import { getBoostComplaintStatusLabel } from '$lib/helpers/boosting-complaint-progress';
 
 	let { data }: { data: PageData } = $props();
@@ -102,17 +105,6 @@
 		return 'Processing';
 	}
 
-	function getStatusColorFromTone(tone: 'success' | 'pending' | 'failure') {
-		switch (tone) {
-			case 'success':
-				return 'status-success';
-			case 'pending':
-				return 'status-warning';
-			case 'failure':
-				return 'status-error';
-		}
-	}
-
 	// Show guidance only when it's actually relevant, so refunded/failed orders aren't cluttered
 	// with account-care tips for a product that was never delivered.
 	const paymentState = $derived(getPaymentState(data.order.status, data.order.paymentStatus));
@@ -120,6 +112,26 @@
 	const orderDelivered = $derived(fulfillmentLabel === 'Completed');
 	const isPhoneOrder = $derived(data.order.orderType === 'phone');
 	const displayOrderNumber = $derived(formatOrderRef(data.order.orderNumber, data.order.id));
+	// The one stage for this order, with any live link or status change applied.
+	const orderStage = $derived(
+		getOrderStage({
+			...data.order,
+			orderItems: data.order.orderItems.map((item) =>
+				boostStatusOverrideByItemId[item.id]
+					? {
+							...item,
+							boostProgress: undefined,
+							boostFulfillmentStatus: boostStatusOverrideByItemId[item.id]
+						}
+					: item
+			)
+		})
+	);
+	function stageBadgeClass(tone: string): string {
+		if (tone === 'done' || tone === 'refund') return 'status-success';
+		if (tone === 'stop') return 'status-error';
+		return 'status-warning';
+	}
 
 	function isManualHandoverItem(item: (typeof data.order.orderItems)[number]): boolean {
 		return getTierDeliveryConfig(item.category?.metadata).mode === 'manual_handover';
@@ -380,73 +392,44 @@
 						class="mb-6 rounded-lg p-6"
 						style="background: var(--surface); border: 1px solid var(--border);"
 					>
-						<div class="flex items-center gap-4">
-							<div
-								class={`status-badge ${getStatusColorFromTone(
-									getPaymentState(data.order.status, data.order.paymentStatus).tone
-								)}`}
-							>
-								{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success'}
+						<div class="flex items-start gap-4">
+							<div class={`status-badge ${stageBadgeClass(orderStage.tone)}`}>
+								{#if orderStage.tone === 'done' || orderStage.tone === 'refund'}
 									<CheckCircle class="h-6 w-6" />
-								{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'failure'}
+								{:else if orderStage.tone === 'stop'}
 									<XCircle class="h-6 w-6" />
 								{:else}
 									<Clock class="h-6 w-6" />
 								{/if}
 							</div>
-							<div>
-								<h2 class="text-xl font-semibold" style="color: var(--text);">
-									{getPaymentState(data.order.status, data.order.paymentStatus).label}
-								</h2>
-								<p style="color: var(--text-muted);">
-									{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && isBoostingOrder()}
-										{data.order.orderItems.some((item) => getBoostingStatus(item) === 'needs_link')
-											? 'Update the link below so we can continue.'
-											: data.order.orderItems.some((item) => getBoostingStatus(item) === 'rejected')
-												? 'Support is reviewing an issue with this boost.'
-												: data.order.orderItems.every(
-															(item) => getBoostingStatus(item) === 'completed'
-													  )
-													? 'Your boost has been completed.'
-													: 'Follow each boost below. Updates appear here automatically.'}
-									{:else if isPhoneOrder}
-										Your payment is safe. We’re preparing your verification number now.
-									{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.status === 'completed'}
-										Your accounts have been successfully allocated and delivered.
-									{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success' && data.order.deliveryMethod === 'whatsapp' && data.order.deliveryStatus === 'processing'}
-										Payment confirmed. Manual handover is in progress on WhatsApp.
-									{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'pending'}
-										Payment not confirmed yet. Credentials are locked.
-									{:else if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'failure'}
-										Payment did not complete for this order. No account allocation was made.
-									{:else}
-										Payment is confirmed. We are finalizing your account delivery.
-									{/if}
-								</p>
-								{#if getPaymentState(data.order.status, data.order.paymentStatus).tone === 'success'}
-									<div class="mt-2 text-xs sm:text-sm">
-										<span style="color: var(--text-dim);">
-											Fulfillment: {getFulfillmentState(
-												data.order.status,
-												data.order.deliveryStatus,
-												getPaymentState(data.order.status, data.order.paymentStatus).tone
-											)}
-										</span>
-									</div>
+							<div class="min-w-0 flex-1 space-y-2">
+								<OrderStageChip stage={orderStage} size="lg" />
+								<p style="color: var(--text-muted);">{orderStage.detail}</p>
+								{#if orderStage.progress !== null && ['in_progress', 'checking', 'part_refunded'].includes(orderStage.key)}
+									<OrderStageProgress percent={orderStage.progress} />
 								{/if}
 							</div>
 						</div>
 					</div>
 				{/if}
 
-				{#if orderDelivered && !isPhoneOrder && !isManualHandoverOrder() && !isBoostingOrder()}
-					<p class="mb-4 text-xs" style="color: var(--text-dim);">
-						Test your login now. A faulty account must be reported within 3 hours of delivery. <a
-							href="/support#faq"
-							class="hover:underline"
-							style="color: var(--link);">Support FAQ</a
-						>.
-					</p>
+				{#if orderDelivered && !isPhoneOrder && !isBoostingOrder()}
+					<details class="mb-4 text-xs" style="color: var(--text-muted);">
+						<summary class="cursor-pointer" style="color: var(--text-muted);"
+							>Need help with this order?</summary
+						>
+						<div class="mt-2 space-y-1">
+							<p>Login trouble? We help for up to 48 hours after purchase.</p>
+							{#if isWithinAccountReportWindow(data.order)}
+								<p>A faulty or wrong account must be reported within 3 hours of delivery.</p>
+							{/if}
+							<a
+								href="/support#contact"
+								class="font-semibold hover:underline"
+								style="color: var(--link);">Contact support</a
+							>
+						</div>
+					</details>
 				{/if}
 
 				{#if getManualHandoverLink()}
@@ -643,9 +626,6 @@
 												</a>
 												{#if item.boostComplaintEligibility?.allowedTypes?.length}
 													<div class="mt-4 border-t pt-3" style="border-color: var(--border);">
-														<p class="text-xs font-semibold" style="color: var(--text);">
-															Something wrong?
-														</p>
 														{#if (complaintOverrideByItemId[item.id] || item.boostComplaints || []).length}
 															{#each complaintOverrideByItemId[item.id] || item.boostComplaints as complaint}
 																<p class="mt-2 text-xs" style="color: var(--text-muted);">
@@ -655,24 +635,25 @@
 																</p>
 															{/each}
 														{:else}
-															{#if item.boostComplaintEligibility.allowedTypes.includes('dropped')}
-																<button
-																	type="button"
-																	onclick={() => reportBoostingIssue(item, 'dropped')}
-																	disabled={!!reportingBoostItemId}
-																	class="mt-2 min-h-11 rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50"
-																	style="border-color: var(--border); color: var(--text);"
-																	>{reportingBoostItemId === item.id
-																		? 'Sending…'
-																		: 'Request refill'}</button
-																>
-															{/if}
-															<details class="mt-3">
+															<details>
 																<summary
 																	class="cursor-pointer text-xs"
-																	style="color: var(--text-muted);">Report an issue</summary
+																	style="color: var(--text-muted);"
+																	>Need help with this boost?</summary
 																>
-																<div class="mt-2 flex flex-col gap-2 sm:flex-row">
+																{#if item.boostComplaintEligibility.allowedTypes.includes('dropped')}
+																	<button
+																		type="button"
+																		onclick={() => reportBoostingIssue(item, 'dropped')}
+																		disabled={!!reportingBoostItemId}
+																		class="mt-2 min-h-11 rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50"
+																		style="border-color: var(--border); color: var(--text);"
+																		>{reportingBoostItemId === item.id
+																			? 'Sending…'
+																			: 'Request refill'}</button
+																	>
+																{/if}
+																<div class="mt-3 flex flex-col gap-2 sm:flex-row">
 																	<select
 																		bind:value={complaintTypeByItemId[item.id]}
 																		class="min-w-0 flex-1 rounded-lg border px-3 py-2 text-xs"

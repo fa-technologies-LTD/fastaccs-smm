@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { CheckCircle, RefreshCw, Clock, Phone, Zap } from '$lib/icons';
+	import { Clock, Phone, Zap } from '$lib/icons';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import { formatOrderRef } from '$lib/helpers/utils';
 	import { goto } from '$app/navigation';
@@ -7,7 +7,9 @@
 	import { confirmSeparateCheckout } from '$lib/helpers/separate-checkout';
 	import { normalizePaymentStatus } from '$lib/helpers/payment-status';
 	import { toNetSales } from '$lib/helpers/order-revenue';
-	import { getBoostOrderSummaryStatus } from '$lib/helpers/boosting-progress';
+	import { getOrderStage } from '$lib/helpers/order-stage';
+	import OrderStageChip from './OrderStageChip.svelte';
+	import OrderStageProgress from './OrderStageProgress.svelte';
 	import {
 		normalizeTierDeliveryMode,
 		type TierDeliveryMode
@@ -185,59 +187,6 @@
 	);
 	const hasBoostingOrders = $derived(orders.some(isBoostingOrder));
 	const hasNumbersOrders = $derived(orders.some(isNumbersOrder));
-
-	function getFulfillmentState(order: OrderRecord): string {
-		const payment = getPaymentState(order);
-		if (payment.tone !== 'success') {
-			const orderStatus = normalizeLower(order.status);
-			const paymentStatus = normalizeLower(order.paymentStatus);
-			if (['refunded'].includes(orderStatus) || ['refunded', 'refund'].includes(paymentStatus)) {
-				return 'Refunded';
-			}
-			return 'Not Started';
-		}
-
-		if (isBoostingOrder(order)) {
-			const summary = getBoostOrderSummaryStatus({ ...order, orderItems: getOrderItems(order) });
-			if (summary === 'under_review') return 'Under Review';
-			if (summary === 'refunded') return 'Refunded';
-			if (summary === 'cancelled') return 'Cancelled';
-			if (summary === 'pending') return 'Not Started';
-			const boostingItems = getBoostingItems(order);
-			if (summary === 'needs_link') {
-				return 'Action Needed — Update Link';
-			}
-			if (boostingItems.some((item) => item.boostFulfillmentStatus === 'rejected')) {
-				return 'Needs Support';
-			}
-			if (summary === 'completed') {
-				return 'Boost Completed';
-			}
-			if (boostingItems.some((item) => item.boostFulfillmentStatus === 'in_progress')) {
-				return 'Boost In Progress';
-			}
-			return 'Boost Pending';
-		}
-
-		const orderStatus = normalizeLower(order.status);
-		const deliveryStatus = normalizeLower(order.deliveryStatus);
-		const deliveryMethod = normalizeLower(order.deliveryMethod);
-
-		if (deliveryMethod === 'whatsapp' && deliveryStatus === 'processing') {
-			return 'Manual Handover (WhatsApp)';
-		}
-
-		if (deliveryStatus === 'delivered' || orderStatus === 'completed') {
-			return 'Completed';
-		}
-		if (deliveryStatus === 'processing' || orderStatus === 'processing') {
-			return 'Processing';
-		}
-		if (deliveryStatus === 'failed') {
-			return 'Failed';
-		}
-		return 'Processing';
-	}
 
 	function getOrderItems(order: OrderRecord): OrderItem[] {
 		if (Array.isArray(order.orderItems) && order.orderItems.length > 0) return order.orderItems;
@@ -553,6 +502,7 @@
 		{:else}
 			<div class="divide-y divide-[var(--border)]">
 				{#each filteredOrders as order (order.id)}
+					{@const stage = getOrderStage(order)}
 					<div
 						id={`order-${order.id}`}
 						class="p-4 sm:p-6 {focusOrderId === order.id ? 'rounded-[var(--r-sm)]' : ''}"
@@ -562,13 +512,6 @@
 					>
 						<div class="mb-3 flex items-center justify-between gap-4">
 							<div class="flex min-w-0 flex-1 items-center">
-								{#if getPaymentState(order).tone === 'success'}
-									<CheckCircle class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--primary);" />
-								{:else if getPaymentState(order).label === 'Confirming with Monnify'}
-									<RefreshCw class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--link);" />
-								{:else}
-									<Clock class="mr-2 h-5 w-5 flex-shrink-0" style="color: var(--status-warning);" />
-								{/if}
 								<div class="min-w-0 flex-1">
 									<div
 										class="flex items-center gap-1.5 truncate font-semibold"
@@ -593,14 +536,7 @@
 								>
 									₦{toNetSales(order.totalAmount, order.refundedAmount).toLocaleString()}
 								</div>
-								{#if Number(order.refundedAmount || 0) > 0}
-									<div class="text-xs" style="color: var(--text-dim);">
-										₦{Number(order.refundedAmount || 0).toLocaleString()} refunded
-									</div>
-								{/if}
-								<div class="text-xs sm:text-sm" style="color: var(--text-muted);">
-									{getPaymentState(order).label}
-								</div>
+								<div class="mt-1"><OrderStageChip {stage} /></div>
 							</div>
 						</div>
 
@@ -619,8 +555,11 @@
 						</div>
 
 						<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-							<div class="text-xs sm:text-sm" style="color: var(--text-dim);">
-								Fulfillment: {getFulfillmentState(order)}
+							<div class="min-w-0 flex-1 space-y-2 sm:max-w-[60%]">
+								<p class="text-xs sm:text-sm" style="color: var(--text-muted);">{stage.detail}</p>
+								{#if stage.progress !== null && ['in_progress', 'checking', 'part_refunded'].includes(stage.key)}
+									<OrderStageProgress percent={stage.progress} />
+								{/if}
 							</div>
 							<div class="grid grid-cols-2 gap-2 text-sm sm:flex sm:flex-row sm:text-base">
 								{#if isPaymentRecheckable(order)}
@@ -643,18 +582,18 @@
 										{checkingPaymentByOrderId[order.id] ? 'Checking...' : 'Refresh payment'}
 									</button>
 								{/if}
-								<!-- Order Again is the primary action only when there's no Resume payment. -->
-								<button
-									onclick={() =>
-										isBoostingOrder(order) ? reorderBoostingOrder(order) : reorderItems(order)}
-									data-sveltekit-preload-data="hover"
-									class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 sm:px-4 sm:text-sm"
-									style={isPaymentRecheckable(order)
-										? 'background: var(--surface-2); border: 1px solid var(--border); color: var(--text);'
-										: 'background: var(--btn-primary-gradient); border: 1px solid var(--btn-primary-border); color: var(--btn-primary-text);'}
-								>
-									Order Again
-								</button>
+								<!-- Order Again appears once an order is paid; an unpaid one offers Resume payment. -->
+								{#if !isPaymentRecheckable(order)}
+									<button
+										onclick={() =>
+											isBoostingOrder(order) ? reorderBoostingOrder(order) : reorderItems(order)}
+										data-sveltekit-preload-data="hover"
+										class="cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 sm:px-4 sm:text-sm"
+										style="background: var(--btn-primary-gradient); border: 1px solid var(--btn-primary-border); color: var(--btn-primary-text);"
+									>
+										Order Again
+									</button>
+								{/if}
 								<button
 									onclick={() => viewOrderDetails(order.id)}
 									data-sveltekit-preload-data="hover"

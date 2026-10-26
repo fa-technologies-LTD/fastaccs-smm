@@ -6,11 +6,11 @@ import OrderTab from './OrderTab.svelte';
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 
 it.each([
-	['under_review', 'Under Review'],
-	['in_progress', 'Boost In Progress']
+	['under_review', 'Checking'],
+	['in_progress', 'In progress']
 ])(
 	'shows %s rather than a stale completed parent in the customer order list',
-	async (status, label) => {
+	async (status, chip) => {
 		render(OrderTab, {
 			initialOrders: [
 				{
@@ -34,7 +34,7 @@ it.each([
 				}
 			]
 		});
-		await expect.element(page.getByText(`Fulfillment: ${label}`, { exact: true })).toBeVisible();
-		expect(page.getByText('Fulfillment: Boost Completed', { exact: true }).query()).toBeNull();
+		await expect.element(page.getByText(chip, { exact: true })).toBeVisible();
+		expect(page.getByText('Delivered', { exact: true }).query()).toBeNull();
 	}
 );

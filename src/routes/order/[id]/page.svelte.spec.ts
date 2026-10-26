@@ -88,7 +88,11 @@ describe('customer Boosting progress and refill journey', () => {
 	afterEach(() => vi.restoreAllMocks());
 	it('separates payment confirmation from queued delivery', async () => {
 		render(OrderPage, { data: data('pending') });
-		await expect.element(page.getByRole('heading', { name: 'Payment Confirmed' })).toBeVisible();
+		// One stage for the order: paid, delivery not started yet.
+		await expect.element(page.getByText('Preparing', { exact: true })).toBeVisible();
+		await expect
+			.element(page.getByText('Queued to start. No need to order again.', { exact: true }))
+			.toBeVisible();
 		await expect.element(page.getByText('Queued', { exact: true }).first()).toBeVisible();
 		await expect
 			.element(page.getByText('Your boost is queued. No need to order again.'))
@@ -112,6 +116,12 @@ describe('customer Boosting progress and refill journey', () => {
 			})
 		);
 		render(OrderPage, { data: data('completed', { eligible: true }) });
+		// Help is there when needed, behind one closed section rather than on the page by default.
+		await expect
+			.element(page.getByText('Need help with this boost?', { exact: true }))
+			.toBeVisible();
+		expect(page.getByRole('button', { name: 'Request refill' }).query()).toBeNull();
+		await page.getByText('Need help with this boost?', { exact: true }).click();
 		await page.getByRole('button', { name: 'Request refill' }).click();
 		expect(fetchMock).toHaveBeenCalledOnce();
 		expect(fetchMock).toHaveBeenCalledWith(
@@ -127,7 +137,7 @@ describe('customer Boosting progress and refill journey', () => {
 	});
 	it('does not claim a boost started when payment is unconfirmed', async () => {
 		render(OrderPage, { data: data('in_progress', { paymentStatus: 'unpaid', remains: 20 }) });
-		await expect.element(page.getByRole('heading', { name: 'Awaiting Payment' })).toBeVisible();
+		await expect.element(page.getByText('Awaiting payment', { exact: true })).toBeVisible();
 		await expect
 			.element(page.getByText('Delivery starts after payment is confirmed.'))
 			.toBeVisible();

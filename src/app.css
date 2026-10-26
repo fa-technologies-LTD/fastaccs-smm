@@ -121,6 +121,14 @@
 	--notice-promo: #f5b84a;
 	--notice-promo-bg: rgba(245, 184, 74, 0.12);
 	--notice-promo-border: rgba(245, 184, 74, 0.38);
+	/* Order stages (see $lib/helpers/order-stage): one colour per stage, the same on every screen. */
+	--stage-pay: var(--status-warning);
+	--stage-prep: var(--status-info);
+	--stage-progress: #38bdf8;
+	--stage-done: var(--status-success);
+	--stage-refund: #c4a5ff;
+	--stage-stop: var(--status-error);
+	--stage-you: #ffa266;
 	--status-pending-border: rgba(255, 184, 0, 0.3);
 
 	/* ===== PLATFORM GRADIENTS ===== */
