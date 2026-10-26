@@ -73,6 +73,7 @@ beforeEach(async () => {
 	cart.clear();
 	cart.close();
 	localStorage.clear();
+	sessionStorage.clear();
 	price = 500;
 	benefitLabel = null;
 	mocks.goto.mockReset();
@@ -196,7 +197,7 @@ it('resumes the original accepted request after a lost response even if current 
 	).toBeUndefined();
 	expect(mocks.goto).not.toHaveBeenCalled();
 });
-it('replaces an earlier Monnify attempt when the buyer then ticks store credit', async () => {
+it('replaces an earlier Monnify attempt once store credit is used', async () => {
 	seed();
 	const earlier = {
 		userId: user.id,
@@ -239,11 +240,11 @@ it('replaces an earlier Monnify attempt when the buyer then ticks store credit',
 			affiliateRef: null
 		}
 	} as never);
-	await expect
-		.element(page.getByRole('button', { name: 'Continue saved checkout', exact: true }))
-		.toBeEnabled();
-	await page.getByRole('checkbox', { name: 'Use store credit' }).click();
+	// Credit is on by default, so the earlier card attempt is not offered for continuing.
 	await expect.element(page.getByText('This replaces your earlier ₦500 checkout.')).toBeVisible();
+	expect(
+		page.getByRole('button', { name: 'Continue saved checkout', exact: true }).query()
+	).toBeNull();
 	await page.getByRole('button', { name: 'Complete Order', exact: true }).click();
 	await expect.poll(() => mocks.createOrder.mock.calls.length).toBe(1);
 	expect(mocks.createOrder.mock.calls[0][0]).toMatchObject({
@@ -303,7 +304,6 @@ it('uses the server quote for a changed credit balance and asks for confirmation
 			affiliateRef: null
 		}
 	} as never);
-	await page.getByRole('checkbox', { name: /Use store credit/ }).click();
 	await page.getByRole('button', { name: 'Complete Order', exact: true }).click();
 	await expect
 		.element(page.getByRole('button', { name: 'Confirm updated total & continue', exact: true }))
@@ -386,9 +386,43 @@ it('does not apply a fractional earned-credit remainder the server will refuse',
 			affiliateRef: null
 		}
 	} as never);
-	await page.getByRole('checkbox', { name: /Use store credit/ }).click();
 	await expect.element(page.getByRole('button', { name: 'Pay Now', exact: true })).toBeVisible();
 	expect(page.getByRole('button', { name: 'Complete Order', exact: true }).query()).toBeNull();
+});
+it('uses store credit by default and remembers an untick for the rest of the visit', async () => {
+	seed();
+	const credit = { totalAvailable: 1000, refundAvailable: 1000, earnedAvailable: 0 };
+	const view = render(Checkout, {
+		data: { user, storeCredit: credit, affiliateRef: null }
+	} as never);
+	const box = page.getByRole('checkbox', { name: /store credit/i });
+	await expect.element(box).toBeChecked();
+	await expect.element(page.getByText('₦500 left after this order')).toBeVisible();
+	await expect
+		.element(page.getByRole('button', { name: 'Complete Order', exact: true }))
+		.toBeVisible();
+	await box.click();
+	await expect.element(page.getByText('Use your ₦1,000 store credit')).toBeVisible();
+	await expect.element(page.getByRole('button', { name: 'Pay Now', exact: true })).toBeVisible();
+	view.unmount();
+	render(Checkout, { data: { user, storeCredit: credit, affiliateRef: null } } as never);
+	await expect.element(page.getByRole('checkbox', { name: /store credit/i })).not.toBeChecked();
+});
+it('says why reward credit only pays part of a larger order', async () => {
+	price = 13_500;
+	seed();
+	render(Checkout, {
+		data: {
+			user,
+			storeCredit: { totalAvailable: 16_500, refundAvailable: 1_800, earnedAvailable: 14_700 },
+			affiliateRef: null
+		}
+	} as never);
+	await expect.element(page.getByText('-₦5,850')).toBeVisible();
+	await expect
+		.element(page.getByText('₦16,500 balance · reward credit pays up to 30% of an order'))
+		.toBeVisible();
+	await expect.element(page.getByRole('button', { name: 'Pay Now', exact: true })).toBeVisible();
 });
 it('keeps mobile Checkout clickable with the first-visit consent banner, and closes on Escape', async () => {
 	seed();

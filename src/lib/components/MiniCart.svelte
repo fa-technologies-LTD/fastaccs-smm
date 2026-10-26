@@ -6,6 +6,7 @@
 	import { goto } from '$app/navigation';
 	import type { CartItem, CartItemWithTier } from '$lib/types/cart';
 	import { formatPrice } from '$lib/helpers/utils';
+	import { computeOrderRedemption } from '$lib/helpers/store-credit-redemption';
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
 	import { brandKey } from '$lib/components/BrandIcon.svelte';
@@ -29,22 +30,45 @@
 	let lastLoadedCartKey = $state('');
 	let dialog = $state<HTMLDivElement>();
 	// Store credit and first-order offer reminders, refreshed at most once a minute while open.
+	interface StoreCreditHint {
+		refundAvailable: number;
+		earnedAvailable: number;
+		promo: Array<{ campaign: string; available: number }>;
+		promoCaps: Record<string, number>;
+		promoNote: string | null;
+	}
 	let rewardHints = $state<string[]>([]);
+	let storeCreditHint = $state<StoreCreditHint | null>(null);
 	let rewardHintsLoadedAt = 0;
 	$effect(() => {
 		if (!isOpen || Date.now() - rewardHintsLoadedAt < 60_000) return;
 		rewardHintsLoadedAt = Date.now();
 		fetch('/api/rewards/cart-hint')
 			.then((response) => (response.ok ? response.json() : { lines: [] }))
-			.then((body: { lines?: unknown }) => {
+			.then((body: { lines?: unknown; credit?: StoreCreditHint | null }) => {
 				rewardHints = Array.isArray(body.lines)
 					? body.lines.filter((line): line is string => typeof line === 'string').slice(0, 2)
 					: [];
+				storeCreditHint = body.credit ?? null;
 			})
 			.catch(() => {
 				rewardHints = [];
+				storeCreditHint = null;
 			});
 	});
+	// What the buyer's credit pays toward this cart (same rule as checkout), not the whole balance.
+	const storeCreditLine = $derived.by(() => {
+		if (!storeCreditHint || total <= 0) return '';
+		const applied = computeOrderRedemption(total, storeCreditHint, {
+			promoCaps: storeCreditHint.promoCaps
+		}).totalApplied;
+		if (applied < 1) return '';
+		const promoNote = storeCreditHint.promoNote ? ` (${storeCreditHint.promoNote})` : '';
+		return applied >= total
+			? `Your store credit covers this cart${promoNote}`
+			: `${formatPrice(applied)} of your store credit applies to this cart${promoNote}`;
+	});
+	const cartHints = $derived([storeCreditLine, ...rewardHints].filter(Boolean));
 	$effect(() => {
 		if (!isOpen) return;
 		const previous = document.activeElement;
@@ -463,9 +487,9 @@
 						<div
 							style="border-top: 1px solid var(--border); background: var(--bg-elev-1); padding: var(--space-lg);"
 						>
-							{#if rewardHints.length}
+							{#if cartHints.length}
 								<div class="mb-3 space-y-1">
-									{#each rewardHints as hint (hint)}
+									{#each cartHints as hint (hint)}
 										<p
 											class="text-xs font-medium"
 											style="color: var(--primary); font-family: var(--font-body);"

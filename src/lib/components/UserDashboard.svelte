@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { CustomerRewards } from '$lib/helpers/customer-rewards';
+	import { EARNED_REDEMPTION_CAP_PERCENT } from '$lib/helpers/store-credit-redemption';
 	import { onMount } from 'svelte';
 	import { BriefcaseBusiness, Compass, LifeBuoy, Lock, Unlock, Clock3, X } from '$lib/icons';
 	import OrderTab from './OrderTab.svelte';
@@ -65,6 +66,8 @@
 		affiliateLoaded?: boolean;
 		storeCredit?: {
 			totalAvailable?: number;
+			refundAvailable?: number;
+			earnedAvailable?: number;
 			promoAvailable?: number;
 			promo?: Array<{ campaign: string; available: number; nextExpiresAt: string | null }>;
 		} | null;
@@ -76,6 +79,9 @@
 	} = $props();
 
 	const storeCreditBalance = $derived(Math.max(0, Number(storeCredit?.totalAvailable || 0)));
+	const refundCredit = $derived(Math.max(0, Math.floor(Number(storeCredit?.refundAvailable || 0))));
+	const rewardCredit = $derived(Math.max(0, Math.floor(Number(storeCredit?.earnedAvailable || 0))));
+	const rewardCapPercent = Math.round(EARNED_REDEMPTION_CAP_PERCENT * 100);
 
 	// "Your rewards": only what applies to this customer right now, each with one next step.
 	const rewardLines = $derived.by(() => {
@@ -509,6 +515,11 @@
 					>· view history →</span
 				>
 			</div>
+			{#if rewardCredit >= 1 && refundCredit >= 1}
+				<div class="mt-1 text-[11px]" style="color: var(--text-muted);">
+					₦{refundCredit.toLocaleString()} refund · ₦{rewardCredit.toLocaleString()} reward
+				</div>
+			{/if}
 		</button>
 	</div>
 
@@ -682,6 +693,12 @@
 					<p class="text-xs" style="color: var(--text-muted);">
 						₦{storeCreditBalance.toLocaleString()} available
 					</p>
+					{#if rewardCredit >= 1}
+						<p class="mt-0.5 text-xs" style="color: var(--text-muted);">
+							Refund credit pays for anything in full. Reward credit pays up to {rewardCapPercent}%
+							of each order.
+						</p>
+					{/if}
 				</div>
 				<button
 					onclick={() => (showCreditHistory = false)}

@@ -26,7 +26,10 @@
 	import type { PageData } from './$types';
 	import { createOrder } from '$lib/services/orders';
 	import type { CreateOrderData } from '$lib/services/orders';
-	import { computeOrderRedemption } from '$lib/helpers/store-credit-redemption';
+	import {
+		computeOrderRedemption,
+		EARNED_REDEMPTION_CAP_PERCENT
+	} from '$lib/helpers/store-credit-redemption';
 	import { matchesCheckoutQuote, type CheckoutQuote } from '$lib/helpers/checkout-quote';
 	import type { CartItemWithTier } from '$lib/types/cart';
 	import { formatPrice } from '$lib/helpers/utils';
@@ -102,14 +105,29 @@
 		activeServerQuote?.total ?? Math.max(0, cartTotal - promoDiscountAmount)
 	);
 
-	// Store credit (signed-in buyers). Mirrors the server redemption rule so we can
-	// preview the discount — the refund bucket spends up to 100% of the order, the
-	// earned bucket is capped at 30%. The server recomputes authoritatively at
-	// checkout, so this is only an estimate for display.
-	// Promo credit (Refer & Win / BIGSPENDER) expires, so the box starts ticked when the buyer has
-	// some; they can untick it. Without promo credit it stays opt-in as before.
-	const hasPromoCreditAtLoad = () => (data.storeCredit?.promoAvailable ?? 0) > 0;
-	let applyStoreCredit = $state(hasPromoCreditAtLoad());
+	// Store credit (signed-in buyers). Mirrors the server redemption rule so we can preview it: refund
+	// credit pays up to 100% of the order, reward credit up to 30%, promo credit up to its campaign cap.
+	// The server recomputes authoritatively at checkout, so this is only an estimate for display.
+	// Credit is used by default; a buyer who unticks it keeps that choice for the rest of the visit.
+	const STORE_CREDIT_OFF_KEY = 'fastaccs_store_credit_off';
+	const creditOnByDefault = () => {
+		if ((data.storeCredit?.totalAvailable ?? 0) <= 0) return false;
+		try {
+			return sessionStorage.getItem(STORE_CREDIT_OFF_KEY) !== '1';
+		} catch {
+			return true;
+		}
+	};
+	let applyStoreCredit = $state(creditOnByDefault());
+	function setStoreCreditChoice(on: boolean) {
+		applyStoreCredit = on;
+		try {
+			if (on) sessionStorage.removeItem(STORE_CREDIT_OFF_KEY);
+			else sessionStorage.setItem(STORE_CREDIT_OFF_KEY, '1');
+		} catch {
+			/* the choice still applies on this page */
+		}
+	}
 	const storeCreditAvailable = $derived(data.storeCredit?.totalAvailable ?? 0);
 	const promoCreditAvailable = $derived(data.storeCredit?.promoAvailable ?? 0);
 	const promoCreditNote = $derived.by(() => {
@@ -130,23 +148,33 @@
 			: '';
 		return `Includes ${formatPrice(promoCreditAvailable)} promo credit · pays up to ${cap}% of an order${expiry ? ` · expires ${expiry}` : ''}`;
 	});
+	const creditEstimate = $derived(
+		computeOrderRedemption(
+			checkoutTotal,
+			{
+				refundAvailable: data.storeCredit?.refundAvailable ?? 0,
+				earnedAvailable: data.storeCredit?.earnedAvailable ?? 0,
+				promo: data.storeCredit?.promo ?? []
+			},
+			{ promoCaps: data.storeCredit?.promoCaps ?? {} }
+		)
+	);
 	const storeCreditApplied = $derived.by(() => {
 		if (!applyStoreCredit || storeCreditAvailable <= 0 || checkoutTotal <= 0) return 0;
-		return (
-			activeServerQuote?.creditApplied ??
-			computeOrderRedemption(
-				checkoutTotal,
-				{
-					refundAvailable: data.storeCredit?.refundAvailable ?? 0,
-					earnedAvailable: data.storeCredit?.earnedAvailable ?? 0,
-					promo: data.storeCredit?.promo ?? []
-				},
-				{ promoCaps: data.storeCredit?.promoCaps ?? {} }
-			).totalApplied
-		);
+		return activeServerQuote?.creditApplied ?? creditEstimate.totalApplied;
 	});
 	const payableTotal = $derived(Math.max(0, checkoutTotal - storeCreditApplied));
 	const usesStoreCredit = $derived(applyStoreCredit && storeCreditAvailable > 0);
+	const rewardCapPercent = Math.round(EARNED_REDEMPTION_CAP_PERCENT * 100);
+	// One short line under the credit row: why part of the balance stays unused, or what is left.
+	const storeCreditNote = $derived.by(() => {
+		if (!applyStoreCredit || storeCreditApplied <= 0) return '';
+		const reward = Math.floor(data.storeCredit?.earnedAvailable ?? 0);
+		if (payableTotal > 0 && reward >= 1 && creditEstimate.earnedApplied < reward)
+			return `${formatPrice(storeCreditAvailable)} balance · reward credit pays up to ${rewardCapPercent}% of an order`;
+		const left = Math.max(0, storeCreditAvailable - storeCreditApplied);
+		return left >= 1 ? `${formatPrice(left)} left after this order` : 'Uses all your store credit';
+	});
 	// An earlier attempt is only continued while the store-credit choice is unchanged. After the buyer
 	// changes it (e.g. ticks credit after leaving Monnify), the next attempt is built from the screen and
 	// replaces the earlier one under the same checkout key, so the server can cancel the old payment.
@@ -1403,47 +1431,45 @@
 							</div>
 							{#if storeCreditAvailable > 0}
 								<label
-									class="flex cursor-pointer items-center justify-between gap-2 rounded-lg p-3"
-									style="background: var(--bg-elev-2); border: 1px solid var(--border-2);"
+									class="flex cursor-pointer items-start justify-between gap-3 rounded-lg p-3"
+									style="background: var(--bg-elev-2); border: 1px solid var(--border-2); font-family: var(--font-body);"
 								>
-									<span
-										class="flex items-center gap-2 text-xs sm:text-sm"
-										style="color: var(--text); font-family: var(--font-body);"
-									>
+									<span class="flex min-w-0 items-start gap-2">
 										<input
 											type="checkbox"
-											bind:checked={applyStoreCredit}
-											class="h-4 w-4 cursor-pointer"
+											checked={applyStoreCredit}
+											onchange={(event) => setStoreCreditChoice(event.currentTarget.checked)}
+											class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer"
 											style="accent-color: var(--primary);"
 										/>
-										Use store credit
+										<span class="min-w-0">
+											<span
+												class="block text-xs font-medium sm:text-sm"
+												style="color: var(--text);"
+											>
+												{applyStoreCredit
+													? 'Store credit'
+													: `Use your ${formatPrice(storeCreditAvailable)} store credit`}
+											</span>
+											{#if storeCreditNote}
+												<span class="mt-0.5 block text-xs" style="color: var(--text-muted);"
+													>{storeCreditNote}</span
+												>
+											{/if}
+											{#if applyStoreCredit && promoCreditNote}
+												<span class="mt-0.5 block text-xs" style="color: var(--text-muted);"
+													>{promoCreditNote}</span
+												>
+											{/if}
+										</span>
 									</span>
-									<span
-										class="text-xs font-medium sm:text-sm"
-										style="color: var(--text-muted); font-family: var(--font-body);"
-										>{formatPrice(storeCreditAvailable)} available</span
-									>
+									{#if storeCreditApplied > 0}
+										<span
+											class="shrink-0 text-xs font-semibold sm:text-sm"
+											style="color: var(--primary);">-{formatPrice(storeCreditApplied)}</span
+										>
+									{/if}
 								</label>
-								{#if promoCreditNote}
-									<p
-										class="-mt-1 text-xs"
-										style="color: var(--text-muted); font-family: var(--font-body);"
-									>
-										{promoCreditNote}
-									</p>
-								{/if}
-							{/if}
-							{#if storeCreditApplied > 0}
-								<div
-									class="flex justify-between text-xs font-semibold sm:text-sm"
-									style="color: var(--primary); font-family: var(--font-body);"
-								>
-									<span class="flex items-center gap-1">
-										<Tag size={14} />
-										Store Credit
-									</span>
-									<span>-{formatPrice(storeCreditApplied)}</span>
-								</div>
 							{/if}
 							<hr style="border-color: var(--border);" />
 							<div class="flex justify-between text-base font-bold sm:text-lg">
