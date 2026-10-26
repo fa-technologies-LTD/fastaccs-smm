@@ -189,7 +189,7 @@
 	);
 	let activeTab = $state<DashboardTab>('orders');
 	let selectedOrderId = $state<string | null>(null);
-	let showPaymentPendingBanner = $state(false);
+	let paymentNotice = $state<'pending' | 'unknown' | null>(null);
 	let showAffiliateAccessNudge = $state(false);
 
 	function affiliateNudgeDismissed(): boolean {
@@ -282,11 +282,16 @@
 		selectedOrderId = orderIdParam || null;
 
 		const paymentPendingParam = String(url.searchParams.get('paymentPending') || '').trim();
-		showPaymentPendingBanner = paymentPendingParam === '1';
+		paymentNotice =
+			paymentPendingParam === '1'
+				? 'pending'
+				: paymentPendingParam === 'unknown'
+					? 'unknown'
+					: null;
 	}
 
 	function dismissPaymentPendingBanner(): void {
-		showPaymentPendingBanner = false;
+		paymentNotice = null;
 		if (typeof window === 'undefined') return;
 		const nextUrl = new URL(window.location.href);
 		nextUrl.searchParams.delete('paymentPending');
@@ -387,7 +392,7 @@
 		</div>
 	</div>
 
-	{#if showPaymentPendingBanner}
+	{#if paymentNotice}
 		<div
 			class="mb-5 flex items-start justify-between gap-3 rounded-[var(--r-sm)] border px-4 py-3"
 			style="background: rgba(202,219,46,0.12); border-color: rgba(202,219,46,0.32);"
@@ -399,18 +404,21 @@
 						class="text-sm font-semibold"
 						style="color: var(--text); font-family: var(--font-head);"
 					>
-						Payment Confirmation Pending
+						{paymentNotice === 'unknown'
+							? 'We couldn’t confirm your order'
+							: 'Waiting for payment confirmation'}
 					</p>
 					<p class="text-xs sm:text-sm" style="color: var(--text-muted);">
-						We are still waiting for Monnify confirmation. This order will auto-update once payment
-						is verified.
+						{paymentNotice === 'unknown'
+							? 'Check your orders below before you try again. If it isn’t there, you weren’t charged.'
+							: 'Your order updates here by itself once Monnify confirms the payment.'}
 					</p>
 				</div>
 			</div>
 			<button
 				type="button"
 				onclick={dismissPaymentPendingBanner}
-				aria-label="Dismiss payment pending notice"
+				aria-label="Dismiss this notice"
 				class="rounded-full p-1.5 transition hover:opacity-80"
 				style="border: 1px solid var(--border); color: var(--text-muted);"
 			>

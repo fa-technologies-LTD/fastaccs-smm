@@ -34,4 +34,13 @@ describe('dashboard rewards strip', () => {
 		expect(body).toContain('Spend ₦12,000 more to get ₦3,000 store credit');
 		expect(body).toContain('Refer a friend: get ₦1,000 credit when they spend ₦5,000');
 	});
+
+	it('splits refund and reward credit and says how reward credit can be used', () => {
+		const body = html({
+			storeCredit: { totalAvailable: 16_500, refundAvailable: 1_800, earnedAvailable: 14_700 },
+			rewards: null
+		});
+		expect(body).toContain('₦16,500');
+		expect(body).toContain('₦1,800 refund · ₦14,700 reward');
+	});
 });

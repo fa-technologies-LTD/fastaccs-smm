@@ -958,11 +958,8 @@
 			}
 			const message = error instanceof Error ? error.message : 'Please try again.';
 			if (/timed out|failed to create order/i.test(message)) {
-				showWarning(
-					'We’re finishing this safely',
-					'Open My Orders to see the saved checkout status. Don’t start a second payment.'
-				);
-				goto('/dashboard?tab=orders&paymentPending=1');
+				// We don't know whether the order was saved: My Orders shows the answer, so say exactly that.
+				goto('/dashboard?tab=orders&paymentPending=unknown');
 			} else {
 				showError('Checkout could not start', message);
 			}
