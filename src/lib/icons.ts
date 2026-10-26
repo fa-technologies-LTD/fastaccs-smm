@@ -88,7 +88,8 @@ import {
 	IconUserPlus,
 	IconUsers,
 	IconWallet,
-	IconX
+	IconX,
+	IconGift
 } from '@tabler/icons-svelte';
 
 export const Activity = IconActivity;
@@ -182,6 +183,7 @@ export const UserCheck = IconUserCheck;
 export const UserPlus = IconUserPlus;
 export const Users = IconUsers;
 export const Wallet = IconWallet;
+export const Gift = IconGift;
 export const X = IconX;
 export const XCircle = IconCircleX;
 export const Zap = IconBolt;

@@ -10,13 +10,15 @@
 		Check,
 		Lock,
 		Tag,
-		Shield,
 		X,
 		Minus,
 		Plus,
 		ExternalLink,
-		Edit
+		Edit,
+		Gift,
+		Wallet
 	} from '$lib/icons';
+	import AnimatedAmount from '$lib/components/checkout/AnimatedAmount.svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
@@ -35,7 +37,6 @@
 	import { formatPrice } from '$lib/helpers/utils';
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
 	import { validateLinkForAction } from '$lib/helpers/social-link-validator';
-	import { BOOSTING_TURNAROUND_MESSAGE } from '$lib/helpers/boosting-service-config';
 	import type { BoostingPlatform, BoostingActionType } from '$lib/helpers/social-link-validator';
 	import { buildCheckoutFingerprint } from '$lib/helpers/checkout-session';
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
@@ -58,6 +59,12 @@
 	let promoAppliedCode = $state<string | null>(null);
 	let promoDiscountAmount = $state(0);
 	let promoValidationLoading = $state(false);
+	// Code box: shown on demand; feedback stays inline (error under the field, a short celebration on success).
+	let showCodeInput = $state(false);
+	let promoError = $state('');
+	let promoCelebrate = $state(false);
+	let promoReplacesReferral = $state(false);
+	let promoCelebrateTimer: ReturnType<typeof setTimeout> | undefined;
 	let loadingCartData = $state(true);
 	let cartLoadError = $state<string | null>(null);
 	let checkoutSlow = $state(false);
@@ -186,6 +193,31 @@
 	);
 	const hasBoostingOrder = $derived(cartItems.some((item) => Boolean(item.boosting)));
 	const hasNumbersOrder = $derived(cartItems.some((item) => item.tier.deliveryMode === 'auto_sms'));
+	// One line under the pay button: what happens next, for the kind of order in the cart.
+	const deliveryNote = $derived.by(() => {
+		const after = payableTotal > 0 ? 'after payment' : 'after you confirm';
+		if (hasBoostingOrder) return `Delivery starts ${after}. Track it on your order page.`;
+		if (hasNumbersOrder) return `Your number opens right ${after}. The code appears there.`;
+		if (hasManualHandover)
+			return 'We send the login details on WhatsApp. Your order page shows the link.';
+		return `Login details appear on your dashboard right ${after}.`;
+	});
+	// A short glow on the pay button whenever the amount due changes (credit or a code applied).
+	let payPulse = $state(false);
+	let lastPayable: number | null = null;
+	$effect(() => {
+		const amount = payableTotal;
+		const changed = lastPayable !== null && amount !== lastPayable;
+		lastPayable = amount;
+		if (!changed) return;
+		payPulse = false;
+		const frame = requestAnimationFrame(() => (payPulse = true));
+		const timer = setTimeout(() => (payPulse = false), 650);
+		return () => {
+			cancelAnimationFrame(frame);
+			clearTimeout(timer);
+		};
+	});
 	$effect(() => {
 		const signature = JSON.stringify(cart.items);
 		if (!loadingCartData && !loading && signature !== loadedCartSignature) void loadCartData(true);
@@ -313,6 +345,7 @@
 		}
 
 		promoValidationLoading = true;
+		promoError = '';
 		try {
 			const response = await fetch('/api/promotions/validate', {
 				method: 'POST',
@@ -340,20 +373,16 @@
 
 			promoAppliedCode = result.data.code;
 			promoDiscountAmount = Number(result.data.discountAmount || 0);
-			showSuccess(
-				'Promo applied',
-				result.data.replacesReferralDiscount
-					? `${result.data.code} saved ${formatPrice(promoDiscountAmount)}, used instead of your referral discount on this order`
-					: `${result.data.code} saved ${formatPrice(promoDiscountAmount)}`
-			);
+			promoReplacesReferral = Boolean(result.data.replacesReferralDiscount);
+			showCodeInput = false;
+			promoCelebrate = true;
+			clearTimeout(promoCelebrateTimer);
+			promoCelebrateTimer = setTimeout(() => (promoCelebrate = false), 900);
 		} catch (error) {
 			promoAppliedCode = null;
 			promoDiscountAmount = 0;
-			promoCodeInput = ''; // clear so a failed code doesn't look applied
-			showWarning(
-				'Promo not applied',
-				error instanceof Error ? error.message : 'Invalid promo code'
-			);
+			// Keep what they typed so a small typo is easy to fix; the message says what went wrong.
+			promoError = error instanceof Error ? error.message : 'This code isn’t valid.';
 		} finally {
 			promoValidationLoading = false;
 		}
@@ -363,6 +392,9 @@
 		promoAppliedCode = null;
 		promoDiscountAmount = 0;
 		promoCodeInput = '';
+		promoError = '';
+		promoReplacesReferral = false;
+		promoCelebrate = false;
 	}
 
 	function redirectToLoginWithReturnUrl(): void {
@@ -1043,64 +1075,6 @@
 			</div>
 		{:else}
 			<div class="flex flex-col gap-4 sm:gap-6">
-				<div class="order-2">
-					<!-- Customer Information -->
-					<div
-						class="rounded-lg p-4 shadow-sm sm:p-5"
-						style="background: var(--bg-elev-1); border: 1px solid var(--border);"
-					>
-						{#if user}
-							<div class="flex items-center gap-3">
-								<Check size={20} style="color: var(--primary);" />
-								<div class="flex-1">
-									<p class="font-medium" style="color: var(--text); font-family: var(--font-body);">
-										Ordering as {user?.fullName || user?.email}
-									</p>
-									<p
-										class="text-sm"
-										style="color: var(--text-muted); font-family: var(--font-body);"
-									>
-										This order will be saved to your account
-									</p>
-								</div>
-								{#if user?.avatarUrl}
-									<img src={user.avatarUrl} alt="Profile" class="h-10 w-10 rounded-full" />
-								{/if}
-							</div>
-						{:else}
-							<!-- Login Required -->
-							<div
-								class="rounded-lg p-4"
-								style="background: rgba(202,219,46,0.12); border: 1px solid rgba(202,219,46,0.3);"
-							>
-								<h3
-									class="mb-3 text-base font-semibold"
-									style="color: var(--text); font-family: var(--font-head);"
-								>
-									Customer Information
-								</h3>
-								<div class="flex items-center gap-3">
-									<Lock size={20} style="color: var(--fa-lime-700);" />
-									<div class="flex-1">
-										<p
-											class="font-medium"
-											style="color: var(--text); font-family: var(--font-head);"
-										>
-											Sign in to checkout
-										</p>
-										<p
-											class="text-sm"
-											style="color: var(--text-muted); font-family: var(--font-body);"
-										>
-											Your order and delivery details will be saved to your account.
-										</p>
-									</div>
-								</div>
-							</div>
-						{/if}
-					</div>
-				</div>
-
 				<!-- Order Summary -->
 				<div class="order-1">
 					<div
@@ -1281,7 +1255,7 @@
 													class="rounded-md px-2 py-1 text-xs font-semibold"
 													style="border: 1px solid var(--border); color: var(--text-muted); background: var(--bg-elev-2);"
 												>
-													Qty 1 locked
+													{item.tier.deliveryMode === 'auto_sms' ? '1 number' : '1 account'}
 												</span>
 											{:else}
 												<div
@@ -1334,63 +1308,131 @@
 						<hr class="my-8" style="border-color: var(--border);" />
 
 						{#if !hasBoostingOrder && !hasNumbersOrder}
-							<div
-								class="mb-4 rounded-lg p-3"
-								style="border: 1px solid var(--border); background: var(--bg);"
-							>
-								<p class="mb-2 text-xs font-semibold uppercase" style="color: var(--text-muted);">
-									Promo or affiliate code (optional)
-								</p>
-								{#if data.availablePromo && !promoAppliedCode}
-									<button
-										type="button"
-										onclick={() => {
-											promoCodeInput = data.availablePromo!.code;
-											void applyPromoCode();
-										}}
-										class="mb-2 flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold transition-transform active:scale-[0.99]"
-										style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.35); color: var(--primary);"
-									>
-										<span>🎁 You've got {data.availablePromo.label} — tap to apply</span>
-										<span
-											class="shrink-0 rounded-full px-2 py-0.5"
-											style="background: var(--primary); color: #04140c;">Apply</span
-										>
-									</button>
-								{/if}
-								<div class="flex items-center gap-2">
-									<input
-										type="text"
-										bind:value={promoCodeInput}
-										placeholder="Enter promo code"
-										class="w-full rounded-lg px-3 py-2 text-sm"
-										style="border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text);"
-									/>
-									<button
-										type="button"
-										onclick={applyPromoCode}
-										disabled={promoValidationLoading || !promoCodeInput.trim()}
-										class="rounded-full px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-										style="background: var(--btn-primary-gradient);"
-									>
-										{promoValidationLoading ? 'Checking...' : 'Apply'}
-									</button>
-								</div>
+							<div class="mb-4 space-y-2" style="font-family: var(--font-body);">
 								{#if promoAppliedCode}
 									<div
-										class="mt-2 flex items-center justify-between rounded-lg p-2 text-xs"
-										style="background: rgba(5,212,113,0.12); border: 1px solid rgba(5,212,113,0.3); color: var(--primary);"
+										class="promo-applied flex items-center gap-3 rounded-xl p-3"
+										class:promo-applied--celebrate={promoCelebrate}
+										role="status"
 									>
-										<span>Applied: <strong>{promoAppliedCode}</strong></span>
+										<span class="promo-applied__check" aria-hidden="true">
+											<Check size={16} />
+											{#if promoCelebrate}
+												{#each [0, 1, 2, 3, 4, 5, 6, 7] as spark (spark)}
+													<i style="--spark: {spark}"></i>
+												{/each}
+											{/if}
+										</span>
+										<span class="min-w-0 flex-1">
+											<span class="block text-sm font-semibold" style="color: var(--text);"
+												>{promoAppliedCode} applied</span
+											>
+											{#if promoReplacesReferral}
+												<span class="block text-xs" style="color: var(--text-muted);"
+													>Used instead of your referral discount</span
+												>
+											{/if}
+										</span>
+										<span class="shrink-0 text-right">
+											<span class="block text-[11px]" style="color: var(--text-muted);"
+												>You save</span
+											>
+											<span class="block text-sm font-bold" style="color: var(--primary);">
+												<AnimatedAmount
+													value={activeServerQuote?.discount ?? promoDiscountAmount}
+													from={0}
+												/>
+											</span>
+										</span>
 										<button
 											type="button"
 											onclick={clearPromoCode}
-											class="rounded-full px-2 py-1 font-semibold"
-											style="background: var(--surface); color: var(--text); border: 1px solid var(--border);"
+											class="shrink-0 text-xs underline"
+											style="color: var(--text-muted);">Remove</button
 										>
-											Remove
-										</button>
 									</div>
+								{:else}
+									{#if data.availablePromo}
+										{@const offerShortBy = Math.max(
+											0,
+											Number(data.availablePromo.minOrderValue || 0) - cartTotal
+										)}
+										<button
+											type="button"
+											onclick={() => {
+												promoCodeInput = data.availablePromo!.code;
+												void applyPromoCode();
+											}}
+											disabled={promoValidationLoading || offerShortBy > 0}
+											class="offer-card flex w-full items-center gap-3 rounded-xl p-3 text-left"
+										>
+											<span class="offer-card__icon" aria-hidden="true"><Gift size={18} /></span>
+											<span class="min-w-0 flex-1">
+												<span class="block text-sm font-semibold" style="color: var(--text);"
+													>{data.availablePromo.label}</span
+												>
+												<span
+													class="block text-xs"
+													style="color: {offerShortBy > 0
+														? 'var(--primary)'
+														: 'var(--text-muted)'};"
+													>{offerShortBy > 0
+														? `Add ${formatPrice(offerShortBy)} more to use it`
+														: 'Your first-order offer'}</span
+												>
+											</span>
+											{#if offerShortBy <= 0}
+												<span class="offer-card__cta"
+													>{promoValidationLoading && promoCodeInput === data.availablePromo.code
+														? 'Applying…'
+														: 'Apply'}</span
+												>
+											{/if}
+										</button>
+									{/if}
+									{#if showCodeInput}
+										<form
+											class="flex items-center gap-2"
+											onsubmit={(event) => {
+												event.preventDefault();
+												void applyPromoCode();
+											}}
+										>
+											<input
+												type="text"
+												bind:value={promoCodeInput}
+												oninput={() => (promoError = '')}
+												placeholder="Enter code"
+												aria-label="Promo or referral code"
+												aria-invalid={promoError ? 'true' : undefined}
+												autocomplete="off"
+												autocapitalize="characters"
+												class="w-full rounded-lg px-3 py-2 text-sm uppercase placeholder:normal-case"
+												style="border: 1px solid {promoError
+													? 'var(--status-error)'
+													: 'var(--border)'}; background: var(--bg-elev-1); color: var(--text);"
+											/>
+											<button
+												type="submit"
+												disabled={promoValidationLoading || !promoCodeInput.trim()}
+												class="btn-fa btn-fa--primary shrink-0 px-4 text-xs"
+											>
+												{promoValidationLoading ? 'Checking…' : 'Apply'}
+											</button>
+										</form>
+									{:else}
+										<button
+											type="button"
+											onclick={() => (showCodeInput = true)}
+											class="text-xs font-semibold"
+											style="color: var(--primary);">Have a code?</button
+										>
+									{/if}
+									{#if promoError}
+										<p class="text-xs" role="alert" style="color: var(--status-error);">
+											{promoError}
+										</p>
+									{/if}
 								{/if}
 							</div>
 						{/if}
@@ -1472,55 +1514,19 @@
 								</label>
 							{/if}
 							<hr style="border-color: var(--border);" />
-							<div class="flex justify-between text-base font-bold sm:text-lg">
-								<span style="color: var(--text); font-family: var(--font-head);">Total</span>
-								<span style="color: var(--primary); font-family: var(--font-head);">
-									{formatPrice(payableTotal)}
+							<div class="flex items-baseline justify-between">
+								<span
+									class="text-base font-semibold sm:text-lg"
+									style="color: var(--text); font-family: var(--font-head);">To pay</span
+								>
+								<span
+									class="text-2xl font-bold sm:text-3xl"
+									style="color: var(--primary); font-family: var(--font-head);"
+								>
+									<AnimatedAmount value={payableTotal} />
 								</span>
 							</div>
 						</div>
-						<!-- Payment method status -->
-						<div
-							class="mb-4 flex items-center justify-between rounded-lg p-3"
-							style="background: var(--bg-elev-2); border: 1px solid var(--border-2);"
-						>
-							<div class="flex items-center gap-2">
-								<Shield
-									size={20}
-									style={payableTotal <= 0
-										? 'color: var(--primary);'
-										: 'color: var(--fa-blue-300);'}
-								/>
-								<span
-									class="text-sm font-medium"
-									style="color: var(--text); font-family: var(--font-body);"
-									>{payableTotal <= 0
-										? 'Covered by your store credit'
-										: 'Payments secured by Monnify'}</span
-								>
-							</div>
-							{#if payableTotal > 0}
-								<a
-									href="/support"
-									class="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
-								>
-									Payment FAQ
-								</a>
-							{/if}
-						</div>
-						<p class="mb-2 text-center text-xs leading-relaxed" style="color: var(--text-dim);">
-							{#if hasBoostingOrder}
-								After payment, your order is queued for delivery. {BOOSTING_TURNAROUND_MESSAGE}
-								Track the latest status on your order page.
-							{:else if hasNumbersOrder}
-								After payment, we’ll take you straight to your number. Your code appears there
-								automatically.
-							{:else if hasManualHandover}
-								Login details are delivered on WhatsApp. Your order page will show you the link.
-							{:else}
-								Account details will be available on your dashboard once payment is confirmed.
-							{/if}
-						</p>
 						<!-- Complete checkout -->
 						{#if resumableAttempt}
 							<p
@@ -1528,11 +1534,10 @@
 								class="mt-4 rounded-lg border p-3 text-sm"
 								style="border-color: var(--border); color: var(--text-muted);"
 							>
-								Your earlier checkout is saved at {formatPrice(
+								You started a {formatPrice(
 									resumableAttempt.acceptedQuote?.payable ?? resumableAttempt.totalAmount
-								)}. Continue it, or
-								<a class="underline" href="/dashboard?tab=orders">review it in My Orders</a> before starting
-								another payment.
+								)} payment earlier.
+								<a class="underline" href="/dashboard?tab=orders">See it in My Orders</a>
 							</p>
 						{:else if savedAttempt}
 							<p
@@ -1554,10 +1559,22 @@
 								{currentPriceChangeMessage}
 							</p>
 						{/if}
+						{#if !user}
+							<p
+								class="mt-4 text-center text-xs"
+								style="color: var(--text-muted); font-family: var(--font-body);"
+							>
+								Have store credit? Sign in to use it.
+							</p>
+						{/if}
 						<button
 							onclick={payWithMonnify}
 							disabled={loading || loadingCartData}
-							class="btn-fa btn-fa--primary mt-6 w-full py-3 sm:py-4 sm:text-base"
+							aria-busy={loading}
+							class="btn-fa btn-fa--primary pay-button w-full py-3 sm:py-4 sm:text-base {user
+								? 'mt-6'
+								: 'mt-3'}"
+							class:pay-button--pulse={payPulse}
 						>
 							{#if loading}
 								<div
@@ -1570,51 +1587,43 @@
 											: 'Applying your store credit…'
 										: checkoutSlow
 											? 'Saving your order…'
-											: 'Processing…'}</span
+											: 'Securing your order…'}</span
 								>
+								<span class="pay-button__progress" aria-hidden="true"></span>
 							{:else if !user}
 								<Lock size={18} class="sm:h-5 sm:w-5" />
-								<span class="text-sm sm:text-base">Sign in &amp; continue</span>
+								<span class="text-sm sm:text-base">Sign in to continue</span>
 							{:else if resumableAttempt}
-								<span class="text-sm sm:text-base">Continue saved checkout</span>
+								<span class="text-sm sm:text-base">Finish that payment</span>
 							{:else if currentPriceChangeMessage}
 								<span class="text-sm sm:text-base">Confirm updated total &amp; continue</span>
 							{:else if payableTotal <= 0}
-								<CreditCard size={18} class="sm:h-5 sm:w-5" />
-								<span class="text-sm sm:text-base">Complete Order</span>
+								<Wallet size={18} class="sm:h-5 sm:w-5" />
+								<span class="text-sm sm:text-base">Pay with store credit</span>
 							{:else}
 								<CreditCard size={18} class="sm:h-5 sm:w-5" />
-								<span class="text-sm sm:text-base">Pay Now</span>
+								<span class="text-sm sm:text-base">Pay <AnimatedAmount value={payableTotal} /></span
+								>
 							{/if}
 						</button>
 						<p
 							class="mt-3 text-center text-xs leading-relaxed"
 							style="color: var(--text-dim); font-family: var(--font-body);"
 						>
-							{payableTotal <= 0 ? 'By completing your order' : 'By continuing with payment'}, you
-							agree to our
-							<a href="/terms" class="hover:underline" style="color: var(--link);">Terms</a>,
+							{payableTotal > 0
+								? 'Secure payment by Monnify · '
+								: 'Nothing to pay by card. '}{deliveryNote}
+						</p>
+						<p
+							class="mt-1 text-center text-xs leading-relaxed"
+							style="color: var(--text-dim); font-family: var(--font-body);"
+						>
+							By {payableTotal > 0 ? 'paying' : 'confirming'} you agree to our
+							<a href="/terms" class="hover:underline" style="color: var(--link);">Terms</a> and
 							<a href="/refund-policy" class="hover:underline" style="color: var(--link);"
 								>Refund Policy</a
-							>,
-							<a href="/privacy" class="hover:underline" style="color: var(--link);"
-								>Privacy Notice</a
-							>, and
-							<a href="/acceptable-use" class="hover:underline" style="color: var(--link);"
-								>Acceptable Use Rules</a
 							>.
 						</p>
-
-						<!-- Security Notice -->
-						<div class="mt-6">
-							<div
-								class="flex items-center justify-center gap-2 text-xs"
-								style="color: var(--text-dim); font-family: var(--font-body);"
-							>
-								<Lock size={12} />
-								<span>Secure encrypted connection</span>
-							</div>
-						</div>
 					</div>
 				</div>
 			</div>
@@ -1625,6 +1634,164 @@
 <Footer />
 
 <style>
+	/* Pay button: a soft shine on hover, a press-in on tap, a glow when the amount changes, and a
+	   moving bar while the order is being secured. All of it stops under reduced motion. */
+	.pay-button {
+		position: relative;
+		overflow: hidden;
+		transition:
+			transform 120ms ease,
+			box-shadow 200ms ease;
+	}
+	.pay-button:active:not(:disabled) {
+		transform: scale(0.98);
+	}
+	.pay-button::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(
+			110deg,
+			transparent 30%,
+			rgba(255, 255, 255, 0.32) 50%,
+			transparent 70%
+		);
+		transform: translateX(-120%);
+		pointer-events: none;
+	}
+	@media (hover: hover) {
+		.pay-button:not(:disabled):hover::after {
+			transform: translateX(120%);
+			transition: transform 750ms ease;
+		}
+	}
+	.pay-button--pulse {
+		animation: pay-pulse 650ms ease-out;
+	}
+	@keyframes pay-pulse {
+		from {
+			box-shadow: 0 0 0 0 rgba(5, 212, 113, 0.55);
+		}
+		to {
+			box-shadow: 0 0 0 14px rgba(5, 212, 113, 0);
+		}
+	}
+	.pay-button__progress {
+		position: absolute;
+		left: 0;
+		bottom: 0;
+		width: 40%;
+		height: 3px;
+		border-radius: 999px;
+		background: rgba(4, 20, 12, 0.45);
+		animation: pay-progress 1.1s ease-in-out infinite;
+	}
+	@keyframes pay-progress {
+		from {
+			transform: translateX(-100%);
+		}
+		to {
+			transform: translateX(260%);
+		}
+	}
+
+	/* First-order offer and applied-code card. */
+	.offer-card {
+		background: rgba(5, 212, 113, 0.08);
+		border: 1px solid rgba(5, 212, 113, 0.3);
+		transition:
+			border-color 150ms ease,
+			transform 120ms ease;
+	}
+	.offer-card:not(:disabled):hover {
+		border-color: rgba(5, 212, 113, 0.6);
+	}
+	.offer-card:active:not(:disabled) {
+		transform: scale(0.99);
+	}
+	.offer-card__icon {
+		display: grid;
+		place-items: center;
+		width: 34px;
+		height: 34px;
+		flex-shrink: 0;
+		border-radius: 10px;
+		background: rgba(5, 212, 113, 0.16);
+		color: var(--primary);
+	}
+	.offer-card__cta {
+		flex-shrink: 0;
+		padding: 6px 14px;
+		border-radius: 999px;
+		background: var(--primary);
+		color: #04140c;
+		font-size: 0.75rem;
+		font-weight: 700;
+	}
+	.promo-applied {
+		background: rgba(5, 212, 113, 0.1);
+		border: 1px solid rgba(5, 212, 113, 0.4);
+	}
+	.promo-applied--celebrate {
+		animation: promo-pop 420ms cubic-bezier(0.2, 1.4, 0.4, 1);
+	}
+	@keyframes promo-pop {
+		from {
+			transform: scale(0.96);
+		}
+		to {
+			transform: scale(1);
+		}
+	}
+	.promo-applied__check {
+		position: relative;
+		display: grid;
+		place-items: center;
+		width: 28px;
+		height: 28px;
+		flex-shrink: 0;
+		border-radius: 999px;
+		background: var(--primary);
+		color: #04140c;
+	}
+	.promo-applied__check i {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 5px;
+		height: 5px;
+		margin: -2.5px 0 0 -2.5px;
+		border-radius: 999px;
+		background: var(--primary);
+		opacity: 0;
+		animation: promo-spark 700ms ease-out forwards;
+	}
+	@keyframes promo-spark {
+		from {
+			opacity: 1;
+			transform: rotate(calc(var(--spark) * 45deg)) translateY(-8px) scale(1);
+		}
+		to {
+			opacity: 0;
+			transform: rotate(calc(var(--spark) * 45deg)) translateY(-26px) scale(0.4);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.pay-button,
+		.pay-button::after,
+		.pay-button__progress,
+		.pay-button--pulse,
+		.offer-card,
+		.promo-applied--celebrate,
+		.promo-applied__check i {
+			animation: none !important;
+			transition: none !important;
+		}
+		.promo-applied__check i {
+			display: none;
+		}
+	}
+
 	.line-clamp-2 {
 		display: -webkit-box;
 		-webkit-line-clamp: 2;

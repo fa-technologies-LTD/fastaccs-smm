@@ -118,7 +118,7 @@ it('does not redirect a removed Boosting offer to Numbers or clear other cart it
 	render(Checkout, {
 		data: { user, storeCredit: { totalAvailable: 0 }, affiliateRef: null }
 	} as never);
-	await page.getByRole('button', { name: 'Pay Now', exact: true }).click();
+	await page.getByRole('button', { name: /^Pay ₦/ }).click();
 	await expect.poll(() => mocks.warning.mock.calls.length).toBeGreaterThan(0);
 	expect(mocks.goto.mock.calls.some((call) => call[0] === '/numbers')).toBe(false);
 	expect(cart.itemCount).toBe(1);
@@ -144,7 +144,7 @@ it('does not discard an uncertain payment attempt based on generic unavailable w
 	render(Checkout, {
 		data: { user, storeCredit: { totalAvailable: 0 }, affiliateRef: null }
 	} as never);
-	await page.getByRole('button', { name: 'Pay Now', exact: true }).click();
+	await page.getByRole('button', { name: /^Pay ₦/ }).click();
 	await expect.poll(() => mocks.createOrder.mock.calls.length).toBe(1);
 	expect(JSON.parse(localStorage.getItem('fastaccs_checkout_session')!).request).toMatchObject({
 		userId: user.id
@@ -185,7 +185,7 @@ it('resumes the original accepted request after a lost response even if current 
 	render(Checkout, {
 		data: { user, storeCredit: { totalAvailable: 0 }, affiliateRef: null }
 	} as never);
-	await page.getByRole('button', { name: 'Continue saved checkout', exact: true }).click();
+	await page.getByRole('button', { name: 'Finish that payment', exact: true }).click();
 	const { analytics: _previousConsent, ...financialIntent } = request;
 	expect(mocks.createOrder.mock.calls[0][0]).toMatchObject(financialIntent);
 	expect(mocks.createOrder.mock.calls[0][0].analytics).toMatchObject({
@@ -242,10 +242,8 @@ it('replaces an earlier Monnify attempt once store credit is used', async () => 
 	} as never);
 	// Credit is on by default, so the earlier card attempt is not offered for continuing.
 	await expect.element(page.getByText('This replaces your earlier ₦500 checkout.')).toBeVisible();
-	expect(
-		page.getByRole('button', { name: 'Continue saved checkout', exact: true }).query()
-	).toBeNull();
-	await page.getByRole('button', { name: 'Complete Order', exact: true }).click();
+	expect(page.getByRole('button', { name: 'Finish that payment', exact: true }).query()).toBeNull();
+	await page.getByRole('button', { name: 'Pay with store credit', exact: true }).click();
 	await expect.poll(() => mocks.createOrder.mock.calls.length).toBe(1);
 	expect(mocks.createOrder.mock.calls[0][0]).toMatchObject({
 		useStoreCredit: true,
@@ -266,9 +264,9 @@ it('requires another click after refreshing a changed price, before creating any
 	render(Checkout, {
 		data: { user, storeCredit: { totalAvailable: 0 }, affiliateRef: null }
 	} as never);
-	await expect.element(page.getByRole('button', { name: 'Pay Now', exact: true })).toBeEnabled();
+	await expect.element(page.getByRole('button', { name: /^Pay ₦/ })).toBeEnabled();
 	price = 1000;
-	await page.getByRole('button', { name: 'Pay Now', exact: true }).click();
+	await page.getByRole('button', { name: /^Pay ₦/ }).click();
 	await expect
 		.element(page.getByRole('button', { name: 'Confirm updated total & continue', exact: true }))
 		.toBeEnabled();
@@ -304,7 +302,7 @@ it('uses the server quote for a changed credit balance and asks for confirmation
 			affiliateRef: null
 		}
 	} as never);
-	await page.getByRole('button', { name: 'Complete Order', exact: true }).click();
+	await page.getByRole('button', { name: 'Pay with store credit', exact: true }).click();
 	await expect
 		.element(page.getByRole('button', { name: 'Confirm updated total & continue', exact: true }))
 		.toBeEnabled();
@@ -386,8 +384,10 @@ it('does not apply a fractional earned-credit remainder the server will refuse',
 			affiliateRef: null
 		}
 	} as never);
-	await expect.element(page.getByRole('button', { name: 'Pay Now', exact: true })).toBeVisible();
-	expect(page.getByRole('button', { name: 'Complete Order', exact: true }).query()).toBeNull();
+	await expect.element(page.getByRole('button', { name: /^Pay ₦/ })).toBeVisible();
+	expect(
+		page.getByRole('button', { name: 'Pay with store credit', exact: true }).query()
+	).toBeNull();
 });
 it('uses store credit by default and remembers an untick for the rest of the visit', async () => {
 	seed();
@@ -399,11 +399,11 @@ it('uses store credit by default and remembers an untick for the rest of the vis
 	await expect.element(box).toBeChecked();
 	await expect.element(page.getByText('₦500 left after this order')).toBeVisible();
 	await expect
-		.element(page.getByRole('button', { name: 'Complete Order', exact: true }))
+		.element(page.getByRole('button', { name: 'Pay with store credit', exact: true }))
 		.toBeVisible();
 	await box.click();
 	await expect.element(page.getByText('Use your ₦1,000 store credit')).toBeVisible();
-	await expect.element(page.getByRole('button', { name: 'Pay Now', exact: true })).toBeVisible();
+	await expect.element(page.getByRole('button', { name: /^Pay ₦/ })).toBeVisible();
 	view.unmount();
 	render(Checkout, { data: { user, storeCredit: credit, affiliateRef: null } } as never);
 	await expect.element(page.getByRole('checkbox', { name: /store credit/i })).not.toBeChecked();
@@ -422,7 +422,98 @@ it('says why reward credit only pays part of a larger order', async () => {
 	await expect
 		.element(page.getByText('₦16,500 balance · reward credit pays up to 30% of an order'))
 		.toBeVisible();
-	await expect.element(page.getByRole('button', { name: 'Pay Now', exact: true })).toBeVisible();
+	await expect.element(page.getByRole('button', { name: /^Pay ₦/ })).toBeVisible();
+});
+function accountCart(validate: () => Response) {
+	cart.addTier('fixture-account', 1);
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async (input) => {
+			const url = String(input);
+			if (url.includes('/api/cart/refresh'))
+				return Response.json({
+					success: true,
+					data: {
+						items: [
+							{
+								...cart.items[0],
+								tier: {
+									id: 'fixture-account',
+									name: 'Aged X account',
+									price: 2000,
+									slug: 'aged-x',
+									platformName: 'X',
+									platformSlug: 'x',
+									isActive: true,
+									deliveryMode: 'instant_auto'
+								}
+							}
+						],
+						messages: []
+					}
+				});
+			if (url.includes('/api/promotions/validate')) return validate();
+			return Response.json({ success: true, data: [] });
+		})
+	);
+}
+it('applies the first-order offer in one tap and shows what it saves', async () => {
+	accountCart(() =>
+		Response.json({ success: true, data: { code: 'WELCOME10', discountAmount: 200 } })
+	);
+	render(Checkout, {
+		data: {
+			user,
+			storeCredit: { totalAvailable: 0 },
+			affiliateRef: null,
+			availablePromo: {
+				code: 'WELCOME10',
+				value: 10,
+				minOrderValue: 0,
+				label: '10% off your first account order'
+			}
+		}
+	} as never);
+	await page.getByRole('button', { name: /10% off your first account order/ }).click();
+	await expect.element(page.getByText('WELCOME10 applied')).toBeVisible();
+	await expect.element(page.getByRole('button', { name: /^Pay ₦1,800/ })).toBeVisible();
+	expect(page.getByRole('button', { name: /10% off your first account order/ }).query()).toBeNull();
+});
+it('shows how much more is needed instead of offering a code the cart cannot use yet', async () => {
+	accountCart(() =>
+		Response.json({ success: true, data: { code: 'WELCOME10', discountAmount: 200 } })
+	);
+	render(Checkout, {
+		data: {
+			user,
+			storeCredit: { totalAvailable: 0 },
+			affiliateRef: null,
+			availablePromo: {
+				code: 'WELCOME10',
+				value: 200,
+				minOrderValue: 2500,
+				label: '₦200 off your first account order'
+			}
+		}
+	} as never);
+	await expect.element(page.getByText('Add ₦500 more to use it')).toBeVisible();
+	await expect
+		.element(page.getByRole('button', { name: /₦200 off your first account order/ }))
+		.toBeDisabled();
+});
+it('keeps a mistyped code in the field and explains the problem in place', async () => {
+	accountCart(() =>
+		Response.json({ success: false, error: 'This code isn’t valid.' }, { status: 400 })
+	);
+	render(Checkout, {
+		data: { user, storeCredit: { totalAvailable: 0 }, affiliateRef: null }
+	} as never);
+	await page.getByRole('button', { name: 'Have a code?', exact: true }).click();
+	const field = page.getByRole('textbox', { name: 'Promo or referral code' });
+	await field.fill('WELCOM10');
+	await page.getByRole('button', { name: 'Apply', exact: true }).click();
+	await expect.element(page.getByRole('alert')).toHaveTextContent('This code isn’t valid.');
+	await expect.element(field).toHaveValue('WELCOM10');
 });
 it('keeps mobile Checkout clickable with the first-visit consent banner, and closes on Escape', async () => {
 	seed();
