@@ -29,6 +29,10 @@ export interface AdminOrderStatsSnapshot {
 	units_sold: number;
 	total_users: number;
 	manual_handovers_completed: number;
+	/** Paid account orders not yet delivered (e.g. waiting for a WhatsApp handover). */
+	awaiting_delivery: number;
+	/** Account orders marked completed without a confirmed payment (usually tests or manual entries). */
+	completed_unpaid: number;
 }
 
 export interface AdminBoostingOrderStatsSnapshot {
@@ -53,6 +57,12 @@ export interface AdminInventoryStatsSnapshot {
 	product_types: number;
 	accountsInOutOfStockTiers: number;
 	outOfStockTiersCount: number;
+	/** Reservations whose hold time has passed but the account never moved on. */
+	stale_reserved: number;
+	/** Accounts marked sold that are not attached to any order. */
+	sold_without_order: number;
+	/** Account types with some stock left but under the low-stock threshold, fewest first. */
+	lowStockTiers: Array<{ id: string; name: string; available: number }>;
 	lowStockThreshold: number;
 }
 
@@ -75,7 +85,9 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 		todaysRevenue,
 		unitsSold,
 		totalUsers,
-		manualHandoversCompleted
+		manualHandoversCompleted,
+		awaitingDelivery,
+		completedUnpaid
 	] = await Promise.all([
 		prisma.order.count({ where: ACCOUNT_ORDER_FILTER }),
 		prisma.order.count({ where: { ...ACCOUNT_ORDER_FILTER, ...buildRevenueOrderWhere() } }),
@@ -88,15 +100,9 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 		prisma.order.count({
 			where: { ...ACCOUNT_ORDER_FILTER, status: { in: [...ORDER_STATUS_GROUPS.completed] } }
 		}),
-		prisma.order.count({
-			where: {
-				...ACCOUNT_ORDER_FILTER,
-				OR: [{ status: 'cancelled' }, { paymentStatus: 'cancelled' }]
-			}
-		}),
-		prisma.order.count({
-			where: { ...ACCOUNT_ORDER_FILTER, status: { in: [...ORDER_STATUS_GROUPS.failed] } }
-		}),
+		// Cancelled and payment-failed are separate, non-overlapping counts (one status each).
+		prisma.order.count({ where: { ...ACCOUNT_ORDER_FILTER, status: 'cancelled' } }),
+		prisma.order.count({ where: { ...ACCOUNT_ORDER_FILTER, status: 'failed' } }),
 		prisma.order.count({ where: { ...ACCOUNT_ORDER_FILTER, createdAt: { gte: today } } }),
 		// Revenue ("Sales") stays combined across account + boosting by design.
 		prisma.order.aggregate({
@@ -123,6 +129,18 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 		// deliveryStatus stays 'processing'), so key off status.
 		prisma.order.count({
 			where: { deliveryMethod: 'whatsapp', status: 'completed' }
+		}),
+		prisma.order.count({
+			where: {
+				AND: [ACCOUNT_ORDER_FILTER, buildRevenueOrderWhere(), { status: { not: 'completed' } }]
+			}
+		}),
+		prisma.order.count({
+			where: {
+				...ACCOUNT_ORDER_FILTER,
+				status: 'completed',
+				paymentStatus: { notIn: ['paid', 'success', 'overpaid'] }
+			}
 		})
 	]);
 
@@ -139,7 +157,9 @@ export async function getOrderStatsSnapshot(): Promise<AdminOrderStatsSnapshot> 
 		todays_revenue: toNetSales(todaysRevenue._sum.totalAmount, todaysRevenue._sum.refundedAmount),
 		units_sold: unitsSold,
 		total_users: totalUsers,
-		manual_handovers_completed: manualHandoversCompleted
+		manual_handovers_completed: manualHandoversCompleted,
+		awaiting_delivery: awaitingDelivery,
+		completed_unpaid: completedUnpaid
 	};
 }
 
@@ -210,60 +230,77 @@ export async function getInventoryStatsSnapshot(
 		overrides.lowStockThreshold ?? (await getLowStockThresholdSetting().catch(() => 10));
 
 	const soldStatuses = [...new Set([...getAllocatedLikeAccountStatuses(), 'delivered'])];
-	const [totalTiers, totalPlatforms, totalAvailable, totalReserved, totalSold, tiers] =
-		await Promise.all([
-			prisma.category.count({
-				where: {
-					categoryType: 'tier',
-					isActive: true,
-					parentId: { not: null },
-					// Numbers (auto-SMS) tiers aren't account inventory — exclude from the tier count.
-					NOT: { metadata: { path: ['delivery_mode'], equals: 'auto_sms' } }
-				}
-			}),
-			prisma.category.count({
-				where: {
-					categoryType: 'platform',
-					isActive: true
-				}
-			}),
-			prisma.account.count({ where: { status: 'available' } }),
-			prisma.account.count({ where: { status: 'reserved' } }),
-			prisma.account.count({ where: { status: { in: soldStatuses } } }),
-			prisma.category.findMany({
-				where: {
-					categoryType: 'tier',
-					isActive: true,
-					parentId: { not: null },
-					// Manual-handover AND numbers (auto-SMS) tiers have no account inventory —
-					// they must never count toward account "out of stock".
-					NOT: [
-						{ metadata: { path: ['delivery_mode'], equals: 'manual_handover' } },
-						{ metadata: { path: ['delivery_mode'], equals: 'auto_sms' } }
-					]
-				},
-				select: {
-					id: true,
-					_count: {
-						select: {
-							accounts: {
-								where: {
-									status: 'available'
-								}
+	const now = new Date();
+	const [
+		totalTiers,
+		totalPlatforms,
+		totalAvailable,
+		totalReserved,
+		totalSold,
+		tiers,
+		staleReserved,
+		soldWithoutOrder
+	] = await Promise.all([
+		prisma.category.count({
+			where: {
+				categoryType: 'tier',
+				isActive: true,
+				parentId: { not: null },
+				// Numbers (auto-SMS) tiers aren't account inventory — exclude from the tier count.
+				NOT: { metadata: { path: ['delivery_mode'], equals: 'auto_sms' } }
+			}
+		}),
+		prisma.category.count({
+			where: {
+				categoryType: 'platform',
+				isActive: true
+			}
+		}),
+		prisma.account.count({ where: { status: 'available' } }),
+		// Only holds that are still running count as reserved; expired ones are reported apart.
+		prisma.account.count({
+			where: { status: 'reserved', OR: [{ reservedUntil: null }, { reservedUntil: { gt: now } }] }
+		}),
+		prisma.account.count({ where: { status: { in: soldStatuses } } }),
+		prisma.category.findMany({
+			where: {
+				categoryType: 'tier',
+				isActive: true,
+				parentId: { not: null },
+				// Manual-handover AND numbers (auto-SMS) tiers have no account inventory —
+				// they must never count toward account "out of stock".
+				NOT: [
+					{ metadata: { path: ['delivery_mode'], equals: 'manual_handover' } },
+					{ metadata: { path: ['delivery_mode'], equals: 'auto_sms' } }
+				]
+			},
+			select: {
+				id: true,
+				name: true,
+				_count: {
+					select: {
+						accounts: {
+							where: {
+								status: 'available'
 							}
 						}
 					}
 				}
-			})
-		]);
+			}
+		}),
+		prisma.account.count({ where: { status: 'reserved', reservedUntil: { lte: now } } }),
+		prisma.account.count({ where: { status: { in: soldStatuses }, orderItemId: null } })
+	]);
 
 	const outOfStockTierIds = tiers
 		.filter((tier) => tier._count.accounts === 0)
 		.map((tier) => tier.id);
 
-	const lowStockTiersCount = tiers.filter(
-		(tier) => tier._count.accounts > 0 && tier._count.accounts < lowStockThreshold
-	).length;
+	const lowStockTiers = tiers
+		.filter((tier) => tier._count.accounts > 0 && tier._count.accounts < lowStockThreshold)
+		.map((tier) => ({ id: tier.id, name: tier.name.trim(), available: tier._count.accounts }))
+		.sort((a, b) => a.available - b.available);
+	const lowStockTiersCount = lowStockTiers.length;
 
 	const accountsInOutOfStockTiers = outOfStockTierIds.length
 		? await prisma.account.count({
@@ -286,7 +323,10 @@ export async function getInventoryStatsSnapshot(
 		product_types: totalTiers,
 		accountsInOutOfStockTiers,
 		outOfStockTiersCount: outOfStockTierIds.length,
-		lowStockThreshold
+		lowStockThreshold,
+		stale_reserved: staleReserved,
+		sold_without_order: soldWithoutOrder,
+		lowStockTiers
 	};
 }
 

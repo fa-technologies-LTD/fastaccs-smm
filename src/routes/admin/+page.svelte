@@ -46,6 +46,8 @@
 				units_sold: number;
 				total_users: number;
 				manual_handovers_completed?: number;
+				awaiting_delivery?: number;
+				completed_unpaid?: number;
 			};
 			inventoryStats: {
 				total_tiers: number;
@@ -59,6 +61,10 @@
 				product_types: number;
 				accountsInOutOfStockTiers: number;
 				outOfStockTiersCount: number;
+				lowStockThreshold?: number;
+				stale_reserved?: number;
+				sold_without_order?: number;
+				lowStockTiers?: Array<{ id: string; name: string; available: number }>;
 			};
 			boostingStats: {
 				total_orders: number;
@@ -110,8 +116,12 @@
 	// Use the real out-of-stock TIER count (0 is valid) — `??`, not `||`, so a true
 	// zero isn't mistaken for "missing" and replaced by the unrelated batch count.
 	const outOfStockCount = $derived(inventoryStats.outOfStockTiersCount ?? 0);
+	const lowStockTiers = $derived(inventoryStats.lowStockTiers ?? []);
 	const totalIssueCount = $derived(
-		outOfStockCount + dashboardIssues.failedEmails.length + dashboardIssues.unhealthyJobs.length
+		outOfStockCount +
+			lowStockTiers.length +
+			dashboardIssues.failedEmails.length +
+			dashboardIssues.unhealthyJobs.length
 	);
 
 	async function refreshData() {
@@ -339,15 +349,21 @@
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
-							Completed Orders
+							Delivered Orders
 						</p>
 						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
 							{orderStats.completed_orders}
 						</p>
-						<div class="mt-1 flex items-center">
+						<div class="mt-1 flex flex-col">
 							<span class="text-xs sm:text-sm" style="color: var(--text-muted)"
-								>Paid-confirmed: {orderStats.paid_orders}</span
+								>Paid: {orderStats.paid_orders}{#if orderStats.awaiting_delivery}
+									· {orderStats.awaiting_delivery} waiting to deliver{/if}</span
 							>
+							{#if orderStats.completed_unpaid}
+								<span class="text-xs" style="color: var(--status-warning)"
+									>{orderStats.completed_unpaid} completed without a confirmed payment</span
+								>
+							{/if}
 						</div>
 					</div>
 				</div>
@@ -374,7 +390,7 @@
 						</p>
 						<div class="mt-1 flex items-center">
 							<span class="text-xs sm:text-sm" style="color: var(--text-muted)">
-								Failed total: {orderStats.failed_orders}
+								Payment failed: {orderStats.failed_orders}
 							</span>
 						</div>
 					</div>
@@ -429,7 +445,9 @@
 						</p>
 						<div class="mt-1 flex items-center">
 							<span class="text-xs sm:text-sm" style="color: var(--text-muted)"
-								>SKU units sold: {orderStats.units_sold || 0}</span
+								>{inventoryStats.sold_without_order
+									? `${inventoryStats.sold_without_order} sold without an order`
+									: 'Accounts delivered to buyers'}</span
 							>
 						</div>
 					</div>
@@ -512,14 +530,11 @@
 							{inventoryStats.outOfStockTiersCount || inventoryStats.out_of_stock || 0}
 						</p>
 						<div class="mt-1 flex items-center">
-							{#if (inventoryStats.outOfStockTiersCount || inventoryStats.out_of_stock || 0) > 0}
-								<span class="text-xs sm:text-sm" style="color: #f97316;">
-									{inventoryStats.outOfStockTiersCount || inventoryStats.out_of_stock || 0} account
-									{(inventoryStats.outOfStockTiersCount || inventoryStats.out_of_stock || 0) === 1
-										? ' type is'
-										: ' types are'} out of stock
-								</span>
-							{:else}
+							{#if lowStockTiers.length}
+								<span class="text-xs sm:text-sm" style="color: var(--status-warning);"
+									>{lowStockTiers.length} more running low</span
+								>
+							{:else if outOfStockCount === 0}
 								<span class="text-xs sm:text-sm" style="color: var(--status-success);"
 									>All tiers have stock</span
 								>
@@ -576,10 +591,15 @@
 						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
 							{inventoryStats.total_reserved || 0}
 						</p>
-						<div class="mt-1 flex items-center">
+						<div class="mt-1 flex flex-col">
 							<span class="text-xs sm:text-sm" style="color: var(--text-muted);">
 								Available: {inventoryStats.total_available}
 							</span>
+							{#if inventoryStats.stale_reserved}
+								<span class="text-xs" style="color: var(--status-warning);"
+									>{inventoryStats.stale_reserved} expired holds need fixing</span
+								>
+							{/if}
 						</div>
 					</div>
 				</div>
@@ -920,7 +940,7 @@
 				<div class="space-y-3 p-4" style="border-top: 1px solid var(--border)">
 					{#if totalIssueCount === 0}
 						<p class="text-sm" style="color: var(--status-success);">
-							No failed emails, automation issues, or low-stock alerts.
+							No failed emails, automation issues, or stock alerts.
 						</p>
 					{:else}
 						{#if outOfStockCount > 0}
@@ -936,6 +956,30 @@
 									</span>
 								</div>
 								<ArrowUpRight class="h-4 w-4 flex-shrink-0" style="color: var(--text-dim);" />
+							</a>
+						{/if}
+						{#if lowStockTiers.length}
+							<a
+								href="/admin/inventory"
+								class="block rounded-lg p-2 transition-all hover:scale-[.99]"
+								style="border: 1px solid var(--border)"
+							>
+								<div class="flex items-center justify-between gap-3">
+									<div class="flex items-center gap-3">
+										<AlertCircle
+											class="h-4 w-4 flex-shrink-0"
+											style="color: var(--status-warning);"
+										/>
+										<span class="text-sm" style="color: var(--text)">
+											{lowStockTiers.length} account {lowStockTiers.length === 1 ? 'type' : 'types'}
+											low on stock
+										</span>
+									</div>
+									<ArrowUpRight class="h-4 w-4 flex-shrink-0" style="color: var(--text-dim);" />
+								</div>
+								<p class="mt-1 pl-7 text-xs leading-relaxed" style="color: var(--text-muted)">
+									{lowStockTiers.map((tier) => `${tier.name} (${tier.available})`).join(' · ')}
+								</p>
 							</a>
 						{/if}
 
