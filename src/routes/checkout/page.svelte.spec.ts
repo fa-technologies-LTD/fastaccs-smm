@@ -196,6 +196,62 @@ it('resumes the original accepted request after a lost response even if current 
 	).toBeUndefined();
 	expect(mocks.goto).not.toHaveBeenCalled();
 });
+it('replaces an earlier Monnify attempt when the buyer then ticks store credit', async () => {
+	seed();
+	const earlier = {
+		userId: user.id,
+		email: user.email,
+		phone: '',
+		items: [{ categoryId: 'fixture-category', quantity: 1 }],
+		currency: 'NGN',
+		paymentMethod: 'monnify',
+		totalAmount: 500,
+		checkoutKey: 'fixture-earlier-checkout',
+		useStoreCredit: false,
+		acceptedQuote: {
+			subtotal: 500,
+			discount: 0,
+			total: 500,
+			creditApplied: 0,
+			payable: 500,
+			linePrices: [500]
+		}
+	};
+	localStorage.setItem(
+		'fastaccs_checkout_session',
+		JSON.stringify({ key: earlier.checkoutKey, request: earlier })
+	);
+	mocks.createOrder.mockResolvedValue({
+		success: false,
+		error: 'Fixture stops before order creation'
+	});
+	render(Checkout, {
+		data: {
+			user,
+			storeCredit: {
+				totalAvailable: 1000,
+				refundAvailable: 1000,
+				earnedAvailable: 0,
+				promoAvailable: 0,
+				promo: [],
+				promoCaps: {}
+			},
+			affiliateRef: null
+		}
+	} as never);
+	await expect
+		.element(page.getByRole('button', { name: 'Continue saved checkout', exact: true }))
+		.toBeEnabled();
+	await page.getByRole('checkbox', { name: 'Use store credit' }).click();
+	await expect.element(page.getByText('This replaces your earlier ₦500 checkout.')).toBeVisible();
+	await page.getByRole('button', { name: 'Complete Order', exact: true }).click();
+	await expect.poll(() => mocks.createOrder.mock.calls.length).toBe(1);
+	expect(mocks.createOrder.mock.calls[0][0]).toMatchObject({
+		useStoreCredit: true,
+		checkoutKey: 'fixture-earlier-checkout',
+		acceptedQuote: { creditApplied: 500, payable: 0 }
+	});
+});
 it('clears the current cart when another tab removes the storage key', () => {
 	seed();
 	localStorage.removeItem('fastaccs_cart');

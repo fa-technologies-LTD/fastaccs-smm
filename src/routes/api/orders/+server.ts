@@ -300,18 +300,13 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				return json({ success: false, error: 'Checkout session conflict.' }, { status: 409 });
 			}
 
-			if (Boolean(orderData.useStoreCredit) !== existingCheckoutUsesStoreCredit(existingCheckout)) {
-				return json(
-					{
-						success: false,
-						code: 'CHECKOUT_INTENT_CHANGED',
-						error: 'Checkout payment option changed. Please try again.'
-					},
-					{ status: 409 }
-				);
-			}
+			// The buyer changed whether store credit pays (e.g. left Monnify, came back and ticked
+			// "Use store credit"). The old gateway checkout is never reopened for the new choice: it is
+			// superseded below like a retry, and a new order is created with the current choice.
+			const paymentChoiceChanged =
+				Boolean(orderData.useStoreCredit) !== existingCheckoutUsesStoreCredit(existingCheckout);
 
-			if (isActiveCheckoutOrder(existingCheckout)) {
+			if (isActiveCheckoutOrder(existingCheckout) && !paymentChoiceChanged) {
 				logPaymentEvent('info', 'checkout.resumed', {
 					traceId,
 					orderId: existingCheckout.id,
@@ -353,6 +348,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 			if (
 				['pending', 'pending_payment'].includes(existingCheckout.status) &&
+				// A live checkout (only reached here when the payment choice changed) is superseded at once.
+				!isActiveCheckoutOrder(existingCheckout) &&
 				existingCheckout.paymentExpiresAt &&
 				existingCheckout.paymentExpiresAt.getTime() > Date.now() &&
 				existingCheckout.updatedAt.getTime() > Date.now() - CHECKOUT_INITIALIZATION_GRACE_MS
@@ -425,7 +422,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					orderId: existingCheckout.id,
 					userId: checkoutUserId,
 					status: existingCheckout.status,
-					source: 'checkout_retry'
+					source: paymentChoiceChanged ? 'payment_choice_changed' : 'checkout_retry'
 				});
 				const cancellation = await settleFailedPayment({
 					orderId: existingCheckout.id,
@@ -1283,9 +1280,12 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			totalApplied: 0
 		};
 		let promoCaps: Record<string, number> = {};
+		// Recorded on the order so support can see whether a buyer who paid by card had credit to use.
+		let creditAvailableAtCheckout: number | null = null;
 		if (orderData.useStoreCredit && checkoutUserId) {
 			try {
 				const buckets = await getStoreCreditBuckets(checkoutUserId);
+				creditAvailableAtCheckout = buckets.totalAvailable;
 				// Promo credit (Refer & Win / BIGSPENDER) is capped per campaign by the owner.
 				if (buckets.promoAvailable > 0) promoCaps = await getPromoCaps();
 				storeCreditRedemption = computeOrderRedemption(finalOrderTotal, buckets, { promoCaps });
@@ -1303,6 +1303,12 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					},
 					{ status: 503 }
 				);
+			}
+		} else if (checkoutUserId) {
+			try {
+				creditAvailableAtCheckout = (await getStoreCreditBuckets(checkoutUserId)).totalAvailable;
+			} catch {
+				creditAvailableAtCheckout = null;
 			}
 		}
 		const amountToCharge = Math.max(
@@ -1598,7 +1604,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 								occurredAt: createdOrder.createdAt,
 								metadata: {
 									orderType: createdOrder.orderType,
-									storeCreditApplied: storeCreditRedemption.totalApplied
+									storeCreditApplied: storeCreditRedemption.totalApplied,
+									useStoreCredit: Boolean(orderData.useStoreCredit),
+									creditAvailable: creditAvailableAtCheckout
 								}
 							},
 							tx

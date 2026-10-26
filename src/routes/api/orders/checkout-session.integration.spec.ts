@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
 	findUnique: vi.fn(),
-	isCheckoutEnabled: vi.fn()
+	isCheckoutEnabled: vi.fn(),
+	settleFailedPayment: vi.fn(),
+	initializationDisabled: vi.fn()
 }));
 
 vi.mock('$lib/prisma', () => ({
@@ -11,6 +13,16 @@ vi.mock('$lib/prisma', () => ({
 			findUnique: mocks.findUnique
 		}
 	}
+}));
+
+vi.mock('$lib/services/payment-settlement', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/services/payment-settlement')>()),
+	settleFailedPayment: mocks.settleFailedPayment
+}));
+
+vi.mock('$lib/helpers/checkout-control.server', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/helpers/checkout-control.server')>()),
+	isNewCheckoutInitializationDisabled: mocks.initializationDisabled
 }));
 
 vi.mock('$lib/services/admin-settings', () => ({
@@ -46,6 +58,7 @@ describe('checkout session ownership and resume behavior', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mocks.isCheckoutEnabled.mockResolvedValue(true);
+		mocks.initializationDisabled.mockReturnValue(false);
 	});
 
 	it('rejects a checkout key that belongs to another user', async () => {
@@ -134,36 +147,68 @@ describe('checkout session ownership and resume behavior', () => {
 		expect(await response.json()).toMatchObject({ pending: true, orderId: 'order-uncertain' });
 	});
 
-	it('does not resume a gateway checkout after the buyer switches to store credit', async () => {
-		mocks.findUnique.mockResolvedValue({
-			id: 'order-existing',
-			userId: verifiedBuyer.id,
-			status: 'pending_payment',
-			paymentStatus: 'pending',
-			paymentMethod: 'monnify',
-			storeCreditApplied: 0,
-			paymentCheckoutUrl: 'https://monnify.example/checkout',
-			paymentReference: 'ORD_EXISTING',
-			paymentExpiresAt: new Date(Date.now() + 60_000),
-			updatedAt: new Date(),
-			deliveryMethod: 'email'
+	const openMonnifyCheckout = () => ({
+		id: 'order-existing',
+		userId: verifiedBuyer.id,
+		status: 'pending_payment',
+		paymentStatus: 'pending',
+		paymentMethod: 'monnify',
+		storeCreditApplied: 0,
+		paymentCheckoutUrl: 'https://monnify.example/checkout',
+		paymentReference: 'ORD_EXISTING',
+		paymentExpiresAt: new Date(Date.now() + 60_000),
+		updatedAt: new Date(),
+		deliveryMethod: 'email'
+	});
+
+	it('replaces an open Monnify checkout when the buyer switches to store credit', async () => {
+		mocks.findUnique.mockResolvedValue(openMonnifyCheckout());
+		mocks.settleFailedPayment.mockResolvedValue({
+			success: true,
+			orderId: 'order-existing',
+			status: 'CANCELLED'
 		});
+		// Stop right after the old checkout is handled: the new order would be created next.
+		mocks.initializationDisabled.mockReturnValueOnce(false).mockReturnValueOnce(true);
 
 		const response = await POST({
 			request: buildRequest('checkout-key-payment-intent-changed', true),
-			locals: {
-				user: verifiedBuyer,
-				session: null,
-				adminContext: null
-			},
+			locals: { user: verifiedBuyer, session: null, adminContext: null },
 			url: new URL('https://smm.fastaccs.com/api/orders')
 		} as never);
+		const body = await response.json();
 
-		expect(response.status).toBe(409);
-		expect(await response.json()).toMatchObject({
-			success: false,
-			code: 'CHECKOUT_INTENT_CHANGED'
+		expect(mocks.settleFailedPayment).toHaveBeenCalledWith(
+			expect.objectContaining({
+				orderId: 'order-existing',
+				failureKind: 'cancelled',
+				clearCheckoutKey: true,
+				cancellationReason: 'superseded_retry'
+			})
+		);
+		expect(body.resumed).toBeUndefined();
+		expect(body.checkoutUrl).toBeUndefined();
+		expect(body.code).not.toBe('CHECKOUT_INTENT_CHANGED');
+	});
+
+	it('sends the buyer to the paid order if the old Monnify payment completed meanwhile', async () => {
+		mocks.findUnique.mockResolvedValue(openMonnifyCheckout());
+		mocks.settleFailedPayment.mockResolvedValue({
+			success: true,
+			orderId: 'order-existing',
+			status: 'PAID'
 		});
+
+		const response = await POST({
+			request: buildRequest('checkout-key-paid-meanwhile', true),
+			locals: { user: verifiedBuyer, session: null, adminContext: null },
+			url: new URL('https://smm.fastaccs.com/api/orders')
+		} as never);
+		const body = await response.json();
+
+		expect(response.status).toBe(200);
+		expect(body).toMatchObject({ success: true, resumed: true, orderId: 'order-existing' });
+		expect(body.redirectUrl).toContain('/checkout/verify?orderId=order-existing');
 	});
 
 	it('resumes a paid store-credit checkout after the original response was lost', async () => {

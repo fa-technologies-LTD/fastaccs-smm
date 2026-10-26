@@ -146,6 +146,13 @@
 		);
 	});
 	const payableTotal = $derived(Math.max(0, checkoutTotal - storeCreditApplied));
+	const usesStoreCredit = $derived(applyStoreCredit && storeCreditAvailable > 0);
+	// An earlier attempt is only continued while the store-credit choice is unchanged. After the buyer
+	// changes it (e.g. ticks credit after leaving Monnify), the next attempt is built from the screen and
+	// replaces the earlier one under the same checkout key, so the server can cancel the old payment.
+	const resumableAttempt = $derived(
+		savedAttempt && Boolean(savedAttempt.useStoreCredit) === usesStoreCredit ? savedAttempt : null
+	);
 	const hasManualHandover = $derived(
 		cartItems.some((item) => item.tier.deliveryMode === 'manual_handover')
 	);
@@ -596,7 +603,14 @@
 			checkoutSlow = true;
 		}, 6_000);
 		try {
-			let requestSnapshot = resumableRequest();
+			const earlierAttempt = resumableRequest();
+			let requestSnapshot =
+				earlierAttempt && Boolean(earlierAttempt.useStoreCredit) === usesStoreCredit
+					? earlierAttempt
+					: null;
+			// Replacing an earlier attempt keeps its key, so the server cancels that payment first.
+			let replacedCheckoutKey =
+				earlierAttempt && !requestSnapshot ? earlierAttempt.checkoutKey : null;
 			if (!requestSnapshot) {
 				const previousQuote = displayedQuote();
 				await loadCartData(true);
@@ -638,12 +652,12 @@
 						acceptedQuote: displayedQuote(),
 						currency: 'NGN',
 						paymentMethod: 'monnify',
-						checkoutKey: getOrCreateCheckoutKey(),
+						checkoutKey: replacedCheckoutKey ?? getOrCreateCheckoutKey(),
 						affiliateCode:
 							hasBoostingOrder || hasNumbersOrder ? undefined : affiliateCode || undefined,
 						promotionCode:
 							hasBoostingOrder || hasNumbersOrder ? undefined : promoAppliedCode || undefined,
-						useStoreCredit: applyStoreCredit && storeCreditAvailable > 0,
+						useStoreCredit: usesStoreCredit,
 						analytics: {
 							ga4ClientId,
 							consentGranted: Boolean(ga4ClientId)
@@ -696,6 +710,7 @@
 			if (!orderResult.success && shouldRotateCheckoutSession(orderResult.error)) {
 				resetCheckoutSession();
 				requestSnapshot = null;
+				replacedCheckoutKey = null;
 				orderResult = await createCheckoutOrder();
 			}
 
@@ -1481,17 +1496,27 @@
 							{/if}
 						</p>
 						<!-- Complete checkout -->
-						{#if savedAttempt}
+						{#if resumableAttempt}
 							<p
 								role="status"
 								class="mt-4 rounded-lg border p-3 text-sm"
 								style="border-color: var(--border); color: var(--text-muted);"
 							>
 								Your earlier checkout is saved at {formatPrice(
-									savedAttempt.acceptedQuote?.payable ?? savedAttempt.totalAmount
+									resumableAttempt.acceptedQuote?.payable ?? resumableAttempt.totalAmount
 								)}. Continue it, or
 								<a class="underline" href="/dashboard?tab=orders">review it in My Orders</a> before starting
 								another payment.
+							</p>
+						{:else if savedAttempt}
+							<p
+								role="status"
+								class="mt-4 rounded-lg border p-3 text-sm"
+								style="border-color: var(--border); color: var(--text-muted);"
+							>
+								This replaces your earlier {formatPrice(
+									savedAttempt.acceptedQuote?.payable ?? savedAttempt.totalAmount
+								)} checkout.
 							</p>
 						{/if}
 						{#if currentPriceChangeMessage}
@@ -1524,7 +1549,7 @@
 							{:else if !user}
 								<Lock size={18} class="sm:h-5 sm:w-5" />
 								<span class="text-sm sm:text-base">Sign in &amp; continue</span>
-							{:else if savedAttempt}
+							{:else if resumableAttempt}
 								<span class="text-sm sm:text-base">Continue saved checkout</span>
 							{:else if currentPriceChangeMessage}
 								<span class="text-sm sm:text-base">Confirm updated total &amp; continue</span>
