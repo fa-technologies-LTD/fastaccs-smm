@@ -106,7 +106,10 @@
 		return a.name.localeCompare(b.name);
 	}
 
-	const allPlatforms = $derived(data.platforms || []);
+	// A platform with nothing on sale yet reads as broken ("0 Account Types"), so it stays off the list.
+	const allPlatforms = $derived(
+		(data.platforms || []).filter((platform) => (platform.tier_count || 0) > 0)
+	);
 	const hasAnyPlatforms = $derived(allPlatforms.length > 0);
 
 	const filteredPlatforms = $derived.by(() => {
