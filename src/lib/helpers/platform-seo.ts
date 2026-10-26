@@ -71,7 +71,7 @@ export function buildPlatformFaq(display: string): SeoFaqItem[] {
 		{
 			question: 'What if I have trouble logging in?',
 			answer:
-				'Test the login immediately after delivery. If anything is wrong, contact support on WhatsApp or email, ideally within 2 hours of purchase, so we can help quickly.'
+				'Test the login right after delivery. If the account is faulty or wrong, contact support on WhatsApp or email within 3 hours of delivery. We help with login questions for up to 48 hours after purchase.'
 		},
 		{
 			question: 'Can I choose a specific account?',

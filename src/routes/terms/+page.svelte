@@ -96,8 +96,8 @@
 					<li>Provide accurate order details and keep your account credentials secure.</li>
 					<li>Review delivery notes and follow account-specific guidance where provided.</li>
 					<li>
-						Report login or delivery issues promptly so support can investigate while records are
-						fresh.
+						Report a faulty or wrong account within 3 hours of delivery. Login help is available for
+						up to 48 hours after purchase.
 					</li>
 				</ul>
 			</section>

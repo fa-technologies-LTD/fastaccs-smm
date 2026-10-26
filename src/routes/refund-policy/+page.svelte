@@ -38,8 +38,9 @@
 					Issue Reporting Window
 				</h2>
 				<p>
-					Report account login issues as soon as possible after delivery, ideally within 2 hours.
-					For a Boosting drop, report it within the refill window shown on the option you bought.
+					Report a faulty or wrong account within 3 hours of delivery to qualify for a replacement
+					or refund. We still help with login questions for up to 48 hours after purchase. For a
+					Boosting drop, report it within the refill window shown on the option you bought.
 				</p>
 			</section>
 

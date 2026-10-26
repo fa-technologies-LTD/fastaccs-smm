@@ -26,7 +26,7 @@
 		{
 			question: 'When should I report login issues?',
 			answer:
-				'Please test login immediately after delivery. For fastest assistance, report login issues within 2 hours of purchase.'
+				'Test your login as soon as it is delivered. A faulty or wrong account must be reported within 3 hours of delivery. We help with login questions for up to 48 hours after purchase.'
 		},
 		{
 			question: 'Why can X follower count change after delivery?',
@@ -145,7 +145,7 @@
 			points: [
 				'Test login as soon as your order is delivered.',
 				'Report login issues quickly for the best support outcome.',
-				'For fastest help, message us within 2 hours of purchase.'
+				'Faulty accounts must be reported within 3 hours of delivery. For login questions, we help for up to 48 hours after purchase.'
 			]
 		},
 		{

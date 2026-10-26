@@ -441,7 +441,7 @@
 
 				{#if orderDelivered && !isPhoneOrder && !isManualHandoverOrder() && !isBoostingOrder()}
 					<p class="mb-4 text-xs" style="color: var(--text-dim);">
-						Test your login soon — issues reported within 2 hours get the fastest support. <a
+						Test your login now. A faulty account must be reported within 3 hours of delivery. <a
 							href="/support#faq"
 							class="hover:underline"
 							style="color: var(--link);">Support FAQ</a
