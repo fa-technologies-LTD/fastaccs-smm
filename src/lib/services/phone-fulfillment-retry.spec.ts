@@ -179,16 +179,14 @@ beforeEach(() => {
 			orderEvent: { create: vi.fn().mockResolvedValue({}) },
 			order: {
 				update: vi.fn(),
-				findUnique: vi
-					.fn()
-					.mockResolvedValue({
-						userId: 'user-1',
-						totalAmount: 1200,
-						refundedAmount: 0,
-						status: 'paid',
-						paymentStatus: 'paid',
-						deliveryStatus: 'processing'
-					})
+				findUnique: vi.fn().mockResolvedValue({
+					userId: 'user-1',
+					totalAmount: 1200,
+					refundedAmount: 0,
+					status: 'paid',
+					paymentStatus: 'paid',
+					deliveryStatus: 'processing'
+				})
 			}
 		})
 	);
@@ -263,6 +261,43 @@ describe('customerRetryPhoneRental', () => {
 		expect(prismaMock.phoneRental.updateMany).toHaveBeenCalledWith(
 			expect.objectContaining({ data: expect.objectContaining({ retryCount: { increment: 1 } }) })
 		);
+	});
+
+	it('prioritizes the other provider after the current provider times out', async () => {
+		prismaMock.phoneRental.findUnique.mockResolvedValue(rental({ provider: 'pvapins' }));
+		buildLiveCandidatePoolMock.mockResolvedValue([
+			{
+				provider: 'pvapins',
+				providerServiceRef: 'Whatsapp24',
+				providerCountryRef: 'USA',
+				label: 'pvapins:Whatsapp24',
+				costCents: 40,
+				available: 1,
+				reliability: 0.95,
+				sampleSize: 20
+			},
+			{
+				provider: 'hubman',
+				providerServiceRef: '1',
+				providerCountryRef: '58',
+				label: 'hubman:1',
+				costCents: 70,
+				available: 100,
+				reliability: 0.5,
+				sampleSize: 4
+			}
+		]);
+		rentMock.mockResolvedValue({
+			providerRef: 'hub-replacement',
+			phoneNumber: '15551112222',
+			costCents: 70,
+			expiresAt: null
+		});
+
+		const result = await customerRetryPhoneRental('item-1');
+
+		expect(result.status).toBe('awaiting_sms');
+		expect(rentMock.mock.calls[0][0]).toMatchObject({ providerServiceRef: '1' });
 	});
 
 	it('confirmed release reserves NO liability', async () => {

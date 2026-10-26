@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const getAvailableServicesMock = vi.hoisted(() => vi.fn());
 const loadCountriesMock = vi.hoisted(() => vi.fn());
 const loadAppsMock = vi.hoisted(() => vi.fn());
+const sendCriticalAdminAlertMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../hubman', () => ({
 	isHubmanConfigured: () => true,
@@ -14,6 +15,7 @@ vi.mock('../pvapins', () => ({
 	loadApps: loadAppsMock,
 	usdStringToCents: (v: string) => Math.round(Number(v) * 100)
 }));
+vi.mock('../admin-alerts', () => ({ sendCriticalAdminAlert: sendCriticalAdminAlertMock }));
 
 import { buildLiveCandidatePool } from './live-pool';
 
@@ -22,7 +24,9 @@ const usaCountry = [{ id: 58, full_name: 'USA', picture: 'https://x/_us.webp' }]
 beforeEach(() => {
 	vi.clearAllMocks();
 	loadCountriesMock.mockResolvedValue(usaCountry);
+	sendCriticalAdminAlertMock.mockResolvedValue({ sent: true });
 });
+afterEach(() => vi.restoreAllMocks());
 
 describe('buildLiveCandidatePool', () => {
 	it('merges live hub-man stock + matching listed pvapins variants', async () => {
@@ -63,6 +67,35 @@ describe('buildLiveCandidatePool', () => {
 
 		expect(pool.map((c) => c.provider)).toEqual(['pvapins']);
 		expect(pool[0].label).toBe('pvapins:Whatsapp24');
+	});
+
+	it('continues with PVAPins but logs and alerts when the Hubman lookup fails', async () => {
+		const error = new Error('Hubman timed out');
+		const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		getAvailableServicesMock.mockRejectedValue(error);
+		loadAppsMock.mockResolvedValue([
+			{ id: 1, full_name: 'Whatsapp24', deduct: '0.66', trending: 0 }
+		]);
+
+		const pool = await buildLiveCandidatePool({
+			hubServiceId: 1,
+			hubCountryId: 58,
+			hubCountryCode: 'US',
+			hubCountryName: 'USA',
+			reliability: new Map()
+		});
+
+		expect(pool.map((candidate) => candidate.provider)).toEqual(['pvapins']);
+		expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Hubman lookup failed'));
+		await vi.waitFor(() =>
+			expect(sendCriticalAdminAlertMock).toHaveBeenCalledWith(
+				expect.objectContaining({
+					source: 'numbers.live-pool',
+					dedupeKey: 'hubman-live-pool:1:58'
+				})
+			)
+		);
+		consoleSpy.mockRestore();
 	});
 
 	it('applies learned reliability so a proven supplier outranks cheaper unproven ones', async () => {

@@ -19,7 +19,12 @@ export function numbersAnalyticsForAdmin(
 		recent: analytics.recent.map((row) => ({
 			...row,
 			saleNgn: orderAmountsVisible ? row.saleNgn : null,
-			costUsd: revenueVisible ? row.costUsd : null
+			costUsd: revenueVisible ? row.costUsd : null,
+			attempts: row.attempts.map((attempt) => ({
+				...attempt,
+				expectedCostUsd: revenueVisible ? attempt.expectedCostUsd : null,
+				actualCostUsd: revenueVisible ? attempt.actualCostUsd : null
+			}))
 		}))
 	};
 }

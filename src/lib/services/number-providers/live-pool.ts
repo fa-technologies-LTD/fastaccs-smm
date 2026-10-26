@@ -1,5 +1,6 @@
 import * as hubman from '../hubman';
 import * as pvapins from '../pvapins';
+import { sendCriticalAdminAlert } from '../admin-alerts';
 import { buildCandidatePool, type Candidate } from './selection';
 import { loadCandidateReliability, type ReliabilityStat } from './reliability';
 import { serviceByHubId, pvapinsAppsForService, findPvapinsCountry } from './service-map';
@@ -36,8 +37,27 @@ export async function buildLiveCandidatePool(input: {
 					available: Number(info.available_numbers_count)
 				};
 			}
-		} catch {
-			/* fail-soft: hub-man contributes nothing this run */
+		} catch (error) {
+			// Keep fulfilment fail-soft, but never make Hubman disappear without leaving an operational
+			// signal. The alert is deduplicated per market so a provider incident cannot create a storm.
+			const reason = error instanceof Error ? error.message : 'Unknown Hubman lookup failure';
+			console.error(
+				`[numbers.pool] Hubman lookup failed for service ${input.hubServiceId}, country ${input.hubCountryId}: ${reason}`
+			);
+			void sendCriticalAdminAlert({
+				title: 'Hubman was excluded from Numbers routing',
+				message: `The live Hubman inventory lookup failed for ${service?.name ?? `service ${input.hubServiceId}`} in ${input.hubCountryName || input.hubCountryCode} (country ${input.hubCountryId}). This fulfilment will continue with other providers. Error: ${reason.slice(0, 500)}`,
+				source: 'numbers.live-pool',
+				dedupeKey: `hubman-live-pool:${input.hubServiceId}:${input.hubCountryId}`,
+				cooldownMs: 30 * 60 * 1000,
+				ctaText: 'Open Numbers analytics',
+				ctaUrl: 'https://smm.fastaccs.com/admin/numbers/analytics'
+			}).catch((alertError) =>
+				console.error(
+					'[numbers.pool] Failed to alert on Hubman lookup failure:',
+					alertError instanceof Error ? alertError.message : alertError
+				)
+			);
 		}
 	}
 

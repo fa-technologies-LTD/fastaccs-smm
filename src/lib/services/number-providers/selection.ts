@@ -30,6 +30,8 @@ export interface Candidate {
 	reliability: number | null;
 	/** Number of resolved rents behind `reliability` (drives cold-start handling). */
 	sampleSize: number;
+	/** Resolved rents for this exact provider route, excluding broader market/provider priors. */
+	exactSampleSize?: number;
 	/** Exact-route recent failure streak; aggregate priors never populate these fields. */
 	consecutiveFailures?: number;
 	lastResolvedAt?: Date | null;
@@ -64,7 +66,7 @@ export function effectiveReliability(c: Pick<Candidate, 'reliability' | 'sampleS
  * the failover order.
  */
 export function rankCandidates(candidates: Candidate[]): Candidate[] {
-	return candidates
+	const ranked = candidates
 		.filter((c) => c.available > 0)
 		.map((c) => ({
 			c,
@@ -76,11 +78,59 @@ export function rankCandidates(candidates: Candidate[]): Candidate[] {
 		.sort(
 			(a, b) =>
 				protectionRank(a.protection) - protectionRank(b.protection) ||
+				confirmedVsUnprovenListed(a.c, b.c) ||
 				b.bucket - a.bucket ||
 				b.stockRank - a.stockRank ||
 				a.c.costCents - b.c.costCents
 		)
 		.map((x) => x.c);
+
+	return capPvapinsBeforeConfirmedHub(ranked);
+}
+
+/**
+ * A live Hubman count is stronger availability evidence than a PVAPins catalogue listing. An
+ * untested listed route may still be explored, but it cannot displace confirmed stock merely by
+ * receiving the optimistic cold-start score. Proven PVAPins routes continue to compete normally.
+ */
+function confirmedVsUnprovenListed(a: Candidate, b: Candidate): number {
+	const exactSamples = (candidate: Candidate) => candidate.exactSampleSize ?? candidate.sampleSize;
+	const unprovenListed = (candidate: Candidate) =>
+		candidate.stockConfidence === 'listed' && exactSamples(candidate) <= 0;
+	if (a.stockConfidence === 'confirmed' && unprovenListed(b)) return -1;
+	if (b.stockConfidence === 'confirmed' && unprovenListed(a)) return 1;
+	return 0;
+}
+
+/**
+ * Even strong listed variants must not keep confirmed Hubman inventory buried indefinitely. Two
+ * PVAPins candidates may lead on their delivery record; then the confirmed source gets its turn.
+ */
+export const MAX_PVAPINS_BEFORE_CONFIRMED_HUB = 2;
+function capPvapinsBeforeConfirmedHub(ranked: Candidate[]): Candidate[] {
+	const hubIndex = ranked.findIndex(
+		(candidate) => candidate.provider === 'hubman' && candidate.stockConfidence === 'confirmed'
+	);
+	if (hubIndex < 0) return ranked;
+	const pvapinsAhead = ranked
+		.slice(0, hubIndex)
+		.filter((candidate) => candidate.provider === 'pvapins').length;
+	if (pvapinsAhead <= MAX_PVAPINS_BEFORE_CONFIRMED_HUB) return ranked;
+
+	const hub = ranked[hubIndex];
+	const withoutHub = ranked.filter((_, index) => index !== hubIndex);
+	let seenPvapins = 0;
+	let insertionIndex = 0;
+	for (let index = 0; index < withoutHub.length; index += 1) {
+		if (withoutHub[index].provider !== 'pvapins') continue;
+		seenPvapins += 1;
+		if (seenPvapins === MAX_PVAPINS_BEFORE_CONFIRMED_HUB) {
+			insertionIndex = index + 1;
+			break;
+		}
+	}
+	withoutHub.splice(insertionIndex, 0, hub);
+	return withoutHub;
 }
 
 function protectionRank(state: ReturnType<typeof routeProtectionState>): number {
@@ -133,6 +183,7 @@ export function buildCandidatePool(input: {
 			stockConfidence: 'confirmed',
 			reliability: stat?.reliability ?? null,
 			sampleSize: stat?.total ?? 0,
+			exactSampleSize: exactStat?.total ?? 0,
 			consecutiveFailures: exactStat?.consecutiveFailures ?? 0,
 			lastResolvedAt: exactStat?.lastResolvedAt ?? null,
 			consecutiveOos: exactStat?.consecutiveOos ?? 0,
@@ -162,6 +213,7 @@ export function buildCandidatePool(input: {
 			stockConfidence: 'listed',
 			reliability: stat?.reliability ?? null,
 			sampleSize: stat?.total ?? 0,
+			exactSampleSize: exactStat?.total ?? 0,
 			consecutiveFailures: exactStat?.consecutiveFailures ?? 0,
 			lastResolvedAt: exactStat?.lastResolvedAt ?? null,
 			consecutiveOos: exactStat?.consecutiveOos ?? 0,

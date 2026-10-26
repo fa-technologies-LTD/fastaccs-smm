@@ -50,6 +50,40 @@ describe('rankCandidates', () => {
 		expect(rankCandidates([listed, confirmed])[0].label).toBe('confirmed');
 	});
 
+	it('keeps confirmed Hubman stock ahead of an untested listed route after one Hubman timeout', () => {
+		const listed = c({ label: 'untested-pvapins', exactSampleSize: 0 });
+		const hub = c({
+			provider: 'hubman',
+			label: 'confirmed-hubman',
+			stockConfidence: 'confirmed',
+			reliability: 0,
+			sampleSize: 1,
+			exactSampleSize: 1
+		});
+		expect(rankCandidates([listed, hub]).map((x) => x.label)).toEqual([
+			'confirmed-hubman',
+			'untested-pvapins'
+		]);
+	});
+
+	it('tries at most two proven PVAPins routes before confirmed Hubman stock', () => {
+		const proven = (label: string, costCents: number) =>
+			c({ label, costCents, reliability: 0.98, sampleSize: 20, exactSampleSize: 20 });
+		const hub = c({
+			provider: 'hubman',
+			label: 'confirmed-hubman',
+			stockConfidence: 'confirmed',
+			reliability: 0.2,
+			sampleSize: 20,
+			exactSampleSize: 20
+		});
+		expect(
+			rankCandidates([proven('pva-1', 30), proven('pva-2', 40), proven('pva-3', 50), hub]).map(
+				(x) => x.label
+			)
+		).toEqual(['pva-1', 'pva-2', 'confirmed-hubman', 'pva-3']);
+	});
+
 	it('gives unproven candidates a fair shot — below proven-excellent, above proven-poor', () => {
 		const excellent = c({ label: 'excellent', reliability: 0.98, sampleSize: 30 });
 		const unproven = c({ label: 'unproven', reliability: null, sampleSize: 0 });
@@ -145,8 +179,8 @@ describe('effectiveReliability', () => {
 describe('buildCandidatePool', () => {
 	it('merges hub-man + pvapins, attaches reliability, and ranks by it (bad supplier sinks)', () => {
 		const reliability = new Map<string, ReliabilityStat>([
-			['pvapins:Whatsapp24', { received: 18, total: 20, reliability: 0.9 }],
-			['pvapins:Whatsapp46', { received: 1, total: 20, reliability: 0.05 }],
+			['pvapins:route:1:58:Whatsapp24', { received: 18, total: 20, reliability: 0.9 }],
+			['pvapins:route:1:58:Whatsapp46', { received: 1, total: 20, reliability: 0.05 }],
 			['hubman:market:1:58', { received: 5, total: 20, reliability: 0.25 }]
 		]);
 		const pool = buildCandidatePool({
@@ -167,7 +201,7 @@ describe('buildCandidatePool', () => {
 		]);
 	});
 
-	it('lists an unproven pvapins supplier ahead of a proven-poor hub-man one', () => {
+	it('prefers confirmed Hubman over an unproven PVAPins listing while its route is normal', () => {
 		const pool = buildCandidatePool({
 			serviceId: 1,
 			countryId: 58,
@@ -175,7 +209,7 @@ describe('buildCandidatePool', () => {
 			pvapins: [{ app: 'Whatsapp99', countryName: 'USA', costCents: 66, available: 5 }],
 			reliability: new Map([['hubman:market:1:58', { received: 2, total: 20, reliability: 0.1 }]])
 		});
-		expect(pool[0].label).toBe('pvapins:Whatsapp99');
+		expect(pool[0].label).toBe('hubman:1');
 	});
 });
 

@@ -359,6 +359,15 @@ export interface NumbersAnalytics {
 		costUsd: number | null;
 		buyer: string | null;
 		buyerUserId: string | null;
+		attempts: Array<{
+			createdAt: string;
+			provider: string;
+			providerServiceRef: string;
+			outcome: string;
+			failureCategory: string | null;
+			expectedCostUsd: number | null;
+			actualCostUsd: number | null;
+		}>;
 	}>;
 }
 
@@ -396,22 +405,47 @@ export async function getNumbersAnalytics(): Promise<NumbersAnalytics> {
 			})),
 		serviceOpenEvents
 	);
-	const attempts = rentals.length
-		? await prisma.phoneAttempt.findMany({
-				where: {
-					orderItemId: { in: rentals.map((r) => r.orderItemId) },
-					actualCostCents: { not: null }
-				},
-				select: { orderItemId: true, actualCostCents: true }
-			})
-		: [];
+	const recentRentals = rentals.slice(0, 25);
+	const [costAttempts, recentAttempts] = rentals.length
+		? await Promise.all([
+				prisma.phoneAttempt.findMany({
+					where: {
+						orderItemId: { in: rentals.map((r) => r.orderItemId) },
+						actualCostCents: { not: null }
+					},
+					select: { orderItemId: true, actualCostCents: true }
+				}),
+				prisma.phoneAttempt.findMany({
+					where: {
+						orderItemId: { in: recentRentals.map((r) => r.orderItemId) }
+					},
+					select: {
+						orderItemId: true,
+						provider: true,
+						providerServiceRef: true,
+						outcome: true,
+						failureCategory: true,
+						expectedCostCents: true,
+						actualCostCents: true,
+						createdAt: true
+					},
+					orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+				})
+			])
+		: [[], []];
 	const actualCostByOrderItem = new Map<string, number>();
-	for (const attempt of attempts) {
+	for (const attempt of costAttempts) {
 		actualCostByOrderItem.set(
 			attempt.orderItemId,
 			(actualCostByOrderItem.get(attempt.orderItemId) ?? 0) +
 				Math.max(0, attempt.actualCostCents ?? 0)
 		);
+	}
+	const attemptsByOrderItem = new Map<string, (typeof recentAttempts)[number][]>();
+	for (const attempt of recentAttempts) {
+		const trail = attemptsByOrderItem.get(attempt.orderItemId) ?? [];
+		trail.push(attempt);
+		attemptsByOrderItem.set(attempt.orderItemId, trail);
 	}
 
 	const groups = new Map<string, NumbersServiceStat & { _otpSum: number; _otpCount: number }>();
@@ -496,7 +530,7 @@ export async function getNumbersAnalytics(): Promise<NumbersAnalytics> {
 		},
 		byService,
 		demand30d,
-		recent: rentals.slice(0, 25).map((r) => {
+		recent: recentRentals.map((r) => {
 			const u = r.orderItem?.order?.user ?? null;
 			return {
 				createdAt: r.createdAt.toISOString(),
@@ -515,7 +549,17 @@ export async function getNumbersAnalytics(): Promise<NumbersAnalytics> {
 						? r.costCents / 100
 						: null,
 				buyer: u ? u.fullName?.trim() || u.email : null,
-				buyerUserId: u?.id ?? null
+				buyerUserId: u?.id ?? null,
+				attempts: (attemptsByOrderItem.get(r.orderItemId) ?? []).map((attempt) => ({
+					createdAt: attempt.createdAt.toISOString(),
+					provider: attempt.provider,
+					providerServiceRef: attempt.providerServiceRef,
+					outcome: attempt.outcome,
+					failureCategory: attempt.failureCategory,
+					expectedCostUsd:
+						attempt.expectedCostCents == null ? null : attempt.expectedCostCents / 100,
+					actualCostUsd: attempt.actualCostCents == null ? null : attempt.actualCostCents / 100
+				}))
 			};
 		})
 	};

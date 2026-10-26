@@ -40,7 +40,27 @@ export function numbersAnalyticsFixture(): NumbersAnalytics {
 				saleNgn: 5500,
 				costUsd: 0.75,
 				buyer: null,
-				buyerUserId: null
+				buyerUserId: null,
+				attempts: [
+					{
+						createdAt: '2026-10-12T10:58:00Z',
+						provider: 'pvapins',
+						providerServiceRef: 'Whatsapp24',
+						outcome: 'otp_timeout',
+						failureCategory: null,
+						expectedCostUsd: 0.4,
+						actualCostUsd: 0
+					},
+					{
+						createdAt: '2026-10-12T11:00:00Z',
+						provider: 'hubman',
+						providerServiceRef: '1',
+						outcome: 'otp_received',
+						failureCategory: null,
+						expectedCostUsd: 0.75,
+						actualCostUsd: 0.75
+					}
+				]
 			}
 		]
 	};

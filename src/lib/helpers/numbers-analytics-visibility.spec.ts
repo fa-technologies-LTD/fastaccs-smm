@@ -14,6 +14,11 @@ it('redacts aggregate revenue, costs and margins without pretending they are zer
 	});
 	expect(view.byService[0]).toMatchObject({ revenueNgn: null, costNgn: null, marginNgn: null });
 	expect(view.recent[0]).toMatchObject({ saleNgn: null, costUsd: null });
+	expect(view.recent[0].attempts[0]).toMatchObject({
+		provider: 'pvapins',
+		expectedCostUsd: null,
+		actualCostUsd: null
+	});
 	expect(source.overall.revenueNgn).toBe(11000);
 	expect(source.recent[0].costUsd).toBe(0.75);
 });

@@ -26,6 +26,13 @@
 		if (['refunded', 'expired', 'cancelled', 'failed'].includes(s)) return '#fbbf24';
 		return '#38bdf8';
 	}
+	function providerLabel(provider: string): string {
+		return provider === 'pvapins' ? 'PVAPins' : provider === 'hubman' ? 'Hubman' : provider;
+	}
+	function attemptCost(attempt: (typeof a.recent)[number]['attempts'][number]): string | null {
+		const cost = attempt.actualCostUsd ?? attempt.expectedCostUsd;
+		return cost == null ? null : `$${cost.toFixed(2)}`;
+	}
 	function probeCount(status: string): number {
 		return Number(data.probeSummary?.byStatus?.[status] ?? 0);
 	}
@@ -314,14 +321,38 @@
 							{/if}
 						</td>
 						<td class="px-4 py-2" style="color: var(--text);">{r.serviceName} — {r.countryName}</td>
-						<td class="px-4 py-2">
-							<span
-								class="inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold"
-								style={r.provider === 'pvapins'
-									? 'background: rgba(167,139,250,0.14); color: #a78bfa; border: 1px solid rgba(167,139,250,0.3);'
-									: 'background: rgba(56,189,248,0.12); color: #38bdf8; border: 1px solid rgba(56,189,248,0.28);'}
-								>{r.provider === 'pvapins' ? 'pvapins' : 'hub-man'}</span
-							>
+						<td class="px-4 py-2 align-top">
+							<div class="flex flex-col items-start gap-1.5">
+								<span
+									class="inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold"
+									style={r.provider === 'pvapins'
+										? 'background: rgba(167,139,250,0.14); color: #a78bfa; border: 1px solid rgba(167,139,250,0.3);'
+										: 'background: rgba(56,189,248,0.12); color: #38bdf8; border: 1px solid rgba(56,189,248,0.28);'}
+									>{r.provider === 'pvapins' ? 'pvapins' : 'hub-man'}</span
+								>
+								{#if r.attempts.length > 0}
+									<details class="text-xs" style="color: var(--text-muted);">
+										<summary class="cursor-pointer hover:underline">
+											{r.attempts.length}
+											{r.attempts.length === 1 ? 'attempt' : 'attempts'}
+										</summary>
+										<ol class="mt-2 space-y-1.5" aria-label="Provider attempt trail">
+											{#each r.attempts as attempt, index (`${attempt.createdAt}:${attempt.provider}:${attempt.providerServiceRef}:${index}`)}
+												<li class="whitespace-nowrap">
+													<span class="font-semibold" style="color: var(--text);"
+														>{index + 1}. {providerLabel(attempt.provider)}</span
+													>
+													· <span class="font-mono">{attempt.providerServiceRef}</span> · {attempt.outcome.replaceAll(
+														'_',
+														' '
+													)}
+													{#if attemptCost(attempt)}· {attemptCost(attempt)}{/if}
+												</li>
+											{/each}
+										</ol>
+									</details>
+								{/if}
+							</div>
 						</td>
 						<td class="px-4 py-2 font-mono" style="color: var(--text);">{r.phoneNumber ?? '—'}</td>
 						<td class="px-4 py-2 font-medium" style="color: {statusColor(r.status)};">{r.status}</td

@@ -50,3 +50,12 @@ it('labels current-rate margin as estimated, not final profit', async () => {
 		.element(page.getByRole('link', { name: 'Overview', exact: true }))
 		.toHaveAttribute('href', '/admin/analytics');
 });
+
+it('shows the full provider-attempt trail behind the final source', async () => {
+	render(Page, { data: fixture(true) } as never);
+	await page.getByText('2 attempts', { exact: true }).click();
+	await expect.element(page.getByText(/Whatsapp24/)).toBeVisible();
+	await expect.element(page.getByText(/otp timeout/)).toBeVisible();
+	await expect.element(page.getByText(/Hubman/)).toBeVisible();
+	await expect.element(page.getByText(/otp received/)).toBeVisible();
+});

@@ -452,7 +452,7 @@ export interface PhoneFulfillmentResult {
 export async function fulfillPhoneOrder(
 	orderId: string,
 	source: string,
-	options: { excludeKeys?: string[] } = {}
+	options: { excludeKeys?: string[]; preferProvider?: NumberProviderId } = {}
 ): Promise<PhoneFulfillmentResult> {
 	const ctx = await loadPhoneOrderContext(orderId);
 	if (!ctx) return { status: 'error', message: 'Not a phone order' };
@@ -574,12 +574,23 @@ export async function fulfillPhoneOrder(
 		hubCountryCode: ctx.tier.countryCode,
 		hubCountryName: ctx.tier.countryName
 	}).catch(() => []);
+	// After a conclusive OTP timeout, give the other provider the first opportunity. The pool has
+	// already removed blocked routes and applied the normal reliability ranking; this only groups an
+	// eligible alternate source ahead of the timed-out source for this replacement generation.
+	const prioritizedPool = options.preferProvider
+		? [
+				...pool.filter((candidate) => candidate.provider === options.preferProvider),
+				...pool.filter((candidate) => candidate.provider !== options.preferProvider)
+			]
+		: pool;
 	const excludeKeys = new Set([...(options.excludeKeys ?? []), ...persistedTried]);
 	const candidateKey = (c: { provider: string; providerServiceRef: string }) =>
 		`${c.provider}:${c.providerServiceRef}`;
 	// Affordable across BOTH suppliers, within the hard procurement ceiling (the ₦500 floor). Kept
 	// whole (not sliced) so we can tell whether UNTRIED affordable options still remain after a pass.
-	const affordable = pool.filter((c) => c.costCents > 0 && c.costCents <= effectiveCeilingCents);
+	const affordable = prioritizedPool.filter(
+		(c) => c.costCents > 0 && c.costCents <= effectiveCeilingCents
+	);
 	// This pass attempts only the not-yet-tried affordable candidates, in the ranker's order, bounded
 	// by MAX_RENT_ATTEMPTS so we never hammer suppliers — the cap limits a BATCH, not "availability".
 	const ladder = affordable.filter((c) => !excludeKeys.has(candidateKey(c)));
@@ -1777,7 +1788,8 @@ export async function customerRetryPhoneRental(
 		};
 	}
 
-	const r = await fulfillPhoneOrder(orderId, 'retry', { excludeKeys: tried });
+	const preferProvider: NumberProviderId = rental.provider === 'pvapins' ? 'hubman' : 'pvapins';
+	const r = await fulfillPhoneOrder(orderId, 'retry', { excludeKeys: tried, preferProvider });
 	if (r.status === 'awaiting_sms')
 		return {
 			ok: true,
