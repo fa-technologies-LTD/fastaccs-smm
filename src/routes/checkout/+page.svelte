@@ -195,17 +195,46 @@
 		const left = Math.max(0, storeCreditAvailable - storeCreditApplied);
 		return left >= 1 ? `${formatPrice(left)} left after this order` : 'Uses all your store credit';
 	});
-	// An earlier attempt is only continued while the store-credit choice is unchanged. After the buyer
-	// changes it (e.g. ticks credit after leaving Monnify), the next attempt is built from the screen and
-	// replaces the earlier one under the same checkout key, so the server can cancel the old payment.
-	const resumableAttempt = $derived(
-		savedAttempt && Boolean(savedAttempt.useStoreCredit) === usesStoreCredit ? savedAttempt : null
-	);
+	// An unpaid order from an earlier, different cart: a quiet link to it, never in the way of this one.
+	let earlierUnpaidOrder = $state<{ id: string; payable: number } | null>(null);
+	let earlierOrderChecked = false;
 	const hasManualHandover = $derived(
 		cartItems.some((item) => item.tier.deliveryMode === 'manual_handover')
 	);
 	const hasBoostingOrder = $derived(cartItems.some((item) => Boolean(item.boosting)));
 	const hasNumbersOrder = $derived(cartItems.some((item) => item.tier.deliveryMode === 'auto_sms'));
+	// Once the cart has loaded: an earlier attempt for a different cart never takes over this checkout.
+	// If its order is still waiting for payment, show a quiet link to it in My Orders.
+	$effect(() => {
+		if (earlierOrderChecked || loadingCartData || !cartItems.length || !user) return;
+		earlierOrderChecked = true;
+		const earlier = savedAttempt;
+		if (!earlier || cartSignature(earlier.items) === cartSignature(buildRequestItems())) return;
+		const orderId = savedOrderId();
+		savedAttempt = null;
+		if (!orderId) return;
+		fetch(`/api/orders/${encodeURIComponent(orderId)}`)
+			.then((response) => (response.ok ? response.json() : null))
+			.then((body) => {
+				const order = body?.data;
+				const expiresAt = order?.paymentExpiresAt ? new Date(order.paymentExpiresAt).getTime() : 0;
+				if (
+					order?.status === 'pending_payment' &&
+					!['paid', 'success', 'overpaid'].includes(String(order.paymentStatus)) &&
+					expiresAt > Date.now()
+				)
+					earlierUnpaidOrder = {
+						id: orderId,
+						payable: Math.max(
+							0,
+							Number(order.totalAmount || 0) - Number(order.storeCreditApplied || 0)
+						)
+					};
+			})
+			.catch(() => {
+				/* the link is optional */
+			});
+	});
 	// Once per checkout visit, after the cart has loaded: shake what the buyer can use but hasn't.
 	$effect(() => {
 		if (nudgesPlanned || loadingCartData || !cartItems.length || !user) return;
@@ -602,6 +631,55 @@
 			linePrices: cartItems.map((item) => cart.getItemLinePrice(item))
 		};
 	}
+	function buildRequestItems(): CreateOrderData['items'] {
+		return cartItems.map((item) => ({
+			categoryId: item.tierId,
+			quantity: item.quantity,
+			price: cart.getItemLinePrice(item),
+			exactAccountId: item.exactAccount?.accountId,
+			exactAccountLabel: item.exactAccount?.displayLabel,
+			boostTargetUrl: item.boosting?.targetUrl,
+			boostQuantity: item.boosting?.boostQuantity,
+			boostOfferId: item.boosting?.boostOfferId,
+			boostComments: item.boosting?.comments,
+			accountAddonKey: item.accountAddon?.key
+		}));
+	}
+	/** Same products, quantities and targets: prices and the credit choice may differ. */
+	function cartSignature(items: CreateOrderData['items'] | undefined): string {
+		return JSON.stringify(
+			(items ?? [])
+				.map((item) => [
+					item.categoryId,
+					item.quantity,
+					item.exactAccountId ?? null,
+					item.boostTargetUrl ?? null,
+					item.boostQuantity ?? null,
+					item.boostOfferId ?? null,
+					item.accountAddonKey ?? null
+				])
+				.sort()
+		);
+	}
+	function savedOrderId(): string | null {
+		try {
+			const saved = JSON.parse(localStorage.getItem(CHECKOUT_SESSION_STORAGE_KEY) || 'null');
+			return saved?.request?.userId === user?.id && typeof saved.orderId === 'string'
+				? saved.orderId
+				: null;
+		} catch {
+			return null;
+		}
+	}
+	function rememberOrderId(orderId: string): void {
+		try {
+			const saved = JSON.parse(localStorage.getItem(CHECKOUT_SESSION_STORAGE_KEY) || 'null');
+			if (saved)
+				localStorage.setItem(CHECKOUT_SESSION_STORAGE_KEY, JSON.stringify({ ...saved, orderId }));
+		} catch {
+			/* optional: only powers the "unpaid order from earlier" link */
+		}
+	}
 	function resumableRequest(): CreateOrderData | null {
 		try {
 			const saved = JSON.parse(localStorage.getItem(CHECKOUT_SESSION_STORAGE_KEY) || 'null');
@@ -692,15 +770,16 @@
 			checkoutSlow = true;
 		}, 6_000);
 		try {
+			// The pay button always pays for this cart. When an earlier attempt was for the same cart, its key
+			// is reused so the server resumes, replaces or recognises that order instead of charging twice.
 			const earlierAttempt = resumableRequest();
-			let requestSnapshot =
-				earlierAttempt && Boolean(earlierAttempt.useStoreCredit) === usesStoreCredit
-					? earlierAttempt
-					: null;
-			// Replacing an earlier attempt keeps its key, so the server cancels that payment first.
+			// Filled in by createCheckoutOrder below (typed loosely so TypeScript keeps it nullable).
+			let requestSnapshot = null as CreateOrderData | null;
 			let replacedCheckoutKey =
-				earlierAttempt && !requestSnapshot ? earlierAttempt.checkoutKey : null;
-			if (!requestSnapshot) {
+				earlierAttempt && cartSignature(earlierAttempt.items) === cartSignature(buildRequestItems())
+					? earlierAttempt.checkoutKey
+					: null;
+			{
 				const previousQuote = displayedQuote();
 				await loadCartData(true);
 				if (cartLoadError)
@@ -725,18 +804,7 @@
 						userId: user.id,
 						email: user.email || '',
 						phone: user.phone || '',
-						items: cartItems.map((item) => ({
-							categoryId: item.tierId,
-							quantity: item.quantity,
-							price: cart.getItemLinePrice(item),
-							exactAccountId: item.exactAccount?.accountId,
-							exactAccountLabel: item.exactAccount?.displayLabel,
-							boostTargetUrl: item.boosting?.targetUrl,
-							boostQuantity: item.boosting?.boostQuantity,
-							boostOfferId: item.boosting?.boostOfferId,
-							boostComments: item.boosting?.comments,
-							accountAddonKey: item.accountAddon?.key
-						})),
+						items: buildRequestItems(),
 						totalAmount: finalTotal,
 						acceptedQuote: displayedQuote(),
 						currency: 'NGN',
@@ -887,6 +955,7 @@
 			}
 
 			const resolvedOrderId = String(orderResult.orderId || '');
+			if (resolvedOrderId) rememberOrderId(resolvedOrderId);
 			const ga4CheckoutPayload = getCheckoutGa4Payload(resolvedOrderId);
 			if (orderResult.resumed) {
 				// The displayed basket may have changed since this saved order was created.
@@ -1556,25 +1625,19 @@
 							</div>
 						</div>
 						<!-- Complete checkout -->
-						{#if resumableAttempt}
-							<div class="mt-4">
-								<Notice
-									kind="info"
-									action={{ label: 'See it in My Orders', href: '/dashboard?tab=orders' }}
+						{#if earlierUnpaidOrder}
+							<p
+								class="mt-4 text-xs"
+								style="color: var(--text-muted); font-family: var(--font-body);"
+							>
+								You have an unpaid {formatPrice(earlierUnpaidOrder.payable)} order from earlier.
+								<a
+									class="underline"
+									style="color: var(--text-muted);"
+									href={`/dashboard?tab=orders&orderId=${encodeURIComponent(earlierUnpaidOrder.id)}`}
+									>View it</a
 								>
-									You started a {formatPrice(
-										resumableAttempt.acceptedQuote?.payable ?? resumableAttempt.totalAmount
-									)} payment earlier.
-								</Notice>
-							</div>
-						{:else if savedAttempt}
-							<div class="mt-4">
-								<Notice kind="info">
-									This replaces your earlier {formatPrice(
-										savedAttempt.acceptedQuote?.payable ?? savedAttempt.totalAmount
-									)} checkout.
-								</Notice>
-							</div>
+							</p>
 						{/if}
 						{#if currentPriceChangeMessage}
 							<div class="mt-4">
@@ -1615,8 +1678,6 @@
 							{:else if !user}
 								<Lock size={18} class="sm:h-5 sm:w-5" />
 								<span class="text-sm sm:text-base">Sign in to continue</span>
-							{:else if resumableAttempt}
-								<span class="text-sm sm:text-base">Finish that payment</span>
 							{:else if currentPriceChangeMessage}
 								<span class="text-sm sm:text-base">Confirm updated total &amp; continue</span>
 							{:else if payableTotal <= 0}

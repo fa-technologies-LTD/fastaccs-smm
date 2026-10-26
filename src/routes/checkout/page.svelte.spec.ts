@@ -152,18 +152,24 @@ it('does not discard an uncertain payment attempt based on generic unavailable w
 	expect(cart.itemCount).toBe(1);
 	expect(mocks.goto).not.toHaveBeenCalled();
 });
-it('resumes the original accepted request after a lost response even if current prices have changed', async () => {
-	seed();
-	price = 1000;
-	const request = {
+const seededItem = {
+	categoryId: 'fixture-category',
+	quantity: 1,
+	boostTargetUrl: 'https://instagram.com/p/fixture/',
+	boostQuantity: 200,
+	boostOfferId: 'fixture-offer'
+};
+function earlierRequest(overrides: Record<string, unknown> = {}) {
+	return {
 		userId: user.id,
 		email: user.email,
 		phone: '',
-		items: [{ categoryId: 'fixture-category', quantity: 1 }],
+		items: [seededItem],
 		currency: 'NGN',
 		paymentMethod: 'monnify',
 		totalAmount: 500,
 		checkoutKey: 'fixture-existing-checkout',
+		useStoreCredit: false,
 		analytics: { ga4ClientId: '123456.654321', consentGranted: true },
 		acceptedQuote: {
 			subtotal: 500,
@@ -172,8 +178,14 @@ it('resumes the original accepted request after a lost response even if current 
 			creditApplied: 0,
 			payable: 500,
 			linePrices: [500]
-		}
+		},
+		...overrides
 	};
+}
+it('reuses the earlier checkout for the same cart after a lost response, at today’s price', async () => {
+	seed();
+	price = 1000;
+	const request = earlierRequest();
 	localStorage.setItem(
 		'fastaccs_checkout_session',
 		JSON.stringify({ key: request.checkoutKey, request })
@@ -185,9 +197,13 @@ it('resumes the original accepted request after a lost response even if current 
 	render(Checkout, {
 		data: { user, storeCredit: { totalAvailable: 0 }, affiliateRef: null }
 	} as never);
-	await page.getByRole('button', { name: 'Finish that payment', exact: true }).click();
-	const { analytics: _previousConsent, ...financialIntent } = request;
-	expect(mocks.createOrder.mock.calls[0][0]).toMatchObject(financialIntent);
+	// The pay button pays for this cart; the same key lets the server recognise the earlier order.
+	await page.getByRole('button', { name: /^Pay ₦1,000/ }).click();
+	await expect.poll(() => mocks.createOrder.mock.calls.length).toBeGreaterThan(0);
+	expect(mocks.createOrder.mock.calls[0][0]).toMatchObject({
+		checkoutKey: 'fixture-existing-checkout',
+		totalAmount: 1000
+	});
 	expect(mocks.createOrder.mock.calls[0][0].analytics).toMatchObject({
 		consentGranted: false,
 		ga4ClientId: null
@@ -197,30 +213,12 @@ it('resumes the original accepted request after a lost response even if current 
 	).toBeUndefined();
 	expect(mocks.goto).not.toHaveBeenCalled();
 });
-it('replaces an earlier Monnify attempt once store credit is used', async () => {
+it('lets the buyer switch to store credit on the same cart without any extra step', async () => {
 	seed();
-	const earlier = {
-		userId: user.id,
-		email: user.email,
-		phone: '',
-		items: [{ categoryId: 'fixture-category', quantity: 1 }],
-		currency: 'NGN',
-		paymentMethod: 'monnify',
-		totalAmount: 500,
-		checkoutKey: 'fixture-earlier-checkout',
-		useStoreCredit: false,
-		acceptedQuote: {
-			subtotal: 500,
-			discount: 0,
-			total: 500,
-			creditApplied: 0,
-			payable: 500,
-			linePrices: [500]
-		}
-	};
+	const request = earlierRequest({ checkoutKey: 'fixture-earlier-checkout' });
 	localStorage.setItem(
 		'fastaccs_checkout_session',
-		JSON.stringify({ key: earlier.checkoutKey, request: earlier })
+		JSON.stringify({ key: request.checkoutKey, request })
 	);
 	mocks.createOrder.mockResolvedValue({
 		success: false,
@@ -240,11 +238,7 @@ it('replaces an earlier Monnify attempt once store credit is used', async () => 
 			affiliateRef: null
 		}
 	} as never);
-	await expect
-		.element(page.getByRole('button', { name: 'Finish that payment', exact: true }))
-		.toBeEnabled();
 	await page.getByRole('checkbox', { name: /store credit/i }).click();
-	await expect.element(page.getByText('This replaces your earlier ₦500 checkout.')).toBeVisible();
 	expect(page.getByRole('button', { name: 'Finish that payment', exact: true }).query()).toBeNull();
 	await page.getByRole('button', { name: 'Pay with store credit', exact: true }).click();
 	await expect.poll(() => mocks.createOrder.mock.calls.length).toBe(1);
@@ -254,6 +248,72 @@ it('replaces an earlier Monnify attempt once store credit is used', async () => 
 		acceptedQuote: { creditApplied: 500, payable: 0 }
 	});
 });
+it.each([
+	['still unpaid', 'pending_payment', true],
+	['cancelled', 'cancelled', false]
+])(
+	'never blocks a new purchase with an earlier one (%s), and links to it only while unpaid',
+	async (_label, earlierStatus, showsLink) => {
+		seed();
+		const request = earlierRequest({
+			checkoutKey: 'fixture-old-checkout',
+			items: [{ categoryId: 'another-product', quantity: 1 }],
+			acceptedQuote: {
+				subtotal: 300,
+				discount: 0,
+				total: 300,
+				creditApplied: 0,
+				payable: 300,
+				linePrices: [300]
+			}
+		});
+		localStorage.setItem(
+			'fastaccs_checkout_session',
+			JSON.stringify({ key: request.checkoutKey, request, orderId: 'fixture-old-order' })
+		);
+		const baseFetch = globalThis.fetch;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input, init) =>
+				String(input).includes('/api/orders/fixture-old-order')
+					? Response.json({
+							data: {
+								status: earlierStatus,
+								paymentStatus: earlierStatus === 'cancelled' ? 'cancelled' : 'pending',
+								paymentExpiresAt: new Date(Date.now() + 600_000).toISOString(),
+								totalAmount: 300,
+								storeCreditApplied: 0
+							}
+						})
+					: baseFetch(input, init)
+			)
+		);
+		mocks.createOrder.mockResolvedValue({
+			success: false,
+			error: 'Fixture stops before order creation'
+		});
+		render(Checkout, {
+			data: { user, storeCredit: { totalAvailable: 0 }, affiliateRef: null }
+		} as never);
+		const pay = page.getByRole('button', { name: /^Pay ₦500/ });
+		await expect.element(pay).toBeEnabled();
+		if (showsLink) {
+			await expect
+				.element(page.getByText('You have an unpaid ₦300 order from earlier.'))
+				.toBeVisible();
+			await expect
+				.element(page.getByRole('link', { name: 'View it' }))
+				.toHaveAttribute('href', '/dashboard?tab=orders&orderId=fixture-old-order');
+		} else {
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			expect(page.getByText(/unpaid .* order from earlier/).query()).toBeNull();
+		}
+		await pay.click();
+		await expect.poll(() => mocks.createOrder.mock.calls.length).toBe(1);
+		expect(mocks.createOrder.mock.calls[0][0].checkoutKey).not.toBe('fixture-old-checkout');
+		expect(mocks.createOrder.mock.calls[0][0].totalAmount).toBe(500);
+	}
+);
 it('clears the current cart when another tab removes the storage key', () => {
 	seed();
 	localStorage.removeItem('fastaccs_cart');
