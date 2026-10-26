@@ -9,6 +9,7 @@
 		markBoostingLaunchNoticeSeen
 	} from '$lib/helpers/boosting-launch-notice';
 	import type { PendingSitePopup } from '$lib/services/site-popups';
+	import { cart } from '$lib/stores/cart.svelte';
 
 	interface Props {
 		isLoggedIn: boolean;
@@ -23,9 +24,18 @@
 	let launchChecked = false;
 	let launchShownThisVisit = false;
 	let launchChecking = $state(false);
+	// A buyer with items in the cart is mid-purchase: no pop-ups until they are done.
+	const buyingNow = () => cart.itemCount > 0;
+	// Offers read as promos, launches as announcements, account news as a plain notice.
+	function popupKind(type: string): 'announcement' | 'promo' | 'info' {
+		if (['affiliate_refresh', 'first_purchase', 'boosting_crosssell'].includes(type))
+			return 'promo';
+		if (type === 'bank_details_outcome') return 'info';
+		return 'announcement';
+	}
 
 	$effect(() => {
-		const eligible = canShowBoostingLaunchNotice(page.url.pathname);
+		const eligible = canShowBoostingLaunchNotice(page.url.pathname) && !buyingNow();
 		if (!eligible) showBoostingLaunch = false;
 		if (!eligible || launchChecked || hasSeenBoostingLaunchNotice()) return;
 		const controller = new AbortController();
@@ -41,6 +51,7 @@
 					Array.isArray(result.data) &&
 					result.data.length > 0 &&
 					canShowBoostingLaunchNotice(page.url.pathname) &&
+					!buyingNow() &&
 					!hasSeenBoostingLaunchNotice()
 				) {
 					activePopup = null;
@@ -75,6 +86,7 @@
 					isLoggedIn &&
 					!isAdminPath() &&
 					!showBoostingLaunch &&
+					!buyingNow() &&
 					canShowBoostingLaunchNotice(page.url.pathname) &&
 					!(
 						hasSeenBoostingLaunchNotice() &&
@@ -90,7 +102,12 @@
 	}
 
 	$effect(() => {
-		if (!isLoggedIn || isAdminPath() || !canShowBoostingLaunchNotice(page.url.pathname)) {
+		if (
+			!isLoggedIn ||
+			isAdminPath() ||
+			!canShowBoostingLaunchNotice(page.url.pathname) ||
+			buyingNow()
+		) {
 			activePopup = null;
 			return;
 		}
@@ -155,6 +172,7 @@
 		secondaryHref={activePopup.secondaryHref}
 		secondaryText={activePopup.secondaryText}
 		onItemNavigate={handleItemNavigate}
+		kind={popupKind(activePopup.type)}
 		accent={activePopup.type === 'numbers_launch' || activePopup.type === 'numbers_improved'
 			? '#0ea5e9'
 			: null}

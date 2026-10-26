@@ -2,6 +2,7 @@
 	import { toasts, removeToast, type Toast } from '$lib/stores/toasts';
 	import { CheckCircle, AlertCircle, AlertTriangle, Info, X } from '$lib/icons';
 	import { fly } from 'svelte/transition';
+	import { toneStyle } from '$lib/notify/kinds';
 
 	function getToastIcon(type: Toast['type']) {
 		switch (type) {
@@ -26,8 +27,9 @@
 				href={toast.link}
 				transition:fly={{ x: 240, duration: 220 }}
 				class="toast toast-{toast.type} toast-link"
+				style={toneStyle(toast.type)}
 			>
-				<Icon class="toast-icon" />
+				<span class="toast-icon-wrap" aria-hidden="true"><Icon class="toast-icon" /></span>
 
 				<div class="toast-content">
 					<div class="toast-title-row">
@@ -53,8 +55,12 @@
 				</button>
 			</a>
 		{:else}
-			<div transition:fly={{ x: 240, duration: 220 }} class="toast toast-{toast.type}">
-				<Icon class="toast-icon" />
+			<div
+				transition:fly={{ x: 240, duration: 220 }}
+				class="toast toast-{toast.type}"
+				style={toneStyle(toast.type)}
+			>
+				<span class="toast-icon-wrap" aria-hidden="true"><Icon class="toast-icon" /></span>
 
 				<div class="toast-content">
 					<div class="toast-title-row">
@@ -94,9 +100,10 @@
 		display: flex;
 		align-items: flex-start;
 		gap: 0.75rem;
-		border-radius: 0.5rem;
+		border-radius: 0.875rem;
 		border-width: 1px;
-		padding: 1rem;
+		border-style: solid;
+		padding: 0.75rem 0.875rem;
 		box-shadow:
 			0 10px 15px -3px rgb(0 0 0 / 0.1),
 			0 4px 6px -4px rgb(0 0 0 / 0.1);
@@ -115,43 +122,29 @@
 			0 8px 10px -6px rgb(0 0 0 / 0.1);
 	}
 
-	/* Success Toast */
-	.toast-success {
-		background-color: rgba(7, 25, 12, 0.98);
-		border-color: var(--status-success-border);
-		color: var(--status-success);
+	/* Every kind shares one look (see $lib/notify/kinds): a surface card with the kind's border and
+	   icon chip, and readable text. */
+	.toast {
+		background-color: var(--bg-elev-1);
+		border-color: var(--tone-border);
+		color: var(--text);
 		backdrop-filter: blur(8px);
 	}
 
-	/* Error Toast */
-	.toast-error {
-		background-color: rgba(25, 7, 7, 0.98);
-		border-color: var(--status-error-border);
-		color: var(--status-error);
-		backdrop-filter: blur(8px);
-	}
-
-	/* Warning Toast */
-	.toast-warning {
-		background-color: rgba(25, 22, 7, 0.98);
-		border-color: var(--status-warning-border);
-		color: var(--status-warning);
-		backdrop-filter: blur(8px);
-	}
-
-	/* Info Toast */
-	.toast-info {
-		background-color: rgba(7, 8, 25, 0.98);
-		border-color: var(--status-info-border);
-		color: var(--status-info);
-		backdrop-filter: blur(8px);
+	.toast-icon-wrap {
+		display: grid;
+		place-items: center;
+		width: 1.75rem;
+		height: 1.75rem;
+		flex-shrink: 0;
+		border-radius: 999px;
+		background: var(--tone-bg);
+		color: var(--tone);
 	}
 
 	.toast-icon {
-		margin-top: 0.125rem;
-		height: 1.25rem;
-		width: 1.25rem;
-		flex-shrink: 0;
+		height: 1rem;
+		width: 1rem;
 	}
 
 	.toast-content {
@@ -167,7 +160,8 @@
 
 	.toast-title {
 		font-size: 0.875rem;
-		font-weight: 500;
+		font-weight: 600;
+		color: var(--text);
 	}
 
 	.toast-count {
@@ -185,9 +179,9 @@
 	}
 
 	.toast-message {
-		margin-top: 0.25rem;
-		font-size: 0.875rem;
-		opacity: 0.9;
+		margin-top: 0.125rem;
+		font-size: 0.8125rem;
+		color: var(--text-muted);
 	}
 
 	.toast-close {

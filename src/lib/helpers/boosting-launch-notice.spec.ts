@@ -3,16 +3,14 @@ import { canShowBoostingLaunchNotice } from './boosting-launch-notice';
 
 afterEach(() => vi.unstubAllGlobals());
 
+it.each(['/', '/services', '/platforms', '/dashboard', '/numbers', '/blog/guide'])(
+	'permits the browsing page %s',
+	(path) => expect(canShowBoostingLaunchNotice(path)).toBe(true)
+);
 it.each([
-	'/',
-	'/services',
 	'/services/instagram',
 	'/platforms/x',
-	'/dashboard',
-	'/numbers',
-	'/blog/guide'
-])('permits the browsing page %s', (path) => expect(canShowBoostingLaunchNotice(path)).toBe(true));
-it.each([
+	'/numbers/whatsapp/kenya',
 	'/checkout',
 	'/order/123',
 	'/admin',
@@ -21,7 +19,7 @@ it.each([
 	'/auth/login',
 	'/numbers/order/123',
 	'/local-review/boosting-copy'
-])('protects the sensitive page %s', (path) =>
+])('keeps pop-ups off the buying page %s', (path) =>
 	expect(canShowBoostingLaunchNotice(path)).toBe(false)
 );
 

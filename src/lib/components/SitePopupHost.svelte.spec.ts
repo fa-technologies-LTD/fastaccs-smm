@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { page } from '$app/state';
 import SitePopupHost from './SitePopupHost.svelte';
 import { markBoostingLaunchNoticeSeen } from '$lib/helpers/boosting-launch-notice';
+import { cart } from '$lib/stores/cart.svelte';
 
 const launchState = vi.hoisted(() => ({ seen: false }));
 vi.mock('$lib/helpers/boosting-launch-notice', async (original) => ({
@@ -188,4 +189,15 @@ it('ignores an availability response arriving after navigation to checkout', asy
 	await tick();
 	expect(markBoostingLaunchNoticeSeen).not.toHaveBeenCalled();
 	expect(browser.getByRole('dialog').query()).toBeNull();
+});
+
+it('stays quiet while the buyer has items in the cart', async () => {
+	page.url.pathname = '/dashboard';
+	cart.addTier('fixture-account', 1);
+	render(SitePopupHost, { isLoggedIn: true });
+	await tick();
+	await tick();
+	expect(browser.getByRole('dialog').query()).toBeNull();
+	expect(fetch).not.toHaveBeenCalled();
+	cart.clear();
 });

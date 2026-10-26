@@ -26,7 +26,7 @@
 
 {#if current}
 	<div
-		class="decision-backdrop fixed inset-0 z-[70] flex items-end justify-center p-4 sm:items-center"
+		class="decision-backdrop fixed inset-0 z-[90] flex items-end justify-center p-4 sm:items-center"
 		role="presentation"
 		onclick={(event) => {
 			if (event.target === event.currentTarget) decision.answer(false);
@@ -72,7 +72,8 @@
 
 <style>
 	.decision-backdrop {
-		background: rgba(0, 0, 0, 0.55);
+		background: rgba(2, 8, 6, 0.72);
+		backdrop-filter: blur(4px);
 		padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
 	}
 	.decision {

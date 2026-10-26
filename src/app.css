@@ -114,6 +114,13 @@
 	--status-error-border: rgba(255, 80, 80, 0.3);
 	--status-warning-border: rgba(202, 219, 46, 0.3);
 	--status-info-border: rgba(170, 173, 255, 0.25);
+	/* Notification kinds beyond status: announcements (something new) and promos (an offer). */
+	--notice-announce: #05d471;
+	--notice-announce-bg: rgba(5, 212, 113, 0.12);
+	--notice-announce-border: rgba(5, 212, 113, 0.35);
+	--notice-promo: #f5b84a;
+	--notice-promo-bg: rgba(245, 184, 74, 0.12);
+	--notice-promo-border: rgba(245, 184, 74, 0.38);
 	--status-pending-border: rgba(255, 184, 0, 0.3);
 
 	/* ===== PLATFORM GRADIENTS ===== */

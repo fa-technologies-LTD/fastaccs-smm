@@ -19,6 +19,7 @@
 		Wallet
 	} from '$lib/icons';
 	import AnimatedAmount from '$lib/components/checkout/AnimatedAmount.svelte';
+	import Notice from '$lib/components/notify/Notice.svelte';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
@@ -1556,35 +1557,29 @@
 						</div>
 						<!-- Complete checkout -->
 						{#if resumableAttempt}
-							<p
-								role="status"
-								class="mt-4 rounded-lg border p-3 text-sm"
-								style="border-color: var(--border); color: var(--text-muted);"
-							>
-								You started a {formatPrice(
-									resumableAttempt.acceptedQuote?.payable ?? resumableAttempt.totalAmount
-								)} payment earlier.
-								<a class="underline" href="/dashboard?tab=orders">See it in My Orders</a>
-							</p>
+							<div class="mt-4">
+								<Notice
+									kind="info"
+									action={{ label: 'See it in My Orders', href: '/dashboard?tab=orders' }}
+								>
+									You started a {formatPrice(
+										resumableAttempt.acceptedQuote?.payable ?? resumableAttempt.totalAmount
+									)} payment earlier.
+								</Notice>
+							</div>
 						{:else if savedAttempt}
-							<p
-								role="status"
-								class="mt-4 rounded-lg border p-3 text-sm"
-								style="border-color: var(--border); color: var(--text-muted);"
-							>
-								This replaces your earlier {formatPrice(
-									savedAttempt.acceptedQuote?.payable ?? savedAttempt.totalAmount
-								)} checkout.
-							</p>
+							<div class="mt-4">
+								<Notice kind="info">
+									This replaces your earlier {formatPrice(
+										savedAttempt.acceptedQuote?.payable ?? savedAttempt.totalAmount
+									)} checkout.
+								</Notice>
+							</div>
 						{/if}
 						{#if currentPriceChangeMessage}
-							<p
-								role="status"
-								class="mt-4 rounded-lg border p-3 text-sm"
-								style="border-color: var(--status-warning); color: var(--text);"
-							>
-								{currentPriceChangeMessage}
-							</p>
+							<div class="mt-4">
+								<Notice kind="warning">{currentPriceChangeMessage}</Notice>
+							</div>
 						{/if}
 						{#if !user}
 							<p

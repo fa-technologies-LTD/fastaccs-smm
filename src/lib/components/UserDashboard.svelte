@@ -1,8 +1,9 @@
 <script lang="ts">
 	import type { CustomerRewards } from '$lib/helpers/customer-rewards';
 	import { EARNED_REDEMPTION_CAP_PERCENT } from '$lib/helpers/store-credit-redemption';
+	import Notice from '$lib/components/notify/Notice.svelte';
 	import { onMount } from 'svelte';
-	import { BriefcaseBusiness, Compass, LifeBuoy, Lock, Unlock, Clock3, X } from '$lib/icons';
+	import { BriefcaseBusiness, Compass, LifeBuoy, Lock, Unlock, X } from '$lib/icons';
 	import OrderTab from './OrderTab.svelte';
 	import PurchaseTab from './PurchaseTab.svelte';
 	import AffiliateTab from './AffiliateTab.svelte';
@@ -393,37 +394,18 @@
 	</div>
 
 	{#if paymentNotice}
-		<div
-			class="mb-5 flex items-start justify-between gap-3 rounded-[var(--r-sm)] border px-4 py-3"
-			style="background: rgba(202,219,46,0.12); border-color: rgba(202,219,46,0.32);"
-		>
-			<div class="flex items-start gap-2">
-				<Clock3 size={16} class="mt-0.5" style="color: var(--fa-lime-700);" />
-				<div>
-					<p
-						class="text-sm font-semibold"
-						style="color: var(--text); font-family: var(--font-head);"
-					>
-						{paymentNotice === 'unknown'
-							? 'We couldn’t confirm your order'
-							: 'Waiting for payment confirmation'}
-					</p>
-					<p class="text-xs sm:text-sm" style="color: var(--text-muted);">
-						{paymentNotice === 'unknown'
-							? 'Check your orders below before you try again. If it isn’t there, you weren’t charged.'
-							: 'Your order updates here by itself once Monnify confirms the payment.'}
-					</p>
-				</div>
-			</div>
-			<button
-				type="button"
-				onclick={dismissPaymentPendingBanner}
-				aria-label="Dismiss this notice"
-				class="rounded-full p-1.5 transition hover:opacity-80"
-				style="border: 1px solid var(--border); color: var(--text-muted);"
+		<div class="mb-5">
+			<Notice
+				kind={paymentNotice === 'unknown' ? 'warning' : 'info'}
+				title={paymentNotice === 'unknown'
+					? 'We couldn’t confirm your order'
+					: 'Waiting for payment confirmation'}
+				onDismiss={dismissPaymentPendingBanner}
 			>
-				<X size={14} />
-			</button>
+				{paymentNotice === 'unknown'
+					? 'Check your orders below before you try again. If it isn’t there, you weren’t charged.'
+					: 'Your order updates here by itself once Monnify confirms the payment.'}
+			</Notice>
 		</div>
 	{/if}
 
