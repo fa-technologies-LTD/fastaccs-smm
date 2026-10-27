@@ -624,9 +624,9 @@
 				Super commissions waiting for a cost ({costHeldCommissions.length})
 			</h2>
 			<p class="mt-1 text-sm" style="color: var(--text-dim);">
-				These orders had no tier cost when they were paid. Enter the real goods cost for each order
-				to work out the 5% commission. It can clear once 24 hours have passed since payment and the
-				required checks are complete.
+				These orders had no account type cost when they were paid. Enter the real goods cost for
+				each order to work out the 5% commission. It can clear once 24 hours have passed since
+				payment and the required checks are complete.
 			</p>
 			<div class="mt-4 space-y-3">
 				{#each costHeldCommissions as row (row.id)}

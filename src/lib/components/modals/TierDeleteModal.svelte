@@ -45,7 +45,9 @@
 						<AlertCircle class="h-6 w-6 text-red-600" />
 					</div>
 					<div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-						<h3 class="text-lg leading-6 font-semibold" style="color: var(--text);">Delete Tier</h3>
+						<h3 class="text-lg leading-6 font-semibold" style="color: var(--text);">
+							Delete account type
+						</h3>
 						<div class="mt-2">
 							<p class="text-sm" style="color: var(--text-muted);">
 								Are you sure you want to delete <strong>{tier?.name}</strong>? This action cannot be
@@ -69,7 +71,7 @@
 					class="inline-flex w-full cursor-pointer justify-center rounded-full px-3 py-2 text-sm font-semibold text-white transition-all hover:scale-95 active:scale-90 disabled:opacity-50 disabled:active:scale-100 sm:ml-3 sm:w-auto"
 					style="background: #dc2626;"
 				>
-					{loading ? 'Deleting...' : 'Delete Tier'}
+					{loading ? 'Deleting...' : 'Delete account type'}
 				</button>
 				<button
 					type="button"

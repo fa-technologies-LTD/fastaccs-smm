@@ -151,11 +151,14 @@
 	<div>
 		<h1 class="text-2xl font-bold" style="color: var(--text)">Promotions</h1>
 		<p class="mt-1 text-sm" style="color: var(--text-muted);">
-			Manage promo codes. Affiliate structure remains untouched for future rollout.
+			Create promo codes and see how they are used.
 		</p>
 	</div>
 
-	<section class="rounded-lg p-6" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
+	<section
+		class="rounded-lg p-6"
+		style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+	>
 		<h2 class="text-lg font-semibold" style="color: var(--text)">Create Promo Code</h2>
 		{#if !canManagePromotions}
 			<p class="mt-2 text-sm" style="color: var(--text-muted);">
@@ -259,7 +262,11 @@
 
 			<div class="flex items-end gap-3">
 				<label class="inline-flex items-center gap-2 text-sm" style="color: var(--text);">
-					<input type="checkbox" bind:checked={form.singleUsePerUser} disabled={!canManagePromotions} />
+					<input
+						type="checkbox"
+						bind:checked={form.singleUsePerUser}
+						disabled={!canManagePromotions}
+					/>
 					Single-use per user
 				</label>
 				<label class="inline-flex items-center gap-2 text-sm" style="color: var(--text);">
@@ -301,14 +308,20 @@
 		</form>
 	</section>
 
-	<section class="rounded-lg p-6" style="background: var(--bg-elev-1); border: 1px solid var(--border);">
+	<section
+		class="rounded-lg p-6"
+		style="background: var(--bg-elev-1); border: 1px solid var(--border);"
+	>
 		<h2 class="text-lg font-semibold" style="color: var(--text)">Active & Past Promotions</h2>
 		{#if promotions.length === 0}
 			<p class="mt-3 text-sm" style="color: var(--text-muted);">No promotions created yet.</p>
 		{:else}
 			<div class="mt-4 space-y-3">
 				{#each promotions as promo}
-					<div class="rounded-lg p-4" style="border: 1px solid var(--border); background: var(--bg);">
+					<div
+						class="rounded-lg p-4"
+						style="border: 1px solid var(--border); background: var(--bg);"
+					>
 						<div class="flex flex-wrap items-center justify-between gap-2">
 							<div>
 								<p class="text-sm font-semibold" style="color: var(--text);">{promo.code}</p>

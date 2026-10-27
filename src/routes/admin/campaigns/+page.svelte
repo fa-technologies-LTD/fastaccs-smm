@@ -119,7 +119,7 @@
 			{#if rw.margin.missing.length}
 				<details class="mt-2">
 					<summary class="cursor-pointer text-xs" style="color: var(--text-muted);">
-						Tiers missing a cost ({rw.margin.missing.length})
+						Account types missing a cost ({rw.margin.missing.length})
 					</summary>
 					<ul class="mt-1 list-disc pl-5 text-xs" style="color: var(--text-muted);">
 						{#each rw.margin.missing as name (name)}<li>{name}</li>{/each}

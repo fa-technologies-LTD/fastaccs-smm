@@ -107,7 +107,12 @@
 				icon: Layers,
 				permission: 'admin:catalog:manage'
 			},
-			{ href: '/admin/tiers', label: 'Tiers', icon: Target, permission: 'admin:catalog:manage' },
+			{
+				href: '/admin/tiers',
+				label: 'Account Types',
+				icon: Target,
+				permission: 'admin:catalog:manage'
+			},
 			{
 				href: '/admin/boosting-pricing',
 				label: 'Boosting Pricing',
@@ -132,7 +137,7 @@
 				icon: Plus,
 				permission: 'admin:inventory:manage'
 			},
-			{ href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
+			{ href: '/admin/orders', label: 'Account Orders', icon: ShoppingCart },
 			{ href: '/admin/boosting-orders', label: 'Boosting Orders', icon: Zap },
 			{
 				href: '/admin/numbers/analytics',

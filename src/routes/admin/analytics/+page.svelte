@@ -182,8 +182,7 @@
 				Business timezone: <span class="font-semibold">{stats.timezone || 'Africa/Lagos'}</span>
 			</p>
 			<p class="mt-1 text-xs" style="color: var(--text-dim)">
-				Order KPIs use <span class="font-semibold">createdAt</span>; net-sales timing uses
-				<span class="font-semibold">paidAt</span> (legacy fallback to createdAt when paidAt is missing).
+				Orders count on the day they were placed. Sales count on the day they were paid.
 			</p>
 		</div>
 		{#if canViewRevenue}
@@ -374,7 +373,7 @@
 					class="rounded-lg p-3"
 					style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 				>
-					<h2 class="text-base font-semibold" style="color: var(--text)">Top Tier Revenue</h2>
+					<h2 class="text-base font-semibold" style="color: var(--text)">Top Account Types</h2>
 					<div class="mt-3">
 						<BarChart
 							orientation="horizontal"
@@ -385,7 +384,7 @@
 									value: row.revenue
 								}))}
 							formatValue={formatMoney}
-							emptyMessage="No tier revenue data available."
+							emptyMessage="No account type sales yet."
 						/>
 					</div>
 				</section>

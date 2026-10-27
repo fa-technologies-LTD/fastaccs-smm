@@ -155,8 +155,8 @@
 		},
 		{
 			value: 'platform_tier_buyers',
-			label: 'Platform + tier buyers',
-			description: 'Users who purchased from specific platforms and tiers.'
+			label: 'Platform + account type buyers',
+			description: 'Users who purchased from specific platforms and account types.'
 		},
 		{
 			value: 'failed_payment_users',
@@ -452,7 +452,10 @@
 			audience === 'platform_tier_buyers' &&
 			(selectedPlatformIds.length === 0 || selectedTierIds.length === 0)
 		) {
-			showWarning('Select filters', 'Choose at least one platform and one tier for this audience.');
+			showWarning(
+				'Select filters',
+				'Choose at least one platform and one account type for this audience.'
+			);
 			return;
 		}
 		if (recipientCount <= 0 && specificEmailsList.length === 0) {
@@ -716,14 +719,16 @@
 
 			{#if audience === 'platform_tier_buyers'}
 				<div>
-					<h3 class="mb-2 text-sm font-semibold" style="color: var(--text);">Select tiers</h3>
+					<h3 class="mb-2 text-sm font-semibold" style="color: var(--text);">
+						Select account types
+					</h3>
 					<div
 						class="max-h-44 space-y-2 overflow-auto rounded-lg p-3"
 						style="background: var(--bg); border: 1px solid var(--border);"
 					>
 						{#if getVisibleTiers().length === 0}
 							<p class="text-sm" style="color: var(--text-muted);">
-								No active tiers found for the selected platform(s).
+								No active account types for the selected platform(s).
 							</p>
 						{:else}
 							{#each getVisibleTiers() as tier (tier.id)}

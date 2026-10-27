@@ -536,7 +536,7 @@
 								>
 							{:else if outOfStockCount === 0}
 								<span class="text-xs sm:text-sm" style="color: var(--status-success);"
-									>All tiers have stock</span
+									>All account types have stock</span
 								>
 							{/if}
 						</div>

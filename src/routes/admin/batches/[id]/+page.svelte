@@ -63,7 +63,9 @@
 	const processedCount = $derived(accounts.length);
 	const availableCount = $derived(accounts.filter((a) => a.status === 'available').length);
 	const deliveredCount = $derived(accounts.filter((a) => a.status === 'delivered').length);
-	const totalUnits = $derived(batch.total_accounts || (batch as any).totalUnits || accounts.length || 0);
+	const totalUnits = $derived(
+		batch.total_accounts || (batch as any).totalUnits || accounts.length || 0
+	);
 
 	function formatDateShort(value: string | null | undefined): string {
 		if (!value) return 'N/A';
@@ -129,20 +131,20 @@
 
 		if (searchTerm.trim()) {
 			const term = searchTerm.toLowerCase();
-				filtered = filtered.filter((account) => {
-					const fields = [
-						account.username,
-						account.email,
-						account.emailPassword,
-						account.twoFa,
-						account.linkUrl,
-						account.platform,
-						account.status,
-						...Object.values(account.credentialExtras || {})
-					];
-					return fields.some((value) => toSearchableText(value).includes(term));
-				});
-			}
+			filtered = filtered.filter((account) => {
+				const fields = [
+					account.username,
+					account.email,
+					account.emailPassword,
+					account.twoFa,
+					account.linkUrl,
+					account.platform,
+					account.status,
+					...Object.values(account.credentialExtras || {})
+				];
+				return fields.some((value) => toSearchableText(value).includes(term));
+			});
+		}
 
 		return filtered;
 	});
@@ -243,18 +245,21 @@
 
 		const rows = filteredAccounts().map((account) => {
 			const extrasByLabel = Object.fromEntries(
-				getCredentialExtraEntries(account.credentialExtras).map((entry) => [entry.label, entry.value])
+				getCredentialExtraEntries(account.credentialExtras).map((entry) => [
+					entry.label,
+					entry.value
+				])
 			);
 			return [
 				account.username || '',
 				account.password || '',
 				account.email || '',
-					account.emailPassword || '',
-					account.twoFa || '',
-					account.linkUrl || '',
-					account.platform || '',
-					normalizeAccountStatus(account.status || ''),
-					account.createdAt || '',
+				account.emailPassword || '',
+				account.twoFa || '',
+				account.linkUrl || '',
+				account.platform || '',
+				normalizeAccountStatus(account.status || ''),
+				account.createdAt || '',
 				account.deliveredAt || '',
 				account.deliveryNotes || '',
 				...extraHeaders.map((header) => extrasByLabel[header] || '')
@@ -306,9 +311,9 @@
 						{:else}
 							<FileText class="h-6 w-6 text-gray-600" />
 						{/if}
-						<h1 class="text-2xl font-bold text-gray-900">{batch.name}</h1>
+						<h1 class="text-2xl font-bold" style="color: var(--text)">{batch.name}</h1>
 					</div>
-					<p class="text-gray-600">Batch imported on {formatDateShort(batch.created_at)}</p>
+					<p style="color: var(--text-muted)">Uploaded {formatDateShort(batch.created_at)}</p>
 				</div>
 				<button
 					onclick={exportAccounts}
@@ -384,7 +389,9 @@
 						</div>
 						<div>
 							<dt class="text-sm font-medium text-gray-500">Description</dt>
-							<dd class="text-sm text-gray-900">{batch.description || 'No description provided'}</dd>
+							<dd class="text-sm text-gray-900">
+								{batch.description || 'No description provided'}
+							</dd>
 						</div>
 						{#if batch.metadata?.filename}
 							<div>
@@ -436,7 +443,9 @@
 		<div class="rounded-lg border border-gray-200 bg-white">
 			<div class="border-b border-gray-200 px-6 py-4">
 				<div class="flex flex-wrap items-center justify-between gap-4">
-					<h2 class="text-lg font-semibold text-gray-900">Accounts ({filteredAccounts().length})</h2>
+					<h2 class="text-lg font-semibold text-gray-900">
+						Accounts ({filteredAccounts().length})
+					</h2>
 					<div class="flex flex-wrap items-center gap-3">
 						<input
 							type="text"
@@ -467,14 +476,16 @@
 					<p class="text-gray-500">Try adjusting your search or filter criteria.</p>
 				</div>
 			{:else}
-					<!-- Mobile cards -->
-						<div class="space-y-3 p-3 lg:hidden">
-							{#each filteredAccounts() as account}
-								{@const credentialEntries = getCanonicalCredentialEntries(account as any)}
-								<div class="rounded-lg border border-gray-200 p-3">
+				<!-- Mobile cards -->
+				<div class="space-y-3 p-3 lg:hidden">
+					{#each filteredAccounts() as account}
+						{@const credentialEntries = getCanonicalCredentialEntries(account as any)}
+						<div class="rounded-lg border border-gray-200 p-3">
 							<div class="mb-3 flex items-start justify-between gap-3">
 								<div>
-									<div class="text-sm font-semibold text-gray-900">@{account.username || 'N/A'}</div>
+									<div class="text-sm font-semibold text-gray-900">
+										@{account.username || 'N/A'}
+									</div>
 									{#if account.email}
 										<div class="text-xs text-gray-500">{account.email}</div>
 									{/if}
@@ -488,30 +499,32 @@
 								</span>
 							</div>
 
-								<div class="space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs">
-									{#if credentialEntries.length === 0}
-										<div class="text-[11px] text-gray-500">No credential fields found.</div>
-									{:else}
-										{#each credentialEntries as entry}
-											<div>
-												<span class="font-semibold">{entry.label}:</span>
-												{#if entry.isUrl && entry.href}
-													<a
-														href={entry.href}
-														target="_blank"
-														rel="noopener noreferrer"
-														class="ml-1 underline"
-														style="color: var(--link);"
-													>
-														{entry.value}
-													</a>
-												{:else}
-													<span class="ml-1">{entry.value}</span>
-												{/if}
-											</div>
-										{/each}
-									{/if}
-									</div>
+							<div
+								class="space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs"
+							>
+								{#if credentialEntries.length === 0}
+									<div class="text-[11px] text-gray-500">No credential fields found.</div>
+								{:else}
+									{#each credentialEntries as entry}
+										<div>
+											<span class="font-semibold">{entry.label}:</span>
+											{#if entry.isUrl && entry.href}
+												<a
+													href={entry.href}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="ml-1 underline"
+													style="color: var(--link);"
+												>
+													{entry.value}
+												</a>
+											{:else}
+												<span class="ml-1">{entry.value}</span>
+											{/if}
+										</div>
+									{/each}
+								{/if}
+							</div>
 
 							<div class="mt-3 flex items-center justify-between text-xs text-gray-500">
 								<span>Added: {formatDateTime(account.createdAt)}</span>
@@ -559,11 +572,11 @@
 								</th>
 							</tr>
 						</thead>
-								<tbody class="divide-y divide-gray-200 bg-white">
-									{#each filteredAccounts() as account}
-										{@const StatusIcon = getStatusIcon(account.status)}
-										{@const credentialEntries = getCanonicalCredentialEntries(account as any)}
-										<tr class="hover:bg-gray-50">
+						<tbody class="divide-y divide-gray-200 bg-white">
+							{#each filteredAccounts() as account}
+								{@const StatusIcon = getStatusIcon(account.status)}
+								{@const credentialEntries = getCanonicalCredentialEntries(account as any)}
+								<tr class="hover:bg-gray-50">
 									<td class="px-6 py-4 align-top">
 										<div class="flex items-start gap-3">
 											<StatusIcon
@@ -578,33 +591,35 @@
 											</div>
 										</div>
 									</td>
-										<td class="px-6 py-4 align-top">
-											<div class="space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs">
-												{#if credentialEntries.length === 0}
-													<div class="text-[11px] text-gray-500">No credential fields found.</div>
-												{:else}
-													{#each credentialEntries as entry}
-														<div>
-															<span class="font-semibold">{entry.label}:</span>
-															{#if entry.isUrl && entry.href}
-																<a
-																	href={entry.href}
-																	target="_blank"
-																	rel="noopener noreferrer"
-																	class="inline-flex items-center gap-1 underline"
-																	style="color: var(--link);"
-																>
-																	{entry.value}
-																	<ExternalLink class="h-3 w-3" />
-																</a>
-															{:else}
-																<span>{entry.value}</span>
-															{/if}
-														</div>
-													{/each}
-												{/if}
-												</div>
-											</td>
+									<td class="px-6 py-4 align-top">
+										<div
+											class="space-y-1 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-xs"
+										>
+											{#if credentialEntries.length === 0}
+												<div class="text-[11px] text-gray-500">No credential fields found.</div>
+											{:else}
+												{#each credentialEntries as entry}
+													<div>
+														<span class="font-semibold">{entry.label}:</span>
+														{#if entry.isUrl && entry.href}
+															<a
+																href={entry.href}
+																target="_blank"
+																rel="noopener noreferrer"
+																class="inline-flex items-center gap-1 underline"
+																style="color: var(--link);"
+															>
+																{entry.value}
+																<ExternalLink class="h-3 w-3" />
+															</a>
+														{:else}
+															<span>{entry.value}</span>
+														{/if}
+													</div>
+												{/each}
+											{/if}
+										</div>
+									</td>
 									<td class="px-6 py-4 align-top">
 										<span
 											class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {getStatusColor(

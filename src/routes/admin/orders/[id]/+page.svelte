@@ -1003,7 +1003,7 @@
 										<th
 											class="px-6 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
 										>
-											Platform/Tier
+											Platform / account type
 										</th>
 										{#if showCredentials}
 											<th

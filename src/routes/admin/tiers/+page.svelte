@@ -192,7 +192,7 @@
 
 	// Show error if data loading failed
 	if (data.error) {
-		showError('Failed to load  tiers', data.error);
+		showError('Failed to load account types', data.error);
 	}
 
 	// Auto-generate slug from name (no platform prefix for  tiers)
@@ -325,20 +325,20 @@
 
 			const result = await createCategory(newTier);
 			if (result.error) {
-				showError('Failed to create tier', result.error);
+				showError('Failed to create account type', result.error);
 			} else {
 				tiers = [...tiers, result.data!];
 				showCreateModal = false;
 				const selectedPlatform = platforms.find((p) => p.id === tierForm.parentId);
 				showSuccess(
-					'Tier created successfully',
+					'Account type created',
 					`${tierForm.name} has been created for ${selectedPlatform?.name || 'the selected platform'}`
 				);
 				resetForm();
 			}
 		} catch (error) {
 			console.error('Failed to create tier:', error);
-			showError('Failed to create tier', 'An unexpected error occurred');
+			showError('Failed to create account type', 'An unexpected error occurred');
 		}
 	}
 
@@ -366,16 +366,16 @@
 
 			const result = await updateCategory(selectedTier.id as string, updates);
 			if (result.error) {
-				showError('Failed to update tier', result.error);
+				showError('Failed to update account type', result.error);
 			} else {
 				tiers = tiers.map((t) => (t.id === selectedTier!.id ? result.data! : t));
 				showEditModal = false;
-				showSuccess(' tier updated successfully', `${tierForm.name} has been updated`);
+				showSuccess('Account type updated', `${tierForm.name} has been updated`);
 				selectedTier = null;
 			}
 		} catch (error) {
 			console.error('Failed to update tier:', error);
-			showError('Failed to update tier', 'An unexpected error occurred');
+			showError('Failed to update account type', 'An unexpected error occurred');
 		} finally {
 			loading = false;
 		}
@@ -397,15 +397,15 @@
 		try {
 			const result = await deleteCategory(tierToDelete.id as string);
 			if (result.error) {
-				showError('Failed to delete tier', result.error);
+				showError('Failed to delete account type', result.error);
 			} else {
 				tiers = tiers.filter((t) => t.id !== tierToDelete!.id);
-				showSuccess('Tier deleted', `${tierToDelete.name} has been removed from all platforms`);
+				showSuccess('Account type deleted', `${tierToDelete.name} has been removed`);
 				closeDeleteModal();
 			}
 		} catch (error) {
 			console.error('Failed to delete tier:', error);
-			showError('Failed to delete tier', 'An unexpected error occurred');
+			showError('Failed to delete account type', 'An unexpected error occurred');
 		}
 	}
 
@@ -510,7 +510,7 @@
 		}
 
 		const confirmed = window.confirm(
-			`Confirm the offload file for "${tier.name}" has downloaded successfully.\n\nThis will delete ${accountCount} available/unsold log${accountCount === 1 ? '' : 's'} from this tier. Delivered, allocated, and reserved records will not be deleted.`
+			`Confirm the offload file for "${tier.name}" has downloaded successfully.\n\nThis will delete ${accountCount} available/unsold log${accountCount === 1 ? '' : 's'} from this account type. Delivered, allocated, and reserved records will not be deleted.`
 		);
 		if (!confirmed) {
 			showWarning('Delete cancelled', 'No logs were deleted.');
@@ -549,7 +549,7 @@
 		if (!tierId || !isTierActive(tier)) return;
 
 		const confirmed = window.confirm(
-			`Archive "${tier.name}"?\n\nIf this tier still has available logs, use Offload or Offload & Delete first. Archive will hide the tier from customer storefront listings and preserve historical records.`
+			`Archive "${tier.name}"?\n\nIf this account type still has available logs, use Offload or Offload & Delete first. Archive will hide the account type from customer storefront listings and preserve historical records.`
 		);
 		if (!confirmed) return;
 
@@ -575,7 +575,7 @@
 			console.error('Failed to archive tier:', error);
 			showError(
 				'Archive failed',
-				error instanceof Error ? error.message : 'Could not archive tier.'
+				error instanceof Error ? error.message : 'Could not archive account type.'
 			);
 		} finally {
 			busyTierAction = null;
@@ -584,7 +584,7 @@
 </script>
 
 <svelte:head>
-	<title>Tier Management - Admin Panel</title>
+	<title>Account Types - Admin Panel</title>
 </svelte:head>
 
 <div class="p-2 sm:p-4">
@@ -594,11 +594,11 @@
 			<div class="min-w-0 flex-1">
 				<div class="mb-2 flex items-center gap-3">
 					<Target class="h-5 w-5 sm:h-6 sm:w-6" style="color: #a855f7;" />
-					<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">Tier Management</h1>
+					<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">Account Types</h1>
 				</div>
 				<p class="text-sm sm:text-base" style="color: var(--text-muted)">
-					Manage follower tiers that work across all platforms. Accounts from any platform can be
-					assigned to these tiers.
+					Each account type belongs to one platform. Set what buyers see, how it is delivered and
+					its price.
 				</p>
 				{#if costOverview && costOverview.total > 0}
 					<div
@@ -609,7 +609,7 @@
 							Costs entered on <strong style="color: var(--text);"
 								>{costOverview.withCost} of {costOverview.total}</strong
 							>
-							active account tiers.
+							active account types.
 							{#if costOverview.missing.length}
 								Missing: {costOverview.missing.slice(0, 6).join(', ')}{costOverview.missing.length >
 								6
@@ -636,33 +636,15 @@
 				style="background: #a855f7;"
 			>
 				<Plus size={18} />
-				Add Tier
+				Add account type
 			</button>
-		</div>
-
-		<!-- Info Banner -->
-		<div
-			class="rounded-lg p-4"
-			style="border: 1px solid rgba(105,109,250,0.3); background: rgba(105,109,250,0.08);"
-		>
-			<div class="flex items-start gap-3">
-				<AlertCircle class="mt-0.5 h-5 w-5 flex-shrink-0" style="color: var(--link);" />
-				<div class="text-sm">
-					<p class="mb-1 font-medium" style="color: var(--link)">How Tiers Work</p>
-					<p style="color: var(--text-muted)">
-						tiers (like "500 Followers") contain accounts from ALL platforms. When customers visit a
-						platform page, they see these tiers with account counts filtered by that platform. This
-						allows you to manage one set of tiers instead of separate tiers for each platform.
-					</p>
-				</div>
-			</div>
 		</div>
 
 		<div class="mt-3">
 			<input
 				type="search"
 				bind:value={tierSearch}
-				placeholder="Search tiers by name or platform…"
+				placeholder="Search account types by name or platform…"
 				class="w-full rounded-lg px-3 py-2 text-sm sm:max-w-xs"
 				style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
 			/>
@@ -735,9 +717,9 @@
 	{:else if tiers.length === 0}
 		<div class="py-12 text-center">
 			<Target class="mx-auto mb-4 h-12 w-12" style="color: var(--text-dim);" />
-			<h3 class="mb-2 text-lg font-medium" style="color: var(--text)">No tiers found</h3>
+			<h3 class="mb-2 text-lg font-medium" style="color: var(--text)">No account types yet</h3>
 			<p class="mb-4" style="color: var(--text-muted)">
-				Create your first follower tier to get started. It will be available across all platforms.
+				Add your first account type to start selling.
 			</p>
 			<button
 				onclick={openCreateModal}
@@ -745,17 +727,17 @@
 				style="background: #a855f7;"
 			>
 				<Plus class="mr-2 h-4 w-4" />
-				Add Tier
+				Add account type
 			</button>
 		</div>
 	{:else if visibleTiers.length === 0}
 		<div class="py-12 text-center">
 			<Archive class="mx-auto mb-4 h-12 w-12" style="color: var(--text-dim);" />
 			<h3 class="mb-2 text-lg font-medium" style="color: var(--text)">
-				No {tierStatusFilter} tiers found
+				No {tierStatusFilter} account types
 			</h3>
 			<p class="mb-4" style="color: var(--text-muted)">
-				Switch filters above to view the other tier states.
+				Switch the filter above to see the others.
 			</p>
 		</div>
 	{:else if tierViewMode === 'compact'}
@@ -875,8 +857,8 @@
 											disabled={busyTierAction !== null}
 											class="rounded-full p-2 transition-colors disabled:opacity-50"
 											style="color: var(--text-muted); border: 1px solid var(--border);"
-											title="Edit Tier"
-											aria-label="Edit Tier"
+											title="Edit account type"
+											aria-label="Edit account type"
 										>
 											<Edit size={15} />
 										</button>
@@ -955,7 +937,7 @@
 								disabled={busyTierAction !== null}
 								class="group rounded p-1 transition-colors"
 								style="color: var(--text-dim);"
-								title="Edit Tier"
+								title="Edit account type"
 							>
 								<Edit size={16} class="transition-transform group-hover:scale-90" />
 							</button>

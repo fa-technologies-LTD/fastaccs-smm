@@ -1,7 +1,12 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { Plus, Trash2, Edit, Eye, AlertCircle, Archive } from '$lib/icons';
-	import { createCategory, updateCategory, deleteCategory, retireCategory } from '$lib/services/categories';
+	import {
+		createCategory,
+		updateCategory,
+		deleteCategory,
+		retireCategory
+	} from '$lib/services/categories';
 	import { showSuccess, showError } from '$lib/stores/toasts';
 	import type { Category, CategoryInsert, CategoryUpdate } from '$lib/services/categories';
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
@@ -265,7 +270,7 @@
 			const result = await response.json();
 
 			if (!response.ok || result.error) {
-				throw new Error(result.error || 'Failed to load destination tiers');
+				throw new Error(result.error || 'Failed to load destination account types');
 			}
 
 			const tiers = (result.data || []) as Array<
@@ -278,10 +283,12 @@
 				}
 			>;
 
-			retireTargets = tiers.filter((tier) => tier.id !== platformId && tier.parentId !== platformId);
+			retireTargets = tiers.filter(
+				(tier) => tier.id !== platformId && tier.parentId !== platformId
+			);
 		} catch (error) {
 			console.error('Failed to load retire targets:', error);
-			showError('Could not load destination tiers', 'Please try again.');
+			showError('Could not load destination account types', 'Please try again.');
 			retireTargets = [];
 		} finally {
 			retireTargetsLoading = false;
@@ -300,7 +307,7 @@
 		if (!platformToRetire) return;
 
 		if (moveAvailableInventory && !retireTargetCategoryId) {
-			showError('Destination required', 'Choose a destination tier/category before retiring.');
+			showError('Destination required', 'Choose a destination account type before retiring.');
 			return;
 		}
 
@@ -432,7 +439,8 @@
 							{:else}
 								<div
 									class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded font-semibold text-white"
-									style="background-color: {typeof platformMeta.color === 'string' && platformMeta.color.trim()
+									style="background-color: {typeof platformMeta.color === 'string' &&
+									platformMeta.color.trim()
 										? platformMeta.color
 										: '#3B82F6'}"
 								>
@@ -449,8 +457,8 @@
 								onclick={() => viewTiers(platform)}
 								class="group rounded p-2 transition-colors hover:bg-white/5"
 								style="color: var(--text-muted);"
-								title="View Tiers"
-								aria-label="View Tiers"
+								title="View account types"
+								aria-label="View account types"
 							>
 								<Eye size={16} class="transition-transform group-hover:scale-90" />
 							</button>
@@ -518,17 +526,6 @@
 							</div>
 						{/if}
 					</div>
-
-					<!-- Platform Info Note -->
-					<div class="mt-4 pt-4" style="border-top: 1px solid var(--border)">
-						<p class="text-center text-xs" style="color: var(--text-muted)">
-							Tiers are managed in the <a
-								href="/admin/tiers"
-								class="transition-opacity hover:opacity-80"
-								style="color: var(--link);">Tiers</a
-							> section
-						</p>
-					</div>
 				</div>
 			{/each}
 		</div>
@@ -563,14 +560,14 @@
 		{loading}
 		onClose={() => (showEditModal = false)}
 		onUpdate={handleUpdate}
-			onNameInput={(value) => (platformForm.name = value)}
-			onSlugInput={(value) => (platformForm.slug = value)}
-			onDescriptionInput={(value) => (platformForm.description = value)}
-			onIconInput={(value) => (platformForm.metadata.icon = value)}
-			onColorInput={(value) => (platformForm.metadata.color = value)}
-			onWebsiteInput={(value) => (platformForm.metadata.website_url = value)}
-		/>
-	{/if}
+		onNameInput={(value) => (platformForm.name = value)}
+		onSlugInput={(value) => (platformForm.slug = value)}
+		onDescriptionInput={(value) => (platformForm.description = value)}
+		onIconInput={(value) => (platformForm.metadata.icon = value)}
+		onColorInput={(value) => (platformForm.metadata.color = value)}
+		onWebsiteInput={(value) => (platformForm.metadata.website_url = value)}
+	/>
+{/if}
 
 <!-- Delete Confirmation Modal -->
 {#if showDeleteModal}
@@ -588,9 +585,9 @@
 	<PlatformRetireModal
 		open={showRetireModal}
 		platform={platformToRetire}
-		loading={loading}
+		{loading}
 		loadingTargets={retireTargetsLoading}
-		moveAvailableInventory={moveAvailableInventory}
+		{moveAvailableInventory}
 		targetCategoryId={retireTargetCategoryId}
 		targetOptions={retireTargets}
 		onClose={closeRetireModal}

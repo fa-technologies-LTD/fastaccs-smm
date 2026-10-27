@@ -124,7 +124,7 @@
 		}
 
 		if (!uploadForm.tier_id) {
-			uploadError = 'Please select a tier';
+			uploadError = 'Please select an account type';
 			return;
 		}
 
@@ -394,12 +394,12 @@
 					</div>
 
 					<!-- Actions -->
-						<div class="pt-3" style="border-top: 1px solid var(--border);">
-							<button
-								onclick={() => viewBatchDetails(batch)}
-								class="group flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-all hover:scale-[.99] sm:text-sm"
-								style="background: var(--bg-elev-2); color: var(--text);"
-							>
+					<div class="pt-3" style="border-top: 1px solid var(--border);">
+						<button
+							onclick={() => viewBatchDetails(batch)}
+							class="group flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-all hover:scale-[.99] sm:text-sm"
+							style="background: var(--bg-elev-2); color: var(--text);"
+						>
 							<Eye size={16} class="transition-transform group-hover:scale-90" />
 							View Details
 						</button>
@@ -434,26 +434,26 @@
 					}}
 				>
 					<div class="px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-							<div class="mb-4">
-								<h3 class="text-lg font-semibold" style="color: var(--text);">
-									Import Account Batch
-								</h3>
-								<p class="mt-1 text-sm" style="color: var(--text-muted);">
-									Upload a CSV file with any credential/log schema. Columns are auto-detected.
-								</p>
-								<p class="mt-1 text-xs" style="color: var(--text-muted);">
-									Known fields (mapped automatically when present): profile link, username, password,
-									email, email password, 2FA link, followers, engagement rate, niche, quality score.
-								</p>
-								<p class="mt-1 text-xs" style="color: var(--text-muted);">
-									Example: <code class="rounded px-1" style="background: var(--surface);">
-										Profile Link,Username,Password,Email,Email Password,2FA Link,Backup Email</code
-									>
-								</p>
-								<p class="mt-1 text-xs" style="color: var(--text-muted);">
-									Hard-fail mode: if any row is invalid, nothing is imported.
-								</p>
-							</div>
+						<div class="mb-4">
+							<h3 class="text-lg font-semibold" style="color: var(--text);">
+								Import Account Batch
+							</h3>
+							<p class="mt-1 text-sm" style="color: var(--text-muted);">
+								Upload a CSV file with any credential/log schema. Columns are auto-detected.
+							</p>
+							<p class="mt-1 text-xs" style="color: var(--text-muted);">
+								Known fields (mapped automatically when present): profile link, username, password,
+								email, email password, 2FA link, followers, engagement rate, niche, quality score.
+							</p>
+							<p class="mt-1 text-xs" style="color: var(--text-muted);">
+								Example: <code class="rounded px-1" style="background: var(--surface);">
+									Profile Link,Username,Password,Email,Email Password,2FA Link,Backup Email</code
+								>
+							</p>
+							<p class="mt-1 text-xs" style="color: var(--text-muted);">
+								Hard-fail mode: if any row is invalid, nothing is imported.
+							</p>
+						</div>
 
 						{#if uploadError}
 							<div class="mb-4 rounded-lg border border-red-200 bg-red-50 p-3">
@@ -495,66 +495,70 @@
 							</div>
 						{/if}
 
-							<div class="space-y-4">
-								<!-- File Upload -->
-								<div>
-									<label for={batchCsvInputId} class="mb-2 block text-sm font-medium" style="color: var(--text);"
-										>CSV File *</label
-									>
-									<input
-										id={batchCsvInputId}
-										type="file"
-										accept=".csv,text/csv,application/csv,text/comma-separated-values,application/vnd.ms-excel"
-										class="sr-only"
-										onchange={handleFileSelect}
-									/>
-									<div
-										class="rounded-lg border border-dashed p-4 text-center transition-colors sm:p-5"
-										role="group"
-										style={dragActive
-											? 'border-color: var(--primary); background: var(--surface);'
-											: 'border-color: var(--border);'}
-										ondragover={handleDragOver}
-										ondragleave={handleDragLeave}
-										ondrop={handleDrop}
-									>
-										{#if selectedFile}
-											<div class="flex flex-wrap items-center justify-center gap-1.5 text-green-600">
-												<FileText size={18} />
-												<span class="max-w-full truncate text-sm font-medium">{selectedFile.name}</span>
-												<span class="text-xs" style="color: var(--text-muted);">
-													({formatFileSize(selectedFile.size)})
-												</span>
-											</div>
-											<label
-												for={batchCsvInputId}
-												class="mt-2 inline-flex cursor-pointer items-center justify-center rounded-full px-3 py-1 text-xs font-medium"
-												style="border: 1px solid var(--border); color: var(--text); background: var(--bg-elev-2);"
+						<div class="space-y-4">
+							<!-- File Upload -->
+							<div>
+								<label
+									for={batchCsvInputId}
+									class="mb-2 block text-sm font-medium"
+									style="color: var(--text);">CSV File *</label
+								>
+								<input
+									id={batchCsvInputId}
+									type="file"
+									accept=".csv,text/csv,application/csv,text/comma-separated-values,application/vnd.ms-excel"
+									class="sr-only"
+									onchange={handleFileSelect}
+								/>
+								<div
+									class="rounded-lg border border-dashed p-4 text-center transition-colors sm:p-5"
+									role="group"
+									style={dragActive
+										? 'border-color: var(--primary); background: var(--surface);'
+										: 'border-color: var(--border);'}
+									ondragover={handleDragOver}
+									ondragleave={handleDragLeave}
+									ondrop={handleDrop}
+								>
+									{#if selectedFile}
+										<div class="flex flex-wrap items-center justify-center gap-1.5 text-green-600">
+											<FileText size={18} />
+											<span class="max-w-full truncate text-sm font-medium"
+												>{selectedFile.name}</span
 											>
-												Choose Another File
-											</label>
-										{:else}
-											<div class="space-y-2">
-												<Upload class="mx-auto h-6 w-6" style="color: var(--text-dim);" />
-												<div>
-													<p class="text-xs sm:text-sm" style="color: var(--text-muted);">
-														Drop your CSV file here, or tap to choose one
-													</p>
-													<label
-														for={batchCsvInputId}
-														class="mt-2 inline-flex cursor-pointer items-center justify-center rounded-full px-3 py-1 text-xs font-medium sm:text-sm"
-														style="border: 1px solid var(--status-info-border); color: var(--link); background: rgba(105,109,250,0.12);"
-													>
-														Choose CSV File
-													</label>
-													<p class="mt-2 text-[11px]" style="color: var(--text-dim);">
-														Mobile: use the file picker button above.
-													</p>
-												</div>
+											<span class="text-xs" style="color: var(--text-muted);">
+												({formatFileSize(selectedFile.size)})
+											</span>
+										</div>
+										<label
+											for={batchCsvInputId}
+											class="mt-2 inline-flex cursor-pointer items-center justify-center rounded-full px-3 py-1 text-xs font-medium"
+											style="border: 1px solid var(--border); color: var(--text); background: var(--bg-elev-2);"
+										>
+											Choose Another File
+										</label>
+									{:else}
+										<div class="space-y-2">
+											<Upload class="mx-auto h-6 w-6" style="color: var(--text-dim);" />
+											<div>
+												<p class="text-xs sm:text-sm" style="color: var(--text-muted);">
+													Drop your CSV file here, or tap to choose one
+												</p>
+												<label
+													for={batchCsvInputId}
+													class="mt-2 inline-flex cursor-pointer items-center justify-center rounded-full px-3 py-1 text-xs font-medium sm:text-sm"
+													style="border: 1px solid var(--status-info-border); color: var(--link); background: rgba(105,109,250,0.12);"
+												>
+													Choose CSV File
+												</label>
+												<p class="mt-2 text-[11px]" style="color: var(--text-dim);">
+													Mobile: use the file picker button above.
+												</p>
 											</div>
-										{/if}
-									</div>
+										</div>
+									{/if}
 								</div>
+							</div>
 
 							<!-- Batch Name -->
 							<div>
@@ -596,7 +600,7 @@
 									class="block text-sm font-medium"
 									style="color: var(--text);"
 								>
-									Tier *
+									Account type *
 								</label>
 								<select
 									id="tier-select"
@@ -607,7 +611,7 @@
 									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 								>
 									<option value="">
-										{uploadForm.platform_id ? 'Select a tier...' : 'Select platform first'}
+										{uploadForm.platform_id ? 'Select an account type...' : 'Select platform first'}
 									</option>
 									{#each availableTiers() as tier}
 										<option value={tier.id}>{tier.name}</option>

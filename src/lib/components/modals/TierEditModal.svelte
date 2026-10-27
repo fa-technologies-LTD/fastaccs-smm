@@ -96,10 +96,10 @@
 						<div class="mb-4">
 							<h3 class="flex items-center gap-2 text-lg font-semibold" style="color: var(--text);">
 								<Target class="h-5 w-5" style="color: var(--primary);" />
-								Edit Tier
+								Edit account type
 							</h3>
 							<p class="mt-1 text-sm" style="color: var(--text-muted);">
-								Changes will affect this tier across all platforms
+								Changes apply to this account type
 							</p>
 						</div>
 
@@ -108,7 +108,7 @@
 							<!-- Name -->
 							<div class="md:col-span-2">
 								<label for="edit-name" class="block text-sm font-medium" style="color: var(--text);"
-									>Tier Name *</label
+									>Account type name *</label
 								>
 								<input
 									id="edit-name"
@@ -164,7 +164,7 @@
 										>
 										<span class="mt-1 block text-xs" style="color: var(--text-muted);">
 											Offer 0F, +100F (₦4,000), +500F (₦12,000), or +1,000F (₦19,000). Use this only
-											on a manual-handover Verified X tier.
+											on a manual-handover Verified X account type.
 										</span>
 									</span>
 									<input
@@ -186,7 +186,7 @@
 										</p>
 										<p class="mt-1 text-xs leading-relaxed" style="color: var(--text-muted);">
 											Let logged-in buyers open real profile links and choose friendly profile
-											labels before checkout. Keep this off for normal sample-only tiers.
+											labels before checkout. Keep this off for normal sample-only account types.
 										</p>
 									</div>
 									<input
@@ -210,14 +210,14 @@
 											class="mt-1 block text-xs leading-relaxed"
 											style="color: var(--text-muted);"
 										>
-											Keep this checked whenever the tier's margin cannot safely support both sides
-											of the offer.
+											Keep this checked whenever the account type's margin cannot safely support
+											both sides of the offer.
 										</span>
 									</span>
 									<input
 										type="checkbox"
 										bind:checked={tierForm.metadata.affiliate_excluded}
-										aria-label="Exclude this tier from the affiliate offer"
+										aria-label="Exclude this account type from the affiliate offer"
 									/>
 								</label>
 							</div>
@@ -229,7 +229,7 @@
 								<div class="mb-2">
 									<p class="text-sm font-semibold" style="color: var(--text);">Merchandising</p>
 									<p class="text-xs" style="color: var(--text-muted);">
-										Control tier prominence on storefront with pinning and featured badges.
+										Control how prominent this account type is on the storefront.
 									</p>
 								</div>
 								<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -237,7 +237,7 @@
 										class="flex items-center justify-between rounded-md px-3 py-2 text-sm"
 										style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
 									>
-										<span>Pin this tier</span>
+										<span>Pin this account type</span>
 										<input
 											type="checkbox"
 											bind:checked={tierForm.metadata.is_pinned}
@@ -325,7 +325,8 @@
 								<div class="mb-2">
 									<p class="text-sm font-semibold" style="color: var(--text);">Delivery Handling</p>
 									<p class="text-xs" style="color: var(--text-muted);">
-										Choose whether this tier is delivered instantly or by manual WhatsApp handover.
+										Choose whether this account type is delivered instantly or by manual WhatsApp
+										handover.
 									</p>
 								</div>
 								<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -396,7 +397,8 @@
 								<div class="mb-2">
 									<p class="text-sm font-semibold" style="color: var(--text);">Buyer Login Guide</p>
 									<p class="text-xs" style="color: var(--text-muted);">
-										Attach a per-tier login guide link so buyers can self-serve after purchase.
+										Attach a login guide link for this account type so buyers can self-serve after
+										purchase.
 									</p>
 								</div>
 								<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -626,7 +628,7 @@
 							class="inline-flex w-full justify-center rounded-full px-3 py-2 text-sm font-semibold shadow-sm disabled:opacity-50 sm:ml-3 sm:w-auto"
 							style="background: var(--primary); color: #000;"
 						>
-							{loading ? 'Updating...' : 'Update Tier'}
+							{loading ? 'Updating...' : 'Update account type'}
 						</button>
 						<button
 							type="button"

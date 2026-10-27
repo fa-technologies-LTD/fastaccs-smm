@@ -3,9 +3,9 @@
 	let { active }: { active: 'accounts' | 'boosting' | 'numbers' } = $props();
 
 	const tabs = [
-		{ key: 'accounts', label: 'Accounts', href: '/admin/orders' },
-		{ key: 'boosting', label: 'Boosting', href: '/admin/boosting-orders' },
-		{ key: 'numbers', label: 'Numbers', href: '/admin/numbers/analytics' }
+		{ key: 'accounts', label: 'Account Orders', href: '/admin/orders' },
+		{ key: 'boosting', label: 'Boosting Orders', href: '/admin/boosting-orders' },
+		{ key: 'numbers', label: 'Numbers Orders', href: '/admin/numbers/analytics' }
 	] as const;
 </script>
 

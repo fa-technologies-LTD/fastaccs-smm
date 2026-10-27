@@ -839,7 +839,7 @@
 				<p class="mt-2 text-xs" style="color: var(--text-muted);">
 					{data.superSwitchoverWat
 						? `Set for ${data.superSwitchoverWat.replace('T', ' ')} WAT.`
-						: 'Not set.'} Profit commission needs a cost on each account tier; orders without one are
+						: 'Not set.'} Profit commission needs a cost on each account type; orders without one are
 					held for review.
 				</p>
 				<button
@@ -1027,7 +1027,7 @@
 			<p class="mt-1 text-sm" style="color: var(--text-muted);">
 				Role split is enforced server-side: FULL_ADMIN, ORDER_MANAGER, ASSISTANT, READ_ONLY.
 				ASSISTANT can run orders &amp; inventory but never sees revenue/analytics and can't create
-				tiers, offload accounts, or manage users.
+				account types, offload accounts, or manage users.
 			</p>
 			{#if !roleManagementEnabled}
 				<p class="mt-3 text-sm" style="color: var(--text-muted);">

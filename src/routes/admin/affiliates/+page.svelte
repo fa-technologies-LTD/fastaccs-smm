@@ -238,8 +238,10 @@
 	<!-- Header -->
 	<div class="flex items-center justify-between">
 		<div>
-			<h1 class="text-2xl font-bold text-gray-900">Affiliate Management</h1>
-			<p class="mt-1 text-gray-600">Monitor and manage affiliate programs</p>
+			<h1 class="text-2xl font-bold" style="color: var(--text)">Affiliates</h1>
+			<p class="mt-1" style="color: var(--text-muted)">
+				Referrals, earnings, bank details and payouts.
+			</p>
 		</div>
 		<button onclick={exportData} class="btn-fa btn-fa--primary cursor-pointer">
 			<Download class="h-4 w-4" />
