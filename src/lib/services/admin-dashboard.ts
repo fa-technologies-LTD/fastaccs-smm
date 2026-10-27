@@ -1,5 +1,7 @@
 import { prisma } from '$lib/prisma';
 import { EMAIL_FAILURE_NOISE_FILTER } from '$lib/services/email-failure-filters';
+import { describeAdminActivity } from '$lib/helpers/admin-activity-label';
+import { getOrderStage } from '$lib/helpers/order-stage';
 
 export type RecentActivityItem = {
 	id: string;
@@ -31,7 +33,7 @@ export async function getRecentActivityFeed(limit = 10): Promise<RecentActivityI
 		prisma.order.findMany({
 			orderBy: { createdAt: 'desc' },
 			take: 5,
-			select: { id: true, orderNumber: true, status: true, createdAt: true }
+			include: { orderItems: true }
 		}),
 		prisma.user.findMany({
 			orderBy: { registeredAt: 'desc' },
@@ -39,6 +41,15 @@ export async function getRecentActivityFeed(limit = 10): Promise<RecentActivityI
 			select: { id: true, email: true, fullName: true, registeredAt: true }
 		}),
 		prisma.adminAuditLog.findMany({
+			// Skip the steps a broadcast logs while it sends; they are the system working, not an admin.
+			where: {
+				NOT: {
+					AND: [
+						{ description: { startsWith: 'POST /api/admin/broadcast/' } },
+						{ description: { endsWith: '/process' } }
+					]
+				}
+			},
 			orderBy: { createdAt: 'desc' },
 			take: 5,
 			select: {
@@ -54,7 +65,7 @@ export async function getRecentActivityFeed(limit = 10): Promise<RecentActivityI
 		...orders.map((order) => ({
 			id: `order-${order.id}`,
 			type: 'order' as const,
-			label: `New order ${order.orderNumber} — ${order.status}`,
+			label: `New order ${order.orderNumber} · ${getOrderStage(order).chip}`,
 			href: `/admin/orders/${order.id}`,
 			timestamp: order.createdAt
 		})),
@@ -65,13 +76,16 @@ export async function getRecentActivityFeed(limit = 10): Promise<RecentActivityI
 			href: `/admin/users/${user.id}`,
 			timestamp: user.registeredAt
 		})),
-		...adminActions.map((entry) => ({
-			id: `admin-action-${entry.id}`,
-			type: 'admin_action' as const,
-			label: entry.description || 'Admin action',
-			href: entry.targetUserId ? `/admin/users/${entry.targetUserId}` : null,
-			timestamp: entry.createdAt
-		}))
+		...adminActions.map((entry) => {
+			const described = describeAdminActivity(entry.description);
+			return {
+				id: `admin-action-${entry.id}`,
+				type: 'admin_action' as const,
+				label: described.label,
+				href: described.href ?? (entry.targetUserId ? `/admin/users/${entry.targetUserId}` : null),
+				timestamp: entry.createdAt
+			};
+		})
 	];
 
 	items.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
