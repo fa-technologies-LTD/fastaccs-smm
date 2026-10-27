@@ -136,3 +136,87 @@ it('renders purchased followers, not a cart-line count or an internal product ty
 	await expect.element(page.getByText('×1', { exact: true })).not.toBeInTheDocument();
 	await expect.element(page.getByText('boosting_service', { exact: true })).not.toBeInTheDocument();
 });
+
+function accountOrderFixture(order: Record<string, unknown>) {
+	return {
+		order: {
+			id: 'test-order',
+			orderNumber: 'ORD-TEST',
+			orderItems: [{ quantity: 1, productName: 'test' }],
+			item_count: 1,
+			created_at: '2026-06-17T11:18:15Z',
+			metadata: { notes: [] },
+			...order
+		},
+		items: [
+			{
+				id: 'acc-1',
+				account_username: 'buyer_account',
+				account_status: 'delivered',
+				platform_name: 'Facebook',
+				tier_name: 'test'
+			}
+		],
+		orderedItems: [],
+		error: null,
+		canViewOrderAmounts: true,
+		adminRole: 'FULL_ADMIN',
+		adminPermissions: ['admin:orders:manage']
+	};
+}
+
+it('closes a refunded order: no send, cancel or refund actions, only a muted refunded note', async () => {
+	render(Page, {
+		data: accountOrderFixture({
+			status: 'refunded',
+			paymentStatus: 'refunded',
+			deliveryStatus: 'refunded',
+			totalAmount: 500,
+			refundedAmount: 500,
+			total_amount: 500,
+			refunded_amount: 500,
+			net_sale_amount: 0
+		})
+	} as never);
+	await expect.element(page.getByText('Refunded ₦500 to store credit')).toBeVisible();
+	await expect.element(page.getByText(/^Closed\. This order was refunded/)).toBeVisible();
+	for (const name of ['Refund to store credit', 'Cancel Order', 'Mark as Completed']) {
+		expect(page.getByRole('button', { name, exact: true }).query()).toBeNull();
+	}
+	expect(page.getByRole('button', { name: /^Send via/ }).query()).toBeNull();
+	expect(page.getByRole('button', { name: /faulty & refund/i }).query()).toBeNull();
+});
+
+it('closes an order whose payment failed: no cancel button', async () => {
+	render(Page, {
+		data: accountOrderFixture({
+			status: 'failed',
+			paymentStatus: 'failed',
+			total_amount: 500,
+			refunded_amount: 0,
+			net_sale_amount: 500
+		})
+	} as never);
+	await expect.element(page.getByText(/^Closed\. The payment never came through/)).toBeVisible();
+	expect(page.getByRole('button', { name: 'Cancel Order', exact: true }).query()).toBeNull();
+});
+
+it('keeps the actions on a paid account order that still needs handing over', async () => {
+	render(Page, {
+		data: accountOrderFixture({
+			status: 'processing',
+			paymentStatus: 'paid',
+			totalAmount: 500,
+			total_amount: 500,
+			refunded_amount: 0,
+			net_sale_amount: 500
+		})
+	} as never);
+	await expect
+		.element(page.getByRole('button', { name: 'Refund to store credit', exact: true }))
+		.toBeVisible();
+	await expect
+		.element(page.getByRole('button', { name: 'Cancel Order', exact: true }))
+		.toBeVisible();
+	expect(page.getByText(/^Closed\./).query()).toBeNull();
+});

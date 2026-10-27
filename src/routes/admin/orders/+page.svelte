@@ -8,6 +8,7 @@
 	import { getOrderStatusLabel, isOrderStatusInGroup } from '$lib/helpers/order-status';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
 	import { isRevenueOrder, toNetSales } from '$lib/helpers/order-revenue';
+	import { getOrderStage } from '$lib/helpers/order-stage';
 
 	// Props from page data
 	let { data } = $props<{
@@ -78,16 +79,9 @@
 
 	// Pin unresolved manual-handover orders (paid, awaiting WhatsApp handover) to
 	// the top so they aren't missed; once delivered they fall back into date order.
+	// Uses the shared order stage, so refunded, unpaid and cancelled orders never pin.
 	function isUnresolvedManual(order: any): boolean {
-		// A manual handover is "done" once the order is marked completed (handed over
-		// on WhatsApp) — those keep deliveryStatus 'processing', so check status too.
-		const status = String(order?.status || '').toLowerCase();
-		return (
-			order?.deliveryMethod === 'whatsapp' &&
-			status !== 'completed' &&
-			String(order?.deliveryStatus || '').toLowerCase() !== 'delivered' &&
-			!isCancelledOrder(order)
-		);
+		return order?.deliveryMethod === 'whatsapp' && getOrderStage(order).key === 'preparing';
 	}
 	const sortedForAttention = $derived.by(() =>
 		[...filteredOrders].sort(

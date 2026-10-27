@@ -33,6 +33,8 @@
 	import { normalizeAccountStatus } from '$lib/helpers/account-status';
 	import { canCompleteOrder } from '$lib/helpers/order-completion';
 	import { getBoostOrderSummaryStatus } from '$lib/helpers/boosting-progress';
+	import { getOrderStage } from '$lib/helpers/order-stage';
+	import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 
 	// Props from load function
 	interface Props {
@@ -62,6 +64,16 @@
 
 	let order = $state(data.order);
 	const displayStatus = $derived(getBoostOrderSummaryStatus(order) ?? order.status);
+	// Same stage rules the buyer sees. A fully refunded order, or one that ended without payment,
+	// is closed: history and notes only, no delivery, cancel or refund actions left.
+	const isRefundedOrder = $derived(getOrderStage(order).key === 'refunded');
+	const isClosed = $derived(
+		isRefundedOrder ||
+			(!isOrderPaymentConfirmed({ status: order.status, paymentStatus: order.paymentStatus }) &&
+				['cancelled', 'failed', 'expired', 'abandoned'].includes(
+					String(order.status || '').toLowerCase()
+				))
+	);
 	let items = $state<OrderItemWithDetails[]>(data.items);
 	const orderedItems = $derived(data.orderedItems || []);
 	const isBoostingOrder = $derived(
@@ -635,7 +647,7 @@
 
 					<!-- A provider-reported completion does not remove Boosting refund rights.
 					     Preserve the existing Accounts restriction; the refund API rechecks payment. -->
-					{#if canManageOrders && ['paid', 'success', 'overpaid'].includes(order.paymentStatus) && (isBoostingOrder || String(order.status) !== 'completed') && String(order.status) !== 'refunded'}
+					{#if canManageOrders && !isClosed && ['paid', 'success', 'overpaid'].includes(order.paymentStatus) && (isBoostingOrder || String(order.status) !== 'completed') && String(order.status) !== 'refunded'}
 						{#if refundArmed}
 							{#if isBoostingOrder}<p class="w-full text-sm text-[var(--text-muted)]">
 									Refunds the entire order to store credit. Existing supplier work may continue.
@@ -676,14 +688,16 @@
 								Refund to store credit
 							</button>
 						{/if}
-					{:else if String(order.status) === 'refunded' || String(order.paymentStatus) === 'refunded'}
+					{:else if isRefundedOrder}
 						<span
 							class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold sm:px-4 sm:text-sm"
-							style="border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--status-success);"
-							title="This order was refunded to the buyer's store credit"
+							style="border-color: var(--border); background: var(--bg-elev-2); color: var(--text-muted);"
+							title="Refunded to the buyer's store credit. This order is closed."
 						>
 							<CheckCircle class="h-4 w-4" />
-							Refunded to store credit
+							Refunded {formatAdminAmount(
+								Number(order.refunded_amount || 0) || Number(order.total_amount || 0)
+							)} to store credit
 						</span>
 					{/if}
 				</div>
@@ -854,7 +868,11 @@
 							<Package class="mx-auto mb-4 h-12 w-12 text-[var(--text-dim)]" />
 							<h3 class="mb-2 text-lg font-medium text-[var(--text)]">No accounts allocated</h3>
 							<p class="text-[var(--text-muted)]">
-								Accounts will be allocated when the order is processed.
+								{isRefundedOrder
+									? 'This order was refunded before any accounts were sent.'
+									: isClosed
+										? 'This order ended without payment, so no accounts were sent.'
+										: 'Accounts will be allocated when the order is processed.'}
 							</p>
 						</div>
 					{:else}
@@ -895,6 +913,10 @@
 										<span>{item.platform_name} · {item.tier_name}</span>
 										{#if getAccountStatus(item) === 'faulty'}
 											<span class="text-[11px] font-medium text-amber-500">Refunded (faulty)</span>
+										{:else if isClosed}
+											<span class="text-[11px] font-medium text-[var(--text-muted)]"
+												>Order refunded</span
+											>
 										{:else}
 											<button
 												onclick={() => refundFaultyAccount(item.id, item.account_username)}
@@ -1099,6 +1121,10 @@
 												<div class="inline-flex items-center gap-3">
 													{#if accountStatus === 'faulty'}
 														<span class="text-[11px] font-medium text-amber-500">Refunded</span>
+													{:else if isClosed}
+														<span class="text-[11px] font-medium text-[var(--text-muted)]"
+															>Order refunded</span
+														>
 													{:else}
 														<button
 															onclick={() => refundFaultyAccount(item.id, item.account_username)}
@@ -1199,7 +1225,7 @@
 				{/if}
 
 				<!-- Delivery Management -->
-				{#if !isBoostingOrder}
+				{#if !isBoostingOrder && !isClosed}
 					<div class="rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] p-6 shadow-sm">
 						<h3 class="mb-4 text-lg font-semibold text-[var(--text)]">Delivery Management</h3>
 
@@ -1243,40 +1269,48 @@
 				<div class="rounded-lg border border-[var(--border)] bg-[var(--bg-elev-1)] p-6 shadow-sm">
 					<h3 class="mb-4 text-lg font-semibold text-[var(--text)]">Status Management</h3>
 
-					<div class="space-y-3">
-						{#if order.status === 'pending' || order.status === 'pending_payment'}
-							<button
-								onclick={() => updateStatus('processing')}
-								disabled={isProcessing}
-								class="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-							>
-								<Clock class="h-4 w-4" />
-								Start Processing
-							</button>
-						{/if}
+					{#if isClosed}
+						<p class="text-sm text-[var(--text-muted)]">
+							{isRefundedOrder
+								? 'Closed. This order was refunded to store credit, so there is nothing left to do.'
+								: 'Closed. The payment never came through, so there is nothing left to do.'}
+						</p>
+					{:else}
+						<div class="space-y-3">
+							{#if order.status === 'pending' || order.status === 'pending_payment'}
+								<button
+									onclick={() => updateStatus('processing')}
+									disabled={isProcessing}
+									class="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+								>
+									<Clock class="h-4 w-4" />
+									Start Processing
+								</button>
+							{/if}
 
-						{#if canCompleteOrder(order)}
-							<button
-								onclick={() => updateStatus('completed')}
-								disabled={isProcessing}
-								class="flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
-							>
-								<CheckCircle class="h-4 w-4" />
-								{isBoostingOrder ? 'Review Boosting delivery' : 'Mark as Completed'}
-							</button>
-						{/if}
+							{#if canCompleteOrder(order)}
+								<button
+									onclick={() => updateStatus('completed')}
+									disabled={isProcessing}
+									class="flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
+								>
+									<CheckCircle class="h-4 w-4" />
+									{isBoostingOrder ? 'Review Boosting delivery' : 'Mark as Completed'}
+								</button>
+							{/if}
 
-						{#if order.status !== 'cancelled' && order.status !== 'completed'}
-							<button
-								onclick={() => updateStatus('cancelled')}
-								disabled={isProcessing}
-								class="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
-							>
-								<X class="h-4 w-4" />
-								Cancel Order
-							</button>
-						{/if}
-					</div>
+							{#if order.status !== 'cancelled' && order.status !== 'completed'}
+								<button
+									onclick={() => updateStatus('cancelled')}
+									disabled={isProcessing}
+									class="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+								>
+									<X class="h-4 w-4" />
+									Cancel Order
+								</button>
+							{/if}
+						</div>
+					{/if}
 				</div>
 
 				<!-- Order Notes -->
