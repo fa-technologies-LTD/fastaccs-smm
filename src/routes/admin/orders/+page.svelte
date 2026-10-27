@@ -215,9 +215,9 @@
 <div class="p-2 sm:p-4">
 	<div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 		<div class="min-w-0 flex-1">
-			<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">Order Management</h1>
+			<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">Account Orders</h1>
 			<p class="mt-1 text-sm sm:text-base" style="color: var(--text-muted)">
-				Manage customer orders and processing status.
+				Accounts bought on the site, newest first.
 			</p>
 			<div class="mt-2">
 				<OrderTypeTabs active="accounts" />

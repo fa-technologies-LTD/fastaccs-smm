@@ -257,7 +257,17 @@ export async function getInventoryStatsSnapshot(
 				isActive: true
 			}
 		}),
-		prisma.account.count({ where: { status: 'available' } }),
+		// In stock: what a buyer can buy now, so only active account types (same as Inventory).
+		prisma.account.count({
+			where: {
+				status: 'available',
+				category: {
+					categoryType: 'tier',
+					isActive: true,
+					NOT: { metadata: { path: ['delivery_mode'], equals: 'auto_sms' } }
+				}
+			}
+		}),
 		// Only holds that are still running count as reserved; expired ones are reported apart.
 		prisma.account.count({
 			where: { status: 'reserved', OR: [{ reservedUntil: null }, { reservedUntil: { gt: now } }] }

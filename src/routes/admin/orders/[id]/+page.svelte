@@ -141,6 +141,8 @@
 				return X;
 			case 'cancelled':
 				return X;
+			case 'refunded':
+				return CheckCircle;
 			default:
 				return AlertTriangle;
 		}
@@ -158,6 +160,7 @@
 			case 'failed':
 				return 'text-[var(--status-error)] bg-[var(--status-error-bg)]';
 			case 'cancelled':
+			case 'refunded':
 				return 'text-[var(--text-muted)] bg-[var(--bg-elev-2)]';
 			default:
 				return 'text-[var(--status-warning)] bg-[var(--status-warning-bg)]';

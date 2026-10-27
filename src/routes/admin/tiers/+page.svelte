@@ -768,7 +768,7 @@
 								</h2>
 								<p class="text-xs" style="color: var(--text-muted);">
 									{group.tiers.length}
-									{group.tiers.length === 1 ? 'tier' : 'tiers'}
+									{group.tiers.length === 1 ? 'account type' : 'account types'}
 								</p>
 							</div>
 						</div>

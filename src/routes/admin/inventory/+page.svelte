@@ -201,19 +201,24 @@
 	const summaryStats = $derived.by(() => {
 		const accountTiers = inventoryRows.filter((item) => !item.is_manual);
 		return {
-			total_accounts: inventoryRows.reduce(
-				(sum, item) => sum + (item.lifetime_total_accounts || item.total_accounts || 0),
-				0
-			),
+			// All-time figures cover every account type, archived ones too, same as the dashboard.
+			total_accounts:
+				Number(data.stats?.total_accounts) ||
+				inventoryRows.reduce(
+					(sum, item) => sum + (item.lifetime_total_accounts || item.total_accounts || 0),
+					0
+				),
 			available_accounts: inventoryRows.reduce(
 				(sum, item) => sum + (item.available_accounts || 0),
 				0
 			),
-			delivered_accounts: inventoryRows.reduce(
-				(sum, item) =>
-					sum + (item.delivered_accounts || item.sold_accounts || item.allocated_accounts || 0),
-				0
-			),
+			delivered_accounts:
+				Number(data.stats?.sold_accounts) ||
+				inventoryRows.reduce(
+					(sum, item) =>
+						sum + (item.delivered_accounts || item.sold_accounts || item.allocated_accounts || 0),
+					0
+				),
 			platforms: new Set(inventoryRows.map((item) => item.platform_name)).size,
 			out_of_stock: accountTiers.filter((item) => (item.available_accounts || 0) === 0).length,
 			low_stock: accountTiers.filter((item) =>
@@ -561,7 +566,7 @@
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
-							Lifetime Stock
+							Uploaded
 						</th>
 						<th
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
@@ -573,7 +578,7 @@
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
-							Delivered
+							Sold From Stock
 						</th>
 						<th
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
@@ -803,7 +808,9 @@
 										</p>
 									</div>
 									<div>
-										<p class="text-[10px] uppercase" style="color: var(--text-dim);">Delivered</p>
+										<p class="text-[10px] uppercase" style="color: var(--text-dim);">
+											Sold from stock
+										</p>
 										<p class="text-sm font-bold" style="color: var(--link);">
 											{item.delivered_accounts ??
 												item.sold_accounts ??
