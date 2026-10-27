@@ -107,6 +107,8 @@ export async function getOrders(
 		status?: string;
 		userId?: string;
 		type?: 'account' | 'boosting';
+		/** Admin list rows only: no login details. */
+		view?: 'list';
 	} = {},
 	fetchFn: typeof fetch = fetch
 ) {
@@ -117,6 +119,7 @@ export async function getOrders(
 		if (options.status) searchParams.set('status', options.status);
 		if (options.userId) searchParams.set('userId', options.userId);
 		if (options.type) searchParams.set('type', options.type);
+		if (options.view) searchParams.set('view', options.view);
 
 		const response = await fetchFn(`/api/orders?${searchParams.toString()}`);
 		return await handleApiCall(response);

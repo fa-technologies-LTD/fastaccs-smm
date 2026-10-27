@@ -52,8 +52,14 @@ export const GET: RequestHandler = async () => {
 					]
 				}
 			}),
-			// Affiliate bank details waiting for the owner's review.
-			prisma.affiliatePayoutDetails.count({ where: { status: 'pending' } }),
+			// Affiliate bank details waiting for review, for the same people the Affiliates page lists,
+			// so this count matches the banner there.
+			prisma.affiliatePayoutDetails.count({
+				where: {
+					status: 'pending',
+					user: { OR: [{ isAffiliateEnabled: true }, { affiliatePrograms: { some: {} } }] }
+				}
+			}),
 			// Payment issues: webhooks held for a person, and refunds whose follow-up did not finish.
 			prisma.paymentWebhookInbox.count({ where: { status: 'quarantined' } }),
 			prisma.refundRecoveryTask.count({ where: { status: { not: 'completed' } } })

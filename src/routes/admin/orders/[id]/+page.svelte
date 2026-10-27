@@ -32,8 +32,9 @@
 	} from '$lib/helpers/credential-contract';
 	import { normalizeAccountStatus } from '$lib/helpers/account-status';
 	import { canCompleteOrder } from '$lib/helpers/order-completion';
-	import { getBoostOrderSummaryStatus } from '$lib/helpers/boosting-progress';
 	import { getOrderStage } from '$lib/helpers/order-stage';
+	import OrderStageChip from '$lib/components/OrderStageChip.svelte';
+	import { askDecision } from '$lib/stores/decision.svelte';
 	import { isOrderPaymentConfirmed } from '$lib/helpers/buyer-order-visibility';
 
 	// Props from load function
@@ -63,10 +64,10 @@
 	let hideMonetaryAmounts = $state(false);
 
 	let order = $state(data.order);
-	const displayStatus = $derived(getBoostOrderSummaryStatus(order) ?? order.status);
 	// Same stage rules the buyer sees. A fully refunded order, or one that ended without payment,
 	// is closed: history and notes only, no delivery, cancel or refund actions left.
-	const isRefundedOrder = $derived(getOrderStage(order).key === 'refunded');
+	const stage = $derived(getOrderStage(order));
+	const isRefundedOrder = $derived(stage.key === 'refunded');
 	const isClosed = $derived(
 		isRefundedOrder ||
 			(!isOrderPaymentConfirmed({ status: order.status, paymentStatus: order.paymentStatus }) &&
@@ -131,42 +132,6 @@
 	}
 
 	// Helper functions
-	function getStatusIcon(status: string) {
-		switch (status) {
-			case 'completed':
-				return CheckCircle;
-			case 'processing':
-				return Clock;
-			case 'failed':
-				return X;
-			case 'cancelled':
-				return X;
-			case 'refunded':
-				return CheckCircle;
-			default:
-				return AlertTriangle;
-		}
-	}
-
-	function getStatusColor(status: string) {
-		switch (status) {
-			case 'completed':
-				return 'text-[var(--status-success)] bg-[var(--status-success-bg)]';
-			case 'processing':
-				return 'text-[var(--link)] bg-[var(--bg-elev-2)]';
-			case 'pending':
-			case 'pending_payment':
-				return 'text-[var(--status-warning)] bg-[var(--status-warning-bg)]';
-			case 'failed':
-				return 'text-[var(--status-error)] bg-[var(--status-error-bg)]';
-			case 'cancelled':
-			case 'refunded':
-				return 'text-[var(--text-muted)] bg-[var(--bg-elev-2)]';
-			default:
-				return 'text-[var(--status-warning)] bg-[var(--status-warning-bg)]';
-		}
-	}
-
 	function formatStatusLabel(status: string) {
 		if (status === 'needs_link') return 'Action needed';
 		return String(status || '')
@@ -404,6 +369,46 @@
 		}
 	}
 
+	// Admin-only outcome for a faulty account: swap in a fresh one of the same type from stock.
+	let replacingAccountId = $state<string | null>(null);
+	async function replaceAccount(accountId: string | undefined, username: string | undefined) {
+		if (!accountId || replacingAccountId) return;
+		const confirmed = await askDecision({
+			title: 'Replace this account?',
+			message: `@${username || 'This account'} is retired and the buyer gets a new account of the same type from stock. No money moves.`,
+			confirmLabel: 'Replace account',
+			cancelLabel: 'Keep it'
+		});
+		if (!confirmed) return;
+		replacingAccountId = accountId;
+		try {
+			const res = await fetch(`/api/orders/${order.id}/replace-account`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ accountId })
+			});
+			const result = await res.json().catch(() => ({}));
+			if (!res.ok || !result.success) throw new Error(result.error || 'Replacement failed');
+			addToast({
+				type: 'success',
+				title: 'Account replaced',
+				message: 'The buyer can see the new login on their order now.',
+				duration: 4000
+			});
+			await invalidateAll();
+			items = data.items;
+		} catch (error) {
+			addToast({
+				type: 'error',
+				title: 'Not replaced',
+				message: error instanceof Error ? error.message : 'Try again.',
+				duration: 5000
+			});
+		} finally {
+			replacingAccountId = null;
+		}
+	}
+
 	// Per-account faulty refund: flag one bad account and refund its unit price to store credit.
 	let refundingAccountId = $state<string | null>(null);
 	async function refundFaultyAccount(accountId: string | undefined, username: string | undefined) {
@@ -568,18 +573,10 @@
 					<div class="flex-1">
 						<div class="mb-2 flex items-center gap-3">
 							{#if order}
-								{@const StatusIcon = getStatusIcon(displayStatus)}
-								<StatusIcon class="h-6 w-6 {getStatusColor(displayStatus).split(' ')[0]}" />
 								<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text);">
-									Order #{getDisplayOrderId(order.id)}
+									{order.orderNumber || `Order #${getDisplayOrderId(order.id)}`}
 								</h1>
-								<span
-									class="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium {getStatusColor(
-										displayStatus
-									)}"
-								>
-									{formatStatusLabel(displayStatus)}
-								</span>
+								<OrderStageChip {stage} size="lg" />
 							{/if}
 						</div>
 						<p style="color: var(--text-muted);">
@@ -916,11 +913,20 @@
 										<span>{item.platform_name} · {item.tier_name}</span>
 										{#if getAccountStatus(item) === 'faulty'}
 											<span class="text-[11px] font-medium text-amber-500">Refunded (faulty)</span>
+										{:else if getAccountStatus(item) === 'replaced'}
+											<span class="text-[11px] font-medium text-[var(--text-muted)]">Replaced</span>
 										{:else if isClosed}
 											<span class="text-[11px] font-medium text-[var(--text-muted)]"
 												>Order refunded</span
 											>
 										{:else}
+											<button
+												onclick={() => replaceAccount(item.id, item.account_username)}
+												disabled={replacingAccountId === item.id}
+												class="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-50"
+											>
+												{replacingAccountId === item.id ? 'Replacing…' : 'Replace'}
+											</button>
 											<button
 												onclick={() => refundFaultyAccount(item.id, item.account_username)}
 												disabled={refundingAccountId === item.id}
@@ -999,36 +1005,36 @@
 								<thead class="bg-[var(--bg-elev-2)]">
 									<tr>
 										<th
-											class="px-6 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
+											class="px-4 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
 										>
 											Account
 										</th>
 										<th
-											class="px-6 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
+											class="px-4 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
 										>
 											Platform / account type
 										</th>
 										{#if showCredentials}
 											<th
-												class="px-6 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
+												class="px-4 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
 											>
 												Credentials Log
 											</th>
 										{/if}
 										<th
-											class="px-6 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
+											class="px-4 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
 										>
 											Status
 										</th>
 										{#if showCredentials}
 											<th
-												class="px-6 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
+												class="px-4 py-3 text-left text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
 											>
 												Timeline
 											</th>
 										{/if}
 										<th
-											class="px-6 py-3 text-right text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
+											class="px-4 py-3 text-right text-xs font-medium tracking-wider text-[var(--text-muted)] uppercase"
 										>
 											Actions
 										</th>
@@ -1048,7 +1054,7 @@
 											credentialExtras: item.account_credential_extras || {}
 										})}
 										<tr class="hover:bg-[var(--bg-elev-2)]">
-											<td class="px-6 py-4 whitespace-nowrap">
+											<td class="px-4 py-3 whitespace-nowrap">
 												<div>
 													<div class="text-sm font-medium text-[var(--text)]">
 														@{item.account_username || 'N/A'}
@@ -1058,7 +1064,7 @@
 													</div>
 												</div>
 											</td>
-											<td class="px-6 py-4 whitespace-nowrap">
+											<td class="px-4 py-3 whitespace-nowrap">
 												<div>
 													<div class="text-sm font-medium text-[var(--text)]">
 														{item.platform_name}
@@ -1069,7 +1075,7 @@
 												</div>
 											</td>
 											{#if showCredentials}
-												<td class="px-6 py-4 align-top">
+												<td class="px-4 py-3 align-top">
 													<div
 														class="space-y-1 rounded border border-[var(--border)] bg-[var(--bg-elev-2)] p-2 font-mono text-xs"
 													>
@@ -1101,7 +1107,7 @@
 													</div>
 												</td>
 											{/if}
-											<td class="px-6 py-4 align-top whitespace-nowrap">
+											<td class="px-4 py-3 align-top whitespace-nowrap">
 												<span
 													class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {getAccountStatusColor(
 														accountStatus
@@ -1111,7 +1117,7 @@
 												</span>
 											</td>
 											{#if showCredentials}
-												<td class="px-6 py-4 align-top text-xs text-[var(--text-muted)]">
+												<td class="px-4 py-3 align-top text-xs text-[var(--text-muted)]">
 													<div>Added: {formatDateTime(item.account_created_at)}</div>
 													{#if item.account_delivered_at}
 														<div class="mt-1">
@@ -1120,15 +1126,27 @@
 													{/if}
 												</td>
 											{/if}
-											<td class="px-6 py-4 text-right text-sm font-medium whitespace-nowrap">
+											<td class="px-4 py-3 text-right text-sm font-medium whitespace-nowrap">
 												<div class="inline-flex items-center gap-3">
 													{#if accountStatus === 'faulty'}
 														<span class="text-[11px] font-medium text-amber-500">Refunded</span>
+													{:else if accountStatus === 'replaced'}
+														<span class="text-[11px] font-medium text-[var(--text-muted)]"
+															>Replaced</span
+														>
 													{:else if isClosed}
 														<span class="text-[11px] font-medium text-[var(--text-muted)]"
 															>Order refunded</span
 														>
 													{:else}
+														<button
+															onclick={() => replaceAccount(item.id, item.account_username)}
+															disabled={replacingAccountId === item.id}
+															class="rounded-lg border border-[var(--border)] px-2 py-1 text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-50"
+															title="Give the buyer a new account of this type from stock"
+														>
+															{replacingAccountId === item.id ? '…' : 'Replace'}
+														</button>
 														<button
 															onclick={() => refundFaultyAccount(item.id, item.account_username)}
 															disabled={refundingAccountId === item.id}

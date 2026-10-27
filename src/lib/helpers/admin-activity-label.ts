@@ -26,6 +26,12 @@ const RULES: Rule[] = [
 	},
 	{
 		method: 'POST',
+		path: new RegExp(`^/api/orders/(${UUID})/replace-account$`),
+		label: 'Faulty account replaced',
+		href: orderHref
+	},
+	{
+		method: 'POST',
 		path: new RegExp(`^/api/orders/(${UUID})/refund-account$`),
 		label: 'Faulty account refunded',
 		href: orderHref

@@ -20,18 +20,6 @@
 	function secs(n: number | null): string {
 		return n == null ? '—' : n < 60 ? `${n}s` : `${Math.round(n / 60)}m`;
 	}
-	function statusColor(s: string): string {
-		if (s === 'received') return '#34d399';
-		if (['refunded', 'expired', 'cancelled', 'failed'].includes(s)) return '#fbbf24';
-		return '#38bdf8';
-	}
-	function providerLabel(provider: string): string {
-		return provider === 'pvapins' ? 'PVAPins' : provider === 'hubman' ? 'Hubman' : provider;
-	}
-	function attemptCost(attempt: (typeof a.recent)[number]['attempts'][number]): string | null {
-		const cost = attempt.actualCostUsd ?? attempt.expectedCostUsd;
-		return cost == null ? null : `$${cost.toFixed(2)}`;
-	}
 	function probeCount(status: string): number {
 		return Number(data.probeSummary?.byStatus?.[status] ?? 0);
 	}
@@ -56,9 +44,11 @@
 	<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
 		<div class="flex items-center gap-3">
 			<Phone class="h-6 w-6" style="color: #38bdf8;" />
-			<h1 class="text-2xl font-bold" style="color: var(--text);">Numbers — Orders & Analytics</h1>
+			<h1 class="text-2xl font-bold" style="color: var(--text);">Numbers Sales</h1>
 		</div>
-		<a href="/admin/numbers" class="text-sm hover:underline" style="color: #38bdf8;">Pricing →</a>
+		<a href="/admin/numbers" class="text-sm hover:underline" style="color: #38bdf8;"
+			>Numbers Prices →</a
+		>
 	</div>
 
 	{#if lowBalance}
@@ -281,92 +271,8 @@
 		</table>
 	</div>
 
-	<!-- Recent -->
-	<h2 class="mb-2 flex items-center gap-2 font-semibold" style="color: var(--text);">
-		<ShieldCheck class="h-4 w-4" style="color: var(--text-muted);" /> Recent rentals
-	</h2>
-	<div class="overflow-x-auto rounded-lg" style="border: 1px solid var(--border);">
-		<table class="w-full text-sm">
-			<thead style="background: var(--bg-elev-1);">
-				<tr class="text-left text-xs uppercase" style="color: var(--text-muted);">
-					<th class="px-4 py-3">When</th>
-					<th class="px-4 py-3">Buyer</th>
-					<th class="px-4 py-3">Service</th>
-					<th class="px-4 py-3">Source</th>
-					<th class="px-4 py-3">Number</th>
-					<th class="px-4 py-3">Status</th>
-					<th class="px-4 py-3 text-right">Net sale</th>
-					<th class="px-4 py-3 text-right">Cost</th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each a.recent as r (r.createdAt + (r.phoneNumber ?? ''))}
-					<tr style="border-top: 1px solid var(--border); background: var(--surface);">
-						<td class="px-4 py-2 whitespace-nowrap" style="color: var(--text-muted);">
-							{new Date(r.createdAt).toLocaleString()}
-						</td>
-						<td class="px-4 py-2" style="color: var(--text);">
-							{#if r.buyer}
-								<a
-									href="/admin/users?q={encodeURIComponent(r.buyer)}"
-									class="hover:underline"
-									style="color: #38bdf8;">{r.buyer}</a
-								>
-							{:else}
-								<span style="color: var(--text-dim);">guest</span>
-							{/if}
-						</td>
-						<td class="px-4 py-2" style="color: var(--text);">{r.serviceName} — {r.countryName}</td>
-						<td class="px-4 py-2 align-top">
-							<div class="flex flex-col items-start gap-1.5">
-								<span
-									class="inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold"
-									style={r.provider === 'pvapins'
-										? 'background: rgba(167,139,250,0.14); color: #a78bfa; border: 1px solid rgba(167,139,250,0.3);'
-										: 'background: rgba(56,189,248,0.12); color: #38bdf8; border: 1px solid rgba(56,189,248,0.28);'}
-									>{r.provider === 'pvapins' ? 'pvapins' : 'hub-man'}</span
-								>
-								{#if r.attempts.length > 0}
-									<details class="text-xs" style="color: var(--text-muted);">
-										<summary class="cursor-pointer hover:underline">
-											{r.attempts.length}
-											{r.attempts.length === 1 ? 'attempt' : 'attempts'}
-										</summary>
-										<ol class="mt-2 space-y-1.5" aria-label="Provider attempt trail">
-											{#each r.attempts as attempt, index (`${attempt.createdAt}:${attempt.provider}:${attempt.providerServiceRef}:${index}`)}
-												<li class="whitespace-nowrap">
-													<span class="font-semibold" style="color: var(--text);"
-														>{index + 1}. {providerLabel(attempt.provider)}</span
-													>
-													· <span class="font-mono">{attempt.providerServiceRef}</span> · {attempt.outcome.replaceAll(
-														'_',
-														' '
-													)}
-													{#if attemptCost(attempt)}· {attemptCost(attempt)}{/if}
-												</li>
-											{/each}
-										</ol>
-									</details>
-								{/if}
-							</div>
-						</td>
-						<td class="px-4 py-2 font-mono" style="color: var(--text);">{r.phoneNumber ?? '—'}</td>
-						<td class="px-4 py-2 font-medium" style="color: {statusColor(r.status)};">{r.status}</td
-						>
-						<td class="px-4 py-2 text-right" style="color: var(--text);">{ngn(r.saleNgn)}</td>
-						<td class="px-4 py-2 text-right" style="color: var(--text-muted);">
-							{r.costUsd == null ? '—' : `$${r.costUsd.toFixed(2)}`}
-						</td>
-					</tr>
-				{/each}
-				{#if a.recent.length === 0}
-					<tr style="background: var(--surface);">
-						<td colspan="8" class="px-4 py-8 text-center" style="color: var(--text-dim);"
-							>No rentals yet.</td
-						>
-					</tr>
-				{/if}
-			</tbody>
-		</table>
-	</div>
+	<p class="text-sm" style="color: var(--text-muted);">
+		Each number order, with its supplier attempts, is in
+		<a href="/admin/numbers/orders" style="color: var(--link);">Numbers Orders</a>.
+	</p>
 </div>

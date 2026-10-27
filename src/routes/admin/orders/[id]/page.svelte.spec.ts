@@ -5,6 +5,7 @@ import { orderedItemSummary } from '$lib/helpers/ordered-item-summary';
 import Page from './+page.svelte';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(), invalidateAll: vi.fn() }));
+vi.mock('$lib/stores/decision.svelte', () => ({ askDecision: vi.fn(async () => true) }));
 
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -45,7 +46,7 @@ it('shows under review rather than a stale completed summary for a held Boosting
 		}
 	] as any;
 	render(Page, { data } as any);
-	await expect.element(page.getByText('Under Review', { exact: true })).toBeVisible();
+	await expect.element(page.getByText('Checking', { exact: true })).toBeVisible();
 	await expect.element(page.getByRole('link', { name: 'Manage delivery review' })).toBeVisible();
 	expect(page.getByText('Completed', { exact: true }).query()).toBeNull();
 });
@@ -219,4 +220,42 @@ it('keeps the actions on a paid account order that still needs handing over', as
 		.element(page.getByRole('button', { name: 'Cancel Order', exact: true }))
 		.toBeVisible();
 	expect(page.getByText(/^Closed\./).query()).toBeNull();
+});
+
+it('replaces a faulty account from stock after confirming, with no refund', async () => {
+	const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+		async () => Response.json({ success: true, newAccountId: 'acc-2' })
+	);
+	vi.stubGlobal('fetch', fetchMock);
+	render(Page, {
+		data: accountOrderFixture({
+			status: 'completed',
+			paymentStatus: 'paid',
+			deliveryStatus: 'delivered',
+			totalAmount: 500,
+			total_amount: 500,
+			refunded_amount: 0,
+			net_sale_amount: 500
+		})
+	} as never);
+	await page.getByRole('button', { name: 'Replace', exact: true }).first().click();
+	await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
+	expect(String(fetchMock.mock.calls[0][0])).toBe('/api/orders/test-order/replace-account');
+	expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ accountId: 'acc-1' });
+});
+
+it('shows a replaced account as done, with no buttons left on it', async () => {
+	const data = accountOrderFixture({
+		status: 'completed',
+		paymentStatus: 'paid',
+		totalAmount: 500,
+		total_amount: 500,
+		refunded_amount: 0,
+		net_sale_amount: 500
+	});
+	data.items[0].account_status = 'replaced';
+	render(Page, { data } as never);
+	await expect.element(page.getByText('Replaced', { exact: true }).first()).toBeVisible();
+	expect(page.getByRole('button', { name: 'Replace', exact: true }).query()).toBeNull();
+	expect(page.getByRole('button', { name: /faulty & refund/i }).query()).toBeNull();
 });

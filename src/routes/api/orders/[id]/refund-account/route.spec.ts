@@ -165,4 +165,15 @@ describe('per-account refund integrity', () => {
 		expect(tx.order.update).not.toHaveBeenCalled();
 		expect(mocks.reconcileRegular).not.toHaveBeenCalled();
 	});
+
+	it('never refunds an account that was already replaced with a working one', async () => {
+		tx.account.findUnique.mockResolvedValue(accountRecord({ status: 'replaced' }));
+
+		const response = await callRefundAccount();
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error).toMatch(/already replaced/);
+		expect(mocks.creditStoreCredit).not.toHaveBeenCalled();
+		expect(tx.order.update).not.toHaveBeenCalled();
+	});
 });

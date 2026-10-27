@@ -111,6 +111,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			) {
 				return { outcome: 'order_refunded' as const };
 			}
+			// A replaced account was already swapped for a working one; refunding it too would pay twice.
+			if (String(account.status).toLowerCase() === 'replaced')
+				return { outcome: 'replaced' as const };
 			if (!order.userId) return { outcome: 'guest' as const };
 			const wasPaid = ['paid', 'success', 'overpaid'].includes(order.paymentStatus);
 			if (!wasPaid) return { outcome: 'not_paid' as const };
@@ -233,6 +236,12 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	if (result.outcome === 'order_refunded') {
 		return json(
 			{ error: 'The full order has already been refunded; no additional credit was added.' },
+			{ status: 409 }
+		);
+	}
+	if (result.outcome === 'replaced') {
+		return json(
+			{ error: 'This account was already replaced with a new one, so it can’t be refunded.' },
 			{ status: 409 }
 		);
 	}

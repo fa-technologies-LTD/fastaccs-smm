@@ -47,11 +47,11 @@
 	});
 </script>
 
-<svelte:head><title>Payment recovery — Admin</title></svelte:head>
+<svelte:head><title>Payment Issues — Admin</title></svelte:head>
 <section class="mx-auto max-w-4xl space-y-5 p-4 sm:p-6">
 	<a href="/admin/orders" class="text-sm">← Orders</a>
 	<div class="flex items-center justify-between gap-3">
-		<h1 class="text-2xl font-bold">Payment recovery</h1>
+		<h1 class="text-2xl font-bold">Payment Issues</h1>
 		<button onclick={refresh} class="rounded-lg border px-3 py-2 text-sm">Refresh</button>
 	</div>
 	<p class="text-sm" style="color: var(--text-muted)">

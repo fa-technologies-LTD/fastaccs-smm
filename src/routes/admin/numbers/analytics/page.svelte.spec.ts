@@ -21,12 +21,11 @@ function fixture(revenueVisible: boolean) {
 	};
 }
 
-it('hides company money while preserving an order manager’s per-order refund amounts', async () => {
+it('hides company money for roles without revenue access', async () => {
 	render(Page, { data: fixture(false) } as never);
 	await expect
 		.element(page.getByText('Revenue and supplier costs are hidden for your role.'))
 		.toBeVisible();
-	await expect.element(page.getByText('₦5,500', { exact: true })).toBeVisible();
 	expect(page.getByText('₦11,000', { exact: true }).query()).toBeNull();
 	expect(page.getByText('$0.75', { exact: true }).query()).toBeNull();
 	expect(page.getByText('$8.02', { exact: true }).query()).toBeNull();
@@ -43,12 +42,9 @@ it('labels current-rate margin as estimated, not final profit', async () => {
 	expect(marginHeader?.getAttribute('scope')).toBe('col');
 	await expect.element(page.getByText('$8.02', { exact: true })).toBeVisible();
 });
-
-it('shows the full provider-attempt trail behind the final source', async () => {
+it('points to Numbers Orders for each order and its supplier attempts', async () => {
 	render(Page, { data: fixture(true) } as never);
-	await page.getByText('2 attempts', { exact: true }).click();
-	await expect.element(page.getByText(/Whatsapp24/)).toBeVisible();
-	await expect.element(page.getByText(/otp timeout/)).toBeVisible();
-	await expect.element(page.getByText(/Hubman/)).toBeVisible();
-	await expect.element(page.getByText(/otp received/)).toBeVisible();
+	await expect
+		.element(page.getByRole('link', { name: 'Numbers Orders', exact: true }))
+		.toHaveAttribute('href', '/admin/numbers/orders');
 });

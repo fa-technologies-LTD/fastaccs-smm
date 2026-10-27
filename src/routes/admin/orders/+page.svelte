@@ -4,7 +4,7 @@
 	import { getOrders } from '$lib/services/orders';
 	import OrderTypeIcon from '$lib/components/admin/OrderTypeIcon.svelte';
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
-	import { getOrderStatusLabel, isOrderStatusInGroup } from '$lib/helpers/order-status';
+	import OrderStageChip from '$lib/components/OrderStageChip.svelte';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
 	import { countAccountsSoldOnOrder, isSaleOrder, toNetSales } from '$lib/helpers/order-revenue';
 	import { getOrderStage } from '$lib/helpers/order-stage';
@@ -25,7 +25,28 @@
 	const canViewOrderAmounts = Boolean(data.canViewOrderAmounts);
 	let hideMonetaryAmounts = $state(false);
 	let searchTerm = $state('');
-	let statusFilter = $state<'all' | 'pending' | 'processing' | 'completed' | 'cancelled'>('all');
+	// Filters follow the same order stages customers see. Cancelled and Payment failed keep the
+	// dashboard's meaning (the order's own status), so the counts match the tiles above.
+	type StageFilter =
+		| 'all'
+		| 'needs_action'
+		| 'awaiting_payment'
+		| 'delivered'
+		| 'refunded'
+		| 'cancelled'
+		| 'failed'
+		| 'expired';
+	const STAGE_FILTERS: Array<{ value: StageFilter; label: string }> = [
+		{ value: 'needs_action', label: 'Needs action' },
+		{ value: 'awaiting_payment', label: 'Awaiting payment' },
+		{ value: 'delivered', label: 'Delivered' },
+		{ value: 'refunded', label: 'Refunded' },
+		{ value: 'cancelled', label: 'Cancelled' },
+		{ value: 'failed', label: 'Payment failed' },
+		{ value: 'expired', label: 'Payment expired' },
+		{ value: 'all', label: 'All' }
+	];
+	let statusFilter = $state<StageFilter>('all');
 	let currentPage = $state(1);
 	const itemsPerPage = 20;
 	let loading = $state(false);
@@ -37,42 +58,76 @@
 
 		if (!searchTerm) return orders;
 
+		const term = searchTerm.trim().toLowerCase();
 		return orders.filter(
 			(order: any) =>
-				order.id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				order.guestEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				order.orderNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				order.affiliateCode?.toLowerCase().includes(searchTerm.toLowerCase())
+				order.id?.toLowerCase().includes(term) ||
+				order.guestEmail?.toLowerCase().includes(term) ||
+				order.orderNumber?.toLowerCase().includes(term) ||
+				order.affiliateCode?.toLowerCase().includes(term)
 		);
 	});
 
-	function matchesStatusFilter(order: any, filter: typeof statusFilter): boolean {
-		if (filter === 'all') return true;
-		if (filter === 'cancelled') return isOrderStatusInGroup(order.status, 'failed');
-		return isOrderStatusInGroup(order.status, filter);
+	function stageFilterOf(order: { status?: string | null }): StageFilter {
+		const status = String(order.status || '').toLowerCase();
+		if (status === 'cancelled') return 'cancelled';
+		if (status === 'failed') return 'failed';
+		switch (getOrderStage(order).key) {
+			case 'awaiting_payment':
+			case 'confirming_payment':
+				return 'awaiting_payment';
+			case 'delivered':
+			case 'part_refunded':
+				return 'delivered';
+			case 'refunded':
+				return 'refunded';
+			case 'payment_expired':
+				return 'expired';
+			case 'cancelled':
+				return 'failed';
+			default:
+				return 'needs_action';
+		}
 	}
 
-	// Further filter by status tab
+	// Further filter by stage
 	const filteredOrders = $derived.by(() => {
 		if (statusFilter === 'all') return searchFilteredOrders;
-		return searchFilteredOrders.filter((order: any) => matchesStatusFilter(order, statusFilter));
+		return searchFilteredOrders.filter((order: any) => stageFilterOf(order) === statusFilter);
 	});
 
-	// Counts for each status tab, scoped to the current search
-	const statusCounts = $derived.by(() => {
-		const counts = {
-			all: searchFilteredOrders.length,
-			pending: 0,
-			processing: 0,
-			completed: 0,
-			cancelled: 0
-		};
-		for (const order of searchFilteredOrders) {
-			if (isOrderStatusInGroup(order.status, 'pending')) counts.pending++;
-			if (isOrderStatusInGroup(order.status, 'processing')) counts.processing++;
-			if (isOrderStatusInGroup(order.status, 'completed')) counts.completed++;
-			if (isOrderStatusInGroup(order.status, 'failed')) counts.cancelled++;
+	/** "5 × USA Facebook" for the list: what was bought, repeats of one type added together. */
+	type SummaryItem = {
+		boostTargetUrl?: string | null;
+		productName?: string | null;
+		quantity?: number;
+	};
+	function orderSummary(order: { orderItems?: SummaryItem[] }): string {
+		const items = Array.isArray(order.orderItems) ? order.orderItems : [];
+		const byType: Record<string, number> = {};
+		for (const item of items) {
+			if (item.boostTargetUrl) continue;
+			const name = String(item.productName || 'Account').trim();
+			byType[name] = (byType[name] ?? 0) + Math.max(1, Number(item.quantity) || 1);
 		}
+		return Object.entries(byType)
+			.map(([name, quantity]) => `${quantity} × ${name}`)
+			.join(', ');
+	}
+
+	// Counts for each stage filter, scoped to the current search
+	const statusCounts = $derived.by(() => {
+		const counts: Record<StageFilter, number> = {
+			all: searchFilteredOrders.length,
+			needs_action: 0,
+			awaiting_payment: 0,
+			delivered: 0,
+			refunded: 0,
+			cancelled: 0,
+			failed: 0,
+			expired: 0
+		};
+		for (const order of searchFilteredOrders) counts[stageFilterOf(order)]++;
 		return counts;
 	});
 
@@ -135,7 +190,7 @@
 	async function loadOrders() {
 		loading = true;
 		try {
-			const ordersResult = await getOrders({ type: 'account' });
+			const ordersResult = await getOrders({ type: 'account', view: 'list' });
 
 			if (ordersResult.data) {
 				orders = ordersResult.data;
@@ -177,30 +232,6 @@
 			hideMonetaryAmounts,
 			format: formatPrice
 		});
-	}
-
-	// Get status color
-	function getStatusStyle(status: string): string {
-		switch (status) {
-			case 'completed':
-				return 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border)';
-			case 'paid':
-			case 'processing':
-				return 'background: rgba(105,109,250,0.12); color: var(--link); border: 1px solid var(--link)';
-			case 'pending_payment':
-			case 'pending':
-				return 'background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border)';
-			case 'failed':
-				return 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border)';
-			case 'cancelled':
-				return 'background: var(--bg-elev-2); color: var(--text-muted); border: 1px solid var(--border)';
-			default:
-				return 'background: var(--bg-elev-2); color: var(--text-muted); border: 1px solid var(--border)';
-		}
-	}
-
-	function formatStatusLabel(status: string): string {
-		return getOrderStatusLabel(status);
 	}
 
 	function getDisplayOrderRef(order: any): string {
@@ -285,65 +316,28 @@
 		</div>
 	</div>
 
-	<!-- Status Filter -->
-	<div class="mb-3 flex flex-wrap items-center gap-2">
-		<button
-			type="button"
-			onclick={() => (statusFilter = 'pending')}
-			class="rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
-			style={statusFilter === 'pending'
-				? 'background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border);'
-				: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
-		>
-			Pending ({statusCounts.pending})
-		</button>
-		<button
-			type="button"
-			onclick={() => (statusFilter = 'processing')}
-			class="rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
-			style={statusFilter === 'processing'
-				? 'background: rgba(105,109,250,0.12); color: var(--link); border: 1px solid var(--link);'
-				: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
-		>
-			Processing ({statusCounts.processing})
-		</button>
-		<button
-			type="button"
-			onclick={() => (statusFilter = 'completed')}
-			class="rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
-			style={statusFilter === 'completed'
-				? 'background: var(--status-success-bg); color: var(--status-success); border: 1px solid var(--status-success-border);'
-				: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
-		>
-			Completed ({statusCounts.completed})
-		</button>
-		<button
-			type="button"
-			onclick={() => (statusFilter = 'cancelled')}
-			class="rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
-			style={statusFilter === 'cancelled'
-				? 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border);'
-				: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
-		>
-			Cancelled or failed ({statusCounts.cancelled})
-		</button>
-		<button
-			type="button"
-			onclick={() => (statusFilter = 'all')}
-			class="rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
-			style={statusFilter === 'all'
-				? 'background: rgba(105,109,250,0.14); color: var(--link); border: 1px solid rgba(105,109,250,0.32);'
-				: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
-		>
-			All ({statusCounts.all})
-		</button>
+	<!-- Stage Filter -->
+	<div class="mb-3 flex flex-wrap items-center gap-2" role="group" aria-label="Filter by stage">
+		{#each STAGE_FILTERS as filter (filter.value)}
+			<button
+				type="button"
+				onclick={() => (statusFilter = filter.value)}
+				aria-pressed={statusFilter === filter.value}
+				class="rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95"
+				style={statusFilter === filter.value
+					? 'background: rgba(105,109,250,0.14); color: var(--link); border: 1px solid rgba(105,109,250,0.32);'
+					: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
+			>
+				{filter.label} ({statusCounts[filter.value]})
+			</button>
+		{/each}
 	</div>
 
 	<!-- Search -->
 	<div class="mb-4">
 		<input
 			type="text"
-			placeholder="Search orders by ID, email, or order number..."
+			placeholder="Search by order number, email or affiliate code"
 			bind:value={searchTerm}
 			class="w-full rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:outline-none"
 			style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
@@ -381,14 +375,12 @@
 						<div class="truncate text-xs" style="color: var(--text-muted);">
 							{order.guestEmail || 'N/A'}
 						</div>
+						{#if orderSummary(order)}
+							<div class="truncate text-xs" style="color: var(--text);">{orderSummary(order)}</div>
+						{/if}
 					</div>
 					<div class="flex flex-col items-end gap-1">
-						<span
-							class="inline-flex rounded-full px-2 py-1 text-[11px] font-semibold"
-							style={getStatusStyle(order.status)}
-						>
-							{formatStatusLabel(order.status)}
-						</span>
+						<OrderStageChip stage={getOrderStage(order)} />
 						{#if isUnresolvedManual(order)}
 							<span
 								class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold"
@@ -470,7 +462,7 @@
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
-							Status
+							Stage
 						</th>
 						<th
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
@@ -508,10 +500,16 @@
 									style="color: var(--text)"
 								>
 									<OrderTypeIcon {order} />
-									<span>#{order.id}</span>
+									<span>{order.orderNumber || `#${String(order.id).slice(0, 8)}`}</span>
 								</div>
-								{#if order.orderNumber}
-									<div class="text-sm" style="color: var(--text-muted);">{order.orderNumber}</div>
+								{#if orderSummary(order)}
+									<div
+										class="max-w-xs truncate text-sm"
+										style="color: var(--text-muted);"
+										title={orderSummary(order)}
+									>
+										{orderSummary(order)}
+									</div>
 								{/if}
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
@@ -534,12 +532,7 @@
 								{/if}
 							</td>
 							<td class="px-6 py-4 whitespace-nowrap">
-								<span
-									class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
-									style={getStatusStyle(order.status)}
-								>
-									{formatStatusLabel(order.status)}
-								</span>
+								<OrderStageChip stage={getOrderStage(order)} />
 								{#if isUnresolvedManual(order)}
 									<span
 										class="ml-2 inline-flex rounded-full px-2 py-1 text-xs font-semibold"

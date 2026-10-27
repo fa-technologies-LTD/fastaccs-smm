@@ -223,22 +223,38 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			where.userId = locals.user.id;
 		}
 
+		// The admin order list only needs what a row shows. It never carries login details;
+		// those load on the order's own page.
+		const listView = admin && url.searchParams.get('view') === 'list';
 		const data = await prisma.order.findMany({
 			where,
-			include: admin
+			include: listView
 				? {
 						orderItems: {
-							include: {
-								accounts: true
+							select: {
+								id: true,
+								quantity: true,
+								productName: true,
+								boostTargetUrl: true,
+								accounts: { select: { id: true, status: true } }
 							}
 						},
-						user: {
-							select: ORDER_CUSTOMER_USER_SELECT
-						}
+						user: { select: ORDER_CUSTOMER_USER_SELECT }
 					}
-				: {
-						orderItems: true
-					},
+				: admin
+					? {
+							orderItems: {
+								include: {
+									accounts: true
+								}
+							},
+							user: {
+								select: ORDER_CUSTOMER_USER_SELECT
+							}
+						}
+					: {
+							orderItems: true
+						},
 			orderBy: { createdAt: 'desc' },
 			...(limit ? { take: limit } : {})
 		});

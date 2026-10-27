@@ -12,6 +12,7 @@ describe('describeAdminActivity', () => {
 		],
 		[`POST /api/orders/${id}/refund`, 'Order refunded to store credit', `/admin/orders/${id}`],
 		[`POST /api/orders/${id}/refund-account`, 'Faulty account refunded', `/admin/orders/${id}`],
+		[`POST /api/orders/${id}/replace-account`, 'Faulty account replaced', `/admin/orders/${id}`],
 		['POST /api/batches/import', 'Logs uploaded', '/admin/batches'],
 		[`DELETE /api/categories/${id}/offload`, 'Unsold logs deleted', '/admin/inventory'],
 		[`PUT /api/categories/${id}`, 'Account type or platform edited', '/admin/tiers'],
