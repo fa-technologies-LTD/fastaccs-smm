@@ -1,4 +1,5 @@
 import { prisma } from '$lib/prisma';
+import { isLowStock } from '$lib/helpers/stock-level';
 import { serverCache } from '$lib/helpers/cache';
 import {
 	getBusinessTimezoneSetting,
@@ -297,7 +298,7 @@ export async function getInventoryStatsSnapshot(
 		.map((tier) => tier.id);
 
 	const lowStockTiers = tiers
-		.filter((tier) => tier._count.accounts > 0 && tier._count.accounts < lowStockThreshold)
+		.filter((tier) => isLowStock(tier._count.accounts, lowStockThreshold))
 		.map((tier) => ({ id: tier.id, name: tier.name.trim(), available: tier._count.accounts }))
 		.sort((a, b) => a.available - b.available);
 	const lowStockTiersCount = lowStockTiers.length;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isLowStock } from '$lib/helpers/stock-level';
 	import { invalidateAll } from '$app/navigation';
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
 	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
@@ -61,7 +62,7 @@
 			if (item.is_manual) return false;
 			const available = item.available_accounts || 0;
 			if (stockFilter === 'out') return available === 0;
-			if (stockFilter === 'low') return available > 0 && available <= lowStockThreshold;
+			if (stockFilter === 'low') return isLowStock(available, lowStockThreshold);
 			return available > lowStockThreshold;
 		});
 
@@ -122,10 +123,7 @@
 		const available = items.reduce((sum, i) => sum + (i.available_accounts || 0), 0);
 		const out = items.filter((i) => !i.is_manual && (i.available_accounts || 0) === 0).length;
 		const low = items.filter(
-			(i) =>
-				!i.is_manual &&
-				(i.available_accounts || 0) > 0 &&
-				(i.available_accounts || 0) <= lowStockThreshold
+			(i) => !i.is_manual && isLowStock(i.available_accounts || 0, lowStockThreshold)
 		).length;
 		return { tiers: items.length, available, out, low, attention: out + low > 0 };
 	}
@@ -158,7 +156,7 @@
 	let copyingKey = $state<string | null>(null);
 	async function copyTierAccounts(item: InventoryRow, format: 'links' | 'logs') {
 		if (!item.id) {
-			addToast({ type: 'error', title: 'Tier id missing', duration: 2500 });
+			addToast({ type: 'error', title: 'Account type id missing', duration: 2500 });
 			return;
 		}
 		if (copyingKey) return;
@@ -170,7 +168,7 @@
 			if (!payload.text) {
 				addToast({
 					type: 'info',
-					title: `No ${format} — this tier has no available accounts`,
+					title: `No ${format} : this account type has no available accounts`,
 					duration: 3000
 				});
 				return;
@@ -218,9 +216,8 @@
 			),
 			platforms: new Set(inventoryRows.map((item) => item.platform_name)).size,
 			out_of_stock: accountTiers.filter((item) => (item.available_accounts || 0) === 0).length,
-			low_stock: accountTiers.filter(
-				(item) =>
-					(item.available_accounts || 0) > 0 && (item.available_accounts || 0) <= lowStockThreshold
+			low_stock: accountTiers.filter((item) =>
+				isLowStock(item.available_accounts || 0, lowStockThreshold)
 			).length,
 			healthy: accountTiers.filter((item) => (item.available_accounts || 0) > lowStockThreshold)
 				.length,
@@ -398,7 +395,9 @@
 			class="rounded-lg border p-3 text-left sm:p-4"
 			style="background: var(--status-error-bg); border-color: var(--status-error-border);"
 		>
-			<p class="text-xs font-medium" style="color: var(--text-muted);">Out of stock tiers</p>
+			<p class="text-xs font-medium" style="color: var(--text-muted);">
+				Out of stock account types
+			</p>
 			<p class="mt-1 text-xl font-bold sm:text-2xl" style="color: var(--status-error);">
 				{summaryStats.out_of_stock}
 			</p>
@@ -410,7 +409,7 @@
 			class="rounded-lg border p-3 text-left sm:p-4"
 			style="background: var(--status-warning-bg); border-color: var(--status-warning-border);"
 		>
-			<p class="text-xs font-medium" style="color: var(--text-muted);">Low stock tiers</p>
+			<p class="text-xs font-medium" style="color: var(--text-muted);">Low stock account types</p>
 			<p class="mt-1 text-xl font-bold sm:text-2xl" style="color: var(--status-warning);">
 				{summaryStats.low_stock}
 			</p>
@@ -427,7 +426,7 @@
 				{summaryStats.delivered_accounts.toLocaleString()}
 			</p>
 			<p class="mt-1 text-[11px]" style="color: var(--text-dim);">
-				{summaryStats.total_accounts.toLocaleString()} lifetime stock
+				{summaryStats.total_accounts.toLocaleString()} uploaded all time
 			</p>
 		</div>
 	</div>
@@ -455,7 +454,7 @@
 			<div class="relative min-w-0 flex-1">
 				<input
 					type="text"
-					placeholder="Search platform or tier"
+					placeholder="Search platform or account type"
 					bind:value={searchTerm}
 					class="min-h-10 w-full rounded-lg px-3 py-2 pr-8 text-sm focus:ring-1 focus:outline-none"
 					style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
@@ -487,7 +486,7 @@
 		</div>
 	</div>
 	<p class="mb-3 text-xs" style="color: var(--text-muted);">
-		Showing {filteredInventory.length} of {inventoryRows.length} tiers
+		Showing {filteredInventory.length} of {inventoryRows.length} account types
 	</p>
 
 	<details
@@ -556,7 +555,7 @@
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
-							Platform & Tier
+							Platform & account type
 						</th>
 						<th
 							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
@@ -617,7 +616,7 @@
 									>
 									<span class="text-sm font-semibold" style="color: var(--text);">{platform}</span>
 									<span class="text-xs" style="color: var(--text-muted);"
-										>· {summary.tiers} tier{summary.tiers === 1 ? '' : 's'} · {summary.available.toLocaleString()}
+										>· {summary.tiers} account type{summary.tiers === 1 ? '' : 's'} · {summary.available.toLocaleString()}
 										available</span
 									>
 									{#if summary.out > 0}
@@ -754,7 +753,7 @@
 							>{platform}</span
 						>
 						<span class="block text-xs" style="color: var(--text-muted);"
-							>{summary.tiers} tier{summary.tiers === 1 ? '' : 's'} · {summary.available.toLocaleString()}
+							>{summary.tiers} account type{summary.tiers === 1 ? '' : 's'} · {summary.available.toLocaleString()}
 							available</span
 						>
 					</span>

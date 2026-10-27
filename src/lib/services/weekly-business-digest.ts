@@ -1,4 +1,5 @@
 import { prisma } from '$lib/prisma';
+import { isLowStock } from '$lib/helpers/stock-level';
 import { getBusinessDateKey, getStartOfBusinessDayUtc } from '$lib/helpers/business-timezone';
 import { buildRevenueOrderWindowWhere, toNetSales } from '$lib/helpers/order-revenue.server';
 import {
@@ -403,9 +404,7 @@ export async function sendWeeklyBusinessDigest(): Promise<{
 		}))
 		.sort((a, b) => a.available - b.available);
 	const zeroStockRows = stockRows.filter((row) => row.available === 0);
-	const lowStockRows = stockRows.filter(
-		(row) => row.available > 0 && row.available <= lowStockThreshold
-	);
+	const lowStockRows = stockRows.filter((row) => isLowStock(row.available, lowStockThreshold));
 	const availableAccounts = stockRows.reduce((sum, row) => sum + row.available, 0);
 	const averageOrderValue = currentOrders.length > 0 ? currentRevenue / currentOrders.length : 0;
 	const reportingEnd = new Date(end.getTime() - 1);

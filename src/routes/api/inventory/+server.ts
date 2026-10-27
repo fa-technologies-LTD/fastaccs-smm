@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { isLowStock, isOutOfStock } from '$lib/helpers/stock-level';
 import { prisma } from '$lib/prisma';
 import { getCacheHeaders } from '$lib/helpers/cache';
 import { getInventoryStatsSnapshot } from '$lib/services/admin-metrics';
@@ -233,33 +234,14 @@ export async function GET({ url, locals }) {
 			where: { status: { in: soldStatuses } }
 		});
 
-		// Calculate missing stats
-		const outOfStockBatches = await prisma.accountBatch.count({
-			where: {
-				accounts: {
-					none: {
-						status: 'available'
-					}
-				}
-			}
-		});
-
-		const batchesWithCounts = await prisma.accountBatch.findMany({
-			include: {
-				_count: {
-					select: {
-						accounts: {
-							where: { status: 'available' }
-						}
-					}
-				}
-			}
-		});
-
+		// Stock counts are per account type (never per upload), with the shared stock rule.
 		const lowStockThreshold = await getLowStockThresholdSetting().catch(() => 10);
-		const lowStockBatches = batchesWithCounts.filter(
-			(batch) => batch._count.accounts > 0 && batch._count.accounts < Math.max(1, lowStockThreshold)
-		).length;
+		const stockedTypeCounts = categories
+			.filter((t) => {
+				const mode = getTierDeliveryConfig(t.metadata).mode;
+				return mode !== 'manual_handover' && mode !== 'auto_sms';
+			})
+			.map((t) => t.accounts.filter((a) => a.status === 'available').length);
 
 		const platformsCount = await prisma.account.groupBy({
 			by: ['platform'],
@@ -271,8 +253,8 @@ export async function GET({ url, locals }) {
 		stats.delivered_accounts = soldCount;
 		stats.sold_accounts = soldCount;
 		stats.low_stock_threshold = Math.max(1, lowStockThreshold);
-		stats.out_of_stock = outOfStockBatches;
-		stats.low_stock = lowStockBatches;
+		stats.out_of_stock = stockedTypeCounts.filter((n) => isOutOfStock(n)).length;
+		stats.low_stock = stockedTypeCounts.filter((n) => isLowStock(n, lowStockThreshold)).length;
 		stats.platforms = platformsCount.length;
 
 		// Real out-of-stock TIER count (what the dashboard shows) — account tiers only,
