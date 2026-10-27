@@ -24,7 +24,8 @@ import {
 	buildRevenueOrderWhere,
 	toNetSales,
 	buildRevenueOrderWindowWhere,
-	buildSettledOrderWhere
+	buildSettledOrderWhere,
+	countAccountsSold
 } from '$lib/helpers/order-revenue.server';
 import { toExternalCash } from '$lib/helpers/order-revenue';
 import { ANALYTICS_FUNNEL_STEPS } from '$lib/services/analytics-events';
@@ -234,37 +235,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 					createdAt: { gte: startOfMonth }
 				}
 			}),
-			prisma.account.count({
-				where: {
-					status: { in: retainedAccountStatuses },
-					orderItem: {
-						order: { AND: [buildRevenueOrderWhere(), { orderType: 'account' }] }
-					}
-				}
-			}),
-			prisma.account.count({
-				where: {
-					status: { in: retainedAccountStatuses },
-					orderItem: {
-						order: {
-							AND: [
-								buildRevenueOrderWindowWhere(startOfLastMonth, endOfLastMonth),
-								{ orderType: 'account' }
-							]
-						}
-					}
-				}
-			}),
-			prisma.account.count({
-				where: {
-					status: { in: retainedAccountStatuses },
-					orderItem: {
-						order: {
-							AND: [buildRevenueOrderWindowWhere(startOfMonth), { orderType: 'account' }]
-						}
-					}
-				}
-			}),
+			// Accounts sold: one shared rule (units on paid account orders minus faulty refunds).
+			countAccountsSold(prisma, buildRevenueOrderWhere()),
+			countAccountsSold(prisma, buildRevenueOrderWindowWhere(startOfLastMonth, endOfLastMonth)),
+			countAccountsSold(prisma, buildRevenueOrderWindowWhere(startOfMonth)),
 			prisma.affiliateProgram.aggregate({
 				where: {
 					status: 'active',

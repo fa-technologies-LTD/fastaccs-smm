@@ -5,7 +5,9 @@ import {
 	allocateFullRefundToItems,
 	REFUNDED_MARKER,
 	toExternalCash,
-	toNetSales
+	toNetSales,
+	isSaleOrder,
+	countAccountsSoldOnOrder
 } from './order-revenue';
 
 /**
@@ -118,5 +120,29 @@ describe('canonical order money', () => {
 			{ id: 'first', refundedAmount: 15 },
 			{ id: 'second', refundedAmount: 5 }
 		]);
+	});
+});
+
+describe('one sales rule for admin figures', () => {
+	it('never counts an owner release as a sale', () => {
+		const paid = { status: 'completed', paymentStatus: 'paid', deliveryStatus: 'delivered' };
+		expect(isSaleOrder(paid)).toBe(true);
+		expect(isSaleOrder({ ...paid, paymentChannel: 'manual_release' })).toBe(false);
+		expect(isSaleOrder({ ...paid, paymentStatus: 'refunded' })).toBe(false);
+	});
+
+	it('counts accounts sold as units bought minus faulty refunds, WhatsApp handovers included', () => {
+		expect(
+			countAccountsSoldOnOrder({
+				orderItems: [
+					{
+						quantity: 3,
+						accounts: [{ status: 'delivered' }, { status: 'faulty' }, { status: 'delivered' }]
+					},
+					{ quantity: 2, accounts: [] },
+					{ quantity: 1, boostTargetUrl: 'https://instagram.com/x', accounts: [] }
+				]
+			})
+		).toBe(4);
 	});
 });

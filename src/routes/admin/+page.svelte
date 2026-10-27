@@ -438,7 +438,7 @@
 					</div>
 					<div class="ml-3 min-w-0 flex-1 sm:ml-4">
 						<p class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
-							Lifetime Sold Stock
+							Sold From Stock
 						</p>
 						<p class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
 							{inventoryStats.lifetime_sold_stock || inventoryStats.total_sold || 0}
@@ -447,7 +447,7 @@
 							<span class="text-xs sm:text-sm" style="color: var(--text-muted)"
 								>{inventoryStats.sold_without_order
 									? `${inventoryStats.sold_without_order} sold without an order`
-									: 'Accounts delivered to buyers'}</span
+									: 'Uploaded accounts that went to buyers'}</span
 							>
 						</div>
 					</div>

@@ -421,7 +421,7 @@
 			class="rounded-lg border p-3 sm:p-4"
 			style="background: var(--bg-elev-1); border-color: var(--border);"
 		>
-			<p class="text-xs font-medium" style="color: var(--text-muted);">Delivered</p>
+			<p class="text-xs font-medium" style="color: var(--text-muted);">Sold From Stock</p>
 			<p class="mt-1 text-xl font-bold sm:text-2xl" style="color: var(--link);">
 				{summaryStats.delivered_accounts.toLocaleString()}
 			</p>

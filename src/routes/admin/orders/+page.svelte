@@ -7,7 +7,7 @@
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
 	import { getOrderStatusLabel, isOrderStatusInGroup } from '$lib/helpers/order-status';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
-	import { isRevenueOrder, toNetSales } from '$lib/helpers/order-revenue';
+	import { countAccountsSoldOnOrder, isSaleOrder, toNetSales } from '$lib/helpers/order-revenue';
 	import { getOrderStage } from '$lib/helpers/order-stage';
 
 	// Props from page data
@@ -97,34 +97,20 @@
 
 	const totalPages = $derived(Math.ceil(filteredOrders.length / itemsPerPage));
 
+	// Same meaning as the dashboard: the order itself was cancelled. Failed payments are separate.
 	function isCancelledOrder(order: any): boolean {
-		return (
-			String(order.status || '').toLowerCase() === 'cancelled' ||
-			String(order.paymentStatus || '').toLowerCase() === 'cancelled'
-		);
-	}
-
-	function getOrderItems(order: any): any[] {
-		if (Array.isArray(order.orderItems)) return order.orderItems;
-		if (Array.isArray(order.items)) return order.items;
-		return [];
-	}
-
-	function getOrderUnits(order: any): number {
-		return getOrderItems(order).reduce((sum: number, item: any) => {
-			const quantity = Number(item.quantity || 0);
-			return sum + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
-		}, 0);
+		return String(order.status || '').toLowerCase() === 'cancelled';
 	}
 
 	// Calculate summary stats from filtered orders
 	const summaryStats = $derived.by(() => {
 		const totalOrders = filteredOrders.length;
 		const paidOrders = filteredOrders.filter((o: any) =>
-			isRevenueOrder({
+			isSaleOrder({
 				status: o.status,
 				paymentStatus: o.paymentStatus,
-				deliveryStatus: o.deliveryStatus
+				deliveryStatus: o.deliveryStatus,
+				paymentChannel: o.paymentChannel
 			})
 		);
 		const cancelledOrders = filteredOrders.filter(isCancelledOrder).length;
@@ -132,7 +118,10 @@
 			(sum: number, o: any) => sum + toNetSales(o.totalAmount, o.refundedAmount),
 			0
 		);
-		const unitsSold = paidOrders.reduce((sum: number, order: any) => sum + getOrderUnits(order), 0);
+		const unitsSold = paidOrders.reduce(
+			(sum: number, order: any) => sum + countAccountsSoldOnOrder(order),
+			0
+		);
 
 		return {
 			total_orders: totalOrders,
@@ -269,9 +258,7 @@
 			class="rounded-lg p-3 sm:p-4"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 		>
-			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
-				Total Paid Orders
-			</div>
+			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Paid Orders</div>
 			<div class="text-lg font-bold sm:text-2xl" style="color: var(--status-success);">
 				{summaryStats.paid_orders}
 			</div>
@@ -289,7 +276,9 @@
 			class="rounded-lg p-3 sm:p-4"
 			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 		>
-			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">Net Sales</div>
+			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
+				Net Sales · Accounts
+			</div>
 			<div class="text-lg font-bold sm:text-2xl" style="color: var(--primary);">
 				{formatAdminAmount(summaryStats.total_revenue)}
 			</div>
@@ -299,7 +288,7 @@
 			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
 		>
 			<div class="text-xs font-medium sm:text-sm" style="color: var(--text-muted)">
-				Account Units Sold
+				Accounts Sold
 			</div>
 			<div class="text-lg font-bold sm:text-2xl" style="color: var(--text)">
 				{summaryStats.units_sold}
@@ -347,7 +336,7 @@
 				? 'background: var(--status-error-bg); color: var(--status-error); border: 1px solid var(--status-error-border);'
 				: 'background: var(--bg-elev-1); color: var(--text-muted); border: 1px solid var(--border);'}
 		>
-			Cancelled ({statusCounts.cancelled})
+			Cancelled or failed ({statusCounts.cancelled})
 		</button>
 		<button
 			type="button"

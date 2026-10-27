@@ -1,11 +1,11 @@
-import type { Prisma } from '@prisma/client';
-import { REVENUE_ORDER_STATUSES, REFUNDED_MARKER } from './order-revenue';
+import type { Prisma, PrismaClient } from '@prisma/client';
+import { REVENUE_ORDER_STATUSES, REFUNDED_MARKER, MANUAL_RELEASE_CHANNEL } from './order-revenue';
 import { toExternalCash, toNetSales } from './order-revenue';
 
 // Orders an owner admin releases to a profile (self-offload of specific logs)
 // carry this payment channel so they are excluded from ALL revenue/analytics —
 // they are fulfilled but were never a real sale.
-export const MANUAL_RELEASE_CHANNEL = 'manual_release';
+export { MANUAL_RELEASE_CHANNEL };
 
 function buildDateWindow(gte: Date, lte?: Date): { gte: Date; lte?: Date } {
 	return lte ? { gte, lte } : { gte };
@@ -93,4 +93,23 @@ export function buildRevenueOrderItemWhere(gte?: Date, lte?: Date): Prisma.Order
 	return {
 		order: buildRevenueOrderWindowWhere(gte, lte)
 	};
+}
+
+/**
+ * Accounts sold across the orders matched by `orderWhere` (normally a revenue window): account
+ * units on those orders minus accounts refunded as faulty. Same rule as countAccountsSoldOnOrder().
+ */
+export async function countAccountsSold(
+	db: Pick<PrismaClient, 'orderItem' | 'account'>,
+	orderWhere: Prisma.OrderWhereInput
+): Promise<number> {
+	const accountOrders: Prisma.OrderWhereInput = { AND: [orderWhere, { orderType: 'account' }] };
+	const [units, faulty] = await Promise.all([
+		db.orderItem.aggregate({
+			_sum: { quantity: true },
+			where: { boostTargetUrl: null, order: accountOrders }
+		}),
+		db.account.count({ where: { status: 'faulty', orderItem: { order: accountOrders } } })
+	]);
+	return Math.max(0, Number(units._sum.quantity ?? 0) - faulty);
 }

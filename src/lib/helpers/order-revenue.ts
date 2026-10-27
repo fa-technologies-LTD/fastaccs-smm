@@ -131,3 +131,43 @@ export function isRevenueOrder(input: {
 	}
 	return REVENUE_STATUS_SET.has(status) || paymentStatus === 'paid';
 }
+
+/** Orders an owner releases to a profile (self-offload of logs): fulfilled, never a sale. */
+export const MANUAL_RELEASE_CHANNEL = 'manual_release';
+
+/**
+ * The in-memory twin of buildRevenueOrderWhere(): paid, not refunded, and a real sale. Every admin
+ * sales figure (Net Sales, Paid Orders, Accounts Sold) uses this, so pages agree with the server.
+ */
+export function isSaleOrder(input: {
+	status?: string | null;
+	paymentStatus?: string | null;
+	deliveryStatus?: string | null;
+	paymentChannel?: string | null;
+}): boolean {
+	return isRevenueOrder(input) && normalize(input.paymentChannel) !== MANUAL_RELEASE_CHANNEL;
+}
+
+type SoldAccountItem = {
+	quantity?: unknown;
+	boostTargetUrl?: unknown;
+	accounts?: Array<{ status?: string | null }> | null;
+};
+
+/**
+ * Accounts sold on one paid order: account units bought, minus accounts refunded as faulty.
+ * WhatsApp handovers count even with no uploaded account behind them. The server twin is
+ * countAccountsSold() in order-revenue.server.ts.
+ */
+export function countAccountsSoldOnOrder(order: { orderItems?: SoldAccountItem[] | null }): number {
+	const items = Array.isArray(order.orderItems) ? order.orderItems : [];
+	return items
+		.filter((item) => !item.boostTargetUrl)
+		.reduce((sum, item) => {
+			const quantity = Math.max(0, Math.floor(Number(item.quantity) || 0));
+			const faulty = (item.accounts ?? []).filter(
+				(account) => normalize(account.status) === 'faulty'
+			).length;
+			return sum + Math.max(0, quantity - faulty);
+		}, 0);
+}
