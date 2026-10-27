@@ -1,5 +1,4 @@
 <script lang="ts">
-	import AnalyticsNavigation from '$lib/components/admin/AnalyticsNavigation.svelte';
 	import BoostingOrderSupport from '$lib/components/admin/BoostingOrderSupport.svelte';
 	import ReviewOrderCard from '$lib/components/admin/ReviewOrderCard.svelte';
 	import { boostReviewNotice, type BoostSupportState } from '$lib/helpers/boosting-support';
@@ -22,7 +21,6 @@
 		normalizeBoostItemStatus,
 		type BoostItemStatus
 	} from '$lib/helpers/boosting-admin-status';
-	import type { getBoostingAnalytics } from '$lib/services/boosting-analytics';
 	import type { PageData } from './$types';
 
 	type StatusFilter =
@@ -124,12 +122,6 @@
 
 	let items = $state<BoostingOrderItem[]>(untrack(() => data.items));
 	let meta = $state<ListMeta>(untrack(() => data.meta as ListMeta));
-	let analytics = $state<Awaited<ReturnType<typeof getBoostingAnalytics>> | null>(
-		untrack(() => data.analytics)
-	);
-	let analyticsError = $state(untrack(() => data.analyticsError));
-	let analyticsLoading = $state(false);
-	let analyticsRequestId = 0;
 	let statusFilter = $state<StatusFilter>(
 		untrack(() => (data.meta.status || 'active') as StatusFilter)
 	);
@@ -172,27 +164,8 @@
 		{ value: 'cancelled' as const, label: 'Cancelled', count: meta.statusCounts.cancelled || 0 },
 		{ value: 'all' as const, label: 'All', count: meta.totalItems || 0 }
 	]);
-	async function refreshAnalytics() {
-		const requestId = ++analyticsRequestId;
-		analyticsLoading = true;
-		try {
-			const response = await fetch('/api/admin/boosting-orders/analytics');
-			const result = await response.json();
-			if (!response.ok || !result.success) throw new Error();
-			if (requestId !== analyticsRequestId) return;
-			analytics = result.data;
-			analyticsError = null;
-		} catch {
-			if (requestId === analyticsRequestId)
-				analyticsError = analytics
-					? 'Could not refresh analytics. Showing the last successful report.'
-					: 'Analytics unavailable. Order management is still available.';
-		} finally {
-			if (requestId === analyticsRequestId) analyticsLoading = false;
-		}
-	}
 	async function refreshAll() {
-		await Promise.all([loadItems(meta.page), refreshAnalytics()]);
+		await loadItems(meta.page);
 	}
 
 	function getStatus(item: BoostingOrderItem): ItemStatus {
@@ -442,7 +415,7 @@
 	<header>
 		<h1 class="flex items-center gap-2 text-2xl font-bold" style="color: var(--text);">
 			<Zap class="h-6 w-6" style="color: var(--primary);" />
-			Boosting orders
+			Boosting Orders
 		</h1>
 		<p class="mt-1 text-sm" style="color: var(--text-muted);">
 			Open an order to review it or help the customer.
@@ -455,10 +428,9 @@
 				<button
 					type="button"
 					onclick={refreshAll}
-					disabled={loading || analyticsLoading}
+					disabled={loading}
 					class="rounded-lg border px-3 py-2 text-xs"
-					style="border-color: var(--border);"
-					>{loading || analyticsLoading ? 'Refreshing…' : 'Refresh'}</button
+					style="border-color: var(--border);">{loading ? 'Refreshing…' : 'Refresh'}</button
 				>
 				{#if meta.canRunShadowRouting}
 					<button
@@ -474,105 +446,12 @@
 			</div>
 		</div>
 	</header>
-	<details class="report-panel">
-		<summary>Reports & analytics</summary>
-		<div class="report-content">
-			<AnalyticsNavigation active="boosting" permissions={data.adminPermissions ?? []} />
-
-			{#if analyticsError}<p role="status" class="text-sm" style="color: var(--text-muted);">
-					{analyticsError}
-				</p>{/if}
-			{#if analytics}
-				<p class="text-xs" style="color: var(--text-dim);">
-					Last 30 days · paid orders, including later refunds
-				</p>
-				<div class="grid grid-cols-2 gap-3 lg:grid-cols-6">
-					{#each [['Paid orders', analytics.overall.orders.toLocaleString()], ['Boosting items', analytics.overall.items.toLocaleString()], ['Completed', analytics.overall.completionRate === null ? '—' : `${analytics.overall.completionRate}%`], ...(canViewRevenue ? [['Net sales', formatMonetaryAmount(analytics.overall.netSalesNgn ?? 0)], ['Recorded supplier cost', analytics.overall.supplierCostNgn === null ? '—' : formatMonetaryAmount(analytics.overall.supplierCostNgn)], ['Recorded margin', analytics.overall.recordedMarginNgn === null ? '—' : formatMonetaryAmount(analytics.overall.recordedMarginNgn)]] : [])] as metric}
-						<div
-							class="rounded-[var(--r-md)] border p-4"
-							style="border-color: var(--border); background: var(--bg-elev-1);"
-						>
-							<p class="text-xs" style="color: var(--text-muted);">{metric[0]}</p>
-							<p class="mt-1 text-xl font-bold">{metric[1]}</p>
-						</div>
-					{/each}
-				</div>
-				{#if canViewRevenue && analytics.overall.items > 0}
-					<p class="text-xs" style="color: var(--text-muted);">
-						Recorded margin is after refunds and known supplier charges, before payment fees. It is
-						not final profit. Actual payment fees are not recorded. Repeated polls are counted once
-						per supplier order; missing charges remain unknown.
-					</p>
-				{/if}
-				{#if canViewRevenue && analytics.overall.knownCostItems < analytics.overall.items}<p
-						class="text-xs"
-						style="color: var(--text-muted);"
-					>
-						Costs recorded for {analytics.overall.knownCostItems} of {analytics.overall.items} items.
-						Margin covers those items only. Unknown costs aren’t treated as free.
-					</p>{/if}
-				<details
-					class="rounded-[var(--r-md)] border p-4"
-					style="border-color: var(--border); background: var(--bg-elev-1);"
-				>
-					<summary class="cursor-pointer font-semibold">By service · last 30 days</summary>
-					<div class="mt-3 overflow-x-auto">
-						<table class="w-full text-left text-sm">
-							<thead
-								><tr style="color: var(--text-muted);"
-									><th class="p-2">Service</th><th class="p-2">Items</th><th class="p-2"
-										>Completed</th
-									>{#if canViewRevenue}<th class="p-2">Net sales</th><th class="p-2"
-											>Recorded margin</th
-										>{/if}</tr
-								></thead
-							>
-							<tbody
-								>{#each analytics.byService as row (`${row.categoryId}:${row.platform}:${row.outcome}`)}<tr
-										style="border-top: 1px solid var(--border);"
-										><td class="p-2">{row.name}</td><td class="p-2">{row.items}</td><td class="p-2"
-											>{row.completed}</td
-										>{#if canViewRevenue}<td class="p-2"
-												>{formatMonetaryAmount(row.netSalesNgn ?? 0)}</td
-											><td class="p-2"
-												>{row.recordedMarginNgn === null
-													? '—'
-													: formatMonetaryAmount(row.recordedMarginNgn)}</td
-											>{/if}</tr
-									>{:else}<tr
-										><td
-											colspan={canViewRevenue ? 5 : 3}
-											class="p-4"
-											style="color: var(--text-muted);">No paid Boosting items in this period.</td
-										></tr
-									>{/each}</tbody
-							>
-						</table>
-					</div>
-					{#if canViewRevenue}<div class="mt-4 flex flex-wrap gap-3">
-							{#each analytics.providers as provider (provider.provider)}<div
-									class="rounded-lg border px-3 py-2 text-sm"
-									style="border-color: var(--border);"
-								>
-									<span style="color: var(--text-muted);">{provider.label} balance</span>
-									<strong
-										>{provider.balance === null
-											? '—'
-											: `${provider.currency ?? ''} ${provider.balance.toFixed(2)}`}</strong
-									>
-									<p class="text-xs" style="color: var(--text-dim);">
-										{provider.lastBalanceSuccessAt
-											? `Last checked ${formatDateTime(provider.lastBalanceSuccessAt)}`
-											: 'Not checked yet'}{!provider.enabled || provider.circuitOpen
-											? ' · Supplier paused'
-											: ''}
-									</p>
-								</div>{/each}
-						</div>{/if}
-				</details>
-			{/if}
-		</div>
-	</details>
+	{#if canViewRevenue}
+		<p class="text-sm" style="color: var(--text-muted);">
+			Sales, supplier cost and margin are in
+			<a href="/admin/analytics?tab=boosting" style="color: var(--primary);">Boosting Sales</a>.
+		</p>
+	{/if}
 
 	<section
 		class="rounded-[var(--r-md)] border p-3 sm:p-4"
@@ -930,7 +809,6 @@
 					canRequestLink={item.fulfillmentState?.status !== 'completed' && status !== 'completed'}
 					onUpdated={async () => {
 						await loadItems(meta.page, true);
-						void refreshAnalytics();
 						refreshAdminAttentionBadges();
 					}}
 				/>
@@ -1006,23 +884,6 @@
 	.order-facts dd {
 		color: var(--text-muted);
 		overflow-wrap: anywhere;
-	}
-	.report-panel {
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		background: var(--bg-elev-1);
-	}
-	.report-panel > summary {
-		padding: 12px 16px;
-		font-size: 13px;
-		font-weight: 600;
-		cursor: pointer;
-		color: var(--text-muted);
-	}
-	.report-content {
-		display: grid;
-		gap: 16px;
-		padding: 0 16px 16px;
 	}
 	@media (min-width: 768px) {
 		.order-facts {

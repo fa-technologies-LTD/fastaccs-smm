@@ -48,12 +48,28 @@ it('highlights only the most specific sidebar destination and closes the mobile 
 	await page.getByRole('button', { name: 'Open admin navigation' }).click();
 	const panel = page.getByRole('dialog', { name: 'Admin navigation' });
 	await expect
-		.element(panel.getByRole('link', { name: 'Numbers Orders' }))
+		.element(panel.getByRole('link', { name: 'Analytics' }))
 		.toHaveAttribute('aria-current', 'page');
 	await expect
-		.element(panel.getByRole('link', { name: 'Numbers Pricing' }))
+		.element(panel.getByRole('link', { name: 'Pricing' }))
 		.not.toHaveAttribute('aria-current');
 	await page.viewport(1360, 900);
 	await expect.element(panel).not.toBeInTheDocument();
 	await expect.poll(() => document.body.style.overflow).not.toBe('hidden');
+});
+
+it('shows the section switcher with the current page marked, and only pages this role can open', async () => {
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () => Response.json({}))
+	);
+	render(Layout, { data, children } as never);
+	const tabs = page.getByRole('navigation', { name: 'Analytics pages' });
+	await expect
+		.element(tabs.getByRole('link', { name: 'Numbers Sales' }))
+		.toHaveAttribute('aria-current', 'page');
+	await expect
+		.element(tabs.getByRole('link', { name: 'Boosting Sales' }))
+		.toHaveAttribute('href', '/admin/analytics?tab=boosting');
+	expect(page.getByRole('link', { name: 'Inventory' }).query()).toBeNull();
 });

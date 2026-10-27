@@ -644,23 +644,25 @@ export const load: PageServerLoad = async ({ locals }) => {
 				ok: orderStatsSnapshot.total_orders === directTotalOrders
 			},
 			{
+				// The snapshot's Net Sales is all products (the dashboard figure); compare it with a
+				// direct all-products total, never with accounts alone.
 				key: 'revenue_snapshot_vs_orders',
-				label: 'Account revenue snapshot matches account orders',
+				label: 'Net Sales snapshot matches paid orders',
 				expected: orderStatsSnapshot.total_revenue,
 				actual: toNetSales(
-					accountRevenueAggregate._sum.totalAmount,
-					accountRevenueAggregate._sum.refundedAmount
+					directRevenueAggregate._sum.totalAmount,
+					directRevenueAggregate._sum.refundedAmount
 				),
 				delta:
 					toNetSales(
-						accountRevenueAggregate._sum.totalAmount,
-						accountRevenueAggregate._sum.refundedAmount
+						directRevenueAggregate._sum.totalAmount,
+						directRevenueAggregate._sum.refundedAmount
 					) - orderStatsSnapshot.total_revenue,
 				ok:
 					Math.abs(
 						toNetSales(
-							accountRevenueAggregate._sum.totalAmount,
-							accountRevenueAggregate._sum.refundedAmount
+							directRevenueAggregate._sum.totalAmount,
+							directRevenueAggregate._sum.refundedAmount
 						) - orderStatsSnapshot.total_revenue
 					) < 0.01
 			},
@@ -828,7 +830,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 			advancedAnalyticsEnabled: featureFlags.adminAdvancedAnalytics,
 			totalRevenue: revenueVisible ? allProductNetSales : 0,
 			accountSales: {
-				totalRevenue: revenueVisible ? Number(orderStatsSnapshot.total_revenue || 0) : 0,
+				// Accounts only: the Account Sales tab, labelled to match "Net Sales · Accounts".
+				totalRevenue: revenueVisible
+					? toNetSales(
+							accountRevenueAggregate._sum.totalAmount,
+							accountRevenueAggregate._sum.refundedAmount
+						)
+					: 0,
 				totalOrders: orderStatsSnapshot.total_orders
 			},
 			externalCashCollected: revenueVisible

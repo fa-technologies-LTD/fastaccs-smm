@@ -30,10 +30,6 @@ it('hides company money while preserving an order manager’s per-order refund a
 	expect(page.getByText('₦11,000', { exact: true }).query()).toBeNull();
 	expect(page.getByText('$0.75', { exact: true }).query()).toBeNull();
 	expect(page.getByText('$8.02', { exact: true }).query()).toBeNull();
-	expect(page.getByRole('link', { name: 'Overview', exact: true }).query()).toBeNull();
-	await expect
-		.element(page.getByRole('link', { name: 'Numbers', exact: true }))
-		.toHaveAttribute('aria-current', 'page');
 });
 it('labels current-rate margin as estimated, not final profit', async () => {
 	render(Page, { data: fixture(true) } as never);
@@ -46,9 +42,6 @@ it('labels current-rate margin as estimated, not final profit', async () => {
 	expect(marginHeader).toBeTruthy();
 	expect(marginHeader?.getAttribute('scope')).toBe('col');
 	await expect.element(page.getByText('$8.02', { exact: true })).toBeVisible();
-	await expect
-		.element(page.getByRole('link', { name: 'Overview', exact: true }))
-		.toHaveAttribute('href', '/admin/analytics');
 });
 
 it('shows the full provider-attempt trail behind the final source', async () => {

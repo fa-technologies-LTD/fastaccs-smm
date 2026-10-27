@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Phone, TrendingUp, AlertTriangle, ShieldCheck } from '$lib/icons';
-	import AnalyticsNavigation from '$lib/components/admin/AnalyticsNavigation.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -60,9 +59,6 @@
 			<h1 class="text-2xl font-bold" style="color: var(--text);">Numbers — Orders & Analytics</h1>
 		</div>
 		<a href="/admin/numbers" class="text-sm hover:underline" style="color: #38bdf8;">Pricing →</a>
-	</div>
-	<div class="mb-6">
-		<AnalyticsNavigation active="numbers" permissions={data.adminPermissions ?? []} />
 	</div>
 
 	{#if lowBalance}

@@ -12,20 +12,19 @@
 		TrendingUp,
 		Settings,
 		Home,
-		Plus,
 		Layers,
-		Target,
+		DollarSign,
 		Menu,
-		X,
-		UserCheck,
-		Type,
-		Mail,
-		Tag,
-		Activity,
-		Zap,
-		Phone,
-		Send
+		X
 	} from '$lib/icons';
+	import SectionTabs from '$lib/components/admin/SectionTabs.svelte';
+	import {
+		findSectionTab,
+		sectionCount,
+		visibleSections,
+		type AdminSection,
+		type AdminSectionId
+	} from '$lib/helpers/admin-sections';
 
 	import logo from '$lib/assets/logo.png';
 
@@ -35,7 +34,6 @@
 			? (data.adminPermissions as AdminPermission[])
 			: ([] as AdminPermission[])
 	);
-	const adminPermissionSet = $derived(new Set(adminPermissions));
 
 	const featureFlags = $derived(
 		data?.featureFlags || {
@@ -92,140 +90,98 @@
 		};
 	});
 
-	const adminNavItems = $derived.by(() => {
-		const allItems: Array<{
-			href: string;
-			label: string;
-			icon: any;
-			permission?: AdminPermission;
-			enabled?: boolean;
-		}> = [
-			{ href: '/admin', label: 'Dashboard', icon: Home },
-			{
-				href: '/admin/platforms',
-				label: 'Platforms',
-				icon: Layers,
-				permission: 'admin:catalog:manage'
-			},
-			{
-				href: '/admin/tiers',
-				label: 'Account Types',
-				icon: Target,
-				permission: 'admin:catalog:manage'
-			},
-			{
-				href: '/admin/boosting-pricing',
-				label: 'Boosting Pricing',
-				icon: Zap,
-				permission: 'admin:catalog:manage'
-			},
-			{
-				href: '/admin/numbers',
-				label: 'Numbers Pricing',
-				icon: Phone,
-				permission: 'admin:catalog:manage'
-			},
-			{
-				href: '/admin/inventory',
-				label: 'Inventory',
-				icon: Package,
-				permission: 'admin:inventory:manage'
-			},
-			{
-				href: '/admin/batches',
-				label: 'Batch Import',
-				icon: Plus,
-				permission: 'admin:inventory:manage'
-			},
-			{ href: '/admin/orders', label: 'Account Orders', icon: ShoppingCart },
-			{ href: '/admin/boosting-orders', label: 'Boosting Orders', icon: Zap },
-			{
-				href: '/admin/numbers/analytics',
-				label: 'Numbers Orders',
-				icon: Phone,
-				permission: 'admin:catalog:manage'
-			},
-			{
-				href: '/admin/affiliates',
-				label: 'Affiliates',
-				icon: UserCheck,
-				permission: 'admin:affiliates:manage'
-			},
-			{ href: '/admin/users', label: 'Users', icon: Users },
-			{
-				href: '/admin/analytics',
-				label: 'Analytics',
-				icon: BarChart3,
-				permission: 'admin:revenue:view'
-			},
-			{
-				href: '/admin/marketing',
-				label: 'Marketing',
-				icon: TrendingUp,
-				permission: 'admin:revenue:view'
-			},
-			{
-				href: '/admin/campaigns',
-				label: 'Campaigns',
-				icon: Tag,
-				permission: 'admin:revenue:view'
-			},
-			{
-				href: '/admin/autopilot',
-				label: 'Telegram autopilot',
-				icon: Send,
-				permission: 'admin:revenue:view'
-			},
-			{
-				href: '/admin/promotions',
-				label: 'Promotions',
-				icon: Tag,
-				permission: 'admin:promotions:manage',
-				enabled: featureFlags.adminPromotions
-			},
-			{
-				href: '/admin/microcopy',
-				label: 'Microcopy',
-				icon: Type,
-				permission: 'admin:content:manage'
-			},
-			{
-				href: '/admin/broadcast',
-				label: 'Broadcast',
-				icon: Mail,
-				permission: 'admin:broadcast:manage'
-			},
-			{
-				href: '/admin/automation',
-				label: 'Automation',
-				icon: Activity,
-				permission: 'admin:settings:manage'
-			},
-			{
-				href: '/admin/settings',
-				label: 'Settings',
-				icon: Settings,
-				permission: 'admin:settings:manage'
-			}
-		];
+	const SECTION_ICONS: Record<AdminSectionId, typeof Home> = {
+		overview: Home,
+		orders: ShoppingCart,
+		inventory: Package,
+		customers: Users,
+		products: Layers,
+		pricing: DollarSign,
+		analytics: BarChart3,
+		growth: TrendingUp,
+		settings: Settings
+	};
 
-		return allItems.filter((item) => {
-			if (item.enabled === false) return false;
-			if (!item.permission) return true;
-			return adminPermissionSet.has(item.permission);
-		});
+	const sections = $derived(
+		visibleSections(adminPermissions, featureFlags, attentionCounts, page.url.pathname)
+	);
+	const current = $derived(
+		findSectionTab(sections, page.url.pathname, page.url.searchParams.get('tab'))
+	);
+
+	// Each section opens on the tab you used last.
+	const LAST_TAB_KEY = 'fastaccs_admin_last_tab';
+	let lastTabs = $state<Record<string, string>>({});
+	onMount(() => {
+		try {
+			lastTabs = JSON.parse(localStorage.getItem(LAST_TAB_KEY) || '{}') || {};
+		} catch {
+			lastTabs = {};
+		}
 	});
+	$effect(() => {
+		if (!current) return;
+		const { section, tab } = current;
+		if (lastTabs[section.id] === tab.href) return;
+		lastTabs = { ...lastTabs, [section.id]: tab.href };
+		try {
+			localStorage.setItem(LAST_TAB_KEY, JSON.stringify(lastTabs));
+		} catch {
+			// Remembering the tab is a convenience; the default tab still works.
+		}
+	});
+	function sectionHref(section: AdminSection): string {
+		const remembered = lastTabs[section.id];
+		return section.tabs.some((tab) => tab.href === remembered) ? remembered : section.tabs[0].href;
+	}
+
+	// On a phone, swiping the page left or right moves to the next or previous tab.
+	function swipeTabs(node: HTMLElement) {
+		let startX = 0;
+		let startY = 0;
+		let startAt = 0;
+		let tracking = false;
+		const scrollsSideways = (element: Element | null): boolean => {
+			for (let el = element; el && el !== node; el = el.parentElement) {
+				const overflow = getComputedStyle(el).overflowX;
+				if ((overflow === 'auto' || overflow === 'scroll') && el.scrollWidth > el.clientWidth)
+					return true;
+			}
+			return false;
+		};
+		const start = (event: TouchEvent) => {
+			const target = event.target as Element | null;
+			tracking =
+				event.touches.length === 1 &&
+				!target?.closest('input, textarea, select, [contenteditable], [data-no-swipe]') &&
+				!scrollsSideways(target);
+			startX = event.touches[0]?.clientX ?? 0;
+			startY = event.touches[0]?.clientY ?? 0;
+			startAt = Date.now();
+		};
+		const end = (event: TouchEvent) => {
+			if (!tracking || !current || current.section.tabs.length < 2) return;
+			tracking = false;
+			const dx = (event.changedTouches[0]?.clientX ?? startX) - startX;
+			const dy = (event.changedTouches[0]?.clientY ?? startY) - startY;
+			if (Math.abs(dx) < 80 || Math.abs(dx) < Math.abs(dy) * 2 || Date.now() - startAt > 600)
+				return;
+			const tabs = current.section.tabs;
+			const index = tabs.findIndex((tab) => tab.href === current?.tab.href);
+			const next = tabs[index + (dx < 0 ? 1 : -1)];
+			if (next) void goto(next.href);
+		};
+		node.addEventListener('touchstart', start, { passive: true });
+		node.addEventListener('touchend', end, { passive: true });
+		return {
+			destroy() {
+				node.removeEventListener('touchstart', start);
+				node.removeEventListener('touchend', end);
+			}
+		};
+	}
 
 	let sidebarOpen = $state(false);
-	const activeNavHref = $derived(
-		adminNavItems
-			.filter(
-				(item) =>
-					page.url.pathname === item.href ||
-					(item.href !== '/admin' && page.url.pathname.startsWith(item.href + '/'))
-			)
-			.sort((a, b) => b.href.length - a.href.length)[0]?.href
-	);
 
 	async function signOut() {
 		try {
@@ -262,28 +218,29 @@
 			<div class="flex flex-1 flex-col overflow-y-auto pt-5 pb-4">
 				<img src={logo} alt="FastAccs" class="mx-12" />
 				<nav class="mt-5 flex-1 space-y-1 px-2">
-					{#each adminNavItems as item (item.href)}
-						{@const IconComponent = item.icon}
+					{#each sections as section (section.id)}
+						{@const IconComponent = SECTION_ICONS[section.id]}
+						{@const count = sectionCount(section, attentionCounts)}
 						<a
-							href={item.href}
+							href={sectionHref(section)}
 							data-sveltekit-preload-data="hover"
-							aria-current={activeNavHref === item.href ? 'page' : undefined}
-							class="group flex items-center rounded-md px-2 py-1.5 text-xs font-medium transition-all {activeNavHref ===
-							item.href
+							aria-current={current?.section.id === section.id ? 'page' : undefined}
+							class="group flex items-center rounded-md px-2 py-2 text-sm font-medium transition-all {current
+								?.section.id === section.id
 								? 'bg-white/10 text-white'
 								: 'text-gray-300 hover:bg-white/5 hover:text-white'}"
 						>
 							<IconComponent
 								class="mr-3 h-4 w-4 flex-shrink-0 transition-transform group-hover:scale-95 group-hover:rotate-12"
 							/>
-							{item.label}
-							{#if attentionCounts[item.href] > 0}
+							{section.label}
+							{#if count > 0}
 								<span
 									class="ml-auto rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold"
 									style="background: var(--fa-lime-700); color: #0a0a0a;"
 									title="Needs attention"
 								>
-									{attentionCounts[item.href]}
+									{count}
 								</span>
 							{/if}
 						</a>
@@ -329,13 +286,14 @@
 						</div>
 
 						<nav class="space-y-1 px-2">
-							{#each adminNavItems as item (item.href)}
-								{@const IconComponent = item.icon}
+							{#each sections as section (section.id)}
+								{@const IconComponent = SECTION_ICONS[section.id]}
+								{@const count = sectionCount(section, attentionCounts)}
 								<a
-									href={item.href}
-									aria-current={activeNavHref === item.href ? 'page' : undefined}
-									class="group flex items-center rounded-md px-2 py-2 text-sm font-medium transition-all {activeNavHref ===
-									item.href
+									href={sectionHref(section)}
+									aria-current={current?.section.id === section.id ? 'page' : undefined}
+									class="group flex items-center rounded-md px-2 py-2.5 text-base font-medium transition-all {current
+										?.section.id === section.id
 										? 'bg-white/10 text-white'
 										: 'text-gray-300 hover:bg-white/5 hover:text-white'}"
 									onclick={() => (sidebarOpen = false)}
@@ -343,14 +301,14 @@
 									<IconComponent
 										class="mr-4 h-6 w-6 transition-transform group-hover:scale-95 group-hover:rotate-12"
 									/>
-									{item.label}
-									{#if attentionCounts[item.href] > 0}
+									{section.label}
+									{#if count > 0}
 										<span
 											class="ml-auto rounded-full px-2 py-0.5 text-xs leading-none font-bold"
 											style="background: var(--fa-lime-700); color: #0a0a0a;"
 											title="Needs attention"
 										>
-											{attentionCounts[item.href]}
+											{count}
 										</span>
 									{/if}
 								</a>
@@ -414,9 +372,16 @@
 			</div>
 		</div>
 
-		<main class="flex-1">
+		<main class="flex-1" use:swipeTabs>
 			<div class="py-4">
 				<div class="admin-content-shell mx-auto max-w-7xl px-2.5 sm:px-4 lg:px-6">
+					{#if current && current.section.tabs.length > 1}
+						<SectionTabs
+							section={current.section}
+							activeHref={current.tab.href}
+							counts={attentionCounts}
+						/>
+					{/if}
 					{@render children()}
 				</div>
 			</div>

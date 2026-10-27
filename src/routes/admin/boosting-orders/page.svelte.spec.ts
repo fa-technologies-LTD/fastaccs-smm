@@ -213,71 +213,18 @@ it('uses the same item unit for all status counts, even when orders contain mult
 	await expect.poll(() => vi.mocked(fetch).mock.calls.length).toBe(1);
 	expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain('status=all');
 });
-it('makes incomplete cost coverage explicit instead of calling unknown costs free', async () => {
-	render(Page, { data: fixture() } as never);
-	await page.getByText('Reports & analytics', { exact: true }).click();
-	await page.getByText('By service · last 30 days', { exact: true }).click();
-	await expect.element(page.getByText(/Costs recorded for 1 of 53 items/)).toBeVisible();
-	await expect.element(page.getByText(/Unknown costs aren’t treated as free/)).toBeVisible();
-});
-it('explains payment fees even when supplier cost coverage is complete', async () => {
-	const data = fixture();
-	data.analytics = {
-		...analytics,
-		overall: { ...analytics.overall, knownCostItems: analytics.overall.items }
-	};
-	render(Page, { data } as never);
-	await page.getByText('Reports & analytics', { exact: true }).click();
-	await expect
-		.element(
-			page.getByText(
-				'Recorded margin is after refunds and known supplier charges, before payment fees. It is not final profit.'
-			)
-		)
-		.toBeVisible();
-	expect(page.getByText(/Costs recorded for/).query()).toBeNull();
-});
-it('refreshes analytics and the order queue together from their real endpoint contracts', async () => {
-	const fresh = structuredClone(analytics);
-	fresh.overall.orders = 46;
-	fresh.overall.items = 54;
+it('refreshes the order queue and points sales reporting to Analytics', async () => {
 	vi.stubGlobal(
 		'fetch',
-		vi.fn(async (input: RequestInfo | URL) =>
-			Response.json(
-				String(input).endsWith('/analytics')
-					? { success: true, data: fresh }
-					: { success: true, data: [], meta: { ...meta, totalItems: 54 } }
-			)
-		)
+		vi.fn(async () => Response.json({ success: true, data: [], meta: { ...meta, totalItems: 54 } }))
 	);
 	render(Page, { data: fixture() } as never);
-	await page.getByText('Reports & analytics', { exact: true }).click();
+	await expect
+		.element(page.getByRole('link', { name: 'Boosting Sales', exact: true }))
+		.toHaveAttribute('href', '/admin/analytics?tab=boosting');
 	await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-	await expect.element(page.getByText('46', { exact: true })).toBeVisible();
 	await expect.element(page.getByRole('button', { name: 'All 54', exact: true })).toBeVisible();
-	expect(fetch).toHaveBeenCalledTimes(2);
-});
-it('labels cached reporting when analytics fails without replacing it with fake zero figures', async () => {
-	vi.stubGlobal(
-		'fetch',
-		vi.fn(async (input: RequestInfo | URL) =>
-			String(input).endsWith('/analytics')
-				? Response.json({ success: false }, { status: 503 })
-				: Response.json({ success: true, data: [], meta })
-		)
-	);
-	render(Page, { data: fixture() } as never);
-	await page.getByText('Reports & analytics', { exact: true }).click();
-	await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-	await expect
-		.element(
-			page.getByText('Could not refresh analytics. Showing the last successful report.', {
-				exact: true
-			})
-		)
-		.toBeVisible();
-	await expect.element(page.getByText('45', { exact: true })).toBeVisible();
+	expect(fetch).toHaveBeenCalledTimes(1);
 });
 it('shows purchased refill protection and supplier progress without manual completion controls', async () => {
 	const data = fixture();
@@ -328,18 +275,11 @@ it('shows purchased refill protection and supplier progress without manual compl
 	expect(page.getByRole('button', { name: 'Complete', exact: true }).query()).toBeNull();
 	expect(page.getByText('30-day refill', { exact: true }).query()).toBeNull();
 });
-it('does not render revenue cards for restricted admins', async () => {
-	render(Page, { data: { ...fixture(), canViewRevenue: false } } as never);
-	await page.getByText('Reports & analytics', { exact: true }).click();
-	expect(page.getByText('Net sales', { exact: true }).query()).toBeNull();
-	expect(page.getByText('Recorded margin', { exact: true }).query()).toBeNull();
-	await expect.element(page.getByText('Boosting items', { exact: true })).toBeVisible();
-});
 it('fits a mobile viewport without horizontal page scrolling', async () => {
 	await page.viewport(390, 844);
 	render(Page, { data: fixture() } as never);
 	await expect
-		.element(page.getByRole('heading', { name: 'Boosting orders', exact: true }))
+		.element(page.getByRole('heading', { name: 'Boosting Orders', exact: true }))
 		.toBeVisible();
 	expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
 	await page.screenshot({ path: '__screenshots__/mobile.png' });

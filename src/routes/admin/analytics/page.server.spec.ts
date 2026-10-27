@@ -54,7 +54,8 @@ const event = (revenueVisible = true) =>
 	}) as unknown as Parameters<typeof load>[0];
 beforeEach(() => {
 	vi.clearAllMocks();
-	mock.accountStats.mockResolvedValue({ total_orders: 2, total_revenue: 10000 });
+	// The order snapshot counts account orders but its Net Sales is all products (dashboard figure).
+	mock.accountStats.mockResolvedValue({ total_orders: 2, total_revenue: 15000 });
 	mock.boostStats.mockResolvedValue({ total_orders: 1, total_revenue: 5000 });
 	mock.inventory.mockResolvedValue({ total_available: 10 });
 	mock.flags.mockResolvedValue({ adminAdvancedAnalytics: true });
@@ -104,19 +105,19 @@ it('uses whole-store net sales for Overview/AOV and keeps Accounts separately sc
 	});
 	expect(
 		result.integrity.checks.find((check: any) => check.key === 'revenue_snapshot_vs_orders')
-	).toMatchObject({ expected: 10000, actual: 10000, ok: true });
+	).toMatchObject({ expected: 15000, actual: 15000, ok: true });
 	expect(
 		mock.db.order.aggregate.mock.calls.some(([input]) =>
 			JSON.stringify(input.where).includes('orderType')
 		)
 	).toBe(true);
 });
-it('still flags an actual stale account snapshot, rather than hiding an integrity mismatch', async () => {
+it('still flags an actual stale Net Sales snapshot, rather than hiding an integrity mismatch', async () => {
 	mock.accountStats.mockResolvedValue({ total_orders: 2, total_revenue: 9000 });
 	const result = (await load(event())) as any;
 	expect(
 		result.integrity.checks.find((check: any) => check.key === 'revenue_snapshot_vs_orders')
-	).toMatchObject({ expected: 9000, actual: 10000, ok: false });
+	).toMatchObject({ expected: 9000, actual: 15000, ok: false });
 	expect(result.stats.totalRevenue).toBe(15000);
 });
 it('redacts whole-store and Accounts money when revenue access is absent', async () => {

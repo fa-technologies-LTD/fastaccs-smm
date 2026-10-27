@@ -9,12 +9,7 @@
 	import Sparkline from '$lib/components/charts/Sparkline.svelte';
 	import { STATUS_COLOR_MAP } from '$lib/components/charts/chart-theme';
 	import { page } from '$app/state';
-	import { pushState } from '$app/navigation';
-	import AnalyticsNavigation from '$lib/components/admin/AnalyticsNavigation.svelte';
-	import {
-		getAnalyticsSection,
-		type AnalyticsSection
-	} from '$lib/helpers/admin-analytics-navigation';
+	import BoostingSalesReport from '$lib/components/admin/BoostingSalesReport.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -56,21 +51,15 @@
 		return `${Number(value).toFixed(1)}%`;
 	}
 
-	const activeTab = $derived(
-		getAnalyticsSection(
-			(page.state as { analyticsSection?: string }).analyticsSection ??
-				page.url.searchParams.get('tab')
-		)
-	);
-	function selectSection(_section: AnalyticsSection, href: string) {
-		// Existing data serves hub panels; do not rerun the analytics queries on every tab click.
-		const next = new URL(page.url);
-		const selected = new URL(href, next.origin).searchParams.get('tab');
-		if (selected) next.searchParams.set('tab', selected);
-		else next.searchParams.delete('tab');
-		// Kit's shallow pushState changes page.state, not page.url.
-		pushState(next, { ...page.state, analyticsSection: _section });
-	}
+	// The section switcher above the page links each tab as ?tab=…; the page data is shared, so
+	// switching tabs never reloads the reports.
+	const ANALYTICS_TABS = ['overview', 'accounts', 'boosting', 'users'] as const;
+	const activeTab = $derived.by(() => {
+		const tab = page.url.searchParams.get('tab') ?? '';
+		return (ANALYTICS_TABS as readonly string[]).includes(tab)
+			? (tab as (typeof ANALYTICS_TABS)[number])
+			: 'overview';
+	});
 	const ua = $derived((data.userAnalytics ?? null) as Record<string, any> | null);
 	const acq = $derived(
 		(data.acquisition ?? null) as {
@@ -177,7 +166,7 @@
 <div class="space-y-4">
 	<div class="flex flex-wrap items-center justify-between gap-2">
 		<div>
-			<h1 class="text-2xl font-bold" style="color: var(--text)">Analytics Dashboard</h1>
+			<h1 class="text-2xl font-bold" style="color: var(--text)">Analytics</h1>
 			<p class="mt-1 text-sm" style="color: var(--text-muted)">
 				Business timezone: <span class="font-semibold">{stats.timezone || 'Africa/Lagos'}</span>
 			</p>
@@ -202,12 +191,6 @@
 			</span>
 		{/if}
 	</div>
-
-	<AnalyticsNavigation
-		active={activeTab}
-		permissions={data.adminPermissions ?? []}
-		onSelect={selectSection}
-	/>
 
 	{#if activeTab === 'overview'}
 		<div
@@ -408,51 +391,6 @@
 						formatLabel={(key) => key.slice(5)}
 						formatValue={formatMoney}
 						emptyMessage="No revenue data available."
-					/>
-				</div>
-			</section>
-
-			<section
-				class="rounded-lg p-3"
-				style="border: 1px solid rgba(105,109,250,0.3); background: var(--bg-elev-1);"
-			>
-				<div class="flex flex-wrap items-center justify-between gap-3">
-					<h2 class="text-base font-semibold" style="color: var(--fa-blue-300);">
-						Boosting Services
-					</h2>
-					<a
-						href="/admin/boosting-orders"
-						class="text-sm font-medium"
-						style="color: var(--fa-blue-300);">View Boosting report →</a
-					>
-					<div class="flex flex-wrap gap-4 text-sm" style="color: var(--text-muted);">
-						<span
-							>Orders: <strong style="color: var(--text);"
-								>{stats.boosting?.totalOrders || 0}</strong
-							></span
-						>
-						<span
-							>Lifetime net sales: <strong style="color: var(--text);"
-								>{formatMoney(stats.boosting?.totalRevenue || 0)}</strong
-							></span
-						>
-						<span
-							>This month: <strong style="color: var(--text);"
-								>{formatMoney(stats.boosting?.thisMonthRevenue || 0)}</strong
-							></span
-						>
-					</div>
-				</div>
-				<div class="mt-3">
-					<AreaLineChart
-						data={(stats.boosting?.revenueBreakdown?.lineTrend || []).map(
-							(point: { key: string; revenue: number }) => ({
-								key: point.key,
-								value: point.revenue
-							})
-						)}
-						formatLabel={(key) => key.slice(5)}
-						emptyMessage="No boosting revenue data yet."
 					/>
 				</div>
 			</section>
@@ -1103,7 +1041,7 @@
 			<h2 class="text-lg font-semibold" style="color: var(--text);">Accounts</h2>
 			{#if typeof stats.totalAccounts === 'number'}
 				<div class="grid grid-cols-2 gap-3 lg:grid-cols-3">
-					{#each [['Accounts sold', Number(stats.accountsSold || 0).toLocaleString()], ['Available stock', Number(stats.availableAccounts || 0).toLocaleString()], ...(canViewRevenue ? [['Lifetime net sales', formatMoney(stats.accountSales?.totalRevenue || 0)]] : [])] as metric}
+					{#each [['Accounts sold', Number(stats.accountsSold || 0).toLocaleString()], ['Available stock', Number(stats.availableAccounts || 0).toLocaleString()], ...(canViewRevenue ? [['Net Sales · Accounts', formatMoney(stats.accountSales?.totalRevenue || 0)]] : [])] as metric}
 						<div
 							class="rounded-lg border p-4"
 							style="background: var(--bg-elev-1); border-color: var(--border);"
@@ -1148,14 +1086,44 @@
 			{/if}
 		</section>
 	{:else if activeTab === 'boosting'}
+		<BoostingSalesReport {canViewRevenue} {hideMonetaryAmounts} />
 		<section
-			class="rounded-lg border p-6"
-			style="background: var(--bg-elev-1); border-color: var(--border);"
+			class="rounded-lg p-3"
+			style="border: 1px solid rgba(105,109,250,0.3); background: var(--bg-elev-1);"
 		>
-			<h2 class="font-semibold" style="color: var(--text);">Boosting analytics</h2>
-			<a href="/admin/boosting-orders" class="mt-3 inline-block" style="color: var(--primary);"
-				>Open Boosting report →</a
-			>
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<h2 class="text-base font-semibold" style="color: var(--text);">
+					Boosting sales over time
+				</h2>
+				<div class="flex flex-wrap gap-4 text-sm" style="color: var(--text-muted);">
+					<span
+						>Orders: <strong style="color: var(--text);">{stats.boosting?.totalOrders || 0}</strong
+						></span
+					>
+					<span
+						>Lifetime net sales: <strong style="color: var(--text);"
+							>{formatMoney(stats.boosting?.totalRevenue || 0)}</strong
+						></span
+					>
+					<span
+						>This month: <strong style="color: var(--text);"
+							>{formatMoney(stats.boosting?.thisMonthRevenue || 0)}</strong
+						></span
+					>
+				</div>
+			</div>
+			<div class="mt-3">
+				<AreaLineChart
+					data={(stats.boosting?.revenueBreakdown?.lineTrend || []).map(
+						(point: { key: string; revenue: number }) => ({
+							key: point.key,
+							value: point.revenue
+						})
+					)}
+					formatLabel={(key) => key.slice(5)}
+					emptyMessage="No boosting revenue data yet."
+				/>
+			</div>
 		</section>
 	{:else if activeTab === 'users'}
 		{#if ua}
@@ -1341,24 +1309,5 @@
 				User analytics are unavailable right now.
 			</p>
 		{/if}
-	{:else if activeTab === 'numbers'}
-		<section
-			class="rounded-lg border p-6 text-center"
-			style="background: var(--surface); border-color: var(--border);"
-		>
-			<p class="mb-2 text-base font-semibold" style="color: var(--text);">
-				Numbers analytics live in their own dashboard
-			</p>
-			<p class="mb-4 text-sm" style="color: var(--text-muted);">
-				Rents, success rate, revenue, margin, hub-man balance, buyer attribution and recent rentals.
-			</p>
-			<a
-				href="/admin/numbers/analytics"
-				class="inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold"
-				style="background: #0ea5e9; color: #ffffff;"
-			>
-				Open Numbers analytics →
-			</a>
-		</section>
 	{/if}
 </div>

@@ -1,5 +1,4 @@
 import type { PageLoad } from './$types';
-import type { getBoostingAnalytics } from '$lib/services/boosting-analytics';
 
 const DEFAULT_META = {
 	page: 1,
@@ -48,16 +47,5 @@ export const load: PageLoad = async ({ fetch, url }) => {
 		error = 'Failed to load boosting orders';
 	}
 
-	let analytics: Awaited<ReturnType<typeof getBoostingAnalytics>> | null = null;
-	let analyticsError: string | null = null;
-	try {
-		const response = await fetch('/api/admin/boosting-orders/analytics');
-		const result = await response.json();
-		if (response.ok && result.success) analytics = result.data;
-		else analyticsError = 'Analytics unavailable. Order management is still available.';
-	} catch {
-		analyticsError = 'Analytics unavailable. Order management is still available.';
-	}
-
-	return { items, meta, error, analytics, analyticsError };
+	return { items, meta, error };
 };

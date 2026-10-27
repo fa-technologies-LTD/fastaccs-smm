@@ -8,7 +8,10 @@
 	}: {
 		order: {
 			orderType?: string | null;
-			orderItems?: Array<{ productName?: string | null; boostTargetUrl?: string | null } | null> | null;
+			orderItems?: Array<{
+				productName?: string | null;
+				boostTargetUrl?: string | null;
+			} | null> | null;
 		};
 	} = $props();
 

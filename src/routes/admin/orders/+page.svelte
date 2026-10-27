@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { getOrders } from '$lib/services/orders';
-	import OrderTypeTabs from '$lib/components/admin/OrderTypeTabs.svelte';
 	import OrderTypeIcon from '$lib/components/admin/OrderTypeIcon.svelte';
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
 	import { getOrderStatusLabel, isOrderStatusInGroup } from '$lib/helpers/order-status';
@@ -219,18 +218,8 @@
 			<p class="mt-1 text-sm sm:text-base" style="color: var(--text-muted)">
 				Accounts bought on the site, newest first.
 			</p>
-			<div class="mt-2">
-				<OrderTypeTabs active="accounts" />
-			</div>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
-			{#if data.adminPermissions?.includes('admin:orders:manage')}
-				<a
-					href="/admin/payment-recovery"
-					class="rounded-lg border px-3 py-1.5 text-xs"
-					style="border-color: var(--border); color: var(--text-muted);">Payment issues</a
-				>
-			{/if}
 			<button
 				onclick={loadOrders}
 				disabled={loading}

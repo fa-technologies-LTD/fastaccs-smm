@@ -2,7 +2,6 @@ import { page as browser } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { page } from '$app/state';
-import { pushState } from '$app/navigation';
 import '$lib/../app.css';
 import Page from './+page.svelte';
 
@@ -41,9 +40,6 @@ beforeEach(async () => {
 	await browser.viewport(1360, 900);
 	page.url.href = 'http://localhost/admin/analytics?tab=accounts';
 	mock.setState({});
-	vi.mocked(pushState).mockImplementation((_url, state) => {
-		mock.setState(state);
-	});
 	vi.stubGlobal(
 		'fetch',
 		vi.fn(() => {
@@ -56,41 +52,53 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-it('shows five readable sections and sends product links to their actual reports', async () => {
+it('opens the tab named in the link and shows account sales without fetching', async () => {
 	render(Page, { data: fixture() } as never);
-	const nav = browser.getByRole('navigation', { name: 'Analytics sections' });
-	for (const name of ['Overview', 'Accounts', 'Boosting', 'Numbers', 'Users'])
-		await expect.element(nav.getByRole('link', { name, exact: true })).toBeVisible();
-	await expect
-		.element(nav.getByRole('link', { name: 'Accounts', exact: true }))
-		.toHaveAttribute('aria-current', 'page');
-	await expect
-		.element(nav.getByRole('link', { name: 'Users', exact: true }))
-		.toHaveAttribute('data-sveltekit-preload-data', 'off');
-	await expect
-		.element(nav.getByRole('link', { name: 'Boosting', exact: true }))
-		.toHaveAttribute('href', '/admin/boosting-orders');
-	await expect
-		.element(nav.getByRole('link', { name: 'Numbers', exact: true }))
-		.toHaveAttribute('href', '/admin/numbers/analytics');
 	await expect.element(browser.getByText('42', { exact: true })).toBeVisible();
 	await expect.element(browser.getByText('₦45,600', { exact: true })).toBeVisible();
 	expect(browser.getByText('₦123,450', { exact: true }).query()).toBeNull();
+	expect(fetch).not.toHaveBeenCalled();
 });
-it('switches hub sections without fetching and supports a restored URL', async () => {
+it('switches tabs from the link without reloading the reports', async () => {
 	render(Page, { data: fixture() } as never);
-	const nav = browser.getByRole('navigation', { name: 'Analytics sections' });
-	await nav.getByRole('link', { name: 'Users', exact: true }).click();
+	page.url.href = 'http://localhost/admin/analytics?tab=users';
 	await expect
 		.element(browser.getByText('User analytics are unavailable right now.'))
 		.toBeVisible();
-	expect(pushState).toHaveBeenCalledOnce();
-	expect(page.url.searchParams.get('tab')).toBe('accounts');
-	expect(fetch).not.toHaveBeenCalled();
-	mock.setState({});
 	page.url.href = 'http://localhost/admin/analytics?tab=accounts';
 	await expect.element(browser.getByRole('region', { name: 'Accounts analytics' })).toBeVisible();
 	expect(fetch).not.toHaveBeenCalled();
+});
+it('shows Boosting Sales as a real report on its own tab', async () => {
+	page.url.href = 'http://localhost/admin/analytics?tab=boosting';
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () =>
+			Response.json({
+				success: true,
+				data: {
+					overall: {
+						orders: 7,
+						items: 9,
+						completed: 9,
+						knownCostItems: 9,
+						completionRate: 100,
+						netSalesNgn: 9000,
+						supplierCostNgn: 3000,
+						recordedMarginNgn: 6000
+					},
+					byService: [],
+					providers: []
+				}
+			})
+		)
+	);
+	render(Page, { data: fixture() } as never);
+	await expect
+		.element(browser.getByRole('heading', { name: 'Boosting Sales', exact: true }))
+		.toBeVisible();
+	await expect.element(browser.getByText('Paid orders', { exact: true })).toBeVisible();
+	expect(String(vi.mocked(fetch).mock.calls[0][0])).toBe('/api/admin/boosting-orders/analytics');
 });
 it('does not expose revenue or owner-only destinations to a restricted role', async () => {
 	render(Page, {
@@ -108,10 +116,9 @@ it('distinguishes missing analytics from zero sales', async () => {
 		.toHaveTextContent('Account analytics are unavailable right now.');
 	expect(browser.getByText('0', { exact: true }).query()).toBeNull();
 });
-it('keeps every section visible on a narrow viewport', async () => {
+it('fits a narrow viewport without sideways scrolling', async () => {
 	await browser.viewport(390, 844);
 	render(Page, { data: fixture() } as never);
-	for (const name of ['Overview', 'Accounts', 'Boosting', 'Numbers', 'Users'])
-		await expect.element(browser.getByRole('link', { name, exact: true })).toBeVisible();
+	await expect.element(browser.getByRole('region', { name: 'Accounts analytics' })).toBeVisible();
 	expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
 });
