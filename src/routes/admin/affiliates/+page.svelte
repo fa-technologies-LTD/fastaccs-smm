@@ -5,13 +5,10 @@
 		DollarSign,
 		Search,
 		Download,
-		Eye,
-		CheckCircle,
-		XCircle
+		CheckCircle
 	} from '$lib/icons';
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
-	import { goto } from '$app/navigation';
 	import { formatPrice, formatDate } from '$lib/helpers/utils';
 
 	let { data }: { data: PageData } = $props();
@@ -72,6 +69,48 @@
 			);
 		})
 	);
+
+	// The list opens on what needs you: bank details to check and payout requests.
+	type Affiliate = (typeof allAffiliates)[number];
+	type ListFilter = 'review' | 'active' | 'none' | 'all';
+	const PAGE = 25;
+	const needsReview = (a: Affiliate) =>
+		Boolean(a.hasPendingBankDetails) || Number(a.requestedStoreCredit || 0) > 0;
+	const hasActivity = (a: Affiliate) =>
+		Number(a.totalReferrals || 0) > 0 ||
+		Number(a.totalSales || 0) > 0 ||
+		Number(a.availableStoreCredit || 0) > 0 ||
+		Number(a.requestedStoreCredit || 0) > 0;
+	const filterCounts = $derived({
+		review: affiliates.filter(needsReview).length,
+		active: affiliates.filter(hasActivity).length,
+		none: affiliates.filter((a: Affiliate) => !hasActivity(a)).length,
+		all: affiliates.length
+	});
+	let chosenFilter = $state<ListFilter | null>(null);
+	const listFilter = $derived<ListFilter>(
+		chosenFilter ?? (filterCounts.review > 0 ? 'review' : 'active')
+	);
+	const listed = $derived(
+		affiliates.filter((a: Affiliate) =>
+			listFilter === 'all'
+				? true
+				: listFilter === 'review'
+					? needsReview(a)
+					: listFilter === 'active'
+						? hasActivity(a)
+						: !hasActivity(a)
+		)
+	);
+	let shownCount = $state(PAGE);
+	const LIST_FILTERS: Array<{ value: ListFilter; label: string }> = [
+		{ value: 'review', label: 'To review' },
+		{ value: 'active', label: 'Active' },
+		{ value: 'none', label: 'No referrals yet' },
+		{ value: 'all', label: 'All' }
+	];
+	const amountOrDash = (value: unknown) =>
+		Number(value || 0) > 0 ? formatPrice(Number(value)) : '—';
 
 	function isBusy(userId: string): boolean {
 		return busyAffiliateIds.includes(userId);
@@ -384,9 +423,9 @@
 		</div>
 	</div>
 
-	<!-- Search -->
+	<!-- Find an affiliate -->
 	<div
-		class="rounded-lg p-4"
+		class="space-y-3 rounded-lg p-4"
 		style="border: 1px solid var(--border); background: var(--bg-elev-1);"
 	>
 		<div class="relative">
@@ -397,227 +436,169 @@
 			<input
 				type="text"
 				bind:value={searchQuery}
-				placeholder="Search by name, email, or affiliate promo code..."
+				oninput={() => (shownCount = PAGE)}
+				placeholder="Search name, email or code"
+				aria-label="Search affiliates"
 				class="w-full rounded-lg py-2 pr-4 pl-10 focus:ring-1 focus:outline-none"
 				style="border: 1px solid var(--border); color: var(--text); background: var(--bg);"
 			/>
 		</div>
+		<div class="flex flex-wrap gap-2" role="group" aria-label="Filter affiliates">
+			{#each LIST_FILTERS as option (option.value)}
+				<button
+					type="button"
+					aria-pressed={listFilter === option.value}
+					onclick={() => {
+						chosenFilter = option.value;
+						shownCount = PAGE;
+					}}
+					class="rounded-full px-3 py-1.5 text-xs font-semibold"
+					style={listFilter === option.value
+						? option.value === 'review'
+							? 'background: var(--status-warning-bg); color: var(--status-warning); border: 1px solid var(--status-warning-border);'
+							: 'background: rgba(105,109,250,0.14); color: var(--link); border: 1px solid rgba(105,109,250,0.32);'
+						: 'background: var(--bg); color: var(--text-muted); border: 1px solid var(--border);'}
+				>
+					{option.label} · {filterCounts[option.value]}
+				</button>
+			{/each}
+		</div>
 	</div>
 
-	<!-- Affiliates Table -->
+	<!-- Affiliates -->
 	<div class="rounded-lg" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
-		<div class="p-6" style="border-bottom: 1px solid var(--border);">
-			<h2 class="text-lg font-semibold" style="color: var(--text);">All Affiliates</h2>
-		</div>
 		<div class="overflow-x-auto">
 			<table class="w-full">
 				<thead style="background: var(--bg-elev-2);">
-					<tr>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-muted);"
-						>
-							User
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-muted);"
-						>
-							Code
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-muted);"
-						>
-							Referrals
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-muted);"
-						>
-							Orders
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-muted);"
-						>
-							Net Sales
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-muted);"
-						>
-							Available
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-muted);"
-						>
-							Earned
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-muted);"
-						>
-							Requested
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-muted);"
-						>
-							Joined
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-muted);"
-						>
-							Status
-						</th>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-muted);"
-						>
-							Actions
-						</th>
+					<tr
+						class="text-left text-xs font-medium tracking-wider uppercase"
+						style="color: var(--text-muted);"
+					>
+						<th class="px-4 py-3">Affiliate</th>
+						<th class="px-4 py-3 text-right">Referrals</th>
+						<th class="px-4 py-3 text-right">Sales brought</th>
+						<th class="px-4 py-3 text-right">Balance</th>
+						<th class="px-4 py-3">Status</th>
 					</tr>
 				</thead>
-				<tbody class="divide-y" style="border-color: var(--border); background: var(--bg-elev-1);">
-					{#if affiliates.length === 0}
+				<tbody class="divide-y" style="border-color: var(--border);">
+					{#each listed.slice(0, shownCount) as affiliate (affiliate.id)}
 						<tr>
-							<td colspan="11" class="px-6 py-12 text-center" style="color: var(--text-muted);">
-								No affiliates found
+							<td class="px-4 py-3">
+								<a
+									href={`/admin/affiliates/${affiliate.id}`}
+									class="flex items-center gap-2 text-sm font-semibold hover:underline"
+									style="color: var(--text);"
+								>
+									{affiliate.fullName || affiliate.email}
+									{#if affiliate.isSuperAffiliate}
+										<span
+											class="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+											style="background: var(--status-info-bg); border: 1px solid var(--status-info-border); color: var(--status-info);"
+											>Super</span
+										>
+									{/if}
+								</a>
+								<div class="text-xs" style="color: var(--text-muted);">
+									<span class="font-mono" style="color: var(--link);"
+										>{affiliate.affiliateCode || 'No code'}</span
+									>
+									· joined {formatDate(affiliate.joinedAt || affiliate.createdAt)}
+								</div>
+							</td>
+							<td class="px-4 py-3 text-right text-sm tabular-nums" style="color: var(--text);">
+								{Number(affiliate.totalReferrals || 0) > 0 ? affiliate.totalReferrals : '—'}
+							</td>
+							<td class="px-4 py-3 text-right text-sm tabular-nums" style="color: var(--text);">
+								{amountOrDash(affiliate.totalSales)}
+							</td>
+							<td class="px-4 py-3 text-right text-sm tabular-nums" style="color: var(--text);">
+								{amountOrDash(affiliate.availableStoreCredit)}
+								{#if Number(affiliate.requestedStoreCredit || 0) > 0}
+									<div class="text-xs" style="color: var(--status-warning);">
+										{formatPrice(Number(affiliate.requestedStoreCredit))} requested
+									</div>
+								{/if}
+							</td>
+							<td class="px-4 py-3">
+								<div class="flex flex-wrap items-center gap-2">
+									{#if affiliate.hasPendingBankDetails}
+										<a
+											href={`/admin/affiliates/${affiliate.id}#bank-details`}
+											class="rounded-full px-2 py-0.5 text-xs font-semibold"
+											style="background: var(--status-warning-bg); border: 1px solid var(--status-warning-border); color: var(--status-warning);"
+											>Review bank details</a
+										>
+									{/if}
+									{#if Number(affiliate.requestedStoreCredit || 0) > 0}
+										<a
+											href={`/admin/affiliates/${affiliate.id}`}
+											class="rounded-full px-2 py-0.5 text-xs font-semibold"
+											style="background: var(--status-warning-bg); border: 1px solid var(--status-warning-border); color: var(--status-warning);"
+											>Payout requested</a
+										>
+									{/if}
+									{#if affiliate.isAffiliateEnabled && affiliate.programStatus === 'active'}
+										<span class="text-xs font-semibold" style="color: var(--status-success);"
+											>Active</span
+										>
+									{:else}
+										<span class="text-xs font-semibold" style="color: var(--text-muted);">Off</span>
+									{/if}
+									<button
+										type="button"
+										onclick={() =>
+											toggleAffiliateStatus(
+												affiliate.id,
+												affiliate.isAffiliateEnabled,
+												affiliate.isSuperAffiliate
+											)}
+										disabled={isBusy(affiliate.id)}
+										class="rounded-md px-2 py-0.5 text-xs disabled:opacity-50"
+										style="border: 1px solid var(--border); color: var(--text-muted);"
+										>{affiliate.isAffiliateEnabled ? 'Switch off' : 'Switch on'}</button
+									>
+									{#if affiliate.isAffiliateEnabled && affiliate.programStatus === 'active'}
+										<button
+											type="button"
+											onclick={() => toggleAffiliateType(affiliate.id, affiliate.isSuperAffiliate)}
+											disabled={isBusy(affiliate.id)}
+											class="rounded-md px-2 py-0.5 text-xs disabled:opacity-50"
+											style="border: 1px solid var(--border); color: var(--text-muted);"
+											>{affiliate.isSuperAffiliate ? 'Make regular' : 'Make Super'}</button
+										>
+									{/if}
+								</div>
 							</td>
 						</tr>
 					{:else}
-						{#each affiliates as affiliate}
-							<tr
-								class="transition-colors"
-								style="--hover-bg: var(--bg-elev-2);"
-								onmouseenter={(e) => (e.currentTarget.style.background = 'var(--bg-elev-2)')}
-								onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
+						<tr>
+							<td
+								colspan="5"
+								class="px-4 py-10 text-center text-sm"
+								style="color: var(--text-muted);"
 							>
-								<td class="px-6 py-4 whitespace-nowrap">
-									<div>
-										<div
-											class="flex items-center gap-2 text-sm font-medium"
-											style="color: var(--text);"
-										>
-											{affiliate.fullName || 'N/A'}
-											{#if affiliate.isSuperAffiliate}
-												<span
-													class="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-													style="background: var(--status-info-bg); border: 1px solid var(--status-info-border); color: var(--status-info);"
-												>
-													Super
-												</span>
-											{/if}
-											{#if affiliate.hasPendingBankDetails}
-												<span
-													class="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-													style="background: var(--status-warning-bg); border: 1px solid var(--status-warning-border); color: var(--status-warning);"
-												>
-													Bank details pending
-												</span>
-											{/if}
-										</div>
-										<div class="text-sm" style="color: var(--text-muted);">{affiliate.email}</div>
-									</div>
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap">
-									<div class="font-mono text-sm font-semibold" style="color: var(--link);">
-										{affiliate.affiliateCode || 'N/A'}
-									</div>
-								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
-									{affiliate.totalReferrals || 0}
-								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
-									{affiliate.successfulOrders || 0}
-								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);">
-									{formatPrice(Number(affiliate.totalSales || 0))}
-								</td>
-								<td
-									class="px-6 py-4 text-sm font-medium whitespace-nowrap"
-									style="color: var(--status-success);"
-								>
-									{formatPrice(Number(affiliate.availableStoreCredit || 0))}
-								</td>
-								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap" style="color: #a855f7;">
-									{formatPrice(Number(affiliate.totalStoreCreditEarned || 0))}
-								</td>
-								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap" style="color: #f97316;">
-									{formatPrice(Number(affiliate.requestedStoreCredit || 0))}
-								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text-muted);">
-									{formatDate(affiliate.joinedAt || affiliate.createdAt)}
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap">
-									{#if affiliate.isAffiliateEnabled && affiliate.programStatus === 'active'}
-										<span
-											class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-800"
-										>
-											<CheckCircle class="h-3 w-3" />
-											Active
-										</span>
-									{:else}
-										<span
-											class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-800"
-										>
-											<XCircle class="h-3 w-3" />
-											Inactive
-										</span>
-									{/if}
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap">
-									<div class="flex gap-2">
-										<button
-											onclick={() => goto(`/admin/affiliates/${affiliate.id}`)}
-											class="group cursor-pointer text-blue-600 hover:text-blue-900"
-											title="View Details"
-										>
-											<Eye class="h-5 w-5 transition-all group-hover:scale-90" />
-										</button>
-										<button
-											onclick={() =>
-												toggleAffiliateStatus(
-													affiliate.id,
-													affiliate.isAffiliateEnabled,
-													affiliate.isSuperAffiliate
-												)}
-											disabled={isBusy(affiliate.id)}
-											class="group cursor-pointer text-gray-600 hover:text-gray-900"
-											title={affiliate.isAffiliateEnabled ? 'Disable' : 'Enable'}
-										>
-											{#if affiliate.isAffiliateEnabled}
-												<XCircle class="h-5 w-5 text-red-600 transition-all group-hover:scale-90" />
-											{:else}
-												<CheckCircle
-													class="h-5 w-5 text-green-600 transition-all group-hover:scale-90"
-												/>
-											{/if}
-										</button>
-										{#if affiliate.isAffiliateEnabled && affiliate.programStatus === 'active'}
-											<button
-												onclick={() =>
-													toggleAffiliateType(affiliate.id, affiliate.isSuperAffiliate)}
-												disabled={isBusy(affiliate.id)}
-												class="rounded-md px-2 py-1 text-xs font-semibold disabled:opacity-50"
-												style="border: 1px solid var(--border); color: var(--text);"
-												title={affiliate.isSuperAffiliate
-													? 'Change to regular affiliate'
-													: 'Upgrade to super affiliate'}
-											>
-												{affiliate.isSuperAffiliate ? 'Set regular' : 'Make super'}
-											</button>
-										{/if}
-									</div>
-								</td>
-							</tr>
-						{/each}
-					{/if}
+								{listFilter === 'review'
+									? 'Nothing to review right now.'
+									: searchQuery
+										? 'No affiliates match that search.'
+										: 'No affiliates here.'}
+							</td>
+						</tr>
+					{/each}
 				</tbody>
 			</table>
 		</div>
+		{#if shownCount < listed.length}
+			<div class="p-3 text-center" style="border-top: 1px solid var(--border);">
+				<button
+					type="button"
+					onclick={() => (shownCount += PAGE)}
+					class="rounded-full px-4 py-1.5 text-sm font-semibold"
+					style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
+					>Show {Math.min(PAGE, listed.length - shownCount)} more of {listed.length}</button
+				>
+			</div>
+		{/if}
 	</div>
 </div>

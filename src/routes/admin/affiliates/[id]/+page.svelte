@@ -11,6 +11,7 @@
 	} from '$lib/icons';
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
+	import PersonTabs from '$lib/components/admin/PersonTabs.svelte';
 	import { formatPrice, formatDate } from '$lib/helpers/utils';
 
 	let { data }: { data: PageData } = $props();
@@ -279,6 +280,9 @@
 					{data.affiliate.fullName || 'Affiliate details'}
 				</h1>
 				<p class="mt-1" style="color: var(--text-muted);">{data.affiliate.email}</p>
+				<div class="mt-2">
+					<PersonTabs userId={data.affiliate.id} active="affiliate" />
+				</div>
 			</div>
 		</div>
 	</div>
@@ -856,7 +860,8 @@
 	</div>
 
 	<div
-		class="mb-6 rounded-lg border p-6"
+		id="bank-details"
+		class="mb-6 scroll-mt-20 rounded-lg border p-6"
 		style="border-color: var(--border); background: var(--bg-elev-1);"
 	>
 		<div class="mb-4 flex items-center justify-between">

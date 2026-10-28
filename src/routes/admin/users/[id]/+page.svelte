@@ -7,9 +7,15 @@
 	import { ArrowLeft, ShieldCheck, ShieldOff, Clock3, ShoppingBag, Activity } from '$lib/icons';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
 	import OrderTypeIcon from '$lib/components/admin/OrderTypeIcon.svelte';
+	import PersonTabs from '$lib/components/admin/PersonTabs.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+	const canOpenAffiliate = $derived(
+		(((data as { adminPermissions?: string[] }).adminPermissions ?? []) as string[]).includes(
+			'admin:affiliates:manage'
+		)
+	);
 
 	let user = $state(data.user);
 	const stats = $derived(data.stats);
@@ -218,6 +224,11 @@
 				<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text);">
 					{user.fullName || 'Unnamed user'}
 				</h1>
+				{#if (user.isAffiliateEnabled || user.affiliateCode) && canOpenAffiliate}
+					<div class="mt-2">
+						<PersonTabs userId={user.id} active="customer" />
+					</div>
+				{/if}
 				<p class="mt-1 text-sm sm:text-base" style="color: var(--text-muted);">
 					{user.email || 'No email'}
 				</p>
