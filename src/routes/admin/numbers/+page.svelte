@@ -128,8 +128,8 @@
 
 			// Only re-sync from the rate/margin when they actually changed (a full re-price is slow).
 			// The sync respects locks, so locked prices stay put through a rate/margin change.
+			// The dollar rate is shared and set in Boosting Prices, so this page never sends it.
 			const rateMarginChanged =
-				usdNgnRate !== data.usdNgnRate ||
 				marginPercent !== data.marginPercent ||
 				minProfitNgn !== data.minProfitNgn ||
 				minFulfillmentProfitNgn !== data.minFulfillmentProfitNgn ||
@@ -139,7 +139,6 @@
 			if (rateMarginChanged) {
 				const cfg = await post({
 					action: 'config',
-					usdNgnRate,
 					marginPercent,
 					minProfitNgn,
 					minFulfillmentProfitNgn,
