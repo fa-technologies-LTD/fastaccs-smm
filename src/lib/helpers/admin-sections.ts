@@ -151,6 +151,11 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		label: 'Settings',
 		tabs: [
 			{ href: '/admin/settings', label: 'Settings', permission: 'admin:settings:manage' },
+			{
+				href: '/admin/business-rules',
+				label: 'Business Rules',
+				permission: 'admin:settings:manage'
+			},
 			{ href: '/admin/automation', label: 'System Health', permission: 'admin:settings:manage' }
 		]
 	}

@@ -57,10 +57,18 @@
 	let wallets = $derived(data.wallets || []);
 	let transactions = $derived(data.transactions || []);
 
+	// Long lists: wallets with money in them first (empty ones on request), 25 rows at a time.
+	const PAGE = 25;
+	let showEmptyWallets = $state(false);
+	let walletsShown = $state(PAGE);
+	let transactionsShown = $state(PAGE);
 	let filteredWallets = $derived.by(() => {
-		if (!searchQuery.trim()) return wallets;
+		const withMoney = showEmptyWallets
+			? wallets
+			: wallets.filter((wallet: { balance?: unknown }) => Number(wallet.balance || 0) > 0);
+		if (!searchQuery.trim()) return withMoney;
 		const query = searchQuery.toLowerCase();
-		return wallets.filter(
+		return withMoney.filter(
 			(wallet: any) =>
 				wallet.user?.fullName?.toLowerCase().includes(query) ||
 				wallet.user?.email?.toLowerCase().includes(query)
@@ -141,9 +149,9 @@
 	<!-- Header -->
 	<div class="flex items-center justify-between">
 		<div>
-			<h1 class="text-2xl font-bold" style="color: var(--text)">Affiliate Wallet Oversight</h1>
+			<h1 class="text-2xl font-bold" style="color: var(--text)">Payouts</h1>
 			<p class="mt-1" style="color: var(--text-muted)">
-				Affiliate Cash, refunds, spending, and payout history for affiliate users.
+				Affiliate balances, payouts, refunds and spending.
 			</p>
 		</div>
 		<button
@@ -303,7 +311,13 @@
 	<!-- Affiliate Wallet Balances -->
 	<div class="rounded-lg" style="border: 1px solid var(--border); background: var(--bg-elev-1);">
 		<div class="p-4" style="border-bottom: 1px solid var(--border);">
-			<h2 class="text-base font-semibold" style="color: var(--text);">Affiliate Wallet Balances</h2>
+			<div class="flex flex-wrap items-center justify-between gap-2">
+				<h2 class="text-base font-semibold" style="color: var(--text);">Affiliate balances</h2>
+				<label class="flex items-center gap-2 text-xs" style="color: var(--text-muted);">
+					<input type="checkbox" bind:checked={showEmptyWallets} />
+					Show empty balances
+				</label>
+			</div>
 		</div>
 		<div class="overflow-x-auto">
 			<table class="w-full">
@@ -331,7 +345,7 @@
 							</td>
 						</tr>
 					{:else}
-						{#each filteredWallets as wallet}
+						{#each filteredWallets.slice(0, walletsShown) as wallet}
 							<tr
 								class="transition-colors"
 								onmouseenter={(e) => (e.currentTarget.style.background = 'var(--bg-elev-2)')}
@@ -357,6 +371,17 @@
 				</tbody>
 			</table>
 		</div>
+		{#if walletsShown < filteredWallets.length}
+			<div class="p-3 text-center" style="border-top: 1px solid var(--border);">
+				<button
+					type="button"
+					onclick={() => (walletsShown += PAGE)}
+					class="rounded-full px-4 py-1.5 text-sm font-semibold"
+					style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
+					>Show more ({filteredWallets.length - walletsShown} left)</button
+				>
+			</div>
+		{/if}
 	</div>
 
 	<!-- Recent Transactions -->
@@ -416,7 +441,7 @@
 							</td>
 						</tr>
 					{:else}
-						{#each filteredTransactions as transaction}
+						{#each filteredTransactions.slice(0, transactionsShown) as transaction}
 							{@const TypeIcon = getTypeIcon(transaction.type)}
 							<tr
 								class="transition-colors"
@@ -475,5 +500,16 @@
 				</tbody>
 			</table>
 		</div>
+		{#if transactionsShown < filteredTransactions.length}
+			<div class="p-3 text-center" style="border-top: 1px solid var(--border);">
+				<button
+					type="button"
+					onclick={() => (transactionsShown += PAGE)}
+					class="rounded-full px-4 py-1.5 text-sm font-semibold"
+					style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
+					>Show more ({filteredTransactions.length - transactionsShown} left)</button
+				>
+			</div>
+		{/if}
 	</div>
 </div>

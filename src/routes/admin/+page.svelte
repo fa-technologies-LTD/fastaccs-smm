@@ -23,11 +23,8 @@
 	import { getInventoryStats } from '$lib/services/inventory';
 	import { formatPrice } from '$lib/helpers/utils';
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
-	import { ADMIN_DASHBOARD_SECTIONS } from '$lib/admin/dashboard-sections';
-	import type { AdminPermission } from '$lib/auth/admin-roles';
 	import type { RecentActivityItem, DashboardIssues } from '$lib/services/admin-dashboard';
 	import type { NumbersDashboardSummary } from '$lib/services/phone-analytics';
-	import type { FeatureFlagSnapshot } from '$lib/services/feature-flags';
 
 	// Props from load function
 	interface Props {
@@ -80,8 +77,6 @@
 			recentActivity?: RecentActivityItem[];
 			dashboardIssues?: DashboardIssues;
 			numbersSummary?: NumbersDashboardSummary;
-			adminPermissions?: AdminPermission[];
-			featureFlags?: FeatureFlagSnapshot;
 		};
 	}
 
@@ -98,20 +93,9 @@
 	const canViewRevenue = Boolean(data.canViewRevenue);
 	let hideMonetaryAmounts = $state(false);
 
-	const adminPermissionSet = $derived(new Set(data.adminPermissions ?? []));
-	const featureFlags = $derived(data.featureFlags);
-	const visibleSections = $derived(
-		ADMIN_DASHBOARD_SECTIONS.filter((section) => {
-			if (section.permission && !adminPermissionSet.has(section.permission)) return false;
-			if (section.featureFlag && !featureFlags?.[section.featureFlag]) return false;
-			return true;
-		})
-	);
-
 	const recentActivity = $derived(data.recentActivity ?? []);
 	const dashboardIssues = $derived(data.dashboardIssues ?? { failedEmails: [], unhealthyJobs: [] });
 	let issuesExpanded = $state(false);
-	let managementExpanded = $state(true);
 	let activityExpanded = $state(true);
 	// Use the real out-of-stock TIER count (0 is valid) — `??`, not `||`, so a true
 	// zero isn't mistaken for "missing" and replaced by the unrelated batch count.
@@ -791,57 +775,6 @@
 					</div>
 				</div>
 			</div>
-		</div>
-
-		<!-- Management Center -->
-		<div
-			class="mb-4 rounded-lg sm:mb-6"
-			style="background: var(--bg-elev-1); border: 1px solid var(--border)"
-		>
-			<button
-				onclick={() => (managementExpanded = !managementExpanded)}
-				class="flex w-full cursor-pointer items-center justify-between p-4 text-left"
-				style={managementExpanded ? 'border-bottom: 1px solid var(--border)' : ''}
-			>
-				<div>
-					<h3 class="text-lg font-semibold" style="color: var(--text)">Management Center</h3>
-					<p class="mt-1 text-sm" style="color: var(--text-muted)">
-						Access key administrative functions
-					</p>
-				</div>
-				{#if managementExpanded}
-					<ChevronUp class="h-5 w-5 flex-shrink-0" style="color: var(--text-dim);" />
-				{:else}
-					<ChevronDown class="h-5 w-5 flex-shrink-0" style="color: var(--text-dim);" />
-				{/if}
-			</button>
-			{#if managementExpanded}
-				<div class="p-4">
-					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-						{#each visibleSections as section (section.href)}
-							{@const SectionIcon = section.icon}
-							<a
-								href={section.href}
-								data-sveltekit-preload-data="hover"
-								class="group flex items-center justify-between rounded-lg p-3 transition-all hover:scale-[.99]"
-								style="border: 1px solid var(--border)"
-							>
-								<div class="flex items-center">
-									<SectionIcon class="mr-3 h-5 w-5 flex-shrink-0" style="color: var(--text-dim);" />
-									<div>
-										<p class="font-medium" style="color: var(--text)">{section.label}</p>
-										<p class="text-sm" style="color: var(--text-muted)">{section.description}</p>
-									</div>
-								</div>
-								<ArrowUpRight
-									class="h-4 w-4 flex-shrink-0 transition-all"
-									style="color: var(--text-dim);"
-								/>
-							</a>
-						{/each}
-					</div>
-				</div>
-			{/if}
 		</div>
 
 		<!-- Recent Activity -->

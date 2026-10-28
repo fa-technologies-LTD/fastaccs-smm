@@ -163,7 +163,7 @@
 	async function expandCatalog() {
 		if (
 			!confirm(
-				'Add any newly-available countries/apps to the catalog?\n\nThis expands your set — it never removes anything. New tiers arrive active and auto-priced.'
+				'Add any newly-available countries/apps to the catalog?\n\nThis expands your set — it never removes anything. New listings arrive active and auto-priced.'
 			)
 		)
 			return;
@@ -314,7 +314,7 @@
 					FastAccs may use more expensive stock to <em>save</em> an order, but
 					<strong>will not intentionally procure below this profit floor</strong>. (Rare supplier
 					anomalies — a stale number that charges late, a failed cancellation — can still cause
-					leakage; monitoring surfaces those.) Separate from the pricing target above. A per-tier
+					leakage; monitoring surfaces those.) Separate from the pricing target above. A per-listing
 					override can only <em>raise</em> this floor, never drop below it.
 				</p>
 			</div>
@@ -423,7 +423,7 @@
 
 	<div class="mb-2 flex flex-wrap items-center justify-between gap-3">
 		<div class="text-sm" style="color: var(--text-muted);">
-			{liveCount} numbers live · {rows.length} tiers
+			{liveCount} numbers live · {rows.length} listed
 			{#if flaggedCount > 0}
 				· <span style="color: #f59e0b;">{flaggedCount} flagged for review</span>
 			{/if}
@@ -547,7 +547,7 @@
 										bind:value={row.minFulfillmentProfitNgn}
 										class="w-20 rounded-md px-2 py-1 text-right"
 										style="background: var(--bg-elev-1); border: 1px solid #a78bfa; color: var(--text);"
-										title="Per-tier hard floor — can only RAISE above the global, never below. Click the badge to revert."
+										title="This listing's own minimum profit. It can only be higher than the main one. Click the badge to go back."
 									/>
 									<button
 										onclick={() => toggleFloorOverride(row)}
@@ -555,7 +555,7 @@
 										style="background: rgba(167,139,250,0.15); border: 1px solid #a78bfa; color: #a78bfa;"
 										title="Revert to the global floor"
 									>
-										tier
+										own
 									</button>
 								</div>
 							{:else}
@@ -563,7 +563,7 @@
 									onclick={() => toggleFloorOverride(row)}
 									class="rounded px-2 py-0.5 text-[11px]"
 									style="background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--text-dim);"
-									title="Using the global hard floor (₦{minFulfillmentProfitNgn.toLocaleString()}). Click to set a higher per-tier value."
+									title="Using the main minimum profit (₦{minFulfillmentProfitNgn.toLocaleString()}). Click to set a higher one for this listing."
 								>
 									Global
 								</button>
@@ -607,7 +607,7 @@
 							<input
 								type="checkbox"
 								bind:checked={row.active}
-								title="Show on storefront (auto-hidden tiers stay hidden until stock/quality recovers)"
+								title="Show on storefront (auto-hidden listings stay hidden until stock or quality recovers)"
 							/>
 						</td>
 					</tr>
@@ -616,8 +616,8 @@
 					<tr style="background: var(--surface);">
 						<td colspan="11" class="px-4 py-8 text-center" style="color: var(--text-dim);">
 							{rows.length === 0
-								? 'No tiers yet. Click “Expand catalog” to load the catalog.'
-								: 'No tiers for this app.'}
+								? 'Nothing listed yet. Click “Expand catalog” to load the catalog.'
+								: 'Nothing listed for this app.'}
 						</td>
 					</tr>
 				{/if}

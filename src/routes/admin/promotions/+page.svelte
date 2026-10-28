@@ -13,6 +13,22 @@
 	let loading = $state(false);
 	let selectedPlatformIds = $state<string[]>([]);
 
+	// Codes still usable come first; used-up, ended and switched-off codes wait behind a button.
+	let showPast = $state(false);
+	let codeSearch = $state('');
+	function isPast(promo: PromotionRow): boolean {
+		const usedUp = Boolean(promo.usageCap) && Number(promo.usageCount) >= Number(promo.usageCap);
+		const ended = Boolean(promo.endsAt) && new Date(promo.endsAt as Date).getTime() < Date.now();
+		return !promo.isActive || usedUp || ended;
+	}
+	const pastCount = $derived(promotions.filter(isPast).length);
+	const listedPromotions = $derived.by(() => {
+		const term = codeSearch.trim().toLowerCase();
+		return promotions.filter(
+			(promo) => (showPast || !isPast(promo)) && (!term || promo.code.toLowerCase().includes(term))
+		);
+	});
+
 	let form = $state({
 		code: '',
 		type: 'PERCENT',
@@ -312,12 +328,41 @@
 		class="rounded-lg p-6"
 		style="background: var(--bg-elev-1); border: 1px solid var(--border);"
 	>
-		<h2 class="text-lg font-semibold" style="color: var(--text)">Active & Past Promotions</h2>
-		{#if promotions.length === 0}
-			<p class="mt-3 text-sm" style="color: var(--text-muted);">No promotions created yet.</p>
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<h2 class="text-lg font-semibold" style="color: var(--text)">
+				{showPast ? 'All promo codes' : 'Codes in use'}
+			</h2>
+			<div class="flex flex-wrap items-center gap-2">
+				<input
+					type="search"
+					bind:value={codeSearch}
+					placeholder="Search codes"
+					aria-label="Search promo codes"
+					class="rounded-lg px-3 py-1.5 text-sm"
+					style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+				/>
+				{#if pastCount > 0}
+					<button
+						type="button"
+						onclick={() => (showPast = !showPast)}
+						class="rounded-full px-3 py-1.5 text-xs font-semibold"
+						style="background: var(--bg); border: 1px solid var(--border); color: var(--text-muted);"
+						>{showPast ? 'Hide past codes' : `Show past codes (${pastCount})`}</button
+					>
+				{/if}
+			</div>
+		</div>
+		{#if listedPromotions.length === 0}
+			<p class="mt-3 text-sm" style="color: var(--text-muted);">
+				{promotions.length === 0
+					? 'No promo codes yet.'
+					: codeSearch
+						? 'No codes match that search.'
+						: 'No codes in use right now.'}
+			</p>
 		{:else}
 			<div class="mt-4 space-y-3">
-				{#each promotions as promo}
+				{#each listedPromotions as promo (promo.id)}
 					<div
 						class="rounded-lg p-4"
 						style="border: 1px solid var(--border); background: var(--bg);"
