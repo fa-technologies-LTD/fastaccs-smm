@@ -549,11 +549,16 @@ export async function saveNotificationSettings(input: {
 			JSON.stringify(parsedRecipients.extraRecipients),
 			'Additional admin notification recipients beyond hardcoded owner admins.'
 		),
-		upsertSetting(
-			SETTINGS_KEYS.lowStockThreshold,
-			String(lowStockThreshold),
-			'Default low-stock threshold for operational alerts.'
-		),
+		// The low-stock level lives in Inventory now; this form only changes it when it sends one.
+		...(input.lowStockThreshold === undefined
+			? []
+			: [
+					upsertSetting(
+						SETTINGS_KEYS.lowStockThreshold,
+						String(lowStockThreshold),
+						'Default low-stock threshold for operational alerts.'
+					)
+				]),
 		upsertSetting(
 			SETTINGS_KEYS.highSpenderMinTotal,
 			String(highSpenderMinTotal),
@@ -581,6 +586,21 @@ export async function saveNotificationSettings(input: {
 		)
 	]);
 	serverCache.invalidate(LOW_STOCK_THRESHOLD_CACHE_KEY);
+}
+
+/** Inventory's own control: "low stock" means this many accounts or fewer. */
+export async function saveLowStockThresholdSetting(value: string | number): Promise<number> {
+	const threshold = parseNumberSetting(String(value ?? ''), DEFAULTS.lowStockThreshold, {
+		min: 1,
+		max: 999
+	});
+	await upsertSetting(
+		SETTINGS_KEYS.lowStockThreshold,
+		String(threshold),
+		'Default low-stock threshold for operational alerts.'
+	);
+	serverCache.invalidate(LOW_STOCK_THRESHOLD_CACHE_KEY);
+	return threshold;
 }
 
 export async function getOperationalAlertRecipients(): Promise<string[]> {

@@ -929,19 +929,10 @@
 				</label>
 
 				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<label class="block text-sm" style="color: var(--text-muted);">
-						Low-stock threshold
-						<input
-							type="number"
-							name="lowStockThreshold"
-							value={settings.notifications.lowStockThreshold}
-							min="1"
-							max="999"
-							class="mt-1 w-full rounded-lg px-3 py-2"
-							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
-							disabled={!canManageSettings}
-						/>
-					</label>
+					<p class="block text-sm" style="color: var(--text-muted);">
+						Low stock means {settings.notifications.lowStockThreshold} or fewer. Change it in
+						<a href="/admin/inventory" style="color: var(--link);">Inventory</a>.
+					</p>
 					<label class="block text-sm" style="color: var(--text-muted);">
 						Win-back days threshold
 						<input

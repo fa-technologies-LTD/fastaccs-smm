@@ -3,7 +3,6 @@
 	import { Plus, Trash2, Target } from '$lib/icons';
 	import type { TierDeliveryMode } from '$lib/helpers/tier-delivery-config';
 	import TierSampleScreenshotFields from '$lib/components/modals/TierSampleScreenshotFields.svelte';
-	import { tierMarginNotes } from '$lib/helpers/tier-unit-cost';
 
 	interface Props {
 		open: boolean;
@@ -40,7 +39,6 @@
 				exact_preview_enabled: boolean;
 				verified_x_follower_addons: boolean;
 				affiliate_excluded: boolean;
-				unit_cost_ngn?: number | string | null;
 			};
 		};
 		loading?: boolean;
@@ -58,15 +56,6 @@
 		onClose,
 		onUpdate
 	}: Props = $props();
-
-	// Live margin advice under the cost box (never blocks a save).
-	const marginNotes = $derived(
-		tierMarginNotes({
-			priceNgn: tierForm.metadata.pricing.base_price,
-			unitCostNgn: tierForm.metadata.unit_cost_ngn,
-			affiliateExcluded: tierForm.metadata.affiliate_excluded
-		})
-	);
 </script>
 
 {#if open}
@@ -355,20 +344,11 @@
 								</div>
 
 								{#if tierForm.metadata.delivery_mode === 'manual_handover'}
-									<label
-										class="mt-3 flex items-center gap-2 text-sm font-medium"
-										style="color: var(--text);"
-									>
-										<input
-											type="checkbox"
-											bind:checked={tierForm.metadata.manual_available}
-											class="h-4 w-4 rounded"
-										/>
-										Available on WhatsApp
-										<span class="text-xs font-normal" style="color: var(--text-muted);">
-											(uncheck to show as unavailable on the storefront)
-										</span>
-									</label>
+									<p class="mt-3 text-sm" style="color: var(--text-muted);">
+										{tierForm.metadata.manual_available ? 'Available' : 'Unavailable'} on WhatsApp right
+										now. Switch it in
+										<a href="/admin/inventory" style="color: var(--link);">Inventory</a>.
+									</p>
 									<div class="mt-3">
 										<label
 											for="edit-manual-handover-promise"
@@ -544,62 +524,15 @@
 								/>
 							</div>
 
-							<!-- Pricing -->
+							<!-- Price and cost live in Pricing -->
 							<div>
-								<label
-									for="tier-edit-base-price"
-									class="block text-sm font-medium"
-									style="color: var(--text);">Base Price (₦)</label
-								>
-								<input
-									id="tier-edit-base-price"
-									type="number"
-									step="50"
-									min="0"
-									bind:value={tierForm.metadata.pricing.base_price}
-									class="mt-1 block w-full rounded-md px-4 py-2"
-									style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
-								/>
-								<p class="mt-1 text-xs" style="color: var(--text-muted);">
-									Saved to the nearest ₦50.
+								<p class="block text-sm font-medium" style="color: var(--text);">Price</p>
+								<p class="mt-1 text-sm" style="color: var(--text-muted);">
+									₦{Number(tierForm.metadata.pricing.base_price || 0).toLocaleString('en-NG')}.
+									Change price{canEditCost ? ' and cost' : ''} in
+									<a href="/admin/account-prices" style="color: var(--link);">Account Prices</a>.
 								</p>
 							</div>
-
-							{#if canEditCost}
-								<div>
-									<label
-										for="tier-edit-unit-cost"
-										class="block text-sm font-medium"
-										style="color: var(--text);">Our cost per account (₦)</label
-									>
-									<input
-										id="tier-edit-unit-cost"
-										type="number"
-										min="0"
-										step="1"
-										inputmode="numeric"
-										bind:value={tierForm.metadata.unit_cost_ngn}
-										placeholder="Blank = not set"
-										class="mt-1 block w-full rounded-md px-4 py-2"
-										style="border: 1px solid var(--border); background: var(--bg); color: var(--text);"
-									/>
-									<p class="mt-1 text-xs" style="color: var(--text-muted);">
-										Private. Include payment fees. Never shown to customers or affiliates.
-									</p>
-									{#each marginNotes.notes as note (note.text)}
-										<p
-											class="mt-1 text-xs font-medium"
-											style="color: {note.level === 'error'
-												? 'var(--danger, #e5484d)'
-												: note.level === 'warning'
-													? '#d97706'
-													: 'var(--text-muted)'};"
-										>
-											{note.level === 'info' ? '' : '⚠ '}{note.text}
-										</p>
-									{/each}
-								</div>
-							{/if}
 
 							<div class="md:col-span-2">
 								<label

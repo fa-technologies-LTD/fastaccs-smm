@@ -136,7 +136,7 @@ const RULES: Rule[] = [
 		method: 'POST',
 		path: new RegExp(`^/api/categories/${UUID}/retire$`),
 		label: 'Platform retired',
-		href: () => '/admin/platforms'
+		href: () => '/admin/tiers#platforms'
 	},
 	{
 		method: 'POST',

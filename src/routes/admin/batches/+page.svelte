@@ -19,6 +19,28 @@
 	let { data }: Props = $props();
 
 	let batches = $state(data.batches);
+	// Upload history: newest first, 20 at a time, searchable by upload or account type name.
+	const PAGE = 20;
+	let batchSearch = $state('');
+	let shownCount = $state(PAGE);
+	const filteredBatches = $derived.by(() => {
+		const term = batchSearch.trim().toLowerCase();
+		if (!term) return batches;
+		type Searchable = {
+			name?: string;
+			description?: string | null;
+			platform?: string;
+			tier_name?: string;
+			category?: { name?: string } | null;
+		};
+		return batches.filter((batch: Searchable) =>
+			[batch.name, batch.description, batch.category?.name, batch.platform, batch.tier_name]
+				.filter(Boolean)
+				.join(' ')
+				.toLowerCase()
+				.includes(term)
+		);
+	});
 	let platforms = $state(data.platforms);
 	let allTiers = $state(data.tiers);
 	let showUploadModal = $state(false);
@@ -254,7 +276,7 @@
 </script>
 
 <svelte:head>
-	<title>Batch Import - Admin Panel</title>
+	<title>Upload Logs - Admin Panel</title>
 </svelte:head>
 
 <div class="p-2 sm:p-4">
@@ -262,9 +284,9 @@
 	<div class="mb-4">
 		<div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 			<div class="min-w-0 flex-1">
-				<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">Batch Management</h1>
+				<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">Upload Logs</h1>
 				<p class="mt-1 text-sm sm:text-base" style="color: var(--text-muted)">
-					Import and manage account batches from CSV files
+					Upload new logs to an account type and see past uploads.
 				</p>
 			</div>
 			<button
@@ -273,7 +295,7 @@
 				style="background: var(--link);"
 			>
 				<Upload size={18} />
-				Import Batch
+				Upload logs
 			</button>
 		</div>
 	</div>
@@ -302,12 +324,26 @@
 				style="background: var(--link);"
 			>
 				<Upload class="mr-2 h-4 w-4" />
-				Import Batch
+				Upload logs
 			</button>
 		</div>
 	{:else}
+		<label class="mb-3 block">
+			<span class="sr-only">Search uploads</span>
+			<input
+				type="search"
+				bind:value={batchSearch}
+				oninput={() => (shownCount = PAGE)}
+				placeholder="Search uploads by name or account type"
+				class="w-full rounded-lg px-3 py-1.5 text-sm sm:max-w-sm"
+				style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
+			/>
+		</label>
+		<p class="mb-3 text-xs" style="color: var(--text-muted);">
+			Showing {Math.min(shownCount, filteredBatches.length)} of {filteredBatches.length} uploads
+		</p>
 		<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-			{#each batches as batch}
+			{#each filteredBatches.slice(0, shownCount) as batch}
 				{@const StatusIcon = getStatusIcon(batch.status)}
 				<div
 					class="rounded-lg p-4 shadow-sm"
@@ -407,6 +443,16 @@
 				</div>
 			{/each}
 		</div>
+		{#if shownCount < filteredBatches.length}
+			<button
+				type="button"
+				onclick={() => (shownCount += PAGE)}
+				class="mx-auto mt-4 block rounded-full px-4 py-2 text-sm font-semibold"
+				style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
+			>
+				Show {Math.min(PAGE, filteredBatches.length - shownCount)} more
+			</button>
+		{/if}
 	{/if}
 </div>
 
@@ -655,7 +701,7 @@
 								Processing...
 							{:else}
 								<Upload class="mr-2 h-4 w-4" />
-								Import Batch
+								Upload logs
 							{/if}
 						</button>
 						<button

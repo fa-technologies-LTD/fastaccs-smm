@@ -1,19 +1,26 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { hasAdminPermission, type AdminPermission } from '$lib/auth/admin-roles';
 import {
 	buildCategoryOffloadText,
 	deleteOffloadedAvailableLogs
 } from '$lib/services/category-offload';
 
-function requireAdmin(locals: App.Locals): Response | null {
-	if (!locals.user || locals.user.userType !== 'ADMIN') {
+// Downloading unsold logs hands out login details, so it needs inventory rights; deleting stock
+// needs catalogue rights. A read-only admin can do neither.
+function requireAdmin(locals: App.Locals, permission: AdminPermission): Response | null {
+	if (
+		!locals.user ||
+		locals.user.userType !== 'ADMIN' ||
+		!hasAdminPermission(locals.adminContext, permission)
+	) {
 		return json({ data: null, error: 'Unauthorized' }, { status: 401 });
 	}
 	return null;
 }
 
 export const GET: RequestHandler = async ({ params, locals }) => {
-	const unauthorized = requireAdmin(locals);
+	const unauthorized = requireAdmin(locals, 'admin:inventory:manage');
 	if (unauthorized) return unauthorized;
 
 	try {
@@ -45,7 +52,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 };
 
 export const DELETE: RequestHandler = async ({ params, request, locals }) => {
-	const unauthorized = requireAdmin(locals);
+	const unauthorized = requireAdmin(locals, 'admin:catalog:manage');
 	if (unauthorized) return unauthorized;
 
 	try {

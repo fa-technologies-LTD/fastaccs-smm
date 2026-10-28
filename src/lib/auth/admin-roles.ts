@@ -266,6 +266,17 @@ const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
 		writePermission: 'admin:inventory:manage'
 	},
 	{
+		prefix: '/api/admin/inventory-settings',
+		readPermission: 'admin:access',
+		writePermission: 'admin:inventory:manage'
+	},
+	{
+		// Availability, price and cost each re-check their own permission inside the route.
+		prefix: '/api/admin/account-types',
+		readPermission: 'admin:access',
+		writePermission: 'admin:inventory:manage'
+	},
+	{
 		prefix: '/api/admin/cleanup',
 		readPermission: 'admin:access',
 		writePermission: 'admin:inventory:manage'

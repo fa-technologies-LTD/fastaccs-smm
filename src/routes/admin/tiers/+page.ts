@@ -5,7 +5,7 @@ export const load: PageLoad = async ({ fetch }) => {
 		// Get all tiers with their platforms
 		const [tiersResponse, platformsResponse] = await Promise.all([
 			fetch('/api/categories?type=tier&include_inactive=true'),
-			fetch('/api/categories?type=platform')
+			fetch('/api/categories?type=platform&include_inactive=true')
 		]);
 
 		const tiersResult = await tiersResponse.json();

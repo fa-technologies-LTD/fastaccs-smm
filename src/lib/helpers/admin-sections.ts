@@ -75,7 +75,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		label: 'Products',
 		tabs: [
 			{ href: '/admin/tiers', label: 'Account Types', permission: 'admin:catalog:manage' },
-			{ href: '/admin/platforms', label: 'Platforms', permission: 'admin:catalog:manage' },
 			{
 				href: '/admin/boosting-services',
 				label: 'Boosting Services',
@@ -88,6 +87,11 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		id: 'pricing',
 		label: 'Pricing',
 		tabs: [
+			{
+				href: '/admin/account-prices',
+				label: 'Account Prices',
+				permission: 'admin:catalog:manage'
+			},
 			{
 				href: '/admin/boosting-pricing',
 				label: 'Boosting Prices',

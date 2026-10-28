@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { Plus, Trash2, Edit, Eye, AlertCircle, Archive } from '$lib/icons';
+	import { Plus, Trash2, Edit, AlertCircle, Archive } from '$lib/icons';
 	import {
 		createCategory,
 		updateCategory,
@@ -10,7 +9,7 @@
 	import { showSuccess, showError } from '$lib/stores/toasts';
 	import type { Category, CategoryInsert, CategoryUpdate } from '$lib/services/categories';
 	import { getPlatformIcon, isPlatformImageUrl } from '$lib/helpers/platformColors';
-	import type { PageData } from './$types';
+	import { untrack } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
 	import PlatformCreateModal from '$lib/components/modals/PlatformCreateModal.svelte';
@@ -18,12 +17,16 @@
 	import PlatformDeleteModal from '$lib/components/modals/PlatformDeleteModal.svelte';
 	import PlatformRetireModal from '$lib/components/modals/PlatformRetireModal.svelte';
 
+	/**
+	 * Platforms, managed inside Account Types: each platform is the heading its account types sit
+	 * under. Create, edit, retire and delete keep their existing forms and checks.
+	 */
 	interface Props {
-		data: PageData;
+		platforms: Category[];
 	}
 
-	let { data }: Props = $props();
-	let platforms = $state<Category[]>(data.platforms);
+	let { platforms: initialPlatforms }: Props = $props();
+	let platforms = $state<Category[]>(untrack(() => initialPlatforms));
 	let loading = $state(false);
 	let showCreateModal = $state(false);
 	let showEditModal = $state(false);
@@ -74,11 +77,6 @@
 			}
 		}
 	});
-
-	// Show error if data loading failed
-	if (data.error) {
-		showError('Failed to load platforms', data.error);
-	}
 
 	function getPlatformMetadata(platform: Category): PlatformMetadata {
 		return ((platform.metadata as PlatformMetadata | undefined) || {}) as PlatformMetadata;
@@ -357,28 +355,15 @@
 			.replace(/[^a-z0-9]+/g, '-')
 			.replace(/^-|-$/g, '');
 	}
-
-	function viewTiers(platform: Category) {
-		// Redirect to global tiers page since tiers are no longer platform-specific
-		// You can filter by platform if needed in the UI
-		goto('/admin/tiers');
-	}
 </script>
 
-<svelte:head>
-	<title>Platform Management - Admin Panel</title>
-</svelte:head>
-
-<div class="p-2 sm:p-4">
+<div>
 	<!-- Header -->
 	<div class="mb-4">
 		<div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 			<div class="min-w-0 flex-1">
-				<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">
-					Platform Management
-				</h1>
-				<p class="mt-1 text-sm sm:text-base" style="color: var(--text-muted)">
-					Manage social media platforms and their configurations
+				<p class="text-sm" style="color: var(--text-muted)">
+					The platforms your account types sit under: name, icon and tagline.
 				</p>
 			</div>
 			<button
@@ -387,7 +372,7 @@
 				style="background: var(--primary); color: #000;"
 			>
 				<Plus size={18} />
-				Add Platform
+				Add platform
 			</button>
 		</div>
 	</div>
@@ -413,7 +398,7 @@
 				style="background: var(--link);"
 			>
 				<Plus class="mr-2 h-4 w-4" />
-				Add Platform
+				Add platform
 			</button>
 		</div>
 	{:else}
@@ -453,15 +438,6 @@
 							</div>
 						</div>
 						<div class="flex flex-shrink-0 items-center gap-1">
-							<button
-								onclick={() => viewTiers(platform)}
-								class="group rounded p-2 transition-colors hover:bg-white/5"
-								style="color: var(--text-muted);"
-								title="View account types"
-								aria-label="View account types"
-							>
-								<Eye size={16} class="transition-transform group-hover:scale-90" />
-							</button>
 							<button
 								onclick={() => openEditModal(platform)}
 								type="button"

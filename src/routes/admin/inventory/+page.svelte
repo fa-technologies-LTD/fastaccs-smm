@@ -4,6 +4,7 @@
 	import { formatDate, formatPrice } from '$lib/helpers/utils';
 	import ConfirmModal from '$lib/components/ConfirmModal.svelte';
 	import { addToast } from '$lib/stores/toasts';
+	import { askDecision } from '$lib/stores/decision.svelte';
 	import type { PageData } from './$types';
 
 	type InventoryRow = {
@@ -186,6 +187,138 @@
 		}
 	}
 
+	// Stock jobs live here: deleting unsold logs, the WhatsApp availability switch and the
+	// low-stock level. Each is shown only to roles that may use it.
+	const permissions = $derived(
+		((data as { adminPermissions?: string[] }).adminPermissions ?? []) as string[]
+	);
+	const canManageStock = $derived(permissions.includes('admin:inventory:manage'));
+	const canDeleteLogs = $derived(permissions.includes('admin:catalog:manage'));
+	let busyKey = $state<string | null>(null);
+
+	function downloadText(blob: Blob, filename: string) {
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		link.href = url;
+		link.download = filename;
+		document.body.appendChild(link);
+		link.click();
+		link.remove();
+		URL.revokeObjectURL(url);
+	}
+
+	async function deleteUnsoldLogs(item: InventoryRow) {
+		if (!item.id || busyKey) return;
+		const name = item.tier_name || 'this account type';
+		busyKey = `${item.id}:delete`;
+		try {
+			// Always hand the owner a copy before anything is deleted.
+			const response = await fetch(`/api/categories/${encodeURIComponent(item.id)}/offload`);
+			if (!response.ok) {
+				const result = await response.json().catch(() => null);
+				throw new Error(result?.error || 'Could not prepare the download.');
+			}
+			const count = Number(response.headers.get('X-Account-Count') || 0);
+			const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+			downloadText(await response.blob(), `fastaccs-unsold-${slug}.txt`);
+			if (count === 0) {
+				addToast({ type: 'info', title: `${name} has no unsold logs to delete`, duration: 3000 });
+				return;
+			}
+			const confirmed = await askDecision({
+				title: `Delete ${count} unsold log${count === 1 ? '' : 's'}?`,
+				message: `Check the downloaded file for ${name} opened correctly first. Sold, held and delivered accounts are never deleted.`,
+				confirmLabel: 'Delete unsold logs',
+				cancelLabel: 'Keep them',
+				tone: 'danger'
+			});
+			if (!confirmed) return;
+			const result = await fetch(`/api/categories/${encodeURIComponent(item.id)}/offload`, {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ confirmDownloaded: true })
+			}).then((r) => r.json());
+			if (result.error) throw new Error(result.error);
+			addToast({
+				type: 'success',
+				title: `Deleted ${result.data?.deletedAccounts ?? 0} unsold log(s) from ${name}`,
+				duration: 3500
+			});
+			await invalidateAll();
+		} catch (error) {
+			addToast({
+				type: 'error',
+				title: 'Nothing was deleted',
+				message: error instanceof Error ? error.message : 'Try again.',
+				duration: 4000
+			});
+		} finally {
+			busyKey = null;
+		}
+	}
+
+	async function setAvailability(item: InventoryRow, available: boolean) {
+		if (!item.id || busyKey) return;
+		busyKey = `${item.id}:availability`;
+		try {
+			const response = await fetch(`/api/admin/account-types/${encodeURIComponent(item.id)}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ manualAvailable: available })
+			});
+			const result = await response.json().catch(() => ({}));
+			if (!response.ok) throw new Error(result.error || 'Could not change availability.');
+			addToast({
+				type: 'success',
+				title: `${item.tier_name} is ${available ? 'available to buy' : 'unavailable for now'}`,
+				duration: 3000
+			});
+			await invalidateAll();
+		} catch (error) {
+			addToast({
+				type: 'error',
+				title: 'Availability not changed',
+				message: error instanceof Error ? error.message : 'Try again.',
+				duration: 4000
+			});
+		} finally {
+			busyKey = null;
+		}
+	}
+
+	let lowStockDraft = $state('');
+	let savingLowStock = $state(false);
+	async function saveLowStockLevel(event: SubmitEvent) {
+		event.preventDefault();
+		if (savingLowStock) return;
+		savingLowStock = true;
+		try {
+			const response = await fetch('/api/admin/inventory-settings', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ lowStockThreshold: Number(lowStockDraft || lowStockThreshold) })
+			});
+			const result = await response.json().catch(() => ({}));
+			if (!response.ok) throw new Error(result.error || 'Could not save.');
+			addToast({
+				type: 'success',
+				title: `Low stock now means ${result.lowStockThreshold} or fewer`,
+				duration: 3000
+			});
+			lowStockDraft = '';
+			await invalidateAll();
+		} catch (error) {
+			addToast({
+				type: 'error',
+				title: 'Low-stock level not saved',
+				message: error instanceof Error ? error.message : 'Try again.',
+				duration: 4000
+			});
+		} finally {
+			savingLowStock = false;
+		}
+	}
+
 	const exactPreviewStats = $derived.by(() => ({
 		previewable: inventoryRows.reduce((sum, item) => sum + (item.previewable_accounts || 0), 0),
 		thumbnails: inventoryRows.reduce(
@@ -342,7 +475,7 @@
 		<a
 			href="/admin/batches"
 			class="inline-flex min-h-10 items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold"
-			style="background: var(--primary); color: #00150b;">Import inventory</a
+			style="background: var(--primary); color: #00150b;">Upload logs</a
 		>
 	</div>
 
@@ -506,10 +639,33 @@
 			style="border-color: var(--border);"
 		>
 			<div class="space-y-1 text-xs" style="color: var(--text-muted);">
+				{#if canManageStock}
+					<form class="mb-2 flex flex-wrap items-center gap-2" onsubmit={saveLowStockLevel}>
+						<label for="low-stock-level" style="color: var(--text);">Low stock means</label>
+						<input
+							id="low-stock-level"
+							type="number"
+							min="1"
+							max="999"
+							step="1"
+							placeholder={String(lowStockThreshold)}
+							bind:value={lowStockDraft}
+							class="w-20 rounded-md px-2 py-1 text-sm"
+							style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+						/>
+						<span>or fewer accounts left</span>
+						<button
+							type="submit"
+							disabled={savingLowStock || !lowStockDraft}
+							class="rounded-md px-2.5 py-1 text-xs font-semibold disabled:opacity-50"
+							style="background: var(--surface); border: 1px solid var(--border); color: var(--text);"
+							>{savingLowStock ? 'Saving…' : 'Save'}</button
+						>
+					</form>
+				{/if}
 				<p>
-					Low-stock alert threshold: <strong style="color: var(--text);">{lowStockThreshold}</strong
-					>
-					· Sent today:
+					Low-stock alerts at <strong style="color: var(--text);">{lowStockThreshold}</strong> or
+					fewer · Sent today:
 					<strong style="color: var(--text);">{lowStockPolicy?.alerts_sent_today ?? 0}</strong>
 					· Suppressed:
 					<strong style="color: var(--text);">{lowStockPolicy?.suppressed_today ?? 0}</strong>
@@ -557,49 +713,49 @@
 				<thead style="background: var(--bg-elev-2);">
 					<tr>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							class="px-3 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
 							Platform & account type
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							class="px-3 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
 							Uploaded
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							class="px-3 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
 							Available
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							class="px-3 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
 							Sold From Stock
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							class="px-3 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
 							Price
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							class="px-3 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
 							Status
 						</th>
 						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+							class="px-3 py-3 text-left text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
 							Last Restocked
 						</th>
 						<th
-							class="px-6 py-3 text-right text-xs font-medium tracking-wider uppercase"
+							class="px-3 py-3 text-right text-xs font-medium tracking-wider uppercase"
 							style="color: var(--text-muted);"
 						>
 							Copy
@@ -614,7 +770,7 @@
 								<button
 									type="button"
 									onclick={() => togglePlatform(platform)}
-									class="flex w-full items-center gap-2 px-6 py-2.5 text-left"
+									class="flex w-full items-center gap-2 px-3 py-2.5 text-left"
 								>
 									<span class="text-xs" style="color: var(--text-muted);"
 										>{isPlatformExpanded(platform) ? '▾' : '▸'}</span
@@ -649,7 +805,7 @@
 									onmouseenter={(e) => (e.currentTarget.style.background = 'var(--bg-elev-2)')}
 									onmouseleave={(e) => (e.currentTarget.style.background = 'transparent')}
 								>
-									<td class="px-6 py-4 whitespace-nowrap">
+									<td class="px-3 py-3 whitespace-nowrap">
 										<div class="text-sm font-medium" style="color: var(--text);">
 											{item.platform_name || 'Unknown'}
 										</div>
@@ -657,17 +813,17 @@
 											{item.tier_name || 'Unknown'}
 										</div>
 									</td>
-									<td class="px-6 py-4 whitespace-nowrap">
+									<td class="px-3 py-3 whitespace-nowrap">
 										<div class="text-sm" style="color: var(--text);">
 											{(item.lifetime_total_accounts ?? item.total_accounts ?? 0).toLocaleString()}
 										</div>
 									</td>
-									<td class="px-6 py-4 whitespace-nowrap">
+									<td class="px-3 py-3 whitespace-nowrap">
 										<div class="text-sm" style="color: var(--status-success);">
 											{item.available_accounts?.toLocaleString() || 0}
 										</div>
 									</td>
-									<td class="px-6 py-4 whitespace-nowrap">
+									<td class="px-3 py-3 whitespace-nowrap">
 										<div class="text-sm" style="color: var(--link);">
 											{(
 												item.delivered_accounts ??
@@ -678,28 +834,46 @@
 											).toLocaleString()}
 										</div>
 									</td>
-									<td class="px-6 py-4 whitespace-nowrap">
+									<td class="px-3 py-3 whitespace-nowrap">
 										<div class="text-sm" style="color: var(--text);">
 											{item.tier_price && item.tier_price > 0
 												? formatPrice(item.tier_price)
 												: 'N/A'}
 										</div>
 									</td>
-									<td class="px-6 py-4 whitespace-nowrap">
-										<span
-											class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-											style={getStatusStyle(item, lowStockThreshold)}
-											>{getStatusText(item, lowStockThreshold)}</span
-										>
+									<td class="px-3 py-3 whitespace-nowrap">
+										{#if item.is_manual && canManageStock}
+											<button
+												type="button"
+												onclick={() => setAvailability(item, !item.manual_available)}
+												disabled={busyKey !== null}
+												aria-pressed={Boolean(item.manual_available)}
+												title="WhatsApp handover: switch whether buyers can order it"
+												class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium disabled:opacity-50"
+												style={getStatusStyle(item, lowStockThreshold)}
+											>
+												{busyKey === `${item.id}:availability`
+													? 'Saving…'
+													: item.manual_available
+														? 'Available · pause'
+														: 'Unavailable · resume'}
+											</button>
+										{:else}
+											<span
+												class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+												style={getStatusStyle(item, lowStockThreshold)}
+												>{getStatusText(item, lowStockThreshold)}</span
+											>
+										{/if}
 									</td>
-									<td class="px-6 py-4 whitespace-nowrap">
+									<td class="px-3 py-3 whitespace-nowrap">
 										<div class="text-sm" style="color: var(--text-muted);">
 											{item.last_restocked_at
 												? formatDate(new Date(item.last_restocked_at))
 												: 'Never'}
 										</div>
 									</td>
-									<td class="px-6 py-4 text-right whitespace-nowrap">
+									<td class="px-3 py-3 text-right whitespace-nowrap">
 										{#if (item.available_accounts || 0) > 0}
 											<div class="inline-flex gap-1.5">
 												<button
@@ -720,6 +894,17 @@
 													title="Copy full logs of available accounts"
 													>{copyingKey === `${item.id}:logs` ? '…' : 'Logs'}</button
 												>
+												{#if canDeleteLogs}
+													<button
+														type="button"
+														onclick={() => deleteUnsoldLogs(item)}
+														disabled={busyKey !== null}
+														class="rounded-md px-2 py-1 text-xs font-medium disabled:opacity-50"
+														style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--status-error);"
+														title="Download the unsold logs, then delete them"
+														>{busyKey === `${item.id}:delete` ? '…' : 'Delete unsold'}</button
+													>
+												{/if}
 											</div>
 										{:else}
 											<span class="text-xs" style="color: var(--text-muted);">—</span>
@@ -730,7 +915,7 @@
 						{/if}
 					{:else}
 						<tr>
-							<td colspan="8" class="px-6 py-8 text-center" style="color: var(--text-muted);"
+							<td colspan="8" class="px-3 py-8 text-center" style="color: var(--text-muted);"
 								>No inventory found</td
 							>
 						</tr>
@@ -791,11 +976,27 @@
 												: 'No price'}
 										</p>
 									</div>
-									<span
-										class="shrink-0 rounded-md border px-2 py-1 text-[10px] font-semibold"
-										style={getStatusStyle(item, lowStockThreshold)}
-										>{getStatusText(item, lowStockThreshold)}</span
-									>
+									{#if item.is_manual && canManageStock}
+										<button
+											type="button"
+											onclick={() => setAvailability(item, !item.manual_available)}
+											disabled={busyKey !== null}
+											aria-pressed={Boolean(item.manual_available)}
+											class="shrink-0 rounded-md border px-2 py-1 text-[10px] font-semibold disabled:opacity-50"
+											style={getStatusStyle(item, lowStockThreshold)}
+											>{busyKey === `${item.id}:availability`
+												? 'Saving…'
+												: item.manual_available
+													? 'Available · pause'
+													: 'Unavailable · resume'}</button
+										>
+									{:else}
+										<span
+											class="shrink-0 rounded-md border px-2 py-1 text-[10px] font-semibold"
+											style={getStatusStyle(item, lowStockThreshold)}
+											>{getStatusText(item, lowStockThreshold)}</span
+										>
+									{/if}
 								</div>
 								<div
 									class="mt-3 grid grid-cols-3 gap-2 rounded-lg p-2.5"
@@ -845,6 +1046,18 @@
 											style="border-color: var(--border); color: var(--text); background: var(--surface);"
 											>{copyingKey === `${item.id}:logs` ? 'Copying…' : 'Copy logs'}</button
 										>
+										{#if canDeleteLogs}
+											<button
+												type="button"
+												onclick={() => deleteUnsoldLogs(item)}
+												disabled={busyKey !== null}
+												class="col-span-2 min-h-9 rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50"
+												style="border-color: var(--border); color: var(--status-error); background: var(--surface);"
+												>{busyKey === `${item.id}:delete`
+													? 'Working…'
+													: 'Download and delete unsold logs'}</button
+											>
+										{/if}
 									</div>
 								{/if}
 							</article>

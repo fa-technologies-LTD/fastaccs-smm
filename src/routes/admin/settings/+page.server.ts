@@ -185,7 +185,9 @@ export const actions: Actions = {
 
 		await saveNotificationSettings({
 			adminRecipients: String(formData.get('adminRecipients') || ''),
-			lowStockThreshold: String(formData.get('lowStockThreshold') || ''),
+			lowStockThreshold: formData.has('lowStockThreshold')
+				? String(formData.get('lowStockThreshold') || '')
+				: undefined,
 			highSpenderMinTotal: String(formData.get('highSpenderMinTotal') || ''),
 			sitePopupsEnabled: formData.get('sitePopupsEnabled') === 'on' ? 'true' : 'false',
 			winbackDaysThreshold: String(formData.get('winbackDaysThreshold') || ''),

@@ -2,9 +2,7 @@
 	import {
 		Plus,
 		Edit,
-		Trash2,
 		Archive,
-		Download,
 		Users,
 		DollarSign,
 		Package,
@@ -18,7 +16,7 @@
 		deleteCategory,
 		retireCategory
 	} from '$lib/services/categories';
-	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
+	import { showSuccess, showError } from '$lib/stores/toasts';
 	import { parseTierUnitCostForForm } from '$lib/helpers/tier-unit-cost';
 	import type { CategoryMetadata, CategoryInsert, CategoryUpdate } from '$lib/services/categories';
 	import {
@@ -47,7 +45,8 @@
 	import TierCreateModal from '$lib/components/modals/TierCreateModal.svelte';
 	import TierEditModal from '$lib/components/modals/TierEditModal.svelte';
 	import TierDeleteModal from '$lib/components/modals/TierDeleteModal.svelte';
-	import { parseTierUnitCost, tierMarginNotes } from '$lib/helpers/tier-unit-cost';
+	import PlatformsPanel from '$lib/components/admin/PlatformsPanel.svelte';
+	import { onMount } from 'svelte';
 
 	interface Props {
 		data: PageData;
@@ -56,6 +55,11 @@
 	let { data }: Props = $props();
 	let tiers = $state<CategoryMetadata[]>(data.tiers);
 	let platforms = $state<CategoryMetadata[]>(data.platforms);
+	// Opens straight away when you arrive from an old Platforms link (#platforms).
+	let platformsOpen = $state(false);
+	onMount(() => {
+		if (window.location.hash === '#platforms') platformsOpen = true;
+	});
 	let loading = $state(false);
 	let showCreateModal = $state(false);
 	let showEditModal = $state(false);
@@ -75,41 +79,6 @@
 	const searchActive = $derived(tierSearch.trim().length > 0);
 
 	const activeTierCount = $derived(tiers.filter((tier) => isTierActive(tier)).length);
-	// Full admins: which active account tiers still need a cost and which margins need a look.
-	// Advice only; nothing here blocks anything.
-	const costOverview = $derived.by(() => {
-		if (!data.canViewRevenue) return null;
-		const rows = tiers
-			.filter((tier) => isTierActive(tier))
-			.map((tier) => {
-				const metadata = (tier.metadata ?? {}) as Record<string, unknown>;
-				const pricing = (metadata.pricing ?? {}) as Record<string, unknown>;
-				const mode = String(metadata.delivery_mode || 'instant_auto');
-				const priceNgn = Number(pricing.base_price ?? metadata.price ?? 0);
-				const advice = tierMarginNotes({
-					priceNgn,
-					unitCostNgn: metadata.unit_cost_ngn,
-					affiliateExcluded: metadata.affiliate_excluded === true
-				});
-				return {
-					name: tier.name,
-					accountTier: ['instant_auto', 'manual_handover'].includes(mode) && priceNgn > 0,
-					hasCost: parseTierUnitCost(metadata) !== null,
-					margin: advice.marginPercent,
-					level: advice.notes.find((note) => note.level !== 'info')?.level ?? null
-				};
-			})
-			.filter((row) => row.accountTier);
-		return {
-			total: rows.length,
-			withCost: rows.filter((row) => row.hasCost).length,
-			missing: rows.filter((row) => !row.hasCost).map((row) => row.name),
-			thin: rows
-				.filter((row) => row.level === 'warning')
-				.map((row) => `${row.name} (${row.margin}%)`),
-			losing: rows.filter((row) => row.level === 'error').map((row) => row.name)
-		};
-	});
 	const archivedTierCount = $derived(tiers.filter((tier) => !isTierActive(tier)).length);
 	const visibleTiers = $derived.by(() => {
 		let list =
@@ -440,116 +409,12 @@
 		return Array.isArray(metadata?.features) ? metadata.features.length : 0;
 	}
 
-	function getFilenameFromDisposition(disposition: string | null, fallback: string): string {
-		if (!disposition) return fallback;
-		const match = disposition.match(/filename="?([^"]+)"?/i);
-		return match?.[1] || fallback;
-	}
-
-	function triggerTextDownload(blob: Blob, filename: string): void {
-		const url = URL.createObjectURL(blob);
-		const link = document.createElement('a');
-		link.href = url;
-		link.download = filename;
-		document.body.appendChild(link);
-		link.click();
-		document.body.removeChild(link);
-		URL.revokeObjectURL(url);
-	}
-
-	async function offloadTier(
-		tier: CategoryMetadata
-	): Promise<{ success: boolean; accountCount: number }> {
-		const tierId = getTierId(tier);
-		if (!tierId) return { success: false, accountCount: 0 };
-
-		busyTierAction = `offload:${tierId}`;
-		try {
-			const response = await fetch(`/api/categories/${encodeURIComponent(tierId)}/offload`);
-			if (!response.ok) {
-				const result = await response.json().catch(() => null);
-				throw new Error(result?.error || 'Failed to prepare offload file.');
-			}
-
-			const accountCount = Number(response.headers.get('X-Account-Count') || 0);
-			const blob = await response.blob();
-			const filename = getFilenameFromDisposition(
-				response.headers.get('Content-Disposition'),
-				`fastaccs-offload-${String(tier.name || 'tier')
-					.toLowerCase()
-					.replace(/[^a-z0-9]+/g, '-')}.txt`
-			);
-			triggerTextDownload(blob, filename);
-			showSuccess('Offload ready', `${tier.name} logs were downloaded as a text file.`);
-			return { success: true, accountCount };
-		} catch (error) {
-			console.error('Failed to offload tier logs:', error);
-			showError(
-				'Offload failed',
-				error instanceof Error ? error.message : 'Could not download logs right now.'
-			);
-			return { success: false, accountCount: 0 };
-		} finally {
-			busyTierAction = null;
-		}
-	}
-
-	async function offloadAndDeleteTierLogs(tier: CategoryMetadata): Promise<void> {
-		const tierId = getTierId(tier);
-		if (!tierId) return;
-
-		const { success, accountCount } = await offloadTier(tier);
-		if (!success) return;
-
-		if (accountCount === 0) {
-			showWarning(
-				'No logs to delete',
-				`${tier.name} has no available/unsold logs right now — all stock here is already sold, allocated, or reserved.`
-			);
-			return;
-		}
-
-		const confirmed = window.confirm(
-			`Confirm the offload file for "${tier.name}" has downloaded successfully.\n\nThis will delete ${accountCount} available/unsold log${accountCount === 1 ? '' : 's'} from this account type. Delivered, allocated, and reserved records will not be deleted.`
-		);
-		if (!confirmed) {
-			showWarning('Delete cancelled', 'No logs were deleted.');
-			return;
-		}
-
-		busyTierAction = `delete:${tierId}`;
-		try {
-			const response = await fetch(`/api/categories/${encodeURIComponent(tierId)}/offload`, {
-				method: 'DELETE',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ confirmDownloaded: true })
-			});
-			const result = await response.json();
-			if (!response.ok || result.error) {
-				throw new Error(result.error || 'Failed to delete offloaded logs.');
-			}
-
-			showSuccess(
-				'Offloaded logs deleted',
-				`${result.data?.deletedAccounts ?? 0} available log${result.data?.deletedAccounts === 1 ? '' : 's'} deleted from ${tier.name}.`
-			);
-		} catch (error) {
-			console.error('Failed to delete offloaded tier logs:', error);
-			showError(
-				'Delete failed',
-				error instanceof Error ? error.message : 'Could not delete offloaded logs.'
-			);
-		} finally {
-			busyTierAction = null;
-		}
-	}
-
 	async function archiveTier(tier: CategoryMetadata): Promise<void> {
 		const tierId = getTierId(tier);
 		if (!tierId || !isTierActive(tier)) return;
 
 		const confirmed = window.confirm(
-			`Archive "${tier.name}"?\n\nIf this account type still has available logs, use Offload or Offload & Delete first. Archive will hide the account type from customer storefront listings and preserve historical records.`
+			`Archive "${tier.name}"?\n\nIf this account type still has unsold logs, download and delete them in Inventory first. Archive will hide the account type from customer storefront listings and preserve historical records.`
 		);
 		if (!confirmed) return;
 
@@ -597,38 +462,12 @@
 					<h1 class="text-xl font-bold sm:text-2xl" style="color: var(--text)">Account Types</h1>
 				</div>
 				<p class="text-sm sm:text-base" style="color: var(--text-muted)">
-					Each account type belongs to one platform. Set what buyers see, how it is delivered and
-					its price.
+					Each account type belongs to one platform. Set what buyers see and how it is delivered.
 				</p>
-				{#if costOverview && costOverview.total > 0}
-					<div
-						class="mt-2 rounded-lg p-3 text-xs"
-						style="border: 1px solid var(--border); background: var(--bg-elev-1); color: var(--text-muted);"
-					>
-						<p>
-							Costs entered on <strong style="color: var(--text);"
-								>{costOverview.withCost} of {costOverview.total}</strong
-							>
-							active account types.
-							{#if costOverview.missing.length}
-								Missing: {costOverview.missing.slice(0, 6).join(', ')}{costOverview.missing.length >
-								6
-									? ` and ${costOverview.missing.length - 6} more`
-									: ''}.
-							{/if}
-						</p>
-						{#if costOverview.losing.length}
-							<p class="mt-1 font-medium" style="color: var(--danger, #e5484d);">
-								⚠ Cost at or above price: {costOverview.losing.join(', ')}
-							</p>
-						{/if}
-						{#if costOverview.thin.length}
-							<p class="mt-1 font-medium" style="color: #d97706;">
-								⚠ Thin margins: {costOverview.thin.join(', ')}
-							</p>
-						{/if}
-					</div>
-				{/if}
+				<p class="mt-1 text-sm" style="color: var(--text-muted);">
+					Prices, costs and margins are in
+					<a href="/admin/account-prices" style="color: var(--link);">Account Prices</a>.
+				</p>
 			</div>
 			<button
 				onclick={openCreateModal}
@@ -708,6 +547,21 @@
 			</div>
 		</div>
 	</div>
+
+	<!-- Platforms: the headings account types sit under -->
+	<details
+		id="platforms"
+		class="mb-4 rounded-lg"
+		style="border: 1px solid var(--border); background: var(--bg-elev-1);"
+		bind:open={platformsOpen}
+	>
+		<summary class="cursor-pointer px-4 py-3 text-sm font-semibold" style="color: var(--text);">
+			Platforms ({platforms.filter((platform) => platform.isActive !== false).length})
+		</summary>
+		<div class="border-t px-4 pt-3 pb-4" style="border-color: var(--border);">
+			<PlatformsPanel platforms={platforms as never} />
+		</div>
+	</details>
 
 	<!-- Tiers List -->
 	{#if loading}
@@ -834,25 +688,6 @@
 
 									<div class="flex flex-wrap items-center gap-1.5">
 										<button
-											onclick={() => offloadTier(tier)}
-											disabled={busyTierAction !== null}
-											class="rounded-full px-2.5 py-1 text-xs font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-											style="background: rgba(255,255,255,0.04); color: var(--text-muted); border: 1px solid var(--border);"
-											title="Offload logs"
-										>
-											Offload
-										</button>
-										<button
-											type="button"
-											onclick={() => offloadAndDeleteTierLogs(tier)}
-											disabled={busyTierAction !== null}
-											class="rounded-full px-2.5 py-1 text-xs font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-											style="background: rgba(255,255,255,0.025); color: var(--text-dim); border: 1px solid var(--border);"
-											title="Download logs, then confirm deletion of available/unsold logs"
-										>
-											Delete logs
-										</button>
-										<button
 											onclick={() => openEditModal(tier)}
 											disabled={busyTierAction !== null}
 											class="rounded-full p-2 transition-colors disabled:opacity-50"
@@ -867,8 +702,8 @@
 											disabled={!isTierActive(tier) || busyTierAction !== null}
 											class="rounded-full p-2 transition-colors disabled:cursor-not-allowed disabled:opacity-35"
 											style="color: var(--status-warning); border: 1px solid var(--border);"
-											title={isTierActive(tier) ? 'Archive Tier' : 'Tier already archived'}
-											aria-label={isTierActive(tier) ? 'Archive Tier' : 'Tier already archived'}
+											title={isTierActive(tier) ? 'Archive account type' : 'Already archived'}
+											aria-label={isTierActive(tier) ? 'Archive account type' : 'Already archived'}
 										>
 											<Archive size={15} />
 										</button>
@@ -923,16 +758,6 @@
 						</div>
 						<div class="flex items-center gap-1">
 							<button
-								onclick={() => offloadTier(tier)}
-								disabled={busyTierAction !== null}
-								class="group rounded p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-								style="color: var(--text-dim);"
-								title="Offload logs"
-								aria-label="Offload logs"
-							>
-								<Download size={16} class="transition-transform group-hover:scale-90" />
-							</button>
-							<button
 								onclick={() => openEditModal(tier)}
 								disabled={busyTierAction !== null}
 								class="group rounded p-1 transition-colors"
@@ -946,8 +771,8 @@
 								disabled={!isTierActive(tier) || busyTierAction !== null}
 								class="group rounded p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
 								style="color: var(--status-warning);"
-								title={isTierActive(tier) ? 'Archive Tier' : 'Tier already archived'}
-								aria-label={isTierActive(tier) ? 'Archive Tier' : 'Tier already archived'}
+								title={isTierActive(tier) ? 'Archive account type' : 'Already archived'}
+								aria-label={isTierActive(tier) ? 'Archive account type' : 'Already archived'}
 							>
 								<Archive size={16} class="transition-transform group-hover:scale-90" />
 							</button>
@@ -963,17 +788,6 @@
 						>
 							{isTierActive(tier) ? 'Active' : 'Archived'}
 						</span>
-						<button
-							type="button"
-							onclick={() => offloadAndDeleteTierLogs(tier)}
-							disabled={busyTierAction !== null}
-							class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-							style="background: rgba(255, 255, 255, 0.035); color: var(--text-dim); border: 1px solid var(--border);"
-							title="Download logs, then confirm deletion of available/unsold logs"
-						>
-							<Trash2 size={12} />
-							Delete logs
-						</button>
 					</div>
 
 					<!-- Tier Description -->
@@ -1085,7 +899,7 @@
 {#if showCreateModal}
 	<TierCreateModal
 		open={showCreateModal}
-		{platforms}
+		platforms={platforms.filter((platform) => platform.isActive !== false)}
 		bind:tierForm
 		{loading}
 		canEditCost={Boolean(data.canViewRevenue)}
