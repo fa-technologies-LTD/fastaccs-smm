@@ -1,12 +1,5 @@
 <script lang="ts">
-	import {
-		Users,
-		TrendingUp,
-		DollarSign,
-		Search,
-		Download,
-		CheckCircle
-	} from '$lib/icons';
+	import { Users, TrendingUp, DollarSign, Search, Download, CheckCircle } from '$lib/icons';
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import { formatPrice, formatDate } from '$lib/helpers/utils';
@@ -475,8 +468,8 @@
 						style="color: var(--text-muted);"
 					>
 						<th class="px-4 py-3">Affiliate</th>
-						<th class="px-4 py-3 text-right">Referrals</th>
-						<th class="px-4 py-3 text-right">Sales brought</th>
+						<th class="hidden px-4 py-3 text-right sm:table-cell">Referrals</th>
+						<th class="hidden px-4 py-3 text-right sm:table-cell">Sales brought</th>
 						<th class="px-4 py-3 text-right">Balance</th>
 						<th class="px-4 py-3">Status</th>
 					</tr>
@@ -506,10 +499,16 @@
 									· joined {formatDate(affiliate.joinedAt || affiliate.createdAt)}
 								</div>
 							</td>
-							<td class="px-4 py-3 text-right text-sm tabular-nums" style="color: var(--text);">
+							<td
+								class="hidden px-4 py-3 text-right text-sm tabular-nums sm:table-cell"
+								style="color: var(--text);"
+							>
 								{Number(affiliate.totalReferrals || 0) > 0 ? affiliate.totalReferrals : '—'}
 							</td>
-							<td class="px-4 py-3 text-right text-sm tabular-nums" style="color: var(--text);">
+							<td
+								class="hidden px-4 py-3 text-right text-sm tabular-nums sm:table-cell"
+								style="color: var(--text);"
+							>
 								{amountOrDash(affiliate.totalSales)}
 							</td>
 							<td class="px-4 py-3 text-right text-sm tabular-nums" style="color: var(--text);">
