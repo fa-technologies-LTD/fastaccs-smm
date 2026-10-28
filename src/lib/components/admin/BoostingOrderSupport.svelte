@@ -42,13 +42,7 @@
 	let savedUpdate = $state(false);
 	const supportState = $derived(support ?? getBoostSupportState([]));
 	const workflow = $derived(boostOrderWorkflow({ support: supportState, held, status }));
-	const completionHint = $derived(
-		evidence.trim().length < 10
-			? 'Add a short evidence note (at least 10 characters).'
-			: !confirmed
-				? 'Tick the box to confirm the customer received the delivery.'
-				: ''
-	);
+	const COMPLETED_MESSAGE = 'Your delivery is confirmed. This review is closed.';
 	const title = $derived(
 		action === 'confirm_failure'
 			? 'Confirm missing delivery'
@@ -70,7 +64,7 @@
 					: next === 'request_link'
 						? 'Please send the correct public link for the service you ordered. We’ll review it before continuing.'
 						: next === 'confirm_delivery'
-							? 'Your delivery is confirmed. This review is closed.'
+							? COMPLETED_MESSAGE
 							: '';
 		evidence = '';
 		missingQuantity = quantity;
@@ -102,11 +96,14 @@
 			}
 			return;
 		}
+		const completing = action === 'confirm_delivery';
 		const body = {
 			action,
-			message: message.trim(),
+			// Marking completed is one click: the button is the confirmation, the note is optional
+			// and an emptied message falls back to the standard one.
+			message: completing && message.trim().length < 5 ? COMPLETED_MESSAGE : message.trim(),
 			evidence: evidence.trim(),
-			confirmed,
+			confirmed: completing ? true : confirmed,
 			...(action === 'confirm_failure' ? { quantity: missingQuantity } : {}),
 			expectedRevision: supportState.revision
 		};
@@ -272,25 +269,18 @@
 							confirmation or a refund. Neither happens automatically.
 						</p>
 					{:else if action === 'confirm_delivery'}
-						<p class="muted">Closes this review. History and charges stay unchanged.</p>
+						<p class="muted">
+							Closes this review and tells the customer their delivery is confirmed. History and
+							charges stay unchanged.
+						</p>
 						<label
-							>What delivery evidence did you check?<textarea
+							>Note for your records <span class="optional">(optional)</span><textarea
 								bind:value={evidence}
-								minlength="10"
 								maxlength="1000"
-								required
 								disabled={busy}
 								rows="2"
-								aria-describedby="completion-evidence-help"
-								placeholder="For example: customer confirmed receipt; include the date and where you checked."
+								placeholder="For example: delivered by hand on WhatsApp."
 							></textarea></label
-						>
-						<p id="completion-evidence-help" class="muted evidence-help">
-							Admin only · at least 10 characters.
-						</p>
-						<label class="confirmation"
-							><input type="checkbox" bind:checked={confirmed} required disabled={busy} />I verified
-							that the customer received the delivery—not just the supplier’s status.</label
 						>
 					{:else if action === 'request_link'}
 						<p class="muted">
@@ -302,31 +292,42 @@
 							Shown on their order and notifications. No delivery change or email.
 						</p>
 					{/if}
-					<label
-						>Message the customer will see<textarea
-							bind:value={message}
-							minlength="5"
-							maxlength="500"
-							required
-							disabled={busy}
-							rows={action === 'confirm_delivery' ? 2 : 4}
-						></textarea></label
-					>
+					{#if action === 'confirm_delivery'}
+						<details class="customer-message">
+							<summary>Change the message the customer sees</summary>
+							<label
+								>Message the customer will see<textarea
+									bind:value={message}
+									maxlength="500"
+									disabled={busy}
+									rows="2"
+								></textarea></label
+							>
+						</details>
+					{:else}
+						<label
+							>Message the customer will see<textarea
+								bind:value={message}
+								minlength="5"
+								maxlength="500"
+								required
+								disabled={busy}
+								rows="4"
+							></textarea></label
+						>
+					{/if}
 					{#if error}<p role="alert" class="error">{error}</p>{/if}
 				</div>
 				<footer>
-					{#if action === 'confirm_delivery' && !refreshNeeded && completionHint}
-						<p class="muted completion-hint" role="status">{completionHint}</p>
-					{/if}
 					<div class="dialog-buttons">
 						<button type="button" onclick={close} disabled={busy}>Cancel</button><button
 							class="primary"
 							type="submit"
 							disabled={busy ||
 								(!refreshNeeded &&
+									action !== 'confirm_delivery' &&
 									(message.trim().length < 5 ||
-										((action === 'confirm_delivery' || action === 'confirm_failure') &&
-											(!confirmed || evidence.trim().length < 10))))}
+										(action === 'confirm_failure' && (!confirmed || evidence.trim().length < 10))))}
 							>{busy
 								? 'Saving…'
 								: refreshNeeded
@@ -336,7 +337,7 @@
 										: action === 'withdraw_link'
 											? 'Withdraw request'
 											: action === 'confirm_delivery'
-												? 'Confirm completion'
+												? 'Mark completed'
 												: 'Send to customer'}</button
 						>
 					</div>
@@ -508,11 +509,21 @@
 		justify-content: end;
 		gap: 10px;
 	}
-	.evidence-help {
-		margin-top: 4px;
+	.optional {
+		font-weight: 400;
+		color: var(--text-muted);
 	}
-	.completion-hint {
-		margin-bottom: 8px;
+	.customer-message {
+		margin-top: 12px;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+	.customer-message summary {
+		min-height: 0;
+		border: 0;
+		padding: 0;
+		font-weight: 600;
+		color: var(--link);
 	}
 	.error {
 		margin-top: 12px;

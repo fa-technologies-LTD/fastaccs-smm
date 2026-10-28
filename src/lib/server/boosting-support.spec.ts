@@ -251,10 +251,7 @@ it('blocks another customer, stale actions, refunded orders and invalid links', 
 		})
 	).rejects.toThrow();
 });
-it('requires evidence and confirmation, then resolves item, fulfillment and parent together preserving supplier history', async () => {
-	await expect(
-		applyBoostSupportAction(tx, { ...input(), action: 'confirm_delivery' })
-	).rejects.toThrow('actual delivery');
+it('resolves item, fulfillment and parent together preserving supplier history', async () => {
 	const out = await applyBoostSupportAction(tx, {
 		...input(),
 		action: 'confirm_delivery',
@@ -347,4 +344,17 @@ it('closes an evidenced customer review on a supplier-completed delivery, but do
 	expect(tx.boostFulfillment.updateMany.mock.lastCall[0].data).not.toHaveProperty(
 		'rawProviderStatus'
 	);
+});
+
+it('marks a hand-sorted delivery completed with no note, recording that an admin did it', async () => {
+	const out = await applyBoostSupportAction(tx, {
+		...input(),
+		action: 'confirm_delivery',
+		message: 'Your delivery is confirmed. This review is closed.'
+	});
+	expect(out.support.state).toBe('resolved');
+	expect(tx.orderEvent.create.mock.lastCall[0].data.metadata).toMatchObject({
+		manuallyConfirmed: true,
+		evidence: 'Marked completed by an admin'
+	});
 });

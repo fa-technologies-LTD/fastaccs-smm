@@ -188,10 +188,9 @@ it('does not submit completion twice if the real list refresh fails after saving
 	await page.getByText('Resolve order', { exact: true }).click();
 	await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
 	await page
-		.getByRole('textbox', { name: /What delivery evidence/ })
-		.fill('Customer confirmed receipt; checked manually.');
-	await page.getByRole('checkbox').click();
-	await page.getByRole('button', { name: 'Confirm completion', exact: true }).click();
+		.getByRole('dialog')
+		.getByRole('button', { name: 'Mark completed', exact: true })
+		.click();
 	await expect.element(page.getByRole('alert')).toHaveTextContent('Your update was saved');
 	listFails = false;
 	await page.getByRole('button', { name: 'Refresh review', exact: true }).click();
@@ -375,10 +374,9 @@ it.each(['manual_review', 'completed'])(
 		await page.getByText('Resolve order', { exact: true }).click();
 		await page.getByRole('button', { name: 'Mark completed', exact: true }).click();
 		await page
-			.getByRole('textbox', { name: /What delivery evidence/ })
-			.fill('Owner confirmed delivery was manually sorted.');
-		await page.getByRole('checkbox').click();
-		await page.getByRole('button', { name: 'Confirm completion', exact: true }).click();
+			.getByRole('dialog')
+			.getByRole('button', { name: 'Mark completed', exact: true })
+			.click();
 		await expect
 			.element(page.getByText('Nothing needs attention here.', { exact: true }))
 			.toBeVisible();

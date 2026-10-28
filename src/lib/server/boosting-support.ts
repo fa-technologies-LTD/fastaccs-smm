@@ -224,16 +224,10 @@ export async function applyBoostSupportAction(
 			data: { lastSafeErrorCategory: 'link_request_withdrawn', nextActionAt: null }
 		});
 	} else if (input.action === 'confirm_delivery') {
-		if (
-			!input.confirmed ||
-			!input.evidence ||
-			input.evidence.trim().length < 10 ||
-			input.evidence.length > 1000
-		)
-			throw new BoostSupportError(
-				'Confirm actual delivery and record what you checked (10–1,000 characters).',
-				400
-			);
+		// Choosing "Mark completed" is the admin's confirmation; a note is optional (for example
+		// when the delivery was sorted by hand and there is nothing more to record).
+		if ((input.evidence ?? '').length > 1000)
+			throw new BoostSupportError('Keep the note under 1,000 characters.', 400);
 		if (Number(item.refundedAmount) > 0)
 			throw new BoostSupportError(
 				'This item has a refund recorded. Review its accounting before resolving.'
@@ -414,7 +408,7 @@ export async function applyBoostSupportAction(
 				...(input.action === 'confirm_delivery'
 					? {
 							manuallyConfirmed: true,
-							evidence: input.evidence,
+							evidence: input.evidence?.trim() || 'Marked completed by an admin',
 							previousStatus: item.boostFulfillmentStatus,
 							previousHoldReason: fulfillment?.lastSafeErrorCategory ?? null,
 							previousSupplierStatus: fulfillment?.rawProviderStatus ?? null
