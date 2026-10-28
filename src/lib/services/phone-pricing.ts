@@ -30,6 +30,9 @@ const PHONE_PRICING_KEYS = {
 	pvapinsRateLimitPerMin: 'config.phone.pvapins_rate_limit_per_min'
 } as const;
 
+/** Numbers uses the same dollar rate as Boosting; Boosting Prices is where it is changed. */
+export const PHONE_USD_NGN_RATE_KEY = PHONE_PRICING_KEYS.usdNgnRate;
+
 const DEFAULTS = {
 	usdNgnRate: Math.max(1, Number(env.HUBMAN_USD_NGN_RATE || 1700)),
 	marginPercent: 100, // 2× cost by default; David tunes this in admin

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { prisma } from '$lib/prisma';
 import { env } from '$env/dynamic/private';
 import { getBoostingPricingConfig, BOOSTING_PRICING_KEYS } from '$lib/services/boosting-pricing';
-import { stabilizePrice } from '$lib/services/phone-pricing';
+import { stabilizePrice, PHONE_USD_NGN_RATE_KEY } from '$lib/services/phone-pricing';
 import { BoostPricingError, loadBoostPricingView, lock, recordSheet, state } from './pricing-sheet';
 import {
 	sanitizePricingSheet,
@@ -830,6 +830,19 @@ export async function saveBoostControls(
 					where: { key },
 					create: { key, value: String(value), category: 'settings', isActive: true },
 					update: { value: String(value), isActive: true }
+				});
+			// One dollar rate: a rate a person changes and confirms here is used by Numbers too.
+			// Automatic saves never move it.
+			if (!automatic && Number(next.settings.fx) !== Number(current.sheet.settings.fx))
+				await tx.microcopy.upsert({
+					where: { key: PHONE_USD_NGN_RATE_KEY },
+					create: {
+						key: PHONE_USD_NGN_RATE_KEY,
+						value: String(next.settings.fx),
+						category: 'settings',
+						isActive: true
+					},
+					update: { value: String(next.settings.fx), isActive: true }
 				});
 			const previous = await state(tx);
 			next.version++;

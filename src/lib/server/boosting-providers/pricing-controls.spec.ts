@@ -997,3 +997,27 @@ it('does not present an arbitrary paused service as the current automatic config
 	expect(view.sheet.rows[0].serviceId).toBe('');
 	expect(view.setup.row.reviewed).toBe(false);
 });
+it('shares a dollar rate a person changes and confirms with Numbers', async () => {
+	const next = await current();
+	next.settings.fx = Number(next.settings.fx) + 100;
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	const numbersWrites = db.microcopy.upsert.mock.calls.filter(
+		(call: unknown[]) =>
+			(call[0] as { where: { key: string } }).where.key === 'config.phone.usd_ngn_rate'
+	);
+	expect(numbersWrites).toHaveLength(1);
+	expect((numbersWrites[0][0] as { update: { value: string } }).update.value).toBe(
+		String(next.settings.fx)
+	);
+});
+it('leaves the Numbers rate alone when the dollar rate did not change', async () => {
+	const next = await current();
+	next.settings.defaultMarkup = 200;
+	await saveBoostControls(next, 'owner', db as never);
+	expect(
+		db.microcopy.upsert.mock.calls.some(
+			(call: unknown[]) =>
+				(call[0] as { where: { key: string } }).where.key === 'config.phone.usd_ngn_rate'
+		)
+	).toBe(false);
+});

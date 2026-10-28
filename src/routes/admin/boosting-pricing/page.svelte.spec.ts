@@ -165,7 +165,7 @@ it('displays a legacy pack per 1,000 and saves an edited rate without changing i
 	await expect.element(price).toHaveValue(15000);
 	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 	await expect.element(page.getByRole('cell', { name: '₦81', exact: true })).toBeVisible();
-	await expect.element(page.getByRole('cell', { name: '₦14,919', exact: true })).toBeVisible();
+	await expect.element(page.getByRole('cell', { name: /^₦14,919/ })).toBeVisible();
 	await price.fill('15000.02');
 	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
 	await expect

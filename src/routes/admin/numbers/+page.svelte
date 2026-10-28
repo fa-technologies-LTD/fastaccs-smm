@@ -178,68 +178,6 @@
 			expanding = false;
 		}
 	}
-
-	// --- Numbers discovery sequence + one-time launch cutover. ---
-	let campaignBusy = $state(false);
-	async function launchCampaign() {
-		if (
-			!confirm(
-				'Launch the Numbers announcement?\n\nThis will:\n• email + push every customer (touch 1 of 3)\n• put the announcement banner up\n• RETIRE the manual phone tiers from the store\n\nDo this only after merging to production.'
-			)
-		)
-			return;
-		campaignBusy = true;
-		try {
-			const out = await post({ action: 'launch-campaign' });
-			if (!out.success) throw new Error(out.error || 'Launch failed');
-			showSuccess(
-				`Campaign launched — ${out.manualTiersRetired} manual tiers retired, ${out.emailSent} emails sent, ${out.pushed} push notified. Reloading…`
-			);
-			setTimeout(() => location.reload(), 1200);
-		} catch (e) {
-			showError(e instanceof Error ? e.message : 'Launch failed');
-			campaignBusy = false;
-		}
-	}
-	async function stopCampaign() {
-		if (
-			!confirm(
-				'Stop the automated Numbers emails and take the banner down? Manual tiers stay retired.'
-			)
-		)
-			return;
-		campaignBusy = true;
-		try {
-			const out = await post({ action: 'stop-campaign' });
-			if (!out.success) throw new Error(out.error || 'Stop failed');
-			showSuccess('Campaign stopped. Reloading…');
-			setTimeout(() => location.reload(), 900);
-		} catch (e) {
-			showError(e instanceof Error ? e.message : 'Stop failed');
-			campaignBusy = false;
-		}
-	}
-
-	async function toggleRecoveryCampaign() {
-		const enabling = !data.campaign?.recoveryEnabled;
-		if (
-			enabling &&
-			!confirm(
-				'Enable Numbers recovery emails?\n\nOnce enabled, the daily worker sends one retry email for each attempt that is at least 24 hours old and never delivered a code. A later successful attempt suppresses an older failure.'
-			)
-		)
-			return;
-		campaignBusy = true;
-		try {
-			const out = await post({ action: 'set-recovery-campaign', enabled: enabling });
-			if (!out.success) throw new Error(out.error || 'Update failed');
-			showSuccess(`Numbers recovery emails ${enabling ? 'enabled' : 'disabled'}. Reloading…`);
-			setTimeout(() => location.reload(), 900);
-		} catch (e) {
-			showError(e instanceof Error ? e.message : 'Update failed');
-			campaignBusy = false;
-		}
-	}
 </script>
 
 <div class="mx-auto max-w-6xl p-6" style="color: var(--text);">
@@ -302,26 +240,31 @@
 			<h2 class="font-semibold" style="color: var(--text);">Pricing rules</h2>
 		</div>
 		<p class="mb-4 text-sm" style="color: var(--text-muted);">
-			Customer price = <span class="font-mono">hub-man cost ($) × your rate × (1 + margin%)</span>,
-			rounded up to the nearest ₦100, and never less than
+			Customer price = <span class="font-mono">supplier cost ($) × dollar rate × (1 + markup%)</span
+			>, with the supplier cost from hub-man or PVAPins, rounded up to the nearest ₦100, and never
+			less than
 			<span class="font-mono">cost + ₦1,000</span>. Prices update themselves on every refresh — you
 			never set one by hand.
 		</p>
 		<div class="grid grid-cols-1 items-end gap-4 sm:grid-cols-3">
-			<label class="block">
+			<div class="block">
 				<span class="text-xs font-medium" style="color: var(--text-muted);"
 					>Dollar rate (₦ per $1)</span
 				>
-				<input
-					type="number"
-					bind:value={usdNgnRate}
-					min="1"
-					class="mt-1 w-full rounded-lg px-3 py-2"
-					style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
-				/>
-			</label>
+				<p
+					class="mt-1 rounded-lg px-3 py-2 text-sm"
+					style="color: var(--text); border: 1px solid var(--border);"
+				>
+					₦{Number(usdNgnRate).toLocaleString('en-NG')}
+				</p>
+				<span class="text-[11px]" style="color: var(--text-dim);"
+					>Shared with Boosting. Change it in
+					<a href="/admin/boosting-pricing" style="color: var(--link);">Boosting Prices</a>.</span
+				>
+			</div>
 			<label class="block">
-				<span class="text-xs font-medium" style="color: var(--text-muted);">Profit margin (%)</span>
+				<span class="text-xs font-medium" style="color: var(--text-muted);">Markup on cost (%)</span
+				>
 				<input
 					type="number"
 					bind:value={marginPercent}
@@ -332,7 +275,7 @@
 			</label>
 			<label class="block">
 				<span class="text-xs font-medium" style="color: var(--text-muted);"
-					>Pricing profit target (₦)</span
+					>Profit target per number (₦)</span
 				>
 				<input
 					type="number"
@@ -342,7 +285,8 @@
 					class="mt-1 w-full rounded-lg px-3 py-2"
 					style="background: var(--bg-elev-1); color: var(--text); border: 1px solid var(--border);"
 				/>
-				<span class="text-[11px]" style="color: var(--text-dim);">Profit the sticker AIMS for.</span
+				<span class="text-[11px]" style="color: var(--text-dim);"
+					>The profit each price aims for.</span
 				>
 			</label>
 		</div>
@@ -355,7 +299,7 @@
 			<div class="flex flex-wrap items-end gap-4">
 				<label class="block">
 					<span class="text-xs font-semibold" style="color: #34d399;"
-						>Hard minimum profit per successful number (₦)</span
+						>Minimum profit per number (₦)</span
 					>
 					<input
 						type="number"
@@ -445,73 +389,11 @@
 		</p>
 	</div>
 
-	<!-- Numbers discovery campaign -->
 	{#if data.canManageCampaign}
-		<div
-			class="mb-6 rounded-xl p-5"
-			style="border: 1px solid var(--border); background: var(--surface);"
-		>
-			<div class="flex flex-wrap items-center justify-between gap-3">
-				<div>
-					<h2 class="font-semibold" style="color: var(--text);">Numbers customer emails</h2>
-					<p class="mt-1 text-sm" style="color: var(--text-muted);">
-						{#if data.campaign?.enabled && data.campaign?.launchedAt}
-							🟢 Automated — up to 3 paced discovery emails for opted-in customers. They stop as
-							soon as someone buys a number.
-						{:else}
-							Starts the automated three-email discovery sequence, announces Numbers in the app, and <strong
-								>retires the manual phone tiers</strong
-							>.
-						{/if}
-					</p>
-				</div>
-				{#if data.campaign?.enabled}
-					<button
-						onclick={stopCampaign}
-						disabled={campaignBusy}
-						class="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-						style="border: 1px solid var(--border); color: var(--text);"
-					>
-						{campaignBusy ? 'Working…' : 'Stop campaign'}
-					</button>
-				{:else}
-					<button
-						onclick={launchCampaign}
-						disabled={campaignBusy}
-						class="rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
-						style="background: #0ea5e9; color: #ffffff;"
-					>
-						{campaignBusy ? 'Launching…' : '🚀 Launch announcement'}
-					</button>
-				{/if}
-			</div>
-			<div
-				class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg p-3"
-				style="border: 1px solid var(--border); background: var(--bg);"
-			>
-				<div>
-					<p class="text-sm font-semibold" style="color: var(--text);">No-code recovery emails</p>
-					<p class="mt-1 text-xs" style="color: var(--text-muted);">
-						One retry email per Numbers attempt that is 24+ hours old and never delivered a code. A
-						later successful attempt suppresses the older failure.
-					</p>
-				</div>
-				<button
-					onclick={toggleRecoveryCampaign}
-					disabled={campaignBusy}
-					class="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-					style={data.campaign?.recoveryEnabled
-						? 'border: 1px solid var(--border); color: var(--text);'
-						: 'background: #0ea5e9; color: #ffffff;'}
-				>
-					{campaignBusy
-						? 'Working…'
-						: data.campaign?.recoveryEnabled
-							? 'Disable recovery'
-							: 'Enable recovery'}
-				</button>
-			</div>
-		</div>
+		<p class="mb-6 text-sm" style="color: var(--text-muted);">
+			Numbers customer emails are in
+			<a href="/admin/broadcast" style="color: var(--link);">Growth › Emails</a>.
+		</p>
 	{/if}
 
 	<!-- Balance -->

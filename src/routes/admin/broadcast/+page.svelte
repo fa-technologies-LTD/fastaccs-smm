@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import NumbersEmailsPanel from '$lib/components/admin/NumbersEmailsPanel.svelte';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import {
 		Mail,
@@ -565,9 +566,9 @@
 <div class="space-y-6">
 	<div class="flex flex-wrap items-start justify-between gap-3">
 		<div>
-			<h1 class="text-2xl font-bold" style="color: var(--text);">Email Broadcast</h1>
+			<h1 class="text-2xl font-bold" style="color: var(--text);">Emails</h1>
 			<p class="mt-1 text-sm" style="color: var(--text-muted);">
-				Compose and send campaigns to verified user audiences.
+				Write and send emails to verified customer audiences.
 			</p>
 			<p class="mt-1 text-xs" style="color: var(--text-muted);">
 				Best time to send: 5–7pm WAT. Most orders come in between 9pm and 3am. New sign-ups in their
@@ -586,6 +587,10 @@
 			Refresh
 		</button>
 	</div>
+
+	{#if data.canManageNumbersEmails}
+		<NumbersEmailsPanel campaign={data.numbersCampaign} />
+	{/if}
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr,0.8fr]">
 		<section

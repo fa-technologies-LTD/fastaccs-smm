@@ -1,6 +1,8 @@
 import type { PageServerLoad } from './$types';
 import { prisma } from '$lib/prisma';
 import { getBroadcastAudienceCount, getBroadcastHistory } from '$lib/services/admin-broadcast';
+import { getNumbersCampaignState } from '$lib/services/numbers-campaign';
+import { hasAdminPermission } from '$lib/auth/admin-roles';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	if (!locals.user || locals.user.userType !== 'ADMIN') {
@@ -54,10 +56,18 @@ export const load: PageServerLoad = async ({ locals }) => {
 		getBroadcastAudienceCount('all_verified', [], [])
 	]);
 
+	// Numbers customer emails sit here with the other emails; changing them needs settings rights.
+	const canManageNumbersEmails = hasAdminPermission(locals.adminContext, 'admin:settings:manage');
+	const numbersCampaign = canManageNumbersEmails
+		? await getNumbersCampaignState().catch(() => null)
+		: null;
+
 	return {
 		platforms,
 		tiers,
 		history,
-		initialAudienceCount
+		initialAudienceCount,
+		canManageNumbersEmails,
+		numbersCampaign
 	};
 };

@@ -724,7 +724,7 @@
 			</p>
 			<div class="fields">
 				<label
-					>Dollar rate (₦ per $1)<input
+					>Dollar rate (₦ per $1), also used by Numbers<input
 						type="number"
 						min="1"
 						bind:value={view.sheet.settings.fx}
@@ -732,7 +732,7 @@
 					/></label
 				>
 				<label
-					>Default profit on cost (%)<input
+					>Markup on cost (%)<input
 						type="number"
 						min="0"
 						max="500"
@@ -754,7 +754,7 @@
 			</div>
 			<div class="floor">
 				<label
-					>Minimum retained profit per pricing quantity (₦)<input
+					>Minimum profit per pricing quantity (₦)<input
 						type="number"
 						min="0"
 						bind:value={view.sheet.settings.hardProfitNgn}
@@ -862,7 +862,7 @@
 							>Price ₦</th
 						><th
 							title="Estimated from supplier quotes and the fee settings above; not recorded order profit."
-							>Est. profit ₦</th
+							>Est. profit ₦ · margin</th
 						><th>Status</th><th>Live</th></tr
 					></thead
 				><tbody>
@@ -940,7 +940,11 @@
 								</div></td
 							>
 							<td class:negative={(economics(row).profit ?? 0) <= 0} class="profit"
-								>{money(displayAmount(row, economics(row).profit))}</td
+								>{money(
+									displayAmount(row, economics(row).profit)
+								)}{#if economics(row).profit !== null && row.sale > 0}<small class="margin"
+										>{Math.round(((economics(row).profit ?? 0) / row.sale) * 100)}%</small
+									>{/if}</td
 							>
 							<td
 								><span
@@ -1943,5 +1947,11 @@
 			margin: 16px -14px -14px;
 			padding: 12px 14px;
 		}
+	}
+	.profit .margin {
+		display: block;
+		font-size: 11px;
+		font-weight: 500;
+		color: var(--text-muted);
 	}
 </style>
