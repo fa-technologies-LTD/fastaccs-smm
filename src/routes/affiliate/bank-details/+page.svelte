@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import Navigation from '$lib/components/Navigation.svelte';
 	import Footer from '$lib/components/Footer.svelte';
@@ -8,13 +9,14 @@
 
 	let { data }: { data: PageData } = $props();
 
-	let bankName = $state(data.submission?.bankName || '');
-	let accountNumber = $state(data.submission?.accountNumber || '');
-	let accountName = $state(data.submission?.accountName || '');
-	let phone = $state(data.submission?.phone || '');
-	let feedback = $state(data.submission?.feedback || '');
-	let status = $state(data.submission?.status || null);
-	let rejectionReason = $state(data.submission?.rejectionReason || null);
+	// A draft form: the saved submission is the starting point, then the affiliate's typing is kept.
+	let bankName = $state(untrack(() => data.submission?.bankName || ''));
+	let accountNumber = $state(untrack(() => data.submission?.accountNumber || ''));
+	let accountName = $state(untrack(() => data.submission?.accountName || ''));
+	let phone = $state(untrack(() => data.submission?.phone || ''));
+	let feedback = $state(untrack(() => data.submission?.feedback || ''));
+	let status = $state(untrack(() => data.submission?.status || null));
+	let rejectionReason = $state(untrack(() => data.submission?.rejectionReason || null));
 	let submitting = $state(false);
 	const submissionUnavailable = $derived(Boolean(data.submissionError));
 

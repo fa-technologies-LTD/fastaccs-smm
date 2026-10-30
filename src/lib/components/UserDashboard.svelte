@@ -2,7 +2,7 @@
 	import type { CustomerRewards } from '$lib/helpers/customer-rewards';
 	import { EARNED_REDEMPTION_CAP_PERCENT } from '$lib/helpers/store-credit-redemption';
 	import Notice from '$lib/components/notify/Notice.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { BriefcaseBusiness, Compass, LifeBuoy, Lock, Unlock, X } from '$lib/icons';
 	import OrderTab from './OrderTab.svelte';
 	import PurchaseTab from './PurchaseTab.svelte';
@@ -168,9 +168,10 @@
 		});
 	}
 
-	let affiliateData = $state<unknown>(initialAffiliateData);
-	let affiliateDataLoaded = $state(initialAffiliateLoaded);
-	let affiliateSummaryLoaded = $state(initialAffiliateLoaded);
+	// Seeded once from the page; the dashboard then loads and refreshes affiliate data itself.
+	let affiliateData = $state<unknown>(untrack(() => initialAffiliateData));
+	let affiliateDataLoaded = $state(untrack(() => initialAffiliateLoaded));
+	let affiliateSummaryLoaded = $state(untrack(() => initialAffiliateLoaded));
 	let affiliateDataLoading = $state(false);
 	let affiliateSummaryLoading = $state(false);
 	let affiliateDataError = $state('');

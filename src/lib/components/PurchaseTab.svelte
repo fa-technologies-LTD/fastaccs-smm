@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import {
 		Package,
 		CheckCircle,
@@ -29,9 +29,10 @@
 		initialLoaded?: boolean;
 		whatsappNumber?: string;
 	} = $props();
-	let purchases = $state<any[]>(initialPurchases);
-	let nextCursor = $state<string | null>(initialNextCursor);
-	let purchasesLoaded = $state(initialLoaded);
+	// Seeded once from the page; the tab then loads further pages itself.
+	let purchases = $state<any[]>(untrack(() => initialPurchases));
+	let nextCursor = $state<string | null>(untrack(() => initialNextCursor));
+	let purchasesLoaded = $state(untrack(() => initialLoaded));
 	let purchasesLoading = $state(false);
 	let purchasesError = $state('');
 

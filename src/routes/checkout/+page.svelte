@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { boostQuantityText } from '$lib/helpers/boosting-customer-facts';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { boostingMinimumMessage } from '$lib/helpers/boosting-checkout';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -55,7 +55,8 @@
 
 	// Reactive state
 	let loading = $state(false);
-	let affiliateCode = $state<string | null>(data.affiliateRef ?? null);
+	// Captured once from the page, then updated only by referral detection below.
+	let affiliateCode = $state<string | null>(untrack(() => data.affiliateRef ?? null));
 	let promoCodeInput = $state('');
 	let promoAppliedCode = $state<string | null>(null);
 	let promoDiscountAmount = $state(0);

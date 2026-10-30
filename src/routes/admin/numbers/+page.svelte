@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { Save, Phone, AlertTriangle, DollarSign, Lock, Unlock } from '$lib/icons';
 	import { showSuccess, showError } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
@@ -25,16 +26,18 @@
 		thin: boolean; // headroom < ~2× — a candidate for a lower per-tier floor
 	}
 
-	let rows = $state<Row[]>(data.rows.map((r) => ({ ...r })));
-	let usdNgnRate = $state(data.usdNgnRate);
-	let marginPercent = $state(data.marginPercent);
-	let minProfitNgn = $state(data.minProfitNgn);
+	// An editable sheet: inputs bind into these copies and Save sends them. Taken once on purpose so a
+	// background data refresh can never overwrite unsaved edits.
+	let rows = $state<Row[]>(untrack(() => data.rows.map((r) => ({ ...r }))));
+	let usdNgnRate = $state(untrack(() => data.usdNgnRate));
+	let marginPercent = $state(untrack(() => data.marginPercent));
+	let minProfitNgn = $state(untrack(() => data.minProfitNgn));
 	// Fulfilment SAFETY floor — the hard ₦ profit we never intentionally go below. Distinct from the
 	// pricing profit target above (which the sticker AIMS for). §48/§49.
-	let minFulfillmentProfitNgn = $state(data.minFulfillmentProfitNgn);
-	let maxPriceMultiple = $state(data.maxPriceMultiple);
-	let otpReplacementWaitSeconds = $state(data.otpReplacementWaitSeconds);
-	let pvapinsRateLimitPerMin = $state(data.pvapinsRateLimitPerMin);
+	let minFulfillmentProfitNgn = $state(untrack(() => data.minFulfillmentProfitNgn));
+	let maxPriceMultiple = $state(untrack(() => data.maxPriceMultiple));
+	let otpReplacementWaitSeconds = $state(untrack(() => data.otpReplacementWaitSeconds));
+	let pvapinsRateLimitPerMin = $state(untrack(() => data.pvapinsRateLimitPerMin));
 	let showAdvanced = $state(false);
 	let saving = $state(false);
 	let expanding = $state(false);

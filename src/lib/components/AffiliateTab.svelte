@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import {
 		Share2,
 		Copy,
@@ -162,7 +162,10 @@
 		}
 	}
 
-	let affiliateData = $state<AffiliateData | null>(normalizeAffiliateData(initialAffiliateData));
+	// Seeded once from the page; the tab then refreshes affiliate data itself.
+	let affiliateData = $state<AffiliateData | null>(
+		untrack(() => normalizeAffiliateData(initialAffiliateData))
+	);
 
 	const DISMISSED_POPUPS_KEY = 'fa_dismissed_affiliate_popups';
 	function isPopupDismissedInSession(type: string): boolean {
@@ -188,7 +191,8 @@
 		}
 	}
 
-	const pendingPopupType = affiliateData?.pendingPopup ?? null;
+	// The popup owed when the tab opened; later refreshes do not re-open it.
+	const pendingPopupType = untrack(() => affiliateData?.pendingPopup ?? null);
 	let activePopup = $state<AffiliatePopupType | null>(
 		pendingPopupType && !isPopupDismissedInSession(pendingPopupType) ? pendingPopupType : null
 	);

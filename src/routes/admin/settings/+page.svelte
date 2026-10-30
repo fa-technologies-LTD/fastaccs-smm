@@ -43,22 +43,24 @@
 		addToast({ type: 'success', title: 'Push alerts disabled on this device', duration: 2200 });
 	}
 
-	const settings = data.settings;
-	const announcementBanner = data.announcementBanner;
-	const envConfig = data.envConfig;
-	const featureFlags = data.featureFlags;
-	const affiliateConfig = data.affiliateConfig;
-	const smtpHealth = data.smtpHealth;
-	const sessions = data.sessions || [];
+	// Saved settings follow fresh page data, so the form shows what was actually stored after a save.
+	const settings = $derived(data.settings);
+	const announcementBanner = $derived(data.announcementBanner);
+	const envConfig = $derived(data.envConfig);
+	const featureFlags = $derived(data.featureFlags);
+	const affiliateConfig = $derived(data.affiliateConfig);
+	const smtpHealth = $derived(data.smtpHealth);
+	const sessions = $derived(data.sessions || []);
 	type AdminRow = NonNullable<PageData['admins']>[number];
-	let admins = $state<AdminRow[]>(data.admins || []);
+	// Role changes replace this list; fresh page data resets it.
+	let admins = $derived<AdminRow[]>(data.admins || []);
 	let newAdminEmail = $state('');
-	const canManageSettings = data.canManageSettings;
-	const canManageRoles = data.canManageRoles;
-	const roleManagementEnabled = Boolean(featureFlags.adminRoleManagement);
-	const storeControlsEnabled = Boolean(featureFlags.adminStoreControls);
-	const announcementBannerEnabled = Boolean(featureFlags.adminAnnouncementBanner);
-	const testEmailDefault = data.user?.email || '';
+	const canManageSettings = $derived(data.canManageSettings);
+	const canManageRoles = $derived(data.canManageRoles);
+	const roleManagementEnabled = $derived(Boolean(featureFlags.adminRoleManagement));
+	const storeControlsEnabled = $derived(Boolean(featureFlags.adminStoreControls));
+	const announcementBannerEnabled = $derived(Boolean(featureFlags.adminAnnouncementBanner));
+	const testEmailDefault = $derived(data.user?.email || '');
 	const sectionLinks = [
 		['#business', 'Business'],
 		['#payments', 'Payments'],
@@ -71,8 +73,8 @@
 		['#flags', 'Flags']
 	] as const;
 
-	const recipientsInput = settings.notifications.adminRecipients.join('\n');
-	const highSpenderQualifyingCount = data.highSpenderQualifyingCount;
+	const recipientsInput = $derived(settings.notifications.adminRecipients.join('\n'));
+	const highSpenderQualifyingCount = $derived(data.highSpenderQualifyingCount);
 
 	async function updateAdminRole(userId: string, role: string) {
 		if (!canManageRoles) return;

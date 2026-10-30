@@ -20,8 +20,9 @@
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
-	let selectedPlatform = $state(data.groups[0]?.platform ?? '');
-	let selectedCategoryId = $state(data.groups[0]?.categoryId ?? '');
+	// Starts on the first group; clicks change it, fresh page data resets it.
+	let selectedPlatform = $derived(data.groups[0]?.platform ?? '');
+	let selectedCategoryId = $derived(data.groups[0]?.categoryId ?? '');
 	let selectedOfferByCategory = $state<Record<string, string>>({});
 	let quantityByCategory = $state<Record<string, number>>({});
 	let commentText = $state('');

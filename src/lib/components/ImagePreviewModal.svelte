@@ -11,7 +11,8 @@
 
 	let { images, isOpen, onClose, initialIndex = 0 }: Props = $props();
 
-	let currentIndex = $state(initialIndex);
+	// Every opening starts on the chosen image (the modal stays mounted); arrows move from there.
+	let currentIndex = $derived(isOpen ? initialIndex : 0);
 	let modalElement: HTMLDivElement | undefined = $state();
 
 	// Handle keyboard navigation

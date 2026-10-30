@@ -27,9 +27,11 @@
 		.value((d) => d.value)
 		.sort(null);
 
-	const arcGenerator = arc<PieArcDatum<ChartDatum>>()
-		.innerRadius((size / 2) * innerRadiusRatio)
-		.outerRadius(size / 2 - 1);
+	const arcGenerator = $derived(
+		arc<PieArcDatum<ChartDatum>>()
+			.innerRadius((size / 2) * innerRadiusRatio)
+			.outerRadius(size / 2 - 1)
+	);
 
 	const arcs = $derived(pieGenerator(data));
 
@@ -52,7 +54,13 @@
 {:else}
 	<div class="flex flex-col items-center gap-3">
 		<div class="relative" style="width: {size}px; height: {size}px;">
-			<svg width={size} height={size} viewBox="0 0 {size} {size}" role="img" aria-label="Donut chart">
+			<svg
+				width={size}
+				height={size}
+				viewBox="0 0 {size} {size}"
+				role="img"
+				aria-label="Donut chart"
+			>
 				<g transform="translate({size / 2},{size / 2})">
 					{#each arcs as arcDatum, i (arcDatum.data.label)}
 						<path d={arcGenerator(arcDatum) ?? undefined} fill={colorFor(arcDatum.data, i)} />
@@ -70,11 +78,12 @@
 		</div>
 		<ul class="w-full space-y-1">
 			{#each data as d, i (d.label)}
-				<li class="flex items-center justify-between gap-2 text-xs" style="color: var(--text-muted);">
+				<li
+					class="flex items-center justify-between gap-2 text-xs"
+					style="color: var(--text-muted);"
+				>
 					<span class="flex min-w-0 items-center gap-2">
-						<span
-							class="h-2.5 w-2.5 shrink-0 rounded-full"
-							style="background: {colorFor(d, i)};"
+						<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background: {colorFor(d, i)};"
 						></span>
 						<span class="truncate">{d.label}</span>
 					</span>

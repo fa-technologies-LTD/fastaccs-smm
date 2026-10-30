@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { Clock, Phone, Zap } from '$lib/icons';
 	import { showSuccess, showError, showWarning } from '$lib/stores/toasts';
 	import { formatOrderRef } from '$lib/helpers/utils';
@@ -60,8 +61,9 @@
 		initialNextCursor?: string | null;
 		focusOrderId?: string | null;
 	} = $props();
-	let orders = $state<OrderRecord[]>(initialOrders);
-	let nextCursor = $state<string | null>(initialNextCursor);
+	// Seeded once from the page; the tab then loads further pages itself.
+	let orders = $state<OrderRecord[]>(untrack(() => initialOrders));
+	let nextCursor = $state<string | null>(untrack(() => initialNextCursor));
 	let loadingMore = $state(false);
 	let loadMoreError = $state('');
 	let orderTypeFilter = $state<'all' | 'account' | 'boosting' | 'numbers'>('all');
