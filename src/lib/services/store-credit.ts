@@ -86,6 +86,8 @@ export interface StoreCreditEntry {
 	kind: 'credit' | 'debit';
 	category: string;
 	status: string;
+	/** Proof of payment for a paid payout, served only to this user (and admins). */
+	receiptUrl?: string;
 }
 
 const STORE_CREDIT_HISTORY_TYPES = [
@@ -134,6 +136,7 @@ export async function getStoreCreditHistory(
 		orderBy: { createdAt: 'desc' },
 		take: limit,
 		select: {
+			id: true,
 			type: true,
 			amount: true,
 			status: true,
@@ -176,7 +179,10 @@ export async function getStoreCreditHistory(
 				delta,
 				kind,
 				category: SC_CATEGORY[r.type] ?? (kind === 'credit' ? 'Credit' : 'Spent'),
-				status: String(r.status || '')
+				status: String(r.status || ''),
+				...(r.type === SC_PAYOUT && metadataRecord(r.metadata).receipt
+					? { receiptUrl: `/api/payouts/${r.id}/receipt` }
+					: {})
 			};
 		});
 	return [...weeklySuper, ...individual].sort((a, b) => b.at.localeCompare(a.at));

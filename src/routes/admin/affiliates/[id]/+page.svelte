@@ -12,6 +12,7 @@
 	import { addToast } from '$lib/stores/toasts';
 	import type { PageData } from './$types';
 	import PersonTabs from '$lib/components/admin/PersonTabs.svelte';
+	import PayoutReceiptField from '$lib/components/admin/PayoutReceiptField.svelte';
 	import { formatPrice, formatDate } from '$lib/helpers/utils';
 
 	let { data }: { data: PageData } = $props();
@@ -506,6 +507,22 @@
 												Reverse
 											</button>
 										</div>
+									{:else if String(payout.status || '').toLowerCase() === 'paid'}
+										<PayoutReceiptField
+											affiliateId={data.affiliate.id}
+											payoutId={payout.id}
+											hasReceipt={Boolean(payout.metadata?.receipt)}
+											onUploaded={(uploadedAt) => {
+												payoutRows = payoutRows.map((row) =>
+													row.id === payout.id
+														? {
+																...row,
+																metadata: { ...(row.metadata || {}), receipt: { uploadedAt } }
+															}
+														: row
+												);
+											}}
+										/>
 									{:else}
 										-
 									{/if}

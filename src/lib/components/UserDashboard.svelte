@@ -143,6 +143,7 @@
 		kind: string;
 		category: string;
 		status: string;
+		receiptUrl?: string;
 	};
 	let showCreditHistory = $state(false);
 	let creditHistory = $state<CreditEntry[] | null>(null);
@@ -715,6 +716,15 @@
 								<p class="text-[11px]" style="color: var(--text-dim);">
 									{e.category} · {e.status.replaceAll('_', ' ')} · {creditDate(e.at)}
 								</p>
+								{#if e.receiptUrl}
+									<a
+										href={e.receiptUrl}
+										target="_blank"
+										rel="noopener"
+										class="text-[11px] font-semibold"
+										style="color: var(--primary);">View receipt</a
+									>
+								{/if}
 							</div>
 							<span
 								class="shrink-0 text-sm font-semibold"

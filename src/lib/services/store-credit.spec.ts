@@ -213,6 +213,37 @@ describe('store-credit ledger safeguards', () => {
 		]);
 	});
 
+	it('links a paid payout to its receipt, and only payouts that have one', async () => {
+		prismaMock.walletTransaction.findMany.mockResolvedValueOnce([
+			{
+				id: '22222222-2222-4222-8222-222222222222',
+				type: 'affiliate_payout',
+				amount: 14_700,
+				status: 'paid',
+				description: 'Affiliate payout request submitted',
+				createdAt: new Date('2026-10-29T12:00:00.000Z'),
+				metadata: { receipt: { publicId: 'payout-receipts/a', format: 'jpg' } }
+			},
+			{
+				id: '33333333-3333-4333-8333-333333333333',
+				type: 'affiliate_payout',
+				amount: 5_000,
+				status: 'paid',
+				description: 'Affiliate payout request submitted',
+				createdAt: new Date('2026-10-01T12:00:00.000Z'),
+				metadata: {}
+			}
+		]);
+
+		const [withReceipt, withoutReceipt] = await getStoreCreditHistory(
+			'11111111-1111-4111-8111-111111111111'
+		);
+		expect(withReceipt.receiptUrl).toBe(
+			'/api/payouts/22222222-2222-4222-8222-222222222222/receipt'
+		);
+		expect(withoutReceipt).not.toHaveProperty('receiptUrl');
+	});
+
 	it('re-reads the wallet balance after acquiring the row lock before crediting', async () => {
 		const tx = {
 			wallet: {
