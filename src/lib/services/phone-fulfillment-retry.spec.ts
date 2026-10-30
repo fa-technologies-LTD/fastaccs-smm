@@ -90,7 +90,6 @@ vi.mock('./order-events', () => ({
 
 vi.mock('./phone-pricing', () => ({
 	getPhonePricingConfig: getPhonePricingConfigMock,
-	computeMaxPriceCentsForSale: () => 100000,
 	computeProcurementCeilingCents: () => 100000
 }));
 vi.mock('./rate-limiter', () => ({

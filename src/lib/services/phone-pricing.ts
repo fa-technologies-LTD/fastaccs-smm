@@ -5,11 +5,9 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 /**
  * Pricing for the automated Numbers service.
  *
- * hub-man costs are dynamic USD cents. David picks a margin; we convert the expected
- * cost to a fixed NGN price the customer sees up front. A per-rent `max_price_cents`
- * ceiling (expected cost + tolerance) is sent to hub-man so a live price spike can
- * never silently eat the margin — if the live cost exceeds it, the rent fails cleanly
- * and the customer is refunded rather than sold a loss.
+ * Supplier costs are dynamic USD cents. The customer sees a fixed NGN price up front,
+ * while fulfilment derives a hard per-order procurement ceiling from that paid price.
+ * A supplier whose live cost exceeds the ceiling is skipped rather than creating a loss.
  *
  * Config is stored in the shared key-value settings table (`microcopy`, category
  * `settings`), the same store the admin-settings service uses.
@@ -21,7 +19,6 @@ const PHONE_PRICING_KEYS = {
 	usdNgnRate: 'config.phone.usd_ngn_rate',
 	marginPercent: 'config.phone.margin_percent',
 	minProfitNgn: 'config.phone.min_profit_ngn',
-	ceilingTolerancePercent: 'config.phone.ceiling_tolerance_percent',
 	lowBalanceThresholdCents: 'config.phone.low_balance_threshold_cents',
 	activationTimeoutMinutes: 'config.phone.activation_timeout_minutes',
 	maxPriceMultiple: 'config.phone.max_price_multiple',
@@ -33,15 +30,22 @@ const PHONE_PRICING_KEYS = {
 /** Numbers uses the same dollar rate as Boosting; Boosting Prices is where it is changed. */
 export const PHONE_USD_NGN_RATE_KEY = PHONE_PRICING_KEYS.usdNgnRate;
 
+/**
+ * The HARD minimum profit on every successful fulfilment (the owner's absolute floor). Distinct
+ * from the pricing profit floor (NUMBERS_MIN_PROFIT_NGN ₦1,000, which the *sticker* aims for):
+ * once an order is paid, we may compress margin to deliver, but we NEVER intentionally rent a
+ * number that would leave less than this profit. No intentional-loss / rescue spending exists.
+ */
+export const NUMBERS_MIN_FULFILLMENT_PROFIT_NGN = 500;
+
 const DEFAULTS = {
 	usdNgnRate: Math.max(1, Number(env.HUBMAN_USD_NGN_RATE || 1700)),
 	marginPercent: 100, // 2× cost by default; David tunes this in admin
 	minProfitNgn: 1000, // floor profit per number; David can raise/lower it in admin
-	ceilingTolerancePercent: 20, // allow live cost up to 20% over expected before failing
 	lowBalanceThresholdCents: 500, // alert when hub-man balance drops below $5
 	activationTimeoutMinutes: 20, // wait this long for the OTP before auto-cancel+refund
 	maxPriceMultiple: 2.5, // competitive price cap: sticker ≤ 2.5× basis cost (floor still wins)
-	minFulfillmentProfitNgn: 500, // HARD floor: never intentionally procure a number that leaves < this profit
+	minFulfillmentProfitNgn: NUMBERS_MIN_FULFILLMENT_PROFIT_NGN,
 	otpReplacementWaitSeconds: 120, // wait this long after "I've requested the code" before allowing a replacement
 	pvapinsRateLimitPerMin: 5 // global cap on pvapins get_number calls/min (supplier limit ~5/min)
 } as const;
@@ -51,14 +55,6 @@ export const NUMBERS_PRICE_FLOOR_NGN = 1000;
 
 /** Default competitive price cap: the sticker never exceeds this multiple of the basis cost. */
 export const NUMBERS_MAX_PRICE_MULTIPLE = 2.5;
-
-/**
- * The HARD minimum profit on every successful fulfilment (the owner's absolute floor). Distinct
- * from the pricing profit floor (NUMBERS_MIN_PROFIT_NGN ₦1,000, which the *sticker* aims for):
- * once an order is paid, we may compress margin to deliver, but we NEVER intentionally rent a
- * number that would leave less than this profit. No intentional-loss / rescue spending exists.
- */
-export const NUMBERS_MIN_FULFILLMENT_PROFIT_NGN = 500;
 
 /**
  * The learning epoch. Only rentals RECEIVED on/after this instant may train pricing (realized
@@ -79,7 +75,6 @@ export interface PhonePricingConfig {
 	usdNgnRate: number;
 	marginPercent: number;
 	minProfitNgn: number;
-	ceilingTolerancePercent: number;
 	lowBalanceThresholdCents: number;
 	activationTimeoutMinutes: number;
 	maxPriceMultiple: number;
@@ -111,11 +106,6 @@ export async function getPhonePricingConfig(
 			0
 		),
 		minProfitNgn: parseNumber(map.get(PHONE_PRICING_KEYS.minProfitNgn), DEFAULTS.minProfitNgn, 0),
-		ceilingTolerancePercent: parseNumber(
-			map.get(PHONE_PRICING_KEYS.ceilingTolerancePercent),
-			DEFAULTS.ceilingTolerancePercent,
-			0
-		),
 		lowBalanceThresholdCents: parseNumber(
 			map.get(PHONE_PRICING_KEYS.lowBalanceThresholdCents),
 			DEFAULTS.lowBalanceThresholdCents,
@@ -168,12 +158,6 @@ export async function savePhonePricingConfig(input: Partial<PhonePricingConfig>)
 			PHONE_PRICING_KEYS.minProfitNgn,
 			Math.max(0, Math.round(input.minProfitNgn)),
 			'Minimum profit floor per number (NGN)'
-		]);
-	if (input.ceilingTolerancePercent != null)
-		entries.push([
-			PHONE_PRICING_KEYS.ceilingTolerancePercent,
-			Math.max(0, input.ceilingTolerancePercent),
-			'Max price ceiling tolerance % over expected cost'
 		]);
 	if (input.lowBalanceThresholdCents != null)
 		entries.push([
@@ -238,14 +222,6 @@ export function computeSaleNgn(
 	const costUsd = Math.max(0, expectedCostCents) / 100;
 	const raw = costUsd * config.usdNgnRate * (1 + config.marginPercent / 100);
 	return roundNgnUp(raw);
-}
-
-/**
- * The `max_price_cents` ceiling to send to hub-man for this tier.
- * = expected cost + tolerance. Live cost above this → rent fails → customer refunded.
- */
-export function computeMaxPriceCents(expectedCostCents: number, tolerancePercent: number): number {
-	return Math.ceil(Math.max(1, expectedCostCents) * (1 + tolerancePercent / 100));
 }
 
 /** Minimum naira profit we guarantee on every number rental (the floor, never the target). */
@@ -336,29 +312,4 @@ export function computeProcurementCeilingCents(
 	const budgetNgn = Math.max(0, saleNgn) - Math.max(0, minFulfillmentProfitNgn);
 	if (budgetNgn <= 0) return 0;
 	return Math.floor((budgetNgn / Math.max(1, usdNgnRate)) * 100);
-}
-
-/**
- * The `max_price_cents` we'll pay hub-man for THIS sale and still keep the ₦1,000 profit
- * floor — i.e. pay up to (sale price − ₦1,000), converted to USD cents. Because sticky
- * pricing guarantees price ≥ worst-case cost + ₦1,000, this ceiling always covers what's
- * actually in stock, so rentals reliably succeed instead of refund-looping.
- */
-export function computeMaxPriceCentsForSale(
-	saleNgn: number,
-	config: Pick<PhonePricingConfig, 'usdNgnRate' | 'minProfitNgn'>
-): number {
-	const minProfit = config.minProfitNgn ?? NUMBERS_MIN_PROFIT_NGN;
-	const usableNgn = Math.max(0, saleNgn - minProfit);
-	return Math.max(1, Math.floor((usableNgn / Math.max(1, config.usdNgnRate)) * 100));
-}
-
-/** Realized margin (NGN) on a completed rental, for analytics. */
-export function computeRealizedMarginNgn(
-	saleNgn: number,
-	actualCostCents: number,
-	usdNgnRate: number
-): number {
-	const costNgn = (Math.max(0, actualCostCents) / 100) * usdNgnRate;
-	return saleNgn - costNgn;
 }

@@ -74,7 +74,6 @@ vi.mock('./order-events', () => ({
 
 vi.mock('./phone-pricing', () => ({
 	getPhonePricingConfig: vi.fn(),
-	computeMaxPriceCentsForSale: vi.fn(),
 	computeProcurementCeilingCents: () => 100000
 }));
 vi.mock('$lib/helpers/phone-tier-config', () => ({ getPhoneTierConfig: getPhoneTierConfigMock }));

@@ -1,12 +1,30 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 
 // phone-pricing pulls env + prisma at import for config I/O; the pure math under test needs neither.
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
-vi.mock('$lib/prisma', () => ({ prisma: {} }));
+const prismaMock = vi.hoisted(() => ({ microcopy: { findMany: vi.fn() } }));
+vi.mock('$lib/prisma', () => ({ prisma: prismaMock }));
 
-import { computeAutoPrice, computeProcurementCeilingCents, stabilizePrice } from './phone-pricing';
+import {
+	computeAutoPrice,
+	computeProcurementCeilingCents,
+	getPhonePricingConfig,
+	NUMBERS_MIN_FULFILLMENT_PROFIT_NGN,
+	stabilizePrice
+} from './phone-pricing';
 
 const CFG = { usdNgnRate: 1500, marginPercent: 120, minProfitNgn: 1000, maxPriceMultiple: 2.5 };
+
+beforeEach(() => {
+	vi.clearAllMocks();
+	prismaMock.microcopy.findMany.mockResolvedValue([]);
+});
+
+it('uses the canonical hard fulfilment-profit floor when no owner override is saved', async () => {
+	expect((await getPhonePricingConfig()).minFulfillmentProfitNgn).toBe(
+		NUMBERS_MIN_FULFILLMENT_PROFIT_NGN
+	);
+});
 
 describe('computeAutoPrice — margin collar', () => {
 	it('cheap tier: the ₦1,000 profit floor wins (competitive baseline)', () => {

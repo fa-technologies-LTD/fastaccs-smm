@@ -20,7 +20,6 @@ const buildLiveCandidatePoolMock = vi.hoisted(() => vi.fn());
 const creditStoreCreditMock = vi.hoisted(() => vi.fn());
 const getPhoneTierConfigMock = vi.hoisted(() => vi.fn());
 const getPhonePricingConfigMock = vi.hoisted(() => vi.fn());
-const maxPriceMock = vi.hoisted(() => vi.fn(() => 100000));
 const maxRentMock = vi.hoisted(() => vi.fn(() => 100000)); // hard procurement ceiling (USD cents)
 const acquireRateTokenMock = vi.hoisted(() => vi.fn(() => Promise.resolve(true)));
 
@@ -76,7 +75,6 @@ vi.mock('./order-events', () => ({
 }));
 vi.mock('./phone-pricing', () => ({
 	getPhonePricingConfig: getPhonePricingConfigMock,
-	computeMaxPriceCentsForSale: maxPriceMock,
 	computeProcurementCeilingCents: maxRentMock
 }));
 vi.mock('./rate-limiter', () => ({
@@ -102,7 +100,6 @@ const candidate = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	maxPriceMock.mockReturnValue(100000);
 	maxRentMock.mockReturnValue(100000);
 	acquireRateTokenMock.mockResolvedValue(true);
 	prismaMock.phoneRental.upsert.mockResolvedValue({});
@@ -174,6 +171,46 @@ beforeEach(() => {
 });
 
 describe('fulfillPhoneOrder — candidate rent + failover', () => {
+	it('does not let a lower tier override weaken the global fulfilment-profit floor', async () => {
+		getPhoneTierConfigMock.mockReturnValue({
+			serviceId: 1,
+			countryId: 58,
+			serviceName: 'WhatsApp',
+			countryName: 'USA',
+			countryCode: 'US',
+			expectedCostCents: 66,
+			availableCount: 5,
+			autoHidden: false,
+			hideReason: null,
+			minFulfillmentProfitNgn: 100
+		});
+		buildLiveCandidatePoolMock.mockResolvedValue([]);
+
+		await fulfillPhoneOrder('order-1', 'test');
+
+		expect(maxRentMock).toHaveBeenCalledWith(4800, 500, 1500);
+	});
+
+	it('honours a stricter per-tier fulfilment-profit floor', async () => {
+		getPhoneTierConfigMock.mockReturnValue({
+			serviceId: 1,
+			countryId: 58,
+			serviceName: 'WhatsApp',
+			countryName: 'USA',
+			countryCode: 'US',
+			expectedCostCents: 66,
+			availableCount: 5,
+			autoHidden: false,
+			hideReason: null,
+			minFulfillmentProfitNgn: 900
+		});
+		buildLiveCandidatePoolMock.mockResolvedValue([]);
+
+		await fulfillPhoneOrder('order-1', 'test');
+
+		expect(maxRentMock).toHaveBeenCalledWith(4800, 900, 1500);
+	});
+
 	it('rents the top candidate and records the provider (hub-man)', async () => {
 		buildLiveCandidatePoolMock.mockResolvedValue([candidate()]);
 		rentMock.mockResolvedValue({
