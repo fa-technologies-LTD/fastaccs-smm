@@ -138,6 +138,22 @@ export const POST: RequestHandler = async ({ locals, params, request }) => {
 				},
 				select: { id: true, status: true, amount: true, updatedAt: true }
 			});
+			if (nextStatus === 'paid') {
+				// Money sent to the bank leaves the wallet, so the cached balance follows the ledger.
+				// Requests and reversals never changed it, and paid is final. The wallet lock is held above.
+				const wallet = await tx.wallet.findUnique({
+					where: { userId: id },
+					select: { id: true, balance: true }
+				});
+				if (wallet) {
+					await tx.wallet.update({
+						where: { id: wallet.id },
+						data: {
+							balance: Math.max(0, Number(wallet.balance || 0) - Number(target.amount || 0))
+						}
+					});
+				}
+			}
 			await recordAffiliateEvent(
 				{
 					type: `payout_${nextStatus}`,

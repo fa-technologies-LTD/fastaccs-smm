@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 const tx = vi.hoisted(() => ({
 	$queryRaw: vi.fn(),
 	walletTransaction: { findFirst: vi.fn(), update: vi.fn() },
+	wallet: { findUnique: vi.fn(), update: vi.fn() },
 	affiliatePayoutDetails: { findFirst: vi.fn() }
 }));
 
@@ -65,6 +66,7 @@ beforeEach(() => {
 		metadata: {},
 		updatedAt: new Date('2026-08-25T00:00:00.000Z')
 	});
+	tx.wallet.findUnique.mockResolvedValue({ id: 'wallet-1', balance: 7_250 });
 	tx.affiliatePayoutDetails.findFirst.mockResolvedValue({
 		id: 'bank-1',
 		accountNumberLast4: '6789'
@@ -146,5 +148,22 @@ describe('affiliate payout finalisation safeguards', () => {
 			expect.objectContaining({ action: 'affiliate_payout_status_changed', required: true }),
 			tx
 		);
+		// The paid amount leaves the cached wallet balance too, so it stays in step with the ledger.
+		expect(tx.wallet.update).toHaveBeenCalledWith({
+			where: { id: 'wallet-1' },
+			data: { balance: 1_250 }
+		});
+	});
+
+	it('leaves the wallet balance alone for review and reversal steps', async () => {
+		tx.walletTransaction.update.mockResolvedValue({
+			id: TRANSACTION_ID,
+			status: 'under_review',
+			amount: 6_000,
+			updatedAt: new Date('2026-08-25T01:00:00.000Z')
+		});
+		const response = await callPayout('mark_under_review');
+		expect(response.status).toBe(200);
+		expect(tx.wallet.update).not.toHaveBeenCalled();
 	});
 });
