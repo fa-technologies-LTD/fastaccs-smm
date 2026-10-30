@@ -170,7 +170,7 @@ async function getCatalogUpdatesPopup(since: Date): Promise<PendingSitePopup | n
 
 	return {
 		type: 'catalog_updates',
-		icon: '🆕',
+		icon: '✨',
 		title: "Here's what's new since your last visit",
 		body,
 		bodyItems,
