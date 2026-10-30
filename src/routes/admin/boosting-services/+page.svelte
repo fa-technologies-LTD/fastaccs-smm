@@ -73,7 +73,8 @@
 	}
 
 	let { data }: Props = $props();
-	let services = $state<CategoryMetadata[]>(data.services);
+	// Server copy; actions replace it, fresh page data resets it.
+	let services = $derived<CategoryMetadata[]>(data.services);
 	let loading = $state(false);
 	let showCreateModal = $state(false);
 	let showEditModal = $state(false);
@@ -113,9 +114,10 @@
 		'watch_time'
 	];
 
-	if (data.error) {
-		showError('Failed to load boosting services', data.error);
-	}
+	// Toasts belong to the browser; this also reports again after navigating to a page that failed.
+	$effect(() => {
+		if (data.error) showError('Failed to load boosting services', data.error);
+	});
 
 	function isServiceActive(service: CategoryMetadata): boolean {
 		return service.isActive !== false;

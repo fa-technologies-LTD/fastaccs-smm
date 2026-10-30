@@ -17,13 +17,14 @@
 	let { data }: { data: PageData } = $props();
 
 	let copySuccess = $state('');
-	let payoutRows = $state<any[]>([...(data.payouts || [])]);
+	// Server lists; actions replace them, fresh page data resets them.
+	let payoutRows = $derived<any[]>(data.payouts || []);
 	let payoutActionById = $state<Record<string, boolean>>({});
-	let bankDetails = $state<any>(data.bankDetails || null);
+	let bankDetails = $derived<any>(data.bankDetails || null);
 	let bankDetailsActionLoading = $state(false);
 	let bankDetailsRevealLoading = $state(false);
-	let flaggedRewards = $state<any[]>([...(data.flaggedRewards || [])]);
-	let costHeldCommissions = $state<any[]>([...(data.costHeldCommissions || [])]);
+	let flaggedRewards = $derived<any[]>(data.flaggedRewards || []);
+	let costHeldCommissions = $derived<any[]>(data.costHeldCommissions || []);
 	let costInputs = $state<Record<string, string>>({});
 	let costSaving = $state<Record<string, boolean>>({});
 
@@ -68,13 +69,13 @@
 
 	const referralBaseUrl = 'https://smm.fastaccs.com';
 
-	const popupEngagement = [
+	const popupEngagement = $derived([
 		{ label: 'Access intro', seenAt: data.affiliate.popupsSeen.welcome },
 		{ label: 'Share prompt', seenAt: data.affiliate.popupsSeen.shareCode },
 		{ label: 'Bank prompt', seenAt: data.affiliate.popupsSeen.unlocked },
 		{ label: 'Payout 30%', seenAt: data.affiliate.popupsSeen.progress50 },
 		{ label: 'Payout 80%', seenAt: data.affiliate.popupsSeen.progress80 }
-	];
+	]);
 
 	const payoutRequests = $derived(
 		payoutRows.filter((row) => ['requested', 'under_review'].includes(String(row.status || '')))

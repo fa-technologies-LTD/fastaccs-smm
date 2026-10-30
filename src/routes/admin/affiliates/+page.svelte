@@ -7,7 +7,8 @@
 	let { data }: { data: PageData } = $props();
 
 	let searchQuery = $state('');
-	let allAffiliates = $state<any[]>([...(data.affiliates || [])]);
+	// Server list; optimistic edits replace it, fresh page data resets it.
+	let allAffiliates = $derived<any[]>(data.affiliates || []);
 	let busyAffiliateIds = $state<string[]>([]);
 
 	let stats = $derived.by(() => {

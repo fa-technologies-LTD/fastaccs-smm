@@ -17,18 +17,19 @@
 		)
 	);
 
-	let user = $state(data.user);
+	// Server copy; actions replace it, fresh page data resets it.
+	let user = $derived(data.user);
 	const stats = $derived(data.stats);
 	const orders = $derived(data.orders || []);
 	const timeline = $derived(data.timeline || []);
 	const recentSessions = $derived(data.recentSessions || []);
-	const canViewRevenue = Boolean(data.canViewRevenue);
-	const canViewOrderAmounts = Boolean(data.canViewOrderAmounts);
+	const canViewRevenue = $derived(Boolean(data.canViewRevenue));
+	const canViewOrderAmounts = $derived(Boolean(data.canViewOrderAmounts));
 	// Owner-only actions: suspending users and overriding affiliate access. The
 	// assistant lacks these perms (and the API blocks her too) — hide the buttons.
-	const adminPermissions = (data as { adminPermissions?: string[] }).adminPermissions ?? [];
-	const canManageUsers = adminPermissions.includes('admin:users:manage');
-	const canManageAffiliates = adminPermissions.includes('admin:affiliates:manage');
+	const adminPermissions = $derived((data as { adminPermissions?: string[] }).adminPermissions ?? []);
+	const canManageUsers = $derived(adminPermissions.includes('admin:users:manage'));
+	const canManageAffiliates = $derived(adminPermissions.includes('admin:affiliates:manage'));
 	let hideMonetaryAmounts = $state(false);
 	let orderSearchQuery = $state('');
 	let orderStatusFilter = $state<'all' | 'paid' | 'failed' | 'pending' | 'processing'>('all');

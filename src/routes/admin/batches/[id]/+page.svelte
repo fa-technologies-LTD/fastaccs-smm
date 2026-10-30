@@ -54,8 +54,8 @@
 
 	let { data }: Props = $props();
 
-	let batch = $state(data.batch);
-	let accounts = $state(data.accounts);
+	const batch = $derived(data.batch);
+	const accounts = $derived(data.accounts);
 	let filterStatus = $state('all');
 	let searchTerm = $state('');
 

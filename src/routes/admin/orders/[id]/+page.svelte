@@ -59,11 +59,12 @@
 	let { data }: Props = $props();
 	// Order detail shows per-order amounts (what the buyer paid) — visible to the
 	// assistant so she can process refunds. Not gated on canViewRevenue.
-	const canViewOrderAmounts = Boolean(data.canViewOrderAmounts);
+	const canViewOrderAmounts = $derived(Boolean(data.canViewOrderAmounts));
 	const canManageOrders = $derived(Boolean(data.adminPermissions?.includes('admin:orders:manage')));
 	let hideMonetaryAmounts = $state(false);
 
-	let order = $state(data.order);
+	// Server copy; actions replace it, fresh page data resets it.
+	let order = $derived(data.order);
 	// Same stage rules the buyer sees. A fully refunded order, or one that ended without payment,
 	// is closed: history and notes only, no delivery, cancel or refund actions left.
 	const stage = $derived(getOrderStage(order));
@@ -75,7 +76,7 @@
 					String(order.status || '').toLowerCase()
 				))
 	);
-	let items = $state<OrderItemWithDetails[]>(data.items);
+	let items = $derived<OrderItemWithDetails[]>(data.items);
 	const orderedItems = $derived(data.orderedItems || []);
 	const isBoostingOrder = $derived(
 		Array.isArray(
@@ -396,7 +397,6 @@
 				duration: 4000
 			});
 			await invalidateAll();
-			items = data.items;
 		} catch (error) {
 			addToast({
 				type: 'error',
@@ -500,16 +500,19 @@
 			} else {
 				// Update order metadata with new note
 				const currentNotes = order.metadata?.notes || [];
-				order.metadata = {
-					...order.metadata,
-					notes: [
-						...currentNotes,
-						{
-							note: newNote.trim(),
-							created_at: new Date().toISOString(),
-							author: 'Admin'
-						}
-					]
+				order = {
+					...order,
+					metadata: {
+						...order.metadata,
+						notes: [
+							...currentNotes,
+							{
+								note: newNote.trim(),
+								created_at: new Date().toISOString(),
+								author: 'Admin'
+							}
+						]
+					}
 				};
 				newNote = '';
 				addToast({

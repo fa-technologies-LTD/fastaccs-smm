@@ -13,7 +13,9 @@
 
 	let { data }: Props = $props();
 
-	const redirectTo = data.returnUrl || page.url.searchParams.get('returnUrl') || '/dashboard';
+	const redirectTo = $derived(
+		data.returnUrl || page.url.searchParams.get('returnUrl') || '/dashboard'
+	);
 	let fullName = $state('');
 	let phone = $state('');
 	let email = $state('');

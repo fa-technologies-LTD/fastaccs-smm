@@ -16,7 +16,7 @@
 	let status = $state(data.submission?.status || null);
 	let rejectionReason = $state(data.submission?.rejectionReason || null);
 	let submitting = $state(false);
-	const submissionUnavailable = Boolean(data.submissionError);
+	const submissionUnavailable = $derived(Boolean(data.submissionError));
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();

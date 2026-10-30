@@ -13,7 +13,7 @@
 
 	let { data }: { data: PageData } = $props();
 
-	const canViewRevenue = Boolean(data.canViewRevenue);
+	const canViewRevenue = $derived(Boolean(data.canViewRevenue));
 	let hideMonetaryAmounts = $state(false);
 	const stats = $derived((data.stats || {}) as Record<string, any>);
 	const postPurchaseUpsell = $derived(stats.trafficFunnel?.postPurchaseUpsell);

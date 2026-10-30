@@ -7,9 +7,10 @@
 	type PromotionRow = (typeof data.promotions)[number];
 	type PlatformRow = (typeof data.platforms)[number];
 
-	let promotions = $state<PromotionRow[]>(data.promotions || []);
-	const platforms: PlatformRow[] = data.platforms || [];
-	const canManagePromotions = data.canManagePromotions;
+	// Server copy; actions replace it, fresh page data resets it.
+	let promotions = $derived<PromotionRow[]>(data.promotions || []);
+	const platforms: PlatformRow[] = $derived(data.platforms || []);
+	const canManagePromotions = $derived(data.canManagePromotions);
 	let loading = $state(false);
 	let selectedPlatformIds = $state<string[]>([]);
 

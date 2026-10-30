@@ -53,8 +53,9 @@
 	}
 
 	let { data }: Props = $props();
-	let tiers = $state<CategoryMetadata[]>(data.tiers);
-	let platforms = $state<CategoryMetadata[]>(data.platforms);
+	// Server copy; actions replace it, fresh page data resets it.
+	let tiers = $derived<CategoryMetadata[]>(data.tiers);
+	const platforms = $derived<CategoryMetadata[]>(data.platforms);
 	// Opens straight away when you arrive from an old Platforms link (#platforms).
 	let platformsOpen = $state(false);
 	onMount(() => {
@@ -159,10 +160,10 @@
 		}
 	});
 
-	// Show error if data loading failed
-	if (data.error) {
-		showError('Failed to load account types', data.error);
-	}
+	// Show error if data loading failed (in the browser, and again after navigating to a failed load)
+	$effect(() => {
+		if (data.error) showError('Failed to load account types', data.error);
+	});
 
 	// Auto-generate slug from name (no platform prefix for  tiers)
 	const generateSlug = (name: string) => {

@@ -19,7 +19,9 @@
 	let submitting = $state(false);
 
 	// Get redirect URL from server data or query params
-	const redirectTo = data.returnUrl || page.url.searchParams.get('returnUrl') || '/dashboard';
+	const redirectTo = $derived(
+		data.returnUrl || page.url.searchParams.get('returnUrl') || '/dashboard'
+	);
 	const errorParam = page.url.searchParams.get('error');
 	const passwordWasReset = page.url.searchParams.get('reset') === '1';
 

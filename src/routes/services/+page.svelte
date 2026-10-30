@@ -13,9 +13,10 @@
 		data.managedRolloutActive && data.managedGroups.length === 0
 	);
 
-	if (data.error) {
-		showError('Failed to load boosting services', data.error);
-	}
+	// Toasts belong to the browser; this also reports again after navigating to a page that failed.
+	$effect(() => {
+		if (data.error) showError('Failed to load boosting services', data.error);
+	});
 
 	const platformGradients: Record<string, string> = {
 		instagram: 'var(--gradient-instagram)',

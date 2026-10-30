@@ -20,11 +20,11 @@
 	import { ADMIN_MONEY_VISIBILITY_KEY, formatAdminMoney } from '$lib/helpers/admin-money';
 
 	let { data }: { data: PageData } = $props();
-	const canViewRevenue = Boolean(data.canViewRevenue);
+	const canViewRevenue = $derived(Boolean(data.canViewRevenue));
 	// Suspending users is owner-only; the assistant lacks users:manage.
-	const canManageUsers = (
-		(data as { adminPermissions?: string[] }).adminPermissions ?? []
-	).includes('admin:users:manage');
+	const canManageUsers = $derived(
+		((data as { adminPermissions?: string[] }).adminPermissions ?? []).includes('admin:users:manage')
+	);
 	let hideMonetaryAmounts = $state(false);
 
 	let searchQuery = $state('');
@@ -45,7 +45,8 @@
 		totalRevenue: data.stats?.totalRevenue || 0
 	});
 
-	let users = $state(data.users || []);
+	// Server copy; actions replace it, fresh page data resets it.
+	let users = $derived(data.users || []);
 
 	let filteredUsers = $derived.by(() => {
 		let filtered = users;

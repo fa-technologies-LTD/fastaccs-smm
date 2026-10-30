@@ -18,7 +18,8 @@
 
 	let { data }: Props = $props();
 
-	let batches = $state(data.batches);
+	// Server list; a finished upload is added in place, fresh page data resets it.
+	let batches = $derived(data.batches);
 	// Upload history: newest first, 20 at a time, searchable by upload or account type name.
 	const PAGE = 20;
 	let batchSearch = $state('');
@@ -41,8 +42,8 @@
 				.includes(term)
 		);
 	});
-	let platforms = $state(data.platforms);
-	let allTiers = $state(data.tiers);
+	const platforms = $derived(data.platforms);
+	const allTiers = $derived(data.tiers);
 	let showUploadModal = $state(false);
 	let isUploading = $state(false);
 	let uploadError = $state('');

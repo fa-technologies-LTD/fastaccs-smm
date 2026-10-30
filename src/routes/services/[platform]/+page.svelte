@@ -55,9 +55,10 @@
 
 	let { data }: { data: PageData } = $props();
 
-	if (data.error) {
-		showError('Failed to load boosting services', data.error);
-	}
+	// Toasts belong to the browser; this also reports again after navigating to a page that failed.
+	$effect(() => {
+		if (data.error) showError('Failed to load boosting services', data.error);
+	});
 
 	const services = $derived<BoostingServiceDisplay[]>(
 		data.services.map((service) => ({

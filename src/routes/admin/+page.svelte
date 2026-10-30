@@ -82,15 +82,16 @@
 
 	let { data }: Props = $props();
 
-	let orderStats = $state(data.orderStats);
-	let inventoryStats = $state(data.inventoryStats);
-	let boostingStats = $state(data.boostingStats);
+	// Server values, replaced by the in-page refresh and reset when fresh page data arrives.
+	let orderStats = $derived(data.orderStats);
+	let inventoryStats = $derived(data.inventoryStats);
+	let boostingStats = $derived(data.boostingStats);
 	let loading = $state(false);
-	let error = $state(data.error);
+	let error = $derived(data.error);
 	let autoRefresh = $state(false);
 	let refreshInterval: NodeJS.Timeout | null = null;
 	let lastUpdated = $state<Date>(new Date());
-	const canViewRevenue = Boolean(data.canViewRevenue);
+	const canViewRevenue = $derived(Boolean(data.canViewRevenue));
 	let hideMonetaryAmounts = $state(false);
 
 	const recentActivity = $derived(data.recentActivity ?? []);

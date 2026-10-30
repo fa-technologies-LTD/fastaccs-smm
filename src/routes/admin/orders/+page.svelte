@@ -21,8 +21,8 @@
 	}>();
 
 	// State
-	const canViewRevenue = Boolean(data.canViewRevenue);
-	const canViewOrderAmounts = Boolean(data.canViewOrderAmounts);
+	const canViewRevenue = $derived(Boolean(data.canViewRevenue));
+	const canViewOrderAmounts = $derived(Boolean(data.canViewOrderAmounts));
 	let hideMonetaryAmounts = $state(false);
 	let searchTerm = $state('');
 	// Filters follow the same order stages customers see. Cancelled and Payment failed keep the
@@ -50,7 +50,8 @@
 	let currentPage = $state(1);
 	const itemsPerPage = 20;
 	let loading = $state(false);
-	let orders = $state(data.orders || []);
+	// Server copy; actions replace it, fresh page data resets it.
+	let orders = $derived(data.orders || []);
 
 	// Filter orders based on search
 	const searchFilteredOrders = $derived.by(() => {

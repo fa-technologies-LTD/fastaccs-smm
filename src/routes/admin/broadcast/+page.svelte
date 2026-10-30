@@ -171,7 +171,8 @@
 	let audience = $state<AudienceOption['value']>('all_verified');
 	let selectedPlatformIds = $state<string[]>([]);
 	let selectedTierIds = $state<string[]>([]);
-	let recipientCount = $state<number>(data.initialAudienceCount || 0);
+	// Starts from the server count; recalculated as filters change, reset by fresh page data.
+	let recipientCount = $derived<number>(data.initialAudienceCount || 0);
 	let countLoading = $state(false);
 	let audienceCountSeq = 0;
 	let specificEmailsInput = $state('');
@@ -196,7 +197,8 @@
 	let sendProgress = $state({ total: 0, sent: 0, failed: 0, suppressed: 0, pending: 0 });
 
 	let historyLoading = $state(false);
-	let history = $state<BroadcastHistoryItem[]>(data.history || []);
+	// Server copy; actions replace it, fresh page data resets it.
+	let history = $derived<BroadcastHistoryItem[]>(data.history || []);
 
 	let detailsLoading = $state(false);
 	let selectedDetails = $state<BroadcastDetails | null>(null);
