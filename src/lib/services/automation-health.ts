@@ -5,6 +5,7 @@ import {
 	type AutomationJobName
 } from '$lib/server/automation-jobs';
 import { getManuallyRunnableAutomationJobs } from '$lib/server/automation-work';
+import { missedAutomationRun } from '$lib/server/automation-schedule-health';
 import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
 
 const FAILURE_ALERT_THRESHOLD = 2;
@@ -40,11 +41,6 @@ export interface AutomationDashboardJob {
 	manualRunAllowed: boolean;
 }
 
-function getOverdueThreshold(job: AutomationJobDefinition): Date {
-	const graceMinutes = Math.max(job.expectedIntervalMinutes * 2.5, 30);
-	return new Date(Date.now() - graceMinutes * 60 * 1000);
-}
-
 export async function evaluateAutomationHealth(): Promise<AutomationHealthSummary> {
 	const jobs = Object.values(AUTOMATION_JOBS).filter(
 		(job) => job.name !== 'automation-health' && !('enabled' in job && job.enabled === false)
@@ -57,6 +53,7 @@ export async function evaluateAutomationHealth(): Promise<AutomationHealthSummar
 		alertsSent: 0,
 		jobs: []
 	};
+	const checkedAt = new Date();
 
 	for (const job of jobs) {
 		const recentRuns = await prisma.automationJobRun.findMany({
@@ -89,12 +86,12 @@ export async function evaluateAutomationHealth(): Promise<AutomationHealthSummar
 		// Jobs with no expected interval (manual / one-time, e.g. a one-off announcement)
 		// are never "overdue" — they aren't meant to run again on a schedule. They can
 		// still be flagged for repeated failures below.
-		const overdue =
-			job.expectedIntervalMinutes > 0 && latestRun.startedAt < getOverdueThreshold(job);
+		const missedRun = missedAutomationRun(job, latestRun.startedAt, checkedAt);
+		const overdue = Boolean(missedRun);
 		const repeatedlyFailing = failureCount >= FAILURE_ALERT_THRESHOLD;
 		const unhealthy = overdue || repeatedlyFailing;
 		const reason = overdue
-			? `No run observed within the expected ${job.schedule} window.`
+			? `No run observed for the ${missedRun!.toISOString()} scheduled window (${job.schedule}).`
 			: repeatedlyFailing
 				? `${failureCount} consecutive failures.`
 				: undefined;
@@ -178,9 +175,7 @@ export async function getAutomationDashboardSnapshot(): Promise<AutomationDashbo
 		const latestSuccess = jobRuns.find((run) => run.status === 'succeeded') || null;
 		const lock = lockByJob.get(job.name) || null;
 		const activelyRunning = Boolean(lock && lock.expiresAt > now);
-		const overdue = Boolean(
-			job.expectedIntervalMinutes > 0 && latest && latest.startedAt < getOverdueThreshold(job)
-		);
+		const overdue = Boolean(latest && missedAutomationRun(job, latest.startedAt, now));
 		const latestFailures = jobRuns.findIndex((run) => run.status === 'succeeded');
 		const consecutiveFailures = latestFailures === -1 ? jobRuns.length : latestFailures;
 		const status: AutomationDashboardJob['status'] =

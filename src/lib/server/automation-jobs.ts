@@ -7,6 +7,8 @@ export interface AutomationJobDefinition {
 	risk: AutomationJobRisk;
 	lockTimeoutMinutes: number;
 	expectedIntervalMinutes: number;
+	cronSchedule?: string;
+	healthGraceMinutes?: number;
 	enabled?: boolean;
 }
 
@@ -17,7 +19,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'every 10 minutes',
 		risk: 'financial',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 10
+		expectedIntervalMinutes: 10,
+		cronSchedule: '1,11,21,31,41,51 * * * *'
 	},
 	'abandoned-orders': {
 		name: 'abandoned-orders',
@@ -25,7 +28,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'every 20 minutes',
 		risk: 'operational',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 20
+		expectedIntervalMinutes: 20,
+		cronSchedule: '3,23,43 * * * *'
 	},
 	'exact-preview-thumbnails': {
 		name: 'exact-preview-thumbnails',
@@ -33,7 +37,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'hourly',
 		risk: 'operational',
 		lockTimeoutMinutes: 50,
-		expectedIntervalMinutes: 60
+		expectedIntervalMinutes: 60,
+		cronSchedule: '0 * * * *'
 	},
 	'low-stock-alerts': {
 		name: 'low-stock-alerts',
@@ -41,15 +46,18 @@ export const AUTOMATION_JOBS = {
 		schedule: 'hourly',
 		risk: 'operational',
 		lockTimeoutMinutes: 20,
-		expectedIntervalMinutes: 60
+		expectedIntervalMinutes: 60,
+		cronSchedule: '1 * * * *'
 	},
 	onboarding: {
 		name: 'onboarding',
 		path: '/api/internal/cron/onboarding',
-		schedule: 'every 4 hours',
+		schedule: 'four times daily (08:30, 12:30, 16:30 and 20:30 UTC)',
 		risk: 'marketing',
 		lockTimeoutMinutes: 30,
-		expectedIntervalMinutes: 240
+		expectedIntervalMinutes: 240,
+		cronSchedule: '30 8,12,16,20 * * *',
+		healthGraceMinutes: 30
 	},
 	nurture: {
 		name: 'nurture',
@@ -57,7 +65,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'daily',
 		risk: 'marketing',
 		lockTimeoutMinutes: 30,
-		expectedIntervalMinutes: 1440
+		expectedIntervalMinutes: 1440,
+		cronSchedule: '0 16 * * *'
 	},
 	'affiliate-lifecycle': {
 		name: 'affiliate-lifecycle',
@@ -65,7 +74,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'every 4 hours',
 		risk: 'marketing',
 		lockTimeoutMinutes: 45,
-		expectedIntervalMinutes: 240
+		expectedIntervalMinutes: 240,
+		cronSchedule: '3 */4 * * *'
 	},
 	winback: {
 		name: 'winback',
@@ -73,7 +83,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'daily',
 		risk: 'marketing',
 		lockTimeoutMinutes: 60,
-		expectedIntervalMinutes: 1440
+		expectedIntervalMinutes: 1440,
+		cronSchedule: '10 16 * * *'
 	},
 	'weekly-business-digest': {
 		name: 'weekly-business-digest',
@@ -81,7 +92,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'Sunday at 09:00 Africa/Lagos',
 		risk: 'operational',
 		lockTimeoutMinutes: 30,
-		expectedIntervalMinutes: 10080
+		expectedIntervalMinutes: 10080,
+		cronSchedule: '0 8 * * 0'
 	},
 	'automation-health': {
 		name: 'automation-health',
@@ -89,7 +101,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'hourly',
 		risk: 'operational',
 		lockTimeoutMinutes: 15,
-		expectedIntervalMinutes: 60
+		expectedIntervalMinutes: 60,
+		cronSchedule: '4 * * * *'
 	},
 	'boosting-support-review': {
 		name: 'boosting-support-review',
@@ -97,7 +110,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'hourly',
 		risk: 'operational',
 		lockTimeoutMinutes: 15,
-		expectedIntervalMinutes: 60
+		expectedIntervalMinutes: 60,
+		cronSchedule: '9 * * * *'
 	},
 	'affiliate-announcement': {
 		name: 'affiliate-announcement',
@@ -113,7 +127,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'every 3 hours',
 		risk: 'financial',
 		lockTimeoutMinutes: 15,
-		expectedIntervalMinutes: 180
+		expectedIntervalMinutes: 180,
+		cronSchedule: '4 */3 * * *'
 	},
 	'phone-rentals-sweep': {
 		name: 'phone-rentals-sweep',
@@ -121,7 +136,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'every 10 minutes',
 		risk: 'financial',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 10
+		expectedIntervalMinutes: 10,
+		cronSchedule: '0,10,20,30,40,50 * * * *'
 	},
 	'numbers-campaign': {
 		name: 'numbers-campaign',
@@ -129,7 +145,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'daily 16:20 UTC (17:20 WAT)',
 		risk: 'marketing',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 1440
+		expectedIntervalMinutes: 1440,
+		cronSchedule: '20 16 * * *'
 	},
 	'store-credit-reminders': {
 		name: 'store-credit-reminders',
@@ -137,7 +154,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'daily 16:15 UTC (17:15 WAT)',
 		risk: 'marketing',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 1440
+		expectedIntervalMinutes: 1440,
+		cronSchedule: '15 16 * * *'
 	},
 	'numbers-catalog-sync': {
 		name: 'numbers-catalog-sync',
@@ -145,7 +163,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'every 30 minutes',
 		risk: 'operational',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 30
+		expectedIntervalMinutes: 30,
+		cronSchedule: '2,32 * * * *'
 	},
 	'numbers-catalog-probe': {
 		name: 'numbers-catalog-probe',
@@ -153,7 +172,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'every 2 hours',
 		risk: 'financial',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 120
+		expectedIntervalMinutes: 120,
+		cronSchedule: '4 */2 * * *'
 	},
 	'boosting-catalog-sync': {
 		name: 'boosting-catalog-sync',
@@ -161,7 +181,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'every 6 hours',
 		risk: 'operational',
 		lockTimeoutMinutes: 20,
-		expectedIntervalMinutes: 360
+		expectedIntervalMinutes: 360,
+		cronSchedule: '17 */6 * * *'
 	},
 	'boosting-fulfillment': {
 		name: 'boosting-fulfillment',
@@ -169,7 +190,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'every 5 minutes',
 		risk: 'financial',
 		lockTimeoutMinutes: 4,
-		expectedIntervalMinutes: 5
+		expectedIntervalMinutes: 5,
+		cronSchedule: '6,11,16,21,26,31,36,41,46,51,56 * * * *'
 	},
 	'boosting-refills': {
 		name: 'boosting-refills',
@@ -177,7 +199,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'every 5 minutes',
 		risk: 'operational',
 		lockTimeoutMinutes: 4,
-		expectedIntervalMinutes: 5
+		expectedIntervalMinutes: 5,
+		cronSchedule: '3,8,13,18,23,28,33,38,43,48,53,58 * * * *'
 	},
 	'boosting-draft-suggestions': {
 		name: 'boosting-draft-suggestions',
@@ -201,7 +224,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'daily 16:05 UTC (17:05 WAT)',
 		risk: 'marketing',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 1440
+		expectedIntervalMinutes: 1440,
+		cronSchedule: '5 16 * * *'
 	},
 	'marketing-postbacks': {
 		name: 'marketing-postbacks',
@@ -209,7 +233,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'every 30 minutes (:05, :35)',
 		risk: 'marketing',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 30
+		expectedIntervalMinutes: 30,
+		cronSchedule: '5,35 * * * *'
 	},
 	'boosting-health-report': {
 		name: 'boosting-health-report',
@@ -217,7 +242,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'every 12 hours (08:01 and 20:01 WAT)',
 		risk: 'operational',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 720
+		expectedIntervalMinutes: 720,
+		cronSchedule: '1 7,19 * * *'
 	},
 	'telegram-autopilot': {
 		name: 'telegram-autopilot',
@@ -227,7 +253,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'full run every 15 minutes (:02, :17, :32, :47); replies checked every minute',
 		risk: 'marketing',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 15
+		expectedIntervalMinutes: 15,
+		cronSchedule: '* * * * *'
 	},
 	'marketing-spend-sync': {
 		name: 'marketing-spend-sync',
@@ -235,7 +262,8 @@ export const AUTOMATION_JOBS = {
 		schedule: 'hourly (:07)',
 		risk: 'marketing',
 		lockTimeoutMinutes: 10,
-		expectedIntervalMinutes: 60
+		expectedIntervalMinutes: 60,
+		cronSchedule: '7 * * * *'
 	}
 } as const satisfies Record<string, AutomationJobDefinition>;
 

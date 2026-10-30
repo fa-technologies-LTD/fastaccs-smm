@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const prismaMock = vi.hoisted(() => ({
 	automationJobRun: {
@@ -25,6 +25,10 @@ describe('automation health', () => {
 		vi.clearAllMocks();
 		sendCriticalAdminAlertMock.mockResolvedValue({ sent: true });
 		prismaMock.automationJobLock.findMany.mockResolvedValue([]);
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	it('treats jobs without history as unobserved without creating an alert storm', async () => {
@@ -66,6 +70,54 @@ describe('automation health', () => {
 		expect(sendCriticalAdminAlertMock).toHaveBeenCalledWith(
 			expect.objectContaining({
 				dedupeKey: 'automation-health:onboarding'
+			})
+		);
+	});
+
+	it('does not alert during the intentional overnight onboarding gap', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-10-30T07:04:23.000Z'));
+		const currentRun = new Date('2026-10-30T07:04:00.000Z');
+		prismaMock.automationJobRun.findMany.mockImplementation(
+			async ({ where }: { where: { jobName: string } }) => [
+				{
+					status: 'succeeded',
+					startedAt:
+						where.jobName === 'onboarding' ? new Date('2026-10-29T20:30:04.280Z') : currentRun,
+					finishedAt: currentRun
+				}
+			]
+		);
+
+		const summary = await evaluateAutomationHealth();
+
+		expect(summary.unhealthy).toBe(0);
+		expect(sendCriticalAdminAlertMock).not.toHaveBeenCalled();
+	});
+
+	it('alerts when the first daily onboarding run is actually missed', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-10-30T09:04:23.000Z'));
+		const currentRun = new Date('2026-10-30T09:04:00.000Z');
+		prismaMock.automationJobRun.findMany.mockImplementation(
+			async ({ where }: { where: { jobName: string } }) => [
+				{
+					status: 'succeeded',
+					startedAt:
+						where.jobName === 'onboarding' ? new Date('2026-10-29T20:30:04.280Z') : currentRun,
+					finishedAt: currentRun
+				}
+			]
+		);
+
+		const summary = await evaluateAutomationHealth();
+
+		expect(summary.unhealthy).toBe(1);
+		expect(summary.alertsSent).toBe(1);
+		expect(sendCriticalAdminAlertMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				dedupeKey: 'automation-health:onboarding',
+				message: expect.stringContaining('2026-10-30T08:30:00.000Z scheduled window')
 			})
 		);
 	});

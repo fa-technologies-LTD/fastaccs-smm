@@ -14,9 +14,21 @@ const schedules = new Map(vercel.crons.map((cron) => [cron.path, cron.schedule])
 describe('cost-aware production automation schedules', () => {
 	it('keeps every monitored automatic job represented in Vercel', () => {
 		for (const job of Object.values(AUTOMATION_JOBS)) {
-			if (job.expectedIntervalMinutes === 0) continue;
-			expect(schedules.has(job.path), `${job.name} is missing from vercel.json`).toBe(true);
+			if (job.expectedIntervalMinutes === 0) {
+				expect('cronSchedule' in job, `${job.name} is manual but has a cron schedule`).toBe(false);
+				continue;
+			}
+			expect(job.cronSchedule, `${job.name} has no health-check cron schedule`).toBe(
+				schedules.get(job.path)
+			);
 		}
+	});
+
+	it('describes onboarding as four daily runs rather than a continuous four-hour interval', () => {
+		expect(AUTOMATION_JOBS.onboarding.cronSchedule).toBe('30 8,12,16,20 * * *');
+		expect(AUTOMATION_JOBS.onboarding.schedule).toBe(
+			'four times daily (08:30, 12:30, 16:30 and 20:30 UTC)'
+		);
 	});
 
 	it('preserves fast live recovery while allowing Neon to become idle', () => {
