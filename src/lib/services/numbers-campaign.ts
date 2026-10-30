@@ -2,7 +2,6 @@ import { prisma } from '$lib/prisma';
 import { sendMarketingEmail } from '$lib/services/email';
 import { sendPushToUsers } from '$lib/services/push-notifications';
 import { saveAnnouncementBannerConfig } from '$lib/services/announcement-banner';
-import { getNumbersPlatformId } from '$lib/services/phone-catalog';
 import { getSiteBaseUrl } from '$lib/helpers/site-url';
 
 /**
@@ -48,15 +47,6 @@ type DeliveredOrderCandidate = Pick<RecoveryOrderCandidate, 'userId' | 'createdA
 
 export const NUMBERS_LAUNCH_BANNER_TEXT =
 	'Instant verification numbers for WhatsApp, Telegram, Google & more — get your one-time code in seconds.';
-
-export const NUMBERS_LAUNCH_POPUP = {
-	icon: '⚡',
-	title: 'Verification codes, in seconds',
-	body: 'New: instant phone numbers for WhatsApp, Telegram, Google & more. Buy a number, get your one-time code automatically. No code? Instant refund.',
-	ctaText: 'Maybe later',
-	secondaryHref: '/numbers',
-	secondaryText: 'Get a number →'
-};
 
 const PUSH_PAYLOAD = {
 	title: 'Instant verification numbers are here ⚡',
@@ -130,12 +120,6 @@ export async function setNumbersRecoveryCampaignEnabled(enabled: boolean): Promi
 	await setCampaignState({ ...state, recoveryEnabled: enabled });
 }
 
-/** Days elapsed since launch, retained for the short-lived launch popup only. */
-export function daysSinceLaunch(state: NumbersCampaignState, now = Date.now()): number | null {
-	if (!state.launchedAt) return null;
-	return Math.floor((now - new Date(state.launchedAt).getTime()) / 86_400_000);
-}
-
 // ---- Cutover (retire manual phone tiers) -----------------------------------
 
 async function setManualPhoneTiersActive(active: boolean): Promise<number> {
@@ -155,7 +139,6 @@ async function setManualPhoneTiersActive(active: boolean): Promise<number> {
 }
 
 export const retireManualPhoneTiers = () => setManualPhoneTiersActive(false);
-export const restoreManualPhoneTiers = () => setManualPhoneTiersActive(true);
 
 // ---- Suppression -----------------------------------------------------------
 
@@ -625,21 +608,4 @@ export async function stopNumbersCampaign(): Promise<void> {
 	const state = await getNumbersCampaignState();
 	await setCampaignState({ ...state, enabled: false, launchedAt: state.launchedAt });
 	await setAnnouncementBannerForNumbers(false).catch(() => {});
-}
-
-/** True while the launch popup should still surface (within the 10-day campaign window). */
-export async function isNumbersLaunchPopupWindowOpen(): Promise<boolean> {
-	const state = await getNumbersCampaignState();
-	const day = daysSinceLaunch(state);
-	return state.enabled && day !== null && day < 10;
-}
-
-/** Has this user bought a number? (popup suppression) */
-export async function userHasBoughtNumber(userId: string): Promise<boolean> {
-	const buyers = await numberBuyerIds([userId]);
-	return buyers.has(userId);
-}
-
-export async function getNumbersPlatformExists(): Promise<boolean> {
-	return (await getNumbersPlatformId()) !== null;
 }
