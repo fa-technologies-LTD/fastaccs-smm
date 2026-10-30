@@ -65,7 +65,3 @@ export function getPhoneTierConfig(metadata: unknown): PhoneTierConfig | null {
 		minFulfillmentProfitNgn
 	};
 }
-
-export function isPhoneTier(metadata: unknown): boolean {
-	return getPhoneTierConfig(metadata) !== null;
-}

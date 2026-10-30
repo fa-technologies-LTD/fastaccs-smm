@@ -62,8 +62,6 @@ const OPERATION_LEASE_MS = 2 * 60_000;
  * double-refunded. `orderItemId` is unique on PhoneRental (the idempotency key).
  */
 
-export const PHONE_ORDER_TYPE = 'phone';
-
 /** hub-man returns phone_number as a bare integer (e.g. 15625832620). Normalize to +E.164. */
 function formatPhoneNumber(raw: number | string): string {
 	const digits = String(raw).replace(/[^\d]/g, '');

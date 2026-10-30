@@ -152,14 +152,6 @@ export interface HubmanSms {
 	received_at: string;
 }
 
-export interface HubmanActiveRent {
-	uuid: string;
-	phone_number: number | string;
-	price_cents: number | string;
-	expires_at: string;
-	created_at: string;
-}
-
 // ---------------------------------------------------------------------------
 // Endpoints
 // ---------------------------------------------------------------------------
@@ -270,10 +262,4 @@ export async function cancelRent(uuid: string): Promise<boolean> {
 		`/api/rent/${encodeURIComponent(uuid)}/cancel`
 	);
 	return res.success === true;
-}
-
-/** All currently-active rents on our account (for admin live-ops). */
-export async function getActiveRents(): Promise<HubmanActiveRent[]> {
-	const res = await hubmanRequest<{ data: HubmanActiveRent[] }>('/api/rent/active');
-	return res.data;
 }

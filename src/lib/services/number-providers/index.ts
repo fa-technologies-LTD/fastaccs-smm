@@ -16,11 +16,6 @@ export function allProviders(): NumberProvider[] {
 	return Object.values(PROVIDERS);
 }
 
-/** Providers that have credentials in this environment — the candidates for source selection. */
-export function configuredProviders(): NumberProvider[] {
-	return allProviders().filter((p) => p.isConfigured());
-}
-
 /** A PhoneRental row's fields needed to route poll/cancel back to the right source. */
 export interface RentalRouting {
 	provider: string;
