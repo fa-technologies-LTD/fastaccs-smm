@@ -80,6 +80,11 @@
 	const payoutRequests = $derived(
 		payoutRows.filter((row) => ['requested', 'under_review'].includes(String(row.status || '')))
 	);
+	// Open requests first so the one to fulfil is never buried under payout history.
+	const payoutRowsOpenFirst = $derived([
+		...payoutRequests,
+		...payoutRows.filter((row) => !payoutRequests.includes(row))
+	]);
 
 	function isUpdatingPayout(id: string): boolean {
 		return Boolean(payoutActionById[id]);
@@ -358,6 +363,387 @@
 		</div>
 	</div>
 
+	<!-- Work waiting on an admin comes first; reference sections follow and the long ones are folded. -->
+	{#if payoutRequests.length > 0 || bankDetails?.status === 'pending' || flaggedRewards.length > 0 || costHeldCommissions.length > 0}
+		<div
+			class="mb-6 flex flex-wrap items-center gap-2 rounded-lg border p-4 text-sm"
+			style="border-color: var(--warning, #f59e0b); background: var(--bg-elev-1); color: var(--text);"
+		>
+			<span class="font-semibold">Needs your action:</span>
+			{#if payoutRequests.length > 0}
+				<a class="rounded-full px-3 py-1 font-semibold underline" href="#payout-requests"
+					>{payoutRequests.length} payout request{payoutRequests.length === 1 ? '' : 's'}</a
+				>
+			{/if}
+			{#if bankDetails?.status === 'pending'}
+				<a class="rounded-full px-3 py-1 font-semibold underline" href="#bank-details"
+					>Bank details to review</a
+				>
+			{/if}
+			{#if flaggedRewards.length > 0}
+				<a class="rounded-full px-3 py-1 font-semibold underline" href="#reward-reviews"
+					>{flaggedRewards.length} reward review{flaggedRewards.length === 1 ? '' : 's'}</a
+				>
+			{/if}
+			{#if costHeldCommissions.length > 0}
+				<a class="rounded-full px-3 py-1 font-semibold underline" href="#cost-held"
+					>{costHeldCommissions.length} commission{costHeldCommissions.length === 1 ? '' : 's'} waiting
+					for a cost</a
+				>
+			{/if}
+		</div>
+	{/if}
+
+	<div
+		id="payout-requests"
+		class="mb-6 rounded-lg border p-6"
+		style="border-color: var(--border); background: var(--bg-elev-1);"
+	>
+		<div class="mb-4 flex items-center justify-between">
+			<h2 class="text-lg font-semibold" style="color: var(--text); font-family: var(--font-head);">
+				Payout Requests
+			</h2>
+			<span class="text-sm" style="color: var(--text-dim);">Open: {payoutRequests.length}</span>
+		</div>
+
+		{#if payoutRows.length === 0}
+			<p class="text-sm" style="color: var(--text-dim);">No payout records yet.</p>
+		{:else}
+			<div class="overflow-x-auto">
+				<table class="w-full">
+					<thead style="background: var(--bg-elev-2);">
+						<tr>
+							<th
+								class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
+								style="color: var(--text-dim);">Date</th
+							>
+							<th
+								class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
+								style="color: var(--text-dim);">Amount</th
+							>
+							<th
+								class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
+								style="color: var(--text-dim);">Status</th
+							>
+							<th
+								class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
+								style="color: var(--text-dim);">Reference</th
+							>
+							<th
+								class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
+								style="color: var(--text-dim);">Actions</th
+							>
+						</tr>
+					</thead>
+					<tbody class="divide-y" style="--tw-divide-opacity: 1; border-color: var(--border);">
+						{#each payoutRowsOpenFirst as payout}
+							<tr style="border-color: var(--border);">
+								<td class="px-4 py-3 text-sm" style="color: var(--text);"
+									>{formatDate(payout.createdAt)}</td
+								>
+								<td class="px-4 py-3 text-sm font-semibold" style="color: var(--text);"
+									>{formatPrice(payout.amount)}</td
+								>
+								<td class="px-4 py-3">
+									<span
+										class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
+										style={statusBadgeStyle(payout.status)}
+									>
+										{payout.status}
+									</span>
+									{#if payoutAdminNote(payout)}
+										<p class="mt-1 max-w-[200px] text-[11px]" style="color: var(--text-dim);">
+											{payoutAdminNote(payout)}
+										</p>
+									{/if}
+								</td>
+								<td class="px-4 py-3 text-xs" style="color: var(--text-dim);"
+									>{payout.reference || '-'}</td
+								>
+								<td class="px-4 py-3 text-xs">
+									{#if ['requested', 'under_review'].includes(String(payout.status || '').toLowerCase())}
+										<div class="flex gap-2">
+											<button
+												onclick={() => {
+													const transferReference = window.prompt(
+														'Enter the completed bank transfer reference:'
+													);
+													if (!transferReference?.trim()) return;
+													updatePayoutStatus(
+														payout.id,
+														'mark_paid',
+														undefined,
+														transferReference.trim()
+													);
+												}}
+												disabled={isUpdatingPayout(payout.id)}
+												class="rounded px-2 py-1 disabled:opacity-60"
+												style="background: var(--status-success); color: var(--bg);"
+											>
+												Mark paid
+											</button>
+											<button
+												onclick={() => updatePayoutStatus(payout.id, 'mark_under_review')}
+												disabled={isUpdatingPayout(payout.id)}
+												class="rounded px-2 py-1 disabled:opacity-60"
+												style="background: var(--status-warning); color: var(--bg);"
+											>
+												Review
+											</button>
+											<button
+												onclick={() => {
+													const reason = window.prompt(
+														'Reason for rejecting this payout (sent to the user by email):'
+													);
+													if (reason === null) return;
+													if (!reason.trim()) return;
+													updatePayoutStatus(payout.id, 'mark_reversed', reason.trim());
+												}}
+												disabled={isUpdatingPayout(payout.id)}
+												class="rounded px-2 py-1 disabled:opacity-60"
+												style="background: var(--status-danger); color: var(--bg);"
+											>
+												Reverse
+											</button>
+										</div>
+									{:else}
+										-
+									{/if}
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+	</div>
+
+	<div
+		id="bank-details"
+		class="mb-6 scroll-mt-20 rounded-lg border p-6"
+		style="border-color: var(--border); background: var(--bg-elev-1);"
+	>
+		<div class="mb-4 flex items-center justify-between">
+			<h2 class="text-lg font-semibold" style="color: var(--text); font-family: var(--font-head);">
+				Bank Details Review
+			</h2>
+			{#if bankDetails}
+				<span
+					class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
+					style={statusBadgeStyle(bankDetails.status)}
+				>
+					{bankDetails.status}
+				</span>
+			{/if}
+		</div>
+
+		{#if !bankDetails}
+			<p class="text-sm" style="color: var(--text-dim);">No bank details submitted yet.</p>
+		{:else}
+			{#if !bankDetails.revealed}
+				<div
+					class="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
+					style="border-color: var(--border); background: var(--bg);"
+				>
+					<div>
+						<p class="text-sm font-medium" style="color: var(--text);">
+							Account ending {bankDetails.accountNumberLast4 || '—'}
+						</p>
+						<p class="mt-1 text-xs" style="color: var(--text-dim);">
+							Sensitive details are hidden until an authorised admin reveals them.
+						</p>
+					</div>
+					<button
+						type="button"
+						onclick={revealBankDetails}
+						disabled={bankDetailsRevealLoading}
+						class="rounded px-3 py-1.5 text-sm disabled:opacity-60"
+						style="border: 1px solid var(--border); color: var(--text);"
+					>
+						{bankDetailsRevealLoading ? 'Revealing…' : 'Reveal bank details'}
+					</button>
+				</div>
+			{:else}
+				<div class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+					<div>
+						<p style="color: var(--text-dim);">Bank name</p>
+						<p class="font-medium" style="color: var(--text);">{bankDetails.bankName}</p>
+					</div>
+					<div>
+						<p style="color: var(--text-dim);">Account number</p>
+						<p class="font-medium" style="color: var(--text);">{bankDetails.accountNumber}</p>
+					</div>
+					<div>
+						<p style="color: var(--text-dim);">Account name</p>
+						<p class="font-medium" style="color: var(--text);">{bankDetails.accountName}</p>
+					</div>
+					<div>
+						<p style="color: var(--text-dim);">Phone</p>
+						<p class="font-medium" style="color: var(--text);">{bankDetails.phone}</p>
+					</div>
+					{#if bankDetails.feedback}
+						<div class="sm:col-span-2">
+							<p style="color: var(--text-dim);">Customer feedback</p>
+							<p class="font-medium" style="color: var(--text);">{bankDetails.feedback}</p>
+						</div>
+					{/if}
+					{#if bankDetails.rejectionReason}
+						<div class="sm:col-span-2">
+							<p style="color: var(--text-dim);">Last rejection reason</p>
+							<p class="font-medium" style="color: var(--text);">{bankDetails.rejectionReason}</p>
+						</div>
+					{/if}
+				</div>
+			{/if}
+
+			{#if bankDetails.status === 'pending' && bankDetails.revealed}
+				<div class="mt-4 flex gap-2">
+					<button
+						onclick={() => updateBankDetailsStatus('approve')}
+						disabled={bankDetailsActionLoading}
+						class="rounded px-3 py-1.5 text-sm disabled:opacity-60"
+						style="background: var(--status-success); color: var(--bg);"
+					>
+						Approve
+					</button>
+					<button
+						onclick={() => {
+							const reason = window.prompt(
+								'Reason for rejecting these bank details (sent to the user):'
+							);
+							if (reason === null || !reason.trim()) return;
+							updateBankDetailsStatus('reject', reason.trim());
+						}}
+						disabled={bankDetailsActionLoading}
+						class="rounded px-3 py-1.5 text-sm disabled:opacity-60"
+						style="background: var(--status-danger); color: var(--bg);"
+					>
+						Reject
+					</button>
+				</div>
+			{/if}
+		{/if}
+	</div>
+
+	<div
+		id="reward-reviews"
+		class="mb-6 rounded-lg border p-6"
+		style="border-color: var(--border); background: var(--bg-elev-1);"
+	>
+		<div class="mb-4 flex items-center justify-between">
+			<h2 class="text-lg font-semibold" style="color: var(--text); font-family: var(--font-head);">
+				Reward Reviews
+			</h2>
+			<span class="text-sm" style="color: var(--text-dim);">Open: {flaggedRewards.length}</span>
+		</div>
+		{#if flaggedRewards.length === 0}
+			<p class="text-sm" style="color: var(--text-dim);">
+				No rewards are held for identity review.
+			</p>
+		{:else}
+			<div class="space-y-3">
+				{#each flaggedRewards as reward}
+					<div
+						class="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
+						style="border-color: var(--status-warning-border); background: var(--status-warning-bg);"
+					>
+						<div>
+							<p class="text-sm font-semibold" style="color: var(--text);">
+								{formatPrice(reward.amount)} pending review
+							</p>
+							<p class="mt-1 text-xs" style="color: var(--text-dim);">
+								Order {reward.orderId || 'unknown'} · {formatDate(reward.createdAt)}
+							</p>
+							{#if reward.riskSignals?.length}
+								<p class="mt-1 text-xs" style="color: var(--status-warning);">
+									Signals: {reward.riskSignals
+										.map((signal: string) => signal.replaceAll('_', ' '))
+										.join(', ')}
+								</p>
+							{/if}
+						</div>
+						<div class="flex gap-2">
+							<button
+								type="button"
+								disabled={rewardReviewLoading[reward.id]}
+								onclick={() => reviewFlaggedReward(reward.id, 'approve')}
+								class="rounded px-3 py-1.5 text-sm disabled:opacity-60"
+								style="background: var(--status-success); color: var(--bg);">Approve</button
+							>
+							<button
+								type="button"
+								disabled={rewardReviewLoading[reward.id]}
+								onclick={() => {
+									const reason = window.prompt('Reason for rejecting this pending reward:');
+									if (reason === null || !reason.trim()) return;
+									reviewFlaggedReward(reward.id, 'reject', reason.trim());
+								}}
+								class="rounded px-3 py-1.5 text-sm disabled:opacity-60"
+								style="background: var(--status-danger); color: var(--bg);">Reject</button
+							>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
+	</div>
+
+	{#if costHeldCommissions.length > 0}
+		<div
+			id="cost-held"
+			class="mb-6 rounded-lg border p-6"
+			style="border-color: var(--status-warning-border); background: var(--bg-elev-1);"
+		>
+			<h2 class="text-lg font-semibold" style="color: var(--text); font-family: var(--font-head);">
+				Super commissions waiting for a cost ({costHeldCommissions.length})
+			</h2>
+			<p class="mt-1 text-sm" style="color: var(--text-dim);">
+				These orders had no account type cost when they were paid. Enter the real goods cost for
+				each order to work out the 5% commission. It can clear once 24 hours have passed since
+				payment and the required checks are complete.
+			</p>
+			<div class="mt-4 space-y-3">
+				{#each costHeldCommissions as row (row.id)}
+					<div
+						class="flex flex-wrap items-end justify-between gap-3 rounded-lg border p-3"
+						style="border-color: var(--border); background: var(--bg-elev-2);"
+					>
+						<div class="text-sm">
+							<p class="font-semibold" style="color: var(--text);">{row.orderNumber}</p>
+							<p style="color: var(--text-dim);">
+								{row.paidAt ? formatDate(row.paidAt) : ''} · Order {formatPrice(row.orderTotal)} · Cash
+								paid {formatPrice(row.cashPaid)}{row.refunded > 0
+									? ` · Refunded ${formatPrice(row.refunded)}`
+									: ''}
+							</p>
+						</div>
+						<div class="flex items-end gap-2">
+							<label class="text-xs" style="color: var(--text-dim);">
+								Goods cost (₦)
+								<input
+									type="number"
+									min="0"
+									step="1"
+									bind:value={costInputs[row.id]}
+									class="mt-1 block w-32 rounded-lg px-2 py-1.5 text-sm"
+									style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
+								/>
+							</label>
+							<button
+								type="button"
+								disabled={costSaving[row.id]}
+								onclick={() => releaseWithCost(row.id)}
+								class="rounded-lg px-3 py-2 text-sm font-semibold"
+								style="background: var(--btn-primary-gradient); color: #04140C;"
+								>{costSaving[row.id] ? 'Saving…' : 'Calculate & release'}</button
+							>
+						</div>
+					</div>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
 	<div class="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
 		<div
 			class="rounded-lg border p-6"
@@ -592,382 +978,10 @@
 		</div>
 	{/if}
 
-	<div
-		class="mb-6 rounded-lg border p-6"
-		style="border-color: var(--border); background: var(--bg-elev-1);"
-	>
-		<h2
-			class="mb-4 text-lg font-semibold"
-			style="color: var(--text); font-family: var(--font-head);"
+	<details class="mb-6">
+		<summary class="cursor-pointer py-2 text-sm font-semibold" style="color: var(--text-muted);"
+			>Dashboard pop-ups seen</summary
 		>
-			Dashboard Pop-ups
-		</h2>
-		<div class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
-			{#each popupEngagement as item}
-				<div
-					class="rounded-lg border p-3"
-					style="border-color: var(--border); background: var(--bg-elev-2);"
-				>
-					<p style="color: var(--text-dim);">{item.label}</p>
-					<p
-						class="font-semibold"
-						style={item.seenAt ? 'color: var(--status-success);' : 'color: var(--text-dim);'}
-					>
-						{item.seenAt ? `Seen ${formatDate(item.seenAt)}` : 'Not yet seen'}
-					</p>
-				</div>
-			{/each}
-		</div>
-	</div>
-
-	{#if costHeldCommissions.length > 0}
-		<div
-			class="mb-6 rounded-lg border p-6"
-			style="border-color: var(--status-warning-border); background: var(--bg-elev-1);"
-		>
-			<h2 class="text-lg font-semibold" style="color: var(--text); font-family: var(--font-head);">
-				Super commissions waiting for a cost ({costHeldCommissions.length})
-			</h2>
-			<p class="mt-1 text-sm" style="color: var(--text-dim);">
-				These orders had no account type cost when they were paid. Enter the real goods cost for
-				each order to work out the 5% commission. It can clear once 24 hours have passed since
-				payment and the required checks are complete.
-			</p>
-			<div class="mt-4 space-y-3">
-				{#each costHeldCommissions as row (row.id)}
-					<div
-						class="flex flex-wrap items-end justify-between gap-3 rounded-lg border p-3"
-						style="border-color: var(--border); background: var(--bg-elev-2);"
-					>
-						<div class="text-sm">
-							<p class="font-semibold" style="color: var(--text);">{row.orderNumber}</p>
-							<p style="color: var(--text-dim);">
-								{row.paidAt ? formatDate(row.paidAt) : ''} · Order {formatPrice(row.orderTotal)} · Cash
-								paid {formatPrice(row.cashPaid)}{row.refunded > 0
-									? ` · Refunded ${formatPrice(row.refunded)}`
-									: ''}
-							</p>
-						</div>
-						<div class="flex items-end gap-2">
-							<label class="text-xs" style="color: var(--text-dim);">
-								Goods cost (₦)
-								<input
-									type="number"
-									min="0"
-									step="1"
-									bind:value={costInputs[row.id]}
-									class="mt-1 block w-32 rounded-lg px-2 py-1.5 text-sm"
-									style="background: var(--bg); border: 1px solid var(--border); color: var(--text);"
-								/>
-							</label>
-							<button
-								type="button"
-								disabled={costSaving[row.id]}
-								onclick={() => releaseWithCost(row.id)}
-								class="rounded-lg px-3 py-2 text-sm font-semibold"
-								style="background: var(--btn-primary-gradient); color: #04140C;"
-								>{costSaving[row.id] ? 'Saving…' : 'Calculate & release'}</button
-							>
-						</div>
-					</div>
-				{/each}
-			</div>
-		</div>
-	{/if}
-
-	<div
-		class="mb-6 rounded-lg border p-6"
-		style="border-color: var(--border); background: var(--bg-elev-1);"
-	>
-		<div class="mb-4 flex items-center justify-between">
-			<h2 class="text-lg font-semibold" style="color: var(--text); font-family: var(--font-head);">
-				Reward Reviews
-			</h2>
-			<span class="text-sm" style="color: var(--text-dim);">Open: {flaggedRewards.length}</span>
-		</div>
-		{#if flaggedRewards.length === 0}
-			<p class="text-sm" style="color: var(--text-dim);">
-				No rewards are held for identity review.
-			</p>
-		{:else}
-			<div class="space-y-3">
-				{#each flaggedRewards as reward}
-					<div
-						class="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
-						style="border-color: var(--status-warning-border); background: var(--status-warning-bg);"
-					>
-						<div>
-							<p class="text-sm font-semibold" style="color: var(--text);">
-								{formatPrice(reward.amount)} pending review
-							</p>
-							<p class="mt-1 text-xs" style="color: var(--text-dim);">
-								Order {reward.orderId || 'unknown'} · {formatDate(reward.createdAt)}
-							</p>
-							{#if reward.riskSignals?.length}
-								<p class="mt-1 text-xs" style="color: var(--status-warning);">
-									Signals: {reward.riskSignals
-										.map((signal: string) => signal.replaceAll('_', ' '))
-										.join(', ')}
-								</p>
-							{/if}
-						</div>
-						<div class="flex gap-2">
-							<button
-								type="button"
-								disabled={rewardReviewLoading[reward.id]}
-								onclick={() => reviewFlaggedReward(reward.id, 'approve')}
-								class="rounded px-3 py-1.5 text-sm disabled:opacity-60"
-								style="background: var(--status-success); color: var(--bg);">Approve</button
-							>
-							<button
-								type="button"
-								disabled={rewardReviewLoading[reward.id]}
-								onclick={() => {
-									const reason = window.prompt('Reason for rejecting this pending reward:');
-									if (reason === null || !reason.trim()) return;
-									reviewFlaggedReward(reward.id, 'reject', reason.trim());
-								}}
-								class="rounded px-3 py-1.5 text-sm disabled:opacity-60"
-								style="background: var(--status-danger); color: var(--bg);">Reject</button
-							>
-						</div>
-					</div>
-				{/each}
-			</div>
-		{/if}
-	</div>
-
-	<div
-		class="mb-6 rounded-lg border p-6"
-		style="border-color: var(--border); background: var(--bg-elev-1);"
-	>
-		<div class="mb-4 flex items-center justify-between">
-			<h2 class="text-lg font-semibold" style="color: var(--text); font-family: var(--font-head);">
-				Payout Requests
-			</h2>
-			<span class="text-sm" style="color: var(--text-dim);">Open: {payoutRequests.length}</span>
-		</div>
-
-		{#if payoutRows.length === 0}
-			<p class="text-sm" style="color: var(--text-dim);">No payout records yet.</p>
-		{:else}
-			<div class="overflow-x-auto">
-				<table class="w-full">
-					<thead style="background: var(--bg-elev-2);">
-						<tr>
-							<th
-								class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
-								style="color: var(--text-dim);">Date</th
-							>
-							<th
-								class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
-								style="color: var(--text-dim);">Amount</th
-							>
-							<th
-								class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
-								style="color: var(--text-dim);">Status</th
-							>
-							<th
-								class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
-								style="color: var(--text-dim);">Reference</th
-							>
-							<th
-								class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
-								style="color: var(--text-dim);">Actions</th
-							>
-						</tr>
-					</thead>
-					<tbody class="divide-y" style="--tw-divide-opacity: 1; border-color: var(--border);">
-						{#each payoutRows as payout}
-							<tr style="border-color: var(--border);">
-								<td class="px-4 py-3 text-sm" style="color: var(--text);"
-									>{formatDate(payout.createdAt)}</td
-								>
-								<td class="px-4 py-3 text-sm font-semibold" style="color: var(--text);"
-									>{formatPrice(payout.amount)}</td
-								>
-								<td class="px-4 py-3">
-									<span
-										class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
-										style={statusBadgeStyle(payout.status)}
-									>
-										{payout.status}
-									</span>
-									{#if payoutAdminNote(payout)}
-										<p class="mt-1 max-w-[200px] text-[11px]" style="color: var(--text-dim);">
-											{payoutAdminNote(payout)}
-										</p>
-									{/if}
-								</td>
-								<td class="px-4 py-3 text-xs" style="color: var(--text-dim);"
-									>{payout.reference || '-'}</td
-								>
-								<td class="px-4 py-3 text-xs">
-									{#if ['requested', 'under_review'].includes(String(payout.status || '').toLowerCase())}
-										<div class="flex gap-2">
-											<button
-												onclick={() => {
-													const transferReference = window.prompt(
-														'Enter the completed bank transfer reference:'
-													);
-													if (!transferReference?.trim()) return;
-													updatePayoutStatus(
-														payout.id,
-														'mark_paid',
-														undefined,
-														transferReference.trim()
-													);
-												}}
-												disabled={isUpdatingPayout(payout.id)}
-												class="rounded px-2 py-1 disabled:opacity-60"
-												style="background: var(--status-success); color: var(--bg);"
-											>
-												Mark paid
-											</button>
-											<button
-												onclick={() => updatePayoutStatus(payout.id, 'mark_under_review')}
-												disabled={isUpdatingPayout(payout.id)}
-												class="rounded px-2 py-1 disabled:opacity-60"
-												style="background: var(--status-warning); color: var(--bg);"
-											>
-												Review
-											</button>
-											<button
-												onclick={() => {
-													const reason = window.prompt(
-														'Reason for rejecting this payout (sent to the user by email):'
-													);
-													if (reason === null) return;
-													if (!reason.trim()) return;
-													updatePayoutStatus(payout.id, 'mark_reversed', reason.trim());
-												}}
-												disabled={isUpdatingPayout(payout.id)}
-												class="rounded px-2 py-1 disabled:opacity-60"
-												style="background: var(--status-danger); color: var(--bg);"
-											>
-												Reverse
-											</button>
-										</div>
-									{:else}
-										-
-									{/if}
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{/if}
-	</div>
-
-	<div
-		id="bank-details"
-		class="mb-6 scroll-mt-20 rounded-lg border p-6"
-		style="border-color: var(--border); background: var(--bg-elev-1);"
-	>
-		<div class="mb-4 flex items-center justify-between">
-			<h2 class="text-lg font-semibold" style="color: var(--text); font-family: var(--font-head);">
-				Bank Details Review
-			</h2>
-			{#if bankDetails}
-				<span
-					class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
-					style={statusBadgeStyle(bankDetails.status)}
-				>
-					{bankDetails.status}
-				</span>
-			{/if}
-		</div>
-
-		{#if !bankDetails}
-			<p class="text-sm" style="color: var(--text-dim);">No bank details submitted yet.</p>
-		{:else}
-			{#if !bankDetails.revealed}
-				<div
-					class="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
-					style="border-color: var(--border); background: var(--bg);"
-				>
-					<div>
-						<p class="text-sm font-medium" style="color: var(--text);">
-							Account ending {bankDetails.accountNumberLast4 || '—'}
-						</p>
-						<p class="mt-1 text-xs" style="color: var(--text-dim);">
-							Sensitive details are hidden until an authorised admin reveals them.
-						</p>
-					</div>
-					<button
-						type="button"
-						onclick={revealBankDetails}
-						disabled={bankDetailsRevealLoading}
-						class="rounded px-3 py-1.5 text-sm disabled:opacity-60"
-						style="border: 1px solid var(--border); color: var(--text);"
-					>
-						{bankDetailsRevealLoading ? 'Revealing…' : 'Reveal bank details'}
-					</button>
-				</div>
-			{:else}
-				<div class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-					<div>
-						<p style="color: var(--text-dim);">Bank name</p>
-						<p class="font-medium" style="color: var(--text);">{bankDetails.bankName}</p>
-					</div>
-					<div>
-						<p style="color: var(--text-dim);">Account number</p>
-						<p class="font-medium" style="color: var(--text);">{bankDetails.accountNumber}</p>
-					</div>
-					<div>
-						<p style="color: var(--text-dim);">Account name</p>
-						<p class="font-medium" style="color: var(--text);">{bankDetails.accountName}</p>
-					</div>
-					<div>
-						<p style="color: var(--text-dim);">Phone</p>
-						<p class="font-medium" style="color: var(--text);">{bankDetails.phone}</p>
-					</div>
-					{#if bankDetails.feedback}
-						<div class="sm:col-span-2">
-							<p style="color: var(--text-dim);">Customer feedback</p>
-							<p class="font-medium" style="color: var(--text);">{bankDetails.feedback}</p>
-						</div>
-					{/if}
-					{#if bankDetails.rejectionReason}
-						<div class="sm:col-span-2">
-							<p style="color: var(--text-dim);">Last rejection reason</p>
-							<p class="font-medium" style="color: var(--text);">{bankDetails.rejectionReason}</p>
-						</div>
-					{/if}
-				</div>
-			{/if}
-
-			{#if bankDetails.status === 'pending' && bankDetails.revealed}
-				<div class="mt-4 flex gap-2">
-					<button
-						onclick={() => updateBankDetailsStatus('approve')}
-						disabled={bankDetailsActionLoading}
-						class="rounded px-3 py-1.5 text-sm disabled:opacity-60"
-						style="background: var(--status-success); color: var(--bg);"
-					>
-						Approve
-					</button>
-					<button
-						onclick={() => {
-							const reason = window.prompt(
-								'Reason for rejecting these bank details (sent to the user):'
-							);
-							if (reason === null || !reason.trim()) return;
-							updateBankDetailsStatus('reject', reason.trim());
-						}}
-						disabled={bankDetailsActionLoading}
-						class="rounded px-3 py-1.5 text-sm disabled:opacity-60"
-						style="background: var(--status-danger); color: var(--bg);"
-					>
-						Reject
-					</button>
-				</div>
-			{/if}
-		{/if}
-	</div>
-
-	{#if data.monthlyBreakdown.length > 0}
 		<div
 			class="mb-6 rounded-lg border p-6"
 			style="border-color: var(--border); background: var(--bg-elev-1);"
@@ -976,158 +990,206 @@
 				class="mb-4 text-lg font-semibold"
 				style="color: var(--text); font-family: var(--font-head);"
 			>
-				Monthly Performance
+				Dashboard Pop-ups
 			</h2>
+			<div class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+				{#each popupEngagement as item}
+					<div
+						class="rounded-lg border p-3"
+						style="border-color: var(--border); background: var(--bg-elev-2);"
+					>
+						<p style="color: var(--text-dim);">{item.label}</p>
+						<p
+							class="font-semibold"
+							style={item.seenAt ? 'color: var(--status-success);' : 'color: var(--text-dim);'}
+						>
+							{item.seenAt ? `Seen ${formatDate(item.seenAt)}` : 'Not yet seen'}
+						</p>
+					</div>
+				{/each}
+			</div>
+		</div>
+	</details>
+
+	<details class="mb-6">
+		<summary class="cursor-pointer py-2 text-sm font-semibold" style="color: var(--text-muted);"
+			>Monthly performance</summary
+		>
+		{#if data.monthlyBreakdown.length > 0}
+			<div
+				class="mb-6 rounded-lg border p-6"
+				style="border-color: var(--border); background: var(--bg-elev-1);"
+			>
+				<h2
+					class="mb-4 text-lg font-semibold"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
+					Monthly Performance
+				</h2>
+				<div class="overflow-x-auto">
+					<table class="w-full">
+						<thead style="background: var(--bg-elev-2);">
+							<tr>
+								<th
+									class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
+									style="color: var(--text-dim);">Month</th
+								>
+								<th
+									class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
+									style="color: var(--text-dim);">Orders</th
+								>
+								<th
+									class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
+									style="color: var(--text-dim);">Net sales</th
+								>
+								<th
+									class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
+									style="color: var(--text-dim);">Cash</th
+								>
+							</tr>
+						</thead>
+						<tbody class="divide-y" style="border-color: var(--border);">
+							{#each data.monthlyBreakdown as month}
+								<tr style="border-color: var(--border);">
+									<td class="px-4 py-3 text-sm font-medium" style="color: var(--text);"
+										>{month.month}</td
+									>
+									<td class="px-4 py-3 text-sm" style="color: var(--text);">{month.orders}</td>
+									<td class="px-4 py-3 text-sm" style="color: var(--text);"
+										>{formatPrice(month.sales)}</td
+									>
+									<td class="px-4 py-3 text-sm font-semibold" style="color: var(--status-success);"
+										>{formatPrice(month.storeCredit)}</td
+									>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</div>
+		{/if}
+	</details>
+
+	<details class="mb-6">
+		<summary class="cursor-pointer py-2 text-sm font-semibold" style="color: var(--text-muted);"
+			>Referred orders ({data.orders.length})</summary
+		>
+		<div
+			class="rounded-lg border"
+			style="border-color: var(--border); background: var(--bg-elev-1);"
+		>
+			<div class="border-b p-6" style="border-color: var(--border);">
+				<h2
+					class="text-lg font-semibold"
+					style="color: var(--text); font-family: var(--font-head);"
+				>
+					Referred Orders ({data.orders.length})
+				</h2>
+			</div>
 			<div class="overflow-x-auto">
 				<table class="w-full">
 					<thead style="background: var(--bg-elev-2);">
 						<tr>
 							<th
-								class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
-								style="color: var(--text-dim);">Month</th
+								class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+								style="color: var(--text-dim);">Order</th
 							>
 							<th
-								class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
-								style="color: var(--text-dim);">Orders</th
+								class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+								style="color: var(--text-dim);">Customer</th
 							>
 							<th
-								class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
-								style="color: var(--text-dim);">Net sales</th
+								class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+								style="color: var(--text-dim);">Items</th
 							>
 							<th
-								class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
+								class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+								style="color: var(--text-dim);">Total</th
+							>
+							<th
+								class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
 								style="color: var(--text-dim);">Cash</th
+							>
+							<th
+								class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+								style="color: var(--text-dim);">Status</th
+							>
+							<th
+								class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+								style="color: var(--text-dim);">Date</th
+							>
+							<th
+								class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
+								style="color: var(--text-dim);">Actions</th
 							>
 						</tr>
 					</thead>
 					<tbody class="divide-y" style="border-color: var(--border);">
-						{#each data.monthlyBreakdown as month}
-							<tr style="border-color: var(--border);">
-								<td class="px-4 py-3 text-sm font-medium" style="color: var(--text);"
-									>{month.month}</td
-								>
-								<td class="px-4 py-3 text-sm" style="color: var(--text);">{month.orders}</td>
-								<td class="px-4 py-3 text-sm" style="color: var(--text);"
-									>{formatPrice(month.sales)}</td
-								>
-								<td class="px-4 py-3 text-sm font-semibold" style="color: var(--status-success);"
-									>{formatPrice(month.storeCredit)}</td
+						{#if data.orders.length === 0}
+							<tr>
+								<td colspan="8" class="px-6 py-12 text-center" style="color: var(--text-dim);"
+									>No referred orders yet</td
 								>
 							</tr>
-						{/each}
+						{:else}
+							{#each data.orders as order}
+								<tr style="border-color: var(--border);">
+									<td class="px-6 py-4 whitespace-nowrap">
+										<div class="text-sm font-medium" style="color: var(--text);">
+											#{order.orderNumber}
+										</div>
+										<div class="text-xs" style="color: var(--text-dim);">
+											{order.id.slice(0, 8)}
+										</div>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap">
+										<div class="text-sm font-medium" style="color: var(--text);">
+											{order.customerName}
+										</div>
+										<div class="text-xs" style="color: var(--text-dim);">{order.customerEmail}</div>
+									</td>
+									<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);"
+										>{order.itemCount}</td
+									>
+									<td
+										class="px-6 py-4 text-sm font-medium whitespace-nowrap"
+										style="color: var(--text);"
+									>
+										{formatPrice(order.totalAmount)}
+									</td>
+									<td
+										class="px-6 py-4 text-sm font-medium whitespace-nowrap"
+										style="color: var(--status-success);"
+									>
+										{formatPrice(order.storeCredit)}
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap">
+										<span
+											class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
+											style={statusBadgeStyle(order.status)}
+										>
+											{order.status}
+										</span>
+									</td>
+									<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text-dim);"
+										>{formatDate(order.createdAt)}</td
+									>
+									<td class="px-6 py-4 text-sm whitespace-nowrap">
+										<a
+											href="/admin/orders/{order.id}"
+											class="flex items-center gap-1"
+											style="color: var(--fa-blue-300);"
+										>
+											View
+											<ExternalLink class="h-3 w-3" />
+										</a>
+									</td>
+								</tr>
+							{/each}
+						{/if}
 					</tbody>
 				</table>
 			</div>
 		</div>
-	{/if}
-
-	<div class="rounded-lg border" style="border-color: var(--border); background: var(--bg-elev-1);">
-		<div class="border-b p-6" style="border-color: var(--border);">
-			<h2 class="text-lg font-semibold" style="color: var(--text); font-family: var(--font-head);">
-				Referred Orders ({data.orders.length})
-			</h2>
-		</div>
-		<div class="overflow-x-auto">
-			<table class="w-full">
-				<thead style="background: var(--bg-elev-2);">
-					<tr>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-dim);">Order</th
-						>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-dim);">Customer</th
-						>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-dim);">Items</th
-						>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-dim);">Total</th
-						>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-dim);">Cash</th
-						>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-dim);">Status</th
-						>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-dim);">Date</th
-						>
-						<th
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider uppercase"
-							style="color: var(--text-dim);">Actions</th
-						>
-					</tr>
-				</thead>
-				<tbody class="divide-y" style="border-color: var(--border);">
-					{#if data.orders.length === 0}
-						<tr>
-							<td colspan="8" class="px-6 py-12 text-center" style="color: var(--text-dim);"
-								>No referred orders yet</td
-							>
-						</tr>
-					{:else}
-						{#each data.orders as order}
-							<tr style="border-color: var(--border);">
-								<td class="px-6 py-4 whitespace-nowrap">
-									<div class="text-sm font-medium" style="color: var(--text);">
-										#{order.orderNumber}
-									</div>
-									<div class="text-xs" style="color: var(--text-dim);">{order.id.slice(0, 8)}</div>
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap">
-									<div class="text-sm font-medium" style="color: var(--text);">
-										{order.customerName}
-									</div>
-									<div class="text-xs" style="color: var(--text-dim);">{order.customerEmail}</div>
-								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text);"
-									>{order.itemCount}</td
-								>
-								<td
-									class="px-6 py-4 text-sm font-medium whitespace-nowrap"
-									style="color: var(--text);"
-								>
-									{formatPrice(order.totalAmount)}
-								</td>
-								<td
-									class="px-6 py-4 text-sm font-medium whitespace-nowrap"
-									style="color: var(--status-success);"
-								>
-									{formatPrice(order.storeCredit)}
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap">
-									<span
-										class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
-										style={statusBadgeStyle(order.status)}
-									>
-										{order.status}
-									</span>
-								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap" style="color: var(--text-dim);"
-									>{formatDate(order.createdAt)}</td
-								>
-								<td class="px-6 py-4 text-sm whitespace-nowrap">
-									<a
-										href="/admin/orders/{order.id}"
-										class="flex items-center gap-1"
-										style="color: var(--fa-blue-300);"
-									>
-										View
-										<ExternalLink class="h-3 w-3" />
-									</a>
-								</td>
-							</tr>
-						{/each}
-					{/if}
-				</tbody>
-			</table>
-		</div>
-	</div>
+	</details>
 </div>
