@@ -4,15 +4,6 @@ import type { CheckoutQuote } from '$lib/helpers/checkout-quote';
 // Re-export Prisma types that are used by components
 export type { OrderItem };
 
-// Extended types for order data
-export interface OrderWithItems extends Order {
-	items: (OrderItem & {
-		category: Category;
-		accounts: Account[];
-	})[];
-	user?: User;
-}
-
 export interface CreateOrderData {
 	userId?: string;
 	email: string;
@@ -140,23 +131,6 @@ export async function getOrderById(orderId: string, fetchFn: typeof fetch = fetc
 	}
 }
 
-// Get tier order details (comprehensive order information for customer view)
-export async function getTierOrderDetails(orderId: string, fetchFn: typeof fetch = fetch) {
-	try {
-		const response = await fetchFn(`/api/orders/${orderId}`);
-		const result = await handleApiCall(response);
-
-		if (result.error) {
-			return null;
-		}
-
-		return result.data;
-	} catch (error) {
-		console.error('Failed to fetch tier order details:', error);
-		return null;
-	}
-}
-
 // Create new order
 export async function createOrder(
 	orderData: CreateOrderData,
@@ -205,30 +179,6 @@ export async function updateOrderStatus(orderId: string, status: string, notes?:
 	}
 }
 
-// Cancel order
-export async function cancelOrder(orderId: string, reason?: string) {
-	try {
-		const response = await fetch(`/api/orders/${orderId}`, {
-			method: 'PATCH',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({
-				status: 'cancelled',
-				paymentStatus: 'cancelled',
-				deliveryStatus: 'cancelled'
-			})
-		});
-		if (response.ok && reason && reason.trim()) {
-			void addOrderNote(orderId, `Cancellation reason: ${reason.trim()}`);
-		}
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to cancel order:', error);
-		return { data: null, error: 'Failed to cancel order' };
-	}
-}
-
 // Get order statistics
 export async function getOrderStats(
 	options: {
@@ -252,59 +202,6 @@ export async function getOrderStats(
 	}
 }
 
-// Get orders by user
-export async function getUserOrders(
-	userId: string,
-	options: {
-		page?: number;
-		limit?: number;
-		status?: string;
-	} = {}
-) {
-	try {
-		const searchParams = new URLSearchParams({ userId });
-		if (options.page) searchParams.set('page', options.page.toString());
-		if (options.limit) searchParams.set('limit', options.limit.toString());
-		if (options.status) searchParams.set('status', options.status);
-
-		const response = await fetch(`/api/orders?${searchParams.toString()}`);
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to fetch user orders:', error);
-		return { data: null, error: 'Failed to fetch user orders' };
-	}
-}
-
-// Process order payment
-export async function processOrderPayment(
-	orderId: string,
-	paymentData: {
-		paymentMethod: string;
-		paymentReference?: string;
-		amount: number;
-	}
-) {
-	try {
-		const response = await fetch(`/api/orders/${orderId}`, {
-			method: 'PATCH',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({
-				status: 'processing',
-				paymentStatus: 'paid',
-				paidAt: new Date().toISOString(),
-				paymentReference: paymentData.paymentReference || null,
-				paymentChannel: paymentData.paymentMethod || null
-			})
-		});
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to process payment:', error);
-		return { data: null, error: 'Failed to process payment' };
-	}
-}
-
 // Fulfill order (assign accounts)
 export async function fulfillOrder(orderId: string) {
 	try {
@@ -318,42 +215,6 @@ export async function fulfillOrder(orderId: string) {
 	} catch (error) {
 		console.error('Failed to fulfill order:', error);
 		return { data: null, error: 'Failed to fulfill order' };
-	}
-}
-
-// Delete order (admin only)
-export async function deleteOrder(orderId: string) {
-	try {
-		const response = await fetch(`/api/orders/${orderId}`, {
-			method: 'DELETE'
-		});
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to delete order:', error);
-		return { data: null, error: 'Failed to delete order' };
-	}
-}
-
-// Get order delivery details
-export async function getOrderDelivery(orderId: string) {
-	try {
-		const response = await fetch(`/api/orders/${orderId}`);
-		const result = await handleApiCall(response);
-		if (result?.error) return result;
-		const order = result?.data;
-		return {
-			data: {
-				orderId,
-				deliveryStatus: order?.deliveryStatus || 'pending',
-				deliveryMethod: order?.deliveryMethod || 'email',
-				deliveryContact: order?.deliveryContact || null,
-				deliveredAt: order?.deliveredAt || null
-			},
-			error: null
-		};
-	} catch (error) {
-		console.error('Failed to fetch delivery details:', error);
-		return { data: null, error: 'Failed to fetch delivery details' };
 	}
 }
 
@@ -405,22 +266,6 @@ export interface OrderMetadata extends Order {
 	};
 }
 
-// Process order (allocation + preparation for delivery)
-export async function processOrder(orderId: string) {
-	try {
-		const response = await fetch(`/api/orders/${orderId}/process`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			}
-		});
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to process order:', error);
-		return { data: null, error: 'Failed to process order' };
-	}
-}
-
 // Process order delivery (send credentials to customer)
 export async function processOrderDelivery(
 	orderId: string,
@@ -455,22 +300,5 @@ export async function addOrderNote(orderId: string, note: string) {
 	} catch (error) {
 		console.error('Failed to add order note:', error);
 		return { data: null, error: 'Failed to add order note' };
-	}
-}
-
-// Retry failed delivery
-export async function retryOrderDelivery(orderId: string) {
-	try {
-		const response = await fetch(`/api/orders/${orderId}/deliver`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({ deliveryMethod: 'email' })
-		});
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to retry order delivery:', error);
-		return { data: null, error: 'Failed to retry order delivery' };
 	}
 }

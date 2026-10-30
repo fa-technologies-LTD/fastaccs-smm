@@ -8,8 +8,6 @@
 export const PROMO_DEFAULT_CAP_PERCENT = 50;
 export const PROMO_MAX_CAP_WITHOUT_OVERRIDE = 50;
 
-export type PromoCampaign = 'refer_win' | 'bigspender';
-
 export interface PromoLot {
 	id: string;
 	campaign: string;

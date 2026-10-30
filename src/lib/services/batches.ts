@@ -158,21 +158,6 @@ export async function getBatches(fetchFn: typeof fetch = fetch) {
 	}
 }
 
-// Get batches by tier
-export async function getBatchesByTier(categoryId: string, fetchFn: typeof fetch = fetch) {
-	try {
-		const response = await fetchFn(`/api/batches?categoryId=${encodeURIComponent(categoryId)}`);
-		const result = await response.json();
-		if (result.error) {
-			return { data: null, error: asError(String(result.error)) };
-		}
-		return { data: result.data || [], error: null };
-	} catch (error) {
-		console.error('Error fetching batches by tier:', error);
-		return { data: null, error: asError('Failed to fetch batches') };
-	}
-}
-
 // Get batch by ID in BatchMetadata format
 export async function getBatchById(id: string, fetchFn: typeof fetch = fetch) {
 	try {

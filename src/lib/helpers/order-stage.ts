@@ -263,8 +263,6 @@ export function getOrderStage(orderValue: unknown, now: Date = new Date()): Orde
 
 /** Faulty or wrong accounts can be reported within this long after delivery. */
 export const ACCOUNT_REPORT_WINDOW_MS = 3 * 60 * 60 * 1000;
-/** Login help is offered for this long after purchase. */
-export const ACCOUNT_LOGIN_HELP_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 /** Whether a delivered account order is still inside the 3-hour report window. */
 export function isWithinAccountReportWindow(orderValue: unknown, now: Date = new Date()): boolean {

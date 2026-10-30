@@ -87,69 +87,6 @@ async function handleApiCall(response: Response) {
 	}
 }
 
-// Get all platforms
-export async function getPlatforms() {
-	try {
-		const response = await fetch('/api/categories');
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to fetch platforms:', error);
-		return { data: null, error: 'Failed to fetch platforms' };
-	}
-}
-
-// Get tiers for a platform
-export async function getTiersByPlatform(platformId: string) {
-	try {
-		const response = await fetch(`/api/categories/tiers/${platformId}`);
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to fetch tiers:', error);
-		return { data: null, error: 'Failed to fetch tiers' };
-	}
-}
-
-// Get all categories with hierarchy
-export async function getCategoriesWithHierarchy() {
-	try {
-		const response = await fetch('/api/categories/hierarchy');
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to fetch categories with hierarchy:', error);
-		return { data: null, error: 'Failed to fetch categories with hierarchy' };
-	}
-}
-
-// Create platform
-export async function createPlatform(platform: Omit<CategoryInsert, 'categoryType'>) {
-	try {
-		const response = await fetch('/api/categories', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ ...platform, categoryType: 'platform' })
-		});
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to create platform:', error);
-		return { data: null, error: 'Failed to create platform' };
-	}
-}
-
-// Create tier under platform
-export async function createTier(tier: Omit<CategoryInsert, 'categoryType'>) {
-	try {
-		const response = await fetch('/api/categories', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ ...tier, categoryType: 'tier' })
-		});
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to create tier:', error);
-		return { data: null, error: 'Failed to create tier' };
-	}
-}
-
 // Update category
 export async function updateCategory(id: string, updates: CategoryUpdate) {
 	try {
@@ -178,11 +115,6 @@ export async function deleteCategory(id: string) {
 	}
 }
 
-// Hard delete category (same as deleteCategory now)
-export async function hardDeleteCategory(id: string) {
-	return deleteCategory(id);
-}
-
 // Retire/archive category without hard delete
 export async function retireCategory(id: string, options: RetireCategoryOptions = {}) {
 	try {
@@ -195,17 +127,6 @@ export async function retireCategory(id: string, options: RetireCategoryOptions 
 	} catch (error) {
 		console.error('Failed to retire category:', error);
 		return { data: null, error: 'Failed to retire category' };
-	}
-}
-
-// Get category by slug
-export async function getCategoryBySlug(slug: string) {
-	try {
-		const response = await fetch(`/api/categories/slug/${slug}`);
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to fetch category by slug:', error);
-		return { data: null, error: 'Failed to fetch category by slug' };
 	}
 }
 

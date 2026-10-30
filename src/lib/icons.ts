@@ -54,7 +54,6 @@ import {
 	IconLockOpen,
 	IconLogout2,
 	IconMail,
-	IconMapPin,
 	IconMenu2,
 	IconMessage2,
 	IconMessageCircle,
@@ -76,7 +75,6 @@ import {
 	IconShieldOff,
 	IconShoppingBag,
 	IconShoppingCart,
-	IconStar,
 	IconTag,
 	IconTarget,
 	IconTrash,
@@ -146,7 +144,6 @@ export const Loader2 = IconLoader2;
 export const Lock = IconLock;
 export const LogOut = IconLogout2;
 export const Mail = IconMail;
-export const MapPin = IconMapPin;
 export const Menu = IconMenu2;
 export const MessageCircle = IconMessageCircle;
 export const MessageSquare = IconMessage2;
@@ -170,7 +167,6 @@ export const ShieldCheck = IconShieldCheck;
 export const ShieldOff = IconShieldOff;
 export const ShoppingBag = IconShoppingBag;
 export const ShoppingCart = IconShoppingCart;
-export const Star = IconStar;
 export const Tag = IconTag;
 export const Target = IconTarget;
 export const Trash2 = IconTrash;

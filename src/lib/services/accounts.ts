@@ -36,9 +36,6 @@ export interface Account {
 	created_at: string;
 }
 
-// Alias for compatibility with existing code
-export type AccountMetadata = Account;
-
 export interface AccountInsert {
 	id?: string;
 	batch_id: string;
@@ -86,95 +83,6 @@ export interface AccountUpdate {
 	order_item_id?: string | null;
 	delivered_at?: string | null;
 	delivery_notes?: string | null;
-}
-
-// Get accounts by tier
-export async function getAccountsByTier(categoryId: string) {
-	try {
-		const response = await fetch(`/api/accounts?categoryId=${categoryId}`);
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to fetch accounts by tier:', error);
-		return { data: null, error: 'Failed to fetch accounts by tier' };
-	}
-}
-
-// Get all accounts with optional filters
-export async function getAccounts(
-	filters: {
-		status?: string;
-		platform?: string;
-		batchId?: string;
-		categoryId?: string;
-	} = {}
-) {
-	try {
-		const params = new URLSearchParams();
-		if (filters.status) params.append('status', filters.status);
-		if (filters.platform) params.append('platform', filters.platform);
-		if (filters.batchId) params.append('batchId', filters.batchId);
-		if (filters.categoryId) params.append('categoryId', filters.categoryId);
-
-		const response = await fetch(`/api/accounts?${params.toString()}`);
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to fetch accounts:', error);
-		return { data: null, error: 'Failed to fetch accounts' };
-	}
-}
-
-// Create account
-export async function createAccount(account: AccountInsert) {
-	try {
-		const response = await fetch('/api/accounts', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(account)
-		});
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to create account:', error);
-		return { data: null, error: 'Failed to create account' };
-	}
-}
-
-// Update account
-export async function updateAccount(id: string, updates: AccountUpdate) {
-	try {
-		const response = await fetch(`/api/accounts/${id}`, {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(updates)
-		});
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to update account:', error);
-		return { data: null, error: 'Failed to update account' };
-	}
-}
-
-// Delete account
-export async function deleteAccount(id: string) {
-	try {
-		const response = await fetch(`/api/accounts/${id}`, {
-			method: 'DELETE'
-		});
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to delete account:', error);
-		return { data: null, error: 'Failed to delete account' };
-	}
-}
-
-// Get available accounts by tier
-export async function getAvailableAccountsByTier(categoryId: string) {
-	try {
-		const response = await fetch(`/api/accounts?categoryId=${categoryId}&status=available`);
-		return await handleApiCall(response);
-	} catch (error) {
-		console.error('Failed to fetch available accounts:', error);
-		return { data: null, error: 'Failed to fetch available accounts' };
-	}
 }
 
 // Get accounts by batch ID

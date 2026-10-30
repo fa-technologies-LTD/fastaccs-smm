@@ -92,32 +92,6 @@ function getBaseUrl(): string {
 	return candidate ? candidate.replace(/\/+$/, '') : 'https://smm.fastaccs.com';
 }
 
-function getWATDateParts(date = new Date()): {
-	year: number;
-	month: number;
-	day: number;
-	hour: number;
-} {
-	const formatter = new Intl.DateTimeFormat('en-GB', {
-		timeZone: 'Africa/Lagos',
-		year: 'numeric',
-		month: '2-digit',
-		day: '2-digit',
-		hour: '2-digit',
-		hour12: false
-	});
-
-	const parts = formatter.formatToParts(date);
-	const value = (type: string) => Number(parts.find((part) => part.type === type)?.value || '0');
-
-	return {
-		year: value('year'),
-		month: value('month'),
-		day: value('day'),
-		hour: value('hour')
-	};
-}
-
 function getFirstName(fullName: string | null | undefined, fallbackEmail: string): string {
 	if (fullName && fullName.trim()) {
 		return fullName.trim().split(/\s+/)[0];
@@ -275,32 +249,4 @@ export async function runWinBackCampaign(): Promise<{
 	}
 
 	return { queued, sent, skipped };
-}
-
-export function startWinBackScheduler(): void {
-	const schedulerEnabled = (env.WINBACK_SCHEDULER_ENABLED || '').toLowerCase() === 'true';
-	if (!schedulerEnabled) return;
-
-	const globalScope = globalThis as unknown as Record<string, unknown>;
-	const startedKey = '__fastaccsWinBackSchedulerStarted__';
-	const lastRunKey = '__fastaccsWinBackLastRun__';
-	if (globalScope[startedKey]) return;
-
-	globalScope[startedKey] = true;
-	const intervalMs = Math.max(Number(env.WINBACK_SCHEDULER_INTERVAL_MS || 15 * 60 * 1000), 60000);
-
-	setInterval(() => {
-		const { year, month, day, hour } = getWATDateParts();
-		if (hour !== 9) return;
-
-		const currentRunMarker = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-		if (globalScope[lastRunKey] === currentRunMarker) return;
-
-		globalScope[lastRunKey] = currentRunMarker;
-		void runWinBackCampaign().catch((error) => {
-			console.error('[winback.scheduler] run failed:', error);
-		});
-	}, intervalMs);
-
-	console.info('[winback.scheduler] started', { intervalMs, timezone: 'Africa/Lagos' });
 }

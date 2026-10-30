@@ -1024,29 +1024,6 @@ export function maskEmailAddress(email: string): string {
 	return `${visible}${'•'.repeat(Math.max(localPart.length - 1, 1))}@${domain}`;
 }
 
-export function markdownToEmailBody(markdown: string): string {
-	const normalized = markdown
-		.replace(/\r\n/g, '\n')
-		.replace(/\n{3,}/g, '\n\n')
-		.trim();
-
-	if (!normalized) return '';
-
-	return normalized
-		.split('\n')
-		.map((line) => {
-			const trimmed = line.trim();
-			if (!trimmed) return '';
-
-			if (trimmed.startsWith('- ')) {
-				return trimmed;
-			}
-
-			return trimmed;
-		})
-		.join('\n');
-}
-
 export async function sendWelcomeEmailIfNeeded(params: {
 	userId: string;
 	email: string;

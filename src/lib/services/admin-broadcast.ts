@@ -728,10 +728,6 @@ export async function processBroadcastBatch(
 	};
 }
 
-export async function getBroadcastProgress(broadcastId: string): Promise<BroadcastProgress | null> {
-	return computeBroadcastProgress(broadcastId);
-}
-
 export async function getBroadcastHistory(limit = 20): Promise<BroadcastHistoryItem[]> {
 	const rows = await prisma.emailNotification.findMany({
 		where: {
@@ -815,8 +811,4 @@ export async function getBroadcastDetails(
 		})),
 		hasMoreRecipients: totalRecipients > recipients.length
 	};
-}
-
-export function getAudienceLabel(audience: BroadcastAudience): string {
-	return AUDIENCE_LABELS[audience];
 }

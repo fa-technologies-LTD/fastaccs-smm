@@ -310,21 +310,6 @@ export async function getAnnouncementBannerConfig(): Promise<AnnouncementBannerC
 	}
 }
 
-export async function getActiveAnnouncementBanner(): Promise<ActiveAnnouncementBanner | null> {
-	const config = await getAnnouncementBannerConfig();
-	if (!isAnnouncementBannerActive(config)) return null;
-
-	return {
-		text: config.text,
-		link: config.link,
-		dismissible: config.dismissible,
-		version: config.version,
-		startsAt: config.startsAt,
-		endsAt: config.endsAt,
-		dismissCookieName: getAnnouncementBannerDismissCookieName(config.version)
-	};
-}
-
 export function getAnnouncementBannerFormState(
 	config: AnnouncementBannerConfig,
 	timeZone: string

@@ -105,13 +105,6 @@ export function removeToast(id: string) {
 	toasts.update((all) => all.filter((toast) => toast.id !== id));
 }
 
-export function clearToasts() {
-	for (const id of toastTimers.keys()) {
-		clearToastTimer(id);
-	}
-	toasts.set([]);
-}
-
 // Convenience functions
 export function showSuccess(title: string, message?: string, duration?: number, link?: string) {
 	return addToast({ type: 'success', title, message, duration, link });
@@ -123,8 +116,4 @@ export function showError(title: string, message?: string, duration?: number) {
 
 export function showWarning(title: string, message?: string, duration?: number) {
 	return addToast({ type: 'warning', title, message, duration });
-}
-
-export function showInfo(title: string, message?: string, duration?: number) {
-	return addToast({ type: 'info', title, message, duration });
 }

@@ -30,5 +30,4 @@ export const BULK_FOLLOWS_SERVICE_FIXTURE = {
 	category: 'TikTok Views'
 };
 
-export const SMM_RAJA_BALANCE_FIXTURE = { balance: '8.21', currency: 'USD' };
 export const BULK_FOLLOWS_BALANCE_FIXTURE = { balance: '21.0069080', currency: 'USD' };

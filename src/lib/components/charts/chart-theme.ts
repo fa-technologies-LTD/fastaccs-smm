@@ -18,7 +18,6 @@ export const STATUS_COLOR_MAP: Record<string, string> = {
 };
 
 export const DEFAULT_CHART_HEIGHT = 220;
-export const DEFAULT_SPARKLINE_HEIGHT = 40;
 export const CHART_FALLBACK_WIDTH = 600;
 
 export type ChartDatum = {

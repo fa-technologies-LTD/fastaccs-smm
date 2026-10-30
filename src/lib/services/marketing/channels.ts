@@ -180,15 +180,6 @@ export async function listChannels(): Promise<MarketingChannel[]> {
 	return rows.map(fromRow);
 }
 
-export async function getChannelsByKey(keys: string[]): Promise<Map<string, MarketingChannel>> {
-	if (keys.length === 0) return new Map();
-	const rows = await prisma.$queryRaw<ChannelRow[]>`
-		SELECT key, name, kind, status, target_cac_ngn, daily_cap_ngn, postback_template,
-			dedup_by_click_id, notes
-		FROM marketing_channels WHERE key = ANY(${keys})`;
-	return new Map(rows.map((row) => [row.key, fromRow(row)]));
-}
-
 export async function upsertChannel(input: Record<string, unknown>): Promise<MarketingChannel> {
 	const channel = normalizeChannelInput(input);
 	await prisma.$executeRaw`

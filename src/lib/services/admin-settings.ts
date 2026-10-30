@@ -697,28 +697,6 @@ export async function getMinimumOrderValueSetting(): Promise<number> {
 	);
 }
 
-export async function getStoreControlsSnapshot(): Promise<StoreControlSettings> {
-	const values = await getSettingsMap([
-		SETTINGS_KEYS.storeMaintenanceMode,
-		SETTINGS_KEYS.storeCheckoutEnabled,
-		SETTINGS_KEYS.storeAutoDeliveryPaused
-	]);
-	return {
-		maintenanceMode: parseBooleanSetting(
-			values.get(SETTINGS_KEYS.storeMaintenanceMode) || null,
-			DEFAULTS.storeMaintenanceMode
-		),
-		checkoutEnabled: parseBooleanSetting(
-			values.get(SETTINGS_KEYS.storeCheckoutEnabled) || null,
-			DEFAULTS.storeCheckoutEnabled
-		),
-		autoDeliveryPaused: parseBooleanSetting(
-			values.get(SETTINGS_KEYS.storeAutoDeliveryPaused) || null,
-			DEFAULTS.storeAutoDeliveryPaused
-		)
-	};
-}
-
 export async function isCheckoutEnabledSetting(): Promise<boolean> {
 	const values = await getSettingsMap([SETTINGS_KEYS.storeCheckoutEnabled]);
 	return parseBooleanSetting(
@@ -733,20 +711,6 @@ export async function isAutoDeliveryPausedSetting(): Promise<boolean> {
 		values.get(SETTINGS_KEYS.storeAutoDeliveryPaused) || null,
 		DEFAULTS.storeAutoDeliveryPaused
 	);
-}
-
-export async function getLowStockAlertState(): Promise<{
-	signature: string | null;
-	sentAt: string | null;
-}> {
-	const values = await getSettingsMap([
-		SETTINGS_KEYS.lowStockLastSignature,
-		SETTINGS_KEYS.lowStockLastSentAt
-	]);
-	return {
-		signature: values.get(SETTINGS_KEYS.lowStockLastSignature) || null,
-		sentAt: values.get(SETTINGS_KEYS.lowStockLastSentAt) || null
-	};
 }
 
 export async function setLowStockAlertState(signature: string, sentAtIso: string): Promise<void> {
