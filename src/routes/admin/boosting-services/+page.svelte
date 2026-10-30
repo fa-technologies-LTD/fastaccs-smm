@@ -432,6 +432,16 @@
 			<p class="mt-1 text-sm" style="color: var(--text-muted);">
 				Shape simple customer offers while keeping supplier complexity behind the scenes.
 			</p>
+			<!-- The storefront and checkout use the new managed offers whenever the rollout setting is on
+			     (it is in production); this legacy catalogue is only the fallback. -->
+			<p
+				class="mt-3 max-w-2xl rounded-lg border px-3 py-2 text-sm"
+				style="border-color: var(--warning, #f59e0b); color: var(--text);"
+			>
+				Old catalogue: not shown to customers while the new Boosting storefront is on, and checkout
+				refuses these items. Live services and prices are in
+				<a href="/admin/boosting-pricing" class="font-semibold underline">Boosting Prices</a>.
+			</p>
 		</div>
 		<div class="flex flex-wrap gap-2">
 			<a

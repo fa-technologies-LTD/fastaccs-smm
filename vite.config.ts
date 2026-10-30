@@ -10,8 +10,7 @@ export default defineConfig({
 		// interrupts reviews and retains large obsolete module graphs during repeated builds.
 		watch: {
 			ignored: ['**/.svelte-kit/output/**', '**/.vercel/output/**', '**/__screenshots__/**']
-		},
-		allowedHosts: ['matha-excursionary-veraciously.ngrok-free.dev']
+		}
 	},
 	test: {
 		expect: { requireAssertions: true },
