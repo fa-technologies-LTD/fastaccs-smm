@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { REVENUE_ORDER_STATUSES, REFUNDED_MARKER, MANUAL_RELEASE_CHANNEL } from './order-revenue';
 import { toExternalCash, toNetSales } from './order-revenue';
+import { CONFIRMED_PAYMENT_STATUSES } from './buyer-order-visibility';
 
 // Orders an owner admin releases to a profile (self-offload of specific logs)
 // carry this payment channel so they are excluded from ALL revenue/analytics —
@@ -39,6 +40,17 @@ export function buildRevenueOrderWhere(): Prisma.OrderWhereInput {
 			// was silently excluding legitimate revenue.
 			{ OR: [{ paymentChannel: null }, { paymentChannel: { not: MANUAL_RELEASE_CHANNEL } }] }
 		]
+	};
+}
+
+/**
+ * Spend that earns customer rewards (spend gifts, BIGSPENDER, Refer & Win): revenue orders whose
+ * payment was actually confirmed. An order marked completed without a confirmed payment once
+ * unlocked a ₦3,000 gift, so status alone never counts here.
+ */
+export function buildRewardSpendOrderWhere(): Prisma.OrderWhereInput {
+	return {
+		AND: [buildRevenueOrderWhere(), { paymentStatus: { in: [...CONFIRMED_PAYMENT_STATUSES] } }]
 	};
 }
 

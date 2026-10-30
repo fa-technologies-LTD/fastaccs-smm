@@ -4,7 +4,7 @@ import {
 	getStoreCreditBuckets,
 	SC_CREDIT_GIFT
 } from '$lib/services/store-credit';
-import { buildRevenueOrderWhere, toNetSales } from '$lib/helpers/order-revenue.server';
+import { buildRewardSpendOrderWhere, toNetSales } from '$lib/helpers/order-revenue.server';
 
 /**
  * Spend-milestone rewards (buyer-facing, driven by lifetime paid spend):
@@ -25,7 +25,7 @@ const GIFT_REFERENCE = (userId: string) => `spend:gift:70k:${userId}`;
 
 async function cumulativePaidSpend(userId: string): Promise<number> {
 	const agg = await prisma.order.aggregate({
-		where: { AND: [buildRevenueOrderWhere(), { userId }] },
+		where: { AND: [buildRewardSpendOrderWhere(), { userId }] },
 		_sum: { totalAmount: true, refundedAmount: true }
 	});
 	return toNetSales(agg._sum.totalAmount, agg._sum.refundedAmount);

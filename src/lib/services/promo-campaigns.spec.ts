@@ -43,7 +43,7 @@ vi.mock('$lib/prisma', () => ({
 	}
 }));
 vi.mock('$lib/helpers/order-revenue.server', () => ({
-	buildRevenueOrderWhere: () => ({}),
+	buildRewardSpendOrderWhere: () => ({}),
 	toNetSales: (total: unknown, refunded: unknown) => Number(total || 0) - Number(refunded || 0)
 }));
 vi.mock('$lib/services/affiliate-vesting', () => ({

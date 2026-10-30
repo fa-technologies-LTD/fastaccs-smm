@@ -19,7 +19,7 @@ vi.mock('$lib/services/promo-campaigns', () => ({
 	reconcileReferWinForFriend: vi.fn(async () => {})
 }));
 vi.mock('$lib/helpers/order-revenue.server', () => ({
-	buildRevenueOrderWhere: vi.fn(() => ({})),
+	buildRewardSpendOrderWhere: vi.fn(() => ({})),
 	toNetSales: vi.fn(
 		(total: unknown, refunded: unknown) => Number(total || 0) - Number(refunded || 0)
 	)

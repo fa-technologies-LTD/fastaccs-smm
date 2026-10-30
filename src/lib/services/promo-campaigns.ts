@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '$lib/prisma';
-import { buildRevenueOrderWhere, toNetSales } from '$lib/helpers/order-revenue.server';
+import { buildRewardSpendOrderWhere, toNetSales } from '$lib/helpers/order-revenue.server';
 import { parseTierUnitCost } from '$lib/helpers/tier-unit-cost';
 import { TIER_DELIVERY_MODE_KEY } from '$lib/helpers/tier-delivery-config';
 import { createAdminAuditLog } from '$lib/services/admin-audit';
@@ -228,7 +228,7 @@ async function loadFriendOrders(friendIds: string[]): Promise<Map<string, Friend
 	const result = new Map<string, FriendOrder[]>();
 	if (friendIds.length === 0) return result;
 	const orders = await prisma.order.findMany({
-		where: { AND: [buildRevenueOrderWhere(), { userId: { in: friendIds } }] },
+		where: { AND: [buildRewardSpendOrderWhere(), { userId: { in: friendIds } }] },
 		select: FRIEND_ORDER_SELECT
 	});
 	for (const order of orders) {
@@ -580,7 +580,7 @@ function beforeFilter(before?: Date) {
 
 async function lifetimeSpend(userId: string, before?: Date): Promise<number> {
 	const agg = await prisma.order.aggregate({
-		where: { AND: [buildRevenueOrderWhere(), { userId }, ...beforeFilter(before)] },
+		where: { AND: [buildRewardSpendOrderWhere(), { userId }, ...beforeFilter(before)] },
 		_sum: { totalAmount: true, refundedAmount: true }
 	});
 	return toNetSales(agg._sum.totalAmount, agg._sum.refundedAmount);
@@ -761,7 +761,7 @@ export async function listBigSpenderTargets(
 		prisma.order.groupBy({
 			by: ['userId'],
 			where: {
-				AND: [buildRevenueOrderWhere(), { userId: { not: null } }, ...beforeFilter(before)]
+				AND: [buildRewardSpendOrderWhere(), { userId: { not: null } }, ...beforeFilter(before)]
 			},
 			_sum: { totalAmount: true, refundedAmount: true }
 		});
