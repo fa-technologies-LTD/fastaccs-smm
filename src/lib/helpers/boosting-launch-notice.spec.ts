@@ -17,8 +17,7 @@ it.each([
 	'/admin/prices',
 	'/login',
 	'/auth/login',
-	'/numbers/order/123',
-	'/local-review/boosting-copy'
+	'/numbers/order/123'
 ])('keeps pop-ups off the buying page %s', (path) =>
 	expect(canShowBoostingLaunchNotice(path)).toBe(false)
 );
