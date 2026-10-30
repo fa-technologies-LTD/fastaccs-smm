@@ -1,17 +1,30 @@
 # Dependency security triage
 
-Last reviewed: 20 October 2026 — final approved release verification
+Last reviewed: 30 October 2026 — stabilization cleanup (`codex/stabilization-20261030`)
 
 ## Result
 
-The fresh full npm audit reports **zero findings**, down from 19 (including two critical).
-The independent `npm audit --omit=dev` also reports zero. After release `e4f9cf1`, GitHub's
-independent scan identified three additional Vite advisories despite those clean npm results.
-The old critical alerts had cleared. The compatible Vite 6.4.4 patch is included in this
-follow-up; final CI, deployment and GitHub alert verification follow its push. An audit result
-is not proof that all application security risks are absent. A package marked development-only
-can still contribute code to a
-production build, so the development/runtime classification alone was not used to dismiss fixes.
+`npm audit` reports **0 critical, 0 high, 0 moderate and 5 low** findings. All five come from
+the SvelteKit 2 line and are fixed only by the SvelteKit 3 major upgrade (see Deferred below);
+`npm audit fix --force` would perform that breaking upgrade and must not be run as a cleanup.
+An audit result is not proof that all application security risks are absent. A package marked
+development-only can still contribute code to a production build, so the development/runtime
+classification alone is never used to dismiss a fix.
+
+On 20 October the audit was zero (down from 19, including two critical) after the upgrades
+below; the five low findings were published afterwards against SvelteKit 2.
+
+## Deferred to separate, tested migrations
+
+- **SvelteKit 3** (`@sveltejs/kit` 3.x, `@sveltejs/adapter-vercel` 7.x). Clears all five low
+  advisories: enhanced-form redirect to an untrusted site, XSS via an untrusted cache-control
+  header on prerendered pages, and `deepmerge` prototype poisoning through the dev-only Svelte
+  inspector. Neither prerendering with untrusted headers nor the inspector is used in production,
+  but the upgrade should still be planned as its own migration with full regression testing.
+- **`telegram` is archived** (npm deprecation notice). Its maintainers point to the compatible
+  fork `teleproto`. Used only by the Telegram autopilot (`src/lib/server/autopilot/userbot.ts`)
+  and `scripts/telegram-login.mjs`; migrate separately with session-string and FloodWait checks
+  on a test account before the autopilot is enabled.
 
 ## Safely upgraded
 
