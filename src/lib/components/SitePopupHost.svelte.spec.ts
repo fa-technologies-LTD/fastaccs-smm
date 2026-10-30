@@ -1,5 +1,5 @@
 import { page as browser, userEvent } from 'vitest/browser';
-import { render } from 'vitest-browser-svelte';
+import { cleanup, render } from 'vitest-browser-svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { page } from '$app/state';
@@ -45,6 +45,8 @@ beforeEach(() => {
 	);
 });
 afterEach(() => {
+	// Unmount first: emptying the cart re-checks for a popup, which must still hit the stub.
+	cleanup();
 	vi.unstubAllGlobals();
 	sessionStorage.removeItem('fastaccs_site_popup_checked');
 });

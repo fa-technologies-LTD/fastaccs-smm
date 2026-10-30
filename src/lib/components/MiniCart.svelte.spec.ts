@@ -1,6 +1,6 @@
 import { page } from 'vitest/browser';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render } from 'vitest-browser-svelte';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render } from 'vitest-browser-svelte';
 import MiniCart from './MiniCart.svelte';
 import { cart } from '$lib/stores/cart.svelte';
 import type { CartItemWithTier } from '$lib/types/cart';
@@ -8,6 +8,19 @@ import type { CartItemWithTier } from '$lib/types/cart';
 const mocks = vi.hoisted(() => ({ goto: vi.fn(), showWarning: vi.fn() }));
 vi.mock('$app/navigation', () => ({ goto: mocks.goto }));
 vi.mock('$lib/stores/toasts', () => ({ showSuccess: vi.fn(), showWarning: mocks.showWarning }));
+
+// The open cart asks the server for reward hints. Answer here so no test reaches the dev app server,
+// and unmount before the stub goes so a late request cannot escape either.
+beforeEach(() => {
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () => Response.json({ lines: [] }))
+	);
+});
+afterEach(() => {
+	cleanup();
+	vi.unstubAllGlobals();
+});
 
 function openBoostingCart(
 	quantities: number[],
