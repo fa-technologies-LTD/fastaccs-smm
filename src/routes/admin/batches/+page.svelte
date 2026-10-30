@@ -409,10 +409,7 @@
 						<div class="flex items-center justify-between text-sm">
 							<span style="color: var(--text-muted);">Status:</span>
 							<div class="flex items-center gap-2">
-								<svelte:component
-									this={getStatusIcon(batch.status)}
-									class="h-4 w-4 {getStatusColor(batch.status)}"
-								/>
+								<StatusIcon class="h-4 w-4 {getStatusColor(batch.status)}" />
 								<span class="font-medium {getStatusColor(batch.status)} capitalize">
 									{batch.status === 'completed'
 										? 'Successful'
@@ -463,7 +460,11 @@
 			<!-- Background overlay -->
 			<div
 				class="fixed inset-0 bg-black/50 transition-opacity"
+				role="button"
+				tabindex="-1"
+				aria-label="Close modal"
 				onclick={() => !isUploading && (showUploadModal = false)}
+				onkeydown={(e) => e.key === 'Escape' && !isUploading && (showUploadModal = false)}
 			></div>
 
 			<!-- Modal content -->

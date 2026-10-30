@@ -64,6 +64,9 @@
 			<!-- Background overlay -->
 			<div
 				class="fixed inset-0 bg-black/50 transition-opacity"
+				role="button"
+				tabindex="-1"
+				aria-label="Close modal"
 				onclick={onClose}
 				onkeydown={(e) => e.key === 'Escape' && onClose()}
 			></div>
@@ -72,6 +75,8 @@
 			<div
 				class="relative transform overflow-hidden rounded-lg text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl"
 				style="background: var(--bg-elev-1);"
+				role="dialog"
+				aria-modal="true"
 				in:fly={{ y: 200, duration: 300 }}
 				out:fade={{ duration: 300 }}
 			>

@@ -190,6 +190,8 @@
 
 <div
 	class={`rounded-lg p-2 transition-all md:col-span-2 ${isDraggingFiles ? 'ring-2 ring-emerald-500/60 ring-offset-2' : ''}`}
+	role="region"
+	aria-label="Sample screenshots: drop images here, or use each slot's upload button"
 	ondragenter={handleDragOver}
 	ondragover={handleDragOver}
 	ondragleave={handleDragLeave}

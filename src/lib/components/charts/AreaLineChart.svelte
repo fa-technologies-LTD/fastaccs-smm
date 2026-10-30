@@ -124,8 +124,9 @@
 			</g>
 		{/if}
 
-		<!-- Transparent capture layer for pointer tracking. -->
+		<!-- Transparent capture layer for the mouse tooltip; the chart container carries the accessible label. -->
 		<rect
+			aria-hidden="true"
 			x={margin.left}
 			y={margin.top}
 			width={Math.max(0, width - margin.left - margin.right)}

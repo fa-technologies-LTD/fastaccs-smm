@@ -510,8 +510,20 @@
 {#if showCreateModal}
 	<div class="fixed inset-0 z-50 overflow-y-auto">
 		<div class="flex min-h-screen items-center justify-center px-4">
-			<div class="fixed inset-0 bg-black/50" onclick={closeCreateModal}></div>
-			<div class="relative w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+			<div
+				class="fixed inset-0 bg-black/50"
+				role="button"
+				tabindex="-1"
+				aria-label="Close modal"
+				onclick={closeCreateModal}
+				onkeydown={(e) => e.key === 'Escape' && closeCreateModal()}
+			></div>
+			<div
+				class="relative w-full max-w-lg rounded-lg bg-white p-6 shadow-xl"
+				role="dialog"
+				aria-modal="true"
+				aria-label="Add new microcopy"
+			>
 				<h2 class="mb-4 text-xl font-semibold">Add New Microcopy</h2>
 				<div class="space-y-4">
 					<div>
