@@ -8,7 +8,7 @@ describe('describeAdminActivity', () => {
 		[
 			'POST /api/admin/boosting-suppliers/sync',
 			'Boosting suppliers refreshed',
-			'/admin/boosting-services'
+			'/admin/boosting'
 		],
 		[`POST /api/orders/${id}/refund`, 'Order refunded to store credit', `/admin/orders/${id}`],
 		[`POST /api/orders/${id}/refund-account`, 'Faulty account refunded', `/admin/orders/${id}`],

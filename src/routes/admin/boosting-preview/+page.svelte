@@ -120,9 +120,9 @@
 			</p>
 		</div>
 		<a
-			href="/admin/boosting-mappings"
+			href="/admin/boosting"
 			class="flex items-center gap-2 text-sm font-semibold"
-			style="color: var(--link);"><ArrowLeft size={15} /> Back to setup</a
+			style="color: var(--link);"><ArrowLeft size={15} /> Back to Boosting</a
 		>
 	</header>
 

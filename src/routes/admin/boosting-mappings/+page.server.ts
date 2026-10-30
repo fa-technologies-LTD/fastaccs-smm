@@ -1,4 +1,4 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 export const load: PageServerLoad = ({ url }) =>
-	redirect(308, `/admin/boosting-pricing${url.search}`);
+	redirect(308, `/admin/boosting${url.search}`);

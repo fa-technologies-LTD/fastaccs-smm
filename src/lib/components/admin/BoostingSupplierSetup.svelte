@@ -1360,9 +1360,9 @@
 						Paid rollout controls are kept out of this everyday form.
 					</div>
 					<a
-						href="/admin/boosting-services"
+						href="/admin/boosting"
 						class="mt-4 inline-flex text-xs font-semibold"
-						style="color: var(--link);">Manage customer results and availability →</a
+						style="color: var(--link);">Back to Boosting →</a
 					>
 				</details>
 

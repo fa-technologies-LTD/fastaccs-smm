@@ -261,7 +261,7 @@
 				</p>
 				<span class="text-[11px]" style="color: var(--text-dim);"
 					>Shared with Boosting. Change it in
-					<a href="/admin/boosting-pricing" style="color: var(--link);">Boosting Prices</a>.</span
+					<a href="/admin/boosting" style="color: var(--link);">Boosting</a>.</span
 				>
 			</div>
 			<label class="block">

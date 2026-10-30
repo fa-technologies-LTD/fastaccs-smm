@@ -244,7 +244,7 @@ try {
 				const login = await request('/api/auth/login', {
 					email,
 					password,
-					redirectTo: '/admin/boosting-pricing'
+					redirectTo: '/admin/boosting'
 				});
 				assert.equal(login.status, 200, 'Real session login');
 				cookie =

@@ -144,7 +144,7 @@ it('does not stack another announcement for signed-in customers and supports Esc
 	expect(fetch).toHaveBeenCalledOnce();
 });
 
-it.each(['/checkout', '/order/paid', '/admin/boosting-pricing', '/login', '/numbers/order/test'])(
+it.each(['/checkout', '/order/paid', '/admin/boosting', '/login', '/numbers/order/test'])(
 	'never interrupts the sensitive route %s',
 	async (path) => {
 		page.url.href = `http://localhost${path}`;

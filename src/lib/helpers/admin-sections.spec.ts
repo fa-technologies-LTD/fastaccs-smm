@@ -42,8 +42,19 @@ describe('admin sections', () => {
 		expect(where('/admin/numbers/analytics')).toBe('Analytics › Numbers Sales');
 		expect(where('/admin/analytics')).toBe('Analytics › Overview');
 		expect(where('/admin/analytics', 'boosting')).toBe('Analytics › Boosting Sales');
-		expect(where('/admin/boosting-preview')).toBe('Products › Boosting Services');
+		expect(where('/admin/boosting')).toBe('Products › Boosting');
+		expect(where('/admin/boosting-pricing')).toBe('Products › Boosting');
+		expect(where('/admin/boosting-mappings')).toBe('Products › Boosting');
+		expect(where('/admin/boosting-preview')).toBe('Products › Boosting');
 		expect(where('/admin/batches/xyz')).toBe('Inventory › Upload Logs');
+	});
+
+	it('keeps the combined Boosting workspace out of the price-only switcher', () => {
+		expect(
+			visibleSections(owner, { adminPromotions: true })
+				.find((section) => section.id === 'pricing')
+				?.tabs.map((tab) => tab.label)
+		).toEqual(['Account Prices', 'Numbers Prices']);
 	});
 
 	it('ignores a page’s own ?tab= when the page is not shared', () => {

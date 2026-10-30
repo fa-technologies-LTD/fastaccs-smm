@@ -263,7 +263,7 @@ remain outside this approved scope; no blanket catalogue/supplier approval is im
 - [x] Real separate-staging rehearsal of built app: authenticated session → one confirmed Save → stored price/quantities → public visibility → correct ₦500 unpaid checkout, with a fake gateway response only. Insufficient synthetic funds then hides the offer and refuses a stale cart before another order. All fixtures/settings/runtime/audits rolled back; cleanup verified.
 - [x] 1,732 server tests, 45 focused browser tests, zero type errors / 121 existing warnings; verified-staging build passed. Actual localhost desktop/mobile draft/confirmation walkthrough passed with zero browser errors and zero network-write requests.
 - [x] Fix a real staging Save regression: inherited maxima up to the database integer limit were rejected by the new editor's narrower limit. Accept representable maxima without clamping or changing existing offers.
-- [ ] Owner localhost price review: http://localhost:5173/admin/boosting-pricing. Sample-only UI review: http://localhost:5173/local-review/boosting-pricing (reload resets sample).
+- [ ] Owner localhost Boosting review: http://localhost:5173/admin/boosting.
 - [ ] Explicit owner push/deploy approval → controlled release verification while offers remain unpublished → owner confirms only selected ready offers with final Save. Any unavailable/unmapped/unverified offers remain blocked with reasons.
 - [ ] Universal: SEO/indexing/marketing with Claude; support inbox verification; email privacy/copy and announcement approval (no send); retention/refill evidence; deferred cleanup. Prior applied migrations must not be replayed based on old checklist text.
 

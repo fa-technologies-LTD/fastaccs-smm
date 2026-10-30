@@ -1348,7 +1348,7 @@ it('exports current edits without saving or publishing them', async () => {
 it('keeps the catalogue scroll inside the page on mobile', async () => {
 	await page.viewport(390, 844);
 	render(Page, { data: { pricing: fixture() } } as never);
-	await expect.element(page.getByRole('heading', { name: 'Boosting — Pricing' })).toBeVisible();
+	await expect.element(page.getByRole('heading', { name: 'Boosting', exact: true })).toBeVisible();
 	expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
 });
 it('matches the native Numbers-style layout on desktop', async () => {

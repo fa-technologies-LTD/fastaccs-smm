@@ -2,8 +2,8 @@ import type { AdminPermission } from '$lib/auth/admin-roles';
 
 /**
  * The admin's 9 sections and the pages inside each. The sidebar shows the sections; the switcher
- * above each page shows that section's pages. Every switcher lists Accounts, then Boosting, then
- * Numbers. A tab shows only when the signed-in role can open the page behind it.
+ * above each page shows that section's pages. A tab shows only when the signed-in role can open
+ * the page behind it.
  */
 export type AdminSectionId =
 	| 'overview'
@@ -76,10 +76,15 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		tabs: [
 			{ href: '/admin/tiers', label: 'Account Types', permission: 'admin:catalog:manage' },
 			{
-				href: '/admin/boosting-services',
-				label: 'Boosting Services',
+				href: '/admin/boosting',
+				label: 'Boosting',
 				permission: 'admin:catalog:manage',
-				also: ['/admin/boosting-preview']
+				also: [
+					'/admin/boosting-services',
+					'/admin/boosting-pricing',
+					'/admin/boosting-mappings',
+					'/admin/boosting-preview'
+				]
 			}
 		]
 	},
@@ -91,12 +96,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 				href: '/admin/account-prices',
 				label: 'Account Prices',
 				permission: 'admin:catalog:manage'
-			},
-			{
-				href: '/admin/boosting-pricing',
-				label: 'Boosting Prices',
-				permission: 'admin:catalog:manage',
-				also: ['/admin/boosting-mappings']
 			},
 			{
 				href: '/admin/numbers',

@@ -38,7 +38,7 @@
 	} from '$lib/helpers/boosting-pricing-controls';
 	import type { PageData } from './$types';
 
-	// Only the dev-only, loopback-guarded review page passes previewOnly. Its Save is in memory.
+	// Tests and local review fixtures can keep this workspace read-only. Their Save is in memory.
 	let {
 		data,
 		previewOnly = false,
@@ -657,8 +657,8 @@
 		<div class="heading">
 			<Zap size={25} style="color: var(--primary);" />
 			<div>
-				<h1>Boosting — Pricing</h1>
-				<p>Set your rules. Keep prices automatic, or lock your own.</p>
+				<h1>Boosting</h1>
+				<p>Manage offers, supplier routes, pricing and live status in one place.</p>
 			</div>
 		</div>
 		<div class="actions">

@@ -41,6 +41,9 @@ describe('order route permissions', () => {
 
 describe('boosting automation route permissions', () => {
 	it.each([
+		['GET', '/admin/boosting'],
+		['GET', '/admin/boosting-services'],
+		['GET', '/admin/boosting-pricing'],
 		['GET', '/admin/boosting-mappings'],
 		['GET', '/api/admin/boosting-suppliers/discovery'],
 		['POST', '/api/admin/boosting-suppliers/sync'],

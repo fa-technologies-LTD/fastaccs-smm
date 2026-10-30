@@ -422,8 +422,8 @@
 		</p>
 		<div class="mt-2 flex flex-wrap items-center justify-between gap-2">
 			<div class="flex flex-wrap items-center gap-2">
-				<a href="/admin/boosting-pricing" class="text-sm" style="color: var(--primary);"
-					>Pricing →</a
+				<a href="/admin/boosting" class="text-sm" style="color: var(--primary);"
+					>Boosting →</a
 				>
 				<button
 					type="button"

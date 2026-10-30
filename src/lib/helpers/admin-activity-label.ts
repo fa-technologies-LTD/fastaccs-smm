@@ -148,19 +148,19 @@ const RULES: Rule[] = [
 		method: 'POST',
 		path: /^\/api\/admin\/boosting-pricing$/,
 		label: 'Boosting prices saved',
-		href: () => '/admin/boosting-pricing'
+		href: () => '/admin/boosting'
 	},
 	{
 		method: 'PUT',
 		path: /^\/api\/admin\/boosting-mappings\//,
 		label: 'Boosting supplier route saved',
-		href: () => '/admin/boosting-pricing'
+		href: () => '/admin/boosting'
 	},
 	{
 		method: 'POST',
 		path: /^\/api\/admin\/boosting-suppliers\/sync$/,
 		label: 'Boosting suppliers refreshed',
-		href: () => '/admin/boosting-services'
+		href: () => '/admin/boosting'
 	},
 	{
 		method: 'POST',
