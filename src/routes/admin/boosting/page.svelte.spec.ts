@@ -1411,3 +1411,26 @@ it('finds a service fast: remembered platform buttons, a header per service and 
 		.toBe('Instagram Followers Instagram · 1 option · 0 live');
 	localStorage.removeItem('fastaccs-admin-boosting-platform');
 });
+it('says a supplier needs funding once at the top instead of on every offer row', async () => {
+	const data = fixture();
+	data.availability = {
+		row: {
+			reasons: ['The recorded supplier balance is insufficient after its safety reserve.'],
+			checkedAt: new Date().toISOString()
+		}
+	};
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () => Response.json({ success: true, data: { providers: [] } }))
+	);
+	render(Page, { data: { pricing: data } } as never);
+	const notice = page.getByRole('status').filter({ hasText: 'Supplier funding needed' });
+	await expect.element(notice).toBeVisible();
+	await expect.element(notice).toHaveTextContent(/SMM Raja: 1 offer/);
+	await expect
+		.poll(() => document.querySelector('.offer-row .badge')?.textContent ?? '')
+		.not.toMatch(/balance/i);
+	await expect
+		.poll(() => document.querySelector('.offer-row .badge')?.getAttribute('title') ?? '')
+		.toMatch(/balance is insufficient/);
+});

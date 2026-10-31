@@ -223,6 +223,25 @@
 			issues.push('Supplier cost exceeds reviewed limit.');
 		return [...new Set(issues)];
 	};
+	// A low supplier balance affects every offer on that supplier at once, so it is said once at the
+	// top (and by the daily funding email), not on every row. Each offer's details still list it.
+	const FUNDING_REASON = /supplier balance is insufficient/i;
+	const rowWarnings = (r: BoostPricingRow) => warnings(r).filter((w) => !FUNDING_REASON.test(w));
+	const needsFunding = $derived.by(() => {
+		const counts: Record<string, number> = {};
+		for (const r of view.sheet.rows) {
+			if (!warnings(r).some((w) => FUNDING_REASON.test(w))) continue;
+			const provider = sourceProvider(r) ?? 'supplier';
+			counts[provider] = (counts[provider] ?? 0) + 1;
+		}
+		return Object.entries(counts);
+	});
+	const providerName = (provider: string) =>
+		provider === 'smm_raja'
+			? 'SMM Raja'
+			: provider === 'bulk_follows'
+				? 'BulkFollows'
+				: 'A supplier';
 	const liveBlockers = (r: BoostPricingRow) =>
 		warnings(r).filter(
 			(warning) =>
@@ -733,6 +752,18 @@
 			</p>
 			<button disabled={busy} onclick={() => (reloadConfirm = true)}>Check saved settings</button>
 		</div>{/if}
+	{#if needsFunding.length}<div class="funding-notice" role="status">
+			<b>Supplier funding needed</b>
+			<p>
+				{needsFunding
+					.map(
+						([provider, count]) =>
+							`${providerName(provider)}: ${count} ${count === 1 ? 'offer' : 'offers'}`
+					)
+					.join(' · ')}. The balance can’t cover an order after its safety reserve, so these offers
+				can’t sell until it’s topped up. Operators get one email a day about it.
+			</p>
+		</div>{/if}
 	<fieldset disabled={busy}>
 		{#if error && !saveUncertain}<p class="error" role="alert">{error}</p>{/if}
 		{#if view.archivedDraft}<p class="hint">
@@ -1001,11 +1032,11 @@
 							<td class="c-status"
 								><span
 									class="badge"
-									class:warning={warnings(row).length > 0}
+									class:warning={rowWarnings(row).length > 0}
 									title={warnings(row).join(' ')}
 									>{boostReadinessSummary(
-										liveBlockers(row),
-										warnings(row),
+										liveBlockers(row).filter((w) => !FUNDING_REASON.test(w)),
+										rowWarnings(row),
 										view.liveStatuses[row.id] === 'live'
 									)}</span
 								></td
@@ -1778,6 +1809,19 @@
 		border-radius: 999px;
 		font-size: 10px;
 		color: var(--primary);
+	}
+	.funding-notice {
+		margin: 12px 0;
+		padding: 10px 14px;
+		border: 1px solid rgba(245, 158, 11, 0.45);
+		border-radius: 10px;
+		background: rgba(245, 158, 11, 0.08);
+		color: #fbbf24;
+		font-size: 13px;
+	}
+	.funding-notice p {
+		margin: 4px 0 0;
+		color: var(--text);
 	}
 	.offer-counts span,
 	.warning-copy {
