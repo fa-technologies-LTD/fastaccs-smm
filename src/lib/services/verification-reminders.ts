@@ -33,11 +33,13 @@ const SECOND_AFTER_DAYS = 7;
 const DAY_MS = 86_400_000;
 
 export function isLikelyRealMailbox(email: string | null | undefined): boolean {
-	const domain = String(email ?? '')
+	const [name, domain] = String(email ?? '')
 		.trim()
 		.toLowerCase()
-		.split('@')[1];
-	if (!domain) return false;
+		.split('@');
+	if (!name || !domain) return false;
+	// The mail server refuses "a..b@" or a name starting/ending with a dot, and these were retried every day.
+	if (name.includes('..') || name.startsWith('.') || name.endsWith('.')) return false;
 	return COMMON_PROVIDERS.has(domain) || domain.endsWith('.ng');
 }
 

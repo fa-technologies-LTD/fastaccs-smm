@@ -10,18 +10,19 @@ function positive(value: string | undefined, fallback: number) {
 	return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 /**
- * Like Numbers' hub-man alert: once a day per supplier, tell the operators when a Boosting supplier's
+ * Like Numbers' hub-man alert: at most once every 24 h per supplier, tell the operators when a Boosting supplier's
  * balance falls below its safety reserve plus a working float. Offers stop selling when the balance
  * cannot cover an order after the reserve, so this is the one place that warning belongs, not every
  * offer row. Never throws; a failed check simply tries again on the next run.
  */
 export async function alertLowBoostSupplierBalances(
-	options: { database?: StateReader; send?: AlertSender; now?: Date } = {}
+	options: { database?: StateReader; send?: AlertSender } = {}
 ): Promise<string[]> {
 	const database = options.database ?? prisma;
 	const send = options.send ?? sendCriticalAdminAlert;
-	const now = options.now ?? new Date();
 	const reserve = positive(process.env.BOOSTING_BALANCE_SAFETY_USD, 5);
 	const alertBelow = positive(process.env.BOOSTING_LOW_BALANCE_ALERT_USD, reserve + 10);
 	const alerted: string[] = [];
@@ -45,7 +46,9 @@ export async function alertLowBoostSupplierBalances(
 				title: `${name} needs funding`,
 				message: `Boosting supplier ${name} has $${amount.toFixed(2)} left. Offers stop selling once the balance can’t cover an order after the $${reserve.toFixed(2)} safety reserve. Top up to keep Boosting orders flowing.`,
 				source: 'boosting.balance',
-				dedupeKey: `boost-low-balance:${state.provider}:${now.toISOString().slice(0, 10)}`,
+				// The shared alert cooldown is 30 min, so the 24 h has to be asked for here.
+				dedupeKey: `boost-low-balance:${state.provider}`,
+				cooldownMs: DAY_MS,
 				ctaText: 'Open Boosting',
 				ctaUrl: 'https://smm.fastaccs.com/admin/boosting'
 			}).catch(() => {});

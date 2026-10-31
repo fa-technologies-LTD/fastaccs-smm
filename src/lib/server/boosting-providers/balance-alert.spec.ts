@@ -18,7 +18,7 @@ const state = (patch: Record<string, unknown>) => ({
 afterEach(() => vi.unstubAllEnvs());
 
 describe('Boosting supplier funding alert', () => {
-	it('alerts once a day for a supplier below its reserve plus float, never for a healthy or unread one', async () => {
+	it('alerts at most once every 24 h for a supplier below its reserve plus float, never for a healthy or unread one', async () => {
 		const send = vi.fn<(alert: { title: string; message: string }) => Promise<{ sent: boolean }>>(
 			async () => ({ sent: true })
 		);
@@ -36,14 +36,15 @@ describe('Boosting supplier funding alert', () => {
 				])
 			}
 		};
-		const alerted = await alertLowBoostSupplierBalances({ database: database as never, send, now });
+		const alerted = await alertLowBoostSupplierBalances({ database: database as never, send });
 		expect(alerted).toEqual(['smm_raja']);
 		expect(send).toHaveBeenCalledOnce();
 		expect(send).toHaveBeenCalledWith(
 			expect.objectContaining({
 				title: 'SMM Raja needs funding',
 				source: 'boosting.balance',
-				dedupeKey: 'boost-low-balance:smm_raja:2026-10-31'
+				dedupeKey: 'boost-low-balance:smm_raja',
+				cooldownMs: 24 * 60 * 60 * 1000
 			})
 		);
 		expect(send.mock.calls[0][0].message).toContain('$3.20 left');
@@ -58,16 +59,16 @@ describe('Boosting supplier funding alert', () => {
 		const database = {
 			boostProviderState: { findMany: vi.fn(async () => [state({ projectedBalance: 40 })]) }
 		};
-		expect(await alertLowBoostSupplierBalances({ database: database as never, send, now })).toEqual(
-			['smm_raja']
-		);
+		expect(await alertLowBoostSupplierBalances({ database: database as never, send })).toEqual([
+			'smm_raja'
+		]);
 		expect(send.mock.calls[0][0].message).toContain('$20.00 safety reserve');
 
 		const broken = {
 			boostProviderState: { findMany: vi.fn(async () => Promise.reject(new Error('db down'))) }
 		};
 		await expect(
-			alertLowBoostSupplierBalances({ database: broken as never, send, now })
+			alertLowBoostSupplierBalances({ database: broken as never, send })
 		).resolves.toEqual([]);
 	});
 });

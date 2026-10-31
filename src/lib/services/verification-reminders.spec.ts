@@ -39,6 +39,11 @@ describe('confirm-your-email reminders', () => {
 		expect(isLikelyRealMailbox('ada@company.com.ng')).toBe(true);
 		expect(isLikelyRealMailbox('bot@a7gi.ru')).toBe(false);
 		expect(isLikelyRealMailbox(null)).toBe(false);
+		// Addresses the mail server rejects as bad syntax.
+		expect(isLikelyRealMailbox('ada..obi@gmail.com')).toBe(false);
+		expect(isLikelyRealMailbox('.ada@gmail.com')).toBe(false);
+		expect(isLikelyRealMailbox('ada.@gmail.com')).toBe(false);
+		expect(isLikelyRealMailbox('ada.obi@gmail.com')).toBe(true);
 	});
 
 	it('explains checkout is locked, links to the verify page and mentions the first-order offer', async () => {
