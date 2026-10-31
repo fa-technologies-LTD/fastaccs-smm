@@ -53,6 +53,9 @@
 	);
 	let saved = $state(untrack(() => JSON.stringify(data.pricing.sheet)));
 	let platform = $state('all');
+	// Rules are set rarely; offers are what an admin comes to change. The panel opens on demand
+	// and whenever a rule has an unsaved change.
+	let rulesOpen = $state(false);
 	let filter = $state('all');
 	let search = $state('');
 	let tableWidth = $state(980);
@@ -83,6 +86,22 @@
 		if (dirty && !confirm('Leave this page? Unsaved changes will be lost.')) cancel();
 	});
 	const label = (p: string) => (BOOSTING_PLATFORM_LABELS as Record<string, string>)[p] ?? p;
+	const platformCount = (p: string) => view.sheet.rows.filter((row) => row.platform === p).length;
+	const liveIn = (title: string) =>
+		view.sheet.rows.filter((row) => row.title === title && row.selected).length;
+	const optionsIn = (title: string) => visible.filter((row) => row.title === title).length;
+	const PLATFORM_CHOICE_KEY = 'fastaccs-admin-boosting-platform';
+	function choosePlatform(next: string) {
+		platform = next;
+		try {
+			localStorage.setItem(PLATFORM_CHOICE_KEY, next);
+		} catch {
+			// Remembering the platform is a convenience only.
+		}
+	}
+	$effect(() => {
+		if (review.rules.length) rulesOpen = true;
+	});
 	const amountFormat = new Intl.NumberFormat('en-NG', { maximumFractionDigits: 2 });
 	const money = (v: number | null) =>
 		v == null || !Number.isFinite(v) ? '—' : `₦${amountFormat.format(v)}`;
@@ -304,6 +323,13 @@
 		)
 	);
 	onMount(() => {
+		try {
+			const remembered = localStorage.getItem(PLATFORM_CHOICE_KEY);
+			if (remembered && (remembered === 'all' || platforms.includes(remembered)))
+				platform = remembered;
+		} catch {
+			// Browser storage can be unavailable; the page starts on all platforms.
+		}
 		const before = (event: BeforeUnloadEvent) => {
 			if (dirty) {
 				event.preventDefault();
@@ -716,8 +742,15 @@
 			Edit prices, set locks and tick Live. Nothing changes until you Save and confirm the full
 			review.
 		</p>
-		<section class="panel">
-			<h2>Pricing rules</h2>
+		<details class="panel rules" bind:open={rulesOpen}>
+			<summary
+				><span class="rules-title">Pricing rules</span><span class="rules-summary"
+					>$1 = ₦{amountFormat.format(view.sheet.settings.fx)} · {view.sheet.settings
+						.defaultMarkup}% markup · profit target ₦{amountFormat.format(
+						view.sheet.settings.profitTargetNgn ?? 0
+					)} · minimum profit ₦{amountFormat.format(view.sheet.settings.hardProfitNgn ?? 0)}</span
+				>{#if review.rules.length}<small class="draft-marker">Unsaved</small>{/if}</summary
+			>
 			<p>
 				Compare supplier cost, selling price and estimated profit per 1,000. Existing pricing rules,
 				customer minimums and increments stay unchanged.
@@ -809,26 +842,27 @@
 				Unlocked prices follow your rules; locked prices stay put. Review every change before
 				saving.
 			</p>
-		</section>
+		</details>
 		<div class="catalog-toolbar">
 			<BoostingSupplierBalances {previewOnly} />
 			<button disabled={previewOnly || busy} onclick={refreshCosts}
 				><RefreshCcw size={15} /> Refresh costs</button
 			>
 		</div>
+		<p class="offer-counts">
+			{live} offers live · <span>{flagged} blocked</span> ·
+			<span>{advisoryCount} with advisories</span>
+		</p>
 		<div class="filters">
-			<p>
-				{live} offers live · <span>{flagged} blocked</span> ·
-				<span>{advisoryCount} with advisories</span>
-			</p>
+			<div class="platform-chips" role="group" aria-label="Platform">
+				<button aria-pressed={platform === 'all'} onclick={() => choosePlatform('all')}
+					>All <small>{view.sheet.rows.length}</small></button
+				>{#each platforms as p}<button
+						aria-pressed={platform === p}
+						onclick={() => choosePlatform(p)}>{label(p)} <small>{platformCount(p)}</small></button
+					>{/each}
+			</div>
 			<div>
-				<label class="sr-only" for="platform">Platform</label><select
-					id="platform"
-					bind:value={platform}
-					><option value="all">All platforms</option>{#each platforms as p}<option value={p}
-							>{label(p)}</option
-						>{/each}</select
-				>
 				<label class="sr-only" for="status">Status</label><select id="status" bind:value={filter}
 					><option value="all">All offers</option><option value="live">Live now</option><option
 						value="ready">Ready to publish</option
@@ -839,17 +873,17 @@
 				<input aria-label="Search offers" placeholder="Search offers" bind:value={search} />
 				{#if platform !== 'all' || filter !== 'all' || search}<button
 						onclick={() => {
-							platform = 'all';
+							choosePlatform('all');
 							filter = 'all';
 							search = '';
 						}}>Clear filters</button
 					>{/if}
 			</div>
-			<p class="hint">
-				Showing {visible.length} of {view.sheet.rows.length} offers. Live ticks are drafts until Save.
-				Prices, costs and estimated profit are all per 1,000.
-			</p>
 		</div>
+		<p class="hint">
+			Showing {visible.length} of {view.sheet.rows.length} offers. Live ticks are drafts until Save.
+			Prices, costs and estimated profit are all per 1,000.
+		</p>
 		<div
 			class="table-scroll"
 			bind:clientWidth={tableWidth}
@@ -866,9 +900,18 @@
 						><th>Status</th><th>Live</th></tr
 					></thead
 				><tbody>
-					{#each visible as row (row.id)}
-						<tr
-							><td
+					{#each visible as row, index (row.id)}
+						{#if index === 0 || visible[index - 1].title !== row.title}<tr class="group-row"
+								><th colspan="9" scope="colgroup"
+									>{row.title}
+									<small
+										>{label(row.platform)} · {optionsIn(row.title)}
+										{optionsIn(row.title) === 1 ? 'option' : 'options'} · {liveIn(row.title)} live</small
+									></th
+								></tr
+							>{/if}
+						<tr class="offer-row"
+							><td class="c-service"
 								><button
 									class="service"
 									id={`boost-offer-${row.id}`}
@@ -883,7 +926,7 @@
 									}}>{row.title}</button
 								>{#if changedRows.has(row.id)}<small class="draft-marker">Unsaved</small>{/if}</td
 							>
-							<td
+							<td class="c-option"
 								>{view.sheet.rows.filter(
 									(r) => r.platform === row.platform && r.outcome === row.outcome
 								).length > 1
@@ -899,7 +942,9 @@
 										row.tier
 									: '—'}</td
 							>
-							<td>{BOOST_PRICING_DISPLAY_QUANTITY.toLocaleString()}</td><td
+							<td class="c-qty">{BOOST_PRICING_DISPLAY_QUANTITY.toLocaleString()}</td><td
+								class="c-source"
+								data-label="Supplier"
 								><button
 									class="source"
 									onclick={() => chooseSupplier(row)}
@@ -912,15 +957,19 @@
 										? sourceProvider(row) === 'smm_raja'
 											? 'SMM Raja'
 											: 'BulkFollows'
-										: 'Choose supplier'}<small
+										: 'Choose supplier'}
+									<small
 										>{sourceCode(row) ? `#${sourceCode(row)}` : ''}{!row.supplierChoiceId &&
 										view.setup[row.id]?.routingPolicy === 'automatic'
 											? ' · Cost reference'
 											: ''}</small
-									></button
+									>{#if quote(row)}<span class="change" aria-hidden="true">Change</span
+										>{/if}</button
 								></td
 							>
-							<td>{money(displayAmount(row, economics(row).cost))}</td><td
+							<td class="c-cost" data-label="Cost ₦"
+								>{money(displayAmount(row, economics(row).cost))}</td
+							><td class="c-price" data-label="Price ₦"
 								><div class="price">
 									<input
 										aria-label={`Price for ${row.title} ${row.tier}`}
@@ -939,14 +988,17 @@
 									>
 								</div></td
 							>
-							<td class:negative={(economics(row).profit ?? 0) <= 0} class="profit"
+							<td
+								class:negative={(economics(row).profit ?? 0) <= 0}
+								class="profit c-profit"
+								data-label="Est. profit"
 								>{money(
 									displayAmount(row, economics(row).profit)
 								)}{#if economics(row).profit !== null && row.sale > 0}<small class="margin"
 										>{Math.round(((economics(row).profit ?? 0) / row.sale) * 100)}%</small
 									>{/if}</td
 							>
-							<td
+							<td class="c-status"
 								><span
 									class="badge"
 									class:warning={warnings(row).length > 0}
@@ -958,7 +1010,7 @@
 									)}</span
 								></td
 							>
-							<td
+							<td class="c-live"
 								><input
 									aria-label={`Live ${row.title} ${row.tier}`}
 									type="checkbox"
@@ -1650,8 +1702,84 @@
 	}
 	.filters {
 		margin: 20px 0 12px;
+		/* Platform buttons, status and search stay in reach while the list scrolls, just under the
+		   admin's own pinned top bar (48px; 57px once the menu button shows below 1024px). */
+		position: sticky;
+		top: 48px;
+		z-index: 4;
+		padding: 10px 0;
+		background: var(--bg);
+		border-bottom: 1px solid var(--border);
 	}
-	.filters p span,
+	.platform-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		width: 100%;
+	}
+	.platform-chips button {
+		padding: 5px 10px;
+		border-radius: 999px;
+		font-size: 12px;
+	}
+	.platform-chips button[aria-pressed='true'] {
+		border-color: var(--primary);
+		color: var(--primary);
+		background: color-mix(in srgb, var(--primary) 10%, transparent);
+	}
+	.platform-chips small {
+		color: var(--text-muted);
+		font-weight: 500;
+	}
+	.rules > summary {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 6px 12px;
+		cursor: pointer;
+		list-style-position: inside;
+	}
+	.rules-title {
+		font-weight: 650;
+		font-size: 15px;
+	}
+	.rules-summary {
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+	.rules:not([open]) {
+		padding-block: 12px;
+	}
+	/* The header names the service; each row below keeps a quieter copy that opens its details. */
+	.offer-row .service {
+		font-weight: 500;
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+	.group-row th {
+		padding: 10px 12px 6px;
+		font-size: 13px;
+		text-transform: none;
+		color: var(--text);
+		background: var(--bg-elev-1);
+		border-top: 2px solid var(--border);
+	}
+	.group-row small {
+		display: inline;
+		margin-left: 10px;
+		font-weight: 500;
+		color: var(--text-muted);
+	}
+	.change {
+		display: inline-block;
+		margin-left: 6px;
+		padding: 0 7px;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		font-size: 10px;
+		color: var(--primary);
+	}
+	.offer-counts span,
 	.warning-copy {
 		color: #fbbf24;
 	}
@@ -1676,11 +1804,11 @@
 		font-size: 11px;
 		text-transform: uppercase;
 		color: var(--text-muted);
-		padding: 15px;
+		padding: 10px 12px;
 		background: var(--bg-elev-1);
 	}
 	td {
-		padding: 13px;
+		padding: 9px 12px;
 		border-top: 1px solid var(--border);
 		background: var(--surface);
 		vertical-align: middle;
@@ -1701,6 +1829,8 @@
 		font-size: 12px;
 	}
 	.source small {
+		display: inline;
+		margin-left: 4px;
 		font-size: 10px;
 	}
 	.price {
@@ -1738,6 +1868,15 @@
 	.badge.warning {
 		color: #fbbf24;
 		background: rgba(245, 158, 11, 0.1);
+	}
+	/* Long readiness notes stay readable in full on hover and in the offer details. */
+	.badge {
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		max-width: 190px;
 	}
 	input[type='checkbox'] {
 		accent-color: var(--primary);
@@ -1899,6 +2038,11 @@
 		overflow: hidden;
 		clip: rect(0, 0, 0, 0);
 	}
+	@media (max-width: 1023px) {
+		.filters {
+			top: 57px;
+		}
+	}
 	@media (max-width: 700px) {
 		.boosting-page {
 			padding: 16px;
@@ -1924,11 +2068,118 @@
 		.filters input {
 			width: 100%;
 		}
+		/* On a phone the pinned bar stays short: one swipeable row of platforms, then status and search. */
+		.filters > .platform-chips {
+			flex-wrap: nowrap;
+			overflow-x: auto;
+			scrollbar-width: none;
+			padding-bottom: 2px;
+		}
+		.platform-chips button {
+			flex: 0 0 auto;
+		}
+		.filters > div:not(.platform-chips) {
+			display: grid;
+			grid-template-columns: auto minmax(0, 1fr) auto;
+			gap: 6px;
+		}
 		.row-details {
 			grid-template-columns: 1fr;
-			position: sticky;
-			left: 0;
-			width: min(100%, calc(var(--boost-table-width) - 28px));
+		}
+		.table-scroll {
+			overflow: visible;
+			border: 0;
+		}
+		table {
+			min-width: 0;
+		}
+		thead {
+			display: none;
+		}
+		tbody,
+		tbody tr,
+		tbody td,
+		tbody th {
+			display: block;
+		}
+		.group-row th {
+			margin-top: 14px;
+			padding: 10px 2px 4px;
+			background: none;
+			border-top: 0;
+		}
+		.offer-row {
+			display: grid !important;
+			grid-template-columns: 1fr auto;
+			grid-template-areas:
+				'service live'
+				'option option'
+				'source source'
+				'cost price'
+				'profit status';
+			gap: 8px 12px;
+			padding: 12px;
+			margin-top: 8px;
+			border: 1px solid var(--border);
+			border-radius: 12px;
+			background: var(--surface);
+		}
+		.offer-row td {
+			padding: 0;
+			border: 0;
+			background: none;
+		}
+		.offer-row td[data-label]::before {
+			content: attr(data-label);
+			display: block;
+			margin-bottom: 2px;
+			font-size: 10px;
+			text-transform: uppercase;
+			color: var(--text-muted);
+		}
+		.c-service {
+			grid-area: service;
+		}
+		.c-option {
+			grid-area: option;
+			color: var(--text-muted);
+		}
+		.c-qty {
+			display: none !important;
+		}
+		.c-source {
+			grid-area: source;
+		}
+		.c-cost {
+			grid-area: cost;
+		}
+		.c-price {
+			grid-area: price;
+		}
+		.c-profit {
+			grid-area: profit;
+		}
+		.c-status {
+			grid-area: status;
+			align-self: end;
+		}
+		.c-live {
+			grid-area: live;
+			justify-self: end;
+		}
+		.c-live input[type='checkbox'] {
+			width: 22px;
+			height: 22px;
+		}
+		.price input {
+			width: 100%;
+		}
+		.badge {
+			max-width: none;
+		}
+		.expanded td {
+			padding: 12px 4px;
+			border: 0;
 		}
 		.row-details .fields {
 			grid-template-columns: 1fr;

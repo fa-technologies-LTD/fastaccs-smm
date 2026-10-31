@@ -31,6 +31,14 @@ function fixture(): BoostControlsView {
 		approval: { id: 'approval', approvedAt: '2026-10-10', digest: 'test' }
 	};
 }
+
+/** The pricing rules panel starts folded; open it (once) before reading or editing a rule. */
+async function openPricingRules() {
+	if (!document.querySelector<HTMLDetailsElement>('details.rules')?.open) {
+		await page.getByText('Pricing rules', { exact: true }).click();
+	}
+}
+
 beforeEach(async () => {
 	await page.viewport(1360, 900);
 	document.body.style.padding = '24px';
@@ -747,6 +755,7 @@ it('reviews all edits together and cancellation preserves the whole draft withou
 	await page.getByRole('checkbox', { name: 'Live TikTok Likes value' }).click();
 	await page.getByRole('spinbutton', { name: 'Price for Instagram Followers value' }).fill('950');
 	await page.getByRole('checkbox', { name: 'Live Instagram Followers value' }).click();
+	await openPricingRules();
 	await page.getByRole('spinbutton', { name: 'Dollar rate' }).fill('2000');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'Save these changes?' });
@@ -843,6 +852,7 @@ it('saves prices and pending Live selections together only after final confirmat
 });
 it('previews automatic prices but preserves manual locks when the dollar rate changes', async () => {
 	render(Page, { data: { pricing: fixture() } } as never);
+	await openPricingRules();
 	await page.getByRole('spinbutton', { name: 'Dollar rate' }).fill('2000');
 	await expect
 		.element(page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }))
@@ -851,6 +861,7 @@ it('previews automatic prices but preserves manual locks when the dollar rate ch
 	await expect
 		.element(page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }))
 		.toHaveValue(150);
+	await openPricingRules();
 	await page.getByRole('spinbutton', { name: 'Dollar rate' }).fill('3000');
 	await expect
 		.element(page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }))
@@ -1126,6 +1137,7 @@ it('keeps prices, rules and pending Live ticks while inspecting both providers a
 	vi.stubGlobal('fetch', fetchMock);
 	render(Page, { data: { pricing: original } } as never);
 	await page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }).fill('900');
+	await openPricingRules();
 	await page.getByRole('spinbutton', { name: 'Dollar rate' }).fill('2000');
 	await page.getByRole('checkbox', { name: 'Live TikTok Likes value' }).click();
 	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
@@ -1148,6 +1160,7 @@ it('keeps prices, rules and pending Live ticks while inspecting both providers a
 	await expect
 		.element(page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }))
 		.toHaveValue(900);
+	await openPricingRules();
 	await expect.element(page.getByRole('spinbutton', { name: 'Dollar rate' })).toHaveValue(2000);
 	await expect
 		.element(page.getByRole('checkbox', { name: 'Live TikTok Likes value' }))
@@ -1238,6 +1251,7 @@ it('recovers a failed Save through cost refresh without losing price or rule edi
 	vi.stubGlobal('fetch', fetchMock);
 	render(Page, { data: { pricing: fixture() } } as never);
 	await page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }).fill('900');
+	await openPricingRules();
 	await page.getByRole('spinbutton', { name: 'Dollar rate' }).fill('2000');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await page.getByRole('button', { name: 'Confirm & save' }).click();
@@ -1256,6 +1270,7 @@ it('recovers a failed Save through cost refresh without losing price or rule edi
 	await expect
 		.element(page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }))
 		.toHaveValue(900);
+	await openPricingRules();
 	await expect.element(page.getByRole('spinbutton', { name: 'Dollar rate' })).toHaveValue(2000);
 	expect(
 		JSON.parse(fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/sync'))![1]!.body as string)
@@ -1286,6 +1301,7 @@ it('refreshes automatic previews without saving prices or enabling hidden offers
 	);
 	vi.stubGlobal('fetch', fetchMock);
 	render(Page, { data: { pricing: original } } as never);
+	await openPricingRules();
 	await page.getByRole('spinbutton', { name: 'Dollar rate' }).fill('2000');
 	await page.getByRole('button', { name: 'Refresh costs' }).click();
 	await expect
@@ -1354,4 +1370,44 @@ it('keeps the catalogue scroll inside the page on mobile', async () => {
 it('matches the native Numbers-style layout on desktop', async () => {
 	render(Page, { data: { pricing: fixture() } } as never);
 	expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(1360);
+});
+it('finds a service fast: remembered platform buttons, a header per service and a folded rules summary', async () => {
+	const original = fixture();
+	original.sheet.rows.push({
+		...original.sheet.rows[0],
+		id: 'second',
+		sourceOfferId: 'second-offer',
+		title: 'Instagram Followers',
+		platform: 'instagram',
+		outcome: 'followers',
+		selected: false
+	});
+	original.liveStatuses.second = 'hidden';
+	original.quotes.second = { ...original.quotes.row! };
+	original.setup.second = { ...original.setup.row };
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () => Response.json({ success: true, data: { providers: [] } }))
+	);
+	localStorage.removeItem('fastaccs-admin-boosting-platform');
+	render(Page, { data: { pricing: original } } as never);
+	// The rules are folded to one line that still shows the values in force.
+	await expect.element(page.getByText(/\$1 = ₦[\d,]+ · \d+% markup/)).toBeVisible();
+	expect(page.getByRole('spinbutton', { name: 'Dollar rate' }).query()).toBeNull();
+	// One tap shows a platform's services only, and the choice is remembered for next time.
+	const platforms = page.getByRole('group', { name: 'Platform' });
+	await platforms.getByRole('button', { name: /^Instagram/ }).click();
+	await expect
+		.element(platforms.getByRole('button', { name: /^Instagram/ }))
+		.toHaveAttribute('aria-pressed', 'true');
+	expect(localStorage.getItem('fastaccs-admin-boosting-platform')).toBe('instagram');
+	await expect
+		.element(page.getByRole('button', { name: 'Instagram Followers', exact: true }))
+		.toBeVisible();
+	expect(page.getByRole('button', { name: 'TikTok Likes', exact: true }).query()).toBeNull();
+	// Each service gets a header with its platform, options and how many are live.
+	await expect
+		.poll(() => document.querySelector('.group-row th')?.textContent?.replace(/\s+/g, ' ').trim())
+		.toBe('Instagram Followers Instagram · 1 option · 0 live');
+	localStorage.removeItem('fastaccs-admin-boosting-platform');
 });
