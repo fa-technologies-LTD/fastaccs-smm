@@ -225,7 +225,7 @@ it('refreshes the order queue and points sales reporting to Analytics', async ()
 	await expect.element(page.getByRole('button', { name: 'All 54', exact: true })).toBeVisible();
 	expect(fetch).toHaveBeenCalledTimes(1);
 });
-it('shows purchased refill protection and supplier progress without manual completion controls', async () => {
+it('shows purchased refill protection, supplier progress and the guarded manual-completion path', async () => {
 	const data = fixture();
 	(data.items as unknown[]) = [
 		{
@@ -261,7 +261,9 @@ it('shows purchased refill protection and supplier progress without manual compl
 			}
 		}
 	];
-	render(Page, { data } as never);
+	render(Page, {
+		data: { ...data, meta: { ...data.meta, canManageOrders: true } }
+	} as never);
 	await page
 		.getByRole('button', { name: 'Open Instagram Followers · FA-TEST', exact: true })
 		.click();
@@ -271,7 +273,10 @@ it('shows purchased refill protection and supplier progress without manual compl
 		.element(page.getByRole('region', { name: 'Why this order needs review' }))
 		.toHaveTextContent('The last supplier status check failed. Delivery is not confirmed.');
 	await expect.element(page.getByText(/200 \/ 1,000 supplier-reported/)).toBeVisible();
-	expect(page.getByRole('button', { name: 'Complete', exact: true }).query()).toBeNull();
+	await page.getByText('Resolve order', { exact: true }).click();
+	await expect
+		.element(page.getByRole('button', { name: 'Manually fulfilled — mark completed' }))
+		.toBeVisible();
 	expect(page.getByText('30-day refill', { exact: true }).query()).toBeNull();
 });
 it('fits a mobile viewport without horizontal page scrolling', async () => {
@@ -389,7 +394,7 @@ it.each(['manual_review', 'completed'])(
 			.getByRole('button', { name: 'Open Instagram Followers · DEMO-MANUALLY-SORTED', exact: true })
 			.click();
 		await expect
-			.element(page.getByText('Review resolved by support', { exact: true }))
+			.element(page.getByText('Order completed by support', { exact: true }))
 			.toBeVisible();
 		await expect.element(page.getByText('Instagram Followers', { exact: true })).toBeVisible();
 		expect(page.getByRole('button', { name: 'Mark completed', exact: true }).query()).toBeNull();

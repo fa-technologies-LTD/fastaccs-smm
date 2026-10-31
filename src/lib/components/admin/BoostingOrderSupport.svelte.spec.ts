@@ -40,13 +40,13 @@ it('keeps resolved history closed even without an item status', async () => {
 			revision: 'resolved',
 			state: 'resolved',
 			requestId: null,
-			message: 'Your delivery is confirmed. This review is closed.',
+			message: 'Your delivery is confirmed. This order is completed.',
 			updatedAt: null,
 			reply: null
 		}
 	});
 	expect(page.getByText('Resolve order', { exact: true }).query()).toBeNull();
-	await expect.element(page.getByText('Review resolved by support')).toBeVisible();
+	await expect.element(page.getByText('Order completed by support')).toBeVisible();
 });
 
 it('offers a deliberate change of resolution, not completion or retry, while waiting for a link', async () => {
@@ -69,10 +69,12 @@ it('offers a deliberate change of resolution, not completion or retry, while wai
 	).toBeNull();
 	await expect.element(page.getByRole('button', { name: 'Withdraw link request' })).toBeVisible();
 });
-it('keeps customer updates available during an active delivery without offering completion', async () => {
+it('keeps customer updates available during an active delivery and offers guarded manual completion', async () => {
 	render(Component, { ...props, held: false, status: 'in_progress' });
 	await page.getByText('Resolve order', { exact: true }).click();
-	expect(page.getByRole('button', { name: 'Mark completed', exact: true }).query()).toBeNull();
+	await expect
+		.element(page.getByRole('button', { name: 'Manually fulfilled — mark completed' }))
+		.toBeVisible();
 	await page.getByRole('button', { name: 'Customer update', exact: true }).click();
 	await expect.element(page.getByRole('dialog')).toHaveTextContent('No delivery change or email');
 	await userEvent.keyboard('{Escape}');
@@ -175,13 +177,24 @@ it('keeps the completion button inside a short mobile viewport', async () => {
 	await userEvent.keyboard('{Escape}');
 	await page.viewport(1280, 720);
 });
-it('keeps active supplier deliveries out of the link-change and close-review controls', async () => {
+it('requires an explicit acknowledgement before manually completing an active supplier delivery', async () => {
+	const fetchMock = vi.fn().mockResolvedValue(Response.json({ success: true }));
+	vi.stubGlobal('fetch', fetchMock);
 	render(Component, { ...props, held: false });
-	expect(page.getByRole('button', { name: 'Mark completed' }).query()).toBeNull();
 	expect(page.getByRole('button', { name: 'Request valid link' }).query()).toBeNull();
-	await expect
-		.element(page.getByRole('button', { name: 'Customer update', exact: true }))
-		.toBeVisible();
+	await page.getByText('Resolve order', { exact: true }).click();
+	await page.getByRole('button', { name: 'Manually fulfilled — mark completed' }).click();
+	const dialog = page.getByRole('dialog');
+	const submit = dialog.getByRole('button', { name: 'Mark completed', exact: true });
+	await expect.element(submit).toBeDisabled();
+	await dialog.getByRole('checkbox').click();
+	await expect.element(submit).toBeEnabled();
+	await submit.click();
+	expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+		action: 'confirm_delivery',
+		confirmed: true,
+		message: 'Your delivery is confirmed. This order is completed.'
+	});
 });
 it('completes a hand-sorted delivery with one click, then refreshes the list', async () => {
 	const fetchMock = vi.fn().mockResolvedValue(Response.json({ success: true }));
@@ -201,7 +214,7 @@ it('completes a hand-sorted delivery with one click, then refreshes the list', a
 		action: 'confirm_delivery',
 		confirmed: true,
 		evidence: '',
-		message: 'Your delivery is confirmed. This review is closed.'
+		message: 'Your delivery is confirmed. This order is completed.'
 	});
 	expect(onUpdated).toHaveBeenCalledOnce();
 });

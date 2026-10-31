@@ -10,13 +10,13 @@ it('does not offer completion or recovery while waiting for a link', () => {
 		canRequestLink: false
 	});
 });
-it('does not offer completion or link changes during active delivery', () => {
+it('offers an explicit manual-completion path during active delivery without allowing a link change', () => {
 	const flow = boostOrderWorkflow({
 		support: { state: 'none' },
 		held: false,
 		status: 'in_progress'
 	});
-	expect(flow.canConfirmDelivery).toBe(false);
+	expect(flow.canConfirmDelivery).toBe(true);
 	expect(flow.canRequestLink).toBe(false);
 });
 it('allows manual completion of a held delivery without a preceding refund', () =>

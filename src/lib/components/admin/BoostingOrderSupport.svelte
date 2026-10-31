@@ -42,7 +42,7 @@
 	let savedUpdate = $state(false);
 	const supportState = $derived(support ?? getBoostSupportState([]));
 	const workflow = $derived(boostOrderWorkflow({ support: supportState, held, status }));
-	const COMPLETED_MESSAGE = 'Your delivery is confirmed. This review is closed.';
+	const COMPLETED_MESSAGE = 'Your delivery is confirmed. This order is completed.';
 	const title = $derived(
 		action === 'confirm_failure'
 			? 'Confirm missing delivery'
@@ -103,7 +103,9 @@
 			// and an emptied message falls back to the standard one.
 			message: completing && message.trim().length < 5 ? COMPLETED_MESSAGE : message.trim(),
 			evidence: evidence.trim(),
-			confirmed: completing ? true : confirmed,
+			// Held reviews retain the quick close. An active supplier state needs the explicit
+			// manual-fulfilment acknowledgement shown in the dialog.
+			confirmed: completing && held ? true : confirmed,
 			...(action === 'confirm_failure' ? { quantity: missingQuantity } : {}),
 			expectedRevision: supportState.revision
 		};
@@ -166,7 +168,7 @@
 		</div>
 	{:else if supportState.state === 'resolved'}
 		<div class="support-status">
-			<strong>Review resolved by support</strong>
+			<strong>Order completed by support</strong>
 			<p>{supportState.message}</p>
 		</div>
 	{/if}
@@ -193,7 +195,8 @@
 							>{/if}
 						{#if workflow.canConfirmDelivery}<button
 								type="button"
-								onclick={() => open('confirm_delivery')}>Mark completed</button
+								onclick={() => open('confirm_delivery')}
+								>{held ? 'Mark completed' : 'Manually fulfilled — mark completed'}</button
 							>{/if}
 						{#if workflow.canWithdrawLink}<button
 								type="button"
@@ -270,9 +273,14 @@
 						</p>
 					{:else if action === 'confirm_delivery'}
 						<p class="muted">
-							Closes this review and tells the customer their delivery is confirmed. History and
-							charges stay unchanged.
+							Marks this item completed in the unified order history and tells the customer their
+							delivery is confirmed. Existing supplier references and charges stay recorded.
 						</p>
+						{#if !held}<label class="confirmation"
+								><input type="checkbox" bind:checked={confirmed} required disabled={busy} />I
+								manually fulfilled this item and reviewed any supplier order that may still
+								continue.</label
+							>{/if}
 						<label
 							>Note for your records <span class="optional">(optional)</span><textarea
 								bind:value={evidence}
@@ -325,9 +333,11 @@
 							type="submit"
 							disabled={busy ||
 								(!refreshNeeded &&
-									action !== 'confirm_delivery' &&
-									(message.trim().length < 5 ||
-										(action === 'confirm_failure' && (!confirmed || evidence.trim().length < 10))))}
+									((action === 'confirm_delivery' && !held && !confirmed) ||
+										(action !== 'confirm_delivery' &&
+											(message.trim().length < 5 ||
+												(action === 'confirm_failure' &&
+													(!confirmed || evidence.trim().length < 10))))))}
 							>{busy
 								? 'Saving…'
 								: refreshNeeded

@@ -123,11 +123,18 @@ export async function applyBoostSupportAction(
 	if (support.revision !== input.expectedRevision)
 		throw new BoostSupportError('This review changed. Refresh before sending another update.');
 	const fulfillment = item.boostFulfillment;
+	const previousDelivery = {
+		itemStatus: item.boostFulfillmentStatus,
+		fulfillmentStatus: fulfillment?.status ?? null,
+		holdReason: fulfillment?.lastSafeErrorCategory ?? null,
+		supplierStatus: fulfillment?.rawProviderStatus ?? null
+	};
+	const heldForReview = fulfillment
+		? ['manual_review', 'completed'].includes(fulfillment.status)
+		: item.boostFulfillmentStatus !== 'completed' || item.order.deliveryStatus !== 'delivered';
 	const workflow = boostOrderWorkflow({
 		support,
-		held: fulfillment
-			? ['manual_review', 'completed'].includes(fulfillment.status)
-			: item.boostFulfillmentStatus !== 'completed' || item.order.deliveryStatus !== 'delivered',
+		held: heldForReview,
 		status: item.boostFulfillmentStatus ?? undefined,
 		refunded: Number(item.refundedAmount) > 0
 	});
@@ -138,6 +145,11 @@ export async function applyBoostSupportAction(
 				: support.state === 'awaiting_customer'
 					? 'This order is waiting for a link. Withdraw that request before recording a different resolution.'
 					: 'This delivery is not ready for manual completion.'
+		);
+	if (input.action === 'confirm_delivery' && !heldForReview && !input.confirmed)
+		throw new BoostSupportError(
+			'Confirm that you manually fulfilled this item and reviewed any active supplier order.',
+			400
 		);
 	if (input.action === 'request_link' && !workflow.canRequestLink)
 		throw new BoostSupportError(
@@ -168,12 +180,17 @@ export async function applyBoostSupportAction(
 		fulfillment.leaseExpiresAt > now
 	)
 		throw new BoostSupportError('A delivery check is running. Refresh before recording failure.');
-	if (!['message', 'confirm_failure'].includes(input.action) && busy)
+	if (
+		!['message', 'confirm_failure'].includes(input.action) &&
+		busy &&
+		!(input.action === 'confirm_delivery' && input.confirmed)
+	)
 		throw new BoostSupportError(
 			'A supplier submission is active or uncertain. Send a customer update instead; do not replace its link or close delivery yet.'
 		);
 	if (
-		['request_link', 'confirm_delivery'].includes(input.action) &&
+		(input.action === 'request_link' ||
+			(input.action === 'confirm_delivery' && !input.confirmed)) &&
 		fulfillment?.supplierOrderId &&
 		!/^(completed|complete|cancelled|canceled|failed|refunded|partial)$/i.test(
 			fulfillment.rawProviderStatus?.trim() ?? ''
@@ -224,16 +241,14 @@ export async function applyBoostSupportAction(
 			data: { lastSafeErrorCategory: 'link_request_withdrawn', nextActionAt: null }
 		});
 	} else if (input.action === 'confirm_delivery') {
-		// Choosing "Mark completed" is the admin's confirmation; a note is optional (for example
-		// when the delivery was sorted by hand and there is nothing more to record).
+		// This is the single completion transition for held reviews and deliveries handled outside
+		// automation. The active-state variant requires an explicit acknowledgement above.
 		if ((input.evidence ?? '').length > 1000)
 			throw new BoostSupportError('Keep the note under 1,000 characters.', 400);
 		if (Number(item.refundedAmount) > 0)
 			throw new BoostSupportError(
 				'This item has a refund recorded. Review its accounting before resolving.'
 			);
-		if (fulfillment && !['manual_review', 'completed'].includes(fulfillment.status))
-			throw new BoostSupportError('Only a held delivery review can be resolved here.');
 		const activeCase = fulfillment
 			? await tx.boostComplaint.findFirst({
 					where: {
@@ -265,7 +280,7 @@ export async function applyBoostSupportAction(
 					select: { id: true }
 				})
 			: null;
-		if (unknown && !fulfillment?.supplierOrderId)
+		if (unknown && !fulfillment?.supplierOrderId && !input.confirmed)
 			throw new BoostSupportError(
 				'Supplier submission is uncertain. Check the supplier reference before resolving.'
 			);
@@ -280,7 +295,9 @@ export async function applyBoostSupportAction(
 				customerStatus: 'completed',
 				completedAt: now,
 				nextActionAt: null,
-				lastSafeErrorCategory: null
+				lastSafeErrorCategory: null,
+				leaseToken: null,
+				leaseExpiresAt: null
 			}
 		});
 		if (fulfillment)
@@ -408,10 +425,12 @@ export async function applyBoostSupportAction(
 				...(input.action === 'confirm_delivery'
 					? {
 							manuallyConfirmed: true,
+							manualOverride: !heldForReview,
 							evidence: input.evidence?.trim() || 'Marked completed by an admin',
-							previousStatus: item.boostFulfillmentStatus,
-							previousHoldReason: fulfillment?.lastSafeErrorCategory ?? null,
-							previousSupplierStatus: fulfillment?.rawProviderStatus ?? null
+							previousStatus: previousDelivery.itemStatus,
+							previousFulfillmentStatus: previousDelivery.fulfillmentStatus,
+							previousHoldReason: previousDelivery.holdReason,
+							previousSupplierStatus: previousDelivery.supplierStatus
 						}
 					: {}),
 				...(input.action === 'confirm_failure'
@@ -434,7 +453,7 @@ export async function applyBoostSupportAction(
 					input.action === 'request_link'
 						? 'A link is needed for your order'
 						: input.action === 'confirm_delivery'
-							? 'Your order review is resolved'
+							? 'Your order is completed'
 							: 'An update about your order',
 				message: input.message
 			}

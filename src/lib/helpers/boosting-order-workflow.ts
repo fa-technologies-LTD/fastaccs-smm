@@ -26,7 +26,9 @@ export function boostOrderWorkflow(input: BoostOrderWorkflowInput) {
 							? 'needs_review'
 							: 'delivering',
 		canRequestLink: !terminal && !waiting && input.held,
-		canConfirmDelivery: !terminal && !waiting && input.held,
+		// A manager may finish an item that they delivered outside the automated supplier path.
+		// The write endpoint applies the stronger acknowledgement and concurrency guards.
+		canConfirmDelivery: !terminal && !waiting,
 		canConfirmFailure: !terminal && !waiting,
 		canWithdrawLink: waiting && !terminal,
 		canResolve: !terminal

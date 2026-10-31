@@ -117,6 +117,37 @@ it('allows a message without overriding active delivery', async () => {
 	expect(tx.orderEvent.create.mock.calls[0][0].data.type).toBe('customer_support_update');
 });
 
+it('completes an actively tracked delivery only after the admin confirms manual fulfilment', async () => {
+	Object.assign(item, { boostFulfillmentStatus: 'in_progress' });
+	Object.assign(item.boostFulfillment, {
+		status: 'in_progress',
+		rawProviderStatus: 'Processing',
+		leaseToken: 'worker-lease',
+		leaseExpiresAt: new Date(Date.now() + 60_000)
+	});
+	const request = {
+		...input(),
+		action: 'confirm_delivery' as const,
+		message: 'Your delivery is confirmed. This order is completed.'
+	};
+	await expect(applyBoostSupportAction(tx, request)).rejects.toThrow('manually fulfilled');
+	expect(tx.orderItem.update).not.toHaveBeenCalled();
+	const out = await applyBoostSupportAction(tx, { ...request, confirmed: true });
+	expect(out.support.state).toBe('resolved');
+	expect(tx.boostFulfillment.updateMany.mock.lastCall[0].data).toMatchObject({
+		status: 'completed',
+		customerStatus: 'completed',
+		leaseToken: null,
+		leaseExpiresAt: null
+	});
+	expect(tx.orderEvent.create.mock.lastCall[0].data.metadata).toMatchObject({
+		manualOverride: true,
+		previousStatus: 'in_progress',
+		previousFulfillmentStatus: 'in_progress',
+		previousSupplierStatus: 'Processing'
+	});
+});
+
 it('records confirmed missing delivery without queueing a supplier order or altering supplier charges', async () => {
 	Object.assign(item.boostFulfillment, {
 		status: 'in_progress',
@@ -350,7 +381,7 @@ it('marks a hand-sorted delivery completed with no note, recording that an admin
 	const out = await applyBoostSupportAction(tx, {
 		...input(),
 		action: 'confirm_delivery',
-		message: 'Your delivery is confirmed. This review is closed.'
+		message: 'Your delivery is confirmed. This order is completed.'
 	});
 	expect(out.support.state).toBe('resolved');
 	expect(tx.orderEvent.create.mock.lastCall[0].data.metadata).toMatchObject({
