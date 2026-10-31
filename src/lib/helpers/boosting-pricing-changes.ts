@@ -73,6 +73,16 @@ export function boostingPricingChanges(before: BoostPricingSheet, after: BoostPr
 				before: 'Saved supplier setup',
 				after: 'Use and approve selected service (listed below)'
 			});
+		if (row.backupChoices) {
+			const names = (choices: BoostPricingRow['backupChoices']) =>
+				choices?.length
+					? choices.map((c) => `#${c.serviceId ?? c.id.slice(0, 8)}`).join(', ')
+					: 'None';
+			const before = names(previous.backupChoices);
+			const after = names(row.backupChoices);
+			if (before !== after || !previous.backupChoices)
+				changes.push({ label: 'Backups', before: 'Saved backups', after });
+		}
 		const quantity = (value: number) => value.toLocaleString('en-NG');
 		add(
 			changes,

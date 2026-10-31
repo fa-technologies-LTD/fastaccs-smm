@@ -102,6 +102,7 @@ import {
 	type AccountFollowerAddon
 } from '$lib/helpers/account-addons';
 import { getBoostAutomationMode } from '$lib/server/boosting-providers/fulfillment-worker';
+import { boostBackupRouteIds } from '$lib/server/boosting-providers/route-simulator';
 
 interface CreateOrderItemInput {
 	categoryId: string;
@@ -871,6 +872,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 								audienceTag: offer.audienceTag,
 								preferredRouteId: offer.preferredRouteId,
 								lockedRouteId: offer.lockedRouteId,
+								backupRouteIds: boostBackupRouteIds(offer.recoveryModes),
 								routes: offer.routes.map((route) => ({
 									id: route.id,
 									state: route.state,

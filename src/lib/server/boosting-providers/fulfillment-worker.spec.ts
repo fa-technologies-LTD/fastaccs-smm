@@ -4,7 +4,8 @@ import {
 	canRetryBoostSubmission,
 	canStartBoostWork,
 	customerStatusForProviderState,
-	getBoostAutomationMode
+	getBoostAutomationMode,
+	nextBoostBackupRoute
 } from './fulfillment-worker';
 
 describe('Boosting fulfillment safety policy', () => {
@@ -62,5 +63,48 @@ describe('Boosting fulfillment safety policy', () => {
 			[1, 2.5]
 		])
 			expect(canRetryBoostSubmission(rejected, attempts, cap)).toBe(false);
+	});
+
+	it('sends a cancelled or refunded order to the next untried backup, only when the owner set backups', () => {
+		const order = {
+			offerSnapshot: {
+				routingPolicy: 'preferred',
+				preferredRouteId: 'main',
+				backupRouteIds: ['first', 'second']
+			},
+			attemptCount: 1,
+			attemptCap: 3,
+			selectedRouteId: 'main',
+			attempts: [{ type: 'submission', routeId: 'main' }]
+		};
+		expect(nextBoostBackupRoute(order)).toBe('first');
+		expect(
+			nextBoostBackupRoute({
+				...order,
+				attemptCount: 2,
+				selectedRouteId: 'first',
+				attempts: [...order.attempts, { type: 'submission', routeId: 'first' }]
+			})
+		).toBe('second');
+		expect(nextBoostBackupRoute({ ...order, attemptCount: 3 }), 'attempt cap').toBeNull();
+		expect(
+			nextBoostBackupRoute({
+				...order,
+				offerSnapshot: { routingPolicy: 'locked', lockedRouteId: 'main' }
+			}),
+			'a locked offer has no backups'
+		).toBeNull();
+		expect(
+			nextBoostBackupRoute({
+				...order,
+				attemptCount: 2,
+				attempts: [
+					{ type: 'submission', routeId: 'main' },
+					{ type: 'submission', routeId: 'first' },
+					{ type: 'submission', routeId: 'second' }
+				]
+			}),
+			'every listed supplier already tried'
+		).toBeNull();
 	});
 });

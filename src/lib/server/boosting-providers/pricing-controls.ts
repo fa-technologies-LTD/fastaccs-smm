@@ -27,6 +27,10 @@ import { getRequiredLinkType, type BoostingActionType } from '$lib/helpers/socia
 import { getBoostingServiceConfig, getQuantityChips } from '$lib/helpers/boosting-service-config';
 import { inspectBoostSale } from '$lib/server/boosting-sale-readiness';
 import { supplierChoice, supplierChoiceRevision } from './supplier-choice';
+import { BOOST_BACKUP_ROUTE_PREFIX, boostBackupRouteIds } from './route-simulator';
+
+/** Backups per offer: enough to ride out one supplier outage without a long list to review. */
+export const BOOST_MAX_BACKUPS = 3;
 
 type Database = PrismaClient | Prisma.TransactionClient;
 type Offer = Prisma.BoostCustomerOfferGetPayload<{
@@ -40,15 +44,28 @@ const includes = {
 	routes: { include: { providerService: { include: { providerState: true } } } }
 } as const;
 
+/** The owner's main route then backups, in order, for offers saved with backups. */
+function listedRoutes(offer: Offer) {
+	const backups = boostBackupRouteIds(offer.recoveryModes);
+	if (offer.routingPolicy !== 'preferred' || !backups.length) return null;
+	return [offer.preferredRouteId, ...backups].flatMap((id) => {
+		const route = offer.routes.find((r) => r.id === id);
+		return route ? [route] : [];
+	});
+}
 function routesFor(offer: Offer) {
 	if (offer.routingPolicy === 'locked')
 		return offer.routes.filter((r) => r.id === offer.lockedRouteId);
+	const listed = listedRoutes(offer);
+	if (listed) return listed.filter((r) => r.equivalenceApproved && r.state === 'enabled');
 	// Automatic quotes use the highest approved route cost, not a cheap route that cannot represent the shortlist.
 	return offer.routes.filter((r) => r.equivalenceApproved && r.state === 'enabled');
 }
 function approvalRoutesFor(offer: Offer) {
 	if (offer.routingPolicy === 'locked')
 		return offer.routes.filter((r) => r.id === offer.lockedRouteId && r.state !== 'paused');
+	const listed = listedRoutes(offer);
+	if (listed) return listed.filter((r) => r.state !== 'paused');
 	const enabled = routesFor(offer);
 	return enabled.length ? enabled : offer.routes.filter((r) => r.state === 'shadow');
 }
@@ -147,6 +164,7 @@ export async function loadBoostControls(database: Database = prisma): Promise<Bo
 	for (const row of view.sheet.rows) {
 		delete row.supplierChoiceId;
 		delete row.supplierChoiceRevision;
+		delete row.backupChoices;
 		const offer = offers.find((o) => o.id === row.sourceOfferId);
 		row.supplierRevision = offer ? mappingRevision(offer) : 'unconfigured';
 		if (!offer) {
@@ -204,11 +222,19 @@ export async function loadBoostControls(database: Database = prisma): Promise<Bo
 					: highest,
 			undefined
 		);
+		let mainRateUsd: number | null = null;
 		if (route) {
-			row.provider = route.providerService.provider === 'smm_raja' ? 'smm_raja' : 'bulk_follows';
-			row.serviceId = route.providerService.serviceId;
+			// With backups the row shows the main supplier, but prices on the most expensive listed
+			// route so the cost limit and profit floor hold whichever supplier takes the order.
+			const shown =
+				(listedRoutes(offer) && referenceRoutes.find((r) => r.id === offer.preferredRouteId)) ||
+				route;
+			row.provider = shown.providerService.provider === 'smm_raja' ? 'smm_raja' : 'bulk_follows';
+			row.serviceId = shown.providerService.serviceId;
 			const quotes = referenceRoutes.map((r) => quoteFor(offer, r));
-			const quote = quoteFor(offer, route);
+			const quote = quoteFor(offer, shown);
+			mainRateUsd = quote.rateUsd;
+			quote.rateUsd = quoteFor(offer, route).rateUsd;
 			quote.min = Math.max(...quotes.map((q) => q.min ?? 0));
 			quote.max = Math.min(...quotes.map((q) => q.max ?? 0));
 			quote.checkedAt = quotes.map((q) => q.checkedAt).sort()[0];
@@ -230,7 +256,18 @@ export async function loadBoostControls(database: Database = prisma): Promise<Bo
 			})),
 			reviewed:
 				candidates.length > 0 &&
-				candidates.every((r) => r.equivalenceApproved && r.state === 'enabled')
+				candidates.every((r) => r.equivalenceApproved && r.state === 'enabled'),
+			mainRateUsd,
+			backups: (listedRoutes(offer) ?? []).slice(1).map((r) => ({
+				id: r.providerService.id,
+				revision: supplierChoiceRevision(r.providerService),
+				provider: r.providerService.provider,
+				serviceId: r.providerService.serviceId,
+				name: r.providerService.name,
+				rateUsd:
+					r.providerService.ratePerThousand == null ? null : Number(r.providerService.ratePerThousand),
+				issues: quoteFor(offer, r).issues
+			}))
 		};
 	}
 	view.changedRows = [];
@@ -265,6 +302,27 @@ function clean(input: unknown, current: BoostControlsView): BoostPricingSheet {
 					`${row.title}: supplier setup or cost changed. Reload saved settings before confirming. Your draft is kept.`,
 					409
 				);
+			if (raw.backupChoices !== undefined) {
+				const ids = Array.isArray(raw.backupChoices)
+					? raw.backupChoices.map((choice) => choice?.id)
+					: null;
+				if (
+					!ids ||
+					ids.length > BOOST_MAX_BACKUPS ||
+					new Set(ids).size !== ids.length ||
+					raw.backupChoices.some(
+						(choice) =>
+							typeof choice?.id !== 'string' ||
+							!/^[a-f0-9-]{36}$/i.test(choice.id) ||
+							typeof choice.revision !== 'string' ||
+							!/^[a-f0-9]{64}$/.test(choice.revision)
+					)
+				)
+					throw new BoostPricingError(
+						`${row.title}: choose up to ${BOOST_MAX_BACKUPS} backups from the picker before saving.`
+					);
+				row.backupChoices = raw.backupChoices.map(({ id, revision }) => ({ id, revision }));
+			}
 			if (
 				raw.supplierChoiceId !== undefined &&
 				(typeof raw.supplierChoiceId !== 'string' ||
@@ -323,7 +381,7 @@ async function prepareSupplierReview(
 		const original = current.sheet.rows.find((r) => r.id === row.id)!;
 		let offer = offers.find((o) => o.id === row.sourceOfferId);
 		const approvePreload = row.selected && !original.selected && !current.setup[row.id]?.reviewed;
-		if (!row.supplierChoiceId && !approvePreload) continue;
+		if (!row.supplierChoiceId && !row.backupChoices && !approvePreload) continue;
 		if (row.supplierChoiceId) {
 			const service = await tx.boostProviderService.findUnique({
 				where: { id: row.supplierChoiceId },
@@ -446,7 +504,110 @@ async function prepareSupplierReview(
 				}
 			});
 		}
+		if (offer && (row.supplierChoiceId || row.backupChoices))
+			await applyBackups(tx, offer.id, row, original.startingQuantity, next.settings.fx, actor);
 	}
+}
+
+/**
+ * Sets the owner's backup suppliers on one offer: main first, then backups in order. With backups the offer
+ * routes to its main supplier and falls back down the list (never to an unlisted route); without them it stays
+ * locked to the main supplier. A main-supplier change keeps the saved backups unless the draft changed them.
+ * The cost limit covers the most expensive listed supplier, so the profit floor holds for every one of them.
+ */
+async function applyBackups(
+	tx: Prisma.TransactionClient,
+	offerId: string,
+	row: BoostPricingSheet['rows'][number],
+	startingQuantity: number,
+	fx: number,
+	actor: string
+) {
+	const offer = (await tx.boostCustomerOffer.findUnique({ where: { id: offerId }, include: includes }))!;
+	const mainRouteId = offer.lockedRouteId ?? offer.preferredRouteId;
+	const main = offer.routes.find((r) => r.id === mainRouteId);
+	if (!main) throw new BoostPricingError(`${row.title}: choose a main supplier before adding backups.`);
+	const routeIds: string[] = [];
+	if (row.backupChoices) {
+		for (const choice of row.backupChoices) {
+			const service = await tx.boostProviderService.findUnique({
+				where: { id: choice.id },
+				include: { providerState: true }
+			});
+			if (!service)
+				throw new BoostPricingError(`${row.title}: a backup supplier service no longer exists.`);
+			const checked = supplierChoice(service, row);
+			if (checked.revision !== choice.revision)
+				throw new BoostPricingError(
+					`${row.title}: backup ${service.serviceId} changed. Reopen the offer and review it again.`,
+					409
+				);
+			if (checked.issues.length)
+				throw new BoostPricingError(`${row.title}: backup ${service.serviceId}: ${checked.issues[0]}`);
+			if (service.id === main.providerServiceId) continue;
+			const route = await tx.boostServiceRoute.upsert({
+				where: { offerId_providerServiceId: { offerId: offer.id, providerServiceId: service.id } },
+				create: {
+					offerId: offer.id,
+					providerServiceId: service.id,
+					state: 'enabled',
+					equivalenceApproved: true,
+					equivalenceLabel: 'Owner backup in Boosting',
+					targetType: service.targetType!,
+					minimumQuantity: service.minQuantity!,
+					maximumQuantity: service.maxQuantity!,
+					verifiedSignals: [],
+					audienceTags: [],
+					maximumPilotQuantity: service.minQuantity!,
+					reviewedByUserId: actor,
+					reviewedAt: new Date()
+				},
+				update: { state: 'enabled', equivalenceApproved: true, reviewedByUserId: actor, reviewedAt: new Date() }
+			});
+			routeIds.push(route.id);
+		}
+	} else {
+		routeIds.push(...boostBackupRouteIds(offer.recoveryModes).filter((id) => id !== main.id));
+	}
+	// A main-supplier change on an offer without backups leaves its retry policy exactly as it was.
+	if (!routeIds.length && !boostBackupRouteIds(offer.recoveryModes).length) return;
+	const refreshed = (await tx.boostCustomerOffer.findUnique({
+		where: { id: offer.id },
+		include: includes
+	}))!;
+	const highestRate = Math.max(
+		...[main.id, ...routeIds].flatMap((id) => {
+			const route = refreshed.routes.find((r) => r.id === id);
+			return route ? [Number(route.providerService.ratePerThousand)] : [];
+		})
+	);
+	const keptModes = (offer.recoveryModes ?? []).filter(
+		(mode) => !mode.startsWith(BOOST_BACKUP_ROUTE_PREFIX) && mode !== 'fallback_automatic'
+	);
+	const retries = keptModes.includes('retry_definitive_failure') ? offer.attemptCap : 1;
+	await tx.boostCustomerOffer.update({
+		where: { id: offer.id },
+		data: routeIds.length
+			? {
+					routingPolicy: 'preferred',
+					preferredRouteId: main.id,
+					lockedRouteId: null,
+					attemptCap: Math.max(retries, 1 + routeIds.length),
+					recoveryModes: [
+						...keptModes,
+						'fallback_automatic',
+						...routeIds.map((id) => `${BOOST_BACKUP_ROUTE_PREFIX}${id}`)
+					],
+					maximumSupplierCostNgn: reviewedSupplierCost(highestRate, fx, startingQuantity, row.title)
+				}
+			: {
+					routingPolicy: 'locked',
+					lockedRouteId: main.id,
+					preferredRouteId: null,
+					attemptCap: retries,
+					recoveryModes: keptModes
+				}
+	});
 }
 
 /** One atomic Save: rules, changed offer prices/visibility and audit. No supplier purchases. */
@@ -484,7 +645,10 @@ export async function saveBoostControls(
 				throw new BoostPricingError('Confirm the selected offers before publishing them.');
 			if (next.version !== current.sheet.version)
 				throw new BoostPricingError('Newer settings were saved. Reload before saving.', 409);
-			if ((automatic || preserveVisibility) && next.rows.some((r) => r.supplierChoiceId))
+			if (
+				(automatic || preserveVisibility) &&
+				next.rows.some((r) => r.supplierChoiceId || r.backupChoices)
+			)
 				throw new BoostPricingError('Supplier changes require the confirmed owner Save.');
 			const needsSupplierReview =
 				!automatic &&
@@ -492,6 +656,7 @@ export async function saveBoostControls(
 				next.rows.some(
 					(r) =>
 						r.supplierChoiceId ||
+						r.backupChoices ||
 						(r.selected &&
 							!current.sheet.rows.find((old) => old.id === r.id)?.selected &&
 							!current.setup[r.id]?.reviewed)
@@ -557,6 +722,7 @@ export async function saveBoostControls(
 					needsSupplierReview &&
 					Boolean(
 						row.supplierChoiceId ||
+							row.backupChoices ||
 							(row.selected && !original.selected && !current.setup[row.id]?.reviewed)
 					);
 				// An explicit new supplier approval reviews cost at the NEW minimum directly.

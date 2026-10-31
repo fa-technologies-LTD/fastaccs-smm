@@ -8,7 +8,7 @@ const db = vi.hoisted(() => ({
 	$queryRaw: vi.fn(),
 	$transaction: vi.fn(),
 	adminAuditLog: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
-	boostCustomerOffer: { findMany: vi.fn(), update: vi.fn(), create: vi.fn() },
+	boostCustomerOffer: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), create: vi.fn() },
 	boostProviderService: { findMany: vi.fn(), findUnique: vi.fn() },
 	boostServiceRoute: { upsert: vi.fn(), updateMany: vi.fn() },
 	category: { update: vi.fn(), findMany: vi.fn() },
@@ -110,6 +110,9 @@ beforeEach(() => {
 		return store.record;
 	});
 	db.boostCustomerOffer.findMany.mockImplementation(async () => store.offers);
+	db.boostCustomerOffer.findUnique.mockImplementation(
+		async ({ where }: any) => store.offers.find((o) => o.id === where.id) ?? null
+	);
 	db.boostCustomerOffer.update.mockImplementation(async ({ where, data }: any) => {
 		const offer = store.offers.find((o) => o.id === where.id);
 		Object.assign(offer, data, { updatedAt: new Date() });
@@ -153,7 +156,9 @@ beforeEach(() => {
 			route = {
 				...saleOfferFixture().routes[0],
 				...create,
-				id: 'new-route',
+				id: offer.routes.some((r: any) => r.id === 'new-route')
+					? `new-route-${offer.routes.length}`
+					: 'new-route',
 				providerService: store.services.find((s) => s.id === create.providerServiceId)
 			};
 			offer.routes.push(route);
@@ -1021,3 +1026,59 @@ it('leaves the Numbers rate alone when the dollar rate did not change', async ()
 		)
 	).toBe(false);
 });
+
+it("saves backups in the owner's order, keeps the main supplier shown, and drops them back to a locked offer", async () => {
+	const backup = (id: string, serviceId: string, ratePerThousand: number) => ({
+		...store.services[0],
+		id,
+		serviceId,
+		ratePerThousand
+	});
+	const first = backup('22222222-2222-4222-8222-222222222222', 's4715', 0.09);
+	const second = backup('33333333-3333-4333-8333-333333333333', '5767', 0.06);
+	store.services.push(first, second);
+	const next = await current();
+	next.rows[0].backupChoices = [first, second].map((service) => ({
+		id: service.id,
+		revision: supplierChoiceRevision(service)
+	}));
+	await saveBoostControls(next, 'owner', db as never, false, true);
+	const offer = store.offers[0];
+	expect(offer).toMatchObject({
+		routingPolicy: 'preferred',
+		preferredRouteId: 'route',
+		lockedRouteId: null,
+		attemptCap: 3
+	});
+	expect(offer.recoveryModes).toEqual([
+		'fallback_automatic',
+		'backup_route:new-route',
+		'backup_route:new-route-2'
+	]);
+	const reloaded = await loadBoostControls(db as never);
+	expect(reloaded.sheet.rows[0].serviceId).toBe(store.services[0].serviceId);
+	expect(reloaded.setup.row.backups?.map((item) => item.serviceId)).toEqual(['s4715', '5767']);
+	expect(reloaded.sheet.rows[0].backupChoices).toBeUndefined();
+
+	const cleared = await current();
+	cleared.rows[0].backupChoices = [];
+	await saveBoostControls(cleared, 'owner', db as never, false, true);
+	expect(store.offers[0]).toMatchObject({
+		routingPolicy: 'locked',
+		lockedRouteId: 'route',
+		preferredRouteId: null,
+		attemptCap: 1,
+		recoveryModes: []
+	});
+});
+
+it('refuses a backup whose supplier details changed since the owner picked it', async () => {
+	const changed = { ...store.services[0], id: '44444444-4444-4444-8444-444444444444', serviceId: 's1' };
+	store.services.push(changed);
+	const next = await current();
+	next.rows[0].backupChoices = [{ id: changed.id, revision: 'a'.repeat(64) }];
+	await expect(saveBoostControls(next, 'owner', db as never, false, true)).rejects.toThrow(
+		/backup s1 changed/
+	);
+});
+

@@ -2,7 +2,7 @@
 	import { onMount, untrack } from 'svelte';
 	import { beforeNavigate } from '$app/navigation';
 	import { adminDialog } from '$lib/helpers/admin-dialog';
-	import { Save, Download, RefreshCcw, Lock, Unlock, Zap, X } from '$lib/icons';
+	import { Save, Download, RefreshCcw, Lock, Unlock, Zap, X, ArrowUp, ArrowDown } from '$lib/icons';
 	import BoostingSupplierDetails from '$lib/components/admin/BoostingSupplierDetails.svelte';
 	import BoostingSupplierBalances from '$lib/components/admin/BoostingSupplierBalances.svelte';
 	import BoostingSupplierPicker from '$lib/components/admin/BoostingSupplierPicker.svelte';
@@ -22,6 +22,7 @@
 		pricingStepPrice,
 		validatePricingSheet,
 		exportPricingCsv,
+		type BoostBackupChoice,
 		type BoostPricingRow,
 		type BoostPricingSheet
 	} from '$lib/helpers/boosting-pricing-sheet';
@@ -68,9 +69,17 @@
 	let quantityInputs = $state<Record<string, string>>({});
 	let quantityErrors = $state<Record<string, string>>({});
 	let expanded = $state<string | null>(null);
+	const expandedRow = $derived(view.sheet.rows.find((row) => row.id === expanded) ?? null);
+	const tierName = (r: BoostPricingRow) =>
+		r.option.trim() ||
+		({ value: 'Affordable', stable: 'More stable', premium: 'Premium' } as Record<string, string>)[
+			r.tier
+		] ||
+		r.tier;
 	let blockedLiveRow = $state<string | null>(null);
 	let supplier = $state<BoostPricingRow | null>(null);
 	let picker = $state<BoostPricingRow | null>(null);
+	let pickerMode = $state<'main' | 'backup'>('main');
 	let supplierDrafts = $state<Record<string, BoostSupplierChoice>>({});
 	let expandConfirm = $state(false);
 	let saveDraft = $state<BoostPricingSheet | null>(null);
@@ -123,14 +132,68 @@
 			if (price != null) row.sale = price;
 		}
 		picker = null;
-		expanded = row.id;
 		blockedLiveRow = null;
 		error = '';
 	}
 	function chooseSupplier(row: BoostPricingRow) {
 		if (busy || saveUncertain) return;
 		supplier = null;
+		pickerMode = 'main';
 		picker = row;
+	}
+	// Backups: tried in order when the main supplier cannot take an order or cancels it.
+	const MAX_BACKUPS = 3;
+	const backupsOf = (r: BoostPricingRow): BoostBackupChoice[] =>
+		r.backupChoices ?? view.setup[r.id]?.backups ?? [];
+	const mainRate = (r: BoostPricingRow) =>
+		supplierDrafts[r.id]?.rateUsd ?? view.setup[r.id]?.mainRateUsd ?? quote(r)?.rateUsd ?? null;
+	const usdRate = (rate: number | null | undefined) =>
+		rate == null ? '' : `$${rate < 1 ? rate.toFixed(3) : rate.toFixed(2)}/1k`;
+	function setBackups(row: BoostPricingRow, list: BoostBackupChoice[]) {
+		row.backupChoices = list.map((item) => ({ ...item }));
+		blockedLiveRow = null;
+		error = '';
+	}
+	function addBackupFor(row: BoostPricingRow) {
+		if (busy || saveUncertain) return;
+		supplier = null;
+		pickerMode = 'backup';
+		picker = row;
+	}
+	function addBackup(row: BoostPricingRow, choice: BoostSupplierChoice) {
+		const mainId = row.supplierChoiceId ?? quote(row)?.providerServiceId;
+		if (choice.providerServiceId === mainId) {
+			showError('That is already the main supplier.');
+			return;
+		}
+		const list = backupsOf(row).filter((item) => item.id !== choice.providerServiceId);
+		setBackups(
+			row,
+			[
+				...list,
+				{
+					id: choice.providerServiceId,
+					revision: choice.revision,
+					provider: choice.provider,
+					serviceId: choice.serviceId,
+					name: choice.name,
+					rateUsd: choice.rateUsd
+				}
+			].slice(0, MAX_BACKUPS)
+		);
+		picker = null;
+	}
+	function moveBackup(row: BoostPricingRow, index: number, step: number) {
+		const list = [...backupsOf(row)];
+		const [item] = list.splice(index, 1);
+		list.splice(index + step, 0, item);
+		setBackups(row, list);
+	}
+	function removeBackup(row: BoostPricingRow, index: number) {
+		setBackups(
+			row,
+			backupsOf(row).filter((_, position) => position !== index)
+		);
 	}
 	function undoSupplier(row: BoostPricingRow) {
 		delete row.supplierChoiceId;
@@ -268,10 +331,10 @@
 		blockedLiveRow = null;
 		error = '';
 	}
-	function closeDetails(row: BoostPricingRow) {
+	function closeDetails() {
+		// The dialog returns focus to whatever opened it.
 		expanded = null;
 		blockedLiveRow = null;
-		document.getElementById(`boost-offer-${row.id}`)?.focus();
 	}
 	function updateQuantity(
 		row: BoostPricingRow,
@@ -949,7 +1012,7 @@
 									aria-expanded={expanded === row.id}
 									aria-controls={`boost-details-${row.id}`}
 									onclick={() => {
-										if (expanded === row.id) closeDetails(row);
+										if (expanded === row.id) closeDetails();
 										else {
 											expanded = row.id;
 											blockedLiveRow = null;
@@ -990,12 +1053,10 @@
 											: 'BulkFollows'
 										: 'Choose supplier'}
 									<small
-										>{sourceCode(row) ? `#${sourceCode(row)}` : ''}{!row.supplierChoiceId &&
-										view.setup[row.id]?.routingPolicy === 'automatic'
-											? ' · Cost reference'
+										>{sourceCode(row) ? `#${sourceCode(row)}` : ''}{backupsOf(row).length
+											? ` +${backupsOf(row).length} backup${backupsOf(row).length === 1 ? '' : 's'}`
 											: ''}</small
-									>{#if quote(row)}<span class="change" aria-hidden="true">Change</span
-										>{/if}</button
+									></button
 								></td
 							>
 							<td class="c-cost" data-label="Cost ₦"
@@ -1056,212 +1117,6 @@
 									>{/if}</td
 							>
 						</tr>
-						{#if expanded === row.id}<tr class="expanded"
-								><td colspan="9" id={`boost-details-${row.id}`}
-									><div class="row-details">
-										<div>
-											<h3>{row.title}</h3>
-											<p>{quote(row)?.name ?? 'No supplier chosen'}</p>
-											<div role={blockedLiveRow === row.id ? 'alert' : undefined}>
-												{#if blockedLiveRow === row.id}<p class="warning-copy">
-														Not live yet. Review the items below.
-													</p>{/if}
-												{#each warnings(row) as warning}<p class="warning-copy">{warning}</p>{/each}
-												{#if warnings(row).some(boostPricingAdvisory)}
-													<p class="hint">
-														These preferences do not block your confirmed manual Save. Unverified
-														quality labels are not customer guarantees.
-													</p>
-													<button
-														disabled={busy || saveUncertain || row.reviewRequested}
-														onclick={() => {
-															row.reviewRequested = true;
-															row.priceMode = 'manual';
-														}}
-														>{row.reviewRequested
-															? 'Queued for final Save'
-															: 'Review current price and cost'}</button
-													>
-												{/if}
-											</div>
-											<p>
-												Customers start at {pricingStart(
-													row,
-													quote(row)?.max ?? null
-												).toLocaleString()} · +/− {row.increment.toLocaleString()}
-											</p>
-											<p>
-												Reviewed supplier limit: {money(
-													costLimit(row) == null
-														? null
-														: (costLimit(row)! * 1000) / row.startingQuantity
-												)} per 1,000.
-											</p>
-											<button disabled={busy} onclick={() => openSupplier(row)}
-												>Supplier details</button
-											>
-											<button onclick={() => chooseSupplier(row)} disabled={busy || saveUncertain}
-												>{quote(row) ? 'Change supplier' : 'Choose supplier'}</button
-											>
-											{#if row.supplierChoiceId}<p class="hint">
-													Supplier choice is a draft. Final Save approves and keeps this exact
-													service for new orders.
-												</p>
-												<button onclick={() => undoSupplier(row)} disabled={busy}
-													>Undo supplier change</button
-												>
-											{:else if preloadApproval(row)}<p class="hint">
-													Final Save will approve the displayed supplier setup when you tick Live.
-												</p>{/if}
-										</div>
-										<div class="offer-controls">
-											<section
-												class="offer-settings"
-												aria-label={`Offer settings for ${row.title} ${row.tier}`}
-											>
-												<h3>Offer settings</h3>
-												<p>
-													Draft only. Save reviews these changes with your prices and Live ticks.
-												</p>
-												<div class="offer-fields">
-													<label
-														>Customer minimum<input
-															aria-label={`Customer minimum for ${row.title} ${row.tier}`}
-															aria-invalid={Boolean(quantityErrors[`${row.id}:startingQuantity`])}
-															type="number"
-															min="1"
-															step="1"
-															value={quantityValue(row, 'startingQuantity')}
-															oninput={(event) =>
-																updateQuantity(row, 'startingQuantity', event.currentTarget)}
-														/></label
-													>
-													<label
-														>Quantity +/− increment<input
-															aria-label={`Quantity increment for ${row.title} ${row.tier}`}
-															aria-invalid={Boolean(quantityErrors[`${row.id}:increment`])}
-															type="number"
-															min="1"
-															step="1"
-															value={quantityValue(row, 'increment')}
-															oninput={(event) =>
-																updateQuantity(row, 'increment', event.currentTarget)}
-														/></label
-													>
-													<label
-														>Customer maximum (optional)<input
-															aria-label={`Customer maximum for ${row.title} ${row.tier}`}
-															aria-invalid={Boolean(quantityErrors[`${row.id}:maximumQuantity`])}
-															type="number"
-															min="1"
-															step="1"
-															placeholder="Use supplier limit"
-															value={quantityValue(row, 'maximumQuantity')}
-															oninput={(event) =>
-																updateQuantity(row, 'maximumQuantity', event.currentTarget)}
-														/></label
-													>
-													<label
-														>Customer option name<input
-															aria-label={`Customer option name for ${row.title} ${row.tier}`}
-															maxlength="80"
-															placeholder="Use service name"
-															bind:value={row.option}
-														/></label
-													>
-													<label class="wide"
-														>Customer description<input
-															aria-label={`Customer description for ${row.title} ${row.tier}`}
-															maxlength="120"
-															bind:value={row.shortPromise}
-														/></label
-													>
-												</div>
-												{#each rowQuantityErrors(row) as message}<p role="alert" class="error">
-														{message}
-													</p>{/each}
-												<p>
-													Prices and costs are per 1,000. Changing the increment keeps the same
-													per-item price.
-												</p>
-												<p>
-													Cheap offers may start higher to meet the ₦500 checkout minimum. Supplier
-													limits still apply.
-												</p>
-											</section>
-											<details>
-												<summary>Advanced pricing</summary>
-												<p class="hint">
-													Amounts below are per 1,000. Inherited profit target: {money(
-														displayAmount(row, view.sheet.settings.profitTargetNgn ?? 0)
-													)}; minimum retained profit: {money(
-														displayAmount(row, view.sheet.settings.hardProfitNgn ?? 0)
-													)}. Existing rule calculations are preserved.
-												</p>
-												<div class="fields">
-													<label class="check"
-														><input
-															type="checkbox"
-															checked={row.useDefaultMarkup ?? false}
-															onchange={(event) => {
-																row.useDefaultMarkup = event.currentTarget.checked;
-																queueMicrotask(previewPrices);
-															}}
-														/> Use default profit percentage</label
-													>
-													<label
-														>Profit on supplier cost (%)<input
-															type="number"
-															min="0"
-															max="10000"
-															disabled={row.useDefaultMarkup}
-															bind:value={row.targetMarkup}
-															oninput={() => queueMicrotask(previewPrices)}
-														/></label
-													>
-													<label
-														>Profit target override per 1,000 (₦)<input
-															type="number"
-															min="0"
-															placeholder="Global"
-															value={displayAmount(row, row.profitTargetNgn)}
-															oninput={(event) =>
-																updateDisplayOverride(row, 'profitTargetNgn', event.currentTarget)}
-														/></label
-													>
-													<label
-														>Minimum retained profit override per 1,000 (₦)<input
-															type="number"
-															min="0"
-															placeholder="Global"
-															value={displayAmount(row, row.hardProfitNgn)}
-															oninput={(event) =>
-																updateDisplayOverride(row, 'hardProfitNgn', event.currentTarget)}
-														/></label
-													>
-												</div>
-											</details>
-										</div>
-									</div>
-									<div class="row-actions">
-										<p>
-											{dirty
-												? 'Save reviews all pending changes. Closing keeps your edits.'
-												: 'No changes to save.'}
-										</p>
-										<div class="actions">
-											<button disabled={busy} onclick={() => closeDetails(row)}>Close</button>
-											<button
-												class="primary"
-												disabled={busy || !dirty || saveUncertain}
-												onclick={() => save()}
-												><Save size={16} />
-												{operation === 'save' ? 'Saving…' : 'Save all changes'}</button
-											>
-										</div>
-									</div></td
-								></tr
-							>{/if}
 					{:else}<tr><td colspan="9" class="empty">No offers match these filters.</td></tr>{/each}
 				</tbody>
 			</table>
@@ -1282,6 +1137,250 @@
 	{/if}
 </div>
 
+{#if expandedRow}{@const row = expandedRow}
+	<div class="overlay">
+		<div
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="offer-title"
+			tabindex="-1"
+			class="offer-panel"
+			id={`boost-details-${row.id}`}
+			use:adminDialog={() => closeDetails()}
+		>
+			<header>
+				<div>
+					<h2 id="offer-title">
+						{row.title} <small>{label(row.platform)} · {tierName(row)}</small>
+					</h2>
+					<p class="hint">
+						{money(displayAmount(row, row.sale))} per 1,000 · customers start at {pricingStart(
+							row,
+							quote(row)?.max ?? null
+						).toLocaleString()}, +/− {row.increment.toLocaleString()}
+					</p>
+				</div>
+				<button aria-label="Close offer" onclick={() => closeDetails()}><X size={20} /></button>
+			</header>
+			<div role={blockedLiveRow === row.id ? 'alert' : undefined}>
+				{#if blockedLiveRow === row.id}<p class="warning-copy">
+						Not live yet. Review the items below.
+					</p>{/if}
+				{#each warnings(row) as warning}<p class="warning-copy">{warning}</p>{/each}
+				{#if warnings(row).some(boostPricingAdvisory)}
+					<p class="hint">
+						These preferences do not block your confirmed manual Save. Unverified quality labels are
+						not customer guarantees.
+					</p>
+					<button
+						disabled={busy || saveUncertain || row.reviewRequested}
+						onclick={() => {
+							row.reviewRequested = true;
+							row.priceMode = 'manual';
+						}}
+						>{row.reviewRequested
+							? 'Queued for final Save'
+							: 'Review current price and cost'}</button
+					>
+				{/if}
+			</div>
+			<section class="suppliers" aria-label={`Suppliers for ${row.title} ${row.tier}`}>
+				<h3>Suppliers</h3>
+				<ol>
+					<li>
+						<span class="rank">Main</span>
+						<span class="who"
+							><b
+								>{quote(row) ? providerName(sourceProvider(row)) : 'No supplier chosen'}{sourceCode(
+									row
+								)
+									? ` #${sourceCode(row)}`
+									: ''}</b
+							><small>{quote(row)?.name ?? 'Choose a supplier to sell this offer.'}</small></span
+						>
+						<span class="rate">{usdRate(mainRate(row))}</span>
+						<span class="moves"
+							><button onclick={() => chooseSupplier(row)} disabled={busy || saveUncertain}
+								>{quote(row) ? 'Change' : 'Choose'}</button
+							></span
+						>
+					</li>
+					{#each backupsOf(row) as backup, index (backup.id)}<li>
+							<span class="rank">Backup {index + 1}</span>
+							<span class="who"
+								><b>{providerName(backup.provider ?? '')} #{backup.serviceId}</b><small
+									>{backup.name}</small
+								></span
+							>
+							<span class="rate">{usdRate(backup.rateUsd)}</span>
+							<span class="moves"
+								><button
+									aria-label={`Move backup ${index + 1} up`}
+									disabled={busy || index === 0}
+									onclick={() => moveBackup(row, index, -1)}><ArrowUp size={16} /></button
+								><button
+									aria-label={`Move backup ${index + 1} down`}
+									disabled={busy || index === backupsOf(row).length - 1}
+									onclick={() => moveBackup(row, index, 1)}><ArrowDown size={16} /></button
+								><button
+									aria-label={`Remove backup ${index + 1}`}
+									disabled={busy}
+									onclick={() => removeBackup(row, index)}><X size={16} /></button
+								></span
+							>
+						</li>{/each}
+				</ol>
+				<div class="supplier-actions">
+					<button
+						onclick={() => addBackupFor(row)}
+						disabled={busy || saveUncertain || !quote(row) || backupsOf(row).length >= MAX_BACKUPS}
+						>Add backup</button
+					>
+					<button disabled={busy} onclick={() => openSupplier(row)}>Supplier details</button>
+					{#if row.supplierChoiceId}<button onclick={() => undoSupplier(row)} disabled={busy}
+							>Undo supplier change</button
+						>{/if}
+				</div>
+				<p class="hint">
+					If the main supplier can’t take an order, or cancels it, the next backup gets it. The
+					price covers your most expensive supplier. Supplier limit: {money(
+						costLimit(row) == null ? null : (costLimit(row)! * 1000) / row.startingQuantity
+					)} per 1,000.
+					{#if row.supplierChoiceId || row.backupChoices}<b>Save approves these suppliers.</b
+						>{:else if preloadApproval(row)}Save approves the shown supplier when you tick Live.{/if}
+				</p>
+			</section>
+			<div class="offer-controls">
+				<section class="offer-settings" aria-label={`Offer settings for ${row.title} ${row.tier}`}>
+					<h3>Offer settings</h3>
+					<div class="offer-fields">
+						<label
+							>Customer minimum<input
+								aria-label={`Customer minimum for ${row.title} ${row.tier}`}
+								aria-invalid={Boolean(quantityErrors[`${row.id}:startingQuantity`])}
+								type="number"
+								min="1"
+								step="1"
+								value={quantityValue(row, 'startingQuantity')}
+								oninput={(event) => updateQuantity(row, 'startingQuantity', event.currentTarget)}
+							/></label
+						>
+						<label
+							>Quantity +/− increment<input
+								aria-label={`Quantity increment for ${row.title} ${row.tier}`}
+								aria-invalid={Boolean(quantityErrors[`${row.id}:increment`])}
+								type="number"
+								min="1"
+								step="1"
+								value={quantityValue(row, 'increment')}
+								oninput={(event) => updateQuantity(row, 'increment', event.currentTarget)}
+							/></label
+						>
+						<label
+							>Customer maximum (optional)<input
+								aria-label={`Customer maximum for ${row.title} ${row.tier}`}
+								aria-invalid={Boolean(quantityErrors[`${row.id}:maximumQuantity`])}
+								type="number"
+								min="1"
+								step="1"
+								placeholder="Use supplier limit"
+								value={quantityValue(row, 'maximumQuantity')}
+								oninput={(event) => updateQuantity(row, 'maximumQuantity', event.currentTarget)}
+							/></label
+						>
+						<label
+							>Customer option name<input
+								aria-label={`Customer option name for ${row.title} ${row.tier}`}
+								maxlength="80"
+								placeholder="Use service name"
+								bind:value={row.option}
+							/></label
+						>
+						<label class="wide"
+							>Customer description<input
+								aria-label={`Customer description for ${row.title} ${row.tier}`}
+								maxlength="120"
+								bind:value={row.shortPromise}
+							/></label
+						>
+					</div>
+					{#each rowQuantityErrors(row) as message}<p role="alert" class="error">
+							{message}
+						</p>{/each}
+					<p class="hint">
+						Per 1,000. Changing the increment keeps the per-item price; cheap offers may start
+						higher to reach the ₦500 checkout minimum.
+					</p>
+				</section>
+				<details>
+					<summary>Advanced pricing</summary>
+					<p class="hint">
+						Amounts below are per 1,000. Inherited profit target: {money(
+							displayAmount(row, view.sheet.settings.profitTargetNgn ?? 0)
+						)}; minimum retained profit: {money(
+							displayAmount(row, view.sheet.settings.hardProfitNgn ?? 0)
+						)}. Existing rule calculations are preserved.
+					</p>
+					<div class="fields">
+						<label class="check"
+							><input
+								type="checkbox"
+								checked={row.useDefaultMarkup ?? false}
+								onchange={(event) => {
+									row.useDefaultMarkup = event.currentTarget.checked;
+									queueMicrotask(previewPrices);
+								}}
+							/> Use default profit percentage</label
+						>
+						<label
+							>Profit on supplier cost (%)<input
+								type="number"
+								min="0"
+								max="10000"
+								disabled={row.useDefaultMarkup}
+								bind:value={row.targetMarkup}
+								oninput={() => queueMicrotask(previewPrices)}
+							/></label
+						>
+						<label
+							>Profit target override per 1,000 (₦)<input
+								type="number"
+								min="0"
+								placeholder="Global"
+								value={displayAmount(row, row.profitTargetNgn)}
+								oninput={(event) =>
+									updateDisplayOverride(row, 'profitTargetNgn', event.currentTarget)}
+							/></label
+						>
+						<label
+							>Minimum retained profit override per 1,000 (₦)<input
+								type="number"
+								min="0"
+								placeholder="Global"
+								value={displayAmount(row, row.hardProfitNgn)}
+								oninput={(event) =>
+									updateDisplayOverride(row, 'hardProfitNgn', event.currentTarget)}
+							/></label
+						>
+					</div>
+				</details>
+			</div>
+			<div class="row-actions">
+				<p>
+					{dirty
+						? 'Save reviews all pending changes. Closing keeps your edits.'
+						: 'No changes to save.'}
+				</p>
+				<div class="actions">
+					<button disabled={busy} onclick={() => closeDetails()}>Close</button>
+					<button class="primary" disabled={busy || !dirty || saveUncertain} onclick={() => save()}
+						><Save size={16} />
+						{operation === 'save' ? 'Saving…' : 'Save all changes'}</button
+					>
+				</div>
+			</div>
+		</div>
+	</div>{/if}
 {#if reloadConfirm || discardConfirm}<div class="overlay">
 		<div
 			role="dialog"
@@ -1481,7 +1580,9 @@
 		>
 			<header>
 				<div>
-					<h2 id="picker-title">{picker.title} · Choose supplier</h2>
+					<h2 id="picker-title">
+						{picker.title} · {pickerMode === 'backup' ? 'Add a backup supplier' : 'Choose supplier'}
+					</h2>
 					<p class="hint">
 						Your price: {money(displayAmount(picker, picker.sale))} per 1,000
 					</p>
@@ -1496,7 +1597,8 @@
 					quantity={BOOST_PRICING_DISPLAY_QUANTITY}
 					fx={view.sheet.settings.fx}
 					currentId={picker.supplierChoiceId ?? quote(picker)?.providerServiceId}
-					onChoose={(choice) => useSupplier(picker!, choice)}
+					onChoose={(choice) =>
+						pickerMode === 'backup' ? addBackup(picker!, choice) : useSupplier(picker!, choice)}
 					previewChoices={previewOnly
 						? [
 								{
@@ -1801,15 +1903,6 @@
 		font-weight: 500;
 		color: var(--text-muted);
 	}
-	.change {
-		display: inline-block;
-		margin-left: 6px;
-		padding: 0 7px;
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		font-size: 10px;
-		color: var(--primary);
-	}
 	.funding-notice {
 		margin: 12px 0;
 		padding: 10px 14px;
@@ -1927,15 +2020,6 @@
 		width: 15px;
 		height: 15px;
 	}
-	.row-details {
-		display: grid;
-		grid-template-columns: 1fr 1.5fr;
-		gap: 24px;
-		padding: 8px;
-	}
-	.row-details p {
-		margin: 6px 0;
-	}
 	.offer-controls {
 		min-width: 0;
 	}
@@ -1979,7 +2063,7 @@
 		background: var(--surface);
 		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
 	}
-	.row-details .fields {
+	.offer-panel .fields {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 		margin: 0;
 	}
@@ -2048,6 +2132,108 @@
 	}
 	.confirm > .review-summary {
 		margin: 0 0 16px;
+	}
+	.offer-panel {
+		width: 860px;
+		max-width: 100%;
+		max-height: 92dvh;
+		overflow: auto;
+		background: var(--bg);
+		padding: 20px 24px 0;
+		border: 1px solid var(--border);
+		border-radius: 16px;
+	}
+	.offer-panel > header {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 16px;
+		margin-bottom: 12px;
+	}
+	.offer-panel > header {
+		flex-wrap: nowrap;
+	}
+	.offer-panel > header > div {
+		min-width: 0;
+	}
+	.offer-panel > header > button {
+		flex: none;
+	}
+	.offer-panel h2 {
+		margin: 0;
+		font-size: 20px;
+	}
+	.offer-panel h2 small {
+		margin-left: 6px;
+		font-size: 13px;
+		font-weight: 500;
+		color: var(--text-muted);
+	}
+	.offer-panel p {
+		margin: 6px 0;
+	}
+	.suppliers {
+		margin: 12px 0 16px;
+		padding: 14px 16px;
+		border: 1px solid var(--border);
+		border-radius: 12px;
+	}
+	.suppliers h3 {
+		margin: 0 0 8px;
+	}
+	.suppliers ol {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.suppliers li {
+		display: grid;
+		grid-template-columns: 76px minmax(0, 1fr) auto auto;
+		align-items: center;
+		gap: 10px;
+		padding: 8px 0;
+		border-top: 1px solid var(--border);
+	}
+	.suppliers li:first-child {
+		border-top: 0;
+	}
+	.suppliers .rank {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--text-muted);
+	}
+	.suppliers .who {
+		min-width: 0;
+	}
+	.suppliers .who small {
+		display: block;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--text-muted);
+	}
+	.suppliers .rate {
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+	.suppliers .moves {
+		display: flex;
+		gap: 4px;
+	}
+	.supplier-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin: 10px 0 4px;
+	}
+	.offer-panel .row-actions {
+		position: sticky;
+		bottom: 0;
+		margin: 16px -24px 0;
+		padding: 12px 24px;
+		background: var(--bg);
+		border-top: 1px solid var(--border);
 	}
 	.supplier-panel {
 		width: 1050px;
@@ -2126,9 +2312,6 @@
 			display: grid;
 			grid-template-columns: auto minmax(0, 1fr) auto;
 			gap: 6px;
-		}
-		.row-details {
-			grid-template-columns: 1fr;
 		}
 		.table-scroll {
 			overflow: visible;
@@ -2221,11 +2404,7 @@
 		.badge {
 			max-width: none;
 		}
-		.expanded td {
-			padding: 12px 4px;
-			border: 0;
-		}
-		.row-details .fields {
+		.offer-panel .fields {
 			grid-template-columns: 1fr;
 		}
 		.offer-fields {
@@ -2236,6 +2415,19 @@
 		}
 		.supplier-panel {
 			padding: 14px;
+		}
+		.offer-panel {
+			padding: 14px 14px 0;
+		}
+		.offer-panel .row-actions {
+			margin: 12px -14px 0;
+			padding: 10px 14px;
+		}
+		.suppliers li {
+			grid-template-columns: minmax(0, 1fr) auto;
+		}
+		.suppliers .rank {
+			grid-column: 1 / -1;
 		}
 		.supplier-footer {
 			bottom: -14px;

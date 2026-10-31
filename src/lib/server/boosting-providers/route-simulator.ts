@@ -47,6 +47,18 @@ export interface BoostCustomerOfferEnvelope {
 	routingPolicy: BoostRoutingPolicy;
 	preferredRouteId: string | null;
 	lockedRouteId: string | null;
+	/** The owner's backups, in order, tried only when the preferred route cannot take the order. */
+	backupRouteIds?: string[];
+}
+
+/** Backups are kept in the offer's recovery modes as `backup_route:<route id>`, in the owner's order. */
+export const BOOST_BACKUP_ROUTE_PREFIX = 'backup_route:';
+
+export function boostBackupRouteIds(recoveryModes: readonly string[] | null | undefined): string[] {
+	return (recoveryModes ?? [])
+		.filter((mode) => mode.startsWith(BOOST_BACKUP_ROUTE_PREFIX))
+		.map((mode) => mode.slice(BOOST_BACKUP_ROUTE_PREFIX.length))
+		.filter((id, index, all) => id && all.indexOf(id) === index);
 }
 
 export interface BoostProviderRuntimeState {
@@ -90,7 +102,12 @@ export interface BoostRouteProjection {
 
 export interface BoostRouteSimulation {
 	selectedRouteId: string | null;
-	selectionReason: 'lowest_safe_cost' | 'preferred_route' | 'locked_route' | 'no_safe_route';
+	selectionReason:
+		| 'lowest_safe_cost'
+		| 'preferred_route'
+		| 'backup_route'
+		| 'locked_route'
+		| 'no_safe_route';
 	projections: BoostRouteProjection[];
 }
 
@@ -247,9 +264,19 @@ export function simulateBoostRoute(input: SimulateBoostRouteInput): BoostRouteSi
 		selected = eligible.find((projection) => projection.routeId === input.offer.lockedRouteId);
 		if (selected) selectionReason = 'locked_route';
 	} else if (input.offer.routingPolicy === 'preferred') {
+		const backups = input.offer.backupRouteIds ?? [];
 		selected = eligible.find((projection) => projection.routeId === input.offer.preferredRouteId);
 		if (selected) selectionReason = 'preferred_route';
-		else if (eligible[0]) {
+		else if (backups.length) {
+			// The owner's backups in their order; never a route they did not list.
+			for (const id of backups) {
+				selected = eligible.find((projection) => projection.routeId === id);
+				if (selected) {
+					selectionReason = 'backup_route';
+					break;
+				}
+			}
+		} else if (eligible[0]) {
 			selected = eligible[0];
 			selectionReason = 'lowest_safe_cost';
 		}
@@ -258,9 +285,15 @@ export function simulateBoostRoute(input: SimulateBoostRouteInput): BoostRouteSi
 		selectionReason = 'lowest_safe_cost';
 	}
 
-	if (input.offer.routingPolicy === 'locked' && input.offer.lockedRouteId) {
+	const listed =
+		input.offer.routingPolicy === 'locked' && input.offer.lockedRouteId
+			? new Set([input.offer.lockedRouteId])
+			: input.offer.routingPolicy === 'preferred' && input.offer.backupRouteIds?.length
+				? new Set([input.offer.preferredRouteId, ...input.offer.backupRouteIds])
+				: null;
+	if (listed) {
 		for (const projection of projections) {
-			if (projection.routeId !== input.offer.lockedRouteId && projection.eligible) {
+			if (!listed.has(projection.routeId) && projection.eligible) {
 				projection.reasons = ['not_selected_by_policy'];
 				projection.eligible = false;
 			}

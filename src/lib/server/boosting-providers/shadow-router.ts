@@ -11,6 +11,7 @@ import {
 	type BoostTargetType
 } from './types';
 import {
+	boostBackupRouteIds,
 	simulateBoostRoute,
 	type BoostApprovedRoute,
 	type BoostCustomerOfferEnvelope,
@@ -205,7 +206,8 @@ function buildSimulationInput(candidate: ShadowCandidate, now: Date) {
 				? offer.routingPolicy
 				: 'automatic',
 		preferredRouteId: offer.preferredRouteId,
-		lockedRouteId: offer.lockedRouteId
+		lockedRouteId: offer.lockedRouteId,
+		backupRouteIds: boostBackupRouteIds(offer.recoveryModes)
 	};
 
 	const catalogMaxAgeMs = configuredNumber('BOOSTING_CATALOG_MAX_AGE_MINUTES', 90, 5) * 60 * 1000;

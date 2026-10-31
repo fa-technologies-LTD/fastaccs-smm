@@ -229,12 +229,14 @@ it.each([true, false])(
 		await expect
 			.element(page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }))
 			.toHaveValue(900);
+		await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
 		await expect
 			.element(page.getByRole('spinbutton', { name: 'Customer minimum for TikTok Likes value' }))
 			.toHaveValue(100);
 		await expect
 			.element(page.getByRole('spinbutton', { name: 'Quantity increment for TikTok Likes value' }))
 			.toHaveValue(100);
+		await page.getByRole('button', { name: 'Close', exact: true }).click();
 		expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
 		await page.getByRole('checkbox', { name: 'Live TikTok Likes value' }).click();
 		await expect
@@ -490,10 +492,13 @@ it('refreshes supplier balances without resetting price, quantity, lock or Live 
 		name: 'Customer minimum for TikTok Likes value'
 	});
 	await quantity.fill('200');
+	await page.getByRole('button', { name: 'Close', exact: true }).click();
 	await refresh.click();
 	await expect.element(refresh).toHaveTextContent('USD 20.00');
 	await expect.element(price).toHaveValue(900);
+	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
 	await expect.element(quantity).toHaveValue(200);
+	await page.getByRole('button', { name: 'Close', exact: true }).click();
 	await expect
 		.element(page.getByRole('checkbox', { name: 'Live TikTok Likes value' }))
 		.toBeChecked();
@@ -509,7 +514,7 @@ it('identifies an automatic row as a pricing cost reference rather than a promis
 	const data = fixture();
 	data.setup.row.routingPolicy = 'automatic';
 	render(Page, { data: { pricing: data } } as never);
-	const source = page.getByRole('button', { name: /SMM Raja.*Cost reference/ });
+	const source = page.getByRole('button', { name: /^SMM Raja #s1675$/ });
 	await expect
 		.element(source)
 		.toHaveAttribute('title', expect.stringContaining('not a fixed primary supplier'));
@@ -552,6 +557,7 @@ it('explains known funding problems without preventing hidden draft price saves'
 			})
 		)
 		.toBeVisible();
+	await page.getByRole('button', { name: 'Close', exact: true }).click();
 	await page.getByRole('spinbutton', { name: 'Price for TikTok Likes value' }).fill('900');
 	await page.getByRole('button', { name: 'Save all changes', exact: true }).click();
 	await expect.element(page.getByRole('dialog', { name: 'Save these changes?' })).toBeVisible();
@@ -996,7 +1002,10 @@ it('does not create unsaved edits just by opening an older hidden offer for revi
 	await expect
 		.element(page.getByRole('button', { name: 'TikTok Likes', exact: true }))
 		.toHaveAttribute('aria-expanded', 'false');
-	expect(document.activeElement?.id).toBe('boost-offer-row');
+	// Focus goes back to what opened the pop-up.
+	await expect
+		.element(page.getByRole('checkbox', { name: 'Live TikTok Likes value' }))
+		.toHaveFocus();
 });
 it('keeps edited prices on Close and offers Save without scrolling back to the header', async () => {
 	const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -1065,8 +1074,8 @@ it('retains explicit publication confirmation when saving from the expanded row'
 	);
 	vi.stubGlobal('fetch', fetchMock);
 	render(Page, { data: { pricing: original } } as never);
-	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
 	await page.getByRole('checkbox', { name: 'Live TikTok Likes value' }).click();
+	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
 	await page.getByRole('button', { name: 'Save all changes', exact: true }).click();
 	await expect.element(page.getByRole('dialog', { name: 'Save these changes?' })).toBeVisible();
 	expect(
@@ -1165,6 +1174,7 @@ it('keeps prices, rules and pending Live ticks while inspecting both providers a
 	await expect
 		.element(page.getByRole('checkbox', { name: 'Live TikTok Likes value' }))
 		.toBeChecked();
+	await page.getByRole('button', { name: 'Close', exact: true }).click();
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await page.getByRole('button', { name: 'Confirm & save' }).click();
 	await expect
@@ -1433,4 +1443,64 @@ it('says a supplier needs funding once at the top instead of on every offer row'
 	await expect
 		.poll(() => document.querySelector('.offer-row .badge')?.getAttribute('title') ?? '')
 		.toMatch(/balance is insufficient/);
+});
+
+it('adds, orders and removes backup suppliers in the offer pop-up, and Save sends only their ids', async () => {
+	const initial = fixture();
+	initial.setup.row.backups = [
+		{
+			id: '22222222-2222-4222-8222-222222222222',
+			revision: 'b'.repeat(64),
+			provider: 'smm_raja',
+			serviceId: 's4715',
+			name: 'Saved backup',
+			rateUsd: 1.46,
+			issues: []
+		}
+	];
+	const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+		if (String(input).includes('/balances'))
+			return Response.json({ success: true, data: { providers: [] } });
+		if (String(input).includes('/supplier-choices'))
+			return Response.json({ success: true, data: { services: [choice()], hasMore: false } });
+		return Response.json({
+			success: true,
+			data: { ...initial, sheet: JSON.parse(init!.body as string).sheet }
+		});
+	});
+	vi.stubGlobal('fetch', fetchMock);
+	render(Page, { data: { pricing: initial } } as never);
+	await expect
+		.element(page.getByRole('button', { name: 'SMM Raja #s1675 +1 backup', exact: true }))
+		.toBeVisible();
+	await page.getByRole('button', { name: 'TikTok Likes', exact: true }).click();
+	const offer = page.getByRole('dialog', { name: /TikTok Likes/ });
+	const suppliers = offer.getByRole('region', { name: 'Suppliers for TikTok Likes value' });
+	await expect.element(suppliers).toHaveTextContent('Backup 1');
+	await suppliers.getByRole('button', { name: 'Add backup' }).click();
+	await expect
+		.element(page.getByRole('heading', { name: 'TikTok Likes · Add a backup supplier' }))
+		.toBeVisible();
+	await page.getByRole('combobox', { name: 'Supplier provider' }).selectOptions('bulk_follows');
+	await page.getByRole('textbox', { name: 'Search supplier services' }).fill('1234');
+	await page.getByRole('button', { name: 'Use BulkFollows 1234' }).click();
+	await expect.element(suppliers).toHaveTextContent('Backup 2');
+	await suppliers.getByRole('button', { name: 'Move backup 2 up' }).click();
+	await expect
+		.element(suppliers.getByRole('listitem').nth(1))
+		.toHaveTextContent('BulkFollows #1234');
+	await suppliers.getByRole('button', { name: 'Remove backup 2' }).click();
+	await expect.element(suppliers).not.toHaveTextContent('s4715');
+	expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
+
+	await offer.getByRole('button', { name: 'Save all changes', exact: true }).click();
+	const review = page.getByRole('dialog', { name: 'Save these changes?' });
+	await expect.element(review).toHaveTextContent('Backups');
+	await review.getByRole('button', { name: 'Confirm & save' }).click();
+	await vi.waitFor(() =>
+		expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
+	);
+	const [, init] = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!;
+	const sent = JSON.parse(init!.body as string).sheet.rows[0].backupChoices;
+	expect(sent.map((item: { id: string }) => item.id)).toEqual([choice().providerServiceId]);
 });

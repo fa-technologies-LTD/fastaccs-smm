@@ -87,6 +87,39 @@ export function canRetryBoostSubmission(
 	);
 }
 
+/** Supplier results that return the money, so the order can go to the next backup supplier. */
+const RESENDABLE_PROVIDER_STATES: string[] = ['cancelled', 'refunded'];
+/** An accepted submission the supplier later cancelled or refunded: proven not to deliver. */
+export const BOOST_CANCELLED_SUBMISSION_OUTCOME = 'accepted_then_cancelled';
+
+/**
+ * The next backup this order may go to after its supplier cancelled or refunded it: only for offers the
+ * owner gave backups, within the attempt cap, and never a route this order has already been sent to.
+ */
+export function nextBoostBackupRoute(fulfillment: {
+	offerSnapshot: Prisma.JsonValue;
+	attemptCount: number;
+	attemptCap: number;
+	selectedRouteId: string | null;
+	attempts: Array<{ type: string; routeId: string | null }>;
+}): string | null {
+	const snapshot = jsonObject(fulfillment.offerSnapshot);
+	if (!snapshot || snapshot.routingPolicy !== 'preferred') return null;
+	const backups = jsonStringArray(snapshot.backupRouteIds);
+	if (!backups.length || fulfillment.attemptCount >= fulfillment.attemptCap) return null;
+	const tried = new Set(
+		[
+			fulfillment.selectedRouteId,
+			...fulfillment.attempts.filter((a) => a.type === 'submission').map((a) => a.routeId)
+		].filter(Boolean)
+	);
+	const order = [
+		typeof snapshot.preferredRouteId === 'string' ? snapshot.preferredRouteId : null,
+		...backups
+	];
+	return order.find((id): id is string => Boolean(id) && !tried.has(id)) ?? null;
+}
+
 export function customerStatusForProviderState(state: BoostProviderOrderState): string {
 	if (state === 'completed') return 'completed';
 	if (state === 'partial') return 'partial';
@@ -202,7 +235,13 @@ function simulationInput(
 
 	const rejectedRouteIds = new Set(
 		fulfillment.attempts
-			.filter((attempt) => attempt.type === 'submission' && attempt.outcome === 'provider_rejected')
+			.filter(
+				(attempt) =>
+					(attempt.type === 'submission' &&
+						['provider_rejected', BOOST_CANCELLED_SUBMISSION_OUTCOME].includes(attempt.outcome)) ||
+					// A supplier that accepted and then cancelled or refunded this order is not asked again.
+					(attempt.type === 'status_poll' && RESENDABLE_PROVIDER_STATES.includes(attempt.outcome))
+			)
 			.map((attempt) => attempt.routeId)
 			.filter((id): id is string => Boolean(id))
 	);
@@ -355,7 +394,8 @@ function simulationInput(
 				: 'automatic',
 		preferredRouteId:
 			typeof snapshot.preferredRouteId === 'string' ? snapshot.preferredRouteId : null,
-		lockedRouteId: typeof snapshot.lockedRouteId === 'string' ? snapshot.lockedRouteId : null
+		lockedRouteId: typeof snapshot.lockedRouteId === 'string' ? snapshot.lockedRouteId : null,
+		backupRouteIds: jsonStringArray(snapshot.backupRouteIds)
 	};
 	return {
 		offerEnvelope,
@@ -506,6 +546,41 @@ async function processStatus(
 			await notifyBoostingOrderCompleted(fulfillment.orderItem.orderId, database);
 		}
 		return 'completed';
+	}
+	if (RESENDABLE_PROVIDER_STATES.includes(status.state) && nextBoostBackupRoute(fulfillment)) {
+		// The supplier gave the money back, so send the order to the owner's next backup. The accepted
+		// submission is marked as proven cancelled only after the order is safely re-queued; until then
+		// the double-submission guard still blocks a second supplier order.
+		const requeued = await commitBoostSupplierOutcome(database, {
+			orderId: fulfillment.orderItem.orderId,
+			fulfillmentId: fulfillment.id,
+			orderItemId: fulfillment.orderItemId,
+			fulfillmentData: {
+				...common,
+				status: 'queued',
+				customerStatus: 'processing',
+				supplierOrderId: null,
+				submittedAt: null,
+				startedAt: null,
+				lastSafeErrorCategory: `resending_after_provider_${status.state}`,
+				nextActionAt: now
+			},
+			itemData: { boostFulfillmentStatus: 'pending', boostProviderReference: null }
+		});
+		if (requeued) {
+			await database.boostAttempt.updateMany({
+				where: {
+					fulfillmentId: fulfillment.id,
+					type: 'submission',
+					outcome: 'accepted',
+					supplierOrderId: fulfillment.supplierOrderId
+				},
+				data: { outcome: BOOST_CANCELLED_SUBMISSION_OUTCOME }
+			});
+			await updateRouteReliability(database, fulfillment.selectedRouteId, false);
+			return 'polled';
+		}
+		return 'manual_review';
 	}
 	if (['partial', 'cancelled', 'refunded', 'failed'].includes(status.state)) {
 		await commitBoostSupplierOutcome(database, {

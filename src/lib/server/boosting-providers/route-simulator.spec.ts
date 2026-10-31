@@ -204,6 +204,42 @@ describe('boost route simulator', () => {
 		).toMatchObject({ selectedRouteId: 'fallback', selectionReason: 'lowest_safe_cost' });
 	});
 
+	it("falls back down the owner's backup list in order, never to an unlisted route", () => {
+		const routes = [
+			route('unlisted', 'smm_raja', 0.5),
+			route('main', 'bulk_follows', 1.25, { state: 'paused' }),
+			route('second', 'smm_raja', 1.1),
+			route('first', 'bulk_follows', 1.2)
+		];
+		const offer = {
+			routingPolicy: 'preferred' as const,
+			preferredRouteId: 'main',
+			backupRouteIds: ['first', 'second']
+		};
+		const result = simulate(routes, offer);
+		expect(result).toMatchObject({ selectedRouteId: 'first', selectionReason: 'backup_route' });
+		expect(result.projections.find((item) => item.routeId === 'unlisted')).toMatchObject({
+			eligible: false,
+			reasons: ['not_selected_by_policy']
+		});
+
+		const healthyMain = routes.map((item) =>
+			item.id === 'main' ? { ...item, state: 'enabled' as const } : item
+		);
+		expect(simulate(healthyMain, offer)).toMatchObject({
+			selectedRouteId: 'main',
+			selectionReason: 'preferred_route'
+		});
+
+		const noneLeft = routes.map((item) =>
+			['first', 'second'].includes(item.id) ? { ...item, state: 'paused' as const } : item
+		);
+		expect(simulate(noneLeft, offer)).toMatchObject({
+			selectedRouteId: null,
+			selectionReason: 'no_safe_route'
+		});
+	});
+
 	it('never silently falls back from a locked route', () => {
 		const result = simulate(
 			[

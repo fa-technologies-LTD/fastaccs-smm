@@ -32,8 +32,19 @@ export interface BoostPricingRow {
 	supplierChoiceId?: string;
 	supplierChoiceRevision?: string;
 	supplierRevision?: string;
+	/** Owner's draft backup list, in order; only id and revision are trusted, the rest is display. */
+	backupChoices?: BoostBackupChoice[];
 	/** Explicit draft acknowledgement, cleared after the confirmed Save. */
 	reviewRequested?: boolean;
+}
+export interface BoostBackupChoice {
+	id: string;
+	revision: string;
+	provider?: string;
+	serviceId?: string;
+	name?: string;
+	rateUsd?: number | null;
+	issues?: string[];
 }
 export interface BoostPricingSheet {
 	version: number;
@@ -300,6 +311,7 @@ export function sanitizePricingSheet(
 				reviewRequested: r.reviewRequested,
 				supplierChoiceId: r.supplierChoiceId,
 				supplierChoiceRevision: r.supplierChoiceRevision,
+				backupChoices: r.backupChoices,
 				option: r.option.trim(),
 				selected: r.selected,
 				provider: r.provider,
