@@ -14,7 +14,7 @@
 			"@context": "https://schema.org",
 			"@type": "BlogPosting",
 			"headline": "Is It Safe to Buy Social Media Accounts? A Realistic Buyer's Checklist",
-			"image": "https://smm.fastaccs.com/og-share-1200x630.png",
+			"image": "https://smm.fastaccs.com/og-image-v2.jpg",
 			"description": "Honest answers: when buying a social media account is risky, when it's fine, and the 6 things every buyer must verify before paying.",
 			"datePublished": "2026-06-16",
 			"dateModified": "2026-06-16",

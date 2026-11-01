@@ -14,7 +14,7 @@
 			"@context": "https://schema.org",
 			"@type": "BlogPosting",
 			"headline": "How to Manage Multiple Social Media Accounts Without Getting Banned",
-			"image": "https://smm.fastaccs.com/og-share-1200x630.png",
+			"image": "https://smm.fastaccs.com/og-image-v2.jpg",
 			"description": "Platforms detect multi-account activity through IP, device fingerprint, and behaviour patterns. This practical guide covers every layer — and how to handle each one.",
 			"datePublished": "2026-06-16",
 			"dateModified": "2026-06-16",

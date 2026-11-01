@@ -35,8 +35,9 @@
 		'Get Instagram, TikTok, X, Facebook accounts and boosting services with secure checkout, clear order tracking, and buyer support.';
 
 	const publicBaseUrl = $derived(getSiteBaseUrl());
-	const shareImagePath = '/og-share-1200x630.png?v=20260428a';
-	const shareImageUrl = $derived(`${publicBaseUrl}${shareImagePath}`);
+	const shareImageUrl = 'https://smm.fastaccs.com/og-image-v2.jpg';
+	const shareImageAlt =
+		'FastAccs: all socials, one plug. Accounts, boosting and numbers for X, Instagram, TikTok and Facebook.';
 	// Canonical/og:url never include the query string: tracking tags (utm_*, fa_click, fbclid) and
 	// UI parameters (?tab=, ?service=) must not turn into self-canonical duplicate pages.
 	const currentPageUrl = $derived(`${publicBaseUrl}${page.url?.pathname || '/'}`);
@@ -222,9 +223,10 @@
 	<meta property="og:url" content={currentPageUrl} />
 	<meta property="og:image" content={shareImageUrl} />
 	<meta property="og:image:secure_url" content={shareImageUrl} />
-	<meta property="og:image:type" content="image/png" />
 	<meta property="og:image:width" content="1200" />
 	<meta property="og:image:height" content="630" />
+	<meta property="og:image:type" content="image/jpeg" />
+	<meta property="og:image:alt" content={shareImageAlt} />
 	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:title" content={seoTitle} />
 	<meta name="twitter:description" content={seoDescription} />

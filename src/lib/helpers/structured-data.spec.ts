@@ -60,9 +60,9 @@ describe('productJsonLd image', () => {
 				url: 'https://smm.fastaccs.com/x',
 				priceNgn: 100,
 				inStock: true,
-				image: 'https://smm.fastaccs.com/og-share-1200x630.png'
+				image: 'https://smm.fastaccs.com/og-image-v2.jpg'
 			})
-		).toMatchObject({ image: 'https://smm.fastaccs.com/og-share-1200x630.png' });
+		).toMatchObject({ image: 'https://smm.fastaccs.com/og-image-v2.jpg' });
 	});
 });
 

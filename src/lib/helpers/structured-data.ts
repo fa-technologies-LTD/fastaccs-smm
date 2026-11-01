@@ -13,7 +13,7 @@ export function serializeJsonLd(data: unknown): string {
 }
 
 /** The site's 1200×630 share image: a valid `image` until products have their own. */
-export const SHARE_IMAGE_PATH = '/og-share-1200x630.png';
+export const SHARE_IMAGE_PATH = '/og-image-v2.jpg';
 
 export function productJsonLd(input: {
 	name: string;
