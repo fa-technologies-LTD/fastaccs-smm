@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-	botConfigured: vi.fn(() => true),
 	botSend: vi.fn(async () => 1),
-	getAutopilotSettings: vi.fn(async () => ({ ownerChatId: '555' })),
 	sendEmail: vi.fn<(params: Record<string, unknown>) => Promise<{ success: boolean }>>(
 		async () => ({ success: true })
 	),
@@ -11,13 +9,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('$lib/prisma', () => ({ prisma: {} }));
-vi.mock('$lib/server/autopilot/bot', () => ({
-	botConfigured: mocks.botConfigured,
-	botSend: mocks.botSend
-}));
-vi.mock('$lib/server/autopilot/state', () => ({
-	getAutopilotSettings: mocks.getAutopilotSettings
-}));
+vi.mock('$lib/server/autopilot/bot', () => ({ botConfigured: () => true, botSend: mocks.botSend }));
 vi.mock('$lib/services/email', () => ({ sendEmail: mocks.sendEmail }));
 vi.mock('$lib/auth/admin', () => ({ getAdminEmails: mocks.getAdminEmails }));
 vi.mock('./boosting-health-report', () => ({
@@ -35,19 +27,11 @@ const { sendBoostingHealthReport } = await import('./boosting-health-report-send
 describe('sending the Boosting check', () => {
 	beforeEach(() => vi.clearAllMocks());
 
-	it('goes to the owner on Telegram', async () => {
+	it('is emailed to the admins and never sent to Telegram, even with the bot connected', async () => {
 		const result = await sendBoostingHealthReport();
-		expect(mocks.botSend).toHaveBeenCalledWith('555', 'REPORT');
-		expect(mocks.sendEmail).not.toHaveBeenCalled();
-		expect(result).toMatchObject({ sentTo: 'telegram', failures: 1, openComplaints: 1 });
-	});
-
-	it('falls back to email when the bot is not connected or Telegram fails', async () => {
-		mocks.getAutopilotSettings.mockResolvedValueOnce({ ownerChatId: null } as never);
-		expect(await sendBoostingHealthReport()).toMatchObject({ sentTo: 'email' });
-		mocks.botSend.mockRejectedValueOnce(new Error('down'));
-		expect(await sendBoostingHealthReport()).toMatchObject({ sentTo: 'email' });
-		expect(mocks.sendEmail).toHaveBeenCalledTimes(2);
+		expect(mocks.botSend).not.toHaveBeenCalled();
+		expect(result).toMatchObject({ sentTo: 'email', failures: 1, openComplaints: 1 });
+		expect(mocks.sendEmail).toHaveBeenCalledOnce();
 		expect(mocks.sendEmail.mock.calls[0][0]).toMatchObject({
 			to: 'owner@example.com',
 			body: 'REPORT',

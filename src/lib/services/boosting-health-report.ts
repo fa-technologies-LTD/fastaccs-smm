@@ -356,7 +356,7 @@ const COMPLAINTS: Record<string, string> = {
 	dropped: 'dropped after delivery'
 };
 
-/** Plain text for Telegram (no formatting codes), with the things to act on marked ⚠. */
+/** Plain text for the email (no formatting codes), with the things to act on marked ⚠. */
 export function formatBoostingHealthReport(report: BoostingHealthReport): string {
 	const when = report.generatedAt.toLocaleString('en-GB', {
 		day: 'numeric',
