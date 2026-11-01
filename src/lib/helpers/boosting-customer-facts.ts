@@ -47,13 +47,17 @@ export function boostBenefitLabel(value: unknown): string | null {
 		: null;
 }
 
+/** The plural unit customers count in: "followers", "comments", "watch-time units". */
+export function boostQuantityUnit(outcome: string): string {
+	return outcome === 'custom_comments'
+		? 'comments'
+		: outcome === 'watch_time'
+			? 'watch-time units'
+			: (BOOSTING_ACTION_LABELS[outcome as BoostingActionType] ?? 'units').toLowerCase();
+}
+
 export function boostQuantityText(quantity: number, outcome: string): string {
-	let unit =
-		outcome === 'custom_comments'
-			? 'comments'
-			: outcome === 'watch_time'
-				? 'watch-time units'
-				: (BOOSTING_ACTION_LABELS[outcome as BoostingActionType] ?? 'units').toLowerCase();
+	let unit = boostQuantityUnit(outcome);
 	if (quantity === 1 && unit.endsWith('s')) unit = unit.slice(0, -1);
 	return `${quantity.toLocaleString('en-NG')} ${unit}`;
 }

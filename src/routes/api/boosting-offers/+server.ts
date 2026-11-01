@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { env } from '$env/dynamic/private';
 import { prisma } from '$lib/prisma';
 import { boostSaleInclude, inspectBoostSale } from '$lib/server/boosting-sale-readiness';
-import { boostCustomerCopy, boostCustomerOptionName } from '$lib/helpers/boosting-customer-copy';
+import { boostCustomerCopy, boostCustomerOption } from '$lib/helpers/boosting-customer-copy';
 import { boostBenefitLabel } from '$lib/helpers/boosting-customer-facts';
 import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
 import {
@@ -34,7 +34,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 					category: { categoryType: 'boosting_service', isActive: true },
 					routes: { some: { state: 'enabled', equivalenceApproved: true } }
 				},
-				include: boostSaleInclude,
+				include: { ...boostSaleInclude, category: { select: { name: true } } },
 				orderBy: [{ displayOrder: 'asc' }, { customerName: 'asc' }]
 			}),
 			prisma.microcopy.findUnique({
@@ -53,30 +53,31 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 			success: true,
 			automationReady,
 			managedRolloutActive: isBoostingManagedStorefrontEnabled(rolloutMarker, offers.length > 0),
-			data: compatibleOffers.map(({ offer, readiness }) => ({
-				id: offer.id,
-				categoryId: offer.categoryId,
-				platform: offer.platform,
-				outcome: offer.outcome,
-				targetType: offer.targetType,
-				...boostCustomerCopy(offer),
-				benefitLabel: boostBenefitLabel(offer),
-				customerName: boostCustomerOptionName(
-					offer,
-					compatibleOffers
-						.filter((entry) => entry.offer.categoryId === offer.categoryId)
-						.findIndex((entry) => entry.offer.id === offer.id),
-					compatibleOffers.filter((entry) => entry.offer.categoryId === offer.categoryId).length
-				),
-				qualityTier: offer.qualityTier,
-				minQuantity: offer.minQuantity,
-				maxQuantity: readiness.maximumQuantity,
-				stepQuantity: offer.stepQuantity,
-				quantityPresets: offer.quantityPresets,
-				refillDays: offer.refillDays,
-				displayOrder: offer.displayOrder,
-				pricePerStepNgn: Number(offer.pricePerStepNgn)
-			}))
+			data: compatibleOffers.map(({ offer, readiness }) => {
+				const options = compatibleOffers.filter(
+					(entry) => entry.offer.categoryId === offer.categoryId
+				).length;
+				const shown = boostCustomerOption(offer, options, offer.category.name);
+				return {
+					id: offer.id,
+					categoryId: offer.categoryId,
+					platform: offer.platform,
+					outcome: offer.outcome,
+					targetType: offer.targetType,
+					...boostCustomerCopy(offer),
+					benefitLabel: boostBenefitLabel(offer),
+					customerName: shown.name,
+					shortPromise: shown.line,
+					qualityTier: offer.qualityTier,
+					minQuantity: offer.minQuantity,
+					maxQuantity: readiness.maximumQuantity,
+					stepQuantity: offer.stepQuantity,
+					quantityPresets: offer.quantityPresets,
+					refillDays: offer.refillDays,
+					displayOrder: offer.displayOrder,
+					pricePerStepNgn: Number(offer.pricePerStepNgn)
+				};
+			})
 		});
 	} catch (error) {
 		// Missing safety data must not resurrect legacy prices or purchase forms.

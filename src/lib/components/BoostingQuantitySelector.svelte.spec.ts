@@ -31,10 +31,16 @@ describe('Boosting quantity selector', () => {
 			minQuantity: 200,
 			maxQuantity: 30_000,
 			stepQuantity: 200,
+			label: 'Followers quantity',
+			question: 'How many followers?',
 			onchange: vi.fn()
 		});
 
-		await expect.element(page.getByText('Enter a quantity or use +/−.')).toBeVisible();
+		await expect.element(page.getByText('Use +/− or type an amount.')).toBeVisible();
+		await expect.element(page.getByText('How many followers?')).toBeVisible();
+		await expect
+			.element(page.getByRole('spinbutton', { name: 'Followers quantity' }))
+			.toBeVisible();
 		expect(page.getByText(/nearest valid/i).query()).toBeNull();
 	});
 });

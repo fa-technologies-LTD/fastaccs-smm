@@ -10,7 +10,7 @@ export const BOOSTING_REFILL_AVAILABLE_KEY = 'boosting_refill_available';
 export const BOOSTING_REFILL_DAYS_KEY = 'boosting_refill_days';
 
 export const BOOSTING_TURNAROUND_MESSAGE =
-	'Delivery timing varies by service, quantity, and platform conditions.';
+	'Start times vary by service. Track every order from your account.';
 
 const REDUNDANT_TIER_CHIPS = new Set([
 	'affordable',
@@ -79,20 +79,20 @@ export const BOOSTING_ACTION_LABELS: Record<BoostingActionType, string> = {
 	subscribers: 'Subscribers',
 	members: 'Members',
 	likes: 'Likes',
-	live_likes: 'LIVE likes',
+	live_likes: 'LIVE Likes',
 	impressions: 'Impressions',
 	reach: 'Reach',
 	story_shares: 'Shares to stories',
-	custom_comments: 'Custom comments',
+	custom_comments: 'Custom Comments',
 	views: 'Views',
 	comments: 'Comments',
 	reposts: 'Reposts',
 	streams: 'Streams',
-	monthly_listeners: 'Monthly listeners',
+	monthly_listeners: 'Monthly Listeners',
 	reactions: 'Reactions',
 	shares: 'Shares',
 	saves: 'Saves',
-	watch_time: 'Watch time'
+	watch_time: 'Watch Time'
 };
 
 export const BOOSTING_ACTIONS_BY_PLATFORM: Record<BoostingPlatform, readonly BoostingActionType[]> =

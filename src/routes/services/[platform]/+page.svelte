@@ -25,6 +25,7 @@
 	import { recordAnalyticsEvent } from '$lib/services/analytics-events';
 	import { showError, showSuccess, showWarning } from '$lib/stores/toasts';
 	import { formatPrice } from '$lib/helpers/utils';
+	import { boostQuantityUnit } from '$lib/helpers/boosting-customer-facts';
 	import {
 		getBoostingServiceConfig,
 		computeBoostingPrice,
@@ -533,7 +534,7 @@
 							<ActionIcon size={18} style="color: var(--fa-blue-300);" />
 						</div>
 						<div class="min-w-0 flex-1">
-							{#if service.offerId}<p
+							{#if service.offerId && service.name !== service.resultName}<p
 									class="mb-0.5 text-[10px] font-bold tracking-[0.1em] uppercase"
 									style="color: var(--text-dim);"
 								>
@@ -663,6 +664,7 @@
 									stepQuantity={service.config.stepQuantity}
 									presets={service.quantityPresets}
 									label={`${BOOSTING_ACTION_LABELS[service.config.actionType]} quantity`}
+									question={`How many ${boostQuantityUnit(service.config.actionType)}?`}
 									onchange={(next) => (quantityByServiceId[service.id] = next)}
 								/>
 							</div>
@@ -694,7 +696,10 @@
 		<div class="mx-auto flex max-w-3xl items-center gap-3">
 			<div class="min-w-0 flex-1">
 				<p class="truncate text-[11px]" style="color: var(--text-muted);">
-					{expandedService.resultName}{expandedService.offerId ? ` · ${expandedService.name}` : ''}
+					{expandedService.resultName}{expandedService.offerId &&
+					expandedService.name !== expandedService.resultName
+						? ` · ${expandedService.name}`
+						: ''}
 				</p>
 				<p class="font-bold" style="color: var(--text);">{formatPrice(expandedPrice)}</p>
 			</div>

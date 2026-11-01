@@ -28,6 +28,7 @@ beforeEach(() => {
 		{
 			...saleOfferFixture(),
 			categoryId: 'category-1',
+			category: { name: 'Instagram Followers' },
 			platform: 'instagram',
 			outcome: 'followers',
 			targetType: 'profile',
@@ -109,6 +110,11 @@ describe('public live Boosting offer copy', () => {
 			data: [{ categoryId: 'category-1' }]
 		});
 		expect(body.data[0].expectationChips).toEqual([]);
+		// A single option is just the service, under the service's own name; no tier label.
+		expect(body.data[0]).toMatchObject({
+			customerName: 'Instagram Followers',
+			shortPromise: 'Lower drop risk.'
+		});
 		expect(body.data[0]).not.toHaveProperty('routes');
 		expect(mocks.findMany).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -123,6 +129,25 @@ describe('public live Boosting offer copy', () => {
 		expect(setHeaders).toHaveBeenCalledWith(
 			expect.objectContaining({ 'cache-control': 'no-store' })
 		);
+	});
+	it('names several options Quick / Stable / Most stable from their tier', async () => {
+		const base = { ...(await mocks.findMany())[0], customerName: 'Premium', shortPromise: '' };
+		mocks.findMany.mockResolvedValue([
+			{ ...base, id: 'quick', qualityTier: 'value' },
+			{ ...base, id: 'stable', qualityTier: 'stable' },
+			{ ...base, id: 'premium', qualityTier: 'premium' }
+		]);
+		const body = await (await GET({ setHeaders: vi.fn() } as never)).json();
+		expect(
+			body.data.map((offer: { customerName: string; shortPromise: string }) => [
+				offer.customerName,
+				offer.shortPromise
+			])
+		).toEqual([
+			['Quick', 'Quick delivery, best when speed matters.'],
+			['Stable', 'Less likely to drop. A balance of price and staying power.'],
+			['Most stable', 'Stable followers, less likely to drop.']
+		]);
 	});
 	it('a retained old route cannot keep an unavailable locked selection visible', async () => {
 		const base = (await mocks.findMany())[0];

@@ -28,6 +28,7 @@ import { getBoostingServiceConfig, getQuantityChips } from '$lib/helpers/boostin
 import { inspectBoostSale } from '$lib/server/boosting-sale-readiness';
 import { supplierChoice, supplierChoiceRevision } from './supplier-choice';
 import { BOOST_BACKUP_ROUTE_PREFIX, boostBackupRouteIds } from './route-simulator';
+import { boostCustomerOption } from '$lib/helpers/boosting-customer-copy';
 
 /** Backups per offer: enough to ride out one supplier outage without a long list to review. */
 export const BOOST_MAX_BACKUPS = 3;
@@ -257,6 +258,14 @@ export async function loadBoostControls(database: Database = prisma): Promise<Bo
 			reviewed:
 				candidates.length > 0 &&
 				candidates.every((r) => r.equivalenceApproved && r.state === 'enabled'),
+			customerSees: (() => {
+				const shown = boostCustomerOption(
+					offer,
+					offers.filter((o) => o.categoryId === offer.categoryId && o.status === 'live').length,
+					offer.category.name
+				);
+				return { name: shown.name, line: shown.line || (offer.category.description ?? '') };
+			})(),
 			mainRateUsd,
 			backups: (listedRoutes(offer) ?? []).slice(1).map((r) => ({
 				id: r.providerService.id,
@@ -265,7 +274,9 @@ export async function loadBoostControls(database: Database = prisma): Promise<Bo
 				serviceId: r.providerService.serviceId,
 				name: r.providerService.name,
 				rateUsd:
-					r.providerService.ratePerThousand == null ? null : Number(r.providerService.ratePerThousand),
+					r.providerService.ratePerThousand == null
+						? null
+						: Number(r.providerService.ratePerThousand),
 				issues: quoteFor(offer, r).issues
 			}))
 		};
@@ -523,10 +534,14 @@ async function applyBackups(
 	fx: number,
 	actor: string
 ) {
-	const offer = (await tx.boostCustomerOffer.findUnique({ where: { id: offerId }, include: includes }))!;
+	const offer = (await tx.boostCustomerOffer.findUnique({
+		where: { id: offerId },
+		include: includes
+	}))!;
 	const mainRouteId = offer.lockedRouteId ?? offer.preferredRouteId;
 	const main = offer.routes.find((r) => r.id === mainRouteId);
-	if (!main) throw new BoostPricingError(`${row.title}: choose a main supplier before adding backups.`);
+	if (!main)
+		throw new BoostPricingError(`${row.title}: choose a main supplier before adding backups.`);
 	const routeIds: string[] = [];
 	if (row.backupChoices) {
 		for (const choice of row.backupChoices) {
@@ -543,7 +558,9 @@ async function applyBackups(
 					409
 				);
 			if (checked.issues.length)
-				throw new BoostPricingError(`${row.title}: backup ${service.serviceId}: ${checked.issues[0]}`);
+				throw new BoostPricingError(
+					`${row.title}: backup ${service.serviceId}: ${checked.issues[0]}`
+				);
 			if (service.id === main.providerServiceId) continue;
 			const route = await tx.boostServiceRoute.upsert({
 				where: { offerId_providerServiceId: { offerId: offer.id, providerServiceId: service.id } },
@@ -562,7 +579,12 @@ async function applyBackups(
 					reviewedByUserId: actor,
 					reviewedAt: new Date()
 				},
-				update: { state: 'enabled', equivalenceApproved: true, reviewedByUserId: actor, reviewedAt: new Date() }
+				update: {
+					state: 'enabled',
+					equivalenceApproved: true,
+					reviewedByUserId: actor,
+					reviewedAt: new Date()
+				}
 			});
 			routeIds.push(route.id);
 		}

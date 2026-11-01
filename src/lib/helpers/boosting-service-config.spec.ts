@@ -31,7 +31,7 @@ describe('boosting service config', () => {
 
 	it('does not turn variable supplier timing into a fixed customer promise', () => {
 		expect(BOOSTING_TURNAROUND_MESSAGE).toBe(
-			'Delivery timing varies by service, quantity, and platform conditions.'
+			'Start times vary by service. Track every order from your account.'
 		);
 		expect(BOOSTING_TURNAROUND_MESSAGE).not.toMatch(/within|guaranteed|fixed/i);
 	});

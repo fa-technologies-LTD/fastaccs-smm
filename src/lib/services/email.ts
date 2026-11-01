@@ -1304,7 +1304,7 @@ ${itemLines.join('\n')}`;
 	const body = isBoosting
 		? `${orderSummary}
 
-Your order is confirmed and queued for delivery. ${BOOSTING_TURNAROUND_MESSAGE} Track the latest status from your order page.`
+Your order is confirmed and queued for delivery. ${BOOSTING_TURNAROUND_MESSAGE}`
 		: isPhone
 			? `${orderSummary}
 

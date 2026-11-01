@@ -1300,10 +1300,16 @@
 							>Customer description<input
 								aria-label={`Customer description for ${row.title} ${row.tier}`}
 								maxlength="120"
+								placeholder={view.setup[row.id]?.customerSees?.line || 'Use the option’s line'}
 								bind:value={row.shortPromise}
 							/></label
 						>
 					</div>
+					{#if view.setup[row.id]?.customerSees}{@const sees = view.setup[row.id]!.customerSees!}
+						<p class="hint">
+							Customers see: <strong>{sees.name}</strong>{sees.line ? ` — ${sees.line}` : ''}
+						</p>
+					{/if}
 					{#each rowQuantityErrors(row) as message}<p role="alert" class="error">
 							{message}
 						</p>{/each}

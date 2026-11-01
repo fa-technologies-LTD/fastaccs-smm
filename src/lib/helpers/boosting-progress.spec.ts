@@ -83,7 +83,7 @@ describe('buyer Boosting progress', () => {
 					{ ...item, boostFulfillment: { status: 'manual_review', lastSafeErrorCategory } },
 					paid
 				)?.label
-			).toBe('Under review');
+			).toBe('Checking');
 		}
 	);
 	it('distinguishes partial delivery and a customer refund', () => {

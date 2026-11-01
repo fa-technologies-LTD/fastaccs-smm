@@ -55,7 +55,7 @@ describe('customer Boosting progress and refill journey', () => {
 		d.order.status = 'completed';
 		d.order.deliveryStatus = 'delivered';
 		render(OrderPage, { data: d });
-		await expect.element(page.getByText('Under review', { exact: true }).first()).toBeVisible();
+		await expect.element(page.getByText('Checking', { exact: true }).first()).toBeVisible();
 		expect(page.getByText('Completed', { exact: true }).query()).toBeNull();
 	});
 	it('keeps the purchased benefit alongside its contextual quantity and original item name', async () => {

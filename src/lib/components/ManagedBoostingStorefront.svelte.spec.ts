@@ -66,11 +66,8 @@ describe('Managed Boosting storefront', () => {
 		await expect
 			.element(page.getByText('Less likely to drop, with stronger staying power.', { exact: true }))
 			.not.toBeInTheDocument();
-		expect(
-			page
-				.getByText('Delivery timing varies. Track progress from your order.', { exact: true })
-				.all()
-		).toHaveLength(1);
+		// Stock tier lines are dropped rather than replaced with filler.
+		expect(page.getByText(/Delivery timing varies/).all()).toHaveLength(0);
 		await expect
 			.element(page.getByText('Refill terms (eligibility applies)', { exact: true }))
 			.not.toBeInTheDocument();

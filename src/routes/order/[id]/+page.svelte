@@ -164,7 +164,7 @@
 				['under_review', 'manual_review', 'partial', 'rejected'].includes(state)
 			)
 		)
-			return 'Under review';
+			return 'Checking';
 		if (states.every((state) => state === 'cancelled')) return 'Cancelled';
 		return 'Processing';
 	}

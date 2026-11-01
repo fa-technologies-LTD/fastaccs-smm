@@ -42,6 +42,8 @@ export interface BoostControlsView extends BoostPricingView {
 			maximumCostNgn: number;
 			reviewed: boolean;
 			approvalServices?: Array<{ id: string; provider: string; serviceId: string; name: string }>;
+			/** The option's name and line exactly as customers see them now. */
+			customerSees?: { name: string; line: string };
 			/** The main supplier's own rate; the row's quote prices on the most expensive listed supplier. */
 			mainRateUsd?: number | null;
 			/** Saved backups after the main supplier, in the order they are tried. */

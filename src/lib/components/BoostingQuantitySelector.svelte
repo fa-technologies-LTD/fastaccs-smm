@@ -9,6 +9,8 @@
 		stepQuantity: number;
 		presets?: number[];
 		label?: string;
+		/** Visible question above the field, e.g. "How many followers?"; the label stays for screen readers. */
+		question?: string;
 		compact?: boolean;
 		onchange: (value: number) => void;
 	}
@@ -20,6 +22,7 @@
 		stepQuantity,
 		presets = [],
 		label = 'Quantity',
+		question,
 		compact = false,
 		onchange
 	}: Props = $props();
@@ -90,7 +93,9 @@
 	<div class="flex items-end justify-between gap-3">
 		<label class="min-w-0 flex-1">
 			<span class="mb-1 flex items-center justify-between gap-3">
-				<span class="block text-xs font-semibold" style="color: var(--text);">{label}</span>
+				<span class="block text-xs font-semibold" style="color: var(--text);"
+					>{question ?? label}</span
+				>
 				<span class="text-[10px]" style="color: var(--text-dim);"
 					>+/− {stepQuantity.toLocaleString()}</span
 				>
@@ -145,7 +150,7 @@
 		</p>
 	{/if}
 	<p class={compact ? 'text-[10px]' : 'text-[11px]'} style="color: var(--text-dim);">
-		Enter a quantity or use +/−.
+		Use +/− or type an amount.
 	</p>
 </div>
 

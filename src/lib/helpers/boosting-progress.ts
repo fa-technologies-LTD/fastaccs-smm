@@ -95,8 +95,8 @@ export function getBoostingProgress(
 			'Delivery is marked complete. Report an issue if anything is missing.'
 		],
 		partial: ['Partially delivered', 'We’re reviewing the remaining amount. No need to reorder.'],
-		under_review: ['Under review', 'We’re checking this boost. No action needed from you.'],
-		manual_review: ['Under review', 'We’re checking this boost. No action needed from you.'],
+		under_review: ['Checking', 'We’re checking this boost. No action needed from you.'],
+		manual_review: ['Checking', 'We’re checking this boost. No action needed from you.'],
 		needs_link: ['Update link', 'Check and update your link below.'],
 		rejected: ['Needs support', 'Contact support about this boost.'],
 		cancelled: ['Cancelled', 'This boost is stopped. Check your payment or refund status above.'],
