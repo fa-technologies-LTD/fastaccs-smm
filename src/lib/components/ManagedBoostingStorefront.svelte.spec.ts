@@ -24,8 +24,8 @@ const groups = [
 				categoryId: '11111111-1111-4111-8111-111111111111',
 				platform: 'x' as const,
 				outcome: 'followers',
-				customerName: 'Affordable',
-				shortPromise: 'A lower-cost option for straightforward growth.',
+				customerName: 'Quick',
+				shortPromise: 'Quick delivery, best when speed matters.',
 				expectationChips: [],
 				qualityTier: 'value',
 				minQuantity: 500,
@@ -41,8 +41,8 @@ const groups = [
 				categoryId: '11111111-1111-4111-8111-111111111111',
 				platform: 'x' as const,
 				outcome: 'followers',
-				customerName: 'More stable',
-				shortPromise: 'Less likely to drop, with stronger staying power.',
+				customerName: 'Stable',
+				shortPromise: 'Less likely to drop. A balance of price and staying power.',
 				expectationChips: ['30-day refill protection'],
 				qualityTier: 'stable',
 				minQuantity: 500,
@@ -58,20 +58,25 @@ const groups = [
 ];
 
 describe('Managed Boosting storefront', () => {
-	it('uses neutral option labels, no invented recommendation, and explains refill limits', async () => {
+	it('names options as the service pages do, keeps a refill as a note, and explains refill limits', async () => {
 		render(ManagedBoostingStorefront, { groups });
-		await expect.element(page.getByText('Lower price', { exact: true })).toBeVisible();
-		await expect.element(page.getByText('30-day refill', { exact: true })).toBeVisible();
-		await expect.element(page.getByText('Recommended', { exact: true })).not.toBeInTheDocument();
+		await expect.element(page.getByText('Quick', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('Stable', { exact: true })).toBeVisible();
 		await expect
-			.element(page.getByText('Less likely to drop, with stronger staying power.', { exact: true }))
-			.not.toBeInTheDocument();
-		// Stock tier lines are dropped rather than replaced with filler.
+			.element(
+				page.getByText('Less likely to drop. A balance of price and staying power.', {
+					exact: true
+				})
+			)
+			.toBeVisible();
+		await expect.element(page.getByText('30-day refill', { exact: true })).toBeVisible();
+		for (const label of ['Lower price', 'No refill', 'Recommended'])
+			expect(page.getByText(label, { exact: true }).query()).toBeNull();
 		expect(page.getByText(/Delivery timing varies/).all()).toHaveLength(0);
 		await expect
 			.element(page.getByText('Refill terms (eligibility applies)', { exact: true }))
 			.not.toBeInTheDocument();
-		await page.getByRole('button', { name: /30-day refill/ }).click();
+		await page.getByRole('button', { name: /Stable/ }).click();
 		const terms = page.getByText('Refill terms (eligibility applies)', { exact: true });
 		await expect.element(terms).toBeVisible();
 		await expect.element(page.getByText(/not\s+a\s+guarantee\s+against\s+drops/)).not.toBeVisible();
@@ -80,7 +85,7 @@ describe('Managed Boosting storefront', () => {
 		await expect
 			.element(page.getByText(/normally starts when your order is sent to the supplier/))
 			.toBeVisible();
-		await page.getByRole('button', { name: /Lower price/ }).click();
+		await page.getByRole('button', { name: /Quick/ }).click();
 		await expect.element(terms).not.toBeInTheDocument();
 	});
 	it('keeps differing descriptions attached to their own options', async () => {
@@ -96,10 +101,10 @@ describe('Managed Boosting storefront', () => {
 			]
 		});
 		await expect
-			.element(page.getByRole('button', { name: /Lower price/ }))
+			.element(page.getByRole('button', { name: /Quick/ }))
 			.toHaveTextContent('For public pages.');
 		await expect
-			.element(page.getByRole('button', { name: /30-day refill/ }))
+			.element(page.getByRole('button', { name: /Stable/ }))
 			.toHaveTextContent('For public profiles.');
 	});
 	it('shows a short refill label for a custom name and disables checkout in the local demo', async () => {
@@ -210,11 +215,11 @@ describe('Managed Boosting storefront', () => {
 		await expect
 			.element(page.getByRole('button', { name: 'Followers', exact: true }))
 			.toBeVisible();
-		await expect.element(page.getByRole('button', { name: /Lower price/ })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: /Quick/ })).toBeVisible();
 		await expect
-			.element(page.getByRole('button', { name: /Lower price/ }))
+			.element(page.getByRole('button', { name: /Quick/ }))
 			.toHaveTextContent('500 followers');
-		await expect.element(page.getByRole('button', { name: /30-day refill/ })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: /Stable/ })).toBeVisible();
 		await expect.element(page.getByLabelText('Paste your profile link')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: /Add to Cart/ })).toBeEnabled();
 	});

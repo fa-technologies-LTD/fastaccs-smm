@@ -1,11 +1,7 @@
 <script lang="ts">
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
 	import { boostCustomerCopy, boostCustomerShortName } from '$lib/helpers/boosting-customer-copy';
-	import {
-		boostBenefitLabel,
-		boostLowerPriceOffer,
-		boostQuantityText
-	} from '$lib/helpers/boosting-customer-facts';
+	import { boostBenefitLabel, boostQuantityText } from '$lib/helpers/boosting-customer-facts';
 	import { boostingStartingQuantity } from '$lib/helpers/boosting-checkout';
 	import {
 		parseBoostComments,
@@ -87,24 +83,20 @@
 			selectedGroup?.offers[0] ??
 			null
 	);
-	const lowerPriceOfferId = $derived(boostLowerPriceOffer(selectedGroup?.offers ?? []));
 	const selectedCopy = $derived(selectedOffer ? boostCustomerCopy(selectedOffer) : null);
+	// The offers API already names each option (Quick / Stable / Most stable, or the owner's own name) and
+	// gives its line, so the service pages and this one read the same. A refill is a small note, not the name.
 	const offerCards = $derived(
 		(selectedGroup?.offers ?? []).map((offer, _index, offers) => {
-			const copy = boostCustomerCopy(offer);
 			const benefit = offer.benefitLabel ?? boostBenefitLabel(offer);
-			const specificName = boostCustomerShortName(offer);
+			const single = offers.length === 1;
+			const specificName = single ? boostCustomerShortName(offer) : offer.customerName;
 			return {
 				offer,
-				quantityAsName: offers.length === 1 && !specificName,
-				name:
-					offers.length === 1
-						? (specificName ?? boostQuantityText(boostingStartingQuantity(offer), offer.outcome))
-						: (benefit ??
-							specificName ??
-							(offer.id === lowerPriceOfferId ? 'Lower price' : 'No refill')),
-				benefit: offers.length === 1 && benefit && benefit !== specificName ? benefit : null,
-				description: copy.shortPromise.replace(/\s+/g, ' ').trim()
+				quantityAsName: single && !specificName,
+				name: specificName ?? boostQuantityText(boostingStartingQuantity(offer), offer.outcome),
+				benefit: benefit && benefit !== specificName ? benefit : null,
+				description: offer.shortPromise.replace(/\s+/g, ' ').trim()
 			};
 		})
 	);
