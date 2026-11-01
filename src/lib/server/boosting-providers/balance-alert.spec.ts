@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('$lib/prisma', () => ({ prisma: {} }));
 vi.mock('$lib/services/admin-alerts', () => ({ sendCriticalAdminAlert: vi.fn() }));
 
-import { alertLowBoostSupplierBalances } from './balance-alert';
+import { alertBoostOrdersAwaitingFunds, alertLowBoostSupplierBalances } from './balance-alert';
 
 const now = new Date('2026-10-31T12:00:00.000Z');
 const state = (patch: Record<string, unknown>) => ({
@@ -70,5 +70,38 @@ describe('Boosting supplier funding alert', () => {
 		await expect(
 			alertLowBoostSupplierBalances({ database: broken as never, send })
 		).resolves.toEqual([]);
+	});
+
+	it('says straight away when paid orders wait for supplier money, once a day per supplier', async () => {
+		const send = vi.fn<(alert: { title: string; message: string }) => Promise<{ sent: boolean }>>(
+			async () => ({ sent: true })
+		);
+		const database = {
+			boostFulfillment: { count: vi.fn(async () => 2) },
+			boostProviderState: {
+				findMany: vi.fn(async () => [
+					state({ provider: 'bulk_follows', label: 'BulkFollows', projectedBalance: 1.48 })
+				])
+			}
+		};
+		expect(await alertBoostOrdersAwaitingFunds([], { database: database as never, send })).toEqual(
+			[]
+		);
+		expect(send).not.toHaveBeenCalled();
+		expect(
+			await alertBoostOrdersAwaitingFunds(['bulk_follows'], { database: database as never, send })
+		).toEqual(['bulk_follows']);
+		expect(database.boostFulfillment.count).toHaveBeenCalledWith({
+			where: { status: 'queued', lastSafeErrorCategory: 'awaiting_supplier_funds' }
+		});
+		expect(send).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: 'BulkFollows needs funding: paid orders are waiting',
+				dedupeKey: 'boost-awaiting-funds:bulk_follows',
+				cooldownMs: 24 * 60 * 60 * 1000
+			})
+		);
+		expect(send.mock.calls[0][0].message).toContain('2 paid Boosting orders are waiting');
+		expect(send.mock.calls[0][0].message).toContain('BulkFollows has $1.48');
 	});
 });

@@ -70,13 +70,21 @@ describe('public live Boosting offer copy', () => {
 		expect(body.data[0].benefitLabel).toBe('30-day refill');
 		expect(JSON.stringify(body)).not.toMatch(/Standard option|providerService|verifiedSignals/);
 	});
-	it.each(['funds', 'stale', 'refill', 'approval', 'missing'])(
-		'does not sell a known unavailable offer: %s',
+	it.each(['funds', 'stale'])(
+		'keeps an offer on sale when its supplier is short of money (%s); the order waits',
 		async (issue) => {
 			const base = (await mocks.findMany())[0];
 			if (issue === 'funds') base.routes[0].providerService.providerState.projectedBalance = 0;
-			if (issue === 'stale')
-				base.routes[0].providerService.providerState.lastBalanceSuccessAt = new Date(0);
+			else base.routes[0].providerService.providerState.lastBalanceSuccessAt = new Date(0);
+			mocks.findMany.mockResolvedValue([base]);
+			const body = await (await GET({ setHeaders: vi.fn() } as never)).json();
+			expect(body.data).toHaveLength(1);
+		}
+	);
+	it.each(['refill', 'approval', 'missing'])(
+		'does not sell a known unavailable offer: %s',
+		async (issue) => {
+			const base = (await mocks.findMany())[0];
 			if (issue === 'refill') base.refillDays = 30;
 			if (issue === 'approval') base.routes[0].equivalenceApproved = false;
 			if (issue === 'missing') base.routes = [];

@@ -307,3 +307,34 @@ export function simulateBoostRoute(input: SimulateBoostRouteInput): BoostRouteSi
 		projections
 	};
 }
+
+const FUNDING_REASONS: BoostRouteExclusionReason[] = ['insufficient_balance', 'balance_stale'];
+
+/**
+ * When nothing could be selected, the first route the owner allows whose only problem is supplier money.
+ * An order like that waits for a top-up instead of going to review.
+ */
+export function boostRouteAwaitingFunds(
+	offer: BoostCustomerOfferEnvelope,
+	simulation: BoostRouteSimulation
+): BoostRouteProjection | null {
+	if (simulation.selectedRouteId) return null;
+	const listed =
+		offer.routingPolicy === 'locked'
+			? [offer.lockedRouteId]
+			: offer.routingPolicy === 'preferred' && offer.backupRouteIds?.length
+				? [offer.preferredRouteId, ...offer.backupRouteIds]
+				: null;
+	const candidates = listed
+		? listed.flatMap((id) => simulation.projections.filter((p) => p.routeId === id))
+		: [...simulation.projections].sort(
+				(left, right) => left.projectedSupplierCostNgn - right.projectedSupplierCostNgn
+			);
+	return (
+		candidates.find(
+			(projection) =>
+				projection.reasons.length > 0 &&
+				projection.reasons.every((reason) => FUNDING_REASONS.includes(reason))
+		) ?? null
+	);
+}

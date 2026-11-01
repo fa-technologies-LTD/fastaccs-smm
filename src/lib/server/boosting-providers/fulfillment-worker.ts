@@ -8,7 +8,9 @@ import { notifyBoostingOrderCompleted } from '$lib/services/boosting-fulfillment
 import { BoostProviderSubmissionError, createPanelOrderClient } from './panel-order-client';
 import { commitBoostSupplierOutcome } from './commit-supplier-outcome';
 import { reserveBoostSubmission } from './reserve-submission';
+import { recordBoostSupplierBalances } from './balances';
 import {
+	boostRouteAwaitingFunds,
 	simulateBoostRoute,
 	type BoostApprovedRoute,
 	type BoostCustomerOfferEnvelope,
@@ -26,6 +28,10 @@ import type {
 } from './types';
 
 export type BoostAutomationMode = 'shadow' | 'pilot' | 'live';
+
+/** A paid order whose supplier is short of money stays queued under this reason until a top-up covers it. */
+export const BOOST_AWAITING_FUNDS = 'awaiting_supplier_funds';
+export const BOOST_FUNDS_RECHECK_MS = 15 * 60_000;
 
 const dueFulfillmentInclude = Prisma.validator<Prisma.BoostFulfillmentInclude>()({
 	orderItem: {
@@ -57,8 +63,11 @@ export interface BoostFulfillmentWorkerSummary {
 	completed: number;
 	manualReview: number;
 	definitiveRejections: number;
+	awaitingFunds: number;
 	failed: number;
 	mode: BoostAutomationMode;
+	/** Suppliers that paid orders are waiting on, for the funding alert. */
+	awaitingProviders: BoostProviderId[];
 	appRevision?: string;
 }
 
@@ -622,9 +631,23 @@ async function processQueued(
 	orderClients: OrderClients,
 	now: Date,
 	configuredMode: BoostAutomationMode,
-	leaseToken: string
-): Promise<'shadowed' | 'submitted' | 'manual_review' | 'definitive_rejection'> {
+	leaseToken: string,
+	awaitingProviders: Set<BoostProviderId>
+): Promise<'shadowed' | 'submitted' | 'manual_review' | 'definitive_rejection' | 'awaiting_funds'> {
 	const pricing = await getBoostingPricingConfig(database);
+	const waitForFunds = async (provider: BoostProviderId) => {
+		// Still queued, so the customer keeps seeing "Processing" and the worker tries again after a top-up.
+		await database.boostFulfillment.updateMany({
+			where: { id: fulfillment.id, status: 'queued', leaseToken },
+			data: {
+				lastSafeErrorCategory: BOOST_AWAITING_FUNDS,
+				lastCheckedAt: now,
+				nextActionAt: new Date(now.getTime() + BOOST_FUNDS_RECHECK_MS)
+			}
+		});
+		awaitingProviders.add(provider);
+		return 'awaiting_funds' as const;
+	};
 	const snapshot = jsonObject(fulfillment.offerSnapshot);
 	const comments =
 		fulfillment.outcome === 'custom_comments' ? parseBoostComments(snapshot?.customComments) : null;
@@ -658,12 +681,13 @@ async function processQueued(
 	const route = selected
 		? input.routes.find((candidate) => candidate.id === selected.routeId)
 		: null;
+	const awaitingFunds = boostRouteAwaitingFunds(input.offerEnvelope, input.simulation);
 	await database.boostAttempt.create({
 		data: {
 			fulfillmentId: fulfillment.id,
-			routeId: route?.id || null,
+			routeId: route?.id || awaitingFunds?.routeId || null,
 			type: 'route_decision',
-			outcome: selected ? 'selected' : 'no_safe_route',
+			outcome: selected ? 'selected' : awaitingFunds ? 'awaiting_funds' : 'no_safe_route',
 			supplierCostUsd: selected?.rawSupplierCostUsd || null,
 			safeSummary: {
 				mode: effectiveMode,
@@ -673,6 +697,7 @@ async function processQueued(
 		}
 	});
 	if (!selected || !route) {
+		if (awaitingFunds && effectiveMode !== 'shadow') return waitForFunds(awaitingFunds.provider);
 		await database.boostFulfillment.update({
 			where: { id: fulfillment.id },
 			data: {
@@ -741,16 +766,15 @@ async function processQueued(
 		supplierCostUsd: selected.rawSupplierCostUsd,
 		balanceSafetyUsd: finite(env.BOOSTING_BALANCE_SAFETY_USD, 5)
 	});
+	// The recorded balance changed since the route was chosen: wait for money like any other short supplier.
+	if (reservation === 'balance_unavailable') return waitForFunds(route.service.provider);
 	if (reservation !== 'reserved') {
 		await database.boostFulfillment.updateMany({
 			where: { id: fulfillment.id, status: 'queued', leaseToken },
 			data: {
 				status: 'manual_review',
 				customerStatus: reservation === 'order_hold' ? 'cancelled' : 'under_review',
-				lastSafeErrorCategory:
-					reservation === 'balance_unavailable'
-						? 'balance_reservation_failed'
-						: `submission_${reservation}`,
+				lastSafeErrorCategory: `submission_${reservation}`,
 				nextActionAt: null
 			}
 		});
@@ -922,6 +946,7 @@ export async function runBoostFulfillmentWorker(
 		mode?: BoostAutomationMode;
 		clients?: OrderClients;
 		now?: Date;
+		refreshBalances?: (database: PrismaClient) => Promise<unknown>;
 	} = {}
 ): Promise<BoostFulfillmentWorkerSummary> {
 	const database = options.database ?? prisma;
@@ -938,12 +963,25 @@ export async function runBoostFulfillmentWorker(
 		completed: 0,
 		manualReview: 0,
 		definitiveRejections: 0,
+		awaitingFunds: 0,
 		failed: 0,
 		mode,
+		awaitingProviders: [],
 		...(/^[a-f0-9]{40}$/i.test(env.VERCEL_GIT_COMMIT_SHA || '')
 			? { appRevision: env.VERCEL_GIT_COMMIT_SHA }
 			: {})
 	};
+	// Orders waiting on supplier money come back every 15 minutes; read balances first so a top-up counts at once.
+	const fundsDue = await database.boostFulfillment.count({
+		where: {
+			status: 'queued',
+			lastSafeErrorCategory: BOOST_AWAITING_FUNDS,
+			nextActionAt: { lte: now }
+		}
+	});
+	if (fundsDue)
+		await (options.refreshBalances ?? recordBoostSupplierBalances)(database).catch(() => {});
+	const awaitingProviders = new Set<BoostProviderId>();
 	const due = await database.boostFulfillment.findMany({
 		where: {
 			status: { in: ['queued', 'submitted', 'in_progress'] },
@@ -986,7 +1024,15 @@ export async function runBoostFulfillmentWorker(
 			if (!claimed.count) continue;
 			let outcome: string;
 			if (candidate.status === 'queued') {
-				outcome = await processQueued(candidate, database, orderClients, now, mode, leaseToken);
+				outcome = await processQueued(
+					candidate,
+					database,
+					orderClients,
+					now,
+					mode,
+					leaseToken,
+					awaitingProviders
+				);
 			} else {
 				outcome = await processStatus(candidate, database, orderClients, now);
 			}
@@ -996,6 +1042,7 @@ export async function runBoostFulfillmentWorker(
 			else if (outcome === 'completed') summary.completed += 1;
 			else if (outcome === 'polled') summary.polled += 1;
 			else if (outcome === 'definitive_rejection') summary.definitiveRejections += 1;
+			else if (outcome === 'awaiting_funds') summary.awaitingFunds += 1;
 			else summary.manualReview += 1;
 		} catch (error) {
 			summary.failed += 1;
@@ -1012,5 +1059,6 @@ export async function runBoostFulfillmentWorker(
 				.catch(() => undefined);
 		}
 	}
+	summary.awaitingProviders = [...awaitingProviders];
 	return summary;
 }

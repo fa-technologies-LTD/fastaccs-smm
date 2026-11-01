@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeBoostProviderService } from './catalog-normalizer';
 import {
+	boostRouteAwaitingFunds,
 	simulateBoostRoute,
 	type BoostApprovedRoute,
 	type BoostCustomerOfferEnvelope,
@@ -354,5 +355,45 @@ describe('boost route simulator', () => {
 			})
 		).toThrow('positive USD to NGN');
 		expect(() => simulate([], { quantity: 0 })).toThrow('positive quantity');
+	});
+
+	it('lets an order wait for a top-up only when supplier money is the sole problem', () => {
+		const broke = providers.map((state) => ({ ...state, projectedBalanceUsd: 1 }));
+		const waiting = (
+			routes: BoostApprovedRoute[],
+			offerOverrides: Partial<BoostCustomerOfferEnvelope> = {},
+			states = broke
+		) => {
+			const result = simulate(routes, offerOverrides, states);
+			return boostRouteAwaitingFunds({ ...offer, ...offerOverrides }, result)?.routeId ?? null;
+		};
+		expect(waiting([route('cheap', 'smm_raja', 1), route('dear', 'bulk_follows', 1.5)])).toBe(
+			'cheap'
+		);
+		// The owner's locked or listed routes only, in their order.
+		expect(
+			waiting([route('cheap', 'smm_raja', 1), route('dear', 'bulk_follows', 1.5)], {
+				routingPolicy: 'locked',
+				lockedRouteId: 'dear'
+			})
+		).toBe('dear');
+		expect(
+			waiting([route('cheap', 'smm_raja', 1), route('dear', 'bulk_follows', 1.5)], {
+				routingPolicy: 'preferred',
+				preferredRouteId: 'dear',
+				backupRouteIds: ['cheap']
+			})
+		).toBe('dear');
+		// A stale balance reading also just waits; the worker reads a fresh one.
+		expect(
+			waiting(
+				[route('cheap', 'smm_raja', 1)],
+				{},
+				providers.map((state) => ({ ...state, balanceFresh: false }))
+			)
+		).toBe('cheap');
+		// Any other problem still goes to review, and a route with money is simply used.
+		expect(waiting([route('paused', 'smm_raja', 1, { state: 'paused' })])).toBeNull();
+		expect(waiting([route('ok', 'smm_raja', 1)], {}, providers)).toBeNull();
 	});
 });

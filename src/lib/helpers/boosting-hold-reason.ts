@@ -11,6 +11,8 @@ const reasons: Record<string, string> = {
 		'The supplier explicitly rejected the submission. Check the order history before deciding how to resolve it.',
 	balance_reservation_failed:
 		'The available supplier balance could not cover this order after its safety reserve.',
+	awaiting_supplier_funds:
+		'Waiting for supplier money. It goes out on its own within 15 minutes of a top-up.',
 	submission_order_hold:
 		'This order is unpaid, cancelled, refunded or otherwise on hold. Do not send it to a supplier.',
 	submission_state_changed:

@@ -29,7 +29,6 @@ export function inspectBoostSale(
 	// Match live fulfillment's six-hour sync window plus its existing refresh grace period.
 	// The older shadow-preview defaults are not the live purchase contract.
 	const catalogAge = positive(env.BOOSTING_CATALOG_MAX_AGE_MINUTES, 390, 5) * 60_000;
-	const balanceAge = positive(env.BOOSTING_BALANCE_MAX_AGE_MINUTES, 390, 5) * 60_000;
 	const fresh = (date: Date | null | undefined, age: number) => {
 		const time = date?.getTime();
 		return time != null && Number.isFinite(time) && time <= now && now - time <= age;
@@ -73,8 +72,6 @@ export function inspectBoostSale(
 			reasons.push('The supplier service is unavailable.');
 		if (!fresh(state?.lastCatalogueSuccessAt, catalogAge) || !fresh(service.lastSeenAt, catalogAge))
 			reasons.push('Supplier catalogue information needs refreshing.');
-		if (!fresh(state?.lastBalanceSuccessAt, balanceAge))
-			reasons.push('Supplier balance information needs refreshing.');
 		if (
 			!service.platforms.includes(offer.platform) ||
 			!service.outcomes.includes(offer.outcome) ||
@@ -109,17 +106,9 @@ export function inspectBoostSale(
 		)
 			reasons.push('Recorded delivery reliability is below the existing safety requirement.');
 		const costUsd = (number(service.ratePerThousand) * quantity) / 1000;
+		// Supplier money is not checked here: the owner keeps options on sale, and a paid order the
+		// supplier cannot cover yet waits in the queue until a top-up (see the fulfillment worker).
 		const cost = costUsd * fx;
-		// Dispatch reserves against projectedBalance specifically; a historic raw balance
-		// cannot substitute for a missing spendable balance.
-		const balance = number(state?.projectedBalance);
-		if (
-			!Number.isFinite(costUsd) ||
-			costUsd < 0 ||
-			!Number.isFinite(balance) ||
-			balance - positive(env.BOOSTING_BALANCE_SAFETY_USD, 5) < costUsd
-		)
-			reasons.push('The recorded supplier balance is insufficient after its safety reserve.');
 		const cap = (number(offer.maximumSupplierCostNgn) * quantity) / offer.minQuantity;
 		if (
 			!Number.isFinite(cost) ||

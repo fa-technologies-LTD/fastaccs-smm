@@ -12,24 +12,25 @@ describe('read-only sale refusal checks', () => {
 		service.providerState.lastBalanceSuccessAt = new Date(Date.now() - 60 * 60000);
 		expect(inspectBoostSale(offer, 1500).available).toBe(true);
 	});
+	it('refuses a stale catalogue record before payment at the existing live fulfillment default', () => {
+		const offer = saleOfferFixture();
+		const stale = new Date(Date.now() - 391 * 60000);
+		const service = offer.routes[0].providerService;
+		service.lastSeenAt = stale;
+		service.providerState.lastCatalogueSuccessAt = stale;
+		const result = inspectBoostSale(offer, 1500);
+		expect(result.available).toBe(false);
+		expect(result.reasons).toContain('Supplier catalogue information needs refreshing.');
+	});
 	it.each([
-		['catalogue', 391, 'Supplier catalogue information needs refreshing.'],
-		['balance', 391, 'Supplier balance information needs refreshing.']
-	])(
-		'refuses stale %s records before payment at the existing live fulfillment default',
-		(kind, minutes, reason) => {
-			const offer = saleOfferFixture();
-			const stale = new Date(Date.now() - Number(minutes) * 60000);
-			const service = offer.routes[0].providerService;
-			if (kind === 'catalogue') {
-				service.lastSeenAt = stale;
-				service.providerState.lastCatalogueSuccessAt = stale;
-			} else service.providerState.lastBalanceSuccessAt = stale;
-			const result = inspectBoostSale(offer, 1500);
-			expect(result.available).toBe(false);
-			expect(result.reasons).toContain(reason);
-		}
-	);
+		['an empty balance', { balance: 0, projectedBalance: 0 }],
+		['no recorded balance', { balance: null, projectedBalance: null }],
+		['an old balance reading', { lastBalanceSuccessAt: new Date(0) }]
+	])('keeps the option on sale with %s; the paid order waits for a top-up', (_, state) => {
+		const offer = saleOfferFixture();
+		Object.assign(offer.routes[0].providerService.providerState, state);
+		expect(inspectBoostSale(offer, 1500)).toMatchObject({ available: true, reasons: [] });
+	});
 	it('permits a valid recorded configuration without selecting or exposing a supplier', () => {
 		const result = inspectBoostSale(saleOfferFixture(), 1500);
 		expect(result).toMatchObject({ available: true, reasons: [], maximumQuantity: 10000 });
@@ -44,27 +45,8 @@ describe('read-only sale refusal checks', () => {
 		['provider paused', (o: any) => (o.routes[0].providerService.providerState.circuitOpen = true)],
 		['unsupported provider', (o: any) => (o.routes[0].providerService.provider = 'unknown')],
 		[
-			'missing spendable balance despite a historic raw balance',
-			(o: any) => (o.routes[0].providerService.providerState.projectedBalance = null)
-		],
-		[
 			'unsupported currency',
 			(o: any) => (o.routes[0].providerService.providerState.currency = 'NGN')
-		],
-		[
-			'missing balance',
-			(o: any) => {
-				o.routes[0].providerService.providerState.balance = null;
-				o.routes[0].providerService.providerState.projectedBalance = null;
-			}
-		],
-		[
-			'insufficient balance',
-			(o: any) => (o.routes[0].providerService.providerState.projectedBalance = 5)
-		],
-		[
-			'stale balance',
-			(o: any) => (o.routes[0].providerService.providerState.lastBalanceSuccessAt = new Date(0))
 		],
 		[
 			'missing catalogue date',
@@ -109,8 +91,7 @@ describe('read-only sale refusal checks', () => {
 		const offer = saleOfferFixture();
 		expect(inspectBoostSale(offer, 1500, 101).available).toBe(false);
 		expect(inspectBoostSale(offer, 1500, 500, { customerPriceNgn: 1 }).available).toBe(false);
-		offer.routes[0].providerService.providerState.projectedBalance = 5.1 as never;
 		expect(inspectBoostSale(offer, 1500, 500).available).toBe(true);
-		expect(inspectBoostSale(offer, 1500, 2000).available).toBe(false);
+		expect(inspectBoostSale(offer, 1500, 20000).available).toBe(false);
 	});
 });

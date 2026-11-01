@@ -99,13 +99,23 @@ describe('server-authoritative combined Boosting checkout minimum', () => {
 		mocks.transaction.mockRejectedValue(new Error('Fixture financial boundary reached.'));
 	});
 	afterEach(() => vi.restoreAllMocks());
-	it.each(['funds', 'stale', 'locked', 'refill', 'quantity'])(
-		'rejects a stale cart before order or payment writes: %s',
+	it.each(['funds', 'stale'])(
+		'still checks out when the supplier is short of money (%s); the paid order waits',
 		async (issue) => {
 			const offers = await mocks.offers();
 			if (issue === 'funds') offers[0].routes[0].providerService.providerState.projectedBalance = 0;
-			if (issue === 'stale')
-				offers[0].routes[0].providerService.providerState.lastBalanceSuccessAt = new Date(0);
+			else offers[0].routes[0].providerService.providerState.lastBalanceSuccessAt = new Date(0);
+			mocks.offers.mockResolvedValue(offers);
+			const response = await checkout([400]);
+			expect(response.status).toBe(409); // Intentional no-write transaction sentinel.
+			expect(await response.json()).toMatchObject({ error: 'Fixture financial boundary reached.' });
+			expect(mocks.transaction).toHaveBeenCalledOnce();
+		}
+	);
+	it.each(['locked', 'refill', 'quantity'])(
+		'rejects a stale cart before order or payment writes: %s',
+		async (issue) => {
+			const offers = await mocks.offers();
 			if (issue === 'locked') offers[0].lockedRouteId = 'missing';
 			if (issue === 'refill') offers[0].refillDays = 30;
 			if (issue === 'quantity') offers[0].routes[0].maximumQuantity = 200;

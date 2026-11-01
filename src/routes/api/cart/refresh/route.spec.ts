@@ -113,7 +113,7 @@ describe('Boosting custom comments survive cart refresh', () => {
 	});
 	it('removes a known-unavailable mapping and keeps supplier details private', async () => {
 		const offers = await mocks.offers();
-		offers[0].routes[0].providerService.providerState.projectedBalance = 0;
+		offers[0].routes[0].equivalenceApproved = false;
 		mocks.offers.mockResolvedValue(offers);
 		const result = await refresh(Array.from({ length: 10 }, () => 'Good product').join('\n'), 10);
 		expect(result.data.items).toEqual([]);
