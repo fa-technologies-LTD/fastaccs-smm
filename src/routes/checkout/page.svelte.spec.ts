@@ -543,7 +543,7 @@ function accountCart(validate: () => Response) {
 		})
 	);
 }
-it('applies the first-order offer in one tap and shows what it saves', async () => {
+it('shows the first-order offer as a small promo hint and applies it through the normal flow', async () => {
 	accountCart(() =>
 		Response.json({ success: true, data: { code: 'WELCOME10', discountAmount: 200 } })
 	);
@@ -560,10 +560,12 @@ it('applies the first-order offer in one tap and shows what it saves', async () 
 			}
 		}
 	} as never);
-	await page.getByRole('button', { name: /10% off your first account order/ }).click();
+	await expect.element(page.getByText('WELCOME10')).toBeVisible();
+	expect(document.querySelector('.offer-card')).toBeNull();
+	await page.getByRole('button', { name: 'Apply WELCOME10' }).click();
 	await expect.element(page.getByText('WELCOME10 applied')).toBeVisible();
 	await expect.element(page.getByRole('button', { name: /^Pay ₦1,800/ })).toBeVisible();
-	expect(page.getByRole('button', { name: /10% off your first account order/ }).query()).toBeNull();
+	expect(page.getByRole('button', { name: 'Apply WELCOME10' }).query()).toBeNull();
 });
 it('shows how much more is needed instead of offering a code the cart cannot use yet', async () => {
 	accountCart(() =>
@@ -583,9 +585,7 @@ it('shows how much more is needed instead of offering a code the cart cannot use
 		}
 	} as never);
 	await expect.element(page.getByText('Add ₦500 more to use it')).toBeVisible();
-	await expect
-		.element(page.getByRole('button', { name: /₦200 off your first account order/ }))
-		.toBeDisabled();
+	expect(page.getByRole('button', { name: 'Apply WELCOME10' }).query()).toBeNull();
 });
 it('keeps a mistyped code in the field and explains the problem in place', async () => {
 	accountCart(() =>

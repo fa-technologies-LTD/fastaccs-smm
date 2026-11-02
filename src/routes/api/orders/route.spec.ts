@@ -639,6 +639,75 @@ describe('approved invariant: emergency checkout order control', () => {
 		);
 	});
 
+	it('continues an account checkout at normal price when a referral code is stale', async () => {
+		vi.stubEnv('CHECKOUT_DISABLED', 'false');
+		mocks.findOrder.mockResolvedValue(null);
+		mocks.findCategories.mockResolvedValue([
+			{
+				id: 'tier-123',
+				name: 'Instagram Account',
+				categoryType: 'tier',
+				parent: { name: 'Instagram' },
+				metadata: { pricing: { base_price: 5_800 }, delivery_mode: 'instant_auto' }
+			}
+		]);
+		mocks.groupAccounts.mockResolvedValue([{ categoryId: 'tier-123', _count: { _all: 1 } }]);
+		mocks.resolveOrderAffiliateAttribution.mockResolvedValue({
+			affiliateCode: null,
+			affiliateUserId: null,
+			affiliateProgramId: null,
+			policySnapshot: null,
+			source: 'none',
+			error: 'Affiliate code is invalid.'
+		});
+		mocks.initializeTransaction.mockResolvedValue({
+			success: true,
+			checkoutUrl: 'https://checkout.monnify.test/no-referral',
+			transactionReference: 'TX-NO-REFERRAL'
+		});
+
+		const orderCreate = vi.fn().mockResolvedValue({
+			id: 'order-no-referral',
+			orderNumber: 'ORD-NO-REFERRAL',
+			status: 'pending',
+			paymentStatus: 'pending',
+			totalAmount: 5_800,
+			currency: 'NGN',
+			orderItems: []
+		});
+		mocks.createTransaction.mockImplementation(async (callback) =>
+			callback({
+				order: { create: orderCreate },
+				orderEvent: { create: vi.fn().mockResolvedValue({}) }
+			})
+		);
+
+		const response = await POST({
+			request: orderRequest('checkout_key_stale_affiliate', 'NGN', undefined, false, 'STALE123'),
+			locals: { user },
+			url: new URL('https://smm.fastaccs.com/api/orders')
+		} as never);
+
+		expect(response.status).toBe(200);
+		expect(mocks.resolveOrderAffiliateAttribution).toHaveBeenCalledWith({
+			buyerUserId: user.id,
+			explicitAffiliateCode: 'STALE123'
+		});
+		expect(orderCreate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({
+					affiliateCode: null,
+					affiliateUserId: null,
+					subtotal: 5_800,
+					totalAmount: 5_800
+				})
+			})
+		);
+		expect(mocks.initializeTransaction).toHaveBeenCalledWith(
+			expect.objectContaining({ amount: 5_800, orderId: 'order-no-referral' })
+		);
+	});
+
 	it('snapshots regular-versus-Super treatment on an attributed account order', async () => {
 		vi.stubEnv('CHECKOUT_DISABLED', 'false');
 		mocks.findOrder.mockResolvedValue(null);

@@ -1196,7 +1196,11 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			});
 
 			if (attribution.error && affiliateCodeInput) {
-				return json({ success: false, error: attribution.error }, { status: 400 });
+				// Referral attribution is optional. A stale, disabled or self-referral code must
+				// never prevent the buyer from completing checkout at the normal price.
+				console.warn('Ignoring affiliate attribution that cannot be applied at checkout.', {
+					reason: attribution.error
+				});
 			}
 
 			const hasAffiliateAttribution = Boolean(

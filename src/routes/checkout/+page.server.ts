@@ -1,13 +1,27 @@
 import type { PageServerLoad } from './$types';
-import { readAffiliateReferralCookie } from '$lib/services/affiliate';
+import {
+	clearAffiliateReferralCookie,
+	readAffiliateReferralCookie,
+	validateAffiliateCode
+} from '$lib/services/affiliate';
 import { getStoreCreditBuckets } from '$lib/services/store-credit';
 import { getPromoCaps } from '$lib/services/promo-campaigns';
 import { getFirstOrderOffer } from '$lib/services/promotions';
 import type { PromoCampaignBalance } from '$lib/helpers/promo-credit';
 import { prisma } from '$lib/prisma';
 
-export const load: PageServerLoad = async ({ cookies, locals }) => {
-	const affiliateRef = readAffiliateReferralCookie(cookies);
+export const load: PageServerLoad = async ({ cookies, locals, url }) => {
+	let affiliateRef = readAffiliateReferralCookie(cookies);
+	if (affiliateRef) {
+		const validation = await validateAffiliateCode(affiliateRef);
+		const selfReferral = Boolean(locals.user?.id && validation.userId === locals.user.id);
+		if (!validation.valid || selfReferral) {
+			affiliateRef = null;
+			if (validation.error === 'Affiliate code is invalid.' || selfReferral) {
+				clearAffiliateReferralCookie(cookies, url.protocol === 'https:');
+			}
+		}
+	}
 	const userId = locals.user?.id;
 	const emptyStoreCredit = {
 		earnedAvailable: 0,

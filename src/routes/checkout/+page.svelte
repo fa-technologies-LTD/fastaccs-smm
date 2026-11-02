@@ -15,7 +15,6 @@
 		Plus,
 		ExternalLink,
 		Edit,
-		Gift,
 		Wallet
 	} from '$lib/icons';
 	import AnimatedAmount from '$lib/components/checkout/AnimatedAmount.svelte';
@@ -118,8 +117,8 @@
 	// credit pays up to 100% of the order, reward credit up to 30%, promo credit up to its campaign cap.
 	// The server recomputes authoritatively at checkout, so this is only an estimate for display.
 	// The buyer decides whether credit pays. Only promo credit (it expires) starts ticked. Instead of
-	// spending credit for them, the credit row and the one-tap offer give a short shake on a buyer's
-	// first few checkouts, so they learn the option is there.
+	// spending credit for them, the credit row gives a short shake on a buyer's first few checkouts,
+	// so they learn the option is there.
 	const hasPromoCreditAtLoad = () => (data.storeCredit?.promoAvailable ?? 0) > 0;
 	let applyStoreCredit = $state(hasPromoCreditAtLoad());
 	function setStoreCreditChoice(on: boolean) {
@@ -129,10 +128,9 @@
 	const NUDGE_STORAGE_KEY = 'fastaccs_checkout_nudges';
 	const NUDGES_PER_FEATURE = 3;
 	let creditNudge = $state(false);
-	let offerNudge = $state(false);
 	let nudgesPlanned = false;
-	/** True (and counted) while this buyer has seen fewer than three nudges for this feature. */
-	function takeNudge(feature: 'credit' | 'offer'): boolean {
+	/** True (and counted) while this buyer has seen fewer than three credit nudges. */
+	function takeNudge(feature: 'credit'): boolean {
 		if (!user?.id) return false;
 		try {
 			const key = `${NUDGE_STORAGE_KEY}:${user.id}`;
@@ -236,21 +234,12 @@
 				/* the link is optional */
 			});
 	});
-	// Once per checkout visit, after the cart has loaded: shake what the buyer can use but hasn't.
+	// Once per checkout visit, after the cart has loaded: point out available credit without applying it.
 	$effect(() => {
 		if (nudgesPlanned || loadingCartData || !cartItems.length || !user) return;
 		nudgesPlanned = true;
-		const offer = data.availablePromo;
-		const offerUsable =
-			Boolean(offer) &&
-			!promoAppliedCode &&
-			!hasBoostingOrder &&
-			!hasNumbersOrder &&
-			cartTotal >= Number(offer?.minOrderValue || 0);
 		const creditUsable = storeCreditAvailable > 0 && !applyStoreCredit;
 		if (creditUsable && takeNudge('credit')) nudge((on) => (creditNudge = on), 600);
-		if (offerUsable && takeNudge('offer'))
-			nudge((on) => (offerNudge = on), creditUsable ? 1400 : 600);
 	});
 	// One line under the pay button: what happens next, for the kind of order in the cart.
 	const deliveryNote = $derived.by(() => {
@@ -1453,39 +1442,34 @@
 											0,
 											Number(data.availablePromo.minOrderValue || 0) - cartTotal
 										)}
-										<button
-											type="button"
-											onclick={() => {
-												promoCodeInput = data.availablePromo!.code;
-												void applyPromoCode();
-											}}
-											disabled={promoValidationLoading || offerShortBy > 0}
-											class="offer-card flex w-full items-center gap-3 rounded-xl p-3 text-left"
-											class:nudge={offerNudge}
-										>
-											<span class="offer-card__icon" aria-hidden="true"><Gift size={18} /></span>
-											<span class="min-w-0 flex-1">
-												<span class="block text-sm font-semibold" style="color: var(--text);"
-													>{data.availablePromo.label}</span
+										<p class="text-xs" style="color: var(--text-muted);">
+											<span class="font-semibold" style="color: var(--text);"
+												>{data.availablePromo.code}</span
+											>
+											— {data.availablePromo.label}
+											{#if offerShortBy > 0}
+												<span style="color: var(--primary);"
+													>· Add {formatPrice(offerShortBy)} more to use it</span
 												>
-												<span
-													class="block text-xs"
-													style="color: {offerShortBy > 0
-														? 'var(--primary)'
-														: 'var(--text-muted)'};"
-													>{offerShortBy > 0
-														? `Add ${formatPrice(offerShortBy)} more to use it`
-														: 'Your first-order offer'}</span
-												>
-											</span>
-											{#if offerShortBy <= 0}
-												<span class="offer-card__cta"
+											{:else}
+												·
+												<button
+													type="button"
+													onclick={() => {
+														showCodeInput = true;
+														promoCodeInput = data.availablePromo!.code;
+														void applyPromoCode();
+													}}
+													disabled={promoValidationLoading}
+													class="font-semibold underline"
+													style="color: var(--primary);"
+													aria-label="Apply {data.availablePromo.code}"
 													>{promoValidationLoading && promoCodeInput === data.availablePromo.code
 														? 'Applying…'
-														: 'Apply'}</span
+														: 'Apply'}</button
 												>
 											{/if}
-										</button>
+										</p>
 									{/if}
 									{#if showCodeInput}
 										<form
@@ -1815,39 +1799,7 @@
 		}
 	}
 
-	/* First-order offer and applied-code card. */
-	.offer-card {
-		background: rgba(5, 212, 113, 0.08);
-		border: 1px solid rgba(5, 212, 113, 0.3);
-		transition:
-			border-color 150ms ease,
-			transform 120ms ease;
-	}
-	.offer-card:not(:disabled):hover {
-		border-color: rgba(5, 212, 113, 0.6);
-	}
-	.offer-card:active:not(:disabled) {
-		transform: scale(0.99);
-	}
-	.offer-card__icon {
-		display: grid;
-		place-items: center;
-		width: 34px;
-		height: 34px;
-		flex-shrink: 0;
-		border-radius: 10px;
-		background: rgba(5, 212, 113, 0.16);
-		color: var(--primary);
-	}
-	.offer-card__cta {
-		flex-shrink: 0;
-		padding: 6px 14px;
-		border-radius: 999px;
-		background: var(--primary);
-		color: #04140c;
-		font-size: 0.75rem;
-		font-weight: 700;
-	}
+	/* Applied-code confirmation. */
 	.promo-applied {
 		background: rgba(5, 212, 113, 0.1);
 		border: 1px solid rgba(5, 212, 113, 0.4);
@@ -1905,7 +1857,6 @@
 		.pay-button::after,
 		.pay-button__progress,
 		.pay-button--pulse,
-		.offer-card,
 		.promo-applied--celebrate,
 		.promo-applied__check i {
 			animation: none !important;
