@@ -17,6 +17,7 @@
 		secondaryHref?: string;
 		secondaryText?: string;
 		onItemNavigate?: (href: string) => void;
+		showIcon?: boolean;
 		/** Overrides the kind's colour (the Numbers blue). */
 		accent?: string | null;
 		iconKind?: 'emoji' | 'phone';
@@ -34,6 +35,7 @@
 		secondaryHref,
 		secondaryText,
 		onItemNavigate,
+		showIcon = true,
 		accent = null,
 		iconKind = 'emoji',
 		kind = 'announcement'
@@ -49,6 +51,7 @@
 		{title}
 		{body}
 		items={bodyItems}
+		{showIcon}
 		{accent}
 		emoji={iconKind === 'emoji' ? icon : undefined}
 		icon={iconKind === 'phone' ? (Phone as unknown as Component) : undefined}

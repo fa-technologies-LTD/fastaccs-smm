@@ -173,6 +173,7 @@
 		secondaryText={activePopup.secondaryText}
 		onItemNavigate={handleItemNavigate}
 		kind={popupKind(activePopup.type)}
+		showIcon={activePopup.type !== 'catalog_updates'}
 		accent={activePopup.type === 'numbers_launch' || activePopup.type === 'numbers_improved'
 			? '#0ea5e9'
 			: null}

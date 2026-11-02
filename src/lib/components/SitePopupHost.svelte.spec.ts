@@ -193,6 +193,37 @@ it('ignores an availability response arriving after navigation to checkout', asy
 	expect(browser.getByRole('dialog').query()).toBeNull();
 });
 
+it('keeps the catalog update modal unchanged except for removing its decorative icon', async () => {
+	launchState.seen = true;
+	page.url.pathname = '/dashboard';
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () =>
+			Response.json({
+				popup: {
+					type: 'catalog_updates',
+					icon: '✨',
+					title: "Here's what's new since your last visit",
+					body: 'Fresh additions are ready.',
+					ctaText: 'Got it'
+				}
+			})
+		)
+	);
+
+	render(SitePopupHost, { isLoggedIn: true });
+	await expect
+		.element(browser.getByRole('dialog', { name: "Here's what's new since your last visit" }))
+		.toBeVisible();
+	await expect.element(browser.getByText('New', { exact: true })).toBeVisible();
+	await expect
+		.element(browser.getByText('Fresh additions are ready.', { exact: true }))
+		.toBeVisible();
+	await expect.element(browser.getByRole('button', { name: 'Got it' })).toBeVisible();
+	expect(browser.getByText('✨', { exact: true }).query()).toBeNull();
+	expect(document.querySelector('.spotlight__icon')).toBeNull();
+});
+
 it('stays quiet while the buyer has items in the cart', async () => {
 	page.url.pathname = '/dashboard';
 	cart.addTier('fixture-account', 1);

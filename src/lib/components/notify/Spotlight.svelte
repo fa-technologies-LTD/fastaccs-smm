@@ -18,6 +18,7 @@
 		eyebrow = NOTICE_LOOK[kind].eyebrow,
 		icon,
 		emoji,
+		showIcon = true,
 		accent = null,
 		primary,
 		secondary,
@@ -34,6 +35,7 @@
 		eyebrow?: string;
 		icon?: Component;
 		emoji?: string;
+		showIcon?: boolean;
 		/** Overrides the kind's colour, e.g. the Numbers blue. */
 		accent?: string | null;
 		/** A link (with href) or a button that closes. */
@@ -95,9 +97,11 @@
 		<button type="button" class="spotlight__close" aria-label={closeLabel} onclick={onClose}>
 			<X size={18} />
 		</button>
-		<div class="spotlight__icon" aria-hidden="true">
-			{#if emoji}<span class="spotlight__emoji">{emoji}</span>{:else}<Icon size={30} />{/if}
-		</div>
+		{#if showIcon}
+			<div class="spotlight__icon" aria-hidden="true">
+				{#if emoji}<span class="spotlight__emoji">{emoji}</span>{:else}<Icon size={30} />{/if}
+			</div>
+		{/if}
 		{#if eyebrow}<span class="spotlight__eyebrow">{eyebrow}</span>{/if}
 		<h2 id="spotlight-title">{title}</h2>
 		<p id="spotlight-body">{body}</p>
