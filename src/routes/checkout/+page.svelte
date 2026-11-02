@@ -1629,14 +1629,6 @@
 								<Notice kind="warning">{currentPriceChangeMessage}</Notice>
 							</div>
 						{/if}
-						{#if !user}
-							<p
-								class="mt-4 text-center text-xs"
-								style="color: var(--text-muted); font-family: var(--font-body);"
-							>
-								Have store credit? Sign in to use it.
-							</p>
-						{/if}
 						<button
 							onclick={payWithMonnify}
 							disabled={loading || loadingCartData}

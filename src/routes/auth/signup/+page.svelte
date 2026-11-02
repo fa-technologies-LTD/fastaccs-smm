@@ -165,11 +165,7 @@
 							autocomplete="tel"
 							class="w-full rounded-lg px-3 py-2"
 							style="background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text);"
-							placeholder="+234 801 234 5678"
 						/>
-						<p class="mt-1 text-xs" style="color: var(--text-muted);">
-							Get order updates, faster support, and access to our WhatsApp giveaways.
-						</p>
 					</div>
 
 					<div>
