@@ -1,5 +1,6 @@
 import { prisma } from '$lib/prisma';
 import { getBoostingProgress } from '$lib/helpers/boosting-progress';
+import { declinedTransferNotice, readDeclinedTransfer } from '$lib/helpers/declined-transfer';
 
 export const DASHBOARD_ORDERS_PAGE_SIZE = 20;
 
@@ -22,6 +23,13 @@ export async function getDashboardOrdersPage(input: {
 			deliveryStatus: true,
 			deliveryMethod: true,
 			createdAt: true,
+			// The latest transfer Monnify refused, so an unpaid order can say why in plain words.
+			events: {
+				where: { type: 'payment_transfer_declined' },
+				orderBy: { createdAt: 'desc' },
+				take: 1,
+				select: { metadata: true }
+			},
 			orderItems: {
 				select: {
 					id: true,
@@ -54,8 +62,11 @@ export async function getDashboardOrdersPage(input: {
 	});
 
 	const hasMore = rows.length > limit;
-	const orders = (hasMore ? rows.slice(0, limit) : rows).map((order) => ({
+	const orders = (hasMore ? rows.slice(0, limit) : rows).map(({ events, ...order }) => ({
 		...order,
+		paymentNotice: events?.[0]
+			? declinedTransferNotice(readDeclinedTransfer(events[0].metadata))
+			: null,
 		totalAmount: Number(order.totalAmount),
 		refundedAmount: Number(order.refundedAmount),
 		orderItems: order.orderItems.map(({ boostFulfillment, ...item }) => ({

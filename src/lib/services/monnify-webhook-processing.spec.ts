@@ -5,7 +5,8 @@ const mocks = vi.hoisted(() => ({
 	verifyPayment: vi.fn(),
 	findOrder: vi.fn(),
 	settleSuccessfulPayment: vi.fn(),
-	settleFailedPayment: vi.fn()
+	settleFailedPayment: vi.fn(),
+	recordOrderEvent: vi.fn()
 }));
 
 vi.mock('$lib/services/payment', () => ({
@@ -25,6 +26,8 @@ vi.mock('$lib/services/payment-settlement', () => ({
 	settleSuccessfulPayment: mocks.settleSuccessfulPayment,
 	settleFailedPayment: mocks.settleFailedPayment
 }));
+
+vi.mock('$lib/services/order-events', () => ({ recordOrderEvent: mocks.recordOrderEvent }));
 
 vi.mock('$lib/services/admin-alerts', () => ({
 	sendCriticalAdminAlert: vi.fn(async () => undefined)
@@ -164,5 +167,88 @@ describe('approved invariant: Monnify webhook boundary', () => {
 		expect(await response.json()).toEqual({ success: false, retryable: true });
 		expect(mocks.settleSuccessfulPayment).not.toHaveBeenCalled();
 		expect(mocks.settleFailedPayment).not.toHaveBeenCalled();
+	});
+
+	describe('a transfer Monnify refused', () => {
+		const order = { id: 'order-123', paymentReference: 'ORD_123' };
+		const refused = {
+			transactionReference: 'MNFY|34|1',
+			paymentReference: 'ORD_123',
+			rejectionReason: 'UNDER_PAYMENT',
+			expectedAmount: '10500',
+			amountSent: '10000',
+			rejectedAt: '2026-11-02 05:06:44.0'
+		};
+		const gateway = (status: string) => ({
+			success: status === 'PAID',
+			status,
+			transactionReference: 'MNFY|34|1',
+			paymentReference: 'ORD_123',
+			amount: 10500,
+			amountPaid: status === 'PAID' ? 10500 : 0,
+			currency: 'NGN',
+			metaData: { orderId: 'order-123' }
+		});
+		const refuse = () =>
+			processMonnifyWebhookEvent({ eventType: 'REJECTED_PAYMENT', eventData: refused }, 'trace');
+		beforeEach(() => mocks.findOrder.mockResolvedValue(order));
+
+		it('keeps the order open while Monnify still has the payment open, and records why', async () => {
+			mocks.verifyPayment.mockResolvedValue(gateway('PENDING'));
+			const response = await refuse();
+			expect(await response.json()).toEqual({ success: true });
+			expect(mocks.settleFailedPayment).not.toHaveBeenCalled();
+			expect(mocks.recordOrderEvent).toHaveBeenCalledWith(
+				expect.objectContaining({
+					orderId: 'order-123',
+					type: 'payment_transfer_declined',
+					amount: 10000,
+					description:
+						'Monnify refused a transfer (less than the order total): sent ₦10,000, expected ₦10,500. The payment stays open.',
+					idempotencyKey: 'monnify-declined:MNFY|34|1:2026-11-02 05:06:44.0',
+					metadata: expect.objectContaining({
+						reason: 'UNDER_PAYMENT',
+						expectedAmount: 10500,
+						amountSent: 10000
+					})
+				})
+			);
+		});
+
+		it('also stays open when Monnify cannot be reached to check', async () => {
+			mocks.verifyPayment.mockResolvedValue(gateway(''));
+			await refuse();
+			expect(mocks.settleFailedPayment).not.toHaveBeenCalled();
+			expect(mocks.recordOrderEvent).toHaveBeenCalledOnce();
+		});
+
+		it('closes the order only when Monnify itself reports the payment closed', async () => {
+			mocks.verifyPayment.mockResolvedValue(gateway('EXPIRED'));
+			await refuse();
+			expect(mocks.settleFailedPayment).toHaveBeenCalledWith(
+				expect.objectContaining({ orderId: 'order-123', failureKind: 'cancelled' })
+			);
+			expect(mocks.recordOrderEvent).not.toHaveBeenCalled();
+		});
+
+		it('settles the order when the payment has in fact been paid', async () => {
+			mocks.verifyPayment.mockResolvedValue(gateway('PAID'));
+			mocks.settleSuccessfulPayment.mockResolvedValue({ success: true });
+			await refuse();
+			expect(mocks.settleSuccessfulPayment).toHaveBeenCalledOnce();
+			expect(mocks.settleFailedPayment).not.toHaveBeenCalled();
+		});
+
+		it('still fails a card payment Monnify reports as failed', async () => {
+			mocks.verifyPayment.mockResolvedValue(gateway('PENDING'));
+			await processMonnifyWebhookEvent(
+				{ eventType: 'FAILED_TRANSACTION', eventData: { paymentReference: 'ORD_123' } },
+				'trace'
+			);
+			expect(mocks.settleFailedPayment).toHaveBeenCalledWith(
+				expect.objectContaining({ orderId: 'order-123', failureKind: 'failed' })
+			);
+			expect(mocks.recordOrderEvent).not.toHaveBeenCalled();
+		});
 	});
 });

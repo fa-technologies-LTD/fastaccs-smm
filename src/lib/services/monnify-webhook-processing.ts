@@ -10,6 +10,8 @@ import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
 import { settleFailedPayment, settleSuccessfulPayment } from '$lib/services/payment-settlement';
 import { logPaymentEvent } from '$lib/server/payment-observability';
 import { isVerifiedPaymentBoundToOrder } from '$lib/helpers/payment-binding';
+import { recordOrderEvent } from '$lib/services/order-events';
+import { declinedTransferSummary, readDeclinedTransfer } from '$lib/helpers/declined-transfer';
 
 function pickString(value: unknown): string | null {
 	if (typeof value !== 'string') return null;
@@ -40,6 +42,30 @@ async function resolveVerifiedOrder(input: {
 		verifiedPaymentReference: input.verifiedPaymentReference
 	});
 	return { order: bound ? order : null, mismatch: !bound };
+}
+
+/** A refused transfer leaves the Monnify payment open, so it is recorded on the order instead of failing it. */
+async function recordDeclinedTransfer(
+	orderId: string,
+	eventData: Record<string, unknown>,
+	transactionReference: string | null
+) {
+	const transfer = readDeclinedTransfer({
+		reason: eventData.rejectionReason,
+		expectedAmount: eventData.expectedAmount,
+		amountSent: eventData.amountSent
+	});
+	await recordOrderEvent({
+		orderId,
+		type: 'payment_transfer_declined',
+		source: 'webhook',
+		amount: transfer.amountSent,
+		description: declinedTransferSummary(transfer),
+		idempotencyKey: `monnify-declined:${transactionReference || orderId}:${
+			pickString(eventData.rejectedAt) || transfer.amountSent || 'unknown'
+		}`,
+		metadata: { ...transfer, transactionReference }
+	});
 }
 
 function alertBindingMismatch(input: {
@@ -213,13 +239,28 @@ export async function processMonnifyWebhookEvent(
 				}
 			}
 
-			if (!resolvedFailureKind) {
-				resolvedFailureKind = 'failed';
-			}
-
 			if (!resolvedOrderId) {
 				const orderByPaymentReference = await findOrderByPaymentReference(resolvedPaymentReference);
 				resolvedOrderId = orderByPaymentReference?.id || null;
+			}
+
+			if (!resolvedFailureKind && eventType === 'REJECTED_PAYMENT') {
+				// Monnify refused one transfer, but the payment account stays open until Monnify itself
+				// reports it closed, and the customer can still pay. The payment check settles it later.
+				if (resolvedOrderId)
+					await recordDeclinedTransfer(resolvedOrderId, eventData, transactionReference);
+				logPaymentEvent('info', 'webhook.transfer_declined_payment_open', {
+					traceId,
+					orderId: resolvedOrderId,
+					paymentReference: resolvedPaymentReference,
+					transactionReference,
+					status: pickString(eventData.rejectionReason)
+				});
+				return json({ success: true });
+			}
+
+			if (!resolvedFailureKind) {
+				resolvedFailureKind = 'failed';
 			}
 
 			if (resolvedOrderId) {

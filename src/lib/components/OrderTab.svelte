@@ -107,7 +107,7 @@
 
 	function getPaymentState(order: OrderRecord): {
 		label: string;
-		tone: 'success' | 'pending' | 'failure';
+		tone: 'success' | 'pending' | 'failure' | 'review';
 	} {
 		const orderStatus = normalizeLower(order.status);
 		const paymentStatus = normalizeLower(order.paymentStatus);
@@ -123,6 +123,10 @@
 		}
 		if (Number(order.refundedAmount || 0) > 0) {
 			return { label: 'Partially refunded', tone: 'pending' };
+		}
+		// Money arrived and is being checked: asking the buyer to pay again would charge them twice.
+		if (paymentStatus === 'under_review') {
+			return { label: 'Payment received, checking', tone: 'review' };
 		}
 
 		if (

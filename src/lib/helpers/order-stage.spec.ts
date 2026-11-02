@@ -77,6 +77,46 @@ describe('order stages', () => {
 		);
 	});
 
+	it('says why a transfer was refused while the order can still be paid', () => {
+		const open = {
+			status: 'pending_payment',
+			paymentStatus: 'pending',
+			paymentExpiresAt: '2026-10-26T12:30:00Z'
+		};
+		expect(
+			getOrderStage({ ...open, paymentNotice: 'Your transfer of ₦10,000 wasn’t accepted.' }, now)
+		).toMatchObject({
+			key: 'awaiting_payment',
+			detail: 'Your transfer of ₦10,000 wasn’t accepted.'
+		});
+		expect(getOrderStage(open, now).detail).toBe('Finish paying to start this order.');
+	});
+
+	it('never says "nothing was charged" about money that arrived and is held for a check', () => {
+		const held = { paymentStatus: 'under_review', totalAmount: 10500, refundedAmount: 0 };
+		const expected = {
+			key: 'checking',
+			chip: 'Checking payment',
+			detail: 'We’ve received a payment for this order and are checking it. We’ll update you here.'
+		};
+		// Held after the order closed, after an admin cancelled it, and after its payment deadline.
+		expect(getOrderStage({ ...held, status: 'payment_review' }, now)).toMatchObject(expected);
+		expect(getOrderStage({ ...held, status: 'cancelled' }, now)).toMatchObject(expected);
+		expect(
+			getOrderStage(
+				{ ...held, status: 'payment_review', paymentExpiresAt: '2026-10-26T11:00:00Z' },
+				now
+			)
+		).toMatchObject(expected);
+		// Once refunded, it says where the money went.
+		expect(
+			getOrderStage(
+				{ ...held, status: 'refunded', paymentStatus: 'refunded', refundedAmount: 10500 },
+				now
+			)
+		).toMatchObject({ key: 'refunded', detail: '₦10,500 is back in your store credit.' });
+	});
+
 	it('shows engagement progress from the supplier report, and review as checking (not cancelled)', () => {
 		const order = {
 			status: 'paid',

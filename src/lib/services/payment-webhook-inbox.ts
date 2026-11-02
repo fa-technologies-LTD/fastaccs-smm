@@ -5,7 +5,7 @@ import { sendCriticalAdminAlert } from '$lib/services/admin-alerts';
 
 type WebhookPayload = { eventType: string; eventData: Record<string, string> };
 
-/** Store only routing fields, not the gateway's customer/bank payload. Called AFTER signature verification. */
+/** Store only routing fields and refusal details, not the gateway's customer/bank payload. Called AFTER signature verification. */
 export function normalizeWebhookPayload(body: unknown): WebhookPayload {
 	if (!body || typeof body !== 'object') throw new Error('INVALID_WEBHOOK');
 	const event = body as Record<string, unknown>;
@@ -22,7 +22,40 @@ export function normalizeWebhookPayload(body: unknown): WebhookPayload {
 			eventData[key] = data[key].trim();
 		}
 	}
+	// Why Monnify refused a transfer and the amounts involved, without the payer's name or bank details.
+	const rejection = asRecord(data.paymentRejectionInformation);
+	const reason =
+		typeof rejection.rejectionReason === 'string'
+			? rejection.rejectionReason.trim().toUpperCase()
+			: '';
+	if (/^[A-Z_]{1,40}$/.test(reason)) eventData.rejectionReason = reason;
+	const expected = amountText(rejection.expectedAmount);
+	if (expected) eventData.expectedAmount = expected;
+	const sent = (
+		Array.isArray(data.paymentSourceInformation)
+			? data.paymentSourceInformation
+			: [data.paymentSourceInformation]
+	)
+		.map((source) => amountText(asRecord(source).amountPaid))
+		.filter((amount): amount is string => amount !== null);
+	if (sent.length)
+		eventData.amountSent = String(sent.reduce((sum, amount) => sum + Number(amount), 0));
+	if (typeof data.created_on === 'string' && data.created_on.trim().length <= 40)
+		eventData.rejectedAt = data.created_on.trim();
 	return { eventType: event.eventType.trim(), eventData };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+	return value && typeof value === 'object' && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: {};
+}
+
+function amountText(value: unknown): string | null {
+	const amount = typeof value === 'string' ? Number(value.trim()) : value;
+	return typeof amount === 'number' && Number.isFinite(amount) && amount >= 0 && amount < 1e12
+		? String(Math.round(amount * 100) / 100)
+		: null;
 }
 
 export async function receivePaymentWebhook(payload: WebhookPayload): Promise<string> {

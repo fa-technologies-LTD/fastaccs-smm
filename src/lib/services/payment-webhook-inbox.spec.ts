@@ -36,6 +36,48 @@ describe('payment webhook durable retry queue', () => {
 			})
 		).toEqual(payload);
 	});
+	it("keeps Monnify's refusal reason and amounts, but none of the payer's details", () => {
+		const rejected = {
+			eventType: 'REJECTED_PAYMENT',
+			eventData: {
+				paymentReference: 'ORD_1',
+				transactionReference: 'MNFY|1',
+				created_on: '2026-11-02 05:06:44.0',
+				paymentSourceInformation: [
+					{ bankCode: '100004', amountPaid: '10000.00', accountName: 'Ada', accountNumber: '0123' }
+				],
+				paymentRejectionInformation: {
+					bankCode: '50515',
+					destinationAccountNumber: '999',
+					bankName: 'Moniepoint',
+					rejectionReason: 'under_payment',
+					expectedAmount: 10500
+				},
+				customer: { name: 'Ada', email: 'ada@example.com' }
+			}
+		};
+		expect(normalizeWebhookPayload(rejected)).toEqual({
+			eventType: 'REJECTED_PAYMENT',
+			eventData: {
+				paymentReference: 'ORD_1',
+				transactionReference: 'MNFY|1',
+				rejectionReason: 'UNDER_PAYMENT',
+				expectedAmount: '10500',
+				amountSent: '10000',
+				rejectedAt: '2026-11-02 05:06:44.0'
+			}
+		});
+		// A single source object, odd values and a missing block are all handled.
+		expect(
+			normalizeWebhookPayload({
+				eventType: 'REJECTED_PAYMENT',
+				eventData: {
+					paymentSourceInformation: { amountPaid: 11000 },
+					paymentRejectionInformation: { rejectionReason: 'drop table;', expectedAmount: 'lots' }
+				}
+			}).eventData
+		).toEqual({ amountSent: '11000' });
+	});
 	it('does not process work claimed by another worker', async () => {
 		mocks.inbox.updateMany.mockResolvedValue({ count: 0 });
 		await drainPaymentWebhookInbox();

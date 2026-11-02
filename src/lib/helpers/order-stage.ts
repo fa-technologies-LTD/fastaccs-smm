@@ -126,6 +126,16 @@ export function getOrderStage(orderValue: unknown, now: Date = new Date()): Orde
 		return stage('refunded', 'Refunded', 'refund', back);
 	}
 
+	// Money arrived but is held for a check (for example a payment that landed after the order had
+	// closed). It was charged, so it must never read as unpaid, expired or "nothing was charged".
+	if (payment === 'under_review')
+		return stage(
+			'checking',
+			'Checking payment',
+			'prep',
+			'We’ve received a payment for this order and are checking it. We’ll update you here.'
+		);
+
 	const confirmed = isOrderPaymentConfirmed({ status, paymentStatus: payment });
 	if (!confirmed) {
 		if (['expired', 'abandoned'].includes(status) || ['expired', 'abandoned'].includes(payment))
@@ -170,7 +180,9 @@ export function getOrderStage(orderValue: unknown, now: Date = new Date()): Orde
 			'awaiting_payment',
 			'Awaiting payment',
 			'pay',
-			'Finish paying to start this order.'
+			typeof order.paymentNotice === 'string' && order.paymentNotice
+				? order.paymentNotice
+				: 'Finish paying to start this order.'
 		);
 	}
 

@@ -202,6 +202,27 @@ it('closes an order whose payment failed: no cancel button', async () => {
 	expect(page.getByRole('button', { name: 'Cancel Order', exact: true }).query()).toBeNull();
 });
 
+it('offers a refund for money that arrived after the order closed, and says so plainly', async () => {
+	render(Page, {
+		data: accountOrderFixture({
+			status: 'cancelled',
+			paymentStatus: 'under_review',
+			total_amount: 10500,
+			refunded_amount: 0,
+			net_sale_amount: 10500
+		})
+	} as never);
+	await expect
+		.element(page.getByText(/held\s+for\s+review\.\s+Refund\s+it\s+to\s+store\s+credit\s+above/))
+		.toBeVisible();
+	expect(page.getByText(/payment never came through/).query()).toBeNull();
+	await page.getByRole('button', { name: 'Refund to store credit', exact: true }).click();
+	await expect
+		.element(page.getByText(/checks\s+with\s+Monnify\s+that\s+the\s+full\s+amount\s+was\s+paid/))
+		.toBeVisible();
+	expect(page.getByRole('button', { name: 'Cancel Order', exact: true }).query()).toBeNull();
+});
+
 it('keeps the actions on a paid account order that still needs handing over', async () => {
 	render(Page, {
 		data: accountOrderFixture({

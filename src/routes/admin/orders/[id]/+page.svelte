@@ -649,9 +649,17 @@
 					{/if}
 
 					<!-- A provider-reported completion does not remove Boosting refund rights.
-					     Preserve the existing Accounts restriction; the refund API rechecks payment. -->
-					{#if canManageOrders && !isClosed && ['paid', 'success', 'overpaid'].includes(order.paymentStatus) && (isBoostingOrder || String(order.status) !== 'completed') && String(order.status) !== 'refunded'}
+					     Preserve the existing Accounts restriction; the refund API rechecks payment.
+					     Money held for review can be refunded even on a closed order: the API first
+					     confirms the full amount with Monnify. -->
+					{#if canManageOrders && String(order.status) !== 'refunded' && (order.paymentStatus === 'under_review' || (!isClosed && ['paid', 'success', 'overpaid'].includes(order.paymentStatus) && (isBoostingOrder || String(order.status) !== 'completed')))}
 						{#if refundArmed}
+							{#if order.paymentStatus === 'under_review'}<p
+									class="w-full text-sm text-[var(--text-muted)]"
+								>
+									A payment arrived and is held for review. Refunding first checks with Monnify that
+									the full amount was paid for this order.
+								</p>{/if}
 							{#if isBoostingOrder}<p class="w-full text-sm text-[var(--text-muted)]">
 									Refunds the entire order to store credit. Existing supplier work may continue.
 								</p>{/if}
@@ -1297,7 +1305,9 @@
 						<p class="text-sm text-[var(--text-muted)]">
 							{isRefundedOrder
 								? 'Closed. This order was refunded to store credit, so there is nothing left to do.'
-								: 'Closed. The payment never came through, so there is nothing left to do.'}
+								: order.paymentStatus === 'under_review'
+									? 'Closed, but a payment arrived for it and is held for review. Refund it to store credit above, or check it in Monnify.'
+									: 'Closed. The payment never came through, so there is nothing left to do.'}
 						</p>
 					{:else}
 						<div class="space-y-3">

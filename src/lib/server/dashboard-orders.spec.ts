@@ -72,6 +72,39 @@ describe('getDashboardOrdersPage', () => {
 		});
 		expect(page.orders[0].orderItems[0]).not.toHaveProperty('boostFulfillment');
 	});
+	it('says in plain words why Monnify refused a transfer, without exposing the event', async () => {
+		const unpaid = {
+			id: 'order-2',
+			orderNumber: 'FA-2',
+			totalAmount: '10500',
+			refundedAmount: '0',
+			status: 'pending_payment',
+			paymentStatus: 'pending',
+			orderItems: []
+		};
+		mocks.findMany.mockResolvedValue([
+			{
+				...unpaid,
+				events: [
+					{ metadata: { reason: 'UNDER_PAYMENT', expectedAmount: 10500, amountSent: 10000 } }
+				]
+			},
+			{ ...unpaid, id: 'order-3', events: [] }
+		]);
+		const page = await getDashboardOrdersPage({ userId: 'user-1' });
+		expect(mocks.findMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				select: expect.objectContaining({
+					events: expect.objectContaining({ where: { type: 'payment_transfer_declined' }, take: 1 })
+				})
+			})
+		);
+		expect(page.orders[0].paymentNotice).toBe(
+			'Your transfer of ₦10,000 wasn’t accepted: this order needs exactly ₦10,500. You can still pay with Resume payment.'
+		);
+		expect(page.orders[1].paymentNotice).toBeNull();
+		expect(page.orders[0]).not.toHaveProperty('events');
+	});
 	it('projects a held delivery truthfully without exposing the supplier record', async () => {
 		mocks.findMany.mockResolvedValue([
 			{

@@ -15,9 +15,48 @@ import { recordOrderEvent } from '$lib/services/order-events';
 import { allocateFullRefundToItems } from '$lib/helpers/order-revenue';
 import { moneyNgn } from '$lib/helpers/money';
 import { enqueueRefundRecovery } from '$lib/services/refund-recovery';
+import { verifyPayment } from '$lib/services/payment';
+import { isSuccessPaymentStatus, normalizePaymentStatus } from '$lib/helpers/payment-status';
+import { isVerifiedPaymentBoundToOrder } from '$lib/helpers/payment-binding';
 
 function isUuid(value: string): boolean {
 	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+/**
+ * Money held for review (for example a payment that landed after its order had closed) counts as received
+ * only when Monnify confirms the full amount, in naira, for this exact order, with no store credit mixed in.
+ * Asked before the refund transaction so no network call happens while the order row is locked.
+ */
+async function isHeldPaymentConfirmed(orderId: string): Promise<boolean> {
+	const order = await prisma.order.findUnique({
+		where: { id: orderId },
+		select: {
+			id: true,
+			paymentStatus: true,
+			paymentReference: true,
+			totalAmount: true,
+			storeCreditApplied: true
+		}
+	});
+	if (!order || order.paymentStatus !== 'under_review' || !order.paymentReference) return false;
+	if (moneyNgn(order.storeCreditApplied) > 0) return false;
+	const verified = await verifyPayment(order.paymentReference).catch(() => null);
+	if (!verified) return false;
+	const paid = verified.success || isSuccessPaymentStatus(normalizePaymentStatus(verified.status));
+	const metadataOrderId =
+		typeof verified.metaData?.orderId === 'string' ? verified.metaData.orderId : null;
+	return (
+		paid &&
+		String(verified.currency || '').toUpperCase() === 'NGN' &&
+		moneyNgn(verified.amountPaid) >= moneyNgn(order.totalAmount) &&
+		isVerifiedPaymentBoundToOrder({
+			orderId: order.id,
+			metadataOrderId,
+			storedPaymentReference: order.paymentReference,
+			verifiedPaymentReference: verified.paymentReference || null
+		})
+	);
 }
 
 // POST /api/orders/[id]/refund
@@ -54,6 +93,8 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 				return json({ error: 'Keep the refund message within 500 characters.' }, { status: 400 });
 		}
 	}
+
+	const heldPaymentConfirmed = await isHeldPaymentConfirmed(orderId);
 
 	const result = await prisma.$transaction(
 		async (tx) => {
@@ -93,8 +134,14 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 				};
 			}
 
-			const wasPaid = ['paid', 'success', 'overpaid'].includes(order.paymentStatus);
-			if (!wasPaid) return { outcome: 'not_paid' as const };
+			const heldPayment = order.paymentStatus === 'under_review';
+			const wasPaid =
+				['paid', 'success', 'overpaid'].includes(order.paymentStatus) ||
+				(heldPayment && heldPaymentConfirmed);
+			if (!wasPaid)
+				return heldPayment
+					? { outcome: 'held_unconfirmed' as const }
+					: { outcome: 'not_paid' as const };
 			if (!order.userId) return { outcome: 'guest' as const };
 			if (totalAmount <= 0) return { outcome: 'no_amount' as const };
 
@@ -191,7 +238,11 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 					amount,
 					description: `Refunded to store credit for order ${order.orderNumber}${customerMessage ? `. ${customerMessage}` : ''}`,
 					idempotencyKey: `refund:order:${order.id}`,
-					metadata: { priorPartialRefunds: alreadyCredited, cumulativeRefunded: totalAmount }
+					metadata: {
+						priorPartialRefunds: alreadyCredited,
+						cumulativeRefunded: totalAmount,
+						...(heldPayment ? { heldPaymentConfirmedWithMonnify: true } : {})
+					}
 				},
 				tx
 			);
@@ -214,6 +265,15 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 	if (result.outcome === 'not_paid') {
 		return json(
 			{ error: 'This order was never paid — cancel it without a refund.' },
+			{ status: 409 }
+		);
+	}
+	if (result.outcome === 'held_unconfirmed') {
+		return json(
+			{
+				error:
+					'Monnify hasn’t confirmed this payment in full for this order, so it can’t be refunded here. Check it in Monnify first.'
+			},
 			{ status: 409 }
 		);
 	}
