@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
 	import { boostCustomerCopy, boostCustomerShortName } from '$lib/helpers/boosting-customer-copy';
 	import { boostBenefitLabel, boostQuantityText } from '$lib/helpers/boosting-customer-facts';
@@ -57,6 +58,7 @@
 	let selectedOfferId = $state('');
 	let platformRow = $state<HTMLDivElement | null>(null);
 	let resultRow = $state<HTMLDivElement | null>(null);
+	let optionsBlock = $state<HTMLDivElement | null>(null);
 	let quantity = $state(0);
 	let targetUrl = $state('');
 	let linkError = $state<string | null>(null);
@@ -64,12 +66,36 @@
 	let commentText = $state('');
 	let commentError = $state<string | null>(null);
 
+	// A returning customer lands on the platform and result they last looked at.
+	const SAVED_CHOICE_KEY = 'fastaccs.boosting.choice';
+	function savedGroup(): Group | undefined {
+		try {
+			const saved = JSON.parse(localStorage.getItem(SAVED_CHOICE_KEY) ?? 'null');
+			return groups.find((group) => group.categoryId === saved?.categoryId);
+		} catch {
+			return undefined;
+		}
+	}
+	function saveChoice(): void {
+		if (previewOnly) return;
+		try {
+			localStorage.setItem(SAVED_CHOICE_KEY, JSON.stringify({ categoryId: selectedCategoryId }));
+		} catch {
+			// Storage can be off (private mode); the page works the same without it.
+		}
+	}
+
 	$effect(() => {
 		if (selectedPlatform || !groups[0]) return;
-		selectedPlatform = groups[0].platform;
-		selectedCategoryId = groups[0].categoryId;
-		selectedOfferId = groups[0].offers[0]?.id ?? '';
-		quantity = groups[0].offers[0] ? boostingStartingQuantity(groups[0].offers[0]) : 0;
+		const group = (previewOnly ? undefined : savedGroup()) ?? groups[0];
+		selectedPlatform = group.platform;
+		selectedCategoryId = group.categoryId;
+		selectedOfferId = group.offers[0]?.id ?? '';
+		quantity = group.offers[0] ? boostingStartingQuantity(group.offers[0]) : 0;
+		if (group !== groups[0]) {
+			void showChosen(platformRow, false);
+			void showChosen(resultRow, false);
+		}
 	});
 
 	const platforms = $derived([
@@ -155,8 +181,13 @@
 		commentError = null;
 	}
 
+	const reducedMotion = () =>
+		typeof window !== 'undefined' &&
+		window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+	const fadeIn = () => ({ duration: reducedMotion() ? 0 : 180 });
+
 	/** On a phone these rows scroll sideways; glide the chosen chip into view instead of leaving it off-screen. */
-	async function showChosen(row: HTMLDivElement | null): Promise<void> {
+	async function showChosen(row: HTMLDivElement | null, animate = true): Promise<void> {
 		await tick();
 		const chosen = row?.querySelector<HTMLElement>('[aria-pressed="true"]');
 		if (!row || !chosen) return;
@@ -165,21 +196,38 @@
 		const right = left + chosen.offsetWidth - row.clientWidth;
 		const by = left < gap ? left - gap : right > -gap ? right + gap : 0;
 		if (!by) return;
-		const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-		row.scrollTo({ left: row.scrollLeft + by, behavior: reduce ? 'auto' : 'smooth' });
+		row.scrollTo({
+			left: row.scrollLeft + by,
+			behavior: animate && !reducedMotion() ? 'smooth' : 'auto'
+		});
+	}
+
+	/** After a result is picked, bring its options up when they sit below the screen, moving only as far as needed. */
+	async function showOptions(): Promise<void> {
+		await tick();
+		if (!optionsBlock) return;
+		const { top, bottom } = optionsBlock.getBoundingClientRect();
+		if (top >= 0 && bottom <= window.innerHeight) return;
+		optionsBlock.scrollIntoView({
+			block: 'nearest',
+			behavior: reducedMotion() ? 'auto' : 'smooth'
+		});
 	}
 
 	function choosePlatform(platform: BoostingPlatform): void {
 		selectedPlatform = platform;
 		const group = groups.find((candidate) => candidate.platform === platform);
 		if (group) selectDefaults(group);
+		saveChoice();
 		void showChosen(platformRow);
 		void showChosen(resultRow);
 	}
 
 	function chooseGroup(group: Group): void {
 		selectDefaults(group);
+		saveChoice();
 		void showChosen(resultRow);
+		void showOptions();
 	}
 
 	function chooseOffer(offer: Offer): void {
@@ -383,81 +431,88 @@
 		</div>
 
 		{#if selectedGroup}
-			<div>
-				{#if selectedGroup.offers.length > 1}<p
-						class="mb-3 text-sm font-semibold"
-						style="color: var(--text-muted);"
-					>
-						{selectedGroup.platformLabel}
-						{selectedGroup.outcomeLabel}
-					</p>{/if}
-				<div
-					class="grid gap-3"
-					role="group"
-					aria-label={`${selectedGroup.platformLabel} ${selectedGroup.outcomeLabel} options`}
+			{#key selectedGroup.categoryId}<div
+					bind:this={optionsBlock}
+					in:fade={fadeIn()}
+					style="scroll-margin-top: 80px; scroll-margin-bottom: 16px;"
 				>
-					{#each offerCards as { offer, name, benefit, description, quantityAsName } (offer.id)}
-						<button
-							type="button"
-							onclick={() => chooseOffer(offer)}
-							aria-pressed={selectedOffer?.id === offer.id}
-							class="min-h-24 rounded-xl border p-4 text-left"
-							style={selectedOffer?.id === offer.id
-								? 'border-color: var(--primary); background: rgba(16,185,129,.07);'
-								: 'border-color: var(--border);'}
+					{#if selectedGroup.offers.length > 1}<p
+							class="mb-3 text-sm font-semibold"
+							style="color: var(--text-muted);"
 						>
-							<div class="flex items-start justify-between gap-4">
-								<div>
-									<div class="flex flex-wrap items-center gap-2">
-										<strong class="text-lg" style="color: var(--text);">{name}</strong>
+							{selectedGroup.platformLabel}
+							{selectedGroup.outcomeLabel}
+						</p>{/if}
+					<div
+						class="grid gap-3"
+						role="group"
+						aria-label={`${selectedGroup.platformLabel} ${selectedGroup.outcomeLabel} options`}
+					>
+						{#each offerCards as { offer, name, benefit, description, quantityAsName } (offer.id)}
+							<button
+								type="button"
+								onclick={() => chooseOffer(offer)}
+								aria-pressed={selectedOffer?.id === offer.id}
+								class="min-h-24 rounded-xl border p-4 text-left"
+								style={selectedOffer?.id === offer.id
+									? 'border-color: var(--primary); background: rgba(16,185,129,.07);'
+									: 'border-color: var(--border);'}
+							>
+								<div class="flex items-start justify-between gap-4">
+									<div>
+										<div class="flex flex-wrap items-center gap-2">
+											<strong class="text-lg" style="color: var(--text);">{name}</strong>
+										</div>
+										{#if description && !sharedDescriptions.includes(description)}
+											<p class="mt-1 text-sm" style="color: var(--text-muted);">{description}</p>
+										{/if}
+										{#if benefit}
+											<p class="mt-1 text-xs" style="color: var(--text-muted);">
+												{benefit}
+											</p>
+										{/if}
 									</div>
-									{#if description && !sharedDescriptions.includes(description)}
-										<p class="mt-1 text-sm" style="color: var(--text-muted);">{description}</p>
-									{/if}
-									{#if benefit}
-										<p class="mt-1 text-xs" style="color: var(--text-muted);">
-											{benefit}
-										</p>
-									{/if}
+									<strong class="text-right whitespace-nowrap" style="color: var(--text);">
+										{formatPrice(
+											roundCatalogPriceNgn(
+												(boostingStartingQuantity(offer) / offer.stepQuantity) *
+													offer.pricePerStepNgn
+											)
+										)}
+										{#if !quantityAsName}<span
+												class="mt-1 block text-xs font-normal"
+												style="color: var(--text-muted);"
+												>{boostingStartingQuantity(offer).toLocaleString()}
+												{selectedGroup.outcomeLabel.toLowerCase()}</span
+											>{/if}
+									</strong>
 								</div>
-								<strong class="text-right whitespace-nowrap" style="color: var(--text);">
-									{formatPrice(
-										roundCatalogPriceNgn(
-											(boostingStartingQuantity(offer) / offer.stepQuantity) * offer.pricePerStepNgn
-										)
-									)}
-									{#if !quantityAsName}<span
-											class="mt-1 block text-xs font-normal"
-											style="color: var(--text-muted);"
-											>{boostingStartingQuantity(offer).toLocaleString()}
-											{selectedGroup.outcomeLabel.toLowerCase()}</span
-										>{/if}
-								</strong>
-							</div>
-						</button>
+							</button>
+						{/each}
+					</div>
+					{#each sharedDescriptions as description (description)}
+						<p class="mt-3 text-sm" style="color: var(--text-muted);">{description}</p>
 					{/each}
-				</div>
-				{#each sharedDescriptions as description (description)}
-					<p class="mt-3 text-sm" style="color: var(--text-muted);">{description}</p>
-				{/each}
-				{#if selectedOffer && (selectedOffer.refillDays || selectedCopy?.expectationChips.length)}
-					{#key selectedOffer.id}
-						<details class="mt-3 text-sm" style="color: var(--text-muted);">
-							<summary class="min-h-11 cursor-pointer py-3 font-medium">
-								{selectedOffer.refillDays ? 'Refill terms (eligibility applies)' : 'Option details'}
-							</summary>
-							{#if selectedOffer.refillDays}<p class="pb-2">
-									{selectedOffer.refillDays}-day refill requests are included, not a guarantee
-									against drops. The window normally starts when your order is sent to the supplier.
-									Check your order for the exact window and eligibility.
-								</p>{/if}
-							{#each selectedCopy?.expectationChips ?? [] as chip}
-								<p class="pb-2">{chip}</p>
-							{/each}
-						</details>
-					{/key}
-				{/if}
-			</div>
+					{#if selectedOffer && (selectedOffer.refillDays || selectedCopy?.expectationChips.length)}
+						{#key selectedOffer.id}
+							<details class="mt-3 text-sm" style="color: var(--text-muted);">
+								<summary class="min-h-11 cursor-pointer py-3 font-medium">
+									{selectedOffer.refillDays
+										? 'Refill terms (eligibility applies)'
+										: 'Option details'}
+								</summary>
+								{#if selectedOffer.refillDays}<p class="pb-2">
+										{selectedOffer.refillDays}-day refill requests are included, not a guarantee
+										against drops. The window normally starts when your order is sent to the
+										supplier. Check your order for the exact window and eligibility.
+									</p>{/if}
+								{#each selectedCopy?.expectationChips ?? [] as chip}
+									<p class="pb-2">{chip}</p>
+								{/each}
+							</details>
+						{/key}
+					{/if}
+				</div>{/key}
 
 			{#if selectedOffer}
 				<div class="rounded-xl border p-4" style="border-color: var(--border);">

@@ -57,6 +57,44 @@ const groups = [
 	}
 ];
 
+// Two platforms with several results each, as on the live page; Followers comes first on each.
+function phoneGroups() {
+	const base = groups[0].offers[0];
+	const group = (platform: 'x' | 'facebook', outcome: string, label: string, index: number) => {
+		const categoryId = `${index}1111111-1111-4111-8111-111111111111`;
+		return {
+			categoryId,
+			platform,
+			platformLabel: platform === 'x' ? 'X (Twitter)' : 'Facebook',
+			outcome,
+			outcomeLabel: label,
+			offers: [
+				{
+					...base,
+					id: `${index}2222222-2222-4222-8222-222222222222`,
+					categoryId,
+					platform,
+					outcome
+				}
+			]
+		};
+	};
+	return [
+		group('x', 'followers', 'Followers', 1),
+		group('x', 'likes', 'Likes', 2),
+		group('x', 'views', 'Views', 3),
+		group('x', 'reposts', 'Reposts', 4),
+		group('facebook', 'followers', 'Page Followers', 5),
+		group('facebook', 'likes', 'Likes', 6),
+		group('facebook', 'comments', 'Comments', 7)
+	];
+}
+const SAVED_CHOICE_KEY = 'fastaccs.boosting.choice';
+const pressed = (name: string | RegExp) =>
+	expect
+		.element(page.getByRole('button', { name, exact: typeof name === 'string' }))
+		.toHaveAttribute('aria-pressed', 'true');
+
 describe('Managed Boosting storefront', () => {
 	it('names options as the service pages do, keeps a refill as a note, and explains refill limits', async () => {
 		render(ManagedBoostingStorefront, { groups });
@@ -83,7 +121,9 @@ describe('Managed Boosting storefront', () => {
 		await terms.click();
 		await expect.element(page.getByText(/not\s+a\s+guarantee\s+against\s+drops/)).toBeVisible();
 		await expect
-			.element(page.getByText(/normally starts when your order is sent to the supplier/))
+			.element(
+				page.getByText(/normally\s+starts\s+when\s+your\s+order\s+is\s+sent\s+to\s+the\s+supplier/)
+			)
 			.toBeVisible();
 		await page.getByRole('button', { name: /Quick/ }).click();
 		await expect.element(terms).not.toBeInTheDocument();
@@ -123,6 +163,7 @@ describe('Managed Boosting storefront', () => {
 		cart.close();
 		notifications.showSuccess.mockClear();
 		vi.restoreAllMocks();
+		localStorage.removeItem(SAVED_CHOICE_KEY);
 	});
 	const customGroups = [
 		{
@@ -235,37 +276,7 @@ describe('Managed Boosting storefront', () => {
 
 	it('glides the chosen result back into view on a phone when the platform changes', async () => {
 		await page.viewport(390, 800);
-		const base = groups[0].offers[0];
-		const group = (platform: 'x' | 'facebook', outcome: string, label: string, index: number) => {
-			const categoryId = `${index}1111111-1111-4111-8111-111111111111`;
-			return {
-				categoryId,
-				platform,
-				platformLabel: platform === 'x' ? 'X (Twitter)' : 'Facebook',
-				outcome,
-				outcomeLabel: label,
-				offers: [
-					{
-						...base,
-						id: `${index}2222222-2222-4222-8222-222222222222`,
-						categoryId,
-						platform,
-						outcome
-					}
-				]
-			};
-		};
-		render(ManagedBoostingStorefront, {
-			groups: [
-				group('x', 'followers', 'Followers', 1),
-				group('x', 'likes', 'Likes', 2),
-				group('x', 'views', 'Views', 3),
-				group('x', 'reposts', 'Reposts', 4),
-				group('facebook', 'followers', 'Page Followers', 5),
-				group('facebook', 'likes', 'Likes', 6),
-				group('facebook', 'comments', 'Comments', 7)
-			]
-		});
+		render(ManagedBoostingStorefront, { groups: phoneGroups() });
 		const row = page
 			.getByRole('button', { name: 'Followers', exact: true })
 			.element().parentElement!;
@@ -283,5 +294,77 @@ describe('Managed Boosting storefront', () => {
 			.toHaveAttribute('aria-pressed', 'true');
 		await expect.poll(() => row.scrollLeft).toBeLessThan(5);
 		layout.remove();
+	});
+
+	it('reopens on the platform and result a customer last chose', async () => {
+		const first = render(ManagedBoostingStorefront, { groups: phoneGroups() });
+		await page.getByRole('button', { name: /Facebook/ }).click();
+		await page.getByRole('button', { name: 'Comments', exact: true }).click();
+		await pressed('Comments');
+		await first.unmount();
+		render(ManagedBoostingStorefront, { groups: phoneGroups() });
+		await pressed(/Facebook/);
+		await pressed('Comments');
+	});
+
+	it('starts on the first result when the saved one is gone or storage is blocked', async () => {
+		localStorage.setItem(SAVED_CHOICE_KEY, JSON.stringify({ categoryId: 'gone' }));
+		const first = render(ManagedBoostingStorefront, { groups: phoneGroups() });
+		await pressed(/X \(Twitter\)/);
+		await pressed('Followers');
+		await first.unmount();
+		vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+			throw new Error('blocked');
+		});
+		vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+			throw new Error('blocked');
+		});
+		render(ManagedBoostingStorefront, { groups: phoneGroups() });
+		await pressed('Followers');
+		await page.getByRole('button', { name: 'Likes', exact: true }).click();
+		await pressed('Likes');
+	});
+
+	it('does not remember choices made in the admin preview', async () => {
+		render(ManagedBoostingStorefront, { groups: phoneGroups(), previewOnly: true });
+		await page.getByRole('button', { name: /Facebook/ }).click();
+		await pressed(/Facebook/);
+		expect(localStorage.getItem(SAVED_CHOICE_KEY)).toBeNull();
+	});
+
+	it('brings a chosen result’s options up only when they sit below the screen', async () => {
+		const scroll = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
+		const toOptions = { block: 'nearest', behavior: 'smooth' };
+		await page.viewport(390, 2000);
+		render(ManagedBoostingStorefront, { groups: phoneGroups() });
+		await page.getByRole('button', { name: 'Views', exact: true }).click();
+		await pressed('Views');
+		expect(scroll).not.toHaveBeenCalledWith(toOptions);
+		await page.viewport(390, 240);
+		// No stylesheet loads here, so give the chips real phone height: the options then start below the screen.
+		const tall = document.createElement('style');
+		tall.textContent = 'button{display:block;width:100%;min-height:160px}';
+		document.head.append(tall);
+		await page.getByRole('button', { name: 'Likes', exact: true }).click();
+		await expect
+			.poll(() =>
+				scroll.mock.calls.some(([options]) => JSON.stringify(options) === JSON.stringify(toOptions))
+			)
+			.toBe(true);
+		tall.remove();
+		await page.viewport(390, 800);
+	});
+
+	it('fades the options in when the result changes, but not on first load', async () => {
+		const animate = vi.spyOn(Element.prototype, 'animate');
+		const fade = () =>
+			animate.mock.calls.some(
+				([, options]) => (options as KeyframeAnimationOptions)?.duration === 180
+			);
+		render(ManagedBoostingStorefront, { groups: phoneGroups() });
+		await pressed('Followers');
+		expect(fade()).toBe(false);
+		await page.getByRole('button', { name: 'Likes', exact: true }).click();
+		await expect.poll(fade).toBe(true);
 	});
 });
