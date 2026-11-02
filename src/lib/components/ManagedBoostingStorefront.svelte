@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
 	import { boostCustomerCopy, boostCustomerShortName } from '$lib/helpers/boosting-customer-copy';
 	import { boostBenefitLabel, boostQuantityText } from '$lib/helpers/boosting-customer-facts';
@@ -54,6 +55,8 @@
 	let selectedPlatform = $state<BoostingPlatform | ''>('');
 	let selectedCategoryId = $state('');
 	let selectedOfferId = $state('');
+	let platformRow = $state<HTMLDivElement | null>(null);
+	let resultRow = $state<HTMLDivElement | null>(null);
 	let quantity = $state(0);
 	let targetUrl = $state('');
 	let linkError = $state<string | null>(null);
@@ -152,14 +155,31 @@
 		commentError = null;
 	}
 
+	/** On a phone these rows scroll sideways; glide the chosen chip into view instead of leaving it off-screen. */
+	async function showChosen(row: HTMLDivElement | null): Promise<void> {
+		await tick();
+		const chosen = row?.querySelector<HTMLElement>('[aria-pressed="true"]');
+		if (!row || !chosen) return;
+		const gap = 4;
+		const left = chosen.getBoundingClientRect().left - row.getBoundingClientRect().left;
+		const right = left + chosen.offsetWidth - row.clientWidth;
+		const by = left < gap ? left - gap : right > -gap ? right + gap : 0;
+		if (!by) return;
+		const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+		row.scrollTo({ left: row.scrollLeft + by, behavior: reduce ? 'auto' : 'smooth' });
+	}
+
 	function choosePlatform(platform: BoostingPlatform): void {
 		selectedPlatform = platform;
 		const group = groups.find((candidate) => candidate.platform === platform);
 		if (group) selectDefaults(group);
+		void showChosen(platformRow);
+		void showChosen(resultRow);
 	}
 
 	function chooseGroup(group: Group): void {
 		selectDefaults(group);
+		void showChosen(resultRow);
 	}
 
 	function chooseOffer(offer: Offer): void {
@@ -313,11 +333,15 @@
 	</div>
 {:else}
 	<div class="space-y-6">
-		<div class="storefront-scroll -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-2 sm:gap-3">
+		<div
+			bind:this={platformRow}
+			class="storefront-scroll -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-2 sm:gap-3"
+		>
 			{#each platforms as [platform, label] (platform)}
 				<button
 					type="button"
 					onclick={() => choosePlatform(platform)}
+					aria-pressed={platform === selectedPlatform}
 					class="min-w-24 snap-start rounded-2xl border p-3 text-center sm:min-w-28"
 					style={platform === selectedPlatform
 						? 'border-color: var(--primary); background: rgba(16,185,129,.08);'
@@ -337,6 +361,7 @@
 		<div>
 			<p class="mb-3 text-sm font-semibold" style="color: var(--text-muted);">Choose a result</p>
 			<div
+				bind:this={resultRow}
 				class="storefront-scroll -mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0"
 			>
 				{#each visibleGroups as group (group.categoryId)}
@@ -344,6 +369,7 @@
 					<button
 						type="button"
 						onclick={() => chooseGroup(group)}
+						aria-pressed={selectedGroup?.categoryId === group.categoryId}
 						class="flex min-h-20 min-w-[78%] shrink-0 snap-start items-center gap-3 rounded-xl border p-4 text-left sm:min-w-0"
 						style={selectedGroup?.categoryId === group.categoryId
 							? 'border-color: var(--primary); background: rgba(16,185,129,.07);'

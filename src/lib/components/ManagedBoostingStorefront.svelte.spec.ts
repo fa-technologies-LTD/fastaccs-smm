@@ -232,4 +232,56 @@ describe('Managed Boosting storefront', () => {
 		expect(page.getByText('Recommended', { exact: true }).query()).toBeNull();
 		expect(page.getByText('Pick what suits you', { exact: true }).query()).toBeNull();
 	});
+
+	it('glides the chosen result back into view on a phone when the platform changes', async () => {
+		await page.viewport(390, 800);
+		const base = groups[0].offers[0];
+		const group = (platform: 'x' | 'facebook', outcome: string, label: string, index: number) => {
+			const categoryId = `${index}1111111-1111-4111-8111-111111111111`;
+			return {
+				categoryId,
+				platform,
+				platformLabel: platform === 'x' ? 'X (Twitter)' : 'Facebook',
+				outcome,
+				outcomeLabel: label,
+				offers: [
+					{
+						...base,
+						id: `${index}2222222-2222-4222-8222-222222222222`,
+						categoryId,
+						platform,
+						outcome
+					}
+				]
+			};
+		};
+		render(ManagedBoostingStorefront, {
+			groups: [
+				group('x', 'followers', 'Followers', 1),
+				group('x', 'likes', 'Likes', 2),
+				group('x', 'views', 'Views', 3),
+				group('x', 'reposts', 'Reposts', 4),
+				group('facebook', 'followers', 'Page Followers', 5),
+				group('facebook', 'likes', 'Likes', 6),
+				group('facebook', 'comments', 'Comments', 7)
+			]
+		});
+		const row = page
+			.getByRole('button', { name: 'Followers', exact: true })
+			.element().parentElement!;
+		// Component tests load no stylesheet; give the row its phone layout (a sideways-scrolling strip).
+		const layout = document.createElement('style');
+		layout.textContent =
+			'[data-phone-row]{display:flex;overflow-x:auto;width:360px}[data-phone-row]>*{flex:0 0 280px}';
+		document.head.append(layout);
+		row.dataset.phoneRow = '';
+		row.scrollLeft = row.scrollWidth;
+		await expect.poll(() => row.scrollLeft).toBeGreaterThan(100);
+		await page.getByRole('button', { name: /Facebook/ }).click();
+		await expect
+			.element(page.getByRole('button', { name: 'Page Followers', exact: true }))
+			.toHaveAttribute('aria-pressed', 'true');
+		await expect.poll(() => row.scrollLeft).toBeLessThan(5);
+		layout.remove();
+	});
 });
