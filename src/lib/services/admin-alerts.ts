@@ -317,6 +317,16 @@ export async function sendCriticalAdminAlert(params: {
 		return { sent: false, reason: 'cooldown' };
 	}
 
+	// An earlier try that failed already pushed to phones; the email retry job covers it from here.
+	const triedBefore = await prisma.emailNotification.findFirst({
+		where: {
+			notificationType: 'admin_broadcast',
+			referenceId,
+			createdAt: { gte: new Date(Date.now() - cooldownMs) }
+		},
+		select: { id: true }
+	});
+
 	let atLeastOneSent = false;
 	for (const email of recipients) {
 		const result = await sendEmail({
@@ -337,10 +347,63 @@ export async function sendCriticalAdminAlert(params: {
 		}
 	}
 
-	if (atLeastOneSent) {
-		criticalAlertCooldown.set(dedupeKey, Date.now());
-		await pushToAdmins(params.title, params.message);
-	}
+	if (atLeastOneSent) criticalAlertCooldown.set(dedupeKey, Date.now());
+	// The phone push is a second channel: it goes out even when the email fails, so a money alert is
+	// never silent (a mail-server DNS timeout once hid a held payment).
+	if (atLeastOneSent || !triedBefore) await pushToAdmins(params.title, params.message);
 
 	return { sent: atLeastOneSent, reason: atLeastOneSent ? undefined : 'send_failed' };
+}
+
+const CRITICAL_ALERT_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const CRITICAL_ALERT_MAX_TRIES = 5;
+
+/**
+ * Re-sends money and safety alerts whose email failed (a DNS or mail-server hiccup) to each operator who
+ * hasn't received them, for up to a day and at most five tries. Run by the payments job every 10 minutes.
+ */
+export async function retryFailedCriticalAlerts(
+	now = new Date()
+): Promise<{ retried: number; sent: number }> {
+	const rows = await prisma.emailNotification.findMany({
+		where: {
+			notificationType: 'admin_broadcast',
+			referenceId: { startsWith: 'critical:' },
+			createdAt: { gte: new Date(now.getTime() - CRITICAL_ALERT_RETRY_WINDOW_MS) }
+		},
+		select: { email: true, referenceId: true, subject: true, body: true, status: true },
+		orderBy: { createdAt: 'asc' },
+		take: 500
+	});
+	const tries = new Map<string, typeof rows>();
+	for (const row of rows) {
+		const key = `${row.referenceId}\n${row.email}`;
+		tries.set(key, [...(tries.get(key) ?? []), row]);
+	}
+	let retried = 0;
+	let sent = 0;
+	for (const attempts of tries.values()) {
+		const last = attempts[attempts.length - 1];
+		if (
+			last.status !== 'failed' ||
+			!last.subject ||
+			attempts.some((attempt) => attempt.status === 'sent') ||
+			attempts.filter((attempt) => attempt.status === 'failed').length >= CRITICAL_ALERT_MAX_TRIES
+		)
+			continue;
+		retried += 1;
+		const result = await sendEmail({
+			to: last.email,
+			subject: last.subject,
+			body: last.body ?? '',
+			notificationType: 'admin_broadcast',
+			classification: 'operational',
+			referenceId: last.referenceId,
+			ctaText: 'Open admin',
+			ctaUrl: 'https://smm.fastaccs.com/admin',
+			showCta: true
+		});
+		if (result.success) sent += 1;
+	}
+	return { retried, sent };
 }

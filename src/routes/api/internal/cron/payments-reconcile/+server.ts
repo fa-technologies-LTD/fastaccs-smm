@@ -5,6 +5,7 @@ import { drainPaymentWebhookInbox } from '$lib/services/payment-webhook-inbox';
 import { drainRefundRecovery } from '$lib/services/refund-recovery';
 import { drainServerPurchaseAnalytics } from '$lib/services/payment-settlement';
 import { drainRefundAnalytics } from '$lib/services/refund-analytics';
+import { retryFailedCriticalAlerts } from '$lib/services/admin-alerts';
 
 export const config = { maxDuration: 300 };
 
@@ -25,7 +26,9 @@ export const GET: RequestHandler = async ({ request }) =>
 				refundAnalytics: await drainRefundAnalytics(
 					3,
 					Math.min(deadlineMs + 80_000, Date.now() + 30_000)
-				)
+				),
+				// A money alert whose email failed is retried here, so a mail hiccup can't hide it.
+				alerts: await retryFailedCriticalAlerts().catch(() => ({ retried: 0, sent: 0 }))
 			};
 		}
 	});
