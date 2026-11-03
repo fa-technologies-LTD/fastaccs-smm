@@ -722,6 +722,29 @@ async function reserveMarketingEmail(params: SendEmailParams & { campaignKey: st
 			}
 		});
 		if (!user?.email) return { suppressionReason: 'missing_email' };
+		if (params.notificationType === 'welcome') {
+			const purchased = await tx.order.findFirst({
+				where: {
+					AND: [
+						{
+							OR: [
+								{ userId: params.userId },
+								{ guestEmail: { equals: user.email, mode: 'insensitive' } }
+							]
+						},
+						{
+							OR: [
+								{ paidAt: { not: null } },
+								{ paymentStatus: { in: ['paid', 'success', 'overpaid', 'refunded'] } },
+								{ status: { in: ['paid', 'completed', 'refunded'] } }
+							]
+						}
+					]
+				},
+				select: { id: true }
+			});
+			if (purchased) return { suppressionReason: 'already_purchased' };
+		}
 
 		const duplicate = await tx.emailNotification.findFirst({
 			where: {
@@ -1029,51 +1052,17 @@ export async function sendWelcomeEmailIfNeeded(params: {
 	email: string;
 	firstName?: string | null;
 }): Promise<boolean> {
-	const notificationId = await prisma.$transaction(async (tx) => {
-		const lockedUsers = await tx.$queryRaw<Array<{ id: string }>>`
-			SELECT id
-			FROM users
-			WHERE id = ${params.userId}::uuid
-			FOR UPDATE
-		`;
-		if (lockedUsers.length === 0) return null;
-
-		const existing = await tx.emailNotification.findFirst({
-			where: {
-				userId: params.userId,
-				notificationType: 'welcome',
-				status: { in: ['pending', 'sent'] }
-			},
-			orderBy: { createdAt: 'desc' },
-			select: { id: true, status: true, createdAt: true }
-		});
-		if (existing?.status === 'sent') return null;
-		if (
-			existing?.status === 'pending' &&
-			Date.now() - existing.createdAt.getTime() < 10 * 60 * 1000
-		) {
-			return null;
-		}
-
-		const notification = await tx.emailNotification.create({
-			data: {
-				userId: params.userId || null,
-				email: params.email.toLowerCase(),
-				notificationType: 'welcome',
-				classification: 'transactional',
-				referenceId: `welcome:${params.userId}`,
-				status: 'pending'
-			},
-			select: { id: true }
-		});
-		return notification.id;
+	const user = await prisma.user.findUnique({
+		where: { id: params.userId },
+		select: { isActive: true, emailVerified: true, emailVerifiedAt: true, registeredAt: true }
 	});
-
-	if (!notificationId) return false;
+	const verifiedAt = user?.emailVerifiedAt ?? user?.registeredAt;
+	if (!user?.isActive || !user.emailVerified || !verifiedAt) return false;
+	if (Date.now() - verifiedAt.getTime() < 24 * 60 * 60 * 1000) return false;
 
 	const firstName = params.firstName?.trim() || params.email.split('@')[0] || 'there';
 
-	const result = await sendEmail({
+	const result = await sendMarketingEmail({
 		to: params.email,
 		subject: 'Welcome — your account is ready',
 		body: `Hi ${firstName},
@@ -1090,7 +1079,7 @@ Everything in one place.`,
 		userId: params.userId,
 		notificationType: 'welcome',
 		referenceId: `welcome:${params.userId}`,
-		notificationId
+		campaignKey: `welcome:${params.userId}`
 	});
 	return result.success;
 }

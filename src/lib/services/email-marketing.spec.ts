@@ -6,6 +6,9 @@ const txMock = vi.hoisted(() => ({
 	user: {
 		findUnique: vi.fn()
 	},
+	order: {
+		findFirst: vi.fn()
+	},
 	emailNotification: {
 		findFirst: vi.fn(),
 		findUnique: vi.fn(),
@@ -15,6 +18,9 @@ const txMock = vi.hoisted(() => ({
 }));
 const prismaMock = vi.hoisted(() => ({
 	$transaction: vi.fn(),
+	user: {
+		findUnique: vi.fn()
+	},
 	emailNotification: {
 		count: vi.fn(),
 		update: vi.fn(),
@@ -48,7 +54,8 @@ import {
 	CUSTOMER_INBOX_TIP,
 	sendEmail,
 	sendMarketingEmail,
-	sendQueuedMarketingEmail
+	sendQueuedMarketingEmail,
+	sendWelcomeEmailIfNeeded
 } from './email';
 
 describe('marketing email controls', () => {
@@ -68,12 +75,76 @@ describe('marketing email controls', () => {
 			marketingPreferenceToken: '11111111-1111-1111-1111-111111111111'
 		});
 		txMock.emailNotification.findFirst.mockResolvedValue(null);
+		txMock.order.findFirst.mockResolvedValue(null);
+		prismaMock.user.findUnique.mockResolvedValue({
+			isActive: true,
+			emailVerified: true,
+			emailVerifiedAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+			registeredAt: new Date(Date.now() - 48 * 60 * 60 * 1000)
+		});
 		txMock.emailNotification.findUnique.mockResolvedValue(null);
 		txMock.emailNotification.create.mockResolvedValue({ id: 'notification-1' });
 		txMock.emailNotification.update.mockResolvedValue({ id: 'notification-1' });
 		prismaMock.emailNotification.update.mockResolvedValue({ id: 'notification-1' });
 		prismaMock.emailNotification.count.mockResolvedValue(0);
 		sendMailMock.mockResolvedValue({ messageId: 'message-1' });
+	});
+
+	it('does not send the welcome email during the first day after verification', async () => {
+		prismaMock.user.findUnique.mockResolvedValue({
+			isActive: true,
+			emailVerified: true,
+			emailVerifiedAt: new Date(),
+			registeredAt: new Date(Date.now() - 48 * 60 * 60 * 1000)
+		});
+
+		expect(
+			await sendWelcomeEmailIfNeeded({ userId: 'user-1', email: 'buyer@example.com' })
+		).toBe(false);
+		expect(sendMailMock).not.toHaveBeenCalled();
+	});
+
+	it('sends the delayed welcome through marketing preferences', async () => {
+		expect(
+			await sendWelcomeEmailIfNeeded({ userId: 'user-1', email: 'buyer@example.com' })
+		).toBe(true);
+		expect(txMock.emailNotification.create).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({
+					classification: 'marketing',
+					campaignKey: 'welcome:user-1'
+				})
+			})
+		);
+		expect(sendMailMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				html: expect.stringContaining('/email/preferences/11111111-1111-1111-1111-111111111111')
+			})
+		);
+	});
+
+	it('skips the welcome email after a confirmed purchase', async () => {
+		txMock.order.findFirst.mockResolvedValue({ id: 'paid-order' });
+
+		expect(
+			await sendWelcomeEmailIfNeeded({ userId: 'user-1', email: 'buyer@example.com' })
+		).toBe(false);
+		expect(sendMailMock).not.toHaveBeenCalled();
+		expect(txMock.emailNotification.create).not.toHaveBeenCalled();
+		expect(txMock.order.findFirst).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: expect.objectContaining({
+					AND: expect.arrayContaining([
+						expect.objectContaining({
+							OR: expect.arrayContaining([
+								{ userId: 'user-1' },
+								{ guestEmail: { equals: 'buyer@example.com', mode: 'insensitive' } }
+							])
+						})
+					])
+				})
+			})
+		);
 	});
 
 	it('reserves and sends an eligible marketing email with preference links', async () => {

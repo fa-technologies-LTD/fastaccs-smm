@@ -72,5 +72,6 @@ describe('email verification session refresh', () => {
 		expect(result).toEqual({ success: true });
 		expect(mocks.transaction).toHaveBeenCalledTimes(1);
 		expect(mocks.invalidateUserSessionCache).toHaveBeenCalledWith('buyer-1');
+		expect(mocks.sendWelcomeEmailIfNeeded).not.toHaveBeenCalled();
 	});
 });

@@ -59,6 +59,23 @@ describe('onboarding lifecycle automation', () => {
 		});
 	});
 
+	it('selects verified users after one day and excludes customers with paid orders', async () => {
+		await runWelcomeRecovery();
+
+		expect(prismaMock.user.findMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: expect.objectContaining({
+					marketingEmailEnabled: true,
+					OR: [
+						{ emailVerifiedAt: { lte: expect.any(Date) } },
+						{ emailVerifiedAt: null, registeredAt: { lte: expect.any(Date) } }
+					],
+					orders: { none: expect.objectContaining({ OR: expect.any(Array) }) }
+				})
+			})
+		);
+	});
+
 	it('excludes users who received a welcome email within the last day', async () => {
 		await runOnboardingSequence();
 

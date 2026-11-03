@@ -4,8 +4,7 @@ import {
 	generateVerificationCode,
 	logEmailNotification,
 	maskEmailAddress,
-	sendEmail,
-	sendWelcomeEmailIfNeeded
+	sendEmail
 } from './email';
 import { invalidateUserSessionCache } from '$lib/auth/session';
 
@@ -61,13 +60,6 @@ async function getRequestsInLastHour(userId: string): Promise<number> {
 			createdAt: { gte: oneHourAgo }
 		}
 	});
-}
-
-function getFirstName(fullName: string | null | undefined, fallbackEmail: string): string | null {
-	if (fullName && fullName.trim()) {
-		return fullName.trim().split(/\s+/)[0];
-	}
-	return fallbackEmail.split('@')[0] || null;
 }
 
 export async function getVerificationStatus(user: MinimalUser): Promise<VerificationStatusResult> {
@@ -304,12 +296,6 @@ export async function verifyEmailCode(
 		subject: 'Verification successful',
 		body: 'User successfully verified email with OTP.',
 		status: 'sent'
-	});
-
-	await sendWelcomeEmailIfNeeded({
-		userId: user.id,
-		email: user.email,
-		firstName: getFirstName(user.fullName || null, user.email)
 	});
 
 	return { success: true };

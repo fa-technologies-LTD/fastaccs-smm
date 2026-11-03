@@ -159,12 +159,29 @@ export async function runWelcomeRecovery(params?: {
 	limit?: number;
 }): Promise<LifecycleEmailRunSummary> {
 	const limit = Math.min(Math.max(Number(params?.limit || DEFAULT_BATCH_LIMIT), 1), 1000);
+	const readyAt = new Date(Date.now() - 24 * 60 * 60 * 1000);
 	const users = await prisma.user.findMany({
 		where: {
 			isActive: true,
 			emailVerified: true,
 			email: { not: null },
 			userType: { not: 'ADMIN' },
+			marketingEmailEnabled: true,
+			marketingUnsubscribedAt: null,
+			marketingSuppressedAt: null,
+			OR: [
+				{ emailVerifiedAt: { lte: readyAt } },
+				{ emailVerifiedAt: null, registeredAt: { lte: readyAt } }
+			],
+			orders: {
+				none: {
+					OR: [
+						{ paidAt: { not: null } },
+						{ paymentStatus: { in: ['paid', 'success', 'overpaid', 'refunded'] } },
+						{ status: { in: ['paid', 'completed', 'refunded'] } }
+					]
+				}
+			},
 			emailNotifications: {
 				none: {
 					notificationType: 'welcome',
