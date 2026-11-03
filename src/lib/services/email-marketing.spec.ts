@@ -222,6 +222,16 @@ describe('marketing email controls', () => {
 		expect(sent.html).not.toContain(CUSTOMER_INBOX_TIP);
 		expect(sent.attachments).toBeUndefined();
 		expect(prismaMock.emailNotification.count).not.toHaveBeenCalled();
+
+		const { default: realNodemailer } = await vi.importActual<typeof import('nodemailer')>(
+			'nodemailer'
+		);
+		const transport = realNodemailer.createTransport({ streamTransport: true, buffer: true });
+		const mime = (await transport.sendMail(sent)).message.toString('utf8');
+		expect(mime).toContain('YOUR CODE: 123456');
+		expect(mime).not.toContain('multipart/related');
+		expect(mime).not.toContain('Content-Disposition: attachment');
+		expect(Buffer.byteLength(mime)).toBeLessThan(10_000);
 	});
 
 	it('never adds the customer inbox tip to operational email', async () => {
