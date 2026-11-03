@@ -1,11 +1,11 @@
 import { GroupBlocked, GroupSlowmode, TelegramSlowDown } from './errors';
-import { buyRequest, groupCopy, groupQualifies } from './group-rules';
+import { buyRequest, groupCopy, groupQualifies, readGroupRules } from './group-rules';
 import { normalizeUsername, type AutopilotSettings } from './settings';
 import { newGroupRecord, type GroupRecord, type GroupRunState } from './state';
 import type { UserbotPort } from './userbot';
 
 /**
- * The group run (every 15 minutes, between full runs). In joined Nigerian groups it answers
+ * The group run (every 15 minutes). In joined Nigerian groups it answers
  * people asking where to buy accounts, in public, with a tracked link; where a group's rules
  * invite promotion it posts an occasional promo; and it finds and joins a few new groups a day.
  * It never messages members privately: buyers who write to us are handled by the owner's team.
@@ -97,6 +97,34 @@ export async function runGroupsOnce(deps: GroupDeps): Promise<GroupRunSummary> {
 	};
 	const slowed = (group: GroupRecord) =>
 		Boolean(group.slowUntil && new Date(group.slowUntil).getTime() > now.getTime());
+	const currentRules = new Map<string, ReturnType<typeof readGroupRules>>();
+	const canPostLink = async (group: GroupRecord, promo: boolean): Promise<boolean> => {
+		let rules = currentRules.get(group.username);
+		if (!rules) {
+			try {
+				const info = await userbot.groupInfo(group.username);
+				rules = readGroupRules(info.about, info.pinned);
+				currentRules.set(group.username, rules);
+			} catch (error) {
+				await handlePostError(group, error);
+				return false;
+			}
+		}
+		if (rules.linksBanned) {
+			group.status = 'blocked';
+			group.reason = 'links are no longer allowed';
+			group.adsAllowed = false;
+			summary.blocked += 1;
+			await deps.saveGroup(group, group.reason);
+			await deps.logAction('group_blocked', group.username, { reason: group.reason });
+			return false;
+		}
+		if (group.adsAllowed !== rules.adsAllowed) {
+			group.adsAllowed = rules.adsAllowed;
+			await deps.saveGroup(group, 'group promotion rules changed');
+		}
+		return !promo || rules.adsAllowed;
+	};
 
 	// 1. Listen in joined groups and answer people asking where to buy.
 	for (const group of groups.filter((g) => g.status === 'joined')) {
@@ -137,6 +165,10 @@ export async function runGroupsOnce(deps: GroupDeps): Promise<GroupRunSummary> {
 				summary.missed += 1;
 				continue;
 			}
+			if (!(await canPostLink(group, false))) {
+				if (group.status !== 'joined') break;
+				continue;
+			}
 			try {
 				await userbot.sendToGroup(
 					group.username,
@@ -170,6 +202,7 @@ export async function runGroupsOnce(deps: GroupDeps): Promise<GroupRunSummary> {
 		if (group.lastPromoAt && now.getTime() - new Date(group.lastPromoAt).getTime() < PROMO_EVERY)
 			continue;
 		if (slowed(group)) continue;
+		if (!(await canPostLink(group, true))) continue;
 		if (group.promoPosts >= 3) {
 			const visits = await deps.visitsSince(
 				group.username,

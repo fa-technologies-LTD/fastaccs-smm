@@ -24,13 +24,10 @@ function setup(settings: Partial<AutopilotSettings> = {}, channels: ChannelRecor
 			return true;
 		},
 		logAction: vi.fn(async () => {}),
-		ensureCode: vi.fn(async () => 'TGAIRDRO10'),
-		trackedLink: () => 'https://smm.fastaccs.com/platforms/x?utm_source=telegram',
 		bookSpend: vi.fn(async () => {}),
 		send: async (chat, text) => void sent.push({ chat, text }),
 		edit: async (_chat, _id, text) => void edits.push(text),
-		answer: async (_id, text) => void answers.push(text),
-		now: () => new Date('2026-10-22T10:00:00Z')
+		answer: async (_id, text) => void answers.push(text)
 	};
 	return {
 		deps,
@@ -102,35 +99,15 @@ describe('connecting the owner', () => {
 	});
 });
 
-describe('the one-tap payment approval', () => {
-	it('on Approve: makes the code, sends the post, books the spend', async () => {
+describe('retired paid outreach', () => {
+	it('rejects an old payment approval without changing the order or booking money', async () => {
 		const t = setup({}, [awaiting()]);
 		await handleOwnerUpdate(tap('ap:paid:airdrop_naija'), t.deps);
 		const rec = t.saved.get('airdrop_naija')!;
-		expect(rec.status).toBe('paid');
-		expect(rec.code).toBe('TGAIRDRO10');
-		expect(rec.outbox[0]).toContain('Payment sent');
-		expect(rec.outbox[0]).toContain('TGAIRDRO10');
-		expect(t.deps.bookSpend).toHaveBeenCalledWith('airdrop_naija', 3_000, expect.anything());
-		expect(t.edits[0]).toContain('Approved and paid');
-	});
-
-	it('a second tap does nothing (no double booking)', async () => {
-		const t = setup({}, [awaiting()]);
-		await handleOwnerUpdate(tap('ap:paid:airdrop_naija'), t.deps);
-		await handleOwnerUpdate(tap('ap:paid:airdrop_naija'), t.deps);
-		expect(t.deps.bookSpend).toHaveBeenCalledTimes(1);
-		expect(t.answers.at(-1)).toBe('Already handled.');
-	});
-
-	it('two taps at once book the spend only once', async () => {
-		const t = setup({}, [awaiting()]);
-		await Promise.all([
-			handleOwnerUpdate(tap('ap:paid:airdrop_naija'), t.deps),
-			handleOwnerUpdate(tap('ap:paid:airdrop_naija'), t.deps)
-		]);
-		expect(t.deps.bookSpend).toHaveBeenCalledTimes(1);
-		expect(t.saved.get('airdrop_naija')!.outbox).toHaveLength(1);
+		expect(rec.status).toBe('awaiting_payment');
+		expect(rec.outbox).toHaveLength(0);
+		expect(t.deps.bookSpend).not.toHaveBeenCalled();
+		expect(t.answers.at(-1)).toContain('retired');
 	});
 
 	it('a tap from another chat is ignored', async () => {
@@ -140,12 +117,12 @@ describe('the one-tap payment approval', () => {
 		expect(t.deps.bookSpend).not.toHaveBeenCalled();
 	});
 
-	it('on Don’t pay: cancels politely, books nothing', async () => {
+	it('declining an old payment closes it without queuing a DM', async () => {
 		const t = setup({}, [awaiting()]);
 		await handleOwnerUpdate(tap('ap:nopay:airdrop_naija'), t.deps);
 		const rec = t.saved.get('airdrop_naija')!;
 		expect(rec.status).toBe('skipped');
-		expect(rec.outbox[0]).toContain('cancel');
+		expect(rec.outbox).toHaveLength(0);
 		expect(t.deps.bookSpend).not.toHaveBeenCalled();
 	});
 
@@ -157,7 +134,7 @@ describe('the one-tap payment approval', () => {
 });
 
 describe('owner messages', () => {
-	it('a reply to a channel prompt is queued for that admin', async () => {
+	it('does not queue a DM when the owner replies to an old channel prompt', async () => {
 		const rec = {
 			...awaiting(),
 			status: 'contacted' as const,
@@ -166,8 +143,8 @@ describe('owner messages', () => {
 		};
 		const t = setup({}, [rec]);
 		await handleOwnerUpdate(say('We sell X accounts, yes', OWNER, 321), t.deps);
-		expect(t.saved.get('airdrop_naija')!.outbox).toEqual(['We sell X accounts, yes']);
-		expect(t.saved.get('airdrop_naija')!.waitingOwner).toBe(false);
+		expect(t.saved.get('airdrop_naija')!.outbox).toEqual([]);
+		expect(t.sent.at(-1)?.text).toContain('nothing was sent');
 	});
 
 	it('/pause and /resume', async () => {
@@ -189,23 +166,17 @@ describe('pay-per-sale partners', () => {
 			paymentDetails: 'Opay 8031234567 Musa'
 		});
 
-	it('approving sends the post and their code, fixes the terms, and pays nothing', async () => {
+	it('rejects an old partner approval without sending an offer', async () => {
 		const t = setup({ partnerPercent: 10, partnerDays: 30, codeDays: 14 }, [pending()]);
 		await handleOwnerUpdate(tap('ap:partner:airdrop_naija'), t.deps);
 		const rec = t.saved.get('airdrop_naija')!;
-		expect(rec).toMatchObject({
-			deal: 'partner',
-			status: 'paid',
-			partnerPercent: 10,
-			code: 'TGAIRDRO10'
-		});
-		expect(rec.partnerUntil).toBe('2026-11-21T10:00:00.000Z');
-		expect(rec.outbox[0]).toContain('you earn 10% of every order that uses it until 21 November');
-		expect(vi.mocked(t.deps.ensureCode).mock.calls[0][1]).toMatchObject({ codeDays: 30 });
+		expect(rec.status).toBe('partner_pending');
+		expect(rec.outbox).toHaveLength(0);
+		expect(t.answers.at(-1)).toContain('retired');
 		expect(t.deps.bookSpend).not.toHaveBeenCalled();
 	});
 
-	it('a payout tap books the money once and tells them', async () => {
+	it('a legacy payout tap books money once and asks the owner to notify the partner', async () => {
 		const rec = {
 			...pending(),
 			status: 'posted' as const,
@@ -226,7 +197,8 @@ describe('pay-per-sale partners', () => {
 		expect(saved.partnerEarnedNgn).toBe(3_800);
 		expect(saved.partnerPaidUntil).toBe('2026-10-24T10:30:00Z');
 		expect(saved.partnerPayout).toBeNull();
-		expect(saved.outbox.at(-1)).toContain('Sent you ₦3,800 for 4 sales');
+		expect(saved.outbox).toHaveLength(0);
+		expect(t.edits.at(-1)).toContain('notify the partner yourself');
 		expect(t.deps.bookSpend).toHaveBeenCalledTimes(1);
 		expect(t.deps.bookSpend).toHaveBeenCalledWith('airdrop_naija', 3_800, expect.anything());
 	});
@@ -254,10 +226,10 @@ describe('pay-per-sale partners', () => {
 		expect(t.deps.bookSpend).not.toHaveBeenCalled();
 	});
 
-	it('declining a partner tells them politely', async () => {
+	it('declining a partner queues no DM', async () => {
 		const t = setup({}, [pending()]);
 		await handleOwnerUpdate(tap('ap:nopartner:airdrop_naija'), t.deps);
 		expect(t.saved.get('airdrop_naija')!.status).toBe('skipped');
-		expect(t.saved.get('airdrop_naija')!.outbox[0]).toContain('cancel');
+		expect(t.saved.get('airdrop_naija')!.outbox).toHaveLength(0);
 	});
 });

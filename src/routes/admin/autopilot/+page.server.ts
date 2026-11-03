@@ -11,46 +11,20 @@ import {
 	botWebhookInfo,
 	type WebhookHealth
 } from '$lib/server/autopilot/bot';
-import { committedSpend, discoveryLine, spentSoFar, watDay } from '$lib/server/autopilot/engine';
-import { parseChannelList } from '$lib/server/autopilot/rules';
+import { watDay } from '$lib/server/autopilot/engine';
 import { botWebhookSecret } from '$lib/server/autopilot/job';
-import { claudeConfigured } from '$lib/server/autopilot/llm';
 import { SITE_URL } from '$lib/server/autopilot/money';
+import { MAX_KEYWORDS } from '$lib/server/autopilot/settings';
 import {
-	AUTOPILOT_MODELS,
-	MAX_KEYWORDS,
-	normalizeUsername,
-	type AutopilotModel
-} from '$lib/server/autopilot/settings';
-import {
-	addOwnerPicks,
 	getAutopilotSettings,
 	getChannel,
 	getGroupRunState,
-	getOwnerPicks,
 	getRunState,
 	listGroups,
-	listChannels,
-	newChannelRecord,
 	saveAutopilotSettings,
 	saveChannel
 } from '$lib/server/autopilot/state';
 import { userbotConfigured } from '$lib/server/autopilot/userbot';
-
-const STATUS_ORDER = [
-	'awaiting_payment',
-	'agreed',
-	'negotiating',
-	'contacted',
-	'paid',
-	'posted',
-	'discovered',
-	'done',
-	'declined',
-	'refused',
-	'no_reply',
-	'skipped'
-];
 
 const WEBHOOK_URL = `${SITE_URL}/api/telegram/bot`;
 
@@ -75,28 +49,24 @@ async function webhookStatus(): Promise<
 export const load: PageServerLoad = async ({ locals }) => {
 	if (!hasAdminPermission(locals.adminContext, 'admin:revenue:view')) throw error(403, 'Forbidden');
 	const isOwner = isOwnerAdmin(locals.user, locals.adminContext);
-	const [settings, state, channels, actions, picks, groups, groupState] = await Promise.all([
+	const [settings, state, actions, groups, groupState] = await Promise.all([
 		getAutopilotSettings(),
 		getRunState(),
-		listChannels(),
 		prisma.marketingAction.findMany({
 			where: { channelKey: 'telegram' },
 			orderBy: { createdAt: 'desc' },
 			take: 30,
 			select: { createdAt: true, action: true, placementKey: true }
 		}),
-		getOwnerPicks(),
 		listGroups(),
 		getGroupRunState()
 	]);
-	const spent = spentSoFar(channels);
 	return {
 		isOwner,
 		settings: { ...settings, bindCode: null },
 		// Until the owner's chat is connected, keep showing their link (owner only).
 		bindLink: isOwner && !settings.ownerChatId ? await bindLinkFor(settings.bindCode) : null,
 		webhook: isOwner ? await webhookStatus() : null,
-		picksQueued: picks.map((p) => p.username),
 		groups: {
 			today:
 				groupState.day === watDay(new Date())
@@ -132,57 +102,17 @@ export const load: PageServerLoad = async ({ locals }) => {
 		ready: {
 			bot: botConfigured(),
 			telegramAccount: userbotConfigured(),
-			claude: claudeConfigured(),
 			ownerConnected: Boolean(settings.ownerChatId)
 		},
 		state: {
-			lastRunAt: state.lastRunAt,
-			lastFullRunAt: state.lastFullRunAt,
 			lastError: state.lastError,
 			pausedUntil: state.pausedUntil
 		},
-		search: {
-			line: discoveryLine(
-				state.discovery.day === watDay(new Date())
-					? state.discovery
-					: { day: null, inspected: 0, found: 0, searches: 0, reasons: {} }
-			),
-			queued: state.candidates.length
-		},
-		money: { spent, committed: committedSpend(channels), budget: settings.budgetNgn },
-		channels: channels
-			.sort(
-				(a, b) =>
-					STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) || b.avgViews - a.avgViews
-			)
-			.slice(0, 200)
-			.map((r) => ({
-				username: r.username,
-				title: r.title,
-				status: r.status,
-				waitingOwner: r.waitingOwner,
-				members: r.members,
-				avgViews: r.avgViews,
-				maxPriceNgn: r.maxPriceNgn,
-				quotedNgn: r.quotedNgn,
-				agreedNgn: r.agreedNgn,
-				code: r.code,
-				views48h: r.views48h,
-				checked: Boolean(r.checks),
-				deal: r.deal,
-				partnerPercent: r.partnerPercent,
-				partnerUntil: r.partnerUntil,
-				partnerEarnedNgn: r.partnerEarnedNgn,
-				payoutWaiting: Boolean(r.partnerPayout),
-				warnings: r.checks?.warnings ?? [],
-				lastNote: r.log.at(-1) ?? ''
-			})),
 		actions: actions.map((a) => ({
 			at: a.createdAt.toISOString(),
 			action: a.action,
 			channel: a.placementKey
-		})),
-		models: [...AUTOPILOT_MODELS]
+		}))
 	};
 };
 
@@ -208,24 +138,10 @@ export const actions: Actions = {
 		if (denied) return denied;
 		const form = await ctx.request.formData();
 		const s = await getAutopilotSettings();
-		const model = String(form.get('llmModel') ?? s.llmModel) as AutopilotModel;
 		await saveAutopilotSettings({
 			...s,
-			budgetNgn: Math.max(0, num(form, 'budgetNgn', s.budgetNgn)),
-			maxPerPostNgn: Math.max(500, num(form, 'maxPerPostNgn', s.maxPerPostNgn)),
-			maxPer1kViewsNgn: Math.max(100, num(form, 'maxPer1kViewsNgn', s.maxPer1kViewsNgn)),
-			minAvgViews: Math.max(50, num(form, 'minAvgViews', s.minAvgViews)),
-			dailyNewContacts: Math.min(
-				15,
-				Math.max(0, num(form, 'dailyNewContacts', s.dailyNewContacts))
-			),
-			keywords: lines(form.get('keywords')).slice(0, MAX_KEYWORDS),
-			testContacts: lines(form.get('testContacts')).map(normalizeUsername),
-			codePercent: Math.min(30, Math.max(0, num(form, 'codePercent', s.codePercent))),
-			codeDays: Math.min(60, Math.max(1, num(form, 'codeDays', s.codeDays))),
-			partnerEnabled: form.get('partnerEnabled') === 'on',
-			partnerPercent: Math.min(30, Math.max(1, num(form, 'partnerPercent', s.partnerPercent))),
-			partnerDays: Math.min(90, Math.max(7, num(form, 'partnerDays', s.partnerDays))),
+			dailyNewContacts: 0,
+			partnerEnabled: false,
 			groupsEnabled: form.get('groupsEnabled') === 'on',
 			groupRepliesPerDay: Math.min(
 				30,
@@ -236,8 +152,7 @@ export const actions: Actions = {
 				10,
 				Math.max(0, num(form, 'groupPostsPerDay', s.groupPostsPerDay))
 			),
-			groupKeywords: lines(form.get('groupKeywords')).slice(0, MAX_KEYWORDS),
-			llmModel: (AUTOPILOT_MODELS as readonly string[]).includes(model) ? model : s.llmModel
+			groupKeywords: lines(form.get('groupKeywords')).slice(0, MAX_KEYWORDS)
 		});
 		return { message: 'Rules saved.' };
 	},
@@ -250,18 +165,11 @@ export const actions: Actions = {
 		const field = String(form.get('field'));
 		if (field === 'enabled') {
 			const turnOn = !s.enabled;
-			if (turnOn && !s.ownerChatId)
-				return fail(400, { error: 'Connect your bot first, so approvals can reach you.' });
 			await saveAutopilotSettings({ ...s, enabled: turnOn });
 			return { message: turnOn ? 'Autopilot is on.' : 'Autopilot is off.' };
 		}
 		if (field === 'testMode') {
-			await saveAutopilotSettings({ ...s, testMode: !s.testMode });
-			return {
-				message: !s.testMode
-					? 'Test mode on: only your test contacts get messages.'
-					: 'Test mode off: real admins can be messaged.'
-			};
+			return fail(400, { error: 'Channel outreach test mode has been retired.' });
 		}
 		return fail(400, { error: 'Unknown switch.' });
 	},
@@ -290,40 +198,13 @@ export const actions: Actions = {
 	tryChannels: async (ctx) => {
 		const denied = ownerOnly(ctx);
 		if (denied) return denied;
-		const form = await ctx.request.formData();
-		const usernames = parseChannelList(String(form.get('channels') ?? ''));
-		if (!usernames.length)
-			return fail(400, { error: 'Paste channel links (t.me/…) or @usernames.' });
-		const added = await addOwnerPicks(usernames.slice(0, 50));
-		return {
-			message: `${added} channel${added === 1 ? '' : 's'} queued. They're checked on the next full run (within 15 minutes) and your bot gets a summary.`
-		};
+		return fail(410, { error: 'Paid channel outreach has been retired.' });
 	},
 
 	addChannel: async (ctx) => {
 		const denied = ownerOnly(ctx);
 		if (denied) return denied;
-		const form = await ctx.request.formData();
-		const username = normalizeUsername(form.get('username'));
-		const contact = normalizeUsername(form.get('contact'));
-		if (!/^[a-z][a-z0-9_]{3,31}$/.test(username) || !/^[a-z][a-z0-9_]{3,31}$/.test(contact)) {
-			return fail(400, { error: 'Enter the channel and the admin as @usernames.' });
-		}
-		if (await getChannel(username))
-			return fail(400, { error: 'That channel is already in the list.' });
-		const s = await getAutopilotSettings();
-		await saveChannel(
-			newChannelRecord({
-				username,
-				title: String(form.get('title') ?? '').trim() || username,
-				contact,
-				manual: true,
-				avgViews: Math.max(0, num(form, 'avgViews', 0)),
-				maxPriceNgn: Math.min(s.maxPerPostNgn, Math.max(500, num(form, 'maxPriceNgn', 1_000)))
-			}),
-			'added by owner'
-		);
-		return { message: `@${username} added. It will be messaged on the next run.` };
+		return fail(410, { error: 'Paid channel outreach has been retired.' });
 	},
 
 	skip: async (ctx) => {

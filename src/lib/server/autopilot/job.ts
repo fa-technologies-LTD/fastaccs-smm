@@ -1,26 +1,16 @@
 import { createHmac } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { botAnswer, botConfigured, botEdit, botSend, type BotButton } from './bot';
-import { planAutopilotRun, runAutopilotOnce, type AutopilotMode, type RunSummary } from './engine';
-import { claudeConfigured, readWithClaude } from './llm';
+import { FULL_RUN_MINUTES, type AutopilotMode } from './engine';
 import { runGroupsOnce, type GroupRunSummary } from './groups';
-import {
-	bookSpend,
-	ensurePlacementCode,
-	groupTrackedLink,
-	groupVisitsSince,
-	partnerSales,
-	trackedLinkFor
-} from './money';
+import { bookSpend, groupTrackedLink, groupVisitsSince } from './money';
 import { handleOwnerUpdate, type TelegramUpdate } from './owner';
-import { placementCode, postCopy } from './rules';
 import type { AutopilotSettings } from './settings';
 import {
 	acquireLock,
 	getAutopilotSettings,
 	getGroupRunState,
 	getKnownPeers,
-	getOwnerPicks,
 	getRunState,
 	listChannels,
 	logAction,
@@ -31,9 +21,7 @@ import {
 	saveKnownPeers,
 	saveGroup,
 	saveGroupRunState,
-	listGroups,
-	settleOwnerPicks,
-	type ChannelRecord
+	listGroups
 } from './state';
 import { TelegramSlowDown, connectUserbot, userbotConfigured, type UserbotPort } from './userbot';
 
@@ -55,31 +43,23 @@ function ownerNotifier(settings: AutopilotSettings) {
 	};
 }
 
-export function postFor(rec: ChannelRecord, settings: AutopilotSettings): string {
-	return postCopy({
-		link: rec.link ?? trackedLinkFor(rec.username, settings),
-		code: rec.code ?? placementCode(rec.username, settings.codePercent),
-		percent: settings.codePercent,
-		days: settings.codeDays
-	});
-}
-
 /** Which run is due right now (null: nothing to do, so the cron returns without touching Telegram). */
 export async function autopilotModeNow(now = new Date()): Promise<AutopilotMode | null> {
-	const [settings, state, channels] = await Promise.all([
-		getAutopilotSettings(),
-		getRunState(),
-		listChannels()
-	]);
-	return planAutopilotRun({ now, settings, configured: userbotConfigured(), state, channels });
+	const [settings, state] = await Promise.all([getAutopilotSettings(), getRunState()]);
+	if (!settings.enabled || !settings.groupsEnabled || !userbotConfigured()) return null;
+	if (state.pausedUntil && new Date(state.pausedUntil) > now) return null;
+	if (FULL_RUN_MINUTES.includes(now.getUTCMinutes())) return 'full';
+	return null;
 }
 
 /** One run. Does nothing while the autopilot is off or not set up. */
 export async function runAutopilotJob(
 	mode: AutopilotMode = 'full'
-): Promise<RunSummary | GroupRunSummary | { skipped: string }> {
+): Promise<GroupRunSummary | { skipped: string }> {
+	if (mode === 'replies') return { skipped: 'channel_replies_retired' };
 	const settings = await getAutopilotSettings();
 	if (!settings.enabled) return { skipped: 'off' };
+	if (!settings.groupsEnabled) return { skipped: 'groups_off' };
 	if (!userbotConfigured()) return { skipped: 'telegram_not_set_up' };
 	const state = await getRunState();
 	if (state.pausedUntil && new Date(state.pausedUntil) > new Date())
@@ -89,59 +69,24 @@ export async function runAutopilotJob(
 	const known = await getKnownPeers().catch(() => []);
 	try {
 		userbot = await connectUserbot(known);
-		if (mode === 'groups') {
-			return await runGroupsOnce({
-				userbot,
-				settings,
-				now: new Date(),
-				deadline: Date.now() + 45_000,
-				listGroups,
-				saveGroup,
-				getState: getGroupRunState,
-				saveState: saveGroupRunState,
-				logAction,
-				trackedLink: groupTrackedLink,
-				visitsSince: groupVisitsSince
-			});
-		}
-		return await runAutopilotOnce({
+		const result = await runGroupsOnce({
 			userbot,
 			settings,
-			store: {
-				listChannels,
-				saveChannel,
-				getRunState,
-				saveRunState,
-				logAction,
-				getOwnerPicks,
-				settleOwnerPicks,
-				queueGroup: async (username, via) => {
-					const groupState = await getGroupRunState();
-					if (groupState.candidates.some((c) => c.username === username)) return;
-					groupState.candidates.unshift({ username, via, ownerPick: true });
-					await saveGroupRunState(groupState);
-				}
-			},
-			groupStats: async () => {
-				const [groups, groupState] = await Promise.all([listGroups(), getGroupRunState()]);
-				const today = new Date(Date.now() + 3_600_000).toISOString().slice(0, 10);
-				const fresh = groupState.day === today;
-				return {
-					watching: groups.filter((g) => g.status === 'joined').length,
-					repliesToday: fresh ? groupState.repliesToday : 0,
-					postsToday: fresh ? groupState.postsToday : 0
-				};
-			},
 			now: new Date(),
-			notifyOwner: ownerNotifier(settings),
-			readWithClaude: claudeConfigured()
-				? (text, title) => readWithClaude(text, { channelTitle: title, model: settings.llmModel })
-				: undefined,
-			postFor: (rec) => postFor(rec, settings),
-			partnerSales,
-			deadline: Date.now() + (mode === 'full' ? 45_000 : 30_000),
-			mode: mode === 'replies' ? 'replies' : 'full'
+			deadline: Date.now() + 45_000,
+			listGroups,
+			saveGroup,
+			getState: getGroupRunState,
+			saveState: saveGroupRunState,
+			logAction,
+			trackedLink: groupTrackedLink,
+			visitsSince: groupVisitsSince
 		});
+		if (state.lastError) {
+			state.lastError = null;
+			await saveRunState(state);
+		}
+		return result;
 	} catch (error) {
 		const latest = await getRunState();
 		if (error instanceof TelegramSlowDown) {
@@ -157,7 +102,7 @@ export async function runAutopilotJob(
 				});
 				await ownerNotifier(settings)(
 					error.reason === 'account_limited'
-						? `⚠️ Telegram has limited the autopilot account from messaging new people (usually after too many first messages). I've paused until ${when} WAT and will resume by myself. If it keeps happening, lower "New admins to message per day".`
+						? `⚠️ Telegram has limited the account. Group activity is paused until ${when} WAT and will resume automatically.`
 						: `⏸ Telegram asked the autopilot to slow down. Paused until ${when} WAT; it resumes by itself.`
 				);
 			}
@@ -179,14 +124,11 @@ export async function handleBotWebhook(update: TelegramUpdate): Promise<void> {
 		listChannels,
 		saveChannel,
 		logAction,
-		ensureCode: ensurePlacementCode,
-		trackedLink: trackedLinkFor,
 		bookSpend: (username, amount, settings) => bookSpend(username, amount, settings),
 		send: async (chatId, text) => {
 			await botSend(chatId, text);
 		},
 		edit: botEdit,
-		answer: botAnswer,
-		now: () => new Date()
+		answer: botAnswer
 	});
 }

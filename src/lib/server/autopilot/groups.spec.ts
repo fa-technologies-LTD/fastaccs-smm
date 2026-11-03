@@ -31,9 +31,14 @@ function setup(groups: GroupRecord[], messages: Record<string, GroupMessage[]> =
 			return sent.length;
 		}),
 		searchGroups: vi.fn(async () => []),
-		groupInfo: vi.fn(async () => {
-			throw new Error('NOT_A_GROUP');
-		}),
+		groupInfo: vi.fn(async (username: string) => ({
+			title: username,
+			about: saved.get(username)?.adsAllowed ? 'Promotions are allowed' : 'Community discussion',
+			pinned: '',
+			members: 3_000,
+			joined: true,
+			messages: []
+		})),
 		joinGroup: vi.fn(async () => {})
 	} as unknown as UserbotPort;
 	const actions: string[] = [];
@@ -153,6 +158,23 @@ describe('answering people who ask to buy', () => {
 });
 
 describe('promos where the rules invite them', () => {
+	it('stops public link replies and promos if a group changes its rules', async () => {
+		const t = setup([joined('market_a', { adsAllowed: true })], {
+			market_a: [msg(11, 'Who sells twitter accounts?'), msg(12, 'Need IG accounts')]
+		});
+		vi.mocked(t.userbot.groupInfo).mockImplementation(async () => ({
+			title: 'market_a',
+			about: 'No links or advertising',
+			pinned: '',
+			members: 3_000,
+			joined: true,
+			messages: []
+		}));
+		const summary = await runGroupsOnce(t.deps);
+		expect(t.sent).toHaveLength(0);
+		expect(summary.blocked).toBe(1);
+		expect(t.saved.get('market_a')).toMatchObject({ status: 'blocked', adsAllowed: false });
+	});
 	it('posts at most every 3 days, within the daily limit, and stops after 3 posts with no visits', async () => {
 		const t = setup([
 			joined('market_a', { adsAllowed: true }),
