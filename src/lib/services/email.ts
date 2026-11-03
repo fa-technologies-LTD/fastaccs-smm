@@ -588,32 +588,63 @@ function withEmailTracking(params: SendEmailParams): SendEmailParams {
 	};
 }
 
+function renderVerificationEmailHtml(params: {
+	subject: string;
+	bodyHtml: string;
+	code?: string;
+	codeLabel?: string;
+}): string {
+	return `<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+  <body style="font-family:Arial,sans-serif;color:#17211b;max-width:560px;margin:24px auto;padding:0 16px;">
+    <p>Fast Accounts</p>
+    <h1 style="font-size:24px;">${escapeHtml(params.subject)}</h1>
+    ${params.code ? `<p>${escapeHtml(params.codeLabel || 'Code')}</p><p style="font-size:30px;font-weight:bold;letter-spacing:4px;">${escapeHtml(params.code)}</p>` : ''}
+    ${params.bodyHtml}
+  </body>
+</html>`;
+}
+
 export async function sendEmail(rawParams: SendEmailParams): Promise<SendEmailResult> {
 	const params = withEmailTracking(rawParams);
 	const recipient = params.to.trim().toLowerCase();
 	const subject = params.subject.trim();
 	const body = params.body.trim();
-	const showInboxTip = await shouldShowCustomerInboxTip(params, recipient);
+	const isVerification = params.notificationType === 'verification';
+	const showInboxTip = isVerification ? false : await shouldShowCustomerInboxTip(params, recipient);
 	const actionUrl = params.showCta !== false ? normalizeEmailActionUrl(params.ctaUrl) : null;
 	const actionBody = actionUrl ? `${body}\n\n${params.ctaText || 'Open'}: ${actionUrl}` : body;
-	const textBody = showInboxTip ? `${actionBody}\n\n${CUSTOMER_INBOX_TIP}` : actionBody;
+	const verificationCode = params.highlight?.trim();
+	const textBody = isVerification
+		? `${subject}${verificationCode ? `\n\n${params.highlightLabel?.trim() || 'Code'}: ${verificationCode}` : ''}\n\n${body}`
+		: showInboxTip
+			? `${actionBody}\n\n${CUSTOMER_INBOX_TIP}`
+			: actionBody;
 
 	const bodyHtml = renderEmailBody(body);
-	const html = renderEmailTemplate({
-		body: bodyHtml,
-		title: subject,
-		eyebrow: getEmailEyebrow(params),
-		highlight: params.highlight || null,
-		highlightLabel: params.highlightLabel || null,
-		preheader: params.preheader || deriveEmailPreheader(body, subject),
-		ctaText: params.ctaText || null,
-		ctaUrl: params.ctaUrl || null,
-		showCta: params.showCta !== false,
-		showInboxTip,
-		marketingPreferenceUrl: params.marketingPreferenceToken
-			? `${getBaseUrl()}/email/preferences/${params.marketingPreferenceToken}`
-			: null
-	});
+	const html = isVerification
+		? renderVerificationEmailHtml({
+				subject,
+				bodyHtml,
+				code: verificationCode,
+				codeLabel: params.highlightLabel?.trim()
+			})
+		: renderEmailTemplate({
+				body: bodyHtml,
+				title: subject,
+				eyebrow: getEmailEyebrow(params),
+				highlight: params.highlight || null,
+				highlightLabel: params.highlightLabel || null,
+				preheader: params.preheader || deriveEmailPreheader(body, subject),
+				ctaText: params.ctaText || null,
+				ctaUrl: params.ctaUrl || null,
+				showCta: params.showCta !== false,
+				showInboxTip,
+				marketingPreferenceUrl: params.marketingPreferenceToken
+					? `${getBaseUrl()}/email/preferences/${params.marketingPreferenceToken}`
+					: null
+			});
 
 	try {
 		const transporter = getTransporter();
@@ -624,15 +655,19 @@ export async function sendEmail(rawParams: SendEmailParams): Promise<SendEmailRe
 			subject,
 			text: textBody,
 			html,
-			attachments: [
-				{
-					filename: 'fastaccounts-email-header.png',
-					content: EMAIL_HEADER_CONTENT,
-					cid: EMAIL_HEADER_CID,
-					contentType: 'image/png',
-					contentDisposition: 'inline'
-				}
-			]
+			...(isVerification
+				? {}
+				: {
+						attachments: [
+							{
+								filename: 'fastaccounts-email-header.png',
+								content: EMAIL_HEADER_CONTENT,
+								cid: EMAIL_HEADER_CID,
+								contentType: 'image/png',
+								contentDisposition: 'inline'
+							}
+						]
+					})
 		});
 
 		if (params.notificationId) {

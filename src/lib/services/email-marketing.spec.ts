@@ -98,16 +98,16 @@ describe('marketing email controls', () => {
 			registeredAt: new Date(Date.now() - 48 * 60 * 60 * 1000)
 		});
 
-		expect(
-			await sendWelcomeEmailIfNeeded({ userId: 'user-1', email: 'buyer@example.com' })
-		).toBe(false);
+		expect(await sendWelcomeEmailIfNeeded({ userId: 'user-1', email: 'buyer@example.com' })).toBe(
+			false
+		);
 		expect(sendMailMock).not.toHaveBeenCalled();
 	});
 
 	it('sends the delayed welcome through marketing preferences', async () => {
-		expect(
-			await sendWelcomeEmailIfNeeded({ userId: 'user-1', email: 'buyer@example.com' })
-		).toBe(true);
+		expect(await sendWelcomeEmailIfNeeded({ userId: 'user-1', email: 'buyer@example.com' })).toBe(
+			true
+		);
 		expect(txMock.emailNotification.create).toHaveBeenCalledWith(
 			expect.objectContaining({
 				data: expect.objectContaining({
@@ -126,9 +126,9 @@ describe('marketing email controls', () => {
 	it('skips the welcome email after a confirmed purchase', async () => {
 		txMock.order.findFirst.mockResolvedValue({ id: 'paid-order' });
 
-		expect(
-			await sendWelcomeEmailIfNeeded({ userId: 'user-1', email: 'buyer@example.com' })
-		).toBe(false);
+		expect(await sendWelcomeEmailIfNeeded({ userId: 'user-1', email: 'buyer@example.com' })).toBe(
+			false
+		);
 		expect(sendMailMock).not.toHaveBeenCalled();
 		expect(txMock.emailNotification.create).not.toHaveBeenCalled();
 		expect(txMock.order.findFirst).toHaveBeenCalledWith(
@@ -201,6 +201,27 @@ describe('marketing email controls', () => {
 		expect(prismaMock.emailNotification.count).toHaveBeenCalledWith({
 			where: expect.objectContaining({ status: 'sent' })
 		});
+	});
+
+	it('sends verification codes in both formats without the inline image or inbox tip', async () => {
+		await sendEmail({
+			to: 'buyer@example.com',
+			subject: 'Confirm your email',
+			body: 'Enter this code on Fast Accounts. It expires in 10 minutes.\n\nDo not share it.',
+			highlight: '123456',
+			highlightLabel: 'YOUR CODE',
+			notificationType: 'verification',
+			showCta: false
+		});
+
+		const sent = sendMailMock.mock.calls[0][0];
+		expect(sent.text).toContain('YOUR CODE: 123456');
+		expect(sent.html).toContain('123456');
+		expect(sent.html).not.toContain('cid:fastaccounts-email-header');
+		expect(sent.text).not.toContain(CUSTOMER_INBOX_TIP);
+		expect(sent.html).not.toContain(CUSTOMER_INBOX_TIP);
+		expect(sent.attachments).toBeUndefined();
+		expect(prismaMock.emailNotification.count).not.toHaveBeenCalled();
 	});
 
 	it('never adds the customer inbox tip to operational email', async () => {
