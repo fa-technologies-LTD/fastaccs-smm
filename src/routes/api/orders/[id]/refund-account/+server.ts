@@ -17,6 +17,7 @@ import { getAllocatedLikeAccountStatuses } from '$lib/helpers/account-status';
 import { recordOrderEvent } from '$lib/services/order-events';
 import { allocateFullRefundToItems } from '$lib/helpers/order-revenue';
 import { moneyNgn } from '$lib/helpers/money';
+import { confirmMoneyReceived, unconfirmedMoneyError } from '$lib/server/order-money-received';
 
 const FAULTY_STATUS = 'faulty';
 
@@ -43,6 +44,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	if (!isUuid(orderId)) return json({ error: 'Invalid order ID' }, { status: 400 });
 	if (!isUuid(accountId)) return json({ error: 'A valid accountId is required' }, { status: 400 });
 
+	// The money behind the order is confirmed before the lock, from Monnify and the store-credit ledger.
+	const received = await confirmMoneyReceived(orderId);
 	// Refund + flag the account atomically. Then decide if the whole order is now refunded.
 	const result = await prisma.$transaction(
 		async (tx) => {
@@ -117,6 +120,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			if (!order.userId) return { outcome: 'guest' as const };
 			const wasPaid = ['paid', 'success', 'overpaid'].includes(order.paymentStatus);
 			if (!wasPaid) return { outcome: 'not_paid' as const };
+			if (received.status !== 'confirmed') return { outcome: 'money_unconfirmed' as const };
 
 			// Work out whether this is the final retained account before issuing money. The final
 			// item receives the exact remaining order value, eliminating rounding/discount drift.
@@ -253,6 +257,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	}
 	if (result.outcome === 'not_paid') {
 		return json({ error: 'This order was never paid.' }, { status: 409 });
+	}
+	if (result.outcome === 'money_unconfirmed') {
+		const { status, error } = unconfirmedMoneyError(received);
+		return json({ error }, { status });
 	}
 	if (result.outcome === 'no_amount') {
 		return json({ error: 'Account has no unit price to refund.' }, { status: 400 });

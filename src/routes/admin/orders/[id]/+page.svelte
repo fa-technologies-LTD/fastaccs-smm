@@ -76,6 +76,11 @@
 					String(order.status || '').toLowerCase()
 				))
 	);
+	// Money arrived for this order (or is held for review) and has not been returned.
+	const moneyReceived = $derived(
+		!isRefundedOrder &&
+			['paid', 'success', 'overpaid', 'under_review'].includes(String(order.paymentStatus || ''))
+	);
 	let items = $derived<OrderItemWithDetails[]>(data.items);
 	const orderedItems = $derived(data.orderedItems || []);
 	const isBoostingOrder = $derived(
@@ -237,21 +242,17 @@
 			return;
 		}
 
-		// Cancelling a PAID order: offer to refund it to store credit in the same step.
-		if (
-			newStatus === 'cancelled' &&
-			order.paymentStatus === 'paid' &&
-			String(order.status) !== 'refunded' &&
-			String(order.status) !== 'completed'
-		) {
+		// A paid order (or one holding a payment for review) is only ever closed with its refund. The server
+		// refuses a bare cancel too, so a mis-click can no longer keep a customer's money.
+		if (newStatus === 'cancelled' && moneyReceived) {
 			const amount = Number(order.total_amount || 0);
-			const doRefund = confirm(
-				`This order was paid ₦${amount.toLocaleString()}.\n\nOK = refund it to the buyer's store credit (recommended).\nCancel = cancel the order WITHOUT a refund.`
-			);
-			if (doRefund) {
+			if (
+				confirm(
+					`This order was paid ₦${amount.toLocaleString()}.\n\nCancel it and refund ₦${amount.toLocaleString()} to the buyer's store credit?`
+				)
+			)
 				await refundOrder();
-				return;
-			}
+			return;
 		}
 
 		isProcessing = true;
@@ -1340,7 +1341,7 @@
 									class="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
 								>
 									<X class="h-4 w-4" />
-									Cancel Order
+									{moneyReceived ? 'Cancel and refund' : 'Cancel Order'}
 								</button>
 							{/if}
 						</div>

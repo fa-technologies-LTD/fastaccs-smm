@@ -238,9 +238,55 @@ it('keeps the actions on a paid account order that still needs handing over', as
 		.element(page.getByRole('button', { name: 'Refund to store credit', exact: true }))
 		.toBeVisible();
 	await expect
+		.element(page.getByRole('button', { name: 'Cancel and refund', exact: true }))
+		.toBeVisible();
+	expect(page.getByRole('button', { name: 'Cancel Order', exact: true }).query()).toBeNull();
+	expect(page.getByText(/^Closed\./).query()).toBeNull();
+});
+
+it('closes a paid order only through its refund, never a bare cancel', async () => {
+	const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+		async () => Response.json({ success: true, refundedAmount: 500 })
+	);
+	vi.stubGlobal('fetch', fetchMock);
+	const confirmMock = vi.fn(() => false);
+	vi.stubGlobal('confirm', confirmMock);
+	render(Page, {
+		data: accountOrderFixture({
+			status: 'processing',
+			paymentStatus: 'paid',
+			totalAmount: 500,
+			total_amount: 500,
+			refunded_amount: 0,
+			net_sale_amount: 500
+		})
+	} as never);
+	const cancel = page.getByRole('button', { name: 'Cancel and refund', exact: true });
+	// Saying no leaves the order exactly as it was: there is no "cancel without refund" path.
+	await cancel.click();
+	expect(confirmMock).toHaveBeenCalledWith(expect.stringContaining('refund ₦500'));
+	expect(fetchMock).not.toHaveBeenCalled();
+	confirmMock.mockReturnValue(true);
+	await cancel.click();
+	await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+	expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/refund$/);
+	expect(fetchMock.mock.calls[0][1]?.method).toBe('POST');
+});
+
+it('cancels an unpaid order directly', async () => {
+	render(Page, {
+		data: accountOrderFixture({
+			status: 'pending',
+			paymentStatus: 'pending',
+			total_amount: 500,
+			refunded_amount: 0,
+			net_sale_amount: 500
+		})
+	} as never);
+	await expect
 		.element(page.getByRole('button', { name: 'Cancel Order', exact: true }))
 		.toBeVisible();
-	expect(page.getByText(/^Closed\./).query()).toBeNull();
+	expect(page.getByRole('button', { name: 'Cancel and refund', exact: true }).query()).toBeNull();
 });
 
 it('replaces a faulty account from stock after confirming, with no refund', async () => {

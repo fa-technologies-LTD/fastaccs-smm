@@ -9,7 +9,7 @@ import { releaseOrderReservations } from '$lib/services/order-reservations';
 import { sanitizeCustomerOrder } from '$lib/helpers/customer-order-visibility';
 import { hasAdminPermission } from '$lib/auth/admin-roles';
 import { ORDER_CUSTOMER_USER_SELECT } from '$lib/auth/browser-session';
-import { isRefundReversal } from '$lib/helpers/order-refund-lock';
+import { isRefundReversal, paidOrderEditBlock } from '$lib/helpers/order-refund-lock';
 import { canCompleteOrder } from '$lib/helpers/order-completion';
 
 function isUuid(value: string): boolean {
@@ -298,6 +298,9 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 			});
 			if (!current) return { blocked: 'not_found' as const };
 			if (isRefundReversal(current, updateData)) return { blocked: 'refunded' as const };
+			const moneyBlock = paidOrderEditBlock(current, updateData as Record<string, unknown>);
+			if (moneyBlock === 'refund_required') return { blocked: 'refund_required' as const };
+			if (moneyBlock === 'payment_locked') return { blocked: 'payment_locked' as const };
 			if (
 				current.orderType === 'boosting' &&
 				(updateData.status === 'completed' || updateData.deliveryStatus === 'delivered')
@@ -391,6 +394,29 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 					data: null,
 					error:
 						'This order has been refunded. Its status, payment status and delivery status are locked so the refund cannot be reversed.'
+				},
+				{ status: 409 }
+			);
+		}
+
+		if (outcome.blocked === 'refund_required') {
+			return json(
+				{
+					data: null,
+					error:
+						'This order was paid. Use Cancel and refund so the customer gets their money back.',
+					code: 'REFUND_REQUIRED'
+				},
+				{ status: 409 }
+			);
+		}
+		if (outcome.blocked === 'payment_locked') {
+			return json(
+				{
+					data: null,
+					error:
+						'Payment details change only through a verified payment or a refund, never by editing the order.',
+					code: 'PAYMENT_LOCKED'
 				},
 				{ status: 409 }
 			);

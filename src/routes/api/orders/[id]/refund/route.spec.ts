@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 	audit: vi.fn(),
 	invalidateStats: vi.fn(),
 	heldOrder: vi.fn(),
+	creditSpent: vi.fn(),
 	verifyPayment: vi.fn()
 }));
 
@@ -27,12 +28,19 @@ const tx = vi.hoisted(() => ({
 }));
 
 vi.mock('$lib/prisma', () => ({
-	prisma: { $transaction: mocks.transaction, order: { findUnique: mocks.heldOrder } }
+	prisma: {
+		$transaction: mocks.transaction,
+		order: { findUnique: mocks.heldOrder },
+		walletTransaction: { aggregate: mocks.creditSpent }
+	}
 }));
 vi.mock('$lib/services/payment', () => ({ verifyPayment: mocks.verifyPayment }));
 vi.mock('$lib/services/store-credit', () => ({
 	creditStoreCredit: mocks.creditStoreCredit,
-	SC_CREDIT_REFUND: 'store_credit_refund'
+	SC_CREDIT_REFUND: 'store_credit_refund',
+	SC_REDEEM_EARNED: 'store_credit_redemption_earned',
+	SC_REDEEM_REFUND: 'store_credit_redemption_refund',
+	SC_REDEEM_PROMO: 'store_credit_redemption_promo'
 }));
 vi.mock('$lib/services/order-events', () => ({ recordOrderEvent: mocks.recordOrderEvent }));
 vi.mock('$lib/services/affiliate', () => ({
@@ -83,6 +91,7 @@ function paidOrder(overrides: Record<string, unknown> = {}) {
 		status: 'completed',
 		deliveryStatus: 'delivered',
 		refundedAmount: 7_500,
+		paymentReference: 'ORD_paid',
 		orderItems: [
 			{ id: 'item-1', totalPrice: 15_000, refundedAmount: 7_500 },
 			{ id: 'item-2', totalPrice: 7_500, refundedAmount: 0 }
@@ -114,6 +123,16 @@ beforeEach(() => {
 	mocks.clawbackMilestones.mockResolvedValue(undefined);
 	mocks.audit.mockResolvedValue(undefined);
 	mocks.heldOrder.mockImplementation(async () => tx.order.findUnique());
+	mocks.creditSpent.mockResolvedValue({ _sum: { amount: null } });
+	// Monnify's own record: by default the transfer covered the order in full.
+	mocks.verifyPayment.mockImplementation(async (reference: string) => ({
+		success: true,
+		status: 'PAID',
+		paymentReference: reference,
+		amountPaid: (await tx.order.findUnique()).totalAmount,
+		currency: 'NGN',
+		metaData: {}
+	}));
 });
 
 describe('full-order refund integrity', () => {
@@ -192,6 +211,37 @@ describe('full-order refund integrity', () => {
 		expect(mocks.reverseVested).toHaveBeenCalledWith(ORDER_ID);
 	});
 
+	it('refuses a paid label with no money behind it, even on an ordinary order', async () => {
+		// An order marked paid by hand, or a payment Monnify has no record of, must never become store credit.
+		mocks.verifyPayment.mockResolvedValue({
+			success: false,
+			status: 'not_found',
+			paymentReference: '',
+			amountPaid: 0,
+			currency: 'NGN'
+		});
+		const response = await callRefund();
+		expect(response.status).toBe(409);
+		expect(await response.json()).toMatchObject({
+			error: expect.stringContaining('Only ₦0 of ₦22,500 could be confirmed')
+		});
+		expect(mocks.verifyPayment).toHaveBeenCalledWith('ORD_paid');
+		expect(mocks.creditStoreCredit).not.toHaveBeenCalled();
+		expect(tx.order.update).not.toHaveBeenCalled();
+	});
+
+	it('confirms an order paid only with store credit from the credit ledger, without Monnify', async () => {
+		tx.order.findUnique.mockResolvedValue(paidOrder({ paymentReference: null }));
+		mocks.creditSpent.mockResolvedValue({ _sum: { amount: 22_500 } });
+		expect((await callRefund()).status).toBe(200);
+		expect(mocks.verifyPayment).not.toHaveBeenCalled();
+		expect(mocks.creditSpent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: expect.objectContaining({ metadata: { path: ['orderId'], equals: ORDER_ID } })
+			})
+		);
+	});
+
 	it('makes a repeat refund request a no-op with no second credit', async () => {
 		tx.order.findUnique.mockResolvedValue(
 			paidOrder({
@@ -257,7 +307,9 @@ describe('full-order refund integrity', () => {
 			);
 			expect(mocks.recordOrderEvent).toHaveBeenCalledWith(
 				expect.objectContaining({
-					metadata: expect.objectContaining({ heldPaymentConfirmedWithMonnify: true })
+					metadata: expect.objectContaining({
+						confirmedReceived: { transfer: 10_500, storeCredit: 0 }
+					})
 				}),
 				tx
 			);
@@ -280,22 +332,32 @@ describe('full-order refund integrity', () => {
 			expect(tx.order.update).not.toHaveBeenCalled();
 		});
 
-		it('leaves a held payment that mixed in store credit, or that Monnify cannot confirm, for a manual check', async () => {
+		it('counts store credit spent on the order alongside the transfer', async () => {
 			tx.order.findUnique.mockResolvedValue({ ...held(), storeCreditApplied: 2_000 });
-			mocks.verifyPayment.mockResolvedValue(monnify());
-			expect((await callRefund()).status).toBe(409);
-			expect(mocks.verifyPayment).not.toHaveBeenCalled();
-			tx.order.findUnique.mockResolvedValue(held());
-			mocks.verifyPayment.mockRejectedValue(new Error('network'));
-			expect((await callRefund()).status).toBe(409);
-			expect(mocks.creditStoreCredit).not.toHaveBeenCalled();
+			mocks.creditSpent.mockResolvedValue({ _sum: { amount: 2_000 } });
+			mocks.verifyPayment.mockResolvedValue(monnify({ amountPaid: 8_500 }));
+			expect((await callRefund()).status).toBe(200);
+			expect(mocks.creditStoreCredit).toHaveBeenCalledWith(
+				tx,
+				expect.objectContaining({ amount: 10_500 })
+			);
 		});
 
-		it('never asks Monnify about an ordinary paid order', async () => {
-			tx.order.findUnique.mockResolvedValue(paidOrder());
-			tx.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 7_500 } });
-			expect((await callRefund()).status).toBe(200);
-			expect(mocks.verifyPayment).not.toHaveBeenCalled();
+		it.each([
+			['the request fails', () => mocks.verifyPayment.mockRejectedValue(new Error('network'))],
+			[
+				'Monnify reports an error',
+				() =>
+					mocks.verifyPayment.mockResolvedValue(
+						monnify({ success: false, status: 'error', amountPaid: 0 })
+					)
+			]
+		])('asks to try again, and credits nothing, when %s', async (_, arrange) => {
+			arrange();
+			const response = await callRefund();
+			expect(response.status).toBe(503);
+			expect(mocks.creditStoreCredit).not.toHaveBeenCalled();
+			expect(mocks.transaction).toHaveBeenCalled();
 		});
 	});
 });

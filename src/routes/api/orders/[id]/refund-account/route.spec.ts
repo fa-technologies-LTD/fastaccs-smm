@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
 	hasPermission: vi.fn(),
+	moneyReceived: vi.fn(),
 	transaction: vi.fn(),
 	creditStoreCredit: vi.fn(),
 	recordOrderEvent: vi.fn(),
@@ -25,6 +26,10 @@ const tx = vi.hoisted(() => ({
 }));
 
 vi.mock('$lib/prisma', () => ({ prisma: { $transaction: mocks.transaction } }));
+vi.mock('$lib/server/order-money-received', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/server/order-money-received')>()),
+	confirmMoneyReceived: mocks.moneyReceived
+}));
 vi.mock('$lib/services/store-credit', () => ({
 	creditStoreCredit: mocks.creditStoreCredit,
 	SC_CREDIT_REFUND: 'store_credit_refund'
@@ -122,9 +127,26 @@ beforeEach(() => {
 	mocks.reverseVested.mockResolvedValue({ reversed: 0 });
 	mocks.clawbackMilestones.mockResolvedValue(undefined);
 	mocks.audit.mockResolvedValue(undefined);
+	mocks.moneyReceived.mockResolvedValue({ status: 'confirmed', transfer: 0, storeCredit: 0 });
 });
 
 describe('per-account refund integrity', () => {
+	it.each([
+		[{ status: 'short', transfer: 0, storeCredit: 0, total: 10_000 }, 409, /Only ₦0 of ₦10,000/],
+		[{ status: 'unavailable' }, 503, /could not be reached/]
+	])(
+		'pays nothing when the money behind the order is not confirmed (%o)',
+		async (money, code, why) => {
+			mocks.moneyReceived.mockResolvedValue(money);
+			const response = await callRefundAccount();
+			expect(response.status).toBe(code);
+			expect((await response.json()).error).toMatch(why);
+			expect(mocks.moneyReceived).toHaveBeenCalledWith(ORDER_ID);
+			expect(mocks.creditStoreCredit).not.toHaveBeenCalled();
+			expect(tx.account.update).not.toHaveBeenCalled();
+		}
+	);
+
 	it('records a partial refund and proportionately reconciles affiliate earnings', async () => {
 		const response = await callRefundAccount();
 		const body = await response.json();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isRefundReversal } from './order-refund-lock';
+import { isRefundReversal, paidOrderEditBlock } from './order-refund-lock';
 
 const REFUNDED_ORDER = {
 	status: 'refunded',
@@ -59,5 +59,36 @@ describe('isRefundReversal', () => {
 
 	it('treats an empty patch as harmless', () => {
 		expect(isRefundReversal(REFUNDED_ORDER, {})).toBe(false);
+	});
+});
+
+describe('paidOrderEditBlock', () => {
+	it('stops a paid order being cancelled without its refund', () => {
+		// ORD-…CEF734C4 / CE0373F6: paid ₦7,500, cancelled by an edit on 25 Oct, nothing returned.
+		expect(paidOrderEditBlock(PAID_ORDER, { status: 'cancelled' })).toBe('refund_required');
+		expect(paidOrderEditBlock(PAID_ORDER, { status: 'failed' })).toBe('refund_required');
+		// ORD-…9B43C685: the held ₦10,500 payment was cancelled the same way.
+		expect(paidOrderEditBlock({ paymentStatus: 'under_review' }, { status: 'cancelled' })).toBe(
+			'refund_required'
+		);
+	});
+
+	it('never lets an edit mark an order paid, or change a paid order’s payment details', () => {
+		expect(paidOrderEditBlock({ paymentStatus: 'pending' }, { paymentStatus: 'paid' })).toBe(
+			'payment_locked'
+		);
+		expect(paidOrderEditBlock(PAID_ORDER, { paymentStatus: 'failed' })).toBe('payment_locked');
+		expect(paidOrderEditBlock(PAID_ORDER, { paymentReference: 'another-payment' })).toBe(
+			'payment_locked'
+		);
+		expect(paidOrderEditBlock(PAID_ORDER, { paidAt: null })).toBe('payment_locked');
+	});
+
+	it('leaves unpaid orders and ordinary work on paid orders alone', () => {
+		expect(paidOrderEditBlock({ paymentStatus: 'pending' }, { status: 'cancelled' })).toBeNull();
+		expect(paidOrderEditBlock({ paymentStatus: 'failed' }, { status: 'cancelled' })).toBeNull();
+		expect(paidOrderEditBlock(PAID_ORDER, { status: 'processing' })).toBeNull();
+		expect(paidOrderEditBlock(PAID_ORDER, { status: 'completed' })).toBeNull();
+		expect(paidOrderEditBlock(PAID_ORDER, { deliveryContact: '@buyer' })).toBeNull();
 	});
 });
