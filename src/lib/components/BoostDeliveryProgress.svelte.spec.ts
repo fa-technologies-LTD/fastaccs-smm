@@ -38,6 +38,7 @@ describe('BoostDeliveryProgress', () => {
 			.element(page.getByRole('progressbar', { name: 'Delivered so far' }))
 			.toHaveAttribute('aria-valuenow', '87');
 		await expect.element(page.getByText('Counts reported by our supplier.')).toBeVisible();
+		await expect.element(page.getByText('Real-time counts on the app may differ.')).toBeVisible();
 		await expect
 			.element(page.getByRole('listitem').filter({ hasText: 'Delivering' }))
 			.toHaveAttribute('aria-current', 'step');
@@ -53,6 +54,7 @@ describe('BoostDeliveryProgress', () => {
 			.element(page.getByRole('progressbar', { name: 'Delivered so far' }))
 			.toHaveAttribute('aria-valuenow', '100');
 		expect(page.getByText('Counts reported by our supplier.').query()).toBeNull();
+		await expect.element(page.getByText('Real-time counts on the app may differ.')).toBeVisible();
 		expect(document.querySelector('[aria-current="step"]')).toBeNull();
 	});
 });

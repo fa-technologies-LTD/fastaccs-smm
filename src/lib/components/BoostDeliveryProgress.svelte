@@ -96,8 +96,10 @@
 	{#if meta}
 		<p class="delivery__meta">{meta}</p>
 	{/if}
-	{#if delivered !== null && !done}
-		<p class="delivery__meta">Counts reported by our supplier.</p>
+	{#if delivered !== null}
+		<p class="delivery__meta delivery__note">
+			{done ? '' : 'Counts reported by our supplier. '}Real-time counts on the app may differ.
+		</p>
 	{/if}
 </div>
 
@@ -204,19 +206,25 @@
 		border-color: var(--fill);
 		background: var(--fill);
 	}
+	/* The step happening now glows, so the eye lands on it first. */
 	.delivery__steps .is-now {
-		color: var(--text);
+		color: var(--fill);
 		font-weight: 600;
+		text-shadow: 0 0 10px color-mix(in srgb, var(--fill) 55%, transparent);
 	}
 	.delivery__steps .is-now .dot {
 		border-color: var(--fill);
-		box-shadow: 0 0 0 0 color-mix(in srgb, var(--fill) 60%, transparent);
-		animation: pulse 1.8s ease-out infinite;
+		background: var(--fill);
+		box-shadow: 0 0 8px 1px color-mix(in srgb, var(--fill) 75%, transparent);
+		animation: glow 1.8s ease-in-out infinite;
 	}
 	.delivery__meta {
 		margin: 0;
 		color: var(--text-dim);
 		font-size: 0.75rem;
+	}
+	.delivery__note {
+		font-size: 0.6875rem;
 	}
 	@keyframes sheen {
 		to {
@@ -231,9 +239,17 @@
 			left: 100%;
 		}
 	}
-	@keyframes pulse {
-		to {
-			box-shadow: 0 0 0 6px transparent;
+	@keyframes glow {
+		0%,
+		100% {
+			box-shadow:
+				0 0 4px 0 color-mix(in srgb, var(--fill) 55%, transparent),
+				0 0 0 0 color-mix(in srgb, var(--fill) 45%, transparent);
+		}
+		50% {
+			box-shadow:
+				0 0 12px 3px color-mix(in srgb, var(--fill) 90%, transparent),
+				0 0 0 5px transparent;
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
