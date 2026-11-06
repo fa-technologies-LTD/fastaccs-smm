@@ -7,11 +7,13 @@
 	import OrderTab from './OrderTab.svelte';
 	import PurchaseTab from './PurchaseTab.svelte';
 	import AffiliateTab from './AffiliateTab.svelte';
+	import DashboardTour, { type TourStep } from './DashboardTour.svelte';
 	import { addToast } from '$lib/stores/toasts';
 
 	type DashboardTab = 'orders' | 'purchases' | 'affiliate';
 
 	interface DashboardUser {
+		id?: string;
 		fullName?: string | null;
 		emailVerified?: boolean;
 	}
@@ -344,7 +346,69 @@
 	let totalSpent = $derived(Math.max(0, Number(metrics?.totalSpent || 0)));
 	let accountsOwned = $derived(Math.max(0, Number(metrics?.accountsOwned || 0)));
 	let isSecured = $derived(Boolean(user?.emailVerified));
+
+	// The first-visit tour: new customers see it once; anyone can replay it from the header.
+	let touring = $state(false);
+	const tourKey = $derived(`fastaccs_dashboard_tour_v1:${user?.id ?? 'guest'}`);
+	const tourSteps = $derived<TourStep[]>([
+		{
+			title: 'Welcome to your dashboard',
+			text: 'Everything you buy lives here. Want a 30-second tour?'
+		},
+		{
+			target: 'store-credit',
+			title: 'Your store credit',
+			text: 'Refunds and rewards land here. Switch it on at checkout to pay with it.'
+		},
+		{
+			target: 'orders-tab',
+			title: 'Your orders',
+			text: 'Every order shows here with where it’s at: waiting for payment, being prepared, or delivered.'
+		},
+		{
+			target: 'purchases-tab',
+			title: 'Your accounts',
+			text: 'Bought an account? Its login details are here. Tap to copy them.'
+		},
+		...(isSecured
+			? []
+			: [
+					{
+						target: 'secure',
+						title: 'Lock your account',
+						text: 'Tap here and enter the 6-digit code we email you. That confirms the account is yours.'
+					}
+				]),
+		{
+			title: 'That’s it',
+			text: 'Need help? Message us on WhatsApp from the bottom of any page. Enjoy!'
+		}
+	]);
+	function tourSeen(): boolean {
+		try {
+			return window.localStorage.getItem(tourKey) === 'done';
+		} catch {
+			return true;
+		}
+	}
+	function endTour() {
+		touring = false;
+		try {
+			window.localStorage.setItem(tourKey, 'done');
+		} catch {
+			// Private browsing: the tour may show again next time, which is harmless.
+		}
+	}
+	onMount(() => {
+		if (completedOrders > 1 || tourSeen()) return;
+		const timer = setTimeout(() => (touring = true), 700);
+		return () => clearTimeout(timer);
+	});
 </script>
+
+{#if touring}
+	<DashboardTour steps={tourSteps} onclose={endTour} />
+{/if}
 
 <div class="mx-auto max-w-6xl px-4 py-6 sm:py-8">
 	<div
@@ -369,7 +433,13 @@
 					<!-- This counts PAID (non-refunded) orders, not delivered ones — a paid order still
 					     being fulfilled was reading as "completed". Wording matches what it measures. -->
 					<p class="text-xs" style="color: var(--text-muted);">
-						{completedOrders} paid order{completedOrders === 1 ? '' : 's'}
+						{completedOrders} paid order{completedOrders === 1 ? '' : 's'} ·
+						<button
+							type="button"
+							class="cursor-pointer underline-offset-2 hover:underline"
+							style="color: var(--link);"
+							onclick={() => (touring = true)}>Take the tour</button
+						>
 					</p>
 				</div>
 			</div>
@@ -385,6 +455,7 @@
 			{:else}
 				<a
 					href="/auth/login?returnUrl=/dashboard"
+					data-tour="secure"
 					class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold"
 					style="background: rgba(226,75,74,0.1); border: 1px solid rgba(226,75,74,0.24); color: var(--status-danger);"
 				>
@@ -488,6 +559,7 @@
 		<button
 			type="button"
 			onclick={openCreditHistory}
+			data-tour="store-credit"
 			class="rounded-[var(--r-sm)] border border-[var(--border)] px-3 py-3 text-left transition-colors hover:border-[var(--primary)]"
 			style="background: var(--surface-2);"
 			title="View store-credit history"
@@ -545,6 +617,7 @@
 		<nav class="flex flex-nowrap gap-6 pb-2 whitespace-nowrap">
 			<button
 				onclick={() => (activeTab = 'orders')}
+				data-tour="orders-tab"
 				class="border-b-2 px-1 py-2 text-sm font-semibold transition-all"
 				style="border-color: {activeTab === 'orders'
 					? 'var(--primary)'
@@ -556,6 +629,7 @@
 			</button>
 			<button
 				onclick={() => (activeTab = 'purchases')}
+				data-tour="purchases-tab"
 				class="border-b-2 px-1 py-2 text-sm font-semibold transition-all"
 				style="border-color: {activeTab === 'purchases'
 					? 'var(--primary)'
