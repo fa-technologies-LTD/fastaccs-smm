@@ -28,9 +28,20 @@
 	import { getOrderStage, isWithinAccountReportWindow } from '$lib/helpers/order-stage';
 	import OrderStageChip from '$lib/components/OrderStageChip.svelte';
 	import OrderStageProgress from '$lib/components/OrderStageProgress.svelte';
+	import BoostDeliveryProgress from '$lib/components/BoostDeliveryProgress.svelte';
 	import { getBoostComplaintStatusLabel } from '$lib/helpers/boosting-complaint-progress';
 
 	let { data }: { data: PageData } = $props();
+	// Paid boosts that are queued, delivering, done or being checked get the delivery card.
+	const DELIVERY_CARD_STATES = [
+		'pending',
+		'queued',
+		'in_progress',
+		'completed',
+		'partial',
+		'under_review',
+		'manual_review'
+	];
 	let boostLinkDraftByItemId = $state<Record<string, string>>({});
 	let boostLinkOverrideByItemId = $state<Record<string, string>>({});
 	let boostStatusOverrideByItemId = $state<Record<string, string>>({});
@@ -405,7 +416,8 @@
 							<div class="min-w-0 flex-1 space-y-2">
 								<OrderStageChip stage={orderStage} size="lg" />
 								<p style="color: var(--text-muted);">{orderStage.detail}</p>
-								{#if orderStage.progress !== null && ['in_progress', 'checking', 'part_refunded'].includes(orderStage.key)}
+								<!-- Each boost has its own delivery card below, so the summary bar is for other orders. -->
+								{#if orderStage.progress !== null && ['in_progress', 'checking', 'part_refunded'].includes(orderStage.key) && !isBoostingOrder()}
 									<OrderStageProgress percent={orderStage.progress} />
 								{/if}
 							</div>
@@ -530,37 +542,14 @@
 													<p class="mb-2 text-sm" style="color: var(--text-muted);">
 														{item.boostProgress.message}
 													</p>
-													{#if item.boostProgress.reportedDelivered !== null}<p
-															class="mb-1 text-xs"
-															style="color: var(--text-muted);"
-														>
-															Reported progress: {item.boostProgress.reportedDelivered} / {item
-																.boostProgress.quantity}
-														</p>{/if}
-													{#if item.boostProgress.lastCheckedAt}<p
-															class="mb-2 text-xs"
-															style="color: var(--text-dim);"
-														>
-															Last checked {new Date(
-																item.boostProgress.lastCheckedAt
-															).toLocaleTimeString('en-NG', {
-																hour: 'numeric',
-																minute: '2-digit',
-																timeZone: 'Africa/Lagos'
-															})} WAT
-														</p>{/if}
-													{#if item.boostProgress.nextCheckAt && new Date(item.boostProgress.nextCheckAt).getTime() > Date.now()}<p
-															class="mb-2 text-xs"
-															style="color: var(--text-dim);"
-														>
-															Next check around {new Date(
-																item.boostProgress.nextCheckAt
-															).toLocaleTimeString('en-NG', {
-																hour: 'numeric',
-																minute: '2-digit',
-																timeZone: 'Africa/Lagos'
-															})} WAT
-														</p>{/if}
+													{#if DELIVERY_CARD_STATES.includes(item.boostProgress.status)}
+														<div class="mb-2">
+															<BoostDeliveryProgress
+																progress={item.boostProgress}
+																quantityLabel={item.boostQuantityLabel}
+															/>
+														</div>
+													{/if}
 												{/if}
 												{#if item.boostSupport && item.boostSupport.state !== 'none'}
 													{#key `${item.id}:${item.boostSupport.revision}`}<BoostingSupportReply

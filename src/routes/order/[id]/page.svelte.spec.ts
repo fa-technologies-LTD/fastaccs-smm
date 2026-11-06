@@ -83,7 +83,9 @@ describe('customer Boosting progress and refill journey', () => {
 		await expect
 			.element(page.getByText('<script>customer update</script>', { exact: true }))
 			.toBeVisible();
-		await expect.element(page.getByText('Reported progress: 60 / 100')).toBeVisible();
+		await expect
+			.element(page.getByRole('progressbar', { name: 'Delivered so far' }))
+			.toHaveAttribute('aria-valuenow', '60');
 	});
 	afterEach(() => vi.restoreAllMocks());
 	it('separates payment confirmation from queued delivery', async () => {
@@ -104,7 +106,13 @@ describe('customer Boosting progress and refill journey', () => {
 	it('shows reported progress without pretending it is independently verified', async () => {
 		render(OrderPage, { data: data('in_progress', { remains: 40 }) });
 		await expect.element(page.getByText('In progress', { exact: true }).first()).toBeVisible();
-		await expect.element(page.getByText('Reported progress: 60 / 100')).toBeVisible();
+		await expect.element(page.getByText('60', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('of 100', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('60%', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('Counts reported by our supplier.')).toBeVisible();
+		await expect
+			.element(page.getByRole('listitem').filter({ hasText: 'Delivering' }))
+			.toHaveAttribute('aria-current', 'step');
 		await expect
 			.element(page.getByText('Your boost has started. Progress updates here automatically.'))
 			.toBeVisible();
@@ -141,6 +149,8 @@ describe('customer Boosting progress and refill journey', () => {
 		await expect
 			.element(page.getByText('Delivery starts after payment is confirmed.'))
 			.toBeVisible();
-		await expect.element(page.getByText('Reported progress: 80 / 100')).not.toBeInTheDocument();
+		await expect
+			.element(page.getByRole('progressbar', { name: 'Delivered so far' }))
+			.not.toBeInTheDocument();
 	});
 });
