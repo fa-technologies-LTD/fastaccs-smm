@@ -2,7 +2,11 @@
 	import { tick } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import BrandIcon from '$lib/components/BrandIcon.svelte';
-	import { boostCustomerCopy, boostCustomerShortName } from '$lib/helpers/boosting-customer-copy';
+	import {
+		BOOST_NO_DROP_NOTE,
+		boostCustomerCopy,
+		boostCustomerShortName
+	} from '$lib/helpers/boosting-customer-copy';
 	import { boostBenefitLabel, boostQuantityText } from '$lib/helpers/boosting-customer-facts';
 	import { boostingStartingQuantity } from '$lib/helpers/boosting-checkout';
 	import {
@@ -597,6 +601,9 @@
 									? `Add to Cart — ${formatPrice(total)}`
 									: 'Add to Cart'}
 					</button>
+					<p class="mt-2 text-center text-xs" style="color: var(--text-dim);">
+						{BOOST_NO_DROP_NOTE}
+					</p>
 				</div>
 			{/if}
 		{/if}

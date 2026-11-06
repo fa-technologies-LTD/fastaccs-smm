@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { boostQuantityText } from '$lib/helpers/boosting-customer-facts';
+	import { BOOST_NO_DROP_NOTE } from '$lib/helpers/boosting-customer-copy';
 	import { onMount, untrack } from 'svelte';
 	import { boostingMinimumMessage } from '$lib/helpers/boosting-checkout';
 	import { goto } from '$app/navigation';
@@ -1674,6 +1675,14 @@
 								? 'Secure payment by Monnify · '
 								: 'Nothing to pay by card. '}{deliveryNote}
 						</p>
+						{#if hasBoostingOrder}
+							<p
+								class="mt-1 text-center text-xs leading-relaxed"
+								style="color: var(--text-dim); font-family: var(--font-body);"
+							>
+								{BOOST_NO_DROP_NOTE}
+							</p>
+						{/if}
 						<p
 							class="mt-1 text-center text-xs leading-relaxed"
 							style="color: var(--text-dim); font-family: var(--font-body);"

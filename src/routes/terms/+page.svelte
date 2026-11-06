@@ -60,6 +60,10 @@
 						requesting a refill. Options without a stated refill may experience drop-off.
 					</li>
 					<li>
+						FastAccs does not promise non-drop delivery. Followers, likes, views, and other
+						engagement can drop after delivery, including on options with a refill window.
+					</li>
+					<li>
 						Do not run overlapping services for the same link and result. FastAccs may queue a new
 						order until the earlier one is complete so delivery and any recovery can be measured
 						safely.

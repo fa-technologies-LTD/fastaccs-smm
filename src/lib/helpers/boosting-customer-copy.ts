@@ -18,6 +18,10 @@ export function boostServiceBaseName(offer: { platform: string; outcome: string 
 	return `${platform} ${BOOSTING_ACTION_LABELS[offer.outcome as BoostingActionType] ?? offer.outcome}`;
 }
 
+/** The faint line near every boosting payment step: delivery is never promised to stay. */
+export const BOOST_NO_DROP_NOTE =
+	'Followers, likes and views can drop after delivery. We don’t promise they won’t.';
+
 // Lines written for the old tier labels. Customers see the option's own line instead.
 const STOCK_LINES = new Set([
 	'A lower-cost option for straightforward growth.',

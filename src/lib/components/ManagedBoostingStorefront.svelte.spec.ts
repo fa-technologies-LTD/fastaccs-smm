@@ -263,6 +263,9 @@ describe('Managed Boosting storefront', () => {
 		await expect.element(page.getByRole('button', { name: /Stable/ })).toBeVisible();
 		await expect.element(page.getByLabelText('Paste your profile link')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: /Add to Cart/ })).toBeEnabled();
+		await expect
+			.element(page.getByText('We don’t promise they won’t.', { exact: false }))
+			.toBeVisible();
 	});
 	it('uses the service name without a tier or recommendation when only one option exists', async () => {
 		render(ManagedBoostingStorefront, {
