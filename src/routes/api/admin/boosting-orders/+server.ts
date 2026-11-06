@@ -9,6 +9,11 @@ import { isBoostOrderOverdue } from '$lib/helpers/boosting-overdue-review';
 import { boostHoldReasons } from '$lib/helpers/boosting-hold-reason';
 import { BOOST_SUPPORT_EVENT_TYPES, getBoostSupportState } from '$lib/helpers/boosting-support';
 import {
+	adminProofSummary,
+	BOOST_PROOF_EVENT_TYPES,
+	readBoostProof
+} from '$lib/server/boost-delivery-proof';
+import {
 	BOOST_ITEM_STATUSES,
 	BOOST_ACTIVE_ITEM_STATUSES,
 	BOOST_OPEN_COMPLAINT_STATUSES,
@@ -177,6 +182,15 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 				orderBy: { occurredAt: 'desc' }
 			})
 		: [];
+	const proofEvents = items.length
+		? await prisma.orderEvent.findMany({
+				where: {
+					orderItemId: { in: items.map((item) => item.id) },
+					type: { in: BOOST_PROOF_EVENT_TYPES }
+				},
+				select: { orderItemId: true, type: true, metadata: true, occurredAt: true }
+			})
+		: [];
 
 	let shadowDecisions: Array<{
 		orderItemId: string;
@@ -338,6 +352,9 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 								}
 							: null,
 					complaints: shadow?.complaints || [],
+					proof: adminProofSummary(
+						readBoostProof(proofEvents.filter((event) => event.orderItemId === item.id))
+					),
 					fulfillmentState: shadow ? { status: shadow.status, mode: shadow.fulfillmentMode } : null,
 					progress: shadow
 						? {

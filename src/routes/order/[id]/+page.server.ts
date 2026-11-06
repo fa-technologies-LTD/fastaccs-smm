@@ -13,6 +13,11 @@ import { getBoostingProgress } from '$lib/helpers/boosting-progress';
 import { boostBenefitLabel, boostQuantityText } from '$lib/helpers/boosting-customer-facts';
 import { isPhoneRefundConfirmed } from '$lib/helpers/phone-refund-state';
 import { BOOST_SUPPORT_EVENT_TYPES } from '$lib/helpers/boosting-support';
+import {
+	BOOST_PROOF_EVENT_TYPES,
+	customerProofAccess,
+	readBoostProof
+} from '$lib/server/boost-delivery-proof';
 
 export const load: PageServerLoad = async ({ params, locals, url, depends }) => {
 	depends('app:order-progress');
@@ -85,7 +90,8 @@ export const load: PageServerLoad = async ({ params, locals, url, depends }) => 
 							'boosting_link_review_requested',
 							'boosting_rejected',
 							'customer_support_update',
-							'order_refunded'
+							'order_refunded',
+							...BOOST_PROOF_EVENT_TYPES
 						]
 					}
 				},
@@ -193,7 +199,19 @@ export const load: PageServerLoad = async ({ params, locals, url, depends }) => 
 						paymentConfirmed: isOrderPaymentConfirmed(order)
 					})
 				: null,
-			boostComplaints: item.boostFulfillment?.complaints ?? []
+			boostComplaints: item.boostFulfillment?.complaints ?? [],
+			// Only whether the buyer may open a proof; the proof itself is served by its own endpoint.
+			boostProofAccess: item.boostTargetUrl
+				? customerProofAccess(
+						readBoostProof(
+							boostingIssueEvents.filter(
+								(event) =>
+									event.orderItemId === item.id && BOOST_PROOF_EVENT_TYPES.includes(event.type)
+							)
+						),
+						item.boostFulfillment?.complaints ?? []
+					)
+				: 'none'
 		}))
 	};
 	// Keep the generated page type while the runtime value is rebuilt from the customer

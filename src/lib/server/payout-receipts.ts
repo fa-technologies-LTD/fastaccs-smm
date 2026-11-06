@@ -62,14 +62,23 @@ export function receiptFromMetadata(metadata: unknown): PayoutReceipt | null {
 }
 
 export async function uploadPayoutReceipt(file: File, uploadedBy: string): Promise<PayoutReceipt> {
+	return uploadPrivateImage(file, uploadedBy, { folder: RECEIPT_FOLDER, tag: 'payout_receipt' });
+}
+
+/** Stores an image as a private ("authenticated") Cloudinary asset; other private evidence reuses this. */
+export async function uploadPrivateImage(
+	file: File,
+	uploadedBy: string,
+	options: { folder: string; tag: string }
+): Promise<PayoutReceipt> {
 	const config = cloudinaryConfig();
 	if (!config) throw new Error('RECEIPT_STORAGE_NOT_CONFIGURED');
 	const payload = new FormData();
 	payload.append('file', file);
-	payload.append('public_id', `${RECEIPT_FOLDER}/${crypto.randomUUID()}`);
+	payload.append('public_id', `${options.folder}/${crypto.randomUUID()}`);
 	payload.append('type', 'authenticated');
 	payload.append('overwrite', 'false');
-	payload.append('tags', 'payout_receipt');
+	payload.append('tags', options.tag);
 	const response = await fetch(`${CLOUDINARY_API_BASE}/v1_1/${config.cloudName}/image/upload`, {
 		method: 'POST',
 		headers: {
@@ -112,6 +121,28 @@ export function privateReceiptDownloadUrl(receipt: PayoutReceipt, now = Date.now
 		signature: signCloudinaryParams(params, config.apiSecret)
 	});
 	return `${CLOUDINARY_API_BASE}/v1_1/${config.cloudName}/image/download?${query}`;
+}
+
+/** Deletes a private image for good. A missing image counts as deleted. */
+export async function deletePrivateImage(publicId: string, now = Date.now()): Promise<boolean> {
+	const config = cloudinaryConfig();
+	if (!config) return false;
+	const params: Record<string, string> = {
+		invalidate: 'true',
+		public_id: publicId,
+		timestamp: String(Math.floor(now / 1000)),
+		type: 'authenticated'
+	};
+	const response = await fetch(`${CLOUDINARY_API_BASE}/v1_1/${config.cloudName}/image/destroy`, {
+		method: 'POST',
+		body: new URLSearchParams({
+			...params,
+			api_key: config.apiKey,
+			signature: signCloudinaryParams(params, config.apiSecret)
+		})
+	}).catch(() => null);
+	const result = (await response?.json().catch(() => null)) as { result?: string } | null;
+	return Boolean(response?.ok) && (result?.result === 'ok' || result?.result === 'not found');
 }
 
 const FORMAT_CONTENT_TYPES: Record<string, string> = {

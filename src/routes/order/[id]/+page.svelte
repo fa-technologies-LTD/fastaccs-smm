@@ -42,6 +42,8 @@
 		'under_review',
 		'manual_review'
 	];
+	// Set when the buyer opens a proof, so the page reflects it before the next refresh.
+	let proofAccessByItemId = $state<Record<string, string>>({});
 	let boostLinkDraftByItemId = $state<Record<string, string>>({});
 	let boostLinkOverrideByItemId = $state<Record<string, string>>({});
 	let boostStatusOverrideByItemId = $state<Record<string, string>>({});
@@ -613,6 +615,32 @@
 												>
 													{getBoostingTargetUrl(item)}
 												</a>
+												{#if ['available', 'viewing'].includes(proofAccessByItemId[item.id] ?? item.boostProofAccess ?? '')}
+													<div
+														class="mt-3 rounded-lg border p-3"
+														style="border-color: var(--border);"
+													>
+														<p class="text-sm font-semibold" style="color: var(--text);">
+															Delivery proof
+														</p>
+														<p class="mt-1 text-xs" style="color: var(--text-muted);">
+															A screenshot of your delivery. You can open it once.
+														</p>
+														<a
+															href={`/api/orders/${data.order.id}/boosting-proof/${item.id}`}
+															target="_blank"
+															rel="noopener"
+															onclick={() => (proofAccessByItemId[item.id] = 'viewing')}
+															class="mt-2 inline-flex min-h-11 items-center rounded-lg border px-4 py-2 text-sm font-semibold"
+															style="border-color: var(--border); color: var(--text);"
+															>View delivery proof</a
+														>
+													</div>
+												{:else if (proofAccessByItemId[item.id] ?? item.boostProofAccess) === 'used'}
+													<p class="mt-3 text-xs" style="color: var(--text-dim);">
+														You viewed the delivery proof for this boost.
+													</p>
+												{/if}
 												{#if item.boostComplaintEligibility?.allowedTypes?.length}
 													<div class="mt-4 border-t pt-3" style="border-color: var(--border);">
 														{#if (complaintOverrideByItemId[item.id] || item.boostComplaints || []).length}

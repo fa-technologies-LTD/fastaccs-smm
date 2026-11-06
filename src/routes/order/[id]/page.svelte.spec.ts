@@ -153,4 +153,26 @@ describe('customer Boosting progress and refill journey', () => {
 			.element(page.getByRole('progressbar', { name: 'Delivered so far' }))
 			.not.toBeInTheDocument();
 	});
+	it('shows delivery proof only when it was opened to the buyer, as a one-time link', async () => {
+		render(OrderPage, { data: data('completed') });
+		await expect.element(page.getByText('Delivered', { exact: true }).first()).toBeVisible();
+		expect(page.getByText('Delivery proof', { exact: true }).query()).toBeNull();
+
+		const d = data('completed') as unknown as { order: { orderItems: Record<string, unknown>[] } };
+		d.order.orderItems[0].boostProofAccess = 'available';
+		render(OrderPage, { data: d } as never);
+		await expect
+			.element(page.getByRole('link', { name: 'View delivery proof' }))
+			.toHaveAttribute('href', '/api/orders/order-1/boosting-proof/item-1');
+		await expect.element(page.getByText('You can open it once.', { exact: false })).toBeVisible();
+	});
+	it('tells the buyer the proof was already viewed', async () => {
+		const d = data('completed') as unknown as { order: { orderItems: Record<string, unknown>[] } };
+		d.order.orderItems[0].boostProofAccess = 'used';
+		render(OrderPage, { data: d } as never);
+		await expect
+			.element(page.getByText('You viewed the delivery proof for this boost.'))
+			.toBeVisible();
+		expect(page.getByRole('link', { name: 'View delivery proof' }).query()).toBeNull();
+	});
 });

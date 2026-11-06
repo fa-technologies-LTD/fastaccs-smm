@@ -1,5 +1,6 @@
 <script lang="ts">
 	import BoostingOrderSupport from '$lib/components/admin/BoostingOrderSupport.svelte';
+	import BoostProofField from '$lib/components/admin/BoostProofField.svelte';
 	import ReviewOrderCard from '$lib/components/admin/ReviewOrderCard.svelte';
 	import { boostReviewNotice, type BoostSupportState } from '$lib/helpers/boosting-support';
 	import { untrack } from 'svelte';
@@ -68,6 +69,12 @@
 			refillCheckedAt: string | null;
 		}>;
 		fulfillmentState: { status: string; mode: string } | null;
+		proof?: {
+			uploadedAt: string | null;
+			firstViewedAt: string | null;
+			deletedAt: string | null;
+			expiresAt: string | null;
+		} | null;
 		progress?: {
 			customerStatus: string | null;
 			startCount: number | null;
@@ -422,9 +429,7 @@
 		</p>
 		<div class="mt-2 flex flex-wrap items-center justify-between gap-2">
 			<div class="flex flex-wrap items-center gap-2">
-				<a href="/admin/boosting" class="text-sm" style="color: var(--primary);"
-					>Boosting →</a
-				>
+				<a href="/admin/boosting" class="text-sm" style="color: var(--primary);">Boosting →</a>
 				<button
 					type="button"
 					onclick={refreshAll}
@@ -812,6 +817,15 @@
 						refreshAdminAttentionBadges();
 					}}
 				/>
+				{#if meta.canManageOrders === true}
+					<div class="mt-3 border-t pt-3" style="border-color: var(--border);">
+						<BoostProofField
+							itemId={item.id}
+							proof={item.proof ?? null}
+							onUploaded={() => loadItems(meta.page, true)}
+						/>
+					</div>
+				{/if}
 			</ReviewOrderCard>
 		{/each}
 

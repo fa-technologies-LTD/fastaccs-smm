@@ -144,6 +144,9 @@ export function sanitizeCustomerOrder(order: unknown): JsonRecord {
 				copyAllowed(asRecord(complaint), CUSTOMER_BOOST_COMPLAINT_FIELDS)
 			);
 		}
+		// A proof exists for the buyer only once their report was closed; otherwise nothing is sent.
+		if (['available', 'viewing', 'used'].includes(String(item.boostProofAccess)))
+			safe.boostProofAccess = item.boostProofAccess;
 		if (item.boostComplaintEligibility) {
 			const eligibility = asRecord(item.boostComplaintEligibility);
 			safe.boostComplaintEligibility = copyAllowed(eligibility, [
