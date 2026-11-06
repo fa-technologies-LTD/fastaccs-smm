@@ -6,10 +6,6 @@ import { boostSaleInclude, inspectBoostSale } from '$lib/server/boosting-sale-re
 import { boostCustomerCopy, boostCustomerOption } from '$lib/helpers/boosting-customer-copy';
 import { boostBenefitLabel } from '$lib/helpers/boosting-customer-facts';
 import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
-import {
-	BOOSTING_MANAGED_STOREFRONT_KEY,
-	isBoostingManagedStorefrontEnabled
-} from '$lib/server/boosting-providers/storefront-rollout';
 import type { RequestHandler } from './$types';
 
 function isFoundationPending(error: unknown): boolean {
@@ -27,7 +23,7 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 			: {})
 	});
 	try {
-		const [offers, rolloutMarker, pricing] = await Promise.all([
+		const [offers, pricing] = await Promise.all([
 			prisma.boostCustomerOffer.findMany({
 				where: {
 					status: 'live',
@@ -36,10 +32,6 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 				},
 				include: { ...boostSaleInclude, category: { select: { name: true } } },
 				orderBy: [{ displayOrder: 'asc' }, { customerName: 'asc' }]
-			}),
-			prisma.microcopy.findUnique({
-				where: { key: BOOSTING_MANAGED_STOREFRONT_KEY },
-				select: { value: true, isActive: true }
 			}),
 			getBoostingPricingConfig()
 		]);
@@ -52,7 +44,8 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
 		return json({
 			success: true,
 			automationReady,
-			managedRolloutActive: isBoostingManagedStorefrontEnabled(rolloutMarker, offers.length > 0),
+			// The old category catalogue is retired; with no live offer the storefront shows a pause.
+			managedRolloutActive: true,
 			data: compatibleOffers.map(({ offer, readiness }) => {
 				const options = compatibleOffers.filter(
 					(entry) => entry.offer.categoryId === offer.categoryId

@@ -1,19 +1,9 @@
 import {
 	BOOSTING_ACTION_LABELS,
-	getBoostingServiceConfig,
 	BOOSTING_PLATFORM_LABELS
 } from '$lib/helpers/boosting-service-config';
-import { canonicalizePlatformKey, isPlatformImageUrl } from '$lib/helpers/platformColors';
 import type { BoostingPlatform } from '$lib/helpers/social-link-validator';
 import type { PageLoad } from './$types';
-
-export interface ServicesPlatformTile {
-	platform: BoostingPlatform;
-	label: string;
-	iconUrl: string | null;
-	serviceCount: number;
-	allComingSoon: boolean;
-}
 
 export interface ManagedBoostingOffer {
 	id: string;
@@ -74,141 +64,58 @@ const OUTCOME_ORDER = [
 	'watch_time'
 ];
 
+const SEO = {
+	title: 'Social Media Boosting Services | FastAccs',
+	description:
+		'Grow across major social and streaming platforms with simple, clearly priced services. Paste your link, pay, and track delivery — no password needed.',
+	type: 'website'
+};
+
+// The old category catalogue (fixed prices and its own purchase forms) is retired for good: the page shows
+// reviewed offers only, and with none it shows the upgrade pause instead of anything older.
 export const load: PageLoad = async ({ fetch }) => {
 	try {
-		const [servicesResponse, platformsResponse, offersResponse] = await Promise.all([
-			fetch('/api/categories?type=boosting_service'),
-			fetch('/api/categories?type=platform'),
-			fetch('/api/boosting-offers')
-		]);
-		const servicesResult = await servicesResponse.json();
+		const offersResponse = await fetch('/api/boosting-offers');
 		if (!offersResponse.ok)
 			return {
-				managedRolloutActive: true,
 				managedGroups: [] as ManagedBoostingGroup[],
-				platformTiles: [] as ServicesPlatformTile[],
 				error: 'Boosting availability could not be checked. Please try again shortly.'
 			};
-
-		if (!servicesResponse.ok) {
-			return {
-				managedRolloutActive: false,
-				managedGroups: [] as ManagedBoostingGroup[],
-				platformTiles: [] as ServicesPlatformTile[],
-				error: servicesResult.error || 'Failed to load boosting services'
+		const offersPayload = (await offersResponse.json()) as { data?: ManagedBoostingOffer[] };
+		const groupsByCategory = new Map<string, ManagedBoostingGroup>();
+		for (const offer of offersPayload.data ?? []) {
+			const group = groupsByCategory.get(offer.categoryId) ?? {
+				categoryId: offer.categoryId,
+				platform: offer.platform,
+				platformLabel: BOOSTING_PLATFORM_LABELS[offer.platform],
+				outcome: offer.outcome,
+				outcomeLabel:
+					BOOSTING_ACTION_LABELS[offer.outcome as keyof typeof BOOSTING_ACTION_LABELS] ??
+					offer.outcome,
+				offers: []
 			};
+			group.offers.push(offer);
+			groupsByCategory.set(offer.categoryId, group);
 		}
-
-		const boostingServices = (servicesResult.data || []) as Array<{ metadata: unknown }>;
-		const realPlatforms = platformsResponse.ok
-			? ((await platformsResponse.json()).data as
-					| Array<{
-							slug: string;
-							metadata?: { icon?: unknown };
-					  }>
-					| undefined) || []
-			: [];
-
-		const iconByPlatformKey = new Map<string, string>();
-		for (const platform of realPlatforms) {
-			const icon = platform.metadata?.icon;
-			if (isPlatformImageUrl(icon)) {
-				iconByPlatformKey.set(canonicalizePlatformKey(platform.slug), icon as string);
-			}
-		}
-
-		const offersPayload = offersResponse.ok
-			? ((await offersResponse.json()) as {
-					managedRolloutActive?: boolean;
-					data?: ManagedBoostingOffer[];
-				})
-			: null;
-		if (offersPayload?.managedRolloutActive) {
-			const groupsByCategory = new Map<string, ManagedBoostingGroup>();
-			for (const offer of offersPayload.data ?? []) {
-				const group = groupsByCategory.get(offer.categoryId) ?? {
-					categoryId: offer.categoryId,
-					platform: offer.platform,
-					platformLabel: BOOSTING_PLATFORM_LABELS[offer.platform],
-					outcome: offer.outcome,
-					outcomeLabel:
-						BOOSTING_ACTION_LABELS[offer.outcome as keyof typeof BOOSTING_ACTION_LABELS] ??
-						offer.outcome,
-					offers: []
-				};
-				group.offers.push(offer);
-				groupsByCategory.set(offer.categoryId, group);
-			}
-			const managedGroups = [...groupsByCategory.values()]
-				.map((group) => ({
-					...group,
-					offers: group.offers.sort(
-						(left, right) =>
-							left.displayOrder - right.displayOrder ||
-							left.customerName.localeCompare(right.customerName)
-					)
-				}))
-				.sort(
+		const managedGroups = [...groupsByCategory.values()]
+			.map((group) => ({
+				...group,
+				offers: group.offers.sort(
 					(left, right) =>
-						PLATFORM_ORDER.indexOf(left.platform) - PLATFORM_ORDER.indexOf(right.platform) ||
-						OUTCOME_ORDER.indexOf(left.outcome) - OUTCOME_ORDER.indexOf(right.outcome)
-				);
-
-			return {
-				managedRolloutActive: true,
-				managedGroups,
-				platformTiles: [] as ServicesPlatformTile[],
-				error: null,
-				seo: {
-					title: 'Social Media Boosting Services | FastAccs',
-					description:
-						'Grow across major social and streaming platforms with simple, clearly priced services. Paste your link, pay, and track delivery — no password needed.',
-					type: 'website'
-				}
-			};
-		}
-
-		const countByPlatform = new Map<BoostingPlatform, number>();
-		const liveCountByPlatform = new Map<BoostingPlatform, number>();
-		for (const service of boostingServices) {
-			const config = getBoostingServiceConfig(service.metadata);
-			countByPlatform.set(config.platform, (countByPlatform.get(config.platform) || 0) + 1);
-			if (config.pricePerStep > 0) {
-				liveCountByPlatform.set(
-					config.platform,
-					(liveCountByPlatform.get(config.platform) || 0) + 1
-				);
-			}
-		}
-
-		const platformTiles: ServicesPlatformTile[] = Array.from(countByPlatform.entries()).map(
-			([platform, serviceCount]) => ({
-				platform,
-				label: BOOSTING_PLATFORM_LABELS[platform],
-				iconUrl: iconByPlatformKey.get(canonicalizePlatformKey(platform)) || null,
-				serviceCount,
-				allComingSoon: (liveCountByPlatform.get(platform) || 0) === 0
-			})
-		);
-
-		return {
-			managedRolloutActive: false,
-			managedGroups: [] as ManagedBoostingGroup[],
-			platformTiles,
-			error: null,
-			seo: {
-				title: 'Social Media Boosting Services | FastAccs',
-				description:
-					'Grow across major social and streaming platforms with simple, clearly priced services. Paste your link, pay, and track delivery — no password needed.',
-				type: 'website'
-			}
-		};
+						left.displayOrder - right.displayOrder ||
+						left.customerName.localeCompare(right.customerName)
+				)
+			}))
+			.sort(
+				(left, right) =>
+					PLATFORM_ORDER.indexOf(left.platform) - PLATFORM_ORDER.indexOf(right.platform) ||
+					OUTCOME_ORDER.indexOf(left.outcome) - OUTCOME_ORDER.indexOf(right.outcome)
+			);
+		return { managedGroups, error: null, seo: SEO };
 	} catch (error) {
-		console.error('Failed to load boosting services platforms:', error);
+		console.error('Failed to load boosting services:', error);
 		return {
-			managedRolloutActive: false,
 			managedGroups: [] as ManagedBoostingGroup[],
-			platformTiles: [] as ServicesPlatformTile[],
 			error: 'Failed to load boosting services'
 		};
 	}

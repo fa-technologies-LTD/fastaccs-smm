@@ -7,10 +7,6 @@ import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
 import { boostCustomerCopy } from '$lib/helpers/boosting-customer-copy';
 import { boostBenefitLabel } from '$lib/helpers/boosting-customer-facts';
 import {
-	BOOSTING_MANAGED_STOREFRONT_KEY,
-	isBoostingManagedStorefrontEnabled
-} from '$lib/server/boosting-providers/storefront-rollout';
-import {
 	normalizeTierDeliveryMode,
 	getTierStockStatus,
 	type TierDeliveryMode
@@ -343,18 +339,6 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		const mergedItems = new Map<string, CartItemWithTier>();
 		const now = new Date();
 		const boostPricing = boostOffers.length ? await getBoostingPricingConfig() : null;
-		const managedMarker = inputItems.some(
-			(item) => item.boosting && !normalizeText(item.boosting.boostOfferId)
-		)
-			? await prisma.microcopy.findUnique({
-					where: { key: BOOSTING_MANAGED_STOREFRONT_KEY },
-					select: { value: true, isActive: true }
-				})
-			: null;
-		const managedBoosting = isBoostingManagedStorefrontEnabled(
-			managedMarker,
-			boostOffers.length > 0
-		);
 
 		for (const input of inputItems) {
 			const rawTierId = normalizeText(input.tierId);
@@ -367,7 +351,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			if (tier.categoryType === 'boosting_service') {
 				const legacyConfig = getBoostingServiceConfig(tier.metadata);
 				const requestedOfferId = normalizeText(input.boosting?.boostOfferId);
-				if (!requestedOfferId && managedBoosting) {
+				// The old category catalogue is retired: only a reviewed offer can be bought.
+				if (!requestedOfferId) {
 					messages.push(
 						'This Boosting option has changed. Choose an available option again. Your other items are unchanged.'
 					);

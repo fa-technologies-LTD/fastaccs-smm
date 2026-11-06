@@ -8,10 +8,6 @@ import { inspectBoostSale } from '$lib/server/boosting-sale-readiness';
 import { getBoostingPricingConfig } from '$lib/services/boosting-pricing';
 import { boostCustomerCopy } from '$lib/helpers/boosting-customer-copy';
 import {
-	BOOSTING_MANAGED_STOREFRONT_KEY,
-	isBoostingManagedStorefrontEnabled
-} from '$lib/server/boosting-providers/storefront-rollout';
-import {
 	holdUncertainInitialization,
 	isDefinitiveInitializationFailure
 } from '$lib/services/payment-initialization-recovery';
@@ -613,8 +609,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				})
 			: [];
 		const boostOfferById = new Map(boostOffers.map((offer) => [offer.id, offer]));
-		// Once managed offers replace the legacy catalogue, stale carts must not bypass
-		// publication or create a paid, manual-only order using old category prices.
+		// The old category catalogue is retired: a stale cart must not bypass publication or
+		// create a paid, manual-only order using old category prices.
 		if (
 			normalizedItems.some(
 				(item) =>
@@ -622,19 +618,14 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 					categoryById.get(item.categoryId)?.categoryType === 'boosting_service'
 			)
 		) {
-			const marker = await prisma.microcopy.findUnique({
-				where: { key: BOOSTING_MANAGED_STOREFRONT_KEY },
-				select: { value: true, isActive: true }
-			});
-			if (isBoostingManagedStorefrontEnabled(marker, boostOffers.length > 0))
-				return json(
-					{
-						success: false,
-						code: 'ITEM_UNAVAILABLE',
-						error: 'Choose an available Boosting option again.'
-					},
-					{ status: 409 }
-				);
+			return json(
+				{
+					success: false,
+					code: 'ITEM_UNAVAILABLE',
+					error: 'Choose an available Boosting option again.'
+				},
+				{ status: 409 }
+			);
 		}
 
 		const itemsWithNames: Array<{

@@ -64,7 +64,6 @@ async function fetchPlatformServices(
 
 		const offerPayload = offerCopyResponse.ok
 			? ((await offerCopyResponse.json()) as {
-					managedRolloutActive?: boolean;
 					data?: Array<{
 						id: string;
 						categoryId: string;
@@ -96,9 +95,8 @@ async function fetchPlatformServices(
 				const offers = (offersByCategoryId.get(service.id) ?? []).sort(
 					(left, right) => left.displayOrder - right.displayOrder
 				);
-				if (!offers.length) {
-					return offerPayload?.managedRolloutActive ? [] : [{ ...service, categoryId: service.id }];
-				}
+				// The old category catalogue is retired: a category without a reviewed offer is not for sale.
+				if (!offers.length) return [];
 				return offers.map((offer) => ({
 					...service,
 					id: offer.id,
